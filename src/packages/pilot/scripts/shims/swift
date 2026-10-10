@@ -1,0 +1,9 @@
+#!/bin/sh
+# Why: Swift 6.4 (Xcode 27) defaults to the swiftbuild build system, whose output paths differ from what
+# Orca's helper build scripts expect (.build/<triple>/release). Used only by Pilot's build-mac.mjs.
+real=$(PATH="$PILOT_REAL_PATH" command -v swift)
+if [ "$1" = "build" ]; then
+  shift
+  exec "$real" build --build-system native "$@"
+fi
+exec "$real" "$@"
