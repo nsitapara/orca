@@ -61,7 +61,7 @@ export function planUpdate({ push, build }) {
   return steps
 }
 
-function reportFailure(step, code, cwd, reachedMerge) {
+function reportFailure(step, cwd, reachedMerge) {
   const branch = run('git', ['branch', '--show-current'], { cwd }).stdout.trim()
   if (step.title === CLEAN_TITLE) {
     console.error('\nCommit or stash your changes first.')
@@ -88,7 +88,7 @@ export async function runSteps(steps, { cwd = REPO, dryRun = false } = {}) {
     if (code === 0) {
       continue
     }
-    reportFailure(step, code, cwd, mergeIndex !== -1 && i >= mergeIndex)
+    reportFailure(step, cwd, mergeIndex !== -1 && i >= mergeIndex)
     return { code, failed: step }
   }
   return { code: 0 }
