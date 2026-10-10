@@ -10,6 +10,7 @@
  * the runtime factory, but only when an Electron serve sidecar or an operator-supplied
  * Chromium proves available at startup.
  */
+import { attachPilotOrcad } from '../../packages/pilot/src/main/attach-orcad' // pilot-hook: orcad
 import process from 'node:process'
 import {
   getAppEnvironment,
@@ -351,6 +352,7 @@ async function startOrcadRuntime(
   // Why before the RPC server binds: like `--serve`, the first client must find a ready graph.
   const { publishHeadlessRuntimeGraph } = await import('../runtime/headless-runtime-graph')
   publishHeadlessRuntimeGraph(runtime)
+  attachPilotOrcad(runtime, registerCleanup) // pilot-hook: orcad
 
   const bindHost = resolveOrcadBindHost(options.bind)
   const rpc = new OrcaRuntimeRpcServer({
