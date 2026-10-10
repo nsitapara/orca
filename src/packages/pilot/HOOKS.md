@@ -8,3 +8,5 @@ Every change Pilot makes to an upstream file is listed here (D24). Each one is a
 | tsconfig-web    | config/tsconfig.web.json    | ../src/packages/pilot/src/renderer/**/* | composite renderer project must list Pilot UI files     |
 | tsconfig-tc-web | config/tsconfig.tc.web.json | ../src/packages/pilot/src/renderer/**/* | typecheck config replaces include, so it lists them too |
 | tsconfig-cli    | config/tsconfig.cli.json    | ../src/packages/pilot/src/cli/**/*      | CLI compiles Pilot commands                             |
+| main            | src/main/startup/main-process-ready-runtime.ts | attachPilotMain(runtime) | start Pilot in desktop/serve before RPC is built |
+| orcad           | src/main/orcad/orcad-entry.ts | attachPilotOrcad(runtime, | start Pilot in orcad before RPC binds |
