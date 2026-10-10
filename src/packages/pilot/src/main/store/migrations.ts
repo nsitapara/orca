@@ -16,10 +16,13 @@ CREATE TABLE runs (id TEXT PRIMARY KEY, automation_id TEXT NOT NULL, tick_id INT
   item_label TEXT NOT NULL, worktree_path TEXT, status TEXT NOT NULL, outcome TEXT, started_at INTEGER NOT NULL,
   finished_at INTEGER, cost_usd REAL, tokens INTEGER);
 CREATE INDEX runs_by_tick ON runs (tick_id);
+CREATE INDEX runs_by_automation_status ON runs (automation_id, status);
+CREATE INDEX runs_by_worktree ON runs (worktree_path);
 CREATE TABLE steps (run_id TEXT NOT NULL REFERENCES runs(id) ON DELETE CASCADE, idx INTEGER NOT NULL, name TEXT NOT NULL,
   agent TEXT NOT NULL, skill TEXT, status TEXT NOT NULL, terminal_handle TEXT, pane_key TEXT, session_id TEXT,
   transcript_path TEXT, cost_usd REAL, tokens INTEGER, started_at INTEGER, finished_at INTEGER, error TEXT,
   PRIMARY KEY (run_id, idx));
+CREATE INDEX steps_by_status ON steps (status);
 `
 
 // Same pattern as Orca's orchestration.db (migrate.ts): user_version + one transaction, all or nothing.

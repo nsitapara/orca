@@ -66,17 +66,24 @@ export class PilotStore {
     const insert = this.db.prepare(
       'INSERT INTO tick_items (tick_id, item_key, label, verdict, reason, checks_json, fields_json, run_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
     )
-    for (const d of decisions) {
-      insert.run(
-        tickId,
-        d.key,
-        d.label,
-        d.verdict,
-        d.reason,
-        JSON.stringify(d.checks),
-        JSON.stringify(d.fields),
-        runIds.get(d.key) ?? null
-      )
+    this.db.exec('BEGIN IMMEDIATE')
+    try {
+      for (const d of decisions) {
+        insert.run(
+          tickId,
+          d.key,
+          d.label,
+          d.verdict,
+          d.reason,
+          JSON.stringify(d.checks),
+          JSON.stringify(d.fields),
+          runIds.get(d.key) ?? null
+        )
+      }
+      this.db.exec('COMMIT')
+    } catch (error) {
+      this.db.exec('ROLLBACK')
+      throw error
     }
   }
 
@@ -99,7 +106,7 @@ export class PilotStore {
 
   tickItems(tickId: number): TickItemRow[] {
     return this.db
-      .prepare('SELECT * FROM tick_items WHERE tick_id = ?')
+      .prepare('SELECT * FROM tick_items WHERE tick_id = ? ORDER BY rowid')
       .all(tickId)
       .map((raw) => {
         const r = raw as Record<string, unknown>
