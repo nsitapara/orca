@@ -26,6 +26,14 @@ export function runInherit(cmd, args, opts = {}) {
       process.stderr.write(`${cmd}: ${error.message}\n`)
       resolve(1)
     })
-    child.on('exit', (code) => resolve(code ?? 0))
+    child.on('exit', (code, signal) => {
+      if (code !== null) {
+        resolve(code)
+        return
+      }
+      // Killed by a signal: that is a failure, never a success.
+      process.stderr.write(`${cmd} was stopped by ${signal}\n`)
+      resolve(1)
+    })
   })
 }
