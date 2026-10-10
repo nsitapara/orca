@@ -10,3 +10,5 @@ Every change Pilot makes to an upstream file is listed here (D24). Each one is a
 | tsconfig-cli    | config/tsconfig.cli.json    | ../src/packages/pilot/src/cli/**/*      | CLI compiles Pilot commands                             |
 | main            | src/main/startup/main-process-ready-runtime.ts | attachPilotMain(runtime) | start Pilot in desktop/serve before RPC is built |
 | orcad           | src/main/orcad/orcad-entry.ts | attachPilotOrcad(runtime, | start Pilot in orcad before RPC binds |
+| renderer | src/renderer/src/main.tsx | attachPilotRenderer() | display rebrand + Pilot renderer setup |
+| tailwind-source | src/renderer/src/assets/main.css | packages/pilot/src | generate Tailwind classes used by Pilot UI |
