@@ -24,7 +24,7 @@ export function stepErrors(raw: RawAutomation): string[] {
       return
     }
     if (s.shell !== undefined) {
-      errors.push(`steps[${i}].shell: only shell steps use shell: (shell steps arrive in M3)`)
+      errors.push(`step ${i + 1}: only shell steps use shell: (shell steps arrive in M3)`)
     }
     if (!s.skill && !s.prompt) {
       errors.push(`step ${i + 1} needs a skill or a prompt`)
@@ -51,7 +51,13 @@ export function quotaErrors(raw: RawAutomation): string[] {
 
 // A constant key would make the automation run once, ever.
 export function oncePerErrors(raw: RawAutomation): string[] {
-  if (raw.once_per === undefined || raw.once_per.match(PLACEHOLDER)) {
+  const template = raw.once_per
+  if (template === undefined) {
+    return []
+  }
+  // Any brace group with whitespace would stay literal in the key (a silent partial key).
+  const spaced = /\{[^{}]*\s[^{}]*\}/.test(template)
+  if (template.match(PLACEHOLDER) && !spaced) {
     return []
   }
   return ['once_per: no {field} placeholder (write {mr.iid}, without spaces)']

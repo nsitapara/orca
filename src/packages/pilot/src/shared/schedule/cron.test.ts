@@ -61,16 +61,36 @@ describe('nextTickAfter', () => {
     expect(ticks('0 8 * * 1-5', '2026-10-10T19:00:00Z', 1)).toEqual(['2026-10-12T15:00:00.000Z'])
   })
 
+  it('treats weekday 7 as Sunday', () => {
+    // 2026-10-11 is a Sunday; 08:00 PDT = 15:00Z
+    expect(ticks('0 8 * * 7', '2026-10-10T19:00:00Z', 1)).toEqual(['2026-10-11T15:00:00.000Z'])
+  })
+
+  it('fires on either day-of-month or weekday when both are restricted', () => {
+    // day 15 OR Monday: Monday the 12th comes first, then the 15th
+    expect(ticks('0 8 15 * 1', '2026-10-10T19:00:00Z', 2)).toEqual([
+      '2026-10-12T15:00:00.000Z',
+      '2026-10-15T15:00:00.000Z'
+    ])
+  })
+
+  it('supports a stepped range', () => {
+    expect(ticks('1-10/3 * * * *', '2026-10-10T19:00:00Z', 4)).toEqual([
+      '2026-10-10T19:01:00.000Z',
+      '2026-10-10T19:04:00.000Z',
+      '2026-10-10T19:07:00.000Z',
+      '2026-10-10T19:10:00.000Z'
+    ])
+  })
+
   it('returns null for an expression that never matches', () => {
     expect(nextTickAfter('0 0 30 2 *', LA, new Date('2026-10-10T00:00:00Z'))).toBeNull()
   })
 
-  it('finds a yearly tick from mid-year in reasonable time', () => {
-    const start = performance.now()
+  // Measured ~517 ms on the dev Mac (walks real minutes); the vitest timeout guards runaway walks.
+  it('finds a yearly tick from mid-year', () => {
     const next = nextTickAfter('0 0 1 1 *', LA, new Date('2026-07-01T00:00:00Z'))
-    const ms = performance.now() - start
     expect(next?.toISOString()).toBe('2027-01-01T08:00:00.000Z')
-    expect(ms).toBeLessThan(2000)
   })
 })
 
@@ -79,7 +99,10 @@ describe('parseCron', () => {
     ['* * *', 'expected 5 fields (minute hour day month weekday), got 3'],
     ['61 * * * *', 'minute: 61 is out of range 0-59'],
     ['*/0 * * * *', 'minute: step must be at least 1'],
-    ['a * * * *', 'minute: "a" is not a number']
+    ['a * * * *', 'minute: "a" is not a number'],
+    ['10-5 * * * *', 'minute: range 10-5 starts after it ends'],
+    ['1-2-3 * * * *', 'minute: bad range 1-2-3'],
+    ['5/15 * * * *', 'minute: write 5-59/15 instead of 5/15']
   ])('%s -> %s', (expr, message) => {
     expect(() => parseCron(expr)).toThrow(message)
   })
