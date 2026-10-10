@@ -34,9 +34,18 @@ function parseField(text: string, name: string, min: number, max: number): Set<n
     let lo = min
     let hi = max
     if (range !== '*') {
-      const [a, b] = range.split('-')
-      lo = num(a, name)
-      hi = b === undefined ? lo : num(b, name)
+      const bounds = range.split('-')
+      if (bounds.length > 2) {
+        throw new Error(`${name}: bad range ${range}`)
+      }
+      lo = num(bounds[0], name)
+      hi = bounds[1] === undefined ? lo : num(bounds[1], name)
+      if (bounds.length === 1 && stepText !== undefined) {
+        throw new Error(`${name}: write ${lo}-${max}/${stepText} instead of ${lo}/${stepText}`)
+      }
+      if (lo > hi) {
+        throw new Error(`${name}: range ${lo}-${hi} starts after it ends`)
+      }
     }
     for (const v of [lo, hi]) {
       if (v < min || v > max) {

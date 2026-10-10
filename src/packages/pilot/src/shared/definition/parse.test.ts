@@ -154,50 +154,51 @@ describe('parseAutomationYaml', () => {
     expect(result.ok).toBe(true)
   })
 
+  const MINIMAL = 'name: n\nrepo: r\nschedule: manual\n'
+  const STEP = 'steps:\n  - agent: claude\n    prompt: x\n'
   it.each([
-    ['items', 'items:\n  kind: merge_request\n  bogus: 1\n', 'items: unknown key "bogus"'],
+    [
+      'items',
+      `${MINIMAL}items:\n  kind: merge_request\n  bogus: 1\n${STEP}`,
+      'items: unknown key "bogus"'
+    ],
     [
       'items.where',
-      'items:\n  kind: merge_request\n  where: { bogus: 1 }\n',
+      `${MINIMAL}items:\n  kind: merge_request\n  where: { bogus: 1 }\n${STEP}`,
       'items.where: unknown key "bogus"'
     ],
     [
       'a step',
-      'steps:\n  - agent: claude\n    prompt: x\n    bogus: 1\n',
+      `${MINIMAL}steps:\n  - agent: claude\n    prompt: x\n    bogus: 1\n`,
       'steps.0: unknown key "bogus"'
     ],
     [
       'the author ref',
-      'items:\n  kind: merge_request\n  where:\n    author: { people: [nish], bogus: 1 }\n',
-      '"bogus"'
+      `${MINIMAL}items:\n  kind: merge_request\n  where:\n    author: { people: [nish], bogus: 1 }\n${STEP}`,
+      'items.where.author: unknown key "bogus"'
     ],
-    ['a check object', 'checks:\n  - worktree: exists\n    bogus: 1\n', '"bogus"'],
-    ['quota', 'checks:\n  - quota: { weekly: 90, bogus: 1 }\n', '"bogus"']
-  ])('rejects an unknown key inside %s and names it', (_level, replacement, message) => {
-    const key = replacement.split(':')[0]
-    const base = CI_05.replace(/\nitems:[\s\S]*?\nonce_per/, '\nonce_per')
-      .replace(/\nchecks:[\s\S]*?\nlimits/, '\nlimits')
-      .replace(/\nsteps:[\s\S]*?\npowers/, '\npowers')
-    const withDefaults = key === 'items' ? base : `${base}\nitems:\n  kind: merge_request\n`
-    const parts: Record<string, string> = {
-      items: key === 'items' ? replacement : '',
-      checks: key === 'checks' ? replacement : '',
-      steps: key === 'steps' ? replacement : 'steps:\n  - agent: claude\n    prompt: x\n'
-    }
-    const yaml = `${key === 'items' ? base : withDefaults}\n${parts.checks}${parts.steps}${key === 'items' ? parts.items : ''}`
-    const result = parseAutomationYaml(yaml, '/a/ci.yaml')
-    expect(result.ok).toBe(false)
-    if (!result.ok) {
-      console.info('ERR', result.errors)
-      expect(result.errors.join('\n')).toContain(message)
-    }
+    [
+      'a check object',
+      `${MINIMAL}checks:\n  - worktree: exists\n    bogus: 1\n${STEP}`,
+      'checks.0: unknown key "bogus"'
+    ],
+    [
+      'quota',
+      `${MINIMAL}checks:\n  - quota: { weekly: 90, bogus: 1 }\n${STEP}`,
+      'checks.0.quota: unknown key "bogus"'
+    ]
+  ])('rejects an unknown key inside %s and names it', (_level, yaml, message) => {
+    expect(parseAutomationYaml(yaml, '/a/ci.yaml')).toEqual({
+      ok: false,
+      errors: [`/a/ci.yaml: ${message}`]
+    })
   })
 
   it.each([
     [
       'an agent step with a shell key',
       CI_05.replace('    skill: fix-gitlab-ci\n', '    skill: fix-gitlab-ci\n    shell: ./x.sh\n'),
-      'steps[0].shell: only shell steps use shell: (shell steps arrive in M3)'
+      'step 1: only shell steps use shell: (shell steps arrive in M3)'
     ],
     [
       'a step with no skill or prompt',
@@ -217,6 +218,11 @@ describe('parseAutomationYaml', () => {
     [
       'a once_per with no placeholder',
       CI_05.replace('"{mr.iid}:{mr.pipeline}"', '"daily"'),
+      'once_per: no {field} placeholder (write {mr.iid}, without spaces)'
+    ],
+    [
+      'a once_per with one valid and one spaced placeholder',
+      CI_05.replace('"{mr.iid}:{mr.pipeline}"', '"{mr.iid}:{ mr.pipeline }"'),
       'once_per: no {field} placeholder (write {mr.iid}, without spaces)'
     ],
     [

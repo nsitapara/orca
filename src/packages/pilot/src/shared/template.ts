@@ -1,5 +1,6 @@
 import type { ItemFields } from './api-types'
 
+// Global flag: use with match()/replace(), never .test()/.exec() (lastIndex is stateful).
 export const PLACEHOLDER = /\{([a-z_][\w]*(?:\.[\w]+)+|[a-z_][\w]*)\}/gi
 
 export function renderTemplate(
