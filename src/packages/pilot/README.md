@@ -11,10 +11,43 @@ Pilot is Nish's fork of Orca (`github.com/nsitapara/orca`), with Automations reb
 - **Launchers:** `bin/orca` inside Pilot launches Pilot's binary but, without `ORCA_USER_DATA_PATH`, talks to whichever app's data the environment points at. Use `pilot` for Pilot.
 - **Tests:** `pnpm exec vitest run --config config/vitest.config.ts src/packages/pilot`
 
+## Remote use (D25)
+
+Pilot keeps Orca's pairing, WebSocket server, web client and `orcad` protocols unchanged. Pilot's runtime listens on 6868 (override `PILOT_WS_PORT`), so it runs beside real Orca on 6768. Pairing links stay `orca://pair?code=...` and carry Pilot's endpoint.
+
+### Verified 2026-10-10 (automated)
+
+- **Pilot and Orca side by side: pass.** Run from `dist/mac-arm64/Pilot.app` (rebuilt that day), with real Orca running:
+
+      Orca   25130 ... TCP *:6768 (LISTEN)
+      Pilot  83991 ... TCP 127.0.0.1:6868 (LISTEN)
+
+  Pilot has not paired a device, so its WebSocket listener is bound to loopback only (upstream behaviour, STA-2370).
+
+- **Headless `orcad`: pass.** `pnpm run build:orcad` writes `out/orcad/orcad.js`. Started with `ORCA_USER_DATA=<temp dir> node out/orcad/orcad.js --port 6790` (a temp data folder, never Orca's), it printed `[pilot] attached (orcad)` and `Bound endpoint: ws://127.0.0.1:6790`, and a pairing URL. Then, with the packaged Pilot CLI:
+
+      pilot environment add --name local-orcad --pairing-code <code>
+      pilot automations status --environment local-orcad
+      -> Pilot 0.1.0 (orcad)
+
+  The flag is `--environment <id or name>`; this CLI has no `--host`. The environment was removed afterwards (`pilot environment rm --environment local-orcad`).
+
+### Pending, Nish to verify (2026-10-10)
+
+These need a phone, a second Mac and an iPad on Tailscale. Open Pilot (`dist/mac-arm64/Pilot.app`) first. Do not use real Orca's `orca` CLI for these: it would save the environment in Orca's data.
+
+- [ ] **Phone.** In Pilot, open the "Orca Mobile" nav entry (the name stays). Scan the QR code with the Orca mobile app on a phone that is on Tailscale. Expect Pilot's worktrees listed and a terminal that opens. The link is `orca://pair?code=...` and its endpoint is this Mac's address on port 6868.
+- [ ] **Another Mac.** On a second Mac with Orca installed, run `orca environment add --name pilot-mac --pairing-code <code from Pilot's pairing screen>`, then `orca worktree list --host runtime:<environment id>` (if `--host` is rejected, use `--environment <id>`). Expect Pilot's worktrees.
+- [ ] **Browser web client.** Open Pilot's web client URL (from the same pairing screen, pairing in the URL fragment) on an iPad or another machine, using this Mac's Tailscale address on port 6868. Expect the full UI, with **Automations** showing Pilot's page.
+- Pilot's WebSocket listener binds loopback until a device is paired (upstream STA-2370), so the network bind appears only after the first pairing. If a Tailscale address refuses the connection before pairing, that is expected.
+
 ## Known gaps
 
 - Computer Use is unavailable in packaged Pilot. Enabling it needs a Pilot bundle id for the helper plus a trust-list entry in its Swift peer check.
 - After closing the right sidebar while on the Automations tab, Orca's main-side persistence allowlist resets the stored tab to Explorer (the UI hydrates it back via `hydratePersistedUI`), so reopening or restarting lands on Explorer, not Automations.
+- After a restart (or closing and reopening the right sidebar) the sidebar tab comes back as Explorer, because main's persistence allowlist drops `plugin:pilot`. The existing sidebar-tab note above covers the same cause.
+- "Install CLI" installs `/usr/local/bin/pilot`, not `orca`. Checked in code, not clicked: `applyPilotEnvDefaults` (`src/main/env.ts`) sets `ORCA_CLI_INSTALL_PATH` to `/usr/local/bin/pilot`, and `cli-install-location.ts` uses that override ahead of its own `orca` default.
+- Packaged builds are unsigned (`CSC_IDENTITY_AUTO_DISCOVERY=false`, `--dir` output). macOS may ask you to allow the app on first launch.
 
 ## Updating from upstream
 

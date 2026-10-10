@@ -19,6 +19,7 @@ function stepEnv(args) {
   return env
 }
 
+/** @type {[string, string[]][]} */
 const steps = [
   ['pnpm', ['run', 'build:desktop']],
   // No build:computer-macos: Pilot ships without the Computer Use helper (README, Known gaps).
