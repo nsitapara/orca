@@ -1,6 +1,8 @@
 {
   "extends": "@electron-toolkit/tsconfig/tsconfig.node.json",
   "include": [
+    "../src/packages/pilot/src/main/**/*",
+    "../src/packages/pilot/src/shared/**/*",
     "../electron.vite.config.*",
     "./vitest.config.ts",
     "./build-plugins/**/*",
