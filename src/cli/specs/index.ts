@@ -1,4 +1,5 @@
 import type { CommandSpec } from '../args'
+import { PILOT_COMMAND_SPECS } from '../../packages/pilot/src/cli/specs' // pilot-hook: cli-specs
 import { ACCOUNT_COMMAND_SPECS } from './account'
 import { BROWSER_ADVANCED_COMMAND_SPECS } from './browser-advanced'
 import { BROWSER_BASIC_COMMAND_SPECS } from './browser-basic'
@@ -44,5 +45,6 @@ export const COMMAND_SPECS: CommandSpec[] = [
   ...EMULATOR_COMMAND_SPECS,
   ...SKILL_COMMAND_SPECS,
   ...SEARCH_COMMAND_SPECS,
-  ...PROFILE_STATE_COMMAND_SPECS
+  ...PROFILE_STATE_COMMAND_SPECS,
+  ...PILOT_COMMAND_SPECS // pilot-hook: cli-specs
 ]
