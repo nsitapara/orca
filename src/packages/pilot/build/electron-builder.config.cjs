@@ -6,9 +6,14 @@ const base = require('../../../../config/electron-builder.config.cjs')
 
 const PILOT_BIN = 'src/packages/pilot/build/bin'
 const ORCA_LAUNCHER = 'resources/darwin/bin/orca'
+// Why: the helper keeps Orca's bundle id (shared TCC grants) and its peer check rejects Pilot.
+const COMPUTER_USE_HELPER = 'Orca Computer Use.app'
 
 function pilotMacResources(list) {
-  const kept = (list ?? []).filter((r) => (typeof r === 'string' ? r : r.from) !== ORCA_LAUNCHER)
+  const kept = (list ?? []).filter((r) => {
+    const from = typeof r === 'string' ? r : r.from
+    return from !== ORCA_LAUNCHER && !from.includes(COMPUTER_USE_HELPER)
+  })
   return [
     ...kept,
     { from: `${PILOT_BIN}/orca`, to: 'bin/orca' },

@@ -1,7 +1,16 @@
 #!/bin/sh
 # Why: Swift 6.4 (Xcode 27) defaults to the swiftbuild build system, whose output paths differ from what
 # Orca's helper build scripts expect (.build/<triple>/release). Used only by Pilot's build-mac.mjs.
+if [ -z "$PILOT_REAL_PATH" ]; then
+  echo "swift shim: PILOT_REAL_PATH is empty; run it through build-mac.mjs" >&2
+  exit 1
+fi
 real=$(PATH="$PILOT_REAL_PATH" command -v swift)
+self_dir=$(cd "$(dirname "$0")" && pwd)
+if [ -z "$real" ] || [ "$(cd "$(dirname "$real")" && pwd)" = "$self_dir" ]; then
+  echo "swift shim: could not find the real swift on PILOT_REAL_PATH" >&2
+  exit 1
+fi
 if [ "$1" = "build" ]; then
   shift
   exec "$real" build --build-system native "$@"

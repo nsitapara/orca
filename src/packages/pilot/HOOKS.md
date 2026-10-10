@@ -2,22 +2,23 @@
 
 Every change Pilot makes to an upstream file is listed here (D24). Each one is an import plus one call, one JSX element, or one config line. The logic lives in `src/packages/pilot/`. `node src/packages/pilot/scripts/hook-guard.mjs` checks that every row's file still contains its Match text, and that no other upstream file differs from `upstream/main`. After an upstream sync, a failing row names the file to fix.
 
-| Hook            | File                        | Match                                   | Why                                                     |
-| --------------- | --------------------------- | --------------------------------------- | ------------------------------------------------------- |
-| tsconfig-node   | config/tsconfig.node.json   | ../src/packages/pilot/src/main/**/*     | typecheck Pilot main + shared code                      |
-| tsconfig-web    | config/tsconfig.web.json    | ../src/packages/pilot/src/renderer/**/* | composite renderer project must list Pilot UI files     |
-| tsconfig-tc-web | config/tsconfig.tc.web.json | ../src/packages/pilot/src/renderer/**/* | typecheck config replaces include, so it lists them too |
-| tsconfig-cli    | config/tsconfig.cli.json    | ../src/packages/pilot/src/cli/**/*      | CLI compiles Pilot commands                             |
-| main            | src/main/startup/main-process-ready-runtime.ts | attachPilotMain(runtime) | start Pilot in desktop/serve before RPC is built |
-| orcad           | src/main/orcad/orcad-entry.ts | attachPilotOrcad(runtime, | start Pilot in orcad before RPC binds |
-| renderer | src/renderer/src/main.tsx | attachPilotRenderer() | display rebrand + Pilot renderer setup |
-| tailwind-source | src/renderer/src/assets/main.css | packages/pilot/src | generate Tailwind classes used by Pilot UI |
-| right-sidebar-route | src/renderer/src/store/right-sidebar-route.ts | isPilotTab(tab) | keep the Automations tab through route normalization |
-| right-sidebar-items | src/renderer/src/components/right-sidebar/use-right-sidebar-activity-items.ts | ...pilotActivityItems | add the Automations icon to the activity bar |
-| right-sidebar-panel | src/renderer/src/components/right-sidebar/right-sidebar-panel-content.tsx | <PilotRightSidebarPanel /> | render the Automations panel |
-| right-sidebar-reclick | src/renderer/src/components/right-sidebar/use-right-sidebar-tab-routing.ts | handlePilotActivityClick(tab, effectiveTab) | D22: reclick closes, any click opens |
-| right-sidebar-keep-strip | src/renderer/src/components/right-sidebar/index.tsx | usePilotSideStripWhenClosed( | D22: side strip stays when the panel is closed |
-| automations-page | src/renderer/src/app-shell/AppWorkspaceShell.tsx | packages/pilot/src/renderer/pages/PilotAutomationsPage | Pilot's Automations page replaces Orca's |
-| cli-specs | src/cli/specs/index.ts | ...PILOT_COMMAND_SPECS | Pilot CLI commands |
-| cli-handlers | src/cli/handler-group-manifest.ts | ...PILOT_HANDLER_GROUPS | Pilot CLI handlers |
-| updater | src/main/updater/updater-setup.ts | isPilotUpdaterDisabled() | never offer Orca releases to Pilot |
+| Hook                     | File                                                                          | Match                                                  | Why                                                         |
+| ------------------------ | ----------------------------------------------------------------------------- | ------------------------------------------------------ | ----------------------------------------------------------- |
+| tsconfig-node            | config/tsconfig.node.json                                                     | ../src/packages/pilot/src/main/**/*                    | typecheck Pilot main + shared code                          |
+| tsconfig-web             | config/tsconfig.web.json                                                      | ../src/packages/pilot/src/renderer/**/*                | composite renderer project must list Pilot UI files         |
+| tsconfig-tc-web          | config/tsconfig.tc.web.json                                                   | ../src/packages/pilot/src/renderer/**/*                | typecheck config replaces include, so it lists them too     |
+| tsconfig-cli             | config/tsconfig.cli.json                                                      | ../src/packages/pilot/src/cli/**/*                     | CLI compiles Pilot commands                                 |
+| main                     | src/main/startup/main-process-ready-runtime.ts                                | attachPilotMain(runtime)                               | start Pilot in desktop/serve before RPC is built            |
+| orcad                    | src/main/orcad/orcad-entry.ts                                                 | attachPilotOrcad(runtime,                              | start Pilot in orcad before RPC binds                       |
+| renderer                 | src/renderer/src/main.tsx                                                     | attachPilotRenderer()                                  | display rebrand + Pilot renderer setup                      |
+| tailwind-source          | src/renderer/src/assets/main.css                                              | packages/pilot/src                                     | generate Tailwind classes used by Pilot UI                  |
+| right-sidebar-route      | src/renderer/src/store/right-sidebar-route.ts                                 | isPilotTab(tab)                                        | keep the Automations tab through route normalization        |
+| right-sidebar-items      | src/renderer/src/components/right-sidebar/use-right-sidebar-activity-items.ts | ...pilotActivityItems                                  | add the Automations icon to the activity bar                |
+| right-sidebar-panel      | src/renderer/src/components/right-sidebar/right-sidebar-panel-content.tsx     | <PilotRightSidebarPanel />                             | render the Automations panel                                |
+| right-sidebar-reclick    | src/renderer/src/components/right-sidebar/use-right-sidebar-tab-routing.ts    | handlePilotActivityClick(tab, effectiveTab)            | D22: reclick closes, any click opens                        |
+| right-sidebar-keep-strip | src/renderer/src/components/right-sidebar/index.tsx                           | usePilotSideStripWhenClosed(                           | D22: side strip stays when the panel is closed              |
+| automations-page         | src/renderer/src/app-shell/AppWorkspaceShell.tsx                              | packages/pilot/src/renderer/pages/PilotAutomationsPage | Pilot's Automations page replaces Orca's                    |
+| cli-specs                | src/cli/specs/index.ts                                                        | ...PILOT_COMMAND_SPECS                                 | Pilot CLI commands                                          |
+| cli-handlers             | src/cli/handler-group-manifest.ts                                             | ...PILOT_HANDLER_GROUPS                                | Pilot CLI handlers                                          |
+| updater                  | src/main/updater/updater-setup.ts                                             | isPilotUpdaterDisabled()                               | never offer Orca releases to Pilot                          |
+| runtime-ws-port          | src/main/startup/main-process-runtime-launch.ts                               | pilotRuntimeWsOptions()                                | Pilot listens on 6868 so it never fights real Orca for 6768 |
