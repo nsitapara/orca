@@ -5,3 +5,6 @@ export type PilotStatus = {
   automationDirs: string[]
   missingDirs: string[]
 }
+
+export type FieldValue = string | number | boolean | null
+export type ItemFields = Record<string, FieldValue>
