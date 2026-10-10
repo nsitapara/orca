@@ -130,4 +130,19 @@ describe('PilotStore', () => {
     expect(() => store.recordDecisions(tick, [], new Map())).not.toThrow()
     expect(store.tickItems(tick)).toEqual([])
   })
+
+  it('records decisions atomically and in insertion order', () => {
+    const store = freshStore()
+    const tick = store.startTick('a', false, 1)
+    expect(() =>
+      store.recordDecisions(tick, [decision('!2', 'started'), decision('!2', 'skipped')], new Map())
+    ).toThrow()
+    expect(store.tickItems(tick)).toEqual([])
+    store.recordDecisions(
+      tick,
+      [decision('!9', 'started'), decision('!10', 'skipped'), decision('!1', 'notdue')],
+      new Map()
+    )
+    expect(store.tickItems(tick).map((i) => i.itemKey)).toEqual(['!9', '!10', '!1'])
+  })
 })
