@@ -8,7 +8,7 @@ export function renderTemplate(
 ): { text: string; missing: string[] } {
   const missing = new Set<string>()
   const text = template.replace(FIELD, (whole, name: string) => {
-    const value = fields[name]
+    const value = Object.hasOwn(fields, name) ? fields[name] : undefined
     if (value === undefined || value === null) {
       missing.add(name)
       return whole
@@ -24,7 +24,7 @@ export function oncePerKey(template: string | null, fields: ItemFields, itemKey:
   }
   const { text, missing } = renderTemplate(template, fields)
   if (missing.length) {
-    return `${text}#missing:${missing.join(',')}`
+    return `${text}#missing:${missing.join(',')}#${itemKey}`
   }
   return text
 }

@@ -29,6 +29,21 @@ describe('renderTemplate', () => {
   it('ignores braces that are not field names', () => {
     expect(renderTemplate('if (x) { y }', fields).text).toBe('if (x) { y }')
   })
+
+  it('leaves prototype names unresolved', () => {
+    expect(renderTemplate('{constructor} {toString}', {})).toEqual({
+      text: '{constructor} {toString}',
+      missing: ['constructor', 'toString']
+    })
+  })
+
+  it('leaves an unclosed brace as is without reporting it', () => {
+    expect(renderTemplate('a {mr.iid', fields)).toEqual({ text: 'a {mr.iid', missing: [] })
+  })
+
+  it('leaves whitespace inside braces literal without reporting it', () => {
+    expect(renderTemplate('{ mr.iid }', fields)).toEqual({ text: '{ mr.iid }', missing: [] })
+  })
 })
 
 describe('oncePerKey', () => {
@@ -37,6 +52,13 @@ describe('oncePerKey', () => {
   it('falls back to the item key without a template', () =>
     expect(oncePerKey(null, fields, '!1561')).toBe('!1561'))
   it('marks keys with missing fields so they never collide with real ones', () => {
-    expect(oncePerKey('{mr.iid}:{mr.head}', fields, '!1561')).toBe('1561:{mr.head}#missing:mr.head')
+    expect(oncePerKey('{mr.iid}:{mr.head}', fields, '!1561')).toBe(
+      '1561:{mr.head}#missing:mr.head#!1561'
+    )
+  })
+  it('keeps two items missing the same field on different keys', () => {
+    const a = oncePerKey('{mr.head}', {}, '!1')
+    const b = oncePerKey('{mr.head}', {}, '!2')
+    expect(a).not.toBe(b)
   })
 })
