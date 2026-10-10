@@ -15,3 +15,11 @@ Pilot is Nish's fork of Orca (`github.com/nsitapara/orca`), with Automations reb
 
 - Computer Use is unavailable in packaged Pilot. Enabling it needs a Pilot bundle id for the helper plus a trust-list entry in its Swift peer check.
 - After closing the right sidebar while on the Automations tab, Orca's main-side persistence allowlist resets the stored tab to Explorer (the UI hydrates it back via `hydratePersistedUI`), so reopening or restarting lands on Explorer, not Automations.
+
+## Updating from upstream
+
+    node src/packages/pilot/scripts/update.mjs            # sync + verify
+    node src/packages/pilot/scripts/update.mjs --build    # …and build Pilot.app
+    node src/packages/pilot/scripts/update.mjs --dry-run  # show the steps only
+
+`main` is always an exact copy of `upstream/main`. GitHub's "Sync fork" button does the same fast-forward. `pilot` merges `main`. Pilot's code is all in this folder, so a merge conflict can only be in one of the hook lines in `HOOKS.md`. Fix that line, commit, and run the command again. Pushing is opt-in (`--push`). The command refuses to start with uncommitted changes to tracked files.
