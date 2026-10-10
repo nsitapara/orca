@@ -1,8 +1,8 @@
 import { useLayoutEffect, type RefObject } from 'react'
 import { CalendarClock } from 'lucide-react'
-import { useAppStore } from '@/store'
 import type { ActivityBarItem } from '@/components/right-sidebar/activity-bar-buttons'
 import { PILOT_TAB, resolveActivityClick } from '../../shared/sidebar-click'
+import { pilotStore } from '../store'
 
 export { PILOT_TAB, isPilotTab } from '../../shared/sidebar-click'
 
@@ -31,7 +31,11 @@ export function PilotRightSidebarPanel(): React.JSX.Element {
 
 // pilot-hook: right-sidebar-reclick. Returns true when it handled the click (closed the panel).
 export function handlePilotActivityClick(tab: string, effectiveTab: string): boolean {
-  const state = useAppStore.getState()
+  const store = pilotStore()
+  if (!store) {
+    return false
+  }
+  const state = store.getState()
   const action = resolveActivityClick({ tab, effectiveTab, open: state.rightSidebarOpen })
   if (action === 'close') {
     state.setRightSidebarOpen(false)
