@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-export ORCA_USER_DATA_PATH="$HOME/Library/Application Support/pilot"
+export ORCA_USER_DATA_PATH="$HOME/Library/Application Support/Pilot"
 set -euo pipefail
 
 function app_realpath() {
@@ -15,7 +15,7 @@ function app_realpath() {
 
 APP_PATH="$(app_realpath "${BASH_SOURCE[0]}")"
 if [ -z "$APP_PATH" ]; then
-	echo "Unable to determine Orca.app path from symlink: ${BASH_SOURCE[0]}"
+	echo "Unable to determine Pilot.app path from symlink: ${BASH_SOURCE[0]}"
 	exit 1
 fi
 

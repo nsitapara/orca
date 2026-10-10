@@ -26,6 +26,7 @@ import { startWindowsDesktopBeforeShellPathReady } from './windows-desktop-shell
 import { repairKnownPoisonedInstallDirBeforeWindow } from './windows-install-dir-acl-recovery'
 import { installServeQuitHandling } from './serve-quit-handling'
 import { registerHeadlessServeSshHandlers } from './headless-serve-ssh-registration'
+import { pilotRuntimeWsOptions } from '../../packages/pilot/src/main/runtime-ws-port' // pilot-hook: runtime-ws-port
 import { settleServeDesktopActivation } from './serve-desktop-activation'
 import {
   recordRuntimeRpcStartFailure,
@@ -82,6 +83,7 @@ function installRuntimeRpc(
     // Why: STA-2370 — the desktop app binds the WS listener to loopback until the user pairs a device;
     // `orca serve` is an explicit remote opt-in, and E2E keeps the wide bind its harness connects over.
     exposeNetworkByDefault: Boolean(serveOptions) || isE2E,
+    ...pilotRuntimeWsOptions(), // pilot-hook: runtime-ws-port
     ...(isE2E ? { wsPort: e2eWsPort } : {}),
     ...(devWsPort !== undefined ? { wsPort: devWsPort } : {}),
     ...(serveOptions?.wsPort !== undefined
