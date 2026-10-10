@@ -17,7 +17,9 @@ const WorktreeCreationPanel = lazy(
   () => import('../components/worktree-creation/WorktreeCreationPanel')
 )
 const TaskPage = lazy(() => import('../components/task-page/TaskPage'))
-const AutomationsPage = lazy(() => import('../components/automations/AutomationsPage'))
+const AutomationsPage = lazy(
+  () => import('../../../packages/pilot/src/renderer/pages/PilotAutomationsPage')
+) // pilot-hook: automations-page
 const ActivityPrototypePage = lazy(() => import('../components/activity/ActivityPrototypePage'))
 const Settings = lazy(() => import('../components/settings/Settings'))
 const SkillsPage = lazy(() => import('../components/skills/SkillsPage'))
