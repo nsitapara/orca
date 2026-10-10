@@ -12,6 +12,14 @@ describe('attachPilotRenderer', () => {
     expect(i18n.t('missing', { defaultValue: 'About Orca' })).toBe('About Pilot')
   })
 
+  it('does not throw on object resources and keeps their shape', async () => {
+    const i18n = i18next.createInstance()
+    const obj = { n: 1, x: 'Orca' }
+    await i18n.init({ lng: 'en', resources: { en: { translation: { obj } } } })
+    attachPilotRenderer({ i18n, doc: document })
+    expect(i18n.t('obj', { returnObjects: true })).toEqual({ n: 1, x: 'Pilot' })
+  })
+
   it('sets the document title', () => {
     document.title = 'Orca'
     attachPilotRenderer({ i18n: i18next.createInstance(), doc: document })
