@@ -134,4 +134,105 @@ describe('parseAutomationYaml', () => {
       errors: [`/a/ci.yaml: ${message}`]
     })
   })
+
+  it('rejects a bad cron and a bad time zone', () => {
+    const yaml = CI_05.replace('"10 * * * *"', '"61 * * * *"').replace(
+      'repo: web-platform',
+      'repo: web-platform\ntimezone: Mars/Base'
+    )
+    expect(parseAutomationYaml(yaml, '/a/ci.yaml')).toEqual({
+      ok: false,
+      errors: [
+        '/a/ci.yaml: schedule: minute: 61 is out of range 0-59',
+        '/a/ci.yaml: timezone: "Mars/Base" isn\'t an IANA time zone'
+      ]
+    })
+  })
+
+  it('accepts manual schedules', () => {
+    const result = parseAutomationYaml(CI_05.replace('"10 * * * *"', 'manual'), '/a/ci.yaml')
+    expect(result.ok).toBe(true)
+  })
+
+  it.each([
+    ['items', 'items:\n  kind: merge_request\n  bogus: 1\n', 'items: unknown key "bogus"'],
+    [
+      'items.where',
+      'items:\n  kind: merge_request\n  where: { bogus: 1 }\n',
+      'items.where: unknown key "bogus"'
+    ],
+    [
+      'a step',
+      'steps:\n  - agent: claude\n    prompt: x\n    bogus: 1\n',
+      'steps.0: unknown key "bogus"'
+    ],
+    [
+      'the author ref',
+      'items:\n  kind: merge_request\n  where:\n    author: { people: [nish], bogus: 1 }\n',
+      '"bogus"'
+    ],
+    ['a check object', 'checks:\n  - worktree: exists\n    bogus: 1\n', '"bogus"'],
+    ['quota', 'checks:\n  - quota: { weekly: 90, bogus: 1 }\n', '"bogus"']
+  ])('rejects an unknown key inside %s and names it', (_level, replacement, message) => {
+    const key = replacement.split(':')[0]
+    const base = CI_05.replace(/\nitems:[\s\S]*?\nonce_per/, '\nonce_per')
+      .replace(/\nchecks:[\s\S]*?\nlimits/, '\nlimits')
+      .replace(/\nsteps:[\s\S]*?\npowers/, '\npowers')
+    const withDefaults = key === 'items' ? base : `${base}\nitems:\n  kind: merge_request\n`
+    const parts: Record<string, string> = {
+      items: key === 'items' ? replacement : '',
+      checks: key === 'checks' ? replacement : '',
+      steps: key === 'steps' ? replacement : 'steps:\n  - agent: claude\n    prompt: x\n'
+    }
+    const yaml = `${key === 'items' ? base : withDefaults}\n${parts.checks}${parts.steps}${key === 'items' ? parts.items : ''}`
+    const result = parseAutomationYaml(yaml, '/a/ci.yaml')
+    expect(result.ok).toBe(false)
+    if (!result.ok) {
+      console.info('ERR', result.errors)
+      expect(result.errors.join('\n')).toContain(message)
+    }
+  })
+
+  it.each([
+    [
+      'an agent step with a shell key',
+      CI_05.replace('    skill: fix-gitlab-ci\n', '    skill: fix-gitlab-ci\n    shell: ./x.sh\n'),
+      'steps[0].shell: only shell steps use shell: (shell steps arrive in M3)'
+    ],
+    [
+      'a step with no skill or prompt',
+      CI_05.replace(/steps:[\s\S]*?\npowers/, 'steps:\n  - agent: claude\npowers'),
+      'step 1 needs a skill or a prompt'
+    ],
+    [
+      'a weekly quota over 100',
+      CI_05.replace('weekly: 90%', 'weekly: 150%'),
+      'checks[3].quota.weekly: 150 is out of range 0-100'
+    ],
+    [
+      'a negative session quota',
+      CI_05.replace('session: 95%', 'session: -5'),
+      'checks[3].quota.session: -5 is out of range 0-100'
+    ],
+    [
+      'a once_per with no placeholder',
+      CI_05.replace('"{mr.iid}:{mr.pipeline}"', '"daily"'),
+      'once_per: no {field} placeholder (write {mr.iid}, without spaces)'
+    ],
+    [
+      'a once_per with spaces in braces',
+      CI_05.replace('"{mr.iid}:{mr.pipeline}"', '"{ mr.iid }"'),
+      'once_per: no {field} placeholder (write {mr.iid}, without spaces)'
+    ]
+  ])('rejects %s', (_label, yaml, message) => {
+    expect(parseAutomationYaml(yaml, '/a/ci.yaml')).toEqual({
+      ok: false,
+      errors: [`/a/ci.yaml: ${message}`]
+    })
+  })
+
+  it('accepts quota bounds 0 and 100', () => {
+    const yaml = CI_05.replace('weekly: 90%', 'weekly: 0').replace('session: 95%', 'session: 100%')
+    expect(parseAutomationYaml(yaml, '/a/ci.yaml').ok).toBe(true)
+  })
 })
