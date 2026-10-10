@@ -15,6 +15,7 @@ import {
   recordRendererCrashBreadcrumb
 } from './lib/crash-diagnostics'
 import { installAutomationHostDiagnostic } from './components/automations/automation-host-diagnostics'
+import { attachPilotRenderer } from '../../packages/pilot/src/renderer/attach-renderer' // pilot-hook: renderer
 import { applyDocumentTheme } from './lib/document-theme'
 import { installTypingLatencyDiagnostic } from './lib/typing-latency/diagnostic'
 import { shouldEnableReactGrab } from './lib/react-grab-dev-gate'
@@ -32,6 +33,7 @@ recordRendererCrashBreadcrumb('renderer_bootstrap_started', { dev: import.meta.e
 installRendererCrashDiagnostics()
 installTypingLatencyDiagnostic()
 installAutomationHostDiagnostic()
+attachPilotRenderer() // pilot-hook: renderer
 
 if (
   import.meta.env.DEV &&
