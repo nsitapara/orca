@@ -52,23 +52,35 @@ function quotaOutcome(
 
 function outcome(c: BuiltinCheck, f: ItemFields): Omit<CheckOutcome, 'check'> {
   if (c.kind === 'worktree_exists') {
-    if (f['worktree.path'] === null || f['worktree.path'] === undefined) {
-      return { ok: false, reason: `No worktree for branch ${f['mr.branch']}` }
+    const path = f['worktree.path']
+    if (typeof path !== 'string') {
+      return { ok: false, reason: `No worktree for branch ${f['mr.branch'] ?? '(unknown)'}` }
     }
-    return { ok: true, reason: String(f['worktree.path']) }
+    return { ok: true, reason: path }
   }
   if (c.kind === 'worktree_clean') {
-    if (f['worktree.git_operation']) {
-      return { ok: false, reason: `A ${f['worktree.git_operation']} is in progress` }
+    const op = f['worktree.git_operation']
+    if (op !== null && typeof op !== 'string') {
+      return { ok: false, reason: "Couldn't tell whether a git operation is in progress" }
     }
-    const dirty = asNumber(f['worktree.dirty_count']) ?? 0
+    if (op) {
+      return { ok: false, reason: `A ${op} is in progress` }
+    }
+    const dirty = asNumber(f['worktree.dirty_count'])
+    if (dirty === null) {
+      return { ok: false, reason: "Couldn't read uncommitted changes" }
+    }
     if (dirty > 0) {
       return { ok: false, reason: plural(dirty, 'uncommitted file') }
     }
     return { ok: true, reason: 'No uncommitted changes' }
   }
   if (c.kind === 'session_none_open') {
-    if (f['session.open_from_automation'] === true) {
+    const open = f['session.open_from_automation']
+    if (typeof open !== 'boolean') {
+      return { ok: false, reason: "Couldn't tell whether a session is open" }
+    }
+    if (open) {
       return { ok: false, reason: 'A session from this automation is still open there' }
     }
     return { ok: true, reason: 'No session open' }

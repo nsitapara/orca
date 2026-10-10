@@ -19,13 +19,13 @@ function scopeGate(def: AutomationDefinition, item: TickItem, people: PeopleDire
   const where = def.items?.where ?? {}
   const state = item.fields['mr.state']
   if (where.state === 'open' && state !== 'open') {
-    return { verdict: 'out_of_scope', reason: `MR is ${state}` }
+    return { verdict: 'out_of_scope', reason: `MR is ${state ?? '(state unknown)'}` }
   }
   // anyone/absent: no lookup; a people or group ref needs the author in people.yaml.
   if (where.author === undefined || where.author === 'anyone') {
     return null
   }
-  const username = String(item.fields['mr.author'])
+  const username = String(item.fields['mr.author'] ?? '(unknown)')
   const person = personByGitlab(people, username)
   if (!person) {
     return { verdict: 'out_of_scope', reason: `Author ${username} isn't in people.yaml` }
@@ -74,9 +74,12 @@ function limitGate(def: AutomationDefinition, startedSoFar: number, running: num
 }
 
 // The tick algorithm (spec §6 steps 3–6): scope → due → once_per → first-seen baseline → checks → limits.
+// per_tick and at_once apply in the caller's item order (Task 17 sorts by iid).
 export function decideTick(input: DecideInput): ItemDecision[] {
   const { definition: def, people, handledKeys, seenKeys, runningCount } = input
   let started = 0
+  const startedOnceKeys = new Set<string>()
+  const startedWorktrees = new Set<string>()
   return input.items.map((item) => {
     const onceKey = oncePerKey(def.oncePer, item.fields, item.key)
     const base = {
@@ -90,7 +93,7 @@ export function decideTick(input: DecideInput): ItemDecision[] {
     if (gate) {
       return { ...base, ...gate }
     }
-    if (handledKeys.has(onceKey)) {
+    if (handledKeys.has(onceKey) || startedOnceKeys.has(onceKey)) {
       return { ...base, verdict: 'notdue', reason: `Already handled ${onceKey}` }
     }
     if (def.firstSeen === 'baseline' && !seenKeys.has(item.key)) {
@@ -100,11 +103,24 @@ export function decideTick(input: DecideInput): ItemDecision[] {
     if (failed) {
       return { ...base, checks, verdict: 'skipped', reason: failed.reason }
     }
+    const path = item.fields['worktree.path']
+    if (typeof path === 'string' && startedWorktrees.has(path)) {
+      return {
+        ...base,
+        checks,
+        verdict: 'skipped',
+        reason: `Another run starts in ${path} this tick`
+      }
+    }
     const limit = limitGate(def, started, runningCount)
     if (limit) {
       return { ...base, checks, ...limit }
     }
     started += 1
+    startedOnceKeys.add(onceKey)
+    if (typeof path === 'string') {
+      startedWorktrees.add(path)
+    }
     return { ...base, checks, verdict: 'started', reason: 'All checks pass' }
   })
 }
