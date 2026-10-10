@@ -3,8 +3,14 @@ import { useAppStore } from '@/store'
 import { pilotBrand } from '../shared/brand'
 import { registerPilotStore, type PilotStore } from './store'
 
+export type PilotI18nPostProcessor = {
+  type: 'postProcessor'
+  name: string
+  process: (value: unknown) => unknown
+}
+
 export type I18nLike = {
-  use(module: object): unknown
+  use(module: PilotI18nPostProcessor): unknown
   options: { postProcess?: string | readonly string[] | false }
 }
 
