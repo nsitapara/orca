@@ -9,6 +9,14 @@ groups:
   - { id: web, name: Web team, members: [nish, shivan] }
 `
 
+function errorsOf(text: string): string[] {
+  const result = parsePeopleYaml(text)
+  if (result.ok) {
+    throw new Error('expected validation to fail')
+  }
+  return result.errors
+}
+
 describe('people', () => {
   const parsed = parsePeopleYaml(YAML)
   if (!parsed.ok) {
@@ -16,8 +24,9 @@ describe('people', () => {
   }
   const dir = parsed.directory
 
-  it('finds a person by GitLab username', () => {
+  it('finds a person by GitLab username, ignoring case', () => {
     expect(personByGitlab(dir, 'nish8')?.id).toBe('nish')
+    expect(personByGitlab(dir, 'Nish8')?.id).toBe('nish')
     expect(personByGitlab(dir, 'someone')).toBeNull()
   })
 
@@ -26,7 +35,8 @@ describe('people', () => {
     ['anyone' as const, 'shivan', true],
     [{ people: ['nish'] }, 'nish', true],
     [{ people: ['nish'] }, 'shivan', false],
-    [{ group: 'web' }, 'shivan', true]
+    [{ group: 'web' }, 'shivan', true],
+    [{}, 'nish', false]
   ])('refIncludes(%o, %s) = %s', (ref, id, expected) => {
     expect(refIncludes(ref, id, dir)).toBe(expected)
   })
@@ -35,6 +45,8 @@ describe('people', () => {
     expect(describeRef({ people: ['nish'] }, dir)).toBe('Nish Sitapara')
     expect(describeRef({ people: ['nish', 'shivan'] }, dir)).toBe('Nish Sitapara and Shivan')
     expect(describeRef({ group: 'web' }, dir)).toBe('Web team')
+    expect(describeRef({ people: ['nish'], group: 'web' }, dir)).toBe('Nish Sitapara and Web team')
+    expect(describeRef({}, dir)).toBe('nobody')
     expect(describeRef('anyone', dir)).toBe('anyone')
   })
 
@@ -56,5 +68,31 @@ describe('people', () => {
   it('returns malformed YAML as an error value instead of throwing', () => {
     const bad = parsePeopleYaml('people: [ { id: a, name: A\n')
     expect(bad.ok).toBe(false)
+  })
+
+  it.each([
+    [
+      'a group member that is not a person',
+      'groups:\n  - { id: devs, name: Devs, members: [nish, shivn] }',
+      'groups.devs: unknown member "shivn"'
+    ],
+    [
+      'a group id used as a member (no nesting)',
+      'groups:\n  - { id: devs, name: Devs, members: [web] }',
+      'groups.devs: unknown member "web"'
+    ]
+  ])('rejects %s', (_label, groups, expected) => {
+    const text = `people:\n  - { id: nish, name: Nish }\n  - { id: shivan, name: Shivan }\n${groups}\n  - { id: web, name: Web, members: [nish] }\n`
+    expect(errorsOf(text)).toContain(expected)
+  })
+
+  it.each([
+    ['gitlab', 'nish8', 'Nish8'],
+    ['github', 'nsitapara', 'NSitapara'],
+    ['linear', 'nish', 'NISH'],
+    ['slack', 'U123', 'u123']
+  ])('rejects a duplicate %s account across people, ignoring case', (field, first, second) => {
+    const text = `people:\n  - { id: a, name: A, ${field}: ${first} }\n  - { id: b, name: B, ${field}: ${second} }\n`
+    expect(errorsOf(text)).toContain(`people.b.${field}: "${second}" is also used by a`)
   })
 })

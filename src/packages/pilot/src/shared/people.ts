@@ -2,6 +2,8 @@ import { parse as parseYaml } from 'yaml'
 import { z } from 'zod'
 import type { PeopleRef } from './definition/types'
 
+const ACCOUNT_FIELDS = ['gitlab', 'github', 'linear', 'slack'] as const
+
 const personSchema = z.strictObject({
   id: z.string().min(1),
   name: z.string().min(1),
@@ -35,8 +37,38 @@ function readYaml(text: string): { ok: true; value: unknown } | { ok: false; err
   }
 }
 
-function duplicateIds(ids: string[]): string[] {
-  return [...new Set(ids.filter((id, i) => ids.indexOf(id) !== i))]
+function duplicateIdErrors(people: Person[]): string[] {
+  const ids = people.map((p) => p.id)
+  const dupes = [...new Set(ids.filter((id, i) => ids.indexOf(id) !== i))]
+  return dupes.length ? [`duplicate person id: ${dupes.join(', ')}`] : []
+}
+
+function accountErrors(people: Person[]): string[] {
+  const owners = new Map<string, string>()
+  const errors: string[] = []
+  for (const person of people) {
+    for (const field of ACCOUNT_FIELDS) {
+      const value = person[field]
+      if (value === undefined) {
+        continue
+      }
+      const key = `${field}:${value.toLowerCase()}`
+      const owner = owners.get(key)
+      if (owner === undefined) {
+        owners.set(key, person.id)
+      } else {
+        errors.push(`people.${person.id}.${field}: "${value}" is also used by ${owner}`)
+      }
+    }
+  }
+  return errors
+}
+
+function memberErrors(people: Person[], groups: z.infer<typeof groupSchema>[]): string[] {
+  const personIds = new Set(people.map((p) => p.id))
+  return groups.flatMap((g) =>
+    g.members.filter((m) => !personIds.has(m)).map((m) => `groups.${g.id}: unknown member "${m}"`)
+  )
 }
 
 export function parsePeopleYaml(
@@ -53,15 +85,21 @@ export function parsePeopleYaml(
       errors: parsed.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`)
     }
   }
-  const dupes = duplicateIds(parsed.data.people.map((p) => p.id))
-  if (dupes.length) {
-    return { ok: false, errors: [`duplicate person id: ${dupes.join(', ')}`] }
+  const { people, groups = [] } = parsed.data
+  const errors = [
+    ...duplicateIdErrors(people),
+    ...accountErrors(people),
+    ...memberErrors(people, groups)
+  ]
+  if (errors.length) {
+    return { ok: false, errors }
   }
-  return { ok: true, directory: { people: parsed.data.people, groups: parsed.data.groups ?? [] } }
+  return { ok: true, directory: { people, groups } }
 }
 
 export function personByGitlab(dir: PeopleDirectory, username: string): Person | null {
-  return dir.people.find((p) => p.gitlab === username) ?? null
+  const wanted = username.toLowerCase()
+  return dir.people.find((p) => p.gitlab?.toLowerCase() === wanted) ?? null
 }
 
 export function refIncludes(
@@ -96,8 +134,9 @@ export function describeRef(ref: PeopleRef | undefined, dir: PeopleDirectory): s
   if (ref === undefined || ref === 'anyone') {
     return 'anyone'
   }
+  const names = (ref.people ?? []).map((id) => nameOf(id, dir))
   if (ref.group) {
-    return dir.groups.find((g) => g.id === ref.group)?.name ?? ref.group
+    names.push(dir.groups.find((g) => g.id === ref.group)?.name ?? ref.group)
   }
-  return joinNames((ref.people ?? []).map((id) => nameOf(id, dir)))
+  return joinNames(names)
 }
