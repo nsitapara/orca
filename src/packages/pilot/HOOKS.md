@@ -20,3 +20,4 @@ Every change Pilot makes to an upstream file is listed here (D24). Each one is a
 | automations-page | src/renderer/src/app-shell/AppWorkspaceShell.tsx | packages/pilot/src/renderer/pages/PilotAutomationsPage | Pilot's Automations page replaces Orca's |
 | cli-specs | src/cli/specs/index.ts | ...PILOT_COMMAND_SPECS | Pilot CLI commands |
 | cli-handlers | src/cli/handler-group-manifest.ts | ...PILOT_HANDLER_GROUPS | Pilot CLI handlers |
+| updater | src/main/updater/updater-setup.ts | isPilotUpdaterDisabled() | never offer Orca releases to Pilot |

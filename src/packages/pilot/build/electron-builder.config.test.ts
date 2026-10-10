@@ -1,0 +1,39 @@
+import { createRequire } from 'node:module'
+import { describe, expect, it } from 'vitest'
+
+const require = createRequire(import.meta.url)
+const config = require('./electron-builder.config.cjs')
+const base = require('../../../../config/electron-builder.config.cjs')
+
+describe('Pilot electron-builder wrapper', () => {
+  it('renames the app and keeps its own data folder', () => {
+    expect(config.appId).toBe('dev.nsitapara.pilot')
+    expect(config.productName).toBe('Pilot')
+    expect(config.extraMetadata.name).toBe('pilot')
+  })
+
+  it('registers pilot:// and never orca:// (D25)', () => {
+    expect(config.protocols).toEqual([{ name: 'Pilot', schemes: ['pilot'] }])
+  })
+
+  it('turns off the release feed so upstream releases never replace Pilot', () => {
+    expect(config.publish).toBeNull()
+  })
+
+  it("ships both launchers from Pilot, and Orca's launcher is replaced", () => {
+    const resources = config.mac.extraResources.map(
+      (r: { from: string; to: string }) => `${r.from} -> ${r.to}`
+    )
+    expect(resources).toContain('src/packages/pilot/build/bin/pilot -> bin/pilot')
+    expect(resources).toContain('src/packages/pilot/build/bin/orca -> bin/orca')
+    expect(resources.some((r: string) => r.startsWith('resources/darwin/bin/orca '))).toBe(false)
+  })
+
+  it('unpacks the CLI code Pilot adds', () => {
+    expect(config.asarUnpack).toContain('out/packages/pilot/**')
+  })
+
+  it('leaves the base config untouched', () => {
+    expect(base.productName).toBe('Orca')
+  })
+})
