@@ -20,7 +20,7 @@ export function attachPilotRenderer(deps: { i18n?: I18nLike; doc?: Document } = 
   i18n.use({
     type: 'postProcessor',
     name: 'pilot-brand',
-    process: (value: string) => pilotBrand(value)
+    process: (value: unknown) => (typeof value === 'string' ? pilotBrand(value) : value)
   })
   const list = asList(i18n.options.postProcess)
   if (!list.includes('pilot-brand')) {

@@ -22,7 +22,10 @@ export function runInherit(cmd, args, opts = {}) {
       env: opts.env,
       stdio: 'inherit'
     })
-    child.on('error', () => resolve(1))
+    child.on('error', (error) => {
+      process.stderr.write(`${cmd}: ${error.message}\n`)
+      resolve(1)
+    })
     child.on('exit', (code) => resolve(code ?? 0))
   })
 }
