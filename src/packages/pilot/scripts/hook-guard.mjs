@@ -4,21 +4,9 @@
 import { existsSync, readFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { runProcessSync } from '@orca/process-host'
+import { run } from './run.mjs'
 
 const PILOT_DIR = 'src/packages/pilot/'
-
-// Pilot scripts spawn through @orca/process-host (Orca's process-host ratchet forbids direct
-// child_process imports). Copy this helper into other Pilot scripts that need to run a command.
-export function run(cmd, args, opts = {}) {
-  return runProcessSync({
-    program: cmd,
-    args,
-    cwd: opts.cwd,
-    env: opts.env,
-    timeoutMs: opts.timeoutMs
-  })
-}
 
 export function parseHooksTable(markdown) {
   const rows = []
@@ -48,16 +36,18 @@ export function parseHooksTable(markdown) {
   return rows
 }
 
+// Returns { files } or { problem }. A failure is never "no changes".
 function changedUpstreamFiles(repoRoot, upstreamRef) {
   const probe = run('git', ['rev-parse', '--verify', '--quiet', upstreamRef], { cwd: repoRoot })
   if (probe.code !== 0) {
-    return null
+    return { problem: `upstream ref "${upstreamRef}" not found: run git fetch upstream first` }
   }
   const diff = run('git', ['diff', '--name-only', `${upstreamRef}...HEAD`], { cwd: repoRoot })
   if (diff.code !== 0) {
-    return null
+    const reason = diff.stderr.split('\n')[0]
+    return { problem: `couldn't diff against ${upstreamRef}: ${reason}` }
   }
-  return diff.stdout.split('\n').filter((f) => f && !f.startsWith(PILOT_DIR))
+  return { files: diff.stdout.split('\n').filter((f) => f && !f.startsWith(PILOT_DIR)) }
 }
 
 export function checkHooks({ repoRoot, upstreamRef }) {
@@ -75,7 +65,11 @@ export function checkHooks({ repoRoot, upstreamRef }) {
   }
   if (upstreamRef) {
     const listed = new Set(table.map((r) => r.file))
-    for (const file of changedUpstreamFiles(repoRoot, upstreamRef) ?? []) {
+    const changed = changedUpstreamFiles(repoRoot, upstreamRef)
+    if (changed.problem) {
+      problems.push(changed.problem)
+    }
+    for (const file of changed.files ?? []) {
       if (!listed.has(file)) {
         problems.push(`${file} differs from ${upstreamRef} but isn't a hook in HOOKS.md`)
       }
