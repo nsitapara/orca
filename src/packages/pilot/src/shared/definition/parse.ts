@@ -1,6 +1,7 @@
 import { parse as parseYaml } from 'yaml'
 import type { z } from 'zod'
 import { automationSchema, type RawAutomation } from './schema'
+import { oncePerErrors, quotaErrors, scheduleErrors, stepErrors } from './validate'
 import type { AutomationDefinition, BuiltinCheck, ParseResult } from './types'
 
 function formatIssue(issue: z.core.$ZodIssue): string {
@@ -118,7 +119,13 @@ export function parseAutomationYaml(text: string, file: string): ParseResult {
   if (!parsed.success) {
     return { ok: false, errors: parsed.error.issues.map((i) => `${file}: ${formatIssue(i)}`) }
   }
-  const limits = m1Limits(parsed.data)
+  const limits = [
+    ...scheduleErrors(parsed.data),
+    ...stepErrors(parsed.data),
+    ...quotaErrors(parsed.data),
+    ...oncePerErrors(parsed.data),
+    ...m1Limits(parsed.data)
+  ]
   if (limits.length) {
     return { ok: false, errors: limits.map((e) => `${file}: ${e}`) }
   }

@@ -1,13 +1,13 @@
 import type { ItemFields } from './api-types'
 
-const FIELD = /\{([a-z_][\w]*(?:\.[\w]+)+|[a-z_][\w]*)\}/gi
+export const PLACEHOLDER = /\{([a-z_][\w]*(?:\.[\w]+)+|[a-z_][\w]*)\}/gi
 
 export function renderTemplate(
   template: string,
   fields: ItemFields
 ): { text: string; missing: string[] } {
   const missing = new Set<string>()
-  const text = template.replace(FIELD, (whole, name: string) => {
+  const text = template.replace(PLACEHOLDER, (whole, name: string) => {
     const value = Object.hasOwn(fields, name) ? fields[name] : undefined
     if (value === undefined || value === null) {
       missing.add(name)
