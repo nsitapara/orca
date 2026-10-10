@@ -2,6 +2,7 @@
 import { describe, expect, it } from 'vitest'
 import i18next from 'i18next'
 import { attachPilotRenderer } from './attach-renderer'
+import { pilotStore, registerPilotStore } from './store'
 
 describe('attachPilotRenderer', () => {
   it('rewrites the product name in resolved strings and defaults', async () => {
@@ -24,5 +25,12 @@ describe('attachPilotRenderer', () => {
     document.title = 'Orca'
     attachPilotRenderer({ i18n: i18next.createInstance(), doc: document })
     expect(document.title).toBe('Pilot')
+  })
+
+  it('registers the app store for the sidebar hooks', () => {
+    const store = { getState: () => ({ rightSidebarOpen: true, setRightSidebarOpen: () => {} }) }
+    attachPilotRenderer({ i18n: i18next.createInstance(), doc: document, store })
+    expect(pilotStore()).toBe(store)
+    registerPilotStore(null)
   })
 })
