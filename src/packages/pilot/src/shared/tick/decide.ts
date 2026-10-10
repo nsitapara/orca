@@ -21,8 +21,8 @@ function scopeGate(def: AutomationDefinition, item: TickItem, people: PeopleDire
   if (where.state === 'open' && state !== 'open') {
     return { verdict: 'out_of_scope', reason: `MR is ${state}` }
   }
-  // An explicit `anyone` still needs a mapped author (spec ruling); only an absent filter skips the lookup.
-  if (where.author === undefined) {
+  // anyone/absent: no lookup; a people or group ref needs the author in people.yaml.
+  if (where.author === undefined || where.author === 'anyone') {
     return null
   }
   const username = String(item.fields['mr.author'])

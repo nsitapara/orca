@@ -89,7 +89,7 @@ describe('decideTick on 2026-10-10 12:10 (automation 05)', () => {
     })
   })
 
-  it('puts an author missing from people.yaml out of scope even under author: anyone', () => {
+  it('treats an author missing from people.yaml as in scope under author: anyone', () => {
     const { definition, people } = setup(CI_05.replace('{ people: [nish] }', 'anyone'))
     const contractor = fixture.items.filter((i) => i.key === '!1600')
     const [d] = decideTick({
@@ -100,9 +100,6 @@ describe('decideTick on 2026-10-10 12:10 (automation 05)', () => {
       seenKeys: new Set(),
       runningCount: 0
     })
-    expect(d).toMatchObject({
-      verdict: 'out_of_scope',
-      reason: "Author contractor9 isn't in people.yaml"
-    })
+    expect(d).toMatchObject({ verdict: 'skipped', reason: 'No worktree for branch web-2200-x' })
   })
 })
