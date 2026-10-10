@@ -1,8 +1,15 @@
-import { mkdtempSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { describe, expect, it } from 'vitest'
+import { EventEmitter } from 'node:events'
+import * as fs from 'node:fs'
+import { describe, expect, it, vi } from 'vitest'
 import { loadDefinitions, watchDefinitions, type LoadedDefinitions } from './loader'
+
+vi.mock('node:fs', async (importOriginal) => {
+  const actual = await importOriginal<typeof fs>()
+  return { ...actual, watch: vi.fn(actual.watch) }
+})
 
 const VALID =
   'name: A\nrepo: web-platform\nschedule: manual\nsteps: [ { agent: claude, prompt: hi } ]\n'
@@ -58,6 +65,53 @@ describe('loadDefinitions', () => {
         ]
       }
     ])
+  })
+})
+
+describe('loadDefinitions resilience', () => {
+  it('does not throw on unreadable entries; valid files still load', () => {
+    const d = dir({ 'a.yaml': VALID })
+    mkdirSync(join(d, 'bad.yaml'))
+    symlinkSync(join(d, 'nowhere'), join(d, 'gone.yaml'))
+    const loaded = loadDefinitions([d])
+    expect(loaded.definitions.map((x) => x.id)).toEqual(['a'])
+    expect(loaded.errors.map((e) => e.file)).toEqual([join(d, 'bad.yaml'), join(d, 'gone.yaml')])
+    expect(loaded.errors[0]?.errors[0]).toContain("couldn't read")
+  })
+
+  it('turns an unreadable people.yaml into peopleError', () => {
+    const d = dir()
+    symlinkSync(join(d, 'nowhere'), join(d, 'people.yaml'))
+    expect(loadDefinitions([d]).peopleError).toContain("couldn't read")
+  })
+
+  it('turns a folder that is a file into one error entry', () => {
+    const f = join(dir({ 'plain.txt': 'x' }), 'plain.txt')
+    const loaded = loadDefinitions([f])
+    expect(loaded.errors).toEqual([{ file: f, errors: [expect.stringContaining("couldn't list")] }])
+  })
+
+  it('skips hidden files, and never parses people.yml as an automation', () => {
+    const d = dir({
+      '.x.yaml': VALID,
+      '._x.yaml': VALID,
+      'people.yml': 'people:\n  - { id: nish, name: Nish }\n'
+    })
+    symlinkSync(join(d, 'nowhere'), join(d, '.#a.yaml'))
+    const loaded = loadDefinitions([d])
+    expect(loaded.definitions).toEqual([])
+    expect(loaded.errors).toEqual([])
+    expect(loaded.people.people.map((p) => p.id)).toEqual(['nish'])
+  })
+
+  it('people.yaml wins over people.yml and the conflict is noted', () => {
+    const d = dir({
+      'people.yaml': 'people:\n  - { id: a, name: A }\n',
+      'people.yml': 'people:\n  - { id: b, name: B }\n'
+    })
+    const loaded = loadDefinitions([d])
+    expect(loaded.people.people.map((p) => p.id)).toEqual(['a'])
+    expect(loaded.peopleError).toContain('both exist')
   })
 })
 
@@ -145,6 +199,22 @@ describe('watchDefinitions', () => {
   it('reloads after a file changes', async () => {
     const loaded = await nextChange(dir())
     expect(loaded.definitions.map((x) => x.id)).toEqual(['b'])
+  })
+
+  it('survives a watcher error event and a watch() that throws', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const emitter = Object.assign(new EventEmitter(), { close: vi.fn() })
+    vi.mocked(fs.watch)
+      .mockImplementationOnce(() => {
+        throw new Error('EMFILE')
+      })
+      .mockImplementationOnce(() => emitter as unknown as fs.FSWatcher)
+    const stop = watchDefinitions([dir(), dir()], () => {}, 10)
+    expect(() => emitter.emit('error', new Error('ENOSPC'))).not.toThrow()
+    expect(emitter.close).toHaveBeenCalled()
+    expect(warn).toHaveBeenCalledTimes(2)
+    stop()
+    warn.mockRestore()
   })
 
   it('does not throw for a missing folder and still closes cleanly', () => {
