@@ -7,3 +7,7 @@ Pilot is Nish's fork of Orca (`github.com/nsitapara/orca`), with Automations reb
 - **Dev:** `node src/packages/pilot/scripts/dev.mjs` runs `pnpm dev` with a separate `pilot-dev` data folder.
 - **Build for macOS:** `node src/packages/pilot/scripts/build-mac.mjs`.
 - **Tests:** `pnpm exec vitest run --config config/vitest.config.ts src/packages/pilot`
+
+## Known gaps
+
+- After closing the right sidebar while on the Automations tab, Orca's main-side persistence allowlist resets the stored tab to Explorer (the UI hydrates it back via `hydratePersistedUI`), so reopening or restarting lands on Explorer, not Automations.

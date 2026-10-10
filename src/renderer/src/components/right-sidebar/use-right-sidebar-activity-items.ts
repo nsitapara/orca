@@ -16,6 +16,7 @@ import { useShortcutLabel } from '@/hooks/useShortcutLabel'
 import { translate } from '@/i18n/i18n'
 import { AgentSessionHistoryIcon } from './agent-session-history-icon'
 import type { ActivityBarItem } from './activity-bar-buttons'
+import { pilotActivityItems } from '../../../../packages/pilot/src/renderer/sidebar/pilot-tab' // pilot-hook: right-sidebar-items
 
 export type RightSidebarActivityItems = {
   visibleItems: ActivityBarItem[]
@@ -113,7 +114,8 @@ export function useRightSidebarActivityItems({
       },
       // Why: plugin panels append after the built-in tabs so core navigation
       // keeps stable positions regardless of which plugins are installed.
-      ...getPluginPanelActivityItems(visiblePluginPanels, pluginPanelErrors)
+      ...getPluginPanelActivityItems(visiblePluginPanels, pluginPanelErrors),
+      ...pilotActivityItems // pilot-hook: right-sidebar-items
     ],
     [
       checksShortcut,
