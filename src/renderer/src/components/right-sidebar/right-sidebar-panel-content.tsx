@@ -2,6 +2,10 @@ import { Suspense } from 'react'
 import { lazyWithRetry as lazy } from '@/lib/lazy-with-retry'
 import type { ActiveRightSidebarTab } from '@/store/slices/editor'
 import { isPluginPanelTabKey } from '../../../../shared/plugins/plugin-manifest'
+import {
+  PilotRightSidebarPanel,
+  isPilotTab
+} from '../../../../packages/pilot/src/renderer/sidebar/pilot-tab' // pilot-hook: right-sidebar-panel
 
 const FileExplorer = lazy(() => import('./FileExplorer'))
 const SourceControl = lazy(() => import('./SourceControl'))
@@ -48,6 +52,8 @@ export function RightSidebarPanelContent({
         {isPluginPanelTabKey(effectiveTab) && (
           <PluginPanel key={effectiveTab} tabKey={effectiveTab} />
         )}
+        {isPilotTab(effectiveTab) && <PilotRightSidebarPanel />}{' '}
+        {/* pilot-hook: right-sidebar-panel */}
       </Suspense>
     </div>
   )

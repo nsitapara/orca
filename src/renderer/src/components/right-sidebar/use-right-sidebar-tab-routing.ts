@@ -6,6 +6,7 @@ import { normalizeRightSidebarRoute } from '@/store/right-sidebar-route'
 import { resolveRightSidebarEffectiveTab } from './right-sidebar-effective-tab'
 import { useInstalledPluginRouteReconciliation } from './use-installed-plugin-route-reconciliation'
 import type { ActivityBarItem } from './activity-bar-buttons'
+import { handlePilotActivityClick } from '../../../../packages/pilot/src/renderer/sidebar/pilot-tab' // pilot-hook: right-sidebar-reclick
 
 export type RightSidebarTabRouting = {
   effectiveTab: ActiveRightSidebarTab
@@ -84,6 +85,9 @@ export function useRightSidebarTabRouting({
     rememberedFolderTabByWorkspaceKeyRef.current[activeFolderWorkspaceKey] = effectiveTab
   }, [activeFolderWorkspaceKey, effectiveTab, visibleItems])
   const selectActivityTab = (tab: ActiveRightSidebarTab): void => {
+    if (handlePilotActivityClick(tab, effectiveTab)) {
+      return
+    } // pilot-hook: right-sidebar-reclick
     if (activeFolderWorkspaceKey) {
       rememberedFolderTabByWorkspaceKeyRef.current[activeFolderWorkspaceKey] = tab
     }

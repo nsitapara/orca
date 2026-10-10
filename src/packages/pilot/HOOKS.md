@@ -12,3 +12,8 @@ Every change Pilot makes to an upstream file is listed here (D24). Each one is a
 | orcad           | src/main/orcad/orcad-entry.ts | attachPilotOrcad(runtime, | start Pilot in orcad before RPC binds |
 | renderer | src/renderer/src/main.tsx | attachPilotRenderer() | display rebrand + Pilot renderer setup |
 | tailwind-source | src/renderer/src/assets/main.css | packages/pilot/src | generate Tailwind classes used by Pilot UI |
+| right-sidebar-route | src/renderer/src/store/right-sidebar-route.ts | isPilotTab(tab) | keep the Automations tab through route normalization |
+| right-sidebar-items | src/renderer/src/components/right-sidebar/use-right-sidebar-activity-items.ts | ...pilotActivityItems | add the Automations icon to the activity bar |
+| right-sidebar-panel | src/renderer/src/components/right-sidebar/right-sidebar-panel-content.tsx | <PilotRightSidebarPanel /> | render the Automations panel |
+| right-sidebar-reclick | src/renderer/src/components/right-sidebar/use-right-sidebar-tab-routing.ts | handlePilotActivityClick(tab, effectiveTab) | D22: reclick closes, any click opens |
+| right-sidebar-keep-strip | src/renderer/src/components/right-sidebar/index.tsx | usePilotSideStripWhenClosed( | D22: side strip stays when the panel is closed |

@@ -3,6 +3,7 @@ import type {
   RightSidebarExplorerView
 } from '../../../shared/ui-chrome-types'
 import { isPluginPanelTabKey } from '../../../shared/plugins/plugin-tab-key'
+import { isPilotTab } from '../../../packages/pilot/src/shared/sidebar-click' // pilot-hook: right-sidebar-route
 
 export type RightSidebarRoute = {
   rightSidebarTab: ActiveRightSidebarTab
@@ -39,6 +40,9 @@ export function normalizeRightSidebarRoute(
     }
     return { rightSidebarTab: tab, rightSidebarExplorerView: 'files' }
   }
+  if (isPilotTab(tab)) {
+    return { rightSidebarTab: tab as 'plugin:pilot', rightSidebarExplorerView: 'files' }
+  } // pilot-hook: right-sidebar-route
   if (
     tab === 'explorer' ||
     tab === 'vault' ||

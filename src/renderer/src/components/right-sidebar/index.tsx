@@ -27,6 +27,7 @@ import { RightSidebarTopActivityBar } from './right-sidebar-top-activity-bar'
 import { useRightSidebarActivityItems } from './use-right-sidebar-activity-items'
 import { useRightSidebarTabRouting } from './use-right-sidebar-tab-routing'
 import { useWindowWidth } from './use-window-width'
+import { usePilotSideStripWhenClosed } from '../../../../packages/pilot/src/renderer/sidebar/pilot-tab' // pilot-hook: right-sidebar-keep-strip
 
 const ACTIVITY_BAR_SIDE_WIDTH = 40
 
@@ -76,6 +77,7 @@ function RightSidebarInner(): React.JSX.Element {
     renderedExtraWidth: activityBarSideWidth,
     setWidth: setRightSidebarWidth
   })
+  usePilotSideStripWhenClosed(containerRef, rightSidebarOpen, activityBarSideWidth) // pilot-hook: right-sidebar-keep-strip
   const topActivityStripRef = useMeasuredWidth(setTopActivityStripWidth)
 
   const panelContent = rightSidebarOpen ? (
