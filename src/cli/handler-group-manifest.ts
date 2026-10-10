@@ -1,5 +1,6 @@
 import type { CommandHandler } from './dispatch'
 import { BROWSER_HANDLER_GROUPS } from './browser-handler-groups'
+import { PILOT_HANDLER_GROUPS } from '../packages/pilot/src/cli/handler-groups' // pilot-hook: cli-handlers
 
 export type HandlerGroup = {
   name: string
@@ -287,5 +288,6 @@ export const HANDLER_GROUPS: readonly HandlerGroup[] = [
     name: 'search',
     keys: ['search'],
     load: async () => (await import('./handlers/search.js')).SEARCH_HANDLERS
-  }
+  },
+  ...PILOT_HANDLER_GROUPS // pilot-hook: cli-handlers
 ]

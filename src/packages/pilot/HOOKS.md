@@ -18,3 +18,5 @@ Every change Pilot makes to an upstream file is listed here (D24). Each one is a
 | right-sidebar-reclick | src/renderer/src/components/right-sidebar/use-right-sidebar-tab-routing.ts | handlePilotActivityClick(tab, effectiveTab) | D22: reclick closes, any click opens |
 | right-sidebar-keep-strip | src/renderer/src/components/right-sidebar/index.tsx | usePilotSideStripWhenClosed( | D22: side strip stays when the panel is closed |
 | automations-page | src/renderer/src/app-shell/AppWorkspaceShell.tsx | packages/pilot/src/renderer/pages/PilotAutomationsPage | Pilot's Automations page replaces Orca's |
+| cli-specs | src/cli/specs/index.ts | ...PILOT_COMMAND_SPECS | Pilot CLI commands |
+| cli-handlers | src/cli/handler-group-manifest.ts | ...PILOT_HANDLER_GROUPS | Pilot CLI handlers |
