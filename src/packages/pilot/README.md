@@ -74,9 +74,10 @@ How one of the old sweeps that real Orca schedules (`~/.agents/skills/<name>-swe
    - Record every comparison in the vault note (`Agent Work/Automation platform.md`). A difference that isn't just wording is a Pilot bug to fix before cutover.
 6. **Cut over (Nish approves).**
    1. Re-seed `handled` right before switching (`--apply` again), because the old sweep keeps adding entries until it's off.
-   2. Disable the old automation in real Orca.
-   3. Set the schedule in the YAML (05: `"10 * * * *"`) and commit it in `~/.agents`.
-   4. Make sure Pilot has the edit: the Automations list shows the new schedule, and so does the reload above (its `schedule` and `nextTickAt`). Expect the first real tick at the **next** slot, not at once: a schedule set while Pilot runs is walked from now (Task 20's catch-up rule).
+   2. Confirm no CI-fix tabs are open in real Orca before disabling 05. Pilot's session check sees only its own terminals, so it wouldn't hold back a worktree where an old sweep's agent is still open.
+   3. Disable the old automation in real Orca.
+   4. Set the schedule in the YAML (05: `"10 * * * *"`) and commit it in `~/.agents`. Validate the YAML before saving a schedule change (`pilot automations validate --file <file>`): an invalid file drops the automation until it's fixed.
+   5. Make sure Pilot has the edit: the Automations list shows the new schedule, and so does the reload above (its `schedule` and `nextTickAt`). Expect the first real tick at the **next** slot, not at once: a schedule set while Pilot runs is walked from now (Task 20's catch-up rule).
       - If Pilot is restarted instead, an automation with no real tick yet walks from an hour before the start. A slot that fell in that hour then runs once, right at start.
 
 ### Automation 05 (`fix-failed-ci`)
@@ -118,8 +119,7 @@ These need a phone, a second Mac and an iPad on Tailscale. Open Pilot (`dist/mac
 ## Known gaps
 
 - Computer Use is unavailable in packaged Pilot. Enabling it needs a Pilot bundle id for the helper plus a trust-list entry in its Swift peer check.
-- After closing the right sidebar while on the Automations tab, Orca's main-side persistence allowlist resets the stored tab to Explorer (the UI hydrates it back via `hydratePersistedUI`), so reopening or restarting lands on Explorer, not Automations.
-- After a restart (or closing and reopening the right sidebar) the sidebar tab comes back as Explorer, because main's persistence allowlist drops `plugin:pilot`. The existing sidebar-tab note above covers the same cause.
+- After closing the right sidebar while on the Automations tab, Orca's main-side persistence allowlist drops `plugin:pilot` and resets the stored tab to Explorer (the UI hydrates it back via `hydratePersistedUI`), so reopening or restarting lands on Explorer, not Automations.
 - "Install CLI" links `/usr/local/bin/pilot` (never `orca`) to Pilot's `Contents/Resources/bin/orca`: upstream's `bundled-cli-launcher-path.ts` always installs the `bin/orca` launcher, and `applyPilotEnvDefaults` (`src/packages/pilot/src/main/env.ts`) sets `ORCA_CLI_INSTALL_PATH` to `/usr/local/bin/pilot`, which `cli-install-location.ts` uses ahead of its own `orca` default. That launcher pins Pilot's data folder and install path, so the installed `pilot` command and `pilot serve` (which re-installs the CLI on start) act on Pilot, never on real Orca. Checked in code and by `build/bin/launchers.test.ts`, not clicked.
 - Packaged builds are unsigned (`CSC_IDENTITY_AUTO_DISCOVERY=false`, `--dir` output). macOS may ask you to allow the app on first launch.
 - Upstream orcad keeps its own data in `~/.orca` (or `$XDG_DATA_HOME/Orca`) unless `ORCA_USER_DATA` is set, so Pilot's orcad started without it shares real Orca's headless folder. Set `ORCA_USER_DATA` when running Pilot's orcad (Task 9 does). Pilot's own store never goes there: it uses `ORCA_USER_DATA` when set, else `~/.pilot/orcad/`.
