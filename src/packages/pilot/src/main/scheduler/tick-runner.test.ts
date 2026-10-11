@@ -2,12 +2,15 @@ import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
+import type { OrcaRuntimeService } from '../../../../../main/runtime/orca-runtime'
 import { testDefinition } from '../../shared/definition/__fixtures__/definition'
 import type { AutomationDefinition } from '../../shared/definition/types'
 import { EMPTY_PEOPLE } from '../../shared/people'
 import { fakeFieldDeps, testItem } from '../fields/__fixtures__/field-deps'
 import type { FieldEngineDeps } from '../fields/engine'
 import type { WorktreeInfo } from '../fields/worktree-facts'
+import { makeLauncher } from '../run/launch'
+import { runtimeWorkspaceDeps } from '../run/workspace'
 import { createPassFetchCache } from '../sources/fetch-cache'
 import type { Item, SourceContext } from '../sources/types'
 import { PilotStore } from '../store/store'
@@ -401,13 +404,116 @@ describe('runTick with first_seen: baseline (R12)', () => {
   })
 })
 
-const NEW_WORKTREE = {
+const newWorktree = (name: string) => ({
   kind: 'new_worktree' as const,
   base: 'origin/dev',
-  name: 'x',
+  name,
   reuseExisting: false,
   setup: 'skip' as const
+})
+
+// Task 8d: through the real launcher and the real worktree claim. Each new worktree's create also
+// records what its run and step 0 looked like then: the run row exists (running) before the
+// workspace is resolved, and step 0 waits as `pending` until it exists (B8).
+function launching(create: (name: string) => Promise<{ id: string; path: string }>) {
+  const d = deps()
+  const selectors: string[] = []
+  const atCreate: string[] = []
+  const createManagedWorktree = async (req: { name: string; comment: string }) => {
+    const runId = /\(run (.+)\)$/.exec(req.comment)?.[1] ?? ''
+    atCreate.push(`${d.store.runs.get(runId)?.status}/${d.store.runs.steps(runId)[0]?.status}`)
+    return { worktree: await create(req.name) }
+  }
+  const runtime = { createManagedWorktree } as unknown as OrcaRuntimeService
+  d.launch = makeLauncher(d.store, {
+    workspace: runtimeWorkspaceDeps(runtime, async () => worktrees, d.store.runs),
+    launchTerminal: async (selector) => {
+      selectors.push(selector)
+      return { handle: `term_${selectors.length}`, paneKey: 'tab:leaf' }
+    },
+    modeText: async () => null,
+    newSessionId: () => 'sess',
+    now: d.now
+  })
+  return { d, selectors, atCreate }
 }
+const created = async (name: string) => ({ id: `r::/wt/${name}`, path: `/wt/${name}` })
+
+describe('runTick launching into each workspace (Task 8d)', () => {
+  it.each<[string, AutomationDefinition, string[], string[], string[]]>([
+    [
+      'main_checkout for items',
+      { ...def, workspace: { kind: 'main_checkout' } },
+      ['path:/repo', 'path:/repo'],
+      ['/repo', '/repo'],
+      []
+    ],
+    [
+      'main_checkout for a run-once automation',
+      testDefinition({ id: 'fix-failed-ci', items: null, workspace: { kind: 'main_checkout' } }),
+      ['path:/repo'],
+      ['/repo'],
+      []
+    ],
+    [
+      'new_worktree for items',
+      { ...def, workspace: newWorktree('fix-{mr.iid}') },
+      ['id:r::/wt/fix-1561', 'id:r::/wt/fix-1574'],
+      ['/wt/fix-1561', '/wt/fix-1574'],
+      ['running/pending', 'running/pending']
+    ],
+    [
+      'new_worktree for a run-once automation',
+      testDefinition({
+        id: 'fix-failed-ci',
+        items: null,
+        workspace: newWorktree('memo-{run.date}')
+      }),
+      ['id:r::/wt/memo-20261010'],
+      ['/wt/memo-20261010'],
+      ['running/pending']
+    ]
+  ])('starts %s', async (_name, automation, selectors, paths, atCreate) => {
+    const run = launching(created)
+    const sources = automation.items === null ? repoSources : sourcesWith()
+    const result = await runTick(automation, people, { ...run.d, sources }, { dryRun: false })
+    expect(result.status).toBe('ok')
+    expect(run.selectors).toEqual(selectors)
+    expect(run.atCreate).toEqual(atCreate)
+    const runs = run.d.store.runs.forTick(result.tickId)
+    expect(runs.map((r) => [r.status, r.worktreePath])).toEqual(paths.map((p) => ['running', p]))
+    expect(runs.map((r) => run.d.store.runs.steps(r.id)[0]?.status)).toEqual(
+      paths.map(() => 'running')
+    )
+  })
+
+  it("fails the step and the run, and frees the item's key, when its new worktree can't be made", async () => {
+    const run = launching(async () => {
+      throw new Error('git worktree add failed')
+    })
+    const result = await runTick(
+      { ...def, workspace: newWorktree('fix-{mr.iid}') },
+      people,
+      run.d,
+      {
+        dryRun: false
+      }
+    )
+    expect(result.status).toBe('ok')
+    expect(run.selectors).toEqual([])
+    const runs = run.d.store.runs.forTick(result.tickId)
+    expect(runs.map((r) => [r.status, r.outcome])).toEqual([
+      ['failed', "Couldn't start: git worktree add failed"],
+      ['failed', "Couldn't start: git worktree add failed"]
+    ])
+    expect(runs.map((r) => run.d.store.runs.steps(r.id)[0])).toMatchObject([
+      { status: 'failed', error: 'git worktree add failed' },
+      { status: 'failed', error: 'git worktree add failed' }
+    ])
+    expect(run.d.store.handledKeys('fix-failed-ci').size).toBe(0)
+  })
+})
+
 const whereOf = (where: Record<string, unknown>) => ({
   items: { kind: 'merge_request' as const, where, match: [], customFields: [] }
 })
@@ -418,21 +524,6 @@ describe('runTick on keys a later task implements (Task 2b ruling)', () => {
       'start: ask_first',
       { start: 'ask_first', askFirst: { title: 'Fix !{mr.iid}?', context: '', options: [] } },
       "start: ask_first isn't supported yet"
-    ],
-    [
-      'main_checkout for items',
-      { workspace: { kind: 'main_checkout' } },
-      "workspace: main_checkout isn't supported yet"
-    ],
-    [
-      'new_worktree for items',
-      { workspace: NEW_WORKTREE },
-      "workspace: new_worktree isn't supported yet"
-    ],
-    [
-      'new_worktree for a run-once automation',
-      { items: null, workspace: NEW_WORKTREE },
-      "workspace: new_worktree isn't supported yet"
     ],
     ['where.reviewer', whereOf({ reviewer: 'anyone' }), "items.where.reviewer isn't supported yet"],
     ['where.draft', whereOf({ draft: false }), "items.where.draft isn't supported yet"],
