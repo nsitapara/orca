@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import { oncePerKey, renderTemplate } from './template'
+import {
+  oncePerKey,
+  placeholderNames,
+  renderTemplate,
+  runFields,
+  stepFields,
+  type StepResult
+} from './template'
 
 const fields = {
   'mr.iid': 1561,
@@ -60,5 +67,84 @@ describe('oncePerKey', () => {
     const a = oncePerKey('{mr.head}', {}, '!1')
     const b = oncePerKey('{mr.head}', {}, '!2')
     expect(a).not.toBe(b)
+  })
+})
+
+describe('placeholderNames', () => {
+  it('lists each placeholder once, in order, ignoring braces that are not one', () => {
+    expect(placeholderNames('{a} {b.c} {a} { d } {e')).toEqual(['a', 'b.c'])
+  })
+})
+
+describe('runFields', () => {
+  it.each([
+    ['America/Los_Angeles', '20261010'],
+    ['Europe/London', '20261011']
+  ])('dates a run at 06:30 UTC on 11 Oct in %s as %s', (timezone, date) => {
+    expect(runFields({ automationId: 'memo', at: Date.UTC(2026, 9, 11, 6, 30), timezone })).toEqual(
+      {
+        'run.automation': 'memo',
+        'run.date': date
+      }
+    )
+  })
+
+  it('adds the tick id once the tick has started (G3)', () => {
+    expect(runFields({ automationId: 'memo', at: 0, timezone: 'UTC', tickId: 41 })).toEqual({
+      'run.automation': 'memo',
+      'run.date': '19700101',
+      'run.tick': 41
+    })
+  })
+
+  it('adds the run id once there is a run', () => {
+    expect(
+      runFields({ automationId: 'memo', at: 0, timezone: 'UTC', runId: 'memo-202610110630-t1-1' })
+    ).toMatchObject({ 'run.id': 'memo-202610110630-t1-1' })
+  })
+})
+
+describe('stepFields', () => {
+  const steps: StepResult[] = [
+    {
+      name: 'review',
+      status: 'done',
+      exitCode: null,
+      outputs: { changed: true, findings: 2, status: 'clean' }
+    },
+    { name: 'lint', status: 'failed', exitCode: 1, outputs: {} },
+    { name: 'fix', status: 'pending', exitCode: null, outputs: {} }
+  ]
+
+  it("gives every earlier step by name, the one just before as previous, and a step's own status first", () => {
+    expect(stepFields(steps, 2)).toEqual({
+      'steps.review.changed': true,
+      'steps.review.findings': 2,
+      'steps.review.status': 'done',
+      'steps.review.exit_code': null,
+      'steps.lint.status': 'failed',
+      'steps.lint.exit_code': 1,
+      'previous.status': 'failed',
+      'previous.exit_code': 1
+    })
+  })
+
+  it('reads the first step as previous for the second, and nothing later', () => {
+    const fields = stepFields(steps, 1)
+    expect(fields).toMatchObject({ 'previous.changed': true, 'previous.status': 'done' })
+    expect(fields).not.toHaveProperty(['steps.lint.status'])
+  })
+
+  it('has nothing before the first step', () => {
+    expect(stepFields(steps, 0)).toEqual({})
+  })
+
+  it("fills a prompt from an earlier step's outputs", () => {
+    expect(
+      renderTemplate(
+        'Fix {steps.review.findings} findings ({previous.status})',
+        stepFields(steps, 1)
+      ).text
+    ).toBe('Fix 2 findings (done)')
   })
 })
