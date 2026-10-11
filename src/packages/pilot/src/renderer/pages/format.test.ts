@@ -1,0 +1,63 @@
+import { describe, expect, it } from 'vitest'
+import { errorText, outcomeLine, relativeTime, tickLine, verdictLabel } from './format'
+
+describe('renderer formatting', () => {
+  it.each([
+    [30_000, 'just now'],
+    [5 * 60_000, '5 min ago'],
+    [3 * 3_600_000, '3 h ago'],
+    [-10 * 60_000, 'in 10 min']
+  ])('relativeTime(%s)', (delta, s) =>
+    expect(relativeTime(1_000_000_000 - delta, 1_000_000_000)).toBe(s)
+  )
+
+  it('labels verdicts in plain words', () => {
+    expect(
+      ['started', 'skipped', 'notdue', 'out_of_scope', 'over_limit', 'baselined'].map((v) =>
+        verdictLabel(v as never)
+      )
+    ).toEqual(['Started', 'Skipped', 'Not due', 'Not in scope', 'Next tick', 'Baselined'])
+  })
+
+  it('summarizes a tick', () => {
+    expect(
+      tickLine({
+        id: 1,
+        automationId: 'a',
+        startedAt: 0,
+        finishedAt: 1,
+        dryRun: false,
+        status: 'ok',
+        error: null,
+        counts: { started: 1, skipped: 3, notdue: 2 }
+      })
+    ).toBe('6 checked · 1 started · 3 skipped · 2 not due')
+    expect(
+      tickLine({
+        id: 2,
+        automationId: 'a',
+        startedAt: 0,
+        finishedAt: 1,
+        dryRun: false,
+        status: 'failed',
+        error: 'glab: 502',
+        counts: {}
+      })
+    ).toBe('Failed: glab: 502')
+  })
+})
+
+describe('call results and errors', () => {
+  const ok = { tickId: 4, status: 'ok' as const, error: null, decisions: [] }
+  it.each([
+    [{ status: 'busy' as const }, 'Tick already running'],
+    [{ status: 'unknown' as const }, 'No automation fix-ci'],
+    [ok, 'Tick 4 · ok'],
+    [{ ...ok, status: 'failed' as const, error: 'glab: 502' }, 'Tick 4 · failed: glab: 502']
+  ])('outcomeLine(%j)', (outcome, text) => expect(outcomeLine(outcome, 'fix-ci')).toBe(text))
+
+  it('errorText keeps the message without the Error: prefix', () => {
+    expect(errorText(new Error("Pilot isn't running: x"))).toBe("Pilot isn't running: x")
+    expect(errorText('plain')).toBe('plain')
+  })
+})
