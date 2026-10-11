@@ -4,6 +4,8 @@ export type PilotStatus = {
   dataPath: string
   automationDirs: string[]
   missingDirs: string[]
+  // A people.yaml problem or notice (e.g. people.yaml and people.yml both exist). Never blocks loading.
+  peopleError: string | null
 }
 
 export type FieldValue = string | number | boolean | null

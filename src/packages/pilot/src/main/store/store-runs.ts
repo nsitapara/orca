@@ -126,6 +126,14 @@ export class RunStore {
     }
   }
 
+  get(id: string): RunRow | null {
+    const r = this.db.prepare('SELECT * FROM runs WHERE id = ?').get(id)
+    if (!r) {
+      return null
+    }
+    return toRun(r as never)
+  }
+
   forTick(tickId: number): RunRow[] {
     return this.db
       .prepare('SELECT * FROM runs WHERE tick_id = ? ORDER BY started_at, id')
@@ -161,6 +169,16 @@ export class RunStore {
     return this.db
       .prepare("SELECT * FROM steps WHERE status IN ('starting', 'running')")
       .all()
+      .map((r) => toStep(r as never))
+  }
+
+  // A step is 'starting' with no terminal only while its launch is in flight.
+  staleStartingSteps(startedBefore: number): StepRow[] {
+    return this.db
+      .prepare(
+        "SELECT * FROM steps WHERE status = 'starting' AND terminal_handle IS NULL AND started_at < ? ORDER BY started_at, run_id"
+      )
+      .all(startedBefore)
       .map((r) => toStep(r as never))
   }
 

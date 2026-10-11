@@ -131,6 +131,61 @@ describe('PilotStore', () => {
     expect(store.tickItems(tick)).toEqual([])
   })
 
+  it('finds the last real tick, ignoring dry runs (scheduler timing)', () => {
+    const store = freshStore()
+    expect(store.lastRealTick('a')).toBeNull()
+    store.startTick('a', true, 50)
+    expect(store.lastRealTick('a')).toBeNull()
+    store.startTick('a', false, 100)
+    store.startTick('a', true, 200)
+    store.startTick('b', false, 300)
+    expect(store.lastRealTick('a')).toMatchObject({ startedAt: 100, dryRun: false })
+    expect(store.lastTick('a')).toMatchObject({ startedAt: 200, dryRun: true })
+  })
+
+  it('unmarks only the once_per key a given run holds', () => {
+    const store = freshStore()
+    store.markHandled('a', 'k:1', 'run-1', 1)
+    store.markHandled('a', 'k:2', 'run-2', 1)
+    store.markHandled('a', 'k:3', null, 1)
+    store.markHandled('b', 'k:1', 'run-1', 1)
+    store.unmarkHandledForRun('a', 'run-1')
+    expect(store.handledKeys('a')).toEqual(new Set(['k:2', 'k:3']))
+    expect(store.handledKeys('b')).toEqual(new Set(['k:1']))
+  })
+
+  it('finds steps stuck starting without a terminal since before a cutoff', () => {
+    const store = freshStore()
+    const add = (id: string, startedAt: number) => {
+      store.runs.create({
+        id,
+        automationId: 'a',
+        tickId: null,
+        itemKey: id,
+        itemLabel: id,
+        worktreePath: null,
+        startedAt
+      })
+      store.runs.createStep({
+        runId: id,
+        idx: 0,
+        name: 's',
+        agent: 'claude',
+        skill: null,
+        startedAt
+      })
+    }
+    add('stale', 10)
+    add('young', 500)
+    add('launched', 10)
+    store.runs.updateStep('launched', 0, { terminalHandle: 'term_1' })
+    add('failed', 10)
+    store.runs.updateStep('failed', 0, { status: 'failed' })
+    expect(store.runs.staleStartingSteps(100).map((s) => s.runId)).toEqual(['stale'])
+    expect(store.runs.get('stale')).toMatchObject({ id: 'stale', status: 'running' })
+    expect(store.runs.get('missing')).toBeNull()
+  })
+
   it('records decisions atomically and in insertion order', () => {
     const store = freshStore()
     const tick = store.startTick('a', false, 1)
