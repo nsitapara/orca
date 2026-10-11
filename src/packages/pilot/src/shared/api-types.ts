@@ -125,6 +125,78 @@ export type HandledRow = {
   failedAt: number | null
 }
 
+export type InboxType = 'question' | 'flagged' | 'default' | 'action' | 'bug' | 'left_for_you'
+export type InboxStatus = 'open' | 'answered' | 'done' | 'obsolete' | 'stale' | 'dismissed'
+export type InboxOption = { label: string; meaning: string }
+// An answer carries the digest of the card version it was given against (contract §10), and where
+// it was given: the page, `pilot inbox answer`, or the vault import.
+export type InboxAnswer = {
+  option: number | null
+  text: string | null
+  digest: string
+  via: 'page' | 'cli' | 'import'
+}
+export type InboxItemRow = {
+  id: string
+  automationId: string
+  runId: string | null
+  stepIdx: number | null
+  itemKey: string | null
+  worktreePath: string | null
+  person: string
+  type: InboxType
+  title: string
+  context: string
+  options: InboxOption[]
+  suggested: string | null
+  detailsMd: string | null
+  action: string | null
+  actionArgs: Record<string, unknown> | null
+  digest: string
+  version: number
+  status: InboxStatus
+  answer: InboxAnswer | null
+  answeredAt: number | null
+  answeredBy: string | null
+  createdAt: number
+  updatedAt: number
+  // How the work an answer started ended, and what the agent said back (contract §10, G6).
+  outcome: string | null
+  replies: string[]
+  // Named parts of a card that can be approved or left out one by one (`approve except:` / `keep:`).
+  parts: Record<string, string>
+  // The two labels of a card's on/off switch (on first), empty when it has none.
+  switchWords: string[]
+  source: 'engine' | 'import'
+  vaultRef: string | null
+}
+export type QueueState = 'not_ready' | 'ready' | 'held' | 'dispatched' | 'failed'
+export type HoldReason =
+  | 'worktree_busy'
+  | 'typing'
+  | 'claimed'
+  | 'quota'
+  | 'no_worktree'
+  | 'mr_unknown'
+  | 'in_flight'
+  | 'waits'
+  | 'retry'
+export type QueueRoute = 'resume' | 'fork' | 'new' | 'action'
+export type QueueRow = {
+  id: number
+  inboxItemId: string
+  state: QueueState
+  holdReason: HoldReason | null
+  // The words that go with the code, shown on the page ("Nish is typing in the terminal").
+  holdDetail: string | null
+  readyAt: number
+  attempts: number
+  route: QueueRoute | null
+  targetSessionId: string | null
+  dispatchedRunId: string | null
+  updatedAt: number
+}
+
 export type TickResult = {
   tickId: number
   status: 'ok' | 'failed'
