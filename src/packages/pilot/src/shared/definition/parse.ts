@@ -4,6 +4,7 @@ import { normalize } from './normalize'
 import { automationSchema, type RawAutomation } from './schema'
 import type { ParseResult } from './types'
 import { definitionErrors } from './validate'
+import { exprErrors } from './validate-expr'
 import { WHERE_SCHEMAS } from './where'
 
 type Issue = z.core.$ZodIssue
@@ -81,7 +82,7 @@ export function parseAutomationYaml(text: string, file: string): ParseResult {
   if (!where.ok) {
     return { ok: false, errors: where.errors.map((e) => `${file}: ${e}`) }
   }
-  const errors = definitionErrors(parsed.data)
+  const errors = [...definitionErrors(parsed.data), ...exprErrors(parsed.data)]
   if (errors.length > 0) {
     return { ok: false, errors: errors.map((e) => `${file}: ${e}`) }
   }

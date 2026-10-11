@@ -96,10 +96,10 @@ const stepSession = z.union(
 const step = z.strictObject({
   name: z
     .string()
-    .regex(
-      /^[A-Za-z_]\w*$/,
-      'use letters, digits and _, starting with a letter or _ (steps are read as {steps.<name>.<output>})'
-    )
+    .regex(/^[A-Za-z_][A-Za-z0-9_]*$/, {
+      error: (issue) =>
+        `${String(issue.input)} must use only letters, digits and _ so {steps.<name>.…} can name it`
+    })
     .optional(),
   agent: z.enum(['claude', 'codex', 'shell']),
   skill: z.string().min(1).optional(),

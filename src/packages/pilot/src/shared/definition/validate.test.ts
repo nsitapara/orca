@@ -160,7 +160,7 @@ describe('definition validation', () => {
     [
       'a step name a placeholder cannot read',
       `${BASE}steps:\n  - { name: re-view, agent: claude, prompt: x }\n`,
-      'steps.0.name: use letters, digits and _, starting with a letter or _ (steps are read as {steps.<name>.<output>})'
+      'steps.0.name: re-view must use only letters, digits and _ so {steps.<name>.…} can name it'
     ],
     [
       'an unknown item kind',
