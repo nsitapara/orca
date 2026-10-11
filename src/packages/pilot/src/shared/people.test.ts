@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import { describeRef, parsePeopleYaml, personByGitlab, refIncludes } from './people'
+import type { PeopleRef } from './definition/types'
+import {
+  describeRef,
+  gitlabHandlesFor,
+  parsePeopleYaml,
+  personByGitlab,
+  refIncludes
+} from './people'
 
 const YAML = `
 people:
@@ -94,5 +101,24 @@ describe('people', () => {
   ])('rejects a duplicate %s account across people, ignoring case', (field, first, second) => {
     const text = `people:\n  - { id: a, name: A, ${field}: ${first} }\n  - { id: b, name: B, ${field}: ${second} }\n`
     expect(errorsOf(text)).toContain(`people.b.${field}: "${second}" is also used by a`)
+  })
+
+  const notCases: [PeopleRef, string, boolean][] = [
+    [{ not: { people: ['nish'] } }, 'nish', false],
+    [{ not: { people: ['nish'] } }, 'shivan', true],
+    [{ not: { group: 'web' } }, 'shivan', false],
+    [{ not: {} }, 'nish', true]
+  ]
+  it.each(notCases)('refIncludes(%o, %s) = %s for a not ref', (ref, id, expected) => {
+    expect(refIncludes(ref, id, dir)).toBe(expected)
+  })
+
+  it('describes a not ref as everyone but the people it names', () => {
+    expect(describeRef({ not: { people: ['nish'] } }, dir)).toBe('anyone but Nish Sitapara')
+    expect(describeRef({ not: { group: 'web' } }, dir)).toBe('anyone but Web team')
+  })
+
+  it('asks GitLab for every author under a not ref, so the filter runs after listing', () => {
+    expect(gitlabHandlesFor({ not: { people: ['nish'] } }, dir)).toBeNull()
   })
 })

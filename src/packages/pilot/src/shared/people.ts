@@ -1,6 +1,6 @@
 import { parse as parseYaml } from 'yaml'
 import { z } from 'zod'
-import type { PeopleRef } from './definition/types'
+import type { PeopleRef, PeopleSet } from './definition/types'
 
 const ACCOUNT_FIELDS = ['gitlab', 'github', 'linear', 'slack'] as const
 
@@ -102,6 +102,16 @@ export function personByGitlab(dir: PeopleDirectory, username: string): Person |
   return dir.people.find((p) => p.gitlab?.toLowerCase() === wanted) ?? null
 }
 
+function setIncludes(set: PeopleSet, personId: string, dir: PeopleDirectory): boolean {
+  if (set.people?.includes(personId)) {
+    return true
+  }
+  if (!set.group) {
+    return false
+  }
+  return dir.groups.find((g) => g.id === set.group)?.members.includes(personId) ?? false
+}
+
 export function refIncludes(
   ref: PeopleRef | undefined,
   personId: string,
@@ -110,13 +120,10 @@ export function refIncludes(
   if (ref === undefined || ref === 'anyone') {
     return true
   }
-  if (ref.people?.includes(personId)) {
-    return true
+  if ('not' in ref) {
+    return !setIncludes(ref.not, personId, dir)
   }
-  if (!ref.group) {
-    return false
-  }
-  return dir.groups.find((g) => g.id === ref.group)?.members.includes(personId) ?? false
+  return setIncludes(ref, personId, dir)
 }
 
 function nameOf(id: string, dir: PeopleDirectory): string {
@@ -130,25 +137,33 @@ function joinNames(names: string[]): string {
   return `${names.slice(0, -1).join(', ')} and ${names.at(-1)}`
 }
 
-export function describeRef(ref: PeopleRef | undefined, dir: PeopleDirectory): string {
-  if (ref === undefined || ref === 'anyone') {
-    return 'anyone'
-  }
-  const names = (ref.people ?? []).map((id) => nameOf(id, dir))
-  if (ref.group) {
-    names.push(dir.groups.find((g) => g.id === ref.group)?.name ?? ref.group)
+function describeSet(set: PeopleSet, dir: PeopleDirectory): string {
+  const names = (set.people ?? []).map((id) => nameOf(id, dir))
+  if (set.group) {
+    names.push(dir.groups.find((g) => g.id === set.group)?.name ?? set.group)
   }
   return joinNames(names)
 }
 
+export function describeRef(ref: PeopleRef | undefined, dir: PeopleDirectory): string {
+  if (ref === undefined || ref === 'anyone') {
+    return 'anyone'
+  }
+  if ('not' in ref) {
+    return `anyone but ${describeSet(ref.not, dir)}`
+  }
+  return describeSet(ref, dir)
+}
+
 // The GitLab handles a ref names, so a list request can ask for just those authors. null means no
-// author filter (anyone/absent). People without a gitlab handle can't author MRs and are skipped,
-// so an empty list means "nobody resolvable", never "everyone".
+// author filter (anyone/absent, or a `not` ref, which is filtered after listing). People without a
+// gitlab handle can't author MRs and are skipped, so an empty list means "nobody resolvable", never
+// "everyone".
 export function gitlabHandlesFor(
   ref: PeopleRef | undefined,
   dir: PeopleDirectory
 ): string[] | null {
-  if (ref === undefined || ref === 'anyone') {
+  if (ref === undefined || ref === 'anyone' || 'not' in ref) {
     return null
   }
   const ids = new Set(ref.people ?? [])
