@@ -1,54 +1,13 @@
 import type { OrcaRuntimeService } from '../../../../../main/runtime/orca-runtime'
 import type { PilotStore } from '../store/store'
+import { newestLiveRow, newestSessionRow, observedState, type ObservedState } from './agent-rows'
 import type { CostReader } from './cost'
 import { isTerminalGoneError, terminalRelister, type TerminalRelist } from './terminal-relist'
 
-export type ObservedState = 'working' | 'waiting' | 'done' | 'gone'
+export type { ObservedState }
 export type StepProbe = {
   status(handle: string, paneKey: string): Promise<ObservedState>
   session(paneKey: string): { id: string; transcriptPath: string | null } | null
-}
-
-const STATE_MAP: Record<string, ObservedState> = {
-  working: 'working',
-  blocked: 'waiting',
-  waiting: 'waiting',
-  done: 'done'
-}
-
-type Row = ReturnType<OrcaRuntimeService['getAgentStatusRowsForPane']>[number]
-
-// Mirrors upstream's selectRuntimeHookAgentRowForPane "live" rule: newest by receivedAt, ignoring
-// provider-session-only and restored-unconfirmed rows (neither proves the agent is live).
-function newestLiveRow(rows: readonly Row[]): Row | null {
-  let best: Row | null = null
-  for (const row of rows) {
-    if (row.providerSessionOnly === true || row.restoredUnconfirmed === true) {
-      continue
-    }
-    if (!best || row.receivedAt > best.receivedAt) {
-      best = row
-    }
-  }
-  return best
-}
-
-function newestSessionRow(rows: readonly Row[]): Row | null {
-  let best: Row | null = null
-  for (const row of rows) {
-    if (row.providerSession && (!best || row.receivedAt > best.receivedAt)) {
-      best = row
-    }
-  }
-  return best
-}
-
-function observed(row: Row): ObservedState {
-  // Claude's SessionStart writes done + sessionBoundary before the prompt lands: not a turn end.
-  if (row.state === 'done' && row.sessionBoundary === true) {
-    return 'working'
-  }
-  return STATE_MAP[row.state] ?? 'working'
 }
 
 export function runtimeStepProbe(
@@ -59,7 +18,7 @@ export function runtimeStepProbe(
     async status(handle, paneKey) {
       const row = newestLiveRow(runtime.getAgentStatusRowsForPane(paneKey))
       if (row) {
-        return observed(row)
+        return observedState(row)
       }
       try {
         await runtime.showTerminal(handle)
