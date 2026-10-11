@@ -1,16 +1,10 @@
 import type { ItemDecision, TickResult, Verdict } from '../../shared/api-types'
 import type { AutomationDefinition } from '../../shared/definition/types'
 import type { PeopleDirectory } from '../../shared/people'
-import {
-  decideTick,
-  usesHandled,
-  type HandledState,
-  type ScopeGate
-} from '../../shared/tick/decide'
+import { usesHandled, workspacePathOf } from '../../shared/tick/decide'
 import { createPassFetchCache, type PassFetchCache } from '../sources/fetch-cache'
-import type { GlabApi } from '../sources/gitlab-api'
-import type { PilotStore } from '../store/store'
-import { gatherItems, type ItemDeps } from './tick-items'
+import { glabApiForRepo, type GlabApi } from '../sources/gitlab-api'
+import { decideTickItems, type DecideDeps, type DecideOutcome } from './tick-decide'
 
 export type { TickResult }
 export type LaunchRequest = {
@@ -33,15 +27,14 @@ function errorMessage(e: unknown): string {
   return e instanceof Error ? e.message : String(e)
 }
 
-// `pass` is the scheduler pass's fetch cache, shared by every automation that ticks in that pass.
-// A tick without one (Run now, a dry run) gets its own.
-export type TickOptions = { dryRun: boolean; pass?: PassFetchCache }
-
-export type TickDeps = ItemDeps & {
-  store: PilotStore
-  gitlab(repoPath: string): Promise<GlabApi>
+// Items, fields and decisions come from decideTickItems; launch starts a run's first step. `gitlab` only
+// feeds the pass a tick run by hand (Run now, a dry run) makes for itself; it defaults to the real client.
+export type TickDeps = DecideDeps & {
+  gitlab?(repoPath: string): Promise<GlabApi>
   launch(req: LaunchRequest): Promise<LaunchResult>
 }
+// `pass` is the scheduler pass's fetch cache, shared by every automation that ticks in that pass.
+export type TickOptions = { dryRun: boolean; pass?: PassFetchCache }
 
 const pad = (v: number) => String(v).padStart(2, '0')
 
@@ -63,68 +56,47 @@ function countVerdicts(decisions: ItemDecision[]): Partial<Record<Verdict, numbe
 
 const ACTED_ON_WHERE = new Set(['state', 'author', 'head_pipeline'])
 
-// Keys a later task implements. Until then a file using one fails the tick instead of running wider.
+// Keys a later task implements (Task 2b ruling): until then a file using one fails the tick instead
+// of running wider. start: ask_first → Task 25; other workspaces → Task 8; more MR where → Task 14c.
 function unactedKey(def: AutomationDefinition): string | null {
-  const items = def.items
-  if (items && items.match.length > 0) {
-    return "items.match isn't supported yet"
-  }
   if (def.start === 'ask_first') {
     return "start: ask_first isn't supported yet"
   }
   // A run-once automation's own workspace is the main checkout (its item is the repo).
-  const own = items === null ? 'main_checkout' : 'item_worktree'
+  const own = def.items === null ? 'main_checkout' : 'item_worktree'
   if (def.workspace.kind !== own) {
     return `workspace: ${def.workspace.kind} isn't supported yet`
   }
-  const clause = Object.keys(items?.where ?? {}).find((k) => !ACTED_ON_WHERE.has(k))
+  const clause = Object.keys(def.items?.where ?? {}).find((k) => !ACTED_ON_WHERE.has(k))
   if (clause) {
     return `items.where.${clause} isn't supported yet`
   }
   return null
 }
 
-async function decide(
-  def: AutomationDefinition,
-  people: PeopleDirectory,
-  deps: TickDeps,
-  pass: PassFetchCache,
-  tickId: number
-): Promise<ItemDecision[]> {
-  const unsupported = unactedKey(def)
-  if (unsupported) {
-    throw new Error(unsupported)
-  }
-  const { items, scope } = await gatherItems(def, people, deps, pass, tickId)
-  const { store } = deps
-  const gates = new Map<string, ScopeGate>()
-  for (const item of items) {
-    const result = scope(item)
-    if (!result.ok) {
-      gates.set(item.key, { verdict: result.verdict, reason: result.reason })
-    }
-  }
-  const handled = new Map<string, HandledState>()
-  for (const key of store.handledKeys(def.id)) {
-    handled.set(key, { status: 'done', failedAt: null })
-  }
-  return decideTick({
-    definition: def,
-    // Interim: the v1 facts carry no untracked count; Task 6b reads it from the worktree facts.
-    items: items.map((item) => ({
-      ...item,
-      fields: { 'worktree.untracked_count': 0, ...item.fields }
-    })),
-    now: deps.now(),
-    scope: gates,
-    handled,
-    seenKeys: store.seenKeys(def.id),
-    activeRuns: store.runs.runningCount(def.id),
-    busyWorktrees: new Set(),
-    scriptChecks: new Map()
-  })
+// Seen keys (first_seen, oldest_waiting_first) belong to automations with items; a run-once tick
+// writes none. Its once_per key is kept only when it sets one (usesHandled): else every tick runs it.
+function remembersSeen(def: AutomationDefinition): boolean {
+  return def.items !== null
 }
 
+type Unlaunched = { runId: string; onceKey: string }
+
+// Where the run is recorded: the item's worktree, or the repo's main checkout for main_checkout
+// (recorded, though G2 keeps it out of the one-agent-per-worktree rule); null for a new worktree,
+// which Task 8d records once it exists.
+function recordedWorktree(
+  def: AutomationDefinition,
+  fields: ItemDecision['fields']
+): string | null {
+  if (def.workspace.kind === 'main_checkout') {
+    const path = fields['repo.path']
+    return typeof path === 'string' && path !== '' ? path : null
+  }
+  return workspacePathOf(def, fields)
+}
+
+// Only 'started' decisions start runs; 'asked' ones wait for an answer (Task 25 writes the card).
 // A launch failure keeps the decision's verdict 'started'; the RUN row is the record of the failure.
 async function startRuns(
   def: AutomationDefinition,
@@ -142,19 +114,18 @@ async function startRuns(
     }
     n += 1
     const runId = makeRunId(def.id, at, n, tickId)
-    const worktreePath = decision.fields['worktree.path']
     deps.store.runs.create({
       id: runId,
       automationId: def.id,
       tickId,
       itemKey: decision.key,
       itemLabel: decision.label,
-      worktreePath: typeof worktreePath === 'string' ? worktreePath : null,
+      worktreePath: recordedWorktree(def, decision.fields),
       startedAt: at
     })
     runIds.set(decision.key, runId)
     unlaunched.current = { runId, onceKey: decision.onceKey }
-    // A run-once automation without once_per keeps no key: it runs on every tick.
+    // Marked 'started' at launch (re-marking a failed key starts it fresh); Task 9 settles it.
     if (usesHandled(def)) {
       deps.store.markHandled(def.id, decision.onceKey, runId, at)
     }
@@ -172,8 +143,6 @@ async function startRuns(
   }
 }
 
-type Unlaunched = { runId: string; onceKey: string }
-
 // Best effort: one failing cleanup call must not mask the others.
 function releaseUnlaunched(
   def: AutomationDefinition,
@@ -185,6 +154,9 @@ function releaseUnlaunched(
   try {
     deps.store.runs.update(u.runId, { status: 'failed', outcome, finishedAt: deps.now() })
   } catch {}
+  if (!usesHandled(def)) {
+    return
+  }
   try {
     deps.store.unmarkHandled(def.id, u.onceKey)
   } catch {}
@@ -211,9 +183,8 @@ function keepOrphanHandled(
   } catch {}
 }
 
-// Seen and baselined keys belong to automations with items; a run-once tick writes neither.
 function markDecisions(def: AutomationDefinition, decisions: ItemDecision[], deps: TickDeps): void {
-  if (def.items === null) {
+  if (!remembersSeen(def)) {
     return
   }
   const at = deps.now()
@@ -242,6 +213,21 @@ function finishFailed(
   }
 }
 
+async function decide(
+  def: AutomationDefinition,
+  people: PeopleDirectory,
+  deps: TickDeps,
+  opts: TickOptions,
+  tickId: number
+): Promise<DecideOutcome> {
+  const unsupported = unactedKey(def)
+  if (unsupported) {
+    throw new Error(unsupported)
+  }
+  const pass = opts.pass ?? createPassFetchCache(`tick-${tickId}`, deps.gitlab ?? glabApiForRepo)
+  return decideTickItems(def, people, deps, pass, tickId)
+}
+
 export async function runTick(
   def: AutomationDefinition,
   people: PeopleDirectory,
@@ -249,14 +235,19 @@ export async function runTick(
   opts: TickOptions
 ): Promise<TickResult> {
   const tickId = deps.store.startTick(def.id, opts.dryRun, deps.now())
-  const pass = opts.pass ?? createPassFetchCache(`tick-${tickId}`, deps.gitlab)
   let decisions: ItemDecision[]
+  let warnings: string[]
   try {
-    decisions = await decide(def, people, deps, pass, tickId)
+    const outcome = await decide(def, people, deps, opts, tickId)
+    decisions = outcome.decisions
+    warnings = outcome.warnings
   } catch (error) {
     const message = errorMessage(error)
     finishFailed(tickId, message, {}, deps)
-    return { tickId, status: 'failed', error: message, decisions: [] }
+    return { tickId, status: 'failed', error: message, decisions: [], warnings: [] }
+  }
+  for (const warning of warnings) {
+    console.warn(`[pilot] ${def.id}: ${warning}`)
   }
   const runIds = new Map<string, string>()
   const unlaunched: { current: Unlaunched | null } = { current: null }
@@ -267,13 +258,13 @@ export async function runTick(
     }
     deps.store.recordDecisions(tickId, decisions, runIds)
     deps.store.finishTick(tickId, 'ok', null, countVerdicts(decisions), deps.now())
-    return { tickId, status: 'ok', error: null, decisions }
+    return { tickId, status: 'ok', error: null, decisions, warnings }
   } catch (error) {
     const message = errorMessage(error)
     if (unlaunched.current) {
       releaseUnlaunched(def, unlaunched.current, message, deps)
     }
     finishFailed(tickId, message, countVerdicts(decisions), deps)
-    return { tickId, status: 'failed', error: message, decisions }
+    return { tickId, status: 'failed', error: message, decisions, warnings }
   }
 }

@@ -1,6 +1,6 @@
 import type { ItemFields } from '../../shared/api-types'
 import type { Item } from '../sources/types'
-import type { ActivityDeps, AgentActivity } from './agent-activity'
+import { worktreePathKey, type ActivityDeps, type AgentActivity } from './agent-activity'
 import { stripRefsHeads } from './runtime-facts'
 
 export type WorktreeInfo = {
@@ -89,11 +89,12 @@ async function sessionOpen(steps: SessionStep[], deps: WorktreeFactDeps): Promis
   return false
 }
 
+const UNKNOWN_ACTIVITY: AgentActivity = { state: null, typing: null }
+
+// worktreeActivity lists every worktree it was asked about (idle when no agent tab is there), so a
+// worktree missing from the map was never read: unknown, not idle, and `worktree: idle` fails closed.
 function activityFields(activity: Map<string, AgentActivity> | null, path: string): ItemFields {
-  if (!activity) {
-    return { 'worktree.agent_state': null, 'worktree.typing': null }
-  }
-  const here = activity.get(path) ?? { state: 'idle', typing: false }
+  const here = activity?.get(worktreePathKey(path)) ?? UNKNOWN_ACTIVITY
   return { 'worktree.agent_state': here.state, 'worktree.typing': here.typing }
 }
 

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   worktreeActivity,
+  worktreePathKey,
   type ActivityDeps,
   type AgentActivity,
   type AgentTerminal
@@ -95,6 +96,15 @@ describe('worktreeActivity', () => {
   ])('%s', async (_name, terminals, states, drafts, expected) => {
     const out = await worktreeActivity(['/wt'], deps(terminals, states, drafts))
     expect(out?.get('/wt')).toEqual(expected)
+  })
+
+  // Orca's terminal list and its worktree list are separate registries: compare paths in one form.
+  it('matches terminals to worktrees whatever the trailing slash or dot segments', async () => {
+    const terminals = [term('t1', '/wt/a'), term('t2', '/wt/x/../a/'), term('t3', '/wt/ab')]
+    const states = { 'tab-t2:leaf': 'working', 'tab-t3:leaf': 'working' }
+    const out = await worktreeActivity(['/wt/a/'], deps(terminals, states, { t1: 'hi', t3: 'x' }))
+    expect(out?.get('/wt/a')).toEqual({ state: 'working', typing: true })
+    expect(worktreePathKey('/wt//a/')).toBe('/wt/a')
   })
 
   it('returns null when the terminal list cannot be read, so worktree: idle fails closed', async () => {

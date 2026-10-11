@@ -249,6 +249,9 @@ export type TickResult = {
   status: 'ok' | 'failed'
   error: string | null
   decisions: ItemDecision[]
+  // Source truncation, field scripts that failed: the tick still decided. Logged, not stored.
+  // runTick always sets it; optional so existing TickOutcome literals (UI and CLI fixtures) stay valid.
+  warnings?: string[]
 }
 
 // What dryRun and tickNow return: a result, or why there isn't one.

@@ -278,4 +278,12 @@ export class PilotStore {
       .prepare('INSERT OR IGNORE INTO seen (automation_id, item_key, at) VALUES (?, ?, ?)')
       .run(automationId, itemKey, at)
   }
+
+  // When each item was first seen: oldest_waiting_first's order for items whose source has no time.
+  seenTimes(automationId: string): Map<string, number> {
+    const rows = this.db
+      .prepare('SELECT item_key, at FROM seen WHERE automation_id = ?')
+      .all(automationId) as { item_key: string; at: number }[]
+    return new Map(rows.map((r) => [String(r.item_key), Number(r.at)]))
+  }
 }
