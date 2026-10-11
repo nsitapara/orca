@@ -4,10 +4,12 @@ import type { OrcaRuntimeService } from '../../../../main/runtime/orca-runtime'
 import { ALL_RPC_METHODS } from '../../../../main/runtime/rpc/methods/index'
 import { getAppEnvironment } from '../../../../shared/app-environment'
 import type { PilotStatus } from '../shared/api-types'
+import type { AgentKind } from '../shared/definition/types'
 import { definitionIo, liveDefinitions } from './definitions/live'
 import type { LoadedDefinitions } from './definitions/loader'
 import { pilotAutomationDirs, pilotDataDir } from './env'
-import { cachedQuota, type QuotaReader } from './fields/quota'
+import type { EngineEnv } from './engine-env'
+import { cachedQuotas, type QuotaReader } from './fields/quota'
 import { resolveRepoPath, runtimeFactDeps } from './fields/runtime-facts'
 import { claudeTranscriptCost } from './run/cost'
 import { makeLauncher } from './run/launch'
@@ -40,10 +42,12 @@ export type PilotHost = {
   context: PilotContext | null
   error: string | null
 }
-export type PilotServiceOptions = { quota?: QuotaReader; schedulerEnabled?: boolean }
-
-// orcad has no Claude quota reader (R3): the quota check then sees nulls and lets runs start.
-const NO_QUOTA: QuotaReader = async () => ({ weekly: null, session: null })
+export type PilotServiceOptions = {
+  quotas?: Partial<Record<AgentKind, QuotaReader>>
+  // Where the engine's child processes find Pilot's CLI and data (H9). Absent in orcad.
+  engineEnv?: EngineEnv
+  schedulerEnabled?: boolean
+}
 
 const log = (message: string): void => console.log(message)
 
@@ -84,13 +88,14 @@ function openPilot(
   opened.push(definitions.stop)
   // One relister for the session check and the step watcher, so they share its listing.
   const relist = terminalRelister(runtime, now)
+  const quotas = cachedQuotas(options.quotas)
   const tickDeps: TickDeps = {
     store,
     now,
     resolveRepo: (repo) => resolveRepoPath(runtime, repo),
     gitlab: glabApiForRepo,
     facts: runtimeFactDeps(runtime, store, undefined, { relist, now }),
-    quota: cachedQuota(options.quota ?? NO_QUOTA),
+    quota: quotas.claude,
     launch: makeLauncher(runtime, store, now)
   }
   const probe = runtimeStepProbe(runtime, relist)

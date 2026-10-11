@@ -1,5 +1,6 @@
 import type { ProviderRateLimits } from '../../../../../shared/rate-limit-types'
-import type { TickItem } from '../../shared/api-types'
+import type { ItemFields, TickItem } from '../../shared/api-types'
+import type { AgentKind } from '../../shared/definition/types'
 
 export type QuotaReading = { weekly: number | null; session: number | null }
 export type QuotaReader = () => Promise<QuotaReading>
@@ -54,4 +55,35 @@ export function addQuotaFields<I extends TickItem>(items: I[], q: QuotaReading):
       'quota.claude.session_pct': q.session
     }
   }))
+}
+
+export type QuotaReaders = Record<AgentKind, QuotaReader>
+
+// No reader for this agent in this process (orcad; Codex until Task 18): the quota check lets runs start.
+export const NO_QUOTA: QuotaReader = async () => NONE
+
+export function cachedQuotas(
+  readers: Partial<Record<AgentKind, QuotaReader>> = {},
+  ttlMs?: number,
+  now?: () => number
+): QuotaReaders {
+  return {
+    claude: cachedQuota(readers.claude ?? NO_QUOTA, ttlMs, now),
+    codex: cachedQuota(readers.codex ?? NO_QUOTA, ttlMs, now)
+  }
+}
+
+export async function readQuotas(readers: QuotaReaders): Promise<Record<AgentKind, QuotaReading>> {
+  const read = (reader: QuotaReader) => reader().catch(() => NONE)
+  const [claude, codex] = await Promise.all([read(readers.claude), read(readers.codex)])
+  return { claude, codex }
+}
+
+export function quotaFields(readings: Record<AgentKind, QuotaReading>): ItemFields {
+  return {
+    'quota.claude.weekly_pct': readings.claude.weekly,
+    'quota.claude.session_pct': readings.claude.session,
+    'quota.codex.weekly_pct': readings.codex.weekly,
+    'quota.codex.session_pct': readings.codex.session
+  }
 }
