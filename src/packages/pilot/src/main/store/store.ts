@@ -11,6 +11,11 @@ import { migrate } from './migrations'
 import { RunStore } from './store-runs'
 import { InboxStore } from './store-inbox'
 import { QueueStore } from './store-queue'
+import { ActionRunStore } from './store-actions'
+import { DefinitionStore } from './store-definitions'
+import { EventStore } from './store-events'
+import { FieldCacheStore } from './store-fields'
+import { AgentSessionStore } from './store-sessions'
 
 const DAY = 24 * 60 * 60_000
 // Spec §7: ticks and their items are kept 30 days; runs and steps are kept indefinitely.
@@ -36,11 +41,21 @@ export class PilotStore {
   readonly runs: RunStore
   readonly inbox: InboxStore
   readonly queue: QueueStore
+  readonly events: EventStore
+  readonly actions: ActionRunStore
+  readonly definitions: DefinitionStore
+  readonly fields: FieldCacheStore
+  readonly sessions: AgentSessionStore
 
   private constructor(private readonly db: Database) {
     this.runs = new RunStore(db)
     this.inbox = new InboxStore(db)
     this.queue = new QueueStore(db)
+    this.events = new EventStore(db)
+    this.actions = new ActionRunStore(db)
+    this.definitions = new DefinitionStore(db)
+    this.fields = new FieldCacheStore(db)
+    this.sessions = new AgentSessionStore(db)
   }
 
   static open(path: string): PilotStore {
