@@ -15,6 +15,11 @@ export type LaunchRequest = {
   decision: ItemDecision
 }
 export type LaunchResult = { terminalHandle: string; paneKey: string }
+function errorMessage(e: unknown): string {
+  return e instanceof Error ? e.message : String(e)
+}
+
+// `quota` should be the cached reader in production; a throw is still fail-open (nulls).
 export type TickDeps = {
   store: PilotStore
   now(): number
@@ -28,13 +33,11 @@ export type TickDeps = {
 const pad = (v: number) => String(v).padStart(2, '0')
 
 // Run ids are global in the runs table. Two ticks of one automation in the same minute (a manual
-// "run now" beside the schedule) would collide on `<id>-<minute>-<n>`, so the runner passes the
-// tick id too. Without it the id is the plain `<id>-<minute>-<n>` form.
-export function makeRunId(automationId: string, at: number, n: number, tickId?: number): string {
+// "run now" beside the schedule) would collide on `<id>-<minute>-<n>`, so the tick id is part of it.
+export function makeRunId(automationId: string, at: number, n: number, tickId: number): string {
   const d = new Date(at)
   const stamp = `${d.getUTCFullYear()}${pad(d.getUTCMonth() + 1)}${pad(d.getUTCDate())}${pad(d.getUTCHours())}${pad(d.getUTCMinutes())}`
-  const tick = tickId === undefined ? '' : `-t${tickId}`
-  return `${automationId}-${stamp}${tick}-${n}`
+  return `${automationId}-${stamp}-t${tickId}-${n}`
 }
 
 function countVerdicts(decisions: ItemDecision[]): Partial<Record<Verdict, number>> {
@@ -61,7 +64,7 @@ async function decide(
     deps.facts,
     (i) => i.fields['mr.pipeline'] !== null
   )
-  items = addQuotaFields(items, await deps.quota())
+  items = addQuotaFields(items, await deps.quota().catch(() => ({ weekly: null, session: null })))
   const { store } = deps
   return decideTick({
     definition: def,
@@ -78,9 +81,10 @@ async function startRuns(
   def: AutomationDefinition,
   decisions: ItemDecision[],
   tickId: number,
-  deps: TickDeps
-): Promise<Map<string, string>> {
-  const runIds = new Map<string, string>()
+  deps: TickDeps,
+  runIds: Map<string, string>,
+  unlaunched: { current: Unlaunched | null }
+): Promise<void> {
   const at = deps.now()
   let n = 0
   for (const decision of decisions) {
@@ -89,7 +93,6 @@ async function startRuns(
     }
     n += 1
     const runId = makeRunId(def.id, at, n, tickId)
-    runIds.set(decision.key, runId)
     const worktreePath = decision.fields['worktree.path']
     deps.store.runs.create({
       id: runId,
@@ -100,19 +103,39 @@ async function startRuns(
       worktreePath: typeof worktreePath === 'string' ? worktreePath : null,
       startedAt: at
     })
+    runIds.set(decision.key, runId)
+    unlaunched.current = { runId, onceKey: decision.onceKey }
     deps.store.markHandled(def.id, decision.onceKey, runId, at)
     try {
+      unlaunched.current = null
       await deps.launch({ runId, definition: def, decision })
     } catch (error) {
       deps.store.runs.update(runId, {
         status: 'failed',
-        outcome: `Couldn't start: ${(error as Error).message}`,
+        outcome: `Couldn't start: ${errorMessage(error)}`,
         finishedAt: deps.now()
       })
       deps.store.unmarkHandled(def.id, decision.onceKey)
     }
   }
-  return runIds
+}
+
+type Unlaunched = { runId: string; onceKey: string }
+
+// Best effort: one failing cleanup call must not mask the others.
+function releaseUnlaunched(
+  def: AutomationDefinition,
+  u: Unlaunched,
+  message: string,
+  deps: TickDeps
+) {
+  const outcome = `Couldn't start: ${message}`
+  try {
+    deps.store.runs.update(u.runId, { status: 'failed', outcome, finishedAt: deps.now() })
+  } catch {}
+  try {
+    deps.store.unmarkHandled(def.id, u.onceKey)
+  } catch {}
 }
 
 function markDecisions(def: AutomationDefinition, decisions: ItemDecision[], deps: TickDeps): void {
@@ -139,16 +162,26 @@ export async function runTick(
   try {
     decisions = await decide(def, people, deps)
   } catch (error) {
-    const message = (error as Error).message
+    const message = errorMessage(error)
     deps.store.finishTick(tickId, 'failed', message, {}, deps.now())
     return { tickId, status: 'failed', error: message, decisions: [] }
   }
-  let runIds = new Map<string, string>()
-  if (!opts.dryRun) {
-    markDecisions(def, decisions, deps)
-    runIds = await startRuns(def, decisions, tickId, deps)
+  const runIds = new Map<string, string>()
+  const unlaunched: { current: Unlaunched | null } = { current: null }
+  try {
+    if (!opts.dryRun) {
+      markDecisions(def, decisions, deps)
+      await startRuns(def, decisions, tickId, deps, runIds, unlaunched)
+    }
+    deps.store.recordDecisions(tickId, decisions, runIds)
+    deps.store.finishTick(tickId, 'ok', null, countVerdicts(decisions), deps.now())
+    return { tickId, status: 'ok', error: null, decisions }
+  } catch (error) {
+    const message = errorMessage(error)
+    if (unlaunched.current) {
+      releaseUnlaunched(def, unlaunched.current, message, deps)
+    }
+    deps.store.finishTick(tickId, 'failed', message, countVerdicts(decisions), deps.now())
+    return { tickId, status: 'failed', error: message, decisions }
   }
-  deps.store.recordDecisions(tickId, decisions, runIds)
-  deps.store.finishTick(tickId, 'ok', null, countVerdicts(decisions), deps.now())
-  return { tickId, status: 'ok', error: null, decisions }
 }

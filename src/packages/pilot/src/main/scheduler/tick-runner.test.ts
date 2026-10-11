@@ -162,6 +162,74 @@ describe('runTick', () => {
     expect(d.store.handledKeys('fix-failed-ci').size).toBe(0)
     expect(d.store.seenKeys('fix-failed-ci').size).toBe(0)
     expect(d.store.runs.forTick(result.tickId)).toEqual([])
+    expect(d.store.lastTick('fix-failed-ci')).toMatchObject({
+      status: 'failed',
+      error: 'repo not found'
+    })
+  })
+
+  it('records a non-Error throw as a failed tick with its text', async () => {
+    const d = deps({
+      gitlab: async () => {
+        throw 'boom'
+      }
+    })
+    const result = await runTick(def.definition, people.directory, d, { dryRun: false })
+    expect(result).toMatchObject({ status: 'failed', error: 'boom' })
+    expect(d.store.lastTick('fix-failed-ci')).toMatchObject({ status: 'failed', error: 'boom' })
+  })
+
+  it('never fails a tick because the quota reader throws', async () => {
+    const d = deps({
+      quota: async () => {
+        throw new Error('no token')
+      }
+    })
+    const result = await runTick(def.definition, people.directory, d, { dryRun: false })
+    expect(result.status).toBe('ok')
+    expect(result.decisions.map((x) => x.verdict)).toEqual(['started', 'started'])
+  })
+
+  it('finishes the tick as failed when the store throws mid-start, leaving no stuck run', async () => {
+    const d = deps()
+    const real = d.store.runs.create.bind(d.store.runs)
+    let calls = 0
+    d.store.runs.create = (run) => {
+      calls += 1
+      if (calls === 2) {
+        throw new Error('disk full')
+      }
+      real(run)
+    }
+    const result = await runTick(def.definition, people.directory, d, { dryRun: false })
+    expect(result).toMatchObject({ status: 'failed', error: 'disk full' })
+    expect(d.store.lastTick('fix-failed-ci')).toMatchObject({
+      status: 'failed',
+      error: 'disk full'
+    })
+    expect(d.launched).toEqual(['!1561'])
+    expect(d.store.handledKeys('fix-failed-ci')).toEqual(new Set(['1561:1561']))
+    expect(d.store.runs.forTick(result.tickId).map((r) => [r.itemKey, r.status])).toEqual([
+      ['!1561', 'running']
+    ])
+  })
+
+  it('marks a created run failed and frees its key when the write phase throws before launch', async () => {
+    const d = deps()
+    const real = d.store.markHandled.bind(d.store)
+    d.store.markHandled = (a, k, r, at) => {
+      if (r !== null) {
+        throw new Error('locked')
+      }
+      real(a, k, r, at)
+    }
+    const result = await runTick(def.definition, people.directory, d, { dryRun: false })
+    expect(result).toMatchObject({ status: 'failed', error: 'locked' })
+    expect(d.launched).toEqual([])
+    expect(d.store.runs.forTick(result.tickId).map((r) => [r.status, r.outcome])).toEqual([
+      ['failed', "Couldn't start: locked"]
+    ])
+    expect(d.store.runs.runningCount('fix-failed-ci')).toBe(0)
   })
 
   it('fails only the run whose launch throws, and leaves its item due again (Review Focus 4)', async () => {
