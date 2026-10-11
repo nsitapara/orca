@@ -74,6 +74,7 @@ describe('hookTestTargets', () => {
     expect(hookTestTargets(rows)).toEqual([
       'src/cli/handler-group-manifest.test',
       'src/cli/specs',
+      'src/main/linear',
       'src/main/orcad',
       'src/main/startup',
       'src/main/updater',
