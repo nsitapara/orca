@@ -12,6 +12,12 @@ const TABS: { id: Tab; label: string }[] = [
   { id: 'activity', label: 'Activity' }
 ]
 
+// Pilot reads powers and inbox from the file but doesn't act on them yet, so neither may read as a
+// guarantee (agents can still push without the push power).
+function notEnforced(value: string): string {
+  return `${value} (not enforced in M1)`
+}
+
 function Overview({ detail }: { detail: AutomationDetailPayload }): React.JSX.Element {
   const s = detail.summary
   const next = s.nextTickAt === null ? 'None' : formatInZone(s.nextTickAt, s.timezone)
@@ -20,7 +26,8 @@ function Overview({ detail }: { detail: AutomationDetailPayload }): React.JSX.El
     ['Schedule', `${scheduleText(s)} (${s.timezone})`],
     ['Next tick', next],
     ['Agent', s.agent],
-    ['Powers', s.powers.length ? s.powers.join(', ') : 'None'],
+    ['Powers', notEnforced(s.powers.length ? s.powers.join(', ') : 'None')],
+    ['Inbox', notEnforced(s.inbox)],
     ['Status', s.enabled ? 'Enabled' : 'Paused']
   ]
   return (

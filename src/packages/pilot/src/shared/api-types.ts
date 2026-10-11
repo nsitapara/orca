@@ -104,7 +104,9 @@ export type AutomationSummary = {
   timezone: string
   itemKind: string
   agent: string
+  // Read from the file but not enforced in M1: the Overview says so.
   powers: string[]
+  inbox: string
   // From the scheduler's cache; null for `schedule: manual` and for a disabled automation.
   nextTickAt: number | null
   // The newest tick of either kind; its dryRun says which.
