@@ -1,3 +1,4 @@
+import { normalize } from 'node:path'
 import type { AgentState } from '../run/agent-rows'
 
 export type { AgentState }
@@ -12,6 +13,13 @@ export type ActivityDeps = {
 }
 
 const RANK: Record<AgentState, number> = { idle: 0, waiting: 1, working: 2 }
+
+// Orca's terminal list and its worktree list are separate registries, so their paths are compared in
+// one form (dot segments and doubled or trailing slashes removed), never as raw strings.
+export function worktreePathKey(path: string): string {
+  const normal = normalize(path)
+  return normal.length > 1 ? normal.replace(/\/+$/, '') : normal
+}
 
 async function terminalActivity(t: AgentTerminal, deps: ActivityDeps): Promise<AgentActivity> {
   let state: AgentState | null
@@ -56,8 +64,8 @@ function combineTyping(values: (boolean | null)[]): boolean | null {
   return false
 }
 
-// One terminal listing serves every worktree of a tick. A failed listing returns null: each
-// worktree's agent state and typing stay unknown, so `worktree: idle` fails closed.
+// One terminal listing serves every worktree of a tick, keyed by worktreePathKey. A failed listing
+// returns null: each worktree's agent state and typing stay unknown, so `worktree: idle` fails closed.
 export async function worktreeActivity(
   paths: readonly string[],
   deps: ActivityDeps
@@ -69,9 +77,11 @@ export async function worktreeActivity(
     return null
   }
   const out = new Map<string, AgentActivity>()
-  for (const path of new Set(paths)) {
+  for (const path of new Set(paths.map(worktreePathKey))) {
     const here = await Promise.all(
-      terminals.filter((t) => t.worktreePath === path).map((t) => terminalActivity(t, deps))
+      terminals
+        .filter((t) => worktreePathKey(t.worktreePath) === path)
+        .map((t) => terminalActivity(t, deps))
     )
     out.set(path, {
       state: combineStates(here.map((a) => a.state)),

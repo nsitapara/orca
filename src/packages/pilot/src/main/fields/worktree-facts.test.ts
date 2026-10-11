@@ -118,8 +118,16 @@ describe('worktreeFacts', () => {
     ])
   })
 
-  it('reads a worktree with no agent tabs as idle and nobody typing', async () => {
+  // worktreeActivity lists every worktree it is given (idle when it has no agent tabs); a worktree
+  // it doesn't list is unknown, so worktree: idle fails closed instead of reading it as idle.
+  it("reads a worktree the activity listing doesn't cover as unknown", async () => {
     const facts = await worktreeFacts(wt, 'ci', new Map(), deps())
-    expect([facts['worktree.agent_state'], facts['worktree.typing']]).toEqual(['idle', false])
+    expect([facts['worktree.agent_state'], facts['worktree.typing']]).toEqual([null, null])
+  })
+
+  it('finds its activity whatever the trailing slash', async () => {
+    const activity = new Map([['/wt/a', { state: 'waiting' as const, typing: false }]])
+    const facts = await worktreeFacts({ ...wt, path: '/wt/a/' }, 'ci', activity, deps())
+    expect([facts['worktree.agent_state'], facts['worktree.typing']]).toEqual(['waiting', false])
   })
 })

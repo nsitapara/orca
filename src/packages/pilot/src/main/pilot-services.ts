@@ -8,9 +8,11 @@ import type { AgentKind } from '../shared/definition/types'
 import { definitionIo, liveDefinitions } from './definitions/live'
 import type { LoadedDefinitions } from './definitions/loader'
 import { pilotAutomationDirs, pilotDataDir } from './env'
-import type { EngineEnv } from './engine-env'
+import { resolveEngineEnv, type EngineEnv } from './engine-env'
 import { cachedQuotas, type QuotaReader } from './fields/quota'
-import { resolveRepoPath, runtimeFactDeps } from './fields/runtime-facts'
+import { resolveRepoPath } from './fields/runtime-facts'
+import { runtimeFieldDeps } from './fields/runtime-field-deps'
+import { runShellScript } from './fields/script-runner'
 import { claudeTranscriptCost } from './run/cost'
 import { makeLauncher } from './run/launch'
 import { sweepStaleStarts } from './run/stale-starts'
@@ -19,6 +21,7 @@ import { pollRunningSteps, runtimeStepProbe } from './run/watcher'
 import { buildPilotMethods } from './rpc/methods'
 import { registerPilotRpcMethods } from './rpc/register'
 import { PilotScheduler } from './scheduler/scheduler'
+import { registrySources } from './scheduler/tick-decide'
 import { runTick, type TickDeps } from './scheduler/tick-runner'
 import { createPassFetchCache } from './sources/fetch-cache'
 import { glabApiForRepo } from './sources/gitlab-api'
@@ -89,13 +92,24 @@ function openPilot(
   // One relister for the session check and the step watcher, so they share its listing.
   const relist = terminalRelister(runtime, now)
   const quotas = cachedQuotas(options.quotas)
+  // How field scripts and script checks reach Pilot's CLI and data folder (H9); orcad gets the default.
+  const engineEnv = resolveEngineEnv(options.engineEnv, host.dataDir)
+  const fieldDeps = runtimeFieldDeps(runtime, store, { relist, now })
   const tickDeps: TickDeps = {
     store,
     now,
     resolveRepo: (repo) => resolveRepoPath(runtime, repo),
-    gitlab: glabApiForRepo,
-    facts: runtimeFactDeps(runtime, store, undefined, { relist, now }),
-    quota: quotas.claude,
+    sources: registrySources,
+    fields: {
+      ...fieldDeps,
+      quotas,
+      pendingAnswers: (automationId, itemKey) =>
+        store.queue.pendingAnswerCount(automationId, itemKey),
+      cache: store.fields,
+      runScript: runShellScript,
+      engineEnv,
+      now
+    },
     launch: makeLauncher(runtime, store, now)
   }
   const probe = runtimeStepProbe(runtime, relist)

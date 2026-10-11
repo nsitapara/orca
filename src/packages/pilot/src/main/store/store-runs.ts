@@ -187,6 +187,18 @@ export class RunStore {
     return Number((row as { n: number } | undefined)?.n ?? 0)
   }
 
+  // Worktrees with a running run of any automation: one agent per worktree across automations (§6).
+  runningWorktreePaths(): Set<string> {
+    return new Set(
+      this.db
+        .prepare(
+          "SELECT DISTINCT worktree_path FROM runs WHERE status = 'running' AND worktree_path IS NOT NULL"
+        )
+        .all()
+        .map((r) => String((r as { worktree_path: string }).worktree_path))
+    )
+  }
+
   // One agent per worktree across automations (contract §6): every running run there, of any automation.
   runningInWorktree(worktreePath: string): RunRow[] {
     return this.db
