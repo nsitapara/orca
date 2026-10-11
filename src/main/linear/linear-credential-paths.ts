@@ -1,10 +1,15 @@
 import { existsSync, mkdirSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
+import { pilotCredentialHome } from '../../packages/pilot/src/main/credential-home' // pilot-hook: linear-credential-home
 
 export const LEGACY_WORKSPACE_ID = 'legacy'
 
 function getOrcaDir(): string {
+  const pilotHome = pilotCredentialHome() // pilot-hook: linear-credential-home
+  if (pilotHome) {
+    return pilotHome
+  }
   return join(homedir(), '.orca')
 }
 

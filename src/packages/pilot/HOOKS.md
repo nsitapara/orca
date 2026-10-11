@@ -23,3 +23,4 @@ Every change Pilot makes to an upstream file is listed here (D24). Each one is a
 | updater                  | src/main/updater/updater-setup.ts                                             | isPilotUpdaterDisabled()                               | never offer Orca releases to Pilot                          |
 | runtime-ws-port          | src/main/startup/main-process-runtime-launch.ts                               | pilotRuntimeWsOptions()                                | Pilot listens on 6868 so it never fights real Orca for 6768 |
 | vitest-sqlite-runtime | config/scripts/vitest-sqlite-runtime-files.mjs | PILOT_SQLITE_RUNTIME_INCLUDE | Pilot's SQLite tests run under Node like upstream's |
+| linear-credential-home | src/main/linear/linear-credential-paths.ts | pilotCredentialHome() | Pilot's Linear login lives in ~/.pilot; Orca's in ~/.orca stays untouched |
