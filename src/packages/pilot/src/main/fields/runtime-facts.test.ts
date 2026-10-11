@@ -1,11 +1,11 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { OrcaRuntimeService } from '../../../../../main/runtime/orca-runtime'
 import type { PilotStore } from '../store/store'
-import { runtimeFactDeps } from './runtime-facts'
+import { runtimeFactDeps, SESSION_LOOKBACK_MS } from './runtime-facts'
 
 type Runtime = Record<string, unknown>
 const asRuntime = (r: Runtime) => r as unknown as OrcaRuntimeService
-const store = { runs: { openStepsIn: () => [] } } as unknown as PilotStore
+const store = { runs: { sessionStepsIn: () => [] } } as unknown as PilotStore
 const repo = { id: 'r1', path: '/repo', displayName: 'repo' }
 
 function runtimeWith(
@@ -64,31 +64,81 @@ describe('runtimeFactDeps', () => {
     )
   })
 
-  it('treats only a stale handle as a dead terminal', async () => {
-    const dead = runtimeFactDeps(
-      runtimeWith({}, async () => {
-        throw new Error('terminal_handle_stale')
+  // A stale handle is only a candidate for closed: after a restart a live daemon-hosted terminal
+  // looks stale too, so the PTY host's listing (relist) decides.
+  it.each([
+    ['a stale handle the PTY host no longer lists', new Error('terminal_handle_stale'), false],
+    ['a stale handle the PTY host still lists (restart)', new Error('terminal_handle_stale'), true],
+    ['a terminal_not_found the PTY host no longer lists', new Error('terminal_not_found'), false],
+    [
+      'a structured-worker handle',
+      Object.assign(new Error('t is an agent session'), {
+        code: 'terminal_unsupported_for_agent_session'
       }),
-      store
-    )
-    expect(await dead.terminalAlive('t')).toBe(false)
-    const structured = runtimeFactDeps(
+      false
+    ]
+  ])('asks the PTY host about %s', async (_name, error, listed) => {
+    const relist = vi.fn(async () => listed)
+    const deps = runtimeFactDeps(
       runtimeWith({}, async () => {
-        throw Object.assign(new Error('t is an agent session'), {
-          code: 'terminal_unsupported_for_agent_session'
-        })
+        throw error
       }),
-      store
+      store,
+      undefined,
+      { relist }
     )
-    expect(await structured.terminalAlive('t')).toBe(false)
+    expect(await deps.terminalAlive('t', 'tab:leaf')).toBe(listed)
+    expect(relist).toHaveBeenCalledWith('t', 'tab:leaf')
+  })
+
+  it('needs no listing for a live terminal, and keeps other errors unknown', async () => {
+    const relist = vi.fn(async () => false)
+    const alive = runtimeFactDeps(runtimeWith({}), store, undefined, { relist })
+    expect(await alive.terminalAlive('t', null)).toBe(true)
     const notReady = runtimeFactDeps(
       runtimeWith({}, async () => {
         throw new Error('runtime_unavailable')
       }),
-      store
+      store,
+      undefined,
+      { relist }
     )
-    await expect(notReady.terminalAlive('t')).rejects.toThrow('runtime_unavailable')
-    const alive = runtimeFactDeps(runtimeWith({}), store)
-    expect(await alive.terminalAlive('t')).toBe(true)
+    await expect(notReady.terminalAlive('t', null)).rejects.toThrow('runtime_unavailable')
+    expect(relist).not.toHaveBeenCalled()
+  })
+
+  it("keeps the fact unknown when the PTY host can't say", async () => {
+    const deps = runtimeFactDeps(
+      runtimeWith({}, async () => {
+        throw new Error('terminal_handle_stale')
+      }),
+      store,
+      undefined,
+      {
+        relist: async () => {
+          throw new Error('terminal_liveness_unavailable')
+        }
+      }
+    )
+    await expect(deps.terminalAlive('t', null)).rejects.toThrow('terminal_liveness_unavailable')
+  })
+
+  it("reads the automation's session steps from the last 7 days", () => {
+    const sessionStepsIn = vi.fn(() => [
+      { status: 'running', terminalHandle: 't1', paneKey: 'p1' },
+      { status: 'starting', terminalHandle: null, paneKey: null },
+      { status: 'done', terminalHandle: 't2', paneKey: 'p2' }
+    ])
+    const steps = { runs: { sessionStepsIn } } as unknown as PilotStore
+    const deps = runtimeFactDeps(runtimeWith({}), steps, undefined, {
+      relist: async () => false,
+      now: () => SESSION_LOOKBACK_MS + 5
+    })
+    expect(deps.automationSessions('ci', '/wt')).toEqual([
+      { active: true, handle: 't1', paneKey: 'p1' },
+      { active: true, handle: null, paneKey: null },
+      { active: false, handle: 't2', paneKey: 'p2' }
+    ])
+    expect(sessionStepsIn).toHaveBeenCalledWith('ci', '/wt', 5)
   })
 })

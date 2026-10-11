@@ -89,7 +89,7 @@ describe('PilotStore', () => {
       paneKey: 'tab:leaf'
     })
     expect(store.runs.runningSteps().map((s) => s.terminalHandle)).toEqual(['term_1'])
-    expect(store.runs.openStepsIn('a', '/wt/1')).toHaveLength(1)
+    expect(store.runs.sessionStepsIn('a', '/wt/1', 0)).toHaveLength(1)
     expect(store.runs.runningCount('a')).toBe(1)
     store.runs.updateStep('run-1', 0, {
       status: 'done',
@@ -104,8 +104,56 @@ describe('PilotStore', () => {
       tokens: 1000,
       outcome: 'Done'
     })
-    expect(store.runs.openStepsIn('a', '/wt/1')).toHaveLength(0)
+    expect(store.runs.runningSteps()).toEqual([])
     expect(store.runs.runningCount('a')).toBe(0)
+  })
+
+  // session: none_open reads open steps and finished ones whose tab may still be open (7-day bound).
+  it('finds the session steps of an automation in a worktree', () => {
+    const store = freshStore()
+    const step = (
+      id: string,
+      automationId: string,
+      worktreePath: string,
+      patch: Parameters<typeof store.runs.updateStep>[2]
+    ) => {
+      store.runs.create({
+        id,
+        automationId,
+        tickId: null,
+        itemKey: id,
+        itemLabel: id,
+        worktreePath,
+        startedAt: 1
+      })
+      store.runs.createStep({
+        runId: id,
+        idx: 0,
+        name: 's',
+        agent: 'claude',
+        skill: null,
+        startedAt: 1
+      })
+      store.runs.updateStep(id, 0, patch)
+    }
+    step('starting', 'a', '/wt', {})
+    step('running', 'a', '/wt', { status: 'running', terminalHandle: 't_run' })
+    step('done-recent', 'a', '/wt', { status: 'done', terminalHandle: 't_done', finishedAt: 100 })
+    step('failed-recent', 'a', '/wt', {
+      status: 'failed',
+      terminalHandle: 't_fail',
+      finishedAt: 100
+    })
+    step('done-old', 'a', '/wt', { status: 'done', terminalHandle: 't_old', finishedAt: 99 })
+    step('failed-no-terminal', 'a', '/wt', { status: 'failed', finishedAt: 100 })
+    step('other-automation', 'b', '/wt', { status: 'running', terminalHandle: 't_b' })
+    step('other-worktree', 'a', '/elsewhere', { status: 'running', terminalHandle: 't_e' })
+    expect(store.runs.sessionStepsIn('a', '/wt', 100).map((s) => s.runId)).toEqual([
+      'done-recent',
+      'failed-recent',
+      'running',
+      'starting'
+    ])
   })
 
   it('keeps data across close and reopen of the same file', () => {

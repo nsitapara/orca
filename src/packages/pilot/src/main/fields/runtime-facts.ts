@@ -2,6 +2,7 @@ import { basename, isAbsolute, join } from 'node:path'
 import { gitExecFileAsync } from '../../../../../main/git/command-runner/git-exec-file'
 import { gitOptionalLocksDisabledEnv } from '../../../../../main/git/command-runner/git-process-env'
 import type { OrcaRuntimeService } from '../../../../../main/runtime/orca-runtime'
+import { isTerminalGoneError, terminalRelister, type TerminalRelist } from '../run/terminal-relist'
 import type { PilotStore } from '../store/store'
 import { detectGitOperation, type FactDeps } from './worktree-fields'
 
@@ -10,13 +11,8 @@ type GitRunner = (
   opts: { cwd: string; env?: NodeJS.ProcessEnv }
 ) => Promise<{ stdout: string }>
 
-const STALE_HANDLE = 'terminal_handle_stale'
-const AGENT_SESSION_HANDLE = 'terminal_unsupported_for_agent_session'
-
-function isGoneError(error: Error): boolean {
-  const code = (error as { code?: unknown }).code
-  return error.message === STALE_HANDLE || code === AGENT_SESSION_HANDLE
-}
+// How far back a finished step's tab still counts as maybe open (session: none_open).
+export const SESSION_LOOKBACK_MS = 7 * 24 * 60 * 60_000
 
 export function stripRefsHeads(branch: string): string {
   return branch.replace(/^refs\/heads\//, '')
@@ -38,8 +34,11 @@ export async function resolveRepoPath(
 export function runtimeFactDeps(
   runtime: OrcaRuntimeService,
   store: PilotStore,
-  git: GitRunner = gitExecFileAsync
+  git: GitRunner = gitExecFileAsync,
+  opts: { relist?: TerminalRelist; now?: () => number } = {}
 ): FactDeps {
+  const relist = opts.relist ?? terminalRelister(runtime)
+  const now = opts.now ?? Date.now
   return {
     async listWorktrees(repoPath) {
       const repo = runtime.listRepos().find((r) => r.path === repoPath)
@@ -73,23 +72,29 @@ export function runtimeFactDeps(
       const gitDir = stdout.trim()
       return detectGitOperation(isAbsolute(gitDir) ? gitDir : join(path, gitDir))
     },
-    openSessionHandles(automationId, worktreePath) {
+    automationSessions(automationId, worktreePath) {
       return store.runs
-        .openStepsIn(automationId, worktreePath)
-        .flatMap((s) => (s.terminalHandle ? [s.terminalHandle] : []))
+        .sessionStepsIn(automationId, worktreePath, now() - SESSION_LOOKBACK_MS)
+        .map((s) => ({
+          active: s.status === 'starting' || s.status === 'running',
+          handle: s.terminalHandle,
+          paneKey: s.paneKey
+        }))
     },
-    async terminalAlive(handle) {
+    async terminalAlive(handle, paneKey) {
       try {
         await runtime.showTerminal(handle)
         return true
       } catch (error) {
-        // Only a stale handle means the session is gone. Anything else (runtime not ready, an agent
-        // session without a terminal) is unknown, so it is rethrown and the fact stays absent.
-        // A structured-worker handle (the refusal carries the code) can never be our terminal either.
-        if (error instanceof Error && isGoneError(error)) {
-          return false
+        // Only a terminal showTerminal can't find may be gone (isTerminalGoneError, the same errors
+        // the step watcher uses). Anything else (runtime not ready) is unknown, so it is rethrown
+        // and the fact stays absent.
+        if (!isTerminalGoneError(error)) {
+          throw error
         }
-        throw error
+        // Stale is also what a terminal looks like right after an app restart: the PTY host's
+        // inventory decides (terminal-relist.ts). If it can't say, that error leaves the fact unknown.
+        return relist(handle, paneKey)
       }
     }
   }

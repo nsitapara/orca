@@ -130,11 +130,18 @@ describe('pollRunningSteps', () => {
 })
 
 describe('runtimeStepProbe.status', () => {
-  function probeFor(show: () => Promise<unknown>, rows: unknown[] = []) {
-    return runtimeStepProbe({
-      getAgentStatusRowsForPane: () => rows,
-      showTerminal: show
-    } as unknown as OrcaRuntimeService)
+  function probeFor(
+    show: () => Promise<unknown>,
+    rows: unknown[] = [],
+    relist: (handle: string, paneKey: string | null) => Promise<boolean> = async () => false
+  ) {
+    return runtimeStepProbe(
+      {
+        getAgentStatusRowsForPane: () => rows,
+        showTerminal: show
+      } as unknown as OrcaRuntimeService,
+      relist
+    )
   }
   const codeError = (code: string) =>
     Object.assign(new Error('prose about agent sessions'), { code })
@@ -155,6 +162,42 @@ describe('runtimeStepProbe.status', () => {
     await pollRunningSteps(store, p, noCost, () => 9)
     expect(store.runs.steps('run-1')[0].status).toBe('failed')
     expect(store.runs.runningCount('a')).toBe(0)
+  })
+
+  // After an app restart showTerminal calls a terminal the daemon still hosts stale; the PTY
+  // host's inventory finds it again under its handle or pane, so the run stays open.
+  it('keeps a step whose stale terminal the PTY host still lists (restart)', async () => {
+    const relist = vi.fn(async () => true)
+    const p = probeFor(
+      async () => {
+        throw new Error('terminal_handle_stale')
+      },
+      [],
+      relist
+    )
+    expect(await p.status('h', 'pane')).toBe('working')
+    expect(relist).toHaveBeenCalledWith('h', 'pane')
+    const store = storeWithRunningStep()
+    await pollRunningSteps(store, p, noCost, () => 9)
+    expect(store.runs.steps('run-1')[0].status).toBe('running')
+    expect(store.runs.runningCount('a')).toBe(1)
+  })
+
+  it("leaves the step open when the PTY host can't say (no liveness yet)", async () => {
+    const p = probeFor(
+      async () => {
+        throw new Error('terminal_handle_stale')
+      },
+      [],
+      async () => {
+        throw new Error('terminal_liveness_unavailable')
+      }
+    )
+    await expect(p.status('h', 'pane')).rejects.toThrow('terminal_liveness_unavailable')
+    const store = storeWithRunningStep()
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    await pollRunningSteps(store, p, noCost, () => 9)
+    expect(store.runs.steps('run-1')[0].status).toBe('running')
   })
 
   it('rethrows a transient error so the step stays open', async () => {
