@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { engineChildEnv, pilotBinDir } from './engine-env'
+import { engineChildEnv, pilotBinDir, resolveEngineEnv } from './engine-env'
 
 const env = { binDir: '/Apps/Pilot.app/Contents/Resources/bin', dataDir: '/data/pilot' }
 
@@ -47,5 +47,14 @@ describe('pilotBinDir', () => {
     ]
   ])('%s', (_name, opts, dir) => {
     expect(pilotBinDir(opts)).toBe(dir)
+  })
+})
+
+describe('resolveEngineEnv', () => {
+  it.each([
+    ['given', env, env],
+    ['undefined (orcad)', undefined, { binDir: '', dataDir: '/data/orcad' }]
+  ])('%s', (_name, given, expected) => {
+    expect(resolveEngineEnv(given, '/data/orcad')).toEqual(expected)
   })
 })

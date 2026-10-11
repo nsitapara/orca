@@ -29,3 +29,8 @@ export function engineChildEnv(
   const dirs = [env.binDir, base.PATH ?? ''].filter((d) => d !== '')
   return { PATH: dirs.join(':'), ORCA_USER_DATA_PATH: env.dataDir, ...extra }
 }
+
+// orcad passes no EngineEnv: it has no launcher folder, so binDir is empty and its own data folder is used.
+export function resolveEngineEnv(given: EngineEnv | undefined, dataDir: string): EngineEnv {
+  return given ?? { binDir: '', dataDir }
+}
