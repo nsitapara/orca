@@ -2,7 +2,9 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { GlabApi } from './gitlab-api'
 import type { PeopleRef } from '../../shared/definition/types'
 import { gitlabHandlesFor, type PeopleDirectory } from '../../shared/people'
-import { listMergeRequestItems } from './merge-requests'
+import { createPassFetchCache } from './fetch-cache'
+import { listMergeRequestItems, mergeRequestSource } from './merge-requests'
+import type { SourceContext } from './types'
 
 function fakeApi(): GlabApi & { calls: string[] } {
   const calls: string[] = []
@@ -83,7 +85,10 @@ afterEach(() => vi.restoreAllMocks())
 describe('listMergeRequestItems', () => {
   it('lists open MRs by iid with pipeline details, dropping out-of-scope authors', async () => {
     const api = fakeApi()
-    const items = await listMergeRequestItems(api, { authorUsernames: null, inScope: (u) => u === 'nish8' })
+    const items = await listMergeRequestItems(api, {
+      authorUsernames: null,
+      inScope: (u) => u === 'nish8'
+    })
     expect(
       items.map((i) => [i.key, i.label, i.fields['mr.pipeline'], i.fields['mr.state']])
     ).toEqual([
@@ -123,7 +128,9 @@ describe('listMergeRequestItems', () => {
   it('warns once, naming the handle, when a per-handle page is full', async () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
     const full = Array.from({ length: 100 }, (_, i) => mr(i + 1, 'nish8'))
-    const api = pagedApi((path) => (path.includes('author_username=nish8') ? full : [mr(500, 'sam1')]))
+    const api = pagedApi((path) =>
+      path.includes('author_username=nish8') ? full : [mr(500, 'sam1')]
+    )
     await listMergeRequestItems(api, { authorUsernames: ['nish8', 'sam1'], inScope: () => true })
     expect(warn).toHaveBeenCalledTimes(1)
     expect(warn).toHaveBeenCalledWith(expect.stringContaining('nish8'))
@@ -189,5 +196,59 @@ describe('gitlabHandlesFor', () => {
     [{ group: 'missing' }, []]
   ] as const)('%j -> %j', (ref, expected) => {
     expect(gitlabHandlesFor(ref as PeopleRef | undefined, dir)).toEqual(expected)
+  })
+})
+
+describe('mergeRequestSource', () => {
+  const people: PeopleDirectory = {
+    people: [{ id: 'nish', name: 'Nish', gitlab: 'nish8' }],
+    groups: []
+  }
+  const where = { state: 'open', author: { people: ['nish'] } }
+  const contextFor = (api: GlabApi): SourceContext => ({
+    repo: { name: 'web-platform', id: 'r', path: '/repo', base: null },
+    people,
+    fetch: createPassFetchCache('pass-1', async () => api),
+    now: 0,
+    automationId: 'fix-failed-ci'
+  })
+
+  it("lists the where author's MRs, each with its kind and the branch its worktree is found by", async () => {
+    const { items, warnings } = await mergeRequestSource.list(contextFor(fakeApi()), where)
+    expect(warnings).toEqual([])
+    expect(items.map((i) => [i.key, i.kind, i.worktreeHint])).toEqual([
+      ['!1561', 'merge_request', { branch: 'web-1493-add-digit' }],
+      ['!1574', 'merge_request', { branch: 'web-1474-show-donor' }]
+    ])
+    expect(items[0].sortKeys).toEqual({ waitingSince: null, priority: null })
+  })
+
+  it('reads GitLab through the pass, so a second automation in the pass asks nothing again', async () => {
+    const api = fakeApi()
+    const ctx = contextFor(api)
+    const first = await mergeRequestSource.list(ctx, where)
+    const second = await mergeRequestSource.list(ctx, where)
+    expect(second.items).toEqual(first.items)
+    expect(api.calls).toEqual([
+      'merge_requests?state=opened&author_username=nish8&per_page=100',
+      'merge_requests/1561',
+      'merge_requests/1574'
+    ])
+  })
+
+  it('scopes an item with the merge_request where rules', () => {
+    const item = {
+      kind: 'merge_request' as const,
+      key: '!1',
+      label: '!1 x',
+      fields: { 'mr.state': 'merged' },
+      worktreeHint: null,
+      sortKeys: { waitingSince: null, priority: null }
+    }
+    expect(mergeRequestSource.scope(item, where, people)).toEqual({
+      ok: false,
+      verdict: 'out_of_scope',
+      reason: 'MR is merged'
+    })
   })
 })

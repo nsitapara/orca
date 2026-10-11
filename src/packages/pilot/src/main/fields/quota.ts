@@ -45,7 +45,7 @@ export function cachedQuota(
   }
 }
 
-export function addQuotaFields(items: TickItem[], q: QuotaReading): TickItem[] {
+export function addQuotaFields<I extends TickItem>(items: I[], q: QuotaReading): I[] {
   return items.map((i) => ({
     ...i,
     fields: {
