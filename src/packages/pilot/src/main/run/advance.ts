@@ -1,6 +1,7 @@
 import type { ItemFields, RunRow, StepRow } from '../../shared/api-types'
 import type { AutomationDefinition, StepDef } from '../../shared/definition/types'
 import { decideStep, runEnd, type RunEnd } from '../../shared/run/step-plan'
+import { usesHandled } from '../../shared/tick/decide'
 import { UnrecordedLaunchError, type LaunchRequest } from '../scheduler/tick-runner'
 import type { PilotStore } from '../store/store'
 import { stepKindOf, type AdvancedStep } from '../store/store-advance'
@@ -76,9 +77,10 @@ export function createRunEngine(deps: RunEngineDeps): RunEngine {
   const { store } = deps
   const busy = new Set<string>()
   const again = new Set<string>()
-  // Each run's item fields as its tick decided them. The tick records them (tick_items) only once
-  // every run it starts has launched, so a run reads that record only after a restart.
-  const items = new Map<string, ItemFields>()
+  // Each run's item fields and once_per key as its tick decided them. The tick records the fields
+  // (tick_items) only once every run it starts has launched, so a run reads that record only after a
+  // restart; the key isn't recorded on the run at all.
+  const items = new Map<string, { fields: ItemFields; onceKey: string }>()
 
   function close(run: RunRow, end: RunEnd, opts: CloseOptions = {}): void {
     items.delete(run.id)
@@ -88,7 +90,7 @@ export function createRunEngine(deps: RunEngineDeps): RunEngine {
   function itemFieldsOf(run: RunRow): ItemFields {
     const known = items.get(run.id)
     if (known) {
-      return known
+      return known.fields
     }
     if (run.tickId === null) {
       return {}
@@ -128,6 +130,7 @@ export function createRunEngine(deps: RunEngineDeps): RunEngine {
       error: error.message
     }
     addRunEvent(store, deps.now(), run, 'orphan_agent', payload)
+    holdKey(run, def)
     if (run.status !== 'running') {
       store.setHandledStatus(run.automationId, run.id, 'done', deps.now())
       return
@@ -224,14 +227,28 @@ export function createRunEngine(deps: RunEngineDeps): RunEngine {
     close(run, runEnd(ended, store.inbox.openCountForRun(runId)), { ended })
   }
 
-  // The opening walk returned without handing step 0 to the starter (the automation was unloaded, its
-  // steps changed, or the run ended while its workspace was made). A pending step 0 would read as
-  // still being opened, and the stale-start sweep never closes pending rows (B8).
-  function settleUnstarted(runId: string): void {
+  // The stale-start sweep frees a run's key (unmarkHandledForRun) when it closes a slow launch, which
+  // is when an agent most often shows up untracked: mark the key again, as the tick runner's
+  // keepOrphanHandled does at step 0, so no tick starts a second agent on the item. A run-once
+  // automation without once_per holds no key; after a restart the key is unknown, and only a row the
+  // sweep left can be settled.
+  function holdKey(run: RunRow, def: AutomationDefinition): void {
+    const onceKey = items.get(run.id)?.onceKey
+    if (onceKey !== undefined && usesHandled(def)) {
+      store.markHandled(run.automationId, onceKey, run.id, deps.now())
+    }
+  }
+
+  // The opening walk returned or threw without handing step 0 to the starter (the automation was
+  // unloaded, its steps changed, the run ended while its workspace was made, or a read failed). A
+  // pending step 0 would read as still being opened, and the stale-start sweep never closes pending
+  // rows (B8). A step 0 the starter took over, or that was skipped, is left alone.
+  function settleUnstarted(runId: string, thrown?: string): void {
     if (store.runs.steps(runId).find((s) => s.idx === 0)?.status !== 'pending') {
       return
     }
-    const error = store.runs.get(runId)?.outcome ?? 'The run ended before its first step started'
+    const error =
+      thrown ?? store.runs.get(runId)?.outcome ?? 'The run ended before its first step started'
     store.runs.updateStep(runId, 0, { status: 'failed', error, finishedAt: deps.now() })
   }
 
@@ -259,7 +276,7 @@ export function createRunEngine(deps: RunEngineDeps): RunEngine {
       status: 'pending',
       startedAt: deps.now()
     })
-    items.set(run.id, req.decision.fields)
+    items.set(run.id, { fields: req.decision.fields, onceKey: req.decision.onceKey })
     const fields: ItemFields = { ...req.decision.fields, ...runFieldsOf(run, req.definition) }
     try {
       const workspace = await resolveWorkspace(
@@ -271,7 +288,12 @@ export function createRunEngine(deps: RunEngineDeps): RunEngine {
       store.advance.ensureFailedStep(rowFor(run.id, 0, first, deps.now()), messageOf(error))
       throw error
     }
-    await proceed(run.id, true)
+    try {
+      await proceed(run.id, true)
+    } catch (error) {
+      settleUnstarted(run.id, messageOf(error))
+      throw error
+    }
     settleUnstarted(run.id)
   }
 

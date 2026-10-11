@@ -15,6 +15,7 @@ import {
   type RunEngineDeps,
   type StepStartRequest
 } from './advance'
+import { STALE_START_OUTCOME } from './stale-starts'
 import type { WorkspaceDeps } from './workspace'
 
 const YAML = `name: Review and fix
@@ -423,14 +424,65 @@ describe('createRunEngine', () => {
     ])
   })
 
-  it("fails a step 0 the opening walk never handed to the starter, with the run's outcome", async () => {
-    const { store, engine, started } = setup(null)
+  it("holds a later orphan's key again after the stale-start sweep freed it, so no tick retries the item", async () => {
+    const { store, engine, end, failures, db } = setup()
     await startRun(engine)
-    expect(started).toEqual([])
-    const outcome = 'The automation review is no longer loaded'
-    expect(store.runs.get('run-1')).toMatchObject({ status: 'failed', outcome })
-    expect(store.runs.steps('run-1').map((s) => [s.status, s.error])).toEqual([['failed', outcome]])
+    store.advance.mergeStepOutputs('run-1', 0, { changed: true })
+    end(0, 'done')
+    // The sweep closed the run during step 1's slow launch and freed its key; then the agent appeared.
+    failures.push(() => {
+      store.unmarkHandledForRun('review', 'run-1')
+      store.runs.update('run-1', {
+        status: 'failed',
+        outcome: STALE_START_OUTCOME,
+        finishedAt: 900
+      })
+      return new UnrecordedLaunchError('t9', 'terminal t9 started but could not be recorded')
+    })
+    await engine.advance('run-1')
+    const key = db((d) =>
+      d.prepare("SELECT once_key, status, failed_at FROM handled WHERE run_id = 'run-1'").get()
+    )
+    expect(key).toEqual({ once_key: '1:9', status: 'done', failed_at: null })
+    expect(store.runs.get('run-1')).toMatchObject({
+      status: 'failed',
+      outcome: STALE_START_OUTCOME
+    })
   })
+
+  const unreadable: Partial<RunEngineDeps> = {
+    runAnswer: () => {
+      throw new Error('answers unreadable')
+    }
+  }
+  it.each([
+    [
+      'returns (its automation is unloaded)',
+      null,
+      {},
+      null,
+      'The automation review is no longer loaded'
+    ],
+    [
+      'throws (run.answer is unreadable)',
+      DEF,
+      unreadable,
+      'answers unreadable',
+      'answers unreadable'
+    ]
+  ] as [string, AutomationDefinition | null, Partial<RunEngineDeps>, string | null, string][])(
+    'fails a step 0 the opening walk never handed to the starter when the walk %s',
+    async (_n, def, over, thrown, error) => {
+      const { store, engine, started } = setup(def, over)
+      const settled = await startRun(engine).then(
+        () => null,
+        (e: Error) => e.message
+      )
+      expect(settled).toBe(thrown)
+      expect(started).toEqual([])
+      expect(store.runs.steps('run-1').map((s) => [s.status, s.error])).toEqual([['failed', error]])
+    }
+  )
 
   it.each([
     ['its automation is gone', null, 'review', 'The automation review is no longer loaded'],
