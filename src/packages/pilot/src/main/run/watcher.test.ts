@@ -90,6 +90,25 @@ describe('pollRunningSteps', () => {
     expect(store.runs.runningCount('a')).toBe(0)
   })
 
+  it('retries next poll when the run update throws, leaving the step open', async () => {
+    const store = storeWithRunningStep()
+    const real = store.runs.update.bind(store.runs)
+    let fail = true
+    store.runs.update = (id, patch) => {
+      if (fail) {
+        throw new Error('db busy')
+      }
+      real(id, patch)
+    }
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    await pollRunningSteps(store, probe('done'), noCost, () => 9)
+    expect(store.runs.steps('run-1')[0].status).toBe('running')
+    fail = false
+    await pollRunningSteps(store, probe('done'), noCost, () => 9)
+    expect(store.runs.steps('run-1')[0].status).toBe('done')
+    expect(store.runs.runningCount('a')).toBe(0)
+  })
+
   it('leaves a step alone when its probe throws, and still polls the others', async () => {
     const store = newStore()
     addRunningStep(store, 'run-1', 'bad')
@@ -123,7 +142,10 @@ describe('runtimeStepProbe.status', () => {
   it.each([
     ['stale handle', new Error('terminal_handle_stale')],
     ['unknown handle', new Error('terminal_not_found')],
-    ['pre-restart agent-session handle', codeError('terminal_unsupported_for_agent_session')]
+    [
+      'structured-worker (agent-session) handle',
+      codeError('terminal_unsupported_for_agent_session')
+    ]
   ])('maps a %s to gone and closes the step and run', async (_name, error) => {
     const p = probeFor(async () => {
       throw error
@@ -145,6 +167,49 @@ describe('runtimeStepProbe.status', () => {
     await pollRunningSteps(store, p, noCost, () => 9)
     expect(store.runs.steps('run-1')[0].status).toBe('running')
     expect(store.runs.runningCount('a')).toBe(1)
+  })
+
+  it.each([
+    [
+      'a session-start done row',
+      [{ state: 'done', sessionBoundary: true, receivedAt: 1 }],
+      'working'
+    ],
+    ['a real done row', [{ state: 'done', receivedAt: 1 }], 'done'],
+    [
+      'the newest row',
+      [
+        { state: 'working', receivedAt: 5 },
+        { state: 'done', receivedAt: 2 }
+      ],
+      'working'
+    ]
+  ])('reads %s', async (_n, rows, expected) => {
+    const p = probeFor(async () => ({}), rows)
+    expect(await p.status('h', 'pane')).toBe(expected)
+  })
+
+  it('ignores restoredUnconfirmed and provider-session-only rows, so a stale handle is gone', async () => {
+    const rows = [
+      { state: 'working', receivedAt: 9, restoredUnconfirmed: true },
+      { state: 'working', receivedAt: 8, providerSessionOnly: true }
+    ]
+    const p = probeFor(async () => {
+      throw new Error('terminal_handle_stale')
+    }, rows)
+    expect(await p.status('h', 'pane')).toBe('gone')
+  })
+
+  it('takes the session from the newest row that has one', () => {
+    const p = probeFor(
+      async () => ({}),
+      [
+        { state: 'working', receivedAt: 9 },
+        { receivedAt: 3, providerSession: { id: 'old' } },
+        { receivedAt: 4, providerSession: { id: 'new', transcriptPath: '/t' } }
+      ]
+    )
+    expect(p.session('pane')).toEqual({ id: 'new', transcriptPath: '/t' })
   })
 
   it('reads the status row when there is one, without asking the terminal', async () => {

@@ -62,6 +62,16 @@ function setup(launch: (sel: string, opts: unknown) => Promise<unknown>) {
 const request = { runId: 'run-1', definition: def, decision }
 
 describe('makeLauncher', () => {
+  it('launches by worktree id when the fact exists', async () => {
+    const launch = vi.fn(async () => ({ handle: 'term_1', paneKey: 'tab:leaf' }))
+    const { launcher } = setup(launch)
+    await launcher({
+      ...request,
+      decision: decisionWith({ 'worktree.path': '/wt', 'worktree.id': 'r1::/wt' })
+    })
+    expect(launch).toHaveBeenCalledWith('id:r1::/wt', expect.anything())
+  })
+
   it('launches in the worktree by path and records a running step with its handle', async () => {
     const launch = vi.fn(async () => ({ handle: 'term_1', paneKey: 'tab:leaf' }))
     const { store, launcher } = setup(launch)

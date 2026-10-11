@@ -72,6 +72,15 @@ describe('runtimeFactDeps', () => {
       store
     )
     expect(await dead.terminalAlive('t')).toBe(false)
+    const structured = runtimeFactDeps(
+      runtimeWith({}, async () => {
+        throw Object.assign(new Error('t is an agent session'), {
+          code: 'terminal_unsupported_for_agent_session'
+        })
+      }),
+      store
+    )
+    expect(await structured.terminalAlive('t')).toBe(false)
     const notReady = runtimeFactDeps(
       runtimeWith({}, async () => {
         throw new Error('runtime_unavailable')
