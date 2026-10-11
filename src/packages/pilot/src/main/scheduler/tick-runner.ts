@@ -66,6 +66,27 @@ function unsupportedItems(def: AutomationDefinition): string | null {
   if (def.items.kind !== 'merge_request') {
     return `Pilot can't list ${def.items.kind} items yet`
   }
+  return unactedKey(def)
+}
+
+const ACTED_ON_WHERE = new Set(['state', 'author', 'head_pipeline'])
+
+// Keys a later task implements. Until then a file using one fails the tick instead of running wider.
+function unactedKey(def: AutomationDefinition): string | null {
+  const items = def.items
+  if (items && items.match.length > 0) {
+    return "items.match isn't supported yet"
+  }
+  if (def.start === 'ask_first') {
+    return "start: ask_first isn't supported yet"
+  }
+  if (def.workspace.kind !== 'item_worktree') {
+    return `workspace: ${def.workspace.kind} isn't supported yet`
+  }
+  const clause = Object.keys(items?.where ?? {}).find((k) => !ACTED_ON_WHERE.has(k))
+  if (clause) {
+    return `items.where.${clause} isn't supported yet`
+  }
   return null
 }
 
