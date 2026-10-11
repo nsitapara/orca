@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs'
 import { RuntimeClientError } from '../../../../cli/runtime/types'
 
 export function invalid(message: string): RuntimeClientError {
@@ -22,4 +23,18 @@ export function jsonObjectFlag(
     throw invalid(`--${flag} must be a JSON object`)
   }
   return value as Record<string, unknown>
+}
+
+// A text file a flag names (--details-file), capped so a card stays a card.
+export function readTextFile(path: string, flag: string, maxBytes: number): string {
+  let text: string
+  try {
+    text = readFileSync(path, 'utf8')
+  } catch (error) {
+    throw invalid(`Can't read ${path}: ${(error as NodeJS.ErrnoException).code ?? String(error)}`)
+  }
+  if (Buffer.byteLength(text) > maxBytes) {
+    throw invalid(`--${flag} ${path} is over ${Math.round(maxBytes / 1024)} KB`)
+  }
+  return text
 }

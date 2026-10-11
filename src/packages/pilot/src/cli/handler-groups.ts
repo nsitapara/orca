@@ -16,5 +16,10 @@ export const PILOT_HANDLER_GROUPS: readonly HandlerGroup[] = [
     name: 'pilot-run',
     keys: ['run output', 'run event'],
     load: async () => (await import('./handlers-run.js')).RUN_HANDLERS
+  },
+  {
+    name: 'pilot-inbox',
+    keys: ['inbox add', 'inbox list', 'inbox answer'],
+    load: async () => (await import('./handlers-inbox.js')).INBOX_HANDLERS
   }
 ]

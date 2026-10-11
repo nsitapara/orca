@@ -1,0 +1,105 @@
+import type { InboxAddParams, InboxType } from '../shared/api-types'
+
+export const INBOX_TYPES: readonly InboxType[] = [
+  'question',
+  'flagged',
+  'default',
+  'action',
+  'bug',
+  'left_for_you'
+]
+export const MAX_DETAILS_BYTES = 256 * 1024
+const DASH = ' — '
+
+export function isInboxType(value: string): value is InboxType {
+  return (INBOX_TYPES as readonly string[]).includes(value)
+}
+
+// The server parses "<label> — <meaning>" (Task 20a's parseOption). The CLI only refuses an option with
+// no label, so a typo fails here and not after the card is written. No dash: the whole text is the label.
+export function checkInboxOption(raw: string): string {
+  const at = raw.indexOf(DASH)
+  const label = (at === -1 ? raw : raw.slice(0, at)).trim()
+  if (label === '') {
+    if (at === -1) {
+      throw new Error(`--option "${raw}" has no label`)
+    }
+    throw new Error(`--option "${raw}" has no label before "${DASH}"`)
+  }
+  return raw
+}
+
+// --part <id>=<label>, repeatable: the parts of a card that can be approved or left out one by one.
+export function parseParts(pairs: readonly string[]): Record<string, string> {
+  const parts: Record<string, string> = {}
+  for (const pair of pairs) {
+    const at = pair.indexOf('=')
+    const id = at === -1 ? '' : pair.slice(0, at).trim()
+    const label = at === -1 ? '' : pair.slice(at + 1).trim()
+    if (id === '' || label === '') {
+      throw new Error(`--part "${pair}" isn't <id>=<label>`)
+    }
+    if (Object.hasOwn(parts, id)) {
+      throw new Error(`--part ${id} is given twice`)
+    }
+    parts[id] = label
+  }
+  return parts
+}
+
+// --switch given twice: the word for on, then the word for off (R-3), kept in that order.
+export function parseSwitchWords(words: readonly string[]): string[] {
+  if (words.length === 0) {
+    return []
+  }
+  if (words.length !== 2 || words.some((w) => w.trim() === '')) {
+    throw new Error('Give --switch twice: the word for on, then the word for off')
+  }
+  return words.map((w) => w.trim())
+}
+
+export type InboxTarget = Pick<
+  InboxAddParams,
+  'terminal' | 'runId' | 'stepIdx' | 'automationId' | 'itemKey'
+>
+
+function envValue(env: NodeJS.ProcessEnv, name: string): string | undefined {
+  const value = env[name]?.trim()
+  return value ? value : undefined
+}
+
+// Inside a step Pilot started, the card belongs to the step running in the caller's terminal
+// (ORCA_TERMINAL_HANDLE), falling back to PILOT_RUN_ID / PILOT_STEP_IDX (ruling 8d). Outside a
+// run, --automation and --item say whose it is. Flags win over the env for those two. Absent values are
+// left out of the result.
+export function inboxTarget(
+  env: NodeJS.ProcessEnv,
+  flags: { automation?: string; item?: string }
+): InboxTarget {
+  const runId = envValue(env, 'PILOT_RUN_ID')
+  const rawIdx = envValue(env, 'PILOT_STEP_IDX') ?? ''
+  const stepIdx = runId !== undefined && /^\d+$/.test(rawIdx) ? Number(rawIdx) : undefined
+  const automationId = flags.automation ?? envValue(env, 'PILOT_AUTOMATION_ID')
+  const itemKey = flags.item ?? envValue(env, 'PILOT_ITEM_KEY')
+  if (runId === undefined && (automationId === undefined || itemKey === undefined)) {
+    throw new Error('Outside a Pilot run, give --automation <id> and --item <key>')
+  }
+  const target: InboxTarget = {}
+  const terminal = envValue(env, 'ORCA_TERMINAL_HANDLE')
+  if (terminal !== undefined) {
+    target.terminal = terminal
+  }
+  if (runId !== undefined) {
+    target.runId = runId
+  }
+  if (stepIdx !== undefined) {
+    target.stepIdx = stepIdx
+  }
+  if (automationId !== undefined) {
+    target.automationId = automationId
+  }
+  if (itemKey !== undefined) {
+    target.itemKey = itemKey
+  }
+  return target
+}
