@@ -1,110 +1,247 @@
+import { randomUUID } from 'node:crypto'
 import type { OrcaRuntimeService } from '../../../../../main/runtime/orca-runtime'
-import type { ItemDecision } from '../../shared/api-types'
-import type { AutomationDefinition } from '../../shared/definition/types'
-import { renderTemplate } from '../../shared/template'
-import {
-  UnrecordedLaunchError,
-  type LaunchRequest,
-  type LaunchResult
-} from '../scheduler/tick-runner'
+import type { AgentKind, StepDef } from '../../shared/definition/types'
+import { runFields } from '../../shared/template'
+import type { WorktreeFactDeps } from '../fields/worktree-facts'
+import type { LaunchRequest, LaunchResult } from '../scheduler/tick-runner'
 import type { PilotStore } from '../store/store'
+import type { RunStore } from '../store/store-runs'
+import type { PilotAgentLaunchOptions } from './agent-launch-hook'
+import { launchAgentStep, type AgentStepDeps, type AgentStepRequest } from './agent-step'
+import { terminalLaunchOptions, type SessionPlan } from './step-launch-plan'
+import {
+  resolveWorkspace,
+  runtimeWorkspaceDeps,
+  type Workspace,
+  type WorkspaceDeps
+} from './workspace'
 
-// A placeholder whose field is missing stays literal (renderTemplate's behaviour); nothing is appended.
-export function buildPrompt(
-  def: AutomationDefinition,
-  decision: ItemDecision,
-  runId: string
-): string {
-  const step = def.steps[0]
-  const lines = [
-    `Started by the Pilot automation "${def.name}" (run ${runId}) for ${decision.label}.`
-  ]
-  if (step.skill) {
-    lines.push(`Use the ${step.skill} skill.`)
-  }
-  lines.push('', renderTemplate(step.prompt ?? '', decision.fields).text.trimEnd())
-  return lines.join('\n')
+export type LauncherDeps = AgentStepDeps & {
+  workspace: WorkspaceDeps
+  // Shell steps (Task 10). Without it, a shell first step can't start.
+  startShellStep?: (req: AgentStepRequest) => Promise<LaunchResult>
 }
 
 function messageOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
 }
 
-// Prefer the repo-qualified id (no cross-host ambiguity, has a fast path); fall back to the path.
-function worktreeSelectorOf(decision: ItemDecision): string {
-  const id = decision.fields['worktree.id']
-  if (typeof id === 'string' && id !== '') {
-    return `id:${id}`
-  }
-  const path = decision.fields['worktree.path']
-  if (typeof path !== 'string' || path === '') {
-    throw new Error('worktree is gone')
-  }
-  return `path:${path}`
-}
-
 // Best effort: the failure being reported matters more than a second failure while recording it.
-function failStep(store: PilotStore, runId: string, error: string, at: number): void {
+function failFirstStep(store: PilotStore, runId: string, error: string, at: number): void {
   try {
     store.runs.updateStep(runId, 0, { status: 'failed', error, finishedAt: at })
   } catch {}
 }
 
+// The tick runner's launch until Task 9c wires the run engine: write step 0 as `pending` (B8: a slow
+// worktree create must not look like a stuck start), resolve the run's workspace (item worktree, main
+// checkout or a new worktree), record it on the run, then start step 0 (spec §7). The tick runner
+// created the run row (running) first, so a new worktree's claim sees it. A workspace failure fails
+// the step with its error; the tick runner then fails the run and frees its key. Later steps are Task 9's.
 export function makeLauncher(
-  runtime: OrcaRuntimeService,
   store: PilotStore,
-  now: () => number
+  deps: LauncherDeps
 ): (req: LaunchRequest) => Promise<LaunchResult> {
   return async ({ runId, definition, decision }) => {
-    const step = definition.steps[0]
-    // Task 10 runs shell steps; until then a shell first step can't start.
-    if (step.agent === 'shell') {
-      throw new Error("Pilot can't run shell steps yet")
+    const startedAt = store.runs.get(runId)?.startedAt ?? deps.now()
+    const fields = {
+      ...decision.fields,
+      ...runFields({
+        automationId: definition.id,
+        at: startedAt,
+        timezone: definition.timezone,
+        runId
+      })
     }
-    const selector = worktreeSelectorOf(decision)
+    const first = definition.steps[0]
     store.runs.createStep({
       runId,
       idx: 0,
-      name: step.name,
-      agent: step.agent,
-      skill: step.skill,
-      startedAt: now()
+      name: first.name,
+      agent: first.agent,
+      skill: first.skill,
+      startedAt: null,
+      status: 'pending',
+      kind: first.agent === 'shell' ? 'shell' : 'agent',
+      mode: first.mode,
+      whenExpr: first.when
     })
-    let terminal: { handle: string; paneKey?: string | null }
-    try {
-      terminal = await runtime.launchAgentTerminal(selector, {
-        agent: step.agent,
-        prompt: buildPrompt(definition, decision, runId),
-        title: `${definition.name} · ${decision.label}`
-      })
-    } catch (error) {
-      const message = messageOf(error)
-      const reason = message === 'selector_not_found' ? 'worktree is gone' : message
-      failStep(store, runId, reason, now())
-      throw new Error(reason)
+    const startShell = deps.startShellStep
+    // Before the workspace: a run that can't start must not leave a new worktree behind.
+    if (first.agent === 'shell' && !startShell) {
+      const message = `Step "${first.name}" is a shell step, and this launcher has no shell runner`
+      failFirstStep(store, runId, message, deps.now())
+      throw new Error(message)
     }
+    let workspace: Workspace
     try {
-      const { paneKey } = terminal
-      if (!paneKey) {
-        throw new Error('the runtime returned no pane to watch')
-      }
-      const recorded = store.runs.updateStartingStep(runId, 0, {
-        status: 'running',
-        terminalHandle: terminal.handle,
-        paneKey
-      })
-      // The stale-start sweep closed this step during a slow launch: never bring it back to life.
-      if (!recorded) {
-        throw new Error('the run was closed before its agent started')
-      }
-      return { terminalHandle: terminal.handle, paneKey }
+      workspace = await resolveWorkspace(
+        { definition, runId, label: decision.label, fields },
+        deps.workspace
+      )
+      store.runs.update(runId, { worktreePath: workspace.path, worktreeId: workspace.worktreeId })
     } catch (error) {
-      // The terminal exists but no row tracks it. Say which one, so the failure points at the orphan,
-      // and say it started, so the tick keeps the item handled (the agent is running).
-      const message = `terminal ${terminal.handle} started but couldn't be recorded: ${messageOf(error)}`
-      console.error(`pilot: ${message}`)
-      failStep(store, runId, message, now())
-      throw new UnrecordedLaunchError(terminal.handle, message)
+      failFirstStep(store, runId, messageOf(error), deps.now())
+      throw error
+    }
+    const req: AgentStepRequest = {
+      runId,
+      definition,
+      stepIdx: 0,
+      itemKey: decision.key,
+      label: decision.label,
+      fields,
+      workspace
+    }
+    if (first.agent === 'shell' && startShell) {
+      return startShell(req)
+    }
+    return launchAgentStep(store, req, deps)
+  }
+}
+
+export type AgentSessionMode =
+  | { kind: 'new' }
+  | { kind: 'resume'; sessionId: string }
+  | { kind: 'fork'; sessionId: string }
+export type AgentTerminalRequest = {
+  runId: string
+  stepIdx: number
+  stepName: string
+  automationId: string
+  itemKey: string
+  powers: readonly string[]
+  worktree: { id: string | null; path: string }
+  agent: AgentKind
+  prompt: string
+  title: string
+  args: readonly string[]
+  session: AgentSessionMode
+}
+// sessionId: the id the terminal runs under when Pilot knows it (a pinned new Claude session, a resumed
+// one); null for a fork and for a new Codex session, whose ids are learned from the agent's hooks.
+export type AgentTerminalResult = {
+  terminalHandle: string
+  paneKey: string
+  sessionId: string | null
+}
+
+function planOf(
+  agent: AgentKind,
+  mode: AgentSessionMode,
+  newSessionId: () => string
+): Exclude<SessionPlan, { kind: 'missing' }> {
+  if (mode.kind === 'new') {
+    return { kind: 'fresh', sessionId: agent === 'claude' ? newSessionId() : null }
+  }
+  return mode
+}
+
+// Opens one agent terminal with the §8 env, a new, resumed or forked session and the step's args (R-i).
+// The answer dispatcher (Task 24b) uses it; the caller records the terminal on its own step row.
+export async function openAgentTerminal(
+  runtime: OrcaRuntimeService,
+  req: AgentTerminalRequest,
+  newSessionId: () => string = randomUUID
+): Promise<AgentTerminalResult> {
+  const session = planOf(req.agent, req.session, newSessionId)
+  // A typed variable, not a literal: `pilot` is beyond launchAgentTerminal's declared options.
+  const opts: PilotAgentLaunchOptions = terminalLaunchOptions({
+    agent: req.agent,
+    prompt: req.prompt,
+    title: req.title,
+    env: {
+      runId: req.runId,
+      automationId: req.automationId,
+      itemKey: req.itemKey,
+      stepName: req.stepName,
+      stepIdx: req.stepIdx,
+      powers: req.powers
+    },
+    args: req.args,
+    session
+  })
+  const selector = req.worktree.id ? `id:${req.worktree.id}` : `path:${req.worktree.path}`
+  const terminal = await runtime.launchAgentTerminal(selector, opts)
+  if (!terminal.paneKey) {
+    throw new Error('the runtime returned no pane to watch')
+  }
+  return {
+    terminalHandle: terminal.handle,
+    paneKey: terminal.paneKey,
+    sessionId: session.kind === 'fork' ? null : session.sessionId
+  }
+}
+
+// Until Task 10 reads skills' modes, a step that names one fails instead of running without it.
+function modeTextUnavailable(step: StepDef): Promise<string | null> {
+  if (step.mode) {
+    return Promise.reject(
+      new Error(`Step "${step.name}" uses mode "${step.mode}", which Pilot can't read yet`)
+    )
+  }
+  return Promise.resolve(null)
+}
+
+type LauncherWorktrees = Pick<
+  WorktreeFactDeps,
+  'listWorktrees' | 'terminalAlive' | 'paneState' | 'terminalDraft'
+>
+
+// H10: a prompt goes into the old terminal only when it is live, its agent still runs there (an exited
+// agent leaves a shell, which would run the prompt as commands; upstream's send guard asks the same),
+// that agent is idle and nobody is typing (the draft is read from the rendered screen, B6). Anything
+// unreadable means "not free".
+async function terminalFree(
+  runtime: OrcaRuntimeService,
+  worktrees: LauncherWorktrees,
+  handle: string,
+  paneKey: string | null
+): Promise<boolean> {
+  if (!paneKey) {
+    return false
+  }
+  try {
+    if (!(await worktrees.terminalAlive(handle, paneKey))) {
+      return false
+    }
+    if (worktrees.paneState(paneKey) !== 'idle') {
+      return false
+    }
+    if (!(await runtime.getTerminalAgentStatus(handle)).isRunningAgent) {
+      return false
+    }
+    return (await worktrees.terminalDraft(handle)).trim() === ''
+  } catch {
+    return false
+  }
+}
+
+// `runs` is the run store a new worktree's claim reads and writes (Task 8b).
+export function runtimeLauncherDeps(
+  runtime: OrcaRuntimeService,
+  worktrees: LauncherWorktrees,
+  now: () => number,
+  runs: RunStore
+): LauncherDeps {
+  return {
+    workspace: runtimeWorkspaceDeps(runtime, (repoPath) => worktrees.listWorktrees(repoPath), runs),
+    // opts carries `pilot` (env, argv); the agent-launch-env hook applies it to this launch only.
+    // Orca's sleeping-agent record keeps its own launchConfig, so an agent Orca wakes later resumes
+    // its session without PILOT_* env or the step's args (by then the step is usually closed).
+    launchTerminal: (selector, opts) => runtime.launchAgentTerminal(selector, opts),
+    modeText: modeTextUnavailable,
+    newSessionId: () => randomUUID(),
+    now,
+    resumeTarget: (handle, paneKey) => terminalFree(runtime, worktrees, handle, paneKey),
+    async sendPrompt(handle, prompt) {
+      const sent = await runtime.sendTerminalAgentPrompt(handle, prompt, {
+        inputKind: 'driving',
+        observationTimeoutMs: 30_000
+      })
+      if (!sent.accepted || !sent.prompt?.stages.includes('turn_started')) {
+        throw new Error("the agent didn't start a turn on the prompt")
+      }
     }
   }
 }
