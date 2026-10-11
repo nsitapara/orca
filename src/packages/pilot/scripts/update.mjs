@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 // One command to take upstream Orca updates (D24): main mirrors upstream, pilot merges main, then verify.
 import { readFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { parseHooksTable } from './hook-guard.mjs'
@@ -37,6 +38,16 @@ export function hookTestTargets(rows) {
   return [...targets].sort()
 }
 
+// Why: serve-mode tests start upstream's CLI auto-install. Without ORCA_CLI_INSTALL_PATH it searches
+// PATH, and from an Orca terminal that finds real Orca's bin/orca and links it to itself. An empty
+// ORCA_BROWSER_EXECUTABLE is "unconfigured" upstream, so tests never use a real browser app.
+export function testEnv(dir = tmpdir()) {
+  return {
+    ORCA_CLI_INSTALL_PATH: join(dir, `pilot-test-cli-${process.pid}`, 'orca'),
+    ORCA_BROWSER_EXECUTABLE: ''
+  }
+}
+
 export function planUpdate({ push, build, hookTests }) {
   // An empty filter list would make vitest run the whole suite instead.
   if (!hookTests?.length) {
@@ -71,11 +82,17 @@ export function planUpdate({ push, build, hookTests }) {
     },
     { title: 'Build workspace packages', cmd: 'pnpm', args: ['run', 'build:packages'] },
     { title: 'Typecheck', cmd: 'pnpm', args: ['typecheck'] },
-    { title: 'Run Pilot tests', cmd: 'pnpm', args: [...VITEST, 'src/packages/pilot'] },
+    {
+      title: 'Run Pilot tests',
+      cmd: 'pnpm',
+      args: [...VITEST, 'src/packages/pilot'],
+      env: testEnv()
+    },
     {
       title: "Run upstream tests next to Pilot's hooks",
       cmd: 'pnpm',
-      args: [...VITEST, ...hookTests]
+      args: [...VITEST, ...hookTests],
+      env: testEnv()
     }
   ]
   if (push) {
@@ -116,9 +133,15 @@ export async function runSteps(steps, { cwd = REPO, dryRun = false } = {}) {
     console.log(`\n[${i + 1}/${steps.length}] ${step.title}`)
     if (dryRun) {
       console.log(`  ${step.cmd} ${step.args.join(' ')}`)
+      if (step.env) {
+        console.log(`  env: ${JSON.stringify(step.env)}`)
+      }
       continue
     }
-    const code = await runInherit(step.cmd, step.args, { cwd })
+    const code = await runInherit(step.cmd, step.args, {
+      cwd,
+      env: step.env && { ...process.env, ...step.env }
+    })
     if (code === 0) {
       continue
     }

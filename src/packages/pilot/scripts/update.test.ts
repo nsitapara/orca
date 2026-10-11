@@ -43,6 +43,17 @@ describe('planUpdate', () => {
     expect(() => planUpdate({ push: false, build: false, hookTests: [] })).toThrow('HOOKS.md')
   })
 
+  it('runs both test steps with a throwaway CLI install path and no browser app', () => {
+    const steps = plan({ push: false, build: false }).filter((s: Step & { env?: object }) =>
+      s.title.startsWith('Run ')
+    ) as (Step & { env?: Record<string, string> })[]
+    expect(steps).toHaveLength(2)
+    for (const step of steps) {
+      expect(step.env?.ORCA_CLI_INSTALL_PATH.startsWith(tmpdir())).toBe(true)
+      expect(step.env?.ORCA_BROWSER_EXECUTABLE).toBe('')
+    }
+  })
+
   it('pushes only when asked', () => {
     const titles = plan({ push: true, build: false }).map((s: Step) => s.title)
     expect(titles).toContain('Push main and pilot to origin')

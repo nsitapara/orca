@@ -15,7 +15,7 @@ export function pilotDevEnv(base, home = homedir()) {
     ...base,
     ORCA_DEV_USER_DATA_PATH: dataDir,
     ORCA_DEV_DOCK_TITLE: 'Pilot Dev',
-    ORCA_CLI_INSTALL_PATH: '/usr/local/bin/pilot-dev',
+    ORCA_CLI_INSTALL_PATH: base.ORCA_CLI_INSTALL_PATH ?? '/usr/local/bin/pilot-dev',
     PILOT_SCHEDULER: base.PILOT_SCHEDULER ?? 'off',
     PILOT_AUTOMATION_DIRS: base.PILOT_AUTOMATION_DIRS ?? join(dataDir, 'automations')
   }

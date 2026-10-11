@@ -32,6 +32,12 @@ describe('pilotDevEnv', () => {
     })
   })
 
+  it('keeps a CLI install path the caller set, so serve mode never searches PATH', () => {
+    expect(pilotDevEnv({ ORCA_CLI_INSTALL_PATH: '/tmp/cli' }, '/h').ORCA_CLI_INSTALL_PATH).toBe(
+      '/tmp/cli'
+    )
+  })
+
   it("puts the default automations folder under the caller's dev data folder", () => {
     expect(pilotDevEnv({ ORCA_DEV_USER_DATA_PATH: '/tmp/d' }, '/h').PILOT_AUTOMATION_DIRS).toBe(
       '/tmp/d/automations'
