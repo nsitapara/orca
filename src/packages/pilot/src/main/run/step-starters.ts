@@ -46,12 +46,3 @@ export function stepStarterFor(starters: { agent: StepStarter; shell: StepStarte
     return starters.agent(req)
   }
 }
-
-// Until shell steps are wired (Task 10b replaces this), a shell step fails to start, by name.
-export function unsupportedShellStep(): StepStarter {
-  return async (req) => {
-    throw new Error(
-      `Shell step ${req.definition.steps[req.idx].name} can't run: shell steps aren't supported in this build`
-    )
-  }
-}

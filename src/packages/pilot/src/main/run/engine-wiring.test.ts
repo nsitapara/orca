@@ -64,6 +64,18 @@ function setup(yaml = YAML) {
       })
     },
     workspace: WORKSPACE,
+    engineEnv: { binDir: '/pilot/bin', dataDir: '/data/pilot' },
+    shell: {
+      workspaceOf: async () => ({ path: '/wt' }),
+      envOf: () => ({}),
+      run: async () => ({
+        code: 0,
+        signal: null,
+        stdout: '::pilot-output pruned=4\n',
+        stderr: '',
+        timedOut: false
+      })
+    },
     probe: { status: async () => 'working' as const, session: () => null },
     cost: async () => ({ costUsd: null, tokens: 0 }),
     log: () => {}
@@ -90,6 +102,38 @@ function setup(yaml = YAML) {
 }
 
 describe('wireRunEngine', () => {
+  it("advances the run when a shell step's process ends", async () => {
+    const yaml =
+      'name: Prune then tell\nrepo: web-platform\nschedule: manual\nsteps:\n  - { name: prune, agent: shell, run: ./prune.sh }\n  - { name: tell, agent: claude, prompt: "Pruned {steps.prune.pruned}" }\n'
+    const { store, started, wired } = setup(yaml)
+    store.runs.create({
+      id: 'run-2',
+      automationId: 'test-uis',
+      tickId: null,
+      itemKey: 'repo:web-platform',
+      itemLabel: 'web-platform',
+      worktreePath: '/wt',
+      startedAt: 0
+    })
+    const definition = wired.definitionFor('test-uis')
+    if (!definition) {
+      throw new Error('setup')
+    }
+    const decision = {
+      key: 'repo:web-platform',
+      label: 'web-platform',
+      verdict: 'started' as const,
+      reason: '',
+      checks: [],
+      onceKey: 'repo:web-platform',
+      fields: { 'repo.path': '/wt' }
+    }
+    await wired.engine.startRun({ runId: 'run-2', definition, decision })
+    await wired.shell.settled()
+    await vi.waitFor(() => expect(started.map((s) => [s.run.id, s.idx])).toEqual([['run-2', 1]]))
+    expect(started[0].fields['steps.prune.pruned']).toBe(4)
+  })
+
   it('closes a step past its own timeout through the runtime, then runs the always step', async () => {
     const { store, runtime, started, wired } = setup()
     await wired.poll()
@@ -148,6 +192,8 @@ describe('wireRunEngine', () => {
           paneKey: 'p'
         })
       },
+      engineEnv: { binDir: '/pilot/bin', dataDir: '/data/pilot' },
+      shell: { workspaceOf: async () => ({ path: '/wt' }), envOf: () => ({}) },
       workspace: {
         ...WORKSPACE,
         listWorktrees: () => new Promise((resolve) => (listed = () => resolve([])))

@@ -1,19 +1,34 @@
 import type { OrcaRuntimeService } from '../../../../../main/runtime/orca-runtime'
 import type { AutomationDefinition } from '../../shared/definition/types'
+import type { EngineEnv } from '../engine-env'
 import type { PilotStore } from '../store/store'
 import {
   createRunEngine,
   stepTimeoutMs,
   type RunEngine,
   type RunEngineDeps,
-  type StepStarter
+  type StepStarter,
+  type StepStartRequest
 } from './advance'
 import { claudeTranscriptCost, type CostReader } from './cost'
+import {
+  makeShellSteps,
+  sweepOrphanShellSteps,
+  type ShellRunner,
+  type ShellSteps
+} from './shell-step'
 import { STALE_START_MS, sweepStaleStarts } from './stale-starts'
-import { stepStarterFor, unsupportedShellStep } from './step-starters'
+import { stepStarterFor } from './step-starters'
 import { pollRunningSteps, type StepProbe } from './watcher'
 import type { WorkspaceDeps } from './workspace'
 
+export type ShellWiring = {
+  // Where the step runs: the workspace 9b's startRun recorded on the run (run.worktreePath).
+  workspaceOf(req: StepStartRequest): Promise<{ path: string }>
+  // The §8 step env (Task 8c's pilotStepEnv).
+  envOf(req: StepStartRequest): Record<string, string>
+  run?: ShellRunner
+}
 export type EngineWiringInput = {
   runtime: Pick<OrcaRuntimeService, 'closeTerminal'>
   store: PilotStore
@@ -22,6 +37,9 @@ export type EngineWiringInput = {
   startAgentStep: StepStarter
   // What the engine's startRun hands Task 8b's resolveWorkspace.
   workspace: WorkspaceDeps
+  // Pilot's bin folder and data folder for every shell command (H9).
+  engineEnv: EngineEnv
+  shell: ShellWiring
   probe: StepProbe
   cost?: CostReader
   log(message: string): void
@@ -29,18 +47,35 @@ export type EngineWiringInput = {
   onRunEnd?: RunEngineDeps['onRunEnd']
   runAnswer?: RunEngineDeps['runAnswer']
 }
-export type WiredEngine = { engine: RunEngine; poll(): Promise<void> }
+export type WiredEngine = {
+  engine: RunEngine
+  shell: ShellSteps
+  definitionFor(automationId: string): AutomationDefinition | null
+  poll(): Promise<void>
+}
 
 // The run engine and the scheduler's poll around it: close stale starts, watch running steps (ends,
 // timeouts), then move on every run whose steps have all ended. Wire it once per process: the engine's
 // one-walk-per-run lock and the set of runs being opened live in this instance.
 export function wireRunEngine(input: EngineWiringInput): WiredEngine {
   const { store, now, log } = input
+  let advance: (runId: string) => Promise<void> = async () => {}
+  const shell = makeShellSteps({
+    store,
+    now,
+    log,
+    workspaceOf: input.shell.workspaceOf,
+    envOf: input.shell.envOf,
+    engineEnv: input.engineEnv,
+    run: input.shell.run,
+    timeoutOf: (req) => stepTimeoutMs(req.definition, req.idx),
+    onEnded: (runId) => void advance(runId)
+  })
   const inner = createRunEngine({
     store,
     now,
     definitionFor: input.definitionFor,
-    startStep: stepStarterFor({ agent: input.startAgentStep, shell: unsupportedShellStep() }),
+    startStep: stepStarterFor({ agent: input.startAgentStep, shell: shell.start }),
     workspace: input.workspace,
     log,
     onRunEnd: input.onRunEnd,
@@ -59,6 +94,7 @@ export function wireRunEngine(input: EngineWiringInput): WiredEngine {
       }
     }
   }
+  advance = (runId) => engine.advance(runId)
   const timeoutOf = (step: { runId: string; idx: number }): number | null => {
     const run = store.runs.get(step.runId)
     const def = run ? input.definitionFor(run.automationId) : null
@@ -66,8 +102,11 @@ export function wireRunEngine(input: EngineWiringInput): WiredEngine {
   }
   return {
     engine,
+    shell,
+    definitionFor: input.definitionFor,
     async poll() {
       sweepStaleStarts(store, now, log, STALE_START_MS, (runId) => opening.has(runId))
+      sweepOrphanShellSteps(store, shell.isLive, now, log)
       await pollRunningSteps(store, input.probe, input.cost ?? claudeTranscriptCost, now, {
         timeoutOf,
         // As launch.ts's closeSessionTerminal: a process the close couldn't stop is a failed close, so
