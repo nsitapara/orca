@@ -9,6 +9,8 @@ import type {
 } from '../../shared/api-types'
 import { migrate } from './migrations'
 import { RunStore } from './store-runs'
+import { InboxStore } from './store-inbox'
+import { QueueStore } from './store-queue'
 
 const DAY = 24 * 60 * 60_000
 // Spec §7: ticks and their items are kept 30 days; runs and steps are kept indefinitely.
@@ -32,9 +34,13 @@ function toTick(r: Record<string, unknown>): TickRow {
 
 export class PilotStore {
   readonly runs: RunStore
+  readonly inbox: InboxStore
+  readonly queue: QueueStore
 
   private constructor(private readonly db: Database) {
     this.runs = new RunStore(db)
+    this.inbox = new InboxStore(db)
+    this.queue = new QueueStore(db)
   }
 
   static open(path: string): PilotStore {
@@ -76,6 +82,20 @@ export class PilotStore {
 
   schemaVersion(): number {
     return this.db.pragma('user_version', { simple: true }) as number
+  }
+
+  // Every write in `write` commits, or none does (an answer and its queue row, …). `write` is
+  // synchronous and must not call recordDecisions, which opens its own transaction.
+  transaction<T>(write: () => T): T {
+    this.db.exec('BEGIN IMMEDIATE')
+    try {
+      const result = write()
+      this.db.exec('COMMIT')
+      return result
+    } catch (error) {
+      this.db.exec('ROLLBACK')
+      throw error
+    }
   }
 
   startTick(automationId: string, dryRun: boolean, at: number): number {

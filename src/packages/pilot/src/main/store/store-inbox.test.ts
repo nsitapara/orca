@@ -1,0 +1,186 @@
+import { describe, expect, it } from 'vitest'
+import type { InboxAnswer, InboxStatus } from '../../shared/api-types'
+import { PilotStore } from './store'
+import type { InboxFilter, NewInboxItem } from './store-inbox'
+
+const item = (id: string, extra: Partial<NewInboxItem> = {}): NewInboxItem => ({
+  id,
+  automationId: 'fix-failed-ci',
+  runId: 'run-1',
+  stepIdx: 0,
+  itemKey: 'mr:1561',
+  worktreePath: '/wt/1493',
+  person: 'nish',
+  type: 'question',
+  title: 'Push the fix?',
+  context: 'The branch had local commits',
+  options: [
+    { label: 'Push', meaning: 'push it now' },
+    { label: 'Skip', meaning: 'leave it' }
+  ],
+  suggested: 'Push',
+  detailsMd: null,
+  action: null,
+  actionArgs: null,
+  digest: 'd1',
+  createdAt: 100,
+  source: 'engine',
+  vaultRef: null,
+  ...extra
+})
+const answer = (digest: string): InboxAnswer => ({ option: 0, text: null, digest, via: 'page' })
+
+describe('InboxStore', () => {
+  it('adds an item that is open at version 1, and reads it back', () => {
+    const store = PilotStore.open(':memory:')
+    const added = item('i1', { action: 'push', actionArgs: { iid: 1561, head: 'abc123' } })
+    store.inbox.add(added)
+    expect(store.inbox.get('i1')).toEqual({
+      ...added,
+      version: 1,
+      status: 'open',
+      answer: null,
+      answeredAt: null,
+      answeredBy: null,
+      updatedAt: 100,
+      outcome: null,
+      replies: [],
+      parts: {},
+      switchWords: []
+    })
+    expect(store.inbox.get('missing')).toBeNull()
+  })
+
+  it('keeps the parts, switch words, outcome and replies a card is added with', () => {
+    const store = PilotStore.open(':memory:')
+    store.inbox.add(
+      item('i1', {
+        parts: { a: 'Fix lint', b: 'Add test' },
+        switchWords: ['Post', 'Leave out'],
+        outcome: 'Pushed',
+        replies: ['Done at 10:00']
+      })
+    )
+    expect(store.inbox.get('i1')).toMatchObject({
+      parts: { a: 'Fix lint', b: 'Add test' },
+      switchWords: ['Post', 'Leave out'],
+      outcome: 'Pushed',
+      replies: ['Done at 10:00']
+    })
+  })
+
+  const listCases: [string, InboxFilter, string[]][] = [
+    ["nish's open items", { status: ['open'] as InboxStatus[], person: 'nish' }, ['i1', 'i3']],
+    ['one run', { runId: 'run-2' }, ['i2']],
+    ['one worktree, any status', { worktreePath: '/wt/1493' }, ['i1', 'i2']],
+    ['one item key', { itemKey: 'mr:9' }, ['i3']],
+    ['one automation', { automationId: 'fix-failed-ci' }, ['i1', 'i2', 'i3']],
+    ['imported items', { source: 'import' }, ['i3']],
+    ['items touched at or after 250', { updatedSince: 250 }, ['i2', 'i3']],
+    ['everything', {}, ['i1', 'i2', 'i3']]
+  ]
+  it.each(listCases)('lists %s, oldest first', (_label, filter, ids) => {
+    const store = PilotStore.open(':memory:')
+    store.inbox.add(
+      item('i3', { itemKey: 'mr:9', worktreePath: '/wt/9', createdAt: 300, source: 'import' })
+    )
+    store.inbox.add(item('i1'))
+    store.inbox.add(item('i2', { runId: 'run-2', createdAt: 200 }))
+    store.inbox.setStatus('i2', 'done', 250)
+    expect(store.inbox.list(filter).map((i) => i.id)).toEqual(ids)
+  })
+
+  it('edits a card into a new version with a new digest, changing only what it is given', () => {
+    const store = PilotStore.open(':memory:')
+    store.inbox.add(item('i1'))
+    const edited = store.inbox.edit(
+      'i1',
+      {
+        title: 'Push the fix now?',
+        options: [{ label: 'Push', meaning: 'push it' }],
+        parts: { a: 'Fix the lint' },
+        switchWords: ['Post', 'Leave out'],
+        digest: 'd2'
+      },
+      150
+    )
+    expect(edited).toMatchObject({
+      title: 'Push the fix now?',
+      options: [{ label: 'Push', meaning: 'push it' }],
+      parts: { a: 'Fix the lint' },
+      switchWords: ['Post', 'Leave out'],
+      context: 'The branch had local commits',
+      digest: 'd2',
+      version: 2,
+      updatedAt: 150
+    })
+    expect(store.inbox.edit('missing', { digest: 'x' }, 1)).toBeNull()
+  })
+
+  it.each([
+    ['the digest the card has', 'd1', 'saved', 'answered'],
+    ['a digest the card moved past', 'old', 'changed', 'open']
+  ] as const)('saves an answer given against %s: %s', (_label, digest, result, status) => {
+    const store = PilotStore.open(':memory:')
+    store.inbox.add(item('i1'))
+    expect(store.inbox.saveAnswer('i1', answer(digest), 'nish', 120)).toBe(result)
+    expect(store.inbox.get('i1')?.status).toBe(status)
+  })
+
+  it('keeps who answered, when, and the digest the answer was given against', () => {
+    const store = PilotStore.open(':memory:')
+    store.inbox.add(item('i1'))
+    store.inbox.saveAnswer(
+      'i1',
+      { option: null, text: 'Rebase first', digest: 'd1', via: 'cli' },
+      'nish',
+      120
+    )
+    expect(store.inbox.get('i1')).toMatchObject({
+      status: 'answered',
+      answer: { option: null, text: 'Rebase first', digest: 'd1', via: 'cli' },
+      answeredAt: 120,
+      answeredBy: 'nish',
+      updatedAt: 120
+    })
+  })
+
+  it('refuses an answer on a closed card or a missing one', () => {
+    const store = PilotStore.open(':memory:')
+    store.inbox.add(item('i1'))
+    store.inbox.setStatus('i1', 'obsolete', 110)
+    expect(store.inbox.saveAnswer('i1', answer('d1'), 'nish', 120)).toBe('closed')
+    expect(store.inbox.saveAnswer('nope', answer('d1'), 'nish', 120)).toBe('missing')
+    expect(store.inbox.get('i1')?.status).toBe('obsolete')
+  })
+
+  it('updates a card without making a new version', () => {
+    const store = PilotStore.open(':memory:')
+    store.inbox.add(item('i1'))
+    store.inbox.update(
+      'i1',
+      { status: 'done', outcome: 'Pushed', replies: ['ok'], person: 'sam', worktreePath: null },
+      160
+    )
+    expect(store.inbox.get('i1')).toMatchObject({
+      status: 'done',
+      outcome: 'Pushed',
+      replies: ['ok'],
+      person: 'sam',
+      worktreePath: null,
+      version: 1,
+      digest: 'd1',
+      updatedAt: 160
+    })
+  })
+
+  it('counts the open items a run left', () => {
+    const store = PilotStore.open(':memory:')
+    store.inbox.add(item('i1'))
+    store.inbox.add(item('i2'))
+    store.inbox.add(item('i3', { runId: 'run-2' }))
+    store.inbox.setStatus('i2', 'dismissed', 5)
+    expect(store.inbox.openCountForRun('run-1')).toBe(1)
+    expect(store.inbox.openCountForRun('run-9')).toBe(0)
+  })
+})
