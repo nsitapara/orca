@@ -180,6 +180,30 @@ function busyWorktrees(store: PilotStore, repo: RepoFacts): Set<string> {
   return busy
 }
 
+// Contract §6 across concurrent ticks: busyWorktrees was read when deciding, and runs are created after
+// awaits, so another tick (or Run now) may have taken the worktree since. Checked synchronously right
+// before a run is created, by the same rule as busyWorktrees: the repo's main checkout is shared, and
+// main_checkout runs are exempt. Returns the path that is taken, or null.
+export function worktreeTakenSinceDecide(
+  store: PilotStore,
+  def: AutomationDefinition,
+  path: string | null,
+  fields: ItemDecision['fields']
+): string | null {
+  if (def.workspace.kind !== 'item_worktree' || path === null) {
+    return null
+  }
+  const key = worktreePathKey(path)
+  const main = fields['repo.path']
+  if (typeof main === 'string' && worktreePathKey(main) === key) {
+    return null
+  }
+  const taken =
+    store.runs.runningInWorktree(path).length > 0 ||
+    (key !== path && store.runs.runningInWorktree(key).length > 0)
+  return taken ? path : null
+}
+
 // One automation's decision (spec §6): repo → items → built-in fields → scope → custom fields →
 // script checks → decideTick. A failing source or worktree listing throws; the tick runner records
 // the tick as failed and the next one retries. `tickId` is the tick row the runner started first (G3).

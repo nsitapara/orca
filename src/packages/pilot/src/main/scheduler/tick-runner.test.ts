@@ -242,6 +242,46 @@ describe('runTick', () => {
     ])
   })
 
+  const otherRunAt = (d: ReturnType<typeof deps>, path: string) => {
+    const tick = d.store.startTick('other', false, d.now())
+    d.store.runs.create({
+      id: `other-${path}`,
+      automationId: 'other',
+      tickId: tick,
+      itemKey: 'x',
+      itemLabel: 'x',
+      worktreePath: path,
+      startedAt: d.now()
+    })
+  }
+
+  it("starts an item_worktree item whose worktree is the repo's shared main checkout, even with a run there", async () => {
+    const d = deps({
+      fields: fieldsWith({
+        listWorktrees: async () => [{ ...worktrees[0], path: '/repo//' }, worktrees[1]]
+      })
+    })
+    otherRunAt(d, '/repo')
+    const result = await runTick(def, people, d, { dryRun: false })
+    expect(result.decisions.map((x) => [x.key, x.verdict])).toEqual([
+      ['mr:1561', 'started'],
+      ['mr:1574', 'started']
+    ])
+  })
+
+  it('starts a run-once main_checkout automation while another run is active in the main checkout', async () => {
+    const runOnce = testDefinition({
+      id: 'pull-dev',
+      items: null,
+      workspace: { kind: 'main_checkout' }
+    })
+    const d = deps({ sources: repoSources })
+    otherRunAt(d, '/repo')
+    const result = await runTick(runOnce, people, d, { dryRun: false })
+    expect(result.decisions.map((x) => x.verdict)).toEqual(['started'])
+    expect(d.launched).toEqual(['repo:web-platform'])
+  })
+
   it('resolves with a failed result even when finishTick throws', async () => {
     const d = deps({ sources: failingSources(new Error('glab down')) })
     d.store.finishTick = () => {
