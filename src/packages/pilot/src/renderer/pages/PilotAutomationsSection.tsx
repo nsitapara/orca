@@ -1,16 +1,19 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { AutomationListPayload, PilotStatus } from '../../shared/api-types'
 import { pilotRpc } from '../api'
-import { AutomationView } from './AutomationView'
 import { AutomationsTable } from './AutomationsTable'
 import { errorText } from './format'
 import { ProblemNotices } from './ProblemNotices'
 
-export function PilotAutomationsTab(): React.JSX.Element {
+// Pilot's YAML automations, under Orca's list on the Automations page.
+export function PilotAutomationsSection({
+  onOpen
+}: {
+  onOpen: (id: string) => void
+}): React.JSX.Element {
   const [payload, setPayload] = useState<AutomationListPayload | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [startError, setStartError] = useState<string | null>(null)
-  const [open, setOpen] = useState<string | null>(null)
   const [now, setNow] = useState(() => Date.now())
   const mounted = useRef(true)
   const load = useCallback(() => {
@@ -47,21 +50,19 @@ export function PilotAutomationsTab(): React.JSX.Element {
     }
   }, [load])
 
-  if (open) {
-    return (
-      <main className="relative flex h-full flex-col gap-4 overflow-y-auto bg-background px-5 pb-10 pt-6">
-        <AutomationView id={open} onBack={() => setOpen(null)} />
-      </main>
-    )
-  }
   const loading = !payload && !error
   return (
-    <main className="relative flex h-full flex-col gap-4 overflow-y-auto bg-background px-5 pb-10 pt-6">
-      <h1 className="text-base font-semibold leading-8">Automations</h1>
+    <section className="flex flex-col gap-3 px-5 pb-6 pt-4">
+      <div>
+        <h2 className="text-sm font-semibold leading-6">YAML automations</h2>
+        <p className="text-xs text-muted-foreground">
+          Pilot&apos;s new engine. Each one is a YAML file in an automation folder.
+        </p>
+      </div>
       {error ? <p className="text-sm text-destructive">{error}</p> : null}
       <ProblemNotices payload={payload} startError={startError} />
       {loading ? <p className="text-sm text-muted-foreground">Loading…</p> : null}
-      {payload ? <AutomationsTable payload={payload} now={now} onOpen={setOpen} /> : null}
-    </main>
+      {payload ? <AutomationsTable payload={payload} now={now} onOpen={onOpen} /> : null}
+    </section>
   )
 }

@@ -6,6 +6,7 @@ import { detail, summary } from './fixtures'
 
 const pilotRpc = vi.fn()
 vi.mock('../api', () => ({ pilotRpc: (...args: unknown[]) => pilotRpc(...args) }))
+vi.mock('./OrcaAutomationsPanel', () => ({ OrcaAutomationsPanel: () => <div>orca-page</div> }))
 
 import PilotAutomationsPage from './PilotAutomationsPage'
 
@@ -48,11 +49,14 @@ describe('PilotAutomationsPage', () => {
     pilotRpc.mockReset()
   })
 
-  it('lists automations and opens one', async () => {
+  it("lists automations under Orca's and opens one full page", async () => {
     serve(list)
     render(<PilotAutomationsPage />)
+    expect(screen.getByText('orca-page')).toBeTruthy()
+    expect(screen.getByText('YAML automations')).toBeTruthy()
     fireEvent.click(await screen.findByRole('button', { name: /Fix failed CI/ }))
     expect(await screen.findByText('No ticks yet.')).toBeTruthy()
+    expect(screen.queryByText('orca-page')).toBeNull()
   })
 
   it('shows bad files, a people notice and missing folders above the table', async () => {
