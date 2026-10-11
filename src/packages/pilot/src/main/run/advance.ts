@@ -1,10 +1,11 @@
 import type { ItemFields, RunRow, StepRow } from '../../shared/api-types'
 import type { AutomationDefinition, StepDef } from '../../shared/definition/types'
-import { decideStep, runEnd, type EndedStep, type RunEnd } from '../../shared/run/step-plan'
-import { runFields, stepFields } from '../../shared/template'
-import type { LaunchRequest } from '../scheduler/tick-runner'
+import { decideStep, runEnd, type RunEnd } from '../../shared/run/step-plan'
+import { UnrecordedLaunchError, type LaunchRequest } from '../scheduler/tick-runner'
 import type { PilotStore } from '../store/store'
 import { stepKindOf, type AdvancedStep } from '../store/store-advance'
+import { endedSteps, runFieldsOf, stepInputFields } from './advance-fields'
+import { addRunEvent, closeRun, type CloseOptions } from './run-close'
 import { resolveWorkspace, type WorkspaceDeps } from './workspace'
 
 export type StepStartRequest = {
@@ -54,38 +55,6 @@ function messageOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
 }
 
-function broke(status: StepRow['status'] | RunEnd['status']): boolean {
-  return status === 'failed' || status === 'timed_out'
-}
-
-// An answer run's steps aren't in the definition, so `def` is null for it.
-function endedSteps(rows: StepRow[], def: AutomationDefinition | null): EndedStep[] {
-  return rows.map((r) => ({
-    name: r.name,
-    status: r.status,
-    always: def?.steps[r.idx]?.always ?? false,
-    error: r.error
-  }))
-}
-
-// {run.failed} (H3): an earlier non-`always` step failed or timed out.
-function runFailed(ended: EndedStep[]): boolean {
-  return ended.some((s) => !s.always && broke(s.status))
-}
-
-// The run's own workspace wins over the item's: a new_worktree workspace exists only once startRun
-// resolved it and recorded it on the run.
-function workspaceFields(run: RunRow): ItemFields {
-  const fields: ItemFields = {}
-  if (run.worktreePath) {
-    fields['worktree.path'] = run.worktreePath
-  }
-  if (run.worktreeId) {
-    fields['worktree.id'] = run.worktreeId
-  }
-  return fields
-}
-
 function rowFor(runId: string, idx: number, step: StepDef, at: number): AdvancedStep {
   return {
     runId,
@@ -99,17 +68,6 @@ function rowFor(runId: string, idx: number, step: StepDef, at: number): Advanced
   }
 }
 
-// run.* as a template reads it, dated by the run's start in the automation's timezone.
-function runFieldsOf(run: RunRow, def: AutomationDefinition): ItemFields {
-  return runFields({
-    automationId: run.automationId,
-    at: run.startedAt,
-    timezone: def.timezone,
-    runId: run.id,
-    tickId: run.tickId ?? undefined
-  })
-}
-
 function nextIdx(rows: StepRow[]): number {
   return rows.reduce((max, r) => Math.max(max, r.idx + 1), 0)
 }
@@ -118,94 +76,106 @@ export function createRunEngine(deps: RunEngineDeps): RunEngine {
   const { store } = deps
   const busy = new Set<string>()
   const again = new Set<string>()
+  // Each run's item fields as its tick decided them. The tick records them (tick_items) only once
+  // every run it starts has launched, so a run reads that record only after a restart.
+  const items = new Map<string, ItemFields>()
 
-  // An `always` step that failed or timed out doesn't fail the run (H3); its own row says so, and
-  // this event does too.
-  function recordCleanupFailures(run: RunRow, ended: EndedStep[]): void {
-    for (const step of ended) {
-      if (step.always && broke(step.status)) {
-        store.events.add({
-          at: deps.now(),
-          kind: 'always_step_failed',
-          automationId: run.automationId,
-          runId: run.id,
-          worktreePath: run.worktreePath,
-          itemKey: run.itemKey,
-          payload: { step: step.name, status: step.status, error: step.error }
-        })
-      }
-    }
-  }
-
-  function close(run: RunRow, end: RunEnd, ended: EndedStep[] = []): void {
-    const at = deps.now()
-    const spent = store.advance.rollupCost(run.id)
-    store.runs.update(run.id, {
-      status: end.status,
-      outcome: end.outcome,
-      finishedAt: at,
-      costUsd: spent.costUsd,
-      tokens: spent.tokens
-    })
-    // The once_per key: a failed or timed-out run's key is failed (retry_after_failure), any other done.
-    store.setHandledStatus(run.automationId, run.id, broke(end.status) ? 'failed' : 'done', at)
-    recordCleanupFailures(run, ended)
-    if (deps.onRunEnd) {
-      try {
-        deps.onRunEnd(store.runs.get(run.id) ?? run, end)
-      } catch (error) {
-        deps.log(`[pilot] run ${run.id}: onRunEnd failed: ${messageOf(error)}`)
-      }
-    }
+  function close(run: RunRow, end: RunEnd, opts: CloseOptions = {}): void {
+    items.delete(run.id)
+    closeRun(deps, run, end, opts)
   }
 
   function itemFieldsOf(run: RunRow): ItemFields {
+    const known = items.get(run.id)
+    if (known) {
+      return known
+    }
     if (run.tickId === null) {
       return {}
     }
     return store.advance.tickItemFields(run.tickId, run.itemKey) ?? {}
   }
 
-  function fieldsFor(
-    run: RunRow,
-    def: AutomationDefinition,
-    base: ItemFields,
-    rows: StepRow[],
-    idx: number
-  ): ItemFields {
-    return {
-      ...base,
-      ...workspaceFields(run),
-      ...runFieldsOf(run, def),
-      ...stepFields(rows, idx),
-      'run.failed': runFailed(endedSteps(rows, def)),
-      'run.answer': deps.runAnswer?.(run) ?? null
-    }
-  }
-
   // A skipped step that startRun already wrote as pending is updated; any other gets a new row.
-  function skipStep(
-    rows: StepRow[],
-    runId: string,
-    idx: number,
-    step: StepDef,
-    reason: string
-  ): void {
+  function skipStep(runId: string, idx: number, step: StepDef, reason: string): void {
     const at = deps.now()
-    if (rows.some((r) => r.idx === idx)) {
+    if (store.runs.steps(runId).some((r) => r.idx === idx)) {
       store.runs.updateStep(runId, idx, { status: 'skipped', error: reason, finishedAt: at })
       return
     }
     store.advance.recordSkippedStep(rowFor(runId, idx, step, at), reason)
   }
 
+  // An agent runs in a terminal no step tracks. Nothing more starts beside it, not even an `always`
+  // step; the run fails, and its key is settled done so no tick retries the item while it runs.
+  function orphaned(
+    runId: string,
+    def: AutomationDefinition,
+    idx: number,
+    error: UnrecordedLaunchError
+  ): void {
+    const reason = `Not run: an untracked agent is still in terminal ${error.terminalHandle}`
+    for (let later = idx + 1; later < def.steps.length; later += 1) {
+      skipStep(runId, later, def.steps[later], reason)
+    }
+    const run = store.runs.get(runId)
+    if (!run) {
+      return
+    }
+    const payload = {
+      step: def.steps[idx].name,
+      terminal: error.terminalHandle,
+      error: error.message
+    }
+    addRunEvent(store, deps.now(), run, 'orphan_agent', payload)
+    if (run.status !== 'running') {
+      store.setHandledStatus(run.automationId, run.id, 'done', deps.now())
+      return
+    }
+    const ended = endedSteps(store.runs.steps(runId), def)
+    close(run, { status: 'failed', outcome: error.message }, { ended, handled: 'done' })
+  }
+
+  // True when the walk goes on past this step: it couldn't start, and the run is still running.
+  async function start(
+    run: RunRow,
+    def: AutomationDefinition,
+    idx: number,
+    fields: ItemFields,
+    opening: boolean
+  ): Promise<boolean> {
+    try {
+      await deps.startStep({ run, definition: def, idx, fields })
+      return false
+    } catch (error) {
+      store.advance.ensureFailedStep(
+        rowFor(run.id, idx, def.steps[idx], deps.now()),
+        messageOf(error)
+      )
+      if (error instanceof UnrecordedLaunchError) {
+        orphaned(run.id, def, idx, error)
+      }
+      if (opening) {
+        throw error
+      }
+      deps.log(
+        `[pilot] run ${run.id}: step ${def.steps[idx].name} couldn't start: ${messageOf(error)}`
+      )
+      // The stale-start sweep may have closed the run during a slow launch: its outcome stands.
+      return (
+        !(error instanceof UnrecordedLaunchError) && store.runs.get(run.id)?.status === 'running'
+      )
+    }
+  }
+
   // Walks from the first step without a row (from step 0 when `opening`: startRun wrote it as
   // pending): skipped steps get a row and the walk goes on; the first step to run is started and the
   // walk stops until it ends. Past the last step, the run ends. An answer run has no definition
   // steps: it ends after its last recorded step.
-  async function proceed(runId: string, item: ItemFields | null, opening: boolean): Promise<void> {
+  async function proceed(runId: string, opening: boolean): Promise<void> {
     let run = store.runs.get(runId)
     if (!run || run.status !== 'running') {
+      items.delete(runId)
       return
     }
     let rows = store.runs.steps(runId)
@@ -217,7 +187,7 @@ export function createRunEngine(deps: RunEngineDeps): RunEngine {
     store.runs.update(runId, { costUsd: spent.costUsd, tokens: spent.tokens })
     if (run.trigger === 'answer') {
       const ended = endedSteps(rows, null)
-      close(run, runEnd(ended, store.inbox.openCountForRun(runId)), ended)
+      close(run, runEnd(ended, store.inbox.openCountForRun(runId)), { ended })
       return
     }
     const def = deps.definitionFor(run.automationId)
@@ -236,31 +206,33 @@ export function createRunEngine(deps: RunEngineDeps): RunEngine {
       })
       return
     }
-    const base = item ?? itemFieldsOf(run)
-    const first = opening ? 0 : nextIdx(rows)
-    for (let idx = first; idx < def.steps.length; idx += 1) {
+    const item = itemFieldsOf(run)
+    for (let idx = opening ? 0 : nextIdx(rows); idx < def.steps.length; idx += 1) {
       const step = def.steps[idx]
-      const fields = fieldsFor(run, def, base, rows, idx)
+      const answer = deps.runAnswer?.(run) ?? null
+      const fields = stepInputFields({ run, def, item, rows, idx, answer })
       const verdict = decideStep(step, endedSteps(rows, def), fields)
       if (!verdict.run) {
-        skipStep(rows, runId, idx, step, verdict.reason)
-      } else {
-        try {
-          await deps.startStep({ run, definition: def, idx, fields })
-          return
-        } catch (error) {
-          store.advance.ensureFailedStep(rowFor(runId, idx, step, deps.now()), messageOf(error))
-          if (opening) {
-            throw error
-          }
-          deps.log(`[pilot] run ${runId}: step ${step.name} couldn't start: ${messageOf(error)}`)
-        }
+        skipStep(runId, idx, step, verdict.reason)
+      } else if (!(await start(run, def, idx, fields, opening))) {
+        return
       }
       rows = store.runs.steps(runId)
       run = store.runs.get(runId) ?? run
     }
     const ended = endedSteps(rows, def)
-    close(run, runEnd(ended, store.inbox.openCountForRun(runId)), ended)
+    close(run, runEnd(ended, store.inbox.openCountForRun(runId)), { ended })
+  }
+
+  // The opening walk returned without handing step 0 to the starter (the automation was unloaded, its
+  // steps changed, or the run ended while its workspace was made). A pending step 0 would read as
+  // still being opened, and the stale-start sweep never closes pending rows (B8).
+  function settleUnstarted(runId: string): void {
+    if (store.runs.steps(runId).find((s) => s.idx === 0)?.status !== 'pending') {
+      return
+    }
+    const error = store.runs.get(runId)?.outcome ?? 'The run ended before its first step started'
+    store.runs.updateStep(runId, 0, { status: 'failed', error, finishedAt: deps.now() })
   }
 
   // Step 0 is written as pending first, so the stale-start sweep and the Agent Console see the run
@@ -287,6 +259,7 @@ export function createRunEngine(deps: RunEngineDeps): RunEngine {
       status: 'pending',
       startedAt: deps.now()
     })
+    items.set(run.id, req.decision.fields)
     const fields: ItemFields = { ...req.decision.fields, ...runFieldsOf(run, req.definition) }
     try {
       const workspace = await resolveWorkspace(
@@ -298,7 +271,8 @@ export function createRunEngine(deps: RunEngineDeps): RunEngine {
       store.advance.ensureFailedStep(rowFor(run.id, 0, first, deps.now()), messageOf(error))
       throw error
     }
-    await proceed(run.id, req.decision.fields, true)
+    await proceed(run.id, true)
+    settleUnstarted(run.id)
   }
 
   // One walk per run at a time. A call that arrives meanwhile is replayed once the walk ends, unless
@@ -313,6 +287,7 @@ export function createRunEngine(deps: RunEngineDeps): RunEngine {
       await work()
     } catch (error) {
       again.delete(runId)
+      items.delete(runId)
       throw error
     } finally {
       busy.delete(runId)
@@ -327,7 +302,7 @@ export function createRunEngine(deps: RunEngineDeps): RunEngine {
     advance: (runId) =>
       locked(runId, async () => {
         try {
-          await proceed(runId, null, false)
+          await proceed(runId, false)
         } catch (error) {
           deps.log(`[pilot] couldn't advance run ${runId}: ${messageOf(error)}`)
         }
