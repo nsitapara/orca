@@ -18,6 +18,7 @@ import { buildPilotMethods } from './rpc/methods'
 import { registerPilotRpcMethods } from './rpc/register'
 import { PilotScheduler } from './scheduler/scheduler'
 import { runTick, type TickDeps } from './scheduler/tick-runner'
+import { createPassFetchCache } from './sources/fetch-cache'
 import { glabApiForRepo } from './sources/gitlab-api'
 import { PilotStore } from './store/store'
 
@@ -102,6 +103,7 @@ function openPilot(
       sweepStaleStarts(store, now, log)
       await pollRunningSteps(store, probe, claudeTranscriptCost, now)
     },
+    newPass: () => createPassFetchCache(`pass-${now()}`, glabApiForRepo),
     log
   })
   opened.push(() => scheduler.stop())

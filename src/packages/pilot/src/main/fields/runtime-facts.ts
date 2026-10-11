@@ -3,6 +3,7 @@ import { gitExecFileAsync } from '../../../../../main/git/command-runner/git-exe
 import { gitOptionalLocksDisabledEnv } from '../../../../../main/git/command-runner/git-process-env'
 import type { OrcaRuntimeService } from '../../../../../main/runtime/orca-runtime'
 import { isTerminalGoneError, terminalRelister, type TerminalRelist } from '../run/terminal-relist'
+import type { RepoFacts } from '../sources/types'
 import type { PilotStore } from '../store/store'
 import { detectGitOperation, type FactDeps } from './worktree-fields'
 
@@ -18,17 +19,18 @@ export function stripRefsHeads(branch: string): string {
   return branch.replace(/^refs\/heads\//, '')
 }
 
+// The repo as the automation names it: Orca's display name or the checkout's folder name.
 export async function resolveRepoPath(
   runtime: OrcaRuntimeService,
   repo: string
-): Promise<{ id: string; path: string }> {
+): Promise<RepoFacts> {
   const match = runtime.listRepos().find((r) => r.displayName === repo || basename(r.path) === repo)
   if (!match) {
     throw new Error(
       `Repo "${repo}" isn't added to Pilot. Add it in the sidebar, or fix "repo:" in the automation file.`
     )
   }
-  return { id: match.id, path: match.path }
+  return { name: repo, id: match.id, path: match.path, base: match.worktreeBaseRef ?? null }
 }
 
 export function runtimeFactDeps(

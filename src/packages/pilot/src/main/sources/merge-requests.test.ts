@@ -92,8 +92,8 @@ describe('listMergeRequestItems', () => {
     expect(
       items.map((i) => [i.key, i.label, i.fields['mr.pipeline'], i.fields['mr.state']])
     ).toEqual([
-      ['!1561', '!1561 web-1493', 15610, 'open'],
-      ['!1574', '!1574 web-1474', 15740, 'open']
+      ['mr:1561', '!1561 web-1493', 15610, 'open'],
+      ['mr:1574', '!1574 web-1474', 15740, 'open']
     ])
     expect(api.calls).toEqual([
       'merge_requests?state=opened&per_page=100&page=1',
@@ -110,7 +110,7 @@ describe('listMergeRequestItems', () => {
       authorUsernames: ['nish8', 'a b/c'],
       inScope: () => true
     })
-    expect(items.map((i) => i.key)).toEqual(['!1', '!2'])
+    expect(items.map((i) => i.key)).toEqual(['mr:1', 'mr:2'])
     expect(api.calls.filter((c) => c.startsWith('merge_requests?'))).toEqual([
       'merge_requests?state=opened&author_username=nish8&per_page=100',
       'merge_requests?state=opened&author_username=a%20b%2Fc&per_page=100'
@@ -139,7 +139,7 @@ describe('listMergeRequestItems', () => {
   it('still drops returned MRs whose author is out of scope', async () => {
     const api = pagedApi(() => [mr(1, 'nish8'), mr(2, 'other')])
     const items = await listMergeRequestItems(api, { ...nish, inScope: (u) => u === 'nish8' })
-    expect(items.map((i) => i.key)).toEqual(['!1'])
+    expect(items.map((i) => i.key)).toEqual(['mr:1'])
   })
 
   it('without an author filter, pages until a short page', async () => {
@@ -217,8 +217,8 @@ describe('mergeRequestSource', () => {
     const { items, warnings } = await mergeRequestSource.list(contextFor(fakeApi()), where)
     expect(warnings).toEqual([])
     expect(items.map((i) => [i.key, i.kind, i.worktreeHint])).toEqual([
-      ['!1561', 'merge_request', { branch: 'web-1493-add-digit' }],
-      ['!1574', 'merge_request', { branch: 'web-1474-show-donor' }]
+      ['mr:1561', 'merge_request', { branch: 'web-1493-add-digit' }],
+      ['mr:1574', 'merge_request', { branch: 'web-1474-show-donor' }]
     ])
     expect(items[0].sortKeys).toEqual({ waitingSince: null, priority: null })
   })
@@ -239,7 +239,7 @@ describe('mergeRequestSource', () => {
   it('scopes an item with the merge_request where rules', () => {
     const item = {
       kind: 'merge_request' as const,
-      key: '!1',
+      key: 'mr:1',
       label: '!1 x',
       fields: { 'mr.state': 'merged' },
       worktreeHint: null,

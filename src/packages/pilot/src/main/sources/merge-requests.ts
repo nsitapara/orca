@@ -111,7 +111,7 @@ export async function listMergeRequestItems(
     const detail = await api.get<GitLabMRDetail>(`merge_requests/${mr.iid}`)
     items.push({
       kind: 'merge_request',
-      key: `!${mr.iid}`,
+      key: `mr:${mr.iid}`,
       label: `!${mr.iid} ${shortBranch(mr.source_branch)}`,
       fields: mrFields(mr, detail),
       worktreeHint: { branch: mr.source_branch },

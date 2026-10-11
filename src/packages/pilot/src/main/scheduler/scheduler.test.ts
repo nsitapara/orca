@@ -4,6 +4,7 @@ import { EMPTY_PEOPLE } from '../../shared/people'
 import { nextTickAfter } from '../../shared/schedule/cron'
 import type * as Cron from '../../shared/schedule/cron'
 import type { LoadedDefinitions } from '../definitions/loader'
+import { createPassFetchCache, type PassFetchCache } from '../sources/fetch-cache'
 import { PilotScheduler, type SchedulerDeps } from './scheduler'
 import type { TickResult } from './tick-runner'
 
@@ -44,6 +45,10 @@ function deps(
     definitions: () => loaded,
     lastTickAt: () => last,
     poll: async () => {},
+    newPass: () =>
+      createPassFetchCache('pass', async () => {
+        throw new Error('no GitLab in scheduler tests')
+      }),
     log: (m) => logs.push(m),
     runTick: async (d) => {
       ran.push(d.id)
@@ -54,6 +59,22 @@ function deps(
 
 describe('PilotScheduler', () => {
   const at1012 = Date.UTC(2026, 9, 10, 19, 12) // 12:12 PDT
+
+  it('hands every tick of one loop the same fetch cache, and a manual tick none', async () => {
+    const d = deps([def('a', '10 * * * *'), def('b', '10 * * * *')], at1012, null)
+    const passes: (PassFetchCache | undefined)[] = []
+    d.runTick = async (_def, opts) => {
+      passes.push(opts.pass)
+      return OK
+    }
+    const scheduler = new PilotScheduler(d)
+    await scheduler.tickAll()
+    await scheduler.tickNow('a', { dryRun: true })
+    expect(passes).toHaveLength(3)
+    expect(passes[0]).toBeDefined()
+    expect(passes[1]).toBe(passes[0])
+    expect(passes[2]).toBeUndefined()
+  })
 
   afterEach(() => {
     vi.useRealTimers()

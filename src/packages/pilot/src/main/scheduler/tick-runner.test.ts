@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { parseAutomationYaml } from '../../shared/definition/parse'
 import { parsePeopleYaml } from '../../shared/people'
+import { createPassFetchCache } from '../sources/fetch-cache'
 import type { GlabApi } from '../sources/gitlab-api'
 import { PilotStore } from '../store/store'
 import type { FactDeps } from '../fields/worktree-fields'
@@ -25,6 +26,21 @@ const baselineDef = parseAutomationYaml(
 )
 const people = parsePeopleYaml('people:\n  - { id: nish, name: Nish, gitlab: nish8 }\n')
 if (!def.ok || !baselineDef.ok || !people.ok) {
+  throw new Error('setup')
+}
+const RUN_ONCE = parseAutomationYaml(
+  'name: Pull latest dev\nrepo: web-platform\nschedule: "0 6 * * *"\nsteps: [ { agent: shell, run: ./pull.sh } ]\n',
+  '/a/pull-dev.yaml'
+)
+const DAILY = parseAutomationYaml(
+  'name: Morning memo\nrepo: web-platform\nschedule: "0 6 * * *"\nonce_per: "{run.date}"\nsteps: [ { agent: claude, prompt: x } ]\n',
+  '/a/memo.yaml'
+)
+const WORKTREES = parseAutomationYaml(
+  'name: Review\nrepo: web-platform\nschedule: manual\nitems: { kind: worktree }\nsteps: [ { agent: claude, prompt: x } ]\n',
+  '/a/review.yaml'
+)
+if (!RUN_ONCE.ok || !DAILY.ok || !WORKTREES.ok) {
   throw new Error('setup')
 }
 
@@ -76,7 +92,7 @@ function deps(overrides: Partial<TickDeps> = {}): TickDeps & { launched: string[
     launched,
     store,
     now: () => Date.UTC(2026, 9, 10, 19, 10),
-    resolveRepo: async () => ({ id: 'r', path: '/repo' }),
+    resolveRepo: async () => ({ name: 'web-platform', id: 'r', path: '/repo', base: 'origin/dev' }),
     gitlab: async () => api,
     facts,
     quota: async () => ({ weekly: null, session: null }),
@@ -92,6 +108,31 @@ function deps(overrides: Partial<TickDeps> = {}): TickDeps & { launched: string[
 }
 
 describe('runTick', () => {
+  it('fails the tick, naming the kind, when no source lists its items yet', async () => {
+    const result = await runTick(WORKTREES.definition, people.directory, deps(), { dryRun: false })
+    expect(result).toMatchObject({ status: 'failed', error: "Pilot can't list worktree items yet" })
+  })
+
+  it('shares one GitLab read between the automations of a pass', async () => {
+    const paths: string[] = []
+    const spy: GlabApi = {
+      projectPath: 'p',
+      get: async <T>(path: string) => {
+        paths.push(path)
+        return api.get<T>(path)
+      }
+    }
+    const pass = createPassFetchCache('pass-1', async () => spy)
+    const d = deps()
+    await runTick(def.definition, people.directory, d, { dryRun: true, pass })
+    await runTick(baselineDef.definition, people.directory, d, { dryRun: true, pass })
+    expect(paths).toEqual([
+      'merge_requests?state=opened&author_username=nish8&per_page=100',
+      'merge_requests/1561',
+      'merge_requests/1574'
+    ])
+  })
+
   it.each([
     ['items.match', 'items: { kind: merge_request, match: ["{mr.iid} > 0"] }', ''],
     ['start: ask_first', '', 'start: ask_first\nask_first: { title: Go? }\n'],
@@ -119,34 +160,17 @@ describe('runTick', () => {
     expect(d.launched).toEqual([])
   })
 
-  it('fails the tick of an automation whose items it cannot list yet', async () => {
-    const once = parseAutomationYaml(
-      'name: Pull dev\nrepo: web-platform\nschedule: manual\nsteps: [ { agent: shell, run: ./pull.sh } ]\n',
-      '/a/pull-dev.yaml'
-    )
-    if (!once.ok) {
-      throw new Error(once.errors.join('\n'))
-    }
-    const d = deps()
-    const result = await runTick(once.definition, people.directory, d, { dryRun: false })
-    expect(result).toMatchObject({
-      status: 'failed',
-      error: "Pilot can't tick a run-once automation yet"
-    })
-    expect(d.launched).toEqual([])
-  })
-
   it('starts a run for each item that passes, records the tick and the once_per keys', async () => {
     const d = deps()
     const result = await runTick(def.definition, people.directory, d, {
       dryRun: false
     })
     expect(result.status).toBe('ok')
-    expect(d.launched).toEqual(['!1561', '!1574'])
+    expect(d.launched).toEqual(['mr:1561', 'mr:1574'])
     expect(d.store.handledKeys('fix-failed-ci')).toEqual(new Set(['1561:1561', '1574:1574']))
     expect(d.store.tickItems(result.tickId).map((i) => [i.itemKey, i.verdict, i.runId])).toEqual([
-      ['!1561', 'started', makeRunId('fix-failed-ci', d.now(), 1, result.tickId)],
-      ['!1574', 'started', makeRunId('fix-failed-ci', d.now(), 2, result.tickId)]
+      ['mr:1561', 'started', makeRunId('fix-failed-ci', d.now(), 1, result.tickId)],
+      ['mr:1574', 'started', makeRunId('fix-failed-ci', d.now(), 2, result.tickId)]
     ])
   })
 
@@ -267,10 +291,10 @@ describe('runTick', () => {
       status: 'failed',
       error: 'disk full'
     })
-    expect(d.launched).toEqual(['!1561'])
+    expect(d.launched).toEqual(['mr:1561'])
     expect(d.store.handledKeys('fix-failed-ci')).toEqual(new Set(['1561:1561']))
     expect(d.store.runs.forTick(result.tickId).map((r) => [r.itemKey, r.status])).toEqual([
-      ['!1561', 'running']
+      ['mr:1561', 'running']
     ])
   })
 
@@ -329,7 +353,7 @@ describe('runTick', () => {
   it('fails only the run whose launch throws, and leaves its item due again (Review Focus 4)', async () => {
     const d = deps({
       launch: async (req) => {
-        if (req.decision.key === '!1561') {
+        if (req.decision.key === 'mr:1561') {
           throw new Error('worktree is gone')
         }
         return { terminalHandle: 'term_ok', paneKey: 'tab:leaf' }
@@ -343,8 +367,8 @@ describe('runTick', () => {
     expect(d.store.handledKeys('fix-failed-ci')).toEqual(new Set(['1574:1574']))
     const runs = d.store.runs.forTick(result.tickId)
     expect(runs.map((r) => [r.itemKey, r.status, r.outcome])).toEqual([
-      ['!1561', 'failed', "Couldn't start: worktree is gone"],
-      ['!1574', 'running', null]
+      ['mr:1561', 'failed', "Couldn't start: worktree is gone"],
+      ['mr:1574', 'running', null]
     ])
   })
 
@@ -353,7 +377,7 @@ describe('runTick', () => {
     const message = "terminal term_9 started but couldn't be recorded: disk full"
     const d = deps({
       launch: async (req) => {
-        if (req.decision.key === '!1561') {
+        if (req.decision.key === 'mr:1561') {
           // As after a stale-start sweep freed the key during a slow launch.
           d.store.unmarkHandled('fix-failed-ci', req.decision.onceKey)
           throw new UnrecordedLaunchError('term_9', message)
@@ -367,8 +391,8 @@ describe('runTick', () => {
     expect(
       d.store.runs.forTick(result.tickId).map((r) => [r.itemKey, r.status, r.outcome])
     ).toEqual([
-      ['!1561', 'failed', message],
-      ['!1574', 'running', null]
+      ['mr:1561', 'failed', message],
+      ['mr:1574', 'running', null]
     ])
   })
 
@@ -386,8 +410,8 @@ describe('runTick', () => {
       status: 'ok'
     })
     expect(d.store.tickItems(result.tickId).map((i) => [i.itemKey, i.verdict, i.runId])).toEqual([
-      ['!1561', 'started', null],
-      ['!1574', 'started', null]
+      ['mr:1561', 'started', null],
+      ['mr:1574', 'started', null]
     ])
     expect(d.store.runs.forTick(result.tickId)).toEqual([])
   })
@@ -402,8 +426,8 @@ describe('runTick with first_seen: baseline (R12)', () => {
     expect(d.launched).toEqual([])
     const t2 = await run()
     expect(t2.decisions.map((x) => [x.key, x.verdict, x.reason])).toEqual([
-      ['!1561', 'notdue', 'Already handled 1561:1561'],
-      ['!1574', 'notdue', 'Already handled 1574:1574']
+      ['mr:1561', 'notdue', 'Already handled 1561:1561'],
+      ['mr:1574', 'notdue', 'Already handled 1574:1574']
     ])
     expect(d.launched).toEqual([])
     const t3 = await runTick(
@@ -413,7 +437,7 @@ describe('runTick with first_seen: baseline (R12)', () => {
       { dryRun: false }
     )
     expect(t3.decisions.map((x) => x.verdict)).toEqual(['started', 'started'])
-    expect(d.launched).toEqual(['!1561', '!1574'])
+    expect(d.launched).toEqual(['mr:1561', 'mr:1574'])
   })
 
   it('writes no handled or seen keys when a dry run would baseline', async () => {
@@ -424,5 +448,43 @@ describe('runTick with first_seen: baseline (R12)', () => {
     expect(result.decisions.map((x) => x.verdict)).toEqual(['baselined', 'baselined'])
     expect(d.store.handledKeys('fix-failed-ci').size).toBe(0)
     expect(d.store.seenKeys('fix-failed-ci').size).toBe(0)
+  })
+})
+
+describe('runTick for a run-once automation', () => {
+  it('starts one run on the repo every tick and keeps no handled key', async () => {
+    const d = deps()
+    const first = await runTick(RUN_ONCE.definition, people.directory, d, { dryRun: false })
+    const second = await runTick(RUN_ONCE.definition, people.directory, d, { dryRun: false })
+    for (const result of [first, second]) {
+      expect(result.decisions.map((x) => [x.key, x.label, x.verdict])).toEqual([
+        ['repo:web-platform', 'web-platform', 'started']
+      ])
+    }
+    expect(d.launched).toEqual(['repo:web-platform', 'repo:web-platform'])
+    expect(d.store.handledKeys('pull-dev').size).toBe(0)
+    expect(d.store.seenKeys('pull-dev').size).toBe(0)
+  })
+
+  it('gives its one item the repo and run fields, the tick id included (G3)', async () => {
+    const result = await runTick(RUN_ONCE.definition, people.directory, deps(), { dryRun: true })
+    expect(result.decisions[0].fields).toMatchObject({
+      'repo.name': 'web-platform',
+      'repo.path': '/repo',
+      'repo.base': 'origin/dev',
+      'run.automation': 'pull-dev',
+      'run.date': '20261010',
+      'run.tick': result.tickId
+    })
+  })
+
+  it('runs once per local day with once_per: "{run.date}" (Review Focus)', async () => {
+    const d = deps()
+    await runTick(DAILY.definition, people.directory, d, { dryRun: false })
+    const again = await runTick(DAILY.definition, people.directory, d, { dryRun: false })
+    expect(again.decisions.map((x) => [x.verdict, x.reason])).toEqual([
+      ['notdue', 'Already handled 20261010']
+    ])
+    expect(d.launched).toEqual(['repo:web-platform'])
   })
 })

@@ -1,15 +1,18 @@
 import type { AutomationDefinition } from '../../shared/definition/types'
 import { nextTickAfter } from '../../shared/schedule/cron'
 import type { LoadedDefinitions } from '../definitions/loader'
-import type { TickResult } from './tick-runner'
+import type { PassFetchCache } from '../sources/fetch-cache'
+import type { TickOptions, TickResult } from './tick-runner'
 
 export type SchedulerDeps = {
   now(): number
   definitions(): LoadedDefinitions
-  runTick(def: AutomationDefinition, opts: { dryRun: boolean }): Promise<TickResult>
+  runTick(def: AutomationDefinition, opts: TickOptions): Promise<TickResult>
   // Start of the last real (not dry-run) tick, or null if it never ticked.
   lastTickAt(id: string): number | null
   poll(): Promise<void>
+  // A fetch cache for one loop: every automation that ticks in the loop reads through it.
+  newPass(): PassFetchCache
   log(message: string): void
 }
 
@@ -152,20 +155,21 @@ export class PilotScheduler {
       this.deps.log(`[pilot] couldn't read automations: ${messageOf(error)}`)
       return
     }
+    const pass = this.deps.newPass()
     for (const def of definitions) {
       if (this.stopped) {
         return
       }
-      await this.tickIfDue(def)
+      await this.tickIfDue(def, pass)
     }
   }
 
-  private async tickIfDue(def: AutomationDefinition): Promise<void> {
+  private async tickIfDue(def: AutomationDefinition, pass: PassFetchCache): Promise<void> {
     try {
       if (!this.isDue(def)) {
         return
       }
-      const result = await this.tickNow(def.id, { dryRun: false })
+      const result = await this.tickNow(def.id, { dryRun: false, pass })
       if (result.status === 'failed') {
         this.deps.log(`[pilot] ${def.id} tick failed: ${result.error}`)
       }
@@ -176,7 +180,7 @@ export class PilotScheduler {
 
   // The only way a manual automation runs. Nothing awaits between the busy check and the set, so two
   // calls can never both start a tick of the same automation.
-  async tickNow(id: string, opts: { dryRun: boolean }): Promise<TickNowResult> {
+  async tickNow(id: string, opts: TickOptions): Promise<TickNowResult> {
     if (this.running.has(id)) {
       return { status: 'busy' }
     }
