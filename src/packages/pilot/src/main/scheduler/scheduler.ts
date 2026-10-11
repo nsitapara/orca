@@ -19,9 +19,10 @@ const HOUR = 60 * 60_000
 export const SCHEDULER_INTERVAL_MS = 15_000
 export const SCHEDULER_START_DELAY_MS = 60_000
 
-// The next tick depends only on the cron, the timezone and the last real tick, so it is computed once
-// and kept until the automation ticks or a reload changes its schedule. (A yearly cron walks ~0.5 s.)
+// The next tick depends only on the cron, the timezone and where the walk starts, so it is computed
+// once and kept until the automation ticks or a reload changes its schedule. (A yearly cron walks ~0.5 s.)
 type NextTick = { schedule: string; timezone: string; at: number | null }
+export type LoopTimes = { loopStartedAt: number | null; lastLoopFinishedAt: number | null }
 
 function messageOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
@@ -35,8 +36,11 @@ export class PilotScheduler {
   private readonly running = new Map<string, Promise<TickResult>>()
   private readonly nextTicks = new Map<string, NextTick>()
   private timers: NodeJS.Timeout[] = []
+  private readonly ticked = new Set<string>()
   private loop: Promise<void> | null = null
   private stopped = false
+  private firstLoopDone = false
+  private times: LoopTimes = { loopStartedAt: null, lastLoopFinishedAt: null }
   private readonly startedAt: number
 
   constructor(
@@ -77,19 +81,42 @@ export class PilotScheduler {
     this.timers = []
   }
 
+  // For a status view: a loopStartedAt far in the past means a loop is stuck.
+  loopTimes(): LoopTimes {
+    return { ...this.times }
+  }
+
   nextTickAt(def: AutomationDefinition): number | null {
     if (!isScheduled(def)) {
+      // Forgotten, so enabling it or giving it a schedule later counts as an edit (see walkFrom).
+      this.nextTicks.delete(def.id)
       return null
     }
     const cached = this.nextTicks.get(def.id)
     if (cached && cached.schedule === def.schedule && cached.timezone === def.timezone) {
       return cached.at
     }
-    // Never ticked: a slot in the hour before start still counts, so a restart doesn't skip it.
-    const from = this.deps.lastTickAt(def.id) ?? this.startedAt - HOUR
+    const from = this.walkFrom(def.id)
     const at = nextTickAfter(def.schedule, def.timezone, new Date(from))?.getTime() ?? null
     this.nextTicks.set(def.id, { schedule: def.schedule, timezone: def.timezone, at })
     return at
+  }
+
+  // Where the cron walk starts:
+  // - right after a real tick: that tick, so the schedule keeps its rhythm;
+  // - automations scheduled at the first loop: the last real tick, or an hour before start, so a slot
+  //   missed while the app was closed runs once;
+  // - added, enabled or rescheduled after that: now (or a later real tick), so an edit never fires at
+  //   once. This is what keeps a manual → cron cutover from ticking the moment it is saved.
+  private walkFrom(id: string): number {
+    const last = this.deps.lastTickAt(id)
+    if (this.ticked.delete(id) && last !== null) {
+      return last
+    }
+    if (!this.firstLoopDone) {
+      return last ?? this.startedAt - HOUR
+    }
+    return Math.max(last ?? Number.NEGATIVE_INFINITY, this.deps.now())
   }
 
   isDue(def: AutomationDefinition): boolean {
@@ -100,8 +127,11 @@ export class PilotScheduler {
   // One loop at a time: a call while a loop runs joins it instead of polling and ticking twice.
   tickAll(): Promise<void> {
     if (!this.loop) {
+      this.times = { ...this.times, loopStartedAt: this.deps.now() }
       this.loop = this.runLoop().finally(() => {
         this.loop = null
+        this.firstLoopDone = true
+        this.times = { loopStartedAt: null, lastLoopFinishedAt: this.deps.now() }
       })
     }
     return this.loop
@@ -158,8 +188,9 @@ export class PilotScheduler {
     this.running.set(id, promise)
     try {
       const result = await promise
-      if (!opts.dryRun) {
-        this.nextTicks.delete(id)
+      // Only a scheduled automation keeps its rhythm from this tick; a manual one has no cache entry.
+      if (!opts.dryRun && this.nextTicks.delete(id)) {
+        this.ticked.add(id)
       }
       return result
     } finally {

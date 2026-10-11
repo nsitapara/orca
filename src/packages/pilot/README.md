@@ -66,6 +66,7 @@ These need a phone, a second Mac and an iPad on Tailscale. Open Pilot (`dist/mac
 - After a restart (or closing and reopening the right sidebar) the sidebar tab comes back as Explorer, because main's persistence allowlist drops `plugin:pilot`. The existing sidebar-tab note above covers the same cause.
 - "Install CLI" installs `/usr/local/bin/pilot`, not `orca`. Checked in code, not clicked: `applyPilotEnvDefaults` (`src/main/env.ts`) sets `ORCA_CLI_INSTALL_PATH` to `/usr/local/bin/pilot`, and `cli-install-location.ts` uses that override ahead of its own `orca` default.
 - Packaged builds are unsigned (`CSC_IDENTITY_AUTO_DISCOVERY=false`, `--dir` output). macOS may ask you to allow the app on first launch.
+- Upstream orcad keeps its own data in `~/.orca` (or `$XDG_DATA_HOME/Orca`) unless `ORCA_USER_DATA` is set, so Pilot's orcad started without it shares real Orca's headless folder. Set `ORCA_USER_DATA` when running Pilot's orcad (Task 9 does). Pilot's own store never goes there: it uses `ORCA_USER_DATA` when set, else `~/.pilot/orcad/`.
 
 ## Updating from upstream
 

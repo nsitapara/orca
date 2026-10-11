@@ -1,4 +1,4 @@
-import { mkdtempSync } from 'node:fs'
+import { mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
@@ -184,6 +184,66 @@ describe('PilotStore', () => {
     expect(store.runs.staleStartingSteps(100).map((s) => s.runId)).toEqual(['stale'])
     expect(store.runs.get('stale')).toMatchObject({ id: 'stale', status: 'running' })
     expect(store.runs.get('missing')).toBeNull()
+  })
+
+  it('finds running runs that never got a step since before a cutoff', () => {
+    const store = freshStore()
+    const run = (id: string, startedAt: number) =>
+      store.runs.create({
+        id,
+        automationId: 'a',
+        tickId: null,
+        itemKey: id,
+        itemLabel: id,
+        worktreePath: null,
+        startedAt
+      })
+    run('bare', 10)
+    run('young', 500)
+    run('stepped', 10)
+    store.runs.createStep({
+      runId: 'stepped',
+      idx: 0,
+      name: 's',
+      agent: 'claude',
+      skill: null,
+      startedAt: 10
+    })
+    run('ended', 10)
+    store.runs.update('ended', { status: 'failed' })
+    expect(store.runs.staleRunsWithoutSteps(100).map((r) => r.id)).toEqual(['bare'])
+  })
+
+  it('moves a step to running only while it is still starting', () => {
+    const store = freshStore()
+    store.runs.create({
+      id: 'r',
+      automationId: 'a',
+      tickId: null,
+      itemKey: 'r',
+      itemLabel: 'r',
+      worktreePath: null,
+      startedAt: 1
+    })
+    store.runs.createStep({
+      runId: 'r',
+      idx: 0,
+      name: 's',
+      agent: 'claude',
+      skill: null,
+      startedAt: 1
+    })
+    store.runs.updateStep('r', 0, { status: 'failed', error: 'swept' })
+    expect(store.runs.updateStartingStep('r', 0, { status: 'running', terminalHandle: 't' })).toBe(
+      false
+    )
+    expect(store.runs.steps('r')[0]).toMatchObject({ status: 'failed', terminalHandle: null })
+  })
+
+  it("refuses a file that isn't a database", () => {
+    const path = join(mkdtempSync(join(tmpdir(), 'pilot-store-')), 'pilot-automations.db')
+    writeFileSync(path, 'not sqlite at all, just text that is long enough to have a header')
+    expect(() => PilotStore.open(path)).toThrow(/not a database/)
   })
 
   it('records decisions atomically and in insertion order', () => {

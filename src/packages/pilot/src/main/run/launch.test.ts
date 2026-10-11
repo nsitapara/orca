@@ -4,6 +4,7 @@ import type { ItemDecision } from '../../shared/api-types'
 import { parseAutomationYaml } from '../../shared/definition/parse'
 import { PilotStore } from '../store/store'
 import { buildPrompt, makeLauncher } from './launch'
+import { STALE_START_MS, sweepStaleStarts } from './stale-starts'
 
 const parsed = parseAutomationYaml(
   'name: Fix failed CI on my MRs\nrepo: r\nschedule: manual\nsteps: [ { agent: claude, skill: fix-gitlab-ci, prompt: "Fix pipeline {mr.pipeline} on !{mr.iid}." } ]\n',
@@ -97,16 +98,26 @@ describe('makeLauncher', () => {
     expect(unlisted.store.runs.steps('run-1')[0]).toMatchObject({ status: 'failed' })
   })
 
+  it('leaves a step the sweep closed failed when its launch completes late', async () => {
+    let finish: (t: { handle: string; paneKey: string }) => void = () => {}
+    const { store, launcher } = setup(() => new Promise((resolve) => (finish = resolve)))
+    const late = launcher(request)
+    await vi.waitFor(() => expect(store.runs.steps('run-1')).toHaveLength(1))
+    sweepStaleStarts(
+      store,
+      () => 7 + STALE_START_MS + 1,
+      () => {}
+    )
+    finish({ handle: 'term_3', paneKey: 'p' })
+    await expect(late).rejects.toThrow(/term_3.*closed before its agent started/)
+    expect(store.runs.steps('run-1')[0]).toMatchObject({ status: 'failed', terminalHandle: null })
+    expect(store.runs.get('run-1')?.status).toBe('failed')
+  })
+
   it('names the orphaned terminal when it cannot record the step after launching', async () => {
     const { store, launcher } = setup(async () => ({ handle: 'term_9', paneKey: 'p' }))
-    const real = store.runs.updateStep.bind(store.runs)
-    let first = true
-    store.runs.updateStep = (runId, idx, patch) => {
-      if (first) {
-        first = false
-        throw new Error('disk full')
-      }
-      real(runId, idx, patch)
+    store.runs.updateStartingStep = () => {
+      throw new Error('disk full')
     }
     await expect(launcher(request)).rejects.toThrow(/term_9.*disk full/)
     expect(store.runs.steps('run-1')[0]).toMatchObject({ status: 'failed' })

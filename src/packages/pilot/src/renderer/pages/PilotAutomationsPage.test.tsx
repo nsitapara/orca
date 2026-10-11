@@ -14,7 +14,8 @@ const status: PilotStatus = {
   dataPath: '/tmp/pilot',
   automationDirs: ['/a', '/b'],
   missingDirs: ['/b'],
-  peopleError: null
+  peopleError: null,
+  error: null
 }
 
 describe('PilotAutomationsPage', () => {
