@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { defineMethod } from '../../../../../main/runtime/rpc/core'
 import type { PilotStatus } from '../../shared/api-types'
 import type { PilotContext, PilotHost } from '../pilot-services'
+import { setAutomationEnabled } from './automation-files'
 import { activity, dryRun, getAutomation, listAutomations, tickNow, validateYaml } from './handlers'
 import { buildChannelMethods } from './methods-channel'
 
@@ -12,6 +13,7 @@ export const MAX_ACTIVITY_LIMIT = 200
 export const MAX_VALIDATE_BYTES = 256 * 1024
 
 const Id = z.object({ id: z.string().min(1) })
+const SetEnabled = Id.extend({ enabled: z.boolean() })
 const Activity = Id.extend({
   limit: z.number().int().positive().max(MAX_ACTIVITY_LIMIT).optional()
 })
@@ -106,6 +108,13 @@ export function buildPilotMethods(host: PilotHost) {
         ctx()
         return validateYaml(p.yaml, p.file ?? 'draft.yaml')
       }
+    }),
+    // Edits the automation's file (enabled: true|false) and reloads. Go-live is Nish's call (R15).
+    defineMethod({
+      name: 'pilot.automations.setEnabled',
+      permission: 'workspace',
+      params: SetEnabled,
+      handler: (p) => setAutomationEnabled(ctx(), p.id, p.enabled)
     }),
     ...buildChannelMethods(ctx)
   ].map((m) => Object.assign(m, { pilot: true }))

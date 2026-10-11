@@ -13,6 +13,17 @@ export const PILOT_HANDLER_GROUPS: readonly HandlerGroup[] = [
     load: async () => (await import('./handlers.js')).PILOT_HANDLERS
   },
   {
+    name: 'pilot-automation-files',
+    keys: [
+      'automations list-yaml',
+      'automations get',
+      'automations reload',
+      'automations enable',
+      'automations disable'
+    ],
+    load: async () => (await import('./handlers-automations.js')).AUTOMATION_FILE_HANDLERS
+  },
+  {
     name: 'pilot-run',
     keys: ['run output', 'run event'],
     load: async () => (await import('./handlers-run.js')).RUN_HANDLERS

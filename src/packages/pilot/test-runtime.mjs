@@ -4,6 +4,7 @@ export const PILOT_SQLITE_RUNTIME_INCLUDE = [
   'src/packages/pilot/src/main/store/store.test.ts',
   'src/packages/pilot/src/main/scheduler/tick-runner.test.ts',
   'src/packages/pilot/src/main/rpc/run-channel.test.ts',
+  'src/packages/pilot/src/main/rpc/automation-files.test.ts',
   'src/packages/pilot/src/main/run/watcher.test.ts',
   'src/packages/pilot/src/main/run/launch.test.ts',
   'src/packages/pilot/src/main/run/stale-starts.test.ts',
