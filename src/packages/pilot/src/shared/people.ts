@@ -23,7 +23,10 @@ const directorySchema = z.strictObject({
 })
 
 export type Person = z.infer<typeof personSchema>
-export type PeopleDirectory = { people: Person[]; groups: z.infer<typeof groupSchema>[] }
+export type PeopleDirectory = {
+  people: Person[]
+  groups: z.infer<typeof groupSchema>[]
+}
 export const EMPTY_PEOPLE: PeopleDirectory = { people: [], groups: [] }
 
 function readYaml(text: string): { ok: true; value: unknown } | { ok: false; errors: string[] } {
@@ -139,4 +142,24 @@ export function describeRef(ref: PeopleRef | undefined, dir: PeopleDirectory): s
     names.push(dir.groups.find((g) => g.id === ref.group)?.name ?? ref.group)
   }
   return joinNames(names)
+}
+
+// The GitLab handles a ref names, so a list request can ask for just those authors. null means no
+// author filter (anyone/absent). People without a gitlab handle can't author MRs and are skipped,
+// so an empty list means "nobody resolvable", never "everyone".
+export function gitlabHandlesFor(
+  ref: PeopleRef | undefined,
+  dir: PeopleDirectory
+): string[] | null {
+  if (ref === undefined || ref === 'anyone') {
+    return null
+  }
+  const ids = new Set(ref.people ?? [])
+  if (ref.group) {
+    for (const id of dir.groups.find((g) => g.id === ref.group)?.members ?? []) {
+      ids.add(id)
+    }
+  }
+  const handles = dir.people.filter((p) => ids.has(p.id)).map((p) => p.gitlab)
+  return [...new Set(handles.filter((h): h is string => h !== undefined && h !== ''))]
 }

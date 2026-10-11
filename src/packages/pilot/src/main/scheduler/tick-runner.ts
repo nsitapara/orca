@@ -1,6 +1,6 @@
 import type { ItemDecision, TickResult, Verdict } from '../../shared/api-types'
 import type { AutomationDefinition } from '../../shared/definition/types'
-import type { PeopleDirectory } from '../../shared/people'
+import { gitlabHandlesFor, type PeopleDirectory } from '../../shared/people'
 import { authorInScope, decideTick } from '../../shared/tick/decide'
 import { addQuotaFields, type QuotaReader } from '../fields/quota'
 import { addWorktreeFields, type FactDeps } from '../fields/worktree-fields'
@@ -56,7 +56,10 @@ async function decide(
   const repo = await deps.resolveRepo(def.repo)
   const api = await deps.gitlab(repo.path)
   const inScope = (username: string) => authorInScope(def, people, username)
-  let items = await listMergeRequestItems(api, inScope)
+  let items = await listMergeRequestItems(api, {
+    authorUsernames: gitlabHandlesFor(def.items?.where.author, people),
+    inScope
+  })
   items = await addWorktreeFields(
     items,
     def.id,
@@ -126,7 +129,11 @@ function releaseUnlaunched(
 ) {
   const outcome = `Couldn't start: ${message}`
   try {
-    deps.store.runs.update(u.runId, { status: 'failed', outcome, finishedAt: deps.now() })
+    deps.store.runs.update(u.runId, {
+      status: 'failed',
+      outcome,
+      finishedAt: deps.now()
+    })
   } catch {}
   try {
     deps.store.unmarkHandled(def.id, u.onceKey)

@@ -106,6 +106,22 @@ describe('runTick', () => {
     ])
   })
 
+  it('asks GitLab only for the definition author, so teammates never reach the tick', async () => {
+    const paths: string[] = []
+    const spy: GlabApi = {
+      projectPath: 'p',
+      get: async <T>(path: string) => {
+        paths.push(path)
+        return api.get<T>(path)
+      }
+    }
+    const d = deps({ gitlab: async () => spy })
+    await runTick(def.definition, people.directory, d, { dryRun: true })
+    expect(paths.filter((p) => p.startsWith('merge_requests?'))).toEqual([
+      'merge_requests?state=opened&author_username=nish8&per_page=100'
+    ])
+  })
+
   it('gives runs of two ticks in the same minute different ids', async () => {
     const d = deps({
       launch: async () => ({ terminalHandle: 't', paneKey: 'p' })
