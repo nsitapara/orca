@@ -93,6 +93,9 @@ export function exprErrors(raw: RawAutomation): string[] {
     }
     errors.push(...templateErrors(s.prompt, `steps[${i}].prompt`, i, steps))
     errors.push(...templateErrors(s.run, `steps[${i}].run`, i, steps))
+    for (const [name, value] of Object.entries(s.env ?? {})) {
+      errors.push(...templateErrors(value, `steps[${i}].env.${name}`, i, steps))
+    }
   }
   return errors
 }

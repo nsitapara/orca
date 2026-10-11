@@ -124,7 +124,8 @@ steps:
     when: "{steps.review.changed} == true"
   - name: cleanup
     agent: shell
-    run: "./scripts/teardown.sh {worktree.path}"
+    run: ./scripts/teardown.sh
+    env: { WORKTREE: "{worktree.path}" }
     exit_codes: { ok: [0], skip: [3] }
     always: true
 answers: { resume: never, else: { agent: claude, skill: review-branch, mode: answers } }
@@ -243,8 +244,8 @@ describe('parseAutomationYaml', () => {
             promptStyle: 'wrapped',
             args: [],
             session: { kind: 'new' },
-            run: './scripts/teardown.sh {worktree.path}',
-            env: {},
+            run: './scripts/teardown.sh',
+            env: { WORKTREE: '{worktree.path}' },
             exitCodes: { ok: [0], skip: [3] },
             when: null,
             always: true,
