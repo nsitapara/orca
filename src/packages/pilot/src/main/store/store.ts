@@ -1,5 +1,12 @@
 import Database from '../../../../../main/sqlite/sync-database'
-import type { ItemDecision, TickItemRow, TickRow, Verdict } from '../../shared/api-types'
+import type {
+  HandledRow,
+  HandledStatus,
+  ItemDecision,
+  TickItemRow,
+  TickRow,
+  Verdict
+} from '../../shared/api-types'
 import { migrate } from './migrations'
 import { RunStore } from './store-runs'
 
@@ -194,6 +201,32 @@ export class PilotStore {
     this.db
       .prepare('DELETE FROM handled WHERE automation_id = ? AND run_id = ?')
       .run(automationId, runId)
+  }
+
+  // retry_after_failure reads each key's status: a failed key is due again once its wait is over.
+  handledRows(automationId: string): HandledRow[] {
+    return this.db
+      .prepare('SELECT * FROM handled WHERE automation_id = ? ORDER BY once_key')
+      .all(automationId)
+      .map((raw) => {
+        const r = raw as Record<string, unknown>
+        return {
+          onceKey: String(r.once_key),
+          runId: (r.run_id as string | null) ?? null,
+          at: Number(r.at),
+          status: r.status as HandledStatus,
+          failedAt: (r.failed_at as number | null) ?? null
+        }
+      })
+  }
+
+  // A run's end settles the key it holds; markHandled (INSERT OR REPLACE) starts a key over as 'started'.
+  setHandledStatus(automationId: string, runId: string, status: HandledStatus, at: number): void {
+    this.db
+      .prepare(
+        'UPDATE handled SET status = ?, failed_at = ? WHERE automation_id = ? AND run_id = ?'
+      )
+      .run(status, status === 'failed' ? at : null, automationId, runId)
   }
 
   seenKeys(automationId: string): Set<string> {

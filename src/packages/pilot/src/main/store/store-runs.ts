@@ -1,102 +1,34 @@
 import type Database from '../../../../../main/sqlite/sync-database'
-import type { RunRow, RunStatus, StepRow, StepStatus } from '../../shared/api-types'
+import type { RunRow, StepKind, StepRow, StepStatus } from '../../shared/api-types'
+import {
+  encodeStep,
+  RUN_COLUMNS,
+  setClause,
+  STEP_COLUMNS,
+  toRun,
+  toStep,
+  type RunPatch,
+  type StepPatch
+} from './run-rows'
 
+export type { RunPatch, StepPatch }
 export type NewRun = Pick<
   RunRow,
   'id' | 'automationId' | 'tickId' | 'itemKey' | 'itemLabel' | 'worktreePath' | 'startedAt'
->
+> &
+  Partial<Pick<RunRow, 'status' | 'worktreeId' | 'trigger' | 'parentRunId' | 'imported'>>
+// M1 creates a step as it starts; a multi-step run may lay its steps out first as 'pending', unstarted.
 export type NewStep = {
   runId: string
   idx: number
   name: string
   agent: string
   skill: string | null
-  startedAt: number
-}
-type RunPatch = Partial<{
-  status: RunStatus
-  outcome: string | null
-  finishedAt: number
-  costUsd: number | null
-  tokens: number | null
-}>
-type StepPatch = Partial<{
-  status: StepStatus
-  terminalHandle: string
-  paneKey: string
-  sessionId: string
-  transcriptPath: string
-  costUsd: number | null
-  tokens: number | null
-  finishedAt: number
-  error: string
-}>
-
-const RUN_COLUMNS: Record<keyof RunPatch, string> = {
-  status: 'status',
-  outcome: 'outcome',
-  finishedAt: 'finished_at',
-  costUsd: 'cost_usd',
-  tokens: 'tokens'
-}
-const STEP_COLUMNS: Record<keyof StepPatch, string> = {
-  status: 'status',
-  terminalHandle: 'terminal_handle',
-  paneKey: 'pane_key',
-  sessionId: 'session_id',
-  transcriptPath: 'transcript_path',
-  costUsd: 'cost_usd',
-  tokens: 'tokens',
-  finishedAt: 'finished_at',
-  error: 'error'
-}
-
-function setClause<T extends object>(
-  patch: T,
-  columns: Record<keyof T, string>
-): { sql: string; values: unknown[] } {
-  const keys = Object.keys(patch) as (keyof T)[]
-  return {
-    sql: keys.map((k) => `${columns[k]} = ?`).join(', '),
-    values: keys.map((k) => patch[k] ?? null)
-  }
-}
-
-function toRun(r: Record<string, unknown>): RunRow {
-  return {
-    id: String(r.id),
-    automationId: String(r.automation_id),
-    tickId: (r.tick_id as number | null) ?? null,
-    itemKey: String(r.item_key),
-    itemLabel: String(r.item_label),
-    worktreePath: (r.worktree_path as string | null) ?? null,
-    status: r.status as RunStatus,
-    outcome: (r.outcome as string | null) ?? null,
-    startedAt: Number(r.started_at),
-    finishedAt: (r.finished_at as number | null) ?? null,
-    costUsd: (r.cost_usd as number | null) ?? null,
-    tokens: (r.tokens as number | null) ?? null
-  }
-}
-
-function toStep(r: Record<string, unknown>): StepRow {
-  return {
-    runId: String(r.run_id),
-    idx: Number(r.idx),
-    name: String(r.name),
-    agent: String(r.agent),
-    skill: (r.skill as string | null) ?? null,
-    status: r.status as StepStatus,
-    terminalHandle: (r.terminal_handle as string | null) ?? null,
-    paneKey: (r.pane_key as string | null) ?? null,
-    sessionId: (r.session_id as string | null) ?? null,
-    transcriptPath: (r.transcript_path as string | null) ?? null,
-    costUsd: (r.cost_usd as number | null) ?? null,
-    tokens: (r.tokens as number | null) ?? null,
-    startedAt: (r.started_at as number | null) ?? null,
-    finishedAt: (r.finished_at as number | null) ?? null,
-    error: (r.error as string | null) ?? null
-  }
+  startedAt: number | null
+  kind?: StepKind
+  mode?: string | null
+  whenExpr?: string | null
+  status?: StepStatus
 }
 
 export class RunStore {
@@ -105,7 +37,7 @@ export class RunStore {
   create(run: NewRun): void {
     this.db
       .prepare(
-        'INSERT INTO runs (id, automation_id, tick_id, item_key, item_label, worktree_path, status, started_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+        'INSERT INTO runs (id, automation_id, tick_id, item_key, item_label, worktree_path, worktree_id, status, trigger, parent_run_id, imported, started_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
       )
       .run(
         run.id,
@@ -114,7 +46,11 @@ export class RunStore {
         run.itemKey,
         run.itemLabel,
         run.worktreePath,
-        'running',
+        run.worktreeId ?? null,
+        run.status ?? 'running',
+        run.trigger ?? 'schedule',
+        run.parentRunId ?? null,
+        run.imported ? 1 : 0,
         run.startedAt
       )
   }
@@ -144,13 +80,24 @@ export class RunStore {
   createStep(step: NewStep): void {
     this.db
       .prepare(
-        'INSERT INTO steps (run_id, idx, name, agent, skill, status, started_at) VALUES (?, ?, ?, ?, ?, ?, ?)'
+        'INSERT INTO steps (run_id, idx, name, agent, skill, status, started_at, kind, mode, when_expr) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
       )
-      .run(step.runId, step.idx, step.name, step.agent, step.skill, 'starting', step.startedAt)
+      .run(
+        step.runId,
+        step.idx,
+        step.name,
+        step.agent,
+        step.skill,
+        step.status ?? 'starting',
+        step.startedAt,
+        step.kind ?? 'agent',
+        step.mode ?? null,
+        step.whenExpr ?? null
+      )
   }
 
   updateStep(runId: string, idx: number, patch: StepPatch): void {
-    const { sql, values } = setClause(patch, STEP_COLUMNS)
+    const { sql, values } = setClause(encodeStep(patch), STEP_COLUMNS)
     if (sql) {
       this.db
         .prepare(`UPDATE steps SET ${sql} WHERE run_id = ? AND idx = ?`)
@@ -160,7 +107,7 @@ export class RunStore {
 
   // The launcher's 'starting' → 'running' write. False when the step was closed meanwhile (the sweep).
   updateStartingStep(runId: string, idx: number, patch: StepPatch): boolean {
-    const { sql, values } = setClause(patch, STEP_COLUMNS)
+    const { sql, values } = setClause(encodeStep(patch), STEP_COLUMNS)
     const r = this.db
       .prepare(`UPDATE steps SET ${sql} WHERE run_id = ? AND idx = ? AND status = 'starting'`)
       .run(...(values as never[]), runId, idx)
@@ -217,10 +164,21 @@ export class RunStore {
       .map((r) => toStep(r as never))
   }
 
+  // limits.at_once counts this automation's running runs only: a needs_you run holds no slot (H2).
   runningCount(automationId: string): number {
     const row = this.db
       .prepare("SELECT COUNT(*) AS n FROM runs WHERE automation_id = ? AND status = 'running'")
       .get(automationId)
     return Number((row as { n: number } | undefined)?.n ?? 0)
+  }
+
+  // One agent per worktree across automations (contract §6): every running run there, of any automation.
+  runningInWorktree(worktreePath: string): RunRow[] {
+    return this.db
+      .prepare(
+        "SELECT * FROM runs WHERE worktree_path = ? AND status = 'running' ORDER BY started_at, id"
+      )
+      .all(worktreePath)
+      .map((r) => toRun(r as never))
   }
 }

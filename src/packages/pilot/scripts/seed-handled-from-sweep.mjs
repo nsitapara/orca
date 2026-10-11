@@ -27,9 +27,10 @@ Without --apply it is a dry run: it prints the counts and writes nothing.
   --automation <id>    the automation the keys belong to (default fix-failed-ci)`
 
 // The schema this script writes into. When migrations.ts moves past it, check the handled insert
-// below against the new schema, then raise this.
-export const SEED_SCHEMA_VERSION = 1
-const HANDLED_COLUMNS = ['automation_id', 'once_key', 'run_id', 'at']
+// below against the new schema, then raise this. V2 added status (DEFAULT 'started') and failed_at
+// (NULL), which the insert leaves to their defaults: a seeded key is an attempt the sweep made.
+export const SEED_SCHEMA_VERSION = 2
+const HANDLED_COLUMNS = ['automation_id', 'once_key', 'run_id', 'at', 'status', 'failed_at']
 const BUSY_TIMEOUT_MS = 5000
 const MIGRATIONS_FILE = fileURLToPath(new URL('../src/main/store/migrations.ts', import.meta.url))
 

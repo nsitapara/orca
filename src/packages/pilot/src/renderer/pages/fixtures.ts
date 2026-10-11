@@ -49,6 +49,10 @@ export const failedRunTick: ActivityTick = {
       finishedAt: 2,
       costUsd: null,
       tokens: null,
+      worktreeId: null,
+      trigger: 'schedule' as const,
+      parentRunId: null,
+      imported: false,
       steps: []
     }
   ]

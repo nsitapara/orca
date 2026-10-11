@@ -67,8 +67,22 @@ describe.skipIf(sqlite === undefined)('seedHandled', () => {
     // Object.entries lists integer-like keys first, in ascending order.
     expect(result.invalid).toEqual(['1591: null', '1592: "7"', 'x: 5'])
     expect(handledRows(paths.dbFile)).toEqual([
-      { automation_id: ID, once_key: '1587:2933991087', run_id: null, at: 1_000 },
-      { automation_id: ID, once_key: '1590:2934000001', run_id: null, at: 1_000 }
+      {
+        automation_id: ID,
+        once_key: '1587:2933991087',
+        run_id: null,
+        at: 1_000,
+        status: 'started',
+        failed_at: null
+      },
+      {
+        automation_id: ID,
+        once_key: '1590:2934000001',
+        run_id: null,
+        at: 1_000,
+        status: 'started',
+        failed_at: null
+      }
     ])
   })
 
@@ -80,24 +94,38 @@ describe.skipIf(sqlite === undefined)('seedHandled', () => {
     expect(seed(paths, true)).toMatchObject({ present: 1, missing: 1, added: 1 })
     expect(seed(paths, true)).toMatchObject({ present: 2, missing: 0, added: 0 })
     expect(handledRows(paths.dbFile)).toEqual([
-      { automation_id: ID, once_key: '1587:2933991087', run_id: 'run-1', at: 5 },
-      { automation_id: ID, once_key: '1590:2934000001', run_id: null, at: 1_000 }
+      {
+        automation_id: ID,
+        once_key: '1587:2933991087',
+        run_id: 'run-1',
+        at: 5,
+        status: 'started',
+        failed_at: null
+      },
+      {
+        automation_id: ID,
+        once_key: '1590:2934000001',
+        run_id: null,
+        at: 1_000,
+        status: 'started',
+        failed_at: null
+      }
     ])
   })
 
   it.each([
     {
       name: 'the database is at another schema version',
-      arrange: (p: Paths) => withDb(p.dbFile, 'PRAGMA user_version = 2'),
-      reason: 'the database is at schema 2'
+      arrange: (p: Paths) => withDb(p.dbFile, 'PRAGMA user_version = 3'),
+      reason: 'the database is at schema 3'
     },
     {
       name: "Pilot's migrations moved past the script",
       arrange: (p: Paths) => {
         p.migrationsFile = join(p.dir, 'migrations.ts')
-        writeFileSync(p.migrationsFile, 'export const PILOT_SCHEMA_VERSION = 2\n')
+        writeFileSync(p.migrationsFile, 'export const PILOT_SCHEMA_VERSION = 3\n')
       },
-      reason: "Pilot's migrations are at schema 2"
+      reason: "Pilot's migrations are at schema 3"
     },
     {
       name: 'handled has other columns',
