@@ -7,8 +7,8 @@ Pilot is Nish's fork of Orca (`github.com/nsitapara/orca`), with Automations reb
 - **Dev:** `node src/packages/pilot/scripts/dev.mjs` runs `pnpm dev` with a separate `pilot-dev` data folder.
 - **Build for macOS:** `node src/packages/pilot/scripts/build-mac.mjs`.
   - Swift 6.4 (Xcode 27) workaround: the Swift helper steps run with `scripts/shims/swift` first on PATH, which adds `--build-system native` to `swift build` because Orca's helper scripts expect the `.build/<triple>/release` layout. Drop the shim once upstream's scripts handle the swiftbuild layout, or when `native` is removed from SwiftPM.
-  - Data folder: the packaged app uses `~/Library/Application Support/Pilot` (from productName), and `bin/pilot` points at that exact path. It is separate from Orca's `orca` folder.
-- **Launchers:** `bin/orca` inside Pilot launches Pilot's binary but, without `ORCA_USER_DATA_PATH`, talks to whichever app's data the environment points at. Use `pilot` for Pilot.
+  - Data folder: the packaged app uses `~/Library/Application Support/Pilot` (from productName), and both launchers point at that exact path. It is separate from Orca's `orca` folder.
+- **Launchers:** Pilot ships two identical launchers, `bin/orca` and `bin/pilot`. Both export Pilot's data folder (`ORCA_USER_DATA_PATH`) and CLI install path (`ORCA_CLI_INSTALL_PATH=/usr/local/bin/pilot`), so neither acts on real Orca, even when run from an Orca terminal.
 - **Tests:** `pnpm exec vitest run --config config/vitest.config.ts src/packages/pilot`
 
 ## Import your Orca settings
@@ -119,7 +119,7 @@ These need a phone, a second Mac and an iPad on Tailscale. Open Pilot (`dist/mac
 - Computer Use is unavailable in packaged Pilot. Enabling it needs a Pilot bundle id for the helper plus a trust-list entry in its Swift peer check.
 - After closing the right sidebar while on the Automations tab, Orca's main-side persistence allowlist resets the stored tab to Explorer (the UI hydrates it back via `hydratePersistedUI`), so reopening or restarting lands on Explorer, not Automations.
 - After a restart (or closing and reopening the right sidebar) the sidebar tab comes back as Explorer, because main's persistence allowlist drops `plugin:pilot`. The existing sidebar-tab note above covers the same cause.
-- "Install CLI" installs `/usr/local/bin/pilot`, not `orca`. Checked in code, not clicked: `applyPilotEnvDefaults` (`src/main/env.ts`) sets `ORCA_CLI_INSTALL_PATH` to `/usr/local/bin/pilot`, and `cli-install-location.ts` uses that override ahead of its own `orca` default.
+- "Install CLI" links `/usr/local/bin/pilot` (never `orca`) to Pilot's `Contents/Resources/bin/orca`: upstream's `bundled-cli-launcher-path.ts` always installs the `bin/orca` launcher, and `applyPilotEnvDefaults` (`src/packages/pilot/src/main/env.ts`) sets `ORCA_CLI_INSTALL_PATH` to `/usr/local/bin/pilot`, which `cli-install-location.ts` uses ahead of its own `orca` default. That launcher pins Pilot's data folder and install path, so the installed `pilot` command and `pilot serve` (which re-installs the CLI on start) act on Pilot, never on real Orca. Checked in code and by `build/bin/launchers.test.ts`, not clicked.
 - Packaged builds are unsigned (`CSC_IDENTITY_AUTO_DISCOVERY=false`, `--dir` output). macOS may ask you to allow the app on first launch.
 - Upstream orcad keeps its own data in `~/.orca` (or `$XDG_DATA_HOME/Orca`) unless `ORCA_USER_DATA` is set, so Pilot's orcad started without it shares real Orca's headless folder. Set `ORCA_USER_DATA` when running Pilot's orcad (Task 9 does). Pilot's own store never goes there: it uses `ORCA_USER_DATA` when set, else `~/.pilot/orcad/`.
 
