@@ -62,15 +62,11 @@ function countVerdicts(decisions: ItemDecision[]): Partial<Record<Verdict, numbe
 const ACTED_ON_WHERE = new Set(['state', 'author', 'head_pipeline'])
 
 // Keys a later task implements (Task 2b ruling): until then a file using one fails the tick instead
-// of running wider. start: ask_first → Task 25; other workspaces → Task 8; more MR where → Task 14c.
+// of running wider. start: ask_first → Task 25; more MR where → Task 14c. Every workspace launches
+// (Task 8d).
 function unactedKey(def: AutomationDefinition): string | null {
   if (def.start === 'ask_first') {
     return "start: ask_first isn't supported yet"
-  }
-  // A run-once automation's own workspace is the main checkout (its item is the repo).
-  const own = def.items === null ? 'main_checkout' : 'item_worktree'
-  if (def.workspace.kind !== own) {
-    return `workspace: ${def.workspace.kind} isn't supported yet`
   }
   const clause = Object.keys(def.items?.where ?? {}).find((k) => !ACTED_ON_WHERE.has(k))
   if (clause) {
@@ -89,7 +85,7 @@ type Unlaunched = { runId: string; onceKey: string }
 
 // Where the run is recorded: the item's worktree, or the repo's main checkout for main_checkout
 // (recorded, though G2 keeps it out of the one-agent-per-worktree rule); null for a new worktree,
-// which Task 8d records once it exists.
+// which the launcher's claim records on this run once it exists (run/workspace.ts).
 function recordedWorktree(
   def: AutomationDefinition,
   fields: ItemDecision['fields']
