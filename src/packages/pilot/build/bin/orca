@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# Pilot: always act on Pilot's data folder and install as `pilot`, never on real Orca's. "Install CLI"
+# links /usr/local/bin/pilot to this launcher, and `pilot serve` re-installs the CLI on start.
+export ORCA_USER_DATA_PATH="$HOME/Library/Application Support/Pilot"
+export ORCA_CLI_INSTALL_PATH=/usr/local/bin/pilot
 set -euo pipefail
 
 function app_realpath() {
