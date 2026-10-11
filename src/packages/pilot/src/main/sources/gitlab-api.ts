@@ -9,7 +9,7 @@ import { encodedProject } from '../../../../../main/gitlab/project-path-encoding
 
 export type GlabApi = { projectPath: string; get<T>(path: string): Promise<T> }
 
-// One glab-backed REST client per repo, reusing Orca's host resolution and its concurrency gate.
+// One glab-backed REST client per repo, reusing Orca's host resolution and glab runner.
 export async function glabApiForRepo(repoPath: string): Promise<GlabApi> {
   const ref = await getProjectRef(repoPath, await getGlabKnownHosts())
   if (!ref) {
