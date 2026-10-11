@@ -17,6 +17,7 @@ const VITEST = ['exec', 'vitest', 'run', '--config', 'config/vitest.config.ts']
 // no tests: the typecheck and the build cover them.
 export const R10_FOLDERS = [
   'src/cli/specs',
+  'src/main/linear',
   'src/main/orcad',
   'src/main/startup',
   'src/main/updater',
