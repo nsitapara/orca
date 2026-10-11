@@ -75,4 +75,17 @@ describe('attachPilotMain', () => {
     expect(error).toHaveBeenCalledWith("[pilot] couldn't start: file is not a database")
     expect(m.onWillQuit).not.toHaveBeenCalled()
   })
+
+  // Serve mode installs the CLI after this hook: it must install `pilot` even when Pilot failed.
+  it('sets the env defaults before starting, even when the start throws', () => {
+    vi.stubEnv('ORCA_CLI_INSTALL_PATH', undefined)
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    m.start.mockImplementation(() => {
+      expect(process.env.ORCA_CLI_INSTALL_PATH).toBe('/usr/local/bin/pilot')
+      throw new Error('boom')
+    })
+    attachPilotMain(runtime)
+    expect(m.start).toHaveBeenCalledTimes(1)
+    expect(process.env.ORCA_CLI_INSTALL_PATH).toBe('/usr/local/bin/pilot')
+  })
 })

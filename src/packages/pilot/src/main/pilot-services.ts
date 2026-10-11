@@ -6,7 +6,7 @@ import { getAppEnvironment } from '../../../../shared/app-environment'
 import type { PilotStatus } from '../shared/api-types'
 import { liveDefinitions } from './definitions/live'
 import type { LoadedDefinitions } from './definitions/loader'
-import { applyPilotEnvDefaults, pilotAutomationDirs, pilotDataDir } from './env'
+import { pilotAutomationDirs, pilotDataDir } from './env'
 import { cachedQuota, type QuotaReader } from './fields/quota'
 import { resolveRepoPath, runtimeFactDeps } from './fields/runtime-facts'
 import { claudeTranscriptCost } from './run/cost'
@@ -121,7 +121,6 @@ export function startPilotServices(
   processKind: PilotStatus['process'],
   options: PilotServiceOptions = {}
 ): PilotServices {
-  applyPilotEnvDefaults()
   const host: PilotHost = {
     processKind,
     dirs: pilotAutomationDirs(),

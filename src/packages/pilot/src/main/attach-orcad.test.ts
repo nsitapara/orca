@@ -48,6 +48,19 @@ describe('attachPilotOrcad', () => {
     error.mockRestore()
   })
 
+  it('sets the env defaults before starting, even when the start throws', () => {
+    vi.stubEnv('ORCA_CLI_INSTALL_PATH', undefined)
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {})
+    services.start.mockImplementation(() => {
+      expect(process.env.ORCA_CLI_INSTALL_PATH).toBe('/usr/local/bin/pilot')
+      throw new Error('boom')
+    })
+    attachPilotOrcad(runtime, () => {})
+    expect(services.start).toHaveBeenCalledTimes(1)
+    expect(process.env.ORCA_CLI_INSTALL_PATH).toBe('/usr/local/bin/pilot')
+    error.mockRestore()
+  })
+
   it('only attach-main imports the Claude quota reader, so orcad never loads it (R3)', () => {
     const root = join(import.meta.dirname, '..')
     const importers = readdirSync(root, { recursive: true, encoding: 'utf8' })
