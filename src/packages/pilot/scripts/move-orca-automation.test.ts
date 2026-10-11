@@ -1,10 +1,21 @@
+import { existsSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { homedir, tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 // @ts-expect-error -- .mjs script without type declarations
 import { moveAutomation, parseArgs, runCli } from './move-orca-automation.mjs'
 // @ts-expect-error -- .mjs script without type declarations
 import { mapAutomation } from './move-orca-automation-map.mjs'
+// @ts-expect-error -- .mjs script without type declarations
+import { readRecords, writeRecord } from './move-orca-automation-record.mjs'
 
-type Auto = Record<string, unknown>
+type Auto = {
+  [key: string]: unknown
+  id?: string
+  enabled?: boolean
+  prompt?: string
+  runContext?: Record<string, unknown>
+}
 type Result = { code: number; stdout: string; stderr: string }
 
 const REPO = '/repos/web-platform'
@@ -18,7 +29,9 @@ function orcaAutomation(overrides: Auto = {}): Auto {
     agentId: 'claude',
     runContext: {
       kind: 'workspace-run',
+      projectId: 'git:example/web-platform',
       hostId: 'local',
+      projectHostSetupId: 'r1',
       repoId: 'r1',
       path: REPO
     },
@@ -52,45 +65,54 @@ const ok = (result: unknown): Result => ({
 })
 const failed: Result = { code: 1, stdout: '', stderr: 'boom' }
 
-type Fakes = {
-  calls: string[]
-  orca: (args: string[]) => Result
-  pilot: (args: string[]) => Result
-  orcaEnabled: () => boolean
-  pilotList: Auto[]
+type FakeOpts = {
+  repos?: string[]
+  // Calls to break: 'pilot create', 'pilot mismatch', 'pilot enable', 'pilot remove', 'orca disable'.
+  fail?: string[]
+  // Existing Pilot automations (a half-done move leaves one).
+  pilotList?: Auto[]
+  // 'orca edit' reports success but changes nothing.
+  orcaEditNoEffect?: boolean
+  // After the first successful Orca edit, this many `orca show` calls fail.
+  orcaReadFailures?: number
+  copyOverrides?: Auto
 }
 
-// Both CLIs as in-memory fakes. `fail` names calls ("pilot enable", "orca disable", ...) to break.
-function fakes(
-  source: Auto,
-  opts: { repos?: string[]; fail?: string[]; pilotList?: Auto[] } = {}
-): Fakes {
+// Both CLIs as in-memory fakes that share state, so a retry sees what the first run left.
+function fakes(source: Auto, opts: FakeOpts = {}) {
   const calls: string[] = []
-  let orcaEnabled = source.enabled as boolean
-  let copy: Auto | null = null
+  const state = { orcaEnabled: source.enabled as boolean, edited: false, readFailures: 0 }
+  const pilotAutos: Auto[] = opts.pilotList ? [...opts.pilotList] : []
   const fail = opts.fail ?? []
-  const repos = (opts.repos ?? [REPO]).map((path) => ({
-    path,
-    displayName: path.split('/').pop()
-  }))
+  const repos = (opts.repos ?? [REPO]).map((path) => ({ path, displayName: path.split('/').pop() }))
   const orca = (args: string[]): Result => {
     const verb = args[1]
-    calls.push(`orca ${verb}${args.includes('--disabled') ? ' --disabled' : ''}`)
     if (verb === 'show') {
-      return args.includes('missing')
-        ? { code: 1, stdout: '', stderr: 'Automation not found' }
-        : ok({ automation: { ...source, enabled: orcaEnabled } })
+      calls.push('orca show')
+      if (args.includes('missing')) {
+        return { code: 1, stdout: '', stderr: 'Automation not found' }
+      }
+      if (state.edited && state.readFailures > 0) {
+        state.readFailures -= 1
+        return failed
+      }
+      return ok({ automation: { ...source, enabled: state.orcaEnabled } })
     }
     if (verb === 'edit') {
+      calls.push(args.includes('--disabled') ? 'orca disable' : 'orca enable')
       if (fail.includes('orca disable')) {
         return failed
       }
-      orcaEnabled = false
+      if (!opts.orcaEditNoEffect) {
+        state.orcaEnabled = !args.includes('--disabled')
+      }
+      state.edited = true
+      state.readFailures = opts.orcaReadFailures ?? 0
       return ok({ automation: source })
     }
     throw new Error(`unexpected orca ${args.join(' ')}`)
   }
-  const pilotList = opts.pilotList ?? []
+  const byId = (args: string[]) => pilotAutos.find((auto) => auto.id === args[3])
   const pilot = (args: string[]): Result => {
     const key = args.slice(0, 2).join(' ')
     if (key === 'repo list') {
@@ -100,47 +122,57 @@ function fakes(
       return ok({ worktrees: [{ path: REPO }] })
     }
     if (key === 'automations list') {
-      return ok({ automations: pilotList })
+      return ok({ automations: pilotAutos })
     }
     if (key === 'automations create') {
       calls.push('pilot create')
       if (fail.includes('pilot create')) {
         return failed
       }
-      copy = {
+      const copy = {
         ...source,
         id: 'pilot-1',
-        enabled: !args.includes('--disabled')
+        enabled: !args.includes('--disabled'),
+        ...opts.copyOverrides
       }
       if (fail.includes('pilot mismatch')) {
         copy.prompt = 'changed'
       }
+      pilotAutos.push(copy)
       return ok({ automation: copy })
     }
     if (key === 'automations show') {
       calls.push('pilot show')
-      return ok({ automation: copy })
+      return ok({ automation: byId(args) })
     }
     if (key === 'automations edit') {
       calls.push('pilot enable')
       if (fail.includes('pilot enable')) {
         return failed
       }
-      copy = { ...copy, enabled: true }
-      return ok({ automation: copy })
+      byId(args)!.enabled = true
+      return ok({ automation: byId(args) })
     }
     if (key === 'automations remove') {
       calls.push('pilot remove')
-      copy = null
+      if (fail.includes('pilot remove')) {
+        return failed
+      }
+      pilotAutos.splice(pilotAutos.indexOf(byId(args)!), 1)
       return ok({ removed: true })
     }
     throw new Error(`unexpected pilot ${args.join(' ')}`)
   }
-  return { calls, orca, pilot, orcaEnabled: () => orcaEnabled, pilotList }
+  return { calls, orca, pilot, state, pilotAutos }
 }
 
-function move(f: Fakes, extra: Auto = {}) {
+function tempRecordFile(): string {
+  return join(mkdtempSync(join(tmpdir(), 'pilot-move-')), 'moved-automations.json')
+}
+
+function move(f: ReturnType<typeof fakes>, extra: Auto = {}) {
   const lines: string[] = []
+  const recordFile = extra.recordFile ?? tempRecordFile()
   const outcome = moveAutomation({
     id: 'orca-1',
     apply: false,
@@ -148,11 +180,15 @@ function move(f: Fakes, extra: Auto = {}) {
     orca: f.orca,
     pilot: f.pilot,
     pilotBin: 'pilot',
+    recordFile,
+    now: () => new Date('2026-10-10T12:00:00Z'),
     log: (line: string) => lines.push(line),
     ...extra
   })
-  return { outcome, text: lines.join('\n') }
+  return { outcome, text: lines.join('\n'), recordFile }
 }
+
+const APPLY = { apply: true, disableInOrca: true }
 
 describe('mapAutomation', () => {
   it('maps every create flag from an existing-workspace automation, created disabled', () => {
@@ -199,12 +235,33 @@ describe('mapAutomation', () => {
   })
 })
 
-describe('moveAutomation', () => {
+describe('missedRunGraceMinutes of 0 or null', () => {
+  it.each([0, null])(
+    'omits the flag, says so in the plan, and skips verifying it (%s)',
+    (grace) => {
+      const source = orcaAutomation({ missedRunGraceMinutes: grace })
+      const f = fakes(source, { copyOverrides: { missedRunGraceMinutes: 720 } })
+      const dry = move(f)
+      expect(dry.outcome.mapping.args.some((a: string) => a.includes('grace'))).toBe(false)
+      expect(dry.text).toContain("Pilot's default (720) applies")
+      expect(dry.text).toContain('does not check this field')
+      expect(move(f, APPLY).outcome.status).toBe('applied')
+    }
+  )
+
+  it('still verifies a positive source value', () => {
+    const f = fakes(orcaAutomation(), { copyOverrides: { missedRunGraceMinutes: 60 } })
+    const { outcome, text } = move(f, APPLY)
+    expect(outcome.status).toBe('failed')
+    expect(text).toContain('missedRunGraceMinutes: expected 720')
+  })
+})
+
+describe('moveAutomation preflight', () => {
   it('refuses, changing nothing, when the target repo is missing from Pilot', () => {
     const f = fakes(orcaAutomation(), { repos: ['/repos/other'] })
     const { outcome, text } = move(f, { apply: true })
     expect(outcome.status).toBe('refused')
-    expect(outcome.exitCode).toBe(1)
     expect(text).toContain("isn't in Pilot")
     expect(f.calls).toEqual(['orca show'])
   })
@@ -215,119 +272,283 @@ describe('moveAutomation', () => {
     expect(refused.outcome.status).toBe('refused')
     expect(refused.text).toContain('--allow-drop mystery')
     expect(refused.text).toContain('--allow-drop missedRunPolicy')
-
-    const partly = move(fakes(source), { allowDrop: ['mystery'] })
-    expect(partly.outcome.status).toBe('refused')
-
-    const allowed = move(fakes(source), {
-      allowDrop: ['mystery', 'missedRunPolicy']
-    })
+    expect(move(fakes(source), { allowDrop: ['mystery'] }).outcome.status).toBe('refused')
+    const allowed = move(fakes(source), { allowDrop: ['mystery', 'missedRunPolicy'] })
     expect(allowed.outcome.status).toBe('dry-run')
     expect(allowed.text).toContain('Fields dropped (allowed): mystery, missedRunPolicy')
   })
 
-  it('reports an existing Pilot automation with the same name and target and creates nothing', () => {
-    const f = fakes(orcaAutomation(), {
-      pilotList: [orcaAutomation({ id: 'pilot-9', enabled: false })]
-    })
-    const { outcome, text } = move(f, { apply: true, disableInOrca: true })
-    expect(outcome).toMatchObject({
-      status: 'exists',
-      exitCode: 0,
-      pilotId: 'pilot-9'
-    })
-    expect(text).toContain('already has')
-    expect(f.calls).toEqual(['orca show'])
-  })
-
-  it('does not treat the same name on another target as a duplicate', () => {
-    const other = orcaAutomation({
-      id: 'pilot-9',
-      workspaceId: 'r1::/repos/web-platform-wt'
-    })
-    const { outcome } = move(fakes(orcaAutomation(), { pilotList: [other] }))
-    expect(outcome.status).toBe('dry-run')
-  })
-
-  it('a dry run prints the plan and changes nothing, even with --disable-in-orca', () => {
+  it('a dry run prints the plan and changes nothing, not even the record', () => {
     const f = fakes(orcaAutomation())
-    const { outcome, text } = move(f, { disableInOrca: true })
+    const { outcome, text, recordFile } = move(f, { disableInOrca: true })
     expect(outcome.status).toBe('dry-run')
-    expect(text).toContain('pilot automations create')
     expect(text).toContain('then disable it in Orca, then enable it in Pilot')
     expect(f.calls).toEqual(['orca show'])
-    expect(f.orcaEnabled()).toBe(true)
+    expect(f.state.orcaEnabled).toBe(true)
+    expect(existsSync(recordFile)).toBe(false)
   })
+})
 
-  it('applies in order: create disabled, verify, disable in Orca, enable in Pilot', () => {
+describe('apply', () => {
+  it('applies in order: create disabled, verify, disable in Orca, enable in Pilot, and records it', () => {
     const f = fakes(orcaAutomation())
-    const { outcome } = move(f, { apply: true, disableInOrca: true })
+    const { outcome, recordFile } = move(f, APPLY)
     expect(outcome.status).toBe('applied')
     expect(f.calls).toEqual([
       'orca show',
       'pilot create',
       'pilot show',
-      'orca edit --disabled',
+      'orca disable',
       'orca show',
       'pilot enable',
       'pilot show'
     ])
-    expect(f.orcaEnabled()).toBe(false)
+    expect(f.state.orcaEnabled).toBe(false)
+    expect(readRecords(recordFile)['orca-1']).toEqual({
+      pilotId: 'pilot-1',
+      name: '05 · Fix CI',
+      movedAt: '2026-10-10T12:00:00.000Z',
+      orcaWasEnabled: true,
+      state: 'switched'
+    })
+    expect(readdirSync(join(recordFile, '..'))).toEqual(['moved-automations.json'])
   })
 
   it('without --disable-in-orca leaves Orca alone and Pilot disabled, printing the two commands', () => {
     const f = fakes(orcaAutomation())
-    const { outcome, text } = move(f, { apply: true })
-    expect(outcome.state).toMatchObject({
-      pilotId: 'pilot-1',
-      pilotEnabled: false,
-      orcaDisabled: false
-    })
+    const { outcome, text, recordFile } = move(f, { apply: true })
+    expect(outcome.state).toMatchObject({ pilotId: 'pilot-1', pilotEnabled: false })
     expect(f.calls).toEqual(['orca show', 'pilot create', 'pilot show'])
     expect(text).toContain('orca automations edit --id orca-1 --disabled')
     expect(text).toContain('pilot automations edit --id pilot-1 --enabled')
+    expect(readRecords(recordFile)['orca-1'].state).toBe('created-disabled')
   })
 
-  it('removes its own Pilot copy when verification fails, touching nothing in Orca', () => {
-    const f = fakes(orcaAutomation(), { fail: ['pilot mismatch'] })
-    const { outcome, text } = move(f, { apply: true, disableInOrca: true })
-    expect(outcome.status).toBe('failed')
-    expect(f.calls).toEqual(['orca show', 'pilot create', 'pilot show', 'pilot remove'])
-    expect(text).toContain('prompt: expected')
-    expect(text).toContain('Pilot: nothing created by this run')
-    expect(f.orcaEnabled()).toBe(true)
-  })
-
-  it('removes the Pilot copy when disabling Orca fails, and reports Orca unchanged', () => {
-    const f = fakes(orcaAutomation(), { fail: ['orca disable'] })
-    const { outcome, text } = move(f, { apply: true, disableInOrca: true })
-    expect(outcome.status).toBe('failed')
-    expect(f.calls.at(-1)).toBe('pilot remove')
-    expect(text).toContain('Orca: unchanged by this run')
-  })
-
-  it('keeps the Pilot copy and says so when enabling it fails after Orca was disabled', () => {
-    const f = fakes(orcaAutomation(), { fail: ['pilot enable'] })
-    const { outcome, text } = move(f, { apply: true, disableInOrca: true })
-    expect(outcome.status).toBe('failed')
-    expect(f.calls).not.toContain('pilot remove')
-    expect(text).toContain('Pilot: automation pilot-1 exists, disabled')
-    expect(text).toContain('Orca: disabled by this run')
-    expect(text).toContain('runs nowhere')
+  it('leaves Pilot disabled when Orca already had the automation disabled', () => {
+    const f = fakes(orcaAutomation({ enabled: false }))
+    const { outcome } = move(f, APPLY)
+    expect(outcome.status).toBe('applied')
+    expect(f.calls).toEqual(['orca show', 'pilot create', 'pilot show'])
   })
 
   it('reports a failed create as nothing created', () => {
     const f = fakes(orcaAutomation(), { fail: ['pilot create'] })
-    const { outcome, text } = move(f, { apply: true })
+    const { outcome, text } = move(f, APPLY)
     expect(outcome.status).toBe('failed')
     expect(text).toContain('Pilot: nothing created by this run')
   })
 
-  it('leaves Pilot disabled when Orca already has the automation disabled', () => {
-    const f = fakes(orcaAutomation({ enabled: false }))
-    const { outcome } = move(f, { apply: true, disableInOrca: true })
+  it.each([
+    ['executionTargetId', { executionTargetId: 'ssh-1' }],
+    [
+      'runContext.projectId',
+      { runContext: { ...orcaAutomation().runContext, projectId: 'other' } }
+    ],
+    ['runContext.hostId', { runContext: { ...orcaAutomation().runContext, hostId: 'h2' } }],
+    [
+      'runContext.projectHostSetupId',
+      { runContext: { ...orcaAutomation().runContext, projectHostSetupId: 'zzz' } }
+    ]
+  ])('fails verification when the copy differs in %s', (field, copyOverrides) => {
+    const f = fakes(orcaAutomation(), { copyOverrides })
+    const { outcome, text } = move(f, APPLY)
+    expect(outcome.status).toBe('failed')
+    expect(text).toContain(`${field}: expected`)
+    expect(f.calls).toContain('pilot remove')
+    expect(f.state.orcaEnabled).toBe(true)
+  })
+})
+
+describe('apply failures', () => {
+  it('removes its own Pilot copy when verification fails, touching nothing in Orca', () => {
+    const f = fakes(orcaAutomation(), { fail: ['pilot mismatch'] })
+    const { outcome, text, recordFile } = move(f, APPLY)
+    expect(outcome.status).toBe('failed')
+    expect(f.calls).toEqual(['orca show', 'pilot create', 'pilot show', 'pilot remove'])
+    expect(text).toContain('Pilot: nothing created by this run')
+    expect(text).toContain('Orca: enabled (verified by read-back)')
+    expect(readRecords(recordFile)).toEqual({})
+  })
+
+  it('reports the copy as still there when the undo remove itself fails', () => {
+    const f = fakes(orcaAutomation(), { fail: ['pilot mismatch', 'pilot remove'] })
+    const { outcome, text, recordFile } = move(f, APPLY)
+    expect(outcome.status).toBe('failed')
+    expect(text).toContain('Could not remove Pilot automation pilot-1 (still there, disabled)')
+    expect(text).toContain('Pilot: automation pilot-1 exists, disabled')
+    expect(text).not.toContain('Pilot: nothing created')
+    expect(readRecords(recordFile)['orca-1'].pilotId).toBe('pilot-1')
+  })
+
+  it('removes the Pilot copy when Orca verifiably stays enabled after a failed disable', () => {
+    const f = fakes(orcaAutomation(), { fail: ['orca disable'] })
+    const { outcome, text } = move(f, APPLY)
+    expect(outcome.status).toBe('failed')
+    expect(f.calls.at(-1)).toBe('pilot remove')
+    expect(text).toContain('Orca: enabled (verified by read-back)')
+  })
+
+  it('never enables Pilot when Orca still shows enabled after a "successful" edit', () => {
+    const f = fakes(orcaAutomation(), { orcaEditNoEffect: true })
+    const { outcome } = move(f, APPLY)
+    expect(outcome.status).toBe('failed')
+    expect(f.calls).not.toContain('pilot enable')
+  })
+
+  it('keeps the Pilot copy and says so when enabling it fails after Orca was disabled', () => {
+    const f = fakes(orcaAutomation(), { fail: ['pilot enable'] })
+    const { outcome, text } = move(f, APPLY)
+    expect(outcome.status).toBe('failed')
+    expect(f.calls).not.toContain('pilot remove')
+    expect(text).toContain('Orca: disabled (verified by read-back), disabled by this run')
+    expect(text).toContain('runs nowhere')
+  })
+})
+
+describe('an Orca edit that succeeds but cannot be read back', () => {
+  it('retries the read and carries on when a later read works', () => {
+    const f = fakes(orcaAutomation(), { orcaReadFailures: 2 })
+    const { outcome } = move(f, APPLY)
     expect(outcome.status).toBe('applied')
-    expect(f.calls).toEqual(['orca show', 'pilot create', 'pilot show'])
+    expect(f.calls.filter((call) => call === 'orca show')).toHaveLength(4)
+  })
+
+  it('reports Orca state unknown, keeps the disabled Pilot copy, and prints the commands', () => {
+    const f = fakes(orcaAutomation(), { orcaReadFailures: 9 })
+    const { outcome, text, recordFile } = move(f, APPLY)
+    expect(outcome.status).toBe('failed')
+    expect(f.calls.filter((call) => call === 'orca show')).toHaveLength(4)
+    expect(f.calls).not.toContain('pilot remove')
+    expect(f.calls).not.toContain('pilot enable')
+    expect(f.pilotAutos[0].enabled).toBe(false)
+    expect(text).toContain('Orca state unknown')
+    expect(text).toContain('orca automations show --id orca-1 --json')
+    expect(text).toContain('pilot automations edit --id pilot-1 --enabled')
+    expect(text).toContain('Orca: UNKNOWN')
+    expect(text).not.toContain('unchanged')
+    expect(readRecords(recordFile)['orca-1'].state).toBe('orca-state-unknown')
+  })
+})
+
+describe('finding the Pilot copy', () => {
+  const copy = (overrides: Auto = {}) =>
+    orcaAutomation({ id: 'pilot-1', enabled: false, ...overrides })
+
+  it('finds it by the record after either side was renamed', () => {
+    const recordFile = tempRecordFile()
+    writeRecord(recordFile, 'orca-1', { pilotId: 'pilot-1', name: 'old', state: 'switched' })
+    const f = fakes(orcaAutomation({ name: 'renamed in Orca', enabled: false }), {
+      pilotList: [copy({ name: 'renamed in Pilot', enabled: true })]
+    })
+    const { outcome, text } = move(f, { ...APPLY, recordFile })
+    expect(outcome).toMatchObject({ status: 'exists', pilotId: 'pilot-1' })
+    expect(text).toContain('found by record')
+    expect(text).toContain('Already switched')
+    expect(f.calls).toEqual(['orca show'])
+  })
+
+  it('falls back to name plus target, and does not match the same name on another target', () => {
+    const same = move(fakes(orcaAutomation(), { pilotList: [copy()] }))
+    expect(same.outcome).toMatchObject({ status: 'exists', pilotId: 'pilot-1' })
+    expect(same.text).toContain('found by name and target')
+    const other = copy({ workspaceId: 'r1::/repos/web-platform-wt' })
+    expect(move(fakes(orcaAutomation(), { pilotList: [other] })).outcome.status).toBe('dry-run')
+  })
+
+  it('ignores a record whose Pilot copy is gone and creates a new one', () => {
+    const recordFile = tempRecordFile()
+    writeRecord(recordFile, 'orca-1', { pilotId: 'gone', name: 'x', state: 'switched' })
+    const f = fakes(orcaAutomation())
+    expect(move(f, { apply: true, recordFile }).outcome.status).toBe('applied')
+    expect(readRecords(recordFile)['orca-1'].pilotId).toBe('pilot-1')
+  })
+
+  it('a dry run on an existing copy reports both states and changes nothing', () => {
+    const f = fakes(orcaAutomation(), { pilotList: [copy()] })
+    const { outcome, text } = move(f)
+    expect(outcome.status).toBe('exists')
+    expect(text).toContain('Pilot disabled, Orca ENABLED')
+    expect(f.calls).toEqual(['orca show'])
+  })
+})
+
+describe('resuming a half-done switch', () => {
+  const copy = (enabled: boolean) => orcaAutomation({ id: 'pilot-1', enabled })
+
+  it('Orca enabled, Pilot disabled: disables Orca (verified), then enables Pilot', () => {
+    const f = fakes(orcaAutomation(), { pilotList: [copy(false)] })
+    const { outcome } = move(f, APPLY)
+    expect(outcome.status).toBe('resumed')
+    expect(f.calls).toEqual([
+      'orca show',
+      'orca disable',
+      'orca show',
+      'pilot enable',
+      'pilot show'
+    ])
+  })
+
+  it('Orca disabled, Pilot disabled: enables Pilot only', () => {
+    const f = fakes(orcaAutomation({ enabled: false }), { pilotList: [copy(false)] })
+    const { outcome } = move(f, APPLY)
+    expect(outcome.status).toBe('resumed')
+    expect(f.calls).toEqual(['orca show', 'pilot enable', 'pilot show'])
+  })
+
+  it('both done: nothing to do', () => {
+    const f = fakes(orcaAutomation({ enabled: false }), { pilotList: [copy(true)] })
+    const { outcome, text } = move(f, APPLY)
+    expect(outcome.status).toBe('exists')
+    expect(text).toContain('Nothing to do')
+    expect(f.calls).toEqual(['orca show'])
+  })
+
+  it('both enabled: warns and disables Orca, leaving Pilot on', () => {
+    const f = fakes(orcaAutomation(), { pilotList: [copy(true)] })
+    const { text } = move(f, APPLY)
+    expect(text).toContain('both are enabled')
+    expect(f.calls).toEqual(['orca show', 'orca disable', 'orca show'])
+  })
+
+  it('never enables Pilot while Orca is enabled, and keeps the copy it did not create', () => {
+    const f = fakes(orcaAutomation(), { pilotList: [copy(false)], orcaEditNoEffect: true })
+    const { outcome } = move(f, APPLY)
+    expect(outcome.status).toBe('failed')
+    expect(f.calls).not.toContain('pilot enable')
+    expect(f.calls).not.toContain('pilot remove')
+  })
+
+  it('does not enable Pilot when the record says Orca was disabled before the move', () => {
+    const recordFile = tempRecordFile()
+    writeRecord(recordFile, 'orca-1', { pilotId: 'pilot-1', orcaWasEnabled: false })
+    const f = fakes(orcaAutomation({ enabled: false }), { pilotList: [copy(false)] })
+    move(f, { ...APPLY, recordFile })
+    expect(f.calls).toEqual(['orca show'])
+  })
+
+  it('without --disable-in-orca a retry changes nothing', () => {
+    const f = fakes(orcaAutomation(), { pilotList: [copy(false)] })
+    expect(move(f, { apply: true }).outcome.status).toBe('exists')
+    expect(f.calls).toEqual(['orca show'])
+  })
+})
+
+describe('the move record', () => {
+  it('is written atomically as JSON in the injected folder', () => {
+    const file = tempRecordFile()
+    writeRecord(file, 'a', { pilotId: 'p', name: 'n', movedAt: 't', state: 's' })
+    writeRecord(file, 'b', { pilotId: 'q', name: 'm', movedAt: 't', state: 's' })
+    expect(Object.keys(JSON.parse(readFileSync(file, 'utf8')))).toEqual(['a', 'b'])
+    expect(readdirSync(join(file, '..'))).toEqual(['moved-automations.json'])
+  })
+
+  it('refuses a corrupt file rather than overwriting it, and Orca folders outright', () => {
+    const file = tempRecordFile()
+    writeFileSync(file, '{nope')
+    expect(() => writeRecord(file, 'a', {})).toThrow("isn't a valid move record")
+    expect(readFileSync(file, 'utf8')).toBe('{nope')
+    const inOrca = join(homedir(), 'Library', 'Application Support', 'orca', 'x.json')
+    expect(() => writeRecord(inOrca, 'a', {})).toThrow("Orca's data folder")
   })
 })
 
@@ -336,13 +557,10 @@ describe('runCli', () => {
     const f = fakes(orcaAutomation())
     const out: string[] = []
     const code = runCli(
-      ['--id', 'missing'],
+      ['--id', 'missing', '--record-file', tempRecordFile()],
       (line: string) => out.push(line),
       () => {},
-      {
-        orca: f.orca,
-        pilot: f.pilot
-      }
+      { orca: f.orca, pilot: f.pilot }
     )
     expect(code).toBe(1)
     expect(out.join('\n')).toContain('not found in Orca')

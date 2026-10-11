@@ -48,6 +48,13 @@ function workspacePath(workspaceId) {
 }
 
 // The path the automation acts on: its worktree when it runs in an existing one, else its repo.
+export const PILOT_DEFAULT_GRACE_MINUTES = 720
+
+// The create flag only takes a positive integer, so a source of 0, null or absent can't be passed.
+export function graceIsOmitted(grace) {
+  return grace === undefined || grace === null || grace === 0
+}
+
 export function targetPath(automation) {
   if (automation.workspaceMode === 'existing' && typeof automation.workspaceId === 'string') {
     return workspacePath(automation.workspaceId)
@@ -77,8 +84,9 @@ export function unmappableFields(automation) {
   if (automation.missedRunPolicy !== 'run_once_within_grace') {
     blocked.missedRunPolicy = `policy ${automation.missedRunPolicy}; create only sets the grace window`
   }
+  // 0, null and absent can't be passed (create takes positive integers only); see graceIsOmitted.
   const grace = automation.missedRunGraceMinutes
-  if (grace !== undefined && grace !== null && !(Number.isInteger(grace) && grace > 0)) {
+  if (!graceIsOmitted(grace) && !(Number.isInteger(grace) && grace > 0)) {
     blocked.missedRunGraceMinutes = `${grace} isn't a positive integer`
   }
   const extra = Object.keys(automation.precheck ?? {}).filter(
@@ -101,6 +109,7 @@ export function mapAutomation(automation) {
     `--provider=${automation.agentId}`,
     `--timezone=${automation.timezone}`
   ]
+  const notes = []
   const mapped = [
     ['name', '--name'],
     ['prompt', '--prompt'],
@@ -138,20 +147,29 @@ export function mapAutomation(automation) {
   }
   args.push(automation.reuseSession ? '--reuse-session' : '--fresh-session')
   mapped.push(['reuseSession', automation.reuseSession ? '--reuse-session' : '--fresh-session'])
-  if (automation.missedRunGraceMinutes > 0) {
+  if (graceIsOmitted(automation.missedRunGraceMinutes)) {
+    notes.push(
+      `missedRunGraceMinutes: source is ${automation.missedRunGraceMinutes}; --missed-run-grace-minutes only takes a positive integer, so the flag is omitted, Pilot's default (${PILOT_DEFAULT_GRACE_MINUTES}) applies, and the read-back does not check this field`
+    )
+  } else {
     args.push(`--missed-run-grace-minutes=${automation.missedRunGraceMinutes}`)
     mapped.push(['missedRunGraceMinutes', '--missed-run-grace-minutes'])
   }
   // Always created disabled; the order in --apply decides when it becomes enabled.
   args.push('--disabled', '--json')
   mapped.push(['enabled', '--disabled (enabled last, only after Orca is off)'])
-  return { args, mapped }
+  return { args, mapped, notes }
 }
 
 // What the read-back of the new Pilot automation must show. Returns the fields that differ.
-export function verifyCopy(source, copy) {
+// options.checkEnabled: also require the copy to be disabled (only right after create).
+// options.ignore: fields to skip (a renamed copy).
+export function verifyCopy(source, copy, { checkEnabled = true, ignore = [] } = {}) {
   const problems = []
   const check = (field, expected, actual) => {
+    if (ignore.includes(field)) {
+      return
+    }
     if (JSON.stringify(expected) !== JSON.stringify(actual)) {
       problems.push(
         `${field}: expected ${JSON.stringify(expected)}, Pilot has ${JSON.stringify(actual)}`
@@ -168,10 +186,23 @@ export function verifyCopy(source, copy) {
   check('workspaceMode', source.workspaceMode, copy.workspaceMode)
   check('baseBranch', source.baseBranch ?? null, copy.baseBranch ?? null)
   check('reuseSession', Boolean(source.reuseSession), Boolean(copy.reuseSession))
-  check('missedRunGraceMinutes', source.missedRunGraceMinutes, copy.missedRunGraceMinutes)
+  if (!graceIsOmitted(source.missedRunGraceMinutes)) {
+    check('missedRunGraceMinutes', source.missedRunGraceMinutes, copy.missedRunGraceMinutes)
+  }
   check('sourceContext', source.sourceContext ?? null, copy.sourceContext ?? null)
   check('runContext.path', source.runContext?.path, copy.runContext?.path)
   check('target path', targetPath(source), targetPath(copy))
-  check('enabled', false, copy.enabled)
+  check('executionTargetType', source.executionTargetType, copy.executionTargetType)
+  check('executionTargetId', source.executionTargetId, copy.executionTargetId)
+  check('runContext.projectId', source.runContext?.projectId, copy.runContext?.projectId)
+  check('runContext.hostId', source.runContext?.hostId, copy.runContext?.hostId)
+  check(
+    'runContext.projectHostSetupId',
+    source.runContext?.projectHostSetupId,
+    copy.runContext?.projectHostSetupId
+  )
+  if (checkEnabled) {
+    check('enabled', false, copy.enabled)
+  }
   return problems
 }

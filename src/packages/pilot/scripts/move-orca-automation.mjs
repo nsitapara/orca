@@ -14,9 +14,10 @@ import {
   formatCommand,
   mapAutomation,
   targetPath,
-  unmappableFields,
-  verifyCopy
+  unmappableFields
 } from './move-orca-automation-map.mjs'
+import { applyFresh, callJson, readOrca, resumeCopy } from './move-orca-automation-apply.mjs'
+import { DEFAULT_RECORD_FILE, readRecords } from './move-orca-automation-record.mjs'
 import { run } from './run.mjs'
 
 const HELP = `Usage: node src/packages/pilot/scripts/move-orca-automation.mjs --id <orca automation id> [options]
@@ -28,6 +29,7 @@ Copies one Orca automation into Pilot. Without --apply it is a dry run: it print
   --disable-in-orca      after verifying, disable it in Orca and enable it in Pilot
                          (without it, Pilot's copy stays disabled and the two commands are printed)
   --allow-drop <field>   accept losing a field Pilot's create can't express (repeatable)
+  --record-file <path>   Pilot's record of moves (default: ~/Library/Application Support/Pilot/moved-automations.json)
   --orca-bin <path>      Orca's CLI (default: orca)
   --pilot-bin <path>     Pilot's CLI (default: the one inside dist/mac-arm64/Pilot.app)`
 
@@ -36,181 +38,22 @@ export const DEFAULT_PILOT_BIN = join(
   'dist/mac-arm64/Pilot.app/Contents/Resources/bin/pilot'
 )
 
-// Runs a CLI and parses its --json envelope. Throws a message naming the command on any failure.
-function callJson(runner, label, args) {
-  const result = runner(args)
-  if (result.code !== 0) {
-    const detail = (result.stderr || result.stdout || '').trim()
-    throw new Error(`${label} failed (exit ${result.code}): ${detail}`)
+// The Pilot copy of this Orca automation: by the move record's Pilot id first (survives renames),
+// then by name and target.
+function findCopy(source, copies, records) {
+  const record = records[source.id]
+  const recorded = record ? copies.find((candidate) => candidate.id === record.pilotId) : undefined
+  if (recorded) {
+    return { copy: recorded, via: 'record', record }
   }
-  let body
-  try {
-    body = JSON.parse(result.stdout)
-  } catch {
-    throw new Error(`${label} printed output that isn't JSON`)
-  }
-  if (body.ok === false) {
-    throw new Error(`${label} failed: ${JSON.stringify(body.error)}`)
-  }
-  return body.result
-}
-
-function readOrca(orca, id) {
-  const result = orca(['automations', 'show', '--id', id, '--json'])
-  const text = `${result.stderr}${result.stdout}`
-  if (result.code !== 0) {
-    const notFound = /not.?found|no automation/i.test(text)
-    const message = notFound ? 'not found in Orca' : `orca automations show failed: ${text.trim()}`
-    return { error: `Orca automation ${id}: ${message}` }
-  }
-  try {
-    const body = JSON.parse(result.stdout)
-    if (body.ok === false || !body.result?.automation) {
-      return { error: `Orca automation ${id} not found in Orca` }
-    }
-    return { automation: body.result.automation }
-  } catch {
-    return { error: `orca automations show printed output that isn't JSON` }
-  }
+  const named = copies.find(
+    (candidate) => candidate.name === source.name && sameTarget(candidate, source)
+  )
+  return named ? { copy: named, via: 'name and target', record } : undefined
 }
 
 function sameTarget(a, b) {
   return a.workspaceMode === b.workspaceMode && targetPath(a) === targetPath(b)
-}
-
-function removeFromPilot(pilot, id, state, log) {
-  const result = pilot(['automations', 'remove', '--id', id, '--json'])
-  if (result.code === 0) {
-    state.pilotId = null
-    log(`Undone: removed the Pilot automation ${id} this run created.`)
-    return
-  }
-  log(`Could not remove Pilot automation ${id}: ${(result.stderr || result.stdout).trim()}`)
-}
-
-function printState(state, log) {
-  log('State now:')
-  log(
-    `  Pilot: ${state.pilotId ? `automation ${state.pilotId} exists, ${state.pilotEnabled ? 'ENABLED' : 'disabled'}` : 'nothing created by this run'}`
-  )
-  log(`  Orca: ${state.orcaDisabled ? 'disabled by this run' : 'unchanged by this run'}`)
-}
-
-function finishCommands(orcaBin, pilotBin, orcaId, pilotId) {
-  return [
-    formatCommand(orcaBin, ['automations', 'edit', '--id', orcaId, '--disabled']),
-    formatCommand(pilotBin, ['automations', 'edit', '--id', pilotId, '--enabled'])
-  ]
-}
-
-function applyPlan(ctx) {
-  const { source, mapping, options, orca, pilot, log } = ctx
-  const state = { pilotId: null, pilotEnabled: false, orcaDisabled: false }
-  const fail = (message, undo) => {
-    log(`FAILED: ${message}`)
-    if (undo && state.pilotId && !state.pilotEnabled && !state.orcaDisabled) {
-      removeFromPilot(pilot, state.pilotId, state, log)
-    }
-    printState(state, log)
-    return { status: 'failed', exitCode: 1, state }
-  }
-  let copy
-  try {
-    copy = callJson(pilot, 'pilot automations create', mapping.args).automation
-    state.pilotId = copy.id
-    log(`Created in Pilot, disabled: ${copy.id}`)
-  } catch (error) {
-    return fail(error.message, false)
-  }
-  try {
-    const shown = callJson(pilot, 'pilot automations show', [
-      'automations',
-      'show',
-      '--id',
-      state.pilotId,
-      '--json'
-    ])
-    const problems = verifyCopy(source, shown.automation)
-    if (problems.length > 0) {
-      return fail(`the Pilot copy doesn't match Orca's:\n  - ${problems.join('\n  - ')}`, true)
-    }
-    log('Verified: every mapped field matches.')
-  } catch (error) {
-    return fail(error.message, true)
-  }
-  if (!options.disableInOrca) {
-    const [first, second] = finishCommands(
-      options.orcaBin,
-      options.pilotBin,
-      source.id,
-      state.pilotId
-    )
-    log(
-      "Left Pilot's copy disabled and Orca's untouched. To finish the switch by hand, in this order:"
-    )
-    log(`  ${first}`)
-    log(`  ${second}`)
-    return { status: 'applied', exitCode: 0, state }
-  }
-  if (source.enabled) {
-    try {
-      callJson(orca, 'orca automations edit', [
-        'automations',
-        'edit',
-        '--id',
-        source.id,
-        '--disabled',
-        '--json'
-      ])
-      const check = readOrca(orca, source.id)
-      if (check.error || check.automation.enabled !== false) {
-        throw new Error('Orca still shows the automation as enabled after the edit')
-      }
-      state.orcaDisabled = true
-      log('Disabled in Orca (verified).')
-    } catch (error) {
-      return fail(error.message, true)
-    }
-  } else {
-    log("Already disabled in Orca; Pilot's copy stays disabled to match.")
-    return { status: 'applied', exitCode: 0, state }
-  }
-  try {
-    callJson(pilot, 'pilot automations edit', [
-      'automations',
-      'edit',
-      '--id',
-      state.pilotId,
-      '--enabled',
-      '--json'
-    ])
-    const shown = callJson(pilot, 'pilot automations show', [
-      'automations',
-      'show',
-      '--id',
-      state.pilotId,
-      '--json'
-    ])
-    if (shown.automation.enabled !== true) {
-      throw new Error('Pilot still shows the automation as disabled after the edit')
-    }
-    state.pilotEnabled = true
-    log('Enabled in Pilot (verified). Done: it runs in Pilot only.')
-    return { status: 'applied', exitCode: 0, state }
-  } catch (error) {
-    log(`FAILED: ${error.message}`)
-    log(
-      `Orca's copy is disabled and Pilot's is not enabled, so it runs nowhere. Not removing Pilot's copy. Enable it with:`
-    )
-    log(
-      `  ${formatCommand(options.pilotBin, ['automations', 'edit', '--id', state.pilotId, '--enabled'])}`
-    )
-    log(
-      `or move it back with: ${formatCommand(options.orcaBin, ['automations', 'edit', '--id', source.id, '--enabled'])}`
-    )
-    printState(state, log)
-    return { status: 'failed', exitCode: 1, state }
-  }
 }
 
 function printPlan(source, mapping, dropped, options, log) {
@@ -226,6 +69,9 @@ function printPlan(source, mapping, dropped, options, log) {
   log('Fields mapped:')
   for (const [field, flag] of mapping.mapped) {
     log(`  ${field} -> ${flag}`)
+  }
+  for (const planNote of mapping.notes) {
+    log(`Note, ${planNote}`)
   }
   log(`Fields Pilot sets itself (not copied): ${DERIVED_FIELDS.join(', ')}`)
   const droppedNames = Object.keys(dropped)
@@ -259,6 +105,8 @@ export function moveAutomation({
   pilot,
   orcaBin = 'orca',
   pilotBin = DEFAULT_PILOT_BIN,
+  recordFile = DEFAULT_RECORD_FILE,
+  now = () => new Date(),
   log = console.log
 }) {
   const options = { apply, disableInOrca, orcaBin, pilotBin }
@@ -304,14 +152,15 @@ export function moveAutomation({
     return { status: 'refused', exitCode: 1, refusals }
   }
 
-  const existing = (
+  const copies =
     callJson(pilot, 'pilot automations list', ['automations', 'list', '--json']).automations ?? []
-  ).find((candidate) => candidate.name === source.name && sameTarget(candidate, source))
-  if (existing) {
-    log(
-      `Pilot already has "${source.name}" on the same target (${existing.id}, ${existing.enabled ? 'enabled' : 'disabled'}). Nothing to do.`
+  const found = findCopy(source, copies, readRecords(recordFile))
+  if (found) {
+    return resumeCopy(
+      { source, options, orca, pilot, log, recordFile, now, apply },
+      found.copy,
+      found
     )
-    return { status: 'exists', exitCode: 0, pilotId: existing.id }
   }
 
   const mapping = mapAutomation(source)
@@ -320,7 +169,7 @@ export function moveAutomation({
     log('Dry run: nothing changed. Add --apply to do it.')
     return { status: 'dry-run', exitCode: 0, mapping }
   }
-  return applyPlan({ source, mapping, options, orca, pilot, log })
+  return applyFresh({ source, mapping, options, orca, pilot, log, recordFile, now })
 }
 
 export function parseArgs(argv) {
@@ -331,10 +180,12 @@ export function parseArgs(argv) {
     help: false,
     allowDrop: [],
     orcaBin: 'orca',
-    pilotBin: DEFAULT_PILOT_BIN
+    pilotBin: DEFAULT_PILOT_BIN,
+    recordFile: DEFAULT_RECORD_FILE
   }
   const valueFlags = {
     '--id': 'id',
+    '--record-file': 'recordFile',
     '--orca-bin': 'orcaBin',
     '--pilot-bin': 'pilotBin'
   }
