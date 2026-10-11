@@ -143,6 +143,19 @@ export class RunStore {
       .map((r) => toStep(r as never))
   }
 
+  // Steps still 'pending' (their run's workspace is being made, B8) in running runs that started before
+  // the cutoff. The sweep closes them unless this process is still opening the run.
+  stalePendingSteps(runStartedBefore: number): StepRow[] {
+    return this.db
+      .prepare(
+        `SELECT s.* FROM steps s JOIN runs r ON r.id = s.run_id
+         WHERE s.status = 'pending' AND r.status = 'running' AND r.started_at < ?
+         ORDER BY r.started_at, s.run_id, s.idx`
+      )
+      .all(runStartedBefore)
+      .map((r) => toStep(r as never))
+  }
+
   // A run is created a moment before its first step; one still without a step later never launched.
   staleRunsWithoutSteps(startedBefore: number): RunRow[] {
     return this.db

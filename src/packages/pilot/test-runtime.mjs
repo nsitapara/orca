@@ -8,6 +8,7 @@ export const PILOT_SQLITE_RUNTIME_INCLUDE = [
   'src/packages/pilot/src/main/run/stale-starts.test.ts',
   'src/packages/pilot/src/main/store/store-advance.test.ts',
   'src/packages/pilot/src/main/run/advance.test.ts',
+  'src/packages/pilot/src/main/run/engine-wiring.test.ts',
   'src/packages/pilot/src/main/rpc/methods.test.ts',
   'src/packages/pilot/src/main/rpc/handlers.test.ts',
   'src/packages/pilot/src/main/pilot-services.test.ts',
