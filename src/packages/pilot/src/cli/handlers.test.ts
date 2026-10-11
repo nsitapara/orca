@@ -25,11 +25,11 @@ describe('automations validate', () => {
   let dir: string
   beforeEach(() => {
     dir = mkdtempSync(join(tmpdir(), 'pilot-validate-'))
-    process.exitCode = undefined
+    process.exitCode = 0
   })
   afterEach(() => {
     rmSync(dir, { recursive: true, force: true })
-    process.exitCode = undefined
+    process.exitCode = 0
     vi.restoreAllMocks()
   })
 
@@ -55,7 +55,8 @@ describe('automations validate', () => {
     const log = vi.spyOn(console, 'log').mockImplementation(() => {})
     await PILOT_HANDLERS['automations validate'](ctx({ file }))
     expect(log).toHaveBeenCalledWith('ok fix-ci')
-    expect(process.exitCode).toBeUndefined()
+    // Bun starts exitCode at 0 and ignores undefined, so the hooks reset to 0 and this accepts either.
+    expect(process.exitCode ?? 0).toBe(0)
   })
 })
 

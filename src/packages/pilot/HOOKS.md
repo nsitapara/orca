@@ -22,3 +22,4 @@ Every change Pilot makes to an upstream file is listed here (D24). Each one is a
 | cli-handlers             | src/cli/handler-group-manifest.ts                                             | ...PILOT_HANDLER_GROUPS                                | Pilot CLI handlers                                          |
 | updater                  | src/main/updater/updater-setup.ts                                             | isPilotUpdaterDisabled()                               | never offer Orca releases to Pilot                          |
 | runtime-ws-port          | src/main/startup/main-process-runtime-launch.ts                               | pilotRuntimeWsOptions()                                | Pilot listens on 6868 so it never fights real Orca for 6768 |
+| vitest-sqlite-runtime | config/scripts/vitest-sqlite-runtime-files.mjs | PILOT_SQLITE_RUNTIME_INCLUDE | Pilot's SQLite tests run under Node like upstream's |
