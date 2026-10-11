@@ -15,7 +15,7 @@ import { reposListed, resolveRepoPath } from './fields/runtime-facts'
 import { runtimeFieldDeps } from './fields/runtime-field-deps'
 import { runShellScript } from './fields/script-runner'
 import { claudeTranscriptCost } from './run/cost'
-import { makeLauncher } from './run/launch'
+import { makeLauncher, runtimeLauncherDeps } from './run/launch'
 import { sweepStaleStarts } from './run/stale-starts'
 import { terminalRelister } from './run/terminal-relist'
 import { pollRunningSteps, runtimeStepProbe } from './run/watcher'
@@ -111,7 +111,7 @@ function openPilot(
       engineEnv,
       now
     },
-    launch: makeLauncher(runtime, store, now)
+    launch: makeLauncher(store, runtimeLauncherDeps(runtime, fieldDeps, now, store.runs))
   }
   const probe = runtimeStepProbe(runtime, relist)
   const repoProblems = new Map<string, RepoProblem>()

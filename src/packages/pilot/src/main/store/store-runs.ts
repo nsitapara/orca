@@ -28,6 +28,9 @@ export type NewStep = {
   kind?: StepKind
   mode?: string | null
   whenExpr?: string | null
+  // A session id known before launch (pinned Claude id, or the one resumed).
+  sessionId?: string | null
+  sessionPinned?: boolean
   status?: StepStatus
 }
 
@@ -80,7 +83,7 @@ export class RunStore {
   createStep(step: NewStep): void {
     this.db
       .prepare(
-        'INSERT INTO steps (run_id, idx, name, agent, skill, status, started_at, kind, mode, when_expr) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+        'INSERT INTO steps (run_id, idx, name, agent, skill, status, started_at, kind, mode, when_expr, session_id, session_pinned) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
       )
       .run(
         step.runId,
@@ -92,7 +95,9 @@ export class RunStore {
         step.startedAt,
         step.kind ?? 'agent',
         step.mode ?? null,
-        step.whenExpr ?? null
+        step.whenExpr ?? null,
+        step.sessionId ?? null,
+        step.sessionPinned ? 1 : 0
       )
   }
 
