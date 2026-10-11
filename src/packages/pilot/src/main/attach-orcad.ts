@@ -6,6 +6,9 @@ export function attachPilotOrcad(
   runtime: OrcaRuntimeService,
   registerCleanup: (fn: () => void) => void
 ): void {
-  const services = startPilotServices(runtime, 'orcad')
+  // A headless host ticks only when asked (D25), so a desktop and a headless host never both tick.
+  const services = startPilotServices(runtime, 'orcad', {
+    schedulerEnabled: process.env.PILOT_SCHEDULER === 'on'
+  })
   registerCleanup(() => services.stop())
 }

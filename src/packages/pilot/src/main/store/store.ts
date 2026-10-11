@@ -97,6 +97,19 @@ export class PilotStore {
     return toTick(r as never)
   }
 
+  // The scheduler's timing basis: a manual dry run must never push back the next real tick.
+  lastRealTick(automationId: string): TickRow | null {
+    const r = this.db
+      .prepare(
+        'SELECT * FROM ticks WHERE automation_id = ? AND dry_run = 0 ORDER BY started_at DESC LIMIT 1'
+      )
+      .get(automationId)
+    if (!r) {
+      return null
+    }
+    return toTick(r as never)
+  }
+
   listTicks(automationId: string, limit: number): TickRow[] {
     return this.db
       .prepare('SELECT * FROM ticks WHERE automation_id = ? ORDER BY started_at DESC LIMIT ?')
@@ -144,6 +157,13 @@ export class PilotStore {
     this.db
       .prepare('DELETE FROM handled WHERE automation_id = ? AND once_key = ?')
       .run(automationId, onceKey)
+  }
+
+  // Frees the once_per key a run holds without knowing the key; a later run's re-mark is untouched.
+  unmarkHandledForRun(automationId: string, runId: string): void {
+    this.db
+      .prepare('DELETE FROM handled WHERE automation_id = ? AND run_id = ?')
+      .run(automationId, runId)
   }
 
   seenKeys(automationId: string): Set<string> {
