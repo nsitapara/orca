@@ -1,5 +1,5 @@
 import { isValidTimeZone, parseCron } from '../schedule/cron'
-import { singleQuotedPlaceholders } from '../run/shell-template'
+import { shellProblemMessage, shellTemplateProblems } from '../run/shell-template'
 import { PLACEHOLDER } from '../template'
 import { stepNames } from './normalize'
 import type { RawAutomation, RawStep } from './schema'
@@ -20,7 +20,8 @@ export function scheduleErrors(raw: RawAutomation): string[] {
 }
 
 const AGENT_ONLY = ['skill', 'mode', 'prompt', 'prompt_style', 'args', 'session'] as const
-const SHELL_ONLY = ['run', 'exit_codes'] as const
+const ENV_NAME = /^[A-Z_][A-Z0-9_]*$/
+const SHELL_ONLY = ['run', 'env', 'exit_codes'] as const
 
 function keyNames(keys: readonly string[]): string {
   return keys.map((k) => `${k}:`).join(', ')
@@ -73,10 +74,15 @@ function shellStepErrors(s: RawStep, n: number): string[] {
   if (!s.run) {
     errors.push(`step ${n}: a shell step needs run:`)
   }
-  for (const name of singleQuotedPlaceholders(s.run ?? '')) {
-    errors.push(
-      `step ${n}: {${name}} is inside single quotes in run:, where the shell can't expand it; put it outside them or in double quotes`
-    )
+  for (const problem of shellTemplateProblems(s.run ?? '')) {
+    errors.push(`step ${n}: run: ${shellProblemMessage(problem)}`)
+  }
+  for (const name of Object.keys(s.env ?? {})) {
+    if (!ENV_NAME.test(name) || /^(PILOT_|ORCA_)/.test(name)) {
+      errors.push(
+        `step ${n}: env: ${name} isn't a usable name: capital letters, digits and _, not starting with a digit, PILOT_ or ORCA_`
+      )
+    }
   }
   const skip = new Set(s.exit_codes?.skip ?? [])
   for (const code of s.exit_codes?.ok ?? [0]) {

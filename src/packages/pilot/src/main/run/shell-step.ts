@@ -1,4 +1,12 @@
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import {
+  closeSync,
+  fstatSync,
+  mkdtempSync,
+  openSync,
+  readSync,
+  rmSync,
+  writeFileSync
+} from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { runProcess } from '@orca/process-host'
@@ -6,15 +14,20 @@ import type { StepStatus } from '../../shared/api-types'
 import type { StepDef } from '../../shared/definition/types'
 import { formatDuration } from '../../shared/run/format-duration'
 import { outputsFromFile } from '../../shared/run/outputs'
-import { renderShellCommand } from '../../shared/run/shell-template'
+import {
+  renderShellCommand,
+  shellProblemMessage,
+  type ShellProblem
+} from '../../shared/run/shell-template'
+import { renderTemplate } from '../../shared/template'
 import { engineChildEnv, type EngineEnv } from '../engine-env'
 import { resolveScriptCommand } from '../fields/script-runner'
 import type { PilotStore } from '../store/store'
+export { ORPHAN_SHELL_OUTCOME, sweepOrphanShellSteps } from './shell-sweep'
 import type { StepStarter, StepStartRequest } from './advance'
 
 export const SHELL_CAPTURE_BYTES = 1024 * 1024
 export const OUTPUT_TAIL_CHARS = 8192
-export const ORPHAN_SHELL_OUTCOME = 'Pilot stopped while this shell step ran'
 
 export type ShellSpec = {
   command: string
@@ -118,13 +131,28 @@ export function shellEnding(
 
 function shellRefusal(
   step: string,
-  failed: { missing: string[]; inSingleQuotes: string[] }
+  failed: { missing: string[]; problems: ShellProblem[] }
 ): string {
-  const names = (list: string[]): string => list.map((n) => `{${n}}`).join(', ')
-  if (failed.inSingleQuotes.length > 0) {
-    return `Shell step ${step}: ${names(failed.inSingleQuotes)} is inside single quotes, where the shell can't expand it`
+  if (failed.problems.length > 0) {
+    return `Shell step ${step}: ${failed.problems.map(shellProblemMessage).join('; ')}`
   }
-  return `Shell step ${step}: no value for ${names(failed.missing)}`
+  return `Shell step ${step}: no value for ${failed.missing.map((n) => `{${n}}`).join(', ')}`
+}
+
+// The tail of the outputs file, at most SHELL_CAPTURE_BYTES (the last line per key wins, so the tail is
+// what counts); a cut first line is dropped.
+function readOutputsFile(file: string): string {
+  const fd = openSync(file, 'r')
+  try {
+    const size = fstatSync(fd).size
+    const start = Math.max(0, size - SHELL_CAPTURE_BYTES)
+    const buffer = Buffer.alloc(size - start)
+    readSync(fd, buffer, 0, buffer.length, start)
+    const text = buffer.toString('utf8')
+    return start > 0 ? text.slice(text.indexOf('\n') + 1) : text
+  } finally {
+    closeSync(fd)
+  }
 }
 
 const keyOf = (runId: string, idx: number): string => `${runId}#${idx}`
@@ -143,7 +171,7 @@ export function makeShellSteps(deps: ShellStepDeps): ShellSteps {
     const step = req.definition.steps[req.idx]
     let written = ''
     try {
-      written = readFileSync(outputFile, 'utf8')
+      written = readOutputsFile(outputFile)
     } catch (error) {
       deps.log(
         `[pilot] run ${req.run.id}: step ${step.name}: couldn't read its outputs: ${messageOf(error)}`
@@ -187,6 +215,18 @@ export function makeShellSteps(deps: ShellStepDeps): ShellSteps {
     if (!rendered.ok) {
       throw new Error(shellRefusal(step.name, rendered))
     }
+    const stepEnv: Record<string, string> = {}
+    const missingEnv = new Set<string>()
+    for (const [name, template] of Object.entries(step.env)) {
+      const value = renderTemplate(template, req.fields)
+      value.missing.forEach((m) => missingEnv.add(m))
+      stepEnv[name] = value.text
+    }
+    if (missingEnv.size > 0) {
+      throw new Error(
+        `Shell step ${step.name}: no value for ${[...missingEnv].map((n) => `{${n}}`).join(', ')}`
+      )
+    }
     if (!deps.store.runs.steps(req.run.id).some((s) => s.idx === req.idx)) {
       deps.store.runs.createStep({
         runId: req.run.id,
@@ -219,35 +259,48 @@ export function makeShellSteps(deps: ShellStepDeps): ShellSteps {
     }
     const key = keyOf(req.run.id, req.idx)
     live.add(key)
-    deps.store.runs.updateStep(req.run.id, req.idx, { status: 'running' })
-    const timeoutMs = deps.timeoutOf(req)
-    const base = deps.baseEnv ?? process.env
-    const job: Promise<void> = run({
-      command: rendered.command,
-      cwd,
-      env: {
-        ...base,
-        ...engineChildEnv(deps.engineEnv, deps.envOf(req), base),
-        ...rendered.env,
-        PILOT_OUTPUT_FILE: outputFile
-      },
-      timeoutMs
-    })
-      .then(
-        (result) => finish(req, result, timeoutMs, outputFile),
-        (error: unknown) => fail(req, error)
-      )
-      .catch((error: unknown) =>
-        deps.log(
-          `[pilot] run ${req.run.id}: couldn't record step ${step.name}: ${messageOf(error)}`
-        )
-      )
-      .finally(() => {
-        rmSync(outputDir, { recursive: true, force: true })
-        live.delete(key)
-        inflight.delete(job)
-        deps.onEnded(req.run.id)
+    let job: Promise<void>
+    try {
+      deps.store.runs.updateStep(req.run.id, req.idx, { status: 'running' })
+      const timeoutMs = deps.timeoutOf(req)
+      const base = deps.baseEnv ?? process.env
+      job = run({
+        command: rendered.command,
+        cwd,
+        env: {
+          ...base,
+          ...engineChildEnv(deps.engineEnv, deps.envOf(req), base),
+          ...stepEnv,
+          ...rendered.env,
+          PILOT_OUTPUT_FILE: outputFile
+        },
+        timeoutMs
       })
+        .then(
+          (result) => finish(req, result, timeoutMs, outputFile),
+          (error: unknown) => fail(req, error)
+        )
+        .catch((error: unknown) =>
+          deps.log(
+            `[pilot] run ${req.run.id}: couldn't record step ${step.name}: ${messageOf(error)}`
+          )
+        )
+        .finally(() => {
+          try {
+            rmSync(outputDir, { recursive: true, force: true })
+          } catch (error) {
+            deps.log(`[pilot] couldn't remove ${outputDir}: ${messageOf(error)}`)
+          }
+          live.delete(key)
+          inflight.delete(job)
+          deps.onEnded(req.run.id)
+        })
+    } catch (error) {
+      rmSync(outputDir, { recursive: true, force: true })
+      live.delete(key)
+      fail(req, error)
+      throw error
+    }
     inflight.add(job)
   }
 
@@ -258,38 +311,6 @@ export function makeShellSteps(deps: ShellStepDeps): ShellSteps {
       while (inflight.size > 0) {
         await Promise.all(inflight)
       }
-    }
-  }
-}
-
-// A shell step 'running' with no process in this Pilot belonged to a Pilot that has stopped: its
-// process went with it. The step fails; advanceIdle then ends the run (always steps still run).
-export function sweepOrphanShellSteps(
-  store: PilotStore,
-  isLive: (runId: string, idx: number) => boolean,
-  now: () => number,
-  log: (message: string) => void
-): void {
-  let steps: ReturnType<PilotStore['runs']['runningSteps']>
-  try {
-    steps = store.runs.runningSteps()
-  } catch (error) {
-    log(`[pilot] couldn't sweep shell steps: ${messageOf(error)}`)
-    return
-  }
-  for (const step of steps) {
-    if (step.kind !== 'shell' || step.status !== 'running' || isLive(step.runId, step.idx)) {
-      continue
-    }
-    try {
-      store.runs.updateStep(step.runId, step.idx, {
-        status: 'failed',
-        finishedAt: now(),
-        error: ORPHAN_SHELL_OUTCOME
-      })
-      log(`[pilot] run ${step.runId}: step ${step.name}: ${ORPHAN_SHELL_OUTCOME}`)
-    } catch (error) {
-      log(`[pilot] couldn't close shell step ${step.runId}/${step.idx}: ${messageOf(error)}`)
     }
   }
 }

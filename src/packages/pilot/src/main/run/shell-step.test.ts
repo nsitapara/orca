@@ -188,12 +188,30 @@ describe('makeShellSteps', () => {
     expect(store.runs.steps('run-1')[0].outputs).toEqual({})
   })
 
+  it('exports env: values rendered as plain text, under PILOT_OUTPUT_FILE and over the app env', async () => {
+    const { steps, calls, req } = setup()
+    const def = shellDef('./tell.sh')
+    def.steps[0] = { ...def.steps[0], env: { TITLE: 'MR {mr.title} "$(x)"' } }
+    await steps.start(req(def, { 'mr.title': "it's `x`" }))
+    await steps.settled()
+    expect(calls[0].env.TITLE).toBe('MR it\'s `x` "$(x)"')
+  })
+
+  it('fails a step whose env: value has no value, naming it', async () => {
+    const { store, steps, calls, req } = setup()
+    const def = shellDef('./tell.sh')
+    def.steps[0] = { ...def.steps[0], env: { TITLE: '{mr.title}' } }
+    await expect(steps.start(req(def))).rejects.toThrow('Shell step prune: no value for {mr.title}')
+    expect(calls).toEqual([])
+    expect(store.runs.steps('run-1')).toEqual([])
+  })
+
   it('refuses a placeholder inside single quotes, naming it', async () => {
     const { steps, calls, req } = setup()
     const def = shellDef('echo x')
     def.steps[0] = { ...def.steps[0], run: "echo '{repo.path}'" }
     await expect(steps.start(req(def))).rejects.toThrow(
-      'Shell step prune: {repo.path} is inside single quotes'
+      "Shell step prune: {repo.path} can't be used in this command (it is inside single quotes)"
     )
     expect(calls).toEqual([])
   })
