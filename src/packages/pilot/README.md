@@ -29,6 +29,61 @@ Quit Pilot, then:
 - It refuses, changing nothing, when Orca's database isn't the layout it was written for: a profile-state schema other than 3, a `domain_version` other than 1, or a whitelisted domain that is missing, `null` or the wrong JSON type (what upstream leaves behind when it moves a domain into its own table). Update the script from upstream's `src/main/persistence/profile-state/` code first.
 - **Pruning backups:** nothing deletes them. `--list` shows each set by stamp. Once Pilot has started cleanly on a newer import, delete an old set by hand, e.g. `rm ~/Library/Application\ Support/Pilot/profiles/local-default/*.pre-orca-import-<stamp>`. Keep the newest set until you're sure you won't need `--restore`.
 
+## Migrating an automation
+
+How one of the old sweeps that real Orca schedules (`~/.agents/skills/<name>-sweep`) moves onto Pilot. Automation 05, "Fix failed CI on my MRs" (`ci-fix-sweep` → `fix-failed-ci`), went first. `pilot` below is `dist/mac-arm64/Pilot.app/Contents/Resources/bin/pilot`.
+
+1. **Write the YAML.**
+   - One file per automation in `~/.agents/automations/`. The file name is its id.
+   - Pilot reads the folder through a link: `mkdir -p ~/.pilot && ln -sfn ~/.agents/automations ~/.pilot/automations`.
+   - Start with `schedule: manual`, so it can't run on its own while it shadows the old sweep.
+   - People named in `author:` come from `people.yaml` in the same folder.
+   - Commit both files in `~/.agents` through a temporary index, because other sessions commit there too.
+2. **Validate.**
+   - Run `pilot automations validate --file <file>`. It prints `ok <id>` and exits 0, or prints each problem and exits 1.
+   - Parsing is strict: unknown keys fail, and so do features from later milestones.
+   - The command checks automation files only. `people.yaml` problems show in `pilot automations status`.
+   - Pilot doesn't watch a folder that was created after it started. Until there's a `reload` command, re-scan with the CLI's own client, or restart Pilot:
+
+         C="$PWD/dist/mac-arm64/Pilot.app/Contents"    # from the repo root; require() needs an absolute path
+         ORCA_USER_DATA_PATH="$HOME/Library/Application Support/Pilot" ELECTRON_RUN_AS_NODE=1 "$C/MacOS/Pilot" \
+           -e 'new (require(process.argv[1]).RuntimeClient)().call("pilot.automations.reload").then((r) => console.log(JSON.stringify(r.result, null, 2)))' \
+           "$C/Resources/app.asar.unpacked/out/cli/runtime/client.js"
+
+     The output lists the automations, with any definition or people errors. `pilot automations status` should show no folder marked "(missing)". A reload re-scans the folder but doesn't start watching it, so later edits need another reload, until Pilot restarts with the folder already in place.
+3. **Dry-run beside the old sweep.**
+   - Run `pilot automations dry-run --id <id>`. It checks every item and records a dry tick in Activity. Nothing starts.
+   - Compare each item with the old sweep's latest tick in its `sweep.log`:
+     - old **due** ↔ **started**;
+     - old **skip** ↔ **skipped**, **not due** or **not in scope**, with the same reason in substance.
+   - Never run `pilot automations tick` or Run now while shadowing.
+   - The old sweeps' `--dry-run` isn't read-only: it records decision events and refreshes `mr-cache.json`. Compare against `sweep.log`, or against the inputs the sweep reads, gathered by hand.
+4. **Seed `handled`.** So Pilot doesn't retry what the old sweep already tried:
+
+       node src/packages/pilot/scripts/seed-handled-from-sweep.mjs            # dry run: counts only
+       node src/packages/pilot/scripts/seed-handled-from-sweep.mjs --apply    # insert the missing keys
+
+   - It maps 05's `handled.json` (`"<iid>": <pipeline id>`) to `<iid>:<pipeline>` keys for `fix-failed-ci`, with `run_id` null.
+   - It only adds keys, never replaces one, and is safe to re-run while Pilot runs.
+   - It refuses when Pilot's database or `main/store/migrations.ts` isn't at the schema it was written for.
+   - Other sweeps keep different state, so each needs its own mapping.
+5. **Shadow.**
+   - Keep `schedule: manual`.
+   - Across a working day, run the dry run just after a few of the old sweep's ticks (05 ticks at :10 each hour). Compare each run with `sweep.log`.
+   - Record every comparison in the vault note (`Agent Work/Automation platform.md`). A difference that isn't just wording is a Pilot bug to fix before cutover.
+6. **Cut over (Nish approves).**
+   1. Re-seed `handled` right before switching (`--apply` again), because the old sweep keeps adding entries until it's off.
+   2. Disable the old automation in real Orca.
+   3. Set the schedule in the YAML (05: `"10 * * * *"`) and commit it in `~/.agents`.
+   4. Make sure Pilot has the edit: the Automations list shows the new schedule, and so does the reload above (its `schedule` and `nextTickAt`). Expect the first real tick at the **next** slot, not at once: a schedule set while Pilot runs is walked from now (Task 20's catch-up rule).
+      - If Pilot is restarted instead, an automation with no real tick yet walks from an hour before the start. A slot that fell in that hour then runs once, right at start.
+
+### Automation 05 (`fix-failed-ci`)
+
+- [x] 1–2, 2026-10-10: YAML and people written, validated and linked; one key seeded (`1587:2933991087`). The dry run agreed with the old sweep on all 7 of Nish's open MRs (all not due, head pipelines green). The 22 teammate MRs are not in scope, and the old sweep never lists them. Details are in the vault note's M1 entry.
+- [ ] 3. Shadow for a working day: **pending, Nish**.
+- [ ] 4. Cut over (disable Orca's 05, schedule `"10 * * * *"`): **pending, Nish**.
+
 ## Remote use (D25)
 
 Pilot keeps Orca's pairing, WebSocket server, web client and `orcad` protocols unchanged. Pilot's runtime listens on 6868 (override `PILOT_WS_PORT`), so it runs beside real Orca on 6768. Pairing links stay `orca://pair?code=...` and carry Pilot's endpoint.
