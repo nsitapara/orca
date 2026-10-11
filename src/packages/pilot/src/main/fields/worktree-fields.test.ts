@@ -88,22 +88,26 @@ describe('addWorktreeFields', () => {
     expect(out[0].fields).not.toHaveProperty('session.open_from_automation')
   })
 
-  it('leaves every worktree fact unknown when the worktree list fails', async () => {
-    const out = await addWorktreeFields(
-      [item('!1', 'a')],
-      'ci',
-      '/repo',
-      { ...deps, listWorktrees: boom },
-      () => true
-    )
-    for (const k of [
-      'worktree.path',
-      'worktree.dirty_count',
-      'worktree.git_operation',
-      'session.open_from_automation'
-    ]) {
-      expect(out[0].fields).not.toHaveProperty(k)
+  it('throws when the worktree list fails, so the tick fails and the next one retries', async () => {
+    await expect(
+      addWorktreeFields(
+        [item('!1', 'a')],
+        'ci',
+        '/repo',
+        { ...deps, listWorktrees: boom },
+        () => true
+      )
+    ).rejects.toThrow('boom')
+  })
+
+  it('leaves the open-session fact absent when a terminal check errors and none is alive', async () => {
+    const flaky: FactDeps = {
+      ...deps,
+      openSessionHandles: () => ['t1', 't2'],
+      terminalAlive: async (h) => (h === 't1' ? boom() : false)
     }
+    const out = await addWorktreeFields([item('!1', 'a')], 'ci', '/repo', flaky, () => true)
+    expect(out[0].fields).not.toHaveProperty('session.open_from_automation')
   })
 })
 
@@ -112,10 +116,16 @@ describe('detectGitOperation', () => {
     ['MERGE_HEAD', 'merge'],
     ['rebase-merge', 'rebase'],
     ['CHERRY_PICK_HEAD', 'cherry-pick'],
+    ['sequencer', 'cherry-pick or revert'],
+    ['rebase-apply', 'rebase'],
+    ['rebase-apply/applying', 'am'],
     ['index.lock', 'git operation (index.lock)']
   ])('%s → %s', (marker, expected) => {
     const gitDir = mkdtempSync(join(tmpdir(), 'pilot-gitdir-'))
-    if (marker.includes('-merge')) {
+    if (marker.includes('/')) {
+      mkdirSync(join(gitDir, marker.split('/')[0]))
+      writeFileSync(join(gitDir, marker), '')
+    } else if (['rebase-merge', 'rebase-apply', 'sequencer'].includes(marker)) {
       mkdirSync(join(gitDir, marker))
     } else {
       writeFileSync(join(gitDir, marker), '')

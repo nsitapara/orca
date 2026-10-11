@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { addQuotaFields, cachedQuota } from './quota'
+import { addQuotaFields, cachedQuota, toQuotaReading } from './quota'
 
 describe('cachedQuota', () => {
   it('reads once per ttl and falls back to the last good reading on error', async () => {
@@ -31,6 +31,38 @@ describe('cachedQuota', () => {
       throw new Error('offline')
     })
     expect(await read()).toEqual({ weekly: null, session: null })
+  })
+})
+
+describe('toQuotaReading', () => {
+  const window = (usedPercent: number) => ({ usedPercent }) as never
+
+  it('reads the used percentages from an ok result', () => {
+    const limits = { status: 'ok' as const, weekly: window(61), session: window(38) }
+    expect(toQuotaReading(limits)).toEqual({ weekly: 61, session: 38 })
+  })
+
+  it('throws on an error result, which Orca returns instead of throwing', () => {
+    expect(() => toQuotaReading({ status: 'error', weekly: null, session: null })).toThrow('error')
+  })
+
+  it('lets cachedQuota keep the last good reading across an error result', async () => {
+    let t = 0
+    let ok = true
+    const read = cachedQuota(
+      async () =>
+        toQuotaReading({
+          status: ok ? 'ok' : 'error',
+          weekly: ok ? window(61) : null,
+          session: ok ? window(38) : null
+        }),
+      1000,
+      () => t
+    )
+    await read()
+    ok = false
+    t = 2000
+    expect(await read()).toEqual({ weekly: 61, session: 38 })
   })
 })
 

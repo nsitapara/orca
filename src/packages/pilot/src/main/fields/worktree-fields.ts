@@ -17,11 +17,16 @@ const OPERATION_MARKERS: [string, string][] = [
   ['rebase-apply', 'rebase'],
   ['CHERRY_PICK_HEAD', 'cherry-pick'],
   ['REVERT_HEAD', 'revert'],
+  ['sequencer', 'cherry-pick or revert'],
   ['BISECT_LOG', 'bisect'],
   ['index.lock', 'git operation (index.lock)']
 ]
 
 export function detectGitOperation(gitDir: string): string | null {
+  // rebase-apply also holds a `git am` in progress, marked by an `applying` file.
+  if (existsSync(join(gitDir, 'rebase-apply', 'applying'))) {
+    return 'am'
+  }
   for (const [marker, name] of OPERATION_MARKERS) {
     if (existsSync(join(gitDir, marker))) {
       return name
@@ -51,8 +56,15 @@ async function attempt<T>(read: () => T | Promise<T>): Promise<Read<T>> {
 
 async function anyAlive(deps: FactDeps, automationId: string, path: string): Promise<boolean> {
   const handles = deps.openSessionHandles(automationId, path)
-  const alive = await Promise.all(handles.map((h) => deps.terminalAlive(h)))
-  return alive.some(Boolean)
+  const reads = await Promise.allSettled(handles.map((h) => deps.terminalAlive(h)))
+  if (reads.some((r) => r.status === 'fulfilled' && r.value)) {
+    return true
+  }
+  const failed = reads.find((r) => r.status === 'rejected')
+  if (failed) {
+    throw failed.reason
+  }
+  return false
 }
 
 // A fact that could not be read is left unknown (null for the count, absent otherwise) so Task 14's
@@ -94,11 +106,8 @@ export async function addWorktreeFields(
   deps: FactDeps,
   needsFacts: (item: TickItem) => boolean
 ): Promise<TickItem[]> {
-  const listed = await attempt(() => deps.listWorktrees(repoPath))
-  if (!listed.ok) {
-    return items
-  }
-  const byBranch = new Map(listed.value.map((w) => [w.branch, w]))
+  // A listing failure throws: the tick runner records the tick as failed and the next tick retries.
+  const byBranch = new Map((await deps.listWorktrees(repoPath)).map((w) => [w.branch, w]))
   return Promise.all(
     items.map(async (item) => {
       if (!needsFacts(item)) {

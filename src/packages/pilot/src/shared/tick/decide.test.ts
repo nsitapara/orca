@@ -187,5 +187,7 @@ describe('authorInScope', () => {
     expect(authorInScope(definition, people, 'stranger')).toBe(false)
     const open = setup(CI_05.replace('author: { people: [nish] }, ', ''))
     expect(authorInScope(open.definition, open.people, 'stranger')).toBe(true)
+    const anyone = setup(CI_05.replace('author: { people: [nish] }', 'author: anyone'))
+    expect(authorInScope(anyone.definition, anyone.people, 'stranger')).toBe(true)
   })
 })

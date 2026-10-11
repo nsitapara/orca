@@ -64,4 +64,14 @@ describe('listMergeRequestItems', () => {
       'merge_requests/1574'
     ])
   })
+
+  it('rejects when glab fails, so the tick fails instead of seeing no MRs', async () => {
+    const api: GlabApi = {
+      projectPath: 'p',
+      async get() {
+        throw new Error('glab: 401')
+      }
+    }
+    await expect(listMergeRequestItems(api, () => true)).rejects.toThrow('glab: 401')
+  })
 })
