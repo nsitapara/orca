@@ -141,3 +141,9 @@ export function isValidTimeZone(tz: string): boolean {
     return false
   }
 }
+
+// "HH:MM" on the automation's wall clock (the window check).
+export function localTimeOfDay(at: number, timeZone: string): string {
+  const w = wallClock(new Date(at), timeZone)
+  return `${String(w.hour).padStart(2, '0')}:${String(w.minute).padStart(2, '0')}`
+}

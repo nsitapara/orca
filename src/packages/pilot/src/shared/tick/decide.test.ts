@@ -1,223 +1,311 @@
 import { describe, expect, it } from 'vitest'
-import type { TickItem } from '../api-types'
-import { parseAutomationYaml } from '../definition/parse'
-import type { MergeRequestWhere } from '../definition/types'
-import { parsePeopleYaml } from '../people'
-import { decideTick } from './decide'
-import { mergeRequestScope } from './scope'
-import { fixture } from './__fixtures__/ci-05-2026-10-10'
+import type { ItemFields } from '../api-types'
+import { testDefinition } from '../definition/__fixtures__/definition'
+import type { AutomationDefinition } from '../definition/types'
+import {
+  decideTick,
+  usesHandled,
+  workspacePathOf,
+  type DecideInput,
+  type DecideItem,
+  type HandledState
+} from './decide'
 
-const CI_05 = `
-name: Fix failed CI on my MRs
-repo: web-platform
-schedule: "10 * * * *"
-items:
-  kind: merge_request
-  where: { state: open, author: { people: [nish] }, head_pipeline: failed }
-once_per: "{mr.iid}:{mr.pipeline}"
-checks: [ { worktree: exists }, { worktree: clean }, { session: none_open }, quota ]
-limits: { per_tick: 3 }
-steps: [ { agent: claude, skill: fix-gitlab-ci, prompt: "Fix {mr.pipeline} on !{mr.iid}" } ]
-`
-const PEOPLE = `
-people:
-  - { id: nish, name: Nish Sitapara, gitlab: nish8 }
-  - { id: shivan, name: Shivan, gitlab: shivan2418 }
-`
+const NOW = Date.UTC(2026, 9, 11, 19, 0)
+const HOUR = 60 * 60_000
+const EXISTS = [{ kind: 'worktree_exists' as const }]
 
-function setup(yaml = CI_05) {
-  const def = parseAutomationYaml(yaml, '/a/fix-failed-ci.yaml')
-  const people = parsePeopleYaml(PEOPLE)
-  if (!def.ok || !people.ok) {
-    throw new Error('fixture setup failed')
-  }
-  const where = (def.definition.items?.where ?? {}) as MergeRequestWhere
-  const directory = people.directory
+const item = (
+  n: number,
+  fields: ItemFields = {},
+  sortKeys?: DecideItem['sortKeys']
+): DecideItem => ({
+  key: `mr:${n}`,
+  label: `!${n}`,
+  fields: { 'mr.iid': n, 'worktree.path': `/wt/${n}`, 'repo.path': '/repo', ...fields },
+  ...(sortKeys ? { sortKeys } : {})
+})
+
+function input(
+  definition: AutomationDefinition,
+  items: DecideItem[],
+  over: Partial<DecideInput> = {}
+): DecideInput {
   return {
-    definition: def.definition,
-    scope: (item: TickItem) => mergeRequestScope(item, where, directory)
+    definition,
+    items,
+    now: NOW,
+    scope: new Map(),
+    handled: new Map(),
+    seenKeys: new Set(),
+    activeRuns: 0,
+    busyWorktrees: new Set(),
+    scriptChecks: new Map(),
+    ...over
   }
 }
+const verdicts = (i: DecideInput) => decideTick(i).map((d) => [d.key, d.verdict, d.reason])
 
-describe('decideTick on 2026-10-10 12:10 (automation 05)', () => {
-  it('matches what the old sweep decided, item by item', () => {
-    const { definition, scope } = setup()
-    const decisions = decideTick({
-      definition,
-      scope,
-      items: fixture.items,
-      handledKeys: new Set(fixture.handledKeys),
-      seenKeys: new Set(),
-      runningCount: 0
+describe('decideTick: scope, once_per and baseline', () => {
+  it("applies the source's scope, then each match expression, naming the clause", () => {
+    const def = testDefinition({
+      items: {
+        kind: 'merge_request',
+        where: {},
+        match: ['{mr.waiting_threads} > 0'],
+        customFields: []
+      }
     })
-    expect(decisions.map((d) => [d.key, d.verdict, d.reason])).toEqual([
-      ['!1561', 'started', 'All checks pass'],
-      ['!1587', 'notdue', 'Already handled 1587:2933991087'],
-      ['!1574', 'skipped', '2 uncommitted files'],
-      ['!1592', 'skipped', 'A session from this automation is still open there'],
-      ['!1347', 'notdue', 'Head pipeline success'],
-      ['!1590', 'notdue', 'Head pipeline running'],
-      ['!1588', 'out_of_scope', 'Author is Shivan; this automation looks at Nish Sitapara'],
-      ['!1600', 'out_of_scope', "Author contractor9 isn't in people.yaml"]
+    const items = [
+      item(1, { 'mr.waiting_threads': 2 }),
+      item(2, { 'mr.waiting_threads': 0 }),
+      item(3),
+      item(4)
+    ]
+    const scope = new Map([
+      ['mr:3', { verdict: 'out_of_scope' as const, reason: 'MR is closed' }],
+      ['mr:4', { verdict: 'notdue' as const, reason: 'Head pipeline running' }]
     ])
-    expect(decisions[0].onceKey).toBe('1561:2934410022')
-    expect(decisions[0].checks.map((c) => c.ok)).toEqual([true, true, true, true])
-  })
-
-  it('stops starting at the per-tick limit', () => {
-    const { definition, scope } = setup(CI_05.replace('per_tick: 3', 'per_tick: 1'))
-    const items = fixture.items.map((i) => ({
-      ...i,
-      fields: { ...i.fields, 'worktree.dirty_count': 0, 'session.open_from_automation': false }
-    }))
-    const verdicts = decideTick({
-      definition,
-      scope,
-      items,
-      handledKeys: new Set(),
-      seenKeys: new Set(),
-      runningCount: 0
-    }).map((d) => d.verdict)
-    expect(verdicts.slice(0, 4)).toEqual(['started', 'over_limit', 'over_limit', 'over_limit'])
-  })
-
-  it('baselines items it has never seen when first_seen is baseline', () => {
-    const { definition, scope } = setup(CI_05.replace('limits:', 'first_seen: baseline\nlimits:'))
-    const first = decideTick({
-      definition,
-      scope,
-      items: fixture.items.slice(0, 1),
-      handledKeys: new Set(),
-      seenKeys: new Set(),
-      runningCount: 0
-    })
-    expect(first[0]).toMatchObject({
-      verdict: 'baselined',
-      reason: 'First time seen: recorded, not acted on'
-    })
-  })
-
-  it('treats an author missing from people.yaml as in scope under author: anyone', () => {
-    const { definition, scope } = setup(CI_05.replace('{ people: [nish] }', 'anyone'))
-    const [d] = decideTick({
-      definition,
-      scope,
-      items: fixture.items.filter((i) => i.key === '!1600'),
-      handledKeys: new Set(),
-      seenKeys: new Set(),
-      runningCount: 0
-    })
-    expect(d).toMatchObject({ verdict: 'skipped', reason: 'No worktree for branch web-2200-x' })
-  })
-
-  it('starts nothing twice in one tick: same once_per key, same worktree', () => {
-    const { definition, scope } = setup()
-    const first = fixture.items[0]
-    const run = (items: TickItem[]) =>
-      decideTick({
-        definition,
-        scope,
-        items,
-        handledKeys: new Set(),
-        seenKeys: new Set(),
-        runningCount: 0
-      })
-    const dupKey = run([first, { ...first, key: '!9999', label: '!9999 dup' }])
-    expect(dupKey.map((d) => [d.verdict, d.reason])).toEqual([
-      ['started', 'All checks pass'],
-      ['notdue', 'Already handled 1561:2934410022']
-    ])
-    const otherPipeline = { ...first.fields, 'mr.iid': 9999, 'mr.pipeline': 1 }
-    const sameTree = run([first, { ...first, key: '!9999', fields: otherPipeline }])
-    expect(sameTree.map((d) => [d.verdict, d.reason])).toEqual([
-      ['started', 'All checks pass'],
-      ['skipped', 'Another run starts in /wt/web-1493 this tick']
+    expect(verdicts(input(def, items, { scope }))).toEqual([
+      ['mr:1', 'started', 'All checks pass'],
+      ['mr:2', 'out_of_scope', 'Doesn\'t match "{mr.waiting_threads} > 0"'],
+      ['mr:3', 'out_of_scope', 'MR is closed'],
+      ['mr:4', 'notdue', 'Head pipeline running']
     ])
   })
 
-  it('counts running agents against the at-once limit', () => {
-    const { definition, scope } = setup(CI_05.replace('per_tick: 3', 'at_once: 2'))
-    const [d] = decideTick({
-      definition,
-      scope,
-      items: fixture.items.slice(0, 1),
-      handledKeys: new Set(),
-      seenKeys: new Set(),
-      runningCount: 2
-    })
-    expect(d).toMatchObject({ verdict: 'over_limit', reason: 'At most 2 at once' })
+  it.each<[string, HandledState, number | null, string, string]>([
+    [
+      'handled and done',
+      { status: 'done', failedAt: null },
+      12 * HOUR,
+      'notdue',
+      'Already handled 1'
+    ],
+    // A seeded key (no run) or a run still going stays handled: only a failed run is retried.
+    [
+      'handled, seeded or still started',
+      { status: 'started', failedAt: null },
+      12 * HOUR,
+      'notdue',
+      'Already handled 1'
+    ],
+    [
+      'failed, no retry_after_failure',
+      { status: 'failed', failedAt: NOW - 13 * HOUR },
+      null,
+      'notdue',
+      'Already handled 1'
+    ],
+    [
+      'failed 13h ago, retry after 12h',
+      { status: 'failed', failedAt: NOW - 13 * HOUR },
+      12 * HOUR,
+      'started',
+      'All checks pass'
+    ],
+    [
+      'failed 1h ago, retry after 12h',
+      { status: 'failed', failedAt: NOW - HOUR },
+      12 * HOUR,
+      'notdue',
+      'Its last run failed; due again in 11h'
+    ],
+    [
+      'failed 90 min ago, retry after 2h',
+      { status: 'failed', failedAt: NOW - 90 * 60_000 },
+      2 * HOUR,
+      'notdue',
+      'Its last run failed; due again in 30m'
+    ]
+  ])('once_per: %s', (_name, state, retry, verdict, reason) => {
+    const def = testDefinition({ oncePer: '{mr.iid}', retryAfterFailureMs: retry })
+    const [d] = decideTick(input(def, [item(1)], { handled: new Map([['1', state]]) }))
+    expect([d.verdict, d.reason]).toEqual([verdict, reason])
   })
 
-  it('scopes out MRs that are not open and names missing facts as unknown', () => {
-    const { definition, scope } = setup()
-    const merged = {
-      ...fixture.items[0],
-      fields: { ...fixture.items[0].fields, 'mr.state': 'merged' }
+  it('baselines an item it has never seen', () => {
+    const def = testDefinition({ firstSeen: 'baseline' })
+    expect(verdicts(input(def, [item(1), item(2)], { seenKeys: new Set(['mr:2']) }))).toEqual([
+      ['mr:1', 'baselined', 'First time seen: recorded, not acted on'],
+      ['mr:2', 'started', 'All checks pass']
+    ])
+  })
+
+  it('runs a run-once automation every tick: no scope, once_per or baseline', () => {
+    const def = testDefinition({
+      items: null,
+      firstSeen: 'baseline',
+      workspace: { kind: 'main_checkout' }
+    })
+    const repo = {
+      key: 'repo:web-platform',
+      label: 'web-platform',
+      fields: { 'repo.path': '/repo' }
     }
-    const { 'mr.author': _a, ...noAuthor } = fixture.items[0].fields
-    const out = decideTick({
-      definition,
-      scope,
-      items: [merged, { ...fixture.items[0], fields: noAuthor }],
-      handledKeys: new Set(),
-      seenKeys: new Set(),
-      runningCount: 0
-    })
-    expect(out.map((d) => [d.verdict, d.reason])).toEqual([
-      ['out_of_scope', 'MR is merged'],
-      ['out_of_scope', "Author (unknown) isn't in people.yaml"]
-    ])
+    const out = decideTick(
+      input(def, [repo], {
+        handled: new Map([['repo:web-platform', { status: 'done' as const, failedAt: null }]]),
+        scope: new Map([['repo:web-platform', { verdict: 'out_of_scope' as const, reason: 'x' }]])
+      })
+    )
+    expect([out[0].verdict, out[0].reason]).toEqual(['started', 'All checks pass'])
   })
 
-  it('absent author filter behaves like anyone', () => {
-    const { definition, scope } = setup(CI_05.replace('author: { people: [nish] }, ', ''))
-    const [d] = decideTick({
-      definition,
-      scope,
-      items: fixture.items.filter((i) => i.key === '!1600'),
-      handledKeys: new Set(),
-      seenKeys: new Set(),
-      runningCount: 0
+  // Review Focus 3: with once_per a run-once automation runs once per key (once per local day).
+  it('honours once_per on a run-once automation', () => {
+    const def = testDefinition({
+      items: null,
+      oncePer: '{run.date}',
+      workspace: { kind: 'main_checkout' }
     })
-    expect(d).toMatchObject({ verdict: 'skipped', reason: 'No worktree for branch web-2200-x' })
+    const repo = {
+      key: 'repo:web-platform',
+      label: 'web-platform',
+      fields: { 'run.date': '20261010' }
+    }
+    const handled = new Map([['20261010', { status: 'done' as const, failedAt: null }]])
+    const [d] = decideTick(input(def, [repo], { handled }))
+    expect([d.verdict, d.reason]).toEqual(['notdue', 'Already handled 20261010'])
   })
 })
 
-describe('decideTick for a run-once automation', () => {
-  const RUN_ONCE =
-    'name: Pull dev\nrepo: web-platform\nschedule: manual\nsteps: [ { agent: shell, run: ./pull.sh } ]\n'
-  const repoItem: TickItem = {
-    key: 'repo:web-platform',
-    label: 'web-platform',
-    fields: { 'run.date': '20261010' }
-  }
-  function decideOnce(yaml: string, handled: string[]) {
-    const parsed = parseAutomationYaml(yaml, '/a/pull-dev.yaml')
-    if (!parsed.ok) {
-      throw new Error(parsed.errors.join('\n'))
-    }
-    return decideTick({
-      definition: parsed.definition,
-      scope: () => ({ ok: true }),
-      items: [repoItem],
-      handledKeys: new Set(handled),
-      seenKeys: new Set(),
-      runningCount: 0
-    })[0]
-  }
-
-  it('starts on every tick without once_per, whatever keys are stored (Review Focus)', () => {
-    expect(decideOnce(RUN_ONCE, ['repo:web-platform'])).toMatchObject({
-      verdict: 'started',
-      onceKey: 'repo:web-platform'
+describe('decideTick: checks and the worktree rule', () => {
+  it('stops at the first failing check, using precomputed script results', () => {
+    const def = testDefinition({
+      checks: [
+        { kind: 'worktree_exists' },
+        { kind: 'script', run: './gate.sh', timeoutMs: 1000 },
+        { kind: 'worktree_idle' }
+      ]
     })
+    const scriptChecks = new Map([
+      ['mr:1', new Map([[1, { ok: false, reason: 'Nothing to do' }]])],
+      ['mr:2', new Map([[1, { ok: true, reason: 'Ready' }]])]
+    ])
+    const out = decideTick(
+      input(
+        def,
+        [
+          item(1),
+          item(2, { 'worktree.agent_state': 'idle', 'worktree.typing': false }),
+          item(3, { 'worktree.path': null })
+        ],
+        { scriptChecks }
+      )
+    )
+    expect(out.map((d) => [d.verdict, d.reason, d.checks.length])).toEqual([
+      ['skipped', 'Nothing to do', 2],
+      ['started', 'All checks pass', 3],
+      ['skipped', 'No worktree for !3', 1]
+    ])
   })
 
-  it('honours once_per when it has one', () => {
-    const daily = RUN_ONCE.replace('steps:', 'once_per: "{run.date}"\nsteps:')
-    expect(decideOnce(daily, ['20261010'])).toMatchObject({
-      verdict: 'notdue',
-      reason: 'Already handled 20261010'
+  // G2/B2: only an item's own worktree is exclusive. The main checkout is shared by design (01 hourly
+  // must not block 02 and 07), and a new worktree is the run's own.
+  it.each<[string, AutomationDefinition['workspace'], string, string]>([
+    ["the item's worktree", { kind: 'item_worktree' }, '/wt/1', 'skipped'],
+    ['the main checkout', { kind: 'main_checkout' }, '/repo', 'started'],
+    [
+      'a new worktree never collides',
+      { kind: 'new_worktree', base: 'origin/dev', name: 'x', reuseExisting: false, setup: 'skip' },
+      '/wt/1',
+      'started'
+    ]
+  ])(
+    "another automation's run is active in %s: the next run is %s",
+    (_name, workspace, busy, verdict) => {
+      const def = testDefinition({ workspace })
+      const [d] = decideTick(input(def, [item(1)], { busyWorktrees: new Set([busy]) }))
+      expect(d.verdict).toBe(verdict)
+      if (verdict === 'skipped') {
+        expect(d.reason).toBe(`Another run is active in ${busy}`)
+      }
+    }
+  )
+
+  it.each<[string, AutomationDefinition['workspace'], string | null]>([
+    ["the item's worktree", { kind: 'item_worktree' }, '/wt/1'],
+    ['the main checkout: shared, so no exclusive path', { kind: 'main_checkout' }, null],
+    [
+      'a new worktree',
+      { kind: 'new_worktree', base: 'origin/dev', name: 'x', reuseExisting: false, setup: 'run' },
+      null
+    ]
+  ])('workspacePathOf: %s', (_name, workspace, path) => {
+    expect(workspacePathOf(testDefinition({ workspace }), item(1).fields)).toBe(path)
+  })
+
+  it.each<[string, Partial<AutomationDefinition>, boolean]>([
+    ['an item automation', {}, true],
+    ['a run-once automation without once_per', { items: null }, false],
+    ['a run-once automation with once_per', { items: null, oncePer: '{run.date}' }, true]
+  ])('usesHandled: %s', (_name, over, expected) => {
+    expect(usesHandled(testDefinition(over))).toBe(expected)
+  })
+
+  it('starts nothing twice in one tick: same once_per key, same worktree', () => {
+    const def = testDefinition({ oncePer: '{mr.pipeline}', checks: EXISTS })
+    const items = [
+      item(1, { 'mr.pipeline': 9 }),
+      item(2, { 'mr.pipeline': 9, 'worktree.path': '/wt/2' }),
+      item(3, { 'mr.pipeline': 10, 'worktree.path': '/wt/1' })
+    ]
+    expect(verdicts(input(def, items))).toEqual([
+      ['mr:1', 'started', 'All checks pass'],
+      ['mr:2', 'notdue', 'Already handled 9'],
+      ['mr:3', 'skipped', 'Another run starts in /wt/1 this tick']
+    ])
+  })
+})
+
+describe('decideTick: limits, order and ask_first', () => {
+  it('stops at the per-tick limit and counts running runs against at_once', () => {
+    const perTick = testDefinition({
+      limits: { perTick: 1, atOnce: null, timeoutMs: null, order: 'listed' }
     })
+    expect(decideTick(input(perTick, [item(1), item(2)])).map((d) => d.verdict)).toEqual([
+      'started',
+      'over_limit'
+    ])
+    const atOnce = testDefinition({
+      limits: { perTick: null, atOnce: 2, timeoutMs: null, order: 'listed' }
+    })
+    const [d] = decideTick(input(atOnce, [item(1)], { activeRuns: 2 }))
+    expect([d.verdict, d.reason]).toEqual(['over_limit', 'At most 2 at once'])
+  })
+
+  it.each<[string, 'listed' | 'oldest_waiting_first' | 'priority', string[]]>([
+    ['listed keeps the source order', 'listed', ['started', 'over_limit', 'over_limit']],
+    ['oldest waiting first', 'oldest_waiting_first', ['over_limit', 'started', 'over_limit']],
+    [
+      'priority, lowest number first, unknown last',
+      'priority',
+      ['over_limit', 'over_limit', 'started']
+    ]
+  ])('gives the per-tick slot by order: %s', (_name, order, expected) => {
+    const def = testDefinition({ limits: { perTick: 1, atOnce: null, timeoutMs: null, order } })
+    const items = [
+      item(1, {}, { waitingSince: 300, priority: null }),
+      item(2, {}, { waitingSince: 100, priority: 3 }),
+      item(3, {}, { waitingSince: null, priority: 1 })
+    ]
+    const out = decideTick(input(def, items))
+    expect(out.map((d) => d.key)).toEqual(['mr:1', 'mr:2', 'mr:3'])
+    expect(out.map((d) => d.verdict)).toEqual(expected)
+  })
+
+  it('asks first instead of starting: takes a per-tick slot but no worktree and no at_once slot', () => {
+    const def = testDefinition({
+      start: 'ask_first',
+      askFirst: { title: 'Prepare a review of !{mr.iid}?', context: '', options: [] },
+      limits: { perTick: 2, atOnce: 1, timeoutMs: null, order: 'listed' }
+    })
+    const items = [item(1), item(2, { 'worktree.path': '/wt/1' }), item(3)]
+    expect(verdicts(input(def, items))).toEqual([
+      ['mr:1', 'asked', 'Asks first: Prepare a review of !1?'],
+      ['mr:2', 'asked', 'Asks first: Prepare a review of !2?'],
+      ['mr:3', 'over_limit', 'Over the limit of 2 per tick']
+    ])
   })
 })

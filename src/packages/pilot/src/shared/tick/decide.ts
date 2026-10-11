@@ -1,33 +1,131 @@
-import type { CheckOutcome, ItemDecision, ScopeResult, TickItem } from '../api-types'
+import type { CheckOutcome, ItemDecision, ItemFields, Verdict } from '../api-types'
 import type { AutomationDefinition } from '../definition/types'
-import { oncePerKey } from '../template'
-import { evaluateCheck } from './checks'
+import { evalExpr, parseExpr } from '../expr'
+import { oncePerKey, renderTemplate } from '../template'
+import { evaluateCheck, fieldLookup, type CheckResult } from './checks'
 
-export type DecideInput<I extends TickItem = TickItem> = {
+export type DecideItem = {
+  key: string
+  label: string
+  fields: ItemFields
+  sortKeys?: { waitingSince: number | null; priority: number | null }
+}
+export type ScopeGate = { verdict: 'out_of_scope' | 'notdue'; reason: string }
+export type HandledState = { status: 'started' | 'done' | 'failed'; failedAt: number | null }
+// Item key → index in definition.checks → the script's result.
+export type ScriptCheckResults = ReadonlyMap<string, ReadonlyMap<number, CheckResult>>
+export type DecideInput = {
   definition: AutomationDefinition
-  items: I[]
-  // The item source's verdict on an item's where clauses (shared/tick/scope.ts), passed in so this
-  // stays pure.
-  scope(item: I): ScopeResult
-  handledKeys: ReadonlySet<string>
+  items: DecideItem[]
+  now: number
+  scope: ReadonlyMap<string, ScopeGate>
+  handled: ReadonlyMap<string, HandledState>
   seenKeys: ReadonlySet<string>
-  runningCount: number
+  activeRuns: number
+  busyWorktrees: ReadonlySet<string>
+  scriptChecks: ScriptCheckResults
+}
+type Gate = { verdict: Verdict; reason: string }
+type Candidate = {
+  index: number
+  item: DecideItem
+  onceKey: string
+  checks: CheckOutcome[]
+  path: string | null
 }
 
-type Gate = { verdict: ItemDecision['verdict']; reason: string } | null
+function formatWait(ms: number): string {
+  const minutes = Math.max(1, Math.ceil(ms / 60_000))
+  const hours = Math.floor(minutes / 60)
+  const rest = minutes % 60
+  if (hours === 0) {
+    return `${rest}m`
+  }
+  return rest === 0 ? `${hours}h` : `${hours}h ${rest}m`
+}
+
+function matchGate(def: AutomationDefinition, item: DecideItem): Gate | null {
+  for (const source of def.items?.match ?? []) {
+    const parsed = parseExpr(source)
+    if (!parsed.ok) {
+      return { verdict: 'out_of_scope', reason: `Invalid match "${source}": ${parsed.error}` }
+    }
+    if (!evalExpr(parsed.expr, fieldLookup(item.fields))) {
+      return { verdict: 'out_of_scope', reason: `Doesn't match "${source}"` }
+    }
+  }
+  return null
+}
+
+// A key whose last run failed is due again retry_after_failure after the failure.
+function handledGate(input: Omit<DecideInput, 'scriptChecks'>, onceKey: string): Gate | null {
+  const state = input.handled.get(onceKey)
+  if (!state) {
+    return null
+  }
+  const retry = input.definition.retryAfterFailureMs
+  if (state.status !== 'failed' || retry === null || state.failedAt === null) {
+    return { verdict: 'notdue', reason: `Already handled ${onceKey}` }
+  }
+  const wait = state.failedAt + retry - input.now
+  if (wait <= 0) {
+    return null
+  }
+  return { verdict: 'notdue', reason: `Its last run failed; due again in ${formatWait(wait)}` }
+}
+
+// Spec §6 before the checks: scope (the source's scope() and items.match), once_per, first_seen.
+// Run-once automations skip scope and first_seen, and once_per unless they set one (once per local
+// day with "{run.date}"). Exported so the tick runner runs script checks only for items that reach
+// the checks.
+export function preCheckGate(
+  input: Omit<DecideInput, 'scriptChecks'>,
+  item: DecideItem
+): Gate | null {
+  const def = input.definition
+  const onceKey = oncePerKey(def.oncePer, item.fields, item.key)
+  if (def.items === null) {
+    return usesHandled(def) ? handledGate(input, onceKey) : null
+  }
+  const scoped = input.scope.get(item.key) ?? matchGate(def, item)
+  if (scoped) {
+    return scoped
+  }
+  const handled = handledGate(input, onceKey)
+  if (handled) {
+    return handled
+  }
+  if (def.firstSeen === 'baseline' && !input.seenKeys.has(item.key)) {
+    return { verdict: 'baselined', reason: 'First time seen: recorded, not acted on' }
+  }
+  return null
+}
 
 // A run-once automation without once_per runs on every tick (contract §1): its key is never handled.
 export function usesHandled(def: AutomationDefinition): boolean {
   return def.items !== null || def.oncePer !== null
 }
 
+// The path the cross-automation worktree rule compares: the item's own worktree. A new worktree can't
+// collide with another run, and the repo's main checkout is shared by design (G2/B2), so neither has one.
+export function workspacePathOf(def: AutomationDefinition, fields: ItemFields): string | null {
+  if (def.workspace.kind !== 'item_worktree') {
+    return null
+  }
+  const value = fields['worktree.path']
+  return typeof value === 'string' && value !== '' ? value : null
+}
+
 function runChecks(
-  def: AutomationDefinition,
-  item: TickItem
+  input: DecideInput,
+  item: DecideItem
 ): { checks: CheckOutcome[]; failed: CheckOutcome | null } {
+  const def = input.definition
+  const ctx = { label: item.label, fields: item.fields, now: input.now, timeZone: def.timezone }
+  const scripts = input.scriptChecks.get(item.key)
   const checks: CheckOutcome[] = []
-  for (const c of def.checks) {
-    const result = evaluateCheck(c, item.fields)
+  for (const [index, c] of def.checks.entries()) {
+    const result = evaluateCheck(c, ctx, scripts?.get(index))
     checks.push(result)
     if (!result.ok) {
       return { checks, failed: result }
@@ -36,66 +134,117 @@ function runChecks(
   return { checks, failed: null }
 }
 
-function limitGate(def: AutomationDefinition, startedSoFar: number, running: number): Gate {
+function sortValue(value: number | null | undefined): number {
+  return value ?? Number.POSITIVE_INFINITY
+}
+
+function ranked(def: AutomationDefinition, candidates: Candidate[]): Candidate[] {
+  const order = def.limits.order
+  if (order === 'listed') {
+    return candidates
+  }
+  const key = (c: Candidate) =>
+    order === 'priority'
+      ? sortValue(c.item.sortKeys?.priority)
+      : sortValue(c.item.sortKeys?.waitingSince)
+  return [...candidates].sort((a, b) => key(a) - key(b) || a.index - b.index)
+}
+
+function inTickGate(
+  def: AutomationDefinition,
+  c: Candidate,
+  onceKeys: Set<string>,
+  paths: Set<string>
+): Gate | null {
+  if (usesHandled(def) && onceKeys.has(c.onceKey)) {
+    return { verdict: 'notdue', reason: `Already handled ${c.onceKey}` }
+  }
+  if (c.path !== null && paths.has(c.path)) {
+    return { verdict: 'skipped', reason: `Another run starts in ${c.path} this tick` }
+  }
+  return null
+}
+
+function limitGate(def: AutomationDefinition, taken: number, active: number): Gate | null {
   const { perTick, atOnce } = def.limits
-  if (perTick !== null && startedSoFar >= perTick) {
+  if (perTick !== null && taken >= perTick) {
     return { verdict: 'over_limit', reason: `Over the limit of ${perTick} per tick` }
   }
-  if (atOnce !== null && running + startedSoFar >= atOnce) {
+  if (atOnce !== null && active >= atOnce) {
     return { verdict: 'over_limit', reason: `At most ${atOnce} at once` }
   }
   return null
 }
 
-// The tick algorithm (spec §6 steps 3–6): scope → once_per → first-seen baseline → checks → limits.
-// per_tick and at_once apply in the caller's item order (the merge-request source lists by iid).
-export function decideTick<I extends TickItem>(input: DecideInput<I>): ItemDecision[] {
-  const { definition: def, handledKeys, seenKeys, runningCount } = input
-  const tracksHandled = usesHandled(def)
+function askedReason(def: AutomationDefinition, fields: ItemFields): string {
+  if (!def.askFirst) {
+    return 'Asks before starting'
+  }
+  return `Asks first: ${renderTemplate(def.askFirst.title, fields).text}`
+}
+
+function base(item: DecideItem, onceKey: string) {
+  return { key: item.key, label: item.label, onceKey, fields: item.fields }
+}
+
+// The per-tick slots go out in limits.order; decisions keep the source's order.
+function allocate(input: DecideInput, candidates: Candidate[], out: ItemDecision[]): void {
+  const def = input.definition
+  const onceKeys = new Set<string>()
+  const paths = new Set<string>()
+  let taken = 0
   let started = 0
-  const startedOnceKeys = new Set<string>()
-  const startedWorktrees = new Set<string>()
-  return input.items.map((item) => {
-    const onceKey = oncePerKey(def.oncePer, item.fields, item.key)
-    const base = {
-      key: item.key,
-      label: item.label,
-      onceKey,
-      fields: item.fields,
-      checks: [] as CheckOutcome[]
+  for (const c of ranked(def, candidates)) {
+    const decided = { ...base(c.item, c.onceKey), checks: c.checks }
+    const gate =
+      inTickGate(def, c, onceKeys, paths) ?? limitGate(def, taken, input.activeRuns + started)
+    if (gate) {
+      out[c.index] = { ...decided, ...gate }
+      continue
     }
-    const scope = input.scope(item)
-    if (!scope.ok) {
-      return { ...base, verdict: scope.verdict, reason: scope.reason }
-    }
-    if (tracksHandled && (handledKeys.has(onceKey) || startedOnceKeys.has(onceKey))) {
-      return { ...base, verdict: 'notdue', reason: `Already handled ${onceKey}` }
-    }
-    if (def.firstSeen === 'baseline' && !seenKeys.has(item.key)) {
-      return { ...base, verdict: 'baselined', reason: 'First time seen: recorded, not acted on' }
-    }
-    const { checks, failed } = runChecks(def, item)
-    if (failed) {
-      return { ...base, checks, verdict: 'skipped', reason: failed.reason }
-    }
-    const path = item.fields['worktree.path']
-    if (typeof path === 'string' && startedWorktrees.has(path)) {
-      return {
-        ...base,
-        checks,
-        verdict: 'skipped',
-        reason: `Another run starts in ${path} this tick`
-      }
-    }
-    const limit = limitGate(def, started, runningCount)
-    if (limit) {
-      return { ...base, checks, ...limit }
+    taken += 1
+    onceKeys.add(c.onceKey)
+    if (def.start === 'ask_first') {
+      out[c.index] = { ...decided, verdict: 'asked', reason: askedReason(def, c.item.fields) }
+      continue
     }
     started += 1
-    startedOnceKeys.add(onceKey)
-    if (typeof path === 'string') {
-      startedWorktrees.add(path)
+    if (c.path !== null) {
+      paths.add(c.path)
     }
-    return { ...base, checks, verdict: 'started', reason: 'All checks pass' }
+    out[c.index] = { ...decided, verdict: 'started', reason: 'All checks pass' }
+  }
+}
+
+export function decideTick(input: DecideInput): ItemDecision[] {
+  const def = input.definition
+  // Filled by index: every item gets exactly one decision, here or in allocate().
+  const out: ItemDecision[] = []
+  const candidates: Candidate[] = []
+  input.items.forEach((item, index) => {
+    const onceKey = oncePerKey(def.oncePer, item.fields, item.key)
+    const gate = preCheckGate(input, item)
+    if (gate) {
+      out[index] = { ...base(item, onceKey), checks: [], ...gate }
+      return
+    }
+    const { checks, failed } = runChecks(input, item)
+    if (failed) {
+      out[index] = { ...base(item, onceKey), checks, verdict: 'skipped', reason: failed.reason }
+      return
+    }
+    const path = workspacePathOf(def, item.fields)
+    if (path !== null && input.busyWorktrees.has(path)) {
+      out[index] = {
+        ...base(item, onceKey),
+        checks,
+        verdict: 'skipped',
+        reason: `Another run is active in ${path}`
+      }
+      return
+    }
+    candidates.push({ index, item, onceKey, checks, path })
   })
+  allocate(input, candidates, out)
+  return out
 }

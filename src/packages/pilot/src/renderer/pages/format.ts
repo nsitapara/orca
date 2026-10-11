@@ -6,10 +6,12 @@ const VERDICT: Record<Verdict, string> = {
   notdue: 'Not due',
   out_of_scope: 'Not in scope',
   over_limit: 'Next tick',
-  baselined: 'Baselined'
+  baselined: 'Baselined',
+  asked: 'Asked first'
 }
 const COUNT_ORDER: [Verdict, string][] = [
   ['started', 'started'],
+  ['asked', 'asked first'],
   ['skipped', 'skipped'],
   ['notdue', 'not due'],
   ['over_limit', 'next tick'],
