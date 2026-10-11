@@ -2,7 +2,7 @@ import { app } from 'electron'
 import type { OrcaRuntimeService } from '../../../../main/runtime/orca-runtime'
 import { mainProcessState } from '../../../../main/startup/main-process-state'
 import { getAppEnvironment } from '../../../../shared/app-environment'
-import { pilotSchedulerEnabled, type PilotHostKind } from './env'
+import { applyPilotEnvDefaults, pilotSchedulerEnabled, type PilotHostKind } from './env'
 import { claudeQuotaReader } from './fields/claude-quota'
 import { startPilotServices, type PilotServices } from './pilot-services'
 
@@ -28,6 +28,9 @@ function hostKind(): PilotHostKind {
 }
 
 export function attachPilotMain(runtime: OrcaRuntimeService): void {
+  // First and outside the try: serve mode's CLI install (main-process-runtime-launch.ts) reads
+  // ORCA_CLI_INSTALL_PATH after this hook, even when Pilot's services fail to start.
+  applyPilotEnvDefaults()
   // Why: Orca's ready step calls app.setName('Orca'). userData is already captured, so renaming here
   // changes menus and dialogs only.
   // Upstream startup tests mock `app` without setName (R9), so tolerate its absence.
