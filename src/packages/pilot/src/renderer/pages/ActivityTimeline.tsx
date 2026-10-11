@@ -58,10 +58,16 @@ function costText(run: RunRow): string {
   return run.costUsd === null ? '' : ` · $${run.costUsd.toFixed(2)}`
 }
 
+const RUN_STATUS: Record<RunRow['status'], string> = {
+  running: 'Running',
+  done: 'Done',
+  failed: 'Failed'
+}
+
 function RunLine({ run }: { run: RunRow }): React.JSX.Element {
   return (
     <li className="text-sm">
-      <div>{`Run ${run.id} · ${run.itemLabel} · ${run.status}${costText(run)}`}</div>
+      <div>{`Run ${run.id} · ${run.itemLabel} · ${RUN_STATUS[run.status]}${costText(run)}`}</div>
       {run.outcome ? <div className="text-muted-foreground">{run.outcome}</div> : null}
     </li>
   )

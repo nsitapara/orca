@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type { AutomationListPayload, PilotStatus } from '../../shared/api-types'
 import { pilotRpc } from '../api'
 import { AutomationView } from './AutomationView'
@@ -12,28 +12,39 @@ export default function PilotAutomationsPage(): React.JSX.Element {
   const [startError, setStartError] = useState<string | null>(null)
   const [open, setOpen] = useState<string | null>(null)
   const [now, setNow] = useState(() => Date.now())
+  const mounted = useRef(true)
   const load = useCallback(() => {
     pilotRpc<AutomationListPayload>('pilot.automations.list').then(
       (p) => {
+        if (!mounted.current) {
+          return
+        }
         setPayload(p)
         setNow(Date.now())
         setError(null)
         setStartError(null)
       },
       (e: unknown) => {
+        if (!mounted.current) {
+          return
+        }
         setError(errorText(e))
         // The list fails in degraded mode; pilot.status still says why Pilot didn't start.
         pilotRpc<PilotStatus>('pilot.status').then(
-          (s) => setStartError(s.error),
-          () => setStartError(null)
+          (s) => mounted.current && setStartError(s.error),
+          () => mounted.current && setStartError(null)
         )
       }
     )
   }, [])
   useEffect(() => {
+    mounted.current = true
     load()
     const timer = setInterval(load, 20_000)
-    return () => clearInterval(timer)
+    return () => {
+      mounted.current = false
+      clearInterval(timer)
+    }
   }, [load])
 
   if (open) {

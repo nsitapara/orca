@@ -58,13 +58,16 @@ describe('PilotAutomationsPage', () => {
   it('shows bad files, a people notice and missing folders above the table', async () => {
     serve({
       automations: [summary],
-      errors: [{ file: '/a/bad.yaml', errors: ['schedule is required'] }],
+      errors: [
+        { file: '/a/bad.yaml', errors: ['/a/bad.yaml: YAML error at line 2'] },
+        { file: '/a/two.yaml', errors: ['/a/two.yaml: no steps', '/a/two.yaml: bad schedule'] }
+      ],
       peopleError: 'people.yaml and people.yml both exist',
       missingDirs: ['/gone']
     })
     render(<PilotAutomationsPage />)
-    expect(await screen.findByText('/a/bad.yaml: schedule is required')).toBeTruthy()
-    expect(screen.queryByText(/bad\.yaml: \/a\/bad\.yaml/)).toBeNull()
+    expect(await screen.findByText('/a/bad.yaml: YAML error at line 2')).toBeTruthy()
+    expect(screen.getByText('/a/two.yaml: no steps · bad schedule')).toBeTruthy()
     expect(screen.getByText('People: people.yaml and people.yml both exist')).toBeTruthy()
     expect(screen.getByText('Folder not found: /gone')).toBeTruthy()
     expect(screen.getByRole('button', { name: /Fix failed CI/ })).toBeTruthy()
