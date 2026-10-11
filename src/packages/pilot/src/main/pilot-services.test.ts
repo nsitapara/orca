@@ -108,6 +108,18 @@ describe('startPilotServices', () => {
     on.stop()
   })
 
+  it('closes interrupted ticks and prunes old ones when Pilot starts', () => {
+    const seed = PilotStore.open(join(userData, 'pilot-automations.db'))
+    const stuck = seed.startTick('ci', false, 0)
+    seed.close()
+    const services = startPilotServices(runtime, 'main')
+    expect(services.context.store.lastTick('ci')).toMatchObject({ id: stuck, status: 'failed' })
+    expect(logs).toContain(
+      '[pilot] store: 1 interrupted tick(s) closed, 0 tick(s) older than 30 days removed'
+    )
+    services.stop()
+  })
+
   it("throws when the store can't open, yet pilot.status still answers with the reason", () => {
     writeFileSync(
       join(userData, 'pilot-automations.db'),
