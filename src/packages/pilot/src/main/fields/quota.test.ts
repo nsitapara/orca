@@ -1,12 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import {
-  addQuotaFields,
-  cachedQuota,
-  cachedQuotas,
-  quotaFields,
-  readQuotas,
-  toQuotaReading
-} from './quota'
+import { cachedQuota, cachedQuotas, quotaFields, readQuotas, toQuotaReading } from './quota'
 
 describe('cachedQuota', () => {
   it('reads once per ttl and falls back to the last good reading on error', async () => {
@@ -70,16 +63,6 @@ describe('toQuotaReading', () => {
     ok = false
     t = 2000
     expect(await read()).toEqual({ weekly: 61, session: 38 })
-  })
-})
-
-describe('addQuotaFields', () => {
-  it('adds the same reading to every item', () => {
-    const out = addQuotaFields([{ key: '!1', label: '!1', fields: {} }], {
-      weekly: 61,
-      session: 38
-    })
-    expect(out[0].fields).toEqual({ 'quota.claude.weekly_pct': 61, 'quota.claude.session_pct': 38 })
   })
 })
 

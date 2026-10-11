@@ -1,6 +1,10 @@
+import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 import type { Item } from '../sources/types'
 import {
+  detectGitOperation,
   worktreeFacts,
   worktreeFor,
   type WorktreeFactDeps,
@@ -129,5 +133,34 @@ describe('worktreeFacts', () => {
     const activity = new Map([['/wt/a', { state: 'waiting' as const, typing: false }]])
     const facts = await worktreeFacts({ ...wt, path: '/wt/a/' }, 'ci', activity, deps())
     expect([facts['worktree.agent_state'], facts['worktree.typing']]).toEqual(['waiting', false])
+  })
+})
+
+describe('detectGitOperation', () => {
+  it.each([
+    ['MERGE_HEAD', 'merge'],
+    ['rebase-merge', 'rebase'],
+    ['CHERRY_PICK_HEAD', 'cherry-pick'],
+    ['REVERT_HEAD', 'revert'],
+    ['BISECT_LOG', 'bisect'],
+    ['sequencer', 'cherry-pick or revert'],
+    ['rebase-apply', 'rebase'],
+    ['rebase-apply/applying', 'am'],
+    ['index.lock', 'git operation (index.lock)']
+  ])('%s → %s', (marker, expected) => {
+    const gitDir = mkdtempSync(join(tmpdir(), 'pilot-gitdir-'))
+    if (marker.includes('/')) {
+      mkdirSync(join(gitDir, marker.split('/')[0]))
+      writeFileSync(join(gitDir, marker), '')
+    } else if (['rebase-merge', 'rebase-apply', 'sequencer'].includes(marker)) {
+      mkdirSync(join(gitDir, marker))
+    } else {
+      writeFileSync(join(gitDir, marker), '')
+    }
+    expect(detectGitOperation(gitDir)).toBe(expected)
+  })
+
+  it('is null for a quiet git dir', () => {
+    expect(detectGitOperation(mkdtempSync(join(tmpdir(), 'pilot-gitdir-')))).toBeNull()
   })
 })

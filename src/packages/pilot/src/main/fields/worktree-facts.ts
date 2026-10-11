@@ -1,3 +1,5 @@
+import { existsSync } from 'node:fs'
+import { join } from 'node:path'
 import type { ItemFields } from '../../shared/api-types'
 import type { Item } from '../sources/types'
 import { worktreePathKey, type ActivityDeps, type AgentActivity } from './agent-activity'
@@ -21,6 +23,30 @@ export type WorktreeFactDeps = ActivityDeps & {
   automationSessions(automationId: string, worktreePath: string): SessionStep[]
   anySessions(worktreePath: string): SessionStep[]
   terminalAlive(handle: string, paneKey: string | null): Promise<boolean>
+}
+
+const OPERATION_MARKERS: [string, string][] = [
+  ['MERGE_HEAD', 'merge'],
+  ['rebase-merge', 'rebase'],
+  ['rebase-apply', 'rebase'],
+  ['CHERRY_PICK_HEAD', 'cherry-pick'],
+  ['REVERT_HEAD', 'revert'],
+  ['sequencer', 'cherry-pick or revert'],
+  ['BISECT_LOG', 'bisect'],
+  ['index.lock', 'git operation (index.lock)']
+]
+
+export function detectGitOperation(gitDir: string): string | null {
+  // rebase-apply also holds a `git am` in progress, marked by an `applying` file.
+  if (existsSync(join(gitDir, 'rebase-apply', 'applying'))) {
+    return 'am'
+  }
+  for (const [marker, name] of OPERATION_MARKERS) {
+    if (existsSync(join(gitDir, marker))) {
+      return name
+    }
+  }
+  return null
 }
 
 // The item has no worktree: a known absence, so nobody works or types there and no session is open.

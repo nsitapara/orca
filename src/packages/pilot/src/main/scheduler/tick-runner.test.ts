@@ -11,7 +11,7 @@ import type { WorktreeInfo } from '../fields/worktree-facts'
 import { createPassFetchCache } from '../sources/fetch-cache'
 import type { Item, SourceContext } from '../sources/types'
 import { PilotStore } from '../store/store'
-import type { SourceAccess } from './tick-decide'
+import { registrySources, type SourceAccess } from './tick-decide'
 import { makeRunId, runTick, UnrecordedLaunchError, type TickDeps } from './tick-runner'
 
 const def = testDefinition({
@@ -146,6 +146,10 @@ describe('runTick', () => {
     expect(d.store.handledKeys('fix-failed-ci').size).toBe(0)
     expect(d.store.seenKeys('fix-failed-ci').size).toBe(0)
     expect(d.store.runs.forTick(result.tickId)).toEqual([])
+    expect(d.store.lastTick('fix-failed-ci')).toMatchObject({
+      status: 'failed',
+      error: 'repo not found'
+    })
   })
 
   it('records a non-Error throw as a failed tick with its text', async () => {
@@ -178,6 +182,10 @@ describe('runTick', () => {
     }
     const result = await runTick(def, people, d, { dryRun: false })
     expect(result).toMatchObject({ status: 'failed', error: 'disk full' })
+    expect(d.store.lastTick('fix-failed-ci')).toMatchObject({
+      status: 'failed',
+      error: 'disk full'
+    })
     expect(d.launched).toEqual(['mr:1561'])
     expect(d.store.handledKeys('fix-failed-ci')).toEqual(new Set(['1561:1561']))
     expect(d.store.runs.forTick(result.tickId).map((r) => [r.itemKey, r.status])).toEqual([
@@ -247,6 +255,7 @@ describe('runTick', () => {
     })
     const result = await runTick(def, people, d, { dryRun: false })
     expect(result.status).toBe('ok')
+    expect(result.decisions.map((x) => x.verdict)).toEqual(['started', 'started'])
     expect(d.store.handledKeys('fix-failed-ci')).toEqual(new Set(['1574:1574']))
     expect(
       d.store.runs.forTick(result.tickId).map((r) => [r.itemKey, r.status, r.outcome])
@@ -288,6 +297,7 @@ describe('runTick', () => {
     expect(d.store.seenKeys('fix-failed-ci').size).toBe(0)
     expect(d.store.lastTick('fix-failed-ci')).toMatchObject({ dryRun: true, status: 'ok' })
     expect(d.store.runs.forTick(result.tickId)).toEqual([])
+    expect(d.store.tickItems(result.tickId).map((i) => i.runId)).toEqual([null, null])
   })
 })
 
@@ -412,6 +422,30 @@ describe('runTick v2', () => {
     expect(d.store.runs.forTick(second.tickId)[0].worktreePath).toBe('/repo')
     expect(d.store.handledKeys('pull-dev').size).toBe(0)
     expect(d.store.seenKeys('pull-dev').size).toBe(0)
+  })
+
+  it('gives a run-once item the repo fields', async () => {
+    const runOnce = testDefinition({
+      id: 'pull-dev',
+      items: null,
+      workspace: { kind: 'main_checkout' }
+    })
+    const result = await runTick(runOnce, people, deps({ sources: repoSources }), { dryRun: true })
+    expect(result.decisions[0].fields).toMatchObject({
+      'repo.name': 'web-platform',
+      'repo.path': '/repo'
+    })
+  })
+
+  it('fails the tick on an item kind no source lists yet', async () => {
+    const pipelines = {
+      ...def,
+      items: { kind: 'pipeline' as const, where: {}, match: [], customFields: [] }
+    }
+    const d = deps({ sources: registrySources })
+    const result = await runTick(pipelines, people, d, { dryRun: false })
+    expect(result).toMatchObject({ status: 'failed', error: "Pilot can't list pipelines yet" })
+    expect(d.store.lastTick('fix-failed-ci')).toMatchObject({ status: 'failed' })
   })
 
   // Task 6a ruling: a run-once automation keeps its once_per gate when it sets one.
