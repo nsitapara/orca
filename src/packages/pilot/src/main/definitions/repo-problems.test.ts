@@ -5,7 +5,7 @@ import type { LoadedDefinitions } from './loader'
 import { mergeRepoProblems, type RepoProblem } from './repo-problems'
 
 const loaded = (ids: string[]): LoadedDefinitions => ({
-  definitions: ids.map((id) => testDefinition({ id })),
+  definitions: ids.map((id) => testDefinition({ id, repo: 'nope', schedule: '10 * * * *' })),
   errors: [{ file: '/a/broken.yaml', errors: ['steps: needs at least one step'] }],
   people: EMPTY_PEOPLE,
   peopleError: null,
@@ -26,11 +26,38 @@ describe('mergeRepoProblems', () => {
     ])
   })
 
-  it.each([
-    ['the repo has been added since', ['ci'], () => true],
-    ['the automation is gone or renamed', ['other'], () => false]
-  ])('drops a problem when %s', (_name, ids, isListed) => {
-    const out = mergeRepoProblems(loaded(ids), new Map([['ci', problem('nope')]]), isListed)
+  it.each<[string, ReturnType<typeof testDefinition>[], () => boolean]>([
+    [
+      'the repo has been added since',
+      [testDefinition({ id: 'ci', repo: 'nope', schedule: '10 * * * *' })],
+      () => true
+    ],
+    [
+      'the automation is gone or renamed',
+      [testDefinition({ id: 'other', repo: 'nope', schedule: '10 * * * *' })],
+      () => false
+    ],
+    [
+      "the automation's repo: was fixed",
+      [testDefinition({ id: 'ci', repo: 'web-platform', schedule: '10 * * * *' })],
+      () => false
+    ],
+    [
+      'the automation was disabled since',
+      [testDefinition({ id: 'ci', repo: 'nope', schedule: '10 * * * *', enabled: false })],
+      () => false
+    ],
+    [
+      'the automation became manual',
+      [testDefinition({ id: 'ci', repo: 'nope', schedule: 'manual' })],
+      () => false
+    ]
+  ])('drops a problem when %s', (_name, definitions, isListed) => {
+    const out = mergeRepoProblems(
+      { ...loaded([]), definitions },
+      new Map([['ci', problem('nope')]]),
+      isListed
+    )
     expect(out.errors).toHaveLength(1)
   })
 

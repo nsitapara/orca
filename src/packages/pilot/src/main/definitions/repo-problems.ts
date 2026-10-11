@@ -11,7 +11,11 @@ export function mergeRepoProblems(
 ): LoadedDefinitions {
   const extra: LoadedDefinitions['errors'] = []
   for (const [id, problem] of problems) {
-    if (loaded.definitions.some((d) => d.id === id) && !isListed(problem.repo)) {
+    // Kept only while the current definition still has this problem: same repo, still scheduled.
+    const stillSo = loaded.definitions.some(
+      (d) => d.id === id && d.repo === problem.repo && d.enabled && d.schedule !== 'manual'
+    )
+    if (stillSo && !isListed(problem.repo)) {
       extra.push({ file: problem.file, errors: [problem.message] })
     }
   }
