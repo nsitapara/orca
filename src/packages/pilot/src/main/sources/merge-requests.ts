@@ -9,9 +9,7 @@ type GitLabMR = {
   state: string
   draft?: boolean
 }
-type GitLabMRDetail = GitLabMR & {
-  head_pipeline: { id: number; status: string } | null
-}
+type GitLabMRDetail = GitLabMR & { head_pipeline: { id: number; status: string } | null }
 
 const STATE: Record<string, string> = {
   opened: 'open',
@@ -52,9 +50,15 @@ export type MergeRequestScope = {
 
 async function listForAuthor(api: GlabApi, username: string): Promise<GitLabMR[]> {
   const author = encodeURIComponent(username)
-  return api.get<GitLabMR[]>(
+  const list = await api.get<GitLabMR[]>(
     `merge_requests?state=opened&author_username=${author}&per_page=${PER_PAGE}`
   )
+  if (list.length >= PER_PAGE) {
+    console.warn(
+      `[pilot] ${api.projectPath}: ${username} has ${PER_PAGE}+ open MRs; the list may be truncated`
+    )
+  }
+  return list
 }
 
 async function listAllPages(api: GlabApi): Promise<GitLabMR[]> {

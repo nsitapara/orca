@@ -129,11 +129,7 @@ function releaseUnlaunched(
 ) {
   const outcome = `Couldn't start: ${message}`
   try {
-    deps.store.runs.update(u.runId, {
-      status: 'failed',
-      outcome,
-      finishedAt: deps.now()
-    })
+    deps.store.runs.update(u.runId, { status: 'failed', outcome, finishedAt: deps.now() })
   } catch {}
   try {
     deps.store.unmarkHandled(def.id, u.onceKey)

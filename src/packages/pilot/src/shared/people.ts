@@ -23,10 +23,7 @@ const directorySchema = z.strictObject({
 })
 
 export type Person = z.infer<typeof personSchema>
-export type PeopleDirectory = {
-  people: Person[]
-  groups: z.infer<typeof groupSchema>[]
-}
+export type PeopleDirectory = { people: Person[]; groups: z.infer<typeof groupSchema>[] }
 export const EMPTY_PEOPLE: PeopleDirectory = { people: [], groups: [] }
 
 function readYaml(text: string): { ok: true; value: unknown } | { ok: false; errors: string[] } {

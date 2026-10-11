@@ -2,11 +2,11 @@ import type { TickItemRow } from '../../shared/api-types'
 import { verdictLabel } from './format'
 import { CHECKS_WIDTHS_KEY, useColumnWidths, type ColumnSpec } from './use-column-widths'
 
-const ITEM: ColumnSpec = { id: 'Item', defaultWidth: 200, minWidth: 100 }
-const RESULT: ColumnSpec = { id: 'Result', defaultWidth: 260, minWidth: 140 }
+const ITEM: ColumnSpec = { id: 'Item', label: 'Item', defaultWidth: 200, minWidth: 100 }
+const RESULT: ColumnSpec = { id: 'Result', label: 'Result', defaultWidth: 260, minWidth: 140 }
 
 function checkColumn(name: string): ColumnSpec {
-  return { id: name, defaultWidth: 150, minWidth: 80 }
+  return { id: `check:${name}`, label: name, defaultWidth: 150, minWidth: 80 }
 }
 
 function CheckCell({ item, name }: { item: TickItemRow; name: string }): React.JSX.Element {
@@ -29,11 +29,11 @@ function HeaderCell({
 }): React.JSX.Element {
   return (
     <th className="relative px-3 py-2 text-left font-medium">
-      <span className="block truncate">{col.id}</span>
+      <span className="block truncate">{col.label}</span>
       <div
         role="separator"
         aria-orientation="vertical"
-        aria-label={`Resize ${col.id} column`}
+        aria-label={`Resize ${col.label} column`}
         title="Drag to resize, double-click to reset"
         className="absolute right-0 top-0 h-full w-1.5 cursor-col-resize hover:bg-border"
         onMouseDown={(e) => columns.startDrag(col, e)}
