@@ -1,7 +1,7 @@
-import { useCallback, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type { MouseEvent as ReactMouseEvent } from 'react'
 
-export type ColumnSpec = { id: string; defaultWidth: number; minWidth: number }
+export type ColumnSpec = { id: string; label: string; defaultWidth: number; minWidth: number }
 type Widths = Record<string, number>
 
 // Widths are remembered per viewer, by column id, so a changed set of checks keeps the others.
@@ -35,6 +35,8 @@ export function useColumnWidths(storageKey: string) {
   const [stored, setStored] = useState<Widths>(() => readStored(storageKey))
   const latest = useRef(stored)
   latest.current = stored
+  const stopDrag = useRef<(() => void) | null>(null)
+  useEffect(() => () => stopDrag.current?.(), [])
 
   const widthOf = (col: ColumnSpec): number =>
     Math.max(col.minWidth, stored[col.id] ?? col.defaultWidth)
@@ -54,11 +56,17 @@ export function useColumnWidths(storageKey: string) {
     const startWidth = widthOf(col)
     const widthAt = (x: number) => Math.max(col.minWidth, Math.round(startWidth + x - startX))
     const onMove = (e: MouseEvent) => setStored({ ...latest.current, [col.id]: widthAt(e.clientX) })
-    const onUp = (e: MouseEvent) => {
+    const detach = () => {
       window.removeEventListener('mousemove', onMove)
       window.removeEventListener('mouseup', onUp)
+      stopDrag.current = null
+    }
+    const onUp = (e: MouseEvent) => {
+      detach()
       commit({ ...latest.current, [col.id]: widthAt(e.clientX) })
     }
+    stopDrag.current?.()
+    stopDrag.current = detach
     window.addEventListener('mousemove', onMove)
     window.addEventListener('mouseup', onUp)
   }

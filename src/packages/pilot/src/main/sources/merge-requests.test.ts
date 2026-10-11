@@ -49,10 +49,7 @@ function fakeApi(): GlabApi & { calls: string[] } {
   }
 }
 
-const nish = {
-  authorUsernames: ['nish8'],
-  inScope: (u: string) => u === 'nish8'
-}
+const nish = { authorUsernames: ['nish8'], inScope: (u: string) => u === 'nish8' }
 
 function mr(iid: number, author: string) {
   return {
@@ -76,10 +73,7 @@ function pagedApi(byQuery: (path: string) => unknown[]): GlabApi & { calls: stri
         return byQuery(path) as T
       }
       const iid = Number(path.split('/')[1])
-      return {
-        ...mr(iid, 'x'),
-        head_pipeline: { id: iid, status: 'failed' }
-      } as T
+      return { ...mr(iid, 'x'), head_pipeline: { id: iid, status: 'failed' } } as T
     }
   }
 }
@@ -89,10 +83,7 @@ afterEach(() => vi.restoreAllMocks())
 describe('listMergeRequestItems', () => {
   it('lists open MRs by iid with pipeline details, dropping out-of-scope authors', async () => {
     const api = fakeApi()
-    const items = await listMergeRequestItems(api, {
-      authorUsernames: null,
-      inScope: (u) => u === 'nish8'
-    })
+    const items = await listMergeRequestItems(api, { authorUsernames: null, inScope: (u) => u === 'nish8' })
     expect(
       items.map((i) => [i.key, i.label, i.fields['mr.pipeline'], i.fields['mr.state']])
     ).toEqual([
@@ -123,31 +114,31 @@ describe('listMergeRequestItems', () => {
 
   it('makes no request and returns nothing when no handle resolves', async () => {
     const api = pagedApi(() => [mr(1, 'x')])
-    expect(
-      await listMergeRequestItems(api, {
-        authorUsernames: [],
-        inScope: () => true
-      })
-    ).toEqual([])
+    expect(await listMergeRequestItems(api, { authorUsernames: [], inScope: () => true })).toEqual(
+      []
+    )
     expect(api.calls).toEqual([])
+  })
+
+  it('warns once, naming the handle, when a per-handle page is full', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const full = Array.from({ length: 100 }, (_, i) => mr(i + 1, 'nish8'))
+    const api = pagedApi((path) => (path.includes('author_username=nish8') ? full : [mr(500, 'sam1')]))
+    await listMergeRequestItems(api, { authorUsernames: ['nish8', 'sam1'], inScope: () => true })
+    expect(warn).toHaveBeenCalledTimes(1)
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('nish8'))
   })
 
   it('still drops returned MRs whose author is out of scope', async () => {
     const api = pagedApi(() => [mr(1, 'nish8'), mr(2, 'other')])
-    const items = await listMergeRequestItems(api, {
-      ...nish,
-      inScope: (u) => u === 'nish8'
-    })
+    const items = await listMergeRequestItems(api, { ...nish, inScope: (u) => u === 'nish8' })
     expect(items.map((i) => i.key)).toEqual(['!1'])
   })
 
   it('without an author filter, pages until a short page', async () => {
     const full = Array.from({ length: 100 }, (_, i) => mr(i + 1, 'a'))
     const api = pagedApi((path) => (path.endsWith('page=1') ? full : [mr(101, 'a')]))
-    const items = await listMergeRequestItems(api, {
-      authorUsernames: null,
-      inScope: () => true
-    })
+    const items = await listMergeRequestItems(api, { authorUsernames: null, inScope: () => true })
     expect(items).toHaveLength(101)
     expect(api.calls.filter((c) => c.startsWith('merge_requests?'))).toEqual([
       'merge_requests?state=opened&per_page=100&page=1',
@@ -159,10 +150,7 @@ describe('listMergeRequestItems', () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
     let next = 0
     const api = pagedApi(() => Array.from({ length: 100 }, () => mr(++next, 'a')))
-    const items = await listMergeRequestItems(api, {
-      authorUsernames: null,
-      inScope: () => true
-    })
+    const items = await listMergeRequestItems(api, { authorUsernames: null, inScope: () => true })
     expect(items).toHaveLength(1000)
     expect(api.calls.filter((c) => c.startsWith('merge_requests?'))).toHaveLength(10)
     expect(warn).toHaveBeenCalledWith(expect.stringContaining('1000'))
@@ -176,10 +164,7 @@ describe('listMergeRequestItems', () => {
       }
     }
     await expect(
-      listMergeRequestItems(api, {
-        authorUsernames: null,
-        inScope: () => true
-      })
+      listMergeRequestItems(api, { authorUsernames: null, inScope: () => true })
     ).rejects.toThrow('glab: 401')
     await expect(listMergeRequestItems(api, nish)).rejects.toThrow('glab: 401')
   })
