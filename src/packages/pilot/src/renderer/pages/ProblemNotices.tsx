@@ -1,9 +1,11 @@
 import type { AutomationListPayload } from '../../shared/api-types'
 
-// The loader's messages sometimes already start with the file path; don't repeat it.
+// The loader's messages start with the file path (`<file>: <problem>`). Strip it from each one
+// and show it once in front.
 function fileProblem(file: string, errors: string[]): string {
-  const text = errors.join(' · ')
-  return text.startsWith(file) ? text : `${file}: ${text}`
+  const prefix = `${file}: `
+  const problems = errors.map((e) => (e.startsWith(prefix) ? e.slice(prefix.length) : e))
+  return `${file}: ${problems.join(' · ')}`
 }
 
 // Things that need fixing, shown above the table in plain words. Never blocks the list.

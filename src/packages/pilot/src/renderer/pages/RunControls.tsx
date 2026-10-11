@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import type { TickOutcome } from '../../shared/api-types'
 import { pilotRpc } from '../api'
@@ -11,17 +11,37 @@ type Phase = 'idle' | 'confirm' | 'running'
 export function RunControls({ id, onDone }: { id: string; onDone: () => void }): React.JSX.Element {
   const [phase, setPhase] = useState<Phase>('idle')
   const [message, setMessage] = useState<string | null>(null)
+  const inFlight = useRef(false)
+  const mounted = useRef(true)
+  useEffect(() => {
+    mounted.current = true
+    return () => {
+      mounted.current = false
+    }
+  }, [])
 
   const run = async (
     method: 'pilot.automations.dryRun' | 'pilot.automations.tickNow'
   ): Promise<void> => {
+    if (inFlight.current) {
+      return
+    }
+    inFlight.current = true
     setPhase('running')
     setMessage(null)
     try {
       const result = await pilotRpc<TickOutcome>(method, { id }, { timeoutMs: LONG_CALL_MS })
-      setMessage(outcomeLine(result, id))
+      if (mounted.current) {
+        setMessage(outcomeLine(result, id))
+      }
     } catch (e) {
-      setMessage(errorText(e))
+      if (mounted.current) {
+        setMessage(errorText(e))
+      }
+    }
+    inFlight.current = false
+    if (!mounted.current) {
+      return
     }
     setPhase('idle')
     onDone()

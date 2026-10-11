@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type { ActivityTick, AutomationDetailPayload } from '../../shared/api-types'
 import { pilotRpc } from '../api'
 import { scheduleText } from './AutomationsTable'
@@ -51,19 +51,31 @@ export function AutomationView({
   const [ticks, setTicks] = useState<ActivityTick[]>([])
   const [tab, setTab] = useState<Tab>('activity')
   const [error, setError] = useState<string | null>(null)
+  const mounted = useRef(true)
   const refresh = useCallback(async () => {
     try {
-      setDetail(await pilotRpc<AutomationDetailPayload>('pilot.automations.get', { id }))
-      setTicks(await pilotRpc<ActivityTick[]>('pilot.automations.activity', { id, limit: 30 }))
+      const d = await pilotRpc<AutomationDetailPayload>('pilot.automations.get', { id })
+      const t = await pilotRpc<ActivityTick[]>('pilot.automations.activity', { id, limit: 30 })
+      if (!mounted.current) {
+        return
+      }
+      setDetail(d)
+      setTicks(t)
       setError(null)
     } catch (e) {
-      setError(errorText(e))
+      if (mounted.current) {
+        setError(errorText(e))
+      }
     }
   }, [id])
   useEffect(() => {
+    mounted.current = true
     void refresh()
     const timer = setInterval(() => void refresh(), 20_000)
-    return () => clearInterval(timer)
+    return () => {
+      mounted.current = false
+      clearInterval(timer)
+    }
   }, [refresh])
 
   const back = (

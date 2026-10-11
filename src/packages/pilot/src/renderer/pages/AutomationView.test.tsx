@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { TickOutcome } from '../../shared/api-types'
 import { detail, failedRunTick } from './fixtures'
@@ -123,5 +123,41 @@ describe('AutomationView', () => {
     render(<AutomationView id="fix-ci" onBack={() => {}} />)
     fireEvent.click(await screen.findByRole('button', { name: 'Dry run' }))
     expect(await screen.findByText("Pilot isn't running: store won't open")).toBeTruthy()
+  })
+
+  it('fires tickNow once for a double Confirm', async () => {
+    serve({ tickId: 1, status: 'ok', error: null, decisions: [] })
+    render(<AutomationView id="fix-ci" onBack={() => {}} />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Run now' }))
+    const confirm = screen.getByRole('button', { name: 'Confirm' })
+    // Both clicks land in one batch, before React re-renders the button away.
+    act(() => {
+      confirm.click()
+      confirm.click()
+    })
+    await screen.findByText('Tick 1 · ok')
+    expect(calls('pilot.automations.tickNow')).toHaveLength(1)
+  })
+
+  it('does not refresh after unmount when a call finishes late', async () => {
+    let finish: (v: TickOutcome) => void = () => {}
+    pilotRpc.mockImplementation((method: string) => {
+      if (method === 'pilot.automations.get') {
+        return Promise.resolve(detail)
+      }
+      if (method === 'pilot.automations.activity') {
+        return Promise.resolve([])
+      }
+      return new Promise<TickOutcome>((resolve) => {
+        finish = resolve
+      })
+    })
+    const { unmount } = render(<AutomationView id="fix-ci" onBack={() => {}} />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Dry run' }))
+    unmount()
+    const before = calls('pilot.automations.activity').length
+    finish({ status: 'busy' })
+    await new Promise((r) => setTimeout(r, 0))
+    expect(calls('pilot.automations.activity')).toHaveLength(before)
   })
 })

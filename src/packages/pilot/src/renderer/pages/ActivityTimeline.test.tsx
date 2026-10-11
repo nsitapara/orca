@@ -82,7 +82,7 @@ describe('ActivityTimeline', () => {
       />
     )
     expect(screen.getByText('Dry run')).toBeTruthy()
-    expect(screen.getByText(/ci-1.*\$0\.84/)).toBeTruthy()
+    expect(screen.getByText('Run ci-1 · !1561 web-1493 · Running · $0.84')).toBeTruthy()
     expect(screen.getByText(/Couldn't start: no repo/)).toBeTruthy()
     cleanup()
     render(<ActivityTimeline ticks={[]} checkNames={[]} />)
