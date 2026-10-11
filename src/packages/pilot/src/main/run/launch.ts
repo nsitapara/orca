@@ -2,7 +2,11 @@ import type { OrcaRuntimeService } from '../../../../../main/runtime/orca-runtim
 import type { ItemDecision } from '../../shared/api-types'
 import type { AutomationDefinition } from '../../shared/definition/types'
 import { renderTemplate } from '../../shared/template'
-import type { LaunchRequest, LaunchResult } from '../scheduler/tick-runner'
+import {
+  UnrecordedLaunchError,
+  type LaunchRequest,
+  type LaunchResult
+} from '../scheduler/tick-runner'
 import type { PilotStore } from '../store/store'
 
 // A placeholder whose field is missing stays literal (renderTemplate's behaviour); nothing is appended.
@@ -91,11 +95,12 @@ export function makeLauncher(
       }
       return { terminalHandle: terminal.handle, paneKey }
     } catch (error) {
-      // The terminal exists but no row tracks it. Say which one, so the failure points at the orphan.
+      // The terminal exists but no row tracks it. Say which one, so the failure points at the orphan,
+      // and say it started, so the tick keeps the item handled (the agent is running).
       const message = `terminal ${terminal.handle} started but couldn't be recorded: ${messageOf(error)}`
       console.error(`pilot: ${message}`)
       failStep(store, runId, message, now())
-      throw new Error(message)
+      throw new UnrecordedLaunchError(terminal.handle, message)
     }
   }
 }

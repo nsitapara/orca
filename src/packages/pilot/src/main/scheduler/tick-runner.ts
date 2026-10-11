@@ -15,6 +15,16 @@ export type LaunchRequest = {
   decision: ItemDecision
 }
 export type LaunchResult = { terminalHandle: string; paneKey: string }
+// The launcher started a terminal but no step records it: the agent runs, untracked.
+export class UnrecordedLaunchError extends Error {
+  constructor(
+    readonly terminalHandle: string,
+    message: string
+  ) {
+    super(message)
+    this.name = 'UnrecordedLaunchError'
+  }
+}
 function errorMessage(e: unknown): string {
   return e instanceof Error ? e.message : String(e)
 }
@@ -113,7 +123,12 @@ async function startRuns(
       unlaunched.current = null
       await deps.launch({ runId, definition: def, decision })
     } catch (error) {
-      releaseUnlaunched(def, { runId, onceKey: decision.onceKey }, errorMessage(error), deps)
+      const run = { runId, onceKey: decision.onceKey }
+      if (error instanceof UnrecordedLaunchError) {
+        keepOrphanHandled(def, run, error.message, deps)
+      } else {
+        releaseUnlaunched(def, run, errorMessage(error), deps)
+      }
     }
   }
 }
@@ -133,6 +148,24 @@ function releaseUnlaunched(
   } catch {}
   try {
     deps.store.unmarkHandled(def.id, u.onceKey)
+  } catch {}
+}
+
+// The agent is running in a terminal no step tracks, so its key stays handled (marked again, in case
+// the stale-start sweep freed it during a slow launch) and no later tick starts a second agent on the
+// item. The run is failed, and its outcome names the terminal.
+function keepOrphanHandled(
+  def: AutomationDefinition,
+  u: Unlaunched,
+  message: string,
+  deps: TickDeps
+): void {
+  const at = deps.now()
+  try {
+    deps.store.runs.update(u.runId, { status: 'failed', outcome: message, finishedAt: at })
+  } catch {}
+  try {
+    deps.store.markHandled(def.id, u.onceKey, u.runId, at)
   } catch {}
 }
 

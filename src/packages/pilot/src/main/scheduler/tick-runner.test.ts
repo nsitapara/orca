@@ -7,7 +7,7 @@ import { parsePeopleYaml } from '../../shared/people'
 import type { GlabApi } from '../sources/gitlab-api'
 import { PilotStore } from '../store/store'
 import type { FactDeps } from '../fields/worktree-fields'
-import { makeRunId, runTick, type TickDeps } from './tick-runner'
+import { makeRunId, runTick, UnrecordedLaunchError, type TickDeps } from './tick-runner'
 
 const YAML = `
 name: Fix failed CI on my MRs
@@ -300,6 +300,30 @@ describe('runTick', () => {
     const runs = d.store.runs.forTick(result.tickId)
     expect(runs.map((r) => [r.itemKey, r.status, r.outcome])).toEqual([
       ['!1561', 'failed', "Couldn't start: worktree is gone"],
+      ['!1574', 'running', null]
+    ])
+  })
+
+  // The terminal exists, so the agent runs: freeing the key would let the next tick start a second one.
+  it('keeps the key handled when a started terminal could not be recorded, and names it', async () => {
+    const message = "terminal term_9 started but couldn't be recorded: disk full"
+    const d = deps({
+      launch: async (req) => {
+        if (req.decision.key === '!1561') {
+          // As after a stale-start sweep freed the key during a slow launch.
+          d.store.unmarkHandled('fix-failed-ci', req.decision.onceKey)
+          throw new UnrecordedLaunchError('term_9', message)
+        }
+        return { terminalHandle: 'term_ok', paneKey: 'tab:leaf' }
+      }
+    })
+    const result = await runTick(def.definition, people.directory, d, { dryRun: false })
+    expect(result.status).toBe('ok')
+    expect(d.store.handledKeys('fix-failed-ci')).toEqual(new Set(['1561:1561', '1574:1574']))
+    expect(
+      d.store.runs.forTick(result.tickId).map((r) => [r.itemKey, r.status, r.outcome])
+    ).toEqual([
+      ['!1561', 'failed', message],
       ['!1574', 'running', null]
     ])
   })
