@@ -7,7 +7,14 @@ import type { LaunchRequest, LaunchResult } from '../scheduler/tick-runner'
 import type { PilotStore } from '../store/store'
 import type { RunStore } from '../store/store-runs'
 import type { PilotAgentLaunchOptions } from './agent-launch-hook'
-import { launchAgentStep, type AgentStepDeps, type AgentStepRequest } from './agent-step'
+import { newestSessionRow } from './agent-rows'
+import {
+  launchAgentStep,
+  type AgentStepDeps,
+  type AgentStepRequest,
+  type KnownTerminal,
+  type SessionTerminalState
+} from './agent-step'
 import { terminalLaunchOptions, type SessionPlan } from './step-launch-plan'
 import {
   resolveWorkspace,
@@ -187,33 +194,68 @@ type LauncherWorktrees = Pick<
   WorktreeFactDeps,
   'listWorktrees' | 'terminalAlive' | 'paneState' | 'terminalDraft'
 >
+// The runtime's own word for an agent that can't take a prompt now (RuntimeTerminalAgentStatusState).
+const BUSY_STATUS = new Set(['working', 'permission'])
 
-// H10: a prompt goes into the old terminal only when it is live, its agent still runs there (an exited
-// agent leaves a shell, which would run the prompt as commands; upstream's send guard asks the same),
-// that agent is idle and nobody is typing (the draft is read from the rendered screen, B6). Anything
-// unreadable means "not free".
-async function terminalFree(
+// H10's look at a session's old terminal (agent-step.ts checks the store first). The draft is read
+// from the rendered screen (B6); anything unreadable is busy, never gone.
+async function sessionTerminalState(
   runtime: OrcaRuntimeService,
   worktrees: LauncherWorktrees,
-  handle: string,
-  paneKey: string | null
-): Promise<boolean> {
+  { handle, paneKey }: KnownTerminal,
+  sessionId: string
+): Promise<SessionTerminalState> {
   if (!paneKey) {
-    return false
+    return 'busy'
   }
   try {
     if (!(await worktrees.terminalAlive(handle, paneKey))) {
-      return false
+      return 'gone'
     }
-    if (worktrees.paneState(paneKey) !== 'idle') {
-      return false
+    // An exited agent leaves a shell: the session isn't running there.
+    const agent = await runtime.getTerminalAgentStatus(handle)
+    if (!agent.isRunningAgent) {
+      return 'gone'
     }
-    if (!(await runtime.getTerminalAgentStatus(handle)).isRunningAgent) {
-      return false
+    if (BUSY_STATUS.has(agent.status ?? '') || worktrees.paneState(paneKey) !== 'idle') {
+      return 'busy'
     }
-    return (await worktrees.terminalDraft(handle)).trim() === ''
+    if ((await worktrees.terminalDraft(handle)).trim() !== '') {
+      return 'busy'
+    }
+    const rows = runtime.getAgentStatusRowsForPane(paneKey)
+    return newestSessionRow(rows)?.providerSession?.id === sessionId ? 'free' : 'other'
   } catch {
-    return false
+    return 'busy'
+  }
+}
+
+// The prompt carries item text (MR, branch, Linear), so right before typing it the agent must still be
+// in the foreground and idle: never a plain shell or a permission dialog (upstream's send guard asks
+// the same). Typed as the driver, then it must start a turn.
+async function sendToIdleAgent(
+  runtime: OrcaRuntimeService,
+  handle: string,
+  prompt: string
+): Promise<void> {
+  const agent = await runtime.getTerminalAgentStatus(handle)
+  if (!agent.isRunningAgent || BUSY_STATUS.has(agent.status ?? '')) {
+    throw new Error(`terminal ${handle} has no idle agent to take the prompt`)
+  }
+  const sent = await runtime.sendTerminalAgentPrompt(handle, prompt, {
+    inputKind: 'driving',
+    observationTimeoutMs: 30_000
+  })
+  if (!sent.accepted || !sent.prompt?.stages.includes('turn_started')) {
+    throw new Error("the agent didn't start a turn on the prompt")
+  }
+}
+
+// Pilot's own idle tab. A process the close couldn't stop would make the resume a second one.
+async function closeSessionTerminal(runtime: OrcaRuntimeService, handle: string): Promise<void> {
+  const closed = await runtime.closeTerminal(handle)
+  if (closed.ptyStopVerdict) {
+    throw new Error(`Couldn't close terminal ${handle}: its process is ${closed.ptyStopVerdict}`)
   }
 }
 
@@ -233,15 +275,10 @@ export function runtimeLauncherDeps(
     modeText: modeTextUnavailable,
     newSessionId: () => randomUUID(),
     now,
-    resumeTarget: (handle, paneKey) => terminalFree(runtime, worktrees, handle, paneKey),
-    async sendPrompt(handle, prompt) {
-      const sent = await runtime.sendTerminalAgentPrompt(handle, prompt, {
-        inputKind: 'driving',
-        observationTimeoutMs: 30_000
-      })
-      if (!sent.accepted || !sent.prompt?.stages.includes('turn_started')) {
-        throw new Error("the agent didn't start a turn on the prompt")
-      }
+    sessionTerminals: {
+      state: (terminal, sessionId) => sessionTerminalState(runtime, worktrees, terminal, sessionId),
+      send: (handle, prompt) => sendToIdleAgent(runtime, handle, prompt),
+      close: (handle) => closeSessionTerminal(runtime, handle)
     }
   }
 }
