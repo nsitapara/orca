@@ -1,0 +1,496 @@
+import { mkdtempSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { describe, expect, it } from 'vitest'
+import Database from '../../../../../main/sqlite/sync-database'
+import type { ItemDecision } from '../../shared/api-types'
+import { parseAutomationYaml } from '../../shared/definition/parse'
+import type { AutomationDefinition } from '../../shared/definition/types'
+import { PilotStore } from '../store/store'
+import {
+  createRunEngine,
+  stepTimeoutMs,
+  type RunEngine,
+  type RunEngineDeps,
+  type StepStartRequest
+} from './advance'
+import type { WorkspaceDeps } from './workspace'
+
+const YAML = `name: Review and fix
+repo: web-platform
+schedule: manual
+items: { kind: merge_request }
+limits: { timeout: 60m }
+steps:
+  - { name: review, agent: claude, skill: review-cycles, prompt: Review it, timeout: 20m }
+  - { name: fix, agent: claude, prompt: Fix it, when: "{steps.review.changed} == true" }
+  - { name: cleanup, agent: claude, prompt: Tidy up, always: true }
+`
+function definitionOf(yaml: string): AutomationDefinition {
+  const parsed = parseAutomationYaml(yaml, '/a/review.yaml')
+  if (!parsed.ok) {
+    throw new Error(parsed.errors.join('\n'))
+  }
+  return parsed.definition
+}
+const DEF = definitionOf(YAML)
+const DECISION: ItemDecision = {
+  key: 'mr:1',
+  label: '!1 web-1',
+  verdict: 'started',
+  reason: '',
+  checks: [],
+  onceKey: '1:9',
+  fields: { 'mr.iid': 1, 'worktree.path': '/wt', 'worktree.id': 'wt-1' }
+}
+// item_worktree workspaces read the item's own fields; nothing here lists, creates or claims a worktree.
+const WORKSPACE: WorkspaceDeps = {
+  listWorktrees: async () => [],
+  createWorktree: async () => {
+    throw new Error('createWorktree is not expected')
+  },
+  claimWorktree: () => {
+    throw new Error('claimWorktree is not expected')
+  }
+}
+const INBOX_ITEM = `INSERT INTO inbox_items (id, automation_id, run_id, person, type, title, digest, created_at, updated_at)
+  VALUES ('q1', 'review', 'run-1', 'nish', 'question', 'Push?', 'd1', 1, 1)`
+
+type Ending = 'done' | 'failed' | 'timed_out'
+
+function setup(def: AutomationDefinition | null = DEF, over: Partial<RunEngineDeps> = {}) {
+  const path = join(mkdtempSync(join(tmpdir(), 'pilot-advance-')), 'db.sqlite')
+  const store = PilotStore.open(path)
+  const started: StepStartRequest[] = []
+  const statusWhenStarted: (string | null)[] = []
+  const failures: Error[] = []
+  const engine = createRunEngine({
+    store,
+    now: () => 1000,
+    definitionFor: (id) => (def !== null && id === def.id ? def : null),
+    // Stands in for the launcher: it creates its row or, as Task 8d's launcher does, takes over the
+    // `pending` one the engine wrote for step 0.
+    startStep: async (req) => {
+      const failure = failures.shift()
+      if (failure) {
+        throw failure
+      }
+      started.push(req)
+      const s = req.definition.steps[req.idx]
+      const existing = store.runs.steps(req.run.id).find((r) => r.idx === req.idx)
+      statusWhenStarted.push(existing?.status ?? null)
+      if (!existing) {
+        store.runs.createStep({
+          runId: req.run.id,
+          idx: req.idx,
+          name: s.name,
+          agent: s.agent,
+          skill: s.skill,
+          startedAt: 1000
+        })
+      }
+      store.runs.updateStep(req.run.id, req.idx, {
+        status: 'running',
+        terminalHandle: `t${req.idx}`,
+        paneKey: `p${req.idx}`
+      })
+    },
+    workspace: WORKSPACE,
+    log: () => {},
+    ...over
+  })
+  store.runs.create({
+    id: 'run-1',
+    automationId: 'review',
+    tickId: null,
+    itemKey: 'mr:1',
+    itemLabel: '!1 web-1',
+    worktreePath: '/wt',
+    startedAt: 500
+  })
+  store.markHandled('review', '1:9', 'run-1', 500)
+  const end = (
+    idx: number,
+    status: Ending,
+    extra: { error?: string; costUsd?: number; tokens?: number } = {}
+  ) => store.runs.updateStep('run-1', idx, { status, finishedAt: 1000, ...extra })
+  const db = <T>(work: (d: Database) => T): T => {
+    const d = new Database(path)
+    try {
+      return work(d)
+    } finally {
+      d.close()
+    }
+  }
+  return { store, engine, started, statusWhenStarted, failures, end, db }
+}
+const startRun = (engine: RunEngine) =>
+  engine.startRun({ runId: 'run-1', definition: DEF, decision: DECISION })
+const handledOf = (db: ReturnType<typeof setup>['db']) =>
+  db((d) => d.prepare("SELECT status, failed_at FROM handled WHERE run_id = 'run-1'").get())
+
+describe('createRunEngine', () => {
+  it('starts the first step with the item, workspace and run fields', async () => {
+    const { engine, started } = setup()
+    await startRun(engine)
+    expect(started.map((s) => s.idx)).toEqual([0])
+    expect(started[0].fields).toMatchObject({
+      'mr.iid': 1,
+      'worktree.path': '/wt',
+      'run.id': 'run-1',
+      'run.automation': 'review'
+    })
+    expect(started[0].fields['run.failed']).toBe(false)
+    expect(started[0].fields['run.answer']).toBeNull()
+  })
+
+  it('writes step 0 as pending, records the workspace on the run, then hands the step to the starter', async () => {
+    const { store, engine, statusWhenStarted } = setup()
+    await startRun(engine)
+    expect(statusWhenStarted).toEqual(['pending'])
+    expect(store.runs.get('run-1')).toMatchObject({ worktreePath: '/wt', worktreeId: 'wt-1' })
+    expect(store.runs.steps('run-1')[0]).toMatchObject({ status: 'running', name: 'review' })
+  })
+
+  it('fails step 0 with the workspace error and rethrows it, so the tick frees the item', async () => {
+    const { store, engine, started } = setup()
+    const noWorktree = { ...DECISION, fields: { 'mr.iid': 1 } }
+    await expect(
+      engine.startRun({ runId: 'run-1', definition: DEF, decision: noWorktree })
+    ).rejects.toThrow('No worktree for !1 web-1')
+    expect(started).toEqual([])
+    expect(store.runs.steps('run-1')).toHaveLength(1)
+    expect(store.runs.steps('run-1')[0]).toMatchObject({
+      status: 'failed',
+      error: 'No worktree for !1 web-1'
+    })
+  })
+
+  // A new worktree's claim only sees running runs (Task 8b), so the run must be running first.
+  it('refuses to start a run that is no longer running, before writing a step or resolving a workspace', async () => {
+    const { store, engine, started } = setup()
+    store.runs.update('run-1', { status: 'failed' })
+    await expect(startRun(engine)).rejects.toThrow('Run run-1 is failed, not running')
+    expect(started).toEqual([])
+    expect(store.runs.steps('run-1')).toEqual([])
+    expect(store.runs.get('run-1')?.worktreeId).toBeNull()
+  })
+
+  it('leaves a run without any step to startRun: advancing it starts nothing and ends nothing', async () => {
+    const { store, engine, started } = setup()
+    await engine.advance('run-1')
+    expect(started).toEqual([])
+    expect(store.runs.get('run-1')).toMatchObject({ status: 'running', worktreeId: null })
+  })
+
+  it('does not advance a run whose step 0 is still pending', async () => {
+    const { store, engine, started } = setup()
+    store.runs.createStep({
+      runId: 'run-1',
+      idx: 0,
+      name: 'review',
+      agent: 'claude',
+      skill: 'review-cycles',
+      status: 'pending',
+      startedAt: 600
+    })
+    await engine.advance('run-1')
+    expect(started).toEqual([])
+    expect(store.runs.get('run-1')?.status).toBe('running')
+  })
+
+  it("renders run.answer from the engine's runAnswer source", async () => {
+    const { engine, started } = setup(DEF, { runAnswer: () => 'use the second fix' })
+    await startRun(engine)
+    expect(started[0].fields['run.answer']).toBe('use the second fix')
+  })
+
+  it('starts nothing while a step still runs', async () => {
+    const { engine, started } = setup()
+    await startRun(engine)
+    await engine.advance('run-1')
+    expect(started).toHaveLength(1)
+  })
+
+  it("starts the next step when one ends, with the ended step's outputs as fields", async () => {
+    const { store, engine, started, end } = setup()
+    await startRun(engine)
+    store.advance.mergeStepOutputs('run-1', 0, { changed: true })
+    end(0, 'done')
+    await engine.advance('run-1')
+    expect(started.map((s) => s.idx)).toEqual([0, 1])
+    expect(started[1].fields['steps.review.changed']).toBe(true)
+    expect(store.runs.get('run-1')?.status).toBe('running')
+  })
+
+  it('skips a step whose when is false, still runs the always step, and ends the run done', async () => {
+    const { store, engine, started, end, db } = setup()
+    await startRun(engine)
+    store.advance.mergeStepOutputs('run-1', 0, { changed: false })
+    end(0, 'done')
+    await engine.advance('run-1')
+    expect(store.runs.steps('run-1')[1]).toMatchObject({
+      status: 'skipped',
+      error: 'when: {steps.review.changed} == true is false'
+    })
+    expect(started.map((s) => s.idx)).toEqual([0, 2])
+    end(2, 'done')
+    await engine.advance('run-1')
+    expect(store.runs.get('run-1')).toMatchObject({
+      status: 'done',
+      outcome: 'Done',
+      finishedAt: 1000
+    })
+    expect(handledOf(db)).toEqual({ status: 'done', failed_at: null })
+  })
+
+  it('after a failed step skips the rest but the always step, and fails the run naming the step', async () => {
+    const { store, engine, started, end, db } = setup()
+    await startRun(engine)
+    end(0, 'failed', { error: 'boom' })
+    await engine.advance('run-1')
+    expect(store.runs.steps('run-1')[1]).toMatchObject({
+      status: 'skipped',
+      error: 'Step review failed'
+    })
+    expect(started.map((s) => s.idx)).toEqual([0, 2])
+    end(2, 'done')
+    await engine.advance('run-1')
+    expect(store.runs.get('run-1')).toMatchObject({
+      status: 'failed',
+      outcome: 'Step review failed: boom'
+    })
+    expect(handledOf(db)).toEqual({ status: 'failed', failed_at: 1000 })
+  })
+
+  it.each([
+    ['timed_out when a step timed out', 'timed_out', false, 'timed_out', 'Step review timed out'],
+    [
+      'needs_you when an inbox item is still open',
+      'done',
+      true,
+      'needs_you',
+      'Waiting on you: 1 open item'
+    ]
+  ] as const)('ends the run %s', async (_n, firstEnd, openItem, status, outcome) => {
+    const { store, engine, end, db } = setup()
+    await startRun(engine)
+    store.advance.mergeStepOutputs('run-1', 0, { changed: false })
+    end(0, firstEnd)
+    if (openItem) {
+      db((d) => d.exec(INBOX_ITEM))
+    }
+    await engine.advance('run-1')
+    end(2, 'done')
+    await engine.advance('run-1')
+    expect(store.runs.get('run-1')).toMatchObject({ status, outcome })
+  })
+
+  it("sums every step's cost and tokens into the run", async () => {
+    const { store, engine, end } = setup()
+    await startRun(engine)
+    store.advance.mergeStepOutputs('run-1', 0, { changed: false })
+    end(0, 'done', { costUsd: 1.5, tokens: 100 })
+    await engine.advance('run-1')
+    end(2, 'done', { costUsd: 0.25, tokens: 20 })
+    await engine.advance('run-1')
+    expect(store.runs.get('run-1')).toMatchObject({ costUsd: 1.75, tokens: 120 })
+  })
+
+  it("records a later step that couldn't start as failed and still runs the always step", async () => {
+    const { store, engine, started, end, failures } = setup()
+    await startRun(engine)
+    store.advance.mergeStepOutputs('run-1', 0, { changed: true })
+    end(0, 'done')
+    failures.push(new Error('worktree is gone'))
+    await engine.advance('run-1')
+    expect(store.runs.steps('run-1')[1]).toMatchObject({
+      status: 'failed',
+      error: 'worktree is gone'
+    })
+    expect(started.map((s) => s.idx)).toEqual([0, 2])
+  })
+
+  it('throws from startRun when the first step cannot start, so the tick frees the item', async () => {
+    const { store, engine, failures } = setup()
+    failures.push(new Error('terminal refused'))
+    await expect(startRun(engine)).rejects.toThrow('terminal refused')
+    expect(store.runs.steps('run-1').map((s) => [s.status, s.error])).toEqual([
+      ['failed', 'terminal refused']
+    ])
+  })
+
+  it('does not replay an advance that came in while a failed startRun was going: the tick fails that run', async () => {
+    const engines: RunEngine[] = []
+    let calls = 0
+    const { store, engine } = setup(DEF, {
+      startStep: async () => {
+        calls += 1
+        void engines[0].advance('run-1')
+        throw new Error('terminal refused')
+      }
+    })
+    engines.push(engine)
+    await expect(startRun(engine)).rejects.toThrow('terminal refused')
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(calls).toBe(1)
+    expect(store.runs.steps('run-1').map((s) => s.status)).toEqual(['failed'])
+  })
+
+  it.each([
+    ['its automation is gone', null, 'review', 'The automation review is no longer loaded'],
+    [
+      'its steps changed',
+      DEF,
+      'triage',
+      "The automation's steps changed while this run was going; it stopped after step triage"
+    ]
+  ] as const)('fails the run when %s', async (_n, def, rowName, outcome) => {
+    const { store, engine } = setup(def)
+    store.runs.createStep({
+      runId: 'run-1',
+      idx: 0,
+      name: rowName,
+      agent: 'claude',
+      skill: null,
+      startedAt: 600
+    })
+    store.runs.updateStep('run-1', 0, { status: 'done', finishedAt: 700 })
+    await engine.advance('run-1')
+    expect(store.runs.get('run-1')).toMatchObject({ status: 'failed', outcome })
+  })
+
+  it.each([
+    ['runs after a failure', 'failed', 'Step review failed: boom', [0, 2]],
+    ['is skipped when nothing failed', 'done', 'Done', [0]]
+  ] as const)(
+    'an always step with when {run.failed} %s',
+    async (_n, firstEnd, outcome, startedIdx) => {
+      const def = definitionOf(
+        YAML.replace('Tidy up, always: true', 'Tidy up, always: true, when: "{run.failed} == true"')
+      )
+      const { store, engine, started, end } = setup(def)
+      await engine.startRun({ runId: 'run-1', definition: def, decision: DECISION })
+      store.advance.mergeStepOutputs('run-1', 0, { changed: false })
+      end(0, firstEnd, firstEnd === 'failed' ? { error: 'boom' } : {})
+      await engine.advance('run-1')
+      if (startedIdx.length > 1) {
+        end(2, 'done')
+        await engine.advance('run-1')
+      }
+      expect(started.map((s) => s.idx)).toEqual(startedIdx)
+      expect(store.runs.get('run-1')?.outcome).toBe(outcome)
+    }
+  )
+
+  it("records an always step's failure as an event and leaves the run done", async () => {
+    const { store, engine, end } = setup()
+    await startRun(engine)
+    store.advance.mergeStepOutputs('run-1', 0, { changed: false })
+    end(0, 'done')
+    await engine.advance('run-1')
+    end(2, 'failed', { error: 'rm failed' })
+    await engine.advance('run-1')
+    expect(store.runs.get('run-1')).toMatchObject({
+      status: 'done',
+      outcome: 'Done; cleanup step cleanup failed'
+    })
+    const events = store.events.forRun('run-1').filter((e) => e.kind === 'always_step_failed')
+    expect(events.map((e) => e.payload)).toEqual([
+      { step: 'cleanup', status: 'failed', error: 'rm failed' }
+    ])
+  })
+
+  it('calls onRunEnd once with the finished run and its end', async () => {
+    const ended: [string, string, string][] = []
+    const { store, engine, end } = setup(DEF, {
+      onRunEnd: (run, e) => ended.push([run.id, e.status, e.outcome])
+    })
+    await startRun(engine)
+    store.advance.mergeStepOutputs('run-1', 0, { changed: false })
+    end(0, 'done')
+    await engine.advance('run-1')
+    end(2, 'done')
+    await engine.advance('run-1')
+    await engine.advance('run-1')
+    expect(ended).toEqual([['run-1', 'done', 'Done']])
+  })
+
+  it('ends an answer run after its last recorded step without reading the definition, then calls onRunEnd', async () => {
+    const ended: string[] = []
+    const { store, engine, started } = setup(null, { onRunEnd: (run) => ended.push(run.id) })
+    store.runs.create({
+      id: 'run-a',
+      automationId: 'review',
+      tickId: null,
+      itemKey: 'mr:1',
+      itemLabel: '!1',
+      worktreePath: '/wt',
+      startedAt: 600,
+      trigger: 'answer',
+      parentRunId: 'run-1'
+    })
+    store.runs.createStep({
+      runId: 'run-a',
+      idx: 0,
+      name: 'answer',
+      agent: 'claude',
+      skill: null,
+      startedAt: 600
+    })
+    store.runs.updateStep('run-a', 0, { status: 'done', finishedAt: 700 })
+    await engine.advance('run-a')
+    expect(store.runs.get('run-a')).toMatchObject({ status: 'done', outcome: 'Done' })
+    expect(started).toEqual([])
+    expect(ended).toEqual(['run-a'])
+  })
+
+  it('advanceIdle moves on every run whose steps all ended while Pilot was away', async () => {
+    const { store, engine, started } = setup()
+    store.runs.create({
+      id: 'run-2',
+      automationId: 'review',
+      tickId: null,
+      itemKey: 'mr:2',
+      itemLabel: '!2',
+      worktreePath: '/wt2',
+      startedAt: 600
+    })
+    store.runs.createStep({
+      runId: 'run-2',
+      idx: 0,
+      name: 'review',
+      agent: 'claude',
+      skill: 'review-cycles',
+      startedAt: 600
+    })
+    store.advance.mergeStepOutputs('run-2', 0, { changed: true })
+    store.runs.updateStep('run-2', 0, { status: 'done', finishedAt: 700 })
+    await engine.advanceIdle()
+    expect(started.map((s) => [s.run.id, s.idx])).toEqual([['run-2', 1]])
+  })
+
+  it('starts the next step once when two advances race', async () => {
+    const { store, engine, started, end } = setup()
+    await startRun(engine)
+    store.advance.mergeStepOutputs('run-1', 0, { changed: true })
+    end(0, 'done')
+    await Promise.all([engine.advance('run-1'), engine.advance('run-1')])
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(started.map((s) => s.idx)).toEqual([0, 1])
+  })
+})
+
+describe('stepTimeoutMs', () => {
+  it.each([
+    ["the step's own timeout", 0, 20 * 60_000],
+    ['limits.timeout for a step without one', 1, 60 * 60_000]
+  ])('uses %s', (_n, idx, ms) => expect(stepTimeoutMs(DEF, idx)).toBe(ms))
+
+  it('is null when neither is set', () => {
+    const def = definitionOf(
+      YAML.replace('limits: { timeout: 60m }\n', '').replace(', timeout: 20m', '')
+    )
+    expect(stepTimeoutMs(def, 0)).toBeNull()
+  })
+})

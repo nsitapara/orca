@@ -36,7 +36,8 @@ function errorMessage(e: unknown): string {
 // feeds the pass a tick run by hand (Run now, a dry run) makes for itself; it defaults to the real client.
 export type TickDeps = DecideDeps & {
   gitlab?(repoPath: string): Promise<GlabApi>
-  launch(req: LaunchRequest): Promise<LaunchResult>
+  // The run engine's startRun: it starts the run's first steps; the tick only needs it to settle or throw.
+  launch(req: LaunchRequest): Promise<unknown>
 }
 // `pass` is the scheduler pass's fetch cache, shared by every automation that ticks in that pass.
 export type TickOptions = { dryRun: boolean; pass?: PassFetchCache }

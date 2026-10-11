@@ -16,6 +16,7 @@ import { DefinitionStore } from './store-definitions'
 import { EventStore } from './store-events'
 import { FieldCacheStore } from './store-fields'
 import { AgentSessionStore } from './store-sessions'
+import { AdvanceStore } from './store-advance'
 
 const DAY = 24 * 60 * 60_000
 // Spec §7: ticks and their items are kept 30 days; runs and steps are kept indefinitely.
@@ -46,6 +47,7 @@ export class PilotStore {
   readonly definitions: DefinitionStore
   readonly fields: FieldCacheStore
   readonly sessions: AgentSessionStore
+  readonly advance: AdvanceStore
 
   private constructor(private readonly db: Database) {
     this.runs = new RunStore(db)
@@ -56,6 +58,7 @@ export class PilotStore {
     this.definitions = new DefinitionStore(db)
     this.fields = new FieldCacheStore(db)
     this.sessions = new AgentSessionStore(db)
+    this.advance = new AdvanceStore(db)
   }
 
   static open(path: string): PilotStore {
