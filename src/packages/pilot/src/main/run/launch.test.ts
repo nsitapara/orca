@@ -3,9 +3,11 @@ import type { OrcaRuntimeService } from '../../../../../main/runtime/orca-runtim
 import type { ItemDecision } from '../../shared/api-types'
 import { testDefinition, testStep } from '../../shared/definition/__fixtures__/definition'
 import type { AutomationDefinition } from '../../shared/definition/types'
+import type { WorktreeFactDeps } from '../fields/worktree-facts'
 import { UnrecordedLaunchError } from '../scheduler/tick-runner'
 import { PilotStore } from '../store/store'
 import type { PilotAgentLaunchOptions } from './agent-launch-hook'
+import type { SessionTerminalState } from './agent-step'
 import {
   makeLauncher,
   openAgentTerminal,
@@ -276,18 +278,42 @@ describe('makeLauncher', () => {
   })
 })
 
-const idleWorktrees = {
+const idleWorktrees: Pick<
+  WorktreeFactDeps,
+  'listWorktrees' | 'terminalAlive' | 'paneState' | 'terminalDraft'
+> = {
   listWorktrees: async () => [],
   terminalAlive: async () => true,
-  paneState: () => 'idle' as const,
+  paneState: () => 'idle',
   terminalDraft: async () => ''
 }
 const runs = () => PilotStore.open(':memory:').runs
-// The runtime's own answer to "is an agent still running in this terminal" (upstream's send guard reads it).
-const agentRunning = (isRunningAgent: boolean) =>
-  ({
-    getTerminalAgentStatus: async (handle: string) => ({ handle, isRunningAgent, status: null })
-  }) as unknown as OrcaRuntimeService
+const throwing = async (): Promise<never> => {
+  throw new Error('runtime_unavailable')
+}
+type AgentLook = {
+  running?: boolean
+  status?: 'working' | 'permission' | 'idle' | null
+  session?: string | null
+  unreadable?: boolean
+}
+// The runtime's view of a terminal: whether an agent is in the foreground and its state (what
+// upstream's send guard reads), and the session the pane's hooks report.
+function runtimeSeeing(look: AgentLook = {}, more: Record<string, unknown> = {}) {
+  const session = 'session' in look ? look.session : 's-1'
+  return {
+    getTerminalAgentStatus: async (handle: string) => {
+      if (look.unreadable) {
+        throw new Error('terminal_handle_stale')
+      }
+      const status = 'status' in look ? look.status : 'idle'
+      return { handle, isRunningAgent: look.running ?? true, status }
+    },
+    getAgentStatusRowsForPane: () =>
+      session ? [{ receivedAt: 1, providerSession: { key: 'session_id', id: session } }] : [],
+    ...more
+  } as unknown as OrcaRuntimeService
+}
 
 describe('runtimeLauncherDeps', () => {
   it("passes Pilot's launch options to the runtime unchanged, and refuses a mode until modes load", async () => {
@@ -308,43 +334,44 @@ describe('runtimeLauncherDeps', () => {
     expect(deps.newSessionId()).toMatch(/^[0-9a-f-]{36}$/)
   })
 
-  // H10: only a live, idle terminal with an empty draft (read from the rendered screen) takes the prompt.
-  it.each([
-    ['live, idle, empty draft', idleWorktrees, 'p', true],
-    ['no pane to watch', idleWorktrees, null, false],
-    ['gone', { ...idleWorktrees, terminalAlive: async () => false }, 'p', false],
-    ['working', { ...idleWorktrees, paneState: () => 'working' as const }, 'p', false],
-    ['waiting for input', { ...idleWorktrees, paneState: () => 'waiting' as const }, 'p', false],
-    [
-      'someone typing',
-      { ...idleWorktrees, terminalDraft: async () => 'half a prompt' },
-      'p',
-      false
-    ],
-    [
-      'unreadable',
-      {
-        ...idleWorktrees,
-        terminalDraft: async () => {
-          throw new Error('terminal_handle_stale')
-        }
-      },
-      'p',
-      false
-    ]
-  ])('resumeTarget: %s', async (_name, worktrees, paneKey, expected) => {
-    const deps = runtimeLauncherDeps(agentRunning(true), worktrees, () => 1, runs())
-    expect(await deps.resumeTarget?.('t', paneKey)).toBe(expected)
+  // H10: what the terminal a session last ran in can take. The draft is read from the rendered
+  // screen (B6); anything unreadable is busy, never gone.
+  it.each<[string, Partial<typeof idleWorktrees>, AgentLook, string | null, SessionTerminalState]>([
+    ['an idle agent running this session, nobody typing', {}, {}, 'p', 'free'],
+    ['an idle agent running another session', {}, { session: 's-2' }, 'p', 'other'],
+    ['an idle agent whose session is unknown', {}, { session: null }, 'p', 'other'],
+    ['closed', { terminalAlive: async () => false }, {}, 'p', 'gone'],
+    ['an agent that exited, leaving a shell', {}, { running: false }, 'p', 'gone'],
+    ['a working agent', {}, { status: 'working' }, 'p', 'busy'],
+    ['an agent at a permission prompt', {}, { status: 'permission' }, 'p', 'busy'],
+    ['an agent working by its hooks', { paneState: () => 'working' }, {}, 'p', 'busy'],
+    ['an agent waiting for input by its hooks', { paneState: () => 'waiting' }, {}, 'p', 'busy'],
+    ['someone typing', { terminalDraft: async () => 'half a prompt' }, {}, 'p', 'busy'],
+    ['no pane to read', {}, {}, null, 'busy'],
+    ['unreadable liveness', { terminalAlive: throwing }, {}, 'p', 'busy'],
+    ['an unreadable agent status', {}, { unreadable: true }, 'p', 'busy'],
+    ['an unreadable draft', { terminalDraft: throwing }, {}, 'p', 'busy']
+  ])('sessionTerminals.state: %s', async (_name, worktrees, look, paneKey, expected) => {
+    const seen = { ...idleWorktrees, ...worktrees }
+    const deps = runtimeLauncherDeps(runtimeSeeing(look), seen, () => 1, runs())
+    expect(await deps.sessionTerminals?.state({ handle: 't', paneKey }, 's-1')).toBe(expected)
   })
 
-  // A terminal whose agent exited is a bare shell (no hook row, so its pane reads idle): a prompt typed
-  // there would run as shell commands.
-  it('resumeTarget: not when the agent has exited and left a shell', async () => {
-    const deps = runtimeLauncherDeps(agentRunning(false), idleWorktrees, () => 1, runs())
-    expect(await deps.resumeTarget?.('t', 'p')).toBe(false)
+  // S1: the prompt carries item text (MR, branch, Linear), so it is typed only while an idle agent is
+  // in the foreground, read again right before sending: never into a shell or a permission dialog.
+  it.each<[string, AgentLook]>([
+    ['its agent exited', { running: false }],
+    ['its agent is working', { status: 'working' }],
+    ['its agent is at a permission prompt', { status: 'permission' }]
+  ])('sessionTerminals.send refuses, typing nothing, when %s', async (_name, look) => {
+    const sendTerminalAgentPrompt = vi.fn()
+    const runtime = runtimeSeeing(look, { sendTerminalAgentPrompt })
+    const deps = runtimeLauncherDeps(runtime, idleWorktrees, () => 1, runs())
+    await expect(deps.sessionTerminals?.send('t', 'go')).rejects.toThrow('no idle agent')
+    expect(sendTerminalAgentPrompt).not.toHaveBeenCalled()
   })
 
-  it('sendPrompt types the prompt and fails when no turn starts', async () => {
+  it('sessionTerminals.send types the prompt as the driver, and fails when no turn starts', async () => {
     const sendTerminalAgentPrompt = vi
       .fn()
       .mockResolvedValueOnce({
@@ -352,18 +379,33 @@ describe('runtimeLauncherDeps', () => {
         prompt: { stages: ['input_accepted', 'turn_started'] }
       })
       .mockResolvedValueOnce({ accepted: true, prompt: { stages: ['input_accepted'] } })
-    const deps = runtimeLauncherDeps(
-      { sendTerminalAgentPrompt } as unknown as OrcaRuntimeService,
-      idleWorktrees,
-      () => 1,
-      runs()
-    )
-    await deps.sendPrompt?.('t', 'go')
+    const runtime = runtimeSeeing({}, { sendTerminalAgentPrompt })
+    const deps = runtimeLauncherDeps(runtime, idleWorktrees, () => 1, runs())
+    await deps.sessionTerminals?.send('t', 'go')
     expect(sendTerminalAgentPrompt).toHaveBeenCalledWith('t', 'go', {
       inputKind: 'driving',
       observationTimeoutMs: 30_000
     })
-    await expect(deps.sendPrompt?.('t', 'go')).rejects.toThrow("didn't start a turn")
+    await expect(deps.sessionTerminals?.send('t', 'go')).rejects.toThrow("didn't start a turn")
+  })
+
+  it('sessionTerminals.close closes the tab, and fails when its process may still run', async () => {
+    const closeTerminal = vi
+      .fn()
+      .mockResolvedValueOnce({ handle: 't', tabId: 'tab', ptyKilled: true })
+      .mockResolvedValueOnce({
+        handle: 't',
+        tabId: 'tab',
+        ptyKilled: false,
+        ptyStopVerdict: 'live'
+      })
+    const runtime = { closeTerminal } as unknown as OrcaRuntimeService
+    const deps = runtimeLauncherDeps(runtime, idleWorktrees, () => 1, runs())
+    await deps.sessionTerminals?.close('t')
+    expect(closeTerminal).toHaveBeenCalledWith('t')
+    await expect(deps.sessionTerminals?.close('t')).rejects.toThrow(
+      "Couldn't close terminal t: its process is live"
+    )
   })
 })
 

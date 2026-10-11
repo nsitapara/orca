@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import type { OrcaRuntimeService } from '../../../../../main/runtime/orca-runtime'
-import { testDefinition } from '../../shared/definition/__fixtures__/definition'
+import { testDefinition, testStep } from '../../shared/definition/__fixtures__/definition'
 import type { AutomationDefinition } from '../../shared/definition/types'
 import { EMPTY_PEOPLE } from '../../shared/people'
 import { fakeFieldDeps, testItem } from '../fields/__fixtures__/field-deps'
@@ -511,6 +511,28 @@ describe('runTick launching into each workspace (Task 8d)', () => {
       { status: 'failed', error: 'git worktree add failed' }
     ])
     expect(run.d.store.handledKeys('fix-failed-ci').size).toBe(0)
+  })
+
+  // H10: per_worktree in the main checkout is one session for the repo. The second item would resume it
+  // while the first item's agent still runs it, so its step fails and no second terminal opens.
+  it('fails the second item, opening no second terminal, when both would resume one per-worktree session', async () => {
+    const run = launching(created)
+    const shared: AutomationDefinition = {
+      ...def,
+      workspace: { kind: 'main_checkout' },
+      steps: [testStep({ session: { kind: 'per_worktree' } })]
+    }
+    const result = await runTick(shared, people, run.d, { dryRun: false })
+    expect(result.status).toBe('ok')
+    expect(run.selectors).toEqual(['path:/repo'])
+    const busy = "Couldn't start: Session sess is busy in Fix failed CI on my MRs · !1561"
+    expect(
+      run.d.store.runs.forTick(result.tickId).map((r) => [r.itemKey, r.status, r.outcome])
+    ).toEqual([
+      ['mr:1561', 'running', null],
+      ['mr:1574', 'failed', busy]
+    ])
+    expect(run.d.store.handledKeys('fix-failed-ci')).toEqual(new Set(['1561:1561']))
   })
 })
 

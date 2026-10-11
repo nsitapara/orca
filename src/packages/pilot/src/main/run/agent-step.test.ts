@@ -3,7 +3,12 @@ import { testDefinition, testStep } from '../../shared/definition/__fixtures__/d
 import type { AutomationDefinition } from '../../shared/definition/types'
 import { PilotStore } from '../store/store'
 import type { PilotAgentLaunchOptions } from './agent-launch-hook'
-import { launchAgentStep, type AgentStepDeps, type AgentStepRequest } from './agent-step'
+import {
+  launchAgentStep,
+  type AgentStepDeps,
+  type AgentStepRequest,
+  type SessionTerminalState
+} from './agent-step'
 import type { Workspace } from './workspace'
 
 const workspace: Workspace = {
@@ -49,6 +54,9 @@ function setup(definition: AutomationDefinition, over: Partial<AgentStepDeps> = 
   return { store, deps, launchTerminal, request }
 }
 const argvOf = (call: [string, PilotAgentLaunchOptions]) => call[1].pilot.argv
+// What the run engine records when a step's agent finishes; only then does the next step resume it.
+const finish = (store: PilotStore, runId: string, idx: number) =>
+  store.runs.updateStep(runId, idx, { status: 'done', finishedAt: 7 })
 
 describe('launchAgentStep', () => {
   it("resumes an earlier step's session for session: continue", async () => {
@@ -65,6 +73,7 @@ describe('launchAgentStep', () => {
     })
     const { store, request, launchTerminal, deps } = setup(def)
     await launchAgentStep(store, request(0), deps)
+    finish(store, 'run-1', 0)
     await launchAgentStep(store, request(1), deps)
     expect(argvOf(launchTerminal.mock.calls[0])).toEqual(['--session-id', 'uuid-new'])
     expect(argvOf(launchTerminal.mock.calls[1])).toEqual([
@@ -73,7 +82,7 @@ describe('launchAgentStep', () => {
       '--dangerously-skip-permissions'
     ])
     expect(store.runs.steps('run-1').map((s) => [s.name, s.status, s.sessionId])).toEqual([
-      ['review', 'running', 'uuid-new'],
+      ['review', 'done', 'uuid-new'],
       ['fix', 'running', 'uuid-new']
     ])
   })
@@ -105,6 +114,7 @@ describe('launchAgentStep', () => {
     const { store, request, launchTerminal, deps } = setup(def)
     await launchAgentStep(store, request(0), deps)
     expect(store.sessions.get('cycles', '/wt/a', 'claude')?.sessionId).toBe('uuid-new')
+    finish(store, 'run-1', 0)
     store.runs.create({
       id: 'run-2',
       automationId: 'cycles',
@@ -208,64 +218,149 @@ describe('launchAgentStep', () => {
   })
 })
 
-// H10: a continued or per-worktree session goes back into its terminal when that is still free.
-describe('launchAgentStep into a live session terminal', () => {
-  const continuing = () =>
+// H10, one process per session: the session's old terminal takes the prompt only when it is free and
+// its agent was started with this step's args; an idle Pilot tab that can't is closed first, and a busy
+// one fails the step.
+function terminalsIn(state: SessionTerminalState | Error) {
+  return {
+    state: vi.fn(async (_terminal: { handle: string; paneKey: string | null }, _id: string) => {
+      if (state instanceof Error) {
+        throw state
+      }
+      return state
+    }),
+    send: vi.fn(async (_handle: string, _prompt: string) => {}),
+    close: vi.fn(async (_handle: string) => {})
+  }
+}
+type Terminals = ReturnType<typeof terminalsIn>
+
+describe('launchAgentStep for a session whose terminal may still be open', () => {
+  const continuing = (fixArgs: string[] = []) =>
     testDefinition({
       id: 'review',
       steps: [
         testStep({ name: 'review' }),
-        testStep({ name: 'fix', session: { kind: 'continue', step: 'review' } })
+        testStep({ name: 'fix', session: { kind: 'continue', step: 'review' }, args: fixArgs })
       ]
     })
+  async function reviewed(terminals: Terminals, fixArgs: string[] = []) {
+    const s = setup(continuing(fixArgs), { sessionTerminals: terminals })
+    await launchAgentStep(s.store, s.request(0), s.deps)
+    finish(s.store, 'run-1', 0)
+    return s
+  }
+  const BUSY = 'Session uuid-new is busy in Auto · web-1-a · review'
 
-  it('sends the prompt into the live, idle terminal of the session it continues', async () => {
-    const sendPrompt = vi.fn(async () => {})
-    const resumeTarget = vi.fn(async () => true)
-    const { store, request, launchTerminal, deps } = setup(continuing(), {
-      resumeTarget,
-      sendPrompt
-    })
-    await launchAgentStep(store, request(0), deps)
+  it.each<[string, SessionTerminalState, string[], boolean, boolean, string[] | null]>([
+    ['free, started with the same args: the prompt goes in', 'free', [], true, false, null],
+    [
+      "free, started with other args: closed, then resumed with this step's",
+      'free',
+      ['--x'],
+      false,
+      true,
+      ['--resume', 'uuid-new', '--x']
+    ],
+    [
+      'running another session: closed, then resumed',
+      'other',
+      [],
+      false,
+      true,
+      ['--resume', 'uuid-new']
+    ],
+    ['gone: resumed in a new terminal', 'gone', [], false, false, ['--resume', 'uuid-new']]
+  ])('%s', async (_name, state, fixArgs, sent, closed, argv) => {
+    const terminals = terminalsIn(state)
+    const { store, request, launchTerminal, deps } = await reviewed(terminals, fixArgs)
     await launchAgentStep(store, request(1), deps)
-    expect(launchTerminal).toHaveBeenCalledTimes(1)
-    expect(resumeTarget).toHaveBeenCalledWith('term_1', 'tab1:leaf')
-    expect(sendPrompt).toHaveBeenCalledWith(
-      'term_1',
-      expect.stringContaining('Started by the Pilot automation')
+    expect(terminals.state).toHaveBeenCalledWith(
+      { handle: 'term_1', paneKey: 'tab1:leaf' },
+      'uuid-new'
     )
-    expect(
-      store.runs.steps('run-1').map((s) => [s.name, s.status, s.terminalHandle, s.sessionId])
-    ).toEqual([
-      ['review', 'running', 'term_1', 'uuid-new'],
-      ['fix', 'running', 'term_1', 'uuid-new']
-    ])
+    const prompt = expect.stringContaining('Started by the Pilot automation')
+    expect(terminals.send.mock.calls).toEqual(sent ? [['term_1', prompt]] : [])
+    expect(terminals.close.mock.calls).toEqual(closed ? [['term_1']] : [])
+    expect(launchTerminal.mock.calls.slice(1).map(argvOf)).toEqual(argv ? [argv] : [])
+    expect(store.runs.steps('run-1')[1]).toMatchObject({
+      status: 'running',
+      terminalHandle: sent ? 'term_1' : 'term_2',
+      sessionId: 'uuid-new'
+    })
   })
 
-  it('resumes the session in a new terminal when the old one is gone, busy or has a draft', async () => {
-    const sendPrompt = vi.fn(async () => {})
+  it.each<[string, SessionTerminalState | Error]>([
+    ['busy', 'busy'],
+    ['unreadable', new Error('runtime_unavailable')]
+  ])(
+    "fails the step, opening no terminal, when the session's terminal is %s",
+    async (_name, state) => {
+      const terminals = terminalsIn(state)
+      const { store, request, launchTerminal, deps } = await reviewed(terminals)
+      await expect(launchAgentStep(store, request(1), deps)).rejects.toThrow(BUSY)
+      expect(launchTerminal).toHaveBeenCalledTimes(1)
+      expect(terminals.send).not.toHaveBeenCalled()
+      expect(terminals.close).not.toHaveBeenCalled()
+      expect(store.runs.steps('run-1')[1]).toMatchObject({ status: 'failed', error: BUSY })
+    }
+  )
+
+  it('fails the step without looking at the terminal while a Pilot step still runs in it', async () => {
+    const terminals = terminalsIn('free')
     const { store, request, launchTerminal, deps } = setup(continuing(), {
-      resumeTarget: async () => false,
-      sendPrompt
+      sessionTerminals: terminals
     })
     await launchAgentStep(store, request(0), deps)
-    await launchAgentStep(store, request(1), deps)
-    expect(sendPrompt).not.toHaveBeenCalled()
-    expect(launchTerminal).toHaveBeenCalledTimes(2)
-    expect(argvOf(launchTerminal.mock.calls[1])).toEqual(['--resume', 'uuid-new'])
+    await expect(launchAgentStep(store, request(1), deps)).rejects.toThrow(BUSY)
+    expect(terminals.state).not.toHaveBeenCalled()
+    expect(launchTerminal).toHaveBeenCalledTimes(1)
   })
 
-  it("sends a per-worktree step into the stored session's live terminal", async () => {
+  it.each<[string, string[], 'send' | 'close']>([
+    ['the prompt cannot be typed into a free terminal', [], 'send'],
+    ['the idle terminal running the session cannot be closed', ['--x'], 'close']
+  ])('fails the step, opening no second terminal, when %s', async (_name, fixArgs, failing) => {
+    const terminals = terminalsIn('free')
+    const refused = new Error('terminal term_1 has no idle agent to take the prompt')
+    if (failing === 'send') {
+      terminals.send.mockRejectedValue(refused)
+    } else {
+      terminals.close.mockRejectedValue(refused)
+    }
+    const { store, request, launchTerminal, deps } = await reviewed(terminals, fixArgs)
+    await expect(launchAgentStep(store, request(1), deps)).rejects.toThrow(refused.message)
+    expect(launchTerminal).toHaveBeenCalledTimes(1)
+    expect(store.runs.steps('run-1')[1]).toMatchObject({ status: 'failed', error: refused.message })
+  })
+
+  it("looks at the newest terminal the session ran in, not only the continued step's", async () => {
+    const def = testDefinition({
+      id: 'review',
+      steps: [
+        testStep({ name: 'review' }),
+        testStep({ name: 'fix', session: { kind: 'continue', step: 'review' } }),
+        testStep({ name: 'verify', session: { kind: 'continue', step: 'review' } })
+      ]
+    })
+    const terminals = terminalsIn('gone')
+    const { store, request, deps } = setup(def, { sessionTerminals: terminals })
+    for (const idx of [0, 1, 2]) {
+      await launchAgentStep(store, request(idx), deps)
+      finish(store, 'run-1', idx)
+    }
+    expect(terminals.state.mock.calls.map(([t]) => t.handle)).toEqual(['term_1', 'term_2'])
+  })
+
+  it("sends a per-worktree step into the stored session's free terminal", async () => {
     const def = testDefinition({
       id: 'cycles',
       steps: [testStep({ name: 'pass', session: { kind: 'per_worktree' } })]
     })
-    const sendPrompt = vi.fn(async () => {})
-    const { store, request, launchTerminal, deps } = setup(def, {
-      resumeTarget: async () => true,
-      sendPrompt
-    })
+    const terminals = terminalsIn('free')
+    const { store, request, launchTerminal, deps } = setup(def, { sessionTerminals: terminals })
     await launchAgentStep(store, request(0), deps)
+    finish(store, 'run-1', 0)
     store.runs.create({
       id: 'run-2',
       automationId: 'cycles',
@@ -277,31 +372,11 @@ describe('launchAgentStep into a live session terminal', () => {
     })
     await launchAgentStep(store, request(0, 'run-2'), deps)
     expect(launchTerminal).toHaveBeenCalledTimes(1)
-    expect(sendPrompt).toHaveBeenCalledWith('term_1', expect.any(String))
+    expect(terminals.send).toHaveBeenCalledWith('term_1', expect.any(String))
     expect(store.runs.steps('run-2')[0]).toMatchObject({
       status: 'running',
       terminalHandle: 'term_1',
       sessionId: 'uuid-new'
-    })
-  })
-
-  it('fails the step, opening no second terminal, when the prompt cannot be sent into a terminal that looked free', async () => {
-    const sendPrompt = vi.fn(async () => {
-      throw new Error('someone is typing there')
-    })
-    const { store, request, launchTerminal, deps } = setup(continuing(), {
-      resumeTarget: async () => true,
-      sendPrompt
-    })
-    await launchAgentStep(store, request(0), deps)
-    await expect(launchAgentStep(store, request(1), deps)).rejects.toThrow(
-      'someone is typing there'
-    )
-    expect(launchTerminal).toHaveBeenCalledTimes(1)
-    expect(store.runs.steps('run-1')[1]).toMatchObject({
-      name: 'fix',
-      status: 'failed',
-      error: 'someone is typing there'
     })
   })
 })
