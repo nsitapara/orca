@@ -1,22 +1,18 @@
 import { estimateCostUsd } from '../../../../../main/claude-usage/claude-model-pricing'
 import { parseClaudeUsageFile } from '../../../../../main/claude-usage/transcript-record-parser'
+import type { ClaudeUsageParsedTurn } from '../../../../../main/claude-usage/types'
 
-type Turn = {
-  model: string
-  inputTokens: number
-  outputTokens: number
-  cacheReadTokens: number
-  cacheWriteTokens: number
-  cacheWrite1hTokens: number
-}
-type Estimate = (
-  model: string,
-  input: number,
-  output: number,
-  cacheRead: number,
-  cacheWrite: number,
-  cacheWrite1h: number
-) => number | null
+// Upstream's own types, so a change to the parser or the estimator fails the typecheck here.
+type Turn = Pick<
+  ClaudeUsageParsedTurn,
+  | 'model'
+  | 'inputTokens'
+  | 'outputTokens'
+  | 'cacheReadTokens'
+  | 'cacheWriteTokens'
+  | 'cacheWrite1hTokens'
+>
+type Estimate = typeof estimateCostUsd
 export type Spent = { costUsd: number | null; tokens: number }
 export type CostReader = (transcriptPath: string) => Promise<{
   costUsd: number | null
@@ -26,7 +22,7 @@ export type CostReader = (transcriptPath: string) => Promise<{
 // Never throws: an unreadable transcript is "no cost known", not a failed run.
 export async function claudeTranscriptCost(
   path: string,
-  parse: (p: string) => Promise<Turn[]> = parseClaudeUsageFile as never,
+  parse: (p: string) => Promise<Turn[]> = parseClaudeUsageFile,
   estimate: Estimate = estimateCostUsd
 ): Promise<Spent> {
   let turns: Turn[]
