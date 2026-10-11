@@ -1,0 +1,14 @@
+// Pilot tests that need real node:sqlite. Bun has none, so config/scripts/vitest-sqlite-runtime-files.mjs
+// (pilot-hook: vitest-sqlite-runtime) spreads this list into upstream's Node-runtime project.
+export const PILOT_SQLITE_RUNTIME_INCLUDE = [
+  'src/packages/pilot/src/main/store/store.test.ts',
+  'src/packages/pilot/src/main/scheduler/tick-runner.test.ts',
+  'src/packages/pilot/src/main/run/watcher.test.ts',
+  'src/packages/pilot/src/main/run/launch.test.ts',
+  'src/packages/pilot/src/main/run/stale-starts.test.ts',
+  'src/packages/pilot/src/main/rpc/methods.test.ts',
+  'src/packages/pilot/src/main/rpc/handlers.test.ts',
+  'src/packages/pilot/src/main/pilot-services.test.ts',
+  'src/packages/pilot/scripts/seed-handled-from-sweep.test.ts',
+  'src/packages/pilot/scripts/import-orca-settings.test.ts'
+]

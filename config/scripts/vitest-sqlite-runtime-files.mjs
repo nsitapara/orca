@@ -1,8 +1,10 @@
 import { SQLITE_DATABASE_RUNTIME_INCLUDE } from './vitest-sqlite-database-runtime-files.mjs'
+import { PILOT_SQLITE_RUNTIME_INCLUDE } from '../../src/packages/pilot/test-runtime.mjs' // pilot-hook: vitest-sqlite-runtime
 
 // Real SQLite fixtures keep Node publication and close semantics.
 export const SQLITE_RUNTIME_INCLUDE = [
   ...SQLITE_DATABASE_RUNTIME_INCLUDE,
+  ...PILOT_SQLITE_RUNTIME_INCLUDE, // pilot-hook: vitest-sqlite-runtime
   'src/main/acp/acp-structured-host-live-listing.test.ts',
   'src/main/acp/acp-structured-host-configured-default.test.ts',
   'src/main/pi/rpc-configured-default.test.ts',
