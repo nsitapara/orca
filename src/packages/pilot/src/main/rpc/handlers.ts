@@ -12,10 +12,8 @@ import type { PilotContext } from '../pilot-services'
 
 const ITEM_KIND: Record<string, string> = { merge_request: 'Merge requests' }
 
+// Every valid M1 file has items: (run-once automations arrive in M3).
 function itemKindLabel(def: AutomationDefinition): string {
-  if (!def.items) {
-    return 'Runs once'
-  }
   return ITEM_KIND[def.items.kind] ?? def.items.kind
 }
 

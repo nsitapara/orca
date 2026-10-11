@@ -28,7 +28,8 @@ export type AutomationDefinition = {
   schedule: string
   timezone: string
   enabled: boolean
-  items: { kind: 'merge_request'; where: MergeRequestWhere } | null
+  // Always present in M1: run-once automations (no items:) arrive in M3.
+  items: { kind: 'merge_request'; where: MergeRequestWhere }
   firstSeen: 'process' | 'baseline'
   oncePer: string | null
   checks: BuiltinCheck[]

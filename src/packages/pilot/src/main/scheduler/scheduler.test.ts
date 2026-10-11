@@ -14,7 +14,7 @@ vi.mock('../../shared/schedule/cron', async (importOriginal) => {
 
 function def(id: string, schedule: string, enabled = true) {
   const r = parseAutomationYaml(
-    `name: ${id}\nrepo: r\nschedule: "${schedule}"\nenabled: ${enabled}\nsteps: [ { agent: claude, prompt: x } ]\n`,
+    `name: ${id}\nrepo: r\nschedule: "${schedule}"\nenabled: ${enabled}\nitems: { kind: merge_request }\nsteps: [ { agent: claude, prompt: x } ]\n`,
     `/a/${id}.yaml`
   )
   if (!r.ok) {

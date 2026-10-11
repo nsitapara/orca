@@ -57,7 +57,7 @@ async function decide(
   const api = await deps.gitlab(repo.path)
   const inScope = (username: string) => authorInScope(def, people, username)
   let items = await listMergeRequestItems(api, {
-    authorUsernames: gitlabHandlesFor(def.items?.where.author, people),
+    authorUsernames: gitlabHandlesFor(def.items.where.author, people),
     inScope
   })
   items = await addWorktreeFields(

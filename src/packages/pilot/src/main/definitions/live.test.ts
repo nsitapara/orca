@@ -7,7 +7,7 @@ import type { LoadedDefinitions } from './loader'
 function loaded(ids: string[], extra: Partial<LoadedDefinitions> = {}): LoadedDefinitions {
   const definitions = ids.map((id) => {
     const r = parseAutomationYaml(
-      `name: ${id}\nrepo: r\nschedule: manual\nsteps: [ { agent: claude, prompt: x } ]\n`,
+      `name: ${id}\nrepo: r\nschedule: manual\nitems: { kind: merge_request }\nsteps: [ { agent: claude, prompt: x } ]\n`,
       `/a/${id}.yaml`
     )
     if (!r.ok) {

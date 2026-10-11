@@ -12,7 +12,7 @@ vi.mock('node:fs', async (importOriginal) => {
 })
 
 const VALID =
-  'name: A\nrepo: web-platform\nschedule: manual\nsteps: [ { agent: claude, prompt: hi } ]\n'
+  'name: A\nrepo: web-platform\nschedule: manual\nitems: { kind: merge_request }\nsteps: [ { agent: claude, prompt: hi } ]\n'
 const PEOPLE =
   'people:\n  - { id: nish, name: Nish, gitlab: nish8 }\ngroups:\n  - { id: eng, name: Eng, members: [nish] }\n'
 

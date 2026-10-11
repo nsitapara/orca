@@ -7,7 +7,7 @@ import { buildPrompt, makeLauncher } from './launch'
 import { STALE_START_MS, sweepStaleStarts } from './stale-starts'
 
 const parsed = parseAutomationYaml(
-  'name: Fix failed CI on my MRs\nrepo: r\nschedule: manual\nsteps: [ { agent: claude, skill: fix-gitlab-ci, prompt: "Fix pipeline {mr.pipeline} on !{mr.iid}." } ]\n',
+  'name: Fix failed CI on my MRs\nrepo: r\nschedule: manual\nitems: { kind: merge_request }\nsteps: [ { agent: claude, skill: fix-gitlab-ci, prompt: "Fix pipeline {mr.pipeline} on !{mr.iid}." } ]\n',
   '/a/fix-failed-ci.yaml'
 )
 if (!parsed.ok) {
