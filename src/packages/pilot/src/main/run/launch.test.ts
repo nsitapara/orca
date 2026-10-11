@@ -64,7 +64,7 @@ function setup(launch: Launch, over: Partial<LauncherDeps> = {}) {
     startedAt: STARTED
   })
   const created: string[] = []
-  const stepAtCreate: string[] = []
+  const stepAtCreate: { status: string; startedAt: number | null }[] = []
   const deps: LauncherDeps = {
     workspace: {
       listWorktrees: async () => [
@@ -72,7 +72,8 @@ function setup(launch: Launch, over: Partial<LauncherDeps> = {}) {
       ],
       createWorktree: async (req) => {
         created.push(req.name)
-        stepAtCreate.push(store.runs.steps('run-1')[0]?.status ?? 'no step')
+        const step = store.runs.steps('run-1')[0]
+        stepAtCreate.push({ status: step?.status ?? 'no step', startedAt: step?.startedAt ?? null })
         return { id: `r1::/wt/${req.name}`, path: `/wt/${req.name}` }
       },
       claimWorktree: () => true
@@ -193,7 +194,8 @@ describe('makeLauncher', () => {
       }
     })
     await launcher(request(memo))
-    expect(stepAtCreate).toEqual(['pending'])
+    // Stamped when the run began opening it, as the run engine does; launchAgentStep re-stamps it.
+    expect(stepAtCreate).toEqual([{ status: 'pending', startedAt: 7 }])
     expect(store.runs.steps('run-1')).toHaveLength(1)
     expect(store.runs.steps('run-1')[0]).toMatchObject({
       status: 'running',
