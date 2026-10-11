@@ -3,8 +3,12 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const orcaPage = vi.fn()
+let orcaThrows = false
 vi.mock('../../../../../renderer/src/components/automations/AutomationsPage', () => ({
   default: (props: unknown) => {
+    if (orcaThrows) {
+      throw new Error('boom')
+    }
     orcaPage(props)
     return <div>orca-page</div>
   }
@@ -18,6 +22,7 @@ describe('PilotAutomationsPage tabs', () => {
   afterEach(() => {
     cleanup()
     orcaPage.mockReset()
+    orcaThrows = false
     vi.restoreAllMocks()
   })
 
@@ -36,6 +41,7 @@ describe('PilotAutomationsPage tabs', () => {
   it('renders upstream AutomationsPage with the props AppWorkspaceShell gave it (none)', async () => {
     render(<PilotAutomationsPage />)
     fireEvent.click(screen.getByRole('tab', { name: 'Orca' }))
+    await screen.findByText('orca-page')
     expect(orcaPage).toHaveBeenCalledWith({})
   })
 
@@ -55,6 +61,28 @@ describe('PilotAutomationsPage tabs', () => {
     render(<PilotAutomationsPage />)
     expect(screen.getByText('pilot-tab')).toBeTruthy()
     fireEvent.click(screen.getByRole('tab', { name: 'Orca' }))
+    expect(await screen.findByText('orca-page')).toBeTruthy()
+  })
+
+  it('shows Loading while the Orca page loads', async () => {
+    render(<PilotAutomationsPage />)
+    fireEvent.click(screen.getByRole('tab', { name: 'Orca' }))
+    expect(screen.getByText('Loading…')).toBeTruthy()
+    await screen.findByText('orca-page')
+  })
+
+  it('contains an Orca page crash, keeps Pilot working, and retries', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    orcaThrows = true
+    render(<PilotAutomationsPage />)
+    fireEvent.click(screen.getByRole('tab', { name: 'Orca' }))
+    expect(await screen.findByText("Orca's Automations page couldn't load.")).toBeTruthy()
+    fireEvent.click(screen.getByRole('tab', { name: 'Pilot' }))
+    expect(screen.getByText('pilot-tab')).toBeTruthy()
+    fireEvent.click(screen.getByRole('tab', { name: 'Orca' }))
+    expect(await screen.findByText("Orca's Automations page couldn't load.")).toBeTruthy()
+    orcaThrows = false
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
     expect(await screen.findByText('orca-page')).toBeTruthy()
   })
 })

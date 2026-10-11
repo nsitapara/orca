@@ -1,12 +1,9 @@
-import { lazy, Suspense, useState } from 'react'
+import { useState } from 'react'
+import { OrcaAutomationsPanel } from './OrcaAutomationsPanel'
 import { PilotAutomationsTab } from './PilotAutomationsTab'
 
 export const AUTOMATIONS_TAB_KEY = 'pilot.automations.tab'
 type TabId = 'pilot' | 'orca'
-// Lazy so Orca's page (and its app-store graph) only loads when the Orca tab is opened.
-const OrcaAutomationsPage = lazy(
-  () => import('../../../../../renderer/src/components/automations/AutomationsPage')
-)
 const TABS: { id: TabId; label: string }[] = [
   { id: 'pilot', label: 'Pilot' },
   { id: 'orca', label: 'Orca' }
@@ -60,9 +57,7 @@ export default function PilotAutomationsPage(): React.JSX.Element {
             Orca&apos;s own automations, run by Orca&apos;s engine inside Pilot.
           </p>
           <div className="min-h-0 flex-1 overflow-hidden">
-            <Suspense fallback={null}>
-              <OrcaAutomationsPage />
-            </Suspense>
+            <OrcaAutomationsPanel />
           </div>
         </>
       ) : (
