@@ -3,7 +3,12 @@ import type { OrcaRuntimeService } from '../../../../main/runtime/orca-runtime'
 import { setAppEnvironment, type AppEnvironment } from '../../../../shared/app-environment'
 
 const m = vi.hoisted(() => ({ start: vi.fn(), stop: vi.fn(), quota: vi.fn(), onWillQuit: vi.fn() }))
-vi.mock('electron', () => ({ app: { isPackaged: false, setName: vi.fn() } }))
+const host = vi.hoisted(() => ({
+  app: { isPackaged: false, setName: () => {} },
+  state: { isServeMode: false }
+}))
+vi.mock('electron', () => ({ app: host.app }))
+vi.mock('../../../../main/startup/main-process-state', () => ({ mainProcessState: host.state }))
 vi.mock('./pilot-services', () => ({ startPilotServices: m.start }))
 vi.mock('./fields/claude-quota', () => ({ claudeQuotaReader: () => m.quota }))
 
@@ -16,19 +21,50 @@ describe('attachPilotMain', () => {
     for (const fn of Object.values(m)) {
       fn.mockReset()
     }
+    host.app.isPackaged = true
+    host.state.isServeMode = false
+    vi.stubEnv('PILOT_SCHEDULER', undefined)
     setAppEnvironment({ onWillQuit: m.onWillQuit } as unknown as AppEnvironment)
   })
   afterEach(() => {
+    vi.unstubAllEnvs()
     vi.restoreAllMocks()
   })
 
   it('starts Pilot with the Claude quota reader and stops it when the app quits', () => {
     m.start.mockReturnValue({ stop: m.stop, context: {} })
     attachPilotMain(runtime)
-    expect(m.start).toHaveBeenCalledWith(runtime, 'main', { quota: m.quota })
+    expect(m.start).toHaveBeenCalledWith(runtime, 'main', {
+      quota: m.quota,
+      schedulerEnabled: true
+    })
     m.onWillQuit.mock.calls[0][0]()
     expect(m.stop).toHaveBeenCalledTimes(1)
   })
+
+  // Only one Pilot ticks: unset, that is the packaged desktop app; PILOT_SCHEDULER decides elsewhere.
+  it.each([
+    ['packaged desktop', true, false, undefined, true],
+    ['packaged desktop', true, false, 'off', false],
+    ['packaged desktop', true, false, 'on', true],
+    ['dev', false, false, undefined, false],
+    ['dev', false, false, 'off', false],
+    ['dev', false, false, 'on', true],
+    ['packaged serve', true, true, undefined, false],
+    ['packaged serve', true, true, 'off', false],
+    ['packaged serve', true, true, 'on', true],
+    ['dev serve', false, true, undefined, false]
+  ])(
+    '%s (packaged %s, serve %s), PILOT_SCHEDULER=%s: scheduler %s',
+    (_name, packaged, serve, env, on) => {
+      host.app.isPackaged = packaged
+      host.state.isServeMode = serve
+      vi.stubEnv('PILOT_SCHEDULER', env)
+      m.start.mockReturnValue({ stop: m.stop, context: {} })
+      attachPilotMain(runtime)
+      expect(m.start.mock.calls[0][2]).toMatchObject({ schedulerEnabled: on })
+    }
+  )
 
   it("logs a failed start and lets the app go on (Pilot's store can't stop Orca)", () => {
     const error = vi.spyOn(console, 'error').mockImplementation(() => {})

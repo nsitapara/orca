@@ -96,7 +96,8 @@ function openPilot(
     log
   })
   opened.push(() => scheduler.stop())
-  if (options.schedulerEnabled ?? true) {
+  // The attach hooks decide (pilotSchedulerEnabled); a caller that doesn't say gets no scheduler.
+  if (options.schedulerEnabled ?? false) {
     sweepStaleStarts(store, now, log)
     scheduler.start()
   } else {

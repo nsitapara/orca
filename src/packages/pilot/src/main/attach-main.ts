@@ -1,6 +1,8 @@
 import { app } from 'electron'
 import type { OrcaRuntimeService } from '../../../../main/runtime/orca-runtime'
+import { mainProcessState } from '../../../../main/startup/main-process-state'
 import { getAppEnvironment } from '../../../../shared/app-environment'
+import { pilotSchedulerEnabled, type PilotHostKind } from './env'
 import { claudeQuotaReader } from './fields/claude-quota'
 import { startPilotServices, type PilotServices } from './pilot-services'
 
@@ -13,6 +15,18 @@ function pilotAppName(): string {
   return 'Pilot Dev'
 }
 
+// Upstream's preflight sets isServeMode from `--serve` (main-process-preflight.ts) before the app is
+// ready, so it is settled by the time this hook runs. A packaged serve is still a serve.
+function hostKind(): PilotHostKind {
+  if (mainProcessState.isServeMode) {
+    return 'serve'
+  }
+  if (!app.isPackaged) {
+    return 'dev'
+  }
+  return 'desktop'
+}
+
 export function attachPilotMain(runtime: OrcaRuntimeService): void {
   // Why: Orca's ready step calls app.setName('Orca'). userData is already captured, so renaming here
   // changes menus and dialogs only.
@@ -20,11 +34,14 @@ export function attachPilotMain(runtime: OrcaRuntimeService): void {
   if (typeof app.setName === 'function') {
     app.setName(pilotAppName())
   }
-  // The desktop runs automations (D2); orcad runs them only with PILOT_SCHEDULER=on.
+  // Only the packaged desktop app ticks unless PILOT_SCHEDULER says otherwise (pilotSchedulerEnabled).
   // A Pilot failure (e.g. its store won't open) must never stop Orca from starting.
   let services: PilotServices
   try {
-    services = startPilotServices(runtime, 'main', { quota: claudeQuotaReader() })
+    services = startPilotServices(runtime, 'main', {
+      quota: claudeQuotaReader(),
+      schedulerEnabled: pilotSchedulerEnabled(hostKind())
+    })
   } catch (error) {
     console.error(
       `[pilot] couldn't start: ${error instanceof Error ? error.message : String(error)}`
