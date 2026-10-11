@@ -4,7 +4,7 @@ import type { OrcaRuntimeService } from '../../../../main/runtime/orca-runtime'
 import { ALL_RPC_METHODS } from '../../../../main/runtime/rpc/methods/index'
 import { getAppEnvironment } from '../../../../shared/app-environment'
 import type { PilotStatus } from '../shared/api-types'
-import { liveDefinitions } from './definitions/live'
+import { definitionIo, liveDefinitions } from './definitions/live'
 import type { LoadedDefinitions } from './definitions/loader'
 import { pilotAutomationDirs, pilotDataDir } from './env'
 import { cachedQuota, type QuotaReader } from './fields/quota'
@@ -79,7 +79,7 @@ function openPilot(
       `[pilot] store: ${kept.interrupted} interrupted tick(s) closed, ${kept.pruned} tick(s) older than 30 days removed`
     )
   }
-  const definitions = liveDefinitions(host.dirs, log)
+  const definitions = liveDefinitions(host.dirs, log, definitionIo(store.definitions, now))
   opened.push(definitions.stop)
   // One relister for the session check and the step watcher, so they share its listing.
   const relist = terminalRelister(runtime, now)

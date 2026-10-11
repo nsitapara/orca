@@ -1,10 +1,16 @@
-import { mkdirSync, mkdtempSync, symlinkSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { EventEmitter } from 'node:events'
 import * as fs from 'node:fs'
 import { describe, expect, it, vi } from 'vitest'
-import { loadDefinitions, watchDefinitions, type LoadedDefinitions } from './loader'
+import { PilotStore } from '../store/store'
+import {
+  loadDefinitions,
+  watchDefinitions,
+  type DefinitionMemory,
+  type LoadedDefinitions
+} from './loader'
 
 vi.mock('node:fs', async (importOriginal) => {
   const actual = await importOriginal<typeof fs>()
@@ -236,5 +242,99 @@ describe('watchDefinitions', () => {
   it('does not throw for a missing folder and still closes cleanly', () => {
     const stop = watchDefinitions([join(tmpdir(), 'pilot-defs-nope', 'x')], () => {}, 10)
     expect(() => stop()).not.toThrow()
+  })
+})
+
+describe('the last valid version', () => {
+  const memory = () => PilotStore.open(':memory:').definitions
+  const at = (hour: number) => () => Date.UTC(2026, 9, 11, hour, 0)
+
+  it('keeps running the last valid version after a broken edit, and says so (Review Focus)', () => {
+    const d = dir({ 'a.yaml': VALID })
+    const file = join(d, 'a.yaml')
+    const mem = memory()
+    loadDefinitions([d], mem, at(9))
+    writeFileSync(file, `${VALID.replace('name: A', 'name: B')}onceper: x\n`)
+    const loaded = loadDefinitions([d], mem, at(10))
+    expect(loaded.definitions.map((x) => [x.id, x.name])).toEqual([['a', 'A']])
+    expect(loaded.errors).toEqual([
+      {
+        file,
+        errors: [
+          `${file}: unknown key "onceper"`,
+          `${file}: Pilot keeps running the last valid version, saved 2026-10-11T09:00:00.000Z`
+        ]
+      }
+    ])
+  })
+
+  it('runs the edit once it is valid again', () => {
+    const d = dir({ 'a.yaml': VALID })
+    const file = join(d, 'a.yaml')
+    const mem = memory()
+    loadDefinitions([d], mem)
+    writeFileSync(file, 'name: [')
+    loadDefinitions([d], mem)
+    writeFileSync(file, VALID.replace('name: A', 'name: C'))
+    expect(loadDefinitions([d], mem).definitions.map((x) => x.name)).toEqual(['C'])
+  })
+
+  it('has nothing to keep for a file that never loaded', () => {
+    expect(loadDefinitions([dir({ 'a.yaml': 'name: [' })], memory()).definitions).toEqual([])
+  })
+
+  it('forgets a deleted file, so a broken copy added later has nothing to fall back on (Review Focus)', () => {
+    const d = dir({ 'a.yaml': VALID })
+    const mem = memory()
+    loadDefinitions([d], mem)
+    rmSync(join(d, 'a.yaml'))
+    expect(loadDefinitions([d], mem).definitions).toEqual([])
+    writeFileSync(join(d, 'a.yaml'), 'name: [')
+    expect(loadDefinitions([d], mem).definitions).toEqual([])
+  })
+
+  it('keeps no version whose people no longer resolve', () => {
+    const d = dir({ 'a.yaml': withAuthor('{ people: [nish] }'), 'people.yaml': PEOPLE })
+    const mem = memory()
+    loadDefinitions([d], mem)
+    writeFileSync(join(d, 'a.yaml'), 'name: [')
+    writeFileSync(join(d, 'people.yaml'), 'people:\n  - { id: emil, name: Emil }\n')
+    expect(loadDefinitions([d], mem).definitions).toEqual([])
+  })
+
+  it('keeps nothing in place of a duplicate id', () => {
+    const a = dir({ 'x.yaml': VALID })
+    const b = dir({ 'x.yaml': VALID })
+    const loaded = loadDefinitions([a, b], memory())
+    expect(loaded.definitions.map((x) => x.file)).toEqual([join(a, 'x.yaml')])
+    expect(loaded.errors.map((e) => e.errors.length)).toEqual([1])
+  })
+
+  it('remembers why a file failed', () => {
+    const d = dir({ 'a.yaml': 'name: [' })
+    const mem = memory()
+    loadDefinitions([d], mem, () => 5)
+    expect(mem.errors()).toEqual([
+      { id: 'a', file: join(d, 'a.yaml'), errors: [expect.stringContaining('YAML error')], at: 5 }
+    ])
+  })
+
+  it('still loads every valid file when the memory fails', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const broken = (): never => {
+      throw new Error('database is closed')
+    }
+    const failing: DefinitionMemory = {
+      lastValid: broken,
+      saveValid: broken,
+      saveErrors: broken,
+      forgetAllBut: broken
+    }
+    const d = dir({ 'a.yaml': VALID, 'b.yaml': 'name: [' })
+    const loaded = loadDefinitions([d], failing)
+    expect(loaded.definitions.map((x) => x.id)).toEqual(['a'])
+    expect(loaded.errors.map((e) => e.file)).toEqual([join(d, 'b.yaml')])
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('database is closed'))
+    warn.mockRestore()
   })
 })
