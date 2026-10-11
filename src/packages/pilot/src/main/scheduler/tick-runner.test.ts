@@ -92,6 +92,33 @@ function deps(overrides: Partial<TickDeps> = {}): TickDeps & { launched: string[
 }
 
 describe('runTick', () => {
+  it.each([
+    ['items.match', 'items: { kind: merge_request, match: ["{mr.iid} > 0"] }', ''],
+    ['start: ask_first', '', 'start: ask_first\nask_first: { title: Go? }\n'],
+    ['workspace: main_checkout', '', 'workspace: main_checkout\n'],
+    ['workspace: new_worktree', '', 'workspace: { new_worktree: { base: origin/dev, name: x } }\n'],
+    ['items.where.reviewer', 'items: { kind: merge_request, where: { reviewer: anyone } }', ''],
+    ['items.where.draft', 'items: { kind: merge_request, where: { draft: false } }', ''],
+    ['items.where.approved_by', 'items: { kind: merge_request, where: { approved_by: none } }', ''],
+    [
+      'items.where.target_branch',
+      'items: { kind: merge_request, where: { target_branch: dev } }',
+      ''
+    ]
+  ])('fails the tick, creating no runs, on %s until its task lands', async (key, items, extra) => {
+    const parsed = parseAutomationYaml(
+      `name: N\nrepo: web-platform\nschedule: manual\n${items || 'items: { kind: merge_request }'}\n${extra}steps: [ { agent: claude, prompt: hi } ]\n`,
+      '/a/n.yaml'
+    )
+    if (!parsed.ok) {
+      throw new Error(parsed.errors.join('\n'))
+    }
+    const d = deps()
+    const result = await runTick(parsed.definition, people.directory, d, { dryRun: false })
+    expect(result).toMatchObject({ status: 'failed', error: `${key} isn't supported yet` })
+    expect(d.launched).toEqual([])
+  })
+
   it('fails the tick of an automation whose items it cannot list yet', async () => {
     const once = parseAutomationYaml(
       'name: Pull dev\nrepo: web-platform\nschedule: manual\nsteps: [ { agent: shell, run: ./pull.sh } ]\n',
