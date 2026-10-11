@@ -25,6 +25,10 @@ function def(id: string, schedule: string, enabled = true) {
 
 const OK = { tickId: 1, status: 'ok' as const, error: null, decisions: [] }
 
+function loadedOf(defs: ReturnType<typeof def>[]): LoadedDefinitions {
+  return { definitions: defs, errors: [], people: EMPTY_PEOPLE, peopleError: null, missingDirs: [] }
+}
+
 function deps(
   defs: ReturnType<typeof def>[],
   now: number,
@@ -32,13 +36,7 @@ function deps(
 ): SchedulerDeps & { ran: string[]; logs: string[] } {
   const ran: string[] = []
   const logs: string[] = []
-  const loaded: LoadedDefinitions = {
-    definitions: defs,
-    errors: [],
-    people: EMPTY_PEOPLE,
-    peopleError: null,
-    missingDirs: []
-  }
+  const loaded = loadedOf(defs)
   return {
     ran,
     logs,
@@ -181,12 +179,45 @@ describe('PilotScheduler', () => {
     d.runTick = vi.fn(() => new Promise<TickResult>((resolve) => (release = () => resolve(OK))))
     d.poll = vi.fn(async () => {})
     const s = new PilotScheduler(d)
+    expect(s.loopTimes()).toEqual({ loopStartedAt: null, lastLoopFinishedAt: null })
     const first = s.tickAll()
     const second = s.tickAll()
     await vi.waitFor(() => expect(d.runTick).toHaveBeenCalled())
+    expect(s.loopTimes()).toEqual({ loopStartedAt: at1012, lastLoopFinishedAt: null })
     release()
     await Promise.all([first, second])
     expect(d.runTick).toHaveBeenCalledTimes(1)
     expect(d.poll).toHaveBeenCalledTimes(1)
+    expect(s.loopTimes()).toEqual({ loopStartedAt: null, lastLoopFinishedAt: at1012 })
+  })
+
+  it('catches up a missed slot only for automations there at the first loop; later edits wait (05 cutover)', async () => {
+    const d = deps(
+      [def('ci', '10 * * * *'), def('cutover', 'manual'), def('off', '10 * * * *', false)],
+      at1012,
+      null
+    )
+    const s = new PilotScheduler(d)
+    await s.tickAll()
+    expect(d.ran).toEqual(['ci'])
+    // A real manual run during the shadow period, a day before the cutover.
+    await s.tickNow('cutover', { dryRun: false })
+    d.lastTickAt = (id) => {
+      if (id === 'ci') {
+        return at1012
+      }
+      return id === 'cutover' ? Date.UTC(2026, 9, 9, 19, 10) : null
+    }
+    const edited = [
+      def('ci', '10 * * * *'),
+      def('cutover', '10 * * * *'),
+      def('off', '10 * * * *'),
+      def('added', '10 * * * *')
+    ]
+    d.definitions = () => loadedOf(edited)
+    await s.tickAll()
+    expect(d.ran).toEqual(['ci', 'cutover'])
+    const at1310 = Date.UTC(2026, 9, 10, 20, 10)
+    expect(edited.map((x) => s.nextTickAt(x))).toEqual([at1310, at1310, at1310, at1310])
   })
 })

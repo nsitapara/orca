@@ -10,7 +10,8 @@ describe('formatPilotStatus', () => {
         dataPath: '/Users/n/Library/Application Support/pilot',
         automationDirs: ['/Users/n/.agents/automations', '/Users/n/.pilot/automations'],
         missingDirs: ['/Users/n/.pilot/automations'],
-        peopleError: null
+        peopleError: null,
+        error: null
       })
     ).toBe(
       [
@@ -23,17 +24,19 @@ describe('formatPilotStatus', () => {
     )
   })
 
-  it('adds the people.yaml note when there is one', () => {
+  it("adds why Pilot couldn't start and the people.yaml note, when there are any", () => {
     const out = formatPilotStatus({
       version: '0.1.0',
       process: 'orcad',
       dataPath: '/d',
       automationDirs: ['/a'],
       missingDirs: [],
-      peopleError: '/a/people.yaml: people.yaml and people.yml both exist; using people.yaml'
+      peopleError: '/a/people.yaml: people.yaml and people.yml both exist; using people.yaml',
+      error: 'file is not a database'
     })
-    expect(out.split('\n').at(-1)).toBe(
+    expect(out.split('\n').slice(-2)).toEqual([
+      "Pilot couldn't start: file is not a database",
       'People: /a/people.yaml: people.yaml and people.yml both exist; using people.yaml'
-    )
+    ])
   })
 })

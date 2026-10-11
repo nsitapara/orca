@@ -76,6 +76,40 @@ describe('sweepStaleStarts', () => {
     expect(store.runs.steps('r')[0].status).toBe('failed')
   })
 
+  it('fails a run that never got a step and frees its key, once it is older than the cutoff', () => {
+    const store = newStore()
+    const now = 10 * MIN
+    for (const [id, startedAt] of [
+      ['bare', now - 3 * MIN],
+      ['fresh', now - 1 * MIN]
+    ] as const) {
+      store.runs.create({
+        id,
+        automationId: 'a',
+        tickId: null,
+        itemKey: id,
+        itemLabel: id,
+        worktreePath: '/wt',
+        startedAt
+      })
+      store.markHandled('a', `${id}:1`, id, startedAt)
+    }
+    const logs: string[] = []
+    sweepStaleStarts(
+      store,
+      () => now,
+      (m) => logs.push(m)
+    )
+    expect(store.runs.get('bare')).toMatchObject({
+      status: 'failed',
+      outcome: STALE_START_OUTCOME,
+      finishedAt: now
+    })
+    expect(store.runs.get('fresh')?.status).toBe('running')
+    expect(store.handledKeys('a')).toEqual(new Set(['fresh:1']))
+    expect(logs).toEqual([`[pilot] run bare: ${STALE_START_OUTCOME}`])
+  })
+
   it('never throws: a broken store is logged', () => {
     const store = newStore()
     store.close()

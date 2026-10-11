@@ -158,6 +158,15 @@ export class RunStore {
     }
   }
 
+  // The launcher's 'starting' → 'running' write. False when the step was closed meanwhile (the sweep).
+  updateStartingStep(runId: string, idx: number, patch: StepPatch): boolean {
+    const { sql, values } = setClause(patch, STEP_COLUMNS)
+    const r = this.db
+      .prepare(`UPDATE steps SET ${sql} WHERE run_id = ? AND idx = ? AND status = 'starting'`)
+      .run(...(values as never[]), runId, idx)
+    return Number(r.changes) > 0
+  }
+
   steps(runId: string): StepRow[] {
     return this.db
       .prepare('SELECT * FROM steps WHERE run_id = ? ORDER BY idx')
@@ -180,6 +189,16 @@ export class RunStore {
       )
       .all(startedBefore)
       .map((r) => toStep(r as never))
+  }
+
+  // A run is created a moment before its first step; one still without a step later never launched.
+  staleRunsWithoutSteps(startedBefore: number): RunRow[] {
+    return this.db
+      .prepare(
+        "SELECT r.* FROM runs r LEFT JOIN steps s ON s.run_id = r.id WHERE r.status = 'running' AND s.run_id IS NULL AND r.started_at < ? ORDER BY r.started_at, r.id"
+      )
+      .all(startedBefore)
+      .map((r) => toRun(r as never))
   }
 
   openStepsIn(automationId: string, worktreePath: string): StepRow[] {

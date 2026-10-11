@@ -36,6 +36,18 @@ describe('attachPilotOrcad', () => {
     expect(services.stop).toHaveBeenCalledTimes(1)
   })
 
+  it("logs a failed start and lets orcad go on (Pilot's store can't stop the host)", () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {})
+    services.start.mockImplementation(() => {
+      throw new Error('SQLITE_CANTOPEN')
+    })
+    const cleanups: (() => void)[] = []
+    expect(() => attachPilotOrcad(runtime, (fn) => cleanups.push(fn))).not.toThrow()
+    expect(error).toHaveBeenCalledWith("[pilot] couldn't start: SQLITE_CANTOPEN")
+    expect(cleanups).toEqual([])
+    error.mockRestore()
+  })
+
   it('only attach-main imports the Claude quota reader, so orcad never loads it (R3)', () => {
     const root = join(import.meta.dirname, '..')
     const importers = readdirSync(root, { recursive: true, encoding: 'utf8' })

@@ -80,11 +80,15 @@ export function makeLauncher(
       if (!paneKey) {
         throw new Error('the runtime returned no pane to watch')
       }
-      store.runs.updateStep(runId, 0, {
+      const recorded = store.runs.updateStartingStep(runId, 0, {
         status: 'running',
         terminalHandle: terminal.handle,
         paneKey
       })
+      // The stale-start sweep closed this step during a slow launch: never bring it back to life.
+      if (!recorded) {
+        throw new Error('the run was closed before its agent started')
+      }
       return { terminalHandle: terminal.handle, paneKey }
     } catch (error) {
       // The terminal exists but no row tracks it. Say which one, so the failure points at the orphan.

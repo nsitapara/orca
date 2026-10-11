@@ -5,12 +5,25 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { OrcaRuntimeService } from '../../../../main/runtime/orca-runtime'
 import { setAppEnvironment, type AppEnvironment } from '../../../../shared/app-environment'
 import type { PilotStatus } from '../shared/api-types'
+import type * as Live from './definitions/live'
 import { STALE_START_OUTCOME } from './run/stale-starts'
 import { PilotStore } from './store/store'
 
 type Method = { name: string; handler: () => unknown }
 const registry = vi.hoisted(() => [] as Method[])
 vi.mock('../../../../main/runtime/rpc/methods/index', () => ({ ALL_RPC_METHODS: registry }))
+const live = vi.hoisted(() => ({ fail: false }))
+vi.mock('./definitions/live', async (importOriginal) => {
+  const actual = await importOriginal<typeof Live>()
+  return {
+    liveDefinitions: (...args: Parameters<typeof actual.liveDefinitions>) => {
+      if (live.fail) {
+        throw new Error('watch failed')
+      }
+      return actual.liveDefinitions(...args)
+    }
+  }
+})
 
 import { startPilotServices } from './pilot-services'
 
@@ -21,6 +34,8 @@ let dir = ''
 let logs: string[] = []
 
 beforeEach(() => {
+  registry.length = 0
+  live.fail = false
   userData = mkdtempSync(join(tmpdir(), 'pilot-services-data-'))
   dir = mkdtempSync(join(tmpdir(), 'pilot-services-automations-'))
   writeFileSync(
@@ -47,7 +62,13 @@ describe('startPilotServices', () => {
     expect(logs).toContain('[pilot] scheduler started: first check in 60s, then every 15s')
     expect(logs).toContain(`[pilot] attached (main): 1 automation(s) from ${dir}`)
     const status = registry.find((m) => m.name === 'pilot.status')!.handler() as PilotStatus
-    expect(status).toMatchObject({ process: 'main', automationDirs: [dir], missingDirs: [] })
+    expect(status).toMatchObject({
+      process: 'main',
+      dataPath: userData,
+      automationDirs: [dir],
+      missingDirs: [],
+      error: null
+    })
     expect(status.peopleError).toContain('people.yaml')
     services.stop()
     expect(() => services.stop()).not.toThrow()
@@ -85,5 +106,24 @@ describe('startPilotServices', () => {
       outcome: STALE_START_OUTCOME
     })
     on.stop()
+  })
+
+  it("throws when the store can't open, yet pilot.status still answers with the reason", () => {
+    writeFileSync(
+      join(userData, 'pilot-automations.db'),
+      'not sqlite at all, just enough text here'
+    )
+    expect(() => startPilotServices(runtime, 'main')).toThrow(/not a database/)
+    const status = registry.find((m) => m.name === 'pilot.status')!.handler() as PilotStatus
+    expect(status).toMatchObject({ process: 'main', automationDirs: [dir], peopleError: null })
+    expect(status.error).toMatch(/not a database/)
+    expect(logs.some((m) => m.startsWith('[pilot] attached'))).toBe(false)
+  })
+
+  it('closes the store it opened when a later step of startup fails', () => {
+    live.fail = true
+    const close = vi.spyOn(PilotStore.prototype, 'close')
+    expect(() => startPilotServices(runtime, 'main')).toThrow('watch failed')
+    expect(close).toHaveBeenCalledTimes(1)
   })
 })

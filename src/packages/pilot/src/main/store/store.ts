@@ -25,11 +25,17 @@ export class PilotStore {
 
   static open(path: string): PilotStore {
     const db = new Database(path)
-    db.pragma('journal_mode = WAL')
-    db.pragma('synchronous = NORMAL')
-    db.pragma('busy_timeout = 5000')
-    db.pragma('foreign_keys = ON')
-    migrate(db)
+    try {
+      // busy_timeout first: switching to WAL needs a lock another connection may briefly hold.
+      db.pragma('busy_timeout = 5000')
+      db.pragma('journal_mode = WAL')
+      db.pragma('synchronous = NORMAL')
+      db.pragma('foreign_keys = ON')
+      migrate(db)
+    } catch (error) {
+      db.close()
+      throw error
+    }
     return new PilotStore(db)
   }
 

@@ -6,6 +6,8 @@ export type PilotStatus = {
   missingDirs: string[]
   // A people.yaml problem or notice (e.g. people.yaml and people.yml both exist). Never blocks loading.
   peopleError: string | null
+  // Why Pilot couldn't start (store won't open, …); null while it runs. Orca itself keeps running.
+  error: string | null
 }
 
 export type FieldValue = string | number | boolean | null
