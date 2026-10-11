@@ -1,5 +1,5 @@
 import type { ProviderRateLimits } from '../../../../../shared/rate-limit-types'
-import type { ItemFields, TickItem } from '../../shared/api-types'
+import type { ItemFields } from '../../shared/api-types'
 import type { AgentKind } from '../../shared/definition/types'
 
 export type QuotaReading = { weekly: number | null; session: number | null }
@@ -44,17 +44,6 @@ export function cachedQuota(
       return NONE
     }
   }
-}
-
-export function addQuotaFields<I extends TickItem>(items: I[], q: QuotaReading): I[] {
-  return items.map((i) => ({
-    ...i,
-    fields: {
-      ...i.fields,
-      'quota.claude.weekly_pct': q.weekly,
-      'quota.claude.session_pct': q.session
-    }
-  }))
 }
 
 export type QuotaReaders = Record<AgentKind, QuotaReader>

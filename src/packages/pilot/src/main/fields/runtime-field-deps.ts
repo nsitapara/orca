@@ -7,8 +7,12 @@ import { paneStateFromRows } from '../run/agent-rows'
 import { isTerminalGoneError, terminalRelister, type TerminalRelist } from '../run/terminal-relist'
 import type { PilotStore } from '../store/store'
 import { SESSION_LOOKBACK_MS, stripRefsHeads } from './runtime-facts'
-import type { GitStatusCounts, SessionStep, WorktreeFactDeps } from './worktree-facts'
-import { detectGitOperation } from './worktree-fields'
+import {
+  detectGitOperation,
+  type GitStatusCounts,
+  type SessionStep,
+  type WorktreeFactDeps
+} from './worktree-facts'
 
 type GitRunner = (
   args: string[],
