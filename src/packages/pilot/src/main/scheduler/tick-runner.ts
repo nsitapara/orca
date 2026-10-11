@@ -1,7 +1,8 @@
 import type { ItemDecision, TickResult, Verdict } from '../../shared/api-types'
 import type { AutomationDefinition, MergeRequestWhere } from '../../shared/definition/types'
 import { gitlabHandlesFor, type PeopleDirectory } from '../../shared/people'
-import { authorInScope, decideTick } from '../../shared/tick/decide'
+import { decideTick } from '../../shared/tick/decide'
+import { authorScope, mergeRequestScope } from '../../shared/tick/scope'
 import { addQuotaFields, type QuotaReader } from '../fields/quota'
 import { addWorktreeFields, type FactDeps } from '../fields/worktree-fields'
 import type { GlabApi } from '../sources/gitlab-api'
@@ -102,10 +103,9 @@ async function decide(
   const where = (def.items?.where ?? {}) as MergeRequestWhere
   const repo = await deps.resolveRepo(def.repo)
   const api = await deps.gitlab(repo.path)
-  const inScope = (username: string) => authorInScope(def, people, username)
   let items = await listMergeRequestItems(api, {
     authorUsernames: gitlabHandlesFor(where.author, people),
-    inScope
+    inScope: (username) => authorScope(where.author, username, people).ok
   })
   items = await addWorktreeFields(
     items,
@@ -118,8 +118,8 @@ async function decide(
   const { store } = deps
   return decideTick({
     definition: def,
-    people,
     items,
+    scope: (item) => mergeRequestScope(item, where, people),
     handledKeys: store.handledKeys(def.id),
     seenKeys: store.seenKeys(def.id),
     runningCount: store.runs.runningCount(def.id)

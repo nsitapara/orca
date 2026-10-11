@@ -31,6 +31,11 @@ export type ItemDecision = {
   fields: ItemFields
 }
 
+// An item source's verdict on one item's where clauses (contract §3), before once_per and checks.
+export type ScopeResult =
+  | { ok: true }
+  | { ok: false; verdict: 'out_of_scope' | 'notdue'; reason: string }
+
 export type TickRow = {
   id: number
   automationId: string
