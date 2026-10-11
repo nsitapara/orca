@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { parseAutomationYaml } from '../definition/parse'
-import { parsePeopleYaml } from '../people'
 import type { TickItem } from '../api-types'
-import { authorInScope, decideTick } from './decide'
+import { parseAutomationYaml } from '../definition/parse'
+import type { MergeRequestWhere } from '../definition/types'
+import { parsePeopleYaml } from '../people'
+import { decideTick } from './decide'
+import { mergeRequestScope } from './scope'
 import { fixture } from './__fixtures__/ci-05-2026-10-10'
 
 const CI_05 = `
@@ -29,15 +31,20 @@ function setup(yaml = CI_05) {
   if (!def.ok || !people.ok) {
     throw new Error('fixture setup failed')
   }
-  return { definition: def.definition, people: people.directory }
+  const where = (def.definition.items?.where ?? {}) as MergeRequestWhere
+  const directory = people.directory
+  return {
+    definition: def.definition,
+    scope: (item: TickItem) => mergeRequestScope(item, where, directory)
+  }
 }
 
 describe('decideTick on 2026-10-10 12:10 (automation 05)', () => {
   it('matches what the old sweep decided, item by item', () => {
-    const { definition, people } = setup()
+    const { definition, scope } = setup()
     const decisions = decideTick({
       definition,
-      people,
+      scope,
       items: fixture.items,
       handledKeys: new Set(fixture.handledKeys),
       seenKeys: new Set(),
@@ -58,14 +65,14 @@ describe('decideTick on 2026-10-10 12:10 (automation 05)', () => {
   })
 
   it('stops starting at the per-tick limit', () => {
-    const { definition, people } = setup(CI_05.replace('per_tick: 3', 'per_tick: 1'))
+    const { definition, scope } = setup(CI_05.replace('per_tick: 3', 'per_tick: 1'))
     const items = fixture.items.map((i) => ({
       ...i,
       fields: { ...i.fields, 'worktree.dirty_count': 0, 'session.open_from_automation': false }
     }))
     const verdicts = decideTick({
       definition,
-      people,
+      scope,
       items,
       handledKeys: new Set(),
       seenKeys: new Set(),
@@ -75,10 +82,10 @@ describe('decideTick on 2026-10-10 12:10 (automation 05)', () => {
   })
 
   it('baselines items it has never seen when first_seen is baseline', () => {
-    const { definition, people } = setup(CI_05.replace('limits:', 'first_seen: baseline\nlimits:'))
+    const { definition, scope } = setup(CI_05.replace('limits:', 'first_seen: baseline\nlimits:'))
     const first = decideTick({
       definition,
-      people,
+      scope,
       items: fixture.items.slice(0, 1),
       handledKeys: new Set(),
       seenKeys: new Set(),
@@ -91,12 +98,11 @@ describe('decideTick on 2026-10-10 12:10 (automation 05)', () => {
   })
 
   it('treats an author missing from people.yaml as in scope under author: anyone', () => {
-    const { definition, people } = setup(CI_05.replace('{ people: [nish] }', 'anyone'))
-    const contractor = fixture.items.filter((i) => i.key === '!1600')
+    const { definition, scope } = setup(CI_05.replace('{ people: [nish] }', 'anyone'))
     const [d] = decideTick({
       definition,
-      people,
-      items: contractor,
+      scope,
+      items: fixture.items.filter((i) => i.key === '!1600'),
       handledKeys: new Set(),
       seenKeys: new Set(),
       runningCount: 0
@@ -105,12 +111,12 @@ describe('decideTick on 2026-10-10 12:10 (automation 05)', () => {
   })
 
   it('starts nothing twice in one tick: same once_per key, same worktree', () => {
-    const { definition, people } = setup()
+    const { definition, scope } = setup()
     const first = fixture.items[0]
     const run = (items: TickItem[]) =>
       decideTick({
         definition,
-        people,
+        scope,
         items,
         handledKeys: new Set(),
         seenKeys: new Set(),
@@ -130,10 +136,10 @@ describe('decideTick on 2026-10-10 12:10 (automation 05)', () => {
   })
 
   it('counts running agents against the at-once limit', () => {
-    const { definition, people } = setup(CI_05.replace('per_tick: 3', 'at_once: 2'))
+    const { definition, scope } = setup(CI_05.replace('per_tick: 3', 'at_once: 2'))
     const [d] = decideTick({
       definition,
-      people,
+      scope,
       items: fixture.items.slice(0, 1),
       handledKeys: new Set(),
       seenKeys: new Set(),
@@ -143,17 +149,16 @@ describe('decideTick on 2026-10-10 12:10 (automation 05)', () => {
   })
 
   it('scopes out MRs that are not open and names missing facts as unknown', () => {
-    const { definition, people } = setup()
+    const { definition, scope } = setup()
     const merged = {
       ...fixture.items[0],
       fields: { ...fixture.items[0].fields, 'mr.state': 'merged' }
     }
     const { 'mr.author': _a, ...noAuthor } = fixture.items[0].fields
-    const items = [merged, { ...fixture.items[0], fields: noAuthor }]
     const out = decideTick({
       definition,
-      people,
-      items,
+      scope,
+      items: [merged, { ...fixture.items[0], fields: noAuthor }],
       handledKeys: new Set(),
       seenKeys: new Set(),
       runningCount: 0
@@ -165,12 +170,11 @@ describe('decideTick on 2026-10-10 12:10 (automation 05)', () => {
   })
 
   it('absent author filter behaves like anyone', () => {
-    const { definition, people } = setup(CI_05.replace('author: { people: [nish] }, ', ''))
-    const contractor = fixture.items.filter((i) => i.key === '!1600')
+    const { definition, scope } = setup(CI_05.replace('author: { people: [nish] }, ', ''))
     const [d] = decideTick({
       definition,
-      people,
-      items: contractor,
+      scope,
+      items: fixture.items.filter((i) => i.key === '!1600'),
       handledKeys: new Set(),
       seenKeys: new Set(),
       runningCount: 0
@@ -179,15 +183,41 @@ describe('decideTick on 2026-10-10 12:10 (automation 05)', () => {
   })
 })
 
-describe('authorInScope', () => {
-  it('matches the author rule: refs need a listed person, anyone/absent need nothing', () => {
-    const { definition, people } = setup()
-    expect(authorInScope(definition, people, 'NISH8')).toBe(true)
-    expect(authorInScope(definition, people, 'shivan2418')).toBe(false)
-    expect(authorInScope(definition, people, 'stranger')).toBe(false)
-    const open = setup(CI_05.replace('author: { people: [nish] }, ', ''))
-    expect(authorInScope(open.definition, open.people, 'stranger')).toBe(true)
-    const anyone = setup(CI_05.replace('author: { people: [nish] }', 'author: anyone'))
-    expect(authorInScope(anyone.definition, anyone.people, 'stranger')).toBe(true)
+describe('decideTick for a run-once automation', () => {
+  const RUN_ONCE =
+    'name: Pull dev\nrepo: web-platform\nschedule: manual\nsteps: [ { agent: shell, run: ./pull.sh } ]\n'
+  const repoItem: TickItem = {
+    key: 'repo:web-platform',
+    label: 'web-platform',
+    fields: { 'run.date': '20261010' }
+  }
+  function decideOnce(yaml: string, handled: string[]) {
+    const parsed = parseAutomationYaml(yaml, '/a/pull-dev.yaml')
+    if (!parsed.ok) {
+      throw new Error(parsed.errors.join('\n'))
+    }
+    return decideTick({
+      definition: parsed.definition,
+      scope: () => ({ ok: true }),
+      items: [repoItem],
+      handledKeys: new Set(handled),
+      seenKeys: new Set(),
+      runningCount: 0
+    })[0]
+  }
+
+  it('starts on every tick without once_per, whatever keys are stored (Review Focus)', () => {
+    expect(decideOnce(RUN_ONCE, ['repo:web-platform'])).toMatchObject({
+      verdict: 'started',
+      onceKey: 'repo:web-platform'
+    })
+  })
+
+  it('honours once_per when it has one', () => {
+    const daily = RUN_ONCE.replace('steps:', 'once_per: "{run.date}"\nsteps:')
+    expect(decideOnce(daily, ['20261010'])).toMatchObject({
+      verdict: 'notdue',
+      reason: 'Already handled 20261010'
+    })
   })
 })
