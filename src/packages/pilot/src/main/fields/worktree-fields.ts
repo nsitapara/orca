@@ -109,13 +109,13 @@ async function worktreeFacts(
   return fields
 }
 
-export async function addWorktreeFields(
-  items: TickItem[],
+export async function addWorktreeFields<I extends TickItem>(
+  items: I[],
   automationId: string,
   repoPath: string,
   deps: FactDeps,
-  needsFacts: (item: TickItem) => boolean
-): Promise<TickItem[]> {
+  needsFacts: (item: I) => boolean
+): Promise<I[]> {
   // A listing failure throws: the tick runner records the tick as failed and the next tick retries.
   const byBranch = new Map((await deps.listWorktrees(repoPath)).map((w) => [w.branch, w]))
   return Promise.all(

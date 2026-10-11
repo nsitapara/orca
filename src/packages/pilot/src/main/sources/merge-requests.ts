@@ -1,5 +1,10 @@
-import type { ItemFields, TickItem } from '../../shared/api-types'
+import type { ItemFields } from '../../shared/api-types'
+import type { MergeRequestWhere } from '../../shared/definition/types'
+import { mergeRequestWhereSchema } from '../../shared/definition/where'
+import { EMPTY_PEOPLE, gitlabHandlesFor } from '../../shared/people'
+import { authorScope, mergeRequestScope } from '../../shared/tick/scope'
 import type { GlabApi } from './gitlab-api'
+import type { Item, ItemSource } from './types'
 
 type GitLabMR = {
   iid: number
@@ -91,23 +96,45 @@ async function listOpen(api: GlabApi, authors: string[] | null): Promise<GitLabM
   return [...byIid.values()]
 }
 
-// The list endpoint omits head_pipeline, so each in-scope MR is fetched on its own (as ci-fix-sweep does today).
-// GitLab is asked only for the authors the automation is about; inScope stays as a second guard.
+// The list endpoint omits head_pipeline, so each in-scope MR is fetched on its own (as ci-fix-sweep
+// does today). GitLab is asked only for the authors the automation is about; inScope stays as a
+// second guard. Fetched values may be shared through the pass cache: filter and map, never mutate.
 export async function listMergeRequestItems(
   api: GlabApi,
   scope: MergeRequestScope
-): Promise<TickItem[]> {
+): Promise<Item[]> {
   const list = (await listOpen(api, scope.authorUsernames)).filter((mr) =>
     scope.inScope(mr.author.username)
   )
-  const items: TickItem[] = []
+  const items: Item[] = []
   for (const mr of list.sort((a, b) => a.iid - b.iid)) {
     const detail = await api.get<GitLabMRDetail>(`merge_requests/${mr.iid}`)
     items.push({
+      kind: 'merge_request',
       key: `!${mr.iid}`,
       label: `!${mr.iid} ${shortBranch(mr.source_branch)}`,
-      fields: mrFields(mr, detail)
+      fields: mrFields(mr, detail),
+      worktreeHint: { branch: mr.source_branch },
+      sortKeys: { waitingSince: null, priority: null }
     })
   }
   return items
+}
+
+// merge_request items (contract §3): the open MRs of the repo's GitLab project, read through the
+// pass's fetch cache so automations sharing a pass ask GitLab once.
+export const mergeRequestSource: ItemSource = {
+  kind: 'merge_request',
+  whereSchema: mergeRequestWhereSchema,
+  async list(ctx, where) {
+    const w = where as MergeRequestWhere
+    const people = ctx.people ?? EMPTY_PEOPLE
+    const api = await ctx.fetch.gitlab(ctx.repo.path)
+    const items = await listMergeRequestItems(api, {
+      authorUsernames: gitlabHandlesFor(w.author, people),
+      inScope: (username) => authorScope(w.author, username, people).ok
+    })
+    return { items, warnings: [] }
+  },
+  scope: (item, where, people) => mergeRequestScope(item, where as MergeRequestWhere, people)
 }
