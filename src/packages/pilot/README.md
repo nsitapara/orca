@@ -134,6 +134,7 @@ What follows from that:
 - **Prechecks reach the app that runs them.** A precheck runs with the app's own environment. Pilot sets `ORCA_USER_DATA_PATH` to its data folder, so even `/opt/homebrew/bin/orca` (real Orca's launcher) answers from Pilot. Verified with a probe job on 2026-10-11.
 - **Agent tabs open where the job runs.** Tabs a job opened in Orca before the move stay in Orca, and Pilot's sweeps can't see them. Check `orca worktree ps` in Orca before a switch and let working agents finish.
 - **History:** each app keeps its own runs. The Agent Console shows both, by job code.
+- **A restart can skip one slot.** A slot missed while Pilot was closed is retried at launch. That retry can come before Pilot has loaded its projects, and then it's recorded as `skipped_unavailable` ("The target project is no longer available."). The next slot runs normally. To cover the gap, use the job's Run now in the Agent Console. Seen 2026-10-11 10:10 for 05 and 12.
 
 Switch every moved automation at once (dry run without `--apply`):
 
