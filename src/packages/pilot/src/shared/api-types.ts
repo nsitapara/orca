@@ -75,3 +75,10 @@ export type StepRow = {
   finishedAt: number | null
   error: string | null
 }
+
+export type TickResult = {
+  tickId: number
+  status: 'ok' | 'failed'
+  error: string | null
+  decisions: ItemDecision[]
+}
