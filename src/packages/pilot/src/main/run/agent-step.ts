@@ -170,19 +170,20 @@ async function lookAt(
   }
 }
 
-function sameArgs(a: readonly string[] | undefined, b: readonly string[]): boolean {
-  return a !== undefined && a.length === b.length && a.every((arg, i) => arg === b[i])
+function sameArgs(a: readonly string[], b: readonly string[]): boolean {
+  return a.length === b.length && a.every((arg, i) => arg === b[i])
 }
 
 // H10, one process per session: the step's prompt goes into the terminal its session last ran in when
-// that is free and its agent was started with this step's args. An idle Pilot tab that can't take it
-// (other args, another session) is closed first; a busy one fails the step. Null: open a new terminal.
+// that is free and its process runs with this step's args (as stored at launch, not as the definition
+// now says: it may have reloaded since). An idle Pilot tab that can't take it (other or unknown args,
+// another session) is closed first; a busy one fails the step. Null: open a new terminal.
 async function sessionHome(
   store: PilotStore,
   req: AgentStepRequest,
   sessionId: string,
   deps: AgentStepDeps
-): Promise<KnownTerminal | null> {
+): Promise<(KnownTerminal & { launchArgs: string[] }) | null> {
   const prior = lastSessionStep(store, req, sessionId, deps.now())
   if (!prior?.terminalHandle) {
     return null
@@ -200,8 +201,13 @@ async function sessionHome(
   if (state === 'gone' || !deps.sessionTerminals) {
     return null
   }
-  if (state === 'free' && sameArgs(priorStep?.args, req.definition.steps[req.stepIdx].args)) {
-    return old
+  const launchArgs = prior.launchArgs
+  if (
+    state === 'free' &&
+    launchArgs &&
+    sameArgs(launchArgs, req.definition.steps[req.stepIdx].args)
+  ) {
+    return { ...old, launchArgs }
   }
   await deps.sessionTerminals.close(old.handle)
   return null
@@ -213,6 +219,7 @@ function recordRunning(
   runId: string,
   idx: number,
   terminal: Terminal,
+  launchArgs: string[],
   now: () => number
 ): LaunchResult {
   try {
@@ -223,7 +230,8 @@ function recordRunning(
     const recorded = store.runs.updateStartingStep(runId, idx, {
       status: 'running',
       terminalHandle: terminal.handle,
-      paneKey
+      paneKey,
+      launchArgs
     })
     // The stale-start sweep closed this step during a slow launch: never bring it back to life.
     if (!recorded) {
@@ -266,6 +274,7 @@ export async function launchAgentStep(
     throw new Error(session.reason)
   }
   let terminal: Terminal
+  let launchArgs = [...step.args]
   try {
     const modeText = await deps.modeText(step, req.workspace.path)
     // A typed variable, not a literal: `pilot` is beyond launchAgentTerminal's declared options.
@@ -275,6 +284,8 @@ export async function launchAgentStep(
     if (home && deps.sessionTerminals) {
       // A failure here fails the step: a second process on the same session would be worse.
       await deps.sessionTerminals.send(home.handle, opts.prompt)
+      // The step runs under the args that process was launched with.
+      ;({ launchArgs } = home)
       terminal = home
     } else {
       terminal = await deps.launchTerminal(req.workspace.selector, opts)
@@ -286,5 +297,5 @@ export async function launchAgentStep(
     throw new Error(reason)
   }
   rememberWorktreeSession(store, req, agent, sessionId, deps.now())
-  return recordRunning(store, runId, idx, terminal, deps.now)
+  return recordRunning(store, runId, idx, terminal, launchArgs, deps.now)
 }

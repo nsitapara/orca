@@ -151,6 +151,20 @@ describe('migrate', () => {
     expect(columnsOf(db, 'runs')).not.toContain('trigger')
   })
 
+  it('moves a v2 database to v3: steps gain launch_args_json, unknown (NULL) on existing rows', () => {
+    const db = openDb()
+    migrate(db, 2)
+    db.exec(
+      "INSERT INTO runs (id, automation_id, item_key, item_label, status, started_at) VALUES ('r1', 'a', 'k', 'l', 'done', 1)"
+    )
+    db.exec(
+      "INSERT INTO steps (run_id, idx, name, agent, status) VALUES ('r1', 0, 'fix', 'claude', 'done')"
+    )
+    migrate(db)
+    expect(db.pragma('user_version', { simple: true })).toBe(3)
+    expect(firstRow(db, 'SELECT launch_args_json FROM steps')).toEqual({ launch_args_json: null })
+  })
+
   it('does nothing to a database that is already current', () => {
     const db = openDb()
     migrate(db)

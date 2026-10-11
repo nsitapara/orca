@@ -1,6 +1,6 @@
 import type Database from '../../../../../main/sqlite/sync-database'
 
-export const PILOT_SCHEMA_VERSION = 2
+export const PILOT_SCHEMA_VERSION = 3
 
 const V1 = `
 CREATE TABLE ticks (id INTEGER PRIMARY KEY AUTOINCREMENT, automation_id TEXT NOT NULL, started_at INTEGER NOT NULL,
@@ -78,8 +78,14 @@ CREATE TABLE action_runs (id INTEGER PRIMARY KEY AUTOINCREMENT, inbox_item_id TE
 CREATE TABLE claims (worktree_path TEXT PRIMARY KEY, holder TEXT NOT NULL, until INTEGER NOT NULL);
 `
 
+// Task 8d: the args an agent step's process was launched with (or, for a step sent into a running
+// process, that process's), written by the launcher only. NULL: not known (older rows, shell steps).
+const V3 = `
+ALTER TABLE steps ADD COLUMN launch_args_json TEXT;
+`
+
 // MIGRATIONS[n - 1] takes a database from version n - 1 to n.
-const MIGRATIONS: readonly string[] = [V1, V2]
+const MIGRATIONS: readonly string[] = [V1, V2, V3]
 
 // Same pattern as Orca's orchestration.db (migrate.ts): user_version + one transaction, all or nothing.
 // `target` lets tests build a database at an older version.

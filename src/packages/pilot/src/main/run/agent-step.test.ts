@@ -286,8 +286,96 @@ describe('launchAgentStep for a session whose terminal may still be open', () =>
     expect(store.runs.steps('run-1')[1]).toMatchObject({
       status: 'running',
       terminalHandle: sent ? 'term_1' : 'term_2',
-      sessionId: 'uuid-new'
+      sessionId: 'uuid-new',
+      launchArgs: fixArgs
     })
+  })
+
+  // S2: a sent step runs under the args its process was launched with, as stored then; definitions
+  // reload live, so a YAML edit since closes the idle tab and resumes the session with the new args.
+  it.each<[string, string[], string[], boolean]>([
+    ['unchanged args: the prompt goes in', ['--x'], ['--x'], true],
+    [
+      'a flag removed from the YAML since: closed, then resumed without it',
+      ['--dangerously-skip-permissions'],
+      [],
+      false
+    ],
+    ['a flag added since: closed, then resumed with it', [], ['--x'], false]
+  ])('per_worktree, %s', async (_name, firstArgs, nextArgs, sent) => {
+    const cycles = (args: string[]) =>
+      testDefinition({
+        id: 'cycles',
+        steps: [testStep({ name: 'pass', session: { kind: 'per_worktree' }, args })]
+      })
+    const terminals = terminalsIn('free')
+    const { store, request, launchTerminal, deps } = setup(cycles(firstArgs), {
+      sessionTerminals: terminals
+    })
+    await launchAgentStep(store, request(0), deps)
+    finish(store, 'run-1', 0)
+    store.runs.create({
+      id: 'run-2',
+      automationId: 'cycles',
+      tickId: null,
+      itemKey: 'wt:a',
+      itemLabel: 'web-1-a',
+      worktreePath: '/wt/a',
+      startedAt: 2
+    })
+    await launchAgentStep(store, { ...request(0, 'run-2'), definition: cycles(nextArgs) }, deps)
+    expect(terminals.send.mock.calls.map(([handle]) => handle)).toEqual(sent ? ['term_1'] : [])
+    expect(terminals.close.mock.calls).toEqual(sent ? [] : [['term_1']])
+    const resumed = launchTerminal.mock.calls.slice(1).map(argvOf)
+    expect(resumed).toEqual(sent ? [] : [['--resume', 'uuid-new', ...nextArgs]])
+    expect(store.runs.steps('run-2')[0]).toMatchObject({
+      terminalHandle: sent ? 'term_1' : 'term_2',
+      launchArgs: nextArgs
+    })
+  })
+
+  const flagged = () =>
+    testDefinition({
+      id: 'review',
+      steps: [
+        testStep({ name: 'review', args: ['--dangerously-skip-permissions'] }),
+        testStep({
+          name: 'fix',
+          session: { kind: 'continue', step: 'review' },
+          args: ['--dangerously-skip-permissions']
+        })
+      ]
+    })
+
+  it.each<[string, (store: PilotStore) => void, AutomationDefinition]>([
+    [
+      'its definition reloaded mid-run without the flag',
+      () => {},
+      testDefinition({
+        id: 'review',
+        steps: [
+          testStep({ name: 'review' }),
+          testStep({ name: 'fix', session: { kind: 'continue', step: 'review' } })
+        ]
+      })
+    ],
+    [
+      'its launch args unknown (an older row)',
+      (store) => store.runs.updateStep('run-1', 0, { launchArgs: null }),
+      flagged()
+    ]
+  ])('continue into a process with %s: closed, then resumed', async (_name, arrange, now) => {
+    const terminals = terminalsIn('free')
+    const { store, request, launchTerminal, deps } = setup(flagged(), {
+      sessionTerminals: terminals
+    })
+    await launchAgentStep(store, request(0), deps)
+    finish(store, 'run-1', 0)
+    arrange(store)
+    await launchAgentStep(store, { ...request(1), definition: now }, deps)
+    expect(terminals.send).not.toHaveBeenCalled()
+    expect(terminals.close).toHaveBeenCalledWith('term_1')
+    expect(launchTerminal).toHaveBeenCalledTimes(2)
   })
 
   it.each<[string, SessionTerminalState | Error]>([
