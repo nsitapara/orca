@@ -1,13 +1,11 @@
 import type { ItemDecision, TickResult, Verdict } from '../../shared/api-types'
-import type { AutomationDefinition, MergeRequestWhere } from '../../shared/definition/types'
-import { gitlabHandlesFor, type PeopleDirectory } from '../../shared/people'
-import { decideTick } from '../../shared/tick/decide'
-import { authorScope, mergeRequestScope } from '../../shared/tick/scope'
-import { addQuotaFields, type QuotaReader } from '../fields/quota'
-import { addWorktreeFields, type FactDeps } from '../fields/worktree-fields'
+import type { AutomationDefinition } from '../../shared/definition/types'
+import type { PeopleDirectory } from '../../shared/people'
+import { decideTick, usesHandled } from '../../shared/tick/decide'
+import { createPassFetchCache, type PassFetchCache } from '../sources/fetch-cache'
 import type { GlabApi } from '../sources/gitlab-api'
-import { listMergeRequestItems } from '../sources/merge-requests'
 import type { PilotStore } from '../store/store'
+import { gatherItems, type ItemDeps } from './tick-items'
 
 export type { TickResult }
 export type LaunchRequest = {
@@ -30,14 +28,13 @@ function errorMessage(e: unknown): string {
   return e instanceof Error ? e.message : String(e)
 }
 
-// `quota` should be the cached reader in production; a throw is still fail-open (nulls).
-export type TickDeps = {
+// `pass` is the scheduler pass's fetch cache, shared by every automation that ticks in that pass.
+// A tick without one (Run now, a dry run) gets its own.
+export type TickOptions = { dryRun: boolean; pass?: PassFetchCache }
+
+export type TickDeps = ItemDeps & {
   store: PilotStore
-  now(): number
-  resolveRepo(repo: string): Promise<{ id: string; path: string }>
   gitlab(repoPath: string): Promise<GlabApi>
-  facts: FactDeps
-  quota: QuotaReader
   launch(req: LaunchRequest): Promise<LaunchResult>
 }
 
@@ -59,17 +56,6 @@ function countVerdicts(decisions: ItemDecision[]): Partial<Record<Verdict, numbe
   return counts
 }
 
-// Until Task 4's item sources, a tick can list merge requests only.
-function unsupportedItems(def: AutomationDefinition): string | null {
-  if (def.items === null) {
-    return "Pilot can't tick a run-once automation yet"
-  }
-  if (def.items.kind !== 'merge_request') {
-    return `Pilot can't list ${def.items.kind} items yet`
-  }
-  return unactedKey(def)
-}
-
 const ACTED_ON_WHERE = new Set(['state', 'author', 'head_pipeline'])
 
 // Keys a later task implements. Until then a file using one fails the tick instead of running wider.
@@ -81,7 +67,9 @@ function unactedKey(def: AutomationDefinition): string | null {
   if (def.start === 'ask_first') {
     return "start: ask_first isn't supported yet"
   }
-  if (def.workspace.kind !== 'item_worktree') {
+  // A run-once automation's own workspace is the main checkout (its item is the repo).
+  const own = items === null ? 'main_checkout' : 'item_worktree'
+  if (def.workspace.kind !== own) {
     return `workspace: ${def.workspace.kind} isn't supported yet`
   }
   const clause = Object.keys(items?.where ?? {}).find((k) => !ACTED_ON_WHERE.has(k))
@@ -94,32 +82,20 @@ function unactedKey(def: AutomationDefinition): string | null {
 async function decide(
   def: AutomationDefinition,
   people: PeopleDirectory,
-  deps: TickDeps
+  deps: TickDeps,
+  pass: PassFetchCache,
+  tickId: number
 ): Promise<ItemDecision[]> {
-  const unsupported = unsupportedItems(def)
+  const unsupported = unactedKey(def)
   if (unsupported) {
     throw new Error(unsupported)
   }
-  const where = (def.items?.where ?? {}) as MergeRequestWhere
-  const repo = await deps.resolveRepo(def.repo)
-  const api = await deps.gitlab(repo.path)
-  let items = await listMergeRequestItems(api, {
-    authorUsernames: gitlabHandlesFor(where.author, people),
-    inScope: (username) => authorScope(where.author, username, people).ok
-  })
-  items = await addWorktreeFields(
-    items,
-    def.id,
-    repo.path,
-    deps.facts,
-    (i) => i.fields['mr.pipeline'] !== null
-  )
-  items = addQuotaFields(items, await deps.quota().catch(() => ({ weekly: null, session: null })))
+  const { items, scope } = await gatherItems(def, people, deps, pass, tickId)
   const { store } = deps
   return decideTick({
     definition: def,
     items,
-    scope: (item) => mergeRequestScope(item, where, people),
+    scope,
     handledKeys: store.handledKeys(def.id),
     seenKeys: store.seenKeys(def.id),
     runningCount: store.runs.runningCount(def.id)
@@ -155,7 +131,10 @@ async function startRuns(
     })
     runIds.set(decision.key, runId)
     unlaunched.current = { runId, onceKey: decision.onceKey }
-    deps.store.markHandled(def.id, decision.onceKey, runId, at)
+    // A run-once automation without once_per keeps no key: it runs on every tick.
+    if (usesHandled(def)) {
+      deps.store.markHandled(def.id, decision.onceKey, runId, at)
+    }
     try {
       unlaunched.current = null
       await deps.launch({ runId, definition: def, decision })
@@ -201,12 +180,19 @@ function keepOrphanHandled(
   try {
     deps.store.runs.update(u.runId, { status: 'failed', outcome: message, finishedAt: at })
   } catch {}
+  if (!usesHandled(def)) {
+    return
+  }
   try {
     deps.store.markHandled(def.id, u.onceKey, u.runId, at)
   } catch {}
 }
 
+// Seen and baselined keys belong to automations with items; a run-once tick writes neither.
 function markDecisions(def: AutomationDefinition, decisions: ItemDecision[], deps: TickDeps): void {
+  if (def.items === null) {
+    return
+  }
   const at = deps.now()
   for (const d of decisions) {
     if (d.verdict === 'out_of_scope') {
@@ -237,12 +223,13 @@ export async function runTick(
   def: AutomationDefinition,
   people: PeopleDirectory,
   deps: TickDeps,
-  opts: { dryRun: boolean }
+  opts: TickOptions
 ): Promise<TickResult> {
   const tickId = deps.store.startTick(def.id, opts.dryRun, deps.now())
+  const pass = opts.pass ?? createPassFetchCache(`tick-${tickId}`, deps.gitlab)
   let decisions: ItemDecision[]
   try {
-    decisions = await decide(def, people, deps)
+    decisions = await decide(def, people, deps, pass, tickId)
   } catch (error) {
     const message = errorMessage(error)
     finishFailed(tickId, message, {}, deps)
