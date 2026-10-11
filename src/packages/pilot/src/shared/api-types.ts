@@ -292,3 +292,15 @@ export type AutomationDetailPayload = {
   yaml: string
   checkNames: string[]
 }
+
+// The agent ↔ engine channel (pilot run output | event). Step outputs are template fields
+// (steps.<step>.<name>), so their values are field values.
+export type RunOutputParams = { runId: string; stepIdx: number; outputs: ItemFields }
+export type RunOutputResult = { runId: string; stepIdx: number; outputs: ItemFields }
+export type RunEventParams = { runId: string; kind: string; payload?: Record<string, unknown> }
+export type RunEventResult = { id: number }
+// What the CLI sends: the terminal it runs in (ORCA_TERMINAL_HANDLE) names the step starting or running
+// on it; runId/stepIdx (PILOT_RUN_ID/PILOT_STEP_IDX) are only the fallback when no step is bound there.
+export type RunChannelTarget = { terminal?: string; runId?: string; stepIdx?: number }
+export type RunOutputRequest = RunChannelTarget & { outputs: ItemFields }
+export type RunEventRequest = RunChannelTarget & { kind: string; payload?: Record<string, unknown> }
