@@ -1,70 +1,26 @@
 import { useState } from 'react'
+import { AutomationView } from './AutomationView'
 import { OrcaAutomationsPanel } from './OrcaAutomationsPanel'
-import { PilotAutomationsTab } from './PilotAutomationsTab'
+import { PilotAutomationsSection } from './PilotAutomationsSection'
 
-export const AUTOMATIONS_TAB_KEY = 'pilot.automations.tab'
-type TabId = 'pilot' | 'orca'
-const TABS: { id: TabId; label: string }[] = [
-  { id: 'pilot', label: 'Pilot' },
-  { id: 'orca', label: 'Orca' }
-]
-
-function readTab(): TabId {
-  try {
-    return window.localStorage.getItem(AUTOMATIONS_TAB_KEY) === 'orca' ? 'orca' : 'pilot'
-  } catch {
-    return 'pilot'
-  }
-}
-
-function saveTab(tab: TabId): void {
-  try {
-    window.localStorage.setItem(AUTOMATIONS_TAB_KEY, tab)
-  } catch {
-    // Remembering the tab is a convenience only.
-  }
-}
-
+// One page: Orca's automations (the jobs, run by Orca's engine inside Pilot), then Pilot's YAML ones.
 export default function PilotAutomationsPage(): React.JSX.Element {
-  const [tab, setTab] = useState<TabId>(readTab)
-  const select = (next: TabId): void => {
-    setTab(next)
-    saveTab(next)
+  const [open, setOpen] = useState<string | null>(null)
+  if (open) {
+    return (
+      <main className="relative flex h-full flex-col gap-4 overflow-y-auto bg-background px-5 pb-10 pt-6">
+        <AutomationView id={open} onBack={() => setOpen(null)} />
+      </main>
+    )
   }
   return (
     <div className="flex h-full min-h-0 flex-col bg-background">
-      <div role="tablist" className="flex shrink-0 gap-1 border-b border-border px-5 pt-3">
-        {TABS.map((t) => (
-          <button
-            key={t.id}
-            type="button"
-            role="tab"
-            aria-selected={tab === t.id}
-            onClick={() => select(t.id)}
-            className={
-              tab === t.id
-                ? '-mb-px border-b-2 border-foreground px-3 py-1.5 text-sm font-medium text-foreground'
-                : '-mb-px border-b-2 border-transparent px-3 py-1.5 text-sm text-muted-foreground hover:text-foreground'
-            }
-          >
-            {t.label}
-          </button>
-        ))}
+      <div className="min-h-0 flex-1 overflow-hidden">
+        <OrcaAutomationsPanel />
       </div>
-      {tab === 'orca' ? (
-        <>
-          <p className="shrink-0 px-5 pt-2 text-xs text-muted-foreground">
-            Orca&apos;s own automations, run by Orca&apos;s engine inside Pilot.
-          </p>
-          <div className="min-h-0 flex-1 overflow-hidden">
-            <OrcaAutomationsPanel />
-          </div>
-        </>
-      ) : (
-        <div className="min-h-0 flex-1">
-          <PilotAutomationsTab />
-        </div>
-      )}
+      <div className="max-h-[40%] shrink-0 overflow-y-auto border-t border-border">
+        <PilotAutomationsSection onOpen={setOpen} />
+      </div>
     </div>
   )
 }

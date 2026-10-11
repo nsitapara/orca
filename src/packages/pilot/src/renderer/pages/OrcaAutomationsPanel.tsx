@@ -1,6 +1,6 @@
 import { Component, lazy, Suspense, useMemo, useState } from 'react'
 
-// Lazy so Orca's page (and its app-store graph) only loads when the Orca tab is opened.
+// Lazy so Orca's page (and its app-store graph) loads in its own chunk behind the error boundary.
 const loadOrcaPage = (): Promise<{ default: React.ComponentType }> =>
   import('../../../../../renderer/src/components/automations/AutomationsPage')
 
