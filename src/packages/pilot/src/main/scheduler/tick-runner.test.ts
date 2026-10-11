@@ -211,6 +211,37 @@ describe('runTick', () => {
     expect(d.store.runs.runningCount('fix-failed-ci')).toBe(0)
   })
 
+  it('skips an item whose worktree another run took between deciding and starting, and leaves its key free', async () => {
+    const d = deps()
+    d.launch = async (req) => {
+      d.launched.push(req.decision.key)
+      // Another automation's tick starts an agent in the second item's worktree meanwhile.
+      const otherTick = d.store.startTick('other', false, d.now())
+      d.store.runs.create({
+        id: 'other-run',
+        automationId: 'other',
+        tickId: otherTick,
+        itemKey: 'mr:1',
+        itemLabel: 'x',
+        worktreePath: '/wt/1474',
+        startedAt: d.now()
+      })
+      return { terminalHandle: 't', paneKey: 'p' }
+    }
+    const result = await runTick(def, people, d, { dryRun: false })
+    expect(result.status).toBe('ok')
+    expect(d.launched).toEqual(['mr:1561'])
+    expect(result.decisions.map((x) => [x.key, x.verdict, x.reason])).toEqual([
+      ['mr:1561', 'started', expect.any(String)],
+      ['mr:1574', 'skipped', 'Another run is active in /wt/1474']
+    ])
+    expect(d.store.handledKeys('fix-failed-ci')).toEqual(new Set(['1561:1561']))
+    expect(d.store.tickItems(result.tickId).map((i) => [i.itemKey, i.verdict, i.runId])).toEqual([
+      ['mr:1561', 'started', expect.any(String)],
+      ['mr:1574', 'skipped', null]
+    ])
+  })
+
   it('resolves with a failed result even when finishTick throws', async () => {
     const d = deps({ sources: failingSources(new Error('glab down')) })
     d.store.finishTick = () => {

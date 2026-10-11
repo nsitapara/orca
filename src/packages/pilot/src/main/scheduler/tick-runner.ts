@@ -4,6 +4,7 @@ import type { PeopleDirectory } from '../../shared/people'
 import { usesHandled, workspacePathOf } from '../../shared/tick/decide'
 import { createPassFetchCache, type PassFetchCache } from '../sources/fetch-cache'
 import { glabApiForRepo, type GlabApi } from '../sources/gitlab-api'
+import { worktreePathKey } from '../fields/agent-activity'
 import { decideTickItems, type DecideDeps, type DecideOutcome } from './tick-decide'
 
 export type { TickResult }
@@ -96,6 +97,24 @@ function recordedWorktree(
   return workspacePathOf(def, fields)
 }
 
+// Contract §6 across concurrent ticks: the busy set was read when deciding, and runs are created after
+// awaits, so another tick (or Run now) may have taken the worktree since. Checked synchronously right
+// before the run is created. Main-checkout runs are exempt (G2); a new worktree has no path yet.
+function busyWorktree(
+  def: AutomationDefinition,
+  path: string | null,
+  deps: TickDeps
+): string | null {
+  if (def.workspace.kind !== 'item_worktree' || path === null) {
+    return null
+  }
+  const key = worktreePathKey(path)
+  const busy =
+    deps.store.runs.runningInWorktree(path).length > 0 ||
+    (key !== path && deps.store.runs.runningInWorktree(key).length > 0)
+  return busy ? path : null
+}
+
 // Only 'started' decisions start runs; 'asked' ones wait for an answer (Task 25 writes the card).
 // A launch failure keeps the decision's verdict 'started'; the RUN row is the record of the failure.
 async function startRuns(
@@ -112,6 +131,13 @@ async function startRuns(
     if (decision.verdict !== 'started') {
       continue
     }
+    const worktreePath = recordedWorktree(def, decision.fields)
+    const busy = busyWorktree(def, worktreePath, deps)
+    if (busy !== null) {
+      decision.verdict = 'skipped'
+      decision.reason = `Another run is active in ${busy}`
+      continue
+    }
     n += 1
     const runId = makeRunId(def.id, at, n, tickId)
     deps.store.runs.create({
@@ -120,7 +146,7 @@ async function startRuns(
       tickId,
       itemKey: decision.key,
       itemLabel: decision.label,
-      worktreePath: recordedWorktree(def, decision.fields),
+      worktreePath,
       startedAt: at
     })
     runIds.set(decision.key, runId)
