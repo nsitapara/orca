@@ -68,6 +68,7 @@ How one of the old sweeps that real Orca schedules (`~/.agents/skills/<name>-swe
    - It only adds keys, never replaces one, and is safe to re-run while Pilot runs.
    - It refuses when Pilot's database or `main/store/migrations.ts` isn't at the schema it was written for.
    - Other sweeps keep different state, so each needs its own mapping.
+
 5. **Shadow.**
    - Keep `schedule: manual`.
    - Across a working day, run the dry run just after a few of the old sweep's ticks (05 ticks at :10 each hour). Compare each run with `sweep.log`.
@@ -85,6 +86,35 @@ How one of the old sweeps that real Orca schedules (`~/.agents/skills/<name>-swe
 - [x] 1–2, 2026-10-10: YAML and people written, validated and linked; one key seeded (`1587:2933991087`). The dry run agreed with the old sweep on all 7 of Nish's open MRs (all not due, head pipelines green). The 22 teammate MRs are not in scope, and the old sweep never lists them. Details are in the vault note's M1 entry.
 - [ ] 3. Shadow for a working day: **pending, Nish**.
 - [ ] 4. Cut over (disable Orca's 05, schedule `"10 * * * *"`): **pending, Nish**.
+
+## Moving an Orca automation into Pilot
+
+`scripts/move-orca-automation.mjs` copies one automation from real Orca into Pilot so it never runs in both at once. It reads Orca with `orca automations show` (read-only), maps each field onto `pilot automations create` flags, and never deletes anything in Orca. Pilot has to be running (its CLI talks to it).
+
+Dry run (the default; prints the exact `create` command and the fields mapped and dropped, changes nothing):
+
+```
+node src/packages/pilot/scripts/move-orca-automation.mjs --id <orca automation id>
+```
+
+Move it for real:
+
+```
+node src/packages/pilot/scripts/move-orca-automation.mjs --id <orca automation id> --apply --disable-in-orca
+```
+
+The order is fixed: create in Pilot disabled, read it back and verify every mapped field, disable it in Orca and verify, then enable it in Pilot. If a step fails it prints what was created and what was disabled, and removes the Pilot copy only when Orca is still untouched. Without `--disable-in-orca`, `--apply` stops after the verified, disabled Pilot copy and prints the two commands to finish by hand.
+
+- It refuses, changing nothing, when the target repo or worktree isn't in Pilot, or when Orca's automation has a field `create` can't express (`--allow-drop <field>` accepts the loss).
+- It does nothing when Pilot already has an automation with the same name and target.
+- Pilot sets `id`, `dtstart`, `nextRunAt`, `lastRunAt` and the timestamps itself, so those aren't copied.
+
+Moving it back: disable it in Pilot, then enable it in Orca (in that order, so it never runs twice):
+
+```
+pilot automations edit --id <pilot id> --disabled
+orca automations edit --id <orca id> --enabled
+```
 
 ## Remote use (D25)
 
