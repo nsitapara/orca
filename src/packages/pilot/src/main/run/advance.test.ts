@@ -6,6 +6,7 @@ import Database from '../../../../../main/sqlite/sync-database'
 import type { ItemDecision } from '../../shared/api-types'
 import { parseAutomationYaml } from '../../shared/definition/parse'
 import type { AutomationDefinition } from '../../shared/definition/types'
+import { UnrecordedLaunchError } from '../scheduler/tick-runner'
 import { PilotStore } from '../store/store'
 import {
   createRunEngine,
@@ -63,8 +64,9 @@ function setup(def: AutomationDefinition | null = DEF, over: Partial<RunEngineDe
   const store = PilotStore.open(path)
   const started: StepStartRequest[] = []
   const statusWhenStarted: (string | null)[] = []
-  const failures: Error[] = []
-  const engine = createRunEngine({
+  // A function runs when its launch is due (what happened meanwhile) and returns the error to throw.
+  const failures: (Error | (() => Error))[] = []
+  const deps: RunEngineDeps = {
     store,
     now: () => 1000,
     definitionFor: (id) => (def !== null && id === def.id ? def : null),
@@ -73,7 +75,7 @@ function setup(def: AutomationDefinition | null = DEF, over: Partial<RunEngineDe
     startStep: async (req) => {
       const failure = failures.shift()
       if (failure) {
-        throw failure
+        throw typeof failure === 'function' ? failure() : failure
       }
       started.push(req)
       const s = req.definition.steps[req.idx]
@@ -98,7 +100,8 @@ function setup(def: AutomationDefinition | null = DEF, over: Partial<RunEngineDe
     workspace: WORKSPACE,
     log: () => {},
     ...over
-  })
+  }
+  const engine = createRunEngine(deps)
   store.runs.create({
     id: 'run-1',
     automationId: 'review',
@@ -122,7 +125,7 @@ function setup(def: AutomationDefinition | null = DEF, over: Partial<RunEngineDe
       d.close()
     }
   }
-  return { store, engine, started, statusWhenStarted, failures, end, db }
+  return { store, deps, engine, started, statusWhenStarted, failures, end, db }
 }
 const startRun = (engine: RunEngine) =>
   engine.startRun({ runId: 'run-1', definition: DEF, decision: DECISION })
@@ -335,6 +338,98 @@ describe('createRunEngine', () => {
     await new Promise((resolve) => setTimeout(resolve, 0))
     expect(calls).toBe(1)
     expect(store.runs.steps('run-1').map((s) => s.status)).toEqual(['failed'])
+  })
+
+  it.each([0, 1])(
+    'stops the walk when step %i leaves its agent untracked, and keeps the key from a retry',
+    async (at) => {
+      const { store, engine, started, end, failures, db } = setup()
+      const orphan = new UnrecordedLaunchError('t9', "terminal t9 started but couldn't be recorded")
+      if (at === 0) {
+        failures.push(orphan)
+        await expect(startRun(engine)).rejects.toBe(orphan)
+      } else {
+        await startRun(engine)
+        store.advance.mergeStepOutputs('run-1', 0, { changed: true })
+        end(0, 'done')
+        failures.push(orphan)
+        await engine.advance('run-1')
+      }
+      expect(started.map((s) => s.idx)).toEqual([0].slice(0, at))
+      const notRun = ['skipped', 'Not run: an untracked agent is still in terminal t9']
+      expect(store.runs.steps('run-1').map((s) => [s.status, s.error])).toEqual([
+        ...(at === 1 ? [['done', null]] : []),
+        ['failed', orphan.message],
+        ...[notRun, notRun].slice(at)
+      ])
+      expect(store.runs.get('run-1')).toMatchObject({ status: 'failed', outcome: orphan.message })
+      expect(handledOf(db)).toEqual({ status: 'done', failed_at: null })
+      const events = store.events.forRun('run-1').filter((e) => e.kind === 'orphan_agent')
+      expect(events.map((e) => e.payload)).toEqual([
+        { step: DEF.steps[at].name, terminal: 't9', error: orphan.message }
+      ])
+    }
+  )
+
+  it('stops when the run was closed while a step failed to start, keeping how it was closed', async () => {
+    const ended: string[] = []
+    const { store, engine, started, end, failures } = setup(DEF, {
+      onRunEnd: (run) => ended.push(run.id)
+    })
+    await startRun(engine)
+    store.advance.mergeStepOutputs('run-1', 0, { changed: true })
+    end(0, 'done')
+    // The stale-start sweep closes the run during step 1's slow launch, which then throws.
+    failures.push(() => {
+      store.runs.update('run-1', { status: 'failed', outcome: 'swept', finishedAt: 900 })
+      return new Error('launch gave up')
+    })
+    await engine.advance('run-1')
+    expect(started.map((s) => s.idx)).toEqual([0])
+    expect(store.runs.get('run-1')).toMatchObject({
+      status: 'failed',
+      outcome: 'swept',
+      finishedAt: 900
+    })
+    expect(ended).toEqual([])
+  })
+
+  it("renders a later step's item fields before its tick has recorded them, and from the tick after a restart", async () => {
+    const { store, deps, engine, started } = setup()
+    const tickId = store.startTick('review', false, 400)
+    store.runs.create({
+      id: 'run-t',
+      automationId: 'review',
+      tickId,
+      itemKey: 'mr:1',
+      itemLabel: '!1 web-1',
+      worktreePath: '/wt',
+      startedAt: 500
+    })
+    await engine.startRun({ runId: 'run-t', definition: DEF, decision: DECISION })
+    store.advance.mergeStepOutputs('run-t', 0, { changed: true })
+    store.runs.updateStep('run-t', 0, { status: 'done', finishedAt: 1000 })
+    expect(store.advance.tickItemFields(tickId, 'mr:1')).toBeNull()
+    await engine.advance('run-t')
+    expect(started[1].fields).toMatchObject({ 'mr.iid': 1, 'run.tick': tickId })
+    // A restarted engine knows nothing of the run; by then the tick has recorded the item's fields.
+    store.recordDecisions(tickId, [DECISION], new Map([['mr:1', 'run-t']]))
+    store.runs.updateStep('run-t', 1, { status: 'done', finishedAt: 1000 })
+    await createRunEngine(deps).advance('run-t')
+    expect(started.map((s) => [s.idx, s.fields['mr.iid']])).toEqual([
+      [0, 1],
+      [1, 1],
+      [2, 1]
+    ])
+  })
+
+  it("fails a step 0 the opening walk never handed to the starter, with the run's outcome", async () => {
+    const { store, engine, started } = setup(null)
+    await startRun(engine)
+    expect(started).toEqual([])
+    const outcome = 'The automation review is no longer loaded'
+    expect(store.runs.get('run-1')).toMatchObject({ status: 'failed', outcome })
+    expect(store.runs.steps('run-1').map((s) => [s.status, s.error])).toEqual([['failed', outcome]])
   })
 
   it.each([
