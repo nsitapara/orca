@@ -2,6 +2,7 @@ import { existsSync, lstatSync, readdirSync, readFileSync, watch, type FSWatcher
 import { dirname, join } from 'node:path'
 import { parseAutomationYaml } from '../../shared/definition/parse'
 import type { AutomationDefinition, PeopleRef } from '../../shared/definition/types'
+import { PEOPLE_REF_CLAUSES } from '../../shared/definition/where'
 import { EMPTY_PEOPLE, parsePeopleYaml, type PeopleDirectory } from '../../shared/people'
 
 export type LoadedDefinitions = {
@@ -73,10 +74,16 @@ function loadPeople(dirs: string[]): { people: PeopleDirectory; peopleError: str
   return { people: EMPTY_PEOPLE, peopleError: note ? `${note}. ${real}` : real }
 }
 
-// Every place an AutomationDefinition holds a PeopleRef. Add future refs
-// (e.g. a reviewer) here and nowhere else.
-function peopleRefs(def: AutomationDefinition): { path: string; ref: PeopleRef | undefined }[] {
-  return [{ path: 'items.where.author', ref: def.items.where.author }]
+// Every where clause that names people (PEOPLE_REF_CLAUSES in where.ts); approved_by may be 'none'.
+function peopleRefs(def: AutomationDefinition): { path: string; ref: PeopleRef }[] {
+  const where = def.items?.where ?? {}
+  return PEOPLE_REF_CLAUSES.flatMap((clause) => {
+    const ref = where[clause]
+    if (ref === undefined || ref === 'none') {
+      return []
+    }
+    return [{ path: `items.where.${clause}`, ref: ref as PeopleRef }]
+  })
 }
 
 function refErrors(path: string, ref: PeopleRef | undefined, dir: PeopleDirectory): string[] {

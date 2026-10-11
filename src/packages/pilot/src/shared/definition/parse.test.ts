@@ -27,45 +27,115 @@ powers: [commit, push]
 inbox: "{mr.author}"
 `
 
-describe('parseAutomationYaml', () => {
-  it('normalizes automation 05', () => {
-    const result = parseAutomationYaml(CI_05, '/a/fix-failed-ci.yaml')
-    expect(result.ok).toBe(true)
-    if (!result.ok) {
-      return
+// What M1 produced for 05, plus the v2 fields at their defaults: the same automation.
+const CI_05_DEFINITION = {
+  id: 'fix-failed-ci',
+  file: '/a/fix-failed-ci.yaml',
+  name: 'Fix failed CI on my MRs',
+  repo: 'web-platform',
+  schedule: '10 * * * *',
+  timezone: 'America/Los_Angeles',
+  enabled: true,
+  missedRunGraceMs: 3_600_000,
+  items: {
+    kind: 'merge_request',
+    where: { state: 'open', author: { people: ['nish'] }, head_pipeline: 'failed' },
+    match: [],
+    customFields: []
+  },
+  firstSeen: 'process',
+  oncePer: '{mr.iid}:{mr.pipeline}',
+  retryAfterFailureMs: null,
+  checks: [
+    { kind: 'worktree_exists' },
+    { kind: 'worktree_clean' },
+    { kind: 'session_none_open', scope: 'automation' },
+    { kind: 'quota', agent: 'claude', weekly: 90, session: 95 }
+  ],
+  limits: { perTick: 3, atOnce: null, timeoutMs: null, order: 'listed' },
+  start: 'auto',
+  askFirst: null,
+  workspace: { kind: 'item_worktree' },
+  steps: [
+    {
+      name: 'step1',
+      agent: 'claude',
+      skill: 'fix-gitlab-ci',
+      mode: null,
+      prompt: 'Fix failed pipeline {mr.pipeline} on !{mr.iid}.\n',
+      promptStyle: 'wrapped',
+      args: [],
+      session: { kind: 'new' },
+      run: null,
+      exitCodes: { ok: [0], skip: [] },
+      when: null,
+      always: false,
+      timeoutMs: null
     }
-    expect(result.definition).toEqual({
-      id: 'fix-failed-ci',
-      file: '/a/fix-failed-ci.yaml',
-      name: 'Fix failed CI on my MRs',
-      repo: 'web-platform',
-      schedule: '10 * * * *',
-      timezone: 'America/Los_Angeles',
-      enabled: true,
-      items: {
-        kind: 'merge_request',
-        where: { state: 'open', author: { people: ['nish'] }, head_pipeline: 'failed' }
-      },
-      firstSeen: 'process',
-      oncePer: '{mr.iid}:{mr.pipeline}',
-      checks: [
-        { kind: 'worktree_exists' },
-        { kind: 'worktree_clean' },
-        { kind: 'session_none_open' },
-        { kind: 'quota', weekly: 90, session: 95 }
-      ],
-      limits: { perTick: 3, atOnce: null },
-      steps: [
-        {
-          name: 'step1',
-          agent: 'claude',
-          skill: 'fix-gitlab-ci',
-          mode: null,
-          prompt: 'Fix failed pipeline {mr.pipeline} on !{mr.iid}.\n'
-        }
-      ],
-      powers: ['commit', 'push'],
-      inbox: '{mr.author}'
+  ],
+  answers: null,
+  powers: ['commit', 'push'],
+  inbox: '{mr.author}'
+}
+
+const EVERY_KEY = `
+name: Review and fix
+repo: web-platform
+schedule: "0 3 * * *"
+timezone: Europe/London
+enabled: false
+missed_run_grace: 12h
+items:
+  kind: worktree
+  where: { has_mr: true, mr_author: { not: { people: [emil] } } }
+  match: ["{worktree.new_commits} > 0"]
+  fields:
+    failed_specs: { script: ./fields/failed-specs.sh, cache: per_head, timeout: 2m }
+first_seen: baseline
+once_per: "{worktree.id}:{worktree.head}"
+retry_after_failure: 12h
+checks:
+  - worktree: idle
+  - session: { none_open: any }
+  - quota: { agent: codex, weekly: 80 }
+  - mr: not_approved
+  - window: "02:00-05:59"
+  - answers: none_pending
+  - field: { expr: "{worktree.new_commits} > 0", reason: No new commits }
+  - check: { run: ./scripts/check.sh, timeout: 30s }
+limits: { per_tick: 1, at_once: 1, timeout: 60m, order: oldest_waiting_first }
+start: ask_first
+ask_first: { title: "Review {worktree.branch}?", options: ["Review — run the review now", "Skip — not today"] }
+workspace: { new_worktree: { base: origin/dev, name: "memo-{run.date}", reuse_existing: true, setup: run } }
+steps:
+  - name: review
+    agent: codex
+    skill: review-branch
+    mode: review
+    prompt: Review it.
+    args: ["--full-auto"]
+    session: per_worktree
+    timeout: 30m
+  - name: fix
+    agent: claude
+    prompt: "Fix {steps.review.findings}"
+    prompt_style: raw
+    when: "{steps.review.changed} == true"
+  - name: cleanup
+    agent: shell
+    run: "./scripts/teardown.sh {worktree.path}"
+    exit_codes: { ok: [0], skip: [3] }
+    always: true
+answers: { resume: never, else: { agent: claude, skill: review-branch, mode: answers } }
+powers: [commit, push]
+inbox: nish
+`
+
+describe('parseAutomationYaml', () => {
+  it('normalizes automation 05 to the same definition, with the v2 defaults', () => {
+    expect(parseAutomationYaml(CI_05, '/a/fix-failed-ci.yaml')).toEqual({
+      ok: true,
+      definition: CI_05_DEFINITION
     })
   })
 
@@ -76,6 +146,180 @@ describe('parseAutomationYaml', () => {
   ])('derives the id from %s', (_label, file, id) => {
     const result = parseAutomationYaml(CI_05, file)
     expect(result.ok && result.definition.id).toBe(id)
+  })
+
+  it('normalizes every v2 key', () => {
+    expect(parseAutomationYaml(EVERY_KEY, '/a/review.yaml')).toEqual({
+      ok: true,
+      definition: {
+        id: 'review',
+        file: '/a/review.yaml',
+        name: 'Review and fix',
+        repo: 'web-platform',
+        schedule: '0 3 * * *',
+        timezone: 'Europe/London',
+        enabled: false,
+        missedRunGraceMs: 43_200_000,
+        items: {
+          kind: 'worktree',
+          where: { has_mr: true, mr_author: { not: { people: ['emil'] } } },
+          match: ['{worktree.new_commits} > 0'],
+          customFields: [
+            {
+              name: 'failed_specs',
+              script: './fields/failed-specs.sh',
+              cache: 'per_head',
+              timeoutMs: 120_000
+            }
+          ]
+        },
+        firstSeen: 'baseline',
+        oncePer: '{worktree.id}:{worktree.head}',
+        retryAfterFailureMs: 43_200_000,
+        checks: [
+          { kind: 'worktree_idle' },
+          { kind: 'session_none_open', scope: 'any' },
+          { kind: 'quota', agent: 'codex', weekly: 80, session: 95 },
+          { kind: 'mr', rule: 'not_approved' },
+          { kind: 'window', start: '02:00', end: '05:59' },
+          { kind: 'answers_none_pending' },
+          { kind: 'field', expr: '{worktree.new_commits} > 0', reason: 'No new commits' },
+          { kind: 'script', run: './scripts/check.sh', timeoutMs: 30_000 }
+        ],
+        limits: { perTick: 1, atOnce: 1, timeoutMs: 3_600_000, order: 'oldest_waiting_first' },
+        start: 'ask_first',
+        askFirst: {
+          title: 'Review {worktree.branch}?',
+          context: '',
+          options: ['Review — run the review now', 'Skip — not today']
+        },
+        workspace: {
+          kind: 'new_worktree',
+          base: 'origin/dev',
+          name: 'memo-{run.date}',
+          reuseExisting: true,
+          setup: 'run'
+        },
+        steps: [
+          {
+            name: 'review',
+            agent: 'codex',
+            skill: 'review-branch',
+            mode: 'review',
+            prompt: 'Review it.',
+            promptStyle: 'wrapped',
+            args: ['--full-auto'],
+            session: { kind: 'per_worktree' },
+            run: null,
+            exitCodes: { ok: [0], skip: [] },
+            when: null,
+            always: false,
+            timeoutMs: 1_800_000
+          },
+          {
+            name: 'fix',
+            agent: 'claude',
+            skill: null,
+            mode: null,
+            prompt: 'Fix {steps.review.findings}',
+            promptStyle: 'raw',
+            args: [],
+            session: { kind: 'new' },
+            run: null,
+            exitCodes: { ok: [0], skip: [] },
+            when: '{steps.review.changed} == true',
+            always: false,
+            timeoutMs: null
+          },
+          {
+            name: 'cleanup',
+            agent: 'shell',
+            skill: null,
+            mode: null,
+            prompt: null,
+            promptStyle: 'wrapped',
+            args: [],
+            session: { kind: 'new' },
+            run: './scripts/teardown.sh {worktree.path}',
+            exitCodes: { ok: [0], skip: [3] },
+            when: null,
+            always: true,
+            timeoutMs: null
+          }
+        ],
+        answers: {
+          resume: 'never',
+          else: { agent: 'claude', skill: 'review-branch', mode: 'answers' }
+        },
+        powers: ['commit', 'push'],
+        inbox: 'nish'
+      }
+    })
+  })
+
+  it('defaults new_worktree setup to skip and ask_first options to none', () => {
+    const result = parseAutomationYaml(
+      'name: Memo\nrepo: web-platform\nschedule: manual\nstart: ask_first\nask_first: { title: Go? }\nworkspace: { new_worktree: { base: origin/dev, name: memo } }\nsteps:\n  - agent: shell\n    run: ./x.sh\n',
+      '/a/memo.yaml'
+    )
+    expect(result.ok && [result.definition.workspace, result.definition.askFirst]).toEqual([
+      {
+        kind: 'new_worktree',
+        base: 'origin/dev',
+        name: 'memo',
+        reuseExisting: false,
+        setup: 'skip'
+      },
+      { title: 'Go?', context: '', options: [] }
+    ])
+  })
+
+  it('runs a run-once automation in the main checkout by default', () => {
+    const result = parseAutomationYaml(
+      'name: Pull dev\nrepo: web-platform\nschedule: "0 6 * * *"\nsteps:\n  - agent: shell\n    run: ./pull.sh\n',
+      '/a/pull-dev.yaml'
+    )
+    expect(result.ok && [result.definition.items, result.definition.workspace]).toEqual([
+      null,
+      { kind: 'main_checkout' }
+    ])
+  })
+
+  it.each([
+    ['claude', 'steps: [ { agent: claude, prompt: x } ]', 'claude'],
+    ['codex', 'steps: [ { agent: codex, prompt: x } ]', 'codex'],
+    ['shell', 'steps: [ { agent: shell, run: ./x.sh } ]', 'claude']
+  ])('reads a bare quota check for %s steps as that agent’s quota', (_label, steps, agent) => {
+    const result = parseAutomationYaml(
+      `name: q\nrepo: r\nschedule: manual\nchecks: [ quota ]\n${steps}\n`,
+      '/a/q.yaml'
+    )
+    expect(result.ok && result.definition.checks).toEqual([
+      { kind: 'quota', agent, weekly: 90, session: 95 }
+    ])
+  })
+
+  it.each([
+    ['multi-step runs', CI_05.replace('steps:\n', 'steps:\n  - agent: codex\n    prompt: x\n')],
+    ['precheck scripts', CI_05.replace('  - worktree: exists\n', '  - check: { run: ./x.sh }\n')],
+    [
+      'custom fields',
+      CI_05.replace(
+        '  kind: merge_request\n',
+        '  kind: merge_request\n  fields: { a: { script: ./a.sh } }\n'
+      )
+    ],
+    [
+      'modes',
+      CI_05.replace('    skill: fix-gitlab-ci\n', '    skill: fix-gitlab-ci\n    mode: fix\n')
+    ],
+    ['answers', `${CI_05}\nanswers: { resume: asking_session }\n`],
+    ['ask_first', `${CI_05}\nstart: ask_first\nask_first: { title: "Fix !{mr.iid}?" }\n`],
+    ['retry_after_failure', `${CI_05}\nretry_after_failure: 12h\n`],
+    ['a file without items:', CI_05.replace(/items:\n( {2}.*\n)+/, '')]
+  ])('accepts %s, which M1 rejected', (_label, yaml) => {
+    const result = parseAutomationYaml(yaml, '/a/ci.yaml')
+    expect(result.ok ? [] : result.errors).toEqual([])
   })
 
   it('rejects a misspelled key and names it and the file (Review Focus 1)', () => {
@@ -90,55 +334,7 @@ describe('parseAutomationYaml', () => {
 
   it('reports YAML syntax errors with the file', () => {
     const result = parseAutomationYaml('name: [unclosed', '/a/bad.yaml')
-    expect(result.ok).toBe(false)
-    if (result.ok) {
-      return
-    }
-    expect(result.errors[0]).toMatch(/^\/a\/bad\.yaml: YAML error: /)
-  })
-
-  it.each([
-    [
-      'multi-step runs',
-      CI_05.replace('steps:\n', 'steps:\n  - agent: codex\n    prompt: x\n'),
-      'steps: multi-step runs arrive in M3'
-    ],
-    [
-      'precheck scripts',
-      CI_05.replace('  - worktree: exists\n', '  - check: ./x.sh\n'),
-      'checks: precheck scripts (check:) arrive in M3'
-    ],
-    [
-      'custom fields',
-      CI_05.replace('  kind: merge_request\n', '  kind: merge_request\n  fields: { a: ./a.sh }\n'),
-      'items.fields: custom fields arrive in M4'
-    ],
-    [
-      'other item kinds',
-      CI_05.replace('kind: merge_request', 'kind: worktree'),
-      'items.kind: "worktree" arrives in M3 (M1 supports merge_request)'
-    ],
-    [
-      'modes',
-      CI_05.replace('    skill: fix-gitlab-ci\n', '    skill: fix-gitlab-ci\n    mode: fix\n'),
-      'steps[0].mode: skill modes arrive in M3'
-    ],
-    [
-      'answers',
-      `${CI_05}\nanswers: { resume: asking_session }\n`,
-      'answers: answer routing arrives in M2'
-    ],
-    [
-      // Without items the tick would list every open MR and run on all of them.
-      'a file without items:',
-      CI_05.replace(/items:\n(  .*\n)+/, ''),
-      'items: run-once automations (no items:) arrive in M3'
-    ]
-  ])('rejects %s with the milestone that brings them', (_label, yaml, message) => {
-    expect(parseAutomationYaml(yaml, '/a/ci.yaml')).toEqual({
-      ok: false,
-      errors: [`/a/ci.yaml: ${message}`]
-    })
+    expect(result.ok ? '' : result.errors[0]).toMatch(/^\/a\/bad\.yaml: YAML error: /)
   })
 
   it('rejects a bad cron and a bad time zone', () => {
@@ -156,8 +352,7 @@ describe('parseAutomationYaml', () => {
   })
 
   it('accepts manual schedules', () => {
-    const result = parseAutomationYaml(CI_05.replace('"10 * * * *"', 'manual'), '/a/ci.yaml')
-    expect(result.ok).toBe(true)
+    expect(parseAutomationYaml(CI_05.replace('"10 * * * *"', 'manual'), '/a/ci.yaml').ok).toBe(true)
   })
 
   const MINIMAL = 'name: n\nrepo: r\nschedule: manual\n'
@@ -192,6 +387,11 @@ describe('parseAutomationYaml', () => {
       'quota',
       `${MINIMAL}checks:\n  - quota: { weekly: 90, bogus: 1 }\n${STEP}`,
       'checks.0.quota: unknown key "bogus"'
+    ],
+    [
+      "M1's shell: key on a step",
+      CI_05.replace('    skill: fix-gitlab-ci\n', '    skill: fix-gitlab-ci\n    shell: ./x.sh\n'),
+      'steps.0: unknown key "shell"'
     ]
   ])('rejects an unknown key inside %s and names it', (_level, yaml, message) => {
     expect(parseAutomationYaml(yaml, '/a/ci.yaml')).toEqual({
@@ -201,11 +401,6 @@ describe('parseAutomationYaml', () => {
   })
 
   it.each([
-    [
-      'an agent step with a shell key',
-      CI_05.replace('    skill: fix-gitlab-ci\n', '    skill: fix-gitlab-ci\n    shell: ./x.sh\n'),
-      'step 1: only shell steps use shell: (shell steps arrive in M3)'
-    ],
     [
       'a step with no skill or prompt',
       CI_05.replace(/steps:[\s\S]*?\npowers/, 'steps:\n  - agent: claude\npowers'),

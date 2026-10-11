@@ -1,8 +1,13 @@
 import type { CheckOutcome, ItemDecision, TickItem } from '../api-types'
-import type { AutomationDefinition } from '../definition/types'
+import type { AutomationDefinition, MergeRequestWhere } from '../definition/types'
 import { describeRef, personByGitlab, refIncludes, type PeopleDirectory } from '../people'
 import { oncePerKey } from '../template'
 import { evaluateCheck } from './checks'
+
+// M1's merge-request rules read the where block directly; Task 4a moves them into the source's scope().
+function mrWhere(def: AutomationDefinition): MergeRequestWhere {
+  return (def.items?.where ?? {}) as MergeRequestWhere
+}
 
 export type DecideInput = {
   definition: AutomationDefinition
@@ -23,7 +28,7 @@ function authorCheck(
   people: PeopleDirectory,
   username: string
 ): AuthorCheck {
-  const ref = def.items.where.author
+  const ref = mrWhere(def).author
   if (ref === undefined || ref === 'anyone') {
     return { ok: true }
   }
@@ -49,7 +54,7 @@ export function authorInScope(
 }
 
 function scopeGate(def: AutomationDefinition, item: TickItem, people: PeopleDirectory): Gate {
-  const where = def.items.where
+  const where = mrWhere(def)
   const state = item.fields['mr.state']
   if (where.state === 'open' && state !== 'open') {
     return { verdict: 'out_of_scope', reason: `MR is ${state ?? '(state unknown)'}` }
@@ -61,7 +66,7 @@ function scopeGate(def: AutomationDefinition, item: TickItem, people: PeopleDire
 
 function dueGate(def: AutomationDefinition, item: TickItem): Gate {
   const status = item.fields['mr.pipeline_status']
-  if (def.items.where.head_pipeline === 'failed' && status !== 'failed') {
+  if (mrWhere(def).head_pipeline === 'failed' && status !== 'failed') {
     return { verdict: 'notdue', reason: `Head pipeline ${status ?? 'missing'}` }
   }
   return null

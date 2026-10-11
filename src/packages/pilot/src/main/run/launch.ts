@@ -22,7 +22,7 @@ export function buildPrompt(
   if (step.skill) {
     lines.push(`Use the ${step.skill} skill.`)
   }
-  lines.push('', renderTemplate(step.prompt, decision.fields).text.trimEnd())
+  lines.push('', renderTemplate(step.prompt ?? '', decision.fields).text.trimEnd())
   return lines.join('\n')
 }
 
@@ -57,6 +57,10 @@ export function makeLauncher(
 ): (req: LaunchRequest) => Promise<LaunchResult> {
   return async ({ runId, definition, decision }) => {
     const step = definition.steps[0]
+    // Task 10 runs shell steps; until then a shell first step can't start.
+    if (step.agent === 'shell') {
+      throw new Error("Pilot can't run shell steps yet")
+    }
     const selector = worktreeSelectorOf(decision)
     store.runs.createStep({
       runId,

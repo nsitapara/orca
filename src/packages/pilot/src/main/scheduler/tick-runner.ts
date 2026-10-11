@@ -1,5 +1,5 @@
 import type { ItemDecision, TickResult, Verdict } from '../../shared/api-types'
-import type { AutomationDefinition } from '../../shared/definition/types'
+import type { AutomationDefinition, MergeRequestWhere } from '../../shared/definition/types'
 import { gitlabHandlesFor, type PeopleDirectory } from '../../shared/people'
 import { authorInScope, decideTick } from '../../shared/tick/decide'
 import { addQuotaFields, type QuotaReader } from '../fields/quota'
@@ -58,16 +58,32 @@ function countVerdicts(decisions: ItemDecision[]): Partial<Record<Verdict, numbe
   return counts
 }
 
+// Until Task 4's item sources, a tick can list merge requests only.
+function unsupportedItems(def: AutomationDefinition): string | null {
+  if (def.items === null) {
+    return "Pilot can't tick a run-once automation yet"
+  }
+  if (def.items.kind !== 'merge_request') {
+    return `Pilot can't list ${def.items.kind} items yet`
+  }
+  return null
+}
+
 async function decide(
   def: AutomationDefinition,
   people: PeopleDirectory,
   deps: TickDeps
 ): Promise<ItemDecision[]> {
+  const unsupported = unsupportedItems(def)
+  if (unsupported) {
+    throw new Error(unsupported)
+  }
+  const where = (def.items?.where ?? {}) as MergeRequestWhere
   const repo = await deps.resolveRepo(def.repo)
   const api = await deps.gitlab(repo.path)
   const inScope = (username: string) => authorInScope(def, people, username)
   let items = await listMergeRequestItems(api, {
-    authorUsernames: gitlabHandlesFor(def.items.where.author, people),
+    authorUsernames: gitlabHandlesFor(where.author, people),
     inScope
   })
   items = await addWorktreeFields(

@@ -126,6 +126,12 @@ describe('people references', () => {
       error: 'items.where.author: unknown person "ghost"'
     },
     {
+      name: 'unknown person inside a not ref',
+      author: '{ not: { people: [ghost] } }',
+      error: 'items.where.author.not: unknown person "ghost"'
+    },
+    { name: 'known group inside a not ref', author: '{ not: { group: eng } }', error: null },
+    {
       name: 'unknown group',
       author: '{ group: ops }',
       error: 'items.where.author: unknown group "ops"'
@@ -145,6 +151,16 @@ describe('people references', () => {
       }
     })
   }
+
+  it('checks every where clause that names people, such as reviewer', () => {
+    const yaml =
+      'name: A\nrepo: web-platform\nschedule: manual\nitems:\n  kind: merge_request\n  where:\n    reviewer: { people: [ghost] }\n    approved_by: none\nsteps: [ { agent: claude, prompt: hi } ]\n'
+    const d = dir({ 'a.yaml': yaml, 'people.yaml': PEOPLE })
+    const file = join(d, 'a.yaml')
+    expect(loadDefinitions([d]).errors).toEqual([
+      { file, errors: [`${file}: items.where.reviewer: unknown person "ghost"`] }
+    ])
+  })
 
   it('an absent ref needs no people.yaml', () => {
     expect(loadDefinitions([dir({ 'a.yaml': VALID })]).definitions).toHaveLength(1)

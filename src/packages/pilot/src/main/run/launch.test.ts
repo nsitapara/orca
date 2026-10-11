@@ -30,6 +30,19 @@ function decisionWith(fields: ItemDecision['fields']): ItemDecision {
 const decision = decisionWith({ 'mr.iid': 1561, 'mr.pipeline': 99, 'worktree.path': '/wt' })
 
 describe('buildPrompt', () => {
+  it('starts a skill-only step with the skill line and no prompt text, as M1 did', () => {
+    const skillOnly = parseAutomationYaml(
+      'name: S\nrepo: r\nschedule: manual\nitems: { kind: merge_request }\nsteps: [ { agent: claude, skill: fix-gitlab-ci } ]\n',
+      '/a/s.yaml'
+    )
+    if (!skillOnly.ok) {
+      throw new Error('setup')
+    }
+    expect(buildPrompt(skillOnly.definition, decision, 'r')).toBe(
+      'Started by the Pilot automation "S" (run r) for !1561 web-1493.\nUse the fix-gitlab-ci skill.\n\n'
+    )
+  })
+
   it('names the automation, run and skill, then the rendered prompt', () => {
     expect(buildPrompt(def, decision, 'fix-failed-ci-202610101910-1')).toBe(
       [
@@ -64,6 +77,23 @@ function setup(launch: (sel: string, opts: unknown) => Promise<unknown>) {
 const request = { runId: 'run-1', definition: def, decision }
 
 describe('makeLauncher', () => {
+  it('refuses a shell first step until shell steps can run, recording no step', async () => {
+    const shell = parseAutomationYaml(
+      'name: S\nrepo: r\nschedule: manual\nitems: { kind: merge_request }\nsteps: [ { agent: shell, run: ./x.sh } ]\n',
+      '/a/s.yaml'
+    )
+    if (!shell.ok) {
+      throw new Error('setup')
+    }
+    const launch = vi.fn(async () => ({ handle: 'x', paneKey: 'y' }))
+    const { store, launcher } = setup(launch)
+    await expect(launcher({ ...request, definition: shell.definition })).rejects.toThrow(
+      "Pilot can't run shell steps yet"
+    )
+    expect(launch).not.toHaveBeenCalled()
+    expect(store.runs.steps('run-1')).toEqual([])
+  })
+
   it('launches by worktree id when the fact exists', async () => {
     const launch = vi.fn(async () => ({ handle: 'term_1', paneKey: 'tab:leaf' }))
     const { launcher } = setup(launch)
