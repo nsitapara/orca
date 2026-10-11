@@ -26,12 +26,17 @@ function messageOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
 }
 
-function worktreePathOf(decision: ItemDecision): string {
+// Prefer the repo-qualified id (no cross-host ambiguity, has a fast path); fall back to the path.
+function worktreeSelectorOf(decision: ItemDecision): string {
+  const id = decision.fields['worktree.id']
+  if (typeof id === 'string' && id !== '') {
+    return `id:${id}`
+  }
   const path = decision.fields['worktree.path']
   if (typeof path !== 'string' || path === '') {
     throw new Error('worktree is gone')
   }
-  return path
+  return `path:${path}`
 }
 
 // Best effort: the failure being reported matters more than a second failure while recording it.
@@ -48,7 +53,7 @@ export function makeLauncher(
 ): (req: LaunchRequest) => Promise<LaunchResult> {
   return async ({ runId, definition, decision }) => {
     const step = definition.steps[0]
-    const path = worktreePathOf(decision)
+    const selector = worktreeSelectorOf(decision)
     store.runs.createStep({
       runId,
       idx: 0,
@@ -59,7 +64,7 @@ export function makeLauncher(
     })
     let terminal: { handle: string; paneKey?: string | null }
     try {
-      terminal = await runtime.launchAgentTerminal(`path:${path}`, {
+      terminal = await runtime.launchAgentTerminal(selector, {
         agent: step.agent,
         prompt: buildPrompt(definition, decision, runId),
         title: `${definition.name} · ${decision.label}`

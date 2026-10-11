@@ -18,7 +18,8 @@ const STATE_MAP: Record<string, ObservedState> = {
 // Errors that mean the terminal will never come back (throw sites in src/main/runtime):
 // - terminal_handle_stale: build-pty-terminal-summary, resolve-terminal-pane (showTerminal) and others
 // - terminal_unsupported_for_agent_session: structured-worker-terminal-refusal, carried as `code`
-//   (the message is prose); this is what a pre-restart handle throws
+//   (the message is prose). Only structured-worker handles throw it, and one can't be our terminal.
+//   An unknown or pre-restart handle throws terminal_handle_stale instead.
 // - terminal_not_found: resolve-terminal-pane, serialize-main-terminal-buffer
 // Anything else (runtime_unavailable during startup or a renderer reload, unknown errors) is
 // transient: the probe rethrows and the step is left alone this cycle.
@@ -36,12 +37,47 @@ function isGone(error: unknown): boolean {
   return GONE_CODES.has(error.message) || (typeof code === 'string' && GONE_CODES.has(code))
 }
 
+type Row = ReturnType<OrcaRuntimeService['getAgentStatusRowsForPane']>[number]
+
+// Mirrors upstream's selectRuntimeHookAgentRowForPane "live" rule: newest by receivedAt, ignoring
+// provider-session-only and restored-unconfirmed rows (neither proves the agent is live).
+function newestLiveRow(rows: readonly Row[]): Row | null {
+  let best: Row | null = null
+  for (const row of rows) {
+    if (row.providerSessionOnly === true || row.restoredUnconfirmed === true) {
+      continue
+    }
+    if (!best || row.receivedAt > best.receivedAt) {
+      best = row
+    }
+  }
+  return best
+}
+
+function newestSessionRow(rows: readonly Row[]): Row | null {
+  let best: Row | null = null
+  for (const row of rows) {
+    if (row.providerSession && (!best || row.receivedAt > best.receivedAt)) {
+      best = row
+    }
+  }
+  return best
+}
+
+function observed(row: Row): ObservedState {
+  // Claude's SessionStart writes done + sessionBoundary before the prompt lands: not a turn end.
+  if (row.state === 'done' && row.sessionBoundary === true) {
+    return 'working'
+  }
+  return STATE_MAP[row.state] ?? 'working'
+}
+
 export function runtimeStepProbe(runtime: OrcaRuntimeService): StepProbe {
   return {
     async status(handle, paneKey) {
-      const row = runtime.getAgentStatusRowsForPane(paneKey)[0]
+      const row = newestLiveRow(runtime.getAgentStatusRowsForPane(paneKey))
       if (row) {
-        return STATE_MAP[row.state] ?? 'working'
+        return observed(row)
       }
       try {
         await runtime.showTerminal(handle)
@@ -54,7 +90,7 @@ export function runtimeStepProbe(runtime: OrcaRuntimeService): StepProbe {
       }
     },
     session(paneKey) {
-      const s = runtime.getAgentStatusRowsForPane(paneKey)[0]?.providerSession
+      const s = newestSessionRow(runtime.getAgentStatusRowsForPane(paneKey))?.providerSession
       if (!s?.id) {
         return null
       }
@@ -89,12 +125,7 @@ async function pollStep(
     const spent =
       path && step.agent === 'claude' ? await cost(path) : { costUsd: null, tokens: null }
     const at = now()
-    store.runs.updateStep(step.runId, step.idx, {
-      status: 'done',
-      finishedAt: at,
-      costUsd: spent.costUsd,
-      tokens: spent.tokens
-    })
+    // Run first: if it throws the step stays open and the next poll retries both writes.
     store.runs.update(step.runId, {
       status: 'done',
       finishedAt: at,
@@ -102,12 +133,18 @@ async function pollStep(
       costUsd: spent.costUsd,
       tokens: spent.tokens
     })
+    store.runs.updateStep(step.runId, step.idx, {
+      status: 'done',
+      finishedAt: at,
+      costUsd: spent.costUsd,
+      tokens: spent.tokens
+    })
   }
   if (state === 'gone') {
     const error = 'The terminal closed before the agent finished'
     const at = now()
-    store.runs.updateStep(step.runId, step.idx, { status: 'failed', finishedAt: at, error })
     store.runs.update(step.runId, { status: 'failed', finishedAt: at, outcome: error })
+    store.runs.updateStep(step.runId, step.idx, { status: 'failed', finishedAt: at, error })
   }
 }
 

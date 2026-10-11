@@ -11,6 +11,12 @@ type GitRunner = (
 ) => Promise<{ stdout: string }>
 
 const STALE_HANDLE = 'terminal_handle_stale'
+const AGENT_SESSION_HANDLE = 'terminal_unsupported_for_agent_session'
+
+function isGoneError(error: Error): boolean {
+  const code = (error as { code?: unknown }).code
+  return error.message === STALE_HANDLE || code === AGENT_SESSION_HANDLE
+}
 
 export function stripRefsHeads(branch: string): string {
   return branch.replace(/^refs\/heads\//, '')
@@ -79,7 +85,8 @@ export function runtimeFactDeps(
       } catch (error) {
         // Only a stale handle means the session is gone. Anything else (runtime not ready, an agent
         // session without a terminal) is unknown, so it is rethrown and the fact stays absent.
-        if (error instanceof Error && error.message === STALE_HANDLE) {
+        // A structured-worker handle (the refusal carries the code) can never be our terminal either.
+        if (error instanceof Error && isGoneError(error)) {
           return false
         }
         throw error
