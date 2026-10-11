@@ -6,15 +6,22 @@ import type {
   AutomationSummary
 } from '../../shared/api-types'
 import { parseAutomationYaml } from '../../shared/definition/parse'
-import type { AutomationDefinition, ParseResult } from '../../shared/definition/types'
+import type { AutomationDefinition, ItemKind, ParseResult } from '../../shared/definition/types'
 import { checkName } from '../../shared/tick/checks'
 import type { PilotContext } from '../pilot-services'
 
-const ITEM_KIND: Record<string, string> = { merge_request: 'Merge requests' }
+const ITEM_KIND: Record<ItemKind, string> = {
+  merge_request: 'Merge requests',
+  worktree: 'Worktrees',
+  pipeline: 'Pipelines',
+  linear_ticket: 'Linear tickets'
+}
 
-// Every valid M1 file has items: (run-once automations arrive in M3).
 function itemKindLabel(def: AutomationDefinition): string {
-  return ITEM_KIND[def.items.kind] ?? def.items.kind
+  if (!def.items) {
+    return 'Runs once'
+  }
+  return ITEM_KIND[def.items.kind]
 }
 
 function summarize(ctx: PilotContext, def: AutomationDefinition): AutomationSummary {

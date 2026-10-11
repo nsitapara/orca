@@ -92,6 +92,23 @@ function deps(overrides: Partial<TickDeps> = {}): TickDeps & { launched: string[
 }
 
 describe('runTick', () => {
+  it('fails the tick of an automation whose items it cannot list yet', async () => {
+    const once = parseAutomationYaml(
+      'name: Pull dev\nrepo: web-platform\nschedule: manual\nsteps: [ { agent: shell, run: ./pull.sh } ]\n',
+      '/a/pull-dev.yaml'
+    )
+    if (!once.ok) {
+      throw new Error(once.errors.join('\n'))
+    }
+    const d = deps()
+    const result = await runTick(once.definition, people.directory, d, { dryRun: false })
+    expect(result).toMatchObject({
+      status: 'failed',
+      error: "Pilot can't tick a run-once automation yet"
+    })
+    expect(d.launched).toEqual([])
+  })
+
   it('starts a run for each item that passes, records the tick and the once_per keys', async () => {
     const d = deps()
     const result = await runTick(def.definition, people.directory, d, {

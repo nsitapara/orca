@@ -30,6 +30,20 @@ function context() {
 }
 
 describe('Pilot API handlers', () => {
+  it('labels a run-once automation by what it runs on', () => {
+    const onceDir = mkdtempSync(join(tmpdir(), 'pilot-rpc-once-'))
+    writeFileSync(
+      join(onceDir, 'pull.yaml'),
+      'name: Pull dev\nrepo: web-platform\nschedule: manual\nsteps: [ { agent: shell, run: ./pull.sh } ]\n'
+    )
+    const { ctx } = context()
+    const loaded = loadDefinitions([onceDir])
+    const payload = listAutomations({ ...ctx, loaded: () => loaded })
+    expect(payload.automations.map((a) => [a.id, a.itemKind, a.agent])).toEqual([
+      ['pull', 'Runs once', 'shell']
+    ])
+  })
+
   it('lists automations with their last tick and file errors', () => {
     const { ctx, store } = context()
     const tick = store.startTick('ci', false, 1)

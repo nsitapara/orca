@@ -32,18 +32,79 @@ export type LinearTicketWhere = {
   has_branch?: boolean
 }
 
-export type BuiltinCheck =
+export type AgentKind = 'claude' | 'codex'
+export type StepAgent = AgentKind | 'shell'
+export type Power =
+  | 'commit'
+  | 'push'
+  | 'post'
+  | 'reply'
+  | 'mark_ready'
+  | 'create_ticket'
+  | 'update_ticket'
+  | 'remove_worktree'
+  | 'close_session'
+
+export type ItemsDef = {
+  kind: ItemKind
+  // The where block after its kind's schema (where.ts); the kind's item source reads it.
+  where: Record<string, unknown>
+  match: string[]
+  customFields: {
+    name: string
+    script: string
+    cache: 'per_tick' | 'per_head'
+    timeoutMs: number
+  }[]
+}
+
+export type CheckDef =
   | { kind: 'worktree_exists' }
   | { kind: 'worktree_clean' }
-  | { kind: 'session_none_open' }
-  | { kind: 'quota'; weekly: number; session: number }
+  | { kind: 'worktree_idle' }
+  | { kind: 'session_none_open'; scope: 'automation' | 'any' }
+  | { kind: 'quota'; agent: AgentKind; weekly: number; session: number }
+  | { kind: 'mr'; rule: 'not_approved' | 'not_merged' | 'mine' | 'not_draft' }
+  | { kind: 'window'; start: string; end: string }
+  | { kind: 'answers_none_pending' }
+  | { kind: 'field'; expr: string; reason: string }
+  | { kind: 'script'; run: string; timeoutMs: number }
+
+export type WorkspaceDef =
+  | { kind: 'item_worktree' }
+  | { kind: 'main_checkout' }
+  | {
+      kind: 'new_worktree'
+      base: string
+      name: string
+      reuseExisting: boolean
+      setup: 'run' | 'skip'
+    }
+
+export type StepSession =
+  | { kind: 'new' }
+  | { kind: 'continue'; step: string }
+  | { kind: 'per_worktree' }
 
 export type StepDef = {
   name: string
-  agent: 'claude' | 'codex'
+  agent: StepAgent
   skill: string | null
   mode: string | null
-  prompt: string
+  prompt: string | null
+  promptStyle: 'wrapped' | 'raw'
+  args: string[]
+  session: StepSession
+  run: string | null
+  exitCodes: { ok: number[]; skip: number[] }
+  when: string | null
+  always: boolean
+  timeoutMs: number | null
+}
+
+export type AnswersDef = {
+  resume: 'asking_session' | 'never'
+  else: { agent: AgentKind; skill: string | null; mode: string | null } | null
 }
 
 export type AutomationDefinition = {
@@ -54,14 +115,25 @@ export type AutomationDefinition = {
   schedule: string
   timezone: string
   enabled: boolean
-  // Always present in M1: run-once automations (no items:) arrive in M3.
-  items: { kind: 'merge_request'; where: MergeRequestWhere }
+  missedRunGraceMs: number
+  items: ItemsDef | null // null = run-once
   firstSeen: 'process' | 'baseline'
   oncePer: string | null
-  checks: BuiltinCheck[]
-  limits: { perTick: number | null; atOnce: number | null }
+  retryAfterFailureMs: number | null
+  checks: CheckDef[]
+  limits: {
+    perTick: number | null
+    atOnce: number | null
+    timeoutMs: number | null
+    order: 'listed' | 'oldest_waiting_first' | 'priority'
+  }
+  start: 'auto' | 'ask_first'
+  // options are "<label> — <meaning>" pairs for the card's buttons; [] means Approve / Skip (G4).
+  askFirst: { title: string; context: string; options: string[] } | null
+  workspace: WorkspaceDef
   steps: StepDef[]
-  powers: string[]
+  answers: AnswersDef | null
+  powers: Power[]
   inbox: string
 }
 
