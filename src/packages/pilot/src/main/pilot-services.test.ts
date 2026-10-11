@@ -16,6 +16,7 @@ const live = vi.hoisted(() => ({ fail: false }))
 vi.mock('./definitions/live', async (importOriginal) => {
   const actual = await importOriginal<typeof Live>()
   return {
+    ...actual,
     liveDefinitions: (...args: Parameters<typeof actual.liveDefinitions>) => {
       if (live.fail) {
         throw new Error('watch failed')
@@ -55,6 +56,13 @@ afterEach(() => {
 })
 
 describe('startPilotServices', () => {
+  it('keeps running the last valid version of a file edited into an invalid one', () => {
+    const services = startPilotServices(runtime, 'main')
+    writeFileSync(join(dir, 'ci.yaml'), 'name: [')
+    expect(services.context.reload().definitions.map((d) => d.id)).toEqual(['ci'])
+    services.stop()
+  })
+
   it('opens the store in userData, loads the folders, and runs the scheduler when asked', () => {
     const services = startPilotServices(runtime, 'main', { schedulerEnabled: true })
     expect(existsSync(join(userData, 'pilot-automations.db'))).toBe(true)

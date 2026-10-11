@@ -1,9 +1,11 @@
 import { existsSync, lstatSync, readdirSync, readFileSync, watch, type FSWatcher } from 'node:fs'
 import { dirname, join } from 'node:path'
+import { idFromFile } from '../../shared/definition/normalize'
 import { parseAutomationYaml } from '../../shared/definition/parse'
 import type { AutomationDefinition, PeopleRef } from '../../shared/definition/types'
 import { PEOPLE_REF_CLAUSES } from '../../shared/definition/where'
 import { EMPTY_PEOPLE, parsePeopleYaml, type PeopleDirectory } from '../../shared/people'
+import type { DefinitionStore } from '../store/store-definitions'
 
 export type LoadedDefinitions = {
   definitions: AutomationDefinition[]
@@ -12,6 +14,12 @@ export type LoadedDefinitions = {
   peopleError: string | null
   missingDirs: string[]
 }
+
+// Where the loader keeps each automation's last valid version: the store's definitions tables.
+export type DefinitionMemory = Pick<
+  DefinitionStore,
+  'lastValid' | 'saveValid' | 'saveErrors' | 'forgetAllBut'
+>
 
 const PEOPLE_FILES = ['people.yaml', 'people.yml']
 
@@ -107,7 +115,81 @@ export function unknownPeopleRefs(def: AutomationDefinition, dir: PeopleDirector
   return peopleRefs(def).flatMap(({ path, ref }) => refErrors(path, ref, dir))
 }
 
-export function loadDefinitions(dirs: string[]): LoadedDefinitions {
+type FileResult =
+  | { ok: true; definition: AutomationDefinition; yaml: string }
+  // `fallback`: whether this file's last valid version may stand in. Never for a duplicate id,
+  // which belongs to the other file.
+  | { ok: false; errors: string[]; fallback: boolean }
+
+function loadFile(file: string, people: PeopleDirectory, byId: Map<string, string>): FileResult {
+  let text: string
+  try {
+    text = readFileSync(file, 'utf8')
+  } catch (err) {
+    return { ok: false, errors: [`${file}: couldn't read: ${readFailure(err)}`], fallback: true }
+  }
+  const result = parseAutomationYaml(text, file)
+  if (!result.ok) {
+    return { ok: false, errors: result.errors, fallback: true }
+  }
+  const earlier = byId.get(result.definition.id)
+  if (earlier) {
+    return {
+      ok: false,
+      errors: [`${file}: automation id "${result.definition.id}" is already defined in ${earlier}`],
+      fallback: false
+    }
+  }
+  const refProblems = unknownPeopleRefs(result.definition, people)
+  if (refProblems.length > 0) {
+    return { ok: false, errors: refProblems.map((p) => `${file}: ${p}`), fallback: true }
+  }
+  return { ok: true, definition: result.definition, yaml: text }
+}
+
+// The memory only helps: when it fails, loading carries on without it (fail soft).
+function remember<T>(what: string, fallback: T, act: () => T): T {
+  try {
+    return act()
+  } catch (err) {
+    console.warn(`[pilot] couldn't ${what}: ${readFailure(err)}`)
+    return fallback
+  }
+}
+
+// Records why the file failed, then returns the saved version of this same file that keeps running,
+// if today's parser and people.yaml still accept it.
+function keptVersion(
+  memory: DefinitionMemory,
+  file: string,
+  errors: string[],
+  people: PeopleDirectory,
+  at: number
+): { definition: AutomationDefinition; note: string } | null {
+  const id = idFromFile(file)
+  remember('save the errors', undefined, () => memory.saveErrors(id, file, errors, at))
+  const saved = remember('read the last valid version', null, () => memory.lastValid(id))
+  if (!saved || saved.file !== file) {
+    return null
+  }
+  const parsed = parseAutomationYaml(saved.yaml, file)
+  if (!parsed.ok || unknownPeopleRefs(parsed.definition, people).length > 0) {
+    return null
+  }
+  const when = new Date(saved.loadedAt).toISOString()
+  return {
+    definition: parsed.definition,
+    note: `${file}: Pilot keeps running the last valid version, saved ${when}`
+  }
+}
+
+// With a memory, a file that turns invalid keeps running its last valid version and its error
+// entry says so; a deleted file is forgotten (contract §9, `definitions`).
+export function loadDefinitions(
+  dirs: string[],
+  memory: DefinitionMemory | null = null,
+  now: () => number = Date.now
+): LoadedDefinitions {
   const present = dirs.filter((d) => existsSync(d))
   const { people, peopleError } = loadPeople(present)
   const definitions: AutomationDefinition[] = []
@@ -119,36 +201,36 @@ export function loadDefinitions(dirs: string[]): LoadedDefinitions {
       errors.push({ file: l.dir, errors: [l.error] })
     }
   }
-  for (const file of listings.flatMap((l) => l.files)) {
-    let text: string
-    try {
-      text = readFileSync(file, 'utf8')
-    } catch (err) {
-      errors.push({ file, errors: [`${file}: couldn't read: ${readFailure(err)}`] })
+  const files = listings.flatMap((l) => l.files)
+  for (const file of files) {
+    const id = idFromFile(file)
+    const result = loadFile(file, people, byId)
+    if (result.ok) {
+      byId.set(id, file)
+      definitions.push(result.definition)
+      if (memory) {
+        const { definition, yaml } = result
+        remember('save the valid version', undefined, () =>
+          memory.saveValid(definition, yaml, now())
+        )
+      }
       continue
     }
-    const result = parseAutomationYaml(text, file)
-    if (!result.ok) {
-      errors.push({ file, errors: result.errors })
-      continue
+    // A duplicate id never falls back; neither does an id another file already loaded.
+    const kept =
+      memory !== null && result.fallback && !byId.has(id)
+        ? keptVersion(memory, file, result.errors, people, now())
+        : null
+    if (kept) {
+      byId.set(id, file)
+      definitions.push(kept.definition)
     }
-    const earlier = byId.get(result.definition.id)
-    if (earlier) {
-      errors.push({
-        file,
-        errors: [
-          `${file}: automation id "${result.definition.id}" is already defined in ${earlier}`
-        ]
-      })
-      continue
-    }
-    const refProblems = unknownPeopleRefs(result.definition, people)
-    if (refProblems.length > 0) {
-      errors.push({ file, errors: refProblems.map((p) => `${file}: ${p}`) })
-      continue
-    }
-    byId.set(result.definition.id, file)
-    definitions.push(result.definition)
+    errors.push({ file, errors: kept ? [...result.errors, kept.note] : result.errors })
+  }
+  // Only a complete listing can say which files are gone.
+  if (memory && present.length === dirs.length && listings.every((l) => !l.error)) {
+    const ids = files.map(idFromFile)
+    remember('forget removed automations', undefined, () => memory.forgetAllBut(ids))
   }
   return {
     definitions,
@@ -160,18 +242,19 @@ export function loadDefinitions(dirs: string[]): LoadedDefinitions {
 }
 
 // A folder missing at startup is not watched; creating it later needs an app
-// restart (or Task 21's pilot.automations.reload, which re-scans on demand).
+// restart (or pilot.automations.reload, which re-scans on demand).
 export function watchDefinitions(
   dirs: string[],
   onChange: (loaded: LoadedDefinitions) => void,
-  debounceMs = 300
+  debounceMs = 300,
+  load: (dirs: string[]) => LoadedDefinitions = loadDefinitions
 ): () => void {
   let timer: NodeJS.Timeout | null = null
   const fire = (): void => {
     if (timer) {
       clearTimeout(timer)
     }
-    timer = setTimeout(() => onChange(loadDefinitions(dirs)), debounceMs)
+    timer = setTimeout(() => onChange(load(dirs)), debounceMs)
   }
   const watchers: FSWatcher[] = []
   for (const d of dirs.filter((x) => existsSync(x))) {

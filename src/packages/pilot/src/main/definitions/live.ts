@@ -1,4 +1,9 @@
-import { loadDefinitions, watchDefinitions, type LoadedDefinitions } from './loader'
+import {
+  loadDefinitions,
+  watchDefinitions,
+  type DefinitionMemory,
+  type LoadedDefinitions
+} from './loader'
 
 export type LiveDefinitions = {
   current(): LoadedDefinitions
@@ -6,12 +11,19 @@ export type LiveDefinitions = {
   stop(): void
 }
 
-type DefinitionIo = {
+export type DefinitionIo = {
   load(dirs: string[]): LoadedDefinitions
   watch(dirs: string[], onChange: (loaded: LoadedDefinitions) => void): () => void
 }
 
-const REAL_IO: DefinitionIo = { load: loadDefinitions, watch: watchDefinitions }
+// The real folder IO. With a memory, an invalid edit keeps the automation's last valid version.
+export function definitionIo(
+  memory: DefinitionMemory | null,
+  now: () => number = Date.now
+): DefinitionIo {
+  const load = (dirs: string[]): LoadedDefinitions => loadDefinitions(dirs, memory, now)
+  return { load, watch: (dirs, onChange) => watchDefinitions(dirs, onChange, 300, load) }
+}
 
 function messageOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
@@ -35,7 +47,7 @@ function report(loaded: LoadedDefinitions, log: (message: string) => void): void
 export function liveDefinitions(
   dirs: string[],
   log: (message: string) => void,
-  io: DefinitionIo = REAL_IO
+  io: DefinitionIo = definitionIo(null)
 ): LiveDefinitions {
   let loaded = io.load(dirs)
   let fingerprint = JSON.stringify(loaded)
