@@ -12,9 +12,9 @@
 // - Evidence that blocks that import (profile-state-recovery-required.ts): profile-state.db and
 //   its -wal/-shm/-journal, profile-state.db.authority, profile-state.db.backup.*.db and
 //   orca-data.json.sqlite-export.*.json.
-// So: read Orca's rows (read-only, orca-profile-reader.mjs), merge the whitelist over Pilot's own
-// state, rename Pilot's evidence aside with a timestamp suffix, and write the merged state as
-// Pilot's orca-data.json.
+// So: copy and read Orca's rows (orca-profile-reader.mjs), check and merge the whitelist over
+// Pilot's own state (orca-import-policy.mjs), rename Pilot's evidence aside with a timestamp
+// suffix, and write the merged state as Pilot's orca-data.json.
 import {
   closeSync,
   existsSync,
@@ -29,80 +29,21 @@ import {
 } from 'node:fs'
 import { homedir } from 'node:os'
 import { join, resolve } from 'node:path'
-import { isRecord, readOrcaState, readPilotState } from './orca-profile-reader.mjs'
+import { readOrcaState, readPilotState } from './orca-profile-reader.mjs'
+import {
+  assertImportable,
+  buildImportState,
+  folderSpellings,
+  serializeState
+} from './orca-import-policy.mjs'
 
 const DATA_FILE = 'orca-data.json'
 const BACKUP_TAG = 'pre-orca-import'
 const FAILED_TAG = 'failed-orca-import'
+const BACKUP_NAME = new RegExp(`\\.(${BACKUP_TAG}|${FAILED_TAG})-(\\d{8}T\\d{6}Z)$`)
 const PILOT_EXECUTABLE_SUFFIX = 'Pilot.app/Contents/MacOS/Pilot'
 const PILOT_LOCK_FILES = ['SingletonLock', 'orcad.lock']
 const APP_SUPPORT = join(homedir(), 'Library', 'Application Support')
-
-// Copied from Orca. Each one replaces Pilot's value; if Orca lacks one, Pilot's copy is dropped
-// so loading falls back to the default. Everything else keeps Pilot's own value.
-export const IMPORTED_DOMAINS = [
-  'settings',
-  'repos',
-  'projects',
-  'projectHostSetups',
-  'projectGroups',
-  'folderWorkspaces',
-  // Stored beside folderWorkspaces: their diff comments are split out on save.
-  'folderWorkspaceDiffComments',
-  'sparsePresetsByRepo',
-  'sshTargets',
-  'sshTargetGenerationCounter',
-  'deletedSshConfigAliases',
-  'worktreeMeta',
-  'worktreeMetaByIdentity',
-  'worktreeIdentityAliases',
-  'worktreeLineageById',
-  'workspaceLineageByChildKey',
-  'retiredWorktreeNamesByRepo',
-  'retiredWorktreeNamesByNamespace',
-  'onboarding'
-]
-
-// Must never come from Orca. Orca's automations would run in Pilot too and launch agents twice.
-export const NEVER_IMPORTED_DOMAINS = [
-  'automations',
-  'automationRuns',
-  'ui',
-  'workspaceSession',
-  'workspaceSessionsByHostId',
-  'claudeLivePtySessionIds',
-  'sshRemotePtyLeases',
-  'sshPtyConsumerRecoveries',
-  'mobileClientTabSelectionsByDeviceId',
-  'featureInteractionTelemetryBuckets',
-  'codexResetCreditAttemptLedger',
-  'migrationUnsupportedPtyEntries',
-  'legacyPaneKeyAliasEntries'
-]
-
-for (const domain of IMPORTED_DOMAINS) {
-  if (NEVER_IMPORTED_DOMAINS.includes(domain)) {
-    throw new Error(`${domain} is both imported and never imported`)
-  }
-}
-
-// Settings that would make Pilot collide with or impersonate Orca. They keep Pilot's value.
-export const EXCLUDED_SETTINGS = {
-  telemetry: "holds Orca's installId; each app keeps its own install identity and opt-in",
-  machineName: 'the host name paired phones and browsers see; Pilot must not present as Orca',
-  mobilePairingCustomAddress: "a pairing endpoint that can carry Orca's host:port (6768)",
-  mobilePairingCustomAddresses: "pairing endpoints that can carry Orca's host:port (6768)",
-  opencodeSessionCookie: "sealed with Orca's safeStorage key, which Pilot cannot decrypt",
-  opencodeGoApiKey: "legacy secret sealed with Orca's safeStorage key",
-  httpProxyUrl: "sealed with Orca's safeStorage key, which Pilot cannot decrypt",
-  claudeManagedAccounts: "account records point at auth folders inside Orca's data folder",
-  codexManagedAccounts: "account records point at home folders inside Orca's data folder",
-  activeClaudeManagedAccountId: 'selects one of Orca managed accounts (excluded)',
-  activeCodexManagedAccountId: 'selects one of Orca managed accounts (excluded)',
-  activeClaudeManagedAccountIdsByRuntime: 'selects Orca managed accounts (excluded)',
-  activeCodexManagedAccountIdsByRuntime: 'selects Orca managed accounts (excluded)'
-}
-const ORCA_FOLDER_REASON = "a value points into Orca's data folder"
 
 // Files whose presence decides how Pilot's startup loads the profile.
 const STATE_FILE_PATTERNS = [
@@ -124,142 +65,15 @@ function pathExists(path) {
   }
 }
 
-// Lower-cased spellings of Orca's data folder: absolute, and ~-relative when under home.
-function folderNeedles(folder) {
-  const absolute = resolve(folder)
-  const needles = [absolute.toLowerCase()]
-  if (absolute.startsWith(`${homedir()}/`)) {
-    needles.push(`~${absolute.slice(homedir().length)}`.toLowerCase())
+function namesIn(dir) {
+  if (!existsSync(dir)) {
+    return []
   }
-  return needles
-}
-
-function pointsInto(value, needles) {
-  if (typeof value === 'string') {
-    const lower = value.toLowerCase()
-    return needles.some((needle) => lower.includes(needle))
-  }
-  if (Array.isArray(value)) {
-    return value.some((item) => pointsInto(item, needles))
-  }
-  if (isRecord(value)) {
-    return Object.values(value).some((item) => pointsInto(item, needles))
-  }
-  return false
-}
-
-function exclusionReason(key, value, orcaDataDir) {
-  if (Object.hasOwn(EXCLUDED_SETTINGS, key)) {
-    return EXCLUDED_SETTINGS[key]
-  }
-  if (pointsInto(value, folderNeedles(orcaDataDir))) {
-    return ORCA_FOLDER_REASON
-  }
-  return undefined
-}
-
-// Orca's settings win, except the excluded ones, which keep Pilot's value (or its default).
-export function mergeSettings(orcaSettings, pilotSettings, orcaDataDir) {
-  const settings = { ...pilotSettings }
-  const excluded = []
-  for (const [key, value] of Object.entries(orcaSettings)) {
-    const reason = exclusionReason(key, value, orcaDataDir)
-    if (reason === undefined) {
-      settings[key] = value
-      continue
-    }
-    const kept = Object.hasOwn(pilotSettings, key) ? "Pilot's current value" : "Pilot's default"
-    excluded.push({ key, reason, kept })
-  }
-  return { settings, excluded }
-}
-
-function parseDomain(domains, name) {
-  const payload = domains.get(name)
-  if (payload === undefined) {
-    return undefined
-  }
-  return JSON.parse(payload)
-}
-
-function countOf(domains, name) {
-  const value = parseDomain(domains, name)
-  if (Array.isArray(value)) {
-    return value.length
-  }
-  if (isRecord(value)) {
-    return Object.keys(value).length
-  }
-  return 0
-}
-
-// orca and pilot are Maps of domain -> JSON payload text. Returns the merged state and a report.
-export function buildImportState({ orca, pilot, orcaDataDir }) {
-  const state = new Map(pilot)
-  const imported = []
-  const dropped = []
-  for (const domain of IMPORTED_DOMAINS) {
-    if (domain === 'settings') {
-      continue
-    }
-    if (orca.has(domain)) {
-      state.set(domain, orca.get(domain))
-      imported.push(domain)
-    } else if (state.delete(domain)) {
-      dropped.push(domain)
-    }
-  }
-  let settingsExcluded = []
-  if (orca.has('settings')) {
-    const pilotSettings = parseDomain(pilot, 'settings') ?? {}
-    const merged = mergeSettings(parseDomain(orca, 'settings'), pilotSettings, orcaDataDir)
-    state.set('settings', JSON.stringify(merged.settings))
-    settingsExcluded = merged.excluded
-    imported.unshift('settings')
-  }
-  if (!state.has('schemaVersion') && orca.has('schemaVersion')) {
-    state.set('schemaVersion', orca.get('schemaVersion'))
-  }
-  const excludedKeys = new Set(settingsExcluded.map((item) => item.key))
-  const copiedSettings = Object.keys(parseDomain(orca, 'settings') ?? {}).filter(
-    (key) => !excludedKeys.has(key)
-  )
-  const pilotSettings = parseDomain(pilot, 'settings')
-  return {
-    state,
-    imported,
-    dropped,
-    skipped: [...orca.keys()].filter((d) => d !== 'schemaVersion' && !imported.includes(d)),
-    keptFromPilot: [...pilot.keys()].filter((d) => !IMPORTED_DOMAINS.includes(d)),
-    settingsExcluded,
-    settingsUnknownToPilot:
-      pilotSettings === undefined
-        ? []
-        : copiedSettings.filter((key) => !Object.hasOwn(pilotSettings, key)),
-    schemaVersions: { orca: orca.get('schemaVersion'), pilot: pilot.get('schemaVersion') },
-    counts: {
-      repos: countOf(state, 'repos'),
-      projects: countOf(state, 'projects'),
-      projectHostSetups: countOf(state, 'projectHostSetups'),
-      worktreeMeta: countOf(state, 'worktreeMeta'),
-      sshTargets: countOf(state, 'sshTargets'),
-      orcaAutomationsSkipped: countOf(orca, 'automations'),
-      pilotAutomationsKept: countOf(state, 'automations')
-    }
-  }
-}
-
-// The same shape upstream's export writes: {"domain":payload,...}.
-export function serializeState(state) {
-  const parts = [...state].map(([domain, payload]) => `${JSON.stringify(domain)}:${payload}`)
-  return `{${parts.join(',')}}`
+  return readdirSync(dir)
 }
 
 export function listStateFiles(profileDir) {
-  if (!existsSync(profileDir)) {
-    return []
-  }
-  return readdirSync(profileDir)
+  return namesIn(profileDir)
     .filter((name) => STATE_FILE_PATTERNS.some((pattern) => pattern.test(name)))
     .sort()
 }
@@ -281,32 +95,42 @@ function writeFileDurable(path, text) {
   }
 }
 
-function renameAll(profileDir, names, suffix) {
-  const moved = []
-  for (const name of names) {
-    if (pathExists(join(profileDir, `${name}${suffix}`))) {
-      throw new Error(`${name}${suffix} already exists; wait a second and run again`)
+// Rename [from, to] pairs in order. Refuses before touching anything if a target exists (unless
+// an earlier pair moves that file away). If a rename fails, the ones already made are undone.
+export function renameAll(pairs, rename = renameSync) {
+  const sources = new Set(pairs.map(([from]) => from))
+  for (const [, to] of pairs) {
+    if (pathExists(to) && !sources.has(to)) {
+      throw new Error(`${to} already exists; wait a second and run again`)
     }
   }
-  for (const name of names) {
-    const from = join(profileDir, name)
-    renameSync(from, `${from}${suffix}`)
-    moved.push(`${from}${suffix}`)
+  const done = []
+  try {
+    for (const [from, to] of pairs) {
+      rename(from, to)
+      done.push([from, to])
+    }
+  } catch (error) {
+    for (const [from, to] of done.toReversed()) {
+      rename(to, from)
+    }
+    throw error
   }
-  return moved
+  return done.map(([, to]) => to)
 }
 
 // Rename Pilot's state files aside, then write the merged state. Undo the renames on failure.
 export function stageImport({ profileDir, json, stamp }) {
   mkdirSync(profileDir, { recursive: true })
-  const suffix = `.${BACKUP_TAG}-${stamp}`
-  const backups = renameAll(profileDir, listStateFiles(profileDir), suffix)
+  const pairs = listStateFiles(profileDir).map((name) => {
+    const from = join(profileDir, name)
+    return [from, `${from}.${BACKUP_TAG}-${stamp}`]
+  })
+  const backups = renameAll(pairs)
   try {
     writeFileDurable(join(profileDir, DATA_FILE), json)
   } catch (error) {
-    for (const backup of backups.toReversed()) {
-      renameSync(backup, backup.slice(0, -suffix.length))
-    }
+    renameAll(pairs.map(([from, to]) => [to, from]).toReversed())
     throw error
   }
   const left = listStateFiles(profileDir).filter((name) => name !== DATA_FILE)
@@ -316,21 +140,40 @@ export function stageImport({ profileDir, json, stamp }) {
   return backups
 }
 
-// Put a backup set back. Whatever is there now is renamed aside, never deleted.
+// Put a backup set back. Whatever is there now is renamed aside, never deleted, in the same
+// rollback-safe batch.
 export function restoreBackup({ profileDir, backupStamp, stamp }) {
   const suffix = `.${BACKUP_TAG}-${backupStamp}`
-  const names = existsSync(profileDir) ? readdirSync(profileDir) : []
-  const backups = names.filter((name) => name.endsWith(suffix))
+  const backups = namesIn(profileDir).filter((name) => name.endsWith(suffix))
   if (backups.length === 0) {
     throw new Error(`No files ending in ${suffix} in ${profileDir}`)
   }
-  const setAside = renameAll(profileDir, listStateFiles(profileDir), `.${FAILED_TAG}-${stamp}`)
-  const restored = backups.map((name) => {
-    const target = join(profileDir, name.slice(0, -suffix.length))
-    renameSync(join(profileDir, name), target)
-    return target
-  })
-  return { restored, setAside }
+  const setAside = listStateFiles(profileDir).map((name) => [
+    join(profileDir, name),
+    join(profileDir, `${name}.${FAILED_TAG}-${stamp}`)
+  ])
+  const restore = backups.map((name) => [
+    join(profileDir, name),
+    join(profileDir, name.slice(0, -suffix.length))
+  ])
+  renameAll([...setAside, ...restore])
+  return { restored: restore.map(([, to]) => to), setAside: setAside.map(([, to]) => to) }
+}
+
+// Backup sets in Pilot's profile folder, oldest first.
+export function listBackups(profileDir) {
+  const sets = new Map()
+  for (const name of namesIn(profileDir)) {
+    const match = BACKUP_NAME.exec(name)
+    if (match === null) {
+      continue
+    }
+    const key = `${match[2]} ${match[1]}`
+    const set = sets.get(key) ?? { stamp: match[2], kind: match[1], files: [] }
+    set.files.push(name)
+    sets.set(key, set)
+  }
+  return [...sets.values()].sort((a, b) => a.stamp.localeCompare(b.stamp))
 }
 
 export function findRunningPilot({ pilotDataDir, processPaths }) {
@@ -359,16 +202,24 @@ async function listProcessPaths() {
     .filter(Boolean)
 }
 
+// Compared with symlinks resolved too, so a --pilot-data link into Orca's folder is refused.
 function assertSeparateFolders(orcaDataDir, pilotDataDir) {
-  const orca = resolve(orcaDataDir).toLowerCase()
-  const pilot = resolve(pilotDataDir).toLowerCase()
-  if (pilot === orca || pilot.startsWith(`${orca}/`) || orca.startsWith(`${pilot}/`)) {
-    throw new Error(`Pilot's data folder must be separate from Orca's (${orcaDataDir})`)
+  for (const orcaPath of folderSpellings(orcaDataDir)) {
+    for (const pilotPath of folderSpellings(pilotDataDir)) {
+      const orca = orcaPath.toLowerCase()
+      const pilot = pilotPath.toLowerCase()
+      if (pilot === orca || pilot.startsWith(`${orca}/`) || orca.startsWith(`${pilot}/`)) {
+        throw new Error(`Pilot's data folder must be separate from Orca's (${orcaDataDir})`)
+      }
+    }
   }
 }
 
 export function formatStamp(date) {
-  return date.toISOString().replace(/[-:]/g, '').replace(/\.\d+Z$/, 'Z')
+  return date
+    .toISOString()
+    .replace(/[-:]/g, '')
+    .replace(/\.\d+Z$/, 'Z')
 }
 
 function list(values) {
@@ -378,8 +229,21 @@ function list(values) {
   return values.join(', ')
 }
 
+function printBackups(log, profileDir, sets) {
+  if (sets.length === 0) {
+    log(`No import backups in ${profileDir}`)
+    return
+  }
+  log(`Import backups in ${profileDir} (oldest first):`)
+  for (const set of sets) {
+    const hint = set.kind === BACKUP_TAG ? `  (undo an import with --restore ${set.stamp})` : ''
+    log(`  ${set.stamp}  ${set.kind}  ${set.files.length} files${hint}`)
+  }
+}
+
 function printPlan({ log, orca, pilot, plan, files, stamp, pilotProfileDir }) {
-  log(`Orca source:  ${orca.source} (revision ${orca.revision ?? 'n/a'})`)
+  const orcaVersion = `schema ${orca.schemaVersion ?? 'n/a'}, revision ${orca.revision ?? 'n/a'}`
+  log(`Orca source:  ${orca.source} (${orcaVersion})`)
   log(`Pilot source: ${pilot.source ?? '(no Pilot state yet)'}`)
   log(`Imported from Orca: ${list(plan.imported)}`)
   const c = plan.counts
@@ -405,7 +269,9 @@ function printPlan({ log, orca, pilot, plan, files, stamp, pilotProfileDir }) {
   }
   const versions = plan.schemaVersions
   if (versions.pilot !== undefined && versions.orca !== versions.pilot) {
-    log(`Note: schemaVersion differs (Orca ${versions.orca}, Pilot ${versions.pilot}); Pilot's kept`)
+    log(
+      `Note: schemaVersion differs (Orca ${versions.orca}, Pilot ${versions.pilot}); Pilot's kept`
+    )
   }
   log(`Pilot files renamed aside (suffix .${BACKUP_TAG}-${stamp}):`)
   for (const name of files) {
@@ -416,9 +282,15 @@ function printPlan({ log, orca, pilot, plan, files, stamp, pilotProfileDir }) {
 
 export async function importOrcaSettings(options) {
   const log = options.log ?? console.log
-  const now = options.now ?? new Date()
-  const stamp = formatStamp(now)
+  const stamp = formatStamp(options.now ?? new Date())
   assertSeparateFolders(options.orcaDataDir, options.pilotDataDir)
+  const pilotProfileDir = join(options.pilotDataDir, 'profiles', options.profileId)
+  if (options.list) {
+    // Read-only, so it is allowed while Pilot runs.
+    const backups = listBackups(pilotProfileDir)
+    printBackups(log, pilotProfileDir, backups)
+    return { status: 'listed', backups }
+  }
   const listProcesses = options.listProcesses ?? listProcessPaths
   const running = findRunningPilot({
     pilotDataDir: options.pilotDataDir,
@@ -432,15 +304,19 @@ export async function importOrcaSettings(options) {
     log('A lock file left behind by a crash can be deleted once you are sure Pilot is not running.')
     return { status: 'refused', reasons: running }
   }
-  const pilotProfileDir = join(options.pilotDataDir, 'profiles', options.profileId)
   if (options.restore !== undefined) {
-    const result = restoreBackup({ profileDir: pilotProfileDir, backupStamp: options.restore, stamp })
+    const result = restoreBackup({
+      profileDir: pilotProfileDir,
+      backupStamp: options.restore,
+      stamp
+    })
     log(`Restored: ${list(result.restored)}`)
     log(`Set aside: ${list(result.setAside)}`)
     return { status: 'restored', ...result }
   }
   const orca = readOrcaState(join(options.orcaDataDir, 'profiles', options.profileId))
   const pilot = readPilotState(pilotProfileDir)
+  assertImportable(orca, pilot)
   const plan = buildImportState({
     orca: orca.domains,
     pilot: pilot.domains,
@@ -452,19 +328,24 @@ export async function importOrcaSettings(options) {
     log('Dry run: nothing changed. Run again with --apply to stage the import.')
     return { status: 'dry-run', plan, files }
   }
-  const backups = stageImport({ profileDir: pilotProfileDir, json: serializeState(plan.state), stamp })
+  const backups = stageImport({
+    profileDir: pilotProfileDir,
+    json: serializeState(plan.state),
+    stamp
+  })
   log(`Applied. Backups: ${list(backups)}`)
   log('Pilot imports the staged orca-data.json the next time it starts.')
   log(`To undo before or after that: --restore ${stamp}`)
   return { status: 'applied', plan, backups, stamp }
 }
 
-const HELP = `Usage: node src/packages/pilot/scripts/import-orca-settings.mjs [--dry-run | --apply | --restore <stamp>]
+const HELP = `Usage: node src/packages/pilot/scripts/import-orca-settings.mjs [--dry-run | --apply | --restore <stamp> | --list]
   Copies Orca's settings, repos, projects, worktree metadata and SSH targets into Pilot.
   Never copies Orca's automations, UI state, sessions or terminals. Quit Pilot first.
   --dry-run            print what would change (the default)
   --apply              rename Pilot's state files aside and stage the import
   --restore <stamp>    put back the files an earlier --apply renamed aside
+  --list               list the backup sets in Pilot's profile folder (works while Pilot runs)
   --profile <id>       profile in both apps (default local-default)
   --orca-data <dir>    Orca's data folder (default ~/Library/Application Support/orca)
   --pilot-data <dir>   Pilot's data folder (default ~/Library/Application Support/Pilot)`
@@ -475,10 +356,12 @@ const VALUE_FLAGS = {
   '--orca-data': 'orcaDataDir',
   '--pilot-data': 'pilotDataDir'
 }
+const BOOLEAN_FLAGS = { '--apply': 'apply', '--list': 'list', '--help': 'help', '-h': 'help' }
 
 export function parseArgs(argv) {
   const options = {
     apply: false,
+    list: false,
     help: false,
     profileId: 'local-default',
     orcaDataDir: join(APP_SUPPORT, 'orca'),
@@ -486,12 +369,10 @@ export function parseArgs(argv) {
   }
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index]
-    if (arg === '--apply') {
-      options.apply = true
-    } else if (arg === '--dry-run') {
+    if (arg === '--dry-run') {
       options.apply = false
-    } else if (arg === '--help' || arg === '-h') {
-      options.help = true
+    } else if (Object.hasOwn(BOOLEAN_FLAGS, arg)) {
+      options[BOOLEAN_FLAGS[arg]] = true
     } else if (Object.hasOwn(VALUE_FLAGS, arg) && argv[index + 1] !== undefined) {
       options[VALUE_FLAGS[arg]] = argv[index + 1]
       index += 1
@@ -499,8 +380,9 @@ export function parseArgs(argv) {
       throw new Error(`Unknown or incomplete argument: ${arg}`)
     }
   }
-  if (options.apply && options.restore !== undefined) {
-    throw new Error('Use --apply or --restore, not both')
+  const modes = [options.apply, options.restore !== undefined, options.list].filter(Boolean)
+  if (modes.length > 1) {
+    throw new Error('Use only one of --apply, --restore and --list')
   }
   return options
 }
