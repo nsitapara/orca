@@ -7,10 +7,11 @@ import type { PilotStatus } from '../shared/api-types'
 import type { AgentKind } from '../shared/definition/types'
 import { definitionIo, liveDefinitions } from './definitions/live'
 import type { LoadedDefinitions } from './definitions/loader'
+import { mergeRepoProblems, type RepoProblem } from './definitions/repo-problems'
 import { pilotAutomationDirs, pilotDataDir } from './env'
 import { resolveEngineEnv, type EngineEnv } from './engine-env'
 import { cachedQuotas, type QuotaReader } from './fields/quota'
-import { resolveRepoPath } from './fields/runtime-facts'
+import { reposListed, resolveRepoPath } from './fields/runtime-facts'
 import { runtimeFieldDeps } from './fields/runtime-field-deps'
 import { runShellScript } from './fields/script-runner'
 import { claudeTranscriptCost } from './run/cost'
@@ -113,6 +114,9 @@ function openPilot(
     launch: makeLauncher(runtime, store, now)
   }
   const probe = runtimeStepProbe(runtime, relist)
+  const repoProblems = new Map<string, RepoProblem>()
+  const withRepoProblems = (loaded: LoadedDefinitions): LoadedDefinitions =>
+    mergeRepoProblems(loaded, repoProblems, (repo) => reposListed(runtime, [repo]))
   const scheduler = new PilotScheduler({
     now,
     definitions: definitions.current,
@@ -122,6 +126,9 @@ function openPilot(
       sweepStaleStarts(store, now, log)
       await pollRunningSteps(store, probe, claudeTranscriptCost, now)
     },
+    reposListed: (repos) => reposListed(runtime, repos),
+    repoProblem: (def, message) =>
+      repoProblems.set(def.id, { file: def.file, repo: def.repo, message }),
     newPass: () => createPassFetchCache(`pass-${now()}`, glabApiForRepo),
     log
   })
@@ -137,8 +144,8 @@ function openPilot(
     processKind: host.processKind,
     store,
     dirs: host.dirs,
-    loaded: definitions.current,
-    reload: definitions.reload,
+    loaded: () => withRepoProblems(definitions.current()),
+    reload: () => withRepoProblems(definitions.reload()),
     scheduler
   }
 }

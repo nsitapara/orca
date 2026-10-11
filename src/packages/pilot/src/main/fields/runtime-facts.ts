@@ -22,3 +22,17 @@ export async function resolveRepoPath(
   }
   return { name: repo, id: match.id, path: match.path, base: match.worktreeBaseRef ?? null }
 }
+
+// True once the runtime lists every repo (by display name or folder name, as resolveRepoPath).
+// The runtime may not list repos right after start: the scheduler's first pass waits for this.
+export function reposListed(runtime: OrcaRuntimeService, repos: readonly string[]): boolean {
+  let listed: ReturnType<OrcaRuntimeService['listRepos']>
+  try {
+    listed = runtime.listRepos()
+  } catch {
+    return false
+  }
+  return repos.every((repo) =>
+    listed.some((r) => r.displayName === repo || basename(r.path) === repo)
+  )
+}

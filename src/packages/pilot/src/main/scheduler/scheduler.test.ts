@@ -4,8 +4,8 @@ import { EMPTY_PEOPLE } from '../../shared/people'
 import { nextTickAfter } from '../../shared/schedule/cron'
 import type * as Cron from '../../shared/schedule/cron'
 import type { LoadedDefinitions } from '../definitions/loader'
-import { createPassFetchCache, type PassFetchCache } from '../sources/fetch-cache'
-import { PilotScheduler, type SchedulerDeps } from './scheduler'
+import type { PassFetchCache } from '../sources/fetch-cache'
+import { MAX_CONCURRENT_TICKS, PilotScheduler, REPO_WAIT_MS, type SchedulerDeps } from './scheduler'
 import type { TickResult } from './tick-runner'
 
 vi.mock('../../shared/schedule/cron', async (importOriginal) => {
@@ -24,7 +24,9 @@ function def(id: string, schedule: string, enabled = true) {
   return r.definition
 }
 
-const OK = { tickId: 1, status: 'ok' as const, error: null, decisions: [] }
+const OK = { tickId: 1, status: 'ok' as const, error: null, decisions: [], warnings: [] }
+const HOUR = 60 * 60_000
+const PASS = { passId: 'pass-1' } as unknown as PassFetchCache
 
 function loadedOf(defs: ReturnType<typeof def>[]): LoadedDefinitions {
   return { definitions: defs, errors: [], people: EMPTY_PEOPLE, peopleError: null, missingDirs: [] }
@@ -34,21 +36,22 @@ function deps(
   defs: ReturnType<typeof def>[],
   now: number,
   last: number | null
-): SchedulerDeps & { ran: string[]; logs: string[] } {
+): SchedulerDeps & { ran: string[]; logs: string[]; problems: string[] } {
   const ran: string[] = []
   const logs: string[] = []
+  const problems: string[] = []
   const loaded = loadedOf(defs)
   return {
     ran,
     logs,
+    problems,
     now: () => now,
     definitions: () => loaded,
     lastTickAt: () => last,
     poll: async () => {},
-    newPass: () =>
-      createPassFetchCache('pass', async () => {
-        throw new Error('no GitLab in scheduler tests')
-      }),
+    reposListed: () => true,
+    newPass: () => PASS,
+    repoProblem: (d, message) => problems.push(`${d.id}: ${message}`),
     log: (m) => logs.push(m),
     runTick: async (d) => {
       ran.push(d.id)
@@ -59,22 +62,6 @@ function deps(
 
 describe('PilotScheduler', () => {
   const at1012 = Date.UTC(2026, 9, 10, 19, 12) // 12:12 PDT
-
-  it('hands every tick of one loop the same fetch cache, and a manual tick none', async () => {
-    const d = deps([def('a', '10 * * * *'), def('b', '10 * * * *')], at1012, null)
-    const passes: (PassFetchCache | undefined)[] = []
-    d.runTick = async (_def, opts) => {
-      passes.push(opts.pass)
-      return OK
-    }
-    const scheduler = new PilotScheduler(d)
-    await scheduler.tickAll()
-    await scheduler.tickNow('a', { dryRun: true })
-    expect(passes).toHaveLength(3)
-    expect(passes[0]).toBeDefined()
-    expect(passes[1]).toBe(passes[0])
-    expect(passes[2]).toBeUndefined()
-  })
 
   afterEach(() => {
     vi.useRealTimers()
@@ -146,8 +133,8 @@ describe('PilotScheduler', () => {
       throw new Error('probe broke')
     }
     await expect(new PilotScheduler(d).tickAll()).resolves.toBeUndefined()
-    expect(d.logs).toEqual([
-      '[pilot] step poll failed: probe broke',
+    expect(d.logs[0]).toBe('[pilot] step poll failed: probe broke')
+    expect(d.logs.slice(1).sort()).toEqual([
       '[pilot] a tick failed: glab: 401',
       '[pilot] b tick failed: store closed'
     ])
@@ -240,5 +227,132 @@ describe('PilotScheduler', () => {
     expect(d.ran).toEqual(['ci', 'cutover'])
     const at1310 = Date.UTC(2026, 9, 10, 20, 10)
     expect(edited.map((x) => s.nextTickAt(x))).toEqual([at1310, at1310, at1310, at1310])
+  })
+
+  const withGrace = (d: ReturnType<typeof def>, missedRunGraceMs: number) => ({
+    ...d,
+    missedRunGraceMs
+  })
+
+  it.each([
+    ['a daily 07:00 slot missed by 1.5 h runs once with a 12 h grace', 12 * HOUR, ['prune']],
+    ['the same slot is not caught up with the default 1 h grace', HOUR, []]
+  ])('%s', async (_name, grace, ran) => {
+    const at0830 = Date.UTC(2026, 9, 11, 15, 30) // 08:30 PDT
+    const yesterday0700 = Date.UTC(2026, 9, 10, 14, 0)
+    const d = deps([withGrace(def('prune', '0 7 * * *'), grace)], at0830, yesterday0700)
+    await new PilotScheduler(d).tickAll()
+    expect(d.ran).toEqual(ran)
+  })
+
+  it('runs a slot missed a week ago only when it is inside the grace', async () => {
+    const weekAgo = at1012 - 7 * 24 * HOUR
+    const d = deps([withGrace(def('ci', '10 * * * *'), 2 * HOUR)], at1012, weekAgo)
+    await new PilotScheduler(d).tickAll()
+    expect(d.ran).toEqual(['ci'])
+    const s = new PilotScheduler(
+      deps([def('ci', '10 * * * *')], at1012 + 30 * 60_000, at1012 - 2 * HOUR)
+    )
+    expect(s.isDue(withGrace(def('ci', '10 * * * *'), 10 * 60_000))).toBe(false)
+  })
+
+  it('ticks at most four automations at once, and every due one runs', async () => {
+    const ids = ['a', 'b', 'c', 'd', 'e', 'f']
+    const d = deps(
+      ids.map((id) => def(id, '10 * * * *')),
+      at1012,
+      null
+    )
+    let inFlight = 0
+    let peak = 0
+    d.runTick = async (x) => {
+      inFlight += 1
+      peak = Math.max(peak, inFlight)
+      await new Promise((resolve) => setTimeout(resolve, 5))
+      inFlight -= 1
+      d.ran.push(x.id)
+      return OK
+    }
+    await new PilotScheduler(d).tickAll()
+    expect(peak).toBe(MAX_CONCURRENT_TICKS)
+    expect([...d.ran].sort()).toEqual(ids)
+  })
+
+  it('hands every tick of one pass the same pass, and the next pass a new one; a manual tick gets none', async () => {
+    const d = deps([def('a', '10 * * * *'), def('b', '10 * * * *')], at1012, null)
+    const passes: (string | undefined)[] = []
+    d.runTick = async (_x, opts) => {
+      passes.push(opts.pass?.passId)
+      return OK
+    }
+    let n = 0
+    d.newPass = () => {
+      n += 1
+      return { passId: `pass-${n}` } as unknown as PassFetchCache
+    }
+    const s = new PilotScheduler(d)
+    await s.tickAll()
+    await s.tickNow('a', { dryRun: true })
+    expect(passes).toEqual(['pass-1', 'pass-1', undefined])
+  })
+
+  it('waits for the runtime to list the repo before the first pass, still polling, for at most 5 minutes', async () => {
+    let now = at1012
+    const d = deps([def('ci', '10 * * * *'), def('m', 'manual')], at1012, null)
+    d.now = () => now
+    const asked: string[][] = []
+    d.reposListed = (repos) => {
+      asked.push(repos)
+      return false
+    }
+    d.poll = vi.fn(async () => {})
+    const s = new PilotScheduler(d)
+    await s.tickAll()
+    await s.tickAll()
+    expect(d.ran).toEqual([])
+    expect(d.problems).toEqual([])
+    expect(d.poll).toHaveBeenCalledTimes(2)
+    expect(asked[0]).toEqual(['r'])
+    expect(d.logs).toEqual(['[pilot] waiting for Orca to list r before the first tick'])
+    now = at1012 + REPO_WAIT_MS
+    await s.tickAll()
+    // A4: still unlisted after the wait, so it is a definition problem, not a failed tick.
+    expect(d.ran).toEqual([])
+    expect(d.problems).toEqual([`ci: repo "r" isn't added to Pilot`])
+  })
+
+  it("ticks the automations whose repo is listed and reports the one whose repo isn't", async () => {
+    let now = at1012
+    const d = deps(
+      [def('ci', '10 * * * *'), { ...def('lost', '10 * * * *'), repo: 'nope' }],
+      at1012,
+      null
+    )
+    d.now = () => now
+    d.reposListed = (repos) => repos.every((repo) => repo === 'r')
+    const s = new PilotScheduler(d)
+    now = at1012 + REPO_WAIT_MS
+    await s.tickAll()
+    expect(d.ran).toEqual(['ci'])
+    expect(d.problems).toEqual([`lost: repo "nope" isn't added to Pilot`])
+  })
+
+  it('ticks as soon as the repo is listed; after the first pass an unlisted repo is reported, never waited for', async () => {
+    let listed = false
+    const d = deps([def('ci', '10 * * * *')], at1012, null)
+    d.reposListed = () => listed
+    const s = new PilotScheduler(d)
+    await s.tickAll()
+    expect(d.ran).toEqual([])
+    listed = true
+    await s.tickAll()
+    expect(d.ran).toEqual(['ci'])
+    listed = false
+    d.lastTickAt = () => at1012
+    d.now = () => at1012 + 60 * 60_000
+    await s.tickAll()
+    expect(d.ran).toEqual(['ci'])
+    expect(d.problems).toEqual([`ci: repo "r" isn't added to Pilot`])
+    expect(d.logs).toEqual(['[pilot] waiting for Orca to list r before the first tick'])
   })
 })
