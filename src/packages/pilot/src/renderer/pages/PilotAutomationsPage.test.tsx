@@ -15,7 +15,9 @@ const status: PilotStatus = {
   automationDirs: ['/a', '/b'],
   missingDirs: ['/b'],
   peopleError: null,
-  error: null
+  error: null,
+  loopStartedAt: null,
+  lastLoopFinishedAt: null
 }
 
 describe('PilotAutomationsPage', () => {

@@ -11,7 +11,9 @@ describe('formatPilotStatus', () => {
         automationDirs: ['/Users/n/.agents/automations', '/Users/n/.pilot/automations'],
         missingDirs: ['/Users/n/.pilot/automations'],
         peopleError: null,
-        error: null
+        error: null,
+        loopStartedAt: null,
+        lastLoopFinishedAt: null
       })
     ).toBe(
       [
@@ -32,7 +34,9 @@ describe('formatPilotStatus', () => {
       automationDirs: ['/a'],
       missingDirs: [],
       peopleError: '/a/people.yaml: people.yaml and people.yml both exist; using people.yaml',
-      error: 'file is not a database'
+      error: 'file is not a database',
+      loopStartedAt: null,
+      lastLoopFinishedAt: null
     })
     expect(out.split('\n').slice(-2)).toEqual([
       "Pilot couldn't start: file is not a database",

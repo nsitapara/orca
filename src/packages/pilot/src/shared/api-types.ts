@@ -8,6 +8,11 @@ export type PilotStatus = {
   peopleError: string | null
   // Why Pilot couldn't start (store won't open, …); null while it runs. Orca itself keeps running.
   error: string | null
+  // When the scheduler's current pass started and when the last one finished (Unix ms). A
+  // loopStartedAt far in the past with no later lastLoopFinishedAt means a pass is stuck. Both null
+  // without a scheduler (Pilot failed to start, or the scheduler is off in this process).
+  loopStartedAt: number | null
+  lastLoopFinishedAt: number | null
 }
 
 export type FieldValue = string | number | boolean | null
@@ -85,4 +90,35 @@ export type TickResult = {
   status: 'ok' | 'failed'
   error: string | null
   decisions: ItemDecision[]
+}
+
+export type AutomationSummary = {
+  id: string
+  name: string
+  file: string
+  enabled: boolean
+  schedule: string
+  timezone: string
+  itemKind: string
+  agent: string
+  powers: string[]
+  // From the scheduler's cache; null for `schedule: manual` and for a disabled automation.
+  nextTickAt: number | null
+  // The newest tick of either kind; its dryRun says which.
+  lastTick: TickRow | null
+}
+export type AutomationListPayload = {
+  automations: AutomationSummary[]
+  errors: { file: string; errors: string[] }[]
+  peopleError: string | null
+  missingDirs: string[]
+}
+export type ActivityTick = TickRow & {
+  items: TickItemRow[]
+  runs: (RunRow & { steps: StepRow[] })[]
+}
+export type AutomationDetailPayload = {
+  summary: AutomationSummary
+  yaml: string
+  checkNames: string[]
 }
