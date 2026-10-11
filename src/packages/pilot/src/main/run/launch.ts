@@ -5,6 +5,7 @@ import { runFields } from '../../shared/template'
 import type { WorktreeFactDeps } from '../fields/worktree-facts'
 import type { LaunchRequest, LaunchResult } from '../scheduler/tick-runner'
 import type { PilotStore } from '../store/store'
+import { stepKindOf } from '../store/store-advance'
 import type { RunStore } from '../store/store-runs'
 import type { PilotAgentLaunchOptions } from './agent-launch-hook'
 import { newestSessionRow } from './agent-rows'
@@ -40,11 +41,12 @@ function failFirstStep(store: PilotStore, runId: string, error: string, at: numb
   } catch {}
 }
 
-// The tick runner's launch until Task 9c wires the run engine: write step 0 as `pending` (B8: a slow
-// worktree create must not look like a stuck start), resolve the run's workspace (item worktree, main
-// checkout or a new worktree), record it on the run, then start step 0 (spec §7). The tick runner
-// created the run row (running) first, so a new worktree's claim sees it. A workspace failure fails
-// the step with its error; the tick runner then fails the run and frees its key. Later steps are Task 9's.
+// The interim single-step launch (nothing wires it since Task 9c: the tick runner's launch is the run
+// engine's startRun, run/engine-wiring.ts). Writes step 0 as `pending` (B8: a slow worktree create must
+// not look like a stuck start) stamped now, as the engine does; resolves the run's workspace (item
+// worktree, main checkout or a new worktree), records it on the run, then starts step 0 (spec §7). The
+// tick runner created the run row (running) first, so a new worktree's claim sees it. A workspace
+// failure fails the step with its error; the tick runner then fails the run and frees its key.
 export function makeLauncher(
   store: PilotStore,
   deps: LauncherDeps
@@ -67,9 +69,9 @@ export function makeLauncher(
       name: first.name,
       agent: first.agent,
       skill: first.skill,
-      startedAt: null,
+      startedAt: deps.now(),
       status: 'pending',
-      kind: first.agent === 'shell' ? 'shell' : 'agent',
+      kind: stepKindOf(first.agent),
       mode: first.mode,
       whenExpr: first.when
     })
