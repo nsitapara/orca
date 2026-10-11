@@ -1,16 +1,22 @@
 import { describe, expect, it } from 'vitest'
-import { mkdtempSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { run } from './run.mjs'
 // @ts-expect-error -- .mjs script without type declarations
-import { planUpdate, runSteps } from './update.mjs'
+import { parseHooksTable } from './hook-guard.mjs'
+// @ts-expect-error -- .mjs script without type declarations
+import { hookTestTargets, planUpdate, runSteps } from './update.mjs'
 
 type Step = { title: string; cmd: string; args: string[] }
 
+const HOOK_TESTS = ['src/main/startup']
+const plan = (opts: { push: boolean; build: boolean }): Step[] =>
+  planUpdate({ ...opts, hookTests: HOOK_TESTS })
+
 describe('planUpdate', () => {
   it('syncs main from upstream, merges it into pilot, then verifies', () => {
-    expect(planUpdate({ push: false, build: false }).map((s: Step) => s.title)).toEqual([
+    expect(plan({ push: false, build: false }).map((s: Step) => s.title)).toEqual([
       'Check the working tree is clean',
       'Fetch upstream and origin',
       'Fast-forward main to upstream/main',
@@ -19,20 +25,64 @@ describe('planUpdate', () => {
       'Check Pilot hooks',
       'Build workspace packages',
       'Typecheck',
-      'Run Pilot tests'
+      'Run Pilot tests',
+      "Run upstream tests next to Pilot's hooks"
     ])
   })
 
+  it('runs the upstream tests it is given, and refuses an empty list (vitest would run everything)', () => {
+    const step = plan({ push: false, build: false }).at(-1)
+    expect(step?.args).toEqual([
+      'exec',
+      'vitest',
+      'run',
+      '--config',
+      'config/vitest.config.ts',
+      'src/main/startup'
+    ])
+    expect(() => planUpdate({ push: false, build: false, hookTests: [] })).toThrow('HOOKS.md')
+  })
+
   it('pushes only when asked', () => {
-    const titles = planUpdate({ push: true, build: false }).map((s: Step) => s.title)
+    const titles = plan({ push: true, build: false }).map((s: Step) => s.title)
     expect(titles).toContain('Push main and pilot to origin')
-    const off = planUpdate({ push: false, build: false }).map((s: Step) => s.title)
+    const off = plan({ push: false, build: false }).map((s: Step) => s.title)
     expect(off).not.toContain('Push main and pilot to origin')
   })
 
   it('builds the app last when asked', () => {
-    const steps = planUpdate({ push: false, build: true })
+    const steps = plan({ push: false, build: true })
     expect(steps.at(-1)?.title).toBe('Build Pilot.app')
+  })
+})
+
+describe('hookTestTargets', () => {
+  // R10: the folders the hook reviews ran whole, else the tests named after the hooked file.
+  it('maps each hooked code file in HOOKS.md to the upstream tests next to it', () => {
+    const rows = parseHooksTable(readFileSync(join(import.meta.dirname, '../HOOKS.md'), 'utf8'))
+    expect(hookTestTargets(rows)).toEqual([
+      'src/cli/handler-group-manifest.test',
+      'src/cli/specs',
+      'src/main/orcad',
+      'src/main/startup',
+      'src/main/updater',
+      'src/renderer/src/app-shell',
+      'src/renderer/src/components/right-sidebar',
+      'src/renderer/src/main.test',
+      'src/renderer/src/store/right-sidebar-route.test'
+    ])
+  })
+
+  it('skips config files and lists each target once', () => {
+    expect(
+      hookTestTargets([
+        { file: 'config/tsconfig.node.json' },
+        { file: 'src/renderer/src/assets/main.css' },
+        { file: 'src/main/startup/a.ts' },
+        { file: 'src/main/startup/b.ts' },
+        { file: 'src/x/y.tsx' }
+      ])
+    ).toEqual(['src/main/startup', 'src/x/y.test'])
   })
 })
 
@@ -88,7 +138,7 @@ const GIT_TITLES = [
 ]
 
 function gitSteps(): Step[] {
-  return planUpdate({ push: false, build: false }).filter((s: Step) => GIT_TITLES.includes(s.title))
+  return plan({ push: false, build: false }).filter((s: Step) => GIT_TITLES.includes(s.title))
 }
 
 describe('runSteps against a fixture repo', () => {

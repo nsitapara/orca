@@ -1,14 +1,47 @@
 #!/usr/bin/env node
 // One command to take upstream Orca updates (D24): main mirrors upstream, pilot merges main, then verify.
-import { resolve } from 'node:path'
+import { readFileSync } from 'node:fs'
+import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { parseHooksTable } from './hook-guard.mjs'
 import { run, runInherit } from './run.mjs'
 
 const REPO = resolve(fileURLToPath(new URL('../../../..', import.meta.url)))
 const CLEAN_TITLE = 'Check the working tree is clean'
 const MERGE_TITLE = 'Merge main into pilot'
+const VITEST = ['exec', 'vitest', 'run', '--config', 'config/vitest.config.ts']
 
-export function planUpdate({ push, build }) {
+// R10: the hook reviews ran these folders' tests whole. Any other hooked file runs the tests named
+// after it (`<file>.test.ts(x)`; vitest matches the path prefix). Config files (tsconfig, CSS) have
+// no tests: the typecheck and the build cover them.
+export const R10_FOLDERS = [
+  'src/cli/specs',
+  'src/main/orcad',
+  'src/main/startup',
+  'src/main/updater',
+  'src/renderer/src/app-shell',
+  'src/renderer/src/components/right-sidebar'
+]
+const CODE_FILE = /\.tsx?$/
+
+// The vitest filters for every hooked upstream file in HOOKS.md (rows from parseHooksTable).
+export function hookTestTargets(rows) {
+  const targets = new Set()
+  for (const { file } of rows) {
+    if (!CODE_FILE.test(file)) {
+      continue
+    }
+    const folder = R10_FOLDERS.find((f) => file.startsWith(`${f}/`))
+    targets.add(folder ?? file.replace(CODE_FILE, '.test'))
+  }
+  return [...targets].sort()
+}
+
+export function planUpdate({ push, build, hookTests }) {
+  // An empty filter list would make vitest run the whole suite instead.
+  if (!hookTests?.length) {
+    throw new Error('No upstream tests next to the hooks: is HOOKS.md readable?')
+  }
   const steps = [
     {
       title: CLEAN_TITLE,
@@ -38,10 +71,11 @@ export function planUpdate({ push, build }) {
     },
     { title: 'Build workspace packages', cmd: 'pnpm', args: ['run', 'build:packages'] },
     { title: 'Typecheck', cmd: 'pnpm', args: ['typecheck'] },
+    { title: 'Run Pilot tests', cmd: 'pnpm', args: [...VITEST, 'src/packages/pilot'] },
     {
-      title: 'Run Pilot tests',
+      title: "Run upstream tests next to Pilot's hooks",
       cmd: 'pnpm',
-      args: ['exec', 'vitest', 'run', '--config', 'config/vitest.config.ts', 'src/packages/pilot']
+      args: [...VITEST, ...hookTests]
     }
   ]
   if (push) {
@@ -95,7 +129,8 @@ export async function runSteps(steps, { cwd = REPO, dryRun = false } = {}) {
 }
 
 const HELP = `Usage: node src/packages/pilot/scripts/update.mjs [--dry-run] [--push] [--build]
-  Takes upstream Orca: fast-forwards main, merges main into pilot, installs, checks hooks, typechecks, tests.
+  Takes upstream Orca: fast-forwards main, merges main into pilot, installs, checks hooks, typechecks,
+  runs Pilot's tests and the upstream tests next to each hook in HOOKS.md.
   --push   also push main and pilot to origin (off by default)
   --build  also build Pilot.app at the end
   --dry-run  print the steps without running them`
@@ -105,7 +140,12 @@ export async function runUpdate(argv) {
     console.log(HELP)
     return 0
   }
-  const steps = planUpdate({ push: argv.includes('--push'), build: argv.includes('--build') })
+  const hooks = readFileSync(join(REPO, 'src/packages/pilot/HOOKS.md'), 'utf8')
+  const steps = planUpdate({
+    push: argv.includes('--push'),
+    build: argv.includes('--build'),
+    hookTests: hookTestTargets(parseHooksTable(hooks))
+  })
   const result = await runSteps(steps, { cwd: REPO, dryRun: argv.includes('--dry-run') })
   if (result.code === 0) {
     console.log('\n✓ Pilot is up to date with upstream Orca.')
