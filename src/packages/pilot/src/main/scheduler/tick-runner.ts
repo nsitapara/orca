@@ -1,7 +1,12 @@
 import type { ItemDecision, TickResult, Verdict } from '../../shared/api-types'
 import type { AutomationDefinition } from '../../shared/definition/types'
 import type { PeopleDirectory } from '../../shared/people'
-import { decideTick, usesHandled } from '../../shared/tick/decide'
+import {
+  decideTick,
+  usesHandled,
+  type HandledState,
+  type ScopeGate
+} from '../../shared/tick/decide'
 import { createPassFetchCache, type PassFetchCache } from '../sources/fetch-cache'
 import type { GlabApi } from '../sources/gitlab-api'
 import type { PilotStore } from '../store/store'
@@ -92,13 +97,31 @@ async function decide(
   }
   const { items, scope } = await gatherItems(def, people, deps, pass, tickId)
   const { store } = deps
+  const gates = new Map<string, ScopeGate>()
+  for (const item of items) {
+    const result = scope(item)
+    if (!result.ok) {
+      gates.set(item.key, { verdict: result.verdict, reason: result.reason })
+    }
+  }
+  const handled = new Map<string, HandledState>()
+  for (const key of store.handledKeys(def.id)) {
+    handled.set(key, { status: 'done', failedAt: null })
+  }
   return decideTick({
     definition: def,
-    items,
-    scope,
-    handledKeys: store.handledKeys(def.id),
+    // Interim: the v1 facts carry no untracked count; Task 6b reads it from the worktree facts.
+    items: items.map((item) => ({
+      ...item,
+      fields: { 'worktree.untracked_count': 0, ...item.fields }
+    })),
+    now: deps.now(),
+    scope: gates,
+    handled,
     seenKeys: store.seenKeys(def.id),
-    runningCount: store.runs.runningCount(def.id)
+    activeRuns: store.runs.runningCount(def.id),
+    busyWorktrees: new Set(),
+    scriptChecks: new Map()
   })
 }
 
