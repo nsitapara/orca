@@ -15,28 +15,48 @@ export type DecideInput = {
 
 type Gate = { verdict: ItemDecision['verdict']; reason: string } | null
 
+type AuthorCheck = { ok: true } | { ok: false; reason: string }
+
+// anyone/absent: no lookup; a people or group ref needs the author in people.yaml.
+function authorCheck(
+  def: AutomationDefinition,
+  people: PeopleDirectory,
+  username: string
+): AuthorCheck {
+  const ref = def.items?.where.author
+  if (ref === undefined || ref === 'anyone') {
+    return { ok: true }
+  }
+  const person = personByGitlab(people, username)
+  if (!person) {
+    return { ok: false, reason: `Author ${username} isn't in people.yaml` }
+  }
+  if (refIncludes(ref, person.id, people)) {
+    return { ok: true }
+  }
+  return {
+    ok: false,
+    reason: `Author is ${person.name}; this automation looks at ${describeRef(ref, people)}`
+  }
+}
+
+export function authorInScope(
+  def: AutomationDefinition,
+  people: PeopleDirectory,
+  username: string
+): boolean {
+  return authorCheck(def, people, username).ok
+}
+
 function scopeGate(def: AutomationDefinition, item: TickItem, people: PeopleDirectory): Gate {
   const where = def.items?.where ?? {}
   const state = item.fields['mr.state']
   if (where.state === 'open' && state !== 'open') {
     return { verdict: 'out_of_scope', reason: `MR is ${state ?? '(state unknown)'}` }
   }
-  // anyone/absent: no lookup; a people or group ref needs the author in people.yaml.
-  if (where.author === undefined || where.author === 'anyone') {
-    return null
-  }
   const username = String(item.fields['mr.author'] ?? '(unknown)')
-  const person = personByGitlab(people, username)
-  if (!person) {
-    return { verdict: 'out_of_scope', reason: `Author ${username} isn't in people.yaml` }
-  }
-  if (refIncludes(where.author, person.id, people)) {
-    return null
-  }
-  return {
-    verdict: 'out_of_scope',
-    reason: `Author is ${person.name}; this automation looks at ${describeRef(where.author, people)}`
-  }
+  const author = authorCheck(def, people, username)
+  return author.ok ? null : { verdict: 'out_of_scope', reason: author.reason }
 }
 
 function dueGate(def: AutomationDefinition, item: TickItem): Gate {
