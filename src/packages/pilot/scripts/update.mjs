@@ -40,7 +40,8 @@ export function hookTestTargets(rows) {
 
 // Why: serve-mode tests start upstream's CLI auto-install. Without ORCA_CLI_INSTALL_PATH it searches
 // PATH, and from an Orca terminal that finds real Orca's bin/orca and links it to itself. An empty
-// ORCA_BROWSER_EXECUTABLE is "unconfigured" upstream, so tests never use a real browser app.
+// An empty ORCA_BROWSER_EXECUTABLE is "unconfigured" upstream: it only blocks the Chromium fallback.
+// Orcad still prefers an installed /Applications/Orca.app as its browser host (see README Known gaps).
 export function testEnv(dir = tmpdir()) {
   return {
     ORCA_CLI_INSTALL_PATH: join(dir, `pilot-test-cli-${process.pid}`, 'orca'),
