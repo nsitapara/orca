@@ -196,6 +196,26 @@ type LauncherWorktrees = Pick<
 >
 // The runtime's own word for an agent that can't take a prompt now (RuntimeTerminalAgentStatusState).
 const BUSY_STATUS = new Set(['working', 'permission'])
+// Title and foreground caches refresh asynchronously, so "no agent here" counts only when it holds for
+// about a second: upstream's send guard re-polls the same way (terminal-agent-send-guard.ts).
+const AGENT_RECHECKS = 7
+const AGENT_RECHECK_MS = 150
+type Pause = (ms: number) => Promise<void>
+const wait: Pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
+
+// The foreground agent's status, or null when none shows on any read; a failed read throws.
+async function foregroundAgent(runtime: OrcaRuntimeService, handle: string, pause: Pause) {
+  for (let check = 0; ; check++) {
+    const agent = await runtime.getTerminalAgentStatus(handle)
+    if (agent.isRunningAgent) {
+      return agent
+    }
+    if (check === AGENT_RECHECKS) {
+      return null
+    }
+    await pause(AGENT_RECHECK_MS)
+  }
+}
 
 // H10's look at a session's old terminal (agent-step.ts checks the store first). The draft is read
 // from the rendered screen (B6); anything unreadable is busy, never gone.
@@ -203,7 +223,8 @@ async function sessionTerminalState(
   runtime: OrcaRuntimeService,
   worktrees: LauncherWorktrees,
   { handle, paneKey }: KnownTerminal,
-  sessionId: string
+  sessionId: string,
+  pause: Pause
 ): Promise<SessionTerminalState> {
   if (!paneKey) {
     return 'busy'
@@ -213,8 +234,8 @@ async function sessionTerminalState(
       return 'gone'
     }
     // An exited agent leaves a shell: the session isn't running there.
-    const agent = await runtime.getTerminalAgentStatus(handle)
-    if (!agent.isRunningAgent) {
+    const agent = await foregroundAgent(runtime, handle, pause)
+    if (!agent) {
       return 'gone'
     }
     if (BUSY_STATUS.has(agent.status ?? '') || worktrees.paneState(paneKey) !== 'idle') {
@@ -259,12 +280,13 @@ async function closeSessionTerminal(runtime: OrcaRuntimeService, handle: string)
   }
 }
 
-// `runs` is the run store a new worktree's claim reads and writes (Task 8b).
+// `runs` is the run store a new worktree's claim reads and writes (Task 8b); `pause` is for tests.
 export function runtimeLauncherDeps(
   runtime: OrcaRuntimeService,
   worktrees: LauncherWorktrees,
   now: () => number,
-  runs: RunStore
+  runs: RunStore,
+  pause: Pause = wait
 ): LauncherDeps {
   return {
     workspace: runtimeWorkspaceDeps(runtime, (repoPath) => worktrees.listWorktrees(repoPath), runs),
@@ -276,7 +298,7 @@ export function runtimeLauncherDeps(
     newSessionId: () => randomUUID(),
     now,
     sessionTerminals: {
-      state: (terminal, sessionId) => sessionTerminalState(runtime, worktrees, terminal, sessionId),
+      state: (terminal, id) => sessionTerminalState(runtime, worktrees, terminal, id, pause),
       send: (handle, prompt) => sendToIdleAgent(runtime, handle, prompt),
       close: (handle) => closeSessionTerminal(runtime, handle)
     }

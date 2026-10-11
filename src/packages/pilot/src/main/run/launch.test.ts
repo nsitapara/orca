@@ -293,21 +293,30 @@ const throwing = async (): Promise<never> => {
 }
 type AgentLook = {
   running?: boolean
+  // Successive answers to "is an agent in the foreground" (an Error: that read fails); the last repeats.
+  reads?: (boolean | Error)[]
   status?: 'working' | 'permission' | 'idle' | null
   session?: string | null
   unreadable?: boolean
 }
+const noPause = async () => {}
 // The runtime's view of a terminal: whether an agent is in the foreground and its state (what
 // upstream's send guard reads), and the session the pane's hooks report.
 function runtimeSeeing(look: AgentLook = {}, more: Record<string, unknown> = {}) {
   const session = 'session' in look ? look.session : 's-1'
+  const reads = look.reads ?? [look.running ?? true]
+  let read = 0
   return {
     getTerminalAgentStatus: async (handle: string) => {
+      const running = reads[Math.min(read++, reads.length - 1)]
       if (look.unreadable) {
         throw new Error('terminal_handle_stale')
       }
+      if (running instanceof Error) {
+        throw running
+      }
       const status = 'status' in look ? look.status : 'idle'
-      return { handle, isRunningAgent: look.running ?? true, status }
+      return { handle, isRunningAgent: running, status }
     },
     getAgentStatusRowsForPane: () =>
       session ? [{ receivedAt: 1, providerSession: { key: 'session_id', id: session } }] : [],
@@ -353,9 +362,28 @@ describe('runtimeLauncherDeps', () => {
     ['an unreadable draft', { terminalDraft: throwing }, {}, 'p', 'busy']
   ])('sessionTerminals.state: %s', async (_name, worktrees, look, paneKey, expected) => {
     const seen = { ...idleWorktrees, ...worktrees }
-    const deps = runtimeLauncherDeps(runtimeSeeing(look), seen, () => 1, runs())
+    const deps = runtimeLauncherDeps(runtimeSeeing(look), seen, () => 1, runs(), noPause)
     expect(await deps.sessionTerminals?.state({ handle: 't', paneKey }, 's-1')).toBe(expected)
   })
+
+  // Title and foreground caches lag, so "its agent exited" needs fresh evidence for about a second, as
+  // upstream's send guard asks (150 ms apart); a read that fails on the way is busy.
+  it.each<[string, (boolean | Error)[], SessionTerminalState, number]>([
+    ['no agent on the first read, one on the next: not gone', [false, true], 'free', 1],
+    ['no agent on any read for about a second: gone', [false], 'gone', 7],
+    ['no agent, then a failed read: busy', [false, new Error('terminal_handle_stale')], 'busy', 1]
+  ])(
+    'sessionTerminals.state re-polls a missing agent: %s',
+    async (_name, reads, expected, waits) => {
+      const pause = vi.fn(async (_ms: number) => {})
+      const runtime = runtimeSeeing({ reads })
+      const deps = runtimeLauncherDeps(runtime, idleWorktrees, () => 1, runs(), pause)
+      expect(await deps.sessionTerminals?.state({ handle: 't', paneKey: 'p' }, 's-1')).toBe(
+        expected
+      )
+      expect(pause.mock.calls).toEqual(Array.from({ length: waits }, () => [150]))
+    }
+  )
 
   // S1: the prompt carries item text (MR, branch, Linear), so it is typed only while an idle agent is
   // in the foreground, read again right before sending: never into a shell or a permission dialog.
