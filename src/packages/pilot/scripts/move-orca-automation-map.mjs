@@ -47,7 +47,6 @@ function workspacePath(workspaceId) {
   return at === -1 ? workspaceId : workspaceId.slice(at + 2)
 }
 
-// The path the automation acts on: its worktree when it runs in an existing one, else its repo.
 export const PILOT_DEFAULT_GRACE_MINUTES = 720
 
 // The create flag only takes a positive integer, so a source of 0, null or absent can't be passed.
@@ -55,6 +54,7 @@ export function graceIsOmitted(grace) {
   return grace === undefined || grace === null || grace === 0
 }
 
+// The path the automation acts on: its worktree when it runs in an existing one, else its repo.
 export function targetPath(automation) {
   if (automation.workspaceMode === 'existing' && typeof automation.workspaceId === 'string') {
     return workspacePath(automation.workspaceId)
@@ -84,9 +84,11 @@ export function unmappableFields(automation) {
   if (automation.missedRunPolicy !== 'run_once_within_grace') {
     blocked.missedRunPolicy = `policy ${automation.missedRunPolicy}; create only sets the grace window`
   }
-  // 0, null and absent can't be passed (create takes positive integers only); see graceIsOmitted.
   const grace = automation.missedRunGraceMinutes
-  if (!graceIsOmitted(grace) && !(Number.isInteger(grace) && grace > 0)) {
+  if (graceIsOmitted(grace)) {
+    // Create takes positive integers only, so the copy would get Pilot's default and catch up.
+    blocked.missedRunGraceMinutes = `source is ${grace}, which means Orca does no catch-up after a missed run; Pilot's create can't set that and defaults to ${PILOT_DEFAULT_GRACE_MINUTES} minutes, so the copy WOULD catch up missed runs`
+  } else if (!(Number.isInteger(grace) && grace > 0)) {
     blocked.missedRunGraceMinutes = `${grace} isn't a positive integer`
   }
   const extra = Object.keys(automation.precheck ?? {}).filter(
@@ -149,7 +151,7 @@ export function mapAutomation(automation) {
   mapped.push(['reuseSession', automation.reuseSession ? '--reuse-session' : '--fresh-session'])
   if (graceIsOmitted(automation.missedRunGraceMinutes)) {
     notes.push(
-      `missedRunGraceMinutes: source is ${automation.missedRunGraceMinutes}; --missed-run-grace-minutes only takes a positive integer, so the flag is omitted, Pilot's default (${PILOT_DEFAULT_GRACE_MINUTES}) applies, and the read-back does not check this field`
+      `missedRunGraceMinutes: source is ${automation.missedRunGraceMinutes}; allowed to drop, so the flag is omitted, Pilot's default (${PILOT_DEFAULT_GRACE_MINUTES}, which adds catch-up) applies, and the read-back does not check this field`
     )
   } else {
     args.push(`--missed-run-grace-minutes=${automation.missedRunGraceMinutes}`)
@@ -202,7 +204,44 @@ export function verifyCopy(source, copy, { checkEnabled = true, ignore = [] } = 
     copy.runContext?.projectHostSetupId
   )
   if (checkEnabled) {
-    check('enabled', false, copy.enabled)
+    check('enabled', false, copy.enabled === true)
   }
   return problems
+}
+
+// The fields a verified copy must keep. Not the name: a rename is allowed.
+export function snapshotCopy(copy) {
+  return {
+    prompt: copy.prompt,
+    agentId: copy.agentId,
+    rrule: copy.rrule,
+    timezone: copy.timezone,
+    extraAgentArgs: trimmed(copy.extraAgentArgs),
+    precheck: copy.precheck ?? null,
+    workspaceMode: copy.workspaceMode,
+    baseBranch: copy.baseBranch ?? null,
+    reuseSession: Boolean(copy.reuseSession),
+    missedRunGraceMinutes: copy.missedRunGraceMinutes ?? null,
+    sourceContext: copy.sourceContext ?? null,
+    executionTargetType: copy.executionTargetType,
+    executionTargetId: copy.executionTargetId,
+    targetPath: targetPath(copy),
+    runContext: {
+      path: copy.runContext?.path,
+      projectId: copy.runContext?.projectId,
+      hostId: copy.runContext?.hostId,
+      projectHostSetupId: copy.runContext?.projectHostSetupId
+    }
+  }
+}
+
+// The snapshot fields that changed since the copy was verified.
+export function snapshotDrift(snapshot, copy) {
+  const now = snapshotCopy(copy)
+  return Object.keys(now)
+    .filter((field) => JSON.stringify(snapshot?.[field]) !== JSON.stringify(now[field]))
+    .map(
+      (field) =>
+        `${field}: verified as ${JSON.stringify(snapshot?.[field])}, now ${JSON.stringify(now[field])}`
+    )
 }

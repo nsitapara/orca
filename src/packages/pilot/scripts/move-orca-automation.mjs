@@ -28,6 +28,8 @@ Copies one Orca automation into Pilot. Without --apply it is a dry run: it print
   --apply                create it in Pilot (disabled), verify it, then continue as below
   --disable-in-orca      after verifying, disable it in Orca and enable it in Pilot
                          (without it, Pilot's copy stays disabled and the two commands are printed)
+  --adopt                take over a Pilot copy found by name and target with no move record
+                         (it is verified first; without it such a copy is left alone)
   --allow-drop <field>   accept losing a field Pilot's create can't express (repeatable)
   --record-file <path>   Pilot's record of moves (default: ~/Library/Application Support/Pilot/moved-automations.json)
   --orca-bin <path>      Orca's CLI (default: orca)
@@ -49,7 +51,7 @@ function findCopy(source, copies, records) {
   const named = copies.find(
     (candidate) => candidate.name === source.name && sameTarget(candidate, source)
   )
-  return named ? { copy: named, via: 'name and target', record } : undefined
+  return named ? { copy: named, via: 'name and target', record: undefined } : undefined
 }
 
 function sameTarget(a, b) {
@@ -58,7 +60,7 @@ function sameTarget(a, b) {
 
 function printPlan(source, mapping, dropped, options, log) {
   log(
-    `Orca automation: ${source.name} (${source.id}), ${source.enabled ? 'enabled' : 'disabled'} in Orca`
+    `Orca automation: ${source.name} (${source.id}), ${source.enabled === true ? 'enabled' : 'disabled'} in Orca`
   )
   log(`  prompt: ${source.prompt}`)
   log(
@@ -84,9 +86,10 @@ function printPlan(source, mapping, dropped, options, log) {
     log(`  ${field}: ${reason}`)
   }
   if (options.disableInOrca) {
-    const orcaStep = source.enabled
-      ? 'disable it in Orca, then enable it in Pilot'
-      : 'leave both disabled (Orca already has it disabled)'
+    const orcaStep =
+      source.enabled === true
+        ? 'disable it in Orca, then enable it in Pilot'
+        : 'leave both disabled (Orca already has it disabled)'
     log(`With --apply: create disabled, verify, then ${orcaStep}.`)
   } else {
     log(
@@ -106,10 +109,13 @@ export function moveAutomation({
   orcaBin = 'orca',
   pilotBin = DEFAULT_PILOT_BIN,
   recordFile = DEFAULT_RECORD_FILE,
+  adopt = false,
+  sleep,
+  retryDelayMs,
   now = () => new Date(),
   log = console.log
 }) {
-  const options = { apply, disableInOrca, orcaBin, pilotBin }
+  const options = { apply, disableInOrca, adopt, orcaBin, pilotBin }
   const read = readOrca(orca, id)
   if (read.error) {
     log(read.error)
@@ -157,7 +163,7 @@ export function moveAutomation({
   const found = findCopy(source, copies, readRecords(recordFile))
   if (found) {
     return resumeCopy(
-      { source, options, orca, pilot, log, recordFile, now, apply },
+      { source, options, orca, pilot, log, recordFile, now, apply, sleep, retryDelayMs },
       found.copy,
       found
     )
@@ -169,7 +175,18 @@ export function moveAutomation({
     log('Dry run: nothing changed. Add --apply to do it.')
     return { status: 'dry-run', exitCode: 0, mapping }
   }
-  return applyFresh({ source, mapping, options, orca, pilot, log, recordFile, now })
+  return applyFresh({
+    source,
+    mapping,
+    options,
+    orca,
+    pilot,
+    log,
+    recordFile,
+    now,
+    sleep,
+    retryDelayMs
+  })
 }
 
 export function parseArgs(argv) {
@@ -177,6 +194,7 @@ export function parseArgs(argv) {
     id: undefined,
     apply: false,
     disableInOrca: false,
+    adopt: false,
     help: false,
     allowDrop: [],
     orcaBin: 'orca',
@@ -193,6 +211,8 @@ export function parseArgs(argv) {
     const arg = argv[index]
     if (arg === '--apply') {
       options.apply = true
+    } else if (arg === '--adopt') {
+      options.adopt = true
     } else if (arg === '--disable-in-orca') {
       options.disableInOrca = true
     } else if (arg === '--help' || arg === '-h') {
