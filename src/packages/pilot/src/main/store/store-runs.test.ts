@@ -78,7 +78,8 @@ describe('RunStore v2', () => {
         whenExpr: null,
         outputs: {},
         exitCode: null,
-        sessionPinned: false
+        sessionPinned: false,
+        launchArgs: null
       },
       {
         name: 'cleanup',
@@ -90,7 +91,7 @@ describe('RunStore v2', () => {
     ])
   })
 
-  it('stores step outputs, exit code, output tail, model and the pinned-session flag', () => {
+  it('stores step outputs, exit code, output tail, model, the pinned-session flag and launch args', () => {
     const store = PilotStore.open(':memory:')
     store.runs.create(run('r1'))
     store.runs.createStep({
@@ -107,7 +108,8 @@ describe('RunStore v2', () => {
       exitCode: 3,
       outputTail: 'nothing to do\n',
       model: 'claude-opus-4',
-      sessionPinned: true
+      sessionPinned: true,
+      launchArgs: ['--dangerously-skip-permissions']
     })
     expect(store.runs.steps('r1')[0]).toMatchObject({
       status: 'skipped',
@@ -115,8 +117,11 @@ describe('RunStore v2', () => {
       exitCode: 3,
       outputTail: 'nothing to do\n',
       model: 'claude-opus-4',
-      sessionPinned: true
+      sessionPinned: true,
+      launchArgs: ['--dangerously-skip-permissions']
     })
+    store.runs.updateStep('r1', 0, { launchArgs: [] })
+    expect(store.runs.steps('r1')[0].launchArgs).toEqual([])
   })
 
   it('moves a run to the worktree it got', () => {

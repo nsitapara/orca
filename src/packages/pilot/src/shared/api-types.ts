@@ -126,6 +126,9 @@ export type StepRow = {
   exitCode: number | null
   outputTail: string | null
   sessionPinned: boolean
+  // The args the step's agent process runs under (its own launch, or the process it was sent into);
+  // null when not known. Session flags (--session-id, --resume) are not included.
+  launchArgs: string[] | null
 }
 // The run holding a once_per key settles it: done, or failed (retry_after_failure waits from failedAt).
 export type HandledStatus = 'started' | 'done' | 'failed'
