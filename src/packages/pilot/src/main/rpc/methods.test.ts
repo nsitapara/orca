@@ -52,6 +52,7 @@ describe('Pilot RPC methods', () => {
       'pilot.automations.tickNow',
       'pilot.automations.reload',
       'pilot.automations.validate',
+      'pilot.automations.setEnabled',
       'pilot.run.output',
       'pilot.run.event'
     ]
@@ -75,7 +76,16 @@ describe('Pilot RPC methods', () => {
 
   it("makes every automations method say Pilot isn't running when it failed to start", async () => {
     const find = setup({ context: null, error: 'file is not a database' })
-    const names = ['list', 'get', 'activity', 'dryRun', 'tickNow', 'reload', 'validate']
+    const names = [
+      'list',
+      'get',
+      'activity',
+      'dryRun',
+      'tickNow',
+      'reload',
+      'validate',
+      'setEnabled'
+    ]
     for (const n of names) {
       await expect(
         Promise.resolve().then(() =>

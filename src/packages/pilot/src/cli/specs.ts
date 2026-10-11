@@ -39,6 +39,38 @@ export const PILOT_COMMAND_SPECS: CommandSpec[] = [
     allowedFlags: [...GLOBAL_FLAGS, 'id', 'limit'],
     examples: ['pilot automations activity --id fix-failed-ci --limit 5']
   },
+  {
+    path: ['automations', 'list-yaml'],
+    summary: "Pilot's YAML automations, with any file that didn't load",
+    usage: 'pilot automations list-yaml [--json]',
+    allowedFlags: [...GLOBAL_FLAGS],
+    notes: ["`pilot automations list` is Orca's own engine, which is off in Pilot."]
+  },
+  {
+    path: ['automations', 'get'],
+    summary: 'One YAML automation: its schedule, status, checks and file',
+    usage: 'pilot automations get --id <id> [--json]',
+    allowedFlags: [...GLOBAL_FLAGS, 'id'],
+    examples: ['pilot automations get --id fix-failed-ci']
+  },
+  {
+    path: ['automations', 'reload'],
+    summary: 'Read the automation folders again now',
+    usage: 'pilot automations reload [--json]',
+    allowedFlags: [...GLOBAL_FLAGS]
+  },
+  {
+    path: ['automations', 'enable'],
+    summary: "Set enabled: true in a YAML automation's file",
+    usage: 'pilot automations enable --id <id> [--json]',
+    allowedFlags: [...GLOBAL_FLAGS, 'id']
+  },
+  {
+    path: ['automations', 'disable'],
+    summary: "Set enabled: false in a YAML automation's file",
+    usage: 'pilot automations disable --id <id> [--json]',
+    allowedFlags: [...GLOBAL_FLAGS, 'id']
+  },
   ...RUN_COMMAND_SPECS,
   ...INBOX_COMMAND_SPECS
 ]
