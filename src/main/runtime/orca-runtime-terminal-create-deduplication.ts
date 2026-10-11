@@ -14,6 +14,7 @@ import {
 } from '../../shared/execution-host'
 import { resolveWorktreeLaunchHost } from './worktree-launch-host-repo'
 import type { TuiAgent } from '../../shared/tui-agent'
+import { withPilotAgentLaunch } from '../../packages/pilot/src/main/run/agent-launch-hook' // pilot-hook: agent-launch-env
 
 export class OrcaRuntimeWithTerminalCreateDeduplication extends OrcaRuntimeWithCreateAgentSession {
   async dedupeTerminalCreate(
@@ -166,12 +167,16 @@ export class OrcaRuntimeWithTerminalCreateDeduplication extends OrcaRuntimeWithC
     if (!repo) {
       throw new Error('Repository for the selected workspace is no longer available.')
     }
-    const startup = this.buildStartupForAgent(
-      repo,
-      opts.agent,
-      opts.prompt,
-      undefined,
-      opts.extraAgentArgs ? { extraAgentArgs: opts.extraAgentArgs } : undefined
+    // pilot-hook: agent-launch-env
+    const startup = withPilotAgentLaunch(
+      opts,
+      this.buildStartupForAgent(
+        repo,
+        opts.agent,
+        opts.prompt,
+        undefined,
+        opts.extraAgentArgs ? { extraAgentArgs: opts.extraAgentArgs } : undefined
+      )
     )
     const terminal = await this.createTerminal(`id:${worktree.id}`, {
       command: startup.startup.command,

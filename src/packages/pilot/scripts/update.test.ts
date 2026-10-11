@@ -76,6 +76,7 @@ describe('hookTestTargets', () => {
       'src/cli/specs',
       'src/main/linear',
       'src/main/orcad',
+      'src/main/runtime',
       'src/main/startup',
       'src/main/updater',
       'src/renderer/src/app-shell',
