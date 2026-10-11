@@ -18,6 +18,7 @@ import { launchAgentStep } from './run/agent-step'
 import { wireRunEngine } from './run/engine-wiring'
 import { pilotStepEnv } from './run/step-launch-plan'
 import { runtimeLauncherDeps } from './run/launch'
+import { modeTextFor, readMode } from './run/modes'
 import { sweepStaleStarts } from './run/stale-starts'
 import { terminalRelister } from './run/terminal-relist'
 import { agentStepStarter } from './run/step-starters'
@@ -100,7 +101,10 @@ function openPilot(
   const engineEnv = resolveEngineEnv(options.engineEnv, host.dataDir)
   const fieldDeps = runtimeFieldDeps(runtime, store, { relist, now })
   // `store.runs`: a new worktree's claim reads and records running runs there (Task 8b).
-  const launcherDeps = runtimeLauncherDeps(runtime, fieldDeps, now, store.runs)
+  const launcherDeps = {
+    ...runtimeLauncherDeps(runtime, fieldDeps, now, store.runs),
+    modeText: modeTextFor(readMode)
+  }
   // The one run engine of this process: its per-run lock and its set of runs being opened live in it.
   const wired = wireRunEngine({
     runtime,
