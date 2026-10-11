@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import type { OrcaRuntimeService } from '../../../../../main/runtime/orca-runtime'
 import type { ItemDecision } from '../../shared/api-types'
 import { parseAutomationYaml } from '../../shared/definition/parse'
+import { UnrecordedLaunchError } from '../scheduler/tick-runner'
 import { PilotStore } from '../store/store'
 import { buildPrompt, makeLauncher } from './launch'
 import { STALE_START_MS, sweepStaleStarts } from './stale-starts'
@@ -119,7 +120,14 @@ describe('makeLauncher', () => {
     store.runs.updateStartingStep = () => {
       throw new Error('disk full')
     }
-    await expect(launcher(request)).rejects.toThrow(/term_9.*disk full/)
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    const failure = await launcher(request).catch((e: unknown) => e)
+    // The tick runner keeps the item handled for this error: the agent is running.
+    expect(failure).toBeInstanceOf(UnrecordedLaunchError)
+    expect(failure).toMatchObject({
+      terminalHandle: 'term_9',
+      message: expect.stringMatching(/term_9.*disk full/)
+    })
     expect(store.runs.steps('run-1')[0]).toMatchObject({ status: 'failed' })
   })
 })
