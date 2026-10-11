@@ -51,7 +51,9 @@ describe('Pilot RPC methods', () => {
       'pilot.automations.dryRun',
       'pilot.automations.tickNow',
       'pilot.automations.reload',
-      'pilot.automations.validate'
+      'pilot.automations.validate',
+      'pilot.run.output',
+      'pilot.run.event'
     ]
     for (const n of names) {
       expect(find(n)).toMatchObject({ name: n, permission: 'workspace', pilot: true })
@@ -81,6 +83,40 @@ describe('Pilot RPC methods', () => {
         )
       ).rejects.toThrow("Pilot isn't running: file is not a database")
     }
+    for (const name of ['pilot.run.output', 'pilot.run.event']) {
+      await expect(
+        Promise.resolve().then(() =>
+          find(name).handler({ runId: 'r', stepIdx: 0, outputs: { a: 1 }, kind: 'x' })
+        )
+      ).rejects.toThrow("Pilot isn't running: file is not a database")
+    }
+  })
+
+  it('checks run.output names and values, and caps an event payload at 64 KB', () => {
+    const find = setup()
+    const output = find('pilot.run.output').params!
+    expect(
+      output.safeParse({
+        runId: 'r',
+        stepIdx: 0,
+        outputs: { changed: true, n: 2, s: 'x', z: null }
+      }).success
+    ).toBe(true)
+    expect(output.safeParse({ terminal: 't', outputs: { a: 1 } }).success).toBe(true)
+    expect(output.safeParse({ runId: 'r', stepIdx: 0, outputs: { 'bad-key': 1 } }).success).toBe(
+      false
+    )
+    expect(output.safeParse({ runId: 'r', stepIdx: 0, outputs: {} }).success).toBe(false)
+    expect(output.safeParse({ runId: 'r', stepIdx: -1, outputs: { a: 1 } }).success).toBe(false)
+    const event = find('pilot.run.event').params!
+    expect(event.safeParse({ runId: 'r', kind: 'pushed', payload: { sha: 'abc' } }).success).toBe(
+      true
+    )
+    expect(event.safeParse({ terminal: 't', kind: 'pushed' }).success).toBe(true)
+    expect(event.safeParse({ runId: 'r', kind: 'Pushed!' }).success).toBe(false)
+    expect(
+      event.safeParse({ runId: 'r', kind: 'big', payload: { x: 'y'.repeat(64 * 1024) } }).success
+    ).toBe(false)
   })
 
   it('caps validate input at 256 KB and activity limit at 200', () => {

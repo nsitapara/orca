@@ -4,6 +4,7 @@ import { defineMethod } from '../../../../../main/runtime/rpc/core'
 import type { PilotStatus } from '../../shared/api-types'
 import type { PilotContext, PilotHost } from '../pilot-services'
 import { activity, dryRun, getAutomation, listAutomations, tickNow, validateYaml } from './handlers'
+import { buildChannelMethods } from './methods-channel'
 
 export const PILOT_VERSION = '0.1.0'
 export const DEFAULT_ACTIVITY_LIMIT = 30
@@ -105,6 +106,7 @@ export function buildPilotMethods(host: PilotHost) {
         ctx()
         return validateYaml(p.yaml, p.file ?? 'draft.yaml')
       }
-    })
+    }),
+    ...buildChannelMethods(ctx)
   ].map((m) => Object.assign(m, { pilot: true }))
 }

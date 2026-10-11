@@ -1,5 +1,6 @@
 import type { CommandSpec } from '../../../../cli/args'
 import { GLOBAL_FLAGS } from '../../../../cli/args'
+import { RUN_COMMAND_SPECS } from './specs-run'
 
 export const PILOT_COMMAND_SPECS: CommandSpec[] = [
   {
@@ -36,5 +37,6 @@ export const PILOT_COMMAND_SPECS: CommandSpec[] = [
     usage: 'pilot automations activity --id <id> [--limit <n>] [--json]',
     allowedFlags: [...GLOBAL_FLAGS, 'id', 'limit'],
     examples: ['pilot automations activity --id fix-failed-ci --limit 5']
-  }
+  },
+  ...RUN_COMMAND_SPECS
 ]
