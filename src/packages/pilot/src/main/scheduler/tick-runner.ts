@@ -110,12 +110,7 @@ async function startRuns(
       unlaunched.current = null
       await deps.launch({ runId, definition: def, decision })
     } catch (error) {
-      deps.store.runs.update(runId, {
-        status: 'failed',
-        outcome: `Couldn't start: ${errorMessage(error)}`,
-        finishedAt: deps.now()
-      })
-      deps.store.unmarkHandled(def.id, decision.onceKey)
+      releaseUnlaunched(def, { runId, onceKey: decision.onceKey }, errorMessage(error), deps)
     }
   }
 }
@@ -151,6 +146,20 @@ function markDecisions(def: AutomationDefinition, decisions: ItemDecision[], dep
   }
 }
 
+// finishTick can itself throw (store down); runTick must still resolve with the failed result.
+function finishFailed(
+  tickId: number,
+  message: string,
+  counts: Partial<Record<Verdict, number>>,
+  deps: TickDeps
+): void {
+  try {
+    deps.store.finishTick(tickId, 'failed', message, counts, deps.now())
+  } catch (error) {
+    console.error(`pilot: couldn't finish tick ${tickId}: ${errorMessage(error)}`)
+  }
+}
+
 export async function runTick(
   def: AutomationDefinition,
   people: PeopleDirectory,
@@ -163,7 +172,7 @@ export async function runTick(
     decisions = await decide(def, people, deps)
   } catch (error) {
     const message = errorMessage(error)
-    deps.store.finishTick(tickId, 'failed', message, {}, deps.now())
+    finishFailed(tickId, message, {}, deps)
     return { tickId, status: 'failed', error: message, decisions: [] }
   }
   const runIds = new Map<string, string>()
@@ -181,7 +190,7 @@ export async function runTick(
     if (unlaunched.current) {
       releaseUnlaunched(def, unlaunched.current, message, deps)
     }
-    deps.store.finishTick(tickId, 'failed', message, countVerdicts(decisions), deps.now())
+    finishFailed(tickId, message, countVerdicts(decisions), deps)
     return { tickId, status: 'failed', error: message, decisions }
   }
 }

@@ -232,6 +232,40 @@ describe('runTick', () => {
     expect(d.store.runs.runningCount('fix-failed-ci')).toBe(0)
   })
 
+  it('resolves with a failed result even when finishTick throws', async () => {
+    const d = deps({
+      gitlab: async () => {
+        throw new Error('glab down')
+      }
+    })
+    d.store.finishTick = () => {
+      throw new Error('store down')
+    }
+    const decideFail = await runTick(def.definition, people.directory, d, { dryRun: false })
+    expect(decideFail).toMatchObject({ status: 'failed', error: 'glab down' })
+
+    const w = deps()
+    w.store.finishTick = () => {
+      throw new Error('store down')
+    }
+    const writeFail = await runTick(def.definition, people.directory, w, { dryRun: false })
+    expect(writeFail).toMatchObject({ status: 'failed', error: 'store down' })
+  })
+
+  it('still frees the key when the launch-failure bookkeeping partly throws', async () => {
+    const d = deps({
+      launch: async () => {
+        throw new Error('gone')
+      }
+    })
+    d.store.runs.update = () => {
+      throw new Error('locked')
+    }
+    const result = await runTick(def.definition, people.directory, d, { dryRun: false })
+    expect(result.status).toBe('ok')
+    expect(d.store.handledKeys('fix-failed-ci').size).toBe(0)
+  })
+
   it('fails only the run whose launch throws, and leaves its item due again (Review Focus 4)', async () => {
     const d = deps({
       launch: async (req) => {
@@ -267,6 +301,11 @@ describe('runTick', () => {
       dryRun: true,
       status: 'ok'
     })
+    expect(d.store.tickItems(result.tickId).map((i) => [i.itemKey, i.verdict, i.runId])).toEqual([
+      ['!1561', 'started', null],
+      ['!1574', 'started', null]
+    ])
+    expect(d.store.runs.forTick(result.tickId)).toEqual([])
   })
 })
 
