@@ -49,12 +49,26 @@ const tick: ActivityTick = {
       finishedAt: null,
       costUsd: 0.84,
       tokens: 1,
+      worktreeId: null,
+      trigger: 'schedule' as const,
+      parentRunId: null,
+      imported: false,
       steps: []
     }
   ]
 }
 
 describe('ActivityTimeline', () => {
+  it('names the v2 run statuses', () => {
+    render(
+      <ActivityTimeline
+        ticks={[{ ...tick, runs: [{ ...tick.runs[0], status: 'needs_you' }] }]}
+        checkNames={[]}
+      />
+    )
+    expect(screen.getByText('Run ci-1 · !1561 web-1493 · Needs you · $0.84')).toBeTruthy()
+  })
+
   afterEach(cleanup)
 
   it('shows each tick with its runs, and its check table on demand', () => {

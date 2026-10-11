@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import type { ItemDecision } from '../../shared/api-types'
+import { PILOT_SCHEMA_VERSION } from './migrations'
 import { INTERRUPTED, PilotStore, STUCK_TICK_MS, TICK_RETENTION_MS } from './store'
 
 function freshStore(): PilotStore {
@@ -20,13 +21,34 @@ const decision = (key: string, verdict: ItemDecision['verdict']): ItemDecision =
 })
 
 describe('PilotStore', () => {
-  it('creates schema v1 and reopens without migrating twice', () => {
+  it('creates the current schema and reopens without migrating twice', () => {
     const dir = mkdtempSync(join(tmpdir(), 'pilot-store-'))
     const path = join(dir, 'pilot-automations.db')
     PilotStore.open(path).close()
     const again = PilotStore.open(path)
-    expect(again.schemaVersion()).toBe(1)
+    expect(again.schemaVersion()).toBe(PILOT_SCHEMA_VERSION)
     again.close()
+  })
+
+  it("settles a run's key as done or failed, and marking it again starts it over", () => {
+    const store = freshStore()
+    store.markHandled('a', 'k:1', 'run-1', 1)
+    store.markHandled('a', 'k:2', 'run-2', 1)
+    store.setHandledStatus('a', 'run-1', 'failed', 50)
+    store.setHandledStatus('a', 'run-2', 'done', 60)
+    expect(store.handledRows('a')).toEqual([
+      { onceKey: 'k:1', runId: 'run-1', at: 1, status: 'failed', failedAt: 50 },
+      { onceKey: 'k:2', runId: 'run-2', at: 1, status: 'done', failedAt: null }
+    ])
+    store.markHandled('a', 'k:1', 'run-3', 70)
+    expect(store.handledRows('a')[0]).toEqual({
+      onceKey: 'k:1',
+      runId: 'run-3',
+      at: 70,
+      status: 'started',
+      failedAt: null
+    })
+    expect(store.handledRows('b')).toEqual([])
   })
 
   it('records a tick with its item decisions', () => {

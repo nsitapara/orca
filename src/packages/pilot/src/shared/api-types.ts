@@ -51,7 +51,17 @@ export type TickItemRow = {
   fields: ItemFields
   runId: string | null
 }
-export type RunStatus = 'running' | 'done' | 'failed'
+export type RunStatus =
+  | 'asking'
+  | 'running'
+  | 'needs_you'
+  | 'done'
+  | 'failed'
+  | 'timed_out'
+  | 'cancelled'
+// What started a run (contract §9): the schedule, Run now, a saved answer, a yes to an ask-first
+// card, or the one-shot vault import.
+export type RunTrigger = 'schedule' | 'manual' | 'answer' | 'ask_first' | 'import'
 export type RunRow = {
   id: string
   automationId: string
@@ -65,8 +75,20 @@ export type RunRow = {
   finishedAt: number | null
   costUsd: number | null
   tokens: number | null
+  worktreeId: string | null
+  trigger: RunTrigger
+  parentRunId: string | null
+  imported: boolean
 }
-export type StepStatus = 'starting' | 'running' | 'done' | 'failed'
+export type StepStatus =
+  | 'pending'
+  | 'starting'
+  | 'running'
+  | 'done'
+  | 'failed'
+  | 'skipped'
+  | 'timed_out'
+export type StepKind = 'agent' | 'shell'
 export type StepRow = {
   runId: string
   idx: number
@@ -83,6 +105,24 @@ export type StepRow = {
   startedAt: number | null
   finishedAt: number | null
   error: string | null
+  kind: StepKind
+  mode: string | null
+  model: string | null
+  // What the step reported (`pilot run output`, `::pilot-output` lines; contract §7).
+  outputs: ItemFields
+  whenExpr: string | null
+  exitCode: number | null
+  outputTail: string | null
+  sessionPinned: boolean
+}
+// The run holding a once_per key settles it: done, or failed (retry_after_failure waits from failedAt).
+export type HandledStatus = 'started' | 'done' | 'failed'
+export type HandledRow = {
+  onceKey: string
+  runId: string | null
+  at: number
+  status: HandledStatus
+  failedAt: number | null
 }
 
 export type TickResult = {

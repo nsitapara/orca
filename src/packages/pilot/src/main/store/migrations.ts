@@ -1,6 +1,6 @@
 import type Database from '../../../../../main/sqlite/sync-database'
 
-export const PILOT_SCHEMA_VERSION = 1
+export const PILOT_SCHEMA_VERSION = 2
 
 const V1 = `
 CREATE TABLE ticks (id INTEGER PRIMARY KEY AUTOINCREMENT, automation_id TEXT NOT NULL, started_at INTEGER NOT NULL,
@@ -25,18 +25,75 @@ CREATE TABLE steps (run_id TEXT NOT NULL REFERENCES runs(id) ON DELETE CASCADE, 
 CREATE INDEX steps_by_status ON steps (status);
 `
 
+// Contract §9: multi-step runs, shell steps and outputs, the inbox and its answer queue, actions,
+// events, each automation's last valid definition, the field cache and per-worktree agent sessions.
+const V2 = `
+ALTER TABLE tick_items ADD COLUMN worktree_path TEXT;
+CREATE INDEX tick_items_worktree ON tick_items(worktree_path);
+ALTER TABLE runs ADD COLUMN worktree_id TEXT;
+ALTER TABLE runs ADD COLUMN trigger TEXT NOT NULL DEFAULT 'schedule';
+ALTER TABLE runs ADD COLUMN parent_run_id TEXT;
+ALTER TABLE runs ADD COLUMN imported INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE steps ADD COLUMN kind TEXT NOT NULL DEFAULT 'agent';
+ALTER TABLE steps ADD COLUMN mode TEXT;
+ALTER TABLE steps ADD COLUMN model TEXT;
+ALTER TABLE steps ADD COLUMN outputs_json TEXT NOT NULL DEFAULT '{}';
+ALTER TABLE steps ADD COLUMN when_expr TEXT;
+ALTER TABLE steps ADD COLUMN exit_code INTEGER;
+ALTER TABLE steps ADD COLUMN output_tail TEXT;
+ALTER TABLE steps ADD COLUMN session_pinned INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE handled ADD COLUMN status TEXT NOT NULL DEFAULT 'started';
+ALTER TABLE handled ADD COLUMN failed_at INTEGER;
+CREATE TABLE definitions (id TEXT PRIMARY KEY, file TEXT NOT NULL, yaml TEXT NOT NULL, parsed_json TEXT NOT NULL, loaded_at INTEGER NOT NULL);
+CREATE TABLE definition_errors (id TEXT PRIMARY KEY, file TEXT NOT NULL, errors_json TEXT NOT NULL, at INTEGER NOT NULL);
+CREATE TABLE field_cache (automation_id TEXT NOT NULL, field TEXT NOT NULL, item_key TEXT NOT NULL, cache_key TEXT NOT NULL,
+  value_json TEXT NOT NULL, at INTEGER NOT NULL, PRIMARY KEY (automation_id, field, item_key));
+CREATE TABLE agent_sessions (automation_id TEXT NOT NULL, worktree_path TEXT NOT NULL, agent TEXT NOT NULL,
+  session_id TEXT NOT NULL, updated_at INTEGER NOT NULL, PRIMARY KEY (automation_id, worktree_path, agent));
+CREATE TABLE events (id INTEGER PRIMARY KEY AUTOINCREMENT, at INTEGER NOT NULL, automation_id TEXT, run_id TEXT,
+  worktree_path TEXT, item_key TEXT, kind TEXT NOT NULL, payload_json TEXT NOT NULL DEFAULT '{}');
+CREATE INDEX events_worktree ON events(worktree_path, at DESC);
+CREATE INDEX events_run ON events(run_id);
+CREATE TABLE inbox_items (id TEXT PRIMARY KEY, automation_id TEXT NOT NULL, run_id TEXT, step_idx INTEGER, item_key TEXT,
+  worktree_path TEXT, person TEXT NOT NULL, type TEXT NOT NULL, title TEXT NOT NULL, context TEXT NOT NULL DEFAULT '',
+  options_json TEXT NOT NULL DEFAULT '[]', suggested TEXT, details_md TEXT, action TEXT, action_args_json TEXT,
+  digest TEXT NOT NULL, version INTEGER NOT NULL DEFAULT 1,
+  status TEXT NOT NULL DEFAULT 'open', -- open|answered|done|obsolete|stale|dismissed
+  answer_json TEXT, answered_at INTEGER, answered_by TEXT, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL,
+  outcome TEXT, replies_json TEXT NOT NULL DEFAULT '[]', parts_json TEXT NOT NULL DEFAULT '{}',
+  switch_json TEXT NOT NULL DEFAULT '[]',
+  source TEXT NOT NULL DEFAULT 'engine', vault_ref TEXT);
+CREATE INDEX inbox_open ON inbox_items(status, person);
+CREATE INDEX inbox_worktree ON inbox_items(worktree_path, status);
+CREATE TABLE queue (id INTEGER PRIMARY KEY AUTOINCREMENT,
+  inbox_item_id TEXT NOT NULL REFERENCES inbox_items(id) ON DELETE CASCADE,
+  state TEXT NOT NULL, -- not_ready|ready|held|dispatched|failed
+  hold_reason TEXT, ready_at INTEGER NOT NULL, attempts INTEGER NOT NULL DEFAULT 0, route TEXT, target_session_id TEXT,
+  dispatched_run_id TEXT, updated_at INTEGER NOT NULL);
+CREATE TABLE action_runs (id INTEGER PRIMARY KEY AUTOINCREMENT, inbox_item_id TEXT, run_id TEXT, action TEXT NOT NULL,
+  args_json TEXT NOT NULL, digest TEXT NOT NULL, phase TEXT NOT NULL,
+  status TEXT NOT NULL, -- running|done|failed|stale|needs_agent|not_yet|refused
+  output TEXT,
+  dry_run INTEGER NOT NULL DEFAULT 0, started_at INTEGER NOT NULL, finished_at INTEGER);
+CREATE TABLE claims (worktree_path TEXT PRIMARY KEY, holder TEXT NOT NULL, until INTEGER NOT NULL);
+`
+
+// MIGRATIONS[n - 1] takes a database from version n - 1 to n.
+const MIGRATIONS: readonly string[] = [V1, V2]
+
 // Same pattern as Orca's orchestration.db (migrate.ts): user_version + one transaction, all or nothing.
-export function migrate(db: Database): void {
+// `target` lets tests build a database at an older version.
+export function migrate(db: Database, target = PILOT_SCHEMA_VERSION): void {
   const current = db.pragma('user_version', { simple: true }) as number
-  if (current >= PILOT_SCHEMA_VERSION) {
+  if (current >= target) {
     return
   }
   db.exec('BEGIN IMMEDIATE')
   try {
-    if (current < 1) {
-      db.exec(V1)
+    for (let version = current + 1; version <= target; version++) {
+      db.exec(MIGRATIONS[version - 1])
     }
-    db.pragma(`user_version = ${PILOT_SCHEMA_VERSION}`)
+    db.pragma(`user_version = ${target}`)
     db.exec('COMMIT')
   } catch (error) {
     db.exec('ROLLBACK')

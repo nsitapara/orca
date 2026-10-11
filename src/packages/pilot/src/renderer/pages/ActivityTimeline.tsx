@@ -9,9 +9,13 @@ function costText(run: RunRow): string {
 }
 
 const RUN_STATUS: Record<RunRow['status'], string> = {
+  asking: 'Asking first',
   running: 'Running',
+  needs_you: 'Needs you',
   done: 'Done',
-  failed: 'Failed'
+  failed: 'Failed',
+  timed_out: 'Timed out',
+  cancelled: 'Cancelled'
 }
 
 function RunLine({ run }: { run: RunRow }): React.JSX.Element {
