@@ -116,6 +116,38 @@ pilot automations edit --id <pilot id> --disabled
 orca automations edit --id <orca id> --enabled
 ```
 
+## Pilot and Orca side by side
+
+Both apps can run at once, each with its own backend and data. An automation runs in one of them; the other keeps a disabled copy.
+
+| | Pilot (where the jobs run) | Orca (the fallback) |
+|---|---|---|
+| App | `dist/mac-arm64/Pilot.app`, port 6868 | `/Applications/Orca.app`, port 6768 |
+| Data | `~/Library/Application Support/Pilot` | `~/Library/Application Support/orca` |
+| Jobs | every moved automation, enabled as it was in Orca | the same automations, all disabled |
+| `orca` in its terminals and prechecks | reaches Pilot | reaches Orca |
+| Agent Console | `AGENT_CONSOLE_BACKEND=pilot` (the default) | `AGENT_CONSOLE_BACKEND=orca` |
+
+What follows from that:
+
+- **Keep Pilot open.** Its jobs run only while Pilot runs, and the ones that start an agent (02, M01–M03) need its window. Launch it from the Dock or Finder. Launched from an Orca terminal, it inherits that terminal's `ORCA_*` routing.
+- **Prechecks reach the app that runs them.** A precheck runs with the app's own environment. Pilot sets `ORCA_USER_DATA_PATH` to its data folder, so even `/opt/homebrew/bin/orca` (real Orca's launcher) answers from Pilot. Verified with a probe job on 2026-10-11.
+- **Agent tabs open where the job runs.** Tabs a job opened in Orca before the move stay in Orca, and Pilot's sweeps can't see them. Check `orca worktree ps` in Orca before a switch and let working agents finish.
+- **History:** each app keeps its own runs. The Agent Console shows both, by job code.
+
+Switch every moved automation at once (dry run without `--apply`):
+
+```
+node src/packages/pilot/scripts/switch-automations.mjs --to orca --apply    # back to Orca
+node src/packages/pilot/scripts/switch-automations.mjs --to pilot --apply   # back to Pilot
+```
+
+- It works from `moved-automations.json`, and touches only automations that were enabled in Orca when they moved. Hand-started ones stay disabled in both.
+- For each automation it disables the app it leaves, reads that back, and only then enables the other. If the disable doesn't take, it leaves the other app alone.
+- It refuses unless both apps are running and the two CLIs reach different apps, since `orca` in a Pilot terminal is Pilot's. It calls real Orca's CLI by its full path with Orca's data folder.
+
+Then point the Agent Console at the same app: `AGENT_CONSOLE_BACKEND=orca` or `pilot` (see `~/.agents/skills/agent-console/SKILL.md`, "Which app it uses").
+
 ## Remote use (D25)
 
 Pilot keeps Orca's pairing, WebSocket server, web client and `orcad` protocols unchanged. Pilot's runtime listens on 6868 (override `PILOT_WS_PORT`), so it runs beside real Orca on 6768. Pairing links stay `orca://pair?code=...` and carry Pilot's endpoint.
