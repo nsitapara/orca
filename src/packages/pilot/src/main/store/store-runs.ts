@@ -201,12 +201,19 @@ export class RunStore {
       .map((r) => toRun(r as never))
   }
 
-  openStepsIn(automationId: string, worktreePath: string): StepRow[] {
+  // What the session check reads: this automation's steps in a worktree that are still starting or
+  // running, plus finished ones (done/failed) with a terminal whose tab may still be open. Finished
+  // steps count only back to `finishedSince`, so the check never walks the whole history.
+  sessionStepsIn(automationId: string, worktreePath: string, finishedSince: number): StepRow[] {
     return this.db
       .prepare(
-        "SELECT s.* FROM steps s JOIN runs r ON r.id = s.run_id WHERE r.automation_id = ? AND r.worktree_path = ? AND s.status IN ('starting', 'running')"
+        `SELECT s.* FROM steps s JOIN runs r ON r.id = s.run_id
+         WHERE r.automation_id = ? AND r.worktree_path = ?
+           AND (s.status IN ('starting', 'running')
+             OR (s.status IN ('done', 'failed') AND s.terminal_handle IS NOT NULL AND s.finished_at >= ?))
+         ORDER BY s.started_at, s.run_id`
       )
-      .all(automationId, worktreePath)
+      .all(automationId, worktreePath, finishedSince)
       .map((r) => toStep(r as never))
   }
 

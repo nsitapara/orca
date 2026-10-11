@@ -1,6 +1,7 @@
 import type { OrcaRuntimeService } from '../../../../../main/runtime/orca-runtime'
 import type { PilotStore } from '../store/store'
 import type { CostReader } from './cost'
+import { isTerminalGoneError, terminalRelister, type TerminalRelist } from './terminal-relist'
 
 export type ObservedState = 'working' | 'waiting' | 'done' | 'gone'
 export type StepProbe = {
@@ -13,28 +14,6 @@ const STATE_MAP: Record<string, ObservedState> = {
   blocked: 'waiting',
   waiting: 'waiting',
   done: 'done'
-}
-
-// Errors that mean the terminal will never come back (throw sites in src/main/runtime):
-// - terminal_handle_stale: build-pty-terminal-summary, resolve-terminal-pane (showTerminal) and others
-// - terminal_unsupported_for_agent_session: structured-worker-terminal-refusal, carried as `code`
-//   (the message is prose). Only structured-worker handles throw it, and one can't be our terminal.
-//   An unknown or pre-restart handle throws terminal_handle_stale instead.
-// - terminal_not_found: resolve-terminal-pane, serialize-main-terminal-buffer
-// Anything else (runtime_unavailable during startup or a renderer reload, unknown errors) is
-// transient: the probe rethrows and the step is left alone this cycle.
-const GONE_CODES = new Set([
-  'terminal_handle_stale',
-  'terminal_unsupported_for_agent_session',
-  'terminal_not_found'
-])
-
-function isGone(error: unknown): boolean {
-  if (!(error instanceof Error)) {
-    return false
-  }
-  const code = (error as { code?: unknown }).code
-  return GONE_CODES.has(error.message) || (typeof code === 'string' && GONE_CODES.has(code))
 }
 
 type Row = ReturnType<OrcaRuntimeService['getAgentStatusRowsForPane']>[number]
@@ -72,7 +51,10 @@ function observed(row: Row): ObservedState {
   return STATE_MAP[row.state] ?? 'working'
 }
 
-export function runtimeStepProbe(runtime: OrcaRuntimeService): StepProbe {
+export function runtimeStepProbe(
+  runtime: OrcaRuntimeService,
+  relist: TerminalRelist = terminalRelister(runtime)
+): StepProbe {
   return {
     async status(handle, paneKey) {
       const row = newestLiveRow(runtime.getAgentStatusRowsForPane(paneKey))
@@ -83,10 +65,15 @@ export function runtimeStepProbe(runtime: OrcaRuntimeService): StepProbe {
         await runtime.showTerminal(handle)
         return 'working'
       } catch (error) {
-        if (isGone(error)) {
-          return 'gone'
+        if (!isTerminalGoneError(error)) {
+          throw error
         }
-        throw error
+        // After an app restart a terminal the daemon still hosts looks stale too: ask the PTY host's
+        // inventory before closing the run (terminal-relist.ts). If it can't say, the step waits.
+        if (await relist(handle, paneKey)) {
+          return 'working'
+        }
+        return 'gone'
       }
     },
     session(paneKey) {

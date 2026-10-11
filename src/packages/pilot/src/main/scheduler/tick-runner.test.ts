@@ -65,7 +65,7 @@ const facts: FactDeps = {
   ],
   gitStatusCount: async () => 0,
   gitOperation: async () => null,
-  openSessionHandles: () => [],
+  automationSessions: () => [],
   terminalAlive: async () => false
 }
 

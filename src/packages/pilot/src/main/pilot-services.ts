@@ -12,6 +12,7 @@ import { resolveRepoPath, runtimeFactDeps } from './fields/runtime-facts'
 import { claudeTranscriptCost } from './run/cost'
 import { makeLauncher } from './run/launch'
 import { sweepStaleStarts } from './run/stale-starts'
+import { terminalRelister } from './run/terminal-relist'
 import { pollRunningSteps, runtimeStepProbe } from './run/watcher'
 import { buildPilotMethods } from './rpc/methods'
 import { registerPilotRpcMethods } from './rpc/register'
@@ -74,16 +75,18 @@ function openPilot(
   opened.push(() => store.close())
   const definitions = liveDefinitions(host.dirs, log)
   opened.push(definitions.stop)
+  // One relister for the session check and the step watcher, so they share its listing.
+  const relist = terminalRelister(runtime, now)
   const tickDeps: TickDeps = {
     store,
     now,
     resolveRepo: (repo) => resolveRepoPath(runtime, repo),
     gitlab: glabApiForRepo,
-    facts: runtimeFactDeps(runtime, store),
+    facts: runtimeFactDeps(runtime, store, undefined, { relist, now }),
     quota: cachedQuota(options.quota ?? NO_QUOTA),
     launch: makeLauncher(runtime, store, now)
   }
-  const probe = runtimeStepProbe(runtime)
+  const probe = runtimeStepProbe(runtime, relist)
   const scheduler = new PilotScheduler({
     now,
     definitions: definitions.current,

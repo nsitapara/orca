@@ -1,7 +1,7 @@
 import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { addWorktreeFields, detectGitOperation, type FactDeps } from './worktree-fields'
 
 const item = (key: string, branch: string) => ({
@@ -17,7 +17,8 @@ const deps: FactDeps = {
   ],
   gitStatusCount: async (path) => (path === '/wt/b' ? 2 : 0),
   gitOperation: async () => null,
-  openSessionHandles: (_automation, path) => (path === '/wt/a' ? ['term_1'] : []),
+  automationSessions: (_automation, path) =>
+    path === '/wt/a' ? [{ active: false, handle: 'term_1', paneKey: 'p1' }] : [],
   terminalAlive: async (handle) => handle === 'term_1'
 }
 
@@ -80,12 +81,41 @@ describe('addWorktreeFields', () => {
   it('leaves the open-session fact absent when the store cannot be read', async () => {
     const broken: FactDeps = {
       ...deps,
-      openSessionHandles: () => {
+      automationSessions: () => {
         throw new Error('store closed')
       }
     }
     const out = await addWorktreeFields([item('!1', 'a')], 'ci', '/repo', broken, () => true)
     expect(out[0].fields).not.toHaveProperty('session.open_from_automation')
+  })
+
+  // Parity with the old 05: a CI-fix tab blocks the worktree until it closes, even after the agent's
+  // Stop hook marked its step done.
+  it.each([
+    ['no steps', [], false],
+    [
+      'a step still starting (no terminal yet)',
+      [{ active: true, handle: null, paneKey: null }],
+      true
+    ],
+    ['a running step', [{ active: true, handle: 'closed', paneKey: null }], true],
+    ['a finished step whose tab is open', [{ active: false, handle: 'open', paneKey: 'p' }], true],
+    [
+      'a finished step whose tab closed',
+      [{ active: false, handle: 'closed', paneKey: 'p' }],
+      false
+    ],
+    ['a finished step without a terminal', [{ active: false, handle: null, paneKey: null }], false]
+  ])('session open with %s: %s', async (_name, steps, open) => {
+    const terminalAlive = vi.fn(async (handle: string) => handle === 'open')
+    const out = await addWorktreeFields(
+      [item('!1', 'a')],
+      'ci',
+      '/repo',
+      { ...deps, automationSessions: () => steps, terminalAlive },
+      () => true
+    )
+    expect(out[0].fields['session.open_from_automation']).toBe(open)
   })
 
   it('throws when the worktree list fails, so the tick fails and the next one retries', async () => {
@@ -103,7 +133,10 @@ describe('addWorktreeFields', () => {
   it('leaves the open-session fact absent when a terminal check errors and none is alive', async () => {
     const flaky: FactDeps = {
       ...deps,
-      openSessionHandles: () => ['t1', 't2'],
+      automationSessions: () => [
+        { active: false, handle: 't1', paneKey: null },
+        { active: false, handle: 't2', paneKey: null }
+      ],
       terminalAlive: async (h) => (h === 't1' ? boom() : false)
     }
     const out = await addWorktreeFields([item('!1', 'a')], 'ci', '/repo', flaky, () => true)

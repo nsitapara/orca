@@ -3,12 +3,15 @@ import { join } from 'node:path'
 import type { FieldValue, ItemFields, TickItem } from '../../shared/api-types'
 
 export type WorktreeInfo = { id: string; path: string; branch: string }
+// One of this automation's steps in a worktree: still starting/running (active), or finished with the
+// terminal it ran in, whose tab may still be open.
+export type SessionStep = { active: boolean; handle: string | null; paneKey: string | null }
 export type FactDeps = {
   listWorktrees(repoPath: string): Promise<WorktreeInfo[]>
   gitStatusCount(path: string): Promise<number>
   gitOperation(path: string): Promise<string | null>
-  openSessionHandles(automationId: string, worktreePath: string): string[]
-  terminalAlive(handle: string): Promise<boolean>
+  automationSessions(automationId: string, worktreePath: string): SessionStep[]
+  terminalAlive(handle: string, paneKey: string | null): Promise<boolean>
 }
 
 const OPERATION_MARKERS: [string, string][] = [
@@ -54,9 +57,16 @@ async function attempt<T>(read: () => T | Promise<T>): Promise<Read<T>> {
   }
 }
 
-async function anyAlive(deps: FactDeps, automationId: string, path: string): Promise<boolean> {
-  const handles = deps.openSessionHandles(automationId, path)
-  const reads = await Promise.allSettled(handles.map((h) => deps.terminalAlive(h)))
+// Open while a step still starts or runs, and after it finishes while its tab is still open: the old
+// 05 waited for its CI-fix tab to close, and an agent's Stop hook marks the step done well before that.
+async function sessionOpen(deps: FactDeps, automationId: string, path: string): Promise<boolean> {
+  const steps = deps.automationSessions(automationId, path)
+  if (steps.some((s) => s.active)) {
+    return true
+  }
+  const reads = await Promise.allSettled(
+    steps.flatMap((s) => (s.handle ? [deps.terminalAlive(s.handle, s.paneKey)] : []))
+  )
   if (reads.some((r) => r.status === 'fulfilled' && r.value)) {
     return true
   }
@@ -90,7 +100,7 @@ async function worktreeFacts(
   const [dirty, op, open] = await Promise.all([
     attempt(() => deps.gitStatusCount(wt.path)),
     attempt(() => deps.gitOperation(wt.path)),
-    attempt(() => anyAlive(deps, automationId, wt.path))
+    attempt(() => sessionOpen(deps, automationId, wt.path))
   ])
   const fields: ItemFields = { 'worktree.path': wt.path, 'worktree.id': wt.id }
   setIfRead(fields, 'worktree.dirty_count', dirty, null)
