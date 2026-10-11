@@ -37,6 +37,18 @@ describe('AutomationView', () => {
     expect(screen.getByText(/schedule: manual/)).toBeTruthy()
   })
 
+  it('labels powers and inbox as not enforced in M1', async () => {
+    pilotRpc.mockImplementation(async (method: string) =>
+      method === 'pilot.automations.get'
+        ? { ...detail, summary: { ...detail.summary, powers: ['commit', 'push'] } }
+        : []
+    )
+    render(<AutomationView id="fix-ci" onBack={() => {}} />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Overview' }))
+    expect(await screen.findByText('commit, push (not enforced in M1)')).toBeTruthy()
+    expect(screen.getByText('{mr.author} (not enforced in M1)')).toBeTruthy()
+  })
+
   it('shows the empty state when there are no ticks', async () => {
     pilotRpc.mockImplementation(async (method: string) =>
       method === 'pilot.automations.get' ? detail : []

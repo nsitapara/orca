@@ -14,6 +14,7 @@ export const summary: AutomationSummary = {
   itemKind: 'merge_request',
   agent: 'claude',
   powers: [],
+  inbox: '{mr.author}',
   nextTickAt: null,
   lastTick: null
 }

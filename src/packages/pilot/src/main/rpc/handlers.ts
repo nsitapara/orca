@@ -28,6 +28,7 @@ function summarize(ctx: PilotContext, def: AutomationDefinition): AutomationSumm
     itemKind: itemKindLabel(def),
     agent: def.steps[0]?.agent ?? 'claude',
     powers: def.powers,
+    inbox: def.inbox,
     nextTickAt: ctx.scheduler.nextTickAt(def),
     lastTick: ctx.store.lastTick(def.id)
   }
