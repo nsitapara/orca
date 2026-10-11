@@ -304,3 +304,11 @@ export type RunEventResult = { id: number }
 export type RunChannelTarget = { terminal?: string; runId?: string; stepIdx?: number }
 export type RunOutputRequest = RunChannelTarget & { outputs: ItemFields }
 export type RunEventRequest = RunChannelTarget & { kind: string; payload?: Record<string, unknown> }
+
+export type {
+  InboxAddParams,
+  InboxAddResult,
+  InboxAnswerParams,
+  InboxListParams,
+  InboxListPayload
+} from './inbox-types'
