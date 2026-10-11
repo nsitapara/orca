@@ -3,7 +3,8 @@ import { existsSync, mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { renderShellCommand, singleQuotedPlaceholders } from './shell-template'
+import { renderTemplate } from '../template'
+import { renderShellCommand, shellProblemMessage, shellTemplateProblems } from './shell-template'
 
 describe('renderShellCommand', () => {
   it.each([
@@ -42,16 +43,53 @@ describe('renderShellCommand', () => {
   it('fails when a placeholder has no value, naming every one', () => {
     expect(
       renderShellCommand('x.sh {worktree.path} {mr.iid} {worktree.path}', { 'mr.iid': null })
-    ).toEqual({ ok: false, missing: ['worktree.path', 'mr.iid'], inSingleQuotes: [] })
+    ).toEqual({ ok: false, missing: ['worktree.path', 'mr.iid'], problems: [] })
   })
 
-  it('refuses a placeholder inside single quotes', () => {
-    expect(renderShellCommand("echo '{x}' {y}", { x: 'a', y: 'b' })).toEqual({
+  it('refuses a placeholder inside single quotes, pointing to env:', () => {
+    const rendered = renderShellCommand("echo '{x}' {y}", { x: 'a', y: 'b' })
+    expect(rendered).toEqual({
       ok: false,
       missing: [],
-      inSingleQuotes: ['x']
+      problems: [{ name: 'x', reason: 'it is inside single quotes' }]
     })
-    expect(singleQuotedPlaceholders("sh -c 'echo {x}' && echo {y}")).toEqual(['x'])
+    expect(shellTemplateProblems("echo '{x}'").map(shellProblemMessage)).toEqual([
+      `{x} can't be used in this command (it is inside single quotes); pass it as env: { NAME: '{x}' } and use "$NAME" in the script`
+    ])
+    expect(shellProblemMessage({ name: 'x', reason: 'r' })).not.toContain('double quotes')
+  })
+
+  it.each([
+    ['a comment', '# 27" monitor\nfind . -name {x}'],
+    ['a heredoc', 'cat <<EOF\n27"\n{x}\nEOF'],
+    ['a nested sh -c in double quotes', 'sh -c "echo {x}"'],
+    ['a nested bash -ec', "bash -ec 'echo {x}'"],
+    ['a substitution', 'echo $(echo {x})'],
+    ['a backtick', 'echo `echo {x}`'],
+    ['ANSI quoting', "echo $'a' {x}"],
+    ['eval', 'eval echo {x}'],
+    ['xargs', 'ls | xargs echo {x}'],
+    ['trap', 'trap "echo {x}" EXIT'],
+    ['a [[ test', '[[ -n {x} ]] && echo y'],
+    ['an arithmetic expression', 'echo $((1)) {x}'],
+    ['let', 'let n={x}']
+  ])('refuses any placeholder next to %s', (_n, template) => {
+    const rendered = renderShellCommand(template, { x: 'z -o -exec touch MARK ;' })
+    expect(rendered.ok).toBe(false)
+    expect(shellTemplateProblems(template).map((p) => p.name)).toEqual(['x'])
+  })
+
+  it('allows a # that is not a comment, and a command with no placeholder', () => {
+    expect(renderShellCommand('echo a#b "# {x}" $#', { x: '1' }).ok).toBe(true)
+    expect(renderShellCommand('echo "$(date)" # fine', {}).ok).toBe(true)
+  })
+
+  it('judges a script path the same at load (as written) and at render (after resolveScriptCommand)', () => {
+    const asWritten = './tools/{x}.sh --flag'
+    const resolved = "'/a/tools/{x}.sh' --flag"
+    expect(shellTemplateProblems(asWritten)).toEqual(shellTemplateProblems(resolved))
+    expect(shellTemplateProblems(asWritten)).toHaveLength(1)
+    expect(renderShellCommand(resolved, { x: 'v' }).ok).toBe(false)
   })
 })
 
@@ -66,35 +104,19 @@ describe('renderShellCommand never runs a value (real /bin/sh)', () => {
     '\ntouch MARK\n',
     "$'\\'' ; touch MARK; #"
   ]
-  // 'runs': the command is rendered and run; 'refused': the render fails (nothing runs).
   const CONTEXTS = [
-    ['a bare argument', 'echo {x}', 'runs'],
-    ['double quotes', 'echo "{x}"', 'runs'],
-    ['a comment with a double quote', '# say "{x}\necho ok', 'runs'],
-    ['a comment with an apostrophe', "# don't {x}\necho ok", 'refused'],
-    ['an unquoted heredoc', 'cat <<EOF\n{x}\nEOF', 'runs'],
-    ['a quoted heredoc', "cat <<'EOF'\n{x}\nEOF", 'runs'],
-    ['a command substitution in quotes', 'echo "$(echo {x})"', 'runs'],
-    ['quotes in a command substitution', 'echo $(echo "{x}")', 'runs'],
-    ['single quotes in a command substitution', 'echo "$(printf %s \'{x}\')"', 'runs'],
-    ['backticks in double quotes', 'echo "`echo {x}`"', 'runs'],
-    ['a backslash before the placeholder', 'echo \\{x}', 'runs'],
-    ['a backslash in double quotes', 'echo "\\{x}"', 'runs'],
-    ['bash ANSI quoting before it', "echo $'a\\'b' {x}", 'refused'],
-    ['a nested sh -c', "sh -c 'echo {x}'", 'refused']
+    ['a bare argument', 'echo {x}'],
+    ['double quotes', 'echo "a {x} b"'],
+    ['a backslash before the placeholder', 'echo \\{x}'],
+    ['a backslash in double quotes', 'echo "\\{x}"'],
+    ['an earlier quoted word', `echo 'it' "s" {x}`]
   ] as const
 
   it.each(
-    CONTEXTS.flatMap(([name, template, mode]) =>
-      PAYLOADS.map((p) => [name, template, mode, p] as const)
-    )
-  )('%s, value %j', (_name, template, mode, payload) => {
+    CONTEXTS.flatMap(([name, template]) => PAYLOADS.map((p) => [name, template, p] as const))
+  )('%s, value %j', (_name, template, payload) => {
     const dir = mkdtempSync(join(tmpdir(), 'pilot-tpl-'))
     const rendered = renderShellCommand(template, { x: payload })
-    if (mode === 'refused') {
-      expect(rendered.ok).toBe(false)
-      return
-    }
     if (!rendered.ok) {
       throw new Error('expected the template to render')
     }
@@ -107,6 +129,21 @@ describe('renderShellCommand never runs a value (real /bin/sh)', () => {
     } catch {}
     expect(existsSync(join(dir, 'MARK'))).toBe(false)
   })
+
+  it.each(PAYLOADS)(
+    'an env: value %j reaches the script as one argument via "$NAME"',
+    (payload) => {
+      const dir = mkdtempSync(join(tmpdir(), 'pilot-tpl-'))
+      const value = renderTemplate('{x}', { x: payload }).text
+      const out = execFileSync('/bin/sh', ['-c', 'for a in "$NAME"; do printf "[%s]" "$a"; done'], {
+        cwd: dir,
+        env: { PATH: '/usr/bin:/bin', NAME: value },
+        encoding: 'utf8'
+      })
+      expect(out).toBe(`[${payload}]`)
+      expect(existsSync(join(dir, 'MARK'))).toBe(false)
+    }
+  )
 
   it('hands the value over intact', () => {
     const rendered = renderShellCommand('printf %s "{x}"', { x: 'it\'s $(rm -rf ~) "q"' })

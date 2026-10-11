@@ -97,6 +97,8 @@ export type StepDef = {
   session: StepSession
   run: string | null
   exitCodes: { ok: number[]; skip: number[] }
+  // Shell steps: NAME -> template, rendered as plain text and exported to the command.
+  env: Record<string, string>
   when: string | null
   always: boolean
   timeoutMs: number | null

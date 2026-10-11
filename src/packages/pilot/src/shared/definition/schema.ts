@@ -109,6 +109,7 @@ const step = z.strictObject({
   args: z.array(z.string()).optional(),
   session: stepSession.optional(),
   run: z.string().min(1).optional(),
+  env: z.record(z.string(), z.string()).optional(),
   exit_codes: z
     .strictObject({
       ok: z.array(z.number().int()).optional(),

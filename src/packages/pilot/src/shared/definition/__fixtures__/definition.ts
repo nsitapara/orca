@@ -11,6 +11,7 @@ export function testStep(over: Partial<StepDef> = {}): StepDef {
     args: [],
     session: { kind: 'new' },
     run: null,
+    env: {},
     exitCodes: { ok: [0], skip: [] },
     when: null,
     always: false,

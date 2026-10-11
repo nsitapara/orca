@@ -20,7 +20,37 @@ describe('definition validation', () => {
     [
       'a shell placeholder inside single quotes',
       `${BASE}steps:\n  - { agent: shell, run: "echo '{mr.title}'" }\n`,
-      "step 1: {mr.title} is inside single quotes in run:, where the shell can't expand it; put it outside them or in double quotes"
+      `step 1: run: {mr.title} can't be used in this command (it is inside single quotes); pass it as env: { NAME: '{mr.title}' } and use "$NAME" in the script`
+    ],
+    [
+      'a shell placeholder next to a comment',
+      `${BASE}steps:\n  - { agent: shell, run: "echo {mr.title} # hi" }\n`,
+      `step 1: run: {mr.title} can't be used in this command (the command has a comment); pass it as env: { NAME: '{mr.title}' } and use "$NAME" in the script`
+    ],
+    [
+      'a script path with a placeholder',
+      `${BASE}steps:\n  - { agent: shell, run: "./tools/{mr.iid}.sh" }\n`,
+      `step 1: run: {mr.iid} can't be used in this command (it is inside single quotes); pass it as env: { NAME: '{mr.iid}' } and use "$NAME" in the script`
+    ],
+    [
+      'a lowercase env name',
+      `${BASE}steps:\n  - { agent: shell, run: ./x.sh, env: { title: "{mr.title}" } }\n`,
+      "step 1: env: title isn't a usable name: capital letters, digits and _, not starting with a digit, PILOT_ or ORCA_"
+    ],
+    [
+      'an env name starting PILOT_',
+      `${BASE}steps:\n  - { agent: shell, run: ./x.sh, env: { PILOT_X: a } }\n`,
+      "step 1: env: PILOT_X isn't a usable name: capital letters, digits and _, not starting with a digit, PILOT_ or ORCA_"
+    ],
+    [
+      'an env name starting ORCA_',
+      `${BASE}steps:\n  - { agent: shell, run: ./x.sh, env: { ORCA_X: a } }\n`,
+      "step 1: env: ORCA_X isn't a usable name: capital letters, digits and _, not starting with a digit, PILOT_ or ORCA_"
+    ],
+    [
+      'env on an agent step',
+      `${BASE}steps:\n  - { agent: claude, prompt: hi, env: { A: b } }\n`,
+      'step 1: only shell steps use env:'
     ],
     [
       'a shell step with agent keys',
