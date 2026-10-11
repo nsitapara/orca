@@ -11,6 +11,21 @@ Pilot is Nish's fork of Orca (`github.com/nsitapara/orca`), with Automations reb
 - **Launchers:** `bin/orca` inside Pilot launches Pilot's binary but, without `ORCA_USER_DATA_PATH`, talks to whichever app's data the environment points at. Use `pilot` for Pilot.
 - **Tests:** `pnpm exec vitest run --config config/vitest.config.ts src/packages/pilot`
 
+## Import your Orca settings
+
+Quit Pilot, then:
+
+    node src/packages/pilot/scripts/import-orca-settings.mjs            # dry run: shows what would change
+    node src/packages/pilot/scripts/import-orca-settings.mjs --apply    # stage it; Pilot loads it on next start
+    node src/packages/pilot/scripts/import-orca-settings.mjs --restore <stamp>   # undo an --apply
+
+- **What comes over:** settings, repos, projects and their host setups, project groups, folder workspaces, sparse presets, SSH targets, worktree metadata, lineage and identities, retired worktree names, and onboarding. Each one replaces Pilot's copy.
+- **What never comes over:** Orca's automations and their runs (Orca's would run in Pilot too and launch agents twice), UI state, workspace sessions, terminals and PTY leases, mobile tab selections, and telemetry.
+- **Settings kept at Pilot's value:** the telemetry install id, `machineName`, custom pairing addresses (they can carry Orca's port), secrets sealed with Orca's keychain key (`opencodeSessionCookie`, `opencodeGoApiKey`, `httpProxyUrl`), managed Claude/Codex accounts (they point into Orca's data folder), and any setting whose value points into Orca's data folder. The dry run lists each one with its reason.
+- **How it works:** the script reads Orca's `profile-state.db` read-only, merges the whitelist over Pilot's current state, renames Pilot's `profile-state.db*`, `.authority` marker, backups and exports aside with a `.pre-orca-import-<stamp>` suffix, and writes `orca-data.json` in Pilot's profile. On its next start, Pilot's own legacy-JSON migration imports it into a fresh `profile-state.db`. Nothing is deleted, and nothing in Orca's data folder is written.
+- **Re-sync:** run `--apply` again at any time. Pilot's own UI, sessions and automations are kept, and the whitelisted parts are refreshed from Orca.
+- It refuses to run while Pilot is running (a `Pilot.app/Contents/MacOS/Pilot` process, or `SingletonLock` / `orcad.lock` in Pilot's data folder).
+
 ## Remote use (D25)
 
 Pilot keeps Orca's pairing, WebSocket server, web client and `orcad` protocols unchanged. Pilot's runtime listens on 6868 (override `PILOT_WS_PORT`), so it runs beside real Orca on 6768. Pairing links stay `orca://pair?code=...` and carry Pilot's endpoint.
