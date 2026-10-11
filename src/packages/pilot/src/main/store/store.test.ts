@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import type { ItemDecision } from '../../shared/api-types'
-import { PilotStore } from './store'
+import { INTERRUPTED, PilotStore, STUCK_TICK_MS, TICK_RETENTION_MS } from './store'
 
 function freshStore(): PilotStore {
   return PilotStore.open(join(mkdtempSync(join(tmpdir(), 'pilot-store-')), 'pilot-automations.db'))
@@ -154,6 +154,51 @@ describe('PilotStore', () => {
       'running',
       'starting'
     ])
+  })
+
+  // Spec §7: ticks and items for 30 days, runs and steps indefinitely.
+  it('removes ticks older than 30 days with their items, keeping runs and each newest tick', () => {
+    const store = freshStore()
+    const now = TICK_RETENTION_MS + 1_000
+    const old = store.startTick('a', false, 1)
+    store.recordDecisions(old, [decision('!1', 'started')], new Map([['!1', 'run-old']]))
+    store.finishTick(old, 'ok', null, {}, 2)
+    store.runs.create({
+      id: 'run-old',
+      automationId: 'a',
+      tickId: old,
+      itemKey: '!1',
+      itemLabel: '!1',
+      worktreePath: null,
+      startedAt: 1
+    })
+    const newer = store.startTick('a', false, 500)
+    store.finishTick(newer, 'ok', null, {}, 501)
+    const recent = store.startTick('a', false, now - 1)
+    store.finishTick(recent, 'ok', null, {}, now)
+    const lonely = store.startTick('b', false, 1)
+    store.finishTick(lonely, 'ok', null, {}, 2)
+    expect(store.housekeep(now)).toEqual({ interrupted: 0, pruned: 2 })
+    expect(store.listTicks('a', 10).map((t) => t.id)).toEqual([recent])
+    expect(store.tickItems(old)).toEqual([])
+    expect(store.runs.get('run-old')?.tickId).toBe(old)
+    // An automation that hasn't ticked in 30 days keeps its last tick.
+    expect(store.lastRealTick('b')?.id).toBe(lonely)
+  })
+
+  it('closes a tick still running after an hour as interrupted, and leaves a younger one', () => {
+    const store = freshStore()
+    const now = 10 * STUCK_TICK_MS
+    const stuck = store.startTick('a', false, now - STUCK_TICK_MS - 1)
+    const young = store.startTick('b', false, now - 1_000)
+    expect(store.housekeep(now)).toEqual({ interrupted: 1, pruned: 0 })
+    expect(store.lastTick('a')).toMatchObject({
+      id: stuck,
+      status: 'failed',
+      error: INTERRUPTED,
+      finishedAt: now
+    })
+    expect(store.lastTick('b')).toMatchObject({ id: young, status: 'running' })
   })
 
   it('keeps data across close and reopen of the same file', () => {

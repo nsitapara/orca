@@ -3,6 +3,13 @@ import type { ItemDecision, TickItemRow, TickRow, Verdict } from '../../shared/a
 import { migrate } from './migrations'
 import { RunStore } from './store-runs'
 
+const DAY = 24 * 60 * 60_000
+// Spec §7: ticks and their items are kept 30 days; runs and steps are kept indefinitely.
+export const TICK_RETENTION_MS = 30 * DAY
+// No tick runs this long: one still 'running' after an hour was cut off by a quit or a crash.
+export const STUCK_TICK_MS = 60 * 60_000
+export const INTERRUPTED = 'interrupted'
+
 function toTick(r: Record<string, unknown>): TickRow {
   return {
     id: Number(r.id),
@@ -41,6 +48,23 @@ export class PilotStore {
 
   close(): void {
     this.db.close()
+  }
+
+  // Run when Pilot starts. Each automation's newest tick of each kind (real, dry run) is kept at any
+  // age, so the list still shows its last tick and the scheduler still knows when it last ran.
+  // Deleting a tick deletes its items (ON DELETE CASCADE); its runs and steps stay.
+  housekeep(now: number): { interrupted: number; pruned: number } {
+    const interrupted = this.db
+      .prepare(
+        "UPDATE ticks SET status = 'failed', error = ?, finished_at = ? WHERE status = 'running' AND started_at < ?"
+      )
+      .run(INTERRUPTED, now, now - STUCK_TICK_MS)
+    const pruned = this.db
+      .prepare(
+        'DELETE FROM ticks WHERE started_at < ? AND id NOT IN (SELECT MAX(id) FROM ticks GROUP BY automation_id, dry_run)'
+      )
+      .run(now - TICK_RETENTION_MS)
+    return { interrupted: Number(interrupted.changes), pruned: Number(pruned.changes) }
   }
 
   schemaVersion(): number {

@@ -73,6 +73,12 @@ function openPilot(
   mkdirSync(host.dataDir, { recursive: true })
   const store = PilotStore.open(join(host.dataDir, 'pilot-automations.db'))
   opened.push(() => store.close())
+  const kept = store.housekeep(now())
+  if (kept.interrupted > 0 || kept.pruned > 0) {
+    log(
+      `[pilot] store: ${kept.interrupted} interrupted tick(s) closed, ${kept.pruned} tick(s) older than 30 days removed`
+    )
+  }
   const definitions = liveDefinitions(host.dirs, log)
   opened.push(definitions.stop)
   // One relister for the session check and the step watcher, so they share its listing.
