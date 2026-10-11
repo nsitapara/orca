@@ -16,6 +16,7 @@ import { runtimeFieldDeps } from './fields/runtime-field-deps'
 import { runShellScript } from './fields/script-runner'
 import { launchAgentStep } from './run/agent-step'
 import { wireRunEngine } from './run/engine-wiring'
+import { pilotStepEnv } from './run/step-launch-plan'
 import { runtimeLauncherDeps } from './run/launch'
 import { sweepStaleStarts } from './run/stale-starts'
 import { terminalRelister } from './run/terminal-relist'
@@ -108,6 +109,24 @@ function openPilot(
     definitionFor: (id) => definitions.current().definitions.find((d) => d.id === id) ?? null,
     startAgentStep: agentStepStarter((req) => launchAgentStep(store, req, launcherDeps)),
     workspace: launcherDeps.workspace,
+    engineEnv,
+    shell: {
+      workspaceOf: async (req) => {
+        if (!req.run.worktreePath) {
+          throw new Error(`Run ${req.run.id} has no workspace`)
+        }
+        return { path: req.run.worktreePath }
+      },
+      envOf: (req) =>
+        pilotStepEnv({
+          runId: req.run.id,
+          stepName: req.definition.steps[req.idx].name,
+          stepIdx: req.idx,
+          automationId: req.run.automationId,
+          itemKey: req.run.itemKey,
+          powers: req.definition.powers
+        })
+    },
     probe: runtimeStepProbe(runtime, relist),
     log
   })

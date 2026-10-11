@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import type { RunRow } from '../../shared/api-types'
 import { parseAutomationYaml } from '../../shared/definition/parse'
 import type { StepStartRequest } from './advance'
-import { agentStepStarter, stepStarterFor, unsupportedShellStep } from './step-starters'
+import { agentStepStarter, stepStarterFor } from './step-starters'
 
 const parsed = parseAutomationYaml(
   'name: Pull dev\nrepo: web-platform\nschedule: manual\nsteps:\n  - { name: pull, agent: shell, run: git pull }\n  - { name: tell, agent: claude, prompt: Say what changed }\n',
@@ -77,11 +77,5 @@ describe('stepStarterFor', () => {
     })
     await start(req(idx))
     expect(calls).toEqual([which])
-  })
-
-  it('refuses a shell step until shell steps are wired, naming it', async () => {
-    await expect(unsupportedShellStep()(req(0))).rejects.toThrow(
-      "Shell step pull can't run: shell steps aren't supported in this build"
-    )
   })
 })

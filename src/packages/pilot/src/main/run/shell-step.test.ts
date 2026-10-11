@@ -1,0 +1,275 @@
+import { mkdtempSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { describe, expect, it } from 'vitest'
+import type { ItemFields, RunRow } from '../../shared/api-types'
+import { parseAutomationYaml } from '../../shared/definition/parse'
+import type { AutomationDefinition } from '../../shared/definition/types'
+import { outputsFromStdout } from '../../shared/run/outputs'
+import { PilotStore } from '../store/store'
+import type { StepStartRequest } from './advance'
+import {
+  makeShellSteps,
+  ORPHAN_SHELL_OUTCOME,
+  runShell,
+  sweepOrphanShellSteps,
+  type ShellResult,
+  type ShellRunner,
+  type ShellSpec
+} from './shell-step'
+
+const MIN = 60_000
+
+function shellDef(run: string): AutomationDefinition {
+  const yaml = `name: Clean Docker\nrepo: web-platform\nschedule: manual\nsteps:\n  - name: prune\n    agent: shell\n    run: ${JSON.stringify(run)}\n    exit_codes: { ok: [0], skip: [3] }\n`
+  const parsed = parseAutomationYaml(yaml, '/a/clean-docker.yaml')
+  if (!parsed.ok) {
+    throw new Error(parsed.errors.join('\n'))
+  }
+  return parsed.definition
+}
+
+const result = (over: Partial<ShellResult> = {}): ShellResult => ({
+  code: 0,
+  signal: null,
+  stdout: '',
+  stderr: '',
+  timedOut: false,
+  ...over
+})
+
+function setup(opts: { run?: ShellRunner; workspace?: () => Promise<{ path: string }> } = {}) {
+  const store = PilotStore.open(join(mkdtempSync(join(tmpdir(), 'pilot-shell-')), 'db.sqlite'))
+  store.runs.create({
+    id: 'run-1',
+    automationId: 'clean-docker',
+    tickId: null,
+    itemKey: 'repo:web-platform',
+    itemLabel: 'web-platform',
+    worktreePath: null,
+    startedAt: 1
+  })
+  const ended: string[] = []
+  const logs: string[] = []
+  const calls: ShellSpec[] = []
+  const steps = makeShellSteps({
+    store,
+    now: () => 50,
+    workspaceOf: opts.workspace ?? (async () => ({ path: '/repo' })),
+    envOf: () => ({ PILOT_RUN_ID: 'run-1', PILOT_STEP_IDX: '0' }),
+    engineEnv: { binDir: '/pilot/bin', dataDir: '/data/pilot' },
+    timeoutOf: () => 10 * MIN,
+    onEnded: (runId) => void ended.push(runId),
+    log: (m) => void logs.push(m),
+    run:
+      opts.run ??
+      (async (spec) => {
+        calls.push(spec)
+        return result()
+      }),
+    baseEnv: { PATH: '/usr/bin' }
+  })
+  const req = (
+    def: AutomationDefinition,
+    fields: ItemFields = { 'repo.path': '/repo' }
+  ): StepStartRequest => ({
+    run: store.runs.get('run-1') as RunRow,
+    definition: def,
+    idx: 0,
+    fields
+  })
+  return { store, steps, ended, logs, calls, req }
+}
+
+describe('makeShellSteps', () => {
+  it.each([
+    ['exit 0', result({ code: 0 }), 'done', null],
+    [
+      'a skip code',
+      result({ code: 3, stdout: "Docker isn't running\n" }),
+      'skipped',
+      "Exited 3 (skip): Docker isn't running"
+    ],
+    [
+      'any other code',
+      result({ code: 1, stdout: 'pruning\n', stderr: 'boom\n' }),
+      'failed',
+      'Exited 1: boom'
+    ],
+    ['a signal', result({ code: null, signal: 'SIGKILL' }), 'failed', 'Stopped by SIGKILL'],
+    [
+      'its timeout',
+      result({ code: null, signal: 'SIGTERM', timedOut: true }),
+      'timed_out',
+      'Timed out after 10m'
+    ]
+  ] as const)('ends the step on %s', async (_n, outcome, status, error) => {
+    const { store, steps, ended, req } = setup({ run: async () => outcome })
+    await steps.start(req(shellDef('./prune.sh {repo.path}')))
+    await steps.settled()
+    expect(store.runs.steps('run-1')[0]).toMatchObject({
+      kind: 'shell',
+      status,
+      exitCode: outcome.code,
+      error
+    })
+    expect(ended).toEqual(['run-1'])
+  })
+
+  it("runs the rendered command (a ./ script beside the YAML) in the workspace, with Pilot's bin first on PATH, the step env over the app env, and its timeout", async () => {
+    const { steps, calls, req } = setup()
+    await steps.start(req(shellDef('./prune.sh {repo.path}')))
+    await steps.settled()
+    expect(calls).toEqual([
+      {
+        command: "'/a/prune.sh' '/repo'",
+        cwd: '/repo',
+        env: {
+          PATH: '/pilot/bin:/usr/bin',
+          ORCA_USER_DATA_PATH: '/data/pilot',
+          PILOT_RUN_ID: 'run-1',
+          PILOT_STEP_IDX: '0'
+        },
+        timeoutMs: 10 * MIN
+      }
+    ])
+  })
+
+  it('takes over the pending row Task 9b wrote for step 0 instead of adding a second one', async () => {
+    const { store, steps, req } = setup()
+    store.runs.createStep({
+      runId: 'run-1',
+      idx: 0,
+      name: 'prune',
+      agent: 'shell',
+      skill: null,
+      kind: 'shell',
+      status: 'pending',
+      startedAt: 1
+    })
+    await steps.start(req(shellDef('./prune.sh')))
+    await steps.settled()
+    expect(store.runs.steps('run-1')).toHaveLength(1)
+    expect(store.runs.steps('run-1')[0]).toMatchObject({
+      kind: 'shell',
+      status: 'done',
+      exitCode: 0
+    })
+  })
+
+  it('keeps ::pilot-output lines as outputs, and the last 8 KB of output', async () => {
+    const stdout = `${'x'.repeat(9000)}\n::pilot-output found_bugs=2\n::pilot-output report=reports/qa 1.md\n::pilot-output bad-key=1\n`
+    const { store, steps, logs, req } = setup({
+      run: async () => result({ stdout, stderr: 'warn\n' })
+    })
+    await steps.start(req(shellDef('./qa.sh')))
+    await steps.settled()
+    const row = store.runs.steps('run-1')[0]
+    expect(row.outputs).toEqual({ found_bugs: 2, report: 'reports/qa 1.md' })
+    expect(row.outputTail).toHaveLength(8192)
+    expect(row.outputTail?.endsWith('--- stderr ---\nwarn\n')).toBe(true)
+    expect(logs.some((l) => l.includes('bad-key'))).toBe(true)
+  })
+
+  it('is live while its process runs, and not after', async () => {
+    let finish: (r: ShellResult) => void = () => {}
+    const { store, steps, req } = setup({ run: () => new Promise((resolve) => (finish = resolve)) })
+    await steps.start(req(shellDef('sleep 1')))
+    expect(steps.isLive('run-1', 0)).toBe(true)
+    expect(store.runs.steps('run-1')[0].status).toBe('running')
+    finish(result())
+    await steps.settled()
+    expect(steps.isLive('run-1', 0)).toBe(false)
+  })
+
+  it('refuses to start, writing nothing itself, when a placeholder has no value', async () => {
+    const { store, steps, calls, req } = setup()
+    await expect(steps.start(req(shellDef('./teardown.sh {worktree.path}')))).rejects.toThrow(
+      'Shell step prune: no value for {worktree.path}'
+    )
+    expect(store.runs.steps('run-1')).toEqual([])
+    expect(calls).toEqual([])
+  })
+
+  it("fails its step and rethrows when the workspace can't be resolved", async () => {
+    const { store, steps, req } = setup({
+      workspace: async () => {
+        throw new Error('No worktree for web-platform')
+      }
+    })
+    await expect(steps.start(req(shellDef('./x.sh')))).rejects.toThrow(
+      'No worktree for web-platform'
+    )
+    expect(store.runs.steps('run-1')[0]).toMatchObject({
+      status: 'failed',
+      error: 'No worktree for web-platform'
+    })
+  })
+})
+
+describe('sweepOrphanShellSteps', () => {
+  it('fails a running shell step no live process owns, and nothing else', () => {
+    const { store } = setup()
+    store.runs.createStep({
+      runId: 'run-1',
+      idx: 0,
+      name: 'prune',
+      agent: 'shell',
+      skill: null,
+      startedAt: 1,
+      kind: 'shell'
+    })
+    store.runs.updateStep('run-1', 0, { status: 'running' })
+    store.runs.createStep({
+      runId: 'run-1',
+      idx: 1,
+      name: 'live',
+      agent: 'shell',
+      skill: null,
+      startedAt: 1,
+      kind: 'shell'
+    })
+    store.runs.updateStep('run-1', 1, { status: 'running' })
+    store.runs.createStep({
+      runId: 'run-1',
+      idx: 2,
+      name: 'agent',
+      agent: 'claude',
+      skill: null,
+      startedAt: 1
+    })
+    store.runs.updateStep('run-1', 2, { status: 'running', terminalHandle: 't', paneKey: 'p' })
+    sweepOrphanShellSteps(
+      store,
+      (_runId, idx) => idx === 1,
+      () => 9,
+      () => {}
+    )
+    expect(store.runs.steps('run-1').map((s) => s.status)).toEqual(['failed', 'running', 'running'])
+    expect(store.runs.steps('run-1')[0].error).toBe(ORPHAN_SHELL_OUTCOME)
+  })
+})
+
+describe('runShell (a real /bin/sh)', () => {
+  it('runs in the folder with the env given, and reports its outputs and exit code', async () => {
+    const r = await runShell({
+      command: 'printf "%s\\n" "$PILOT_RUN_ID" "::pilot-output count=2"; test -d . && exit 3',
+      cwd: mkdtempSync(join(tmpdir(), 'pilot-sh-')),
+      env: { PATH: '/usr/bin:/bin', PILOT_RUN_ID: 'run-9' },
+      timeoutMs: 10_000
+    })
+    expect(r).toMatchObject({ code: 3, timedOut: false })
+    expect(r.stdout).toContain('run-9')
+    expect(outputsFromStdout(r.stdout).outputs).toEqual({ count: 2 })
+  })
+
+  it('stops a command that runs past its timeout', async () => {
+    const r = await runShell({
+      command: 'sleep 5',
+      cwd: tmpdir(),
+      env: { PATH: '/usr/bin:/bin' },
+      timeoutMs: 500
+    })
+    expect(r.timedOut).toBe(true)
+  })
+})
