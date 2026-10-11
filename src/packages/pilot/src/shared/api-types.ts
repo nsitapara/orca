@@ -92,6 +92,9 @@ export type TickResult = {
   decisions: ItemDecision[]
 }
 
+// What dryRun and tickNow return: a result, or why there isn't one.
+export type TickOutcome = TickResult | { status: 'busy' } | { status: 'unknown' }
+
 export type AutomationSummary = {
   id: string
   name: string
