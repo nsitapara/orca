@@ -4,7 +4,7 @@ import { setAppEnvironment, type AppEnvironment } from '../../../../shared/app-e
 
 const m = vi.hoisted(() => ({ start: vi.fn(), stop: vi.fn(), quota: vi.fn(), onWillQuit: vi.fn() }))
 const host = vi.hoisted(() => ({
-  app: { isPackaged: false, setName: () => {} },
+  app: { isPackaged: false, setName: () => {}, getAppPath: () => '/repo' },
   state: { isServeMode: false }
 }))
 vi.mock('electron', () => ({ app: host.app }))
@@ -24,9 +24,17 @@ describe('attachPilotMain', () => {
     host.app.isPackaged = true
     host.state.isServeMode = false
     vi.stubEnv('PILOT_SCHEDULER', undefined)
-    setAppEnvironment({ onWillQuit: m.onWillQuit } as unknown as AppEnvironment)
+    Object.defineProperty(process, 'resourcesPath', {
+      configurable: true,
+      value: '/Apps/Pilot.app/Contents/Resources'
+    })
+    setAppEnvironment({
+      onWillQuit: m.onWillQuit,
+      getPath: () => '/data/pilot'
+    } as unknown as AppEnvironment)
   })
   afterEach(() => {
+    delete (process as { resourcesPath?: string }).resourcesPath
     vi.unstubAllEnvs()
     vi.restoreAllMocks()
   })
@@ -35,7 +43,8 @@ describe('attachPilotMain', () => {
     m.start.mockReturnValue({ stop: m.stop, context: {} })
     attachPilotMain(runtime)
     expect(m.start).toHaveBeenCalledWith(runtime, 'main', {
-      quota: m.quota,
+      quotas: { claude: m.quota },
+      engineEnv: { binDir: '/Apps/Pilot.app/Contents/Resources/bin', dataDir: '/data/pilot' },
       schedulerEnabled: true
     })
     m.onWillQuit.mock.calls[0][0]()

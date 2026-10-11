@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import { addQuotaFields, cachedQuota, toQuotaReading } from './quota'
+import {
+  addQuotaFields,
+  cachedQuota,
+  cachedQuotas,
+  quotaFields,
+  readQuotas,
+  toQuotaReading
+} from './quota'
 
 describe('cachedQuota', () => {
   it('reads once per ttl and falls back to the last good reading on error', async () => {
@@ -73,5 +80,36 @@ describe('addQuotaFields', () => {
       session: 38
     })
     expect(out[0].fields).toEqual({ 'quota.claude.weekly_pct': 61, 'quota.claude.session_pct': 38 })
+  })
+})
+
+describe('per-agent quota', () => {
+  it('reads both agents and leaves an unreadable one null (fail-open)', async () => {
+    const readings = await readQuotas({
+      claude: async () => ({ weekly: 61, session: 38 }),
+      codex: async () => {
+        throw new Error('codex app-server down')
+      }
+    })
+    expect(quotaFields(readings)).toEqual({
+      'quota.claude.weekly_pct': 61,
+      'quota.claude.session_pct': 38,
+      'quota.codex.weekly_pct': null,
+      'quota.codex.session_pct': null
+    })
+  })
+
+  it('caches each agent on its own, and an agent without a reader reads null', async () => {
+    let calls = 0
+    const quotas = cachedQuotas({
+      claude: async () => {
+        calls += 1
+        return { weekly: 1, session: 2 }
+      }
+    })
+    await quotas.claude()
+    await quotas.claude()
+    expect(calls).toBe(1)
+    expect(await quotas.codex()).toEqual({ weekly: null, session: null })
   })
 })

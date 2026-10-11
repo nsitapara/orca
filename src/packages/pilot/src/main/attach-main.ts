@@ -3,6 +3,7 @@ import type { OrcaRuntimeService } from '../../../../main/runtime/orca-runtime'
 import { mainProcessState } from '../../../../main/startup/main-process-state'
 import { getAppEnvironment } from '../../../../shared/app-environment'
 import { applyPilotEnvDefaults, pilotSchedulerEnabled, type PilotHostKind } from './env'
+import { pilotBinDir } from './engine-env'
 import { claudeQuotaReader } from './fields/claude-quota'
 import { startPilotServices, type PilotServices } from './pilot-services'
 
@@ -42,7 +43,15 @@ export function attachPilotMain(runtime: OrcaRuntimeService): void {
   let services: PilotServices
   try {
     services = startPilotServices(runtime, 'main', {
-      quota: claudeQuotaReader(),
+      quotas: { claude: claudeQuotaReader() },
+      engineEnv: {
+        binDir: pilotBinDir({
+          packaged: app.isPackaged,
+          resourcesPath: process.resourcesPath,
+          appPath: app.getAppPath()
+        }),
+        dataDir: getAppEnvironment().getPath('userData')
+      },
       schedulerEnabled: pilotSchedulerEnabled(hostKind())
     })
   } catch (error) {
