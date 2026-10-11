@@ -3,7 +3,9 @@ import type { OrcaRuntimeService } from '../../../../../main/runtime/orca-runtim
 import type { ItemFields } from '../../shared/api-types'
 import type { AutomationDefinition, WorkspaceDef } from '../../shared/definition/types'
 import { renderTemplate } from '../../shared/template'
+import { worktreePathKey } from '../fields/agent-activity'
 import type { WorktreeInfo } from '../fields/worktree-facts'
+import type { RunStore } from '../store/store-runs'
 
 export type Workspace = {
   kind: WorkspaceDef['kind']
@@ -25,6 +27,9 @@ export type NewWorktreeRequest = {
 export type WorkspaceDeps = {
   listWorktrees(repoPath: string): Promise<WorktreeInfo[]>
   createWorktree(req: NewWorktreeRequest): Promise<{ id: string; path: string }>
+  // Takes a new_worktree workspace for the run (records it on the run); false when a running run of
+  // any automation is in it. Synchronous: nothing can take the worktree between the check and the record.
+  claimWorktree(runId: string, worktree: { id: string; path: string }): boolean
 }
 export type WorkspaceRequest = {
   definition: AutomationDefinition
@@ -62,7 +67,9 @@ function itemWorktree(req: WorkspaceRequest): Workspace {
 async function mainCheckout(repoPath: string, deps: WorkspaceDeps): Promise<Workspace> {
   let id: string | null
   try {
-    id = (await deps.listWorktrees(repoPath)).find((w) => w.path === repoPath)?.id ?? null
+    const main = worktreePathKey(repoPath)
+    id =
+      (await deps.listWorktrees(repoPath)).find((w) => worktreePathKey(w.path) === main)?.id ?? null
   } catch {
     id = null
   }
@@ -90,20 +97,41 @@ async function newWorktree(
   if (missing.length > 0) {
     throw new Error(`Can't name the new worktree: ${missing.join(', ')} missing`)
   }
-  if (ws.reuseExisting) {
-    const found = (await deps.listWorktrees(repoPath)).find((w) => sameName(w, name))
-    if (found) {
-      return {
-        kind: 'new_worktree',
-        path: found.path,
-        worktreeId: found.id,
-        selector: `id:${found.id}`,
-        created: false
-      }
+  return oneAtATime(repoPath, async () => {
+    const found = ws.reuseExisting ? await reusable(name, repoPath, deps) : null
+    const worktree = found ?? (await deps.createWorktree(createRequest(req, ws, repoPath, name)))
+    if (!deps.claimWorktree(req.runId, worktree)) {
+      throw new Error(`Worktree ${name} is busy`)
     }
-  }
+    return {
+      kind: 'new_worktree',
+      path: worktree.path,
+      worktreeId: worktree.id,
+      selector: `id:${worktree.id}`,
+      created: found === null
+    }
+  })
+}
+
+// The main checkout is never a "new worktree", whatever the name says.
+async function reusable(
+  name: string,
+  repoPath: string,
+  deps: WorkspaceDeps
+): Promise<WorktreeInfo | null> {
+  const main = worktreePathKey(repoPath)
+  const listed = await deps.listWorktrees(repoPath)
+  return listed.find((w) => worktreePathKey(w.path) !== main && sameName(w, name)) ?? null
+}
+
+function createRequest(
+  req: WorkspaceRequest,
+  ws: NewWorktreeDef,
+  repoPath: string,
+  name: string
+): NewWorktreeRequest {
   const iid = req.fields['mr.iid']
-  const created = await deps.createWorktree({
+  return {
     repoPath,
     name,
     base: ws.base,
@@ -112,14 +140,24 @@ async function newWorktree(
     linkedGitLabMR: typeof iid === 'number' ? iid : null,
     setup: ws.setup,
     noParent: true
-  })
-  return {
-    kind: 'new_worktree',
-    path: created.path,
-    worktreeId: created.id,
-    selector: `id:${created.id}`,
-    created: true
   }
+}
+
+// Up to four ticks run at once (Task 7). One repo's new worktrees are made one after another, so git's
+// .git locks never contend; the reuse lookup waits its turn too, so it sees a worktree just created.
+const repoTurns = new Map<string, Promise<unknown>>()
+
+function oneAtATime<T>(repoPath: string, work: () => Promise<T>): Promise<T> {
+  const key = worktreePathKey(repoPath)
+  const turn = (repoTurns.get(key) ?? Promise.resolve()).then(work)
+  const settled = turn.catch(() => undefined)
+  repoTurns.set(key, settled)
+  void settled.then(() => {
+    if (repoTurns.get(key) === settled) {
+      repoTurns.delete(key)
+    }
+  })
+  return turn
 }
 
 // Spec §7: where a run works. Throws with the reason the run fails with.
@@ -141,14 +179,33 @@ export async function resolveWorkspace(
   return newWorktree(req, ws, repoPath, deps)
 }
 
+// Ruling 6a: a new worktree is one run's at a time, whichever automation's. Paths compare normalized
+// (worktreePathKey) on both sides, however either was written.
+function claimIn(runs: RunStore): WorkspaceDeps['claimWorktree'] {
+  return (runId, worktree) => {
+    const key = worktreePathKey(worktree.path)
+    const taken = [...runs.runningWorktreePaths()].some(
+      (path) =>
+        worktreePathKey(path) === key && runs.runningInWorktree(path).some((r) => r.id !== runId)
+    )
+    if (taken) {
+      return false
+    }
+    runs.update(runId, { worktreePath: worktree.path, worktreeId: worktree.id })
+    return true
+  }
+}
+
 // Setup follows the workspace's `setup` (default skip, as Orca's own new-per-run automations); the new
 // worktree has no parent, as the old sweeps' --no-parent.
 export function runtimeWorkspaceDeps(
   runtime: OrcaRuntimeService,
-  listWorktrees: WorkspaceDeps['listWorktrees']
+  listWorktrees: WorkspaceDeps['listWorktrees'],
+  runs: RunStore
 ): WorkspaceDeps {
   return {
     listWorktrees,
+    claimWorktree: claimIn(runs),
     async createWorktree(req) {
       const result = await runtime.createManagedWorktree({
         repoSelector: `path:${req.repoPath}`,
