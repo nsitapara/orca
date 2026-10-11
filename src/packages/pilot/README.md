@@ -185,6 +185,12 @@ These need a phone, a second Mac and an iPad on Tailscale. Open Pilot (`dist/mac
 - "Install CLI" links `/usr/local/bin/pilot` (never `orca`) to Pilot's `Contents/Resources/bin/orca`: upstream's `bundled-cli-launcher-path.ts` always installs the `bin/orca` launcher, and `applyPilotEnvDefaults` (`src/packages/pilot/src/main/env.ts`) sets `ORCA_CLI_INSTALL_PATH` to `/usr/local/bin/pilot`, which `cli-install-location.ts` uses ahead of its own `orca` default. That launcher pins Pilot's data folder and install path, so the installed `pilot` command and `pilot serve` (which re-installs the CLI on start) act on Pilot, never on real Orca. Checked in code and by `build/bin/launchers.test.ts`, not clicked.
 - Packaged builds are unsigned (`CSC_IDENTITY_AUTO_DISCOVERY=false`, `--dir` output). macOS may ask you to allow the app on first launch.
 - Upstream orcad keeps its own data in `~/.orca` (or `$XDG_DATA_HOME/Orca`) unless `ORCA_USER_DATA` is set, so Pilot's orcad started without it shares real Orca's headless folder. Set `ORCA_USER_DATA` when running Pilot's orcad (Task 9 does). Pilot's own store never goes there: it uses `ORCA_USER_DATA` when set, else `~/.pilot/orcad/`.
+- Upstream hardcodes `~/.orca` for some files, so both apps share them.
+  - **Credentials.** Each app encrypts its credentials with its own keychain key, so Pilot can't read Orca's. Connecting one in Pilot would overwrite Orca's.
+    - Linear has its own folder in desktop Pilot, `~/.pilot` (hook `linear-credential-home`), so connect Linear in Pilot once.
+    - Still shared, so don't connect them in Pilot: Jira (`jira/site-credential-store.ts`), Bitbucket, the speech OpenAI key, MiniMax, Z Code, and `credentials/encrypted-api-key-file-store.ts`.
+    - Pilot's orcad (plain Node) still uses `~/.orca` for Linear.
+  - **Agent hook scripts** in `~/.orca/agent-hooks`. Both apps install them, and they reach their app through each terminal's environment. Not checked: whether different upstream versions rewrite each other's scripts.
 - Upstream orcad starts `/Applications/Orca.app/Contents/MacOS/Orca --serve` (then `~/Applications/Orca.app`) as its browser host whenever it exists, and only reads `ORCA_BROWSER_EXECUTABLE` if that fails (`orcad-browser-provider.ts`). It starts before Pilot's orcad hook runs. Pilot can't redirect it without editing upstream; its only protection is that the sidecar inherits `ORCA_CLI_INSTALL_PATH` (set by the `bin/pilot` launcher) so its CLI install can't touch real Orca's `orca`.
 
 ## Running upstream tests
