@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { parseAutomationYaml } from '../definition/parse'
 import { parsePeopleYaml } from '../people'
 import type { TickItem } from '../api-types'
-import { decideTick } from './decide'
+import { authorInScope, decideTick } from './decide'
 import { fixture } from './__fixtures__/ci-05-2026-10-10'
 
 const CI_05 = `
@@ -176,5 +176,16 @@ describe('decideTick on 2026-10-10 12:10 (automation 05)', () => {
       runningCount: 0
     })
     expect(d).toMatchObject({ verdict: 'skipped', reason: 'No worktree for branch web-2200-x' })
+  })
+})
+
+describe('authorInScope', () => {
+  it('matches the author rule: refs need a listed person, anyone/absent need nothing', () => {
+    const { definition, people } = setup()
+    expect(authorInScope(definition, people, 'NISH8')).toBe(true)
+    expect(authorInScope(definition, people, 'shivan2418')).toBe(false)
+    expect(authorInScope(definition, people, 'stranger')).toBe(false)
+    const open = setup(CI_05.replace('author: { people: [nish] }, ', ''))
+    expect(authorInScope(open.definition, open.people, 'stranger')).toBe(true)
   })
 })
