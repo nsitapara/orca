@@ -20,12 +20,12 @@ describe('definition validation', () => {
     [
       'a shell placeholder in run:',
       `${BASE}steps:\n  - { agent: shell, run: "echo {mr.title} # hi" }\n`,
-      `step 1: run can't contain {placeholders}; pass values with env: { NAME: '{field}' } and use "$NAME" in the script`
+      `step 1: run can't contain {placeholders}; pass values with env: { NAME: '{mr.title}' } and use "$NAME" in the script`
     ],
     [
       'a script path with a placeholder',
       `${BASE}steps:\n  - { agent: shell, run: "./tools/{mr.iid}.sh" }\n`,
-      `step 1: run can't contain {placeholders}; pass values with env: { NAME: '{field}' } and use "$NAME" in the script`
+      `step 1: run can't contain {placeholders}; pass values with env: { NAME: '{mr.title}' } and use "$NAME" in the script`
     ],
     [
       'a lowercase env name',
@@ -45,12 +45,13 @@ describe('definition validation', () => {
       'PS4',
       'CDPATH',
       'GLOBIGNORE',
+      'AGENT_RUN',
       'LD_PRELOAD',
       'DYLD_INSERT_LIBRARIES'
     ].map((name) => [
       `a reserved env name ${name}`,
       `${BASE}steps:\n  - { agent: shell, run: ./x.sh, env: { ${name}: a } }\n`,
-      `step 1: env: ${name} is reserved: not PATH, IFS, HOME, ENV, BASH_ENV, SHELLOPTS, BASHOPTS, PS4, CDPATH, GLOBIGNORE, or a name starting PILOT_, ORCA_, LD_ or DYLD_`
+      `step 1: env: ${name} is reserved: not PATH, IFS, HOME, ENV, BASH_ENV, SHELLOPTS, BASHOPTS, PS4, CDPATH, GLOBIGNORE, AGENT_RUN, or a name starting PILOT_, ORCA_, LD_ or DYLD_`
     ]),
     [
       'an env value naming a later step',

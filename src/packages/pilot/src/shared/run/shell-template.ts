@@ -15,10 +15,11 @@ const RESERVED_ENV = new Set([
   'BASHOPTS',
   'PS4',
   'CDPATH',
-  'GLOBIGNORE'
+  'GLOBIGNORE',
+  'AGENT_RUN'
 ])
 
-export const RUN_PLACEHOLDER_ADVICE = `can't contain {placeholders}; pass values with env: { NAME: '{field}' } and use "$NAME" in the script`
+export const RUN_PLACEHOLDER_ADVICE = `can't contain {placeholders}; pass values with env: { NAME: '{mr.title}' } and use "$NAME" in the script`
 
 // The Pilot placeholders written in a shell command (never allowed there; see RUN_PLACEHOLDER_ADVICE).
 export function runPlaceholders(command: string): string[] {
@@ -31,7 +32,7 @@ export function envNameProblem(name: string): string | null {
     return `${name} isn't a usable name: capital letters, digits and _, not starting with a digit`
   }
   if (/^(PILOT_|ORCA_|LD_|DYLD_)/.test(name) || RESERVED_ENV.has(name)) {
-    return `${name} is reserved: not PATH, IFS, HOME, ENV, BASH_ENV, SHELLOPTS, BASHOPTS, PS4, CDPATH, GLOBIGNORE, or a name starting PILOT_, ORCA_, LD_ or DYLD_`
+    return `${name} is reserved: not PATH, IFS, HOME, ENV, BASH_ENV, SHELLOPTS, BASHOPTS, PS4, CDPATH, GLOBIGNORE, AGENT_RUN, or a name starting PILOT_, ORCA_, LD_ or DYLD_`
   }
   return null
 }

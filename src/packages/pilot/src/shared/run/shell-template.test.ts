@@ -36,7 +36,8 @@ describe('envNameProblem', () => {
       'BASHOPTS',
       'PS4',
       'CDPATH',
-      'GLOBIGNORE'
+      'GLOBIGNORE',
+      'AGENT_RUN'
     ].map((n): [string, string | null] => [n, `${n} is reserved`])
   ])('%s', (name, problem) => {
     const got = envNameProblem(name)

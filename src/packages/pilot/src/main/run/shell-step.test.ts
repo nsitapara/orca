@@ -209,7 +209,7 @@ describe('makeShellSteps', () => {
     const def = shellDef('echo x')
     def.steps[0] = { ...def.steps[0], run: 'echo {repo.path}' }
     await expect(steps.start(req(def))).rejects.toThrow(
-      "Shell step prune: run can't contain {placeholders}; pass values with env: { NAME: '{field}' } and use \"$NAME\" in the script"
+      "Shell step prune: run can't contain {placeholders}; pass values with env: { NAME: '{mr.title}' } and use \"$NAME\" in the script"
     )
     expect(calls).toEqual([])
   })
