@@ -120,7 +120,7 @@ export type StepRow = {
   kind: StepKind
   mode: string | null
   model: string | null
-  // What the step reported (`pilot run output`, `::pilot-output` lines; contract §7).
+  // What the step reported (`pilot run output`, a shell step's $PILOT_OUTPUT_FILE; contract §7).
   outputs: ItemFields
   whenExpr: string | null
   exitCode: number | null

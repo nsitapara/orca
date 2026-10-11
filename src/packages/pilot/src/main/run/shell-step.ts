@@ -1,8 +1,11 @@
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { runProcess } from '@orca/process-host'
 import type { StepStatus } from '../../shared/api-types'
 import type { StepDef } from '../../shared/definition/types'
 import { formatDuration } from '../../shared/run/format-duration'
-import { OUTPUT_LINE_PREFIX, outputsFromStdout } from '../../shared/run/outputs'
+import { outputsFromFile } from '../../shared/run/outputs'
 import { renderShellCommand } from '../../shared/run/shell-template'
 import { engineChildEnv, type EngineEnv } from '../engine-env'
 import { resolveScriptCommand } from '../fields/script-runner'
@@ -29,7 +32,7 @@ export type ShellResult = {
 export type ShellRunner = (spec: ShellSpec) => Promise<ShellResult>
 
 // /bin/sh -c through Orca's process host, in its own process group so a timeout stops the whole tree.
-// Past 1 MiB the output keeps its tail, where ::pilot-output lines usually are.
+// Past 1 MiB the output keeps its tail, where a command's last words usually are.
 export const runShell: ShellRunner = async (spec) => {
   const result = await runProcess(
     {
@@ -80,7 +83,7 @@ function lastLine(text: string): string | null {
   const lines = text
     .split('\n')
     .map((l) => l.trim())
-    .filter((l) => l !== '' && !l.startsWith(OUTPUT_LINE_PREFIX.trim()))
+    .filter((l) => l !== '')
   return lines.at(-1) ?? null
 }
 
@@ -113,6 +116,17 @@ export function shellEnding(
   return { status: 'failed', error: `Exited ${result.code}${said}` }
 }
 
+function shellRefusal(
+  step: string,
+  failed: { missing: string[]; inSingleQuotes: string[] }
+): string {
+  const names = (list: string[]): string => list.map((n) => `{${n}}`).join(', ')
+  if (failed.inSingleQuotes.length > 0) {
+    return `Shell step ${step}: ${names(failed.inSingleQuotes)} is inside single quotes, where the shell can't expand it`
+  }
+  return `Shell step ${step}: no value for ${names(failed.missing)}`
+}
+
 const keyOf = (runId: string, idx: number): string => `${runId}#${idx}`
 
 export function makeShellSteps(deps: ShellStepDeps): ShellSteps {
@@ -120,9 +134,22 @@ export function makeShellSteps(deps: ShellStepDeps): ShellSteps {
   const live = new Set<string>()
   const inflight = new Set<Promise<void>>()
 
-  function finish(req: StepStartRequest, result: ShellResult, timeoutMs: number | null): void {
+  function finish(
+    req: StepStartRequest,
+    result: ShellResult,
+    timeoutMs: number | null,
+    outputFile: string
+  ): void {
     const step = req.definition.steps[req.idx]
-    const { outputs, warnings } = outputsFromStdout(result.stdout)
+    let written = ''
+    try {
+      written = readFileSync(outputFile, 'utf8')
+    } catch (error) {
+      deps.log(
+        `[pilot] run ${req.run.id}: step ${step.name}: couldn't read its outputs: ${messageOf(error)}`
+      )
+    }
+    const { outputs, warnings } = outputsFromFile(written)
     for (const warning of warnings) {
       deps.log(`[pilot] run ${req.run.id}: step ${step.name}: ${warning}`)
     }
@@ -158,9 +185,7 @@ export function makeShellSteps(deps: ShellStepDeps): ShellSteps {
       req.fields
     )
     if (!rendered.ok) {
-      throw new Error(
-        `Shell step ${step.name}: no value for ${rendered.missing.map((n) => `{${n}}`).join(', ')}`
-      )
+      throw new Error(shellRefusal(step.name, rendered))
     }
     if (!deps.store.runs.steps(req.run.id).some((s) => s.idx === req.idx)) {
       deps.store.runs.createStep({
@@ -181,6 +206,17 @@ export function makeShellSteps(deps: ShellStepDeps): ShellSteps {
       fail(req, error)
       throw error
     }
+    // The step reports outputs by appending key=value lines to $PILOT_OUTPUT_FILE, in a private folder.
+    let outputDir: string
+    let outputFile: string
+    try {
+      outputDir = mkdtempSync(join(tmpdir(), 'pilot-step-'))
+      outputFile = join(outputDir, 'outputs')
+      writeFileSync(outputFile, '', { mode: 0o600 })
+    } catch (error) {
+      fail(req, error)
+      throw error
+    }
     const key = keyOf(req.run.id, req.idx)
     live.add(key)
     deps.store.runs.updateStep(req.run.id, req.idx, { status: 'running' })
@@ -189,11 +225,16 @@ export function makeShellSteps(deps: ShellStepDeps): ShellSteps {
     const job: Promise<void> = run({
       command: rendered.command,
       cwd,
-      env: { ...base, ...engineChildEnv(deps.engineEnv, deps.envOf(req), base) },
+      env: {
+        ...base,
+        ...engineChildEnv(deps.engineEnv, deps.envOf(req), base),
+        ...rendered.env,
+        PILOT_OUTPUT_FILE: outputFile
+      },
       timeoutMs
     })
       .then(
-        (result) => finish(req, result, timeoutMs),
+        (result) => finish(req, result, timeoutMs, outputFile),
         (error: unknown) => fail(req, error)
       )
       .catch((error: unknown) =>
@@ -202,6 +243,7 @@ export function makeShellSteps(deps: ShellStepDeps): ShellSteps {
         )
       )
       .finally(() => {
+        rmSync(outputDir, { recursive: true, force: true })
         live.delete(key)
         inflight.delete(job)
         deps.onEnded(req.run.id)

@@ -1,4 +1,5 @@
 import { isValidTimeZone, parseCron } from '../schedule/cron'
+import { singleQuotedPlaceholders } from '../run/shell-template'
 import { PLACEHOLDER } from '../template'
 import { stepNames } from './normalize'
 import type { RawAutomation, RawStep } from './schema'
@@ -71,6 +72,11 @@ function shellStepErrors(s: RawStep, n: number): string[] {
   }
   if (!s.run) {
     errors.push(`step ${n}: a shell step needs run:`)
+  }
+  for (const name of singleQuotedPlaceholders(s.run ?? '')) {
+    errors.push(
+      `step ${n}: {${name}} is inside single quotes in run:, where the shell can't expand it; put it outside them or in double quotes`
+    )
   }
   const skip = new Set(s.exit_codes?.skip ?? [])
   for (const code of s.exit_codes?.ok ?? [0]) {

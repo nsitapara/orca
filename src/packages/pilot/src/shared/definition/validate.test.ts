@@ -18,6 +18,11 @@ describe('definition validation', () => {
       'step 1: a shell step needs run:'
     ],
     [
+      'a shell placeholder inside single quotes',
+      `${BASE}steps:\n  - { agent: shell, run: "echo '{mr.title}'" }\n`,
+      "step 1: {mr.title} is inside single quotes in run:, where the shell can't expand it; put it outside them or in double quotes"
+    ],
+    [
       'a shell step with agent keys',
       `${BASE}steps:\n  - { agent: shell, run: ./x.sh, skill: s, prompt: hi }\n`,
       "step 1: shell steps don't take skill:, prompt:"

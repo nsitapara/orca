@@ -1,4 +1,4 @@
-import { mkdtempSync } from 'node:fs'
+import { appendFileSync, mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
@@ -68,13 +68,10 @@ function setup(yaml = YAML) {
     shell: {
       workspaceOf: async () => ({ path: '/wt' }),
       envOf: () => ({}),
-      run: async () => ({
-        code: 0,
-        signal: null,
-        stdout: '::pilot-output pruned=4\n',
-        stderr: '',
-        timedOut: false
-      })
+      run: async (spec) => {
+        appendFileSync(String(spec.env.PILOT_OUTPUT_FILE), 'pruned=4\n')
+        return { code: 0, signal: null, stdout: '', stderr: '', timedOut: false }
+      }
     },
     probe: { status: async () => 'working' as const, session: () => null },
     cost: async () => ({ costUsd: null, tokens: 0 }),
