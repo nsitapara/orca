@@ -14,11 +14,13 @@ import { cachedQuotas, type QuotaReader } from './fields/quota'
 import { reposListed, resolveRepoPath } from './fields/runtime-facts'
 import { runtimeFieldDeps } from './fields/runtime-field-deps'
 import { runShellScript } from './fields/script-runner'
-import { claudeTranscriptCost } from './run/cost'
-import { makeLauncher, runtimeLauncherDeps } from './run/launch'
+import { launchAgentStep } from './run/agent-step'
+import { wireRunEngine } from './run/engine-wiring'
+import { runtimeLauncherDeps } from './run/launch'
 import { sweepStaleStarts } from './run/stale-starts'
 import { terminalRelister } from './run/terminal-relist'
-import { pollRunningSteps, runtimeStepProbe } from './run/watcher'
+import { agentStepStarter } from './run/step-starters'
+import { runtimeStepProbe } from './run/watcher'
 import { buildPilotMethods } from './rpc/methods'
 import { registerPilotRpcMethods } from './rpc/register'
 import { PilotScheduler } from './scheduler/scheduler'
@@ -96,6 +98,19 @@ function openPilot(
   // How field scripts and script checks reach Pilot's CLI and data folder (H9); orcad gets the default.
   const engineEnv = resolveEngineEnv(options.engineEnv, host.dataDir)
   const fieldDeps = runtimeFieldDeps(runtime, store, { relist, now })
+  // `store.runs`: a new worktree's claim reads and records running runs there (Task 8b).
+  const launcherDeps = runtimeLauncherDeps(runtime, fieldDeps, now, store.runs)
+  // The one run engine of this process: its per-run lock and its set of runs being opened live in it.
+  const wired = wireRunEngine({
+    runtime,
+    store,
+    now,
+    definitionFor: (id) => definitions.current().definitions.find((d) => d.id === id) ?? null,
+    startAgentStep: agentStepStarter((req) => launchAgentStep(store, req, launcherDeps)),
+    workspace: launcherDeps.workspace,
+    probe: runtimeStepProbe(runtime, relist),
+    log
+  })
   const tickDeps: TickDeps = {
     store,
     now,
@@ -111,9 +126,8 @@ function openPilot(
       engineEnv,
       now
     },
-    launch: makeLauncher(store, runtimeLauncherDeps(runtime, fieldDeps, now, store.runs))
+    launch: (req) => wired.engine.startRun(req)
   }
-  const probe = runtimeStepProbe(runtime, relist)
   const repoProblems = new Map<string, RepoProblem>()
   const withRepoProblems = (loaded: LoadedDefinitions): LoadedDefinitions =>
     mergeRepoProblems(loaded, repoProblems, (repo) => reposListed(runtime, [repo]))
@@ -122,10 +136,7 @@ function openPilot(
     definitions: definitions.current,
     runTick: (def, opts) => runTick(def, definitions.current().people, tickDeps, opts),
     lastTickAt: (id) => store.lastRealTick(id)?.startedAt ?? null,
-    poll: async () => {
-      sweepStaleStarts(store, now, log)
-      await pollRunningSteps(store, probe, claudeTranscriptCost, now)
-    },
+    poll: wired.poll,
     reposListed: (repos) => reposListed(runtime, repos),
     repoProblem: (def, message) =>
       repoProblems.set(def.id, { file: def.file, repo: def.repo, message }),

@@ -4,7 +4,13 @@ import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 import type { OrcaRuntimeService } from '../../../../../main/runtime/orca-runtime'
 import { PilotStore } from '../store/store'
-import { pollRunningSteps, runtimeStepProbe, type StepProbe } from './watcher'
+import {
+  pollRunningSteps,
+  runtimeStepProbe,
+  type ObservedState,
+  type StepPollHooks,
+  type StepProbe
+} from './watcher'
 
 function newStore(): PilotStore {
   return PilotStore.open(join(mkdtempSync(join(tmpdir(), 'pilot-watch-')), 'db.sqlite'))
@@ -41,21 +47,26 @@ function storeWithRunningStep(): PilotStore {
   return store
 }
 
-const probe = (state: 'working' | 'waiting' | 'done' | 'gone'): StepProbe => ({
+const probe = (state: ObservedState): StepProbe => ({
   status: async () => state,
   session: () => ({ id: 'sess-1', transcriptPath: '/t/sess-1.jsonl' })
 })
 const noCost = async () => ({ costUsd: null, tokens: 0 })
+const HOUR = 60 * 60_000
+
+function hooks(over: Partial<StepPollHooks> = {}) {
+  return {
+    timeoutOf: () => null,
+    closeTerminal: vi.fn(async () => {}),
+    onStepEnded: vi.fn(async () => {}),
+    ...over
+  }
+}
 
 describe('pollRunningSteps', () => {
   it('records the session id while the agent works', async () => {
     const store = storeWithRunningStep()
-    await pollRunningSteps(
-      store,
-      probe('working'),
-      async () => ({ costUsd: 0, tokens: 0 }),
-      () => 5
-    )
+    await pollRunningSteps(store, probe('working'), noCost, () => 5, hooks())
     expect(store.runs.steps('run-1')[0]).toMatchObject({
       status: 'running',
       sessionId: 'sess-1',
@@ -63,13 +74,15 @@ describe('pollRunningSteps', () => {
     })
   })
 
-  it('finishes the step and the run with cost when the agent is done', async () => {
+  it('ends the step with its cost and hands the run to the run engine', async () => {
     const store = storeWithRunningStep()
+    const h = hooks()
     await pollRunningSteps(
       store,
       probe('done'),
       async () => ({ costUsd: 1.95, tokens: 120000 }),
-      () => 9
+      () => 9,
+      h
     )
     expect(store.runs.steps('run-1')[0]).toMatchObject({
       status: 'done',
@@ -77,36 +90,37 @@ describe('pollRunningSteps', () => {
       tokens: 120000,
       finishedAt: 9
     })
-    expect(store.runs.runningCount('a')).toBe(0)
+    expect(h.onStepEnded).toHaveBeenCalledWith('run-1')
+    expect(store.runs.get('run-1')?.status).toBe('running')
   })
 
-  it('fails the run when its terminal is gone before the agent finished', async () => {
+  it('fails the step when its terminal is gone before the agent finished, and hands the run on', async () => {
     const store = storeWithRunningStep()
-    await pollRunningSteps(store, probe('gone'), noCost, () => 9)
+    const h = hooks()
+    await pollRunningSteps(store, probe('gone'), noCost, () => 9, h)
     expect(store.runs.steps('run-1')[0]).toMatchObject({
       status: 'failed',
       error: 'The terminal closed before the agent finished'
     })
-    expect(store.runs.runningCount('a')).toBe(0)
+    expect(h.onStepEnded).toHaveBeenCalledWith('run-1')
   })
 
-  it('retries next poll when the run update throws, leaving the step open', async () => {
-    const store = storeWithRunningStep()
-    const real = store.runs.update.bind(store.runs)
-    let fail = true
-    store.runs.update = (id, patch) => {
-      if (fail) {
-        throw new Error('db busy')
-      }
-      real(id, patch)
-    }
+  it('keeps the step ended when the run engine throws, and still polls the others', async () => {
+    const store = newStore()
+    addRunningStep(store, 'run-1', 'a')
+    addRunningStep(store, 'run-2', 'b')
+    const h = hooks({
+      onStepEnded: vi.fn(async (runId: string) => {
+        if (runId === 'run-1') {
+          throw new Error('db busy')
+        }
+      })
+    })
     vi.spyOn(console, 'error').mockImplementation(() => {})
-    await pollRunningSteps(store, probe('done'), noCost, () => 9)
-    expect(store.runs.steps('run-1')[0].status).toBe('running')
-    fail = false
-    await pollRunningSteps(store, probe('done'), noCost, () => 9)
+    await pollRunningSteps(store, probe('done'), noCost, () => 9, h)
     expect(store.runs.steps('run-1')[0].status).toBe('done')
-    expect(store.runs.runningCount('a')).toBe(0)
+    expect(store.runs.steps('run-2')[0].status).toBe('done')
+    expect(h.onStepEnded).toHaveBeenCalledTimes(2)
   })
 
   it('leaves a step alone when its probe throws, and still polls the others', async () => {
@@ -123,9 +137,51 @@ describe('pollRunningSteps', () => {
       session: () => null
     }
     vi.spyOn(console, 'error').mockImplementation(() => {})
-    await pollRunningSteps(store, flaky, noCost, () => 9)
+    await pollRunningSteps(store, flaky, noCost, () => 9, hooks())
     expect(store.runs.steps('run-1')[0].status).toBe('running')
     expect(store.runs.steps('run-2')[0].status).toBe('done')
+  })
+
+  // The step started at 1 (addRunningStep); "now" is 1 + elapsed.
+  it.each([
+    ['working past its timeout', 'working', HOUR, 'timed_out', 'Timed out after 60m'],
+    [
+      'waiting past its timeout',
+      'waiting',
+      HOUR,
+      'timed_out',
+      'Timed out after 60m while it waited in its tab'
+    ],
+    ['working within its timeout', 'working', HOUR - 1, 'running', null],
+    ['done exactly at its timeout', 'done', HOUR, 'done', null]
+  ] as const)('a step %s', async (_name, state, elapsed, status, error) => {
+    const store = storeWithRunningStep()
+    const h = hooks({ timeoutOf: () => HOUR })
+    await pollRunningSteps(store, probe(state), noCost, () => 1 + elapsed, h)
+    expect(store.runs.steps('run-1')[0]).toMatchObject({ status, ...(error ? { error } : {}) })
+    expect(h.closeTerminal).toHaveBeenCalledTimes(status === 'timed_out' ? 1 : 0)
+  })
+
+  it('never times out a step that has no timeout', async () => {
+    const store = storeWithRunningStep()
+    const h = hooks()
+    await pollRunningSteps(store, probe('waiting'), noCost, () => 10 * HOUR, h)
+    expect(store.runs.steps('run-1')[0].status).toBe('running')
+    expect(h.closeTerminal).not.toHaveBeenCalled()
+  })
+
+  it('keeps a timed-out step running when its terminal could not be closed, for the next poll', async () => {
+    const store = storeWithRunningStep()
+    const h = hooks({
+      timeoutOf: () => HOUR,
+      closeTerminal: vi.fn(async () => {
+        throw new Error('runtime_unavailable')
+      })
+    })
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    await pollRunningSteps(store, probe('working'), noCost, () => 2 * HOUR, h)
+    expect(store.runs.steps('run-1')[0].status).toBe('running')
+    expect(h.onStepEnded).not.toHaveBeenCalled()
   })
 })
 
@@ -153,15 +209,16 @@ describe('runtimeStepProbe.status', () => {
       'structured-worker (agent-session) handle',
       codeError('terminal_unsupported_for_agent_session')
     ]
-  ])('maps a %s to gone and closes the step and run', async (_name, error) => {
+  ])('maps a %s to gone, fails the step and hands the run on', async (_name, error) => {
     const p = probeFor(async () => {
       throw error
     })
     expect(await p.status('h', 'pane')).toBe('gone')
     const store = storeWithRunningStep()
-    await pollRunningSteps(store, p, noCost, () => 9)
+    const h = hooks()
+    await pollRunningSteps(store, p, noCost, () => 9, h)
     expect(store.runs.steps('run-1')[0].status).toBe('failed')
-    expect(store.runs.runningCount('a')).toBe(0)
+    expect(h.onStepEnded).toHaveBeenCalledWith('run-1')
   })
 
   // After an app restart showTerminal calls a terminal the daemon still hosts stale; the PTY
@@ -178,7 +235,7 @@ describe('runtimeStepProbe.status', () => {
     expect(await p.status('h', 'pane')).toBe('working')
     expect(relist).toHaveBeenCalledWith('h', 'pane')
     const store = storeWithRunningStep()
-    await pollRunningSteps(store, p, noCost, () => 9)
+    await pollRunningSteps(store, p, noCost, () => 9, hooks())
     expect(store.runs.steps('run-1')[0].status).toBe('running')
     expect(store.runs.runningCount('a')).toBe(1)
   })
@@ -196,7 +253,7 @@ describe('runtimeStepProbe.status', () => {
     await expect(p.status('h', 'pane')).rejects.toThrow('terminal_liveness_unavailable')
     const store = storeWithRunningStep()
     vi.spyOn(console, 'error').mockImplementation(() => {})
-    await pollRunningSteps(store, p, noCost, () => 9)
+    await pollRunningSteps(store, p, noCost, () => 9, hooks())
     expect(store.runs.steps('run-1')[0].status).toBe('running')
   })
 
@@ -207,7 +264,7 @@ describe('runtimeStepProbe.status', () => {
     await expect(p.status('h', 'pane')).rejects.toThrow('runtime_unavailable')
     const store = storeWithRunningStep()
     vi.spyOn(console, 'error').mockImplementation(() => {})
-    await pollRunningSteps(store, p, noCost, () => 9)
+    await pollRunningSteps(store, p, noCost, () => 9, hooks())
     expect(store.runs.steps('run-1')[0].status).toBe('running')
     expect(store.runs.runningCount('a')).toBe(1)
   })

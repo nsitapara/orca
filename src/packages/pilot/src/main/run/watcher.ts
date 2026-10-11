@@ -1,4 +1,5 @@
 import type { OrcaRuntimeService } from '../../../../../main/runtime/orca-runtime'
+import { formatDuration } from '../../shared/run/format-duration'
 import type { PilotStore } from '../store/store'
 import { newestLiveRow, newestSessionRow, observedState, type ObservedState } from './agent-rows'
 import type { CostReader } from './cost'
@@ -46,15 +47,73 @@ export function runtimeStepProbe(
 }
 
 type OpenStep = ReturnType<PilotStore['runs']['runningSteps']>[number]
+type StepPatch = Parameters<PilotStore['runs']['updateStep']>[2]
+
+export type StepPollHooks = {
+  // The step's timeout in ms, or null for none (contract §7: its own, else limits.timeout).
+  timeoutOf(step: OpenStep): number | null
+  closeTerminal(handle: string): Promise<void>
+  // The step ended (done, failed or timed out): the run engine starts the next step or ends the run.
+  onStepEnded(runId: string): Promise<void>
+}
+
+const GONE = 'The terminal closed before the agent finished'
+
+// The row first: if the engine then throws, the step stays ended and advanceIdle picks the run up.
+async function endStep(
+  store: PilotStore,
+  step: OpenStep,
+  patch: StepPatch,
+  hooks: StepPollHooks
+): Promise<void> {
+  store.runs.updateStep(step.runId, step.idx, patch)
+  await hooks.onStepEnded(step.runId)
+}
+
+// Past its timeout, a working or waiting agent alike: its terminal is closed and the step times out.
+// A close that fails for any reason but "already gone" leaves the step for the next poll.
+async function timeOutIfDue(
+  store: PilotStore,
+  step: OpenStep,
+  handle: string,
+  state: ObservedState,
+  now: () => number,
+  hooks: StepPollHooks
+): Promise<void> {
+  const limit = hooks.timeoutOf(step)
+  if (limit === null || step.startedAt === null || now() - step.startedAt < limit) {
+    return
+  }
+  try {
+    await hooks.closeTerminal(handle)
+  } catch (error) {
+    if (!isTerminalGoneError(error)) {
+      throw error
+    }
+  }
+  const waited = state === 'waiting' ? ' while it waited in its tab' : ''
+  await endStep(
+    store,
+    step,
+    {
+      status: 'timed_out',
+      finishedAt: now(),
+      error: `Timed out after ${formatDuration(limit)}${waited}`
+    },
+    hooks
+  )
+}
 
 async function pollStep(
   store: PilotStore,
   step: OpenStep,
   probe: StepProbe,
   cost: CostReader,
-  now: () => number
+  now: () => number,
+  hooks: StepPollHooks
 ): Promise<void> {
-  if (!step.terminalHandle || !step.paneKey) {
+  const handle = step.terminalHandle
+  if (!handle || !step.paneKey) {
     return
   }
   const session = probe.session(step.paneKey)
@@ -64,47 +123,39 @@ async function pollStep(
       : { sessionId: session.id }
     store.runs.updateStep(step.runId, step.idx, patch)
   }
-  const state = await probe.status(step.terminalHandle, step.paneKey)
+  const state = await probe.status(handle, step.paneKey)
   if (state === 'done') {
     const path = session?.transcriptPath ?? step.transcriptPath
-    // Codex cost is unknown in M1: the run shows, with cost "—".
+    // Codex cost isn't read here: the step shows, with cost "—".
     const spent =
       path && step.agent === 'claude' ? await cost(path) : { costUsd: null, tokens: null }
-    const at = now()
-    // Run first: if it throws the step stays open and the next poll retries both writes.
-    store.runs.update(step.runId, {
-      status: 'done',
-      finishedAt: at,
-      outcome: 'Done',
-      costUsd: spent.costUsd,
-      tokens: spent.tokens
-    })
-    store.runs.updateStep(step.runId, step.idx, {
-      status: 'done',
-      finishedAt: at,
-      costUsd: spent.costUsd,
-      tokens: spent.tokens
-    })
+    await endStep(
+      store,
+      step,
+      { status: 'done', finishedAt: now(), costUsd: spent.costUsd, tokens: spent.tokens },
+      hooks
+    )
+    return
   }
   if (state === 'gone') {
-    const error = 'The terminal closed before the agent finished'
-    const at = now()
-    store.runs.update(step.runId, { status: 'failed', finishedAt: at, outcome: error })
-    store.runs.updateStep(step.runId, step.idx, { status: 'failed', finishedAt: at, error })
+    await endStep(store, step, { status: 'failed', finishedAt: now(), error: GONE }, hooks)
+    return
   }
+  await timeOutIfDue(store, step, handle, state, now, hooks)
 }
 
-// Called every poll interval by the scheduler. A step is done when the agent reports done (Stop hook).
-// One step's probe error leaves that step untouched this cycle and never stops the others.
+// Called every scheduler pass. A step is done when the agent reports done (Stop hook); the run engine
+// decides what comes next. One step's error leaves that step for the next pass and never stops the others.
 export async function pollRunningSteps(
   store: PilotStore,
   probe: StepProbe,
   cost: CostReader,
-  now: () => number
+  now: () => number,
+  hooks: StepPollHooks
 ): Promise<void> {
   for (const step of store.runs.runningSteps()) {
     try {
-      await pollStep(store, step, probe, cost, now)
+      await pollStep(store, step, probe, cost, now, hooks)
     } catch (error) {
       console.error(
         `pilot: couldn't poll step ${step.runId}/${step.idx}: ${error instanceof Error ? error.message : String(error)}`

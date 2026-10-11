@@ -3,7 +3,13 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { PilotStore } from '../store/store'
-import { STALE_START_OUTCOME, sweepStaleStarts } from './stale-starts'
+import {
+  STALE_PENDING_MS,
+  STALE_PENDING_OUTCOME,
+  STALE_START_MS,
+  STALE_START_OUTCOME,
+  sweepStaleStarts
+} from './stale-starts'
 
 const MIN = 60_000
 
@@ -123,5 +129,136 @@ describe('sweepStaleStarts', () => {
     ).not.toThrow()
     expect(logs).toHaveLength(1)
     expect(logs[0]).toMatch(/^\[pilot\] couldn't sweep stale starts: /)
+  })
+
+  it('fails only a later step stuck starting: the run keeps its key, and the run engine ends it', () => {
+    const store = newStore()
+    startRun(store, 'multi', 0)
+    store.runs.updateStep('multi', 0, {
+      status: 'done',
+      terminalHandle: 't',
+      paneKey: 'p',
+      finishedAt: 1
+    })
+    store.runs.createStep({
+      runId: 'multi',
+      idx: 1,
+      name: 'fix',
+      agent: 'claude',
+      skill: null,
+      startedAt: 2
+    })
+    sweepStaleStarts(
+      store,
+      () => 10 * MIN,
+      () => {}
+    )
+    expect(store.runs.steps('multi')[1]).toMatchObject({
+      status: 'failed',
+      error: STALE_START_OUTCOME
+    })
+    expect(store.runs.get('multi')?.status).toBe('running')
+    expect(store.handledKeys('a')).toEqual(new Set(['multi:1']))
+  })
+
+  it('never fails a step still pending (its workspace is being made): the run keeps its key', () => {
+    const store = newStore()
+    store.runs.create({
+      id: 'slow',
+      automationId: 'a',
+      tickId: null,
+      itemKey: 'slow',
+      itemLabel: 'slow',
+      worktreePath: null,
+      startedAt: 0
+    })
+    store.markHandled('a', 'slow:1', 'slow', 0)
+    store.runs.createStep({
+      runId: 'slow',
+      idx: 0,
+      name: 's',
+      agent: 'claude',
+      skill: null,
+      status: 'pending',
+      startedAt: 0
+    })
+    sweepStaleStarts(
+      store,
+      () => 10 * MIN,
+      () => {}
+    )
+    expect(store.runs.steps('slow')[0].status).toBe('pending')
+    expect(store.runs.get('slow')?.status).toBe('running')
+    expect(store.handledKeys('a')).toEqual(new Set(['slow:1']))
+  })
+
+  it('fails a step left pending past the bound by an app that stopped while making its workspace', () => {
+    const store = newStore()
+    store.runs.create({
+      id: 'left',
+      automationId: 'a',
+      tickId: null,
+      itemKey: 'left',
+      itemLabel: 'left',
+      worktreePath: null,
+      startedAt: 0
+    })
+    store.markHandled('a', 'left:1', 'left', 0)
+    store.runs.createStep({
+      runId: 'left',
+      idx: 0,
+      name: 's',
+      agent: 'claude',
+      skill: null,
+      status: 'pending',
+      startedAt: null
+    })
+    sweepStaleStarts(
+      store,
+      () => STALE_PENDING_MS + 1,
+      () => {}
+    )
+    expect(store.runs.steps('left')[0]).toMatchObject({
+      status: 'failed',
+      error: STALE_PENDING_OUTCOME
+    })
+    expect(store.runs.get('left')).toMatchObject({
+      status: 'failed',
+      outcome: STALE_PENDING_OUTCOME
+    })
+    expect(store.handledKeys('a')).toEqual(new Set())
+  })
+
+  it('never fails a pending step whose workspace this process is still making, however long it takes', () => {
+    const store = newStore()
+    store.runs.create({
+      id: 'slow',
+      automationId: 'a',
+      tickId: null,
+      itemKey: 'slow',
+      itemLabel: 'slow',
+      worktreePath: null,
+      startedAt: 0
+    })
+    store.markHandled('a', 'slow:1', 'slow', 0)
+    store.runs.createStep({
+      runId: 'slow',
+      idx: 0,
+      name: 's',
+      agent: 'claude',
+      skill: null,
+      status: 'pending',
+      startedAt: 0
+    })
+    sweepStaleStarts(
+      store,
+      () => 2 * STALE_PENDING_MS,
+      () => {},
+      STALE_START_MS,
+      (runId) => runId === 'slow'
+    )
+    expect(store.runs.steps('slow')[0].status).toBe('pending')
+    expect(store.runs.get('slow')?.status).toBe('running')
+    expect(store.handledKeys('a')).toEqual(new Set(['slow:1']))
   })
 })
