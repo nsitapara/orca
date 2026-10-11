@@ -3,7 +3,6 @@ import type { FieldValue, ItemFields } from '../api-types'
 // Output names end up in templates as steps.<step>.<name>, so they use the placeholder alphabet.
 export const OUTPUT_KEY = /^[A-Za-z_][A-Za-z0-9_]{0,63}$/
 export const MAX_OUTPUT_VALUE = 4096
-export const OUTPUT_LINE_PREFIX = '::pilot-output '
 
 export type OutputPair = { ok: true; key: string; value: FieldValue } | { ok: false; error: string }
 
@@ -64,17 +63,18 @@ export function parseOutputPairs(
   return { ok: true, outputs }
 }
 
-// `::pilot-output key=value` lines a shell step printed, one pair per line, at the start of the line.
-// A bad line is a warning, never a failed step.
-export function outputsFromStdout(stdout: string): { outputs: ItemFields; warnings: string[] } {
+// The file a shell step writes its outputs to ($PILOT_OUTPUT_FILE): one key=value per line, the last
+// line per key winning. Stdout is never read for outputs, so what a child process prints (git log, an
+// MR description) can't forge one. A bad line is a warning, never a failed step.
+export function outputsFromFile(text: string): { outputs: ItemFields; warnings: string[] } {
   const outputs: ItemFields = {}
   const warnings: string[] = []
-  for (const line of stdout.split('\n')) {
-    const text = line.replace(/\r$/, '')
-    if (!text.startsWith(OUTPUT_LINE_PREFIX)) {
+  for (const line of text.split('\n')) {
+    const row = line.replace(/\r$/, '')
+    if (row.trim() === '') {
       continue
     }
-    const pair = parseOutputPair(text.slice(OUTPUT_LINE_PREFIX.length))
+    const pair = parseOutputPair(row)
     if (pair.ok) {
       outputs[pair.key] = pair.value
     } else {

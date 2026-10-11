@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { coerceOutputValue, outputsFromStdout, parseOutputPair, parseOutputPairs } from './outputs'
+import { coerceOutputValue, outputsFromFile, parseOutputPair, parseOutputPairs } from './outputs'
 
 describe('coerceOutputValue', () => {
   it.each([
@@ -47,20 +47,21 @@ describe('parseOutputPair', () => {
   })
 })
 
-describe('outputsFromStdout', () => {
-  it('reads ::pilot-output lines only, the last one per key winning, and reports bad lines', () => {
-    const stdout = [
-      'pruned 3 images',
-      '::pilot-output found_bugs=1',
-      '  ::pilot-output not=me',
-      '::pilot-output found_bugs=2\r',
-      '::pilot-output report=reports/qa 1.md',
-      '::pilot-output bad-key=1'
+describe('outputsFromFile', () => {
+  it('reads key=value lines, the last one per key winning, and reports bad lines', () => {
+    const text = [
+      'found_bugs=1',
+      '',
+      'found_bugs=2\r',
+      'report=reports/qa 1.md',
+      'bad-key=1',
+      '::pilot-output x=1'
     ].join('\n')
-    expect(outputsFromStdout(stdout)).toEqual({
+    expect(outputsFromFile(text)).toEqual({
       outputs: { found_bugs: 2, report: 'reports/qa 1.md' },
       warnings: [
-        '"bad-key" isn\'t an output name: letters, digits and _, not starting with a digit'
+        '"bad-key" isn\'t an output name: letters, digits and _, not starting with a digit',
+        '"::pilot-output x" isn\'t an output name: letters, digits and _, not starting with a digit'
       ]
     })
   })

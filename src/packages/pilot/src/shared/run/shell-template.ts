@@ -1,20 +1,19 @@
 import type { ItemFields } from '../api-types'
-import { shellQuote } from '../shell-quote'
-import { PLACEHOLDER } from '../template'
 
 type QuoteState = 'none' | 'single' | 'double'
-export type ShellRender = { ok: true; command: string } | { ok: false; missing: string[] }
+export type ShellRender =
+  | { ok: true; command: string; env: Record<string, string> }
+  | { ok: false; missing: string[]; inSingleQuotes: string[] }
 
-function insideSingleQuotes(value: string): string {
-  return value.replace(/'/g, `'\\''`)
-}
+export const ARG_ENV_PREFIX = 'PILOT_ARG_'
 
-function insideDoubleQuotes(value: string): string {
-  return value.replace(/[\\"$`]/g, (c) => `\\${c}`)
-}
+// A placeholder as the shell template reads it: the usual {name}, but a "{" right after "$" or "\" is
+// the shell's own (${HOME}, \{), so it stays literal. Global: use with replace()/matchAll().
+const SHELL_PLACEHOLDER = /(?<![$\\])\{([a-z_]\w*(?:\.\w+)+|[a-z_]\w*)\}/gi
 
-// Whether the template is inside '…' or "…" at `end`, as /bin/sh reads it (backslash escapes outside
-// single quotes).
+// Whether the template is inside '…' or "…" at `end`, as /bin/sh reads the plain cases (backslash
+// escapes outside single quotes). It is only a guide for choosing how to write the reference: a value
+// never enters the command text, so a wrong guess can split a word but can never run anything.
 function quoteStateAt(template: string, end: number): QuoteState {
   let state: QuoteState = 'none'
   for (let i = 0; i < end; i += 1) {
@@ -44,30 +43,51 @@ function quoteStateAt(template: string, end: number): QuoteState {
   return state
 }
 
-function quotedFor(state: QuoteState, value: string): string {
-  if (state === 'single') {
-    return insideSingleQuotes(value)
+// Names of placeholders written inside '…': nothing expands there, so they can't carry a value.
+export function singleQuotedPlaceholders(template: string): string[] {
+  const names = new Set<string>()
+  for (const m of template.matchAll(SHELL_PLACEHOLDER)) {
+    if (quoteStateAt(template, m.index) === 'single') {
+      names.add(m[1])
+    }
   }
-  if (state === 'double') {
-    return insideDoubleQuotes(value)
-  }
-  return shellQuote(value)
+  return [...names]
 }
 
-// Every value is quoted for where it sits, so a branch or title with spaces, quotes or $(…) stays one
-// argument and never runs. A missing value fails the render: a step never runs a half-filled command.
+// A value never goes into the command text. Each distinct value is handed over as PILOT_ARG_<n> in the
+// environment and the placeholder becomes a reference to it ("${PILOT_ARG_0}", or ${PILOT_ARG_0} inside
+// "…"), so a branch or title with quotes, $(…), backticks or a newline stays data whatever surrounds it.
+// A missing value, or a placeholder inside '…', fails the render: a step never runs a half-filled command.
 export function renderShellCommand(template: string, fields: ItemFields): ShellRender {
   const missing = new Set<string>()
-  const command = template.replace(PLACEHOLDER, (whole: string, name: string, offset: number) => {
-    const value = Object.hasOwn(fields, name) ? fields[name] : undefined
-    if (value === undefined || value === null) {
-      missing.add(name)
-      return whole
+  const inSingleQuotes = new Set<string>()
+  const env: Record<string, string> = {}
+  const slots = new Map<string, string>()
+  const command = template.replace(
+    SHELL_PLACEHOLDER,
+    (whole: string, name: string, offset: number) => {
+      const value = Object.hasOwn(fields, name) ? fields[name] : undefined
+      if (value === undefined || value === null) {
+        missing.add(name)
+        return whole
+      }
+      const state = quoteStateAt(template, offset)
+      if (state === 'single') {
+        inSingleQuotes.add(name)
+        return whole
+      }
+      const text = String(value)
+      let slot = slots.get(text)
+      if (slot === undefined) {
+        slot = `${ARG_ENV_PREFIX}${slots.size}`
+        slots.set(text, slot)
+        env[slot] = text
+      }
+      return state === 'double' ? `\${${slot}}` : `"\${${slot}}"`
     }
-    return quotedFor(quoteStateAt(template, offset), String(value))
-  })
-  if (missing.size > 0) {
-    return { ok: false, missing: [...missing] }
+  )
+  if (missing.size > 0 || inSingleQuotes.size > 0) {
+    return { ok: false, missing: [...missing], inSingleQuotes: [...inSingleQuotes] }
   }
-  return { ok: true, command }
+  return { ok: true, command, env }
 }

@@ -1,11 +1,11 @@
-import { mkdtempSync } from 'node:fs'
+import { appendFileSync, existsSync, mkdtempSync, readFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import type { ItemFields, RunRow } from '../../shared/api-types'
 import { parseAutomationYaml } from '../../shared/definition/parse'
 import type { AutomationDefinition } from '../../shared/definition/types'
-import { outputsFromStdout } from '../../shared/run/outputs'
+import { outputsFromFile } from '../../shared/run/outputs'
 import { PilotStore } from '../store/store'
 import type { StepStartRequest } from './advance'
 import {
@@ -122,13 +122,15 @@ describe('makeShellSteps', () => {
     await steps.settled()
     expect(calls).toEqual([
       {
-        command: "'/a/prune.sh' '/repo'",
+        command: `'/a/prune.sh' "\${PILOT_ARG_0}"`,
         cwd: '/repo',
         env: {
           PATH: '/pilot/bin:/usr/bin',
           ORCA_USER_DATA_PATH: '/data/pilot',
           PILOT_RUN_ID: 'run-1',
-          PILOT_STEP_IDX: '0'
+          PILOT_STEP_IDX: '0',
+          PILOT_ARG_0: '/repo',
+          PILOT_OUTPUT_FILE: expect.stringMatching(/pilot-step-[^/]+\/outputs$/)
         },
         timeoutMs: 10 * MIN
       }
@@ -157,10 +159,15 @@ describe('makeShellSteps', () => {
     })
   })
 
-  it('keeps ::pilot-output lines as outputs, and the last 8 KB of output', async () => {
-    const stdout = `${'x'.repeat(9000)}\n::pilot-output found_bugs=2\n::pilot-output report=reports/qa 1.md\n::pilot-output bad-key=1\n`
+  it('takes outputs from $PILOT_OUTPUT_FILE only, keeps the last 8 KB of output, and removes the file', async () => {
+    let file = ''
+    const stdout = `${'x'.repeat(9000)}\n::pilot-output forged=1\n`
     const { store, steps, logs, req } = setup({
-      run: async () => result({ stdout, stderr: 'warn\n' })
+      run: async (spec) => {
+        file = String(spec.env.PILOT_OUTPUT_FILE)
+        appendFileSync(file, 'found_bugs=2\nreport=reports/qa 1.md\nbad-key=1\n')
+        return result({ stdout, stderr: 'warn\n' })
+      }
     })
     await steps.start(req(shellDef('./qa.sh')))
     await steps.settled()
@@ -169,6 +176,26 @@ describe('makeShellSteps', () => {
     expect(row.outputTail).toHaveLength(8192)
     expect(row.outputTail?.endsWith('--- stderr ---\nwarn\n')).toBe(true)
     expect(logs.some((l) => l.includes('bad-key'))).toBe(true)
+    expect(existsSync(file)).toBe(false)
+  })
+
+  it('sets no output for a ::pilot-output line printed to stdout', async () => {
+    const { store, steps, req } = setup({
+      run: async () => result({ stdout: '::pilot-output x=1\n' })
+    })
+    await steps.start(req(shellDef('./qa.sh')))
+    await steps.settled()
+    expect(store.runs.steps('run-1')[0].outputs).toEqual({})
+  })
+
+  it('refuses a placeholder inside single quotes, naming it', async () => {
+    const { steps, calls, req } = setup()
+    const def = shellDef('echo x')
+    def.steps[0] = { ...def.steps[0], run: "echo '{repo.path}'" }
+    await expect(steps.start(req(def))).rejects.toThrow(
+      'Shell step prune: {repo.path} is inside single quotes'
+    )
+    expect(calls).toEqual([])
   })
 
   it('is live while its process runs, and not after', async () => {
@@ -252,15 +279,18 @@ describe('sweepOrphanShellSteps', () => {
 
 describe('runShell (a real /bin/sh)', () => {
   it('runs in the folder with the env given, and reports its outputs and exit code', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'pilot-sh-'))
+    const outputs = join(dir, 'outputs')
     const r = await runShell({
-      command: 'printf "%s\\n" "$PILOT_RUN_ID" "::pilot-output count=2"; test -d . && exit 3',
-      cwd: mkdtempSync(join(tmpdir(), 'pilot-sh-')),
-      env: { PATH: '/usr/bin:/bin', PILOT_RUN_ID: 'run-9' },
+      command:
+        'printf "%s\\n" "$PILOT_RUN_ID"; echo count=2 >> "$PILOT_OUTPUT_FILE"; test -d . && exit 3',
+      cwd: dir,
+      env: { PATH: '/usr/bin:/bin', PILOT_RUN_ID: 'run-9', PILOT_OUTPUT_FILE: outputs },
       timeoutMs: 10_000
     })
     expect(r).toMatchObject({ code: 3, timedOut: false })
     expect(r.stdout).toContain('run-9')
-    expect(outputsFromStdout(r.stdout).outputs).toEqual({ count: 2 })
+    expect(outputsFromFile(readFileSync(outputs, 'utf8')).outputs).toEqual({ count: 2 })
   })
 
   it('stops a command that runs past its timeout', async () => {
