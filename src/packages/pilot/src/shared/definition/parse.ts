@@ -23,6 +23,10 @@ function formatIssue(issue: z.core.$ZodIssue): string {
 // M1 scope (Global Constraints): reject what later milestones bring, naming the milestone.
 function m1Limits(raw: RawAutomation): string[] {
   const errors: string[] = []
+  // Without items the tick would still list every open MR, so nothing may run "once" in M1.
+  if (!raw.items) {
+    errors.push('items: run-once automations (no items:) arrive in M3')
+  }
   if (raw.items && raw.items.kind !== 'merge_request') {
     errors.push(`items.kind: "${raw.items.kind}" arrives in M3 (M1 supports merge_request)`)
   }
@@ -83,6 +87,9 @@ function normalizeCheck(c: NonNullable<RawAutomation['checks']>[number]): Builti
 }
 
 function normalize(raw: RawAutomation, file: string): AutomationDefinition {
+  if (!raw.items) {
+    throw new Error('unreachable: a missing items: is rejected by m1Limits')
+  }
   return {
     id: idFromFile(file),
     file,
@@ -91,7 +98,7 @@ function normalize(raw: RawAutomation, file: string): AutomationDefinition {
     schedule: raw.schedule,
     timezone: raw.timezone ?? 'America/Los_Angeles',
     enabled: raw.enabled ?? true,
-    items: raw.items ? { kind: 'merge_request', where: raw.items.where ?? {} } : null,
+    items: { kind: 'merge_request', where: raw.items.where ?? {} },
     firstSeen: raw.first_seen ?? 'process',
     oncePer: raw.once_per ?? null,
     checks: (raw.checks ?? []).map(normalizeCheck),

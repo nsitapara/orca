@@ -18,7 +18,7 @@ function setup(over: Partial<PilotHost> = {}, scheduler: unknown = null) {
   const dir = mkdtempSync(join(tmpdir(), 'pilot-methods-'))
   writeFileSync(
     join(dir, 'ci.yaml'),
-    'name: X\nrepo: r\nschedule: manual\nsteps: [ { agent: claude, prompt: x } ]\n'
+    'name: X\nrepo: r\nschedule: manual\nitems: { kind: merge_request }\nsteps: [ { agent: claude, prompt: x } ]\n'
   )
   const loaded = loadDefinitions([dir])
   const host: PilotHost = {

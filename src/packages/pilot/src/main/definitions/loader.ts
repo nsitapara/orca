@@ -76,7 +76,7 @@ function loadPeople(dirs: string[]): { people: PeopleDirectory; peopleError: str
 // Every place an AutomationDefinition holds a PeopleRef. Add future refs
 // (e.g. a reviewer) here and nowhere else.
 function peopleRefs(def: AutomationDefinition): { path: string; ref: PeopleRef | undefined }[] {
-  return [{ path: 'items.where.author', ref: def.items?.where.author }]
+  return [{ path: 'items.where.author', ref: def.items.where.author }]
 }
 
 function refErrors(path: string, ref: PeopleRef | undefined, dir: PeopleDirectory): string[] {

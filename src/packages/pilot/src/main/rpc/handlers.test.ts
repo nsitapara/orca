@@ -7,7 +7,7 @@ import { PilotStore } from '../store/store'
 import { activity, getAutomation, listAutomations, validateYaml } from './handlers'
 
 const YAML =
-  'name: Fix CI\nrepo: web-platform\nschedule: "10 * * * *"\nchecks: [ { worktree: clean } ]\nsteps: [ { agent: claude, prompt: x } ]\n'
+  'name: Fix CI\nrepo: web-platform\nschedule: "10 * * * *"\nitems: { kind: merge_request }\nchecks: [ { worktree: clean } ]\nsteps: [ { agent: claude, prompt: x } ]\n'
 
 function context() {
   const dir = mkdtempSync(join(tmpdir(), 'pilot-rpc-'))
@@ -36,7 +36,7 @@ describe('Pilot API handlers', () => {
     store.finishTick(tick, 'ok', null, { started: 1 }, 2)
     const payload = listAutomations(ctx)
     expect(payload.automations.map((a) => [a.id, a.agent, a.itemKind, a.lastTick?.counts])).toEqual(
-      [['ci', 'claude', 'Runs once', { started: 1 }]]
+      [['ci', 'claude', 'Merge requests', { started: 1 }]]
     )
     expect(payload.errors.map((e) => e.file.endsWith('bad.yaml'))).toEqual([true])
   })

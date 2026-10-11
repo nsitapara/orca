@@ -40,7 +40,7 @@ beforeEach(() => {
   dir = mkdtempSync(join(tmpdir(), 'pilot-services-automations-'))
   writeFileSync(
     join(dir, 'ci.yaml'),
-    'name: ci\nrepo: r\nschedule: "10 * * * *"\nsteps: [ { agent: claude, prompt: x } ]\n'
+    'name: ci\nrepo: r\nschedule: "10 * * * *"\nitems: { kind: merge_request }\nsteps: [ { agent: claude, prompt: x } ]\n'
   )
   writeFileSync(join(dir, 'people.yaml'), 'people: [\n')
   setAppEnvironment({ getPath: () => userData } as unknown as AppEnvironment)

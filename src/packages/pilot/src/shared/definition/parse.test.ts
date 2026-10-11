@@ -127,6 +127,12 @@ describe('parseAutomationYaml', () => {
       'answers',
       `${CI_05}\nanswers: { resume: asking_session }\n`,
       'answers: answer routing arrives in M2'
+    ],
+    [
+      // Without items the tick would list every open MR and run on all of them.
+      'a file without items:',
+      CI_05.replace(/items:\n(  .*\n)+/, ''),
+      'items: run-once automations (no items:) arrive in M3'
     ]
   ])('rejects %s with the milestone that brings them', (_label, yaml, message) => {
     expect(parseAutomationYaml(yaml, '/a/ci.yaml')).toEqual({
