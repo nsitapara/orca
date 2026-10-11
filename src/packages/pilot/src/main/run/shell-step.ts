@@ -15,11 +15,10 @@ import type { StepDef } from '../../shared/definition/types'
 import { formatDuration } from '../../shared/run/format-duration'
 import { outputsFromFile } from '../../shared/run/outputs'
 import {
-  renderShellCommand,
-  shellProblemMessage,
-  type ShellProblem
+  RUN_PLACEHOLDER_ADVICE,
+  renderShellEnv,
+  runPlaceholders
 } from '../../shared/run/shell-template'
-import { renderTemplate } from '../../shared/template'
 import { engineChildEnv, type EngineEnv } from '../engine-env'
 import { resolveScriptCommand } from '../fields/script-runner'
 import type { PilotStore } from '../store/store'
@@ -129,16 +128,6 @@ export function shellEnding(
   return { status: 'failed', error: `Exited ${result.code}${said}` }
 }
 
-function shellRefusal(
-  step: string,
-  failed: { missing: string[]; problems: ShellProblem[] }
-): string {
-  if (failed.problems.length > 0) {
-    return `Shell step ${step}: ${failed.problems.map(shellProblemMessage).join('; ')}`
-  }
-  return `Shell step ${step}: no value for ${failed.missing.map((n) => `{${n}}`).join(', ')}`
-}
-
 // The tail of the outputs file, at most SHELL_CAPTURE_BYTES (the last line per key wins, so the tail is
 // what counts); a cut first line is dropped.
 function readOutputsFile(file: string): string {
@@ -149,7 +138,11 @@ function readOutputsFile(file: string): string {
     const buffer = Buffer.alloc(size - start)
     readSync(fd, buffer, 0, buffer.length, start)
     const text = buffer.toString('utf8')
-    return start > 0 ? text.slice(text.indexOf('\n') + 1) : text
+    if (start === 0) {
+      return text
+    }
+    const cut = text.indexOf('\n')
+    return cut === -1 ? '' : text.slice(cut + 1)
   } finally {
     closeSync(fd)
   }
@@ -208,23 +201,16 @@ export function makeShellSteps(deps: ShellStepDeps): ShellSteps {
   // anything is written here; the engine fails the step's pending row, if it has one.
   async function start(req: StepStartRequest): Promise<void> {
     const step = req.definition.steps[req.idx]
-    const rendered = renderShellCommand(
-      resolveScriptCommand(step.run ?? '', req.definition.file),
-      req.fields
-    )
-    if (!rendered.ok) {
-      throw new Error(shellRefusal(step.name, rendered))
+    // run: is used as written: values reach the command only through env: (the load check refuses a
+    // placeholder in run:, so one here means a definition that skipped it).
+    const command = resolveScriptCommand(step.run ?? '', req.definition.file)
+    if (runPlaceholders(command).length > 0) {
+      throw new Error(`Shell step ${step.name}: run ${RUN_PLACEHOLDER_ADVICE}`)
     }
-    const stepEnv: Record<string, string> = {}
-    const missingEnv = new Set<string>()
-    for (const [name, template] of Object.entries(step.env)) {
-      const value = renderTemplate(template, req.fields)
-      value.missing.forEach((m) => missingEnv.add(m))
-      stepEnv[name] = value.text
-    }
-    if (missingEnv.size > 0) {
+    const stepEnv = renderShellEnv(step.env, req.fields)
+    if (!stepEnv.ok) {
       throw new Error(
-        `Shell step ${step.name}: no value for ${[...missingEnv].map((n) => `{${n}}`).join(', ')}`
+        `Shell step ${step.name}: no value for ${stepEnv.missing.map((n) => `{${n}}`).join(', ')}`
       )
     }
     if (!deps.store.runs.steps(req.run.id).some((s) => s.idx === req.idx)) {
@@ -265,13 +251,12 @@ export function makeShellSteps(deps: ShellStepDeps): ShellSteps {
       const timeoutMs = deps.timeoutOf(req)
       const base = deps.baseEnv ?? process.env
       job = run({
-        command: rendered.command,
+        command,
         cwd,
         env: {
           ...base,
           ...engineChildEnv(deps.engineEnv, deps.envOf(req), base),
-          ...stepEnv,
-          ...rendered.env,
+          ...stepEnv.env,
           PILOT_OUTPUT_FILE: outputFile
         },
         timeoutMs
@@ -296,7 +281,11 @@ export function makeShellSteps(deps: ShellStepDeps): ShellSteps {
           deps.onEnded(req.run.id)
         })
     } catch (error) {
-      rmSync(outputDir, { recursive: true, force: true })
+      try {
+        rmSync(outputDir, { recursive: true, force: true })
+      } catch (removeError) {
+        deps.log(`[pilot] couldn't remove ${outputDir}: ${messageOf(removeError)}`)
+      }
       live.delete(key)
       fail(req, error)
       throw error

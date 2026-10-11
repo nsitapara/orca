@@ -20,8 +20,8 @@ import {
 
 const MIN = 60_000
 
-function shellDef(run: string): AutomationDefinition {
-  const yaml = `name: Clean Docker\nrepo: web-platform\nschedule: manual\nsteps:\n  - name: prune\n    agent: shell\n    run: ${JSON.stringify(run)}\n    exit_codes: { ok: [0], skip: [3] }\n`
+function shellDef(run: string, env: Record<string, string> = {}): AutomationDefinition {
+  const yaml = `name: Clean Docker\nrepo: web-platform\nschedule: manual\nsteps:\n  - name: prune\n    agent: shell\n    run: ${JSON.stringify(run)}\n    env: ${JSON.stringify(env)}\n    exit_codes: { ok: [0], skip: [3] }\n`
   const parsed = parseAutomationYaml(yaml, '/a/clean-docker.yaml')
   if (!parsed.ok) {
     throw new Error(parsed.errors.join('\n'))
@@ -105,7 +105,7 @@ describe('makeShellSteps', () => {
     ]
   ] as const)('ends the step on %s', async (_n, outcome, status, error) => {
     const { store, steps, ended, req } = setup({ run: async () => outcome })
-    await steps.start(req(shellDef('./prune.sh {repo.path}')))
+    await steps.start(req(shellDef('./prune.sh')))
     await steps.settled()
     expect(store.runs.steps('run-1')[0]).toMatchObject({
       kind: 'shell',
@@ -116,20 +116,20 @@ describe('makeShellSteps', () => {
     expect(ended).toEqual(['run-1'])
   })
 
-  it("runs the rendered command (a ./ script beside the YAML) in the workspace, with Pilot's bin first on PATH, the step env over the app env, and its timeout", async () => {
+  it("runs the command as written (a ./ script beside the YAML) in the workspace, with Pilot's bin first on PATH, the step env over the app env, and its timeout", async () => {
     const { steps, calls, req } = setup()
-    await steps.start(req(shellDef('./prune.sh {repo.path}')))
+    await steps.start(req(shellDef('./prune.sh', { REPO: '{repo.path}' })))
     await steps.settled()
     expect(calls).toEqual([
       {
-        command: `'/a/prune.sh' "\${PILOT_ARG_0}"`,
+        command: "'/a/prune.sh'",
         cwd: '/repo',
         env: {
           PATH: '/pilot/bin:/usr/bin',
           ORCA_USER_DATA_PATH: '/data/pilot',
           PILOT_RUN_ID: 'run-1',
           PILOT_STEP_IDX: '0',
-          PILOT_ARG_0: '/repo',
+          REPO: '/repo',
           PILOT_OUTPUT_FILE: expect.stringMatching(/pilot-step-[^/]+\/outputs$/)
         },
         timeoutMs: 10 * MIN
@@ -188,32 +188,38 @@ describe('makeShellSteps', () => {
     expect(store.runs.steps('run-1')[0].outputs).toEqual({})
   })
 
-  it('exports env: values rendered as plain text, under PILOT_OUTPUT_FILE and over the app env', async () => {
+  it('exports env: values rendered as plain text (only dotted names), over the app env', async () => {
     const { steps, calls, req } = setup()
-    const def = shellDef('./tell.sh')
-    def.steps[0] = { ...def.steps[0], env: { TITLE: 'MR {mr.title} "$(x)"' } }
+    const def = shellDef('./tell.sh', { TITLE: 'MR {mr.title} "$(x)" ${HOME} {print}' })
     await steps.start(req(def, { 'mr.title': "it's `x`" }))
     await steps.settled()
-    expect(calls[0].env.TITLE).toBe('MR it\'s `x` "$(x)"')
+    expect(calls[0].env.TITLE).toBe('MR it\'s `x` "$(x)" ${HOME} {print}')
   })
 
   it('fails a step whose env: value has no value, naming it', async () => {
     const { store, steps, calls, req } = setup()
-    const def = shellDef('./tell.sh')
-    def.steps[0] = { ...def.steps[0], env: { TITLE: '{mr.title}' } }
+    const def = shellDef('./tell.sh', { TITLE: '{mr.title}' })
     await expect(steps.start(req(def))).rejects.toThrow('Shell step prune: no value for {mr.title}')
     expect(calls).toEqual([])
     expect(store.runs.steps('run-1')).toEqual([])
   })
 
-  it('refuses a placeholder inside single quotes, naming it', async () => {
+  it('refuses a placeholder that reached render in run:', async () => {
     const { steps, calls, req } = setup()
     const def = shellDef('echo x')
-    def.steps[0] = { ...def.steps[0], run: "echo '{repo.path}'" }
+    def.steps[0] = { ...def.steps[0], run: 'echo {repo.path}' }
     await expect(steps.start(req(def))).rejects.toThrow(
-      "Shell step prune: {repo.path} can't be used in this command (it is inside single quotes)"
+      "Shell step prune: run can't contain {placeholders}; pass values with env: { NAME: '{field}' } and use \"$NAME\" in the script"
     )
     expect(calls).toEqual([])
+  })
+
+  it("runs a command with ${HOME}, awk '{print}', a comment and a heredoc as written", async () => {
+    const { steps, calls, req } = setup()
+    const command = "awk '{print}' <<EOF # c\n${HOME}\nEOF"
+    await steps.start(req(shellDef(command)))
+    await steps.settled()
+    expect(calls[0].command).toBe(command)
   })
 
   it('is live while its process runs, and not after', async () => {
@@ -229,9 +235,9 @@ describe('makeShellSteps', () => {
 
   it('refuses to start, writing nothing itself, when a placeholder has no value', async () => {
     const { store, steps, calls, req } = setup()
-    await expect(steps.start(req(shellDef('./teardown.sh {worktree.path}')))).rejects.toThrow(
-      'Shell step prune: no value for {worktree.path}'
-    )
+    await expect(
+      steps.start(req(shellDef('./teardown.sh', { WT: '{worktree.path}' })))
+    ).rejects.toThrow('Shell step prune: no value for {worktree.path}')
     expect(store.runs.steps('run-1')).toEqual([])
     expect(calls).toEqual([])
   })

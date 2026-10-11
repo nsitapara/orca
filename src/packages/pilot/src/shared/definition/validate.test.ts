@@ -18,34 +18,44 @@ describe('definition validation', () => {
       'step 1: a shell step needs run:'
     ],
     [
-      'a shell placeholder inside single quotes',
-      `${BASE}steps:\n  - { agent: shell, run: "echo '{mr.title}'" }\n`,
-      `step 1: run: {mr.title} can't be used in this command (it is inside single quotes); pass it as env: { NAME: '{mr.title}' } and use "$NAME" in the script`
-    ],
-    [
-      'a shell placeholder next to a comment',
+      'a shell placeholder in run:',
       `${BASE}steps:\n  - { agent: shell, run: "echo {mr.title} # hi" }\n`,
-      `step 1: run: {mr.title} can't be used in this command (the command has a comment); pass it as env: { NAME: '{mr.title}' } and use "$NAME" in the script`
+      `step 1: run can't contain {placeholders}; pass values with env: { NAME: '{field}' } and use "$NAME" in the script`
     ],
     [
       'a script path with a placeholder',
       `${BASE}steps:\n  - { agent: shell, run: "./tools/{mr.iid}.sh" }\n`,
-      `step 1: run: {mr.iid} can't be used in this command (it is inside single quotes); pass it as env: { NAME: '{mr.iid}' } and use "$NAME" in the script`
+      `step 1: run can't contain {placeholders}; pass values with env: { NAME: '{field}' } and use "$NAME" in the script`
     ],
     [
       'a lowercase env name',
       `${BASE}steps:\n  - { agent: shell, run: ./x.sh, env: { title: "{mr.title}" } }\n`,
-      "step 1: env: title isn't a usable name: capital letters, digits and _, not starting with a digit, PILOT_ or ORCA_"
+      "step 1: env: title isn't a usable name: capital letters, digits and _, not starting with a digit"
     ],
+    ...[
+      'PILOT_X',
+      'ORCA_X',
+      'PATH',
+      'IFS',
+      'HOME',
+      'ENV',
+      'BASH_ENV',
+      'SHELLOPTS',
+      'BASHOPTS',
+      'PS4',
+      'CDPATH',
+      'GLOBIGNORE',
+      'LD_PRELOAD',
+      'DYLD_INSERT_LIBRARIES'
+    ].map((name) => [
+      `a reserved env name ${name}`,
+      `${BASE}steps:\n  - { agent: shell, run: ./x.sh, env: { ${name}: a } }\n`,
+      `step 1: env: ${name} is reserved: not PATH, IFS, HOME, ENV, BASH_ENV, SHELLOPTS, BASHOPTS, PS4, CDPATH, GLOBIGNORE, or a name starting PILOT_, ORCA_, LD_ or DYLD_`
+    ]),
     [
-      'an env name starting PILOT_',
-      `${BASE}steps:\n  - { agent: shell, run: ./x.sh, env: { PILOT_X: a } }\n`,
-      "step 1: env: PILOT_X isn't a usable name: capital letters, digits and _, not starting with a digit, PILOT_ or ORCA_"
-    ],
-    [
-      'an env name starting ORCA_',
-      `${BASE}steps:\n  - { agent: shell, run: ./x.sh, env: { ORCA_X: a } }\n`,
-      "step 1: env: ORCA_X isn't a usable name: capital letters, digits and _, not starting with a digit, PILOT_ or ORCA_"
+      'an env value naming a later step',
+      `${BASE}steps:\n  - { name: a, agent: shell, run: ./x.sh, env: { X: "{steps.b.out}" } }\n  - { name: b, agent: shell, run: ./y.sh }\n`,
+      "steps[0].env.X: {steps.b.out} doesn't name an earlier step"
     ],
     [
       'env on an agent step',
@@ -209,5 +219,13 @@ describe('definition validation', () => {
     ]
   ])('explains %s in plain words', (_label, yaml, message) => {
     expect(errorsOf(yaml)).toEqual([message])
+  })
+})
+
+describe('a shell run: with no Pilot placeholder', () => {
+  it('is accepted whatever shell syntax it holds', () => {
+    const run = 'awk \'{print}\' f | jq \'{title}\' # "c"; echo "${HOME}" <<EOF\n$(date)\nEOF'
+    const yaml = `${BASE}steps:\n  - { agent: shell, run: ${JSON.stringify(run)} }\n`
+    expect(errorsOf(yaml)).toEqual([])
   })
 })
