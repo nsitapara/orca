@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import i18next from 'i18next'
 import { attachPilotRenderer } from './attach-renderer'
 import { pilotStore, registerPilotStore } from './store'
@@ -25,6 +25,24 @@ describe('attachPilotRenderer', () => {
     document.title = 'Orca'
     attachPilotRenderer({ i18n: i18next.createInstance(), doc: document })
     expect(document.title).toBe('Pilot')
+  })
+
+  // main.tsx calls attach at the top level, so a throw would blank the whole UI (R13).
+  it('logs a failure and returns, leaving the app working', () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const i18n = {
+      use: () => {
+        throw new Error('i18n not ready')
+      },
+      options: {}
+    }
+    const store = { getState: () => ({ rightSidebarOpen: true, setRightSidebarOpen: () => {} }) }
+    expect(() => attachPilotRenderer({ i18n, doc: document, store })).not.toThrow()
+    expect(error).toHaveBeenCalledWith('[pilot] renderer attach failed: i18n not ready')
+    // What ran before the failure stays in place: the sidebar hooks still find the store.
+    expect(pilotStore()).toBe(store)
+    registerPilotStore(null)
+    error.mockRestore()
   })
 
   it('registers the app store for the sidebar hooks', () => {
