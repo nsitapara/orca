@@ -1,9 +1,35 @@
-export type PeopleRef = 'anyone' | { people?: string[]; group?: string }
+export type ItemKind = 'merge_request' | 'worktree' | 'pipeline' | 'linear_ticket'
+export type PeopleSet = { people?: string[]; group?: string }
+// `not` leaves out the people it names; everyone else (people.yaml or not) is in.
+export type PeopleRef = 'anyone' | PeopleSet | { not: PeopleSet }
 
+// items.where per kind (contract §3). Each has its schema in where.ts, which is also the kind's
+// ItemSource.whereSchema, so validating a file and running it read the same rules.
 export type MergeRequestWhere = {
   state?: 'open'
   author?: PeopleRef
+  reviewer?: PeopleRef
   head_pipeline?: 'failed' | 'any'
+  draft?: boolean
+  approved_by?: 'none' | PeopleRef
+  target_branch?: string
+}
+export type WorktreeWhere = {
+  has_mr?: boolean
+  mr_author?: PeopleRef
+  mr_state?: 'open'
+  branch_owner?: PeopleRef
+}
+export type PipelineWhere = {
+  ref: string
+  status?: 'failed' | 'any'
+  select?: 'newest_complete' | 'newest_suite_running'
+}
+export type LinearTicketWhere = {
+  assignee?: PeopleRef
+  state_type?: string[]
+  team?: string
+  has_branch?: boolean
 }
 
 export type BuiltinCheck =

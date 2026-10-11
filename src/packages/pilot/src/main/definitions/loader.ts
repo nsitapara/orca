@@ -83,6 +83,9 @@ function refErrors(path: string, ref: PeopleRef | undefined, dir: PeopleDirector
   if (ref === undefined || ref === 'anyone') {
     return []
   }
+  if ('not' in ref) {
+    return refErrors(`${path}.not`, ref.not, dir)
+  }
   const people = (ref.people ?? [])
     .filter((id) => !dir.people.some((p) => p.id === id))
     .map((id) => `${path}: unknown person "${id}"`)
