@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { pilotDataDir } from './env'
+import { pilotDataDir, pilotSchedulerEnabled, type PilotHostKind } from './env'
 
 const HOME = '/h'
 
@@ -32,5 +32,21 @@ describe('pilotDataDir', () => {
     ['orcad: a resolver swapped in by a test', 'orcad', '/tmp/t', {}, '/tmp/t']
   ] as const)('%s', (_name, kind, userData, env, expected) => {
     expect(pilotDataDir(kind, userData, env, HOME)).toBe(expected)
+  })
+})
+
+describe('pilotSchedulerEnabled', () => {
+  // One Pilot ticks a folder of automations. Unset, that is the packaged desktop app only.
+  const HOSTS: PilotHostKind[] = ['desktop', 'dev', 'serve', 'orcad']
+  it.each([
+    [undefined, [true, false, false, false]],
+    ['on', [true, true, true, true]],
+    ['off', [false, false, false, false]],
+    // Anything else reads as unset, so a typo never turns a second Pilot on.
+    ['ON', [true, false, false, false]],
+    ['1', [true, false, false, false]]
+  ] as const)('PILOT_SCHEDULER=%s → desktop, dev, serve, orcad: %j', (value, expected) => {
+    const env = value === undefined ? {} : { PILOT_SCHEDULER: value }
+    expect(HOSTS.map((h) => pilotSchedulerEnabled(h, env))).toEqual(expected)
   })
 })

@@ -8,6 +8,26 @@ export function applyPilotEnvDefaults(env: NodeJS.ProcessEnv = process.env): voi
   env.ORCA_CLI_INSTALL_PATH ??= '/usr/local/bin/pilot'
 }
 
+// Where a Pilot main process runs: the packaged app, `pnpm dev`, a serve (`--serve`), or headless orcad.
+export type PilotHostKind = 'desktop' | 'dev' | 'serve' | 'orcad'
+
+// Only one Pilot may tick a folder of automations. A second one (a dev app, a serve on another
+// profile) has its own empty `handled` table, so its first loop would start agents on every item.
+// PILOT_SCHEDULER=on or =off decides everywhere; unset (or any other value), only the packaged
+// desktop app ticks.
+export function pilotSchedulerEnabled(
+  host: PilotHostKind,
+  env: NodeJS.ProcessEnv = process.env
+): boolean {
+  if (env.PILOT_SCHEDULER === 'on') {
+    return true
+  }
+  if (env.PILOT_SCHEDULER === 'off') {
+    return false
+  }
+  return host === 'desktop'
+}
+
 export function pilotAutomationDirs(env: NodeJS.ProcessEnv = process.env): string[] {
   const raw = env.PILOT_AUTOMATION_DIRS?.trim()
   if (!raw) {

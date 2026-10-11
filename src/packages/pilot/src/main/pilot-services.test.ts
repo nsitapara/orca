@@ -55,8 +55,8 @@ afterEach(() => {
 })
 
 describe('startPilotServices', () => {
-  it('opens the store in userData, loads the folders, and runs the scheduler in main by default', () => {
-    const services = startPilotServices(runtime, 'main')
+  it('opens the store in userData, loads the folders, and runs the scheduler when asked', () => {
+    const services = startPilotServices(runtime, 'main', { schedulerEnabled: true })
     expect(existsSync(join(userData, 'pilot-automations.db'))).toBe(true)
     expect(services.context.loaded().definitions.map((d) => d.id)).toEqual(['ci'])
     expect(logs).toContain('[pilot] scheduler started: first check in 60s, then every 15s')
@@ -75,7 +75,7 @@ describe('startPilotServices', () => {
     expect(() => services.context.store.lastRealTick('ci')).toThrow()
   })
 
-  it('leaves the scheduler off when told to, and sweeps stale starts only when it starts', () => {
+  it('leaves the scheduler off unless asked, and sweeps stale starts only when it starts', () => {
     const seed = PilotStore.open(join(userData, 'pilot-automations.db'))
     seed.runs.create({
       id: 'run-1',
@@ -95,7 +95,7 @@ describe('startPilotServices', () => {
       startedAt: 0
     })
     seed.close()
-    const off = startPilotServices(runtime, 'orcad', { schedulerEnabled: false })
+    const off = startPilotServices(runtime, 'orcad')
     expect(logs).toContain('[pilot] scheduler off in orcad (PILOT_SCHEDULER=on runs it here)')
     expect(logs.some((m) => m.startsWith('[pilot] scheduler started'))).toBe(false)
     expect(off.context.store.runs.get('run-1')?.status).toBe('running')
