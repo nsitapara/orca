@@ -5,6 +5,7 @@
 import { readdirSync, readFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { basename, join, resolve } from 'node:path'
+import { folderSpellings } from './orca-import-policy.mjs'
 import { readPilotState } from './orca-profile-reader.mjs'
 import { run } from './run.mjs'
 
@@ -78,6 +79,31 @@ export function repeatedAgentFlags(definition, commands) {
   return problems
 }
 
+// What an unattended step needs on its command line. Codex: approvals and its sandbox off, or it stops at its first
+// prompt and can't commit (gate.AGENTS, codex-cli 0.160.1). Claude takes its permissions from ~/.claude/settings.json,
+// as the old jobs' plain `claude` launch did, so it needs nothing here.
+const UNATTENDED_FLAGS = { codex: ['--dangerously-bypass-approvals-and-sandbox', '--yolo'] }
+
+// Steps whose command and args together lack their agent's unattended flag.
+export function missingUnattendedFlags(definition, commands) {
+  const problems = []
+  for (const step of definition.steps ?? []) {
+    const command = commands[step.agent]
+    const required = UNATTENDED_FLAGS[step.agent]
+    if (!command || !required) {
+      continue
+    }
+    const args = step.args ?? []
+    const present = new Set(optionNames([...command.split(/\s+/), ...args]))
+    if (!required.some((flag) => present.has(flag))) {
+      problems.push(
+        `step ${step.name} runs Codex without ${required[0]} (${[command, ...args].join(' ')}): unattended, it stops at Codex's first approval prompt`
+      )
+    }
+  }
+  return problems
+}
+
 // The scratch profile's Settings, or null when it has none yet.
 export function settingsFromData(dataDir) {
   const payload = readPilotState(join(dataDir, 'profiles', 'local-default')).domains.get('settings')
@@ -99,9 +125,10 @@ export function parseJson(text) {
   }
 }
 
+// Every spelling of each folder (as given and through symlinks), so a link to the packaged folder is refused too.
 export function assertScratch(dataDir, packagedDir = PACKAGED_DATA) {
-  const clean = (p) => resolve(p).toLowerCase()
-  if (clean(dataDir) === clean(packagedDir)) {
+  const packaged = new Set(folderSpellings(packagedDir).map((p) => p.toLowerCase()))
+  if (folderSpellings(dataDir).some((p) => packaged.has(p.toLowerCase()))) {
     throw new Error(
       `--data must be a scratch copy, not the packaged app's data folder (${packagedDir})`
     )
@@ -157,6 +184,7 @@ export function checkAutomations({ files, call, commands = {} }) {
       dry.code === 0 ? dryRunLine(outcome) : `failed: ${firstLine(dry.stderr || dry.stdout)}`
     const problems = line.startsWith('failed') || line === 'no answer from Pilot' ? [line] : []
     problems.push(...repeatedAgentFlags(parsed.definition, commands))
+    problems.push(...missingUnattendedFlags(parsed.definition, commands))
     return { id, file, name: parsed.definition.name, valid: true, problems, dryRun: line }
   })
 }

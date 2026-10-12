@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
@@ -9,6 +9,7 @@ import {
   automationFiles,
   checkAutomations,
   dryRunLine,
+  missingUnattendedFlags,
   parityRows,
   renderSummary,
   repeatedAgentFlags,
@@ -198,6 +199,14 @@ describe('assertScratch', () => {
       )
     ).not.toThrow()
   })
+
+  it('refuses a symlink that leads to the packaged folder', () => {
+    const root = mkdtempSync(join(tmpdir(), 'pilot-golive-link-'))
+    const packaged = join(root, 'Pilot')
+    mkdirSync(packaged)
+    symlinkSync(packaged, join(root, 'looks-like-scratch'))
+    expect(() => assertScratch(join(root, 'looks-like-scratch'), packaged)).toThrow(/scratch copy/)
+  })
 })
 
 describe('agentCommands', () => {
@@ -297,5 +306,53 @@ describe('settingsFromData', () => {
       JSON.stringify({ settings: { agentDefaultArgs: { codex: '--x' } } })
     )
     expect(settingsFromData(data)).toEqual({ agentDefaultArgs: { codex: '--x' } })
+  })
+})
+
+describe('missingUnattendedFlags', () => {
+  const COMMANDS = { claude: 'claude', codex: 'codex' }
+  const qa = (args: string[]) => ({
+    id: 'qa',
+    name: 'QA',
+    steps: [
+      { name: 'test', agent: 'codex', args },
+      { name: 'fix', agent: 'claude', args: [] }
+    ]
+  })
+
+  // Codex needs approvals and its sandbox off to run and commit unattended (gate.AGENTS); Claude takes its
+  // permissions from ~/.claude/settings.json, so nothing is required on its command line.
+  it.each([
+    [
+      'in the configured command',
+      { ...COMMANDS, codex: 'codex --dangerously-bypass-approvals-and-sandbox' },
+      []
+    ],
+    ["in the step's args", COMMANDS, ['--dangerously-bypass-approvals-and-sandbox']],
+    ['as its --yolo alias', COMMANDS, ['--yolo']]
+  ])('is satisfied by the bypass flag %s', (_where, commands, args) => {
+    expect(missingUnattendedFlags(qa(args), commands)).toEqual([])
+  })
+
+  it('names the automation and the step whose Codex would stop at an approval prompt', () => {
+    const call = (args: string[]) =>
+      args[1] === 'validate'
+        ? {
+            code: 0,
+            stdout: JSON.stringify({ ok: true, definition: qa(['-c', 'x=1']) }),
+            stderr: ''
+          }
+        : {
+            code: 0,
+            stdout: JSON.stringify({
+              ok: true,
+              result: { status: 'ok', tickId: 1, error: null, decisions: [] }
+            }),
+            stderr: ''
+          }
+    const rows = checkAutomations({ files: ['/a/qa.yaml'], call, commands: COMMANDS })
+    expect(renderSummary({ stamp: 's', sha: 'x', rows, parity: [] })).toContain(
+      "- qa: step test runs Codex without --dangerously-bypass-approvals-and-sandbox (codex -c x=1): unattended, it stops at Codex's first approval prompt"
+    )
   })
 })
