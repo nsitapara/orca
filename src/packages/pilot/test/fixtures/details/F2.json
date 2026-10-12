@@ -1,0 +1,141 @@
+{
+ "version": 1,
+ "item": "F2",
+ "built": "2026-10-10T02:48",
+ "by": "item-details \u00b7 claude (opus)",
+ "blocks": [
+  {
+   "type": "facts",
+   "title": "What Approve does",
+   "rows": [
+    [
+     "Applies",
+     "`F2.patch` to web-1690 at 7cc153d"
+    ],
+    [
+     "Then",
+     "lint, typecheck, staff unit tests; one commit <img src=x onerror=\"document.body.dataset.pwned=1\">"
+    ]
+   ]
+  },
+  {
+   "type": "diff",
+   "title": "Proposed change",
+   "base": "7cc153d0000000000000000000000000000000000",
+   "patch": "F2.patch",
+   "patch_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+   "checks": [
+    "pnpm --filter staff exec vitest run usePgtmWorkspaceRouting \u2014 passed"
+   ],
+   "files": [
+    {
+     "path": "apps/staff/src/components/Pages/Family/PgtmReview/usePgtmWorkspaceRouting.ts",
+     "old_path": null,
+     "added": 1,
+     "removed": 1,
+     "hunks": [
+      [
+       [
+        194,
+        194,
+        " ",
+        "  const pending = useHasEdits()"
+       ],
+       [
+        195,
+        null,
+        "-",
+        "  useBlocker(true)"
+       ],
+       [
+        null,
+        195,
+        "+",
+        "  useBlocker(pending)"
+       ],
+       [
+        196,
+        196,
+        " ",
+        "  const veryLongIdentifierNameThatKeepsGoing = computeSomethingWithManyArguments(alpha, beta, gamma, delta, epsilon, zeta, eta, theta)"
+       ]
+      ]
+     ]
+    }
+   ]
+  },
+  {
+   "type": "screens",
+   "title": "Before and after",
+   "pairs": [
+    {
+     "caption": "Leaving an untouched PGT-M workspace",
+     "before": "F2-before.png",
+     "after": "F2-after.png",
+     "route": "/families/12/pgtm",
+     "theme": "light",
+     "viewport": "1280x800",
+     "note": "fixture family, not the QA stack"
+    }
+   ]
+  },
+  {
+   "type": "missing",
+   "what": "After screenshot (dark)",
+   "why": "not captured",
+   "slot": "screens"
+  },
+  {
+   "type": "shots",
+   "title": "QA screenshots",
+   "shots": [
+    {
+     "file": "F2-qa.png",
+     "caption": "after leaving: the native dialog"
+    }
+   ]
+  },
+  {
+   "type": "code",
+   "title": "Cause",
+   "path": "apps/staff/src/components/Pages/Family/PgtmReview/usePgtmWorkspaceRouting.ts",
+   "sha": "7cc153d0000000000000000000000000000000000",
+   "anchor": 195,
+   "rows": [
+    [
+     193,
+     "export function usePgtmWorkspaceRouting() {"
+    ],
+    [
+     194,
+     "  const pending = useHasEdits()"
+    ],
+    [
+     195,
+     "  useBlocker(true)"
+    ],
+    [
+     196,
+     "  return routing"
+    ]
+   ]
+  },
+  {
+   "type": "thread",
+   "title": "Reviewer thread",
+   "url": "https://gitlab.com/polygenx/web-platform/-/merge_requests/1357#note_1",
+   "notes": [
+    {
+     "author": "A reviewer",
+     "at": "2026-10-09 14:02",
+     "body": "Why does this block **every** navigation? <img src=x onerror=\"document.body.dataset.pwned=1\">"
+    }
+   ]
+  },
+  {
+   "type": "text",
+   "title": "Why",
+   "body": "The hook registers the blocker unconditionally.\n\n- keep protection for real edits\n- <img src=x onerror=\"document.body.dataset.pwned=1\">"
+  }
+ ]
+}

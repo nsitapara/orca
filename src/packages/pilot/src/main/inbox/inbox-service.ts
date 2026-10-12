@@ -18,6 +18,9 @@ export type InboxDeps = {
   actionArgsProblem?(name: string, args: Record<string, unknown>): string | null
   // Called after a card closes (Task 25 cancels an ask-first run whose card closed without starting it).
   onResolved?(item: InboxItemRow): void
+  // The Automations folder a card's Details bundle must live in (env.ts pilotDetailsRoot); null or
+  // absent refuses every bundle.
+  detailsRoot?: string | null
 }
 
 // The one builder of InboxDeps (the tick's asks, the answers pass, the RPC methods): adds are checked
@@ -29,6 +32,7 @@ export function buildInboxDeps(src: {
   people(): PeopleDirectory
   actions: ActionCatalog
   onResolved: ((item: InboxItemRow) => void) | null
+  detailsRoot?: string | null
 }): InboxDeps {
   const { actions, onResolved } = src
   return {
@@ -38,6 +42,7 @@ export function buildInboxDeps(src: {
     people: src.people,
     knownAction: (name) => actions.get(name) !== null,
     actionArgsProblem: (name, args) => actions.get(name)?.checkArgs(args) ?? null,
+    detailsRoot: src.detailsRoot ?? null,
     ...(onResolved ? { onResolved } : {})
   }
 }

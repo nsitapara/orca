@@ -88,6 +88,19 @@ function expandHome(path: string, home: string): string {
   return path.replace(/^~(?=\/|$)/, home)
 }
 
+// Where cards' Details bundles must live (vault.AUTOMATIONS): the same folder as the export's, but read
+// even when PILOT_VAULT_EXPORT=off, since a Pilot run writes its bundles there either way.
+export function pilotDetailsRoot(
+  env: NodeJS.ProcessEnv = process.env,
+  home: string = homedir()
+): string {
+  const raw = env.PILOT_VAULT_AUTOMATIONS?.trim()
+  if (raw) {
+    return expandHome(raw, home)
+  }
+  return join(home, 'Documents', 'WebPortal', 'Agent Work', 'Automations')
+}
+
 // Where job 08 wrote the token usage report; Pilot writes the same files there once 08 hands it over.
 export function pilotUsageReportDir(
   env: NodeJS.ProcessEnv = process.env,

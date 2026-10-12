@@ -1,0 +1,279 @@
+import { createHash } from 'node:crypto'
+import {
+  copyFileSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync
+} from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { describe, expect, it } from 'vitest'
+import { loadDetails, readDetailsImage, DetailsRefused } from './details-bundle'
+
+const FIXTURES = join(import.meta.dirname, '../../../test/fixtures/details')
+const FILES = [
+  'F2.json',
+  'F2.patch',
+  'F2-before.png',
+  'F2-after.png',
+  'F2-qa.png',
+  'sample-review.json'
+]
+const sha = (data: string | Buffer) => createHash('sha256').update(data).digest('hex')
+
+type Fixture = { top: string; root: string; dir: string; bundle: string }
+
+// <top>/Automations is the root; the bundle sits at <root>/job/b/details/r/F2.json with its files.
+function fixture(): Fixture {
+  const top = mkdtempSync(join(tmpdir(), 'pilot-details-'))
+  const root = join(top, 'Automations')
+  const dir = join(root, 'job', 'b', 'details', 'r')
+  mkdirSync(dir, { recursive: true })
+  for (const file of FILES) {
+    copyFileSync(join(FIXTURES, file), join(dir, file))
+  }
+  writeFileSync(join(top, 'x.png'), readFileSync(join(FIXTURES, 'F2-qa.png')))
+  return { top, root, dir, bundle: join(dir, 'F2.json') }
+}
+
+type Bundle = { version: number; blocks: Record<string, unknown>[] } & Record<string, unknown>
+function rewrite(f: Fixture, change: (bundle: Bundle) => void): void {
+  const bundle = JSON.parse(readFileSync(f.bundle, 'utf8')) as Bundle
+  change(bundle)
+  writeFileSync(f.bundle, JSON.stringify(bundle))
+}
+function shotsBlock(bundle: Bundle): { shots: { file: string }[] } {
+  return bundle.blocks.find((b) => b.type === 'shots') as never
+}
+const REVIEW = { type: 'review', title: 'Review', file: 'sample-review.json' }
+
+function refusal(work: () => unknown): string {
+  try {
+    work()
+  } catch (error) {
+    expect(error).toBeInstanceOf(DetailsRefused)
+    return (error as Error).message
+  }
+  throw new Error('expected a refusal')
+}
+
+describe('loadDetails', () => {
+  it('reads F2: its realpath, the sha256 of its bytes, 8 blocks, and the draft it holds', () => {
+    const f = fixture()
+    const snapshot = loadDetails(f.root, f.bundle)
+    expect(snapshot.ref).toEqual({
+      path: realpathSync(f.bundle),
+      sha256: sha(readFileSync(f.bundle)),
+      inlined: {},
+      blocks: 8,
+      drafted: true,
+      draftedBase: expect.stringMatching(/^7cc153d/)
+    })
+    expect(snapshot.texts).toEqual({})
+    expect(snapshot.bundle.blocks.map((b) => b.type)).toEqual([
+      'facts',
+      'diff',
+      'screens',
+      'missing',
+      'shots',
+      'code',
+      'thread',
+      'text'
+    ])
+  })
+
+  it('inlines a review file the bundle names, and keeps its sha', () => {
+    const f = fixture()
+    rewrite(f, (b) => b.blocks.push(REVIEW))
+    const snapshot = loadDetails(f.root, f.bundle)
+    const text = readFileSync(join(f.dir, 'sample-review.json'), 'utf8')
+    expect(snapshot.texts).toEqual({ 'sample-review.json': text })
+    expect(snapshot.ref.inlined).toEqual({ 'sample-review.json': sha(text) })
+  })
+
+  it.each<[string, (f: Fixture) => [string | null, string], string?]>([
+    ['a relative path', (f) => [f.root, 'job/b/details/r/F2.json']],
+    ['no Automations folder', (f) => [null, f.bundle]],
+    [
+      'a bundle outside the root',
+      (f) => {
+        copyFileSync(f.bundle, join(f.top, 'F2.json'))
+        return [f.root, join(f.top, 'F2.json')]
+      }
+    ],
+    [
+      'a symlink inside the root to a bundle outside',
+      (f) => {
+        copyFileSync(f.bundle, join(f.top, 'F2.json'))
+        symlinkSync(join(f.top, 'F2.json'), join(f.dir, 'link.json'))
+        return [f.root, join(f.dir, 'link.json')]
+      }
+    ],
+    [
+      'a shots ref that resolves outside the root',
+      (f) => {
+        rewrite(f, (b) => (shotsBlock(b).shots[0].file = '../../../../../x.png'))
+        return [f.root, f.bundle]
+      },
+      'x.png'
+    ],
+    [
+      'an image symlinked outside the root',
+      (f) => {
+        rmSync(join(f.dir, 'F2-qa.png'))
+        symlinkSync(join(f.top, 'x.png'), join(f.dir, 'F2-qa.png'))
+        return [f.root, f.bundle]
+      },
+      'F2-qa.png'
+    ],
+    [
+      'a shots ref that is not an image',
+      (f) => {
+        writeFileSync(join(f.dir, 'notes.txt'), 'notes')
+        rewrite(f, (b) => (shotsBlock(b).shots[0].file = 'notes.txt'))
+        return [f.root, f.bundle]
+      },
+      'notes.txt'
+    ],
+    [
+      'a missing screenshot',
+      (f) => {
+        rmSync(join(f.dir, 'F2-after.png'))
+        return [f.root, f.bundle]
+      },
+      'F2-after.png'
+    ],
+    [
+      'a bundle over 2 MB',
+      (f) => {
+        rewrite(f, (b) => (b.pad = ''))
+        const size = readFileSync(f.bundle).length
+        rewrite(f, (b) => (b.pad = 'x'.repeat(2_000_001 - size)))
+        expect(readFileSync(f.bundle).length).toBe(2_000_001)
+        return [f.root, f.bundle]
+      }
+    ],
+    [
+      'a bundle that is not JSON',
+      (f) => {
+        writeFileSync(f.bundle, '{"version": 1,')
+        return [f.root, f.bundle]
+      }
+    ],
+    ['version 2', (f) => (rewrite(f, (b) => (b.version = 2)), [f.root, f.bundle])],
+    [
+      'a block of an unknown type',
+      (f) => (
+        rewrite(f, (b) => b.blocks.push({ type: 'html', body: '<b>x</b>' })),
+        [f.root, f.bundle]
+      ),
+      'html'
+    ],
+    [
+      "a diff row of kind '*'",
+      (f) => {
+        rewrite(f, (b) => {
+          const diff = b.blocks.find((x) => x.type === 'diff') as {
+            files: { hunks: unknown[][][] }[]
+          }
+          diff.files[0].hunks[0][0] = [194, 194, '*', 'x']
+        })
+        return [f.root, f.bundle]
+      }
+    ],
+    [
+      '41 blocks',
+      (f) => {
+        rewrite(f, (b) => {
+          b.blocks = Array.from({ length: 41 }, () => ({ type: 'text', title: 't', body: 'b' }))
+        })
+        return [f.root, f.bundle]
+      }
+    ],
+    [
+      'a review file over 1 MB',
+      (f) => {
+        const review = JSON.parse(readFileSync(join(f.dir, 'sample-review.json'), 'utf8'))
+        review.pad = 'x'.repeat(1_000_001)
+        writeFileSync(join(f.dir, 'sample-review.json'), JSON.stringify(review))
+        rewrite(f, (b) => b.blocks.push(REVIEW))
+        return [f.root, f.bundle]
+      },
+      'sample-review.json'
+    ],
+    [
+      'a review file without its reviewer',
+      (f) => {
+        const review = JSON.parse(readFileSync(join(f.dir, 'sample-review.json'), 'utf8'))
+        delete review.reviewer
+        writeFileSync(join(f.dir, 'sample-review.json'), JSON.stringify(review))
+        rewrite(f, (b) => b.blocks.push(REVIEW))
+        return [f.root, f.bundle]
+      },
+      'reviewer'
+    ],
+    [
+      'three review blocks',
+      (f) => (rewrite(f, (b) => b.blocks.push(REVIEW, REVIEW, REVIEW)), [f.root, f.bundle])
+    ]
+  ])('refuses %s', (_name, arrange, names) => {
+    const f = fixture()
+    const [root, path] = arrange(f)
+    const message = refusal(() => loadDetails(root, path))
+    expect(message.startsWith('Details bundle refused: ')).toBe(true)
+    if (names) {
+      expect(message).toContain(names)
+    }
+  })
+})
+
+describe('readDetailsImage', () => {
+  it('serves an image the bundle names as its type and bytes', () => {
+    const f = fixture()
+    const snapshot = loadDetails(f.root, f.bundle)
+    const image = readDetailsImage(f.root, snapshot, 'F2-before.png')
+    const bytes = readFileSync(join(f.dir, 'F2-before.png'))
+    expect(image).toEqual({
+      mime: 'image/png',
+      base64: bytes.toString('base64'),
+      bytes: bytes.length
+    })
+    expect(Buffer.from(image.base64, 'base64').equals(bytes)).toBe(true)
+  })
+
+  it.each<[string, (f: Fixture) => string]>([
+    ['a file that is not one of its images (the patch)', () => 'F2.patch'],
+    ['a path that is not a ref of the card', () => '../x.png'],
+    [
+      'an image replaced by a symlink to outside after the add',
+      (f) => {
+        rmSync(join(f.dir, 'F2-qa.png'))
+        symlinkSync(join(f.top, 'x.png'), join(f.dir, 'F2-qa.png'))
+        return 'F2-qa.png'
+      }
+    ],
+    [
+      'an image grown past 8 MB after the add',
+      (f) => {
+        writeFileSync(join(f.dir, 'F2-qa.png'), Buffer.alloc(8_000_001))
+        return 'F2-qa.png'
+      }
+    ]
+  ])('refuses %s', (_name, arrange) => {
+    const f = fixture()
+    const snapshot = loadDetails(f.root, f.bundle)
+    const file = arrange(f)
+    const message = refusal(() => readDetailsImage(f.root, snapshot, file))
+    expect(message.startsWith('Details bundle refused: ')).toBe(true)
+  })
+
+  it('refuses with no Automations folder', () => {
+    const f = fixture()
+    const snapshot = loadDetails(f.root, f.bundle)
+    expect(() => readDetailsImage(null, snapshot, 'F2-qa.png')).toThrow(DetailsRefused)
+  })
+})

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   pilotDataDir,
+  pilotDetailsRoot,
   pilotSchedulerEnabled,
   pilotUsageReportDir,
   pilotUsageTemplate,
@@ -64,6 +65,19 @@ describe('pilotVaultAutomationsDir', () => {
     [{ PILOT_VAULT_AUTOMATIONS: '~/vault/Automations' }, '/h/vault/Automations'],
     [{ PILOT_VAULT_EXPORT: 'off' }, null]
   ])('%j → %s', (env, expected) => expect(pilotVaultAutomationsDir(env, '/h')).toBe(expected))
+})
+
+// Details are read from the same folder whether or not the vault export runs.
+describe('pilotDetailsRoot', () => {
+  it.each([
+    [{}, '/h/Documents/WebPortal/Agent Work/Automations'],
+    [{ PILOT_VAULT_AUTOMATIONS: '~/vault/Automations' }, '/h/vault/Automations'],
+    [{ PILOT_VAULT_EXPORT: 'off' }, '/h/Documents/WebPortal/Agent Work/Automations'],
+    [
+      { PILOT_VAULT_EXPORT: 'off', PILOT_VAULT_AUTOMATIONS: ' /srv/Automations ' },
+      '/srv/Automations'
+    ]
+  ])('%j → %s', (env, expected) => expect(pilotDetailsRoot(env, '/h')).toBe(expected))
 })
 
 describe('usage report locations', () => {
