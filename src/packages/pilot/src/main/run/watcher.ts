@@ -75,6 +75,8 @@ export type StepPollHooks = {
   closeTerminal(handle: string): Promise<void>
   // The step ended (done, failed or timed out): the run engine starts the next step or ends the run.
   onStepEnded(runId: string): Promise<void>
+  // The step's session id was just learned from its hooks (a Codex step, whose CLI can't take one).
+  sessionLearned?(step: OpenStep, sessionId: string): void
 }
 
 const GONE = 'The terminal closed before the agent finished'
@@ -140,6 +142,9 @@ async function pollStep(
   const patch = sessionPatch(step, session)
   if (patch) {
     store.runs.updateStep(step.runId, step.idx, patch)
+    if (patch.sessionId) {
+      hooks.sessionLearned?.(step, patch.sessionId)
+    }
   }
   const state = await probe.status(handle, step.paneKey, step.startedAt)
   if (state === 'done') {
