@@ -438,7 +438,8 @@ function launching(create: (name: string) => Promise<{ id: string; path: string 
     },
     modeText: async () => null,
     newSessionId: () => 'sess',
-    now: d.now
+    now: d.now,
+    transcriptExists: async () => true
   })
   return { d, selectors, atCreate }
 }

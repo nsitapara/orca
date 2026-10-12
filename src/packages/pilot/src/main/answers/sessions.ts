@@ -17,6 +17,7 @@ export type AskingSession = {
   terminalHandle: string | null
   paneKey: string | null
   transcriptPath: string | null
+  startedAt: number | null
   // The args the asking process runs under (its step's launch_args_json); null when not known.
   launchArgs: string[] | null
 }
@@ -30,7 +31,13 @@ export type SessionProbe = {
     paneKey: string | null
     sessionId: string
   }): Promise<TerminalState>
-  transcript(agent: AgentKind, sessionId: string, knownPath: string | null): TranscriptFacts | null
+  // startedAt: when the session's step started (Codex files its rollout under that day).
+  transcript(
+    agent: AgentKind,
+    sessionId: string,
+    knownPath: string | null,
+    startedAt: number
+  ): Promise<TranscriptFacts | null>
 }
 export type SessionTarget =
   | { kind: 'resume'; asking: AskingSession; handle: string; paneKey: string | null }
@@ -63,6 +70,7 @@ export function askingSession(store: PilotStore, items: InboxItemRow[]): AskingS
         terminalHandle: step.terminalHandle,
         paneKey: step.paneKey,
         transcriptPath: step.transcriptPath,
+        startedAt: step.startedAt,
         launchArgs: step.launchArgs
       }
     }
@@ -119,7 +127,12 @@ export async function chooseSession(
       return { kind: 'hold', hold: hold('typing', 'someone is typing in the tab that asked') }
     }
   }
-  const facts = probe.transcript(asking.agent, asking.sessionId, asking.transcriptPath)
+  const facts = await probe.transcript(
+    asking.agent,
+    asking.sessionId,
+    asking.transcriptPath,
+    asking.startedAt ?? now
+  )
   if (forkable(facts, now)) {
     return { kind: 'fork', asking, sessionId: asking.sessionId }
   }

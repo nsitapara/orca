@@ -52,7 +52,7 @@ function setup(state: TerminalState, over: Partial<AgentDispatchDeps> = {}) {
     now: () => NOW,
     probe: {
       terminalState: async () => state,
-      transcript: () => ({ size: 10, mtimeMs: NOW })
+      transcript: async () => ({ size: 10, mtimeMs: NOW })
     },
     quota: async () => ({ weekly: 10, session: 10 }),
     open: vi
@@ -153,7 +153,7 @@ describe('dispatchToAgent', () => {
 
   it('opens a new answers-mode session with the wrapped prompt when nothing can be resumed', async () => {
     const { store, deps, group } = setup('gone', {
-      probe: { terminalState: async () => 'gone', transcript: () => null }
+      probe: { terminalState: async () => 'gone', transcript: async () => null }
     })
     await dispatchToAgent(deps, group)
     const req = vi.mocked(deps.open).mock.calls[0][0]
@@ -182,7 +182,7 @@ describe('dispatchToAgent', () => {
           terminalState: async () => {
             throw new Error('runtime not ready')
           },
-          transcript: () => null
+          transcript: async () => null
         }
       },
       // Unreadable is busy (24a): a hold that doesn't count toward the dispatcher's tries.
@@ -379,7 +379,7 @@ describe('dispatchToAgent', () => {
       await dispatchToAgent(forked.deps, withoutAnswersBlock(forked.group))
       expect(vi.mocked(forked.deps.open).mock.calls[0][0].prompt).not.toContain(POINTER)
       const fresh = setup('gone', {
-        probe: { terminalState: async () => 'gone', transcript: () => null }
+        probe: { terminalState: async () => 'gone', transcript: async () => null }
       })
       await dispatchToAgent(fresh.deps, withoutAnswersBlock(fresh.group))
       expect(vi.mocked(fresh.deps.open).mock.calls[0][0].prompt).not.toContain('modes/')
@@ -396,7 +396,7 @@ describe('dispatchToAgent', () => {
 
     it('is given for the configured mode whose file exists, in the new-session text too', async () => {
       const { deps, group } = setup('gone', {
-        probe: { terminalState: async () => 'gone', transcript: () => null }
+        probe: { terminalState: async () => 'gone', transcript: async () => null }
       })
       await dispatchToAgent(deps, group)
       expect(vi.mocked(deps.open).mock.calls[0][0].prompt).toContain(

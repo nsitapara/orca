@@ -82,6 +82,7 @@ function setup(launch: Launch, over: Partial<LauncherDeps> = {}) {
     modeText: async () => null,
     newSessionId: () => 'sess-pinned',
     now: () => 7,
+    transcriptExists: async () => true,
     ...over
   }
   return { store, deps, created, stepAtCreate, launcher: makeLauncher(store, deps) }

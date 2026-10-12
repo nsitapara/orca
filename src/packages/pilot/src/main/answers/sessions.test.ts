@@ -52,7 +52,7 @@ function probe(
   state: TerminalState,
   transcript: { size: number; mtimeMs: number } | null
 ): SessionProbe {
-  return { terminalState: vi.fn(async () => state), transcript: () => transcript }
+  return { terminalState: vi.fn(async () => state), transcript: async () => transcript }
 }
 const FRESH = { size: 1_000, mtimeMs: NOW - 60_000 }
 

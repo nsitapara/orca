@@ -59,6 +59,14 @@ export type AgentStepDeps = {
   modeText(step: StepDef, workspacePath: string): Promise<string | null>
   newSessionId(): string
   now(): number
+  // Whether a session's transcript is on disk (usage's finders); a per_worktree session without one is
+  // never resumed.
+  transcriptExists(
+    agent: AgentKind,
+    sessionId: string,
+    hinted: string | null,
+    startedAt: number
+  ): Promise<boolean>
   // Optional: without it a session's old terminal can't be looked at, so it resumes in a new one.
   sessionTerminals?: SessionTerminals
 }
@@ -114,6 +122,32 @@ export function rememberLearnedSession(
     return
   }
   store.sessions.set(def.id, run.worktreePath, step.agent, sessionId, at)
+}
+
+// The per_worktree session to resume, or null to start fresh. One whose transcript is gone (Claude deletes
+// them after 30 days; a pinned session that never started has none) would make `--resume` exit to a shell
+// and the step read working until its timeout, holding the worktree: it is forgotten instead.
+async function worktreeSessionToResume(
+  store: PilotStore,
+  req: AgentStepRequest,
+  agent: AgentKind,
+  deps: AgentStepDeps
+): Promise<string | null> {
+  const { definition, workspace } = req
+  const stored = store.sessions.get(definition.id, workspace.path, agent)
+  if (!stored) {
+    return null
+  }
+  const facts = store.runs.sessionFacts(stored.sessionId)
+  const startedAt = facts.firstStartedAt ?? stored.updatedAt
+  if (await deps.transcriptExists(agent, stored.sessionId, facts.transcriptPath, startedAt)) {
+    return stored.sessionId
+  }
+  console.warn(
+    `pilot: session ${stored.sessionId} of ${definition.id} in ${workspace.path} has no transcript; starting fresh`
+  )
+  store.sessions.forget(definition.id, workspace.path, agent)
+  return null
 }
 
 function launchOptions(
@@ -228,7 +262,7 @@ export async function launchAgentStep(
   const agent: AgentKind = step.agent
   const worktreeSession =
     step.session.kind === 'per_worktree'
-      ? (store.sessions.get(definition.id, req.workspace.path, agent)?.sessionId ?? null)
+      ? await worktreeSessionToResume(store, req, agent, deps)
       : null
   const priorSteps = store.runs.steps(runId)
   const newId = deps.newSessionId
