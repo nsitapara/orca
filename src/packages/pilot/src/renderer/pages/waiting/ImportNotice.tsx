@@ -7,6 +7,9 @@ export function noticeText(report: ImportReport): string | null {
   if ((report.imported ?? 0) > 0) {
     parts.push(`${report.imported} vault card(s) not in Pilot`)
   }
+  if ((report.dates ?? 0) > 0) {
+    parts.push(`Ask dates to fix for ${report.dates} imported card(s)`)
+  }
   if ((report.backfilled ?? 0) > 0) {
     parts.push(`${report.backfilled} imported card(s) have Details to add from the vault`)
   }

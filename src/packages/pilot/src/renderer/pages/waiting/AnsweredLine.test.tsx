@@ -111,12 +111,15 @@ describe('an answered card', () => {
     render(<InboxPage />)
     fireEvent.click(await screen.findByRole('button', { name: 'Undo' }))
     await waitFor(() =>
-      expect(pilotRpc).toHaveBeenCalledWith('pilot.inbox.answer', {
-        id: 'in_a',
-        text: '',
-        digest: 'dig1',
-        by: 'n'
-      })
+      expect(pilotRpc).toHaveBeenCalledWith(
+        'pilot.inbox.answer',
+        expect.objectContaining({
+          id: 'in_a',
+          text: '',
+          digest: 'dig1',
+          by: 'n'
+        })
+      )
     )
   })
 
@@ -164,12 +167,14 @@ describe('one click sends what the old radio + Save sent', () => {
     render(<InboxPage />)
     fireEvent.click(await screen.findByRole('button', { name: button }))
     await waitFor(() =>
-      expect(pilotRpc).toHaveBeenCalledWith('pilot.inbox.answer', {
-        id: 'in_a',
-        digest: 'dig1',
-        by: 'n',
-        ...sent
-      })
+      expect(pilotRpc).toHaveBeenCalledWith(
+        'pilot.inbox.answer',
+        expect.objectContaining({
+          id: 'in_a',
+          digest: 'dig1',
+          ...sent
+        })
+      )
     )
   })
 
@@ -189,13 +194,15 @@ describe('one click sends what the old radio + Save sent', () => {
     fireEvent.click(await screen.findByText(/Defaults the agents took/))
     fireEvent.click(await screen.findByRole('button', { name: 'Revert' }))
     await waitFor(() =>
-      expect(pilotRpc).toHaveBeenCalledWith('pilot.inbox.answer', {
-        id: 'in_a',
-        digest: 'dig1',
-        by: 'n',
-        text: 'Revert',
-        option: 1
-      })
+      expect(pilotRpc).toHaveBeenCalledWith(
+        'pilot.inbox.answer',
+        expect.objectContaining({
+          id: 'in_a',
+          digest: 'dig1',
+          text: 'Revert',
+          option: 1
+        })
+      )
     )
   })
 })

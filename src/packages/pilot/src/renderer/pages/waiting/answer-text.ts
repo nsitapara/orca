@@ -196,14 +196,48 @@ export function waitingCount(items: InboxItemRow[]): number {
   return items.filter((i) => i.status === 'open' && i.type !== 'default').length
 }
 
-// "1d", "3h", "12m": how long a card has waited.
+const DAY_MS = 86_400_000
+
+// How long a card has waited, short: "12m", "3h", "5d"; past a week, the date ("Sep 20"). One formatter for the
+// list rows, the badges and the card's own "Asked" line.
 export function ageLabel(createdAt: number, now: number): string {
   const minutes = Math.max(0, Math.floor((now - createdAt) / 60_000))
   if (minutes < 60) {
     return `${minutes}m`
   }
   const hours = Math.floor(minutes / 60)
-  return hours < 24 ? `${hours}h` : `${Math.floor(hours / 24)}d`
+  if (hours < 24) {
+    return `${hours}h`
+  }
+  if (now - createdAt > 7 * DAY_MS) {
+    return new Date(createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+  }
+  return `${Math.floor(hours / 24)}d`
+}
+
+// ICU puts a narrow no-break space before AM/PM; plain spaces read (and test) the same everywhere.
+function plain(text: string): string {
+  return text.replace(/[\u202f\u00a0]/g, ' ')
+}
+
+// "Asked Oct 11, 2:00 AM · 1d ago" (no "ago" past a week, when the date says it), and the full timestamp.
+export function askedLabel(createdAt: number, now: number): { text: string; full: string } {
+  const sameYear = new Date(createdAt).getFullYear() === new Date(now).getFullYear()
+  const when = plain(
+    new Date(createdAt).toLocaleString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      ...(sameYear ? {} : { year: 'numeric' }),
+      hour: 'numeric',
+      minute: '2-digit'
+    })
+  )
+  const recent = now - createdAt <= 7 * DAY_MS
+  const text = recent ? `Asked ${when} · ${ageLabel(createdAt, now)} ago` : `Asked ${when}`
+  const full = plain(
+    new Date(createdAt).toLocaleString('en-US', { dateStyle: 'full', timeStyle: 'short' })
+  )
+  return { text, full }
 }
 
 // "04" from a job named "04 · Test branch UIs overnight"; the automation's id when its name has no code.

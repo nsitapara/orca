@@ -329,6 +329,11 @@ describe('InboxPage', () => {
   it.each([
     ['new cards', { ...NONE, imported: 3, answers: 1 }, '3 vault card(s) not in Pilot'],
     [
+      'ask dates to fix on imported cards only',
+      { ...NONE, dates: 25 },
+      'Ask dates to fix for 25 imported card(s)'
+    ],
+    [
       'Details to add to imported cards only',
       { ...NONE, backfilled: 2 },
       '2 imported card(s) have Details to add from the vault'

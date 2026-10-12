@@ -26,6 +26,8 @@ export type ImportContext = {
   existing(id: string): boolean
   // An imported card that may still get its bundle (isBackfillable); absent: none may.
   backfillable?(id: string): boolean
+  // An imported card still open whose ask date is later than the vault's `at` (isDatable); absent: none is.
+  datable?(id: string, at: number): boolean
   now: number
 }
 export type ImportRun = {
@@ -51,6 +53,8 @@ export type PlannedItem = {
   // The same card named by automation and item, for a dry run (the run it would belong to isn't there yet).
   plain: InboxAddParams
   runId: string | null
+  // When the vault says it was asked (created_at, else the section time, else the import's own time).
+  askedAt: number
   answer: {
     text: string
     option: number | null
@@ -61,8 +65,12 @@ export type PlannedItem = {
 }
 // A card the import wrote before it carried bundles, and the bundle its vault item names.
 export type PlannedBackfill = { id: string; vaultRef: string; title: string; path: string }
+// An imported card whose ask date is the import time, and the vault's time it should have.
+export type PlannedDate = { id: string; vaultRef: string; title: string; at: number }
 export type ImportPlan = {
   items: PlannedItem[]
+  // Imported open cards dated later than the vault's time for them.
+  dates: PlannedDate[]
   // Existing open, unanswered cards without a bundle whose vault item names one (the backfill).
   backfill: PlannedBackfill[]
   runs: ImportRun[]
@@ -76,6 +84,8 @@ export type ImportReport = {
   runs: number
   // Cards already imported that got (or would get) their bundle.
   backfilled: number
+  // Imported open cards that got (or would get) the vault's ask date.
+  dates: number
   // New cards imported with their bundle, plus the backfilled ones.
   details: number
   skipped: ImportPlan['skipped']
@@ -90,6 +100,17 @@ export function vaultItemId(note: string, key: string): string {
 
 // Only a card nobody has answered, still open and without a bundle, gets one from the import: an answer
 // was given to what the card showed, and a card with a bundle keeps it (the import stays idempotent).
+// When the vault says a card was asked: created_at, else the section time; null when it says neither.
+export function vaultAskedAt(row: Pick<VaultRow, 'created_at' | 'section_time'>): number | null {
+  return Date.parse(row.created_at ?? '') || Date.parse(row.section_time) || null
+}
+
+// A card the import wrote, still open, dated after the vault's time for it (the import time, before the
+// import took the vault's): its ask date is corrected. Answered cards are left as they are.
+export function isDatable(item: InboxItemRow | null, at: number): boolean {
+  return item !== null && item.source === 'import' && item.status === 'open' && item.createdAt > at
+}
+
 export function isBackfillable(item: InboxItemRow | null): boolean {
   return (
     item !== null &&
@@ -163,7 +184,7 @@ function runOf(
     itemKey: itemKey ?? `repo:${def.repo}`,
     itemLabel: row.mr_iid ? `!${row.mr_iid} ${row.branch}` : row.location || def.name,
     worktreePath: row.scope === 'branch' ? row.worktree : null,
-    startedAt: Date.parse(row.created_at ?? '') || now,
+    startedAt: vaultAskedAt(row) ?? now,
     agent: row.resume.startsWith('codex') ? 'codex' : 'claude',
     sessionId: row.session
   }
@@ -229,7 +250,7 @@ function answerOf(row: VaultRow): PlannedItem['answer'] {
 }
 
 export function planVaultImport(rows: VaultRow[], ctx: ImportContext): ImportPlan {
-  const plan: ImportPlan = { items: [], backfill: [], runs: [], skipped: [], notes: [] }
+  const plan: ImportPlan = { items: [], backfill: [], dates: [], runs: [], skipped: [], notes: [] }
   const runs = new Map<string, ImportRun>()
   const seen = new Set<string>()
   for (const row of rows) {
@@ -242,10 +263,15 @@ export function planVaultImport(rows: VaultRow[], ctx: ImportContext): ImportPla
       continue
     }
     if (ctx.existing(id)) {
+      const vaultRef = `${row.note}#${row.key}`
+      const at = vaultAskedAt(row)
+      const dated = at !== null && ctx.datable?.(id, at) === true
+      if (dated) {
+        plan.dates.push({ id, vaultRef, title: oneLine(row.summary), at })
+      }
       if (row.details_path && ctx.backfillable?.(id)) {
-        const vaultRef = `${row.note}#${row.key}`
         plan.backfill.push({ id, vaultRef, title: oneLine(row.summary), path: row.details_path })
-      } else {
+      } else if (!dated) {
         skip('already imported')
       }
       continue
@@ -275,6 +301,7 @@ export function planVaultImport(rows: VaultRow[], ctx: ImportContext): ImportPla
       params,
       plain: run ? { ...plain, worktreePath: undefined } : plain,
       runId: run?.id ?? null,
+      askedAt: vaultAskedAt(row) ?? ctx.now,
       answer: answerOf(row)
     })
     if (action.note) {
@@ -289,7 +316,11 @@ export function reportOf(
   plan: ImportPlan,
   applied: boolean,
   runs = plan.runs.length,
-  counts: Pick<ImportReport, 'backfilled' | 'details'> = { backfilled: 0, details: 0 }
+  counts: Pick<ImportReport, 'backfilled' | 'details' | 'dates'> = {
+    backfilled: 0,
+    details: 0,
+    dates: 0
+  }
 ): ImportReport {
   return {
     applied,

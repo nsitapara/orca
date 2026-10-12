@@ -1,5 +1,5 @@
 import { loadDetails } from './details-bundle'
-import type { ImportPlan, PlannedBackfill } from './import-vault'
+import { isDatable, type ImportPlan, type PlannedBackfill, type PlannedDate } from './import-vault'
 import { setInboxDetails } from './inbox-details'
 import type { InboxDeps } from './inbox-service'
 
@@ -40,4 +40,26 @@ export function backfillDetails(
     }
   }
   return { backfilled, skipped }
+}
+
+// The cards the import dated with the import time get the vault's ask date. Under the write, a card is
+// re-read and changed only while it is still an open imported card dated later than the vault's time, so a
+// card answered since the plan, or already corrected, is left alone (and a second run counts none).
+export function fixDates(
+  deps: InboxDeps,
+  dates: readonly PlannedDate[],
+  opts: { dryRun?: boolean }
+): number {
+  let fixed = 0
+  for (const d of dates) {
+    const item = deps.store.inbox.get(d.id)
+    if (!isDatable(item, d.at)) {
+      continue
+    }
+    if (!opts.dryRun) {
+      deps.store.inbox.setCreatedAt(d.id, d.at)
+    }
+    fixed += 1
+  }
+  return fixed
 }
