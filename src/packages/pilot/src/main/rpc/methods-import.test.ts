@@ -245,6 +245,34 @@ describe('pilot.automations.importState', () => {
     expect(store.handledKeys('fix-failed-ci')).toEqual(new Set())
   })
 
+  // The manual jobs keep nothing the engine needs, so importing them says so instead of failing.
+  it.each([
+    ['close-idle-sessions', 'M03 keeps no state: every run lists the open sessions again'],
+    [
+      'manual-memo',
+      'M04 keeps its state in the repo (agent-loops/manual-memo), where its precheck reads it'
+    ],
+    ['mr-next-steps', 'M02 keeps no state: every run writes a fresh report']
+  ])('%s has nothing to import', async (id, note) => {
+    const dir = mkdtempSync(join(tmpdir(), 'pilot-import-state-none-'))
+    const host = {
+      processKind: 'main',
+      dirs: [dir],
+      dataDir: dir,
+      error: null,
+      context: { store: PilotStore.open(join(dir, 'db.sqlite')) }
+    } as unknown as PilotHost
+    const [method] = buildImportMethods(host, () => 7) as unknown as Callable[]
+    const result = (await method.handler(
+      { id },
+      { caller: { kind: 'local-cli' }, runtime: { listRepos: () => [] } }
+    )) as ImportStateResult
+    expect([result.plan, result.handled]).toEqual([
+      { automationId: id, handled: [], sessions: [], files: [], notes: [note] },
+      { total: 0, present: 0, added: 0 }
+    ])
+  })
+
   it('names the known importers for an id it has none for', async () => {
     const { call } = importSetup()
     await expect(call({ id: 'nope' }, { kind: 'local-cli' })).rejects.toThrow(
