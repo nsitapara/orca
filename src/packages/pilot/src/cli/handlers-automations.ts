@@ -28,7 +28,7 @@ export const AUTOMATION_FILE_HANDLERS: Record<string, CommandHandler> = {
       formatAutomationList
     )
   },
-  'automations get': async ({ flags, client, json }) => {
+  'automations show-yaml': async ({ flags, client, json }) => {
     const id = getRequiredStringFlag(flags, 'id')
     printResult(
       await client.call<AutomationDetailPayload>('pilot.automations.get', { id }),

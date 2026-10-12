@@ -48,11 +48,14 @@ export const PILOT_COMMAND_SPECS: CommandSpec[] = [
     notes: ["`pilot automations list` is Orca's own engine, which is off in Pilot."]
   },
   {
-    path: ['automations', 'get'],
+    // `show` is the CLI's read verb, but `automations show` is Orca's own engine (C1): Pilot's is
+    // show-yaml, beside list-yaml, and `automations get` still reaches it.
+    path: ['automations', 'show-yaml'],
+    aliases: [['automations', 'get']],
     summary: 'One YAML automation: its schedule, status, checks and file',
-    usage: 'pilot automations get --id <id> [--json]',
+    usage: 'pilot automations show-yaml --id <id> [--json]',
     allowedFlags: [...GLOBAL_FLAGS, 'id'],
-    examples: ['pilot automations get --id fix-failed-ci']
+    examples: ['pilot automations show-yaml --id fix-failed-ci']
   },
   {
     path: ['automations', 'reload'],

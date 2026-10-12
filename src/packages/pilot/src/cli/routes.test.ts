@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest'
+import { findCommandSpec } from '../../../../cli/args'
 import { buildHandlerRoutes, HANDLER_COMMAND_KEYS } from '../../../../cli/dispatch'
 import { HANDLER_GROUPS, type HandlerGroup } from '../../../../cli/handler-group-manifest'
 import { COMMAND_SPECS } from '../../../../cli/specs/index'
+import { findVocabularyViolations } from '../../../../cli/vocabulary-policy'
 import { PILOT_HANDLER_GROUPS } from './handler-groups'
 import { PILOT_COMMAND_SPECS } from './specs'
 
@@ -29,6 +31,18 @@ describe("Pilot's CLI commands in upstream's route table", () => {
     expect(() => buildHandlerRoutes([upstreamClash, ...PILOT_HANDLER_GROUPS])).toThrow(
       'Duplicate CLI handler registration for "automations status"'
     )
+  })
+
+  it("follows the CLI's verb policy, and `automations get` still reaches Pilot's show-yaml", () => {
+    expect(findVocabularyViolations(PILOT_COMMAND_SPECS)).toEqual([])
+    expect(findCommandSpec(COMMAND_SPECS, ['automations', 'get'])?.path).toEqual([
+      'automations',
+      'show-yaml'
+    ])
+    expect(findCommandSpec(COMMAND_SPECS, ['automations', 'show'])?.path).toEqual([
+      'automations',
+      'show'
+    ])
   })
 
   it('gives each Pilot command exactly one spec in the CLI', () => {
