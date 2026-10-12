@@ -53,7 +53,9 @@ describe('CheckTable column resizing', () => {
   it('remembers widths across mounts', () => {
     const first = render(<CheckTable items={[item]} checkNames={['Clean']} />)
     drag('Clean', 100, 140)
-    expect(JSON.parse(window.localStorage.getItem(CHECKS_WIDTHS_KEY) ?? '{}')).toEqual({ 'check:Clean': 190 })
+    expect(JSON.parse(window.localStorage.getItem(CHECKS_WIDTHS_KEY) ?? '{}')).toEqual({
+      'check:Clean': 190
+    })
     first.unmount()
     render(<CheckTable items={[item]} checkNames={['Clean']} />)
     expect(colWidth(1)).toBe('190px')
@@ -79,7 +81,9 @@ describe('CheckTable column resizing', () => {
 
   it('keeps a check named Item apart from the fixed Item column', () => {
     render(<CheckTable items={[item]} checkNames={['Item']} />)
-    fireEvent.mouseDown(screen.getAllByRole('separator', { name: 'Resize Item column' })[0], { clientX: 0 })
+    fireEvent.mouseDown(screen.getAllByRole('separator', { name: 'Resize Item column' })[0], {
+      clientX: 0
+    })
     fireEvent.mouseMove(window, { clientX: 40 })
     fireEvent.mouseUp(window, { clientX: 40 })
     expect(colWidth(0)).toBe('240px')

@@ -43,6 +43,12 @@ function serve(payload: AutomationListPayload): void {
     if (method === 'pilot.automations.activity') {
       return []
     }
+    if (method === 'pilot.inbox.list') {
+      return { items: [], people: [], groups: [], automations: [] }
+    }
+    if (method === 'pilot.queue.list') {
+      return { entries: [] }
+    }
     return status
   })
 }
@@ -60,6 +66,15 @@ describe('PilotAutomationsPage', () => {
     expect(screen.queryByText('YAML automations')).toBeNull()
     fireEvent.click(await screen.findByRole('button', { name: /Fix failed CI/ }))
     expect(await screen.findByText('No ticks yet.')).toBeTruthy()
+  })
+
+  it('switches to Waiting on you and back', async () => {
+    serve(list)
+    render(<PilotAutomationsPage />)
+    fireEvent.click(screen.getByRole('button', { name: /Waiting on you/ }))
+    expect(await screen.findByText(/Nothing waiting on/)).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Automations' }))
+    expect(await screen.findByRole('button', { name: /Fix failed CI/ })).toBeTruthy()
   })
 
   it("never loads Orca's own Automations page", async () => {
