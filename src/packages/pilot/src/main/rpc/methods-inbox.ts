@@ -2,6 +2,7 @@ import { z } from 'zod'
 import { defineMethod } from '../../../../../main/runtime/rpc/core'
 import type { InboxAddParams } from '../../shared/inbox-types'
 import { proposalProblem } from '../actions/powers'
+import { DETAILS_EITHER } from '../inbox/card'
 import { addInboxItem } from '../inbox/inbox-add'
 import { cardRunLine } from '../inbox/run-line'
 import {
@@ -19,25 +20,29 @@ const TYPES = ['question', 'flagged', 'default', 'action', 'bug', 'left_for_you'
 const STATUSES = ['open', 'answered', 'done', 'obsolete', 'stale', 'dismissed'] as const
 const text = (max: number) => z.string().max(max)
 
-export const InboxAdd = z.object({
-  terminal: z.string().min(1).optional(),
-  runId: z.string().min(1).optional(),
-  stepIdx: z.number().int().nonnegative().optional(),
-  automationId: z.string().min(1).optional(),
-  itemKey: z.string().min(1).optional(),
-  type: z.enum(TYPES),
-  title: z.string().min(1).max(500),
-  context: text(8000).optional(),
-  suggested: text(500).optional(),
-  options: z.array(text(500)).max(10).optional(),
-  detailsMd: text(64 * 1024).optional(),
-  action: z.string().min(1).max(64).optional(),
-  actionArgs: z.record(z.string(), z.unknown()).optional(),
-  parts: z.record(z.string().min(1).max(64), text(500)).optional(),
-  // The switch words, on then off (R-3).
-  switchWords: z.array(z.string().min(1).max(40)).length(2).optional(),
-  worktreePath: z.string().min(1).optional()
-})
+export const InboxAdd = z
+  .object({
+    terminal: z.string().min(1).optional(),
+    runId: z.string().min(1).optional(),
+    stepIdx: z.number().int().nonnegative().optional(),
+    automationId: z.string().min(1).optional(),
+    itemKey: z.string().min(1).optional(),
+    type: z.enum(TYPES),
+    title: z.string().min(1).max(500),
+    context: text(8000).optional(),
+    suggested: text(500).optional(),
+    options: z.array(text(500)).max(10).optional(),
+    detailsMd: text(64 * 1024).optional(),
+    // Read by this process from inside the Automations folder (ruling 1): the CLI never sends its bytes.
+    detailsBundlePath: z.string().min(1).max(4096).optional(),
+    action: z.string().min(1).max(64).optional(),
+    actionArgs: z.record(z.string(), z.unknown()).optional(),
+    parts: z.record(z.string().min(1).max(64), text(500)).optional(),
+    // The switch words, on then off (R-3).
+    switchWords: z.array(z.string().min(1).max(40)).length(2).optional(),
+    worktreePath: z.string().min(1).optional()
+  })
+  .refine((p) => p.detailsMd === undefined || p.detailsBundlePath === undefined, DETAILS_EITHER)
 const Id = z.object({ id: z.string().min(1) })
 const List = z.object({
   person: z.string().min(1).optional(),

@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto'
 import type { InboxItemRow, InboxOption, InboxType } from '../../shared/api-types'
+import { DETAILS_EITHER, type DetailsRef } from '../../shared/details'
 import type { InboxAddParams, InboxItemSummary } from '../../shared/inbox-types'
 
 export type InboxCard = {
@@ -9,6 +10,8 @@ export type InboxCard = {
   suggested: string | null
   options: InboxOption[]
   detailsMd: string | null
+  // The card's Details bundle (its path, its bytes' SHA-256 and each inlined review's), or null.
+  details: DetailsRef | null
   action: string | null
   actionArgs: Record<string, unknown> | null
   parts: Record<string, string>
@@ -37,7 +40,17 @@ export function parseOption(raw: string): InboxOption | null {
   return label ? { label, meaning: text.slice(at + 3).trim() } : null
 }
 
+export { DETAILS_EITHER }
+
+// A card's Details are markdown or a bundle, never both: checked before a bundle is read.
+export function checkDetailsChoice(params: InboxAddParams): void {
+  if (params.detailsMd !== undefined && params.detailsBundlePath !== undefined) {
+    throw new Error(DETAILS_EITHER)
+  }
+}
+
 function checkCard(params: InboxAddParams): void {
+  checkDetailsChoice(params)
   if (!oneLine(params.title)) {
     throw new Error('A card needs a title')
   }
@@ -66,7 +79,8 @@ function checkCard(params: InboxAddParams): void {
   }
 }
 
-export function buildCard(params: InboxAddParams): InboxCard {
+// `details` is the ref of the bundle loadDetails read for these params (null without one).
+export function buildCard(params: InboxAddParams, details: DetailsRef | null = null): InboxCard {
   checkCard(params)
   return {
     type: params.type,
@@ -75,6 +89,7 @@ export function buildCard(params: InboxAddParams): InboxCard {
     suggested: oneLine(params.suggested) || null,
     options: (params.options ?? []).map(parseOption).filter((o): o is InboxOption => o !== null),
     detailsMd: params.detailsMd?.trim() ? params.detailsMd : null,
+    details,
     action: params.action ?? null,
     actionArgs: params.action ? (params.actionArgs ?? {}) : null,
     parts: Object.fromEntries(
@@ -92,6 +107,7 @@ export function cardOf(item: InboxItemRow): InboxCard {
     suggested,
     options,
     detailsMd,
+    details,
     action,
     actionArgs,
     parts,
@@ -104,6 +120,7 @@ export function cardOf(item: InboxItemRow): InboxCard {
     suggested,
     options,
     detailsMd,
+    details,
     action,
     actionArgs,
     parts,
@@ -113,7 +130,8 @@ export function cardOf(item: InboxItemRow): InboxCard {
 
 // What an answer approves (contract §10): type, title, context, options, action and its pinned args (an object).
 // Parts with their switch words, and details, join only when present (E3), so a plain card keeps the six-field
-// digest. The suggestion and replies never count: they don't change what Approve does.
+// digest. A bundle joins as its path, its bytes' SHA-256 and each inlined review text's, so an approval binds to
+// exactly what was shown; a card without one hashes as before. The suggestion and replies never count.
 export function inboxDigest(card: InboxCard): string {
   const fields: unknown[] = [
     card.type,
@@ -128,6 +146,14 @@ export function inboxDigest(card: InboxCard): string {
   }
   if (card.detailsMd) {
     fields.push(card.detailsMd)
+  }
+  if (card.details) {
+    fields.push([
+      'details',
+      card.details.path,
+      card.details.sha256,
+      Object.entries(card.details.inlined).sort()
+    ])
   }
   return createHash('sha256').update(JSON.stringify(fields)).digest('hex')
 }

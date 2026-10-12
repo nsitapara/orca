@@ -1,8 +1,10 @@
-import { mkdtempSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, realpathSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import type { RpcCallerIdentity } from '../../../../../main/runtime/rpc/rpc-caller-identity'
+import type { InboxListPayload } from '../../shared/inbox-types'
+import { detailsFixture } from '../inbox/__fixtures__/details-fixture'
 import { addInboxItem } from '../inbox/inbox-add'
 import { loadDefinitions } from '../definitions/loader'
 import type { PilotHost } from '../pilot-services'
@@ -15,7 +17,7 @@ type Callable = {
   handler(p: unknown, ctx?: { caller?: RpcCallerIdentity }): unknown
 }
 
-function setup() {
+function setup(detailsRoot: string | null = null) {
   const dir = mkdtempSync(join(tmpdir(), 'pilot-inbox-rpc-'))
   writeFileSync(join(dir, 'people.yaml'), 'people:\n  - { id: nish, name: Nish, gitlab: nish8 }\n')
   writeFileSync(
@@ -47,7 +49,8 @@ function setup() {
       scheduler: null as never,
       actions: { entries: () => [], get: () => null },
       dispatcher: null,
-      schedulerOn: true
+      schedulerOn: true,
+      detailsRoot
     }
   }
   const methods = buildPilotMethods(host) as unknown as Callable[]
@@ -106,6 +109,21 @@ describe('inbox RPC', () => {
     }
   })
 
+  it("lists a bundled card with its Details ref only: the snapshot isn't in the payload", () => {
+    const f = detailsFixture()
+    const { call } = setup(f.root)
+    call('pilot.inbox.add', {
+      runId: 'run-1',
+      type: 'bug',
+      title: 'Leaving asks to discard edits',
+      detailsBundlePath: f.bundle
+    })
+    const listed = call('pilot.inbox.list', { person: 'nish' }) as InboxListPayload
+    expect(listed.items[0].details?.path).toBe(realpathSync(f.bundle))
+    expect(listed.items[0]).not.toHaveProperty('snapshot')
+    expect(JSON.stringify(listed)).not.toContain('What Approve does')
+  })
+
   it('adds, lists, replies to and ticks a card', () => {
     const { call } = setup()
     const added = call('pilot.inbox.add', {
@@ -131,9 +149,17 @@ describe('inbox RPC', () => {
     [{ type: 'note', title: 'x' }],
     [{ type: 'question', title: '' }],
     [{ type: 'question', title: 'x', detailsMd: 'x'.repeat(64 * 1024 + 1) }],
-    [{ type: 'action', title: 'x', switchWords: ['Post'] }]
+    [{ type: 'action', title: 'x', switchWords: ['Post'] }],
+    [{ type: 'question', title: 'x', detailsMd: 'x', detailsBundlePath: '/v/F2.json' }],
+    [{ type: 'question', title: 'x', detailsBundlePath: '' }]
   ])('refuses add params %j', (params) => {
     const { find } = setup()
+    expect(find('pilot.inbox.add').params!.safeParse(params).success).toBe(false)
+  })
+
+  it('refuses a bundle path over 4096 characters', () => {
+    const { find } = setup()
+    const params = { type: 'question', title: 'x', detailsBundlePath: `/${'x'.repeat(4096)}` }
     expect(find('pilot.inbox.add').params!.safeParse(params).success).toBe(false)
   })
 

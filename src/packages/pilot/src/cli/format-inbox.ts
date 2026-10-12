@@ -1,4 +1,5 @@
 import type { InboxItemRow, InboxListPayload, InboxOption } from '../shared/api-types'
+import type { DetailsRef } from '../shared/details'
 
 function optionLine(option: InboxOption, n: number): string {
   if (option.meaning) {
@@ -13,6 +14,35 @@ function whose(item: InboxItemRow): string {
     return ''
   }
   return `  (${parts.join(' · ')})`
+}
+
+function bundleLine(ref: DetailsRef): string {
+  const parts = [`sha256 ${ref.sha256}`, `${ref.blocks} block${ref.blocks === 1 ? '' : 's'}`]
+  if (ref.drafted && ref.draftedBase) {
+    parts.push(`drafted at ${ref.draftedBase.slice(0, 8)}`)
+  } else if (ref.drafted) {
+    parts.push('drafted')
+  }
+  return `Details: ${ref.path} (${parts.join(', ')})`
+}
+
+function detailsLine(item: Pick<InboxItemRow, 'details' | 'detailsMd'>): string {
+  if (item.details) {
+    return bundleLine(item.details)
+  }
+  if (item.detailsMd) {
+    return 'Details: markdown'
+  }
+  return 'Details: none'
+}
+
+// One card: what it is and where it stands, its title, and where its Details are.
+export function formatInboxShow(item: InboxItemRow): string {
+  return [
+    `${item.id} · ${item.type} · ${item.status} · v${item.version}`,
+    item.title,
+    detailsLine(item)
+  ].join('\n')
 }
 
 // One line per card, then its options numbered as `pilot inbox answer --option <n>` takes them.

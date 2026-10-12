@@ -21,6 +21,9 @@ export type InboxAddParams = {
   suggested?: string
   options?: string[]
   detailsMd?: string
+  // A Details bundle (details.py) by its absolute path inside the Automations folder: Pilot's main
+  // process reads and checks it, never the CLI. Not together with detailsMd.
+  detailsBundlePath?: string
   action?: string
   actionArgs?: Record<string, unknown>
   // Parts of the card the person can approve or leave out one by one: id → label (H5).
