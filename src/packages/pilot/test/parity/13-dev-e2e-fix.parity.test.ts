@@ -1,8 +1,21 @@
-import { cpSync, mkdtempSync, readFileSync, readdirSync } from 'node:fs'
+import { spawnSync } from 'node:child_process'
+import {
+  chmodSync,
+  cpSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  realpathSync,
+  writeFileSync
+} from 'node:fs'
 import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { loadDefinitions } from '../../src/main/definitions/loader'
+import { outputsFromFile } from '../../src/shared/run/outputs'
+import { renderShellEnv } from '../../src/shared/run/shell-template'
+import { decideStep, runEnd, type EndedStep } from '../../src/shared/run/step-plan'
 import { loadFixture } from './fixture'
 import {
   answerScripts,
@@ -110,27 +123,136 @@ describe('13 · Fix red hourly e2e on dev: the definitions (old job: orca automa
       match: ['{ticket.dev_e2e} == true']
     })
     expect(starts.definition.checks.map((c) => c.kind)).toEqual(['quota', 'script'])
+    // record_start first, as the old start() recorded the session before anything else: neither step is `always`, so
+    // a record that failed stops the fix (see "record_start runs first" below).
     expect(starts.definition.steps).toMatchObject([
+      {
+        name: 'record_start',
+        agent: 'shell',
+        always: false,
+        timeoutMs: 60_000,
+        env: { TICKET: '{ticket.id}', WT: '{worktree.path}' },
+        run: 'python3 /Users/nishsitapara/.agents/skills/dev-e2e-fix/pilot_mode.py started "$TICKET" "$WT"'
+      },
       {
         name: 'fix',
         agent: 'claude',
+        always: false,
         skill: 'dev-e2e-fix',
         promptStyle: 'raw',
         prompt: '/dev-e2e-fix {ticket.id}'
       }
     ])
+    expect(starts.definition.steps).toHaveLength(2)
+  })
+
+  it('record_start runs first, and only a recorded start lets the fix run', () => {
+    for (const recorded of ['done', 'failed', 'timed_out'] as const) {
+      const [first, fix] = starts.definition.steps
+      const ended: EndedStep[] = [
+        { name: first.name, status: recorded, always: first.always, error: null }
+      ]
+      const fields = { 'ticket.id': 'WEB-1', 'worktree.path': '/wt/web-1-fix' }
+      expect(decideStep(first, [], fields).run).toBe(true)
+      expect(decideStep(fix, ended, fields).run).toBe(recorded === 'done')
+      if (recorded !== 'done') {
+        expect(runEnd(ended, 0).status).toBe(recorded)
+      }
+    }
+  })
+
+  // The YAML's own command, through /bin/sh with its env rendered as the engine renders it, in a Pilot step's env.
+  // A python3 shim points gate's state root at a temp folder, so nothing under the real checkout is touched.
+  function recordStart(ticket: string, tickets: Record<string, unknown>) {
+    const root = realpathSync(mkdtempSync(join(tmpdir(), 'parity-13-start-')))
+    const state = join(root, 'agent-loops')
+    mkdirSync(join(state, 'dev-e2e'), { recursive: true })
+    writeFileSync(join(state, 'dev-e2e', 'tickets.json'), JSON.stringify(tickets))
+    const bin = join(root, 'bin')
+    mkdirSync(bin)
+    const real = spawnSync('/bin/sh', ['-c', 'command -v python3'], {
+      encoding: 'utf8'
+    }).stdout.trim()
+    writeFileSync(
+      join(root, 'shim.py'),
+      [
+        'import os, runpy, sys',
+        'from pathlib import Path',
+        'script = sys.argv[1]',
+        'sys.argv = sys.argv[1:]',
+        'sys.path.insert(0, str(Path(script).resolve().parent))',
+        'import sweep',
+        "sweep.gate.STATE_ROOT = Path(os.environ['PARITY_STATE_ROOT'])",
+        "runpy.run_path(script, run_name='__main__')"
+      ].join('\n')
+    )
+    writeFileSync(
+      join(bin, 'python3'),
+      `#!/bin/sh\nexec "${real}" "${join(root, 'shim.py')}" "$@"\n`
+    )
+    chmodSync(join(bin, 'python3'), 0o755)
+    const step = starts.definition.steps[0]
+    const wt = join(root, 'wt', 'web-1-fix')
+    const env = renderShellEnv(step.env, { 'ticket.id': ticket, 'worktree.path': wt })
+    if (!env.ok) {
+      throw new Error('record_start env did not render')
+    }
+    const outputFile = join(root, 'outputs')
+    writeFileSync(outputFile, '')
+    const done = spawnSync('/bin/sh', ['-c', step.run ?? ''], {
+      encoding: 'utf8',
+      env: {
+        PATH: `${bin}:${process.env.PATH ?? ''}`,
+        HOME: homedir(),
+        PILOT_RUN_ID: 'dev-e2e-fix-start-1',
+        PILOT_OUTPUT_FILE: outputFile,
+        PARITY_STATE_ROOT: state,
+        PYTHONDONTWRITEBYTECODE: '1',
+        ...env.env
+      }
+    })
+    return {
+      code: done.status,
+      wt,
+      tickets: JSON.parse(readFileSync(join(state, 'dev-e2e', 'tickets.json'), 'utf8')),
+      outputs: outputsFromFile(readFileSync(outputFile, 'utf8')).outputs
+    }
+  }
+
+  it("record_start writes the session's path and startedAt on the ticket, as the old start() did", () => {
+    const opened = { 'WEB-1': { branch: 'web-1-fix', pipeline: 7, closed: false } }
+    const r = recordStart('WEB-1', opened)
+    expect(r.code).toBe(0)
+    expect(r.tickets['WEB-1']).toEqual({
+      branch: 'web-1-fix',
+      pipeline: 7,
+      closed: false,
+      path: r.wt,
+      startedAt: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\+00:00$/)
+    })
+    expect(r.outputs).toEqual({ path: r.wt })
+  })
+
+  it("record_start fails, recording nothing, for a ticket this job didn't open (so the fix never runs)", () => {
+    const opened = { 'WEB-1': { branch: 'web-1-fix' } }
+    const r = recordStart('WEB-9', opened)
+    expect(r.code).toBe(1)
+    expect(r.tickets).toEqual(opened)
+    expect(r.outputs).toEqual({})
   })
 
   it('every script is the skill’s own pilot_mode.py, with no Pilot placeholder in a command', () => {
     const commands = [
       ...(starts.definition.items?.customFields ?? []).map((f) => f.script),
-      ...starts.definition.checks.flatMap((c) => (c.kind === 'script' ? [c.run] : []))
+      ...starts.definition.checks.flatMap((c) => (c.kind === 'script' ? [c.run] : [])),
+      ...starts.definition.steps.flatMap((s) => (s.agent === 'shell' ? [s.run ?? ''] : []))
     ]
-    expect(commands).toHaveLength(2)
+    expect(commands).toHaveLength(3)
     for (const command of commands) {
       expect(command).toMatch(
-        /^python3 \/Users\/nishsitapara\/\.agents\/skills\/dev-e2e-fix\/pilot_mode\.py (field-fix-ticket|check-worktree)$/
+        /^python3 \/Users\/nishsitapara\/\.agents\/skills\/dev-e2e-fix\/pilot_mode\.py (field-fix-ticket|check-worktree|started "\$TICKET" "\$WT")$/
       )
+      expect(command).not.toContain('{')
     }
   })
 
