@@ -314,7 +314,10 @@ describe('AnswerDispatcher', () => {
     settle()
     expect(await dispatcher.pass()).toMatchObject({ reasked: 1, agents: 0 })
     expect(store.inbox.get(id)).toMatchObject({ status: 'open', answer: null })
-    expect(store.inbox.get(id)?.replies[0]).toContain('terminal term-9')
+    expect(store.inbox.get(id)?.replies[0]).toMatchObject({
+      text: expect.stringContaining('terminal term-9'),
+      by: 'pilot'
+    })
     await dispatcher.pass()
     expect(open).toHaveBeenCalledTimes(1)
   })
@@ -499,7 +502,7 @@ describe('answerRunEnded (G6)', () => {
         status: 'open',
         answer: null,
         answeredAt: null,
-        replies: ['Which image: - [ ] e2e or unit?']
+        replies: [{ text: 'Which image: - [ ] e2e or unit?', by: 'agent' }]
       }
     ]
   ])('a run that %s', (_name, outputs, expected) => {
@@ -521,7 +524,7 @@ describe('answerRunEnded (G6)', () => {
     expect(store.inbox.get(id)).toMatchObject({
       status: 'open',
       answer: null,
-      replies: [ANSWER_RUN_STOPPED]
+      replies: [{ text: ANSWER_RUN_STOPPED, by: 'pilot' }]
     })
     expect(store.queue.get(row.id)).toMatchObject({ state: 'dispatched', attempts: 0 })
   })

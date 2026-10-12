@@ -358,7 +358,9 @@ describe('applyVaultImport: what it must not disturb or lose', () => {
       planVaultImport([row({ answer: 'A', status: 'applying' })], ctx()),
       1_000
     )
-    expect(store.inbox.get(vaultItemId(NOTE, KEY))?.replies).toEqual([SENT_BEFORE_PILOT])
+    expect(store.inbox.get(vaultItemId(NOTE, KEY))?.replies).toEqual([
+      { text: SENT_BEFORE_PILOT, by: 'pilot' }
+    ])
   })
 
   it('files a sessionless branch card with an unknown worktree job-wide, without it, in a dry run and for real', () => {

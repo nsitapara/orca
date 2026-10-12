@@ -159,6 +159,10 @@ export type InboxAnswer = {
   // Who gave it, as the transport stamped it (never from params). Absent on imported answers.
   callerKind?: 'local-cli' | 'desktop' | 'paired-device'
 }
+// A line under a card and who wrote it, set by the code path that writes it (never read from its words):
+// 'pilot' for Pilot's own re-asks and hand-backs, 'agent' for anything an agent or caller said.
+export type InboxReply = { text: string; by: 'pilot' | 'agent' }
+
 export type InboxItemRow = {
   id: string
   automationId: string
@@ -183,9 +187,9 @@ export type InboxItemRow = {
   answeredBy: string | null
   createdAt: number
   updatedAt: number
-  // How the work an answer started ended, and what the agent said back (contract §10, G6).
+  // How the work an answer started ended, and what was said back under the card (contract §10, G6).
   outcome: string | null
-  replies: string[]
+  replies: InboxReply[]
   // Named parts of a card that can be approved or left out one by one (`approve except:` / `keep:`).
   parts: Record<string, string>
   // The two labels of a card's on/off switch (on first), empty when it has none.

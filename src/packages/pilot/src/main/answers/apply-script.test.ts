@@ -154,7 +154,11 @@ describe('applyScript', () => {
     expect(await applyScript(s.deps, s.item(), [])).toEqual({ kind: 'reasked' })
     expect(s.entry.run).not.toHaveBeenCalled()
     expect(s.store.actions.forInboxItem(ID)).toEqual([])
-    expect(s.item()).toMatchObject({ status: 'open', answer: null, replies: [reply] })
+    expect(s.item()).toMatchObject({
+      status: 'open',
+      answer: null,
+      replies: [{ text: reply, by: 'pilot' }]
+    })
   })
 
   it('re-asks an approval whose action a stop interrupted, then runs a new approval', async () => {
@@ -174,7 +178,10 @@ describe('applyScript', () => {
     s.store.actions.interruptRunning(200, 200, () => true)
     expect(await applyScript(s.deps, s.item(), [])).toEqual({ kind: 'reasked' })
     expect(s.entry.run).not.toHaveBeenCalled()
-    expect(s.item()).toMatchObject({ status: 'open', replies: [INTERRUPTED_AGAIN] })
+    expect(s.item()).toMatchObject({
+      status: 'open',
+      replies: [{ text: INTERRUPTED_AGAIN, by: 'pilot' }]
+    })
     s.tick(1_000)
     s.approve()
     expect(await applyScript(s.deps, s.item(), [])).toEqual({ kind: 'done' })

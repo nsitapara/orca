@@ -169,7 +169,10 @@ export function replyToInboxItem(deps: InboxDeps, id: string, text: string): Inb
     throw new Error('A reply needs text')
   }
   const at = deps.now()
-  const patch = { replies: [...item.replies, reply], status: 'open' as const }
+  const patch = {
+    replies: [...item.replies, { text: reply, by: 'agent' as const }],
+    status: 'open' as const
+  }
   deps.store.inbox.update(id, patch, at)
   deps.store.queue.removePending(id)
   inboxEvent(deps.store, item, 'item_replied', { text: reply }, at)
@@ -178,6 +181,7 @@ export function replyToInboxItem(deps: InboxDeps, id: string, text: string): Inb
 }
 
 // The dispatcher refused an approval (not saved on the page, or the card changed): clear it and say why.
+// Only Pilot's own paths call this (the answers pass), so the line is Pilot's.
 export function reaskInboxItem(deps: InboxDeps, id: string, reply: string): InboxItemRow {
   const item = waitingItem(deps, id)
   const at = deps.now()
@@ -186,7 +190,7 @@ export function reaskInboxItem(deps: InboxDeps, id: string, reply: string): Inbo
     answer: null,
     answeredAt: null,
     answeredBy: null,
-    replies: [...item.replies, oneLine(reply)]
+    replies: [...item.replies, { text: oneLine(reply), by: 'pilot' as const }]
   }
   deps.store.inbox.update(id, patch, at)
   deps.store.queue.removePending(id)
