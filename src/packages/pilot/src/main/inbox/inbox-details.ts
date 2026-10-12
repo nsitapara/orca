@@ -1,4 +1,4 @@
-import type { InboxItemRow } from '../../shared/api-types'
+import type { InboxItemRow, RunStatus } from '../../shared/api-types'
 import type { PilotStore } from '../store/store'
 import type { DetailsSnapshot } from '../../shared/details'
 import { redraftedReply } from '../../shared/pilot-replies'
@@ -20,13 +20,24 @@ export type SetDetailsOptions = {
   onlyWithoutDetails?: boolean
 }
 
-// An answer whose work was dispatched (its queue row 'dispatched', the card still 'answered') is being
-// applied now: clearing it would leave that work to end on, or tick, a version nobody answered.
+// An answer run that may still be applying its answer. A finished one (done, needs_you, failed, …) has
+// had its onRunEnd (answer-run-end.ts), so its answer is no longer in flight.
+const LIVE_RUN: ReadonlySet<RunStatus> = new Set(['asking', 'running'])
+
+// The card's answer is being applied now: the card is 'answered' and a dispatched queue row names an
+// answer run still running. Clearing it would leave that run to end on, or tick, a version nobody
+// answered. A dispatched row outlives its run, and one with no run (sent before Pilot) never counts.
 export function answerBeingApplied(store: PilotStore, item: InboxItemRow): boolean {
-  return (
-    item.status === 'answered' &&
-    store.queue.forInboxItem(item.id).some((row) => row.state === 'dispatched')
-  )
+  if (item.status !== 'answered') {
+    return false
+  }
+  return store.queue.forInboxItem(item.id).some((row) => {
+    if (row.state !== 'dispatched' || row.dispatchedRunId === null) {
+      return false
+    }
+    const run = store.runs.get(row.dispatchedRunId)
+    return Boolean(run && LIVE_RUN.has(run.status))
+  })
 }
 
 function waitingItem(deps: InboxDeps, id: string): InboxItemRow {

@@ -10,7 +10,8 @@ import { copyBundle, detailsFixture, rewriteBundle } from './__fixtures__/detail
 import { loadDetails } from './details-bundle'
 import { addInboxItem } from './inbox-add'
 import { ANSWER_BEING_APPLIED, HAS_DETAILS_SINCE, setInboxDetails } from './inbox-details'
-import type { InboxDeps } from './inbox-service'
+import { replyToInboxItem, type InboxDeps } from './inbox-service'
+import type { RunStatus } from '../../shared/api-types'
 
 const def = parseAutomationYaml(
   'name: Fix CI\nrepo: web-platform\nschedule: manual\nitems: { kind: merge_request }\nsteps: [ { agent: claude, prompt: x } ]\ninbox: nish\n',
@@ -46,7 +47,26 @@ function setup() {
     store.inbox.saveAnswer(id, { option: 0, text: null, digest, via: 'page' }, 'nish', 110)
     return store.queue.enqueue(id, 200, 110)
   }
-  return { f, store, deps, id, answer }
+  // The answer sent to an answer run in this state, or (null) sent before Pilot took over (no run).
+  const dispatch = (runStatus: RunStatus | null) => {
+    const row = answer()
+    if (runStatus) {
+      store.runs.create({
+        id: 'ans-1',
+        automationId: 'ci',
+        tickId: null,
+        itemKey: 'mr:1561',
+        itemLabel: '!1561',
+        worktreePath: null,
+        startedAt: 115,
+        status: runStatus,
+        trigger: 'answer'
+      })
+    }
+    const dispatchedRunId = runStatus ? 'ans-1' : null
+    store.queue.update(row, { state: 'dispatched', readyAt: 120, dispatchedRunId }, 120)
+  }
+  return { f, store, deps, id, answer, dispatch }
 }
 
 describe('setInboxDetails', () => {
@@ -108,6 +128,29 @@ describe('setInboxDetails', () => {
     expect(store.queue.forInboxItem(id)).toEqual([])
   })
 
+  // Only an answer run still running is applying the answer: a dispatched row outlives its run.
+  it.each<[string, (s: ReturnType<typeof setup>) => void]>([
+    ['whose answer run finished', (s) => s.dispatch('done')],
+    ['whose answer run failed', (s) => s.dispatch('failed')],
+    ['sent before Pilot took over (no answer run)', (s) => s.dispatch(null)],
+    [
+      'its answer run reopened, then answered again',
+      (s) => {
+        s.dispatch('done')
+        replyToInboxItem(s.deps, s.id, 'Which commit?')
+        s.answer()
+      }
+    ]
+  ])('clears the answer of a card %s', (_name, arrange) => {
+    const s = setup()
+    arrange(s)
+    expect(setInboxDetails(s.deps, s.id, s.f.bundle, OPEN)).toMatchObject({
+      changed: true,
+      cleared: true
+    })
+    expect(s.store.inbox.get(s.id)).toMatchObject({ status: 'open', answer: null })
+  })
+
   it('leaves a bundle attached meanwhile when only a card without one may change', () => {
     const { f, store, deps, id } = setup()
     const drafted = copyBundle(f, 'F3.json')
@@ -157,9 +200,9 @@ describe('setInboxDetails', () => {
       'answered since; Details not attached'
     ],
     [
-      'an answered card whose answer is being applied',
+      'an answered card whose answer run is still running',
       (s) => {
-        s.store.queue.update(s.answer(), { state: 'dispatched', readyAt: 120 }, 120)
+        s.dispatch('running')
         return [s.f.bundle, OPEN]
       },
       ANSWER_BEING_APPLIED
