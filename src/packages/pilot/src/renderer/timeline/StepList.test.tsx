@@ -6,12 +6,18 @@ import { timelineRun } from './timeline.fixtures'
 const pilotRpc = vi.fn()
 vi.mock('../api', () => ({ pilotRpc: (...args: unknown[]) => pilotRpc(...args) }))
 
+const refreshWorktreeTimeline = vi.fn()
+vi.mock('../sidebar/timeline-feed', () => ({
+  refreshWorktreeTimeline: (...args: unknown[]) => refreshWorktreeTimeline(...args)
+}))
+
 import { StepList } from './StepList'
 
 describe('StepList', () => {
   afterEach(() => {
     cleanup()
     pilotRpc.mockReset()
+    refreshWorktreeTimeline.mockReset()
   })
 
   it('shows each step: agent or shell, mode, status, cost, exit code and outputs', () => {
@@ -55,5 +61,18 @@ describe('StepList', () => {
     finish({ action: 'opened', handle: 'term_9' })
     expect(await screen.findByText('Opened in a new tab')).toBeTruthy()
     expect(screen.getByRole('button', { name: /resume/i }).hasAttribute('disabled')).toBe(false)
+  })
+
+  it("refreshes the worktree's timeline after a successful resume only", async () => {
+    pilotRpc.mockResolvedValueOnce({ action: 'opened', handle: 'term_9' })
+    render(<StepList runId="r1" worktreePath="/wt/a" steps={timelineRun().steps} />)
+    fireEvent.click(screen.getByRole('button', { name: /resume/i }))
+    await screen.findByText('Opened in a new tab')
+    expect(refreshWorktreeTimeline).toHaveBeenCalledWith('/wt/a')
+    refreshWorktreeTimeline.mockReset()
+    pilotRpc.mockRejectedValueOnce(new Error('nope'))
+    fireEvent.click(screen.getByRole('button', { name: /resume/i }))
+    await screen.findByText('nope')
+    expect(refreshWorktreeTimeline).not.toHaveBeenCalled()
   })
 })

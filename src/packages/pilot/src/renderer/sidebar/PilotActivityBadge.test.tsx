@@ -5,9 +5,17 @@ import type { WorktreeTimeline } from '../../shared/api-types'
 import { PILOT_TAB } from '../../shared/sidebar-click'
 import { inboxItem, timelineRun, worktreeTimeline } from '../timeline/timeline.fixtures'
 
+let failing = false
 let feed: { data: WorktreeTimeline | null; error: string | null } = { data: null, error: null }
 vi.mock('./active-worktree', () => ({ useActiveWorktreePath: () => '/wt/a' }))
-vi.mock('./timeline-feed', () => ({ useWorktreeTimeline: () => feed }))
+vi.mock('./timeline-feed', () => ({
+  useWorktreeTimeline: () => {
+    if (failing) {
+      throw new Error('Pilot failed')
+    }
+    return feed
+  }
+}))
 
 import { PilotActivityBadge } from './PilotActivityBadge'
 
@@ -36,5 +44,17 @@ describe('PilotActivityBadge', () => {
     feed = { data: worktreeTimeline({ now: [timelineRun({ status: 'running' })] }), error: null }
     render(<PilotActivityBadge itemId={PILOT_TAB} layout="top" />)
     expect(screen.getByLabelText('An automation is running here')).toBeTruthy()
+  })
+
+  it('draws nothing, and does not unmount its parent, when Pilot fails', () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    failing = true
+    render(
+      <div data-testid="bar">
+        <PilotActivityBadge itemId={PILOT_TAB} layout="top" />
+      </div>
+    )
+    expect(screen.getByTestId('bar').innerHTML).toBe('')
+    failing = false
   })
 })

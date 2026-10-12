@@ -10,6 +10,7 @@ type Feed = {
   snapshot: Snapshot
   listeners: Set<() => void>
   timer: ReturnType<typeof setInterval> | null
+  onVisible: (() => void) | null
   loading: boolean
 }
 
@@ -20,7 +21,7 @@ const feeds = new Map<string, Feed>()
 function feedFor(path: string): Feed {
   let feed = feeds.get(path)
   if (!feed) {
-    feed = { snapshot: EMPTY, listeners: new Set(), timer: null, loading: false }
+    feed = { snapshot: EMPTY, listeners: new Set(), timer: null, onVisible: null, loading: false }
     feeds.set(path, feed)
   }
   return feed
@@ -44,18 +45,39 @@ async function load(path: string): Promise<void> {
   feed.listeners.forEach((listener) => listener())
 }
 
+function stopFeed(feed: Feed): void {
+  if (feed.timer) {
+    clearInterval(feed.timer)
+    feed.timer = null
+  }
+  if (feed.onVisible) {
+    document.removeEventListener('visibilitychange', feed.onVisible)
+    feed.onVisible = null
+  }
+}
+
 function subscribe(path: string, listener: () => void): () => void {
   const feed = feedFor(path)
   feed.listeners.add(listener)
   if (!feed.timer) {
     void load(path)
-    feed.timer = setInterval(() => void load(path), TIMELINE_POLL_MS)
+    // A hidden window doesn't poll; it refreshes once when it shows again.
+    feed.timer = setInterval(() => {
+      if (!document.hidden) {
+        void load(path)
+      }
+    }, TIMELINE_POLL_MS)
+    feed.onVisible = () => {
+      if (!document.hidden) {
+        void load(path)
+      }
+    }
+    document.addEventListener('visibilitychange', feed.onVisible)
   }
   return () => {
     feed.listeners.delete(listener)
     if (feed.listeners.size === 0 && feed.timer) {
-      clearInterval(feed.timer)
-      feed.timer = null
+      stopFeed(feed)
     }
   }
 }
@@ -68,9 +90,7 @@ export function refreshWorktreeTimeline(path: string): void {
 // Tests start every case from no feeds.
 export function resetTimelineFeeds(): void {
   for (const feed of feeds.values()) {
-    if (feed.timer) {
-      clearInterval(feed.timer)
-    }
+    stopFeed(feed)
   }
   feeds.clear()
 }

@@ -4,6 +4,7 @@ import type { SessionResumeResult, StepRow } from '../../shared/api-types'
 import { money } from '../../shared/money'
 import { pilotRpc } from '../api'
 import { errorText, stepStatusLabel } from '../pages/format'
+import { refreshWorktreeTimeline } from '../sidebar/timeline-feed'
 
 const AGENT_LABEL: Record<string, string> = { claude: 'Claude', codex: 'Codex', shell: 'Shell' }
 const RESUMED: Record<SessionResumeResult['action'], string> = {
@@ -38,7 +39,15 @@ function outputsText(step: StepRow): string | null {
   return entries.map(([k, v]) => `${k}=${String(v)}`).join(' · ')
 }
 
-function ResumeButton({ runId, step }: { runId: string; step: StepRow }): React.JSX.Element {
+function ResumeButton({
+  runId,
+  worktreePath,
+  step
+}: {
+  runId: string
+  worktreePath: string | null
+  step: StepRow
+}): React.JSX.Element {
   const [note, setNote] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const resume = async (): Promise<void> => {
@@ -52,6 +61,9 @@ function ResumeButton({ runId, step }: { runId: string; step: StepRow }): React.
         stepIdx: step.idx
       })
       setNote(RESUMED[result.action])
+      if (worktreePath) {
+        refreshWorktreeTimeline(worktreePath)
+      }
     } catch (e) {
       setNote(errorText(e))
     } finally {
@@ -74,7 +86,15 @@ function ResumeButton({ runId, step }: { runId: string; step: StepRow }): React.
   )
 }
 
-export function StepList({ runId, steps }: { runId: string; steps: StepRow[] }): React.JSX.Element {
+export function StepList({
+  runId,
+  worktreePath = null,
+  steps
+}: {
+  runId: string
+  worktreePath?: string | null
+  steps: StepRow[]
+}): React.JSX.Element {
   if (steps.length === 0) {
     return <p className="text-xs text-muted-foreground">No steps started.</p>
   }
@@ -87,7 +107,9 @@ export function StepList({ runId, steps }: { runId: string; steps: StepRow[] }):
             <div className="flex flex-wrap items-center gap-2">
               <span className="font-medium">{`${step.idx + 1}. ${step.name}`}</span>
               <span className="text-muted-foreground">{stepFacts(step)}</span>
-              {canResume(step) ? <ResumeButton runId={runId} step={step} /> : null}
+              {canResume(step) ? (
+                <ResumeButton runId={runId} worktreePath={worktreePath} step={step} />
+              ) : null}
             </div>
             {outputs ? <div className="text-muted-foreground">{`Outputs: ${outputs}`}</div> : null}
             {step.error ? <div className="text-destructive">{step.error}</div> : null}

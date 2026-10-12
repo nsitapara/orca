@@ -75,4 +75,24 @@ describe('useWorktreeTimeline', () => {
     expect(calls()).toBe(0)
     expect(result.current).toEqual({ data: null, error: null })
   })
+
+  it('skips the poll while the window is hidden, and refreshes once when it shows again', async () => {
+    renderHook(() => useWorktreeTimeline('/wt/a'))
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0)
+    })
+    expect(calls()).toBe(1)
+    const hidden = vi.spyOn(document, 'hidden', 'get').mockReturnValue(true)
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(TIMELINE_POLL_MS * 3)
+    })
+    expect(calls()).toBe(1)
+    hidden.mockReturnValue(false)
+    await act(async () => {
+      document.dispatchEvent(new Event('visibilitychange'))
+      await vi.advanceTimersByTimeAsync(0)
+    })
+    expect(calls()).toBe(2)
+    hidden.mockRestore()
+  })
 })
