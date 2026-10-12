@@ -1,5 +1,6 @@
 import { agentUsageState } from './agent-usage'
 import { fixFailedCiState } from './fix-failed-ci'
+import { mrFeedbackState } from './mr-feedback'
 import { noStateMapper } from './plans'
 import type { SweepStateMapper } from './types'
 
@@ -13,7 +14,8 @@ export const MAPPERS: SweepStateMapper[] = [
     'merge-dev',
     '02 keeps no state: its run records stay in the vault, written by the agent'
   ),
-  fixFailedCiState
+  fixFailedCiState,
+  mrFeedbackState
 ]
 
 export function sweepStateMapper(
