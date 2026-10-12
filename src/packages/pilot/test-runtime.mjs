@@ -16,6 +16,7 @@ export const PILOT_SQLITE_RUNTIME_INCLUDE = [
   'src/packages/pilot/src/main/rpc/handlers.test.ts',
   'src/packages/pilot/src/main/pilot-services.test.ts',
   'src/packages/pilot/src/main/inbox/inbox-service.test.ts',
+  'src/packages/pilot/src/main/inbox/retire.test.ts',
   'src/packages/pilot/scripts/seed-handled-from-sweep.test.ts',
   'src/packages/pilot/scripts/import-orca-settings.test.ts',
   'src/packages/pilot/test/parity/05-fix-failed-ci.parity.test.ts'
