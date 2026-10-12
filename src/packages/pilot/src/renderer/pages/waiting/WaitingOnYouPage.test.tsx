@@ -327,6 +327,29 @@ describe('WaitingOnYouPage', () => {
     expect(calls.map((c) => c[1])).toEqual([{ apply: false }, { apply: true }])
   })
 
+  it('offers to apply an import that only fills Details into cards already imported', async () => {
+    const report = { applied: false, imported: 0, answers: 0, runs: 0, backfilled: 2, skipped: [] }
+    pilotRpc.mockImplementation(async (method: string, params: { apply?: boolean }) => {
+      if (method === 'pilot.inbox.importVault') {
+        return { ...report, applied: params.apply === true }
+      }
+      return method === 'pilot.inbox.list' ? LIST : { entries: [] }
+    })
+    render(<WaitingOnYouPage />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Import open vault cards' }))
+    expect(
+      await screen.findByText(
+        'Would import 0 card(s), 0 with an answer; 0 skipped; would add Details for 2 card(s) already imported.'
+      )
+    ).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Apply import' }))
+    expect(
+      await screen.findByText(
+        'Imported 0 card(s), 0 with an answer; 0 skipped; added Details for 2 card(s) already imported.'
+      )
+    ).toBeTruthy()
+  })
+
   it('says why when the import is refused', async () => {
     pilotRpc.mockImplementation(async (method: string) => {
       if (method === 'pilot.inbox.importVault') {

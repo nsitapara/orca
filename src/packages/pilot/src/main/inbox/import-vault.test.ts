@@ -1,4 +1,4 @@
-import { mkdtempSync } from 'node:fs'
+import { mkdtempSync, realpathSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
@@ -9,7 +9,8 @@ import { PilotStore } from '../store/store'
 import { applyVaultImport, SENT_BEFORE_PILOT } from './import-apply'
 import { addInboxItem } from './inbox-add'
 import { splitCommand } from './split-command'
-import { planVaultImport, vaultItemId, type ImportContext } from './import-vault'
+import { detailsFixture } from './__fixtures__/details-fixture'
+import { isBackfillable, planVaultImport, vaultItemId, type ImportContext } from './import-vault'
 import type { InboxDeps } from './inbox-service'
 import type { VaultRow } from './vault-reader'
 
@@ -390,4 +391,124 @@ describe('the asking session', () => {
       expect(plan.items[0].params.runId).toBeUndefined()
     }
   )
+})
+
+describe('the vault import and Details bundles', () => {
+  const ID = vaultItemId(NOTE, KEY)
+  function withDetails() {
+    const f = detailsFixture()
+    const { store, deps } = open()
+    const full: InboxDeps = { ...deps, detailsRoot: f.root }
+    const plan = (rows: VaultRow[]) =>
+      planVaultImport(rows, {
+        ...ctx((id) => store.inbox.get(id) !== null),
+        backfillable: (id) => isBackfillable(store.inbox.get(id))
+      })
+    // A card the import wrote before it carried bundles: the bundle's path as markdown.
+    const imported = () =>
+      addInboxItem(
+        { ...full, newId: () => ID },
+        {
+          automationId: 'fix-failed-ci',
+          itemKey: 'mr:1214',
+          type: 'question',
+          title: 'Which?',
+          detailsMd: `Details bundle: ${f.bundle}`
+        },
+        { source: 'import', vaultRef: `${NOTE}#${KEY}` }
+      )
+    return { f, store, deps: full, plan, imported }
+  }
+
+  it('gives a new card its bundle, not the path as markdown', () => {
+    const { f, store, deps, plan } = withDetails()
+    const planned = plan([row({ details_path: f.bundle })])
+    expect(planned.items[0].params).toMatchObject({ detailsBundlePath: f.bundle })
+    expect(planned.items[0].params.detailsMd).toBeUndefined()
+    expect(applyVaultImport(deps, planned, 1_000, { dryRun: true })).toMatchObject({
+      imported: 1,
+      details: 1,
+      backfilled: 0
+    })
+    expect(applyVaultImport(deps, planned, 1_000)).toMatchObject({ imported: 1, details: 1 })
+    expect(store.inbox.get(ID)).toMatchObject({ detailsMd: null })
+    expect(store.inbox.get(ID)?.details?.path).toBe(realpathSync(f.bundle))
+    expect(store.inbox.snapshot(ID)?.ref.blocks).toBe(8)
+  })
+
+  it.each([true, false])(
+    'imports a card whose bundle is refused without it, saying why (dry run %s)',
+    (dryRun) => {
+      const { f, store, deps, plan } = withDetails()
+      writeFileSync(f.bundle, '{"version": 2}')
+      const report = applyVaultImport(deps, plan([row({ details_path: f.bundle })]), 1_000, {
+        dryRun
+      })
+      expect(report).toMatchObject({ imported: 1, details: 0, skipped: [] })
+      expect(report.notes).toEqual([
+        { id: ID, note: expect.stringMatching(/^Details not attached: the bundle .* version/) }
+      ])
+      if (!dryRun) {
+        expect(store.inbox.get(ID)).toMatchObject({ details: null })
+        expect(store.inbox.get(ID)?.detailsMd).toMatch(
+          new RegExp(`^Details bundle: ${f.bundle} \\(not shown in Pilot: the bundle .*\\)$`)
+        )
+      }
+    }
+  )
+
+  it('fills the bundle into an open, unanswered card it imported before: previewed, then applied', () => {
+    const { f, store, deps, plan, imported } = withDetails()
+    imported()
+    const planned = plan([row({ details_path: f.bundle })])
+    expect(planned.items).toEqual([])
+    expect(planned.backfill).toEqual([
+      { id: ID, vaultRef: `${NOTE}#${KEY}`, title: 'Which?', path: f.bundle }
+    ])
+    expect(applyVaultImport(deps, planned, 1_000, { dryRun: true })).toMatchObject({
+      imported: 0,
+      backfilled: 1,
+      details: 1,
+      skipped: []
+    })
+    expect(store.inbox.get(ID)).toMatchObject({ version: 1, details: null })
+    expect(applyVaultImport(deps, planned, 1_000)).toMatchObject({ backfilled: 1, details: 1 })
+    expect(store.inbox.get(ID)).toMatchObject({ version: 2, detailsMd: null })
+    expect(store.inbox.get(ID)?.details?.path).toBe(realpathSync(f.bundle))
+    expect(plan([row({ details_path: f.bundle })])).toMatchObject({
+      backfill: [],
+      skipped: [{ reason: 'already imported' }]
+    })
+  })
+
+  it('never touches an answered card', () => {
+    const { f, store, plan, imported } = withDetails()
+    imported()
+    const digest = store.inbox.get(ID)?.digest ?? ''
+    store.inbox.saveAnswer(ID, { option: 0, text: null, digest, via: 'page' }, 'nish', 1_100)
+    expect(plan([row({ details_path: f.bundle })])).toMatchObject({
+      backfill: [],
+      skipped: [{ reason: 'already imported' }]
+    })
+  })
+
+  it('leaves a card answered between the preview and the apply as it is', () => {
+    const { f, store, deps, plan, imported } = withDetails()
+    imported()
+    const planned = plan([row({ details_path: f.bundle })])
+    const digest = store.inbox.get(ID)?.digest ?? ''
+    store.inbox.saveAnswer(ID, { option: 0, text: null, digest, via: 'page' }, 'nish', 1_100)
+    const before = store.inbox.get(ID)
+    const report = applyVaultImport(deps, planned, 1_000)
+    expect(report).toMatchObject({ backfilled: 0, details: 0 })
+    expect(report.skipped).toEqual([
+      {
+        note: NOTE,
+        key: KEY,
+        summary: 'Which?',
+        reason: expect.stringMatching(/^Details not attached: answered since/)
+      }
+    ])
+    expect(store.inbox.get(ID)).toEqual(before)
+  })
 })

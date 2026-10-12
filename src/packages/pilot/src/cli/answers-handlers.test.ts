@@ -184,6 +184,25 @@ describe('inbox import-vault', () => {
     )
   })
 
+  it('counts the Details it would fill into cards already imported', async () => {
+    const report = {
+      applied: false,
+      imported: 3,
+      answers: 1,
+      runs: 2,
+      backfilled: 2,
+      details: 2,
+      skipped: [],
+      notes: []
+    }
+    const call = vi.fn().mockResolvedValue({ result: report })
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {})
+    await ANSWERS_HANDLERS['inbox import-vault'](ctx({}, call))
+    expect(log).toHaveBeenCalledWith(
+      'Would import 3 card(s), 1 with an answer, and 2 asking session(s), and Details for 2 already-imported card(s).\nApply the vault import in Pilot (Waiting on you)'
+    )
+  })
+
   it('refuses --apply without calling Pilot', async () => {
     const call = vi.fn()
     await expect(
