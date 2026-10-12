@@ -3,9 +3,9 @@ import type { LinearConnector } from '../../src/main/linear-connector/linear-con
 import type { SourceAccess } from '../../src/main/scheduler/tick-decide'
 import type { TickDeps } from '../../src/main/scheduler/tick-runner'
 import { linearTicketSource } from '../../src/main/sources/linear-tickets'
-import type { GitRunner } from '../../src/main/sources/worktree-git'
 import { runtimeWorktreeRecords } from '../../src/main/sources/worktree-records'
 import { fixtureRead, fixtureRuntime, stdoutOf, type ParityFixture } from './fixture'
+import { fixtureGitRunner } from './worktree-fixture'
 
 function resultOf(f: ParityFixture, argv: string[]): unknown {
   const read = fixtureRead(f, argv)
@@ -46,26 +46,13 @@ export function fixtureLinear(f: ParityFixture): LinearConnector {
   }
 }
 
-// `git show-ref --verify --quiet refs/heads/<branch>` in the main checkout, from the case: exit 1 is "no such branch".
-function fixtureShowRef(f: ParityFixture): GitRunner {
-  return async (args, { cwd }) => {
-    const read = fixtureRead(f, ['git', '-C', cwd, ...args])
-    if ((read.code ?? 0) !== 0) {
-      throw Object.assign(new Error(`git ${args.join(' ')} exited ${read.code}`), {
-        code: read.code
-      })
-    }
-    return { stdout: stdoutOf(read) }
-  }
-}
-
 // The tick's sources with the linear_ticket kind registered over the case: the real source (listing, details, branch
 // facts, scope) with Linear, the worktree list and git answered by the fixture. Other kinds run as in production.
 export function withLinearTickets(deps: TickDeps, f: ParityFixture): TickDeps {
   const source = linearTicketSource({
     linear: fixtureLinear(f),
     listWorktrees: runtimeWorktreeRecords(fixtureRuntime(f)),
-    git: fixtureShowRef(f)
+    git: fixtureGitRunner(f) // `git show-ref --verify --quiet refs/heads/<branch>`: exit 1 is "no such branch"
   })
   const sources: SourceAccess = {
     list: (def, ctx) =>
