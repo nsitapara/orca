@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import type { OrcaRuntimeService } from '../../../../main/runtime/orca-runtime'
 import { ALL_RPC_METHODS } from '../../../../main/runtime/rpc/methods/index'
 import { getAppEnvironment } from '../../../../shared/app-environment'
-import type { PilotStatus } from '../shared/api-types'
+import type { PilotStatus, UsageReportResult } from '../shared/api-types'
 import type { AgentKind } from '../shared/definition/types'
 import { actBridge } from './actions/act-bridge'
 import { answerRunEnded } from './answers/answer-run-end'
@@ -43,8 +43,9 @@ import { createLinearWriter } from './linear-connector/linear-writer'
 import { glabApiForRepo } from './sources/gitlab-api'
 import { registerPilotSources } from './sources/register-sources'
 import { PilotStore } from './store/store'
-import { writerGone } from './store/store-actions'
 import { VaultExporter } from './vault/export'
+import { housekeepStore } from './store/housekeep'
+import { usageReporter } from './usage-report/reporter'
 
 export type PilotContext = {
   processKind: PilotStatus['process']
@@ -57,6 +58,7 @@ export type PilotContext = {
   actions: ActionCatalog
   // Saved answers' dispatcher (Task 24c); null in a process that doesn't run the scheduler.
   dispatcher: AnswerDispatcher | null
+  writeUsageReport?: (dir?: string) => UsageReportResult
 }
 export type PilotServices = { stop: () => void; context: PilotContext }
 // What pilot.status reads. It is registered before anything opens, so status still answers (with
@@ -119,17 +121,7 @@ function openPilot(
   opened.push(() => store.close())
   // Before the definitions load: a where clause of these kinds validates against their schemas.
   registerPilotSources({ runtime, store })
-  const kept = store.housekeep(now())
-  // Any process may run actions, and main and orcad may share a store: only a gone writer's are closed.
-  const interrupted = store.actions.interruptRunning(now(), now(), writerGone)
-  if (interrupted > 0) {
-    log(`[pilot] store: ${interrupted} action(s) a stopped process left running marked failed`)
-  }
-  if (kept.interrupted > 0 || kept.pruned > 0) {
-    log(
-      `[pilot] store: ${kept.interrupted} interrupted tick(s) closed, ${kept.pruned} tick(s) older than 30 days removed`
-    )
-  }
+  housekeepStore(store, now, log)
   const definitions = liveDefinitions(host.dirs, log, definitionIo(store.definitions, now))
   opened.push(definitions.stop)
   // One relister for the session check and the step watcher, so they share its listing.
@@ -250,6 +242,7 @@ function openPilot(
         })
       : null
   const readUsage = stepUsageReader(defaultUsagePaths(), now)
+  const usageReports = usageReporter(store, () => definitions.current().definitions, now, log)
   const scheduler = new PilotScheduler({
     now,
     definitions: definitions.current,
@@ -258,6 +251,7 @@ function openPilot(
     poll: async () => {
       await wired.poll()
       await softly('usage', () => measureFinishedSteps(store, readUsage, now, log), log)
+      await softly('usage report', () => usageReports.refreshIfDue(), log)
       await softly('answers', () => dispatcher?.pass(), log)
       await softly('vault export', () => exporter?.pass(), log)
     },
@@ -283,7 +277,8 @@ function openPilot(
     reload: () => withRepoProblems(definitions.reload()),
     scheduler,
     actions,
-    dispatcher
+    dispatcher,
+    writeUsageReport: (dir) => usageReports.write(dir)
   }
 }
 

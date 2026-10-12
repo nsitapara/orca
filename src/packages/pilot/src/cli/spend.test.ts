@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { SpendPayload } from '../shared/api-types'
-import { formatSpend } from './spend'
+import { formatSpend, formatUsageReport } from './spend'
 
 const base: SpendPayload = {
   by: 'automation',
@@ -48,5 +48,19 @@ describe('formatSpend', () => {
     expect(formatSpend({ ...base, days: 1 })).toBe(
       'Spend since 2026-10-05 (last 1 day), by automation\n  Nothing spent in this window.'
     )
+  })
+})
+
+describe('formatUsageReport', () => {
+  it('says where it wrote and what is in it', () => {
+    expect(
+      formatUsageReport({
+        dir: '/r',
+        rows: 12,
+        sessions: 5,
+        costUsd: 3.5,
+        files: ['/r/usage.json', '/r/usage.csv']
+      })
+    ).toBe('Wrote 2 files to /r: 5 sessions, 12 rows, $3.50')
   })
 })

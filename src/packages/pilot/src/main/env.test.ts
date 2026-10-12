@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest'
 import {
   pilotDataDir,
   pilotSchedulerEnabled,
+  pilotUsageReportDir,
+  pilotUsageTemplate,
   pilotVaultAutomationsDir,
   type PilotHostKind
 } from './env'
@@ -62,4 +64,18 @@ describe('pilotVaultAutomationsDir', () => {
     [{ PILOT_VAULT_AUTOMATIONS: '~/vault/Automations' }, '/h/vault/Automations'],
     [{ PILOT_VAULT_EXPORT: 'off' }, null]
   ])('%j → %s', (env, expected) => expect(pilotVaultAutomationsDir(env, '/h')).toBe(expected))
+})
+
+describe('usage report locations', () => {
+  it.each([
+    [
+      {},
+      '/h/Documents/WebPortal/Agent Work/Automations/08 · Tally token usage by job',
+      '/h/.agents/skills/worktree-gate/usage_report.html'
+    ],
+    [{ PILOT_USAGE_REPORT_DIR: '~/r', PILOT_USAGE_TEMPLATE: '/t.html' }, '/h/r', '/t.html']
+  ])('%o', (env, dir, template) => {
+    expect(pilotUsageReportDir(env, '/h')).toBe(dir)
+    expect(pilotUsageTemplate(env, '/h')).toBe(template)
+  })
 })
