@@ -217,7 +217,20 @@ def _05():
         state={"ci-fix/handled.json": {}}, quota={"weekly": 91, "session": 38})
 
 
+    # The order M1 got wrong: a tab still open AND a dirty worktree. The sweep tests the tab first.
+    busy = mr(1610, branch="web-2210-tab-and-dirty", pipeline=failed(1610, 2934500010))
+    yield "05", "tab-and-dirty", build(
+        "05", "tab-and-dirty", now=now, mrs=[busy], worktrees=[worktree("web-2210", "web-2210-tab-and-dirty", dirty=1)],
+        terminals=["term_busy"], loop="ci-fix", branch_mrs=True,
+        state={"ci-fix/handled.json": {}, "ci-fix/tabs.json": {"/wt/web-2210": "term_busy"}}, quota={"weekly": 61, "session": 38})
+
+
 CASE_MAKERS.append(_05)
+
+
+def _canon(text):
+    """JSON as data, with a fixed key order: formatting is free, but true vs 1 and 1 vs 1.0 are drift."""
+    return json.dumps(json.loads(text), sort_keys=True)
 
 
 def main(argv):
@@ -227,7 +240,7 @@ def main(argv):
         path = HERE / job / f"{name}.json"
         text = dump(fixture)
         if check:
-            if not path.exists() or json.loads(path.read_text()) != json.loads(text):  # parsed: the commit hook reformats the JSON
+            if not path.exists() or _canon(path.read_text()) != _canon(text):  # parsed: the commit hook reformats the JSON
                 stale.append(str(path))
             continue
         path.parent.mkdir(parents=True, exist_ok=True)

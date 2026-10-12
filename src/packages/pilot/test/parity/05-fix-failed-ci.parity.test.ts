@@ -100,24 +100,42 @@ describeParity(PARITY_05, "05 · Fix failed CI v2: the sweep's state, imported",
     ])
   })
 
-  // The ruling for 05: skip reasons, not only verdicts (no worktree vs uncommitted vs tab still open).
-  it("skips each MR for the reason the sweep gave: the check named is the sweep's reason", async () => {
-    const neu = await decide(IMPORTED)
-    const byReason: [RegExp, string][] = [
-      [/^no Orca worktree$/, 'Worktree'],
-      [/^previous CI-fix session still open$/, 'No open session'],
-      [/^(uncommitted changes|\S+ present); retry next round$/, 'Clean']
-    ]
-    const old = runOldPlan('05', caseFile('05', IMPORTED)).filter((d) => d.decision === 'skip')
-    expect(old.map((d) => d.key)).toEqual(['mr:1574', 'mr:1592', 'mr:1601', 'mr:1603', 'mr:1604'])
-    for (const d of old) {
-      const expected = byReason.find(([re]) => re.test(d.reason))?.[1]
-      expect([d.key, d.reason, failedCheck(neu.find((n) => n.key === d.key))]).toEqual([
-        d.key,
-        d.reason,
-        expected
-      ])
+  // The ruling for 05: skip reasons, not only verdicts (no worktree vs uncommitted vs tab still open), on every case.
+  it.each(cases)(
+    "%s: each MR is skipped for the check that names the sweep's reason",
+    async (name) => {
+      const byReason: [RegExp, string][] = [
+        [/^no Orca worktree$/, 'Worktree'],
+        [/^previous CI-fix session still open$/, 'No open session'],
+        [/^(uncommitted changes|\S+ present); retry next round$/, 'Clean'],
+        [/^claude .*(weekly|session)/, 'Quota']
+      ]
+      const neu = await decide(name.replace(/\.json$/, ''))
+      const old = runOldPlan('05', join(CASES, name)).filter(
+        (d) => d.decision === 'skip' || d.decision === 'quota'
+      )
+      for (const d of old) {
+        const expected = byReason.find(([re]) => re.test(d.reason))?.[1]
+        expect([d.key, d.reason, failedCheck(neu.find((n) => n.key === d.key))]).toEqual([
+          d.key,
+          d.reason,
+          expected
+        ])
+      }
     }
+  )
+
+  // M1 put "clean" before "session"; the sweep tests the open tab first, so a dirty worktree with its tab open
+  // is skipped for the tab.
+  it('skips an MR with an open tab and a dirty worktree for the open tab, as the sweep does', async () => {
+    const old = runOldPlan('05', caseFile(JOB_05.job, 'tab-and-dirty'))
+    expect(old).toMatchObject([
+      { key: 'mr:1610', decision: 'skip', reason: 'previous CI-fix session still open' }
+    ])
+    const neu = await decide('tab-and-dirty')
+    expect(neu.map((d) => [d.key, d.verdict, failedCheck(d)])).toEqual([
+      ['mr:1610', 'skipped', 'No open session']
+    ])
   })
 
   it('stops what the sweep stopped at dispatch when Claude is out of quota', async () => {

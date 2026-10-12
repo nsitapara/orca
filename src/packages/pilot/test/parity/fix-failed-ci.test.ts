@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
+import { decideStep } from '../../src/shared/run/step-plan'
 import { loadPortedAutomation } from './ported'
 
 const JOB = 'fix-failed-ci'
@@ -44,9 +45,9 @@ describe('05 · Fix failed CI v2: the definition', () => {
 
   it('flags the worktree around the fix, and only flags a failure when the fix failed', () => {
     expect(definition.steps.map((s) => [s.name, s.agent, s.always, s.when])).toEqual([
-      ['flag', 'shell', false, null],
+      ['flag', 'shell', true, null],
       ['fix', 'claude', false, null],
-      ['flag_failed', 'shell', true, "{steps.fix.status} == 'failed'"]
+      ['flag_failed', 'shell', true, '{run.failed} == true']
     ])
     expect(definition.steps[0].run).toContain(
       '--gitlab-mr "!$IID" --comment "fixing failed CI !$IID (auto)"'
@@ -58,6 +59,20 @@ describe('05 · Fix failed CI v2: the definition', () => {
       mode: 'fix',
       promptStyle: 'wrapped'
     })
+  })
+
+  it('still fixes when the flag hangs to its timeout, and flags a failed or timed-out fix', () => {
+    const [flag, fix, flagFailed] = definition.steps
+    const timedOut = [
+      { name: 'flag', status: 'timed_out' as const, always: flag.always, error: null }
+    ]
+    expect(decideStep(fix, timedOut, {})).toEqual({ run: true })
+    const fixTimedOut = [
+      ...timedOut,
+      { name: 'fix', status: 'timed_out' as const, always: false, error: null }
+    ]
+    expect(decideStep(flagFailed, fixTimedOut, { 'run.failed': true })).toEqual({ run: true })
+    expect(decideStep(flagFailed, timedOut, { 'run.failed': false })).toMatchObject({ run: false })
   })
 
   it("sends my answers back to the asking session, else to fix-gitlab-ci's answers mode", () => {
