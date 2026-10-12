@@ -42,6 +42,24 @@ describe('answersLine', () => {
     expect(line).toContain('(approved; its action stopped for judgement: two pipelines disagree)')
   })
 
+  it('names the Details bundle the answer was given against, quoted, with its SHA-256', () => {
+    const path = '/v/Automations/03 · Review branch code/web-1/details/r-1/F2.json'
+    const sha = 'ab'.repeat(32)
+    const withDetails = (id: string, text: string) =>
+      ({ ...item(id, 'Fix the null check?', text), details: { path, sha256: sha } }) as InboxItemRow
+    const line = answersLine('ci-1', 'ci-2-answer-7', [
+      { item: withDetails('in_a', 'approve'), revise: false, needsAgent: null },
+      { item: withDetails('in_b', 'revise: smaller'), revise: true, needsAgent: null }
+    ])
+    const tail = `(Details "${path}" sha256 ${sha}: a drafted patch applies only by ~/.agents/skills/item-details/references/apply.md)`
+    expect(line).not.toContain('\n')
+    // The path's own ' · ' stays inside its quotes.
+    expect(line).toContain(` · [in_a] "Fix the null check?" → approve ${tail} · `)
+    expect(line).toContain(
+      ` · [in_b] "Fix the null check?" → revise: smaller (revise: change the proposal and ask again as a new action; don't run it) ${tail} · `
+    )
+  })
+
   it('names Waiting on you when no run asked', () => {
     const line = answersLine(null, 'ci-2-answer-7', [
       { item: item('in_a', 'Which image?', 'e2e'), revise: false, needsAgent: null }
