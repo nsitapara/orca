@@ -18,6 +18,8 @@ const WriteReport = z.object({
     .optional()
 })
 
+export const REPORT_NO_CALLER = "Pilot can't tell who is calling; nothing was written"
+
 export function buildSpendMethods(ctx: () => PilotContext) {
   return [
     defineMethod({
@@ -36,14 +38,18 @@ export function buildSpendMethods(ctx: () => PilotContext) {
         )
       }
     }),
-    // Any identified caller may trigger it: it only rewrites Pilot's own report files (fixed names, atomic, idempotent),
-    // and into job 08's folder only after the hand-over.
+    // Any identified caller may trigger it (the transport's stamp, never a param; none is refused): it only
+    // rewrites Pilot's own report files (fixed names, atomic, idempotent), and into job 08's folder only
+    // after the hand-over.
     defineMethod({
       name: 'pilot.usage.writeReport',
       permission: 'workspace',
       params: WriteReport,
-      handler: (p) => {
+      handler: (p, rpc) => {
         const c = ctx()
+        if (!rpc?.caller) {
+          throw new Error(REPORT_NO_CALLER)
+        }
         if (!c.writeUsageReport) {
           throw new Error("The usage report isn't available in this process")
         }
