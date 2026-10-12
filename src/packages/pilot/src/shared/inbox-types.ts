@@ -39,13 +39,14 @@ export type InboxListPayload = {
   automations: { id: string; name: string }[]
 }
 // option is 0-based into the card's options (the CLI's --option <n> is 1-based and sends n - 1). Text
-// wins over option. via 'page' names the digest of the version it showed.
+// wins over option. The desktop's save must name the digest of the version it showed. How it was given
+// (page or device) and by which kind of caller come from the transport, never from params.
 export type InboxAnswerParams = {
   id: string
   option?: number
   text?: string
   digest?: string
-  via?: 'page' | 'cli'
+  // Recorded only: nothing may use it to authorize anything.
   by?: string
 }
 

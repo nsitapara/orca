@@ -1,17 +1,22 @@
 import { routeAnswer, type Route } from '../../shared/answers/route'
+import type { InboxAnswer } from '../../shared/api-types'
 import type { InboxItemRow } from '../../shared/api-types'
 import type { QueueEntry, QueueHow } from '../../shared/inbox-types'
 import { personSees, type InboxDeps } from '../inbox/inbox-service'
 
+export const APPROVE_ON_DESKTOP = 'Approve actions in Pilot on this Mac'
+
 export type CatalogLookup = { get(name: string): unknown }
 
-// How an answer (text and picked option) to this card would be handled.
+// How an answer (text, picked option, and the kind of caller that gave it) is handled. Only the desktop
+// approves: a script route for any other caller, or none recorded, is downgraded to a re-ask, so a later
+// catalog change can't turn a device's words into a run.
 export function routeFor(
   item: InboxItemRow,
   catalog: CatalogLookup,
-  answer: { text: string; option: number | null }
+  answer: { text: string; option: number | null; callerKind?: InboxAnswer['callerKind'] }
 ): Route {
-  return routeAnswer({
+  const route = routeAnswer({
     type: item.type,
     action: item.action,
     runnable: item.action !== null && catalog.get(item.action) !== null,
@@ -19,12 +24,17 @@ export function routeFor(
     text: answer.text,
     option: answer.option
   })
+  if (route.kind === 'script' && answer.callerKind !== 'desktop') {
+    return { kind: 'reask', reason: APPROVE_ON_DESKTOP }
+  }
+  return route
 }
 
 export function routeOf(item: InboxItemRow, catalog: CatalogLookup): Route {
   return routeFor(item, catalog, {
     text: item.answer?.text ?? '',
-    option: item.answer?.option ?? null
+    option: item.answer?.option ?? null,
+    callerKind: item.answer?.callerKind
   })
 }
 

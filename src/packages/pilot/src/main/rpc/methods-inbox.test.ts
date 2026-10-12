@@ -238,8 +238,7 @@ describe('inbox RPC', () => {
       callAs({ kind: 'desktop' }, 'pilot.inbox.answer', {
         id: added.id,
         option: 0,
-        digest,
-        via: 'page'
+        digest
       })
     ).toMatchObject({ status: 'answered', answer: { callerKind: 'desktop' } })
     expect(call('pilot.queue.list', { person: 'nish' })).toMatchObject({
@@ -249,36 +248,21 @@ describe('inbox RPC', () => {
 
   it.each<[string, RpcCallerIdentity | undefined, Record<string, unknown>, string]>([
     ['no caller identity', undefined, {}, "Pilot can't tell who is answering"],
+    ['the local CLI', { kind: 'local-cli' }, {}, 'Answer cards in Pilot (Waiting on you)'],
     [
-      'an agent inside a run (env)',
+      'the local CLI claiming to be outside a run',
       { kind: 'local-cli' },
-      { runId: 'run-1', stepIdx: 0 },
-      "Agents don't answer"
+      { text: 'A' },
+      'Answer cards in Pilot (Waiting on you)'
     ],
     [
-      'an agent inside a run (terminal)',
+      'the local CLI inside a run',
       { kind: 'local-cli' },
-      { terminal: 'term-1' },
-      "Agents don't answer"
-    ],
-    [
-      'an agent whose env step ended',
-      { kind: 'local-cli' },
-      { runId: 'run-1', stepIdx: 9 },
-      'Agents'
+      { runId: 'run-1', stepIdx: 0, terminal: 'term-1' },
+      'Answer cards in Pilot (Waiting on you)'
     ]
   ])('refuses an answer from %s', (_name, caller, extra, message) => {
     const { store, call, callAs } = setup()
-    store.runs.createStep({
-      runId: 'run-1',
-      idx: 0,
-      name: 's',
-      agent: 'claude',
-      skill: null,
-      mode: null,
-      startedAt: 1
-    })
-    store.runs.updateStep('run-1', 0, { status: 'running', terminalHandle: 'term-1' })
     const added = call('pilot.inbox.add', { runId: 'run-1', type: 'question', title: 'Q?' }) as {
       id: string
     }
@@ -288,13 +272,22 @@ describe('inbox RPC', () => {
     expect(store.inbox.get(added.id)).toMatchObject({ status: 'open', answer: null })
   })
 
-  it('lets the local CLI outside a run answer a plain question, and records the caller', () => {
+  it('takes no caller-supplied via or run binding in the params', () => {
+    const { find } = setup()
+    const params = find('pilot.inbox.answer').params as unknown as {
+      shape: Record<string, unknown>
+    }
+    expect(Object.keys(params.shape).sort()).toEqual(['by', 'digest', 'id', 'option', 'text'])
+  })
+
+  it('lets a paired device answer text and skip, records how and who, but never approves', () => {
     const { call, callAs } = setup()
+    const phone: RpcCallerIdentity = { kind: 'paired-device', deviceId: 'ipad' }
     const added = call('pilot.inbox.add', { runId: 'run-1', type: 'question', title: 'Q?' }) as {
       id: string
     }
-    expect(
-      callAs({ kind: 'local-cli' }, 'pilot.inbox.answer', { id: added.id, text: 'A' })
-    ).toMatchObject({ answer: { callerKind: 'local-cli', via: 'cli' } })
+    expect(callAs(phone, 'pilot.inbox.answer', { id: added.id, text: 'A' })).toMatchObject({
+      answer: { callerKind: 'paired-device', via: 'device' }
+    })
   })
 })

@@ -286,8 +286,8 @@ describe('pilot inbox list', () => {
 
 describe('pilot inbox answer', () => {
   it.each([
-    [['--option', '2'], { id: 'q1', option: 1, via: 'cli' }],
-    [['--text', 'Not yet'], { id: 'q1', text: 'Not yet', via: 'cli' }]
+    [['--option', '2'], { id: 'q1', option: 1 }],
+    [['--text', 'Not yet'], { id: 'q1', text: 'Not yet' }]
   ])('%j sends %j (the CLI numbers options from 1; the server from 0)', async (flags, params) => {
     const { context, call } = contextFor(['inbox', 'answer', '--id', 'q1', ...flags], {
       id: 'q1',

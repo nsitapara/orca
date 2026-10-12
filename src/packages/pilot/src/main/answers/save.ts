@@ -1,7 +1,9 @@
 import type { InboxAnswer, InboxItemRow } from '../../shared/api-types'
 import type { InboxAnswerParams } from '../../shared/inbox-types'
 import { oneLine } from '../inbox/card'
-import { routeFor, type CatalogLookup } from './queue-view'
+import { APPROVE_ON_DESKTOP, routeFor, type CatalogLookup } from './queue-view'
+
+export { APPROVE_ON_DESKTOP }
 import {
   getInboxItem,
   inboxEvent,
@@ -13,7 +15,7 @@ import {
 // gate.py ANSWERS_SETTLE: a saved answer waits this long, so one still being typed is never sent.
 export const SETTLE_MS = 180_000
 export const CARD_CHANGED_ON_SAVE = 'The card changed; review it again'
-export const APPROVE_ON_DESKTOP = 'Approve actions in Pilot on this Mac'
+export const LOCAL_CLI_NO_ANSWER = 'Answer cards in Pilot (Waiting on you)'
 export const NO_ANSWER_CALLER = "Pilot can't tell who is answering; nothing was saved"
 
 // Who is answering and what the catalog can run: the caller kind is the transport's stamp (null: it named
@@ -37,7 +39,10 @@ function answerText(item: InboxItemRow, params: InboxAnswerParams): string {
 
 function clearAnswer(deps: InboxDeps, item: InboxItemRow, at: number): InboxItemRow {
   const patch = { status: 'open' as const, answer: null, answeredAt: null, answeredBy: null }
-  deps.store.inbox.update(item.id, patch, at)
+  deps.store.transaction(() => {
+    deps.store.queue.removePending(item.id)
+    deps.store.inbox.update(item.id, patch, at)
+  })
   inboxEvent(deps.store, item, 'answer_cleared', {}, at)
   syncRunWaiting(deps.store, item.runId, at)
   return { ...item, ...patch, updatedAt: at }
@@ -54,6 +59,10 @@ export function saveAnswer(
   if (callerKind === null) {
     throw new Error(NO_ANSWER_CALLER)
   }
+  // The local CLI is where agents run, and nothing proves a caller there is Nish: it never answers.
+  if (callerKind === 'local-cli') {
+    throw new Error(LOCAL_CLI_NO_ANSWER)
+  }
   const item = getInboxItem(deps, params.id)
   if (!WAITING.includes(item.status)) {
     throw new Error(`This card is ${item.status}; it takes no answer`)
@@ -61,7 +70,8 @@ export function saveAnswer(
   if (params.digest && params.digest !== item.digest) {
     throw new Error(CARD_CHANGED_ON_SAVE)
   }
-  const via = params.via ?? 'cli'
+  // How it was given follows from the transport's caller, never from params.
+  const via = callerKind === 'desktop' ? 'page' : 'device'
   if (via === 'page' && !params.digest) {
     throw new Error('A page answer names the card version it answers')
   }
@@ -69,27 +79,27 @@ export function saveAnswer(
   const at = deps.now()
   // Typed words win over a picked option, so a stale option can't route a different answer.
   const option = oneLine(params.text) ? null : (params.option ?? null)
-  // Only Pilot on this Mac approves: an answer that runs an action or starts a run is refused elsewhere.
-  if (
-    text &&
-    callerKind !== 'desktop' &&
-    routeFor(item, origin.catalog, { text, option }).kind === 'script'
-  ) {
+  // Only Pilot on this Mac approves: for any other caller routeFor turns a script route into this re-ask.
+  const route = routeFor(item, origin.catalog, { text, option, callerKind })
+  if (text && route.kind === 'reask' && route.reason === APPROVE_ON_DESKTOP) {
     throw new Error(APPROVE_ON_DESKTOP)
   }
-  deps.store.queue.removePending(item.id)
   if (!text) {
     return clearAnswer(deps, item, at)
   }
   const answer: InboxAnswer = { option, text, digest: item.digest, via, callerKind }
+  // `by` is recorded for display only; nothing may use it to authorize anything (the caller kind does).
   const patch = {
     status: 'answered' as const,
     answer,
     answeredAt: at,
     answeredBy: params.by ?? item.person
   }
-  deps.store.inbox.update(item.id, patch, at)
-  deps.store.queue.enqueue(item.id, at + SETTLE_MS, at)
+  deps.store.transaction(() => {
+    deps.store.queue.removePending(item.id)
+    deps.store.inbox.update(item.id, patch, at)
+    deps.store.queue.enqueue(item.id, at + SETTLE_MS, at)
+  })
   inboxEvent(deps.store, item, 'answer_saved', { text, via, option: answer.option }, at)
   syncRunWaiting(deps.store, item.runId, at)
   return { ...item, ...patch, updatedAt: at }

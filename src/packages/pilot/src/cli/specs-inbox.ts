@@ -47,6 +47,9 @@ export const INBOX_COMMAND_SPECS: CommandSpec[] = [
     examples: [
       'pilot inbox answer --id q1 --option 1',
       'pilot inbox answer --id q1 --text "Rebase first"'
+    ],
+    notes: [
+      'Answers on this machine go through Pilot (Waiting on you): the local CLI is refused. Reach a host as a paired device with --host runtime:<name>. A paired device answers questions, skips and revises; approving an action is Pilot on the Mac only.'
     ]
   }
 ]

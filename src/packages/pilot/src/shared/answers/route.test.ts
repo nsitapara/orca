@@ -58,7 +58,15 @@ describe('routeAnswer (test_apply.py test_route)', () => {
     ['keep: 1 2 3', CLEANUP, { kind: 'tick', outcome: 'skipped' }],
     ['keep: web-9999', CLEANUP, { kind: 'agent', revise: true }],
     ['keep: web', { '1': 'web a', '2': 'web b' }, { kind: 'agent', revise: true }],
+    ['keep: ,', CLEANUP, { kind: 'agent', revise: true }],
+    ['approve except: ,', REVIEW, { kind: 'agent', revise: true }],
+    ['approve except: ;', REVIEW, { kind: 'agent', revise: true }],
     ['approve except: F2', REVIEW, { kind: 'script', leaveOut: ['F2'] }],
+    [
+      'approve except: x; part ñ1: soften',
+      { x: 'x;', y: 'part ñ1: soften' },
+      { kind: 'agent', revise: true }
+    ],
     ['part F2: make this a question', REVIEW, { kind: 'agent', revise: true }],
     ['revise: leave out F1; part F2: soften it', REVIEW, { kind: 'agent', revise: true }]
   ])('parts: %j', (text, parts, expected) => {

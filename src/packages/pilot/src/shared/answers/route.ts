@@ -10,7 +10,8 @@ export const START_RUN_ONLY =
   'Answer Approve or Skip: this card only starts its run or leaves it unstarted.'
 
 const LEAVE_OUT = /^(?:approve except|keep):\s*(.+)$/
-const PART_NOTE = /(?:^|;)\s*(?:revise:\s*)?part\s+[\w.-]+\s*:/
+// Unicode-aware like Python's \w.
+const PART_NOTE = /(?:^|;)\s*(?:revise:\s*)?part\s+[\p{L}\p{N}_.-]+\s*:/u
 
 export type RoutableAnswer = {
   type: InboxType
@@ -44,10 +45,16 @@ export function answerWord(text: string): string {
 export function resolveParts(parts: Record<string, string>, refs: string): string[] | null {
   const entries = Object.entries(parts)
   const found: string[] = []
-  for (const ref of refs
+  const named = refs
     .trim()
     .split(/[,\s]+/)
-    .filter(Boolean)) {
+    .filter(Boolean)
+  // Deliberately unlike apply.py: refs that are only punctuation ("keep: ,") name nothing, so the answer
+  // is a revision, never a full approval.
+  if (named.length === 0) {
+    return null
+  }
+  for (const ref of named) {
     const wanted = ref.toLowerCase()
     const match = entries.filter(
       ([id, label]) =>
