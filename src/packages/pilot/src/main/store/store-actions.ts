@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process'
 import type Database from '../../../../../main/sqlite/sync-database'
 import type { ActionPhase, ActionRunRow, ActionRunStatus } from '../../shared/api-types'
 
@@ -7,6 +8,8 @@ export type NewActionRun = Pick<
 > & {
   // The process running it (this one unless said): main and orcad both open Pilot's store.
   writer?: number
+  // When that process started (processIdentity); this process's own when no writer is named.
+  writerIdentity?: string
 }
 
 function toActionRun(r: Record<string, unknown>): ActionRunRow {
@@ -29,29 +32,69 @@ function toActionRun(r: Record<string, unknown>): ActionRunRow {
 // Why an attempt a quit or a crash cut off was closed: it may or may not have done its effect.
 export const ACTION_INTERRUPTED = 'interrupted: Pilot stopped while it ran'
 
-function writerOf(output: string | null): number | null {
+function writerOf(output: string | null): { pid: number | null; identity: string | null } {
   try {
-    const writer = (JSON.parse(output ?? 'null') as { writer?: unknown } | null)?.writer
-    return typeof writer === 'number' ? writer : null
+    const parsed = JSON.parse(output ?? 'null') as { writer?: unknown; identity?: unknown } | null
+    return {
+      pid: typeof parsed?.writer === 'number' ? parsed.writer : null,
+      identity: typeof parsed?.identity === 'string' ? parsed.identity : null
+    }
+  } catch {
+    return { pid: null, identity: null }
+  }
+}
+
+// When a process started, as `ps` prints it ("Mon Oct  5 09:00:00 2026"), or null when it can't be read.
+// A pid alone is not an identity: the OS reuses pids, a reused one would read as the dead writer.
+export function processIdentity(pid: number): string | null {
+  try {
+    const out = execFileSync('ps', ['-o', 'lstart=', '-p', String(pid)], {
+      encoding: 'utf8',
+      timeout: 2000,
+      stdio: ['ignore', 'pipe', 'ignore']
+    })
+    return out.trim() || null
   } catch {
     return null
   }
 }
 
+let ownIdentity: string | null | undefined
+function ownProcessIdentity(): string | null {
+  ownIdentity ??= processIdentity(process.pid)
+  return ownIdentity
+}
+
 // Whether the process that wrote a running row is gone. At start nothing here has run an action yet, so
 // this process's own pid (reused from a dead one), or no pid recorded, is gone; otherwise a process with
-// that pid exists unless the OS says there's none (EPERM: another user's, so alive). A reused pid reads
-// as alive: the row stays running, never closed under a live writer.
-export function writerGone(pid: number | null): boolean {
+// that pid exists unless the OS says there's none (EPERM: another user's, so alive). A live pid whose
+// start identity differs from the one recorded is a reused pid: the writer is gone. A row recorded
+// without an identity, or an identity that can't be read now, reads as alive: never closed under a live
+// writer.
+export function writerGone(
+  pid: number | null,
+  identity: string | null = null,
+  identityOf: (pid: number) => string | null = processIdentity
+): boolean {
   if (pid === null || pid === process.pid) {
     return true
   }
   try {
     process.kill(pid, 0)
-    return false
   } catch (error) {
     return (error as NodeJS.ErrnoException).code !== 'EPERM'
   }
+  if (identity === null) {
+    return false
+  }
+  const now = identityOf(pid)
+  return now !== null && now !== identity
+}
+
+// What a running row's output says about the process running it.
+function writerRecord(a: NewActionRun): { writer: number; identity?: string } {
+  const identity = a.writer === undefined ? ownProcessIdentity() : (a.writerIdentity ?? null)
+  return { writer: a.writer ?? process.pid, ...(identity ? { identity } : {}) }
 }
 
 // Every action attempt is a row (contract §10), refused ones included.
@@ -71,7 +114,7 @@ export class ActionRunStore {
         a.digest,
         a.phase,
         // While it runs, its output names the process running it; finish() replaces it.
-        JSON.stringify({ writer: a.writer ?? process.pid }),
+        JSON.stringify(writerRecord(a)),
         a.dryRun ? 1 : 0,
         a.startedAt
       )
@@ -89,13 +132,13 @@ export class ActionRunStore {
       .run(status, output, at, id)
   }
 
-  // At start: attempts still 'running' whose process is gone (`writerGone(pid)`; null when no writer was
+  // At start: attempts still 'running' whose process is gone (`writerGone(pid, identity)`; null when no writer was
   // recorded) were cut off by a quit or a crash. Left running, each would block its card for ever
   // (powers.ts cardToRun: "is already running"); another live process's attempts are left alone.
   interruptRunning(
     startedBefore: number,
     at: number,
-    writerGone: (pid: number | null) => boolean
+    writerGone: (pid: number | null, identity: string | null) => boolean
   ): number {
     const output = JSON.stringify({
       outcome: 'failed',
@@ -112,7 +155,8 @@ export class ActionRunStore {
     )
     let closed = 0
     for (const row of running) {
-      if (writerGone(writerOf(row.output))) {
+      const writer = writerOf(row.output)
+      if (writerGone(writer.pid, writer.identity)) {
         closed += Number(close.run(output, at, row.id).changes)
       }
     }

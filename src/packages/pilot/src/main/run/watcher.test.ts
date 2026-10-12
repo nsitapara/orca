@@ -328,6 +328,16 @@ describe('runtimeStepProbe.status', () => {
     expect(await p.status('h', 'pane', 5)).toBe('done')
   })
 
+  // The hook server re-stamps receivedAt on a same-state refresh, so a previous turn's done row can look new.
+  it('ignores a re-stamped row of an earlier turn: its state started before the step', async () => {
+    const show = vi.fn(async () => ({}))
+    const p = probeFor(show, [{ state: 'done', stateStartedAt: 3, receivedAt: 20 }])
+    expect(await p.status('h', 'pane', 10)).toBe('working')
+    expect(show).toHaveBeenCalledTimes(1)
+    const fresh = probeFor(show, [{ state: 'done', stateStartedAt: 12, receivedAt: 20 }])
+    expect(await fresh.status('h', 'pane', 10)).toBe('done')
+  })
+
   it('reads the status row when there is one, without asking the terminal', async () => {
     const show = vi.fn(async () => ({}))
     const p = probeFor(show, [{ state: 'blocked' }])
