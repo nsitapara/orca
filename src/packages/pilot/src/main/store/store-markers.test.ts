@@ -1,0 +1,49 @@
+import { mkdtempSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { PilotStore } from './store'
+
+let store: PilotStore
+beforeEach(() => {
+  store = PilotStore.open(join(mkdtempSync(join(tmpdir(), 'pilot-markers-')), 'p.db'))
+})
+afterEach(() => store.close())
+
+function handledBy(automationId: string, key: string, at: number, runStatus: string | null): void {
+  let runId: string | null = null
+  if (runStatus) {
+    runId = `${automationId}-${at}`
+    store.runs.create({
+      id: runId,
+      automationId,
+      tickId: null,
+      itemKey: 'wt:x',
+      itemLabel: 'x',
+      worktreePath: '/wt/x',
+      startedAt: at
+    })
+    store.runs.update(runId, { status: runStatus as never, finishedAt: at + 1 })
+  }
+  store.markHandled(automationId, key, runId, at)
+}
+
+describe('MarkerStore.progressMarkers', () => {
+  it('takes the newest baselined or finished-well key per worktree, for this automation only', () => {
+    handledBy('review', 'repo::/wt/a@aaaaaaa', 1, null) // baseline
+    handledBy('review', 'repo::/wt/a@bbbbbbb', 2, 'done')
+    handledBy('review', 'repo::/wt/a@ccccccc', 3, 'failed') // a failed cycle moves nothing
+    handledBy('review', 'repo::/wt/a@ddddddd', 4, 'running') // nor does one still running
+    handledBy('review', 'repo::/wt/b@eeeeeee', 5, null)
+    handledBy('review', 'repo::/wt/c@1111111', 6, 'needs_you') // finished, left me questions
+    handledBy('qa', 'repo::/wt/a@fffffff', 7, 'done') // another automation's progress
+    handledBy('review', '!1561:15610', 8, 'done') // not a worktree key
+    expect(store.markers.progressMarkers('review')).toEqual(
+      new Map([
+        ['repo::/wt/a', 'bbbbbbb'],
+        ['repo::/wt/b', 'eeeeeee'],
+        ['repo::/wt/c', '1111111']
+      ])
+    )
+  })
+})
