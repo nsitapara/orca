@@ -1,11 +1,14 @@
-import { useState } from 'react'
 import { AutomationView } from './AutomationView'
-import { usePilotAutomationsView } from './automations-view'
+import {
+  setPilotOpenAutomation,
+  usePilotAutomationsView,
+  usePilotOpenAutomation
+} from './automations-view'
 import { PilotAutomationsSection } from './PilotAutomationsSection'
 import { WaitingOnYouPage } from './waiting/WaitingOnYouPage'
 
 export default function PilotAutomationsPage(): React.JSX.Element {
-  const [open, setOpen] = useState<string | null>(null)
+  const open = usePilotOpenAutomation()
   const view = usePilotAutomationsView()
   if (view === 'waiting') {
     return (
@@ -17,13 +20,13 @@ export default function PilotAutomationsPage(): React.JSX.Element {
   if (open) {
     return (
       <main className="relative flex h-full flex-col gap-4 overflow-y-auto bg-background px-5 pb-10 pt-6">
-        <AutomationView id={open} onBack={() => setOpen(null)} />
+        <AutomationView id={open} onBack={() => setPilotOpenAutomation(null)} />
       </main>
     )
   }
   return (
     <main className="relative flex h-full flex-col overflow-y-auto bg-background">
-      <PilotAutomationsSection onOpen={setOpen} />
+      <PilotAutomationsSection onOpen={setPilotOpenAutomation} />
     </main>
   )
 }

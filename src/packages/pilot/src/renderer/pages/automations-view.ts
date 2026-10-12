@@ -4,20 +4,39 @@ import { useSyncExternalStore } from 'react'
 export type PilotAutomationsView = 'automations' | 'waiting'
 
 let current: PilotAutomationsView = 'automations'
+let openId: string | null = null
 const listeners = new Set<() => void>()
+
+function notify(): void {
+  for (const listener of listeners) {
+    listener()
+  }
+}
 
 export function pilotAutomationsView(): PilotAutomationsView {
   return current
 }
 
+// Switching view also closes an open automation, so coming back lands on the list.
 export function setPilotAutomationsView(next: PilotAutomationsView): void {
   if (next === current) {
     return
   }
   current = next
-  for (const listener of listeners) {
-    listener()
+  openId = null
+  notify()
+}
+
+export function pilotOpenAutomation(): string | null {
+  return openId
+}
+
+export function setPilotOpenAutomation(id: string | null): void {
+  if (id === openId) {
+    return
   }
+  openId = id
+  notify()
 }
 
 export function subscribePilotAutomationsView(listener: () => void): () => void {
@@ -29,4 +48,8 @@ export function subscribePilotAutomationsView(listener: () => void): () => void 
 
 export function usePilotAutomationsView(): PilotAutomationsView {
   return useSyncExternalStore(subscribePilotAutomationsView, pilotAutomationsView)
+}
+
+export function usePilotOpenAutomation(): string | null {
+  return useSyncExternalStore(subscribePilotAutomationsView, pilotOpenAutomation)
 }

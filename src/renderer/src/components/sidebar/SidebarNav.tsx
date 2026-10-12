@@ -54,9 +54,7 @@ const SidebarNav = React.memo(function SidebarNav() {
   // translate() preserves Orca's pseudo-localization behavior.
   useTranslation()
   const worktreePaletteShortcutCombos = useShortcutKeyComboDetails('worktree.palette')
-  const openAutomationsPage = PilotWaiting.useOpenAutomations(
-    useAppStore((s) => s.openAutomationsPage)
-  ) // pilot-hook: sidebar-automations-open
+  const openAutomationsPage = PilotWaiting.useOpenAutomationsPage(useAppStore) // pilot-hook: sidebar-automations-open
   const openMobilePage = useAppStore((s) => s.openMobilePage)
   const openArtifactsPage = useAppStore((s) => s.openArtifactsPage)
   const openSkillsPage = useAppStore((s) => s.openSkillsPage)
@@ -209,8 +207,7 @@ const SidebarNav = React.memo(function SidebarNav() {
           <HideSidebarMenu onHide={hideAutomationsButton} />
         </ContextMenu>
       ) : null}
-      <PilotWaiting.WaitingNavItem />
-      {/* pilot-hook: sidebar-waiting-item */}
+      <PilotWaiting.WaitingNavItem /> {/* pilot-hook: sidebar-waiting-item */}
       {showAgentDashboardButton ? (
         <React.Suspense fallback={null}>
           <AgentDashboardSidebarEntry />
