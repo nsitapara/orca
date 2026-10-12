@@ -27,6 +27,8 @@ export const PILOT_SQLITE_RUNTIME_INCLUDE = [
   'src/packages/pilot/src/main/vault/export.test.ts',
   'src/packages/pilot/src/main/rpc/methods-inbox.test.ts',
   'src/packages/pilot/src/main/actions/attempt.test.ts',
+  'src/packages/pilot/src/main/run/ask-first.test.ts',
+  'src/packages/pilot/src/main/actions/start-run-entry.test.ts',
   'src/packages/pilot/src/main/rpc/methods-actions.test.ts',
   'src/packages/pilot/scripts/seed-handled-from-sweep.test.ts',
   'src/packages/pilot/scripts/import-orca-settings.test.ts',

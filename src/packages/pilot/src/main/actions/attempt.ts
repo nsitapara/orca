@@ -4,6 +4,7 @@ import type { InboxDeps } from '../inbox/inbox-service'
 import { resolveInboxPerson } from '../inbox/person'
 import { fieldsForRun } from '../inbox/run-fields'
 import type { PilotStore } from '../store/store'
+import { recordPilotAsk, refuseCall, refused, startRow, type Row } from './refuse'
 import {
   argsDigest,
   cardToRun,
@@ -70,16 +71,6 @@ export const OUTSIDE_A_RUN =
   'Outside a Pilot run, approve actions in Pilot (Waiting on you), or run act.py directly.'
 const NO_CARD = "An approval needs its card and the card's digest"
 
-// What an attempt's action_runs rows say about it.
-type Row = {
-  action: string
-  dryRun: boolean
-  runId: string | null
-  inboxItemId: string | null
-  approved: boolean
-  digest?: string
-}
-
 function rowOf(req: AttemptRequest): Row {
   const { action, dryRun, runId, inboxItemId, approved } = req
   return {
@@ -111,44 +102,7 @@ function pinned(
   return entry.pin ? entry.pin(args, key) : args
 }
 
-function startRow(
-  deps: { store: PilotStore; now(): number },
-  row: Row,
-  args: Record<string, unknown>
-): number {
-  return deps.store.actions.start({
-    inboxItemId: row.inboxItemId,
-    runId: row.runId,
-    action: row.action,
-    args,
-    digest: row.digest ?? argsDigest(row.action, args),
-    phase: 'do',
-    dryRun: row.dryRun,
-    startedAt: deps.now()
-  })
-}
-
-// An attempt turned away is still an action_runs row (contract §10), with why in its output.
-function refused<R extends AttemptResult>(
-  deps: { store: PilotStore; now(): number },
-  row: Row,
-  args: Record<string, unknown>,
-  result: R
-): R {
-  const id = startRow(deps, row, args)
-  deps.store.actions.finish(id, 'refused', JSON.stringify(result), deps.now())
-  return result
-}
-
-// A call refused before it is an attempt (who is calling, or which run it is, can't be told): still a row.
-export function refuseCall(
-  deps: { store: PilotStore; now(): number },
-  call: { action: string; args: Record<string, unknown>; dryRun: boolean },
-  detail: string
-): ActionResult {
-  const row = { ...call, runId: null, inboxItemId: null, approved: false }
-  return refused(deps, row, call.args, actionFailed(detail))
-}
+export { recordPilotAsk, refuseCall }
 
 async function askFirst(
   deps: AttemptDeps,

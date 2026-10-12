@@ -10,6 +10,7 @@ import {
   resolveInboxItem,
   type InboxDeps
 } from '../inbox/inbox-service'
+import { cancelUnstartedRun } from '../run/ask-first'
 import type { PilotContext } from '../pilot-services'
 import { resolveChannelRun, resolveChannelStep } from './run-channel'
 
@@ -51,7 +52,8 @@ export function inboxDeps(c: PilotContext): InboxDeps {
     definitions: () => c.loaded().definitions,
     people: () => c.loaded().people,
     knownAction: (name) => c.actions.get(name) !== null,
-    actionArgsProblem: (name, args) => c.actions.get(name)?.checkArgs(args) ?? null
+    actionArgsProblem: (name, args) => c.actions.get(name)?.checkArgs(args) ?? null,
+    onResolved: (item) => cancelUnstartedRun(c.store, item, Date.now())
   }
 }
 

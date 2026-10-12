@@ -2,6 +2,7 @@ import type { ItemDecision, TickResult, Verdict } from '../../shared/api-types'
 import type { AutomationDefinition, ItemKind } from '../../shared/definition/types'
 import type { PeopleDirectory } from '../../shared/people'
 import { usesHandled, workspacePathOf } from '../../shared/tick/decide'
+import { askDecisions, type AskDeps } from '../run/ask-first'
 import { createPassFetchCache, type PassFetchCache } from '../sources/fetch-cache'
 import { glabApiForRepo, type GlabApi } from '../sources/gitlab-api'
 import {
@@ -38,6 +39,8 @@ export type TickDeps = DecideDeps & {
   gitlab?(repoPath: string): Promise<GlabApi>
   // The run engine's startRun: it starts the run's first steps; the tick only needs it to settle or throw.
   launch(req: LaunchRequest): Promise<unknown>
+  // Asks first: the card an `asked` decision leaves, and the run it holds (Task 25).
+  ask: AskDeps
 }
 // `pass` is the scheduler pass's fetch cache, shared by every automation that ticks in that pass.
 export type TickOptions = { dryRun: boolean; pass?: PassFetchCache }
@@ -78,11 +81,8 @@ const ACTED_ON_WHERE: Partial<Record<ItemKind, ReadonlySet<string>>> = {
 }
 
 // Keys a later task implements (Task 2b ruling): until then a file using one fails the tick instead
-// of running wider. start: ask_first → Task 25. Every workspace launches (Task 8d).
+// of running wider. Every workspace launches (Task 8d); start: ask_first is Task 25.
 function unactedKey(def: AutomationDefinition): string | null {
-  if (def.start === 'ask_first') {
-    return "start: ask_first isn't supported yet"
-  }
   if (!def.items) {
     return null
   }
@@ -116,7 +116,7 @@ function recordedWorktree(
   return workspacePathOf(def, fields)
 }
 
-// Only 'started' decisions start runs; 'asked' ones wait for an answer (Task 25 writes the card).
+// Only 'started' decisions start runs; 'asked' ones wait for an answer (askDecisions writes the card).
 // A launch failure keeps the decision's verdict 'started'; the RUN row is the record of the failure.
 async function startRuns(
   def: AutomationDefinition,
@@ -281,6 +281,11 @@ export async function runTick(
   try {
     if (!opts.dryRun) {
       markDecisions(def, decisions, deps)
+      const at = deps.now()
+      askDecisions(deps.ask, def, decisions, runIds, {
+        tickId,
+        runIdFor: (n) => `${makeRunId(def.id, at, n, tickId)}-ask`
+      })
       await startRuns(def, decisions, tickId, deps, runIds, unlaunched)
     }
     deps.store.recordDecisions(tickId, decisions, runIds)
