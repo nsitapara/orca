@@ -2,7 +2,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { OrcaRuntimeService } from '../../../../main/runtime/orca-runtime'
 import { setAppEnvironment, type AppEnvironment } from '../../../../shared/app-environment'
 
-const m = vi.hoisted(() => ({ start: vi.fn(), stop: vi.fn(), quota: vi.fn(), onWillQuit: vi.fn() }))
+const m = vi.hoisted(() => ({
+  start: vi.fn(),
+  stop: vi.fn(),
+  quota: vi.fn(),
+  codexQuota: vi.fn(),
+  onWillQuit: vi.fn()
+}))
 const host = vi.hoisted(() => ({
   app: { isPackaged: false, setName: () => {}, getAppPath: () => '/repo' },
   state: { isServeMode: false }
@@ -11,6 +17,7 @@ vi.mock('electron', () => ({ app: host.app }))
 vi.mock('../../../../main/startup/main-process-state', () => ({ mainProcessState: host.state }))
 vi.mock('./pilot-services', () => ({ startPilotServices: m.start }))
 vi.mock('./fields/claude-quota', () => ({ claudeQuotaReader: () => m.quota }))
+vi.mock('./fields/codex-quota', () => ({ codexQuotaReader: () => m.codexQuota }))
 
 import { attachPilotMain } from './attach-main'
 
@@ -39,11 +46,11 @@ describe('attachPilotMain', () => {
     vi.restoreAllMocks()
   })
 
-  it('starts Pilot with the Claude quota reader and stops it when the app quits', () => {
+  it('starts Pilot with both quota readers and stops it when the app quits', () => {
     m.start.mockReturnValue({ stop: m.stop, context: {} })
     attachPilotMain(runtime)
     expect(m.start).toHaveBeenCalledWith(runtime, 'main', {
-      quotas: { claude: m.quota },
+      quotas: { claude: m.quota, codex: m.codexQuota },
       engineEnv: { binDir: '/Apps/Pilot.app/Contents/Resources/bin', dataDir: '/data/pilot' },
       schedulerEnabled: true
     })
