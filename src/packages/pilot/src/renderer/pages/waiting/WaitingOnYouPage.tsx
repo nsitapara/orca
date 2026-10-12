@@ -85,7 +85,7 @@ export function WaitingOnYouPage(): React.JSX.Element {
       {error ? <p className="text-sm text-destructive">{error}</p> : null}
       <ImportVaultPanel onImported={() => void reload()} />
       <UpNextPanel entries={queue} onApplyNow={applyNow} />
-      <div className="grid grid-cols-[minmax(10rem,14rem)_1fr] gap-4">
+      <div className="grid grid-cols-[minmax(10rem,14rem)_minmax(0,1fr)] gap-4">
         <nav className="flex flex-col gap-1">
           <Button
             variant={rail === ALL ? 'secondary' : 'ghost'}
@@ -109,7 +109,7 @@ export function WaitingOnYouPage(): React.JSX.Element {
             </Button>
           ))}
         </nav>
-        <div className="flex flex-col gap-3">
+        <div className="flex min-w-0 flex-col gap-3">
           {open.length ? (
             open.map(cardOf)
           ) : (

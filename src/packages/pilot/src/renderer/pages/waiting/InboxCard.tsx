@@ -16,6 +16,8 @@ import {
   runLineView,
   worktreeName
 } from './answer-text'
+import { CardDetails } from './CardDetails'
+import type { PartSwitches } from '../../details/ReviewBlock'
 
 type Answer = { option: number | null; text: string }
 
@@ -89,22 +91,23 @@ function Saved({
 
 function AnswerForm({
   item,
+  off,
+  onToggle,
   onSave,
   onSaved
 }: {
   item: InboxItemRow
+  off: string[]
+  onToggle: (id: string) => void
   onSave: (answer: Answer) => Promise<string | null>
   onSaved: () => void
 }): React.JSX.Element {
   const choices = choicesFor(item)
   const [picked, setPicked] = useState<number | null>(null)
   const [notes, setNotes] = useState('')
-  const [off, setOff] = useState<string[]>([])
   const [saving, setSaving] = useState(false)
   const choice = picked === null ? null : choices[picked]
   const answer = choice ? composeAnswer(item, choice, notes, off) : null
-  const toggle = (id: string) =>
-    setOff((now) => (now.includes(id) ? now.filter((x) => x !== id) : [...now, id]))
   const save = async () => {
     if (!answer) {
       return
@@ -143,10 +146,10 @@ function AnswerForm({
         />
       ) : null}
       {Object.keys(item.parts).length > 0 && choice?.label === 'Approve' ? (
-        <Parts item={item} off={off} onToggle={toggle} />
+        <Parts item={item} off={off} onToggle={onToggle} />
       ) : null}
       <div className="flex flex-wrap items-center gap-2">
-        <Details markdown={item.detailsMd} />
+        <span className="flex-1" />
         <Button size="sm" data-save="" disabled={!answer || saving} onClick={() => void save()}>
           Save answer
         </Button>
@@ -160,24 +163,6 @@ function notesPlaceholder(choice: Choice): string {
     return 'Anything the run should know (optional)'
   }
   return 'What should happen instead?'
-}
-
-function Details({ markdown }: { markdown: string | null }): React.JSX.Element {
-  if (!markdown) {
-    return <span className="flex-1" />
-  }
-  return (
-    <Collapsible className="min-w-48 flex-1">
-      <CollapsibleTrigger className="text-sm text-muted-foreground underline-offset-4 hover:underline">
-        Details
-      </CollapsibleTrigger>
-      <CollapsibleContent>
-        <pre className="mt-2 overflow-auto rounded-md border border-border/50 bg-muted/20 p-2 text-xs">
-          {markdown}
-        </pre>
-      </CollapsibleContent>
-    </Collapsible>
-  )
 }
 
 // Who wrote a reply is stored with it (by), set by the path that wrote it; never guessed from its words.
@@ -245,10 +230,14 @@ export function InboxCard({
   onSave: (answer: Answer) => Promise<string | null>
 }): React.JSX.Element {
   const [editing, setEditing] = useState(item.status === 'open')
+  const [off, setOff] = useState<string[]>([])
+  const toggle = (id: string) =>
+    setOff((now) => (now.includes(id) ? now.filter((x) => x !== id) : [...now, id]))
+  const parts = editing ? partSwitches(item, off, toggle) : null
   return (
-    <article>
-      <Card className="gap-3 py-4">
-        <CardContent className="flex flex-col gap-2 px-4">
+    <article className="min-w-0">
+      <Card className="min-w-0 gap-3 py-4">
+        <CardContent className="flex min-w-0 flex-col gap-2 px-4">
           <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
             <Badge variant="outline">{KIND_LABEL[item.type]}</Badge>
             <span>from {automationName}</span>
@@ -263,12 +252,15 @@ export function InboxCard({
             </p>
           ) : null}
           <RunLineBlock line={runLine} digest={item.digest} />
+          <CardDetails item={item} parts={parts} />
           {item.replies.map((r, i) => (
             <Reply key={i} reply={r} />
           ))}
           <CardBody
             item={item}
             editing={editing}
+            off={off}
+            onToggle={toggle}
             queued={queued}
             onSave={onSave}
             setEditing={setEditing}
@@ -280,21 +272,48 @@ export function InboxCard({
   )
 }
 
+function partSwitches(
+  item: InboxItemRow,
+  off: string[],
+  toggle: (id: string) => void
+): PartSwitches | null {
+  if (Object.keys(item.parts).length === 0) {
+    return null
+  }
+  const words: [string, string] = [
+    item.switchWords[0] ?? 'Include',
+    item.switchWords[1] ?? 'Leave out'
+  ]
+  return { off, toggle, words }
+}
+
 function CardBody({
   item,
   editing,
+  off,
+  onToggle,
   queued,
   onSave,
   setEditing
 }: {
   item: InboxItemRow
   editing: boolean
+  off: string[]
+  onToggle: (id: string) => void
   queued: QueueEntry | null
   onSave: (answer: Answer) => Promise<string | null>
   setEditing: (editing: boolean) => void
 }): React.JSX.Element {
   if (editing) {
-    return <AnswerForm item={item} onSave={onSave} onSaved={() => setEditing(false)} />
+    return (
+      <AnswerForm
+        item={item}
+        off={off}
+        onToggle={onToggle}
+        onSave={onSave}
+        onSaved={() => setEditing(false)}
+      />
+    )
   }
   return <Saved item={item} queued={queued} onChange={() => setEditing(true)} />
 }
