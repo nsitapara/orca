@@ -72,6 +72,18 @@ describe('codexQuotaReading (quota.py codex_limits + out_reason)', () => {
       { ordinaryUsageAllowed: false, rateLimits: {} },
       { weekly: 100, session: null }
     ],
+    [
+      'a window without its duration makes the reading unknown',
+      {
+        rateLimits: { primary: { usedPercent: 60, resetsAt: RESET }, secondary: window(30, 10080) }
+      },
+      { weekly: null, session: null }
+    ],
+    [
+      'a window without its usedPercent makes the reading unknown',
+      { rateLimits: { primary: { windowDurationMins: 300 }, secondary: window(30, 10080) } },
+      { weekly: null, session: null }
+    ],
     ['no answer', {}, { weekly: null, session: null }]
   ] as [string, CodexRateLimitsResult, { weekly: number | null; session: number | null }][])(
     '%s',

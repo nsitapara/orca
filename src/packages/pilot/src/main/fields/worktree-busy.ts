@@ -1,3 +1,4 @@
+import { worktreePathKey } from './agent-activity'
 import type { OrcaRuntimeService } from '../../../../../main/runtime/orca-runtime'
 
 // Ports of worktree-gate/gate.py worktree_busy and tab_busy: why another agent can't start in a
@@ -45,7 +46,11 @@ export async function worktreeBusy(
   reads: BusyReads
 ): Promise<{ typing: boolean; reason: string } | null> {
   for (const t of terminals) {
-    if (!t.connected || !t.agentIdentity || t.worktreePath !== path) {
+    if (
+      !t.connected ||
+      !t.agentIdentity ||
+      worktreePathKey(t.worktreePath) !== worktreePathKey(path)
+    ) {
       continue
     }
     const name = t.title || t.handle

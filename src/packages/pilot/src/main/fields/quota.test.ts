@@ -34,6 +34,77 @@ describe('cachedQuota', () => {
   })
 })
 
+describe('cachedQuota failures and sharing', () => {
+  const GOOD = { weekly: 61, session: 38 }
+  const NONE = { weekly: null, session: null }
+
+  it('does not retry a failed read within the ttl, and keeps the last good reading under an hour', async () => {
+    let calls = 0
+    let t = 0
+    let fail = false
+    const read = cachedQuota(
+      async () => {
+        calls++
+        if (fail) {
+          throw new Error('offline')
+        }
+        return GOOD
+      },
+      300_000,
+      () => t
+    )
+    await read()
+    t = 400_000
+    fail = true
+    expect(await read()).toEqual(GOOD)
+    t = 600_000
+    expect(await read()).toEqual(GOOD)
+    expect(calls).toBe(2)
+    t = 800_000
+    await read()
+    expect(calls).toBe(3)
+  })
+
+  it('reads null once the last good reading is an hour old, and still waits the ttl between failures', async () => {
+    let calls = 0
+    let t = 0
+    let fail = false
+    const read = cachedQuota(
+      async () => {
+        calls++
+        if (fail) {
+          throw new Error('offline')
+        }
+        return GOOD
+      },
+      300_000,
+      () => t
+    )
+    await read()
+    fail = true
+    t = 3_700_000
+    expect(await read()).toEqual(NONE)
+    t = 3_800_000
+    expect(await read()).toEqual(NONE)
+    expect(calls).toBe(2)
+  })
+
+  it('shares one in-flight read between concurrent callers', async () => {
+    let calls = 0
+    let release: (v: typeof GOOD) => void = () => {}
+    const read = cachedQuota(() => {
+      calls++
+      return new Promise<typeof GOOD>((resolve) => {
+        release = resolve
+      })
+    })
+    const both = Promise.all([read(), read()])
+    release(GOOD)
+    expect(await both).toEqual([GOOD, GOOD])
+    expect(calls).toBe(1)
+  })
+})
+
 describe('toQuotaReading', () => {
   const window = (usedPercent: number) => ({ usedPercent }) as never
 

@@ -2,7 +2,7 @@ import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import type { ItemFields } from '../../shared/api-types'
 import type { Item } from '../sources/types'
-import { worktreePathKey, type ActivityDeps, type AgentActivity } from './agent-activity'
+import type { AgentState } from '../run/agent-rows'
 import { stripRefsHeads } from './runtime-facts'
 
 export type WorktreeInfo = {
@@ -16,7 +16,10 @@ export type WorktreeInfo = {
 // in, whose tab may still be open.
 export type SessionStep = { active: boolean; handle: string | null; paneKey: string | null }
 export type GitStatusCounts = { dirty: number; untracked: number }
-export type WorktreeFactDeps = ActivityDeps & {
+export type WorktreeFactDeps = {
+  // Read by the run launcher (Task 8), not by the facts.
+  paneState(paneKey: string): AgentState
+  terminalDraft(handle: string): Promise<string>
   listWorktrees(repoPath: string): Promise<WorktreeInfo[]>
   gitStatus(path: string): Promise<GitStatusCounts>
   gitOperation(path: string): Promise<string | null>
@@ -49,7 +52,7 @@ export function detectGitOperation(gitDir: string): string | null {
   return null
 }
 
-// The item has no worktree: a known absence, so nobody works or types there and no session is open.
+// The item has no worktree: a known absence, so no session is open there.
 export const NO_WORKTREE: ItemFields = {
   'worktree.path': null,
   'worktree.id': null,
@@ -58,8 +61,6 @@ export const NO_WORKTREE: ItemFields = {
   'worktree.dirty_count': null,
   'worktree.untracked_count': null,
   'worktree.git_operation': null,
-  'worktree.agent_state': 'idle',
-  'worktree.typing': false,
   'session.open_from_automation': false,
   'session.open_any': false
 }
@@ -115,15 +116,6 @@ async function sessionOpen(steps: SessionStep[], deps: WorktreeFactDeps): Promis
   return false
 }
 
-const UNKNOWN_ACTIVITY: AgentActivity = { state: null, typing: null }
-
-// worktreeActivity lists every worktree it was asked about (idle when no agent tab is there), so a
-// worktree missing from the map was never read: unknown, not idle, and `worktree: idle` fails closed.
-function activityFields(activity: Map<string, AgentActivity> | null, path: string): ItemFields {
-  const here = activity?.get(worktreePathKey(path)) ?? UNKNOWN_ACTIVITY
-  return { 'worktree.agent_state': here.state, 'worktree.typing': here.typing }
-}
-
 function countOrNull(status: Read<GitStatusCounts>, key: keyof GitStatusCounts): number | null {
   if (!status.ok) {
     return null
@@ -136,7 +128,6 @@ function countOrNull(status: Read<GitStatusCounts>, key: keyof GitStatusCounts):
 export async function worktreeFacts(
   wt: WorktreeInfo,
   automationId: string,
-  activity: Map<string, AgentActivity> | null,
   deps: WorktreeFactDeps
 ): Promise<ItemFields> {
   const [status, op, mine, any] = await Promise.all([
@@ -151,8 +142,7 @@ export async function worktreeFacts(
     'worktree.branch': wt.branch,
     'worktree.head': wt.head,
     'worktree.dirty_count': countOrNull(status, 'dirty'),
-    'worktree.untracked_count': countOrNull(status, 'untracked'),
-    ...activityFields(activity, wt.path)
+    'worktree.untracked_count': countOrNull(status, 'untracked')
   }
   if (op.ok) {
     fields['worktree.git_operation'] = op.value

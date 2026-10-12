@@ -36,10 +36,6 @@ export function mrOutcome(rule: MrRule, f: ItemFields): Outcome {
   return { ok: true, reason: MR_OK[rule] }
 }
 
-function sentence(text: string): string {
-  return text.charAt(0).toUpperCase() + text.slice(1)
-}
-
 // `worktree: idle` (gate.worktree_busy): Task 19c's activity pass sets worktree.busy to '' or the reason.
 export function idleOutcome(f: ItemFields): Outcome {
   if (typeof f['worktree.path'] !== 'string') {
@@ -50,7 +46,7 @@ export function idleOutcome(f: ItemFields): Outcome {
     return { ok: false, reason: "Couldn't tell whether an agent is working there" }
   }
   if (busy !== '') {
-    return { ok: false, reason: sentence(busy) }
+    return { ok: false, reason: busy }
   }
   return { ok: true, reason: 'No agent working and nobody typing' }
 }

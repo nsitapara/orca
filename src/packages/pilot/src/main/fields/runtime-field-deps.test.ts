@@ -69,44 +69,6 @@ describe('runtimeFieldDeps', () => {
     )
   })
 
-  it('lists only connected terminals that run an agent, with their pane keys', async () => {
-    const listTerminals = vi.fn(async () => ({
-      terminals: [
-        {
-          handle: 't1',
-          worktreePath: '/wt',
-          tabId: 'tab1',
-          leafId: 'l1',
-          connected: true,
-          agentIdentity: 'claude'
-        },
-        {
-          handle: 't2',
-          worktreePath: '/wt',
-          tabId: 'tab2',
-          leafId: 'l2',
-          connected: false,
-          agentIdentity: 'claude'
-        },
-        { handle: 't3', worktreePath: '/wt', tabId: 'tab3', leafId: 'l3', connected: true }
-      ],
-      totalCount: 3,
-      truncated: false
-    }))
-    const deps = runtimeFieldDeps(runtimeWith({ listTerminals }), store)
-    expect(await deps.agentTerminals()).toEqual([
-      { handle: 't1', worktreePath: '/wt', paneKey: 'tab1:l1' }
-    ])
-    expect(listTerminals).toHaveBeenCalledWith(undefined, 10_000, { includeVisualLayouts: false })
-  })
-
-  it('throws when the terminal list is cut short', async () => {
-    const listTerminals = async () => ({ terminals: [], totalCount: 20_000, truncated: true })
-    await expect(
-      runtimeFieldDeps(runtimeWith({ listTerminals }), store).agentTerminals()
-    ).rejects.toThrow('cut short')
-  })
-
   it('reads the unsent draft from the rendered screen', async () => {
     const readTerminal = vi.fn(async () => ({ handle: 't1', tail: [], draft: 'half a prompt' }))
     const deps = runtimeFieldDeps(runtimeWith({ readTerminal }), store)

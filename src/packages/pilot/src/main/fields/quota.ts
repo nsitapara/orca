@@ -22,27 +22,40 @@ export function toQuotaReading(
   }
 }
 
-// Same rule as worktree-gate's quota.py: cache 5 min; on a failed read use the last good reading from the
-// past hour; with nothing to go on, return nulls and the quota check lets the run start (fail-open by design).
+// Same rule as worktree-gate's quota.py: an answer, a failed read included, is reused for 5 min, so a
+// Codex that keeps failing or hanging is probed once per ttl, not once per tick; concurrent callers
+// share the read in flight. A failed read answers with the last good reading from the past hour; with
+// nothing to go on it answers nulls, and the quota check lets the run start (fail-open by design).
 export function cachedQuota(
   read: QuotaReader,
   ttlMs = 5 * 60_000,
   now: () => number = Date.now
 ): QuotaReader {
-  let last: { at: number; value: QuotaReading } | null = null
-  return async () => {
-    if (last && now() - last.at < ttlMs) {
-      return last.value
-    }
+  let good: { at: number; value: QuotaReading } | null = null
+  let answer: { at: number; value: QuotaReading } | null = null
+  let inflight: Promise<QuotaReading> | null = null
+  async function refresh(): Promise<QuotaReading> {
+    let value: QuotaReading
     try {
-      last = { at: now(), value: await read() }
-      return last.value
+      value = await read()
+      good = { at: now(), value }
     } catch {
-      if (last && now() - last.at < LAST_GOOD_MAX_AGE) {
-        return last.value
-      }
-      return NONE
+      value = good && now() - good.at < LAST_GOOD_MAX_AGE ? good.value : NONE
     }
+    answer = { at: now(), value }
+    return value
+  }
+  return async () => {
+    if (inflight) {
+      return inflight
+    }
+    if (answer && now() - answer.at < ttlMs) {
+      return answer.value
+    }
+    inflight = refresh().finally(() => {
+      inflight = null
+    })
+    return inflight
   }
 }
 

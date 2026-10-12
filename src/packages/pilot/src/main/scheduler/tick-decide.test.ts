@@ -251,7 +251,7 @@ describe('decideTickItems', () => {
     const pass = createPassFetchCache('pass-1', unusedGitlab)
     const out = await decideTickItems(def, EMPTY_PEOPLE, { ...deps, activity }, pass, 7)
     expect(summary(out)).toEqual([
-      ['mr:1', 'skipped', 'Someone is typing in Fix'],
+      ['mr:1', 'skipped', 'someone is typing in Fix'],
       ['mr:2', 'started', 'All checks pass'],
       ['mr:3', 'out_of_scope', 'MR is closed']
     ])

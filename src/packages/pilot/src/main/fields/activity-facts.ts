@@ -44,7 +44,8 @@ function activityFields(item: Item, busy: Map<string, string>): ItemFields {
   if (typeof path !== 'string') {
     return {}
   }
-  return { 'worktree.busy': busy.get(path) ?? '' }
+  const reason = busy.get(path)
+  return reason === undefined ? {} : { 'worktree.busy': reason }
 }
 
 // Runs in decideTickItems after the field engine and before the decision: the runtime is asked only by
@@ -52,14 +53,18 @@ function activityFields(item: Item, busy: Map<string, string>): ItemFields {
 export async function addActivityFacts(
   items: Item[],
   checks: readonly CheckDef[],
-  rt: ActivityRuntime
+  rt: ActivityRuntime,
+  inScope: (item: Item) => boolean = () => true
 ): Promise<{ items: Item[]; warnings: string[] }> {
   if (!checks.some((c) => c.kind === 'worktree_idle')) {
     return { items, warnings: [] }
   }
   const paths = [
     ...new Set(
-      items.map((i) => i.fields['worktree.path']).filter((p): p is string => typeof p === 'string')
+      items
+        .filter(inScope)
+        .map((i) => i.fields['worktree.path'])
+        .filter((p): p is string => typeof p === 'string')
     )
   ]
   const warnings: string[] = []

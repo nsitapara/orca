@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import {
+  listBusyTerminals,
   runtimeBusyReads,
   tabBusy,
   worktreeBusy,
@@ -56,6 +57,14 @@ describe('worktreeBusy (gate.worktree_busy)', () => {
       { typing: false, reason: '✳ Fix is working' }
     ],
     ["another worktree's tab", { ...TAB, worktreePath: '/wt/y' }, 'x', 'working', true, null],
+    [
+      'a path written with a trailing slash and dot segment',
+      { ...TAB, worktreePath: '/wt/./x/' },
+      'push it',
+      'done',
+      false,
+      { typing: true, reason: 'someone is typing in ✳ Fix' }
+    ],
     ['a shell tab', { ...TAB, agentIdentity: null }, 'x', 'working', true, null],
     ['a closed tab', { ...TAB, connected: false }, 'x', 'working', true, null],
     [
@@ -128,6 +137,26 @@ describe('tabBusy (gate.tab_busy)', () => {
   ] as [string, Partial<TabReads>, boolean][])('%s', async (_name, reads, want) => {
     const all: TabReads = { waitIdle: fail, orphaned: fail, screen: fail, ...reads }
     expect(await tabBusy('term_a', all)).toBe(want)
+  })
+})
+
+describe('truncated lists', () => {
+  it('listBusyTerminals throws on a cut-short terminal list', async () => {
+    const runtime = {
+      listTerminals: async () => ({ terminals: [], truncated: true, totalCount: 9 })
+    }
+    await expect(listBusyTerminals(runtime as unknown as BusyRuntime)).rejects.toThrow(
+      'terminal list cut short (9 terminals)'
+    )
+  })
+
+  it('agentStates throws on a cut-short worktree ps', async () => {
+    const runtime = {
+      getWorktreePs: async () => ({ worktrees: [], truncated: true, totalCount: 5 })
+    }
+    await expect(runtimeBusyReads(runtime as unknown as BusyRuntime).agentStates()).rejects.toThrow(
+      'worktree ps returned 0 of 5 worktrees'
+    )
   })
 })
 

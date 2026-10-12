@@ -2,7 +2,6 @@ import type { ItemFields } from '../../shared/api-types'
 import type { AutomationDefinition } from '../../shared/definition/types'
 import type { EngineEnv } from '../engine-env'
 import type { Item, RepoFacts } from '../sources/types'
-import { worktreeActivity } from './agent-activity'
 import { addCustomFields, type FieldCache } from './custom-fields'
 import { quotaFields, readQuotas, type QuotaReaders } from './quota'
 import type { ScriptRunner } from './script-runner'
@@ -54,17 +53,13 @@ export async function addBuiltinFields(
 ): Promise<Item[]> {
   const worktrees = await deps.listWorktrees(repo.path)
   const matched = items.map((item) => worktreeFor(item, worktrees, repo.path))
-  const activity = await worktreeActivity(
-    matched.flatMap((w) => (w ? [w.path] : [])),
-    deps
-  )
   const quota = quotaFields(await readQuotas(deps.quotas))
   const base = repoFields(repo)
   const facts = new Map<string, Promise<ItemFields>>()
   const factsOf = (wt: WorktreeInfo): Promise<ItemFields> => {
     let read = facts.get(wt.path)
     if (!read) {
-      read = worktreeFacts(wt, def.id, activity, deps)
+      read = worktreeFacts(wt, def.id, deps)
       facts.set(wt.path, read)
     }
     return read

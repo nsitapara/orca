@@ -68,6 +68,20 @@ describe('addActivityFacts', () => {
     expect(rt.terminals).toHaveBeenCalledTimes(1)
   })
 
+  it("reads only the in-scope items' worktrees, and leaves a missing answer absent", async () => {
+    const rt = runtime()
+    const draft = vi.fn(async () => '')
+    rt.reads = () => ({ draft, agentStates: async () => new Map(), tabBusy: async () => false })
+    const got = await addActivityFacts(
+      [item('a', '/wt/a'), item('b', '/wt/b')],
+      IDLE,
+      rt,
+      (i) => i.key === 'b'
+    )
+    expect(got.items.map((i) => i.fields['worktree.busy'])).toEqual([undefined, ''])
+    expect(draft).toHaveBeenCalledTimes(1)
+  })
+
   it('fails closed when the terminals cannot be listed', async () => {
     const rt = runtime({
       terminals: vi.fn(async () => {

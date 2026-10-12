@@ -42,7 +42,6 @@ export function fakeFieldDeps(over: Partial<FieldEngineDeps> = {}): FieldEngineD
     automationSessions: () => [],
     anySessions: () => [],
     terminalAlive: async () => false,
-    agentTerminals: async () => [],
     paneState: () => 'idle',
     terminalDraft: async () => '',
     quotas: { claude: NO_READING, codex: NO_READING },
