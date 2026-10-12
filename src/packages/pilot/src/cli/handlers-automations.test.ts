@@ -22,7 +22,7 @@ describe("Pilot's automation file commands", () => {
     ['automations list-yaml', {}, 'pilot.automations.list', undefined, LIST],
     ['automations reload', {}, 'pilot.automations.reload', undefined, LIST],
     [
-      'automations get',
+      'automations show-yaml',
       { id: 'fix-ci' },
       'pilot.automations.get',
       { id: 'fix-ci' },

@@ -17,7 +17,7 @@ export const PILOT_HANDLER_GROUPS: readonly HandlerGroup[] = [
     name: 'pilot-automation-files',
     keys: [
       'automations list-yaml',
-      'automations get',
+      'automations show-yaml',
       'automations reload',
       'automations enable',
       'automations disable'
