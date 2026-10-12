@@ -10,7 +10,8 @@ import { copyBundle, detailsFixture, rewriteBundle } from './__fixtures__/detail
 import { loadDetails } from './details-bundle'
 import { addInboxItem } from './inbox-add'
 import { ANSWER_BEING_APPLIED, HAS_DETAILS_SINCE, setInboxDetails } from './inbox-details'
-import { replyToInboxItem, type InboxDeps } from './inbox-service'
+import { buildCard, inboxDigest } from './card'
+import { listInbox, replyToInboxItem, type InboxDeps } from './inbox-service'
 import type { RunStatus } from '../../shared/api-types'
 
 const def = parseAutomationYaml(
@@ -214,5 +215,40 @@ describe('setInboxDetails', () => {
     expect(() => setInboxDetails(s.deps, s.id, bundle, opts)).toThrow(message)
     expect(s.store.inbox.get(s.id)).toEqual(before)
     expect(s.store.inbox.snapshot(s.id)).toBeNull()
+  })
+})
+
+describe('the Details summary chips', () => {
+  it('is derived when the bundle is loaded', () => {
+    const f = detailsFixture()
+    const { ref } = loadDetails(f.root, f.bundle)
+    expect(ref.summary).toEqual(expect.arrayContaining(['drafted fix']))
+    expect(ref.summary?.length).toBeLessThanOrEqual(4)
+  })
+
+  it('fills a ref stored without it when the list is built, once, leaving the digest and version alone', () => {
+    const { f, store, deps, id } = setup()
+    setInboxDetails(deps, id, f.bundle, OPEN)
+    const before = store.inbox.get(id)
+    const { summary, ...old } = before?.details ?? ({} as never)
+    store.inbox.edit(id, { details: old as never, digest: before?.digest ?? '' }, 150)
+    expect(store.inbox.get(id)?.details?.summary).toBeUndefined()
+    const stamp = store.inbox.get(id)
+    listInbox(deps, {})
+    const filled = store.inbox.get(id)
+    expect(filled?.details?.summary).toEqual(summary)
+    expect(filled?.digest).toBe(before?.digest)
+    expect(filled?.version).toBe(stamp?.version)
+    expect(filled?.updatedAt).toBe(stamp?.updatedAt)
+    listInbox(deps, {})
+    expect(store.inbox.get(id)).toEqual(filled)
+  })
+
+  it('is not part of the digest', () => {
+    const f = detailsFixture()
+    const { ref } = loadDetails(f.root, f.bundle)
+    const card = buildCard({ automationId: 'a', type: 'bug', title: 't' } as never, ref)
+    const { summary: _s, ...bare } = ref
+    expect(inboxDigest(card)).toBe(inboxDigest({ ...card, details: bare }))
   })
 })

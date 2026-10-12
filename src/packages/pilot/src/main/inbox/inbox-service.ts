@@ -124,6 +124,7 @@ export function listInbox(
 ): InboxListPayload {
   const people = deps.people()
   const person = filter.person
+  deps.store.inbox.fillSummaries()
   const items = deps.store.inbox
     .list({ status: filter.statuses ?? WAITING })
     .filter((i) => !person || personSees(i, person, people))

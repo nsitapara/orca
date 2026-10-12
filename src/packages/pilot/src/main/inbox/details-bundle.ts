@@ -18,6 +18,7 @@ import {
   type DetailsRef,
   type DetailsSnapshot
 } from '../../shared/details'
+import { summaryOf } from '../../shared/details-summary'
 import { isPromptControl } from './card'
 import { BLOCK_TYPES, BundleSchema, firstIssue, ReviewFileSchema } from './details-schema'
 
@@ -258,16 +259,19 @@ export function loadDetails(root: string | null, bundlePath: string): DetailsSna
       texts.push([ref, readReview(file, ref)])
     }
   }
+  const textsByRef = Object.fromEntries(texts)
+  const draft = draftOf(bundle)
   return {
     ref: {
       path: real,
       sha256: sha256(bytes),
       inlined: Object.fromEntries(texts.map(([ref, text]) => [ref, sha256(text)])),
       blocks: bundle.blocks.length,
-      ...draftOf(bundle)
+      ...draft,
+      summary: summaryOf(bundle, textsByRef, draft.drafted)
     },
     bundle,
-    texts: Object.fromEntries(texts)
+    texts: textsByRef
   }
 }
 
