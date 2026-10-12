@@ -30,6 +30,18 @@ describe('answersLine', () => {
     ])
   })
 
+  it("keeps an action's judgement note to one line", () => {
+    const line = answersLine('ci-1', 'ci-2-answer-7', [
+      {
+        item: item('in_c', 'Mark ready?', 'approve'),
+        revise: false,
+        needsAgent: 'two\n  pipelines\ndisagree'
+      }
+    ])
+    expect(line).not.toContain('\n')
+    expect(line).toContain('(approved; its action stopped for judgement: two pipelines disagree)')
+  })
+
   it('names Waiting on you when no run asked', () => {
     const line = answersLine(null, 'ci-2-answer-7', [
       { item: item('in_a', 'Which image?', 'e2e'), revise: false, needsAgent: null }

@@ -6,6 +6,8 @@ import { parseAutomationYaml } from '../../shared/definition/parse'
 import type { InboxItemRow } from '../../shared/api-types'
 import { PilotStore } from '../store/store'
 import { dispatchToAgent, type AgentDispatchDeps } from './answer-run'
+import { PromptNotSentError } from '../run/agent-step'
+import { UnrecordedLaunchError } from '../scheduler/tick-runner'
 import { DraftInProgressError } from './session-probe'
 import type { TerminalState } from './sessions'
 
@@ -58,6 +60,7 @@ function setup(state: TerminalState, over: Partial<AgentDispatchDeps> = {}) {
       .mockResolvedValue({ terminalHandle: 'term-2', paneKey: 'tab2:leaf', sessionId: 'sess-2' }),
     send: vi.fn().mockResolvedValue(undefined),
     mainCheckout: async () => '/main',
+    current: (item) => item,
     ...over
   }
   const item = {
@@ -173,11 +176,48 @@ describe('dispatchToAgent', () => {
           transcript: () => null
         }
       },
-      { holdReason: 'retry', holdDetail: 'the asking tab could not be read: runtime not ready' }
+      // Unreadable is busy (24a): a hold that doesn't count toward the dispatcher's tries.
+      {
+        holdReason: 'worktree_busy',
+        holdDetail: 'the asking tab could not be read: runtime not ready'
+      }
     ]
   ])('holds on %s', async (_name, over, held) => {
     const { deps, group } = setup('gone', over)
     expect(await dispatchToAgent(deps, group)).toEqual({ kind: 'held', hold: held })
+  })
+
+  it('reads a quota that fails as unknown, which lets the answers go (quota rules)', async () => {
+    const { deps, group } = setup('gone', {
+      quota: () => Promise.reject(new Error('usage endpoint down'))
+    })
+    expect(await dispatchToAgent(deps, group)).toMatchObject({ kind: 'dispatched' })
+  })
+
+  // Fix round 1 (req 9): the H10 look, the quota read and the main checkout are all awaited.
+  it('leaves out a card that moved on during the awaits, and sends nothing when none is left', async () => {
+    const moved = new Set<string>()
+    const { store, deps, group } = setup('gone', {
+      quota: async () => {
+        moved.add('in_b')
+        return { weekly: 1, session: 1 }
+      },
+      current: (item) => (moved.has(item.id) ? null : item)
+    })
+    const other = { ...group.answers[0].item, id: 'in_b', title: 'Retry once?' } as InboxItemRow
+    const two = {
+      ...group,
+      answers: [...group.answers, { item: other, revise: false, needsAgent: null }]
+    }
+    await dispatchToAgent(deps, two)
+    const prompt = vi.mocked(deps.open).mock.calls[0][0].prompt
+    expect(prompt).toContain('[in_a]')
+    expect(prompt).not.toContain('[in_b]')
+    moved.add('in_a')
+    vi.mocked(deps.open).mockClear()
+    expect(await dispatchToAgent(deps, two)).toEqual({ kind: 'nothing' })
+    expect(deps.open).not.toHaveBeenCalled()
+    expect(store.runs.get(`${RUN_ID}-2`)).toBeNull()
   })
 
   it('fails the answer run it opened when the launch fails', async () => {
@@ -210,6 +250,74 @@ describe('dispatchToAgent', () => {
       hold: { holdReason: 'typing', holdDetail: 'someone is typing in the tab that asked' }
     })
     expect(store.runs.get(RUN_ID)).toMatchObject({ status: 'cancelled' })
+  })
+
+  it('fails the answer run and retries when the asking tab refused the answers untyped', async () => {
+    const { store, deps, group } = setup('free', {
+      send: vi.fn().mockRejectedValue(new PromptNotSentError('terminal term-1 has no idle agent'))
+    })
+    expect(await dispatchToAgent(deps, group)).toEqual({
+      kind: 'held',
+      hold: { holdReason: 'retry', holdDetail: 'terminal term-1 has no idle agent' }
+    })
+    expect(store.runs.get(RUN_ID)).toMatchObject({ status: 'failed' })
+  })
+
+  // Fix round 1: once the answers may be with an agent, nothing sends them again on its own.
+  it('keeps the run going in the asking tab when the answers were typed but no turn was seen', async () => {
+    const { store, deps, group } = setup('free', {
+      send: vi.fn().mockRejectedValue(new Error("the agent didn't start a turn on the prompt"))
+    })
+    expect(await dispatchToAgent(deps, group)).toEqual({
+      kind: 'dispatched',
+      runId: RUN_ID,
+      route: 'resume',
+      sessionId: 'sess-1'
+    })
+    expect(store.runs.get(RUN_ID)?.status).toBe('running')
+    expect(store.runs.steps(RUN_ID)[0]).toMatchObject({
+      status: 'running',
+      terminalHandle: 'term-1',
+      paneKey: 'tab:leaf'
+    })
+    expect(store.events.forRun(RUN_ID).map((e) => e.kind)).toEqual([
+      'answer_run',
+      'answer_send_unconfirmed'
+    ])
+  })
+
+  it.each<[string, Partial<AgentDispatchDeps>, string]>([
+    [
+      'a tab Pilot opened has no pane to follow',
+      {
+        open: vi
+          .fn()
+          .mockRejectedValue(
+            new UnrecordedLaunchError('term-9', 'the runtime returned no pane to watch')
+          )
+      },
+      'terminal term-9: the runtime returned no pane to watch'
+    ],
+    [
+      'the run was closed while its agent started',
+      {},
+      'terminal term-2: the answer run was closed before its agent started'
+    ]
+  ])('hands the cards back, sending nothing again, when %s', async (name, over, detail) => {
+    const { store, deps, group } = setup('gone', over)
+    if (name.startsWith('the run was closed')) {
+      // As the stale-start sweep would, during a slow launch.
+      vi.mocked(deps.open).mockImplementationOnce(async (req) => {
+        store.runs.updateStep(req.runId, 0, { status: 'failed', finishedAt: NOW })
+        return { terminalHandle: 'term-2', paneKey: 'tab2:leaf', sessionId: null }
+      })
+    }
+    expect(await dispatchToAgent(deps, group)).toEqual({
+      kind: 'unfollowed',
+      runId: RUN_ID,
+      detail
+    })
+    expect(store.runs.get(RUN_ID)).toMatchObject({ status: 'failed' })
   })
 
   it('gives a retried dispatch in the same minute its own run', async () => {

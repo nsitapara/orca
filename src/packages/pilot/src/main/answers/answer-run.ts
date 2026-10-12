@@ -1,15 +1,18 @@
+import type { InboxItemRow, QueueState } from '../../shared/api-types'
 import type { AgentKind, AutomationDefinition } from '../../shared/definition/types'
 import type { QuotaReading } from '../fields/quota'
-import type { AgentSessionMode, AgentTerminalRequest, AgentTerminalResult } from '../run/launch'
+import type { AgentTerminalRequest, AgentTerminalResult } from '../run/launch'
 import type { PilotStore } from '../store/store'
+import { agentOf, askingRunOf, launchAnswerRun } from './answer-start'
 import { hold, quotaHold, type Hold } from './holds'
-import { answersLine, answersText, newSessionPrompt, type AgentAnswer } from './prompt'
-import { DraftInProgressError } from './session-probe'
+import { answersText, type AgentAnswer } from './prompt'
 import { chooseSession, type SessionProbe, type SessionTarget } from './sessions'
 
 // gate.py CLAIM_MINUTES: one automation's answers session has the worktree to itself this long.
 export const CLAIM_MS = 15 * 60_000
-const TYPING = 'someone is typing in the tab that asked'
+// quota.py: a reading that fails is unknown, and unknown lets automations run.
+const UNKNOWN_QUOTA: QuotaReading = { weekly: null, session: null }
+const QUEUED: readonly QueueState[] = ['not_ready', 'ready', 'held']
 
 export type AgentDispatchDeps = {
   store: PilotStore
@@ -21,6 +24,9 @@ export type AgentDispatchDeps = {
   // Types the answers into the asking session's own tab (answers/session-probe.ts sessionPromptSender).
   send(handle: string, prompt: string): Promise<void>
   mainCheckout(repo: string): Promise<string>
+  // The card as it is now if it still waits on this very answer, else null (currentAnswer): read right
+  // before the answer run is written, after every await of the dispatch.
+  current(item: InboxItemRow): InboxItemRow | null
 }
 export type AgentGroup = {
   def: AutomationDefinition
@@ -36,8 +42,11 @@ export type AgentDispatch =
       sessionId: string | null
     }
   | { kind: 'held'; hold: Hold }
-type AnswerRun = { id: string; label: string; itemKey: string }
-type Started = { handle: string; paneKey: string | null; sessionId: string | null; args: string[] }
+  // Every card moved on while the dispatch awaited (ticked, cleared, answered again, retired).
+  | { kind: 'nothing' }
+  // The answers reached an agent Pilot can't follow: they are never sent again on their own.
+  | { kind: 'unfollowed'; runId: string; detail: string }
+export type AnswerRun = { id: string; label: string; itemKey: string }
 
 const pad = (n: number): string => String(n).padStart(2, '0')
 
@@ -64,12 +73,18 @@ function liveAnswerRun(store: PilotStore, path: string, automationId: string): s
   return runs.find((r) => r.trigger === 'answer' && r.automationId === automationId)?.id ?? null
 }
 
-function agentOf(target: SessionTarget): AgentKind {
-  return target.kind === 'new' ? target.agent : target.asking.agent
-}
-
-function askingRunOf(group: AgentGroup, target: SessionTarget): string | null {
-  return target.kind === 'new' ? group.answers[0].item.runId : target.asking.runId
+// The card as it is now, if it still waits on this very answer: answered with the same answer, saved at
+// the same moment, and still queued. A card ticked, cleared, answered again or retired since is null.
+export function currentAnswer(store: PilotStore, item: InboxItemRow): InboxItemRow | null {
+  const now = store.inbox.get(item.id)
+  const was = item.answer
+  if (!now?.answer || !was || now.status !== 'answered' || now.answeredAt !== item.answeredAt) {
+    return null
+  }
+  if (now.answer.digest !== was.digest || now.answer.text !== was.text) {
+    return null
+  }
+  return store.queue.forInboxItem(item.id).some((r) => QUEUED.includes(r.state)) ? now : null
 }
 
 function createAnswerRun(
@@ -121,75 +136,8 @@ function createAnswerRun(
   return run
 }
 
-// The asking tab (its own process, under the args it was launched with), or a new terminal opened
-// with no args of its own: a fork of the asking session, or a new answers session.
-async function start(
-  deps: AgentDispatchDeps,
-  group: AgentGroup,
-  target: SessionTarget,
-  run: AnswerRun,
-  path: string
-): Promise<Started> {
-  const line = answersLine(askingRunOf(group, target), run.id, group.answers)
-  if (target.kind === 'resume') {
-    await deps.send(target.handle, line)
-    const { sessionId, launchArgs } = target.asking
-    return { handle: target.handle, paneKey: target.paneKey, sessionId, args: launchArgs ?? [] }
-  }
-  const prompt = target.kind === 'new' ? newSessionPrompt(group.def, run, target, line) : line
-  const session: AgentSessionMode =
-    target.kind === 'fork' ? { kind: 'fork', sessionId: target.sessionId } : { kind: 'new' }
-  const args: string[] = []
-  const opened = await deps.open({
-    runId: run.id,
-    stepIdx: 0,
-    stepName: 'answers',
-    automationId: group.def.id,
-    itemKey: run.itemKey,
-    powers: group.def.powers,
-    worktree: { id: null, path },
-    agent: agentOf(target),
-    prompt,
-    title: `${group.def.name} · answers`,
-    args,
-    session
-  })
-  return {
-    handle: opened.terminalHandle,
-    paneKey: opened.paneKey,
-    sessionId: opened.sessionId,
-    args
-  }
-}
-
-// Every caller of openAgentTerminal records the terminal and its launch args on its step (Task 8d).
-function recordRunning(deps: AgentDispatchDeps, runId: string, started: Started): void {
-  const recorded = deps.store.runs.updateStartingStep(runId, 0, {
-    status: 'running',
-    terminalHandle: started.handle,
-    launchArgs: started.args,
-    ...(started.paneKey ? { paneKey: started.paneKey } : {}),
-    ...(started.sessionId ? { sessionId: started.sessionId, sessionPinned: true } : {})
-  })
-  if (!recorded) {
-    throw new Error(`the answer run was closed before its agent started in ${started.handle}`)
-  }
-}
-
-function closeRun(
-  deps: AgentDispatchDeps,
-  runId: string,
-  status: 'failed' | 'cancelled',
-  outcome: string
-): void {
-  const at = deps.now()
-  const step = status === 'failed' ? 'failed' : 'skipped'
-  deps.store.runs.updateStep(runId, 0, { status: step, error: outcome, finishedAt: at })
-  deps.store.runs.update(runId, { status, outcome, finishedAt: at })
-}
-
 // apply.py start_agent, as an answer run of the asking run: held for a typing person, the quota or
-// another automation's claim on the worktree; a launch that fails is a retry (the dispatcher counts them).
+// another automation's claim on the worktree. Only the answers still waiting after every await go.
 export async function dispatchToAgent(
   deps: AgentDispatchDeps,
   group: AgentGroup
@@ -200,13 +148,20 @@ export async function dispatchToAgent(
   try {
     target = await chooseSession(group.def, items, deps.store, deps.probe, now)
   } catch (error) {
+    // Unreadable is busy (24a): a hold, not a failed try.
     const words = `the asking tab could not be read: ${messageOf(error)}`
-    return { kind: 'held', hold: hold('retry', words) }
+    return { kind: 'held', hold: hold('worktree_busy', words) }
   }
   if (target.kind === 'hold') {
     return { kind: 'held', hold: target.hold }
   }
-  const quota = quotaHold(agentOf(target), await deps.quota(agentOf(target)))
+  let reading = UNKNOWN_QUOTA
+  try {
+    reading = await deps.quota(agentOf(target))
+  } catch {
+    // As the quota check: a failed read is unknown.
+  }
+  const quota = quotaHold(agentOf(target), reading)
   if (quota) {
     return { kind: 'held', hold: quota }
   }
@@ -225,21 +180,19 @@ export async function dispatchToAgent(
       hold: hold('worktree_busy', `answer run ${live} is still working there`)
     }
   }
+  // Nothing is awaited from here until the prompt is built from these answers.
+  const answers = group.answers.flatMap((a) => {
+    const item = deps.current(a.item)
+    return item ? [{ ...a, item }] : []
+  })
+  if (answers.length === 0) {
+    return { kind: 'nothing' }
+  }
   const claimKey = group.worktreePath ?? `${path}#${group.def.id}`
   if (!deps.store.queue.claim(claimKey, group.def.id, now + CLAIM_MS, now)) {
     return { kind: 'held', hold: hold('claimed', 'another automation is applying answers there') }
   }
-  const run = createAnswerRun(deps, group, target, path, now)
-  try {
-    const started = await start(deps, group, target, run, path)
-    recordRunning(deps, run.id, started)
-    return { kind: 'dispatched', runId: run.id, route: target.kind, sessionId: started.sessionId }
-  } catch (error) {
-    if (error instanceof DraftInProgressError) {
-      closeRun(deps, run.id, 'cancelled', `Not sent: ${TYPING}`)
-      return { kind: 'held', hold: hold('typing', TYPING) }
-    }
-    closeRun(deps, run.id, 'failed', `Couldn't start: ${messageOf(error)}`)
-    return { kind: 'held', hold: hold('retry', messageOf(error)) }
-  }
+  const still = { ...group, answers }
+  const run = createAnswerRun(deps, still, target, path, now)
+  return launchAnswerRun(deps, still, target, run, path)
 }

@@ -10,7 +10,15 @@ import { addInboxItem } from '../inbox/inbox-add'
 import { resolveInboxItem, type InboxDeps } from '../inbox/inbox-service'
 import type { MrBlock } from '../inbox/mr-state'
 import { PilotStore } from '../store/store'
-import { AnswerDispatcher, answerRunEnded, MAX_ATTEMPTS, type DispatcherDeps } from './dispatcher'
+import { UnrecordedLaunchError } from '../scheduler/tick-runner'
+import { currentAnswer } from './answer-run'
+import {
+  AnswerDispatcher,
+  answerRunEnded,
+  ANSWER_RUN_STOPPED,
+  MAX_ATTEMPTS,
+  type DispatcherDeps
+} from './dispatcher'
 import type { HoldDeps } from './holds'
 import { saveAnswer, SETTLE_MS } from './save'
 
@@ -116,7 +124,8 @@ function setup(over: Over = {}) {
       quota: async () => ({ weekly: 1, session: 1 }),
       open: open as never,
       send: vi.fn(),
-      mainCheckout: async () => '/main'
+      mainCheckout: async () => '/main',
+      current: (item) => currentAnswer(store, item)
     },
     log: () => {}
   }
@@ -134,6 +143,7 @@ function setup(over: Over = {}) {
   return {
     store,
     inbox,
+    deps,
     open,
     push,
     holds,
@@ -278,6 +288,37 @@ describe('AnswerDispatcher', () => {
     expect(s.store.inbox.get(again)?.answer?.text).toBe('skip')
   })
 
+  // Fix round 1 (req 9): dispatchToAgent awaits the tab, the quota and the checkout before the prompt.
+  it("leaves a card ticked during the quota read out of the agent's prompt", async () => {
+    const s = setup()
+    const first = s.answer(QUESTION, 'e2e')
+    const second = s.answer({ ...QUESTION, title: 'Retry once?' }, 'yes')
+    s.settle()
+    s.deps.agents.quota = async () => {
+      resolveInboxItem(s.inbox, second, 'done: by hand')
+      return { weekly: 1, session: 1 }
+    }
+    expect(await s.dispatcher.pass()).toMatchObject({ agents: 1 })
+    const prompt = (s.open.mock.calls[0] as unknown as [{ prompt: string }])[0].prompt
+    expect(prompt).toContain(`[${first}]`)
+    expect(prompt).not.toContain(`[${second}]`)
+  })
+
+  it('hands the cards back when their answers went to an agent Pilot cannot follow', async () => {
+    const { store, open, dispatcher, answer, settle } = setup({
+      open: async () => {
+        throw new UnrecordedLaunchError('term-9', 'the runtime returned no pane to watch')
+      }
+    })
+    const id = answer(QUESTION, 'e2e')
+    settle()
+    expect(await dispatcher.pass()).toMatchObject({ reasked: 1, agents: 0 })
+    expect(store.inbox.get(id)).toMatchObject({ status: 'open', answer: null })
+    expect(store.inbox.get(id)?.replies[0]).toContain('terminal term-9')
+    await dispatcher.pass()
+    expect(open).toHaveBeenCalledTimes(1)
+  })
+
   it(`retries a failed dispatch, then marks it failed after ${MAX_ATTEMPTS} tries`, async () => {
     const { store, dispatcher, answer, settle } = setup({
       open: async () => {
@@ -308,6 +349,32 @@ describe('AnswerDispatcher', () => {
 })
 
 describe('AnswerDispatcher.applyNow (apply.py now)', () => {
+  it('runs one more pass after a pass already running, so hurried answers go now', async () => {
+    const s = setup()
+    const first = s.answer(QUESTION, 'e2e')
+    s.settle()
+    let reached = false
+    let release = () => {}
+    s.holds.inFlight = () => {
+      if (reached) {
+        return Promise.resolve(null)
+      }
+      reached = true
+      return new Promise((resolve) => (release = () => resolve(null)))
+    }
+    const running = s.dispatcher.pass()
+    await vi.waitFor(() => expect(reached).toBe(true))
+    const second = s.answer({ ...QUESTION, title: 'Retry once?' }, 'yes')
+    const hurried = s.dispatcher.applyNow({ ids: [second], approver: false })
+    expect(s.dispatcher.applyNow({ approver: false })).toBe(hurried)
+    release()
+    expect(await running).toMatchObject({ agents: 1 })
+    expect(await hurried).toMatchObject({ agents: 1 })
+    const prompts = s.open.mock.calls.map((c) => (c as unknown as [{ prompt: string }])[0].prompt)
+    expect(prompts[0]).toContain(`[${first}]`)
+    expect(prompts[1]).toContain(`[${second}]`)
+  })
+
   it('skips the settle of the answers it names, then runs a pass', async () => {
     const { store, open, dispatcher, answer } = setup()
     const first = answer(QUESTION, 'e2e')
@@ -335,7 +402,7 @@ describe('answerRunEnded (G6)', () => {
   // An answer run that carried one dispatched answer, ended with these outputs and this status.
   function ended(
     outputs: Record<string, string>,
-    status: 'done' | 'needs_you' | 'failed' | 'timed_out' = 'done'
+    status: 'done' | 'needs_you' | 'failed' | 'timed_out' | 'cancelled' = 'done'
   ) {
     const s = setup()
     const id = s.answer(QUESTION, 'e2e')
@@ -381,12 +448,35 @@ describe('answerRunEnded (G6)', () => {
     [
       'leaves it open with a question',
       { item_status: 'open', reply: 'Which image:\n- [ ] e2e or unit?' },
-      { status: 'open', replies: ['Which image: - [ ] e2e or unit?'] }
+      {
+        status: 'open',
+        answer: null,
+        answeredAt: null,
+        replies: ['Which image: - [ ] e2e or unit?']
+      }
     ]
   ])('a run that %s', (_name, outputs, expected) => {
     const { store, id, end } = ended(outputs)
     end()
     expect(store.inbox.get(id)).toMatchObject(expected)
+  })
+
+  it('reopens a card without a reply, logging no empty reply', () => {
+    const { store, id, end } = ended({ item_status: 'open' })
+    end()
+    expect(store.inbox.get(id)).toMatchObject({ status: 'open', answer: null, replies: [] })
+    expect(store.events.list({ kinds: ['item_replied'] })).toEqual([])
+  })
+
+  it('hands the card back, never restarting it, when Nish stopped the answer run', () => {
+    const { store, id, row, end } = ended({}, 'cancelled')
+    end()
+    expect(store.inbox.get(id)).toMatchObject({
+      status: 'open',
+      answer: null,
+      replies: [ANSWER_RUN_STOPPED]
+    })
+    expect(store.queue.get(row.id)).toMatchObject({ state: 'dispatched', attempts: 0 })
   })
 
   it('closes the card of a run that ended waiting on new cards it filed', () => {

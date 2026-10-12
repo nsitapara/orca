@@ -27,9 +27,17 @@ export type KnownTerminal = { handle: string; paneKey: string | null }
 // typing; other: an idle agent running another session; busy: working, waiting, at a permission
 // prompt, typed into, or unreadable; gone: closed, or its agent exited.
 export type SessionTerminalState = 'free' | 'other' | 'busy' | 'gone'
+// A send that typed nothing into the terminal (no idle agent, a draft, the runtime refused it). Any other
+// failure of a send may have left the prompt with the agent.
+export class PromptNotSentError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'PromptNotSentError'
+  }
+}
 export type SessionTerminals = {
   state(terminal: KnownTerminal, sessionId: string): Promise<SessionTerminalState>
-  // Types the prompt in; refuses unless an idle agent is still in the foreground right then.
+  // Types the prompt in; refuses (PromptNotSentError) unless an idle agent is still in the foreground.
   send(handle: string, prompt: string): Promise<void>
   close(handle: string): Promise<void>
 }

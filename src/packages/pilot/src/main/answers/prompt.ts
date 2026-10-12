@@ -1,5 +1,6 @@
 import type { InboxItemRow } from '../../shared/api-types'
 import type { AutomationDefinition } from '../../shared/definition/types'
+import { oneLine } from '../inbox/card'
 
 export type AgentAnswer = { item: InboxItemRow; revise: boolean; needsAgent: string | null }
 
@@ -14,7 +15,8 @@ function note(answer: AgentAnswer): string {
     return REVISE
   }
   if (answer.needsAgent) {
-    return ` (approved; its action stopped for judgement: ${answer.needsAgent})`
+    // The action's own words: one line, like everything in a typed prompt.
+    return ` (approved; its action stopped for judgement: ${oneLine(answer.needsAgent)})`
   }
   return ''
 }

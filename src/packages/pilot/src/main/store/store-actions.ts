@@ -4,7 +4,10 @@ import type { ActionPhase, ActionRunRow, ActionRunStatus } from '../../shared/ap
 export type NewActionRun = Pick<
   ActionRunRow,
   'inboxItemId' | 'runId' | 'action' | 'args' | 'digest' | 'phase' | 'dryRun' | 'startedAt'
->
+> & {
+  // The process running it (this one unless said): main and orcad both open Pilot's store.
+  writer?: number
+}
 
 function toActionRun(r: Record<string, unknown>): ActionRunRow {
   return {
@@ -26,6 +29,31 @@ function toActionRun(r: Record<string, unknown>): ActionRunRow {
 // Why an attempt a quit or a crash cut off was closed: it may or may not have done its effect.
 export const ACTION_INTERRUPTED = 'interrupted: Pilot stopped while it ran'
 
+function writerOf(output: string | null): number | null {
+  try {
+    const writer = (JSON.parse(output ?? 'null') as { writer?: unknown } | null)?.writer
+    return typeof writer === 'number' ? writer : null
+  } catch {
+    return null
+  }
+}
+
+// Whether the process that wrote a running row is gone. At start nothing here has run an action yet, so
+// this process's own pid (reused from a dead one), or no pid recorded, is gone; otherwise a process with
+// that pid exists unless the OS says there's none (EPERM: another user's, so alive). A reused pid reads
+// as alive: the row stays running, never closed under a live writer.
+export function writerGone(pid: number | null): boolean {
+  if (pid === null || pid === process.pid) {
+    return true
+  }
+  try {
+    process.kill(pid, 0)
+    return false
+  } catch (error) {
+    return (error as NodeJS.ErrnoException).code !== 'EPERM'
+  }
+}
+
 // Every action attempt is a row (contract §10), refused ones included.
 export class ActionRunStore {
   constructor(private readonly db: Database) {}
@@ -33,7 +61,7 @@ export class ActionRunStore {
   start(a: NewActionRun): number {
     const r = this.db
       .prepare(
-        "INSERT INTO action_runs (inbox_item_id, run_id, action, args_json, digest, phase, status, dry_run, started_at) VALUES (?, ?, ?, ?, ?, ?, 'running', ?, ?)"
+        "INSERT INTO action_runs (inbox_item_id, run_id, action, args_json, digest, phase, status, output, dry_run, started_at) VALUES (?, ?, ?, ?, ?, ?, 'running', ?, ?, ?)"
       )
       .run(
         a.inboxItemId,
@@ -42,6 +70,8 @@ export class ActionRunStore {
         JSON.stringify(a.args),
         a.digest,
         a.phase,
+        // While it runs, its output names the process running it; finish() replaces it.
+        JSON.stringify({ writer: a.writer ?? process.pid }),
         a.dryRun ? 1 : 0,
         a.startedAt
       )
@@ -59,9 +89,14 @@ export class ActionRunStore {
       .run(status, output, at, id)
   }
 
-  // At start: an attempt still 'running' from before this process was cut off. Left running, it would
-  // block its card for ever (powers.ts cardToRun: "is already running"). Returns how many.
-  interruptRunning(startedBefore: number, at: number): number {
+  // At start: attempts still 'running' whose process is gone (`writerGone(pid)`; null when no writer was
+  // recorded) were cut off by a quit or a crash. Left running, each would block its card for ever
+  // (powers.ts cardToRun: "is already running"); another live process's attempts are left alone.
+  interruptRunning(
+    startedBefore: number,
+    at: number,
+    writerGone: (pid: number | null) => boolean
+  ): number {
     const output = JSON.stringify({
       outcome: 'failed',
       detail: ACTION_INTERRUPTED,
@@ -69,12 +104,19 @@ export class ActionRunStore {
       log: null,
       onYou: false
     })
-    const r = this.db
-      .prepare(
-        "UPDATE action_runs SET status = 'failed', output = ?, finished_at = ? WHERE status = 'running' AND started_at < ?"
-      )
-      .run(output, at, startedBefore)
-    return Number(r.changes)
+    const running = this.db
+      .prepare("SELECT id, output FROM action_runs WHERE status = 'running' AND started_at < ?")
+      .all(startedBefore) as { id: number; output: string | null }[]
+    const close = this.db.prepare(
+      "UPDATE action_runs SET status = 'failed', output = ?, finished_at = ? WHERE id = ? AND status = 'running'"
+    )
+    let closed = 0
+    for (const row of running) {
+      if (writerGone(writerOf(row.output))) {
+        closed += Number(close.run(output, at, row.id).changes)
+      }
+    }
+    return closed
   }
 
   get(id: number): ActionRunRow | null {

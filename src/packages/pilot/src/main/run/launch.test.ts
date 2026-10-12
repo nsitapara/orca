@@ -7,7 +7,7 @@ import type { WorktreeFactDeps } from '../fields/worktree-facts'
 import { UnrecordedLaunchError } from '../scheduler/tick-runner'
 import { PilotStore } from '../store/store'
 import type { PilotAgentLaunchOptions } from './agent-launch-hook'
-import type { SessionTerminalState } from './agent-step'
+import { PromptNotSentError, type SessionTerminalState } from './agent-step'
 import {
   makeLauncher,
   openAgentTerminal,
@@ -397,8 +397,24 @@ describe('runtimeLauncherDeps', () => {
     const sendTerminalAgentPrompt = vi.fn()
     const runtime = runtimeSeeing(look, { sendTerminalAgentPrompt })
     const deps = runtimeLauncherDeps(runtime, idleWorktrees, () => 1, runs())
-    await expect(deps.sessionTerminals?.send('t', 'go')).rejects.toThrow('no idle agent')
+    const refused = deps.sessionTerminals?.send('t', 'go')
+    await expect(refused).rejects.toThrow('no idle agent')
+    await expect(refused).rejects.toBeInstanceOf(PromptNotSentError)
     expect(sendTerminalAgentPrompt).not.toHaveBeenCalled()
+  })
+
+  // Task 24 fix: an answers dispatch must know whether the prompt may have reached the agent.
+  it('sessionTerminals.send says nothing was typed when the runtime refuses the prompt, and not when no turn starts', async () => {
+    const sendTerminalAgentPrompt = vi
+      .fn()
+      .mockResolvedValueOnce({ accepted: false, refusedReason: 'permission' })
+      .mockResolvedValueOnce({ accepted: true, prompt: { stages: ['input_accepted'] } })
+    const runtime = runtimeSeeing({}, { sendTerminalAgentPrompt })
+    const deps = runtimeLauncherDeps(runtime, idleWorktrees, () => 1, runs())
+    await expect(deps.sessionTerminals?.send('t', 'go')).rejects.toBeInstanceOf(PromptNotSentError)
+    const unconfirmed = deps.sessionTerminals?.send('t', 'go')
+    await expect(unconfirmed).rejects.toThrow("didn't start a turn")
+    await expect(unconfirmed).rejects.not.toBeInstanceOf(PromptNotSentError)
   })
 
   it('sessionTerminals.send types the prompt as the driver, and fails when no turn starts', async () => {
@@ -513,7 +529,11 @@ describe('openAgentTerminal', () => {
         session: { kind: 'new' },
         worktree: { id: null, path: '/wt' }
       })
-    ).rejects.toThrow('no pane to watch')
+    ).rejects.toMatchObject({
+      name: 'UnrecordedLaunchError',
+      terminalHandle: 'term_8',
+      message: 'the runtime returned no pane to watch'
+    })
     expect(launchAgentTerminal.mock.calls[0][0]).toBe('path:/wt')
   })
 })

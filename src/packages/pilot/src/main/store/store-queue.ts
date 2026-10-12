@@ -107,6 +107,14 @@ export class QueueStore {
       .map((r) => toQueueRow(r as never))
   }
 
+  // The rows an answer run was sent (answerRunEnded): one run's, not the whole history.
+  forRun(runId: string): QueueRow[] {
+    return this.db
+      .prepare('SELECT * FROM queue WHERE dispatched_run_id = ? ORDER BY id')
+      .all(runId)
+      .map((r) => toQueueRow(r as never))
+  }
+
   // A patch that names holdReason or holdDetail rewrites the one hold_reason column: a new reason
   // without a detail clears the old words, a detail alone keeps the current reason.
   update(id: number, patch: QueuePatch, at: number): void {

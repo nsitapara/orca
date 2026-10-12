@@ -64,6 +64,13 @@ function hooks(over: Partial<StepPollHooks> = {}) {
 }
 
 describe('pollRunningSteps', () => {
+  it('asks the probe about rows since the step started', async () => {
+    const store = storeWithRunningStep()
+    const status = vi.fn(async () => 'working' as const)
+    await pollRunningSteps(store, { ...probe('working'), status }, noCost, () => 9, hooks())
+    expect(status).toHaveBeenCalledWith('term_1', 'pane-term_1', 1)
+  })
+
   it('records the session id while the agent works', async () => {
     const store = storeWithRunningStep()
     await pollRunningSteps(store, probe('working'), noCost, () => 5, hooks())
@@ -310,6 +317,15 @@ describe('runtimeStepProbe.status', () => {
       ]
     )
     expect(p.session('pane')).toEqual({ id: 'new', transcriptPath: '/t' })
+  })
+
+  // A step sent into an earlier step's terminal: that turn's rows aren't this step's (Task 24 fix).
+  it('reads only rows received since the step started, else asks the terminal', async () => {
+    const show = vi.fn(async () => ({}))
+    const p = probeFor(show, [{ state: 'done', receivedAt: 5 }])
+    expect(await p.status('h', 'pane', 10)).toBe('working')
+    expect(show).toHaveBeenCalledTimes(1)
+    expect(await p.status('h', 'pane', 5)).toBe('done')
   })
 
   it('reads the status row when there is one, without asking the terminal', async () => {

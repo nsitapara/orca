@@ -6,7 +6,8 @@ import { getAppEnvironment } from '../../../../shared/app-environment'
 import type { PilotStatus } from '../shared/api-types'
 import type { AgentKind } from '../shared/definition/types'
 import { actBridge } from './actions/act-bridge'
-import { answerRunEnded, type AnswerDispatcher } from './answers/dispatcher'
+import { answerRunEnded } from './answers/answer-run-end'
+import type { AnswerDispatcher } from './answers/dispatcher'
 import { wireAnswerDispatcher } from './answers/wiring'
 import { buildActionCatalog } from './actions/catalog'
 import type { ActionCatalog } from './actions/types'
@@ -39,6 +40,7 @@ import { createLinearWriter } from './linear-connector/linear-writer'
 import { glabApiForRepo } from './sources/gitlab-api'
 import { registerPilotSources } from './sources/register-sources'
 import { PilotStore } from './store/store'
+import { writerGone } from './store/store-actions'
 import { VaultExporter } from './vault/export'
 
 export type PilotContext = {
@@ -115,6 +117,11 @@ function openPilot(
   // Before the definitions load: a where clause of these kinds validates against their schemas.
   registerPilotSources({ runtime, store })
   const kept = store.housekeep(now())
+  // Any process may run actions, and main and orcad may share a store: only a gone writer's are closed.
+  const interrupted = store.actions.interruptRunning(now(), now(), writerGone)
+  if (interrupted > 0) {
+    log(`[pilot] store: ${interrupted} action(s) a stopped process left running marked failed`)
+  }
   if (kept.interrupted > 0 || kept.pruned > 0) {
     log(
       `[pilot] store: ${kept.interrupted} interrupted tick(s) closed, ${kept.pruned} tick(s) older than 30 days removed`
@@ -232,10 +239,6 @@ function openPilot(
   // The attach hooks decide (pilotSchedulerEnabled); a caller that doesn't say gets no scheduler.
   if (options.schedulerEnabled ?? false) {
     sweepStaleStarts(store, now, log)
-    const interrupted = store.actions.interruptRunning(now(), now())
-    if (interrupted > 0) {
-      log(`[pilot] store: ${interrupted} action(s) a stop interrupted marked failed`)
-    }
     scheduler.start()
   } else {
     log(`[pilot] scheduler off in ${host.processKind} (PILOT_SCHEDULER=on runs it here)`)

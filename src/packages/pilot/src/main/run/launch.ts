@@ -3,7 +3,11 @@ import type { OrcaRuntimeService } from '../../../../../main/runtime/orca-runtim
 import type { AgentKind, StepDef } from '../../shared/definition/types'
 import { runFields } from '../../shared/template'
 import type { WorktreeFactDeps } from '../fields/worktree-facts'
-import type { LaunchRequest, LaunchResult } from '../scheduler/tick-runner'
+import {
+  UnrecordedLaunchError,
+  type LaunchRequest,
+  type LaunchResult
+} from '../scheduler/tick-runner'
 import type { PilotStore } from '../store/store'
 import { stepKindOf } from '../store/store-advance'
 import type { RunStore } from '../store/store-runs'
@@ -13,6 +17,7 @@ import {
   launchAgentStep,
   type AgentStepDeps,
   type AgentStepRequest,
+  PromptNotSentError,
   type KnownTerminal,
   type SessionTerminals,
   type SessionTerminalState
@@ -174,7 +179,8 @@ export async function openAgentTerminal(
   const selector = req.worktree.id ? `id:${req.worktree.id}` : `path:${req.worktree.path}`
   const terminal = await runtime.launchAgentTerminal(selector, opts)
   if (!terminal.paneKey) {
-    throw new Error('the runtime returned no pane to watch')
+    // The agent started with its prompt, in a terminal nothing can follow.
+    throw new UnrecordedLaunchError(terminal.handle, 'the runtime returned no pane to watch')
   }
   return {
     terminalHandle: terminal.handle,
@@ -262,15 +268,23 @@ async function sendToIdleAgent(
   handle: string,
   prompt: string
 ): Promise<void> {
-  const agent = await runtime.getTerminalAgentStatus(handle)
+  const agent = await runtime.getTerminalAgentStatus(handle).catch((error: unknown) => {
+    throw new PromptNotSentError(`terminal ${handle} could not be read: ${messageOf(error)}`)
+  })
   if (!agent.isRunningAgent || BUSY_STATUS.has(agent.status ?? '')) {
-    throw new Error(`terminal ${handle} has no idle agent to take the prompt`)
+    throw new PromptNotSentError(`terminal ${handle} has no idle agent to take the prompt`)
   }
   const sent = await runtime.sendTerminalAgentPrompt(handle, prompt, {
     inputKind: 'driving',
     observationTimeoutMs: 30_000
   })
-  if (!sent.accepted || !sent.prompt?.stages.includes('turn_started')) {
+  if (!sent.accepted) {
+    throw new PromptNotSentError(
+      `terminal ${handle} refused the prompt (${sent.refusedReason ?? 'no reason'})`
+    )
+  }
+  // Typed, but no turn seen: the prompt may still be with the agent.
+  if (!sent.prompt?.stages.includes('turn_started')) {
     throw new Error("the agent didn't start a turn on the prompt")
   }
 }

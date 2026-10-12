@@ -2,10 +2,11 @@ import { readdirSync, statSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { basename, join } from 'node:path'
 import type { AgentKind } from '../../shared/definition/types'
-import type { SessionTerminals } from '../run/agent-step'
+import { PromptNotSentError, type SessionTerminals } from '../run/agent-step'
 import type { SessionProbe, TranscriptFacts } from './sessions'
 
-export class DraftInProgressError extends Error {
+// Nothing was typed: someone's draft is in the input.
+export class DraftInProgressError extends PromptNotSentError {
   constructor(handle: string) {
     super(`unsent text in the input of ${handle}`)
     this.name = 'DraftInProgressError'
@@ -119,7 +120,14 @@ export function sessionPromptSender(
   deps: Pick<SessionLookDeps, 'terminals' | 'draft'>
 ): (handle: string, prompt: string) => Promise<void> {
   return async (handle, prompt) => {
-    if ((await deps.draft(handle)).trim()) {
+    let draft: string
+    try {
+      draft = await deps.draft(handle)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      throw new PromptNotSentError(`the input of ${handle} could not be read: ${message}`)
+    }
+    if (draft.trim()) {
       throw new DraftInProgressError(handle)
     }
     await deps.terminals.send(handle, prompt)
