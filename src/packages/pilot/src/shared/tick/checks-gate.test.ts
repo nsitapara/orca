@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import type { ItemFields } from '../api-types'
-import { mrOutcome, type MrRule } from './checks-gate'
+import {
+  gateCheckOutcome,
+  idleOutcome,
+  mrOutcome,
+  sessionOutcome,
+  type MrRule
+} from './checks-gate'
 
 describe('mrOutcome', () => {
   it.each([
@@ -46,5 +52,65 @@ describe('mrOutcome', () => {
 
   it('refuses an unknown rule instead of passing', () => {
     expect(mrOutcome('whatever' as MrRule, { 'mr.draft_block': '' }).ok).toBe(false)
+  })
+})
+
+describe('idleOutcome', () => {
+  it.each([
+    ['no worktree yet', {}, true, 'No worktree yet, so nothing runs there'],
+    [
+      'idle',
+      { 'worktree.path': '/wt/x', 'worktree.busy': '' },
+      true,
+      'No agent working and nobody typing'
+    ],
+    [
+      'typing',
+      { 'worktree.path': '/wt/x', 'worktree.busy': 'someone is typing in ✳ Fix' },
+      false,
+      'Someone is typing in ✳ Fix'
+    ],
+    [
+      'unknown',
+      { 'worktree.path': '/wt/x' },
+      false,
+      "Couldn't tell whether an agent is working there"
+    ]
+  ] as [string, ItemFields, boolean, string][])('%s', (_name, fields, ok, reason) => {
+    expect(idleOutcome(fields)).toEqual({ ok, reason })
+  })
+})
+
+describe('sessionOutcome', () => {
+  it.each([
+    [
+      'automation',
+      { 'session.open_from_automation': true },
+      false,
+      'A session from this automation is still open there'
+    ],
+    ['automation', { 'session.open_from_automation': false }, true, 'No session open'],
+    [
+      'any',
+      { 'session.open_any': true },
+      false,
+      'A session from an automation is still open there'
+    ],
+    ['any', { 'session.open_any': false }, true, 'No session open'],
+    ['any', {}, false, "Couldn't tell whether a session is open"]
+  ] as ['automation' | 'any', ItemFields, boolean, string][])(
+    '%s with %j',
+    (scope, fields, ok, reason) => {
+      expect(sessionOutcome(scope, fields)).toEqual({ ok, reason })
+    }
+  )
+
+  it('gateCheckOutcome routes each kind', () => {
+    expect(
+      gateCheckOutcome({ kind: 'session_none_open', scope: 'any' }, { 'session.open_any': false })
+        .ok
+    ).toBe(true)
+    expect(gateCheckOutcome({ kind: 'worktree_idle' }, {}).ok).toBe(true)
+    expect(gateCheckOutcome({ kind: 'mr', rule: 'mine' }, { 'mr.owner_block': '' }).ok).toBe(true)
   })
 })

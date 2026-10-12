@@ -90,44 +90,37 @@ describe('worktree checks', () => {
     [
       'idle',
       { kind: 'worktree_idle' },
-      { 'worktree.agent_state': 'idle', 'worktree.typing': false },
+      { 'worktree.path': '/wt/a', 'worktree.busy': '' },
       true,
       'No agent working and nobody typing'
     ],
     [
       'someone typing',
       { kind: 'worktree_idle' },
-      { 'worktree.agent_state': 'idle', 'worktree.typing': true },
+      { 'worktree.path': '/wt/a', 'worktree.busy': 'someone is typing in ✳ Fix' },
       false,
-      'Someone is typing in an agent tab there'
-    ],
-    [
-      'typing unknown',
-      { kind: 'worktree_idle' },
-      { 'worktree.agent_state': 'idle', 'worktree.typing': null },
-      false,
-      "Couldn't tell whether someone is typing there"
+      'Someone is typing in ✳ Fix'
     ],
     [
       'an agent working',
       { kind: 'worktree_idle' },
-      { 'worktree.agent_state': 'working', 'worktree.typing': false },
+      { 'worktree.path': '/wt/a', 'worktree.busy': '✳ Fix is working' },
       false,
-      'An agent is working there'
+      '✳ Fix is working'
     ],
     [
-      'an agent waiting',
+      'busy unknown',
       { kind: 'worktree_idle' },
-      { 'worktree.agent_state': 'waiting', 'worktree.typing': false },
+      { 'worktree.path': '/wt/a' },
       false,
-      'An agent there is waiting for input'
+      "Couldn't tell whether an agent is working there"
     ],
     [
-      'agent state unknown',
+      'no worktree yet',
       { kind: 'worktree_idle' },
-      { 'worktree.agent_state': null, 'worktree.typing': false },
-      false,
-      "Couldn't read the agents' state there"
+      {},
+      true,
+      'No worktree yet, so nothing runs there'
     ]
   ])('%s', (_name, c, fields, ok, reason) => {
     expect(run(c, fields)).toEqual([ok, reason])
