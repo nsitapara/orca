@@ -32,6 +32,8 @@ Quit Pilot, then:
 
 ## Migrating an automation
 
+This is how 05 moved onto the M1 engine, kept for its shadow-and-cut-over steps. Every job has since been ported by the build plan "Pilot: every job on the YAML engine" (Tasks 34–46). `go-live-check.mjs` checks them all together (see "Automations on the YAML engine").
+
 How one of the old sweeps that real Orca schedules (`~/.agents/skills/<name>-sweep`) moves onto Pilot. Automation 05, "Fix failed CI on my MRs" (`ci-fix-sweep` → `fix-failed-ci`), went first. `pilot` below is `dist/mac-arm64/Pilot.app/Contents/Resources/bin/pilot`.
 
 1. **Write the YAML.**
@@ -138,10 +140,11 @@ What follows from that:
 - **History:** each app keeps its own runs. The Agent Console shows both, by job code.
 - **A restart can skip one slot.** A slot missed while Pilot was closed is retried at launch. That retry can come before Pilot has loaded its projects, and then it's recorded as `skipped_unavailable` ("The target project is no longer available."). The next slot runs normally. To cover the gap, use the job's Run now in the Agent Console. Seen 2026-10-11 10:10 for 05 and 12.
 
-Switch every moved automation at once (dry run without `--apply`). `--to pilot` refuses while Pilot's Orca engine is off, which is the default: the moved copies would run nowhere.
+This switches the old, moved Orca-style automations (dry run without `--apply`). It is not how the YAML automations go live: use `pilot automations enable --id`. `--to pilot --apply` refuses while Pilot's Orca engine is off, which is the default, because the moved copies would run nowhere. It works only when Pilot starts with `PILOT_ORCA_AUTOMATIONS=on`.
 
 ```
 node src/packages/pilot/scripts/switch-automations.mjs --to orca --apply    # back to Orca
+PILOT_ORCA_AUTOMATIONS=on  # start Pilot with this first, or --to pilot refuses
 node src/packages/pilot/scripts/switch-automations.mjs --to pilot --apply   # back to Pilot
 ```
 
@@ -150,6 +153,105 @@ node src/packages/pilot/scripts/switch-automations.mjs --to pilot --apply   # ba
 - It refuses unless both apps are running and the two CLIs reach different apps, since `orca` in a Pilot terminal is Pilot's. It calls real Orca's CLI by its full path with Orca's data folder.
 
 Then point the Agent Console at the same app: `AGENT_CONSOLE_BACKEND=orca` or `pilot` (see `~/.agents/skills/agent-console/SKILL.md`, "Which app it uses").
+
+## Automations on the YAML engine
+
+Every job is a YAML automation in `~/.agents/automations/` (one file per automation; the file name is its id). Orca's own automation engine doesn't run in Pilot's desktop app or `serve` (hook `orca-automations-off`); Pilot's `orcad` keeps upstream's engine. The format is the contract in the build plan "Pilot: every job on the YAML engine". Check a file without the app: `pilot automations validate --file <file>`.
+
+- **Commands** (all take `--json`):
+  - `pilot automations list-yaml`, `show-yaml --id` (alias `get`), `reload` (`pilot automations list` is upstream's own command)
+  - `enable --id`, `disable --id`
+  - `validate --file`, `dry-run --id`, `tick --id`, `activity --id`
+  - `import-state --id [--apply]`
+  - `spend`, `usage-report`
+- **Nothing runs until Nish switches it on** (build plan Task 50). An automation's first tick shows in its Activity and in the worktree panel.
+- **Go-live check:** `node src/packages/pilot/scripts/go-live-check.mjs --help`.
+  - It validates every file, dry-runs each automation in a scratch Pilot, and summarises the parity tests as a vault section.
+  - It also flags a Codex step whose args repeat an option of the configured Codex command, and refuses a `--data` link to the packaged app's folder.
+  - Build plan Task 47b has the steps for the scratch Pilot. It mirrors the packaged app's data, and `import-orca-settings.mjs` can fill it while the packaged app runs.
+
+### Shell steps
+
+A shell step's `run:` is plain shell. It takes no `{placeholders}`; validation rejects them.
+- **Values in:** `env: { NAME: "{mr.title}" }`. The script reads `"$NAME"`. Pilot fills the text in; the shell never parses it.
+- **Values out:** append `key=value` lines to `$PILOT_OUTPUT_FILE`. The last line per key wins. A value that reads as JSON (`true`, `3`, `null`) becomes that value. Stdout is never read for outputs, so what a child process prints can't forge one. Names are letters, digits and `_`; a value is at most 4096 characters. A bad line is a warning, not a failure.
+- **Reserved env names:** `PATH`, `IFS`, `HOME`, `ENV`, `BASH_ENV`, `SHELLOPTS`, `BASHOPTS`, `PS4`, `CDPATH`, `GLOBIGNORE`, `AGENT_RUN`, and anything starting `PILOT_`, `ORCA_`, `LD_` or `DYLD_`.
+- **Never** use an env value in `$(( ))`, `(( ))`, `let`, `declare -i`, an array subscript, `[[ -eq ]]`, `eval`, or `sh -c "…$NAME…"`. The shell evaluates those as code. Quote it as `"$NAME"`, or validate it first.
+- **Never** put an item value in an env name that another program executes: `NODE_OPTIONS`, `GIT_SSH_COMMAND`, `GIT_CONFIG_*`, `PERL5OPT`, `JAVA_TOOL_OPTIONS`, `SHELL`, `EDITOR`, `PAGER`. Validation doesn't block these.
+
+## The worktree panel
+
+The calendar-clock icon in the right sidebar shows the active worktree's automations (`pilot.worktree.timeline`, polled every 15 s while shown):
+
+- **Next:** each automation's last check on this worktree, with its reason and when it ticks again. The ones with nothing due fold away.
+- **Now** and **Earlier today:** the runs here. Each shows its status, cost and outcome, what it asked, and its steps on demand: agent or shell, mode, status, cost, outputs.
+- **Resume** on an agent step switches to its tab while it's open. Otherwise it reopens the session (`claude --resume <id>`, `codex resume <id>`) in a new tab in the worktree.
+- **Waiting on you:** this worktree's open items. They're answered on the Waiting on you page.
+- **The badge:** the icon counts what waits on you here, or shows a dot while a run is going (hook `right-sidebar-badge`).
+
+An automation's Activity tab shows the same run cards: the run status in plain words (Asking first, Running, Needs you, Done, Failed, Timed out, Cancelled), the steps with Resume, and what each run asked. Its Overview lists the steps in order.
+
+## Spend and token usage
+
+**Per step.** When an agent step ends, Pilot reads its tokens from the agent's own logs, only inside the step's start-to-end window:
+- Claude: its transcript and its subagents' transcripts.
+- Codex: its rollout.
+
+Each step's tokens are:
+- priced with the tables Pilot shares with Orca,
+- kept per day and model (`step_usage`), so a transcript Claude prunes later changes nothing.
+
+A run costs the sum of its steps. A Claude step's session id is pinned at launch; a Codex step keeps the first session id its tab's hooks report.
+
+**Rollups.** `pilot automations spend [--by automation|skill|agent|mr] [--days n]` (default: 7 days, by automation), or the RPC `pilot.spend`. A step counts once it has ended.
+
+**The token usage report.** Pilot writes job 08's files: `usage.json`, `usage.csv`, `usage-data.js`, `Token usage.html` and `Token usage.md`. They use the same paths and schema, so the Agent Console and the vault note keep working.
+- Folder: `PILOT_USAGE_REPORT_DIR`, default `~/Documents/WebPortal/Agent Work/Automations/08 · Tally token usage by job`. HTML template: `PILOT_USAGE_TEMPLATE`, default `~/.agents/skills/worktree-gate/usage_report.html`.
+- **The hand-over from job 08.** Pilot writes into that folder only once `usage-legacy.json` is there. To hand it over:
+  1. Leave job 08 disabled.
+  2. Run `python3 ~/.agents/skills/worktree-gate/usage.py report` once more.
+  3. In that folder, `cp usage.json usage-legacy.json`.
+
+  From then on the packaged app refreshes the files after each measured step and at least hourly. It keeps 08's history (the legacy rows) and replaces only the sessions it measured itself.
+- To write the report anywhere else, at any time: `pilot automations usage-report --out <dir>`.
+
+## Agent Console
+
+The console (`~/.agents/skills/agent-console`) reads `pilot automations list-yaml --json` and maps each automation to its job by name:
+- a name that starts with its code (`01 · …`), else
+- the vault job with the same name, else
+- its id.
+
+It reads each automation's `activity`. A job whose automation is switched on takes its schedule and Run by hand from Pilot: Preview runs `dry-run`, and Run now runs `tick`. Keep `ActivityTick`, `RunRow` and `StepRow` field names stable: add fields, never rename one.
+
+## Going live
+
+The order, behaviour changes and follow-ups come from the build (`go-live-notes.md` and `go-live-report.md` in the build plan folder). Run the go-live check first.
+
+**Order:**
+1. Close out what Orca still has open. Let a running Orca 03 review cycle finish. Close any open Orca 04 QA run or dispatched fix: a stale Orca `run.json` that isn't `done` blocks every Pilot 04 night at `stack`.
+2. Import the open vault cards: Waiting on you, "Import open vault cards" (applying needs Pilot's own window).
+3. Import each job's old state before enabling it: `pilot automations import-state --id <id>` (preview), then `--apply`. 03 and 04 need their `seen.json` first. 08 must be imported before Pilot first writes its own `usage.json` (the hand-over above). 12's sent answers come in as dispatched.
+4. Enable the YAMLs one at a time: `pilot automations enable --id <id>`. Keep Orca's copies disabled.
+5. Retire `apply.py` (job 12) only once Pilot is dispatching answers. Write `<STATE_ROOT>/apply/retired` last. Nothing writes it for you.
+
+**Not checkable in a dry run** (watch the first real run):
+- Linear accepts the uuid5 write ids that 13 uses for ticket creates and fold comments.
+- `claude --resume <id>` keeps the same session id on the installed CLI. If it writes a new one, a Claude resume step reads the old transcript.
+- 13-start and M01 against live Linear in the packaged app (the scratch Pilot can't read its credential).
+
+**Behaviour that differs from the old jobs:**
+- **Answers** to sessions from the old system fork instead of resuming. Imported sessions have no recorded launch arguments.
+- **Approvals** come only from Pilot's own window on this Mac. Paired devices can answer, skip and revise, but not approve. The local CLI can't answer cards. An approval imported from the vault comes back as a re-ask.
+- **Idle tabs** that hold a session a step needs (no draft, no agent working) are closed, and the session resumes in Pilot's own tab.
+- **13 and M01** list the signed-in user's Linear tickets, with no assignee clause.
+- **07:** a timeout or crash is a failed run (it was a silent skip).
+- **03:** needs both agents' quota (it checked only the lead's).
+- **M01:** a quota-out tick skips every ticket (it deferred the fourth). A worktree linked to a ticket under another name isn't reused. A started ticket whose worktree was deleted isn't restarted.
+- **13:** a "Failed again" comment waits while quota is out. A canceled ticket is absent.
+- **05, 06, 03, 04:** worktree flags point at "Waiting on you in Pilot", not the old localhost link.
+- **04:** the old `loop.py status` shows a Pilot run in progress as `start_failed`. The old sweep leaves the run alone until its deadline plus 10 minutes.
+- **Leftovers:** M04 worktrees aren't cleaned up (as before). M03's `INSTRUCTIONS.md` still says "manual Orca automation"; reword it at go-live.
 
 ## Remote use (D25)
 
@@ -196,6 +298,22 @@ These need a phone, a second Mac and an iPad on Tailscale. Open Pilot (`dist/mac
   - **Agent hook scripts** in `~/.orca/agent-hooks`. Both apps install them, and they reach their app through each terminal's environment. Not checked: whether different upstream versions rewrite each other's scripts.
 - Upstream orcad starts `/Applications/Orca.app/Contents/MacOS/Orca --serve` (then `~/Applications/Orca.app`) as its browser host whenever it exists, and only reads `ORCA_BROWSER_EXECUTABLE` if that fails (`orcad-browser-provider.ts`). It starts before Pilot's orcad hook runs. Pilot can't redirect it without editing upstream; its only protection is that the sidecar inherits `ORCA_CLI_INSTALL_PATH` (set by the `bin/pilot` launcher) so its CLI install can't touch real Orca's `orca`.
 - Pilot's orcad still starts Orca's own automation engine (`src/main/orcad/orcad-automations.ts`): the `orca-automations-off` hook covers desktop and serve only. Pilot's own scheduler doesn't run in orcad unless `PILOT_SCHEDULER=on`.
+- Codex subagent rollouts (child threads) aren't added to their parent step's usage; `usage.py` added them.
+- Pilot's Claude price table differs from `usage.py`'s for Sonnet 4 and 4.5 long-context and for old models. That is intended.
+- Resume runs the agent's plain resume command, without the Settings default arguments a launch gets.
+- The badge shows on the Automations icon in the activity bar, not in its overflow menu.
+- Spend and the token report count a step once it has ended; a running step shows up after it ends.
+- The token report doesn't record `doc_written` events the way `usage.py`'s `vault.wrote` did, so the console's Files tab doesn't link a refresh to a run.
+- Approvals come only from Pilot's own window on this Mac (see "Going live").
+- `pnpm lint` shows 5 import-cycle warnings under `mobile/`. They are upstream's, identical on `upstream/main`.
+- **Recommended follow-ups** (parked, not done):
+  - Per-step or propose-only powers, so card approval is the only path for 09's `post` and 05's answers `push`. Today only the prompt keeps an agent from using its automation's power, as under Orca.
+  - Sandbox agents. 04's Codex runs with `--dangerously-bypass-approvals-and-sandbox`, as Orca's launch did.
+  - The Waiting on you page has no "done" button (imported already-sent cards need `pilot inbox tick`), and the vault-import preview doesn't list the session ids it will resume.
+  - The Agent Console page doesn't yet display the `also_on` flag.
+  - A paired device can't approve actions. `pilot.inbox.tick` and `reply` act on any card id (as the old vault did); they could be scoped to the caller's automation.
+  - A `mr: mine` check on 05 would close the "teammate's newer MR from my branch" edge, which the old sweep also left open.
+  - Engine internals: the per-session claim is in-process only (main and orcad share it only if configured to); the vault exporter writes `Runs.md` without `vault.py`'s lock; terminal lists are cached for each answers pass.
 
 ## Running upstream tests
 
