@@ -126,15 +126,16 @@ export class RunStore {
       .map((r) => toStep(r as never))
   }
 
-  // The step starting or running on a terminal (the newest, when a step was sent into an earlier
-  // step's terminal): how `pilot run output|event` find their step from the terminal they run in.
-  stepOnTerminal(handle: string): StepRow | null {
-    const r = this.db
+  // The steps starting or running on a terminal, newest first (more than one when a step was sent into
+  // an earlier step's terminal while that one is still active): how `pilot run output|event` find their
+  // step from the terminal they run in.
+  stepsOnTerminal(handle: string): StepRow[] {
+    return this.db
       .prepare(
-        "SELECT * FROM steps WHERE terminal_handle = ? AND status IN ('starting', 'running') ORDER BY started_at DESC, idx DESC LIMIT 1"
+        "SELECT * FROM steps WHERE terminal_handle = ? AND status IN ('starting', 'running') ORDER BY started_at DESC, idx DESC"
       )
-      .get(handle)
-    return r ? toStep(r as never) : null
+      .all(handle)
+      .map((r) => toStep(r as never))
   }
 
   runningSteps(): StepRow[] {

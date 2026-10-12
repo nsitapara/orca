@@ -21,32 +21,67 @@ export type ModeOutputsReader = (
 
 const NOT_IN_STEP =
   "Not inside a Pilot run's step: this terminal has no running Pilot step, and PILOT_RUN_ID and PILOT_STEP_IDX aren't set"
+// Runs that still accept work; a finished, failed, timed-out or cancelled run takes nothing more.
+const OPEN_RUN: readonly string[] = ['asking', 'running', 'needs_you']
 
-// The (run, step) a channel call is about: the step starting or running on the caller's terminal; only
-// when none is bound there, the env's PILOT_RUN_ID / PILOT_STEP_IDX (a step sent into an earlier
-// step's terminal records against itself, not the earlier one).
-export function resolveChannelStep(
-  ctx: PilotContext,
-  t: RunChannelTarget
-): { runId: string; stepIdx: number } {
-  const bound = t.terminal ? ctx.store.runs.stepOnTerminal(t.terminal) : null
-  if (bound) {
-    return { runId: bound.runId, stepIdx: bound.idx }
+// The env's step, only while it can still report: the step starting or running, in a run still open.
+function activeEnvStep(ctx: PilotContext, runId: string, stepIdx: number): StepRow {
+  const run = ctx.store.runs.get(runId)
+  if (!run) {
+    throw new Error(`No run ${runId}`)
+  }
+  const step = ctx.store.runs.steps(runId).find((s) => s.idx === stepIdx)
+  if (!step) {
+    throw new Error(`Run ${runId} has no step ${stepIdx}`)
+  }
+  if (!OPEN_RUN.includes(run.status) || (step.status !== 'starting' && step.status !== 'running')) {
+    throw new Error(
+      `Step ${stepIdx} of run ${runId} has ended (step ${step.status}, run ${run.status}); it can't record anything more`
+    )
+  }
+  return step
+}
+
+// The step a channel call is about: the one starting or running on the caller's terminal. With several
+// there (a step sent into an earlier step's terminal), the env's step wins when it is one of them. When
+// none is bound, the env's PILOT_RUN_ID / PILOT_STEP_IDX, if that step is still active.
+function resolveStep(ctx: PilotContext, t: RunChannelTarget): { runId: string; stepIdx: number } {
+  const bound = t.terminal ? ctx.store.runs.stepsOnTerminal(t.terminal) : []
+  const named = bound.find((s) => s.runId === t.runId && s.idx === t.stepIdx)
+  const chosen = named ?? bound[0]
+  if (chosen) {
+    return { runId: chosen.runId, stepIdx: chosen.idx }
   }
   if (t.runId && t.stepIdx !== undefined) {
-    return { runId: t.runId, stepIdx: t.stepIdx }
+    const step = activeEnvStep(ctx, t.runId, t.stepIdx)
+    return { runId: step.runId, stepIdx: step.idx }
   }
   throw new Error(NOT_IN_STEP)
 }
 
-// The run alone (events need no step): the terminal's step's run, else the env's.
+export function resolveChannelStep(
+  ctx: PilotContext,
+  t: RunChannelTarget
+): { runId: string; stepIdx: number } {
+  return resolveStep(ctx, t)
+}
+
+// The run alone (events need no step). Without a bound terminal the env's run must still be open.
 export function resolveChannelRun(ctx: PilotContext, t: RunChannelTarget): string {
-  const bound = t.terminal ? ctx.store.runs.stepOnTerminal(t.terminal) : null
-  if (bound) {
-    return bound.runId
+  const bound = t.terminal ? ctx.store.runs.stepsOnTerminal(t.terminal) : []
+  const chosen = bound.find((s) => s.runId === t.runId) ?? bound[0]
+  if (chosen) {
+    return chosen.runId
   }
   if (t.runId) {
-    return t.runId
+    const run = ctx.store.runs.get(t.runId)
+    if (!run) {
+      throw new Error(`No run ${t.runId}`)
+    }
+    if (!OPEN_RUN.includes(run.status)) {
+      throw new Error(`Run ${t.runId} has ended (${run.status}); it can't record anything more`)
+    }
+    return run.id
   }
   throw new Error(NOT_IN_STEP)
 }
