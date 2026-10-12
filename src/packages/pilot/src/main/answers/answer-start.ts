@@ -4,9 +4,9 @@ import { UnrecordedLaunchError } from '../scheduler/tick-runner'
 import type { AgentKind } from '../../shared/definition/types'
 import type { AgentDispatch, AgentDispatchDeps, AgentGroup, AnswerRun } from './answer-run'
 import { hold } from './holds'
-import { answersLine, newSessionPrompt } from './prompt'
+import { answersLine, newSessionPrompt, withModePointer } from './prompt'
 import { DraftInProgressError } from './session-probe'
-import type { SessionTarget } from './sessions'
+import { answersModeOf, type SessionTarget } from './sessions'
 
 const TYPING = 'someone is typing in the tab that asked'
 
@@ -24,6 +24,18 @@ function messageOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
 }
 
+function openingPrompt(
+  group: AgentGroup,
+  run: AnswerRun,
+  target: Exclude<SessionTarget, { kind: 'resume' }>,
+  line: string
+): string {
+  if (target.kind === 'new') {
+    return newSessionPrompt(group.def, run, target, line)
+  }
+  return withModePointer(answersModeOf(group.def, target.asking), line)
+}
+
 // The asking tab (its own process, under the args it was launched with), or a new terminal opened
 // with no args of its own: a fork of the asking session, or a new answers session.
 async function start(
@@ -35,10 +47,10 @@ async function start(
 ): Promise<Started> {
   const line = answersLine(askingRunOf(group, target), run.id, group.answers)
   if (target.kind === 'resume') {
-    await deps.send(target.handle, line)
+    await deps.send(target.handle, withModePointer(answersModeOf(group.def, target.asking), line))
     return askingTab(target)
   }
-  const prompt = target.kind === 'new' ? newSessionPrompt(group.def, run, target, line) : line
+  const prompt = openingPrompt(group, run, target, line)
   const session: AgentSessionMode =
     target.kind === 'fork' ? { kind: 'fork', sessionId: target.sessionId } : { kind: 'new' }
   const args: string[] = []

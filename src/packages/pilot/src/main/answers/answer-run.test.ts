@@ -98,6 +98,10 @@ describe('dispatchToAgent', () => {
     })
     expect(vi.mocked(deps.send).mock.calls[0][0]).toBe('term-1')
     expect(vi.mocked(deps.send).mock.calls[0][1]).toContain('[in_a] "Which image?" → e2e')
+    // A resumed session gets the mode's rules too (never push yourself), as a pointer to the mode file.
+    expect(vi.mocked(deps.send).mock.calls[0][1]).toMatch(
+      /^Apply these answers as ~\/\.agents\/skills\/fix-gitlab-ci\/modes\/answers\.md says\. Answers to/
+    )
     expect(deps.open).not.toHaveBeenCalled()
     expect(store.runs.get(RUN_ID)).toMatchObject({
       trigger: 'answer',
@@ -133,6 +137,9 @@ describe('dispatchToAgent', () => {
         args: [],
         session: { kind: 'fork', sessionId: 'sess-1' }
       })
+    )
+    expect(vi.mocked(deps.open).mock.calls[0][0].prompt).toMatch(
+      /^Apply these answers as ~\/\.agents\/skills\/fix-gitlab-ci\/modes\/answers\.md says\. Answers to/
     )
     expect(store.runs.steps(RUN_ID)[0]).toMatchObject({
       status: 'running',

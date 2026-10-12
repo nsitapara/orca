@@ -42,6 +42,22 @@ export function answersText(answers: AgentAnswer[]): string {
   return answers.map((a) => a.item.answer?.text ?? '').join('\n')
 }
 
+export function modeFile(skill: string, mode: string): string {
+  return `~/.agents/skills/${skill}/modes/${mode}.md`
+}
+
+// A resumed or forked session already knows its job, but not this automation's rules for applying answers
+// (re-check first, never push yourself): one sentence pointing at the mode file, ahead of the answers.
+export function withModePointer(
+  mode: { skill: string | null; mode: string },
+  line: string
+): string {
+  if (!mode.skill) {
+    return line
+  }
+  return `Apply these answers as ${modeFile(mode.skill, mode.mode)} says. ${line}`
+}
+
 // A new session knows nothing yet: the wrapped preamble (contract §7) and the skill's answers mode file.
 export function newSessionPrompt(
   def: Pick<AutomationDefinition, 'name'>,
@@ -52,7 +68,7 @@ export function newSessionPrompt(
   const lines = [`Started by the Pilot automation "${def.name}" (run ${run.id}) for ${run.label}.`]
   if (target.skill) {
     lines.push(
-      `Use the ${target.skill} skill in its ${target.mode} mode (~/.agents/skills/${target.skill}/modes/${target.mode}.md).`
+      `Use the ${target.skill} skill in its ${target.mode} mode (${modeFile(target.skill, target.mode)}).`
     )
   }
   lines.push('', line)
