@@ -83,7 +83,8 @@ export function buildDetailsMethods(ctx: () => PilotContext) {
         return readDetailsImage(c.detailsRoot ?? null, snapshot, p.file)
       }
     }),
-    // pilot inbox set-details: a new bundle for a waiting card, which clears any answer it had.
+    // pilot inbox set-details: a new bundle for a waiting card, which clears the answer it had. A card whose
+    // answer another run is applying is refused; the card's own answer run may re-attach it.
     defineMethod({
       name: 'pilot.inbox.setDetails',
       permission: 'workspace',
@@ -94,10 +95,12 @@ export function buildDetailsMethods(ctx: () => PilotContext) {
         }
         const c = ctx()
         const deps = inboxDeps(c)
-        refuseOutsideScope(c, rpc.caller, p, getInboxItem(deps, p.id).automationId)
+        const automationId = getInboxItem(deps, p.id).automationId
+        const callerRunId = refuseOutsideScope(c, rpc.caller, p, automationId)
         return setInboxDetails(deps, p.id, p.bundlePath, {
           head: p.head ?? null,
-          onlyUnanswered: false
+          onlyUnanswered: false,
+          callerRunId
         })
       }
     })

@@ -12,6 +12,7 @@ import {
   APPROVE_ON_DESKTOP,
   CARD_CHANGED_ON_SAVE,
   DRAFT_ON_DESKTOP,
+  DRAFT_OPTION_ON_DESKTOP,
   LOCAL_CLI_NO_ANSWER,
   NO_ANSWER_CALLER,
   saveAnswer as save,
@@ -273,21 +274,27 @@ describe('a drafted change', () => {
     )
   })
 
-  it('refuses a device approve and saves nothing; the desktop approve is saved', () => {
-    const { store, deps, digest } = setup(QUESTION)
-    const ref = {
-      path: '/v/Automations/03/b/details/r/F2.json',
-      sha256: 'ab'.repeat(32),
-      inlined: {},
-      blocks: 2,
-      drafted: true,
-      draftedBase: 'c'.repeat(40)
+  it.each<[string, Record<string, unknown>, string]>([
+    ['a bug', { type: 'bug', title: 'Guard the null?' }, DRAFT_ON_DESKTOP],
+    ['a question', QUESTION, DRAFT_OPTION_ON_DESKTOP]
+  ])(
+    'refuses a device approve on %s and saves nothing; the desktop approve is saved',
+    (_name, card, reask) => {
+      const { store, deps, digest } = setup(card)
+      const ref = {
+        path: '/v/Automations/03/b/details/r/F2.json',
+        sha256: 'ab'.repeat(32),
+        inlined: {},
+        blocks: 2,
+        drafted: true,
+        draftedBase: 'c'.repeat(40)
+      }
+      store.inbox.edit('in_0000000000000001', { details: ref, digest }, 1_000)
+      const params = { id: 'in_0000000000000001', text: 'approve', digest }
+      expect(() => saveAnswer(deps, params, PHONE)).toThrow(reask)
+      expect(store.inbox.get('in_0000000000000001')).toMatchObject({ status: 'open', answer: null })
+      expect(store.queue.forInboxItem('in_0000000000000001')).toEqual([])
+      expect(saveAnswer(deps, params, DESKTOP).answer).toMatchObject({ text: 'approve' })
     }
-    store.inbox.edit('in_0000000000000001', { details: ref, digest }, 1_000)
-    const params = { id: 'in_0000000000000001', text: 'approve', digest }
-    expect(() => saveAnswer(deps, params, PHONE)).toThrow(DRAFT_ON_DESKTOP)
-    expect(store.inbox.get('in_0000000000000001')).toMatchObject({ status: 'open', answer: null })
-    expect(store.queue.forInboxItem('in_0000000000000001')).toEqual([])
-    expect(saveAnswer(deps, params, DESKTOP).answer).toMatchObject({ text: 'approve' })
-  })
+  )
 })

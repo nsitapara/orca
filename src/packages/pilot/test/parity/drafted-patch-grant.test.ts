@@ -1,7 +1,10 @@
+import { createHash } from 'node:crypto'
 import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { DRAFT_FORBIDDEN, DRAFT_GRANTED } from '../../src/main/answers/prompt'
+import { DRAFT_ON_DESKTOP, DRAFT_OPTION_ON_DESKTOP } from '../../src/shared/pilot-replies'
+import { cliHarness } from '../../src/main/inbox/__fixtures__/cli-harness'
 import { skillsDir } from './old-side'
 
 // Pilot decides whether an answer approved a drafted patch and says so on the card's prompt line; apply.md
@@ -26,6 +29,90 @@ describe.skipIf(!existsSync(skillsDir()))(
       expect(
         readFileSync(join(skillsDir(), 'item-details', 'references', 'apply.md'), 'utf8')
       ).toContain(DRAFT_FORBIDDEN)
+    })
+
+    // The agent's re-ask for a drafted change asked for off the desktop is Pilot's own, for each kind of card.
+    it.each([DRAFT_ON_DESKTOP, DRAFT_OPTION_ON_DESKTOP])(
+      'apply.md quotes the re-ask "%s"',
+      (reask) => {
+        expect(
+          readFileSync(join(skillsDir(), 'item-details', 'references', 'apply.md'), 'utf8')
+        ).toContain(`reply="${reask}"`)
+      }
+    )
+  }
+)
+
+// apply.md's gate reads the grant out of `pilot inbox show --id <id> --json`, which prints the runtime's
+// envelope ({id, ok, result: <the card>, _meta}): the key paths it names must be the ones that output has.
+const GATE_KEYS = ['result.details.draftApproved', 'result.details.sha256']
+const DOCS: [string, string][] = [...FILES, ['item-details', 'modes/draft.md']]
+
+function keyPaths(text: string): string[] {
+  return [...text.matchAll(/`(result\.details\.[A-Za-z0-9]+)`/g)].map((m) => m[1])
+}
+
+function at(value: unknown, path: string): unknown {
+  return path
+    .split('.')
+    .reduce<unknown>((v, key) => (v as Record<string, unknown> | undefined)?.[key], value)
+}
+
+// A drafted bug card approved in Pilot's window, shown through the CLI's own `inbox show --json`.
+async function shownJson(): Promise<{ shown: unknown; sha256: string }> {
+  vi.stubEnv('PILOT_RUN_ID', 'run-1')
+  vi.stubEnv('PILOT_STEP_IDX', '0')
+  vi.stubEnv('PILOT_AUTOMATION_ID', '')
+  vi.stubEnv('PILOT_ITEM_KEY', '')
+  const log = vi.spyOn(console, 'log').mockImplementation(() => undefined)
+  const { f, store, cli } = cliHarness()
+  await cli([
+    'inbox',
+    'add',
+    '--type',
+    'bug',
+    '--title',
+    'Guard the null?',
+    '--details-bundle',
+    f.bundle
+  ])
+  const [item] = store.inbox.list()
+  const answer = { option: null, text: 'approve', digest: item.digest, via: 'page' as const }
+  store.inbox.saveAnswer(item.id, { ...answer, callerKind: 'desktop' }, 'nish', 110)
+  log.mockClear()
+  await cli(['inbox', 'show', '--id', item.id, '--json'])
+  const sha256 = createHash('sha256').update(readFileSync(f.bundle)).digest('hex')
+  return { shown: JSON.parse(String(log.mock.calls[0][0])), sha256 }
+}
+
+describe.skipIf(!existsSync(skillsDir()))(
+  'the grant is read where pilot inbox show --json puts it',
+  () => {
+    afterEach(() => {
+      vi.unstubAllEnvs()
+      vi.restoreAllMocks()
+    })
+
+    it('apply.md names the key paths of the grant and its sha', () => {
+      const text = readFileSync(join(skillsDir(), 'item-details', 'references', 'apply.md'), 'utf8')
+      expect(new Set(keyPaths(text))).toEqual(new Set(GATE_KEYS))
+    })
+
+    it.each(DOCS)('%s/%s never names a details key outside result', (skill, file) => {
+      const text = readFileSync(join(skillsDir(), skill, file), 'utf8')
+      // details.py is the script, not a key.
+      expect(text).not.toMatch(/`details\.(?!py`)[A-Za-z0-9]+`/)
+      expect(text).not.toMatch(/"draftApproved"/)
+    })
+
+    it("those paths hold the grant and the bundle's sha in the CLI's real output", async () => {
+      const { shown, sha256 } = await shownJson()
+      expect(shown).toMatchObject({ ok: true })
+      expect(at(shown, 'result.details.draftApproved')).toBe(true)
+      expect(at(shown, 'result.details.sha256')).toBe(sha256)
+      for (const key of GATE_KEYS) {
+        expect(at(shown, key)).toBeDefined()
+      }
     })
   }
 )

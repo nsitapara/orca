@@ -1,9 +1,20 @@
 import type { InboxItemRow } from '../../shared/api-types'
 import type { AutomationDefinition } from '../../shared/definition/types'
-import { oneLine } from '../inbox/card'
+import { isPromptControl, oneLine } from '../inbox/card'
 import { draftApproved } from './draft-grant'
 
 export type AgentAnswer = { item: InboxItemRow; revise: boolean; needsAgent: string | null }
+
+// Text on the line goes in JSON quotes, one line, with every control character the bundle path refuses
+// escaped: JSON.stringify leaves DEL, C1 (NEL among them) and U+2028/2029 as they are.
+function quoted(text: string): string {
+  let out = ''
+  for (const ch of JSON.stringify(oneLine(text))) {
+    const code = ch.codePointAt(0) ?? 0
+    out += isPromptControl(code) ? `\\u${code.toString(16).padStart(4, '0')}` : ch
+  }
+  return out
+}
 
 const REVISE = " (revise: change the proposal and ask again as a new action; don't run it)"
 const RECORD =
@@ -16,8 +27,8 @@ function howNote(answer: AgentAnswer): string {
     return REVISE
   }
   if (answer.needsAgent) {
-    // The action's own words: one line, like everything in a typed prompt.
-    return ` (approved; its action stopped for judgement: ${oneLine(answer.needsAgent)})`
+    // The action's own words, quoted like the title and the answer: they can't close the note.
+    return ` (approved; its action stopped for judgement: ${quoted(answer.needsAgent)})`
   }
   return ''
 }
@@ -40,11 +51,7 @@ function detailsNote(answer: AgentAnswer): string {
   if (details.drafted) {
     says = draftApproved(answer.item) ? DRAFT_GRANTED : DRAFT_FORBIDDEN
   }
-  return ` (Details ${JSON.stringify(oneLine(details.path))} sha256 ${details.sha256}: ${says})`
-}
-
-function quoted(text: string): string {
-  return JSON.stringify(oneLine(text))
+  return ` (Details ${quoted(details.path)} sha256 ${details.sha256}: ${says})`
 }
 
 function note(answer: AgentAnswer): string {

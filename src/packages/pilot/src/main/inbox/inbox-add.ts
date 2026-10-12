@@ -134,7 +134,8 @@ function updateOpen(
   card: InboxCard,
   digest: string,
   at: number,
-  snapshot: DetailsSnapshot | null
+  snapshot: DetailsSnapshot | null,
+  callerRunId: string | null
 ): InboxAddResult {
   if (open.digest === digest) {
     // The suggestion is not part of the digest: refresh it without making a new version.
@@ -154,8 +155,9 @@ function updateOpen(
   // A card that keeps its bundle (added again without one) keeps that bundle's snapshot too.
   const keepSnapshot = snapshot === null && card.details !== null
   const written = deps.store.transaction(() => {
-    // No change clears an answer whose answer run is still running (set-details refuses the same).
-    if (answerBeingApplied(deps.store, deps.store.inbox.get(open.id) ?? open)) {
+    // No change clears an answer whose answer run is still running (set-details refuses the same), unless
+    // the caller is that answer run.
+    if (answerBeingApplied(deps.store, deps.store.inbox.get(open.id) ?? open, callerRunId)) {
       return false
     }
     deps.store.inbox.edit(open.id, { ...card, digest }, at)
@@ -188,6 +190,8 @@ export function addInboxItem(
     noMerge?: boolean
     // Run every check, write nothing.
     dryRun?: boolean
+    // The run a bundled add is bound to (refuseOutsideScope): its own dispatched answer is not in the way.
+    callerRunId?: string | null
   } = {}
 ): InboxAddResult {
   const origin = originOf(deps, params)
@@ -220,7 +224,8 @@ export function addInboxItem(
   }
   if (open) {
     const merged = keepingBundle(card, open, loaded)
-    return updateOpen(deps, open, merged, inboxDigest(merged), at, loaded)
+    const callerRunId = opts.callerRunId ?? null
+    return updateOpen(deps, open, merged, inboxDigest(merged), at, loaded, callerRunId)
   }
   if (card.action && mine.some((i) => skippedBefore(i, card, origin))) {
     return { id: null, existing: false, refused: SKIPPED_BEFORE }

@@ -29,6 +29,12 @@ export function oneLine(text: string | null | undefined): string {
   return (text ?? '').split(/\s+/).filter(Boolean).join(' ')
 }
 
+// A control character (C0, DEL, C1, or a Unicode line break) could end a typed prompt's line or hide words
+// in it: a Details bundle's path may hold none, and the answers prompt escapes every one it quotes.
+export function isPromptControl(code: number): boolean {
+  return code < 0x20 || (code >= 0x7f && code <= 0x9f) || code === 0x2028 || code === 0x2029
+}
+
 // "<label> — <meaning>", the way card.py and `pilot inbox add --option` write an option (vault.py _options).
 export function parseOption(raw: string): InboxOption | null {
   const text = oneLine(raw)

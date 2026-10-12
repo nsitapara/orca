@@ -18,6 +18,7 @@ import {
   type DetailsRef,
   type DetailsSnapshot
 } from '../../shared/details'
+import { isPromptControl } from './card'
 import { BLOCK_TYPES, BundleSchema, firstIssue, ReviewFileSchema } from './details-schema'
 
 // Every refusal fails closed: nothing of the bundle is kept, and the message says why.
@@ -218,10 +219,7 @@ function draftOf(
 // (C0, DEL, C1, or a Unicode line break) may close the quote or start a new line there.
 function unsafeForPrompt(path: string): boolean {
   for (const ch of path) {
-    const code = ch.codePointAt(0) ?? 0
-    const control =
-      code < 0x20 || (code >= 0x7f && code <= 0x9f) || code === 0x2028 || code === 0x2029
-    if (control || ch === '"' || ch === '\\') {
+    if (isPromptControl(ch.codePointAt(0) ?? 0) || ch === '"' || ch === '\\') {
       return true
     }
   }

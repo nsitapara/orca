@@ -4,12 +4,15 @@ import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import type { RpcCallerIdentity } from '../../../../../main/runtime/rpc/rpc-caller-identity'
 import { loadDefinitions } from '../definitions/loader'
-import { detailsFixture } from '../inbox/__fixtures__/details-fixture'
+import { copyBundle, detailsFixture, rewriteBundle } from '../inbox/__fixtures__/details-fixture'
 import { loadDetails } from '../inbox/details-bundle'
 import { addInboxItem } from '../inbox/inbox-add'
 import type { PilotHost } from '../pilot-services'
 import { PilotStore } from '../store/store'
 import { buildPilotMethods } from './methods'
+import { answerRunEnded } from '../answers/answer-run-end'
+import { ANSWER_BEING_APPLIED } from '../inbox/inbox-details'
+import { redraftedReply } from '../../shared/pilot-replies'
 
 type Callable = {
   name: string
@@ -305,5 +308,107 @@ describe('pilot.inbox.add with a bundle: the scope of set-details', () => {
     const { detailsBundlePath: _bundle, ...plain } = bound
     const added = callAs(CLI, 'pilot.inbox.add', plain) as { id: string }
     expect(store.inbox.get(added.id)).toMatchObject({ automationId: 'ci', runId: 'run-1' })
+  })
+})
+
+// apply.md step 5: the answer run that is applying a card's answer re-drafts it (Approve with notes, the branch
+// moved) and re-attaches it. Its own dispatched answer is not in the way; another run's still is.
+describe("a card's own answer run re-attaches its Details", () => {
+  function answerRun(store: PilotStore, id: string, terminal: string): void {
+    store.runs.create({
+      id,
+      automationId: 'ci',
+      tickId: null,
+      itemKey: 'mr:1',
+      itemLabel: '!1',
+      worktreePath: null,
+      startedAt: 1,
+      trigger: 'answer'
+    })
+    store.runs.createStep({
+      runId: id,
+      idx: 0,
+      name: 'answers',
+      agent: 'claude',
+      skill: null,
+      mode: null,
+      startedAt: 1,
+      status: 'running'
+    })
+    store.runs.updateStep(id, 0, { terminalHandle: terminal })
+  }
+
+  // A ci card answered and sent to <sentTo>, which is still running; ans-1 runs on term-a, ans-2 on term-b.
+  function sentTo(sentTo: string) {
+    const s = detailsSetup()
+    answerRun(s.store, 'ans-1', 'term-a')
+    answerRun(s.store, 'ans-2', 'term-b')
+    const id = s.add(null)
+    const digest = s.store.inbox.get(id)?.digest ?? ''
+    s.store.inbox.saveAnswer(id, { option: 0, text: null, digest, via: 'page' }, 'nish', 110)
+    const row = s.store.queue.enqueue(id, 200, 110)
+    s.store.queue.update(row, { state: 'dispatched', readyAt: 120, dispatchedRunId: sentTo }, 120)
+    const redraft = copyBundle(s.f, 'F2-v2.json')
+    rewriteBundle(redraft, (b) => {
+      b.blocks[0].rows = [['Applies', 'the re-drafted patch']]
+    })
+    return { ...s, id, redraft }
+  }
+
+  it('attaches from the running answer run, clears the answer and asks again', () => {
+    const { f, store, id, redraft, callAs } = sentTo('ans-1')
+    const params = { id, bundlePath: redraft, head: '1234abcd99', terminal: 'term-a' }
+    expect(callAs(CLI, 'pilot.inbox.setDetails', params)).toEqual({
+      id,
+      version: 2,
+      changed: true,
+      cleared: true
+    })
+    expect(store.inbox.get(id)).toMatchObject({ status: 'open', answer: null, version: 2 })
+    expect(store.inbox.get(id)?.replies.at(-1)).toEqual({
+      text: redraftedReply('1234abcd99'),
+      by: 'pilot'
+    })
+    expect(store.inbox.snapshot(id)?.ref.sha256).toBe(loadDetails(f.root, redraft).ref.sha256)
+  })
+
+  it('re-adds the card with its bundle from the running answer run, clearing the answer', () => {
+    const { store, id, redraft, callAs } = sentTo('ans-1')
+    const card = { type: 'bug', title: 'A ci card', detailsBundlePath: redraft, terminal: 'term-a' }
+    expect(callAs(CLI, 'pilot.inbox.add', card)).toEqual({ id, existing: true, refused: null })
+    expect(store.inbox.get(id)).toMatchObject({ status: 'open', answer: null, version: 2 })
+  })
+
+  it("still refuses set-details while another run's answer is being applied", () => {
+    const { store, id, redraft, callAs } = sentTo('ans-2')
+    const before = store.inbox.get(id)
+    const params = { id, bundlePath: redraft, terminal: 'term-a' }
+    expect(() => callAs(CLI, 'pilot.inbox.setDetails', params)).toThrow(ANSWER_BEING_APPLIED)
+    expect(store.inbox.get(id)).toEqual(before)
+  })
+
+  it("still refuses a bundled re-add while another run's answer is being applied", () => {
+    const { store, id, redraft, callAs } = sentTo('ans-2')
+    const before = store.inbox.get(id)
+    const card = { type: 'bug', title: 'A ci card', detailsBundlePath: redraft, terminal: 'term-a' }
+    expect(callAs(CLI, 'pilot.inbox.add', card)).toEqual({
+      id: null,
+      existing: true,
+      refused: ANSWER_BEING_APPLIED
+    })
+    expect(store.inbox.get(id)).toEqual(before)
+  })
+
+  it.each([
+    [{ outcome: 'applied', item_status: 'done' }],
+    [{ outcome: 're-drafted', item_status: 'open', reply: 'Re-drafted with your notes' }]
+  ])('leaves the new version alone when the answer run then ends (%j)', (outputs) => {
+    const { store, id, redraft, callAs } = sentTo('ans-1')
+    callAs(CLI, 'pilot.inbox.setDetails', { id, bundlePath: redraft, terminal: 'term-a' })
+    const reasked = store.inbox.get(id)
+    store.runs.updateStep('ans-1', 0, { status: 'done', outputs })
+    store.runs.update('ans-1', { status: 'done', finishedAt: 300 })
+    answerRunEnded(store, store.runs.get('ans-1')!)
+    expect(store.inbox.get(id)).toEqual(reasked)
   })
 })

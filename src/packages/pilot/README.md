@@ -191,10 +191,10 @@ A card carries its Details as markdown (`--details-file`) or as a structured **D
 - **Commands:**
   - `pilot inbox add --details-bundle <file>` sends the absolute path; Pilot's main process reads and checks the file itself.
   - `pilot inbox show --id <id>` prints one card, with its Details.
-  - `pilot inbox set-details --id <id> --bundle <file> [--head <sha>]` replaces a waiting card's bundle and clears any answer it had.
+  - `pilot inbox set-details --id <id> --bundle <file> [--head <sha>]` replaces a waiting card's bundle. An answer it had is cleared, with Pilot's reply asking again. While an answer run other than the caller is still applying that answer, it is refused (`its answer is being applied; Details not attached`). That answer run itself may re-attach it (a re-draft), which clears the answer the same way.
 - **Who may attach a bundle** (`add --details-bundle` and `set-details` ask the same rule): the desktop, or the local CLI inside a Pilot run's step of the card's own automation. An unbound CLI and a paired device are refused. Only a desktop Approve applies a drafted patch.
 - **Drafting:** 03 and 04 end each run with two `always` steps that draft a bundle for their open code cards (03: `--cap 8`, 90 minutes; 04: `--cap 3`, 60 minutes). There is no idle-night drain: an undrafted card comes round on the branch's next run.
-- **Go-live:** the check's "Card details" line (read-only) counts open cards, those with a bundle, and imported cards still pointing at a vault bundle.
+- **Go-live:** the check's "Card details" line (read-only) counts waiting cards (open or answered), those with a bundle, and imported cards still pointing at a vault bundle.
 
 ## The worktree panel
 

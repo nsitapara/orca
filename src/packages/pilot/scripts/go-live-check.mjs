@@ -225,8 +225,9 @@ function parityLine(parity) {
 
 const VAULT_BUNDLE_NOTE = 'Details bundle: '
 
-// How many open cards carry a Details bundle, and how many imported ones still only point at a vault bundle.
-// Read from `inbox list --json`, which is GET-only: nothing is added or changed.
+// How many waiting cards (`inbox list` returns open and answered ones) carry a Details bundle, and how many
+// imported ones still only point at a vault bundle. Read from `inbox list --json`, which is GET-only:
+// nothing is added or changed.
 export function detailsLine(listPayload, failure = '') {
   if (!listPayload || !Array.isArray(listPayload.items)) {
     return `Card details: couldn't list the inbox (${firstLine(failure).slice(0, 200) || 'no answer from Pilot'})`
@@ -240,7 +241,7 @@ export function detailsLine(listPayload, failure = '') {
       typeof item.detailsMd === 'string' &&
       item.detailsMd.startsWith(VAULT_BUNDLE_NOTE)
   ).length
-  return `Card details: ${items.length} open cards, ${withBundle} with a Details bundle, ${legacy} imported cards still pointing at a vault bundle (re-run "Import open vault cards" in Pilot's window).`
+  return `Card details: ${items.length} waiting cards, ${withBundle} with a Details bundle, ${legacy} imported cards still pointing at a vault bundle (re-run "Import open vault cards" in Pilot's window).`
 }
 
 function problemLines(rows, parity) {

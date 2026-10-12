@@ -4,9 +4,13 @@ import type { QueueEntry, QueueHow } from '../../shared/inbox-types'
 import { personSees, type InboxDeps } from '../inbox/inbox-service'
 import { picksDraftedOption } from './draft-grant'
 
-import { APPROVE_ON_DESKTOP, DRAFT_ON_DESKTOP } from '../../shared/pilot-replies'
+import {
+  APPROVE_ON_DESKTOP,
+  DRAFT_ON_DESKTOP,
+  DRAFT_OPTION_ON_DESKTOP
+} from '../../shared/pilot-replies'
 
-export { APPROVE_ON_DESKTOP, DRAFT_ON_DESKTOP }
+export { APPROVE_ON_DESKTOP, DRAFT_ON_DESKTOP, DRAFT_OPTION_ON_DESKTOP }
 
 export type CatalogLookup = { get(name: string): unknown }
 
@@ -37,7 +41,9 @@ export function routeFor(
   const approvesDraft =
     route.kind === 'agent' && !route.revise && item.details?.drafted === true && asksForDraft
   if (approvesDraft && answer.callerKind !== 'desktop') {
-    return { kind: 'reask', reason: DRAFT_ON_DESKTOP }
+    // A question's drafted change is approved by picking its option, so its re-ask says so.
+    const reason = item.type === 'question' ? DRAFT_OPTION_ON_DESKTOP : DRAFT_ON_DESKTOP
+    return { kind: 'reask', reason }
   }
   return route
 }
