@@ -175,3 +175,96 @@ export function gitlabHandlesFor(
   const handles = dir.people.filter((p) => ids.has(p.id)).map((p) => p.gitlab)
   return [...new Set(handles.filter((h): h is string => h !== undefined && h !== ''))]
 }
+
+export type Account = (typeof ACCOUNT_FIELDS)[number]
+
+export function personByAccount(
+  dir: PeopleDirectory,
+  account: Account,
+  handle: string
+): Person | null {
+  const wanted = handle.toLowerCase()
+  return dir.people.find((p) => p[account]?.toLowerCase() === wanted) ?? null
+}
+
+export function personByGithub(dir: PeopleDirectory, login: string): Person | null {
+  return personByAccount(dir, 'github', login)
+}
+
+// people.yaml's `linear` is the person's Linear display name (or their Linear user id).
+export function personByLinear(dir: PeopleDirectory, name: string): Person | null {
+  return personByAccount(dir, 'linear', name)
+}
+
+export type RefMatch = { ok: true } | { ok: false; reason: string }
+const MATCH: RefMatch = { ok: true }
+
+// Whether the account <handle> (an MR's author, a ticket's assignee) is someone <ref> names. The
+// reasons keep M1's wording ("Author nish8 isn't in people.yaml"); a not-ref passes anyone people.yaml
+// doesn't know, since they can't be one of the people it leaves out.
+export function matchRef(
+  ref: PeopleRef | undefined,
+  role: string,
+  account: Account,
+  handle: string | null,
+  dir: PeopleDirectory
+): RefMatch {
+  if (ref === undefined || ref === 'anyone') {
+    return MATCH
+  }
+  const person = handle ? personByAccount(dir, account, handle) : null
+  if ('not' in ref) {
+    if (person && !refIncludes(ref, person.id, dir)) {
+      return {
+        ok: false,
+        reason: `${role} is ${person.name}; this automation leaves out ${describeRef(ref.not, dir)}`
+      }
+    }
+    return MATCH
+  }
+  if (!handle) {
+    return { ok: false, reason: `${role} is unknown` }
+  }
+  if (!person) {
+    return { ok: false, reason: `${role} ${handle} isn't in people.yaml` }
+  }
+  if (refIncludes(ref, person.id, dir)) {
+    return MATCH
+  }
+  return {
+    ok: false,
+    reason: `${role} is ${person.name}; this automation looks at ${describeRef(ref, dir)}`
+  }
+}
+
+// The same for a list of accounts (an MR's reviewers or approvers): a set needs one of them in it,
+// a not-ref none of them.
+export function matchRefAny(
+  ref: PeopleRef | undefined,
+  role: string,
+  account: Account,
+  handles: readonly string[],
+  dir: PeopleDirectory
+): RefMatch {
+  if (ref === undefined || ref === 'anyone') {
+    return MATCH
+  }
+  const people = handles
+    .map((h) => personByAccount(dir, account, h))
+    .filter((p): p is Person => p !== null)
+  if ('not' in ref) {
+    const hit = people.find((p) => !refIncludes(ref, p.id, dir))
+    if (hit) {
+      return {
+        ok: false,
+        reason: `${role}: ${hit.name}; this automation leaves out ${describeRef(ref.not, dir)}`
+      }
+    }
+    return MATCH
+  }
+  if (people.some((p) => refIncludes(ref, p.id, dir))) {
+    return MATCH
+  }
+  const who = handles.length > 0 ? handles.join(', ') : 'nobody'
+  return { ok: false, reason: `${role}: ${who}; this automation looks at ${describeRef(ref, dir)}` }
+}
