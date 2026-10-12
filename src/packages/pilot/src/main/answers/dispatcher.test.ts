@@ -288,11 +288,9 @@ describe('AnswerDispatcher', () => {
     const again = s.answer({ ...ACTION, title: 'Push again?' }, 'approve')
     s.settle()
     s.holds.inFlight = async () => {
-      saveAnswer(
-        s.inbox,
-        { id: again, text: 'skip', digest: s.store.inbox.get(again)!.digest },
-        { callerKind: 'desktop', catalog: { get: () => s.push } }
-      )
+      // The page refuses this once the row is ready (ANSWER_LOCKED); the dispatcher still checks what it reads.
+      const now = s.store.inbox.get(again)!
+      s.store.inbox.update(again, { answer: { ...now.answer!, text: 'skip' } }, 5_000)
       return null
     }
     await s.dispatcher.pass()

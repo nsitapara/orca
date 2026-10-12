@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { cn } from '@/lib/utils'
 import type { InboxItemRow, InboxReply } from '../../../shared/api-types'
@@ -101,14 +101,19 @@ export function InboxCard({
   onSave: (answer: Answer) => Promise<string | null>
 }): React.JSX.Element {
   const [unsaved, setUnsaved] = useState(false)
+  // Set while the card is open: when it is answered from here the next line takes focus (not on page load).
+  const justAnswered = useRef(item.status === 'open')
   const [off, setOff] = useState<string[]>([])
   const toggle = (id: string) =>
     setOff((now) => (now.includes(id) ? now.filter((x) => x !== id) : [...now, id]))
   // An open card is answered with one click; an answered one is a line with its countdown and Undo.
   const editing = item.status === 'open'
+  if (editing) {
+    justAnswered.current = true
+  }
   const parts = editing ? partSwitches(item, off, toggle) : null
   const asked = askedLabel(item.createdAt, now)
-  const status = statusOf(item, queued, unsaved && editing)
+  const status = statusOf(item, queued, unsaved && editing, now)
   const frame = cn(
     'flex min-w-0 scroll-mt-14 flex-col gap-2 rounded-[10px] border bg-card px-3.5 py-3 text-card-foreground',
     selected ? 'border-foreground/30' : 'border-border'
@@ -123,6 +128,7 @@ export function InboxCard({
         <AnsweredLine
           item={item}
           queued={queued}
+          focusUndo={justAnswered.current}
           onUndo={() => void onSave({ option: null, text: '' })}
         />
         {error ? <p className="text-sm text-destructive">{error}</p> : null}

@@ -540,3 +540,29 @@ describe('when the ask was made', () => {
     vi.useRealTimers()
   })
 })
+
+describe('the unsaved pill after Send', () => {
+  afterEach(() => {
+    cleanup()
+    pilotRpc.mockReset()
+  })
+  it('clears once the notes are sent', async () => {
+    serve({ ...LIST, items: [F1] })
+    render(<InboxPage />)
+    const article = (await screen.findByRole('heading', { name: 'F1 Fixture' })).closest('article')!
+    fireEvent.click(within(article).getByRole('button', { name: 'With notes…' }))
+    fireEvent.change(article.querySelector('textarea')!, { target: { value: 'carefully' } })
+    fireEvent.click(within(article).getByRole('button', { name: 'Send' }))
+    await waitFor(() =>
+      expect(pilotRpc).toHaveBeenCalledWith(
+        'pilot.inbox.answer',
+        expect.objectContaining({ id: 'f1', text: 'carefully' })
+      )
+    )
+    await waitFor(() =>
+      expect([...article.querySelectorAll('span')].map((s) => s.textContent)).not.toContain(
+        'unsaved'
+      )
+    )
+  })
+})
