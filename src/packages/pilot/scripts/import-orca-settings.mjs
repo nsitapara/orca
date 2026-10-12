@@ -44,6 +44,13 @@ const BACKUP_NAME = new RegExp(`\\.(${BACKUP_TAG}|${FAILED_TAG})-(\\d{8}T\\d{6}Z
 const PILOT_EXECUTABLE_SUFFIX = 'Pilot.app/Contents/MacOS/Pilot'
 const PILOT_LOCK_FILES = ['SingletonLock', 'orcad.lock']
 const APP_SUPPORT = join(homedir(), 'Library', 'Application Support')
+// The folder the packaged app (and both launchers) always use.
+const PACKAGED_PILOT_DATA = join(APP_SUPPORT, 'Pilot')
+
+function sameFolder(a, b) {
+  const spellings = new Set(folderSpellings(b).map((p) => p.toLowerCase()))
+  return folderSpellings(a).some((p) => spellings.has(p.toLowerCase()))
+}
 
 // Files whose presence decides how Pilot's startup loads the profile.
 const STATE_FILE_PATTERNS = [
@@ -176,10 +183,18 @@ export function listBackups(profileDir) {
   return [...sets.values()].sort((a, b) => a.stamp.localeCompare(b.stamp))
 }
 
-export function findRunningPilot({ pilotDataDir, processPaths }) {
-  const reasons = processPaths
-    .filter((path) => path.endsWith(PILOT_EXECUTABLE_SUFFIX))
-    .map((path) => `process ${path}`)
+// A running packaged Pilot holds its own data folder, so it blocks an import there; it never uses another folder.
+// Any folder's own lock files (a dev or orcad Pilot running on it) still block an import into that folder.
+export function findRunningPilot({
+  pilotDataDir,
+  processPaths,
+  packagedDataDir = PACKAGED_PILOT_DATA
+}) {
+  const reasons = sameFolder(pilotDataDir, packagedDataDir)
+    ? processPaths
+        .filter((path) => path.endsWith(PILOT_EXECUTABLE_SUFFIX))
+        .map((path) => `process ${path}`)
+    : []
   for (const name of PILOT_LOCK_FILES) {
     const path = join(pilotDataDir, name)
     if (pathExists(path)) {
@@ -294,7 +309,8 @@ export async function importOrcaSettings(options) {
   const listProcesses = options.listProcesses ?? listProcessPaths
   const running = findRunningPilot({
     pilotDataDir: options.pilotDataDir,
-    processPaths: await listProcesses()
+    processPaths: await listProcesses(),
+    packagedDataDir: options.packagedDataDir
   })
   if (running.length > 0) {
     log('Pilot looks like it is running. Quit Pilot first. Found:')
@@ -341,7 +357,8 @@ export async function importOrcaSettings(options) {
 
 const HELP = `Usage: node src/packages/pilot/scripts/import-orca-settings.mjs [--dry-run | --apply | --restore <stamp> | --list]
   Copies Orca's settings, repos, projects, worktree metadata and SSH targets into Pilot.
-  Never copies Orca's automations, UI state, sessions or terminals. Quit Pilot first.
+  Never copies Orca's automations, UI state, sessions or terminals. Quit Pilot first (only when
+  importing into its own data folder).
   --dry-run            print what would change (the default)
   --apply              rename Pilot's state files aside and stage the import
   --restore <stamp>    put back the files an earlier --apply renamed aside

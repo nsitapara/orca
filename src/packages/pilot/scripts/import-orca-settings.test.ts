@@ -15,6 +15,7 @@ import {
 import { homedir, tmpdir } from 'node:os'
 import { basename, join } from 'node:path'
 import {
+  findRunningPilot,
   importOrcaSettings,
   listStateFiles,
   renameAll
@@ -157,6 +158,7 @@ function plainFixture() {
 const options = (f: { orcaData: string; pilotData: string }, extra: State = {}): State => ({
   orcaDataDir: f.orcaData,
   pilotDataDir: f.pilotData,
+  packagedDataDir: f.pilotData,
   profileId: 'local-default',
   listProcesses: () => ['/Applications/Orca.app/Contents/MacOS/Orca'],
   log: quiet,
@@ -258,6 +260,37 @@ describe('importOrcaSettings without a database', () => {
       expect([snapshot(f.orcaProfile), snapshot(f.pilotProfile)]).toEqual([orcaBefore, pilotBefore])
     }
   )
+
+  it.each([
+    [
+      "the packaged app's folder, while it runs",
+      'packaged',
+      [],
+      ['process /x/dist/mac-arm64/Pilot.app/Contents/MacOS/Pilot']
+    ],
+    ['a scratch folder, while the packaged app runs', 'scratch', [], []],
+    [
+      'a scratch folder whose own Pilot holds orcad.lock',
+      'scratch',
+      ['orcad.lock'],
+      ['lock file <scratch>/orcad.lock']
+    ]
+  ])('a running Pilot blocks an import into %s: %j', (_name, target, locks, expected) => {
+    const root = mkdtempSync(join(tmpdir(), 'pilot-guard-'))
+    const packaged = join(root, 'Pilot')
+    const scratch = join(root, 'pilot-golive')
+    mkdirSync(packaged)
+    mkdirSync(scratch)
+    for (const lock of locks) {
+      writeFileSync(join(scratch, lock), '')
+    }
+    const reasons = findRunningPilot({
+      pilotDataDir: target === 'packaged' ? packaged : scratch,
+      processPaths: pilotProcess,
+      packagedDataDir: packaged
+    })
+    expect(reasons.map((r: string) => r.replace(scratch, '<scratch>'))).toEqual(expected)
+  })
 
   it('refuses a --pilot-data symlink that leads into the Orca folder', async () => {
     const f = plainFixture()
