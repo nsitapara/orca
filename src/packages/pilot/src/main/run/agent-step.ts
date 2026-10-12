@@ -95,6 +95,27 @@ function rememberWorktreeSession(
   }
 }
 
+// A session id learned after launch (a fresh Codex step's, from its hooks): a per_worktree step keeps it for
+// the automation's next run in that worktree, as rememberWorktreeSession does for an id known at launch.
+export function rememberLearnedSession(
+  store: PilotStore,
+  definitionFor: (automationId: string) => AutomationDefinition | null,
+  step: { runId: string; idx: number; agent: string },
+  sessionId: string,
+  at: number
+): void {
+  const run = store.runs.get(step.runId)
+  const def = run ? definitionFor(run.automationId) : null
+  const stepDef = def?.steps[step.idx]
+  if (!run?.worktreePath || !def || stepDef?.session.kind !== 'per_worktree') {
+    return
+  }
+  if (stepDef.agent !== step.agent) {
+    return
+  }
+  store.sessions.set(def.id, run.worktreePath, step.agent, sessionId, at)
+}
+
 function launchOptions(
   req: AgentStepRequest,
   agent: AgentKind,

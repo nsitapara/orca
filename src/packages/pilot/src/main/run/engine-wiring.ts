@@ -11,6 +11,7 @@ import {
   type StepStarter,
   type StepStartRequest
 } from './advance'
+import { rememberLearnedSession } from './agent-step'
 import { claudeTranscriptCost, type CostReader } from './cost'
 import {
   makeShellSteps,
@@ -145,7 +146,9 @@ export function wireRunEngine(input: EngineWiringInput): WiredEngine {
             )
           }
         },
-        onStepEnded: (runId) => engine.advance(runId)
+        onStepEnded: (runId) => engine.advance(runId),
+        sessionLearned: (step, sessionId) =>
+          rememberLearnedSession(store, input.definitionFor, step, sessionId, now())
       })
       await engine.advanceIdle()
     }
