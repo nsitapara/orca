@@ -17,9 +17,11 @@ ORCA_READS = {("worktree", "list"), ("worktree", "show"), ("worktree", "ps"), ("
               ("terminal", "show"), ("terminal", "read"), ("terminal", "wait"), ("repo", "list"), ("repo", "show"),
               ("linear", "list"), ("linear", "issue"), ("linear", "search"), ("status",)}
 GLAB_READS = {("mr", "list"), ("mr", "view"), ("ci", "list"), ("ci", "view"), ("auth", "status")}
-GLAB_WRITE_FLAGS = {"-f", "-F", "--field", "--raw-field", "--input"}
+# Any arg starting with one of these gives glab api a body, which makes it a write (-fbody=x, --field=x, --input=f).
+GLAB_WRITE_PREFIXES = ("-f", "-F", "--field", "--raw-field", "--input")
 GIT_READS = {"status", "rev-parse", "log", "show-ref", "merge-base", "rev-list", "for-each-ref", "cat-file",
              "ls-files", "show"}
+GIT_OUTPUT_WRITERS = {"diff", "log", "show"}  # --output=<file> writes a file
 ENV_DROPPED = ("AGENT_RUN", "AGENT_TRIGGER", "AGENT_STEP")
 
 
@@ -33,16 +35,27 @@ class NotInFixture(BaseException):
     BaseException for the same reason."""
 
 
+def _glab_api_arg_writes(rest, i):
+    """(writes, args used) for rest[i]: any field or input flag, in any form, writes; a method other than exactly GET
+    (`-X GET`, `-XGET`, `--method GET`, `--method=GET`) writes."""
+    arg = rest[i]
+    if arg in ("-X", "--method"):
+        return (rest[i + 1] if i + 1 < len(rest) else None) != "GET", 2
+    if arg.startswith("--method="):
+        return arg != "--method=GET", 1
+    if arg.startswith("-X"):
+        return arg != "-XGET", 1
+    return arg.startswith(GLAB_WRITE_PREFIXES), 1
+
+
 def _glab_is_read(rest):
     if rest[:1] == ["api"]:
-        for i, arg in enumerate(rest):
-            if arg in GLAB_WRITE_FLAGS:
+        i = 1
+        while i < len(rest):
+            writes, used = _glab_api_arg_writes(rest, i)
+            if writes:
                 return False
-            if arg in ("-X", "--method"):
-                if i + 1 >= len(rest) or rest[i + 1].upper() != "GET":
-                    return False
-            elif arg.startswith("--method=") and arg.split("=", 1)[1].upper() != "GET":
-                return False
+            i += used
         return True
     return tuple(rest[:2]) in GLAB_READS
 
@@ -57,9 +70,9 @@ def _git_is_read(rest):
         return all(a in ("--show-current", "--list") for a in args)
     if sub == "config":
         return args[:1] == ["--get"]
-    if sub == "diff":
-        return not any(a.startswith("--output") for a in args)
-    return sub in GIT_READS
+    if sub in GIT_OUTPUT_WRITERS and any(a.startswith("--output") for a in args):
+        return False
+    return sub == "diff" or sub in GIT_READS
 
 
 def is_read(argv):
