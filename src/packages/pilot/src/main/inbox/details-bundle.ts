@@ -188,14 +188,30 @@ function readReview(real: string, ref: string): string {
   return text
 }
 
+// The option a question's draft implements: the first facts block's Drafted row (item-details SKILL.md step 4).
+function draftedOptionOf(bundle: DetailsBundle): string | null {
+  for (const block of bundle.blocks) {
+    if (block.type === 'facts') {
+      const row = block.rows.find(([key]) => key === 'Drafted')
+      if (row) {
+        return row[1]
+      }
+    }
+  }
+  return null
+}
+
 // drafts.py _drafted_base: the base of the first drafted diff, else of a no-draft verdict in the diff slot.
-function draftOf(bundle: DetailsBundle): Pick<DetailsRef, 'drafted' | 'draftedBase'> {
+function draftOf(
+  bundle: DetailsBundle
+): Pick<DetailsRef, 'drafted' | 'draftedBase' | 'draftedOption'> {
   const blocks = bundle.blocks
   const drafted = blocks.find((b) => b.type === 'diff' && Boolean(b.patch))
   const verdict = blocks.find((b) => b.type === 'missing' && b.slot === 'diff')
   const base = drafted && 'base' in drafted ? drafted.base : null
   const judged = verdict && 'base' in verdict ? verdict.base : null
-  return { drafted: drafted !== undefined, draftedBase: base || judged || null }
+  const draftedBase = base || judged || null
+  return { drafted: drafted !== undefined, draftedBase, draftedOption: draftedOptionOf(bundle) }
 }
 
 // The bundle's path goes into an answer run's prompt in quotes: none of '"', '\\' or a control character

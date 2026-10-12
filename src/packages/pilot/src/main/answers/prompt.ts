@@ -1,7 +1,7 @@
-import { answerWord, APPROVE } from '../../shared/answers/route'
 import type { InboxItemRow } from '../../shared/api-types'
 import type { AutomationDefinition } from '../../shared/definition/types'
 import { oneLine } from '../inbox/card'
+import { draftApproved } from './draft-grant'
 
 export type AgentAnswer = { item: InboxItemRow; revise: boolean; needsAgent: string | null }
 
@@ -27,20 +27,6 @@ export const DRAFT_GRANTED = `approved in Pilot's window, so its drafted patch m
 export const DRAFT_FORBIDDEN =
   "do not apply the drafted patch; this answer didn't approve it in Pilot's window"
 
-// Pilot, not the agent, decides whether an answer approved a drafted patch: given in Pilot's window on this
-// Mac, where the diff shows, and an Approve (never one with notes) or a pick of a question's option, which
-// apply.md then checks is the option drafted. Any other words ("apply it", "yes, go ahead") grant nothing.
-export function draftApproved(answer: AgentAnswer): boolean {
-  const given = answer.item.answer
-  if (!answer.item.details?.drafted || !given || answer.revise || given.callerKind !== 'desktop') {
-    return false
-  }
-  if (APPROVE.has(answerWord(given.text ?? ''))) {
-    return true
-  }
-  return answer.item.type === 'question' && given.option !== null
-}
-
 // apply.py prompt(): the bundle the answer was given against, pinned by its SHA-256, so a drafted patch
 // applied is the one shown. The path is JSON-quoted: job folders contain ' · ', the prompt's separator,
 // and no file name may close the quote (the loader refuses quotes, backslashes and control characters too).
@@ -50,10 +36,15 @@ function detailsNote(answer: AgentAnswer): string {
     return ''
   }
   let says = `a drafted patch applies only by ${APPLY_MD}`
+  // A hint only: apply.md applies a Pilot card's patch on `pilot inbox show`'s draftApproved, never on this line.
   if (details.drafted) {
-    says = draftApproved(answer) ? DRAFT_GRANTED : DRAFT_FORBIDDEN
+    says = draftApproved(answer.item) ? DRAFT_GRANTED : DRAFT_FORBIDDEN
   }
   return ` (Details ${JSON.stringify(oneLine(details.path))} sha256 ${details.sha256}: ${says})`
+}
+
+function quoted(text: string): string {
+  return JSON.stringify(oneLine(text))
 }
 
 function note(answer: AgentAnswer): string {
@@ -61,7 +52,8 @@ function note(answer: AgentAnswer): string {
 }
 
 // apply.py prompt(): one line (a newline would submit early in a typed prompt), each claimed answer as
-// [id] "title" → answer, then how to record what happened.
+// [id] "title" → "answer", then how to record what happened. The title and the answer are JSON-quoted, as
+// the Details path is, so no words typed into either can close their quotes and pass as Pilot's own.
 export function answersLine(
   askingRunId: string | null,
   answerRunId: string,
@@ -71,7 +63,7 @@ export function answersLine(
     ? `Answers to the questions run ${askingRunId} asked (answer run ${answerRunId}), already claimed:`
     : `Answers saved on Waiting on you (answer run ${answerRunId}), already claimed:`
   const lines = answers.map(
-    (a) => `[${a.item.id}] "${a.item.title}" → ${a.item.answer?.text ?? ''}${note(a)}`
+    (a) => `[${a.item.id}] ${quoted(a.item.title)} → ${quoted(a.item.answer?.text ?? '')}${note(a)}`
   )
   return [head, ...lines, RECORD].join(' · ')
 }
