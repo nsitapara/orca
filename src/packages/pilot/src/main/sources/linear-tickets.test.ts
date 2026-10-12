@@ -261,6 +261,26 @@ describe('linearTicketSource: who and what is blocked', () => {
     expect(urgent.fields['ticket.branch_exists']).toBeNull()
   })
 
+  // A read-only look must never take git's optional locks in Nish's checkout (it would block his own git).
+  it('reads whether a branch exists with git optional locks off', async () => {
+    const calls: { args: string[]; env?: NodeJS.ProcessEnv }[] = []
+    const recording: GitRunner = async (args, opts) => {
+      calls.push({ args, env: opts?.env })
+      throw Object.assign(new Error('exit 1'), { code: 1 })
+    }
+    const src = linearTicketSource({
+      linear: connector(),
+      listWorktrees: async () => [],
+      git: recording
+    })
+    await src.list(context(), M01)
+    const showRef = calls.filter((c) => c.args[0] === 'show-ref')
+    expect(showRef.length).toBeGreaterThan(0)
+    for (const call of showRef) {
+      expect(call.env?.GIT_OPTIONAL_LOCKS).toBe('0')
+    }
+  })
+
   it('a worktree ticket whose GitLab lookup fails is blocked and says why', async () => {
     const down = fakeGlab(() => new Error('gitlab down'))
     const broken = await source(connector()).list(sourceContext({}, down), M01)

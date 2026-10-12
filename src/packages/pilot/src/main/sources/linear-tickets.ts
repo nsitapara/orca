@@ -1,3 +1,4 @@
+import { gitOptionalLocksDisabledEnv } from '../../../../../main/git/command-runner/git-process-env'
 import type { ItemFields } from '../../shared/api-types'
 import type {
   LinearIssueListResult,
@@ -56,7 +57,10 @@ export function findTicketWorktree(
 // (timeout, spawn error, not a repo) is unknown and throws, so the item is blocked, never "mine".
 async function branchExists(git: GitRunner, repoPath: string, branch: string): Promise<boolean> {
   try {
-    await git(['show-ref', '--verify', '--quiet', `refs/heads/${branch}`], { cwd: repoPath })
+    await git(['show-ref', '--verify', '--quiet', `refs/heads/${branch}`], {
+      cwd: repoPath,
+      env: gitOptionalLocksDisabledEnv()
+    })
     return true
   } catch (error) {
     const { code, killed, signal } = (error ?? {}) as {
