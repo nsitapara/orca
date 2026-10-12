@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 import type { SessionTerminalState } from '../run/agent-step'
 import { SessionClaims } from '../run/session-claims'
+import { defaultUsagePaths } from '../usage/step-usage'
 import {
   DraftInProgressError,
   findTranscript,
@@ -12,30 +13,34 @@ import {
 } from './session-probe'
 
 describe('findTranscript', () => {
+  const DAY = Date.UTC(2026, 9, 11, 12)
+  // Claude under CLAUDE_CONFIG_DIR (usage's own finder), Codex by its day folder in each Codex home.
   function home() {
     const dir = mkdtempSync(join(tmpdir(), 'pilot-home-'))
-    mkdirSync(join(dir, '.claude', 'projects', '-Users-n-wt'), { recursive: true })
-    writeFileSync(join(dir, '.claude', 'projects', '-Users-n-wt', 'sess-1.jsonl'), 'x'.repeat(10))
-    const day = join(dir, '.codex', 'sessions', '2026', '10', '11')
+    mkdirSync(join(dir, 'cfg', 'projects', '-Users-n-wt'), { recursive: true })
+    writeFileSync(join(dir, 'cfg', 'projects', '-Users-n-wt', 'sess-1.jsonl'), 'x'.repeat(10))
+    const [y, m, d] = new Date(DAY).toLocaleDateString('en-CA').split('-')
+    const day = join(dir, '.codex', 'sessions', y, m, d)
     mkdirSync(day, { recursive: true })
-    writeFileSync(join(day, 'rollout-2026-10-11T09-00-00-cx-9.jsonl'), 'y'.repeat(20))
-    utimesSync(join(day, 'rollout-2026-10-11T09-00-00-cx-9.jsonl'), 1000, 1000)
-    return dir
+    writeFileSync(join(day, `rollout-${y}-${m}-${d}T09-00-00-cx-9.jsonl`), 'y'.repeat(20))
+    utimesSync(join(day, `rollout-${y}-${m}-${d}T09-00-00-cx-9.jsonl`), 1000, 1000)
+    return { dir, paths: defaultUsagePaths({ CLAUDE_CONFIG_DIR: join(dir, 'cfg') }, dir) }
   }
 
   it.each([
-    ['a Claude session under any project', 'claude', 'sess-1', 10],
-    ['a Codex rollout anywhere under sessions/', 'codex', 'cx-9', 20]
-  ] as const)('finds %s', (_name, agent, id, size) => {
-    expect(findTranscript(agent, id, null, home(), undefined)?.size).toBe(size)
+    ['a Claude session under CLAUDE_CONFIG_DIR', 'claude', 'sess-1', 10],
+    ['a Codex rollout in its day folder', 'codex', 'cx-9', 20]
+  ] as const)('finds %s', async (_name, agent, id, size) => {
+    const { paths } = home()
+    expect((await findTranscript(agent, id, null, DAY, paths))?.size).toBe(size)
   })
 
-  it('prefers the path the step recorded, and finds nothing for an unknown session', () => {
-    const dir = home()
+  it('prefers the path the step recorded, and finds nothing for an unknown session', async () => {
+    const { dir, paths } = home()
     const known = join(dir, 'known.jsonl')
     writeFileSync(known, 'z')
-    expect(findTranscript('claude', 'other', known, dir, undefined)?.size).toBe(1)
-    expect(findTranscript('claude', 'nope', null, dir, undefined)).toBeNull()
+    expect((await findTranscript('claude', 'other', known, DAY, paths))?.size).toBe(1)
+    expect(await findTranscript('claude', 'nope', null, DAY, paths)).toBeNull()
   })
 })
 

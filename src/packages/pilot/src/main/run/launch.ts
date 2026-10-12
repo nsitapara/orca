@@ -30,6 +30,7 @@ import {
   type Workspace,
   type WorkspaceDeps
 } from './workspace'
+import { defaultUsagePaths, findSessionTranscript } from '../usage/step-usage'
 
 export type LauncherDeps = AgentStepDeps & {
   workspace: WorkspaceDeps
@@ -335,6 +336,9 @@ export function runtimeLauncherDeps(
     modeText: modeTextUnavailable,
     newSessionId: () => randomUUID(),
     now,
+    transcriptExists: async (agent, sessionId, hinted, startedAt) =>
+      (await findSessionTranscript(agent, sessionId, hinted, startedAt, defaultUsagePaths())) !==
+      null,
     sessionTerminals: runtimeSessionTerminals(runtime, worktrees, pause)
   }
 }

@@ -231,6 +231,26 @@ export class RunStore {
       .map((r) => toStep(r as never))
   }
 
+  // Where a session's transcript is: when its first step started (Codex files the rollout under that day)
+  // and the newest transcript path a step recorded for it.
+  sessionFacts(sessionId: string): {
+    firstStartedAt: number | null
+    transcriptPath: string | null
+  } {
+    const r = this.db
+      .prepare(
+        `SELECT MIN(started_at) AS first,
+           (SELECT transcript_path FROM steps WHERE session_id = ? AND transcript_path IS NOT NULL
+             ORDER BY started_at DESC LIMIT 1) AS path
+         FROM steps WHERE session_id = ?`
+      )
+      .get(sessionId, sessionId) as { first: number | null; path: string | null } | undefined
+    return {
+      firstStartedAt: r?.first === null || r?.first === undefined ? null : Number(r.first),
+      transcriptPath: r?.path ?? null
+    }
+  }
+
   // limits.at_once counts this automation's running runs only: a needs_you run holds no slot (H2).
   runningCount(automationId: string): number {
     const row = this.db

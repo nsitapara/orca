@@ -1,10 +1,8 @@
-import { readdirSync, statSync } from 'node:fs'
-import { homedir } from 'node:os'
-import { basename, join } from 'node:path'
+import { statSync } from 'node:fs'
 import type { AgentKind } from '../../shared/definition/types'
 import { PromptNotSentError, type SessionTerminals } from '../run/agent-step'
 import { findLiveTab } from '../run/session-tabs'
-import { codexHomes } from '../usage/codex-homes'
+import { defaultUsagePaths, findSessionTranscript, type UsagePaths } from '../usage/step-usage'
 import type { SessionProbe, TerminalState, TranscriptFacts } from './sessions'
 
 // Nothing was typed: someone's draft is in the input.
@@ -24,55 +22,17 @@ function statOf(path: string): TranscriptFacts | null {
   }
 }
 
-function subdirs(dir: string): string[] {
-  try {
-    return readdirSync(dir, { withFileTypes: true })
-      .filter((d) => d.isDirectory())
-      .map((d) => join(dir, d.name))
-  } catch {
-    return []
-  }
-}
-
-function codexRollout(root: string, sessionId: string): string | null {
-  try {
-    const names = readdirSync(root, { recursive: true, encoding: 'utf8' })
-    const found = names.find((n) => n.endsWith('.jsonl') && basename(n).includes(sessionId))
-    return found ? join(root, found) : null
-  } catch {
-    return null
-  }
-}
-
-// Where usage.py looks (CLAUDE_PROJECTS, CODEX_HOMES), plus Pilot's own Codex home.
-export function findTranscript(
+// usage's finders (CLAUDE_CONFIG_DIR, Codex day folders in every Codex home), so the fork check looks where
+// usage does, without walking a whole Codex home.
+export async function findTranscript(
   agent: AgentKind,
   sessionId: string,
   knownPath: string | null,
-  home: string = homedir(),
-  codexHome: string | undefined = process.env.CODEX_HOME
-): TranscriptFacts | null {
-  const known = knownPath ? statOf(knownPath) : null
-  if (known) {
-    return known
-  }
-  if (agent === 'claude') {
-    for (const dir of subdirs(join(home, '.claude', 'projects'))) {
-      const found = statOf(join(dir, `${sessionId}.jsonl`))
-      if (found) {
-        return found
-      }
-    }
-    return null
-  }
-  const homes = codexHomes(codexHome, home)
-  for (const root of homes) {
-    const file = codexRollout(join(root, 'sessions'), sessionId)
-    if (file) {
-      return statOf(file)
-    }
-  }
-  return null
+  startedAt: number,
+  paths: UsagePaths = defaultUsagePaths()
+): Promise<TranscriptFacts | null> {
+  const path = await findSessionTranscript(agent, sessionId, knownPath, startedAt, paths)
+  return path ? statOf(path) : null
 }
 
 export type SessionLookDeps = {
@@ -121,7 +81,7 @@ async function elsewhere(
 // is busy). A busy tab with a draft reads as typing, so its answers wait for the person.
 export function sessionTerminalProbe(
   deps: SessionLookDeps,
-  home: string = homedir()
+  paths: UsagePaths = defaultUsagePaths()
 ): SessionProbe {
   return {
     async terminalState({ handle, paneKey, sessionId }) {
@@ -136,7 +96,8 @@ export function sessionTerminalProbe(
       }
       return state === 'busy' ? busyOrTyping(deps, handle) : state
     },
-    transcript: (agent, sessionId, knownPath) => findTranscript(agent, sessionId, knownPath, home)
+    transcript: (agent, sessionId, knownPath, startedAt) =>
+      findTranscript(agent, sessionId, knownPath, startedAt, paths)
   }
 }
 

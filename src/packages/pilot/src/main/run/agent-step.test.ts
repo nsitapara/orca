@@ -41,6 +41,7 @@ function setup(definition: AutomationDefinition, over: Partial<AgentStepDeps> = 
     modeText: async () => null,
     newSessionId: () => 'uuid-new',
     now: () => 7,
+    transcriptExists: async () => true,
     ...over
   }
   const request = (stepIdx: number, runId = 'run-1'): AgentStepRequest => ({
@@ -128,6 +129,53 @@ describe('launchAgentStep', () => {
     await launchAgentStep(store, request(0, 'run-2'), { ...deps, newSessionId: () => 'uuid-other' })
     expect(argvOf(launchTerminal.mock.calls[1])).toEqual(['--resume', 'uuid-new'])
   })
+
+  // A stored session whose transcript is gone (Claude deletes them after 30 days; a pinned one that never
+  // started has none) would make `--resume` exit to a shell, and the step read working until its timeout.
+  it.each<['claude' | 'codex', boolean, string[], string | null]>([
+    ['claude', false, ['--session-id', 'uuid-new'], 'uuid-new'],
+    ['claude', true, ['--resume', 'old-sess'], 'old-sess'],
+    ['codex', false, [], null],
+    ['codex', true, ['resume', 'old-sess'], 'old-sess']
+  ])(
+    'per_worktree %s with its transcript on disk %s: resumes it only when it is there',
+    async (agent, onDisk, argv, kept) => {
+      const def = testDefinition({
+        id: 'cycles',
+        steps: [testStep({ name: 'pass', agent, session: { kind: 'per_worktree' } })]
+      })
+      const transcriptExists = vi.fn(async () => onDisk)
+      const { store, request, launchTerminal, deps } = setup(def, { transcriptExists })
+      // The session's first step, long ago: where Codex filed its rollout, and the path its hooks gave.
+      store.runs.create({
+        id: 'run-0',
+        automationId: 'cycles',
+        tickId: null,
+        itemKey: 'wt:a',
+        itemLabel: 'web-1-a',
+        worktreePath: '/wt/a',
+        startedAt: 2
+      })
+      store.runs.createStep({
+        runId: 'run-0',
+        idx: 0,
+        name: 'pass',
+        agent,
+        skill: null,
+        startedAt: 2
+      })
+      store.runs.updateStep('run-0', 0, {
+        status: 'done',
+        sessionId: 'old-sess',
+        transcriptPath: '/t/old-sess.jsonl'
+      })
+      store.sessions.set('cycles', '/wt/a', agent, 'old-sess', 5)
+      await launchAgentStep(store, request(0), deps)
+      expect(transcriptExists).toHaveBeenCalledWith(agent, 'old-sess', '/t/old-sess.jsonl', 2)
+      expect(argvOf(launchTerminal.mock.calls[0])).toEqual(argv)
+      expect(store.sessions.get('cycles', '/wt/a', agent)?.sessionId ?? null).toBe(kept)
+    }
+  )
 
   it("doesn't pin or store a Codex session (it is learned from its hooks)", async () => {
     const def = testDefinition({

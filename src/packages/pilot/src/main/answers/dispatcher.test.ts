@@ -119,7 +119,7 @@ function setup(over: Over = {}) {
       now: () => clock,
       probe: {
         terminalState: async () => 'gone',
-        transcript: () => ({ size: 1, mtimeMs: clock })
+        transcript: async () => ({ size: 1, mtimeMs: clock })
       },
       quota: async () => ({ weekly: 1, session: 1 }),
       open: open as never,

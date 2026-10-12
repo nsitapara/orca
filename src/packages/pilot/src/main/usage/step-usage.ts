@@ -1,5 +1,6 @@
 import { homedir } from 'node:os'
 import { join } from 'node:path'
+import type { AgentKind } from '../../shared/definition/types'
 import type { PilotStore } from '../store/store'
 import type { MeasurableStep } from '../store/store-usage'
 import type { UsageBucket } from './buckets'
@@ -24,6 +25,22 @@ export function defaultUsagePaths(
   const claudeDir = env.CLAUDE_CONFIG_DIR?.trim() || join(home, '.claude')
   const codexHomes = sharedCodexHomes(env.CODEX_HOME, home)
   return { claudeProjects: join(claudeDir, 'projects'), codexHomes }
+}
+
+// One way to find a session's transcript (usage, the answers' fork check, a per_worktree resume): the
+// recorded path when it is there, else Claude's under CLAUDE_CONFIG_DIR's projects, or Codex's rollout by
+// its day folder (the session's first day) in each Codex home.
+export async function findSessionTranscript(
+  agent: AgentKind,
+  sessionId: string,
+  hinted: string | null,
+  startedAt: number,
+  paths: UsagePaths
+): Promise<string | null> {
+  if (agent === 'claude') {
+    return findClaudeTranscript(sessionId, hinted, paths.claudeProjects)
+  }
+  return findCodexRollout(sessionId, hinted, startedAt, paths.codexHomes)
 }
 
 export function stepUsageReader(paths: UsagePaths, now: () => number): StepUsageReader {
