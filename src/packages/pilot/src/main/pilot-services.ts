@@ -163,7 +163,8 @@ function openPilot(
         now,
         definitions: () => definitions.current().definitions,
         start: (req) => wired.engine.startRun(req),
-        schedulerOn: () => schedulerOn
+        schedulerOn: () => schedulerOn,
+        displayOnly: () => definitions.current().displayOnly ?? []
       })
     ]
   })

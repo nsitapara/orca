@@ -36,6 +36,8 @@ export function startRunEntry(deps: {
   start(req: LaunchRequest): Promise<unknown>
   // Only the process that runs the scheduler starts a run: its engine watches and ends it.
   schedulerOn(): boolean
+  // Automations whose file is invalid, shown from their last valid version only (loader displayOnly).
+  displayOnly(): readonly string[]
 }): ActionEntry {
   return {
     name: 'start_run',
@@ -72,6 +74,12 @@ export function startRunEntry(deps: {
       const decision = decisionOf(deps.store, run)
       if (!definition || !decision) {
         return actionFailed(`Run ${run.id} has no recorded tick to start from`)
+      }
+      // Fail closed: a held-back definition is for display; nothing new starts from it.
+      if (deps.displayOnly().includes(run.automationId)) {
+        return actionFailed(
+          `${run.automationId} has an invalid definition; fix it before starting runs`
+        )
       }
       if (dryRun) {
         return actionDone(`would start run ${run.id}`)

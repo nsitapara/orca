@@ -281,7 +281,8 @@ describe('approving an ask-first card (Group 22)', () => {
       now: () => 1_000,
       definitions: () => [def],
       start,
-      schedulerOn: () => true
+      schedulerOn: () => true,
+      displayOnly: () => []
     })
     const catalog: ActionCatalog = {
       entries: () => [entry],
