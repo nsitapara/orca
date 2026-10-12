@@ -6,6 +6,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import { Textarea } from '@/components/ui/textarea'
 import type { InboxItemRow } from '../../../shared/api-types'
 import type { QueueEntry } from '../../../shared/inbox-types'
+import { isPilotReply } from '../../../shared/pilot-replies'
 import {
   choicesFor,
   type Choice,
@@ -179,6 +180,11 @@ function Details({ markdown }: { markdown: string | null }): React.JSX.Element {
   )
 }
 
+// Pilot's own re-asks and hand-backs (fixed words) are Pilot's; every other reply is the agent's.
+function replyLabel(reply: string): string {
+  return isPilotReply(reply) ? 'Pilot:' : 'Agent asked:'
+}
+
 // What approving an action card runs, as Pilot wrote it from the stored card (never the agent's words).
 function RunLine({ line }: { line: string | null }): React.JSX.Element | null {
   if (!line) {
@@ -230,7 +236,7 @@ export function InboxCard({
           <RunLine line={runLine} />
           {item.replies.map((r, i) => (
             <p key={i} className="text-sm">
-              Agent asked: {r}
+              {replyLabel(r)} {r}
             </p>
           ))}
           <CardBody

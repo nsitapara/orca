@@ -1,4 +1,5 @@
 import type { InboxItemRow, QueueRow, RunRow } from '../../shared/api-types'
+import { ANSWER_RUN_STOPPED } from '../../shared/pilot-replies'
 import { oneLine } from '../inbox/card'
 import { inboxEvent, syncRunWaiting } from '../inbox/inbox-service'
 import type { PilotStore } from '../store/store'
@@ -8,8 +9,7 @@ import { hold } from './holds'
 // Tries per answer: a dispatch that fails, or an answers session that doesn't finish.
 export const MAX_ATTEMPTS = 3
 const FINISHED_RUN: ReadonlySet<RunRow['status']> = new Set(['done', 'needs_you'])
-export const ANSWER_RUN_STOPPED =
-  'The answer run was stopped before it finished; answer again to send it.'
+export { ANSWER_RUN_STOPPED }
 
 type Text = (key: string) => string
 

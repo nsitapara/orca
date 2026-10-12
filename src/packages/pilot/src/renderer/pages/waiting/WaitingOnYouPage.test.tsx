@@ -141,6 +141,25 @@ describe('WaitingOnYouPage', () => {
     expect(question?.textContent).not.toContain('Run:')
   })
 
+  it("labels Pilot's own re-asks Pilot: and the agent's replies Agent asked:", async () => {
+    const asked = card({
+      id: 'in_r',
+      title: 'Which image?',
+      replies: [
+        'Approve actions in Pilot on this Mac',
+        'The card changed after you approved it; approve the version shown now.',
+        'Sent to the session before Pilot took over. Tick it (pilot inbox tick) once the session is done.',
+        'e2e or unit?'
+      ]
+    })
+    serve({ ...LIST, items: [asked] })
+    render(<WaitingOnYouPage />)
+    expect(await screen.findByText('Pilot: Approve actions in Pilot on this Mac')).toBeTruthy()
+    expect(screen.getByText(/^Pilot: The card changed after you approved it/)).toBeTruthy()
+    expect(screen.getByText(/^Pilot: Sent to the session before Pilot took over/)).toBeTruthy()
+    expect(screen.getByText('Agent asked: e2e or unit?')).toBeTruthy()
+  })
+
   it('loads the cards of the person you view as', async () => {
     serve()
     render(<WaitingOnYouPage />)
