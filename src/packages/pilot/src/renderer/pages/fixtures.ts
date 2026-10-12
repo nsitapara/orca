@@ -3,6 +3,7 @@ import type {
   AutomationDetailPayload,
   AutomationSummary
 } from '../../shared/api-types'
+import type { StepDef } from '../../shared/definition/types'
 
 export const summary: AutomationSummary = {
   id: 'fix-ci',
@@ -22,7 +23,25 @@ export const summary: AutomationSummary = {
 export const detail: AutomationDetailPayload = {
   summary,
   yaml: 'name: Fix failed CI\nschedule: manual\n',
-  checkNames: ['Clean']
+  checkNames: ['Clean'],
+  steps: [
+    {
+      name: 'fix',
+      agent: 'claude',
+      skill: 'fix-gitlab-ci',
+      mode: 'fix',
+      prompt: 'Fix it.',
+      promptStyle: 'wrapped',
+      args: [],
+      session: { kind: 'new' },
+      env: {},
+      run: null,
+      exitCodes: { ok: [0], skip: [] },
+      when: null,
+      always: false,
+      timeoutMs: null
+    } satisfies StepDef
+  ]
 }
 
 export const failedRunTick: ActivityTick = {
@@ -53,7 +72,8 @@ export const failedRunTick: ActivityTick = {
       trigger: 'schedule' as const,
       parentRunId: null,
       imported: false,
-      steps: []
+      steps: [],
+      inbox: []
     }
   ]
 }

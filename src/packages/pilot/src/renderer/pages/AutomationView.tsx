@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { ActivityTick, AutomationDetailPayload } from '../../shared/api-types'
 import { pilotRpc } from '../api'
-import { scheduleText } from './AutomationsTable'
+import { AutomationOverview } from './AutomationOverview'
 import { ActivityTimeline } from './ActivityTimeline'
-import { errorText, formatInZone } from './format'
+import { errorText } from './format'
 import { RunControls } from './RunControls'
 
 type Tab = 'overview' | 'activity'
@@ -11,41 +11,6 @@ const TABS: { id: Tab; label: string }[] = [
   { id: 'overview', label: 'Overview' },
   { id: 'activity', label: 'Activity' }
 ]
-
-// Pilot reads powers and inbox from the file but doesn't act on them yet, so neither may read as a
-// guarantee (agents can still push without the push power).
-function notEnforced(value: string): string {
-  return `${value} (not enforced in M1)`
-}
-
-function Overview({ detail }: { detail: AutomationDetailPayload }): React.JSX.Element {
-  const s = detail.summary
-  const next = s.nextTickAt === null ? 'None' : formatInZone(s.nextTickAt, s.timezone)
-  const facts: [string, string][] = [
-    ['Looks at', s.itemKind],
-    ['Schedule', `${scheduleText(s)} (${s.timezone})`],
-    ['Next tick', next],
-    ['Agent', s.agent],
-    ['Powers', notEnforced(s.powers.length ? s.powers.join(', ') : 'None')],
-    ['Inbox', notEnforced(s.inbox)],
-    ['Status', s.enabled ? 'Enabled' : 'Paused']
-  ]
-  return (
-    <div className="flex flex-col gap-3">
-      <dl className="grid grid-cols-[8rem_1fr] gap-y-1 text-sm">
-        {facts.map(([k, v]) => (
-          <div key={k} className="contents">
-            <dt className="text-muted-foreground">{k}</dt>
-            <dd>{v}</dd>
-          </div>
-        ))}
-      </dl>
-      <pre className="overflow-auto rounded-md border border-border/50 bg-muted/20 p-3 text-xs">
-        {detail.yaml}
-      </pre>
-    </div>
-  )
-}
 
 export function AutomationView({
   id,
@@ -130,7 +95,7 @@ export function AutomationView({
       {tab === 'activity' ? (
         <ActivityTimeline ticks={ticks} checkNames={detail.checkNames} />
       ) : (
-        <Overview detail={detail} />
+        <AutomationOverview detail={detail} />
       )}
     </div>
   )

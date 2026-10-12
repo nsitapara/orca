@@ -1,3 +1,6 @@
+import type { StepDef } from './definition/types'
+import type { InboxItemSummary } from './inbox-types'
+
 export type PilotStatus = {
   version: string
   process: 'main' | 'orcad'
@@ -290,12 +293,13 @@ export type AutomationListPayload = {
 }
 export type ActivityTick = TickRow & {
   items: TickItemRow[]
-  runs: (RunRow & { steps: StepRow[] })[]
+  runs: (RunRow & { steps: StepRow[]; inbox: InboxItemSummary[] })[]
 }
 export type AutomationDetailPayload = {
   summary: AutomationSummary
   yaml: string
   checkNames: string[]
+  steps: StepDef[]
 }
 
 // The agent ↔ engine channel (pilot run output | event). Step outputs are template fields

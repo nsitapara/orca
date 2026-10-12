@@ -1,8 +1,11 @@
 // @vitest-environment happy-dom
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { ActivityTick } from '../../shared/api-types'
+import { inboxItem, stepRow } from '../timeline/timeline.fixtures'
 import { ActivityTimeline } from './ActivityTimeline'
+
+vi.mock('../api', () => ({ pilotRpc: vi.fn() }))
 
 const tick: ActivityTick = {
   id: 7,
@@ -53,7 +56,8 @@ const tick: ActivityTick = {
       trigger: 'schedule' as const,
       parentRunId: null,
       imported: false,
-      steps: []
+      steps: [],
+      inbox: []
     }
   ]
 }
@@ -66,7 +70,7 @@ describe('ActivityTimeline', () => {
         checkNames={[]}
       />
     )
-    expect(screen.getByText('Run ci-1 · !1561 web-1493 · Needs you · $0.84')).toBeTruthy()
+    expect(screen.getByText('Needs you')).toBeTruthy()
   })
 
   afterEach(cleanup)
@@ -85,7 +89,7 @@ describe('ActivityTimeline', () => {
         checkNames={[]}
       />
     )
-    expect(screen.getByText(`Run ci-1 · !1561 web-1493 · ${label} · $0.84`)).toBeTruthy()
+    expect(screen.getByText(label)).toBeTruthy()
   })
 
   it('shows each tick with its runs, and its check table on demand', () => {
@@ -113,10 +117,26 @@ describe('ActivityTimeline', () => {
       />
     )
     expect(screen.getByText('Dry run')).toBeTruthy()
-    expect(screen.getByText('Run ci-1 · !1561 web-1493 · Running · $0.84')).toBeTruthy()
+    expect(screen.getByText('Run ci-1 · !1561 web-1493')).toBeTruthy()
+    expect(screen.getByText('Running')).toBeTruthy()
+    expect(screen.getAllByText('$0.84')).toHaveLength(2)
     expect(screen.getByText(/Couldn't start: no repo/)).toBeTruthy()
     cleanup()
     render(<ActivityTimeline ticks={[]} checkNames={[]} />)
     expect(screen.getByText('No ticks yet.')).toBeTruthy()
+  })
+
+  it('shows the v2 run status, what the run asked, and its steps on demand', () => {
+    const run = {
+      ...tick.runs[0],
+      status: 'timed_out' as const,
+      inbox: [inboxItem()],
+      steps: [stepRow()]
+    }
+    render(<ActivityTimeline ticks={[{ ...tick, runs: [run] }]} checkNames={[]} />)
+    expect(screen.getByText('Timed out')).toBeTruthy()
+    expect(screen.getByText('Push the fix?')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: '1 step' }))
+    expect(screen.getByText('Claude · mode fix · Done · $1.20')).toBeTruthy()
   })
 })

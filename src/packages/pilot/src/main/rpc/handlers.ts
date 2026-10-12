@@ -64,18 +64,26 @@ export function getAutomation(ctx: PilotContext, id: string): AutomationDetailPa
   return {
     summary: summarize(ctx, def),
     yaml: readFileSync(def.file, 'utf8'),
-    checkNames: def.checks.map(checkName)
+    checkNames: def.checks.map(checkName),
+    steps: def.steps
   }
 }
 
-// Newest first. An id with no ticks (or no such automation) gives an empty list.
+// Newest first. An id with no ticks (or no such automation) gives an empty list. Each run carries its steps and
+// what it asked (open and answered inbox items), for Activity and the Agent Console.
 export function activity(ctx: PilotContext, id: string, limit: number): ActivityTick[] {
-  return ctx.store.listTicks(id, limit).map((tick) => ({
+  const ticks = ctx.store
+    .listTicks(id, limit)
+    .map((tick) => ({ tick, runs: ctx.store.runs.forTick(tick.id) }))
+  const asked = ctx.store.timeline.inboxForRuns(ticks.flatMap((t) => t.runs.map((r) => r.id)))
+  return ticks.map(({ tick, runs }) => ({
     ...tick,
     items: ctx.store.tickItems(tick.id),
-    runs: ctx.store.runs
-      .forTick(tick.id)
-      .map((run) => ({ ...run, steps: ctx.store.runs.steps(run.id) }))
+    runs: runs.map((run) => ({
+      ...run,
+      steps: ctx.store.runs.steps(run.id),
+      inbox: asked.filter((i) => i.runId === run.id)
+    }))
   }))
 }
 

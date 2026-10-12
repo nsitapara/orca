@@ -37,16 +37,13 @@ describe('AutomationView', () => {
     expect(screen.getByText(/schedule: manual/)).toBeTruthy()
   })
 
-  it('labels powers and inbox as not enforced in M1', async () => {
+  it("shows the Overview's steps", async () => {
     pilotRpc.mockImplementation(async (method: string) =>
-      method === 'pilot.automations.get'
-        ? { ...detail, summary: { ...detail.summary, powers: ['commit', 'push'] } }
-        : []
+      method === 'pilot.automations.get' ? detail : []
     )
     render(<AutomationView id="fix-ci" onBack={() => {}} />)
     fireEvent.click(await screen.findByRole('button', { name: 'Overview' }))
-    expect(await screen.findByText('commit, push (not enforced in M1)')).toBeTruthy()
-    expect(screen.getByText('{mr.author} (not enforced in M1)')).toBeTruthy()
+    expect(await screen.findByText('1. fix')).toBeTruthy()
   })
 
   it('shows the empty state when there are no ticks', async () => {
