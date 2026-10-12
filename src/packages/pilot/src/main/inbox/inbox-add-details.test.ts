@@ -9,7 +9,7 @@ import { PilotStore } from '../store/store'
 import { detailsFixture, REVIEW_BLOCK, rewriteBundle } from './__fixtures__/details-fixture'
 import { loadDetails } from './details-bundle'
 import { addInboxItem, CHANGED_AFTER_ANSWER } from './inbox-add'
-import { ANSWER_BEING_APPLIED } from './inbox-details'
+import { ANSWER_LOCKED } from './answer-lock'
 import type { InboxDeps } from './inbox-service'
 
 const def = parseAutomationYaml(
@@ -130,10 +130,26 @@ describe('addInboxItem with a Details bundle', () => {
     expect(addInboxItem(s.deps, params)).toEqual({
       id: null,
       existing: true,
-      refused: ANSWER_BEING_APPLIED
+      refused: ANSWER_LOCKED
     })
     expect(s.store.inbox.get(id)).toEqual(before)
     expect(s.store.inbox.snapshot(id)).toEqual(snapshot)
+  })
+
+  it('refuses a re-add of a card whose answer row is ready past its settle time', () => {
+    const s = setup()
+    const id = addInboxItem(s.deps, s.card).id ?? ''
+    const digest = s.store.inbox.get(id)?.digest ?? ''
+    s.store.inbox.saveAnswer(id, { option: 0, text: null, digest, via: 'page' }, 'nish', 50)
+    const row = s.store.queue.enqueue(id, 100, 50)
+    s.store.queue.update(row, { state: 'ready' }, 100)
+    const before = s.store.inbox.get(id)
+    expect(addInboxItem(s.deps, { ...plain(s.card), context: 'Changed' })).toEqual({
+      id: null,
+      existing: true,
+      refused: ANSWER_LOCKED
+    })
+    expect(s.store.inbox.get(id)).toEqual(before)
   })
 
   it('keeps the bundle when the card is added again without one', () => {

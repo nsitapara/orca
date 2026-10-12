@@ -1,12 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { InboxItemRow } from '../../../shared/api-types'
-import type { QueueEntry } from '../../../shared/inbox-types'
-import { answeredLine, countdown, phaseOf } from './answer-buttons'
-import { queueNote } from './answer-text'
-
-function clock(ms: number): string {
-  return new Date(ms).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
-}
+import type { AnswerState } from '../../../shared/inbox-types'
+import { answeredLine, countdown, type Phase, phaseOf } from './answer-buttons'
 
 function useNow(active: boolean): number {
   const [now, setNow] = useState(() => Date.now())
@@ -21,56 +16,63 @@ function useNow(active: boolean): number {
   return now
 }
 
-// What a saved answer says on the card, in one line: what it will do and how long until it does, with Undo
-// only while it can still be taken back (settling or held); after that, what it is doing.
+// What a saved answer says on the card, in one line. Only the server's `locked` says it is being carried out;
+// until then it can be undone (or, once failed, changed).
 function lineText(
   item: InboxItemRow,
-  queued: QueueEntry | null,
-  phase: ReturnType<typeof phaseOf>,
+  state: AnswerState | null,
+  phase: Phase,
   now: number
 ): string {
   const words = answeredLine(item)
-  if (words.label === 'Skipped') {
+  if (phase === 'failed') {
+    return `Didn’t go through: ${state?.reason ?? 'no reason given'}`
+  }
+  if (words.label === 'Skipped' && phase !== 'applying') {
     return 'Skipped'
   }
-  if (phase === 'settling' && queued) {
-    return `${words.label} in ${countdown(queued.readyAt - now)}`
+  if (phase === 'settling' && state?.readyAt != null) {
+    return `${words.label} in ${countdown(state.readyAt - now)}`
   }
-  if (phase === 'held' && queued) {
-    return `${words.label} waiting · ${queueNote(queued, clock)}`
+  if (phase === 'held') {
+    return `${words.label} waiting${state?.reason ? ` · ${state.reason}` : ''}`
+  }
+  if (phase === 'waiting') {
+    return 'Waiting for Pilot to carry it out'
   }
   return words.doing
 }
 
 export function AnsweredLine({
   item,
-  queued,
+  answerState,
   focusUndo,
   onUndo
 }: {
   item: InboxItemRow
-  queued: QueueEntry | null
-  // This click has just answered the card: move focus to Undo so the countdown is announced and reachable.
+  answerState: AnswerState | null
+  // This click has just answered the card: move focus to the button so the countdown is announced.
   focusUndo: boolean
   onUndo: () => void
 }): React.JSX.Element {
-  const now = useNow(queued?.state === 'not_ready')
-  const phase = phaseOf(queued, now)
-  const canUndo = phase !== 'applying'
+  const counting = answerState?.state === 'not_ready' && !answerState.locked
+  const now = useNow(counting)
+  const phase = phaseOf(answerState, now)
+  const button = phase === 'failed' ? 'Change answer' : phase === 'applying' ? null : 'Undo'
   const undo = useRef<HTMLButtonElement>(null)
   useEffect(() => {
-    if (focusUndo && canUndo) {
+    if (focusUndo && button) {
       undo.current?.focus()
     }
-  }, [focusUndo, canUndo])
+  }, [focusUndo, button])
   return (
     <div
       role="status"
       data-answered=""
       className="flex flex-wrap items-center gap-2 rounded-md border border-border/50 bg-muted/30 px-3 py-2 text-sm"
     >
-      <span>{lineText(item, queued, phase, now)}</span>
-      {canUndo ? (
+      <span>{lineText(item, answerState, phase, now)}</span>
+      {button ? (
         <>
           <span className="text-muted-foreground">·</span>
           <button
@@ -79,7 +81,7 @@ export function AnsweredLine({
             className="font-semibold text-[var(--ib-accent)] hover:underline"
             onClick={onUndo}
           >
-            Undo
+            {button}
           </button>
         </>
       ) : null}

@@ -2,7 +2,7 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { InboxItemRow } from '../../../shared/api-types'
-import type { QueueEntry } from '../../../shared/inbox-types'
+import type { AnswerState, QueueEntry } from '../../../shared/inbox-types'
 
 const pilotRpc = vi.fn()
 vi.mock('../../api', () => ({ pilotRpc: (...args: unknown[]) => pilotRpc(...args) }))
@@ -66,7 +66,15 @@ const entry = (over: Partial<QueueEntry>): QueueEntry =>
     ...over
   }) as QueueEntry
 
-function serve(item: InboxItemRow, queue: QueueEntry[]) {
+const state = (over: Partial<AnswerState>): AnswerState => ({
+  locked: false,
+  state: 'not_ready',
+  readyAt: NOW + 179_000,
+  reason: null,
+  ...over
+})
+
+function serve(item: InboxItemRow, queue: QueueEntry[], answerState?: AnswerState) {
   pilotRpc.mockImplementation(async (method: string) => {
     if (method === 'pilot.inbox.list') {
       return {
@@ -74,7 +82,8 @@ function serve(item: InboxItemRow, queue: QueueEntry[]) {
         people: [{ id: 'n', name: 'N' }],
         groups: [],
         automations: [],
-        runLines: {}
+        runLines: {},
+        answerStates: answerState ? { [item.id]: answerState } : {}
       }
     }
     if (method === 'pilot.queue.list') {
@@ -96,10 +105,11 @@ describe('an answered card', () => {
   })
 
   it('is one line counting down to the settle time, with Undo; it does not count as waiting', async () => {
-    serve(CARD, [entry({})])
+    serve(CARD, [entry({})], state({}))
     const { container } = render(<InboxPage />)
     expect(await screen.findByText('Post review in 2:59')).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Undo' })).toBeTruthy()
+    expect(screen.getByText('answered')).toBeTruthy()
     expect(container.textContent).toContain('0 waiting')
     expect(screen.queryByRole('button', { name: 'Post review' })).toBeNull()
     await vi.advanceTimersByTimeAsync(3_000)
@@ -107,45 +117,64 @@ describe('an answered card', () => {
   })
 
   it('Undo clears the answer through the same save, with no words and the card’s digest', async () => {
-    serve(CARD, [entry({})])
+    serve(CARD, [entry({})], state({}))
     render(<InboxPage />)
     fireEvent.click(await screen.findByRole('button', { name: 'Undo' }))
     await waitFor(() =>
       expect(pilotRpc).toHaveBeenCalledWith(
         'pilot.inbox.answer',
-        expect.objectContaining({
-          id: 'in_a',
-          text: '',
-          digest: 'dig1',
-          by: 'n'
-        })
+        expect.objectContaining({ id: 'in_a', text: '', digest: 'dig1' })
       )
     )
   })
 
-  it.each([
-    ['no queue row (it was dispatched)', [] as QueueEntry[]],
-    ['a ready row', [entry({ state: 'ready', readyAt: NOW - 1000 })]],
-    ['a row whose settle time has passed', [entry({ readyAt: NOW - 1 })]]
-  ])('says what is being done, with no Undo, for %s', async (_n, queue) => {
-    serve(CARD, queue)
+  it('says what is being done, with no Undo and the applying pill, only when the server says it is locked', async () => {
+    serve(CARD, [], state({ locked: true, state: 'ready', readyAt: NOW - 1000 }))
     render(<InboxPage />)
     expect(await screen.findByText('Posting review…')).toBeTruthy()
     expect(screen.queryByRole('button', { name: 'Undo' })).toBeNull()
     expect(screen.getByText('applying')).toBeTruthy()
   })
 
-  it('drops Undo when the countdown reaches zero', async () => {
-    serve(CARD, [entry({ readyAt: NOW + 2_000 })])
+  it.each([
+    ['no queue row', state({ state: null, readyAt: null })],
+    ['a row past its settle time that nothing has picked up', state({ readyAt: NOW - 1 })]
+  ])('says Pilot has not carried it out yet, with Undo, for %s', async (_n, st) => {
+    serve(CARD, [], st)
+    render(<InboxPage />)
+    const line = await screen.findByRole('status')
+    expect(line.textContent).toContain('Waiting for Pilot to carry it out')
+    expect(within(line).getByRole('button', { name: 'Undo' })).toBeTruthy()
+    expect(screen.queryByText('applying')).toBeNull()
+  })
+
+  it('moves to waiting for Pilot, not to applying, when the countdown reaches zero unlocked', async () => {
+    serve(CARD, [], state({ readyAt: NOW + 2_000 }))
     render(<InboxPage />)
     expect(await screen.findByRole('button', { name: 'Undo' })).toBeTruthy()
     await vi.advanceTimersByTimeAsync(2_500)
-    expect(screen.queryByRole('button', { name: 'Undo' })).toBeNull()
-    expect(screen.getByText('Posting review…')).toBeTruthy()
+    expect(screen.getByRole('status').textContent).toContain('Waiting for Pilot to carry it out')
+    expect(screen.getByRole('button', { name: 'Undo' })).toBeTruthy()
+    expect(screen.queryByText('Posting review…')).toBeNull()
   })
 
-  it('keeps Undo for a held row', async () => {
-    serve(CARD, [entry({ state: 'held', holdReason: 'typing', holdDetail: 'someone is typing' })])
+  it('shows a failed row’s reason with Change answer, which clears the answer', async () => {
+    serve(CARD, [], state({ state: 'failed', reason: 'no main checkout', readyAt: NOW - 5 }))
+    render(<InboxPage />)
+    const line = await screen.findByRole('status')
+    expect(line.textContent).toContain('Didn’t go through: no main checkout')
+    expect(screen.queryByRole('button', { name: 'Undo' })).toBeNull()
+    fireEvent.click(within(line).getByRole('button', { name: 'Change answer' }))
+    await waitFor(() =>
+      expect(pilotRpc).toHaveBeenCalledWith(
+        'pilot.inbox.answer',
+        expect.objectContaining({ id: 'in_a', text: '', digest: 'dig1' })
+      )
+    )
+  })
+
+  it('keeps Undo for a held row, with its reason', async () => {
+    serve(CARD, [], state({ state: 'held', reason: 'someone is typing', readyAt: NOW - 5 }))
     render(<InboxPage />)
     const line = await screen.findByRole('status')
     expect(line.textContent).toContain('someone is typing')
@@ -162,11 +191,12 @@ describe('an answered card', () => {
           people: [{ id: 'n', name: 'N' }],
           groups: [],
           automations: [],
-          runLines: {}
+          runLines: {},
+          answerStates: answered ? { in_a: state({}) } : {}
         }
       }
       if (method === 'pilot.queue.list') {
-        return { entries: answered ? [entry({})] : [] }
+        return { entries: [] }
       }
       if (method === 'pilot.inbox.answer') {
         answered = true
@@ -181,7 +211,7 @@ describe('an answered card', () => {
   })
 
   it('does not take focus for a card that was already answered when the page loaded', async () => {
-    serve(CARD, [entry({})])
+    serve(CARD, [], state({}))
     render(<InboxPage />)
     const undo = await screen.findByRole('button', { name: 'Undo' })
     expect(document.activeElement).not.toBe(undo)
@@ -189,9 +219,7 @@ describe('an answered card', () => {
   })
 
   it('says Skipped, with Undo while it can still be taken back', async () => {
-    serve({ ...CARD, answer: { ...CARD.answer!, option: 1, text: 'skip' } }, [
-      entry({ answer: 'skip' })
-    ])
+    serve({ ...CARD, answer: { ...CARD.answer!, option: 1, text: 'skip' } }, [], state({}))
     render(<InboxPage />)
     expect(await screen.findByText('Skipped')).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Undo' })).toBeTruthy()

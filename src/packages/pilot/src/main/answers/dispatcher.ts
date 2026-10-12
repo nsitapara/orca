@@ -108,6 +108,8 @@ export class AnswerDispatcher {
         this.deps.log(
           `[pilot] answers for ${group.automationId} in ${where} failed: ${messageOf(error)}`
         )
+        // A throw that repeats every pass counts as a try, so it ends failed (and unlocked) at the limit.
+        this.holdRows(group.entries, hold('retry', messageOf(error)), report)
       }
     }
     return report

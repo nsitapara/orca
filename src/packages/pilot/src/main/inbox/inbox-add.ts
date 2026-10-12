@@ -6,7 +6,7 @@ import { CHANGED_AFTER_ANSWER } from '../../shared/pilot-replies'
 import type { NewInboxItem } from '../store/store-inbox'
 import { buildCard, checkDetailsChoice, inboxDigest, type InboxCard } from './card'
 import { loadDetails } from './details-bundle'
-import { ANSWER_BEING_APPLIED, answerBeingApplied } from './inbox-details'
+import { ANSWER_LOCKED, answerLocked } from './answer-lock'
 import { inboxEvent, syncRunWaiting, WAITING, type InboxDeps } from './inbox-service'
 import { resolveInboxPerson } from './person'
 import { fieldsForRun, latestFieldsFor } from './run-fields'
@@ -155,9 +155,9 @@ function updateOpen(
   // A card that keeps its bundle (added again without one) keeps that bundle's snapshot too.
   const keepSnapshot = snapshot === null && card.details !== null
   const written = deps.store.transaction(() => {
-    // No change clears an answer whose answer run is still running (set-details refuses the same), unless
+    // No change clears an answer that may be being carried out (set-details refuses the same), unless
     // the caller is that answer run.
-    if (answerBeingApplied(deps.store, deps.store.inbox.get(open.id) ?? open, callerRunId)) {
+    if (answerLocked(deps.store, deps.store.inbox.get(open.id) ?? open, at, callerRunId)) {
       return false
     }
     deps.store.inbox.edit(open.id, { ...card, digest }, at)
@@ -170,7 +170,7 @@ function updateOpen(
     return true
   })
   if (!written) {
-    return { id: null, existing: true, refused: ANSWER_BEING_APPLIED }
+    return { id: null, existing: true, refused: ANSWER_LOCKED }
   }
   if (answered) {
     deps.store.queue.removePending(open.id)

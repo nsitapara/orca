@@ -1,9 +1,10 @@
 import type { AutomationDefinition } from '../../shared/definition/types'
 import type { InboxItemRow, InboxStatus } from '../../shared/api-types'
-import type { InboxListPayload, RunLine } from '../../shared/inbox-types'
+import type { AnswerState, InboxListPayload, RunLine } from '../../shared/inbox-types'
 import type { PeopleDirectory } from '../../shared/people'
 import type { ActionCatalog } from '../actions/types'
 import type { PilotStore } from '../store/store'
+import { answerLocked } from './answer-lock'
 import { cardOf, inboxDigest, oneLine } from './card'
 
 export type InboxDeps = {
@@ -116,6 +117,24 @@ function runLinesOf(
   return lines
 }
 
+// Each answered card's lock and queue row, in one query.
+function answerStatesOf(deps: InboxDeps, items: InboxItemRow[]): Record<string, AnswerState> {
+  const answered = items.filter((i) => i.status === 'answered')
+  const rows = deps.store.queue.latestFor(answered.map((i) => i.id))
+  const at = deps.now()
+  const states: Record<string, AnswerState> = {}
+  for (const item of answered) {
+    const row = rows.get(item.id) ?? null
+    states[item.id] = {
+      locked: answerLocked(deps.store, item, at),
+      state: row?.state ?? null,
+      readyAt: row?.readyAt ?? null,
+      reason: row?.holdDetail ?? null
+    }
+  }
+  return states
+}
+
 export function listInbox(
   deps: InboxDeps,
   filter: { person?: string; statuses?: readonly InboxStatus[] },
@@ -136,6 +155,7 @@ export function listInbox(
   return {
     items,
     runLines: runLinesOf(items, runLineOf),
+    answerStates: answerStatesOf(deps, items),
     people: people.people.map((p) => ({ id: p.id, name: p.name })),
     groups: people.groups.map((g) => ({ id: g.id, name: g.name, members: [...g.members] })),
     automations: deps.definitions().map((d) => ({ id: d.id, name: d.name }))

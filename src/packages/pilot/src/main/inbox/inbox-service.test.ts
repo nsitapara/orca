@@ -514,3 +514,57 @@ describe('listInbox itemLabel', () => {
     expect(calls.filter((c) => /FROM tick_items/.test(c))).toHaveLength(1)
   })
 })
+
+describe('listInbox answerStates', () => {
+  const card = (id: string) =>
+    ({
+      id,
+      automationId: 'ci',
+      runId: null,
+      stepIdx: null,
+      itemKey: null,
+      worktreePath: null,
+      person: 'nish',
+      type: 'action',
+      title: id,
+      context: '',
+      options: [],
+      suggested: null,
+      detailsMd: null,
+      action: null,
+      actionArgs: null,
+      digest: id,
+      createdAt: 1,
+      source: 'engine',
+      vaultRef: null
+    }) as never
+
+  it('tells the page, per answered card, whether its answer is locked and where its row stands', () => {
+    const { store, deps } = setup()
+    const states = ['settling', 'held', 'ready', 'failed', 'none'] as const
+    for (const name of states) {
+      store.inbox.add(card(name))
+      const answer = { option: 0, text: 'approve', digest: name, via: 'page' as const }
+      store.inbox.update(
+        name,
+        { status: 'answered', answer, answeredAt: 10, answeredBy: 'nish' },
+        10
+      )
+    }
+    store.inbox.add(card('open-one'))
+    const row = (id: string, readyAt: number, patch: Record<string, unknown>) =>
+      store.queue.update(store.queue.enqueue(id, readyAt, 10), patch as never, 10)
+    row('settling', 500_000, {})
+    row('held', 50, { state: 'held', holdReason: 'typing', holdDetail: 'someone is typing' })
+    row('ready', 50, { state: 'ready' })
+    row('failed', 50, { state: 'failed', holdReason: 'retry', holdDetail: 'no main checkout' })
+    const { answerStates } = listInbox(deps, {})
+    expect(answerStates).toEqual({
+      settling: { locked: false, state: 'not_ready', readyAt: 500_000, reason: null },
+      held: { locked: false, state: 'held', readyAt: 50, reason: 'someone is typing' },
+      ready: { locked: true, state: 'ready', readyAt: 50, reason: null },
+      failed: { locked: false, state: 'failed', readyAt: 50, reason: 'no main checkout' },
+      none: { locked: false, state: null, readyAt: null, reason: null }
+    })
+  })
+})

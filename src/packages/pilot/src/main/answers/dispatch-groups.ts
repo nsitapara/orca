@@ -23,7 +23,9 @@ export function dueGroups(store: PilotStore, at: number): Group[] {
       store.queue.update(row.id, { state: 'failed', ...hold('retry', words) }, at)
       continue
     }
-    if (row.state === 'not_ready') {
+    // Picked up for application: ready from here on, and so locked (a held row too). A hold that applies
+    // again puts it back to held.
+    if (row.state === 'not_ready' || row.state === 'held') {
       store.queue.update(row.id, { state: 'ready' }, at)
     }
     const key = `${item.automationId}|${item.worktreePath ?? ''}`

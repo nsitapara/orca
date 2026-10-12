@@ -20,7 +20,7 @@ import {
   type DispatcherDeps
 } from './dispatcher'
 import type { HoldDeps } from './holds'
-import { saveAnswer, SETTLE_MS } from './save'
+import { ANSWER_LOCKED, saveAnswer, SETTLE_MS } from './save'
 
 const def = parseAutomationYaml(
   'name: Fix CI\nrepo: r\nschedule: manual\nitems: { kind: merge_request }\nsteps: [ { agent: claude, skill: fix-gitlab-ci, prompt: x } ]\npowers: [push]\ninbox: nish\n',
@@ -565,4 +565,77 @@ describe('answerRunEnded (G6)', () => {
       })
     }
   )
+})
+
+describe('the answer lock during a pass', () => {
+  const DESKTOP = (s: ReturnType<typeof setup>) => ({
+    callerKind: 'desktop' as const,
+    catalog: { get: () => s.push }
+  })
+
+  it('locks a held row the moment a pass picks it up, so nothing can change it while it is applied', async () => {
+    const s = setup({
+      holds: { activity: async () => ({ typing: true, reason: 'someone is typing' }) }
+    })
+    const id = s.answer(ACTION, 'approve')
+    s.settle()
+    await s.dispatcher.pass()
+    expect(s.store.queue.forInboxItem(id)[0]).toMatchObject({ state: 'held' })
+    // Typing stops; the next pass takes the held row up and applies it.
+    s.holds.activity = async () => null
+    const digest = s.store.inbox.get(id)!.digest
+    const during: unknown[] = []
+    vi.mocked(s.push.run).mockImplementationOnce(async () => {
+      during.push(s.store.queue.forInboxItem(id)[0].state)
+      for (const params of [
+        { id, text: '', digest },
+        { id, text: 'skip', digest }
+      ]) {
+        try {
+          saveAnswer(s.inbox, params, DESKTOP(s))
+          during.push('changed')
+        } catch (error) {
+          during.push((error as Error).message)
+        }
+      }
+      return { outcome: 'done', detail: 'pushed', link: null, log: null, onYou: false }
+    })
+    await s.dispatcher.pass()
+    expect(during).toEqual(['ready', ANSWER_LOCKED, ANSWER_LOCKED])
+    expect(s.push.run).toHaveBeenCalledTimes(1)
+    expect(s.store.inbox.get(id)).toMatchObject({ status: 'done', outcome: 'done: pushed' })
+  })
+
+  it('puts a row back to held, unlocked, when the hold applies again', async () => {
+    const s = setup({
+      holds: { activity: async () => ({ typing: true, reason: 'someone is typing' }) }
+    })
+    const id = s.answer(ACTION, 'approve')
+    s.settle()
+    await s.dispatcher.pass()
+    await s.dispatcher.pass()
+    expect(s.store.queue.forInboxItem(id)[0]).toMatchObject({ state: 'held', holdReason: 'typing' })
+    const digest = s.store.inbox.get(id)!.digest
+    expect(saveAnswer(s.inbox, { id, text: '', digest }, DESKTOP(s))).toMatchObject({
+      status: 'open'
+    })
+  })
+
+  it('counts a try when a whole group throws, so a repeating throw ends failed and unlocked', async () => {
+    const s = setup({
+      holds: {
+        exists: () => {
+          throw new Error('boom')
+        }
+      }
+    })
+    const id = s.answer(ACTION, 'approve')
+    s.settle()
+    for (let i = 1; i <= MAX_ATTEMPTS; i++) {
+      await s.dispatcher.pass()
+      const row = s.store.queue.forInboxItem(id)[0]
+      expect(row).toMatchObject({ attempts: i, state: i < MAX_ATTEMPTS ? 'held' : 'failed' })
+    }
+    expect(s.store.queue.forInboxItem(id)[0].holdDetail).toContain('boom')
+  })
 })

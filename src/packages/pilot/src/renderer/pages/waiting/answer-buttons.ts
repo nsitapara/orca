@@ -1,5 +1,5 @@
 import type { InboxItemRow } from '../../../shared/api-types'
-import type { QueueEntry } from '../../../shared/inbox-types'
+import type { AnswerState } from '../../../shared/inbox-types'
 import { actionButton } from '../../../shared/answer-actions'
 import { type Choice, choicesFor } from './answer-text'
 
@@ -93,16 +93,23 @@ export function countdown(ms: number): string {
   return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`
 }
 
-// Where a saved answer stands. Only the first two can still be taken back: the server locks an answer once
-// its row is ready (a script may be running) or dispatched.
-export type Phase = 'settling' | 'held' | 'applying'
+// Where a saved answer stands, from the server's answer state. Settling and held can be undone; applying
+// (locked: it may be being carried out) cannot; failed offers Change answer; waiting is an unlocked answer
+// nothing has picked up yet (past its settle time, or no row), which can still be undone.
+export type Phase = 'settling' | 'held' | 'applying' | 'failed' | 'waiting'
 
-export function phaseOf(queued: Pick<QueueEntry, 'state' | 'readyAt'> | null, now: number): Phase {
-  if (queued?.state === 'held') {
+export function phaseOf(state: AnswerState | null, now: number): Phase {
+  if (state?.locked) {
+    return 'applying'
+  }
+  if (state?.state === 'failed') {
+    return 'failed'
+  }
+  if (state?.state === 'held') {
     return 'held'
   }
-  if (queued?.state === 'not_ready' && queued.readyAt > now) {
+  if (state?.state === 'not_ready' && state.readyAt !== null && state.readyAt > now) {
     return 'settling'
   }
-  return 'applying'
+  return 'waiting'
 }
