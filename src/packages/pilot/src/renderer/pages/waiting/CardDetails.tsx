@@ -1,3 +1,4 @@
+import { ChevronRight } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import type { InboxItemRow } from '../../../shared/api-types'
@@ -158,7 +159,11 @@ export function CardDetails({
   }
   return (
     <Collapsible open={open} onOpenChange={change} className="min-w-0">
-      <CollapsibleTrigger className="text-sm text-muted-foreground underline-offset-4 hover:underline">
+      <CollapsibleTrigger className="group inline-flex items-center gap-1 rounded-sm text-[13px] font-semibold text-foreground hover:text-foreground/80">
+        <ChevronRight
+          aria-hidden
+          className="size-3.5 transition-transform group-data-[state=open]:rotate-90"
+        />
         Details
       </CollapsibleTrigger>
       <CollapsibleContent className="mt-2 min-w-0">
