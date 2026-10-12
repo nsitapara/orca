@@ -11,11 +11,8 @@ const YAML = join(portedAutomationsDir(), 'ui-qa-overnight.yaml')
 const HOUR = 3_600_000
 const MINUTE = 60_000
 const SCRIPT = 'python3 /Users/nishsitapara/.agents/skills/ui-qa/scripts/loop.py'
-const CODEX_ARGS = [
-  '-c',
-  'check_for_update_on_startup=false',
-  '--dangerously-bypass-approvals-and-sandbox'
-]
+// No permission flag: Pilot's Codex command carries Settings' (agentDefaultArgs), and Codex refuses it twice.
+const CODEX_ARGS = ['-c', 'check_for_update_on_startup=false']
 
 function modeOutputs(mode: string): string[] {
   const text = readFileSync(join(SKILL, 'modes', `${mode}.md`), 'utf8')

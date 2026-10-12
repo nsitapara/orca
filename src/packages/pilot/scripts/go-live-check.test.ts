@@ -1,15 +1,18 @@
-import { mkdtempSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 // @ts-expect-error -- .mjs script without type declarations
 import {
+  agentCommands,
   assertScratch,
   automationFiles,
   checkAutomations,
   dryRunLine,
   parityRows,
-  renderSummary
+  renderSummary,
+  repeatedAgentFlags,
+  settingsFromData
 } from './go-live-check.mjs'
 
 const decisions = (...verdicts: string[]) =>
@@ -194,5 +197,105 @@ describe('assertScratch', () => {
         '/h/Library/Application Support/Pilot'
       )
     ).not.toThrow()
+  })
+})
+
+describe('agentCommands', () => {
+  const YOLO = {
+    claude: 'claude --dangerously-skip-permissions',
+    codex: 'codex --dangerously-bypass-approvals-and-sandbox'
+  }
+  it.each([
+    [
+      "Settings' own args",
+      {
+        agentDefaultArgs: {
+          claude: '--dangerously-skip-permissions',
+          codex: '--dangerously-bypass-approvals-and-sandbox'
+        }
+      },
+      YOLO
+    ],
+    [
+      'a command override and empty args',
+      {
+        agentCmdOverrides: { codex: 'codex --profile work' },
+        agentDefaultArgs: { claude: '', codex: '' }
+      },
+      { claude: 'claude', codex: 'codex --profile work' }
+    ],
+    ["no Settings: upstream's defaults", null, YOLO]
+  ])('%s', (_name, settings, expected) => {
+    expect(agentCommands(settings)).toEqual(expected)
+  })
+})
+
+describe('repeatedAgentFlags', () => {
+  it("names each step whose args repeat an option of its agent's command; Codex's -c may repeat", () => {
+    const definition = {
+      steps: [
+        {
+          name: 'test',
+          agent: 'codex',
+          args: [
+            '-c',
+            'check_for_update_on_startup=false',
+            '--dangerously-bypass-approvals-and-sandbox'
+          ]
+        },
+        { name: 'fix', agent: 'claude', args: ['--permission-mode', 'acceptEdits'] },
+        { name: 'stack', agent: 'shell', args: [] }
+      ]
+    }
+    const commands = {
+      claude: 'claude --dangerously-skip-permissions',
+      codex: "codex -c model=x '--dangerously-bypass-approvals-and-sandbox'"
+    }
+    expect(repeatedAgentFlags(definition, commands)).toEqual([
+      "step test repeats --dangerously-bypass-approvals-and-sandbox, which Pilot's codex command already has (codex -c model=x '--dangerously-bypass-approvals-and-sandbox'): the agent may refuse to start"
+    ])
+  })
+
+  it('makes the automation not ready, while its dry run still runs', () => {
+    const definition = {
+      id: 'qa',
+      name: 'QA',
+      steps: [{ name: 'test', agent: 'codex', args: ['--yolo'] }]
+    }
+    const call = (args: string[]) =>
+      args[1] === 'validate'
+        ? { code: 0, stdout: JSON.stringify({ ok: true, definition }), stderr: '' }
+        : {
+            code: 0,
+            stdout: JSON.stringify({
+              ok: true,
+              result: { status: 'ok', tickId: 1, error: null, decisions: [] }
+            }),
+            stderr: ''
+          }
+    const [row] = checkAutomations({
+      files: ['/a/qa.yaml'],
+      call,
+      commands: { codex: 'codex --yolo' }
+    })
+    expect([row.dryRun, row.problems]).toEqual([
+      'no items',
+      [
+        "step test repeats --yolo, which Pilot's codex command already has (codex --yolo): the agent may refuse to start"
+      ]
+    ])
+  })
+})
+
+describe('settingsFromData', () => {
+  it("reads the scratch profile's Settings, or null when it has none", () => {
+    const data = mkdtempSync(join(tmpdir(), 'pilot-golive-settings-'))
+    expect(settingsFromData(data)).toBeNull()
+    mkdirSync(join(data, 'profiles', 'local-default'), { recursive: true })
+    writeFileSync(
+      join(data, 'profiles', 'local-default', 'orca-data.json'),
+      JSON.stringify({ settings: { agentDefaultArgs: { codex: '--x' } } })
+    )
+    expect(settingsFromData(data)).toEqual({ agentDefaultArgs: { codex: '--x' } })
   })
 })

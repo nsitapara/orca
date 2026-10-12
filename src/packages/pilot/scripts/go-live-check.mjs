@@ -5,6 +5,7 @@
 import { readdirSync, readFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { basename, join, resolve } from 'node:path'
+import { readPilotState } from './orca-profile-reader.mjs'
 import { run } from './run.mjs'
 
 const HELP = `Usage: node src/packages/pilot/scripts/go-live-check.mjs --cli <out/cli/index.js> --data <dir> [options]
@@ -27,6 +28,61 @@ const VERDICT_WORDS = [
   ['baselined', 'baselined'],
   ['out_of_scope', 'not in scope']
 ]
+
+// Upstream's default args when Settings has none for the agent (YOLO_TUI_AGENT_ARGS, src/shared/tui-agent-permissions.ts).
+const DEFAULT_AGENT_ARGS = {
+  claude: '--dangerously-skip-permissions',
+  codex: '--dangerously-bypass-approvals-and-sandbox'
+}
+// Options a CLI takes many times (Codex's `-c key=value` overrides), so a repeat is fine.
+const REPEATABLE_OPTIONS = new Set(['-c', '--config'])
+
+// The command Pilot launches each agent with before a step's args: Settings' command and its default args.
+export function agentCommands(settings) {
+  const overrides = settings?.agentCmdOverrides ?? {}
+  const configured = settings?.agentDefaultArgs ?? {}
+  return Object.fromEntries(
+    Object.entries(DEFAULT_AGENT_ARGS).map(([agent, fallback]) => {
+      const args = Object.hasOwn(configured, agent) ? configured[agent] : fallback
+      return [agent, `${overrides[agent] || agent} ${args}`.trim()]
+    })
+  )
+}
+
+// The option names in a command or an argv, quotes and `=value` dropped.
+function optionNames(tokens) {
+  return tokens
+    .map((token) => token.replace(/^['"]|['"]$/g, ''))
+    .filter((token) => token.startsWith('-'))
+    .map((token) => token.split('=')[0])
+}
+
+// Steps whose args repeat an option their agent's command already has: Codex refuses a repeated flag.
+export function repeatedAgentFlags(definition, commands) {
+  const problems = []
+  for (const step of definition.steps ?? []) {
+    const command = commands[step.agent]
+    if (!command) {
+      continue
+    }
+    const configured = new Set(optionNames(command.split(/\s+/)))
+    const repeated = new Set(
+      optionNames(step.args ?? []).filter((n) => configured.has(n) && !REPEATABLE_OPTIONS.has(n))
+    )
+    for (const flag of repeated) {
+      problems.push(
+        `step ${step.name} repeats ${flag}, which Pilot's ${step.agent} command already has (${command}): the agent may refuse to start`
+      )
+    }
+  }
+  return problems
+}
+
+// The scratch profile's Settings, or null when it has none yet.
+export function settingsFromData(dataDir) {
+  const payload = readPilotState(join(dataDir, 'profiles', 'local-default')).domains.get('settings')
+  return payload === undefined ? null : JSON.parse(payload)
+}
 
 export function automationFiles(dir) {
   return readdirSync(dir)
@@ -84,7 +140,7 @@ function firstLine(text) {
 }
 
 // `call(args)` runs the Pilot CLI and returns { code, stdout, stderr }.
-export function checkAutomations({ files, call }) {
+export function checkAutomations({ files, call, commands = {} }) {
   return files.map((file) => {
     const id = basename(file).replace(/\.ya?ml$/, '')
     const validated = call(['automations', 'validate', '--file', file, '--json'])
@@ -100,6 +156,7 @@ export function checkAutomations({ files, call }) {
     const line =
       dry.code === 0 ? dryRunLine(outcome) : `failed: ${firstLine(dry.stderr || dry.stdout)}`
     const problems = line.startsWith('failed') || line === 'no answer from Pilot' ? [line] : []
+    problems.push(...repeatedAgentFlags(parsed.definition, commands))
     return { id, file, name: parsed.definition.name, valid: true, problems, dryRun: line }
   })
 }
@@ -213,7 +270,8 @@ function main(argv) {
   assertScratch(options.data)
   const env = { ...process.env, ORCA_USER_DATA_PATH: options.data }
   const call = (args) => run('node', [options.cli, ...args], { env, timeoutMs: CALL_TIMEOUT_MS })
-  const rows = checkAutomations({ files: automationFiles(options.dirs), call })
+  const commands = agentCommands(settingsFromData(options.data))
+  const rows = checkAutomations({ files: automationFiles(options.dirs), call, commands })
   const report = options.parityJson ? parseJson(readFileSync(options.parityJson, 'utf8')) : null
   const sha = run('git', ['rev-parse', '--short', 'HEAD']).stdout.trim()
   console.log(renderSummary({ stamp: stampNow(), sha, rows, parity: parityRows(report) }))
