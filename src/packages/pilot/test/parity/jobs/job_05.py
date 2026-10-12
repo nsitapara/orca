@@ -4,6 +4,7 @@ Words: due (would start), skip (plan's reason), defer (past --max 3), absent (pl
 not failed, or that pipeline already handled).
 """
 
+import subprocess
 from pathlib import Path
 
 SWEEP = "ci-fix-sweep"
@@ -46,12 +47,28 @@ def old_decisions(sweep, gate):
     return sorted(out, key=lambda d: int(d["key"].split(":")[1]))
 
 
+def _try(read):
+    try:
+        read()
+    except subprocess.CalledProcessError:
+        pass  # recorded with its exit code: Pilot's read of it fails the same way
+
+
+def _markers(gate, path):
+    for marker in gate.IN_PROGRESS:
+        Path(path, gate.git(path, "rev-parse", "--git-path", marker)).exists()
+
+
 def record_extras(gate, io):
-    """Pilot reads the git-operation markers of every worktree whose status it reads; the old side stops at a dirty one."""
-    paths = sorted({r["argv"][2] for r in io.reads if r["argv"][:2] == ["git", "-C"] and r["argv"][3:] == ["status", "--porcelain"]})
-    for path in paths:
-        for marker in gate.IN_PROGRESS:
-            Path(path, gate.git(path, "rev-parse", "--git-path", marker)).exists()
+    """Pilot reads the worktree facts (git status and the git-operation markers) of every
+    listed MR's worktree; the old side reads them only where plan() gets that far, and stops at a dirty one."""
+    branches = {mr["source_branch"] for mr in gate.my_open_mrs()}
+    for wt in gate.orca("worktree", "list")["worktrees"]:
+        branch = wt.get("branch", "").removeprefix("refs/heads/")
+        if wt["repoId"] != gate.REPO_ID or wt.get("isArchived") or branch not in branches:
+            continue
+        _try(lambda: gate.git(wt["path"], "status", "--porcelain"))
+        _try(lambda: _markers(gate, wt["path"]))
 
 
 def fixture_extras(gate):

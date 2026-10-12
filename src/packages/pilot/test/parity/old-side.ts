@@ -10,17 +10,22 @@ export function skillsDir(env: NodeJS.ProcessEnv = process.env): string {
   return env.PARITY_SKILLS_DIR ?? join(homedir(), '.agents', 'skills')
 }
 
-// The old side needs python3 and the job's own code (<folder>/<script>: a sweep's sweep.py by default; 12's
-// worktree-gate/apply.py, 03's review-cycles/loop.py). Without either, a parity test skips.
-export function canRunOldSide(folder: string, script = 'sweep.py'): boolean {
+// What the old side lacks to run: python3, worktree-gate's gate.py, or the job's own code (<folder>/<script>:
+// a sweep's sweep.py by default; 12's worktree-gate/apply.py, 03's review-cycles/loop.py).
+export function oldSideMissing(folder: string, script = 'sweep.py'): string[] {
   const skills = skillsDir()
-  if (
-    !existsSync(join(skills, folder, script)) ||
-    !existsSync(join(skills, 'worktree-gate', 'gate.py'))
-  ) {
-    return false
+  const missing = [join(skills, folder, script), join(skills, 'worktree-gate', 'gate.py')].filter(
+    (path) => !existsSync(path)
+  )
+  if (spawnSync('python3', ['--version']).status !== 0) {
+    missing.push('python3')
   }
-  return spawnSync('python3', ['--version']).status === 0
+  return missing
+}
+
+// Without python3 or the job's own code, a parity test skips (describeParity says why).
+export function canRunOldSide(folder: string, script = 'sweep.py'): boolean {
+  return oldSideMissing(folder, script).length === 0
 }
 
 // Replays the job's old plan on a fixture. Nothing runs (parity_io answers every read), and no

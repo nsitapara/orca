@@ -206,8 +206,8 @@ When you run `pnpm test` or orcad yourself from an Orca terminal, first `export 
 A job counts as ported only when its parity test passes (R17): the old sweep's own `plan()` (Python, `test/parity/run_old_plan.py`) and Pilot's dry-run tick read the same recorded inputs, and every item must get an agreeing decision (each job's table maps the old words to verdicts).
 
 - Record a case from live data, GET-only (anything that could write stops the recording before it runs): `node src/packages/pilot/scripts/record-parity-fixture.mjs --job 05 --case <name>`. It writes `test/parity/05/live-<name>.json`, which git ignores: recorded cases hold real MR titles, branches and usernames, so they stay on this machine. Synthetic cases are committed.
-- Run the parity tests: `pnpm exec vitest run --config config/vitest.config.ts src/packages/pilot/test/parity`. They skip when `python3` or `~/.agents/skills` is missing (`PARITY_SKILLS_DIR`, `PARITY_AUTOMATIONS_DIR` point elsewhere).
-- The harness's own tests: `cd src/packages/pilot/test/parity && PYTHONDONTWRITEBYTECODE=1 python3 -m unittest test_parity_io`.
+- Run the parity tests: `pnpm exec vitest run --config config/vitest.config.ts src/packages/pilot/test/parity`. They skip when `python3`, `~/.agents/skills` or the automation's YAML is missing (`PARITY_SKILLS_DIR`, `PARITY_AUTOMATIONS_DIR` point elsewhere), and say what's missing on stderr and in the suite's title. A case fails on any read the new side made that it lacks (`missed read: …`), not only on a disagreeing verdict: re-record it, or add the read to the adapter's `record_extras`.
+- The harness's own tests: `cd src/packages/pilot/test/parity && PYTHONDONTWRITEBYTECODE=1 python3 -m unittest test_parity_io test_jobs`.
 - A mismatch line names the item and both sides' reasons. Fix the engine, never the table.
 
 ## Updating from upstream
