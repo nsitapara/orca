@@ -1,7 +1,8 @@
 import type { QuotaReading } from './quota'
 
 type CodexWindow = { usedPercent?: number; windowDurationMins?: number; resetsAt?: number | null }
-type ReadWindow = CodexWindow & { usedPercent: number }
+type ReadWindow = CodexWindow & { usedPercent: number; windowDurationMins: number }
+const UNKNOWN: QuotaReading = { weekly: null, session: null }
 
 // What `codex app-server` answers to account/rateLimits/read (the fields quota.py reads).
 export type CodexRateLimitsResult = {
@@ -15,8 +16,8 @@ export type CodexRateLimitsResult = {
 
 const WEEKLY_MINUTES = 1440
 
-function readable(w: CodexWindow | null | undefined): w is ReadWindow {
-  return typeof w?.usedPercent === 'number'
+function readable(w: CodexWindow): w is ReadWindow {
+  return typeof w.usedPercent === 'number' && typeof w.windowDurationMins === 'number'
 }
 
 function resetMs(w: CodexWindow): number | null {
@@ -26,7 +27,13 @@ function resetMs(w: CodexWindow): number | null {
 // quota.py codex_limits + out_reason as two percentages the quota check compares with its ceilings.
 export function codexQuotaReading(result: CodexRateLimitsResult, nowMs: number): QuotaReading {
   const limits: NonNullable<CodexRateLimitsResult['rateLimits']> = result.rateLimits ?? {}
-  const windows = [limits.primary, limits.secondary].filter(readable)
+  const present = [limits.primary, limits.secondary].filter((w): w is CodexWindow => Boolean(w))
+  // quota.py indexes usedPercent and windowDurationMins: a window lacking either is a KeyError there,
+  // so the whole reading is unknown (the check lets the job run), never a partial one.
+  if (!present.every(readable)) {
+    return UNKNOWN
+  }
+  const windows = present
   let weekly: number | null = null
   let session: number | null = null
   for (const w of windows) {
@@ -34,7 +41,7 @@ export function codexQuotaReading(result: CodexRateLimitsResult, nowMs: number):
     if (reset !== null && reset <= nowMs) {
       continue // a limit past its reset no longer counts
     }
-    if ((w.windowDurationMins ?? 0) >= WEEKLY_MINUTES) {
+    if (w.windowDurationMins >= WEEKLY_MINUTES) {
       weekly = Math.max(weekly ?? 0, w.usedPercent)
     } else {
       session = Math.max(session ?? 0, w.usedPercent)

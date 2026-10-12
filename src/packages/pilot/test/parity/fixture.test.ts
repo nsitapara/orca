@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  fixtureBusyReads,
   fixtureGit,
   fixtureGitOperation,
   fixtureGlab,
@@ -176,5 +177,39 @@ describe('fixtureQuota', () => {
   it('reads a case with no saved reading as unknown, for either agent', () => {
     expect(fixtureQuota(F, 'claude')).toEqual({ weekly: null, session: null })
     expect(fixtureQuota(F, 'codex')).toEqual({ weekly: null, session: null })
+  })
+})
+
+describe('fixtureBusyReads', () => {
+  const recorded = (argv: string[], result: unknown) => ({
+    argv: ['orca', ...argv, '--json'],
+    code: 0,
+    json: { ok: true, result }
+  })
+
+  it('answers the draft, agent-state and idle-wait reads from the recording', async () => {
+    const f: ParityFixture = {
+      ...F,
+      reads: [
+        recorded(['terminal', 'read', '--terminal', 't1'], { terminal: { draft: 'hi' } }),
+        recorded(['worktree', 'ps', '--limit', '1000'], {
+          worktrees: [{ agents: [{ paneKey: 'a:b', state: 'working' }] }]
+        }),
+        recorded(
+          ['terminal', 'wait', '--terminal', 't1', '--for', 'tui-idle', '--timeout-ms', '1500'],
+          { wait: { satisfied: false } }
+        )
+      ]
+    }
+    const reads = fixtureBusyReads(f)
+    expect(await reads.draft('t1')).toBe('hi')
+    expect((await reads.agentStates()).get('a:b')).toBe('working')
+    expect(await reads.tabBusy('t1')).toBe(true)
+  })
+
+  it('an unrecorded read is a miss, not an idle answer', async () => {
+    const f: ParityFixture = { ...F, reads: [] }
+    await expect(fixtureBusyReads(f).draft('t1')).rejects.toBeInstanceOf(NotInFixture)
+    expect(fixtureMisses(f)).toEqual(['orca terminal read --terminal t1 --json'])
   })
 })

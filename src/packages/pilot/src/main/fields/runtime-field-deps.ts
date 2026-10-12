@@ -19,8 +19,6 @@ type GitRunner = (
   opts: { cwd: string; env?: NodeJS.ProcessEnv }
 ) => Promise<{ stdout: string }>
 
-const TERMINAL_LIST_LIMIT = 10_000
-
 // `??` lines are untracked files; every other non-empty porcelain line is a tracked change.
 export function countGitStatus(porcelain: string): GitStatusCounts {
   let dirty = 0
@@ -109,21 +107,6 @@ export function runtimeFieldDeps(
         }
         return relist(handle, paneKey)
       }
-    },
-    async agentTerminals() {
-      const listed = await runtime.listTerminals(undefined, TERMINAL_LIST_LIMIT, {
-        includeVisualLayouts: false
-      })
-      if (listed.truncated) {
-        throw new Error(`terminal list cut short (${listed.totalCount} terminals)`)
-      }
-      return listed.terminals
-        .filter((t) => t.connected && t.agentIdentity !== undefined)
-        .map((t) => ({
-          handle: t.handle,
-          worktreePath: t.worktreePath,
-          paneKey: `${t.tabId}:${t.leafId}`
-        }))
     },
     paneState(paneKey) {
       return paneStateFromRows(runtime.getAgentStatusRowsForPane(paneKey))

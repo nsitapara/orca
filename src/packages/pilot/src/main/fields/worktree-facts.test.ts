@@ -57,7 +57,6 @@ function deps(over: Partial<WorktreeFactDeps> = {}): WorktreeFactDeps {
     automationSessions: () => [],
     anySessions: () => [],
     terminalAlive: async () => false,
-    agentTerminals: async () => [],
     paneState: () => 'idle',
     terminalDraft: async () => '',
     ...over
@@ -71,8 +70,7 @@ const wt = list[1]
 
 describe('worktreeFacts', () => {
   it('splits tracked and untracked changes and carries id, branch, head and the agents', async () => {
-    const activity = new Map([['/wt/a', { state: 'working' as const, typing: true }]])
-    expect(await worktreeFacts(wt, 'ci', activity, deps())).toEqual({
+    expect(await worktreeFacts(wt, 'ci', deps())).toEqual({
       'worktree.path': '/wt/a',
       'worktree.id': 'r::/wt/a',
       'worktree.branch': 'web-1-a',
@@ -80,8 +78,6 @@ describe('worktreeFacts', () => {
       'worktree.dirty_count': 1,
       'worktree.untracked_count': 2,
       'worktree.git_operation': null,
-      'worktree.agent_state': 'working',
-      'worktree.typing': true,
       'session.open_from_automation': false,
       'session.open_any': false
     })
@@ -95,13 +91,11 @@ describe('worktreeFacts', () => {
         throw new Error('store closed')
       }
     })
-    const facts = await worktreeFacts(wt, 'ci', null, broken)
+    const facts = await worktreeFacts(wt, 'ci', broken)
     expect(facts['worktree.dirty_count']).toBeNull()
     expect(facts['worktree.untracked_count']).toBeNull()
     expect(facts).not.toHaveProperty('worktree.git_operation')
     expect(facts).not.toHaveProperty('session.open_any')
-    expect(facts['worktree.agent_state']).toBeNull()
-    expect(facts['worktree.typing']).toBeNull()
   })
 
   it("counts every automation's open tabs for session.open_any and only this one's for open_from_automation", async () => {
@@ -109,7 +103,6 @@ describe('worktreeFacts', () => {
     const facts = await worktreeFacts(
       wt,
       'ci',
-      new Map(),
       deps({
         automationSessions: () => [{ active: false, handle: 'closed', paneKey: null }],
         anySessions: () => [{ active: false, handle: 'open', paneKey: 'p' }],
@@ -120,19 +113,6 @@ describe('worktreeFacts', () => {
       false,
       true
     ])
-  })
-
-  // worktreeActivity lists every worktree it is given (idle when it has no agent tabs); a worktree
-  // it doesn't list is unknown, so worktree: idle fails closed instead of reading it as idle.
-  it("reads a worktree the activity listing doesn't cover as unknown", async () => {
-    const facts = await worktreeFacts(wt, 'ci', new Map(), deps())
-    expect([facts['worktree.agent_state'], facts['worktree.typing']]).toEqual([null, null])
-  })
-
-  it('finds its activity whatever the trailing slash', async () => {
-    const activity = new Map([['/wt/a', { state: 'waiting' as const, typing: false }]])
-    const facts = await worktreeFacts({ ...wt, path: '/wt/a/' }, 'ci', activity, deps())
-    expect([facts['worktree.agent_state'], facts['worktree.typing']]).toEqual(['waiting', false])
   })
 })
 

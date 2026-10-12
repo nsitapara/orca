@@ -99,7 +99,7 @@ describe('worktree checks', () => {
       { kind: 'worktree_idle' },
       { 'worktree.path': '/wt/a', 'worktree.busy': 'someone is typing in ✳ Fix' },
       false,
-      'Someone is typing in ✳ Fix'
+      'someone is typing in ✳ Fix'
     ],
     [
       'an agent working',

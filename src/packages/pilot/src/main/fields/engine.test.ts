@@ -53,8 +53,6 @@ describe('addBuiltinFields', () => {
     )
     expect(item.fields).toMatchObject({
       'worktree.path': null,
-      'worktree.agent_state': 'idle',
-      'worktree.typing': false,
       'session.open_from_automation': false,
       'session.open_any': false
     })

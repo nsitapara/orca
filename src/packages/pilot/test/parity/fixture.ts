@@ -2,8 +2,8 @@ import { readFileSync } from 'node:fs'
 import { isAbsolute, join } from 'node:path'
 import type { OrcaRuntimeService } from '../../../../main/runtime/orca-runtime'
 import { cachedQuotas, type QuotaReading } from '../../src/main/fields/quota'
-import { listBusyTerminals } from '../../src/main/fields/worktree-busy'
 import { runtimeFieldDeps } from '../../src/main/fields/runtime-field-deps'
+import { listBusyTerminals, type BusyReads } from '../../src/main/fields/worktree-busy'
 import { registrySources } from '../../src/main/scheduler/tick-decide'
 import type { TickDeps } from '../../src/main/scheduler/tick-runner'
 import { createPassFetchCache, type PassFetchCache } from '../../src/main/sources/fetch-cache'
@@ -254,6 +254,44 @@ export function fixtureQuota(f: ParityFixture, agent: AgentKind): QuotaReading {
 // (`activity`) and 25 (`ask`) add a fixture-backed value here when they add the TickDeps member. A dry
 // run takes `{ dryRun: true, pass: fixturePass(f) }`; one given no pass makes its own over `gitlab`, which is the
 // fixture's too, so no parity tick ever reaches the real GitLab.
+// The reads gate.py's worktree_busy makes, answered from the recording: one the case lacks is a miss,
+// which worktreeBusy reports as "could not be read" (and parity-case.ts fails the case on).
+export function fixtureBusyReads(f: ParityFixture): BusyReads {
+  return {
+    draft: async (handle) => {
+      const read = orcaResult<{ terminal: { draft?: string | null } }>(f, [
+        'terminal',
+        'read',
+        '--terminal',
+        handle
+      ])
+      return read.terminal.draft ?? ''
+    },
+    agentStates: async () => {
+      const ps = orcaResult<{ worktrees: { agents?: { paneKey: string; state: string }[] }[] }>(f, [
+        'worktree',
+        'ps',
+        '--limit',
+        '1000'
+      ])
+      return new Map(ps.worktrees.flatMap((w) => (w.agents ?? []).map((a) => [a.paneKey, a.state])))
+    },
+    tabBusy: async (handle) => {
+      const wait = orcaResult<{ wait: { satisfied: boolean } }>(f, [
+        'terminal',
+        'wait',
+        '--terminal',
+        handle,
+        '--for',
+        'tui-idle',
+        '--timeout-ms',
+        '1500'
+      ])
+      return !wait.wait.satisfied
+    }
+  }
+}
+
 export function fixtureTickDeps(f: ParityFixture, store: PilotStore): TickDeps {
   const now = () => f.now
   return {
@@ -284,11 +322,7 @@ export function fixtureTickDeps(f: ParityFixture, store: PilotStore): TickDeps {
     },
     activity: {
       terminals: () => listBusyTerminals(fixtureRuntime(f)),
-      reads: () => ({
-        draft: async () => '',
-        agentStates: async () => new Map(),
-        tabBusy: async () => false
-      }),
+      reads: () => fixtureBusyReads(f),
       terminalAlive: async (handle) => connectedHandles(f).has(handle)
     },
     launch: async () => {

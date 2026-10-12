@@ -1,4 +1,3 @@
-import { addActivityFacts, type ActivityRuntime } from '../fields/activity-facts'
 import type { HandledRow, ItemDecision } from '../../shared/api-types'
 import type { AutomationDefinition, CheckDef } from '../../shared/definition/types'
 import type { PeopleDirectory } from '../../shared/people'
@@ -13,6 +12,7 @@ import {
 } from '../../shared/tick/decide'
 import { runFields } from '../../shared/template'
 import { engineChildEnv, type EngineEnv } from '../engine-env'
+import { addActivityFacts, type ActivityRuntime } from '../fields/activity-facts'
 import { worktreePathKey } from '../fields/agent-activity'
 import { addBuiltinFields, addCustomFields, type FieldEngineDeps } from '../fields/engine'
 import { resolveScriptCommand, type ScriptRunner } from '../fields/script-runner'
@@ -241,7 +241,12 @@ export async function decideTickItems(
     deps.fields
   )
   const activity = deps.activity
-    ? await addActivityFacts(custom.items, def.checks, deps.activity)
+    ? await addActivityFacts(
+        custom.items,
+        def.checks,
+        deps.activity,
+        (item) => !scope.has(item.key)
+      )
     : { items: custom.items, warnings: [] }
   const seenAt = deps.store.seenTimes(def.id)
   const input = {

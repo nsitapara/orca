@@ -68,7 +68,7 @@ describe('idleOutcome', () => {
       'typing',
       { 'worktree.path': '/wt/x', 'worktree.busy': 'someone is typing in ✳ Fix' },
       false,
-      'Someone is typing in ✳ Fix'
+      'someone is typing in ✳ Fix'
     ],
     [
       'unknown',
