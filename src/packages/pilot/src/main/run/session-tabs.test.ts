@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { OrcaRuntimeService } from '../../../../../main/runtime/orca-runtime'
 import type { SessionTerminalState } from './agent-step'
-import { findLiveTab, runtimeSessionTabs, type SessionLook } from './session-tabs'
+import { findLiveTab, runtimeSessionTabs, terminalOpen, type SessionLook } from './session-tabs'
 
 function look(
   states: Record<string, SessionTerminalState>,
@@ -102,5 +102,19 @@ describe('runtimeSessionTabs', () => {
       { 't1:l1': [row('t1:l1', 's1')], 't2:l2': [row('t2:l2', 's-other')] }
     )
     expect(await runtimeSessionTabs(rt)('s1')).toEqual([{ handle: 'h1', paneKey: 't1:l1' }])
+  })
+})
+
+describe('terminalOpen', () => {
+  const runtime = (listing: object) =>
+    ({ listTerminals: vi.fn(async () => listing) }) as unknown as OrcaRuntimeService
+
+  it.each([
+    ['connected', { terminals: [{ handle: 'h1', connected: true }], truncated: false }, true],
+    ['disconnected', { terminals: [{ handle: 'h1', connected: false }], truncated: false }, false],
+    ['absent from a complete listing', { terminals: [], truncated: false }, false],
+    ['absent from a truncated listing: unknown, so open', { terminals: [], truncated: true }, true]
+  ])('%s', async (_name, listing, expected) => {
+    expect(await terminalOpen(runtime(listing), 'h1')).toBe(expected)
   })
 })

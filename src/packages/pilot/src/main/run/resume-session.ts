@@ -4,7 +4,7 @@ import type { RunRow, SessionResumeResult, StepRow } from '../../shared/api-type
 import type { WorktreeFactDeps } from '../fields/worktree-facts'
 import type { PilotStore } from '../store/store'
 import { runtimeSessionTerminals } from './launch'
-import type { SessionClaimTable } from './session-claims'
+import { isStartTimeout, type SessionClaimTable } from './session-claims'
 import { findLiveTab, terminalOpen, type SessionLook } from './session-tabs'
 
 export type ResumeDeps = SessionLook & {
@@ -69,6 +69,7 @@ export async function resumeStepSession(
       return refuseOrFocus(deps, sessionId, hints, claim.handle)
     }
   }
+  let opening = false
   try {
     // A launcher's step is starting on the session with no terminal recorded yet.
     if (deps.startingOn(sessionId)) {
@@ -83,6 +84,7 @@ export async function resumeStepSession(
     if (!run.worktreePath) {
       throw new Error(`Run ${run.id} has no worktree to resume in`)
     }
+    opening = true
     const opened = await deps.open(
       `path:${run.worktreePath}`,
       command,
@@ -91,7 +93,10 @@ export async function resumeStepSession(
     claims?.setHandle(sessionId, by, opened.handle)
     return { action: 'opened', handle: opened.handle }
   } catch (error) {
-    claims?.release(sessionId, by)
+    // An open that timed out may still produce its tab: the claim stays (until landed, dead or the TTL).
+    if (!(opening && isStartTimeout(error))) {
+      claims?.release(sessionId, by)
+    }
     throw error
   }
 }

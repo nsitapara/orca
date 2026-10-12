@@ -8,6 +8,12 @@ export const CLAIM_TTL_MS = 90_000
 // A just-opened terminal may not be listed yet: a start is only called dead after this long.
 export const DEAD_GRACE_MS = 10_000
 
+// A start that failed by timing out (createTerminal's no-reply, the handle never appearing): the tab may
+// still appear, so its claim is kept (pending until landed, dead or the TTL) instead of released.
+export function isStartTimeout(error: unknown): boolean {
+  return error instanceof Error && /timed out/i.test(error.message)
+}
+
 export type ClaimVerdict = 'landed' | 'dead' | 'pending'
 export type ClaimResult = { ok: true } | { ok: false; by: string; handle: string | null }
 export type SessionClaimTable = {

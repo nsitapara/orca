@@ -189,6 +189,22 @@ describe('resumeStepSession, the race window before the new agent posts a row', 
     expect(claims.holder('s1')).toBeNull()
   })
 
+  it.each([
+    ['createTerminal gave no reply', 'Terminal creation timed out'],
+    ['the handle never appeared', 'Timed out waiting for terminal handle after creation']
+  ])(
+    'keeps the claim when opening times out (%s): the tab may still appear',
+    async (_n, message) => {
+      const claims = new SessionClaims()
+      const d = deps(step({}), { claims })
+      d.open.mockRejectedValueOnce(new Error(message))
+      await expect(resumeStepSession(d, req)).rejects.toThrow(message)
+      expect(claims.holder('s1')).toMatchObject({ handle: null })
+      await expect(resumeStepSession(d, req)).rejects.toThrow('Session is opening…')
+      expect(d.open).toHaveBeenCalledTimes(1)
+    }
+  )
+
   it('a remnant row on the old tab never drops the in-flight claim: two Resumes open one tab', async () => {
     const clock = { t: 100_000 }
     // The old tab T1 is gone by the launcher's judgement, but its surviving shell keeps a session-only row.
