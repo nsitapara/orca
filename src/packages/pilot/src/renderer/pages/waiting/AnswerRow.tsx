@@ -1,8 +1,9 @@
-import { useRef, useState } from 'react'
+import { useState } from 'react'
 import { Textarea } from '@/components/ui/textarea'
 import { cn } from '@/lib/utils'
 import type { InboxItemRow } from '../../../shared/api-types'
-import { type Choice, choicesFor, composeAnswer } from './answer-text'
+import { type AnswerButton, buttonsFor } from './answer-buttons'
+import { type Choice, composeAnswer } from './answer-text'
 import type { Answer } from './answer-types'
 
 function notesPlaceholder(choice: Choice): string {
@@ -44,129 +45,129 @@ function Parts({
   )
 }
 
-// The console tags a question's first option as the recommended one (answers.html).
-function recommended(item: InboxItemRow, choice: Choice): boolean {
-  return item.type === 'question' && choice.option === 0
+const PRIMARY = 'bg-[var(--ib-accent)] text-[var(--ib-accent-fg)]'
+const OUTLINE = 'border border-border bg-background text-foreground hover:bg-muted'
+
+function buttonClass(b: AnswerButton): string {
+  const filled = b.role === 'primary' || b.recommended
+  return cn(
+    'rounded-md px-3.5 py-1 text-[13px] font-semibold disabled:opacity-50',
+    filled ? PRIMARY : OUTLINE
+  )
 }
 
-// The options as segmented buttons: one radiogroup, arrow keys move the pick, and the picked option's
-// meaning reads beside them.
+// One button per choice, named for what it does; clicking one saves it (the card then shows its countdown with
+// Undo). Only the choices that need words open the notes box, which has its own Send and Cancel.
 export function AnswerRow({
   item,
   off,
   onToggle,
   onSave,
-  onSaved,
   onPick
 }: {
   item: InboxItemRow
   off: string[]
   onToggle: (id: string) => void
   onSave: (answer: Answer) => Promise<string | null>
-  onSaved: () => void
+  // Whether words are being typed and not yet sent (the card's "unsaved" pill).
   onPick: (picked: boolean) => void
 }): React.JSX.Element {
-  const choices = choicesFor(item)
-  const [picked, setPicked] = useState<number | null>(null)
+  const buttons = buttonsFor(item)
+  const [open, setOpen] = useState<AnswerButton | null>(null)
   const [notes, setNotes] = useState('')
   const [saving, setSaving] = useState(false)
-  const radios = useRef<(HTMLButtonElement | null)[]>([])
-  const choice = picked === null ? null : choices[picked]
-  const answer = choice ? composeAnswer(item, choice, notes, off) : null
-  const pick = (i: number) => {
-    setPicked(i)
-    onPick(true)
-  }
-  const move = (from: number, step: number) => {
-    const next = (from + step + choices.length) % choices.length
-    pick(next)
-    radios.current[next]?.focus()
-  }
-  const onKey = (e: React.KeyboardEvent, i: number) => {
-    if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
-      e.preventDefault()
-      move(i, 1)
-    } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
-      e.preventDefault()
-      move(i, -1)
-    }
-  }
-  const save = async () => {
+  const [hint, setHint] = useState('')
+  const send = async (choice: Choice, words: string) => {
+    const answer = composeAnswer(item, choice, words, off)
     if (!answer) {
       return
     }
     setSaving(true)
-    const failed = await onSave(answer)
+    await onSave(answer)
     setSaving(false)
-    if (!failed) {
-      onSaved()
-    }
   }
+  const click = (b: AnswerButton) => {
+    if (b.choice.notes === 'none') {
+      void send(b.choice, '')
+      return
+    }
+    setOpen(b)
+    onPick(true)
+  }
+  const close = () => {
+    setOpen(null)
+    setNotes('')
+    onPick(false)
+  }
+  const skip = buttons.find((b) => b.role === 'skip')
+  const rest = buttons.filter((b) => b.role !== 'skip')
+  const ready = open ? composeAnswer(item, open.choice, notes, off) !== null : false
   return (
     <div className="flex flex-col gap-2 pt-1">
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-        <div
-          role="radiogroup"
-          aria-label="Answer"
-          className="inline-flex flex-wrap overflow-hidden rounded-md border border-border"
-        >
-          {choices.map((c, i) => (
-            <button
-              key={c.label}
-              ref={(el) => {
-                radios.current[i] = el
-              }}
-              type="button"
-              role="radio"
-              aria-checked={picked === i}
-              data-value={c.label}
-              tabIndex={picked === i || (picked === null && i === 0) ? 0 : -1}
-              onClick={() => pick(i)}
-              onKeyDown={(e) => onKey(e, i)}
-              className={cn(
-                'border-l border-border px-3 py-1 text-[13px] first:border-l-0',
-                picked === i
-                  ? 'bg-[var(--ib-accent-soft)] font-semibold text-[var(--ib-accent)]'
-                  : 'bg-background text-foreground hover:bg-muted'
-              )}
-            >
-              {c.label}
-              {recommended(item, c) ? (
-                <span className="ml-1.5 text-[10.5px] font-medium opacity-80">Recommended</span>
-              ) : null}
-            </button>
-          ))}
-        </div>
-        {choice?.meaning ? (
-          <span className="min-w-0 flex-1 text-[13px] text-muted-foreground">{choice.meaning}</span>
-        ) : (
-          <span className="flex-1" />
-        )}
-        <button
-          type="button"
-          data-save=""
-          disabled={!answer || saving}
-          onClick={() => void save()}
-          className={cn(
-            'rounded-md px-3.5 py-1 text-[13px] font-semibold',
-            answer && !saving
-              ? 'bg-[var(--ib-accent)] text-[var(--ib-accent-fg)]'
-              : 'cursor-not-allowed bg-muted text-muted-foreground'
-          )}
-        >
-          Save answer
-        </button>
-      </div>
-      {choice && choice.notes !== 'none' ? (
-        <Textarea
-          value={notes}
-          onChange={(e) => setNotes(e.target.value)}
-          placeholder={notesPlaceholder(choice)}
-        />
-      ) : null}
-      {Object.keys(item.parts).length > 0 && choice?.label === 'Approve' ? (
+      {Object.keys(item.parts).length > 0 ? (
         <Parts item={item} off={off} onToggle={onToggle} />
       ) : null}
+      {open ? (
+        <div className="flex flex-col gap-2">
+          <Textarea
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+            placeholder={notesPlaceholder(open.choice)}
+          />
+          <div className="flex justify-end gap-2">
+            <button
+              type="button"
+              className={`${OUTLINE} rounded-md px-3 py-1 text-[13px]`}
+              onClick={close}
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              disabled={!ready || saving}
+              onClick={() => void send(open.choice, notes)}
+              className={cn(
+                'rounded-md px-3.5 py-1 text-[13px] font-semibold disabled:opacity-50',
+                PRIMARY
+              )}
+            >
+              Send
+            </button>
+          </div>
+        </div>
+      ) : null}
+      <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Answer">
+        {skip ? (
+          <button
+            type="button"
+            data-choice={skip.choice.label}
+            title={skip.hint || undefined}
+            disabled={saving}
+            onClick={() => click(skip)}
+            className="rounded px-1.5 py-1 text-[13px] text-muted-foreground hover:text-foreground disabled:opacity-50"
+          >
+            {skip.label}
+          </button>
+        ) : null}
+        <span className="min-w-0 flex-1 text-[13px] text-muted-foreground">{hint}</span>
+        {rest.map((b) => (
+          <button
+            key={b.choice.label}
+            type="button"
+            data-choice={b.choice.label}
+            title={b.hint || undefined}
+            disabled={saving}
+            onClick={() => click(b)}
+            onMouseEnter={() => setHint(b.hint)}
+            onMouseLeave={() => setHint('')}
+            onFocus={() => setHint(b.hint)}
+            onBlur={() => setHint('')}
+            className={buttonClass(b)}
+          >
+            {b.label}
+          </button>
+        ))}
+      </div>
     </div>
   )
 }

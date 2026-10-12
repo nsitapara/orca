@@ -8,20 +8,9 @@ vi.mock('../../api', () => ({ pilotRpc: (...args: unknown[]) => pilotRpc(...args
 
 import { InboxPage } from './InboxPage'
 import { INBOX_CSS } from './inbox-style'
-import { kindChipClass, statusOf, statusPillClass } from './chips'
+import { statusOf, statusPillClass } from './chips'
 
 describe('chip colours (the console’s: answers.html)', () => {
-  it.each([
-    ['bug', 'bg-[var(--ib-bad-soft)] text-[var(--ib-bad)]'],
-    ['question', 'bg-[var(--ib-warn-soft)] text-[var(--ib-warn)]'],
-    ['action', 'bg-[var(--ib-warn-soft)] text-[var(--ib-warn)]'],
-    ['flagged', 'bg-[var(--ib-warn-soft)] text-[var(--ib-warn)]'],
-    ['default', 'bg-muted text-foreground/80'],
-    ['left_for_you', 'bg-muted text-foreground/80']
-  ] as const)('a %s kind chip', (kind, colours) => {
-    expect(kindChipClass(kind)).toContain(colours)
-  })
-
   it.each([
     ['waiting', 'bg-[var(--ib-warn-soft)] text-[var(--ib-warn)]'],
     ['answered', 'bg-[var(--ib-accent-soft)] text-[var(--ib-accent)]'],
@@ -113,7 +102,7 @@ describe('colours on the page', () => {
     pilotRpc.mockReset()
   })
 
-  it('colours a card’s chips by kind and status, and tags a question’s first option Recommended', async () => {
+  it('colours a card’s status pill, has no kind chip, and highlights a question’s first option', async () => {
     const items = [
       card({ id: 'b', type: 'bug', title: 'A bug' }),
       card({
@@ -140,18 +129,18 @@ describe('colours on the page', () => {
     })
     const { container } = render(<InboxPage />)
     const bug = (await screen.findByRole('heading', { name: 'A bug' })).closest('article')!
-    expect(bug.querySelector('span')?.className).toContain('text-[var(--ib-bad)]')
-    expect(bug.textContent).toContain('waiting')
     const waiting = [...bug.querySelectorAll('span')].find((s) => s.textContent === 'waiting')
     expect(waiting?.className).toContain('text-[var(--ib-warn)]')
+    // No kind chip: neither the card nor its list row says "Left for you" or "Question".
+    expect(container.textContent).not.toMatch(/Left for you|Question|Action\b/)
     const q = screen.getByRole('heading', { name: 'A question' }).closest('article')!
-    expect(q.querySelector('[role="radio"][data-value="Install"]')?.textContent).toContain(
-      'Recommended'
+    expect(q.querySelector('[data-choice="Install"]')?.className).toContain('bg-[var(--ib-accent)]')
+    expect(q.querySelector('[data-choice="Bake"]')?.className).not.toContain(
+      'bg-[var(--ib-accent)]'
     )
-    expect(q.querySelector('[role="radio"][data-value="Bake"]')?.textContent).not.toContain(
-      'Recommended'
+    expect(bug.querySelector('[data-choice="Approve"]')?.className).toContain(
+      'bg-[var(--ib-accent)]'
     )
-    expect(bug.querySelector('[role="radio"]')?.textContent).not.toContain('Recommended')
     expect(container.querySelector('.pilot-inbox')).not.toBeNull()
     expect(container.querySelector('style[data-pilot-inbox]')).not.toBeNull()
   })

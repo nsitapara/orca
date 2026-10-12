@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -108,8 +108,8 @@ const HELD: QueueEntry = {
   updatedAt: 0
 }
 
-const radio = (from: ParentNode, value: string): Element =>
-  from.querySelector(`[role="radio"][data-value="${value}"]`)!
+const choice = (from: ParentNode, value: string): Element =>
+  from.querySelector(`[data-choice="${value}"]`)!
 
 function serve(list = LIST, queue: QueueEntry[] = [HELD]) {
   pilotRpc.mockImplementation(async (method: string) => {
@@ -147,7 +147,7 @@ describe('InboxPage', () => {
     render(<InboxPage />)
     const line = await screen.findByText('python3 /a/act.py push run /wt/web-1493 web-1493-a')
     const block = line.closest('[data-pilot-run-line]')
-    expect(block?.textContent).toMatch(/^Pilot · Approve runs/)
+    expect(block?.textContent).toMatch(/^Pilot · Push to origin runs/)
     // Apart from the agent's words: the agent's context is not inside Pilot's block.
     expect(block?.textContent).not.toContain('Fixed the flaky spec.')
     expect(line.closest('article')?.textContent).toContain("Push !1561's 2 commits to origin?")
@@ -215,8 +215,7 @@ describe('InboxPage', () => {
     const article = (
       await screen.findByRole('heading', { name: "Push !1561's 2 commits to origin?" })
     ).closest('article')!
-    fireEvent.click(radio(article, 'Approve'))
-    fireEvent.click(article.querySelector('button[data-save]')!)
+    fireEvent.click(choice(article, 'Approve'))
     await waitFor(() =>
       expect(pilotRpc).toHaveBeenCalledWith(
         'pilot.inbox.answer',
@@ -234,8 +233,8 @@ describe('InboxPage', () => {
     const article = (
       await screen.findByRole('heading', { name: "Push !1561's 2 commits to origin?" })
     ).closest('article')!
-    fireEvent.click(radio(article, 'Revise…'))
-    const save = article.querySelector('button[data-save]') as HTMLButtonElement
+    fireEvent.click(choice(article, 'Revise…'))
+    const save = within(article).getByRole('button', { name: 'Send' }) as HTMLButtonElement
     expect(save.disabled).toBe(true)
     fireEvent.change(article.querySelector('textarea')!, { target: { value: 'push only the fix' } })
     fireEvent.click(save)
@@ -259,8 +258,7 @@ describe('InboxPage', () => {
     const article = (
       await screen.findByRole('heading', { name: 'Install LibreOffice in the job?' })
     ).closest('article')!
-    fireEvent.click(radio(article, 'Bake it'))
-    fireEvent.click(article.querySelector('button[data-save]')!)
+    fireEvent.click(choice(article, 'Bake it'))
     expect(await screen.findByText('The card changed; review it again')).toBeTruthy()
   })
 
@@ -280,8 +278,7 @@ describe('InboxPage', () => {
     const article = (
       await screen.findByRole('heading', { name: 'Install LibreOffice in the job?' })
     ).closest('article')!
-    fireEvent.click(radio(article, 'Bake it'))
-    fireEvent.click(article.querySelector('button[data-save]')!)
+    fireEvent.click(choice(article, 'Bake it'))
     expect(await screen.findByText('The card changed; review it again')).toBeTruthy()
     await waitFor(() => expect(version).toBe(2))
     expect(screen.getByText('The card changed; review it again')).toBeTruthy()
@@ -305,11 +302,11 @@ describe('InboxPage', () => {
     const article = (
       await screen.findByRole('heading', { name: 'Prepare a review of !1588?' })
     ).closest('article')!
-    fireEvent.click(radio(article, 'Approve with notes…'))
+    fireEvent.click(choice(article, 'Approve with notes…'))
     fireEvent.change(article.querySelector('textarea')!, {
       target: { value: 'use the second fix' }
     })
-    fireEvent.click(article.querySelector('button[data-save]')!)
+    fireEvent.click(within(article).getByRole('button', { name: 'Send' }))
     await waitFor(() =>
       expect(pilotRpc).toHaveBeenCalledWith(
         'pilot.inbox.answer',
@@ -556,7 +553,6 @@ describe('Details on a card', () => {
     const { container } = render(<InboxPage />)
     fireEvent.click(await screen.findByRole('button', { name: /^Details/ }))
     await screen.findByText('General comments')
-    fireEvent.click(radio(container, 'Approve'))
     const box = screen.getByLabelText('Post 1') as HTMLInputElement
     fireEvent.click(container.querySelector('[data-part="1"] button')!)
     expect(box.checked).toBe(false)
