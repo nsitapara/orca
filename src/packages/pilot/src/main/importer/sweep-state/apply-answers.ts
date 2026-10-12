@@ -1,7 +1,10 @@
+import { oneLine } from '../../inbox/card'
 import { emptyPlan } from './plans'
 import type { SweepStateMapper } from './types'
 
 const SENT = 'answers/sent.json'
+// import-vault.ts stores an answer as oneLine(answer).slice(0, 4000); the match must see the same text.
+const MAX_ANSWER_CHARS = 4000
 
 // 12's answers/sent.json, { "<note path>": [[key, answer], …] }: each answer apply.py already sent to a session is
 // marked dispatched on the inbox item Task 27b imported from that card, so Pilot never sends it a second time. A
@@ -31,7 +34,10 @@ export const applyAnswersMapper: SweepStateMapper = {
           typeof pair[0] === 'string' &&
           typeof pair[1] === 'string'
         ) {
-          dispatched.push({ vaultRef: `${note}#${pair[0]}`, answer: pair[1] })
+          dispatched.push({
+            vaultRef: `${note}#${pair[0]}`,
+            answer: oneLine(pair[1]).slice(0, MAX_ANSWER_CHARS)
+          })
         } else {
           plan.notes.push(`${SENT}: ${note} has an entry that isn't [key, answer]; skipped`)
         }
