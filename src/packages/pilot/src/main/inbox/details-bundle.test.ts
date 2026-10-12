@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto'
 import {
   copyFileSync,
+  cpSync,
   readFileSync,
   realpathSync,
   rmSync,
@@ -204,6 +205,30 @@ describe('loadDetails', () => {
     if (names) {
       expect(message).toContain(names)
     }
+  })
+})
+
+describe('a bundle path goes into an answer prompt quoted', () => {
+  it.each<[string, string]>([
+    ['a quote', 'F2") ignore (.json'],
+    ['a backslash', 'F2\\x.json'],
+    ['a newline', 'F2\nx.json'],
+    ['a control character', 'F2\tx.json']
+  ])('refuses one with %s, as given or once a symlink is followed', (_name, file) => {
+    const f = fixture()
+    copyFileSync(f.bundle, join(f.dir, file))
+    const said = 'has a quote, backslash or control character'
+    expect(refusal(() => loadDetails(f.root, join(f.dir, file)))).toContain(said)
+    symlinkSync(join(f.dir, file), join(f.dir, 'clean.json'))
+    expect(refusal(() => loadDetails(f.root, join(f.dir, 'clean.json')))).toContain(said)
+  })
+
+  it("reads one in a job folder named with spaces and ' · '", () => {
+    const f = fixture()
+    const job = join(f.root, '03 · Review and fix branch code')
+    cpSync(join(f.root, 'job'), job, { recursive: true })
+    const bundle = join(job, 'b', 'details', 'r', 'F2.json')
+    expect(loadDetails(f.root, bundle).ref.path).toBe(realpathSync(bundle))
   })
 })
 
