@@ -114,3 +114,52 @@ describe('SpendStore.totals', () => {
     expect(setup().spend.totals('2026-10-12')).toEqual({ costUsd: 0, tokens: 0, runs: 0 })
   })
 })
+
+describe('report queries', () => {
+  it('lists every measured bucket of a step that had a session, with its run and step', () => {
+    const store = setup()
+    store.runs.updateStep('r1', 0, { sessionId: 's-r1-0' })
+    expect(
+      store.spend
+        .reportBuckets()
+        .map((b) => [b.automationId, b.sessionId, b.day, b.costUsd, b.itemLabel, b.worktreePath])
+    ).toEqual([['fix-ci', 's-r1-0', '2026-10-11', 1, '!1561 web-1493', '/wt']])
+  })
+
+  it('counts agent steps still going or not measured yet as pending', () => {
+    const store = setup()
+    store.runs.createStep({
+      runId: 'r3',
+      idx: 1,
+      name: 's1',
+      agent: 'claude',
+      skill: null,
+      startedAt: 5
+    })
+    store.runs.updateStep('r3', 1, { status: 'running' })
+    expect(store.spend.pendingAgentSteps()).toBe(1)
+  })
+
+  it('lists measured steps that had a tab but no usable session', () => {
+    const store = setup()
+    store.runs.createStep({
+      runId: 'r3',
+      idx: 1,
+      name: 's1',
+      agent: 'codex',
+      skill: null,
+      startedAt: 5
+    })
+    store.runs.updateStep('r3', 1, { status: 'failed', terminalHandle: 'term_9', finishedAt: 6 })
+    store.usage.saveStepUsage('r3', 1, [], false, 7)
+    expect(store.spend.sessionlessSteps()).toEqual([
+      {
+        automationId: 'e2e',
+        agent: 'codex',
+        startedAt: 5,
+        worktreePath: '/wt',
+        itemLabel: 'WEB-2118'
+      }
+    ])
+  })
+})
