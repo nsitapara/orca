@@ -46,6 +46,16 @@ describe('CardDetails', () => {
     pilotRpc.mockReset()
   })
 
+  it('shows the Details toggle as a disclosure button with an arrow, as the console did', () => {
+    pilotRpc.mockResolvedValue({ snapshot })
+    render(<CardDetails item={item('toggle-1')} parts={null} />)
+    const toggle = screen.getByRole('button', { name: 'Details' })
+    expect(toggle.querySelector('svg')).not.toBeNull()
+    expect(toggle.getAttribute('aria-expanded')).toBe('false')
+    fireEvent.click(toggle)
+    expect(toggle.getAttribute('aria-expanded')).toBe('true')
+  })
+
   it('offers Retry when loading the Details fails, and re-fetches on click', async () => {
     pilotRpc.mockRejectedValueOnce(new Error('The card changed; review it again'))
     pilotRpc.mockResolvedValueOnce({ snapshot })
