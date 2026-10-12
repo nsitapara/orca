@@ -68,4 +68,26 @@ describe('createPassFetchCache', () => {
     expect(load).toHaveBeenCalledTimes(1)
     expect(one.passId).toBe('pass-1')
   })
+
+  it('memoizes root reads (the signed-in user) like project reads, and offers none the client lacks', async () => {
+    const roots: string[] = []
+    const api: GlabApi = {
+      projectPath: 'group/web-platform',
+      async get<T>(): Promise<T> {
+        return {} as T
+      },
+      async getRoot<T>(path: string): Promise<T> {
+        roots.push(path)
+        return { username: 'nish8' } as T
+      }
+    }
+    const pass = createPassFetchCache('pass-1', async () => api)
+    const one = await pass.gitlab('/repo')
+    const two = await pass.gitlab('/repo')
+    await one.getRoot?.('user')
+    await two.getRoot?.('user')
+    expect(roots).toEqual(['user'])
+    const bare = createPassFetchCache('pass-1', async () => ({ projectPath: 'p', get: api.get }))
+    expect((await bare.gitlab('/repo')).getRoot).toBeUndefined()
+  })
 })

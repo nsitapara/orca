@@ -113,7 +113,7 @@ describe('fixtureGlab', () => {
   it("serves a pass's GitLab client from the fixture, so Pilot reads through its own per-pass memo", async () => {
     const api = await fixturePass(F).gitlab('/main')
     expect(await api.get('merge_requests/1')).toEqual({ iid: 1 })
-    // The pass client forwards getRoot from Task 14b on; that task's fetch-cache test pins it.
+    expect(await api.getRoot?.('user')).toEqual({ username: 'nish8' })
   })
 })
 

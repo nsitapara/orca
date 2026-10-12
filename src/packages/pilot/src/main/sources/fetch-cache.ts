@@ -33,10 +33,17 @@ export function createPassFetchCache(
     memo,
     async gitlab(repoPath) {
       const api = await memo(`glab-client:${repoPath}`, () => gitlab(repoPath))
-      return {
+      const client: GlabApi = {
         projectPath: api.projectPath,
         get: <T>(path: string) => memo<T>(`glab:${api.projectPath}:${path}`, () => api.get<T>(path))
       }
+      const root = api.getRoot
+      if (root) {
+        // Paths outside the project (`user`): memoized the same way, per project and path.
+        client.getRoot = <T>(path: string) =>
+          memo<T>(`glab-root:${api.projectPath}:${path}`, () => root.call(api, path) as Promise<T>)
+      }
+      return client
     }
   }
 }

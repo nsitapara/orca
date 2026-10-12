@@ -7,7 +7,12 @@ import {
 } from '../../../../../main/gitlab/gitlab-project-ref-resolution'
 import { encodedProject } from '../../../../../main/gitlab/project-path-encoding'
 
-export type GlabApi = { projectPath: string; get<T>(path: string): Promise<T> }
+export type GlabApi = {
+  projectPath: string
+  get<T>(path: string): Promise<T>
+  // Paths outside the project (`user`). Optional so test fakes that never need it stay small.
+  getRoot?<T>(path: string): Promise<T>
+}
 
 // One glab-backed REST client per repo, reusing Orca's host resolution and glab runner.
 export async function glabApiForRepo(repoPath: string): Promise<GlabApi> {
@@ -18,12 +23,15 @@ export async function glabApiForRepo(repoPath: string): Promise<GlabApi> {
     )
   }
   const project = encodedProject(ref.path)
+  const found = ref
+  const call = async <T>(apiPath: string): Promise<T> => {
+    const args = ['api', ...glabHostnameArgs(found, undefined), apiPath]
+    const { stdout } = await glabExecFileAsync(args, glabRepoExecOptions(repoPath, undefined))
+    return JSON.parse(stdout) as T
+  }
   return {
-    projectPath: ref.path,
-    async get<T>(path: string): Promise<T> {
-      const args = ['api', ...glabHostnameArgs(ref, undefined), `projects/${project}/${path}`]
-      const { stdout } = await glabExecFileAsync(args, glabRepoExecOptions(repoPath, undefined))
-      return JSON.parse(stdout) as T
-    }
+    projectPath: found.path,
+    get: <T>(path: string) => call<T>(`projects/${project}/${path}`),
+    getRoot: <T>(path: string) => call<T>(path)
   }
 }
