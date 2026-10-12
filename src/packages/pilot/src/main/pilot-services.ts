@@ -14,6 +14,7 @@ import { startRunEntry } from './actions/start-run-entry'
 import { buildActionCatalog } from './actions/catalog'
 import type { ActionCatalog } from './actions/types'
 import { definitionIo, liveDefinitions } from './definitions/live'
+import { buildInboxDeps } from './inbox/inbox-service'
 import type { LoadedDefinitions } from './definitions/loader'
 import { mergeRepoProblems, type RepoProblem } from './definitions/repo-problems'
 import { pilotAutomationDirs, pilotDataDir, pilotVaultAutomationsDir } from './env'
@@ -184,6 +185,16 @@ function openPilot(
       })
     ]
   })
+  // The tick's asks and the answers pass share it: a card closed without starting its run (Skip, stale,
+  // obsolete) cancels that run.
+  const inbox = buildInboxDeps({
+    store,
+    now,
+    definitions: () => definitions.current().definitions,
+    people: () => definitions.current().people,
+    actions,
+    onResolved: (item) => cancelUnstartedRun(store, item, now())
+  })
   const tickDeps: TickDeps = {
     store,
     now,
@@ -201,20 +212,7 @@ function openPilot(
     },
     activity: runtimeActivity(runtime, fieldDeps.terminalAlive),
     launch: (req) => wired.engine.startRun(req),
-    // A card closed without starting its run (Skip, stale, obsolete) cancels that run.
-    ask: {
-      store,
-      now,
-      inbox: {
-        store,
-        now,
-        definitions: () => definitions.current().definitions,
-        people: () => definitions.current().people,
-        knownAction: (name) => actions.get(name) !== null,
-        actionArgsProblem: (name, args) => actions.get(name)?.checkArgs(args) ?? null,
-        onResolved: (item) => cancelUnstartedRun(store, item, now())
-      }
-    }
+    ask: { store, now, inbox }
   }
   const repoProblems = new Map<string, RepoProblem>()
   const withRepoProblems = (loaded: LoadedDefinitions): LoadedDefinitions =>
@@ -237,7 +235,7 @@ function openPilot(
           store,
           now,
           definitions: () => definitions.current().definitions,
-          people: () => definitions.current().people,
+          inbox,
           actions,
           quotas,
           facts: fieldDeps,

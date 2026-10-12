@@ -4,6 +4,7 @@ import type { InboxAddParams } from '../../shared/inbox-types'
 import { proposalProblem } from '../actions/powers'
 import { addInboxItem } from '../inbox/inbox-add'
 import {
+  buildInboxDeps,
   getInboxItem,
   listInbox,
   replyToInboxItem,
@@ -44,15 +45,17 @@ const List = z.object({
 const Tick = Id.extend({ outcome: z.string().min(1).max(2000) })
 const Reply = Id.extend({ text: z.string().min(1).max(4000) })
 
+// A card an RPC call closes leaves its run alone (onResolved null): only the scheduler's tick and answers
+// pass cancel an ask-first run whose card closed, in the process that runs the engine.
 export function inboxDeps(c: PilotContext): InboxDeps {
-  return {
+  return buildInboxDeps({
     store: c.store,
     now: Date.now,
     definitions: () => c.loaded().definitions,
     people: () => c.loaded().people,
-    knownAction: (name) => c.actions.get(name) !== null,
-    actionArgsProblem: (name, args) => c.actions.get(name)?.checkArgs(args) ?? null
-  }
+    actions: c.actions,
+    onResolved: null
+  })
 }
 
 // What a step (or a job-wide caller) files is a proposal: its action must be in the catalog, its args must
