@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import type { RpcCallerIdentity } from '../../../../../main/runtime/rpc/rpc-caller-identity'
+import { addInboxItem } from '../inbox/inbox-add'
 import { loadDefinitions } from '../definitions/loader'
 import type { PilotHost } from '../pilot-services'
 import { PilotStore } from '../store/store'
@@ -51,6 +52,7 @@ function setup() {
   const methods = buildPilotMethods(host) as unknown as Callable[]
   return {
     store,
+    loaded,
     call: (name: string, p: unknown) => methods.find((m) => m.name === name)!.handler(p),
     callAs: (caller: RpcCallerIdentity | undefined, name: string, p: unknown) =>
       methods.find((m) => m.name === name)!.handler(p, caller ? { caller } : {}),
@@ -60,6 +62,31 @@ function setup() {
 }
 
 describe('inbox RPC', () => {
+  it('refuses to close an ask-first card, which only Pilot or the desktop answer can settle', () => {
+    const { call, store, loaded } = setup()
+    const added = addInboxItem(
+      {
+        store,
+        now: () => 5,
+        definitions: () => loaded.definitions,
+        people: () => loaded.people
+      },
+      {
+        runId: 'run-1',
+        type: 'action',
+        title: 'Go?',
+        options: ['Approve'],
+        action: 'start_run',
+        actionArgs: { run_id: 'run-1' }
+      }
+    )
+    const card = { id: added.id ?? '' }
+    expect(() => call('pilot.inbox.tick', { id: card.id, outcome: 'skipped' })).toThrow(
+      'Answer this in Pilot (Waiting on you)'
+    )
+    expect(store.inbox.get(card.id)?.status).toBe('open')
+  })
+
   it('registers each method once, as pilot.* with a workspace permission', () => {
     const { methods } = setup()
     const names = methods.map((m) => m.name)

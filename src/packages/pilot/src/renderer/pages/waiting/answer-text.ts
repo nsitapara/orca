@@ -11,10 +11,16 @@ export const KIND_LABEL: Record<InboxType, string> = {
 }
 const ACTION_TYPES = new Set<InboxType>(['action', 'bug', 'left_for_you'])
 
+const DEFAULT_ASK = [
+  { label: 'Approve', meaning: 'start it now' },
+  { label: 'Skip', meaning: 'nothing starts' }
+]
+
 export type Choice = {
   label: string
   meaning: string
-  notes: 'none' | 'required'
+  // 'optional': notes may follow but aren't needed (Approve with notes… on an ask-first card).
+  notes: 'none' | 'optional' | 'required'
   // The card's option this choice is, or null for one the page adds (Revise…, Keep, Something else…).
   option: number | null
   text(notes: string): string
@@ -29,16 +35,30 @@ function meaningAt(item: InboxItemRow, at: number | null): string {
   return at === null ? '' : item.options[at].meaning
 }
 
+// An ask-first card (G4): its options are the choices, the first one starts the run. Approve with notes…
+// starts it too, and the notes become the run's {run.answer} ("approve: <notes>", R-2).
+function askFirstChoices(item: InboxItemRow): Choice[] {
+  const options = item.options.length > 0 ? item.options : DEFAULT_ASK
+  const choices: Choice[] = options.map((o, i) => ({
+    label: o.label,
+    meaning: o.meaning,
+    notes: 'none',
+    option: i,
+    text: () => o.label
+  }))
+  const withNotes: Choice = {
+    label: 'Approve with notes…',
+    meaning: 'start it, and tell the run something',
+    notes: 'optional',
+    option: null,
+    text: (n) => (n.trim() ? `approve: ${n.trim()}` : 'approve')
+  }
+  return [choices[0], withNotes, ...choices.slice(1)]
+}
+
 function actionChoices(item: InboxItemRow): Choice[] {
-  // An ask-first card with its own options (G4): they are the choices, the first one starts the run.
-  if (item.action === 'start_run' && item.options.length > 0) {
-    return item.options.map((o, i) => ({
-      label: o.label,
-      meaning: o.meaning,
-      notes: 'none',
-      option: i,
-      text: () => o.label
-    }))
+  if (item.action === 'start_run') {
+    return askFirstChoices(item)
   }
   const approve = optionAt(item, /^approve$/i)
   const skip = optionAt(item, /^skip$/i)

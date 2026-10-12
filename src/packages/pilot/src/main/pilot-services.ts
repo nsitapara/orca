@@ -214,6 +214,8 @@ function openPilot(
         now,
         definitions: () => definitions.current().definitions,
         people: () => definitions.current().people,
+        knownAction: (name) => actions.get(name) !== null,
+        actionArgsProblem: (name, args) => actions.get(name)?.checkArgs(args) ?? null,
         onResolved: (item) => cancelUnstartedRun(store, item, now())
       }
     }

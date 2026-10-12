@@ -13,10 +13,21 @@ function railKey(item: InboxItemRow): string {
   return item.worktreePath ?? ''
 }
 
+function withError(
+  errors: Record<string, string>,
+  id: string,
+  failed: string | null
+): Record<string, string> {
+  const { [id]: _dropped, ...rest } = errors
+  return failed ? { ...rest, [id]: failed } : rest
+}
+
 export function WaitingOnYouPage(): React.JSX.Element {
   const [viewer, setViewer] = useState<string | null>(null)
   const [rail, setRail] = useState<string>(ALL)
   const { inbox, queue, error, save, applyNow } = useWaiting(viewer)
+  // Save errors are kept here, by card id: a card remounts as a new version on every reload.
+  const [errors, setErrors] = useState<Record<string, string>>({})
   const people = inbox?.people ?? []
   const firstPerson = people[0]?.id ?? null
   useEffect(() => {
@@ -40,7 +51,12 @@ export function WaitingOnYouPage(): React.JSX.Element {
       item={i}
       automationName={names.get(i.automationId) ?? i.automationId}
       queued={queue.find((q) => q.itemId === i.id) ?? null}
-      onSave={(answer) => save(i, answer, viewer)}
+      error={errors[i.id] ?? null}
+      onSave={async (answer) => {
+        const failed = await save(i, answer, viewer)
+        setErrors((now) => withError(now, i.id, failed))
+        return failed
+      }}
     />
   )
   return (

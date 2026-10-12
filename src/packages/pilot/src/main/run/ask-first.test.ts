@@ -115,6 +115,7 @@ describe('askDecisions', () => {
   })
 
   it("releases the key and cancels the run when the card can't be written", () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {})
     const { store, ask } = setup([])
     expect(ask('cd00c0fd', 7)).toEqual(new Map())
     expect(store.handledKeys('rev').has('1588:cd00c0fd')).toBe(false)
@@ -134,6 +135,29 @@ describe('askDecisions', () => {
       outcome: 'Not started: stale: asked again for !1588 web-2115'
     })
     expect(store.inbox.list({ runId: 'rev-t8-1-ask' })[0].status).toBe('open')
+  })
+
+  it("resolves the card as stale when Pilot's own ask row can't be recorded", () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    const { store, ask } = setup()
+    vi.spyOn(store.actions, 'start').mockImplementation(() => {
+      throw new Error('disk full')
+    })
+    expect(ask('cd00c0fd', 7)).toEqual(new Map())
+    expect(store.inbox.list({ runId: 'rev-t7-1-ask' })[0].status).toBe('stale')
+    expect(store.runs.get('rev-t7-1-ask')?.status).toBe('cancelled')
+    expect(store.handledKeys('rev').has('1588:cd00c0fd')).toBe(false)
+  })
+
+  it('cancels the asking run when the retirer closes its card as obsolete', () => {
+    const { store, deps, ask } = setup()
+    ask('cd00c0fd', 7)
+    const card = store.inbox.list({ runId: 'rev-t7-1-ask' })[0]
+    resolveInboxItem(deps.inbox, card.id, 'obsolete: !1588 merged')
+    expect(store.runs.get('rev-t7-1-ask')).toMatchObject({
+      status: 'cancelled',
+      outcome: 'Not started: obsolete: !1588 merged'
+    })
   })
 
   it('cancels the run when its card is skipped, and leaves a started run alone', () => {
@@ -299,6 +323,58 @@ describe('approving an ask-first card (Group 22)', () => {
     })
     expect(await attemptAction(attempt, req)).toMatchObject({ outcome: 'failed' })
     expect(start).toHaveBeenCalledTimes(1)
+  })
+
+  it('never lets a run ask for an approval-only action: no card, no asked row', async () => {
+    const { store, attempt, runId } = approvable()
+    store.runs.create({
+      id: 'agent-1',
+      automationId: 'rev',
+      tickId: null,
+      itemKey: 'mr:1588',
+      itemLabel: '!1588',
+      worktreePath: '/wt',
+      startedAt: 2
+    })
+    const before = store.inbox.list({}).length
+    const result = await attemptAction(attempt, {
+      action: 'start_run',
+      dryRun: false,
+      runId: 'agent-1',
+      approved: false,
+      inboxItemId: null,
+      args: { run_id: runId }
+    })
+    expect(result).toMatchObject({
+      outcome: 'failed',
+      detail: expect.stringContaining('only Pilot asks')
+    })
+    expect(store.inbox.list({}).length).toBe(before)
+    expect(store.inbox.list({ runId: 'agent-1' })).toEqual([])
+  })
+
+  it("doesn't cancel another run's asking run when an agent's start_run card closes", () => {
+    const { store, deps, runId } = approvable()
+    store.runs.create({
+      id: 'agent-1',
+      automationId: 'rev',
+      tickId: null,
+      itemKey: 'mr:1588',
+      itemLabel: '!1588',
+      worktreePath: '/wt',
+      startedAt: 2
+    })
+    const filed = addInboxItem(deps.inbox, {
+      runId: 'agent-1',
+      type: 'action',
+      title: 'Go?',
+      options: ['Approve'],
+      action: 'start_run',
+      actionArgs: { run_id: runId }
+    })
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    resolveInboxItem(deps.inbox, filed.id ?? '', 'skipped')
+    expect(store.runs.get(runId)?.status).toBe('asking')
   })
 
   it('refuses an agent-filed start_run card, which Pilot never asked about', async () => {

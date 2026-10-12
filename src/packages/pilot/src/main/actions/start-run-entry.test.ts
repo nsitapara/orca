@@ -107,13 +107,13 @@ describe('start_run', () => {
       { outcome: 'failed', detail: 'Run rev-1-ask has no recorded tick to start from' }
     ]
   ])('refuses %s', async (_name, s, args, expected) => {
-    expect(await s.entry.run(args, { dryRun: false, runId: null })).toMatchObject(expected)
+    expect(await s.entry.run(args, { dryRun: false, runId: 'rev-1-ask' })).toMatchObject(expected)
     expect(s.start).not.toHaveBeenCalled()
   })
 
   it('fails the run when its first step cannot start', async () => {
     const { store, entry } = setup(vi.fn().mockRejectedValue(new Error('No worktree for !1588')))
-    expect(await entry.run(ARGS, { dryRun: false, runId: null })).toMatchObject({
+    expect(await entry.run(ARGS, { dryRun: false, runId: 'rev-1-ask' })).toMatchObject({
       outcome: 'failed',
       detail: "Couldn't start run rev-1-ask: No worktree for !1588"
     })
@@ -122,6 +122,28 @@ describe('start_run', () => {
       outcome: "Couldn't start: No worktree for !1588",
       finishedAt: 50
     })
+  })
+
+  it("starts nothing for a card that belongs to a different run (an agent's card naming another's run)", async () => {
+    const { store, start, entry } = setup()
+    expect(await entry.run(ARGS, { dryRun: false, runId: 'agent-1' })).toMatchObject({
+      outcome: 'failed',
+      detail: 'start_run only runs from the card of run rev-1-ask'
+    })
+    expect(await entry.run(ARGS, { dryRun: false, runId: null })).toMatchObject({
+      outcome: 'failed'
+    })
+    expect(start).not.toHaveBeenCalled()
+    expect(store.runs.get('rev-1-ask')?.status).toBe('asking')
+  })
+
+  it('launches with the once_per key the tick marked handled for the run', async () => {
+    const { store, start, entry } = setup()
+    store.markHandled('rev', '1588:cd00', 'rev-1-ask', 1)
+    await entry.run(ARGS, { dryRun: false, runId: 'rev-1-ask' })
+    expect(start).toHaveBeenCalledWith(
+      expect.objectContaining({ decision: expect.objectContaining({ onceKey: '1588:cd00' }) })
+    )
   })
 
   it('starts nothing on a dry run', async () => {

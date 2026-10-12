@@ -3,7 +3,6 @@ import type { AutomationDefinition } from '../../shared/definition/types'
 import type { EngineEnv } from '../engine-env'
 import type { PilotStore } from '../store/store'
 import {
-  ANSWER_STEP_TIMEOUT_MS,
   createRunEngine,
   runStepTimeoutMs,
   stepTimeoutMs,
@@ -23,6 +22,9 @@ import { STALE_START_MS, sweepStaleStarts } from './stale-starts'
 import { stepStarterFor } from './step-starters'
 import { pollRunningSteps, type StepProbe } from './watcher'
 import type { WorkspaceDeps } from './workspace'
+
+// A step whose definition was never loaded in this process times out this long after it was found missing.
+export const MISSING_DEFINITION_TIMEOUT_MS = 60 * 60_000
 
 export type ShellWiring = {
   // Where the step runs: the workspace 9b's startRun recorded on the run (run.worktreePath).
@@ -97,15 +99,32 @@ export function wireRunEngine(input: EngineWiringInput): WiredEngine {
     }
   }
   advance = (runId) => engine.advance(runId)
-  const timeoutOf = (step: { runId: string; idx: number }): number | null => {
+  // The last definition seen for each automation, and when one first went missing: a removed or broken
+  // file must not strip a running step of its timeout, nor let it hold its worktree for ever.
+  const lastKnown = new Map<string, AutomationDefinition>()
+  const missingSince = new Map<string, number>()
+  const timeoutOf = (step: {
+    runId: string
+    idx: number
+    startedAt: number | null
+  }): number | null => {
     const run = store.runs.get(step.runId)
-    const def = run ? input.definitionFor(run.automationId) : null
-    if (run && def) {
+    if (!run) {
+      return null
+    }
+    const loaded = input.definitionFor(run.automationId)
+    if (loaded) {
+      lastKnown.set(run.automationId, loaded)
+      missingSince.delete(run.automationId)
+    }
+    const def = loaded ?? lastKnown.get(run.automationId)
+    if (def) {
       return runStepTimeoutMs(def, run, step.idx)
     }
-    // Its definition isn't loaded (the file was removed or no longer parses): the default hour, so the
-    // run can't hold its worktree for ever.
-    return ANSWER_STEP_TIMEOUT_MS
+    // Never known in this process: the default hour, counted from when it was first found missing.
+    const since = missingSince.get(run.automationId) ?? now()
+    missingSince.set(run.automationId, since)
+    return Math.max(since - (step.startedAt ?? since), 0) + MISSING_DEFINITION_TIMEOUT_MS
   }
   return {
     engine,
