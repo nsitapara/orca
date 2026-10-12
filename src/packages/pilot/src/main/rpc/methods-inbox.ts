@@ -129,7 +129,10 @@ export function buildInboxMethods(ctx: () => PilotContext) {
       name: 'pilot.inbox.list',
       permission: 'workspace',
       params: List,
-      handler: (p) => listInbox(inboxDeps(ctx()), p)
+      handler: (p) => {
+        const c = ctx()
+        return listInbox(inboxDeps(c), p, c.actions)
+      }
     }),
     defineMethod({
       name: 'pilot.inbox.get',

@@ -5,6 +5,7 @@ import type { PeopleDirectory } from '../../shared/people'
 import type { ActionCatalog } from '../actions/types'
 import type { PilotStore } from '../store/store'
 import { cardOf, inboxDigest, oneLine } from './card'
+import { actionRunLine, type UsageLookup } from './run-line'
 
 export type InboxDeps = {
   store: PilotStore
@@ -88,9 +89,22 @@ export function personSees(item: InboxItemRow, person: string, people: PeopleDir
   return people.groups.some((g) => g.id === item.person && g.members.includes(person))
 }
 
+// Each action card's Run line (run-line.ts), keyed by card id: from the stored action and args.
+function runLines(items: InboxItemRow[], catalog: UsageLookup | null): Record<string, string> {
+  const lines: Record<string, string> = {}
+  for (const item of items) {
+    if (item.action) {
+      const usage = catalog?.get(item.action)?.usage ?? null
+      lines[item.id] = actionRunLine(item.action, item.actionArgs ?? {}, usage)
+    }
+  }
+  return lines
+}
+
 export function listInbox(
   deps: InboxDeps,
-  filter: { person?: string; statuses?: readonly InboxStatus[] }
+  filter: { person?: string; statuses?: readonly InboxStatus[] },
+  catalog: UsageLookup | null = null
 ): InboxListPayload {
   const people = deps.people()
   const person = filter.person
@@ -99,6 +113,7 @@ export function listInbox(
     .filter((i) => !person || personSees(i, person, people))
   return {
     items,
+    runLines: runLines(items, catalog),
     people: people.people.map((p) => ({ id: p.id, name: p.name })),
     groups: people.groups.map((g) => ({ id: g.id, name: g.name, members: [...g.members] })),
     automations: deps.definitions().map((d) => ({ id: d.id, name: d.name }))

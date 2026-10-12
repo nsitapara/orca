@@ -80,7 +80,8 @@ const LIST: InboxListPayload = {
     { id: 'emil', name: 'Emil Elgaard' }
   ],
   groups: [],
-  automations: [{ id: 'ci', name: 'Fix failed CI on my MRs' }]
+  automations: [{ id: 'ci', name: 'Fix failed CI on my MRs' }],
+  runLines: { in_push: 'push · worktree path /wt/web-1493 · branch web-1493-a' }
 }
 const HELD: QueueEntry = {
   rowId: 1,
@@ -128,6 +129,16 @@ describe('WaitingOnYouPage', () => {
     expect(screen.getByText('Up next from your answers · 1')).toBeTruthy()
     expect(screen.getByText(/someone is typing in Claude · review/)).toBeTruthy()
     expect(screen.getByRole('button', { name: /All worktrees/ }).textContent).toContain('2')
+  })
+
+  it("shows Pilot's Run line on an action card, and none on a question", async () => {
+    serve()
+    render(<WaitingOnYouPage />)
+    const line = await screen.findByText('push · worktree path /wt/web-1493 · branch web-1493-a')
+    expect(line.closest('article')?.textContent).toContain("Push !1561's 2 commits to origin?")
+    expect(line.parentElement?.textContent).toMatch(/^Run:/)
+    const question = screen.getByText('Install LibreOffice in the job?').closest('article')
+    expect(question?.textContent).not.toContain('Run:')
   })
 
   it('loads the cards of the person you view as', async () => {
