@@ -80,6 +80,16 @@ export class RunStore {
       .map((r) => toRun(r as never))
   }
 
+  // Runs that finished at or after `at`, oldest finish first: the vault export's feed.
+  finishedSince(at: number): RunRow[] {
+    return this.db
+      .prepare(
+        'SELECT * FROM runs WHERE finished_at IS NOT NULL AND finished_at >= ? ORDER BY finished_at, id'
+      )
+      .all(at)
+      .map((r) => toRun(r as never))
+  }
+
   createStep(step: NewStep): void {
     this.db
       .prepare(

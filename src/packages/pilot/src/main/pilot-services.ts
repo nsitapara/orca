@@ -8,7 +8,7 @@ import type { AgentKind } from '../shared/definition/types'
 import { definitionIo, liveDefinitions } from './definitions/live'
 import type { LoadedDefinitions } from './definitions/loader'
 import { mergeRepoProblems, type RepoProblem } from './definitions/repo-problems'
-import { pilotAutomationDirs, pilotDataDir } from './env'
+import { pilotAutomationDirs, pilotDataDir, pilotVaultAutomationsDir } from './env'
 import { resolveEngineEnv, type EngineEnv } from './engine-env'
 import { runtimeActivity } from './fields/activity-facts'
 import { cachedQuotas, type QuotaReader } from './fields/quota'
@@ -33,6 +33,7 @@ import { createPassFetchCache } from './sources/fetch-cache'
 import { glabApiForRepo } from './sources/gitlab-api'
 import { registerPilotSources } from './sources/register-sources'
 import { PilotStore } from './store/store'
+import { VaultExporter } from './vault/export'
 
 export type PilotContext = {
   processKind: PilotStatus['process']
@@ -63,6 +64,19 @@ const log = (message: string): void => console.log(message)
 
 function messageOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
+}
+
+// One failing part of a scheduler pass (answers, the vault export) never stops the others (R13).
+export async function softly(
+  what: string,
+  work: () => unknown,
+  log: (message: string) => void
+): Promise<void> {
+  try {
+    await work()
+  } catch (error) {
+    log(`[pilot] ${what} failed: ${messageOf(error)}`)
+  }
 }
 
 // Newest first: the scheduler stops before the watcher, and both before the store closes.
@@ -159,12 +173,25 @@ function openPilot(
   const repoProblems = new Map<string, RepoProblem>()
   const withRepoProblems = (loaded: LoadedDefinitions): LoadedDefinitions =>
     mergeRepoProblems(loaded, repoProblems, (repo) => reposListed(runtime, [repo]))
+  const vaultDir = pilotVaultAutomationsDir()
+  const exporter = vaultDir
+    ? new VaultExporter({
+        store,
+        now,
+        dir: vaultDir,
+        definitions: () => definitions.current().definitions,
+        log
+      })
+    : null
   const scheduler = new PilotScheduler({
     now,
     definitions: definitions.current,
     runTick: (def, opts) => runTick(def, definitions.current().people, tickDeps, opts),
     lastTickAt: (id) => store.lastRealTick(id)?.startedAt ?? null,
-    poll: wired.poll,
+    poll: async () => {
+      await wired.poll()
+      await softly('vault export', () => exporter?.pass(), log)
+    },
     reposListed: (repos) => reposListed(runtime, repos),
     repoProblem: (def, message) =>
       repoProblems.set(def.id, { file: def.file, repo: def.repo, message }),

@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { pilotDataDir, pilotSchedulerEnabled, type PilotHostKind } from './env'
+import {
+  pilotDataDir,
+  pilotSchedulerEnabled,
+  pilotVaultAutomationsDir,
+  type PilotHostKind
+} from './env'
 
 const HOME = '/h'
 
@@ -49,4 +54,12 @@ describe('pilotSchedulerEnabled', () => {
     const env = value === undefined ? {} : { PILOT_SCHEDULER: value }
     expect(HOSTS.map((h) => pilotSchedulerEnabled(h, env))).toEqual(expected)
   })
+})
+
+describe('pilotVaultAutomationsDir', () => {
+  it.each([
+    [{}, '/h/Documents/WebPortal/Agent Work/Automations'],
+    [{ PILOT_VAULT_AUTOMATIONS: '~/vault/Automations' }, '/h/vault/Automations'],
+    [{ PILOT_VAULT_EXPORT: 'off' }, null]
+  ])('%j → %s', (env, expected) => expect(pilotVaultAutomationsDir(env, '/h')).toBe(expected))
 })
