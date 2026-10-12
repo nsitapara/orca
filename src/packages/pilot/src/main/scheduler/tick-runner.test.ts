@@ -9,7 +9,7 @@ import { EMPTY_PEOPLE, parsePeopleYaml } from '../../shared/people'
 import { fakeFieldDeps, testItem } from '../fields/__fixtures__/field-deps'
 import type { FieldEngineDeps } from '../fields/engine'
 import type { WorktreeInfo } from '../fields/worktree-facts'
-import { makeLauncher } from '../run/launch'
+import { makeLauncher } from '../run/__fixtures__/launcher'
 import { runtimeWorkspaceDeps } from '../run/workspace'
 import { createPassFetchCache } from '../sources/fetch-cache'
 import type { Item, SourceContext } from '../sources/types'
@@ -598,35 +598,9 @@ describe('runTick with start: ask_first (Task 25)', () => {
   })
 })
 
-describe('runTick on keys a later task implements (Task 2b ruling)', () => {
-  it.each<[string, Partial<AutomationDefinition>, string]>([
-    [
-      'a merge_request where key no source reads',
-      whereOf({ labels: ['web'] }),
-      "items.where.labels isn't supported yet"
-    ],
-    [
-      'a linear_ticket where key no source reads',
-      {
-        items: {
-          kind: 'linear_ticket',
-          where: { priority: 'urgent' } as never,
-          match: [],
-          customFields: []
-        }
-      },
-      "items.where.priority isn't supported yet"
-    ]
-  ])('fails the tick on %s, starting nothing and writing no keys', async (_name, over, error) => {
-    const d = deps()
-    const result = await runTick({ ...def, ...over }, people, d, { dryRun: false })
-    expect(result).toMatchObject({ status: 'failed', error })
-    expect(d.launched).toEqual([])
-    expect(d.store.handledKeys('fix-failed-ci').size).toBe(0)
-    expect(d.store.seenKeys('fix-failed-ci').size).toBe(0)
-    expect(d.store.lastTick('fix-failed-ci')).toMatchObject({ status: 'failed', error })
-  })
-
+// The where schemas are strict (shared/definition/where.ts): a file naming a key no source reads never
+// parses, so every key a definition can carry is one its source acts on.
+describe('runTick on the where keys and match', () => {
   // Task 14c: the MR source reads reviewers, drafts, approvals and target branches.
   it('ticks on every merge_request where key now that the MR source reads them', async () => {
     const every = whereOf({

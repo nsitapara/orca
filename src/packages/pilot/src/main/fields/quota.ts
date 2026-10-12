@@ -73,7 +73,7 @@ export function cachedQuota(
 
 export type QuotaReaders = Record<AgentKind, QuotaReader>
 
-// No reader for this agent in this process (orcad; Codex until Task 18): the quota check lets runs start.
+// No reader for this agent in this process (orcad passes none): the quota check lets runs start.
 export const NO_QUOTA: QuotaReader = async () => NONE
 
 export function cachedQuotas(

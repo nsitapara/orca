@@ -1,21 +1,13 @@
 import { randomUUID } from 'node:crypto'
 import type { OrcaRuntimeService } from '../../../../../main/runtime/orca-runtime'
 import type { AgentKind, StepDef } from '../../shared/definition/types'
-import { runFields } from '../../shared/template'
 import type { WorktreeFactDeps } from '../fields/worktree-facts'
-import {
-  UnrecordedLaunchError,
-  type LaunchRequest,
-  type LaunchResult
-} from '../scheduler/tick-runner'
-import type { PilotStore } from '../store/store'
-import { stepKindOf } from '../store/store-advance'
+import { UnrecordedLaunchError, type LaunchResult } from '../scheduler/tick-runner'
 import type { RunStore } from '../store/store-runs'
 import type { PilotAgentLaunchOptions } from './agent-launch-hook'
 import { newestSessionRow } from './agent-rows'
 import { runtimeClaims, runtimeSessionTabs, terminalOpen } from './session-tabs'
 import {
-  launchAgentStep,
   type AgentStepDeps,
   type AgentStepRequest,
   PromptNotSentError,
@@ -24,12 +16,7 @@ import {
   type SessionTerminalState
 } from './agent-step'
 import { terminalLaunchOptions, type SessionPlan } from './step-launch-plan'
-import {
-  resolveWorkspace,
-  runtimeWorkspaceDeps,
-  type Workspace,
-  type WorkspaceDeps
-} from './workspace'
+import { runtimeWorkspaceDeps, type WorkspaceDeps } from './workspace'
 import { defaultUsagePaths, findSessionTranscript } from '../usage/step-usage'
 
 export type LauncherDeps = AgentStepDeps & {
@@ -40,81 +27,6 @@ export type LauncherDeps = AgentStepDeps & {
 
 function messageOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
-}
-
-// Best effort: the failure being reported matters more than a second failure while recording it.
-function failFirstStep(store: PilotStore, runId: string, error: string, at: number): void {
-  try {
-    store.runs.updateStep(runId, 0, { status: 'failed', error, finishedAt: at })
-  } catch {}
-}
-
-// The interim single-step launch (nothing wires it since Task 9c: the tick runner's launch is the run
-// engine's startRun, run/engine-wiring.ts). Writes step 0 as `pending` (B8: a slow worktree create must
-// not look like a stuck start) stamped now, as the engine does; resolves the run's workspace (item
-// worktree, main checkout or a new worktree), records it on the run, then starts step 0 (spec §7). The
-// tick runner created the run row (running) first, so a new worktree's claim sees it. A workspace
-// failure fails the step with its error; the tick runner then fails the run and frees its key.
-export function makeLauncher(
-  store: PilotStore,
-  deps: LauncherDeps
-): (req: LaunchRequest) => Promise<LaunchResult> {
-  return async ({ runId, definition, decision }) => {
-    const startedAt = store.runs.get(runId)?.startedAt ?? deps.now()
-    const fields = {
-      ...decision.fields,
-      ...runFields({
-        automationId: definition.id,
-        at: startedAt,
-        timezone: definition.timezone,
-        runId
-      })
-    }
-    const first = definition.steps[0]
-    store.runs.createStep({
-      runId,
-      idx: 0,
-      name: first.name,
-      agent: first.agent,
-      skill: first.skill,
-      startedAt: deps.now(),
-      status: 'pending',
-      kind: stepKindOf(first.agent),
-      mode: first.mode,
-      whenExpr: first.when
-    })
-    const startShell = deps.startShellStep
-    // Before the workspace: a run that can't start must not leave a new worktree behind.
-    if (first.agent === 'shell' && !startShell) {
-      const message = `Step "${first.name}" is a shell step, and this launcher has no shell runner`
-      failFirstStep(store, runId, message, deps.now())
-      throw new Error(message)
-    }
-    let workspace: Workspace
-    try {
-      workspace = await resolveWorkspace(
-        { definition, runId, label: decision.label, fields },
-        deps.workspace
-      )
-      store.runs.update(runId, { worktreePath: workspace.path, worktreeId: workspace.worktreeId })
-    } catch (error) {
-      failFirstStep(store, runId, messageOf(error), deps.now())
-      throw error
-    }
-    const req: AgentStepRequest = {
-      runId,
-      definition,
-      stepIdx: 0,
-      itemKey: decision.key,
-      label: decision.label,
-      fields,
-      workspace
-    }
-    if (first.agent === 'shell' && startShell) {
-      return startShell(req)
-    }
-    return launchAgentStep(store, req, deps)
-  }
 }
 
 export type AgentSessionMode =
@@ -191,7 +103,8 @@ export async function openAgentTerminal(
   }
 }
 
-// Until Task 10 reads skills' modes, a step that names one fails instead of running without it.
+// The runtime launcher's own mode reader: a step that names a mode fails instead of running without it.
+// Pilot's services replace it with the skill's mode file (run/modes.ts modeTextFor).
 function modeTextUnavailable(step: StepDef): Promise<string | null> {
   if (step.mode) {
     return Promise.reject(

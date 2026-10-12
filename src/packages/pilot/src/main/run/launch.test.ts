@@ -9,13 +9,13 @@ import { PilotStore } from '../store/store'
 import type { PilotAgentLaunchOptions } from './agent-launch-hook'
 import { PromptNotSentError, type SessionTerminalState } from './agent-step'
 import {
-  makeLauncher,
   openAgentTerminal,
   runtimeLauncherDeps,
   type AgentTerminalRequest,
   type LauncherDeps
 } from './launch'
 import { STALE_START_MS, sweepStaleStarts } from './stale-starts'
+import { makeLauncher } from './__fixtures__/launcher'
 
 const def = testDefinition({
   id: 'fix-failed-ci',
