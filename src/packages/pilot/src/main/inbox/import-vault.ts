@@ -4,6 +4,7 @@ import type { AgentKind, AutomationDefinition } from '../../shared/definition/ty
 import type { InboxAddParams } from '../../shared/inbox-types'
 import type { PeopleDirectory } from '../../shared/people'
 import { oneLine } from './card'
+import { SAME_CARD_OPEN } from './inbox-add'
 import { splitCommand } from './split-command'
 import type { VaultRow } from './vault-reader'
 
@@ -44,6 +45,9 @@ export type PlannedItem = {
   title: string
   // What goes through addInboxItem (the engine's own validation, routing and size rules).
   params: InboxAddParams
+  // The same card named by automation and item, for a dry run (the run it would belong to isn't there yet).
+  plain: InboxAddParams
+  runId: string | null
   answer: {
     text: string
     option: number | null
@@ -118,13 +122,17 @@ function actionOf(row: VaultRow): ActionPin {
   return { action: entry, args: { argv }, note: null }
 }
 
+// A Resume: line is note text agents can write, and the dispatcher resumes whatever session id lands here:
+// only a UUID counts.
+const SESSION_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
 function runOf(
   row: VaultRow,
   def: AutomationDefinition,
   itemKey: string | null,
   now: number
 ): ImportRun | null {
-  if (!row.session) {
+  if (!SESSION_ID.test(row.session)) {
     return null
   }
   return {
@@ -147,9 +155,16 @@ function paramsOf(
   itemKey: string | null
 ): InboxAddParams {
   // In a run the card's automation, item and worktree come from the run alone; otherwise they are named.
-  const target: Pick<InboxAddParams, 'runId' | 'stepIdx' | 'automationId' | 'itemKey'> = run
+  const target: Pick<
+    InboxAddParams,
+    'runId' | 'stepIdx' | 'automationId' | 'itemKey' | 'worktreePath'
+  > = run
     ? { runId: run.id, stepIdx: 0 }
-    : { automationId: def.id, itemKey: itemKey ?? `repo:${def.repo}` }
+    : {
+        automationId: def.id,
+        itemKey: itemKey ?? `repo:${def.repo}`,
+        ...(row.scope === 'branch' && row.worktree ? { worktreePath: row.worktree } : {})
+      }
   return {
     ...target,
     type: row.kind,
@@ -181,6 +196,7 @@ function answerOf(row: VaultRow): PlannedItem['answer'] {
 export function planVaultImport(rows: VaultRow[], ctx: ImportContext): ImportPlan {
   const plan: ImportPlan = { items: [], runs: [], skipped: [], notes: [] }
   const runs = new Map<string, ImportRun>()
+  const seen = new Set<string>()
   for (const row of rows) {
     const id = vaultItemId(row.note, row.key)
     const skip = (reason: string) =>
@@ -197,10 +213,17 @@ export function planVaultImport(rows: VaultRow[], ctx: ImportContext): ImportPla
     const itemKey = itemKeyOf(row, def, ctx.worktreeIds)
     const action = actionOf(row)
     const run = runOf(row, def, itemKey, ctx.now)
+    const params = paramsOf(row, action, run, def, itemKey)
+    const plain = run ? paramsOf(row, action, null, def, itemKey) : params
+    const same = `${def.id}|${plain.itemKey}|${row.kind}|${oneLine(row.summary)}`
+    if (seen.has(same)) {
+      skip(SAME_CARD_OPEN)
+      continue
+    }
+    seen.add(same)
     if (run && !runs.has(run.id)) {
       runs.set(run.id, run)
     }
-    const params = paramsOf(row, action, run, def, itemKey)
     plan.items.push({
       id,
       vaultRef: `${row.note}#${row.key}`,
@@ -210,6 +233,8 @@ export function planVaultImport(rows: VaultRow[], ctx: ImportContext): ImportPla
       type: row.kind,
       title: oneLine(row.summary),
       params,
+      plain: run ? { ...plain, worktreePath: undefined } : plain,
+      runId: run?.id ?? null,
       answer: answerOf(row)
     })
     if (action.note) {

@@ -1,11 +1,16 @@
 import { describe, expect, it, vi } from 'vitest'
 import { readOpenVaultItems } from './vault-reader'
 
+const ROW = { note: '/v/n.md', key: 'abc', kind: 'question', summary: 'Which?', options: [] }
+
 describe('readOpenVaultItems', () => {
   it("runs vault.py export-open as Pilot's own process and reads its JSON", async () => {
-    const run = vi
-      .fn()
-      .mockResolvedValue({ code: 0, stdout: '[{"key":"abc"}]\n', stderr: '', timedOut: false })
+    const run = vi.fn().mockResolvedValue({
+      code: 0,
+      stdout: `[${JSON.stringify(ROW)}]\n`,
+      stderr: '',
+      timedOut: false
+    })
     expect(
       await readOpenVaultItems({
         vaultPy: '/v.py',
@@ -13,7 +18,7 @@ describe('readOpenVaultItems', () => {
         run,
         env: { PATH: '/bin', PILOT_RUN_ID: 'x' }
       })
-    ).toEqual([{ key: 'abc' }])
+    ).toEqual([ROW])
     expect(run).toHaveBeenCalledWith({
       program: 'python3',
       args: ['/v.py', 'export-open'],
@@ -32,5 +37,18 @@ describe('readOpenVaultItems', () => {
     await expect(readOpenVaultItems({ run })).rejects.toThrow(
       'vault.py export-open failed (exit 1): Traceback: no module vault'
     )
+  })
+
+  it.each([
+    ['[1]', 'row 0 is not an object'],
+    ['{"a":1}', 'vault.py export-open did not print a list'],
+    ['[{"note":"n"}]', 'vault.py is older than Pilot expects: row 0 has no "key"'],
+    [
+      '[{"note":"n","key":"k","kind":"question","summary":"s","options":"x"}]',
+      'row 0: "options" must be a list'
+    ]
+  ])('refuses %s', async (stdout, message) => {
+    const run = vi.fn().mockResolvedValue({ code: 0, stdout, stderr: '', timedOut: false })
+    await expect(readOpenVaultItems({ run })).rejects.toThrow(message)
   })
 })

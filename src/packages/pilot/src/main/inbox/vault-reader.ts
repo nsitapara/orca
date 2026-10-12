@@ -39,6 +39,41 @@ export type VaultRow = {
 }
 
 const TIMEOUT_MS = 120_000
+const STRING_FIELDS = ['note', 'key', 'kind', 'summary'] as const
+const LIST_FIELDS = ['options', 'parts', 'switch', 'replies'] as const
+
+function parseJson(text: string): unknown {
+  try {
+    return JSON.parse(text)
+  } catch {
+    throw new Error('vault.py export-open did not print JSON')
+  }
+}
+
+// The export's shape, checked once: a vault.py older than Pilot expects fails here with the field named,
+// not later inside the import.
+function checkRows(value: unknown): VaultRow[] {
+  if (!Array.isArray(value)) {
+    throw new Error('vault.py export-open did not print a list')
+  }
+  value.forEach((row, at) => {
+    if (typeof row !== 'object' || row === null) {
+      throw new Error(`row ${at} is not an object`)
+    }
+    const fields = row as Record<string, unknown>
+    for (const name of STRING_FIELDS) {
+      if (typeof fields[name] !== 'string' || fields[name] === '') {
+        throw new Error(`vault.py is older than Pilot expects: row ${at} has no "${name}"`)
+      }
+    }
+    for (const name of LIST_FIELDS) {
+      if (fields[name] !== undefined && !Array.isArray(fields[name])) {
+        throw new Error(`row ${at}: "${name}" must be a list`)
+      }
+    }
+  })
+  return value as VaultRow[]
+}
 
 export async function readOpenVaultItems(
   opts: { vaultPy?: string; python?: string; run?: ProcessRun; env?: NodeJS.ProcessEnv } = {}
@@ -58,5 +93,5 @@ export async function readOpenVaultItems(
     const said = (result.stderr || result.stdout).trim().slice(-300)
     throw new Error(`vault.py export-open failed (exit ${result.code}): ${said}`)
   }
-  return JSON.parse(result.stdout) as VaultRow[]
+  return checkRows(parseJson(result.stdout))
 }

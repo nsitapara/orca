@@ -40,6 +40,8 @@ export function inboxItemLine(
   return [i.id, i.status, i.outcome, i.title].filter(Boolean).join(' · ')
 }
 
+const IMPORT_ON_PAGE = 'Apply the vault import in Pilot (Waiting on you)'
+
 type ImportReport = {
   applied: boolean
   imported: number
@@ -51,15 +53,21 @@ type ImportReport = {
 
 export const ANSWERS_HANDLERS: Record<string, CommandHandler> = {
   'inbox import-vault': async ({ flags, client, json }) => {
-    const params = { apply: flags.get('apply') === true, ...bindingFromEnv(process.env) }
-    const response = await client.call<ImportReport>('pilot.inbox.importVault', params, {
-      timeoutMs: LONG_IMPORT_MS
-    })
+    // Applying is the desktop's alone; the CLI previews and points to the page.
+    if (flags.get('apply') === true) {
+      throw invalid(IMPORT_ON_PAGE)
+    }
+    const response = await client.call<ImportReport>(
+      'pilot.inbox.importVault',
+      { apply: false },
+      { timeoutMs: LONG_IMPORT_MS }
+    )
     printResult(response, json, (r) =>
       [
-        `${r.applied ? 'Imported' : 'Would import'} ${r.imported} card(s), ${r.answers} with an answer, and ${r.runs} asking session(s).`,
+        `Would import ${r.imported} card(s), ${r.answers} with an answer, and ${r.runs} asking session(s).`,
         ...r.notes.map((n) => `  note ${n.id}: ${n.note}`),
-        ...r.skipped.map((s) => `  skip "${s.summary}": ${s.reason}`)
+        ...r.skipped.map((s) => `  skip "${s.summary}": ${s.reason}`),
+        IMPORT_ON_PAGE
       ].join('\n')
     )
   },

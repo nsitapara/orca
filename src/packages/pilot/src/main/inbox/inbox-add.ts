@@ -9,6 +9,7 @@ import { fieldsForRun, latestFieldsFor } from './run-fields'
 
 export const SKIPPED_BEFORE =
   'Skipped before with the same arguments; not offered again until they change'
+export const SAME_CARD_OPEN = 'same card already open'
 export const CHANGED_AFTER_ANSWER = 'The card changed after you answered; answer this version.'
 
 type Origin = {
@@ -142,7 +143,14 @@ function updateOpen(
 export function addInboxItem(
   deps: InboxDeps,
   params: InboxAddParams,
-  opts: { source?: InboxItemRow['source']; vaultRef?: string } = {}
+  opts: {
+    source?: InboxItemRow['source']
+    vaultRef?: string
+    // The import never edits a card that is already open: it refuses instead.
+    noMerge?: boolean
+    // Run every check, write nothing.
+    dryRun?: boolean
+  } = {}
 ): InboxAddResult {
   const origin = originOf(deps, params)
   const def = deps.definitions().find((d) => d.id === origin.automationId)
@@ -163,6 +171,9 @@ export function addInboxItem(
   const at = deps.now()
   const mine = deps.store.inbox.list({ automationId: origin.automationId })
   const open = mine.find((i) => WAITING.includes(i.status) && sameCard(i, card, origin))
+  if (open && opts.noMerge) {
+    return { id: null, existing: true, refused: SAME_CARD_OPEN }
+  }
   if (open) {
     return updateOpen(deps, open, card, digest, at)
   }
@@ -172,6 +183,9 @@ export function addInboxItem(
   const { person, routed } = resolveInboxPerson(def.inbox, origin.fields, deps.people())
   if (person === null) {
     throw new Error('No person to address the card to: people.yaml names nobody')
+  }
+  if (opts.dryRun) {
+    return { id: null, existing: false, refused: null }
   }
   const item: NewInboxItem = {
     id: (deps.newId ?? newItemId)(),
