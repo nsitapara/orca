@@ -139,4 +139,14 @@ export class UsageStore {
       | undefined
     return row?.at ?? null
   }
+
+  // What runs in this worktree spent on one local day (steps are counted once they end).
+  costForWorktreeOn(worktreePath: string, day: string): number {
+    const row = this.db
+      .prepare(
+        'SELECT COALESCE(SUM(u.cost_usd), 0) AS c FROM step_usage u JOIN runs r ON r.id = u.run_id WHERE r.worktree_path = ? AND u.day = ?'
+      )
+      .get(worktreePath, day) as { c: number }
+    return Number(row.c)
+  }
 }

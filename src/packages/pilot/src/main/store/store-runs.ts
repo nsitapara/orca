@@ -139,6 +139,16 @@ export class RunStore {
   // The steps starting or running on a terminal, newest first (more than one when a step was sent into
   // an earlier step's terminal while that one is still active): how `pilot run output|event` find their
   // step from the terminal they run in.
+  // A worktree's runs since `since`, plus any older one still running or asking; newest first.
+  forWorktree(worktreePath: string, since: number): RunRow[] {
+    return this.db
+      .prepare(
+        "SELECT * FROM runs WHERE worktree_path = ? AND (started_at >= ? OR status IN ('running', 'asking')) ORDER BY started_at DESC, id"
+      )
+      .all(worktreePath, since)
+      .map((r) => toRun(r as never))
+  }
+
   stepsOnTerminal(handle: string): StepRow[] {
     return this.db
       .prepare(
