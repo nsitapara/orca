@@ -4,7 +4,8 @@ import {
   type LinearRuntime
 } from './linear-connector'
 
-export type LinearWriteOpts = { workspaceId?: string; writeId?: string }
+// Linear deduplicates a retried write only by its writeId, so the non-idempotent writes require one.
+export type LinearWriteOpts = { workspaceId?: string; writeId: string }
 
 export type LinearWriter = {
   createIssue(input: {
@@ -16,11 +17,11 @@ export type LinearWriter = {
     priority?: string
     labels?: string[]
     workspaceId?: string
-    writeId?: string
+    writeId: string
   }): Promise<{ identifier: string; url: string; branchName: string | null }>
-  addComment(issue: string, body: string, opts?: LinearWriteOpts): Promise<{ url: string | null }>
+  addComment(issue: string, body: string, opts: LinearWriteOpts): Promise<{ url: string | null }>
   setState(issue: string, state: string, opts?: Pick<LinearWriteOpts, 'workspaceId'>): Promise<void>
-  attachUrl(issue: string, url: string, title: string, opts?: LinearWriteOpts): Promise<void>
+  attachUrl(issue: string, url: string, title: string, opts: LinearWriteOpts): Promise<void>
 }
 
 // `orca linear create --priority` names (src/cli/linear-request-builders.ts LINEAR_PRIORITY_VALUES).
@@ -36,9 +37,17 @@ function priorityNumber(name: string | undefined): number | undefined {
   return PRIORITY[name]
 }
 
+function requireWriteId(writeId: string | undefined, what: string): string {
+  if (typeof writeId !== 'string' || writeId === '') {
+    throw new Error(`${what} needs a writeId, so a retried write can't duplicate`)
+  }
+  return writeId
+}
+
 export function linearWriterOver(linear: LinearConnector): LinearWriter {
   return {
     async createIssue(input) {
+      const writeId = requireWriteId(input.writeId, 'creating a Linear issue')
       const created = await linear.create({
         title: input.title,
         body: input.body,
@@ -48,22 +57,26 @@ export function linearWriterOver(linear: LinearConnector): LinearWriter {
         priority: priorityNumber(input.priority),
         labels: input.labels,
         workspaceId: input.workspaceId,
-        writeId: input.writeId
+        writeId
       })
       const { identifier, url } = created.issue
       // sweep.py create_ticket: the branch name comes from reading the new issue back.
       const branchName = await linear
         .issue(identifier, created.meta.workspaceId)
         .then((issue) => issue.branchName ?? null)
-        .catch(() => null)
+        .catch((error: unknown) => {
+          console.warn(`Linear: created ${identifier} but couldn't read its branch back:`, error)
+          return null
+        })
       return { identifier, url, branchName }
     },
     async addComment(issue, body, opts) {
+      const writeId = requireWriteId(opts?.writeId, 'commenting on a Linear issue')
       const done = await linear.comment({
         issue,
         body,
-        workspaceId: opts?.workspaceId,
-        writeId: opts?.writeId
+        workspaceId: opts.workspaceId,
+        writeId
       })
       return { url: done.comment.url }
     },
@@ -71,12 +84,13 @@ export function linearWriterOver(linear: LinearConnector): LinearWriter {
       await linear.setState({ issue, to: state, workspaceId: opts?.workspaceId })
     },
     async attachUrl(issue, url, title, opts) {
+      const writeId = requireWriteId(opts?.writeId, 'attaching a link to a Linear issue')
       await linear.attach({
         issue,
         url,
         title,
-        workspaceId: opts?.workspaceId,
-        writeId: opts?.writeId
+        workspaceId: opts.workspaceId,
+        writeId
       })
     }
   }

@@ -3,9 +3,10 @@ import type { LinearTicketWhere } from '../definition/types'
 import { matchRef, personByLinear, type PeopleDirectory } from '../people'
 import { IN_SCOPE, firstFailure, outOfScope, textOf } from './scope-helpers'
 
-// No assignee clause: the signed-in user's tickets (M01's `--filter assigned`). `anyone`: every ticket.
+// No assignee clause: the signed-in user's tickets (M01's `--filter assigned`). Any assignee ref
+// (`anyone`, named people, a not-ref) lists every ticket; the scope then filters by display name.
 export function linearListFilter(w: LinearTicketWhere): 'assigned' | 'all' {
-  return w.assignee === 'anyone' ? 'all' : 'assigned'
+  return w.assignee === undefined ? 'assigned' : 'all'
 }
 
 export function stateTypeAllowed(type: string | null | undefined, w: LinearTicketWhere): boolean {
