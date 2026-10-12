@@ -1,8 +1,9 @@
+import { resolve } from 'node:path'
 import type { CommandHandler } from '../../../../cli/dispatch'
 import { getOptionalPositiveIntegerFlag, getOptionalStringFlag } from '../../../../cli/flags'
 import { printResult } from '../../../../cli/format'
 import { RuntimeClientError } from '../../../../cli/runtime/types'
-import type { SpendGroup, SpendPayload, SpendRow } from '../shared/api-types'
+import type { SpendGroup, SpendPayload, SpendRow, UsageReportResult } from '../shared/api-types'
 import { fmtTokens, money } from '../shared/money'
 
 const GROUPS: readonly SpendGroup[] = ['automation', 'skill', 'agent', 'mr']
@@ -40,9 +41,26 @@ export function formatSpend(p: SpendPayload): string {
   ].join('\n')
 }
 
+const REPORT_TIMEOUT_MS = 120_000
+
+export function formatUsageReport(r: UsageReportResult): string {
+  return `Wrote ${r.files.length} files to ${r.dir}: ${r.sessions} sessions, ${r.rows} rows, ${money(r.costUsd)}`
+}
+
 export const PILOT_SPEND_HANDLERS: Record<string, CommandHandler> = {
   'automations spend': async ({ flags, client, json }) => {
     const params = { by: groupFlag(flags), days: getOptionalPositiveIntegerFlag(flags, 'days') }
     printResult(await client.call<SpendPayload>('pilot.spend', params), json, formatSpend)
+  },
+  'automations usage-report': async ({ flags, client, json }) => {
+    const out = getOptionalStringFlag(flags, 'out')
+    const params = out ? { dir: resolve(out) } : {}
+    printResult(
+      await client.call<UsageReportResult>('pilot.usage.writeReport', params, {
+        timeoutMs: REPORT_TIMEOUT_MS
+      }),
+      json,
+      formatUsageReport
+    )
   }
 }

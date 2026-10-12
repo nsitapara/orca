@@ -83,3 +83,38 @@ export function pilotVaultAutomationsDir(
   }
   return join(home, 'Documents', 'WebPortal', 'Agent Work', 'Automations')
 }
+
+function expandHome(path: string, home: string): string {
+  return path.replace(/^~(?=\/|$)/, home)
+}
+
+// Where job 08 wrote the token usage report; Pilot writes the same files there once 08 hands it over.
+export function pilotUsageReportDir(
+  env: NodeJS.ProcessEnv = process.env,
+  home: string = homedir()
+): string {
+  const raw = env.PILOT_USAGE_REPORT_DIR?.trim()
+  if (raw) {
+    return expandHome(raw, home)
+  }
+  return join(
+    home,
+    'Documents',
+    'WebPortal',
+    'Agent Work',
+    'Automations',
+    '08 · Tally token usage by job'
+  )
+}
+
+// usage.py's HTML report, copied beside the data as Token usage.html.
+export function pilotUsageTemplate(
+  env: NodeJS.ProcessEnv = process.env,
+  home: string = homedir()
+): string {
+  const raw = env.PILOT_USAGE_TEMPLATE?.trim()
+  if (raw) {
+    return expandHome(raw, home)
+  }
+  return join(home, '.agents', 'skills', 'worktree-gate', 'usage_report.html')
+}
