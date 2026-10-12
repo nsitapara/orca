@@ -17,7 +17,7 @@ const ACTION_EXIT: Record<string, number> = {
 const ACTION_TIMEOUT_MS = 660_000
 
 type ActionReply = { outcome: string; detail: string; link?: string | null }
-type ActionCaller = { terminal?: string; runId?: string; stepIdx?: number }
+type EnvBinding = { terminal?: string; runId?: string; stepIdx?: number }
 
 function argsJson(raw: string | undefined): Record<string, unknown> {
   let value: unknown = {}
@@ -33,8 +33,9 @@ function argsJson(raw: string | undefined): Record<string, unknown> {
 }
 
 // Who is calling, for the server to resolve (ruling 8d, Task 22b): the terminal this runs in, and the env's
-// run and step as the fallback. Only what is set is sent; with none of it, the caller is a person.
-export function actionCaller(env: NodeJS.ProcessEnv): ActionCaller {
+// run and step as the fallback. Only what is set is sent; with none of it the call is bound to no run, and
+// Pilot only dry-runs it.
+export function bindingFromEnv(env: NodeJS.ProcessEnv): EnvBinding {
   const terminal = env.ORCA_TERMINAL_HANDLE?.trim() ?? ''
   const runId = env.PILOT_RUN_ID?.trim() ?? ''
   const rawIdx = env.PILOT_STEP_IDX?.trim() ?? ''
@@ -71,7 +72,7 @@ export const ANSWERS_HANDLERS: Record<string, CommandHandler> = {
       action: getRequiredStringFlag(flags, 'name'),
       args: argsJson(getOptionalStringFlag(flags, 'args-json')),
       dryRun: flags.get('dry-run') === true,
-      ...actionCaller(process.env)
+      ...bindingFromEnv(process.env)
     }
     const response = await client.call<ActionReply>('pilot.action.run', params, {
       timeoutMs: ACTION_TIMEOUT_MS

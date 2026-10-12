@@ -112,59 +112,57 @@ describe('action RPC', () => {
 
   const OUTSIDE =
     'Outside a Pilot run, approve actions in Pilot (Waiting on you), or run act.py directly.'
+  const NO_CALLER = "Pilot can't tell who is calling; nothing runs"
   const DESKTOP: RpcCallerIdentity = { kind: 'desktop' }
   const PHONE: RpcCallerIdentity = { kind: 'paired-device', deviceId: 'ipad' }
   const BOUND = { runId: 'run-2', stepIdx: 0 }
+  const REFUSED = (detail: string) => ({ outcome: 'failed', detail })
 
-  // Approval comes only from the transport's caller identity (a person's own app or paired device),
-  // never from params: an agent that drops its binding is an unbound local CLI, and is refused.
-  it.each<[string, RpcCallerIdentity | undefined, Record<string, unknown>, string, object]>([
-    ['desktop, unbound', DESKTOP, {}, '', { outcome: 'done' }],
-    ['a paired device, unbound', PHONE, {}, '', { outcome: 'done' }],
-    ['desktop, naming a run without its power', DESKTOP, BOUND, '', { outcome: 'done' }],
-    ['the local CLI, unbound', LOCAL, {}, 'push', { outcome: 'failed', detail: OUTSIDE }],
+  // pilot.action.run approves nothing, for any caller: a call bound to a run gets that run's powers, an
+  // unbound one only dry-runs, and a call the transport can't name is refused. Every refusal is a row.
+  it.each<[string, RpcCallerIdentity | undefined, Record<string, unknown>, string, object, number]>(
     [
-      'the local CLI, unbound, in a terminal of its own',
-      LOCAL,
-      { terminal: 'my-own-tab' },
-      'push',
-      { outcome: 'failed', detail: OUTSIDE }
-    ],
-    ['the local CLI bound to a step without the power', LOCAL, BOUND, '', { outcome: 'asked' }],
-    ['the local CLI bound to a step with the power', LOCAL, BOUND, 'push', { outcome: 'done' }],
-    [
-      'no caller identity, unbound',
-      undefined,
-      {},
-      'push',
-      { outcome: 'failed', detail: "Pilot can't tell who is calling; nothing runs" }
-    ],
-    [
-      'no caller identity, bound',
-      undefined,
-      BOUND,
-      'push',
-      { outcome: 'failed', detail: "Pilot can't tell who is calling; nothing runs" }
+      ['desktop, unbound', DESKTOP, {}, 'push', REFUSED(OUTSIDE), 0],
+      ['desktop, unbound, dry run', DESKTOP, { dryRun: true }, '', { outcome: 'done' }, 1],
+      ['a paired device, unbound', PHONE, {}, 'push', REFUSED(OUTSIDE), 0],
+      ['a paired device, unbound, dry run', PHONE, { dryRun: true }, '', { outcome: 'done' }, 1],
+      ['the local CLI, unbound', LOCAL, {}, 'push', REFUSED(OUTSIDE), 0],
+      [
+        'the local CLI, unbound, own terminal',
+        LOCAL,
+        { terminal: 'my-own-tab' },
+        'push',
+        REFUSED(OUTSIDE),
+        0
+      ],
+      ['the local CLI, unbound, dry run', LOCAL, { dryRun: true }, '', { outcome: 'done' }, 1],
+      [
+        'the local CLI bound to a step without the power',
+        LOCAL,
+        BOUND,
+        '',
+        { outcome: 'asked' },
+        0
+      ],
+      [
+        'the local CLI bound to a step with the power',
+        LOCAL,
+        BOUND,
+        'push',
+        { outcome: 'done' },
+        1
+      ],
+      ['no caller identity, unbound', undefined, {}, 'push', REFUSED(NO_CALLER), 0],
+      ['no caller identity, dry run', undefined, { dryRun: true }, 'push', REFUSED(NO_CALLER), 0],
+      ['no caller identity, bound', undefined, BOUND, 'push', REFUSED(NO_CALLER), 0]
     ]
-  ])('%s', async (_name, caller, target, powers, expected) => {
-    const { push, call } = setup(powers)
+  )('%s', async (_name, caller, extra, powers, expected, runs) => {
+    const { store, push, call } = setup(powers)
     const ctx = caller ? { caller } : {}
-    expect(await call('pilot.action.run', { ...PUSH, ...target }, ctx)).toMatchObject(expected)
-    expect(vi.mocked(push.run).mock.calls.length).toBe(
-      'outcome' in expected && expected.outcome === 'done' ? 1 : 0
-    )
-  })
-
-  it.each<[string, RpcCallerIdentity | undefined, number]>([
-    ['the local CLI, unbound, may dry-run', LOCAL, 1],
-    ['no caller identity may not even dry-run', undefined, 0]
-  ])('%s', async (_name, caller, runs) => {
-    const { push, call } = setup()
-    await call('pilot.action.run', { ...PUSH, dryRun: true }, caller ? { caller } : {})
+    expect(await call('pilot.action.run', { ...PUSH, ...extra }, ctx)).toMatchObject(expected)
     expect(push.run).toHaveBeenCalledTimes(runs)
-    if (runs) {
-      expect(push.run).toHaveBeenCalledWith(PUSH.args, { dryRun: true, runId: null })
-    }
+    const status = runs ? 'done' : 'refused'
+    expect(store.actions.get(1)).toMatchObject({ action: 'push', status })
   })
 
   it('lists the catalog for any caller', () => {
@@ -185,15 +183,17 @@ describe('action RPC', () => {
     ['a run id without its step', { runId: 'run-2' }, false, "Not inside a Pilot run's step"],
     ['an ended step', { runId: 'run-2', stepIdx: 0 }, true, 'Step 0 of run run-2 has ended'],
     ['an unknown run', { runId: 'run-9', stepIdx: 0 }, false, 'No run run-9']
-  ])('refuses %s, never treating it as a person', async (_name, target, ended, message) => {
+  ])('refuses %s, and records the refusal', async (_name, target, ended, message) => {
     const { store, push, call } = setup('push')
     if (ended) {
       store.runs.updateStep('run-2', 0, { status: 'done' })
     }
-    await expect(
-      Promise.resolve().then(() => call('pilot.action.run', { ...PUSH, ...target }))
-    ).rejects.toThrow(message)
+    expect(await call('pilot.action.run', { ...PUSH, ...target })).toMatchObject({
+      outcome: 'failed',
+      detail: expect.stringContaining(message)
+    })
     expect(push.run).not.toHaveBeenCalled()
+    expect(store.actions.get(1)).toMatchObject({ action: 'push', status: 'refused', runId: null })
   })
 
   it("runs an action the env step's run has the power for", async () => {

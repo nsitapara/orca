@@ -31,16 +31,18 @@ describe('buildActionCatalog', () => {
     })
   })
 
-  it.each([
-    [{ argv: ['/wt', 'b', 'aaa', 'bbb'] }, null],
-    [{ argv: 'a' }, 'usage: push'],
-    [{ argv: ['a', 1] }, 'usage: push'],
-    [{ argv: ['a'], write_id: 'x' }, 'usage: push'],
-    [{}, 'usage: push']
-  ])("checks an act.py entry's args: %j", (args, problem) => {
-    const said = buildActionCatalog({ act, linear: null }).get('push')!.checkArgs(args)
-    expect(problem === null ? said : said?.startsWith(problem)).toBe(problem === null ? null : true)
+  it("takes an act.py entry's { argv: string[] }", () => {
+    const push = buildActionCatalog({ act, linear: null }).get('push')!
+    expect(push.checkArgs({ argv: ['/wt', 'b', 'aaa', 'bbb'] })).toBeNull()
   })
+
+  it.each([[{ argv: 'a' }], [{ argv: ['a', 1] }], [{ argv: ['a'], write_id: 'x' }], [{}]])(
+    "says why an act.py entry's args %j don't fit",
+    (args) => {
+      const push = buildActionCatalog({ act, linear: null }).get('push')!
+      expect(push.checkArgs(args)).toMatch(/^usage: push /)
+    }
+  )
 
   it('hands a refreshed pinning back as args', async () => {
     vi.mocked(act.refresh).mockResolvedValueOnce({

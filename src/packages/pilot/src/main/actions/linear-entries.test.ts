@@ -5,13 +5,11 @@ import { LINEAR_NOT_CONNECTED, linearEntries, writeIdFor } from './linear-entrie
 
 function writer(): { [K in keyof LinearWriter]: Mock<LinearWriter[K]> } {
   return {
-    createIssue: vi
-      .fn()
-      .mockResolvedValue({
-        identifier: 'WEB-2118',
-        url: 'https://linear.app/x/WEB-2118',
-        branchName: 'web-2118-fix'
-      }),
+    createIssue: vi.fn().mockResolvedValue({
+      identifier: 'WEB-2118',
+      url: 'https://linear.app/x/WEB-2118',
+      branchName: 'web-2118-fix'
+    }),
     addComment: vi.fn().mockResolvedValue({ url: 'https://linear.app/x/WEB-2118#c' }),
     setState: vi.fn().mockResolvedValue(undefined),
     attachUrl: vi.fn().mockResolvedValue(undefined)
@@ -156,18 +154,16 @@ describe('Linear entries', () => {
     })
   })
 
+  it('takes args that fit the schema', () => {
+    expect(entry(writer(), 'linear_create').checkArgs({ team: 'WEB', title: 't' })).toBeNull()
+  })
+
   it.each([
-    ['linear_create', { team: 'WEB', title: 't' }, null],
-    ['linear_create', { team: 'WEB' }, 'usage: linear_create'],
-    ['linear_attach', { issue: 'WEB-1', url: 'javascript:x' }, 'usage: linear_attach'],
-    [
-      'linear_comment',
-      { issue: 'WEB-1', body: 'b', write_id: 'not-a-uuid' },
-      'usage: linear_comment'
-    ]
-  ])('checks %s args against its schema: %j', (name, args, problem) => {
-    const said = entry(writer(), name).checkArgs(args)
-    expect(problem === null ? said : said?.startsWith(problem)).toBe(problem === null ? null : true)
+    ['linear_create', { team: 'WEB' }],
+    ['linear_attach', { issue: 'WEB-1', url: 'javascript:x' }],
+    ['linear_comment', { issue: 'WEB-1', body: 'b', write_id: 'not-a-uuid' }]
+  ])('says why %s args %j miss its schema', (name, args) => {
+    expect(entry(writer(), name).checkArgs(args)).toMatch(new RegExp(`^usage: ${name} `))
   })
 
   it("fails with Linear's message when the write fails", async () => {
