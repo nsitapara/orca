@@ -14,6 +14,7 @@ import {
   type AgentStepDeps,
   type AgentStepRequest,
   type KnownTerminal,
+  type SessionTerminals,
   type SessionTerminalState
 } from './agent-step'
 import { terminalLaunchOptions, type SessionPlan } from './step-launch-plan'
@@ -282,6 +283,20 @@ async function closeSessionTerminal(runtime: OrcaRuntimeService, handle: string)
   }
 }
 
+// H10's look at, typing into and closing of a session's terminal: the run launcher's, and the answer
+// dispatcher's (Task 24b) when it sends answers into the session that asked.
+export function runtimeSessionTerminals(
+  runtime: OrcaRuntimeService,
+  worktrees: LauncherWorktrees,
+  pause: Pause = wait
+): SessionTerminals {
+  return {
+    state: (terminal, id) => sessionTerminalState(runtime, worktrees, terminal, id, pause),
+    send: (handle, prompt) => sendToIdleAgent(runtime, handle, prompt),
+    close: (handle) => closeSessionTerminal(runtime, handle)
+  }
+}
+
 // `runs` is the run store a new worktree's claim reads and writes (Task 8b); `pause` is for tests.
 export function runtimeLauncherDeps(
   runtime: OrcaRuntimeService,
@@ -299,10 +314,6 @@ export function runtimeLauncherDeps(
     modeText: modeTextUnavailable,
     newSessionId: () => randomUUID(),
     now,
-    sessionTerminals: {
-      state: (terminal, id) => sessionTerminalState(runtime, worktrees, terminal, id, pause),
-      send: (handle, prompt) => sendToIdleAgent(runtime, handle, prompt),
-      close: (handle) => closeSessionTerminal(runtime, handle)
-    }
+    sessionTerminals: runtimeSessionTerminals(runtime, worktrees, pause)
   }
 }

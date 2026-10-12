@@ -4,6 +4,7 @@ import type { EngineEnv } from '../engine-env'
 import type { PilotStore } from '../store/store'
 import {
   createRunEngine,
+  runStepTimeoutMs,
   stepTimeoutMs,
   type RunEngine,
   type RunEngineDeps,
@@ -98,7 +99,7 @@ export function wireRunEngine(input: EngineWiringInput): WiredEngine {
   const timeoutOf = (step: { runId: string; idx: number }): number | null => {
     const run = store.runs.get(step.runId)
     const def = run ? input.definitionFor(run.automationId) : null
-    return def ? stepTimeoutMs(def, step.idx) : null
+    return run && def ? runStepTimeoutMs(def, run, step.idx) : null
   }
   return {
     engine,

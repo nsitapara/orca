@@ -10,6 +10,8 @@ import { UnrecordedLaunchError } from '../scheduler/tick-runner'
 import { PilotStore } from '../store/store'
 import {
   createRunEngine,
+  ANSWER_STEP_TIMEOUT_MS,
+  runStepTimeoutMs,
   stepTimeoutMs,
   type RunEngine,
   type RunEngineDeps,
@@ -639,5 +641,24 @@ describe('stepTimeoutMs', () => {
       YAML.replace('limits: { timeout: 60m }\n', '').replace(', timeout: 20m', '')
     )
     expect(stepTimeoutMs(def, 0)).toBeNull()
+  })
+})
+
+// Task 9c ruling: an answer run's one step isn't the definition's step at its index.
+describe('runStepTimeoutMs', () => {
+  const bare = definitionOf(
+    YAML.replace('limits: { timeout: 60m }\n', '').replace(', timeout: 20m', '')
+  )
+  it.each([
+    ['a scheduled run: the step at its index', DEF, 'schedule', 20 * 60_000],
+    ["an answer run: limits.timeout, never step 0's own", DEF, 'answer', 60 * 60_000],
+    [
+      'an answer run with no limits.timeout: the answer-run default',
+      bare,
+      'answer',
+      ANSWER_STEP_TIMEOUT_MS
+    ]
+  ] as const)('%s', (_n, def, trigger, ms) => {
+    expect(runStepTimeoutMs(def, { trigger }, 0)).toBe(ms)
   })
 })
