@@ -230,10 +230,11 @@ The order, behaviour changes and follow-ups come from the build (`go-live-notes.
 
 **Order:**
 1. Close out what Orca still has open. Let a running Orca 03 review cycle finish. Close any open Orca 04 QA run or dispatched fix: a stale Orca `run.json` that isn't `done` blocks every Pilot 04 night at `stack`.
-2. Import the open vault cards: Waiting on you, "Import open vault cards" (applying needs Pilot's own window).
+2. Import the open vault cards: Waiting on you, "Import open vault cards" (applying needs Pilot's own window). From now on answer only in Pilot (Waiting on you): the old answers page is read-only on the Pilot backend.
 3. Import each job's old state before enabling it: `pilot automations import-state --id <id>` (preview), then `--apply`. 03 and 04 need their `seen.json` first. 08 must be imported before Pilot first writes its own `usage.json` (the hand-over above). 12's sent answers come in as dispatched.
-4. Enable the YAMLs one at a time: `pilot automations enable --id <id>`. Keep Orca's copies disabled.
-5. Retire `apply.py` (job 12) only once Pilot is dispatching answers. Write `<STATE_ROOT>/apply/retired` last. Nothing writes it for you.
+4. Connect Linear in Pilot (Settings) before enabling 13 and M01. Pilot can't read Orca's Linear credential (see the Known gaps).
+5. Enable the YAMLs one at a time: `pilot automations enable --id <id>`. Keep Orca's copies disabled.
+6. Retire `apply.py` (job 12) only once Pilot is dispatching answers. Write `<STATE_ROOT>/apply/retired` last. Nothing writes it for you.
 
 **Not checkable in a dry run** (watch the first real run):
 - Linear accepts the uuid5 write ids that 13 uses for ticket creates and fold comments.
@@ -244,6 +245,9 @@ The order, behaviour changes and follow-ups come from the build (`go-live-notes.
 - **Answers** to sessions from the old system fork instead of resuming. Imported sessions have no recorded launch arguments.
 - **Approvals** come only from Pilot's own window on this Mac. Paired devices can answer, skip and revise, but not approve. The local CLI can't answer cards. An approval imported from the vault comes back as a re-ask.
 - **Idle tabs** that hold a session a step needs (no draft, no agent working) are closed, and the session resumes in Pilot's own tab.
+- **Action cards** show, in a Pilot block apart from the agent's words, the exact command or args Approve runs (escaped to printable text).
+- **Ticking, enabling and pausing** are yours alone: Pilot's window, a paired device, or the CLI in your own terminal. An agent in a run is refused, and a real tick (Run now) runs only in the process that runs the scheduler.
+- **A definition file that turns invalid** is shown from its last valid version but never ticked until it is fixed.
 - **13 and M01** list the signed-in user's Linear tickets, with no assignee clause.
 - **07:** a timeout or crash is a failed run (it was a silent skip).
 - **03:** needs both agents' quota (it checked only the lead's).
@@ -259,8 +263,10 @@ The order, behaviour changes and follow-ups come from the build (`go-live-notes.
 2. Re-enable the jobs in Orca's Automations page.
 3. If job 12 was retired, remove `<STATE_ROOT>/apply/retired`. While it exists, `apply.py` sends nothing.
 4. Point the console at Orca: `console.py stop`, then `AGENT_CONSOLE_BACKEND=orca python3 ~/.agents/skills/agent-console/console.py ensure`.
-5. The old jobs resume from their own state. `import-state` only reads the old files, and adds to Pilot's data. Pilot's runs leave 03's `cycles.json` and 04's `run.json` readable by the Orca sweeps: a stopped cycle is forgotten, an unfinished one restarts as abandoned, and 04 treats a live Pilot run as active until its deadline plus 10 minutes. Rolling back needs no cleanup of them.
-6. What Pilot did alone stays in Pilot: its runs and cards, and answers it already sent (the old job won't resend what it never saw).
+5. Stop Pilot's usage report before re-enabling 08, so Pilot and Orca's 08 don't both write `usage.json`: in the report folder, rename `usage-legacy.json` away (for example to `usage-legacy.json.pilot`). Pilot writes there only while that file exists.
+6. The old jobs resume from their own state. `import-state` only reads the old files, and adds to Pilot's data. Pilot's runs leave 03's `cycles.json` and 04's `run.json` readable by the Orca sweeps: a stopped cycle is forgotten, an unfinished one restarts as abandoned, and 04 treats a live Pilot run as active until its deadline plus 10 minutes. Rolling back needs no cleanup of them.
+7. What Pilot did alone stays in Pilot: its runs and cards, and answers it already sent (the old job won't resend what it never saw).
+8. 05 and 09 may redo work Pilot already did: Pilot doesn't write their old state files, so their sweeps don't know what Pilot handled.
 
 ## Remote use (D25)
 
@@ -314,6 +320,7 @@ These need a phone, a second Mac and an iPad on Tailscale. Open Pilot (`dist/mac
 - Spend and the token report count a step once it has ended; a running step shows up after it ends.
 - The token report doesn't record `doc_written` events the way `usage.py`'s `vault.wrote` did, so the console's Files tab doesn't link a refresh to a run.
 - Approvals come only from Pilot's own window on this Mac (see "Going live").
+- The powers `commit`, `reply`, `remove_worktree` and `close_session` are labels only: nothing enforces them. Only catalog actions are gated by a power (`push`, `mark_ready`, `post`, `create_ticket`, `update_ticket`).
 - `pnpm lint` shows 5 import-cycle warnings under `mobile/`. They are upstream's, identical on `upstream/main`.
 - **Recommended follow-ups** (parked, not done):
   - Per-step or propose-only powers, so card approval is the only path for 09's `post` and 05's answers `push`. Today only the prompt keeps an agent from using its automation's power, as under Orca.
