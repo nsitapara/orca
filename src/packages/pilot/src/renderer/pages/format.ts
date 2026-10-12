@@ -1,3 +1,4 @@
+import { money } from '../../shared/money'
 import type { RunStatus, StepStatus, TickOutcome, TickRow, Verdict } from '../../shared/api-types'
 
 const VERDICT: Record<Verdict, string> = {
@@ -121,4 +122,12 @@ export function stepStatusLabel(status: StepStatus): string {
 // "1:10 PM": the time of day, in the viewer's own zone.
 export function clockTime(ms: number): string {
   return new Date(ms).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+}
+
+// Today's spend for the panel: the priced total, and "+ unpriced" when some usage had no price.
+export function spentLabel(usd: number, unpricedBuckets: number): string {
+  if (unpricedBuckets > 0) {
+    return `${money(usd)} + unpriced`
+  }
+  return money(usd)
 }

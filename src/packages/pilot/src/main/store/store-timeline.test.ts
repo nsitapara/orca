@@ -138,6 +138,15 @@ describe('TimelineStore inbox reads', () => {
     ])
   })
 
+  it('lists open items under any spelling of the worktree path', () => {
+    const { store, raw } = setup()
+    inbox(raw, 'i1', { path: '/wt/a/' })
+    inbox(raw, 'i2', { path: '/wt/a' })
+    inbox(raw, 'i3', { path: '/wt/b' })
+    expect(store.timeline.openInbox('/wt/a', null).map((i) => i.id)).toEqual(['i1', 'i2'])
+    expect(store.timeline.openInbox('/wt/a/', null).map((i) => i.id)).toEqual(['i1', 'i2'])
+  })
+
   it('lists the open and answered items of the given runs', () => {
     const { store, raw } = setup()
     store.runs.create({

@@ -140,13 +140,20 @@ export class UsageStore {
     return row?.at ?? null
   }
 
-  // What runs in this worktree spent on one local day (steps are counted once they end).
-  costForWorktreeOn(worktreePath: string, day: string): number {
+  // What runs in this worktree spent on one local day (steps are counted once they end), and how many of
+  // those buckets had no price. `paths` are the spellings the worktree may be stored under.
+  costForWorktreeOn(
+    paths: readonly string[],
+    day: string
+  ): { costUsd: number; unpricedBuckets: number } {
     const row = this.db
       .prepare(
-        'SELECT COALESCE(SUM(u.cost_usd), 0) AS c FROM step_usage u JOIN runs r ON r.id = u.run_id WHERE r.worktree_path = ? AND u.day = ?'
+        `SELECT COALESCE(SUM(u.cost_usd), 0) AS c,
+                COALESCE(SUM(CASE WHEN u.cost_usd IS NULL THEN 1 ELSE 0 END), 0) AS unpriced
+         FROM step_usage u JOIN runs r ON r.id = u.run_id
+         WHERE r.worktree_path IN (SELECT value FROM json_each(?)) AND u.day = ?`
       )
-      .get(worktreePath, day) as { c: number }
-    return Number(row.c)
+      .get(JSON.stringify(paths), day) as { c: number; unpriced: number }
+    return { costUsd: Number(row.c), unpricedBuckets: Number(row.unpriced) }
   }
 }

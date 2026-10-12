@@ -1,5 +1,6 @@
 import type { TimelineRun, TimelineNext, WorktreeTimeline } from '../../shared/api-types'
 import type { AutomationDefinition } from '../../shared/definition/types'
+import { worktreePathSpellings } from '../fields/agent-activity'
 import type { PilotStore } from '../store/store'
 import { localDay } from '../usage/buckets'
 
@@ -53,7 +54,7 @@ export function buildWorktreeTimeline(
       }
     })
     .sort(byNextTick)
-  const runs = deps.store.runs.forWorktree(worktreePath, startOfDay(now))
+  const runs = deps.store.runs.forWorktree(worktreePathSpellings(worktreePath), startOfDay(now))
   const asked = deps.store.timeline
     .inboxForRuns(runs.map((r) => r.id))
     .filter((i) => person === null || i.person === person)
@@ -63,11 +64,16 @@ export function buildWorktreeTimeline(
     steps: deps.store.runs.steps(run.id),
     inbox: asked.filter((i) => i.runId === run.id)
   }))
+  const spent = deps.store.usage.costForWorktreeOn(
+    worktreePathSpellings(worktreePath),
+    localDay(now)
+  )
   return {
     next,
     now: withDetail.filter((r) => NOW_STATUSES.has(r.status)),
     earlier: withDetail.filter((r) => !NOW_STATUSES.has(r.status)),
     waiting: deps.store.timeline.openInbox(worktreePath, person),
-    spentTodayUsd: deps.store.usage.costForWorktreeOn(worktreePath, localDay(now))
+    spentTodayUsd: spent.costUsd,
+    unpricedBuckets: spent.unpricedBuckets
   }
 }
