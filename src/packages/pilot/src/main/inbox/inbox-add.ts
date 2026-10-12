@@ -78,7 +78,13 @@ function originOf(deps: InboxDeps, params: InboxAddParams): Origin {
   }
 }
 
+// Only the same action's card is the same card: an open card never turns into an ask for another action.
+// A start_run card (Pilot's ask-first ask, one per run) is never the same as any other, so nothing merges
+// into Pilot's ask and Pilot's ask never merges into another run's card.
 function sameCard(item: InboxItemRow, card: InboxCard, origin: Origin): boolean {
+  if (item.action !== card.action || card.action === 'start_run') {
+    return false
+  }
   return (
     item.itemKey === origin.itemKey &&
     item.worktreePath === origin.worktreePath &&
