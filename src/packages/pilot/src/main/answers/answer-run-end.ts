@@ -1,4 +1,4 @@
-import type { InboxItemRow, QueueRow, RunRow } from '../../shared/api-types'
+import type { InboxItemRow, InboxReply, QueueRow, RunRow } from '../../shared/api-types'
 import { ANSWER_RUN_STOPPED } from '../../shared/pilot-replies'
 import { oneLine } from '../inbox/card'
 import { inboxEvent, syncRunWaiting } from '../inbox/inbox-service'
@@ -13,22 +13,24 @@ export { ANSWER_RUN_STOPPED }
 
 type Text = (key: string) => string
 
-// Back to its person, its answer cleared (as save.ts clearAnswer), with a line under it when there is one.
+// Back to its person, its answer cleared (as save.ts clearAnswer), with a line under it when there is one:
+// Pilot's own (the run was stopped) or the agent's (its `reply` output).
 function reopen(
   store: PilotStore,
   item: InboxItemRow,
-  line: string,
+  line: InboxReply,
   kind: string,
   at: number
 ): void {
   const cleared = { status: 'open' as const, answer: null, answeredAt: null, answeredBy: null }
+  const text = line.text
   store.inbox.update(
     item.id,
-    { ...cleared, ...(line ? { replies: [...item.replies, line] } : {}) },
+    { ...cleared, ...(text ? { replies: [...item.replies, line] } : {}) },
     at
   )
-  if (line) {
-    inboxEvent(store, item, kind, kind === 'item_reasked' ? { reason: line } : { text: line }, at)
+  if (text) {
+    inboxEvent(store, item, kind, kind === 'item_reasked' ? { reason: text } : { text }, at)
   }
 }
 
@@ -42,7 +44,7 @@ function retry(store: PilotStore, row: QueueRow, status: string, at: number): vo
 function settle(store: PilotStore, item: InboxItemRow, text: Text, at: number): void {
   const status = text('item_status')
   if (status === 'open') {
-    reopen(store, item, text('reply'), 'item_replied', at)
+    reopen(store, item, { text: text('reply'), by: 'agent' }, 'item_replied', at)
     return
   }
   const outcome = text('outcome')
@@ -86,7 +88,7 @@ export function answerRunEnded(store: PilotStore, run: RunRow): void {
       continue
     }
     if (run.status === 'cancelled') {
-      reopen(store, item, ANSWER_RUN_STOPPED, 'item_reasked', at)
+      reopen(store, item, { text: ANSWER_RUN_STOPPED, by: 'pilot' }, 'item_reasked', at)
     } else if (FINISHED_RUN.has(run.status)) {
       settle(store, item, text, at)
     } else {

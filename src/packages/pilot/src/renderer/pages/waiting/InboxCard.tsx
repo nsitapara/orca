@@ -4,9 +4,8 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { Textarea } from '@/components/ui/textarea'
-import type { InboxItemRow } from '../../../shared/api-types'
+import type { InboxItemRow, InboxReply } from '../../../shared/api-types'
 import type { QueueEntry, RunLine } from '../../../shared/inbox-types'
-import { isPilotReply } from '../../../shared/pilot-replies'
 import {
   choicesFor,
   type Choice,
@@ -181,9 +180,12 @@ function Details({ markdown }: { markdown: string | null }): React.JSX.Element {
   )
 }
 
-// Pilot's own re-asks and hand-backs (fixed words) are Pilot's; every other reply is the agent's.
-function replyLabel(reply: string): string {
-  return isPilotReply(reply) ? 'Pilot:' : 'Agent asked:'
+// Who wrote a reply is stored with it (by), set by the path that wrote it; never guessed from its words.
+function Reply({ reply }: { reply: InboxReply }): React.JSX.Element {
+  if (reply.by === 'pilot') {
+    return <p className="text-sm text-primary">Pilot: {reply.text}</p>
+  }
+  return <p className="text-sm">Agent asked: {reply.text}</p>
 }
 
 // What approving an action card runs, as Pilot wrote it from the stored card: a Pilot block of its own,
@@ -262,9 +264,7 @@ export function InboxCard({
           ) : null}
           <RunLineBlock line={runLine} digest={item.digest} />
           {item.replies.map((r, i) => (
-            <p key={i} className="text-sm">
-              {replyLabel(r)} {r}
-            </p>
+            <Reply key={i} reply={r} />
           ))}
           <CardBody
             item={item}

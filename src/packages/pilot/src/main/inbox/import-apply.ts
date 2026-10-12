@@ -63,7 +63,8 @@ function writeAnswer(deps: InboxDeps, planned: PlannedItem, now: number): void {
     digest: item.digest,
     via: answer.via
   }
-  const replies = answer.sent ? [...item.replies, SENT_BEFORE_PILOT] : item.replies
+  const sent = { text: SENT_BEFORE_PILOT, by: 'pilot' as const }
+  const replies = answer.sent ? [...item.replies, sent] : item.replies
   deps.store.inbox.update(
     item.id,
     { status: 'answered', answer: stored, answeredAt: now, answeredBy: item.person, replies },

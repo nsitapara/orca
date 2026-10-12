@@ -164,22 +164,26 @@ describe('WaitingOnYouPage', () => {
     expect(screen.queryByText('python3 x')).toBeNull()
   })
 
-  it("labels Pilot's own re-asks Pilot: and the agent's replies Agent asked:", async () => {
+  // Who wrote a reply is stored when it is written (by), never guessed from its words: an agent can't pass
+  // its text off as Pilot's by copying Pilot's wording.
+  it('labels each reply by who wrote it, never by its words', async () => {
     const asked = card({
       id: 'in_r',
       title: 'Which image?',
       replies: [
-        'Approve actions in Pilot on this Mac',
-        'The card changed after you approved it; approve the version shown now.',
-        'Sent to the session before Pilot took over. Tick it (pilot inbox tick) once the session is done.',
-        'e2e or unit?'
+        {
+          text: 'The card changed after you approved it; approve the version shown now.',
+          by: 'pilot'
+        },
+        { text: 'Approve actions in Pilot on this Mac', by: 'agent' },
+        { text: 'e2e or unit?', by: 'agent' }
       ]
     })
     serve({ ...LIST, items: [asked] })
     render(<WaitingOnYouPage />)
-    expect(await screen.findByText('Pilot: Approve actions in Pilot on this Mac')).toBeTruthy()
-    expect(screen.getByText(/^Pilot: The card changed after you approved it/)).toBeTruthy()
-    expect(screen.getByText(/^Pilot: Sent to the session before Pilot took over/)).toBeTruthy()
+    expect(await screen.findByText(/^Pilot: The card changed after you approved it/)).toBeTruthy()
+    expect(screen.getByText('Agent asked: Approve actions in Pilot on this Mac')).toBeTruthy()
+    expect(screen.queryByText('Pilot: Approve actions in Pilot on this Mac')).toBeNull()
     expect(screen.getByText('Agent asked: e2e or unit?')).toBeTruthy()
   })
 

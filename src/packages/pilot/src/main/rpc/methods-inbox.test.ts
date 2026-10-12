@@ -118,7 +118,7 @@ describe('inbox RPC', () => {
       items: [{ id: added.id, person: 'nish' }]
     })
     expect(call('pilot.inbox.reply', { id: added.id, text: 'Which one?' })).toMatchObject({
-      replies: ['Which one?']
+      replies: [{ text: 'Which one?', by: 'agent' }]
     })
     expect(call('pilot.inbox.tick', { id: added.id, outcome: 'done: e2e' })).toMatchObject({
       status: 'done',

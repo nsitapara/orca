@@ -201,7 +201,7 @@ describe('addInboxItem', () => {
       version: 2,
       status: 'open',
       answer: null,
-      replies: [CHANGED_AFTER_ANSWER]
+      replies: [{ text: CHANGED_AFTER_ANSWER, by: 'pilot' }]
     })
     expect(store.queue.forInboxItem('in_0000000000000001')).toEqual([])
   })
@@ -300,7 +300,7 @@ describe('resolving and replying', () => {
     replyToInboxItem(deps, 'in_0000000000000001', 'Which image: e2e or unit?')
     expect(store.inbox.get('in_0000000000000001')).toMatchObject({
       status: 'open',
-      replies: ['Which image: e2e or unit?']
+      replies: [{ text: 'Which image: e2e or unit?', by: 'agent' }]
     })
   })
 

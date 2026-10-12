@@ -58,15 +58,31 @@ describe('InboxStore', () => {
         parts: { a: 'Fix lint', b: 'Add test' },
         switchWords: ['Post', 'Leave out'],
         outcome: 'Pushed',
-        replies: ['Done at 10:00']
+        replies: [{ text: 'Done at 10:00', by: 'pilot' }]
       })
     )
     expect(store.inbox.get('i1')).toMatchObject({
       parts: { a: 'Fix lint', b: 'Add test' },
       switchWords: ['Post', 'Leave out'],
       outcome: 'Pushed',
-      replies: ['Done at 10:00']
+      replies: [{ text: 'Done at 10:00', by: 'pilot' }]
     })
+  })
+
+  // Replies written before authors were stored, and anything that isn't a Pilot-authored reply, read back
+  // as the agent's: only Pilot's own write paths mark a reply as Pilot's.
+  it("reads replies stored without an author, or with one it does not know, as the agent's", () => {
+    const store = PilotStore.open(':memory:')
+    store.inbox.add(item('i1'))
+    // Written as raw JSON, the way an older Pilot stored plain strings.
+    const raw = ['legacy', { text: 'x', by: 'admin' }, { text: 'p', by: 'pilot' }, 7]
+    store.inbox.update('i1', { replies: raw as never }, 2)
+    expect(store.inbox.get('i1')?.replies).toEqual([
+      { text: 'legacy', by: 'agent' },
+      { text: 'x', by: 'agent' },
+      { text: 'p', by: 'pilot' },
+      { text: '7', by: 'agent' }
+    ])
   })
 
   const listCases: [string, InboxFilter, string[]][] = [
@@ -159,13 +175,19 @@ describe('InboxStore', () => {
     store.inbox.add(item('i1'))
     store.inbox.update(
       'i1',
-      { status: 'done', outcome: 'Pushed', replies: ['ok'], person: 'sam', worktreePath: null },
+      {
+        status: 'done',
+        outcome: 'Pushed',
+        replies: [{ text: 'ok', by: 'agent' }],
+        person: 'sam',
+        worktreePath: null
+      },
       160
     )
     expect(store.inbox.get('i1')).toMatchObject({
       status: 'done',
       outcome: 'Pushed',
-      replies: ['ok'],
+      replies: [{ text: 'ok', by: 'agent' }],
       person: 'sam',
       worktreePath: null,
       version: 1,

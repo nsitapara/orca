@@ -125,7 +125,8 @@ function itemLines(item: InboxItemRow, location: string): string[] {
     lines.push(`  Answer: ${field(said)}`)
   }
   for (const reply of item.replies) {
-    lines.push(`  Reply: ${field(reply)}`)
+    const who = reply.by === 'pilot' ? 'Pilot' : 'Reply'
+    lines.push(`  ${who}: ${field(reply.text)}`)
   }
   return lines
 }

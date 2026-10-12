@@ -3,6 +3,7 @@ import type {
   InboxAnswer,
   InboxItemRow,
   InboxOption,
+  InboxReply,
   InboxStatus,
   InboxType
 } from '../../shared/api-types'
@@ -133,12 +134,28 @@ function toItem(r: Record<string, unknown>): InboxItemRow {
     createdAt: Number(r.created_at),
     updatedAt: Number(r.updated_at),
     outcome: (r.outcome as string | null) ?? null,
-    replies: JSON.parse(String(r.replies_json)) as string[],
+    replies: repliesOf(r.replies_json),
     parts: JSON.parse(String(r.parts_json)) as Record<string, string>,
     switchWords: JSON.parse(String(r.switch_json)) as string[],
     source: r.source as InboxItemRow['source'],
     vaultRef: (r.vault_ref as string | null) ?? null
   }
+}
+
+// Only a stored { by: 'pilot' } reply is Pilot's. A plain string (written before authors were stored) or
+// anything else reads as the agent's, so an old or odd row can never pass for Pilot.
+function repliesOf(json: unknown): InboxReply[] {
+  const stored: unknown = JSON.parse(String(json))
+  if (!Array.isArray(stored)) {
+    return []
+  }
+  return stored.map((r): InboxReply => {
+    if (r && typeof r === 'object' && typeof (r as InboxReply).text === 'string') {
+      const by = (r as InboxReply).by === 'pilot' ? 'pilot' : 'agent'
+      return { text: (r as InboxReply).text, by }
+    }
+    return { text: String(r), by: 'agent' }
+  })
 }
 
 // replies and answer are stored as JSON text; null stays null.

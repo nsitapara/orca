@@ -125,7 +125,7 @@ function updateOpen(
     answer: null,
     answeredAt: null,
     answeredBy: null,
-    replies: [...open.replies, CHANGED_AFTER_ANSWER]
+    replies: [...open.replies, { text: CHANGED_AFTER_ANSWER, by: 'pilot' as const }]
   }
   deps.store.transaction(() => {
     deps.store.inbox.edit(open.id, { ...card, digest }, at)
