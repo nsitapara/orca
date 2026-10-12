@@ -1,4 +1,4 @@
-import type { TickOutcome, TickRow, Verdict } from '../../shared/api-types'
+import type { RunStatus, StepStatus, TickOutcome, TickRow, Verdict } from '../../shared/api-types'
 
 const VERDICT: Record<Verdict, string> = {
   started: 'Started',
@@ -88,4 +88,37 @@ export function formatInZone(ms: number, timeZone: string): string {
   } catch {
     return new Date(ms).toLocaleString()
   }
+}
+
+// The run-status words, one map for the timeline, the panel and Activity.
+const RUN_STATUS: Record<RunStatus, string> = {
+  asking: 'Asking first',
+  running: 'Running',
+  needs_you: 'Needs you',
+  done: 'Done',
+  failed: 'Failed',
+  timed_out: 'Timed out',
+  cancelled: 'Cancelled'
+}
+const STEP_STATUS: Record<StepStatus, string> = {
+  pending: 'Waiting',
+  starting: 'Starting',
+  running: 'Running',
+  done: 'Done',
+  failed: 'Failed',
+  skipped: 'Skipped',
+  timed_out: 'Timed out'
+}
+
+export function runStatusLabel(status: RunStatus): string {
+  return RUN_STATUS[status]
+}
+
+export function stepStatusLabel(status: StepStatus): string {
+  return STEP_STATUS[status]
+}
+
+// "1:10 PM": the time of day, in the viewer's own zone.
+export function clockTime(ms: number): string {
+  return new Date(ms).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
 }

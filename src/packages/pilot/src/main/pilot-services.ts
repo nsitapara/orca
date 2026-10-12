@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import type { OrcaRuntimeService } from '../../../../main/runtime/orca-runtime'
 import { ALL_RPC_METHODS } from '../../../../main/runtime/rpc/methods/index'
 import { getAppEnvironment } from '../../../../shared/app-environment'
-import type { PilotStatus, UsageReportResult } from '../shared/api-types'
+import type { PilotStatus, SessionResumeResult, UsageReportResult } from '../shared/api-types'
 import type { AgentKind } from '../shared/definition/types'
 import { actBridge } from './actions/act-bridge'
 import { answerRunEnded } from './answers/answer-run-end'
@@ -28,6 +28,7 @@ import { wireRunEngine } from './run/engine-wiring'
 import { pilotStepEnv } from './run/step-launch-plan'
 import { cancelUnstartedRun, runAnswerOf } from './run/ask-first'
 import { runtimeLauncherDeps } from './run/launch'
+import { resumeStepSession, runtimeResumeDeps } from './run/resume-session'
 import { modeTextFor, readMode } from './run/modes'
 import { sweepStaleStarts } from './run/stale-starts'
 import { terminalRelister } from './run/terminal-relist'
@@ -59,6 +60,8 @@ export type PilotContext = {
   // Saved answers' dispatcher (Task 24c); null in a process that doesn't run the scheduler.
   dispatcher: AnswerDispatcher | null
   writeUsageReport?: (dir?: string) => UsageReportResult
+  // Opens or focuses a step's agent session (pilot.session.resume); absent where there is no runtime.
+  resumeSession?: (req: { runId: string; stepIdx: number }) => Promise<SessionResumeResult>
 }
 export type PilotServices = { stop: () => void; context: PilotContext }
 // What pilot.status reads. It is registered before anything opens, so status still answers (with
@@ -278,7 +281,8 @@ function openPilot(
     scheduler,
     actions,
     dispatcher,
-    writeUsageReport: (dir) => usageReports.write(dir)
+    writeUsageReport: (dir) => usageReports.write(dir),
+    resumeSession: (req) => resumeStepSession(runtimeResumeDeps(runtime, store, fieldDeps), req)
   }
 }
 

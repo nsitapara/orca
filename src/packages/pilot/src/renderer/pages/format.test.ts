@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest'
-import { errorText, outcomeLine, relativeTime, tickLine, verdictLabel } from './format'
+import {
+  errorText,
+  outcomeLine,
+  relativeTime,
+  runStatusLabel,
+  stepStatusLabel,
+  tickLine,
+  verdictLabel
+} from './format'
 
 describe('renderer formatting', () => {
   it.each([
@@ -60,4 +68,23 @@ describe('call results and errors', () => {
     expect(errorText(new Error("Pilot isn't running: x"))).toBe("Pilot isn't running: x")
     expect(errorText('plain')).toBe('plain')
   })
+})
+
+describe('status labels', () => {
+  it.each([
+    ['asking', 'Asking first'],
+    ['running', 'Running'],
+    ['needs_you', 'Needs you'],
+    ['done', 'Done'],
+    ['failed', 'Failed'],
+    ['timed_out', 'Timed out'],
+    ['cancelled', 'Cancelled']
+  ] as const)('run %s → %s', (s, label) => expect(runStatusLabel(s)).toBe(label))
+
+  it.each([
+    ['pending', 'Waiting'],
+    ['starting', 'Starting'],
+    ['skipped', 'Skipped'],
+    ['timed_out', 'Timed out']
+  ] as const)('step %s → %s', (s, label) => expect(stepStatusLabel(s)).toBe(label))
 })

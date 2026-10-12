@@ -2,26 +2,16 @@ import { useState } from 'react'
 import { Badge } from '@/components/ui/badge'
 import type { ActivityTick, RunRow } from '../../shared/api-types'
 import { CheckTable } from './CheckTable'
-import { tickLine } from './format'
+import { runStatusLabel, tickLine } from './format'
 
 function costText(run: RunRow): string {
   return run.costUsd === null ? '' : ` · $${run.costUsd.toFixed(2)}`
 }
 
-const RUN_STATUS: Record<RunRow['status'], string> = {
-  asking: 'Asking first',
-  running: 'Running',
-  needs_you: 'Needs you',
-  done: 'Done',
-  failed: 'Failed',
-  timed_out: 'Timed out',
-  cancelled: 'Cancelled'
-}
-
 function RunLine({ run }: { run: RunRow }): React.JSX.Element {
   return (
     <li className="text-sm">
-      <div>{`Run ${run.id} · ${run.itemLabel} · ${RUN_STATUS[run.status]}${costText(run)}`}</div>
+      <div>{`Run ${run.id} · ${run.itemLabel} · ${runStatusLabel(run.status)}${costText(run)}`}</div>
       {run.outcome ? <div className="text-muted-foreground">{run.outcome}</div> : null}
     </li>
   )

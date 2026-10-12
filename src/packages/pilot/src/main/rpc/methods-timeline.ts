@@ -8,6 +8,10 @@ const Timeline = z.object({
   person: z.string().min(1).max(200).optional()
 })
 
+const Resume = z.object({ runId: z.string().min(1), stepIdx: z.number().int().nonnegative() })
+
+export const RESUME_FROM_PILOT = 'Open sessions from Pilot'
+
 export function buildTimelineMethods(ctx: () => PilotContext) {
   return [
     defineMethod({
@@ -26,6 +30,23 @@ export function buildTimelineMethods(ctx: () => PilotContext) {
           p.worktreePath,
           p.person ?? null
         )
+      }
+    }),
+    defineMethod({
+      name: 'pilot.session.resume',
+      permission: 'workspace',
+      params: Resume,
+      // A UI action: only the desktop app (the transport's stamp, never a param) may open or focus a
+      // terminal here, so an agent or a paired device can't pop sessions open.
+      handler: async (p, rpc) => {
+        if (rpc.caller?.kind !== 'desktop') {
+          throw new Error(RESUME_FROM_PILOT)
+        }
+        const c = ctx()
+        if (!c.resumeSession) {
+          throw new Error("Sessions can't be resumed in this process")
+        }
+        return c.resumeSession({ runId: p.runId, stepIdx: p.stepIdx })
       }
     })
   ]
