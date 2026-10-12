@@ -2,6 +2,7 @@ import { homedir } from 'node:os'
 import { join } from 'node:path'
 import type { InboxType } from '../../shared/api-types'
 import { bridgeEnv, runWithProcessHost, type ProcessRun } from '../actions/act-bridge'
+import type { EngineEnv } from '../engine-env'
 
 // What `vault.py export-open` prints per open item (Task 27a).
 export type VaultRow = {
@@ -76,7 +77,13 @@ function checkRows(value: unknown): VaultRow[] {
 }
 
 export async function readOpenVaultItems(
-  opts: { vaultPy?: string; python?: string; run?: ProcessRun; env?: NodeJS.ProcessEnv } = {}
+  opts: {
+    vaultPy?: string
+    python?: string
+    run?: ProcessRun
+    env?: NodeJS.ProcessEnv
+    engineEnv?: EngineEnv
+  } = {}
 ): Promise<VaultRow[]> {
   const env = opts.env ?? process.env
   const vaultPy =
@@ -86,7 +93,7 @@ export async function readOpenVaultItems(
   const result = await (opts.run ?? runWithProcessHost)({
     program: opts.python ?? env.PILOT_PYTHON ?? 'python3',
     args: [vaultPy, 'export-open'],
-    env: bridgeEnv(env, null),
+    env: bridgeEnv(env, null, opts.engineEnv),
     timeoutMs: TIMEOUT_MS
   })
   if (result.code !== 0 || result.timedOut) {
