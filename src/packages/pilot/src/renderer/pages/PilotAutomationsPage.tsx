@@ -12,7 +12,7 @@ export default function PilotAutomationsPage(): React.JSX.Element {
   const view = usePilotAutomationsView()
   if (view === 'inbox') {
     return (
-      <main className="relative flex h-full flex-col overflow-y-auto scrollbar-sleek bg-background px-5 pb-10 pt-6">
+      <main className="relative flex h-full flex-col overflow-y-auto scrollbar-sleek bg-background px-5 pb-10">
         <InboxPage />
       </main>
     )

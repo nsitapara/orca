@@ -139,7 +139,7 @@ describe('InboxPage', () => {
     expect(screen.getByText('Defaults the agents took · 1')).toBeTruthy()
     expect(screen.getByText('Up next from your answers · 1')).toBeTruthy()
     expect(screen.getByText(/someone is typing in Claude · review/)).toBeTruthy()
-    expect(screen.getByRole('option', { name: 'All worktrees · 2' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'All · 2' })).toBeTruthy()
   })
 
   it("shows Pilot's Run line in its own Pilot block on an action card, and none on a question", async () => {

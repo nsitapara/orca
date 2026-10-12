@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { InboxItemRow } from '../../../shared/api-types'
 import type { InboxListPayload } from '../../../shared/inbox-types'
@@ -111,7 +111,7 @@ describe('the Inbox layout', () => {
     expect(within(header).getByRole('heading', { name: 'Inbox' })).toBeTruthy()
     expect(within(header).getByText('4 waiting')).toBeTruthy()
     expect(within(header).getByRole('combobox', { name: 'Viewing as' })).toBeTruthy()
-    expect(within(header).getByRole('combobox', { name: 'Worktree filter' })).toBeTruthy()
+    expect(within(header).queryByRole('combobox', { name: 'Worktree filter' })).toBeNull()
     expect(header.textContent).not.toContain('Every automation leaves')
   })
 
@@ -141,28 +141,19 @@ describe('the Inbox layout', () => {
     expect(article.textContent).not.toContain('web-2099-carrier')
   })
 
-  it('shows only the selected group, from the dropdown or from a heading in the list', async () => {
+  it('shows only the selected group, picked from a heading in the list, and All again', async () => {
     serve()
     render(<InboxPage />)
     await screen.findByRole('heading', { name: 'F1 Fixture' })
-    fireEvent.change(screen.getByRole('combobox', { name: 'Worktree filter' }), {
-      target: { value: 'mr:1579' }
-    })
-    expect(screen.getAllByRole('region').map((s) => s.getAttribute('aria-label'))).toEqual([
-      '!1579'
-    ])
+    const list = () => within(screen.getByRole('navigation', { name: 'Cards' }))
+    const regions = () => screen.getAllByRole('region').map((s) => s.getAttribute('aria-label'))
+    fireEvent.click(list().getByRole('button', { name: '!1579 · 1' }))
+    expect(regions()).toEqual(['!1579'])
     expect(screen.queryByRole('heading', { name: 'F1 Fixture' })).toBeNull()
-    fireEvent.change(screen.getByRole('combobox', { name: 'Worktree filter' }), {
-      target: { value: 'all' }
-    })
-    fireEvent.click(
-      within(screen.getByRole('navigation', { name: 'Cards' })).getByRole('button', {
-        name: 'web-2099-carrier · 2'
-      })
-    )
-    expect(screen.getAllByRole('region').map((s) => s.getAttribute('aria-label'))).toEqual([
-      'web-2099-carrier'
-    ])
+    fireEvent.click(list().getByRole('button', { name: 'All · 4' }))
+    expect(regions()).toHaveLength(3)
+    fireEvent.click(list().getByRole('button', { name: 'web-2099-carrier · 2' }))
+    expect(regions()).toEqual(['web-2099-carrier'])
   })
 
   it('lists the cards by the same groups: kind, job code, age, and the title', async () => {
@@ -175,6 +166,7 @@ describe('the Inbox layout', () => {
       .filter((b) => !b.hasAttribute('data-row'))
       .map((b) => b.textContent)
     expect(headings).toEqual([
+      'All · 4',
       'web-2099-carrier · 2',
       '!1579 · 1',
       '09 · Prepare reviews requested of me · 1'
@@ -277,15 +269,14 @@ describe('fix round 1', () => {
     vi.useFakeTimers({ shouldAdvanceTime: true })
     render(<InboxPage />)
     await screen.findByRole('heading', { name: 'F1 Fixture' })
-    const filter = () =>
-      screen.getByRole('combobox', { name: 'Worktree filter' }) as HTMLSelectElement
-    fireEvent.change(filter(), { target: { value: 'mr:1579' } })
+    const nav = () => within(screen.getByRole('navigation', { name: 'Cards' }))
+    fireEvent.click(nav().getByRole('button', { name: '!1579 · 1' }))
     expect(screen.getAllByRole('region')).toHaveLength(1)
     list = { ...LIST, items: [F1, F2, JOB] }
     await vi.advanceTimersByTimeAsync(10_500)
     vi.useRealTimers()
     await waitFor(() => expect(screen.getAllByRole('region')).toHaveLength(2))
-    expect(filter().value).toBe('all')
+    expect(nav().getByRole('button', { name: 'All · 3' }).getAttribute('aria-pressed')).toBe('true')
     expect(screen.queryByText(/Nothing waiting/)).toBeNull()
   })
 
@@ -312,14 +303,10 @@ describe('fix round 1', () => {
     await screen.findByRole('heading', { name: 'F1 Fixture' })
     fireEvent.click(screen.getByText(/Defaults the agents took/))
     expect(screen.getByRole('heading', { name: 'Default in job' })).toBeTruthy()
-    fireEvent.change(screen.getByRole('combobox', { name: 'Worktree filter' }), {
-      target: { value: 'wt:/w/web-2099-carrier' }
-    })
+    fireEvent.click(screen.getByRole('button', { name: 'web-2099-carrier · 1' }))
     expect(screen.getByRole('heading', { name: 'Default in worktree' })).toBeTruthy()
     expect(screen.queryByRole('heading', { name: 'Default in job' })).toBeNull()
-    fireEvent.change(screen.getByRole('combobox', { name: 'Worktree filter' }), {
-      target: { value: 'mr:1579' }
-    })
+    fireEvent.click(screen.getByRole('button', { name: '!1579 · 1' }))
     expect(screen.queryByText(/Defaults the agents took/)).toBeNull()
   })
 
@@ -381,5 +368,111 @@ describe('fix round 1', () => {
     expect(await screen.findByText(/^Imported 1 card/)).toBeTruthy()
     await waitFor(() => expect(previews).toBe(2))
     expect(screen.getByText(/^Imported 1 card/)).toBeTruthy()
+  })
+})
+
+let fireWidth: (w: number) => void = () => {}
+class FakeResizeObserver {
+  constructor(cb: ResizeObserverCallback) {
+    fireWidth = (w) =>
+      act(() => cb([{ contentRect: { width: w } } as ResizeObserverEntry], this as never))
+  }
+  observe(): void {}
+  unobserve(): void {}
+  disconnect(): void {}
+}
+
+describe('the filter by page width', () => {
+  beforeEach(() => {
+    window.localStorage.clear()
+    vi.stubGlobal('ResizeObserver', FakeResizeObserver)
+  })
+  afterEach(() => {
+    cleanup()
+    pilotRpc.mockReset()
+    vi.unstubAllGlobals()
+  })
+  const badges = () => screen.queryByRole('toolbar', { name: 'Filter by group' })
+  const list = () => screen.queryByRole('navigation', { name: 'Cards' })
+
+  it('on a wide page shows the list and no badges', async () => {
+    serve()
+    render(<InboxPage />)
+    await screen.findByRole('heading', { name: 'F1 Fixture' })
+    fireWidth(1100)
+    expect(list()).not.toBeNull()
+    expect(badges()).toBeNull()
+    expect(screen.getByRole('button', { name: 'Hide the card list' })).toBeTruthy()
+  })
+
+  it('on a narrow page shows badges and no list, and no fold button', async () => {
+    serve()
+    render(<InboxPage />)
+    await screen.findByRole('heading', { name: 'F1 Fixture' })
+    fireWidth(700)
+    expect(list()).toBeNull()
+    expect(screen.queryByRole('button', { name: /the card list/ })).toBeNull()
+    const bar = within(badges()!)
+    expect(bar.getAllByRole('button').map((b) => b.textContent)).toEqual([
+      'All· 4',
+      'web-2099-carrier· 2',
+      '!1579· 1',
+      '09 · Prepare reviews requested of me· 1'
+    ])
+    expect(bar.getByRole('button', { name: /^All/ }).getAttribute('aria-pressed')).toBe('true')
+    expect(bar.getByRole('button', { name: /^web-2099/ }).getAttribute('title')).toBe(
+      'web-2099-carrier'
+    )
+  })
+
+  it('with the list folded shows badges, and the fold button brings the list back', async () => {
+    serve()
+    render(<InboxPage />)
+    await screen.findByRole('heading', { name: 'F1 Fixture' })
+    fireWidth(1100)
+    fireEvent.click(screen.getByRole('button', { name: 'Hide the card list' }))
+    expect(list()).toBeNull()
+    expect(badges()).not.toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Show the card list' }))
+    expect(list()).not.toBeNull()
+    expect(badges()).toBeNull()
+  })
+
+  it('filters on a badge click, highlighting the selected one', async () => {
+    serve()
+    render(<InboxPage />)
+    await screen.findByRole('heading', { name: 'F1 Fixture' })
+    fireWidth(500)
+    const badge = within(badges()!).getByRole('button', { name: /^!1579/ })
+    fireEvent.click(badge)
+    expect(screen.getAllByRole('region').map((s) => s.getAttribute('aria-label'))).toEqual([
+      '!1579'
+    ])
+    expect(badge.getAttribute('aria-pressed')).toBe('true')
+    expect(badge.className).toContain('bg-[var(--ib-accent-soft)]')
+  })
+
+  it('never lets a sticky element float transparent over the cards', async () => {
+    serve()
+    render(<InboxPage />)
+    await screen.findByRole('heading', { name: 'F1 Fixture' })
+    const heading = screen.getByRole('region', { name: 'web-2099-carrier' }).querySelector('h2')!
+    for (const c of ['sticky', 'top-0', 'bg-background', 'z-20', 'border-b', '-mx-5']) {
+      expect(heading.className).toContain(c)
+    }
+    const nav = list()!
+    for (const c of [
+      'sticky',
+      'bg-background',
+      'z-20',
+      'self-start',
+      'overflow-y-auto',
+      'scrollbar-sleek'
+    ]) {
+      expect(nav.className).toContain(c)
+    }
+    fireWidth(500)
+    expect(list()).toBeNull()
+    expect(badges()!.className).not.toContain('sticky')
   })
 })
