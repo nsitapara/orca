@@ -4,7 +4,14 @@ import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { loadDefinitions } from '../../src/main/definitions/loader'
 import { loadFixture } from './fixture'
-import { answerScripts, JOB_13, PARITY_13_PIPELINES, PARITY_13_STARTS, seed13 } from './jobs/job-13'
+import {
+  answerScripts,
+  JOB_13,
+  PARITY_13_PIPELINES,
+  PARITY_13_STARTS,
+  seed13,
+  VERDICTS_13
+} from './jobs/job-13'
 import { withLinearTickets } from './linear-fixture'
 import { PARITY_DIR, runOldPlan, type OldDecision } from './old-side'
 import { describeParity, expectParity } from './parity-case'
@@ -92,14 +99,14 @@ describe('13 · Fix red hourly e2e on dev: the definitions (old job: orca automa
         setup: 'run'
       }
     })
+    // No assignee clause: Linear's `assigned` filter (the signed-in user's tickets) lists them, not the whole org.
+    expect(starts.definition.items?.where).toEqual({
+      team: 'WEB',
+      state_type: ['triage', 'backlog', 'unstarted', 'started'],
+      has_branch: true
+    })
     expect(starts.definition.items).toMatchObject({
       kind: 'linear_ticket',
-      where: {
-        assignee: { people: ['nish'] },
-        team: 'WEB',
-        state_type: ['triage', 'backlog', 'unstarted', 'started'],
-        has_branch: true
-      },
       match: ['{ticket.dev_e2e} == true']
     })
     expect(starts.definition.checks.map((c) => c.kind)).toEqual(['quota', 'script'])
@@ -186,6 +193,9 @@ function reasonAgrees(o: OldDecision, n: Fresh): boolean {
   if (o.decision === 'FAIL') {
     return n.reason === o.reason.replace(/; retried next run$/, '')
   }
+  if (o.decision === 'act' || o.decision === 'start') {
+    return n.verdict === 'started' && n.reason === 'All checks pass'
+  }
   if (o.decision === 'QUOTA') {
     const [, window, percent] = QUOTA_OLD.exec(o.reason) ?? []
     const [, newPercent, newWindow] = QUOTA_NEW.exec(n.reason) ?? []
@@ -219,7 +229,7 @@ describeParity(
     )
 
     // Skip reasons, not only verdicts: the sweep's QUOTA, FAIL, green, seen and has_session each land on the same reason.
-    it.each(cases)('%s: each skip is for the reason the sweep gave', async (name) => {
+    it.each(cases)('%s: each decision is for the reason the sweep gave', async (name) => {
       const old = runOldPlan(JOB_13.job, join(CASES, name)).filter(
         (d) => d.decision !== 'script_check'
       )
@@ -228,8 +238,11 @@ describeParity(
         runOldPlan(JOB_13.job, join(CASES, name))
       )
       for (const o of old.filter((d) =>
-        ['green', 'seen', 'has_session', 'FAIL', 'QUOTA'].includes(d.decision)
+        ['green', 'seen', 'has_session', 'FAIL', 'QUOTA', 'act', 'start'].includes(d.decision)
       )) {
+        if (VERDICTS_13.known?.some((k) => k.key === o.key && k.word === o.decision)) {
+          continue // a deliberate difference, named in VERDICTS_13 with its reason
+        }
         const n = fresh.find((d) => d.key === o.key)
         expect(n, o.key).toBeDefined()
         expect([o.key, reasonAgrees(o, n!), n!.reason]).toEqual([o.key, true, n!.reason])

@@ -347,7 +347,7 @@ def _issue(ident, state, branch, created="2026-10-11T17:10:00.000Z"):
 def case_13(name, *, children, jobs, now, handled=None, tickets=None, linear_state=None, others=(), worktrees=(), quota=None):
     """One 13 case: the hourly children and their jobs, 13's own state (handled pipelines, tickets), what Linear says about
     each ticket (`linear_state`: ident -> state type, or "!why" when the old sweep's read of it fails), and the worktrees.
-    The reads are the old sweep's, Pilot's pipeline source's, and Pilot's Linear listing (every ticket, since the assignee is matched by display name): the old state read is
+    The reads are the old sweep's, Pilot's pipeline source's, and Pilot's Linear listing (`assigned`: the signed-in user's tickets): the old state read is
     `orca linear issue <ID>`; Pilot's listing and its per-ticket details come with a workspace."""
     tickets, linear_state, handled = tickets or {}, linear_state or {}, handled or {}
     fixture = build("13", name, now=now, loop="dev-e2e", quota=quota or {"weekly": 20, "session": 10},
@@ -372,8 +372,8 @@ def case_13(name, *, children, jobs, now, handled=None, tickets=None, linear_sta
         else:
             reads.append(read(["orca", "linear", "issue", ident, "--json"], json={"ok": True, "result": {"issue": {"state": {"type": state_of(ident)}}}}))
     issues = [_issue(i, state_of(i), b) for i, b in sorted(every.items())]
-    meta = {"filter": "all", "workspaceId": "all", "limit": 200, "returned": len(issues), "hasMore": False, "partial": False, "workspaceErrors": []}
-    reads.append(read(["orca", "linear", "list", "--filter", "all", "--workspace", "all", "--limit", "200", "--json"],
+    meta = {"filter": "assigned", "workspaceId": "all", "limit": 200, "returned": len(issues), "hasMore": False, "partial": False, "workspaceErrors": []}
+    reads.append(read(["orca", "linear", "list", "--filter", "assigned", "--workspace", "all", "--limit", "200", "--json"],
                       json={"ok": True, "result": {"issues": [{k: v for k, v in i.items() if k not in ("branchName", "createdAt", "labels")} for i in issues],
                                                    "truncated": False, "meta": meta}}))
     reads.append(glab("user", {"username": "nish8"}))
@@ -398,6 +398,8 @@ def _13():
     both = ["e2e-checks-and-build", "test-apps-e2e: [tasks]"]
     ticket = lambda jobs, branch, **extra: {"jobs": jobs, "pipeline": 3, "branch": branch, **extra}  # noqa: E731
     red_run = {"children": [pchild(9, "failed"), pchild(8, "success")], "jobs": {9: red(90), 8: green(80)}}
+    # Its own pipeline id: the one known difference (quota-out comments) is exempted by this key only.
+    red_run_19 = {"children": [pchild(19, "failed"), pchild(18, "success")], "jobs": {19: red(190), 18: green(180)}}
     green_run = {"children": [pchild(9, "success")], "jobs": {9: green(90)}}
     unstarted = {"WEB-2": ticket(["e2e-checks-and-build"], "web-2-fix")}
     out = {"weekly": 95, "session": 40}
@@ -415,7 +417,7 @@ def _13():
     yield make("red-new-failures", **red_run)
     yield make("red-covered-by-open-ticket", **red_run, tickets={"WEB-1": ticket(both, "web-1-fix", path="/wt/web-1")})
     yield make("red-quota-out", **red_run, quota=out)
-    yield make("red-covered-quota-out", **red_run, quota=out, tickets={"WEB-1": ticket(both, "web-1-fix", path="/wt/web-1")})
+    yield make("red-covered-quota-out", **red_run_19, quota=out, tickets={"WEB-1": ticket(both, "web-1-fix", path="/wt/web-1")})
     yield make("allowed-failure-and-notifier-only", children=[pchild(9, "failed")],
                jobs={9: [pjob(91, "smoke", "failed", allow_failure=True), pjob(92, "notify-slack", "failed"), pjob(93, "e2e-checks-and-build")]})
     yield make("ticket-never-started", **green_run, tickets=unstarted)

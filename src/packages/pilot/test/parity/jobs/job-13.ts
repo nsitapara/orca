@@ -39,7 +39,7 @@ export const VERDICTS_13: VerdictTable = {
   whenOldMissing: ['out_of_scope'],
   known: [
     {
-      key: 'pipeline:9',
+      key: 'pipeline:19',
       word: 'act',
       verdict: 'skipped',
       why: 'Pilot checks Claude quota before every 13 run; the old sweep checked it only before opening a ticket, so it still commented while Claude was out'

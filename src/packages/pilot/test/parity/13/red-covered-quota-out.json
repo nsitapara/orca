@@ -22,19 +22,19 @@
       "code": 0,
       "json": [
         {
-          "id": 9,
+          "id": 19,
           "status": "failed",
           "ref": "dev",
-          "sha": "0000000000000000000000000000000000000009",
-          "web_url": "https://gitlab.com/p/9",
+          "sha": "0000000000000000000000000000000000000019",
+          "web_url": "https://gitlab.com/p/19",
           "created_at": "2026-10-11T17:00:00Z"
         },
         {
-          "id": 8,
+          "id": 18,
           "status": "success",
           "ref": "dev",
-          "sha": "0000000000000000000000000000000000000008",
-          "web_url": "https://gitlab.com/p/8",
+          "sha": "0000000000000000000000000000000000000018",
+          "web_url": "https://gitlab.com/p/18",
           "created_at": "2026-10-11T17:00:00Z"
         }
       ]
@@ -45,23 +45,23 @@
         "api",
         "--hostname",
         "gitlab.com",
-        "projects/polygenx%2Fweb-platform/pipelines/8/jobs?per_page=100"
+        "projects/polygenx%2Fweb-platform/pipelines/18/jobs?per_page=100"
       ],
       "code": 0,
       "json": [
         {
-          "id": 81,
+          "id": 181,
           "name": "e2e-checks-and-build",
           "status": "success",
           "allow_failure": false,
-          "web_url": "https://gitlab.com/j/81"
+          "web_url": "https://gitlab.com/j/181"
         },
         {
-          "id": 83,
+          "id": 183,
           "name": "notify-slack-recovery",
           "status": "skipped",
           "allow_failure": false,
-          "web_url": "https://gitlab.com/j/83"
+          "web_url": "https://gitlab.com/j/183"
         }
       ]
     },
@@ -71,30 +71,30 @@
         "api",
         "--hostname",
         "gitlab.com",
-        "projects/polygenx%2Fweb-platform/pipelines/9/jobs?per_page=100"
+        "projects/polygenx%2Fweb-platform/pipelines/19/jobs?per_page=100"
       ],
       "code": 0,
       "json": [
         {
-          "id": 91,
+          "id": 191,
           "name": "e2e-checks-and-build",
           "status": "failed",
           "allow_failure": false,
-          "web_url": "https://gitlab.com/j/91"
+          "web_url": "https://gitlab.com/j/191"
         },
         {
-          "id": 92,
+          "id": 192,
           "name": "test-apps-e2e: [tasks]",
           "status": "failed",
           "allow_failure": false,
-          "web_url": "https://gitlab.com/j/92"
+          "web_url": "https://gitlab.com/j/192"
         },
         {
-          "id": 93,
+          "id": 193,
           "name": "notify-slack",
           "status": "success",
           "allow_failure": false,
-          "web_url": "https://gitlab.com/j/93"
+          "web_url": "https://gitlab.com/j/193"
         }
       ]
     },
@@ -119,7 +119,7 @@
         "linear",
         "list",
         "--filter",
-        "all",
+        "assigned",
         "--workspace",
         "all",
         "--limit",
@@ -145,7 +145,7 @@
           ],
           "truncated": false,
           "meta": {
-            "filter": "all",
+            "filter": "assigned",
             "workspaceId": "all",
             "limit": 200,
             "returned": 1,
