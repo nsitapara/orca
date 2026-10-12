@@ -2,7 +2,7 @@ import type { CommandHandler } from '../../../../cli/dispatch'
 import { getOptionalStringFlag, getRequiredStringFlag } from '../../../../cli/flags'
 import { printResult } from '../../../../cli/format'
 import type { InboxItemRow } from '../shared/api-types'
-import type { QueueListPayload } from '../shared/inbox-types'
+import type { DispatchReport, QueueListPayload } from '../shared/inbox-types'
 import { bindingFromEnv, invalid } from './cli-values'
 
 // The CLI never imports main code: its own copy of attempt.ts's EXIT_CODES.
@@ -18,14 +18,6 @@ const ACTION_EXIT: Record<string, number> = {
 const ACTION_TIMEOUT_MS = 660_000
 
 type ActionReply = { outcome: string; detail: string; link?: string | null }
-type DispatchReport = {
-  retired: number
-  ticked: number
-  actions: number
-  agents: number
-  held: number
-  reasked: number
-}
 
 function argsJson(raw: string | undefined): Record<string, unknown> {
   let value: unknown = {}

@@ -116,6 +116,15 @@ describe('QueueStore', () => {
     expect(store.queue.pendingAnswerCount('a', 'mr:1')).toBe(0)
   })
 
+  it("lists the rows dispatched to one run, and only that run's", () => {
+    const store = storeWithItems('i1', 'i2', 'i3')
+    const [a, b, c] = ['i1', 'i2', 'i3'].map((id) => store.queue.enqueue(id, 1, 1))
+    store.queue.update(a, { state: 'dispatched', dispatchedRunId: 'ans-1' }, 2)
+    store.queue.update(b, { state: 'dispatched', dispatchedRunId: 'ans-2' }, 2)
+    store.queue.update(c, { state: 'dispatched', dispatchedRunId: 'ans-1' }, 2)
+    expect(store.queue.forRun('ans-1').map((r) => r.id)).toEqual([a, c])
+  })
+
   it('lets one holder claim a worktree until the claim runs out', () => {
     const { queue } = PilotStore.open(':memory:')
     expect(queue.claim('/wt', 'dispatch-1', 1000, 0)).toBe(true)

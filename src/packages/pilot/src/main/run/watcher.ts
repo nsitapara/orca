@@ -7,7 +7,9 @@ import { isTerminalGoneError, terminalRelister, type TerminalRelist } from './te
 
 export type { ObservedState }
 export type StepProbe = {
-  status(handle: string, paneKey: string): Promise<ObservedState>
+  // `since`: only rows received from then on are the step's (an earlier step's turn in the same
+  // terminal isn't); without one, every row counts.
+  status(handle: string, paneKey: string, since?: number | null): Promise<ObservedState>
   session(paneKey: string): { id: string; transcriptPath: string | null } | null
 }
 
@@ -16,8 +18,11 @@ export function runtimeStepProbe(
   relist: TerminalRelist = terminalRelister(runtime)
 ): StepProbe {
   return {
-    async status(handle, paneKey) {
-      const row = newestLiveRow(runtime.getAgentStatusRowsForPane(paneKey))
+    async status(handle, paneKey, since) {
+      const rows = runtime.getAgentStatusRowsForPane(paneKey)
+      const row = newestLiveRow(
+        since === null || since === undefined ? rows : rows.filter((r) => r.receivedAt >= since)
+      )
       if (row) {
         return observedState(row)
       }
@@ -123,7 +128,7 @@ async function pollStep(
       : { sessionId: session.id }
     store.runs.updateStep(step.runId, step.idx, patch)
   }
-  const state = await probe.status(handle, step.paneKey)
+  const state = await probe.status(handle, step.paneKey, step.startedAt)
   if (state === 'done') {
     const path = session?.transcriptPath ?? step.transcriptPath
     // Codex cost isn't read here: the step shows, with cost "—".

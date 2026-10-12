@@ -11,6 +11,7 @@ import { InboxRetirer } from '../inbox/retire'
 import { openAgentTerminal, runtimeSessionTerminals } from '../run/launch'
 import { glabApiForRepo } from '../sources/gitlab-api'
 import type { PilotStore } from '../store/store'
+import { currentAnswer } from './answer-run'
 import { AnswerDispatcher } from './dispatcher'
 import { gitInFlight, passActivity } from './holds'
 import { sessionPromptSender, sessionTerminalProbe } from './session-probe'
@@ -72,7 +73,8 @@ export function wireAnswerDispatcher(w: AnswerWiring): AnswerDispatcher {
       quota: (agent) => w.quotas[agent](),
       open: (req) => openAgentTerminal(runtime, req),
       send: sessionPromptSender({ terminals, draft }),
-      mainCheckout: repoPath
+      mainCheckout: repoPath,
+      current: (item) => currentAnswer(store, item)
     },
     log
   })

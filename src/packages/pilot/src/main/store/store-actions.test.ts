@@ -18,11 +18,12 @@ describe('ActionRunStore', () => {
   it('records an attempt as running, then how it ended', () => {
     const { actions } = PilotStore.open(':memory:')
     const id = actions.start(attempt())
+    // While it runs, its output names the process running it (the interrupt sweep reads it).
     expect(actions.get(id)).toEqual({
       id,
       ...attempt(),
       status: 'running',
-      output: null,
+      output: JSON.stringify({ writer: process.pid }),
       finishedAt: null
     })
     actions.finish(id, 'refused', 'No push power', 12)
@@ -64,12 +65,26 @@ describe('ActionRunStore', () => {
     const done = actions.start(attempt({ phase: 'do', startedAt: 11 }))
     actions.finish(done, 'done', null, 12)
     const fresh = actions.start(attempt({ phase: 'do', startedAt: 30 }))
-    expect(actions.interruptRunning(20, 25)).toBe(1)
+    expect(actions.interruptRunning(20, 25, () => true)).toBe(1)
     expect(actions.get(left)).toMatchObject({ status: 'failed', finishedAt: 25 })
     expect(JSON.parse(actions.get(left)!.output!)).toMatchObject({
       outcome: 'failed',
       detail: ACTION_INTERRUPTED
     })
     expect([actions.get(done)?.status, actions.get(fresh)?.status]).toEqual(['done', 'running'])
+  })
+
+  // Fix round 1: main and orcad both open Pilot's store; one sharing a file must not close the other's.
+  it('interrupts only attempts whose writing process is gone', () => {
+    const { actions } = PilotStore.open(':memory:')
+    const mine = actions.start(attempt({ phase: 'do', startedAt: 10 }))
+    const other = actions.start(attempt({ phase: 'do', startedAt: 10, writer: 4242 }))
+    expect(actions.get(other)?.output).toBe('{"writer":4242}')
+    const gone = new Set<number | null>()
+    expect(actions.interruptRunning(20, 25, (pid) => gone.has(pid))).toBe(0)
+    expect(actions.get(mine)?.status).toBe('running')
+    gone.add(process.pid)
+    expect(actions.interruptRunning(20, 25, (pid) => gone.has(pid))).toBe(1)
+    expect(actions.get(mine)?.status).toBe('failed')
   })
 })

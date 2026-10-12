@@ -171,7 +171,7 @@ describe('applyScript', () => {
       dryRun: false,
       startedAt: 110
     })
-    s.store.actions.interruptRunning(200, 200)
+    s.store.actions.interruptRunning(200, 200, () => true)
     expect(await applyScript(s.deps, s.item(), [])).toEqual({ kind: 'reasked' })
     expect(s.entry.run).not.toHaveBeenCalled()
     expect(s.item()).toMatchObject({ status: 'open', replies: [INTERRUPTED_AGAIN] })

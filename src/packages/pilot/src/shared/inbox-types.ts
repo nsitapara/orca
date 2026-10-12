@@ -88,3 +88,13 @@ export type QueueEntry = {
   updatedAt: number
 }
 export type QueueListPayload = { entries: QueueEntry[] }
+
+// What one pass of the answers dispatcher did (`pilot.answers.applyNow`, `pilot inbox apply-now`).
+export type DispatchReport = {
+  retired: number
+  ticked: number
+  actions: number
+  agents: number
+  held: number
+  reasked: number
+}

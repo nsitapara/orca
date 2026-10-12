@@ -116,27 +116,30 @@ describe('startPilotServices', () => {
     on.stop()
   })
 
-  // Group 22 note: a 'running' card action left by a crash would block its card for ever.
-  it('marks actions a stop left running as failed when the scheduler starts', () => {
+  // Group 22 note: a 'running' card action left by a crash would block its card for ever. main and
+  // orcad both open Pilot's store, so only rows of a process that is gone are closed.
+  it("marks actions a stopped process left running as failed when Pilot starts, never a live process's", () => {
     const seed = PilotStore.open(join(userData, 'pilot-automations.db'))
-    const left = seed.actions.start({
+    const row = {
       inboxItemId: 'in_1',
       runId: null,
       action: 'push',
       args: {},
       digest: 'd',
-      phase: 'do',
+      phase: 'do' as const,
       dryRun: false,
       startedAt: 1
-    })
+    }
+    const left = seed.actions.start(row)
+    const live = seed.actions.start({ ...row, writer: process.ppid })
     seed.close()
-    const off = startPilotServices(runtime, 'orcad')
-    expect(off.context.store.actions.get(left)?.status).toBe('running')
-    off.stop()
-    const on = startPilotServices(runtime, 'orcad', { schedulerEnabled: true })
-    expect(on.context.store.actions.get(left)?.status).toBe('failed')
-    expect(logs).toContain('[pilot] store: 1 action(s) a stop interrupted marked failed')
-    on.stop()
+    const services = startPilotServices(runtime, 'orcad')
+    expect(services.context.store.actions.get(left)?.status).toBe('failed')
+    expect(services.context.store.actions.get(live)?.status).toBe('running')
+    expect(logs).toContain(
+      '[pilot] store: 1 action(s) a stopped process left running marked failed'
+    )
+    services.stop()
   })
 
   it('closes interrupted ticks and prunes old ones when Pilot starts', () => {
