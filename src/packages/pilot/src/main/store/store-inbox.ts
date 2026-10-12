@@ -57,6 +57,7 @@ export type InboxPatch = Partial<
     | 'replies'
     | 'person'
     | 'worktreePath'
+    | 'suggested'
     | 'answer'
     | 'answeredAt'
     | 'answeredBy'
@@ -79,6 +80,7 @@ const PATCH_COLUMNS: Record<keyof InboxPatch, string> = {
   replies: 'replies_json',
   person: 'person',
   worktreePath: 'worktree_path',
+  suggested: 'suggested',
   answer: 'answer_json',
   answeredAt: 'answered_at',
   answeredBy: 'answered_by'

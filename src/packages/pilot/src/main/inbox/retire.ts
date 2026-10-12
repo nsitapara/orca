@@ -79,10 +79,20 @@ export class InboxRetirer {
     let retired = 0
     for (const item of store.inbox.list({ status: WAITING })) {
       const block = await this.check(item, now())
-      if (block && 'finished' in block && block.finished) {
+      if (!block || !('finished' in block) || !block.finished) {
+        continue
+      }
+      // The awaits above let others tick or answer the card: look again, and one card never stops the pass.
+      const current = store.inbox.get(item.id)
+      if (!current || !WAITING.includes(current.status)) {
+        continue
+      }
+      try {
         resolveInboxItem(this.deps.inbox, item.id, `obsolete: ${block.finished}`, 'obsolete')
         this.deps.log(`[pilot] retire ${item.automationId} ${item.id}: obsolete, ${block.finished}`)
         retired += 1
+      } catch (error) {
+        this.deps.log(`[pilot] retire ${item.id} failed: ${messageOf(error)}`)
       }
     }
     return retired

@@ -70,4 +70,14 @@ describe('mrBlock', () => {
       )
     ).toEqual({ finished: null })
   })
+
+  it('does not trust a full page of a branch listing (older MRs may be cut off)', async () => {
+    const page = Array.from({ length: 20 }, (_, i) => ({ iid: i + 1, state: 'merged' }))
+    expect(
+      await mrBlock(
+        api(() => page),
+        { branch: 'b' }
+      )
+    ).toMatchObject({ unknown: expect.stringContaining('MR state unknown') })
+  })
 })

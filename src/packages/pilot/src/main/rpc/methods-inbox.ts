@@ -55,6 +55,7 @@ export function inboxDeps(c: PilotContext): InboxDeps {
 // Which run (and step) a card belongs to: the step running on the caller's terminal first, the env's step
 // only as the fallback (ruling 8d, run-channel's resolver). With no terminal-bound step and no env run,
 // an explicit --automation and --item still files a job-wide card; otherwise the resolver refuses.
+// Whenever a run is resolved, the card's automation, item and worktree come from that run alone.
 export function resolveAddTarget(c: PilotContext, p: z.infer<typeof InboxAdd>): InboxAddParams {
   const { terminal, ...card } = p
   const explicit = card.automationId !== undefined && card.itemKey !== undefined
@@ -68,16 +69,21 @@ export function resolveAddTarget(c: PilotContext, p: z.infer<typeof InboxAdd>): 
   ) {
     return card
   }
+  const fromRunOnly = {
+    ...card,
+    automationId: undefined,
+    itemKey: undefined,
+    worktreePath: undefined
+  }
   if (terminal === undefined && card.stepIdx === undefined) {
-    return { ...card, runId: resolveChannelRun(c, card) }
+    return { ...fromRunOnly, runId: resolveChannelRun(c, card) }
   }
   const { runId, stepIdx } = resolveChannelStep(c, {
     terminal,
     runId: card.runId,
     stepIdx: card.stepIdx
   })
-  // A card filed from a step belongs to that run's item; the flags only name a card outside a run.
-  return { ...card, runId, stepIdx, automationId: undefined, itemKey: undefined }
+  return { ...fromRunOnly, runId, stepIdx }
 }
 
 export function buildInboxMethods(ctx: () => PilotContext) {

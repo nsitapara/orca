@@ -17,6 +17,9 @@ export type InboxCard = {
 
 const PART_ID = /^[\w.-]+$/
 export const MAX_DETAILS_CHARS = 64 * 1024
+export const MAX_ACTION_ARGS_BYTES = 16 * 1024
+export const MAX_PARTS = 20
+export const MAX_OPTIONS = 10
 
 // One line, like vault.py's _clean: a card reads the same on the page, in the vault export and in a prompt.
 export function oneLine(text: string | null | undefined): string {
@@ -43,6 +46,15 @@ function checkCard(params: InboxAddParams): void {
   }
   if (params.actionArgs && !params.action) {
     throw new Error('Action arguments need an action')
+  }
+  if ((params.options?.length ?? 0) > MAX_OPTIONS) {
+    throw new Error(`A card can have at most ${MAX_OPTIONS} options`)
+  }
+  if (Object.keys(params.parts ?? {}).length > MAX_PARTS) {
+    throw new Error(`A card can have at most ${MAX_PARTS} parts`)
+  }
+  if (params.actionArgs && JSON.stringify(params.actionArgs).length >= MAX_ACTION_ARGS_BYTES) {
+    throw new Error('Action arguments are limited to 16 KB')
   }
   for (const id of Object.keys(params.parts ?? {})) {
     if (!PART_ID.test(id)) {

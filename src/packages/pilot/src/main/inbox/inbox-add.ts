@@ -1,6 +1,5 @@
 import { randomUUID } from 'node:crypto'
-import type { ItemFields } from '../../shared/api-types'
-import type { InboxItemRow } from '../../shared/api-types'
+import type { InboxItemRow, ItemFields } from '../../shared/api-types'
 import type { InboxAddParams, InboxAddResult } from '../../shared/inbox-types'
 import type { NewInboxItem } from '../store/store-inbox'
 import { buildCard, inboxDigest, type InboxCard } from './card'
@@ -30,18 +29,33 @@ function stringField(fields: ItemFields, name: string): string | null {
   return typeof value === 'string' && value !== '' ? value : null
 }
 
+// The worktrees an automation has shown: those of the items in its newest real tick.
+function knownWorktrees(deps: InboxDeps, automationId: string): Set<string> {
+  const tick = deps.store.lastRealTick(automationId)
+  const paths = tick ? deps.store.tickItems(tick.id).map((i) => i.fields['worktree.path']) : []
+  return new Set(paths.filter((p): p is string => typeof p === 'string' && p !== ''))
+}
+
+// Inside a run, where the card belongs (automation, item, worktree) comes from the run alone: the
+// caller's own claims are ignored, so a step can't aim a card at another worktree or item.
 function originOf(deps: InboxDeps, params: InboxAddParams): Origin {
   if (params.runId) {
     const run = deps.store.runs.get(params.runId)
     if (!run) {
       throw new Error(`No run ${params.runId}`)
     }
+    if (
+      params.stepIdx !== undefined &&
+      !deps.store.runs.steps(run.id).some((s) => s.idx === params.stepIdx)
+    ) {
+      throw new Error(`Run ${run.id} has no step ${params.stepIdx}`)
+    }
     return {
       automationId: run.automationId,
       runId: run.id,
       stepIdx: params.stepIdx ?? null,
-      itemKey: params.itemKey ?? run.itemKey,
-      worktreePath: params.worktreePath ?? run.worktreePath,
+      itemKey: run.itemKey,
+      worktreePath: run.worktreePath,
       fields: fieldsForRun(deps.store, run.id)
     }
   }
@@ -49,6 +63,9 @@ function originOf(deps: InboxDeps, params: InboxAddParams): Origin {
     throw new Error('Outside a run, --automation and --item are required')
   }
   const fields = latestFieldsFor(deps.store, params.automationId, params.itemKey)
+  if (params.worktreePath && !knownWorktrees(deps, params.automationId).has(params.worktreePath)) {
+    throw new Error(`"${params.worktreePath}" is not a worktree of ${params.automationId}`)
+  }
   return {
     automationId: params.automationId,
     runId: null,
@@ -94,6 +111,10 @@ function updateOpen(
   at: number
 ): InboxAddResult {
   if (open.digest === digest) {
+    // The suggestion is not part of the digest: refresh it without making a new version.
+    if (open.suggested !== card.suggested) {
+      deps.store.inbox.update(open.id, { suggested: card.suggested }, at)
+    }
     return { id: open.id, existing: true, refused: null }
   }
   const answered = open.status === 'answered'
@@ -143,6 +164,9 @@ export function addInboxItem(
     return { id: null, existing: false, refused: SKIPPED_BEFORE }
   }
   const { person, routed } = resolveInboxPerson(def.inbox, origin.fields, deps.people())
+  if (person === null) {
+    throw new Error('No person to address the card to: people.yaml names nobody')
+  }
   const item: NewInboxItem = {
     id: (deps.newId ?? newItemId)(),
     automationId: origin.automationId,

@@ -22,3 +22,11 @@ describe('resolveInboxPerson', () => {
     expect(resolveInboxPerson(template, fields, people)).toEqual(expected)
   })
 })
+
+describe('resolveInboxPerson with nobody known', () => {
+  it('returns no person instead of the raw string', () => {
+    expect(
+      resolveInboxPerson('{mr.author}', { 'mr.author': 'x' }, { people: [], groups: [] } as never)
+    ).toEqual({ person: null, routed: false })
+  })
+})

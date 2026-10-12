@@ -91,10 +91,77 @@ describe('addInboxItem', () => {
     expect(store.events.list({ runId: 'run-1', kinds: ['item_written'] })).toHaveLength(1)
   })
 
-  it('files a card under the worktree it names (pilot inbox add --worktree)', () => {
+  it('takes worktree, automation and item from the run only, ignoring what the caller names', () => {
     const { store, deps } = setup()
-    addInboxItem(deps, { ...QUESTION, worktreePath: '/wt/other' })
-    expect(store.inbox.get('in_0000000000000001')?.worktreePath).toBe('/wt/other')
+    addInboxItem(deps, {
+      ...QUESTION,
+      worktreePath: '/wt/other',
+      automationId: 'x',
+      itemKey: 'mr:9'
+    })
+    expect(store.inbox.get('in_0000000000000001')).toMatchObject({
+      automationId: 'ci',
+      itemKey: 'mr:1561',
+      worktreePath: '/wt/1493'
+    })
+  })
+
+  it('files a job-wide card only under a worktree its automation knows', () => {
+    const { store, deps } = setup()
+    const wide = { ...QUESTION, runId: undefined, automationId: 'ci', itemKey: 'mr:1561' }
+    expect(() => addInboxItem(deps, { ...wide, worktreePath: '/wt/elsewhere' })).toThrow(
+      '"/wt/elsewhere" is not a worktree of ci'
+    )
+    store.recordDecisions(
+      store.startTick('ci', false, 5),
+      [
+        {
+          key: 'mr:1561',
+          label: 'x',
+          verdict: 'started' as const,
+          reason: '',
+          checks: [],
+          onceKey: '1561:9',
+          fields: { 'worktree.path': '/wt/known' }
+        }
+      ],
+      new Map()
+    )
+    addInboxItem(deps, { ...wide, worktreePath: '/wt/known' })
+    expect(store.inbox.get('in_0000000000000001')?.worktreePath).toBe('/wt/known')
+  })
+
+  it('refuses a step that is not on the run, and accepts one that is', () => {
+    const { store, deps } = setup()
+    expect(() => addInboxItem(deps, { ...QUESTION, stepIdx: 3 })).toThrow('Run run-1 has no step 3')
+    store.runs.createStep({
+      runId: 'run-1',
+      idx: 0,
+      name: 's',
+      agent: 'claude',
+      skill: null,
+      mode: null,
+      startedAt: 1
+    })
+    addInboxItem(deps, { ...QUESTION, stepIdx: 0 })
+    expect(store.inbox.get('in_0000000000000001')?.stepIdx).toBe(0)
+  })
+
+  it('refreshes a changed suggestion without a new version', () => {
+    const { store, deps } = setup()
+    addInboxItem(deps, { ...QUESTION, suggested: 'A' })
+    expect(addInboxItem(deps, { ...QUESTION, suggested: 'B' })).toMatchObject({ existing: true })
+    expect(store.inbox.get('in_0000000000000001')).toMatchObject({
+      suggested: 'B',
+      version: 1,
+      status: 'open'
+    })
+  })
+
+  it('does not store a raw string as the person when nobody is known', () => {
+    const { deps } = setup()
+    const empty = { ...deps, people: () => ({ people: [], groups: [] }) as never }
+    expect(() => addInboxItem(empty, QUESTION)).toThrow('No person to address the card to')
   })
 
   it('turns a finished run into "needs you" while its card is open', () => {
