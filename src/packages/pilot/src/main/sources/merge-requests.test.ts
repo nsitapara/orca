@@ -1,254 +1,259 @@
-import { afterEach, describe, expect, it, vi } from 'vitest'
-import type { GlabApi } from './gitlab-api'
-import type { PeopleRef } from '../../shared/definition/types'
-import { gitlabHandlesFor, type PeopleDirectory } from '../../shared/people'
-import { createPassFetchCache } from './fetch-cache'
-import { listMergeRequestItems, mergeRequestSource } from './merge-requests'
-import type { SourceContext } from './types'
+import { describe, expect, it } from 'vitest'
+import { PEOPLE, fakeGlab, sourceContext } from './__fixtures__/source-context'
+import { mergeRequestSource } from './merge-requests'
 
-function fakeApi(): GlabApi & { calls: string[] } {
-  const calls: string[] = []
-  const list = [
-    {
-      iid: 1574,
-      title: 'Donor status',
-      source_branch: 'web-1474-show-donor',
-      author: { username: 'nish8' },
-      state: 'opened',
-      draft: false
-    },
-    {
-      iid: 1561,
-      title: 'Digit format',
-      source_branch: 'web-1493-add-digit',
-      author: { username: 'nish8' },
-      state: 'opened',
-      draft: false
-    },
-    {
-      iid: 1588,
-      title: 'ECS deps',
-      source_branch: 'web-2115-stop-ecs',
-      author: { username: 'shivan2418' },
-      state: 'opened',
-      draft: false
-    }
-  ]
-  return {
-    calls,
-    projectPath: 'polygenx/web-platform',
-    async get<T>(path: string): Promise<T> {
-      calls.push(path)
-      if (path.startsWith('merge_requests?')) {
-        return list as T
-      }
-      const iid = Number(path.split('/')[1])
-      return {
-        ...list.find((m) => m.iid === iid),
-        head_pipeline: { id: iid * 10, status: 'failed' }
-      } as T
-    }
-  }
-}
-
-const nish = { authorUsernames: ['nish8'], inScope: (u: string) => u === 'nish8' }
-
-function mr(iid: number, author: string) {
+type Listed = ReturnType<typeof listed>
+function listed(iid: number, author: string, branch: string) {
   return {
     iid,
     title: `MR ${iid}`,
-    source_branch: `web-${iid}-x`,
-    author: { username: author },
-    state: 'opened'
+    source_branch: branch,
+    target_branch: 'dev',
+    author: { username: author, name: `${author} name` },
+    state: 'opened',
+    draft: false,
+    labels: ['web'],
+    reviewers: [{ username: 'nish8' }],
+    web_url: `https://gitlab.com/polygenx/web-platform/-/merge_requests/${iid}`,
+    sha: String(iid).repeat(10)
   }
 }
 
-// Serves list requests from `byQuery(path)`; detail requests echo the iid with a pipeline.
-function pagedApi(byQuery: (path: string) => unknown[]): GlabApi & { calls: string[] } {
-  const calls: string[] = []
-  return {
-    calls,
-    projectPath: 'p',
-    async get<T>(path: string): Promise<T> {
-      calls.push(path)
-      if (path.startsWith('merge_requests?')) {
-        return byQuery(path) as T
-      }
-      const iid = Number(path.split('/')[1])
-      return { ...mr(iid, 'x'), head_pipeline: { id: iid, status: 'failed' } } as T
+type World = {
+  list: Record<string, Listed[] | Error>
+  pipelines?: Record<number, { id: number; status: string }>
+  approvals?: Record<number, string[] | Error>
+  discussions?: Record<number, unknown[] | Error>
+  details?: Record<number, Error>
+}
+
+function gitlab(world: World) {
+  const all = Object.values(world.list).flatMap((l) => (l instanceof Error ? [] : l))
+  return fakeGlab((path) => {
+    if (path === 'root:user') {
+      return { username: 'nish8' }
     }
-  }
+    const page = /^(merge_requests\?state=opened.*)&per_page=100&page=1$/.exec(path)
+    if (page) {
+      return world.list[page[1]] ?? []
+    }
+    const detail = /^merge_requests\/(\d+)$/.exec(path)
+    if (detail) {
+      const iid = Number(detail[1])
+      const mr = all.find((m) => m.iid === iid)
+      return (
+        world.details?.[iid] ?? {
+          ...mr,
+          head_pipeline: world.pipelines?.[iid] ?? null,
+          changes_count: '12'
+        }
+      )
+    }
+    const approvals = /^merge_requests\/(\d+)\/approvals$/.exec(path)
+    if (approvals) {
+      const by = world.approvals?.[Number(approvals[1])] ?? []
+      return by instanceof Error ? by : { approved_by: by.map((u) => ({ user: { username: u } })) }
+    }
+    const threads = /^merge_requests\/(\d+)\/discussions\?per_page=100&page=1$/.exec(path)
+    if (threads) {
+      return world.discussions?.[Number(threads[1])] ?? []
+    }
+    if (path.startsWith('repository/commits/')) {
+      return { committed_date: '2026-10-08T13:36:51-07:00' }
+    }
+    const branch = /^merge_requests\?source_branch=([^&]+)&per_page=100$/.exec(path)
+    if (branch) {
+      const mr = all.find((m) => m.source_branch === decodeURIComponent(branch[1]))
+      return mr ? [{ iid: mr.iid, state: 'opened', author: mr.author, draft: mr.draft }] : []
+    }
+    return undefined
+  })
 }
 
-afterEach(() => vi.restoreAllMocks())
+const MINE = { state: 'open', author: { people: ['nish'] } }
+const REVIEW = {
+  state: 'open',
+  reviewer: { people: ['nish'] },
+  author: { not: { people: ['nish'] } },
+  approved_by: 'none'
+}
+const UNRESOLVED = {
+  notes: [{ author: { username: 'shivan2418' }, resolvable: true, resolved: false, system: false }]
+}
 
-describe('listMergeRequestItems', () => {
-  it('lists open MRs by iid with pipeline details, dropping out-of-scope authors', async () => {
-    const api = fakeApi()
-    const items = await listMergeRequestItems(api, {
-      authorUsernames: null,
-      inScope: (u) => u === 'nish8'
+describe('mergeRequestSource', () => {
+  it('lists my open MRs by iid with M1 fields, the new ones and the ownership blocks', async () => {
+    const api = gitlab({
+      list: {
+        'merge_requests?state=opened&author_username=nish8': [
+          listed(1574, 'nish8', 'web-1474-show-donor'),
+          listed(1561, 'nish8', 'web-1493-add-digit')
+        ]
+      },
+      pipelines: { 1561: { id: 15610, status: 'failed' } },
+      approvals: { 1574: ['alex1craig'] },
+      discussions: { 1561: [UNRESOLVED] }
     })
+    const { items, warnings } = await mergeRequestSource().list(sourceContext({}, api), MINE)
+    expect(warnings).toEqual([])
     expect(
-      items.map((i) => [i.key, i.label, i.fields['mr.pipeline'], i.fields['mr.state']])
+      items.map((i) => [
+        i.key,
+        i.label,
+        i.fields['mr.pipeline'],
+        i.fields['mr.approved_by'],
+        i.fields['mr.waiting_threads'],
+        i.fields['mr.review_block']
+      ])
     ).toEqual([
-      ['mr:1561', '!1561 web-1493', 15610, 'open'],
-      ['mr:1574', '!1574 web-1474', 15740, 'open']
+      ['mr:1561', '!1561 web-1493', 15610, '', 1, ''],
+      ['mr:1574', '!1574 web-1474', null, 'alex1craig', 0, '!1574 approved by alex1craig']
     ])
-    expect(api.calls).toEqual([
-      'merge_requests?state=opened&per_page=100&page=1',
-      'merge_requests/1561',
-      'merge_requests/1574'
-    ])
-  })
-
-  it('asks GitLab per handle (URL-encoded), merges the results and de-duplicates by iid', async () => {
-    const api = pagedApi((path) =>
-      path.includes('author_username=nish8') ? [mr(2, 'nish8'), mr(1, 'nish8')] : [mr(2, 'nish8')]
-    )
-    const items = await listMergeRequestItems(api, {
-      authorUsernames: ['nish8', 'a b/c'],
-      inScope: () => true
+    expect(items[0].fields).toMatchObject({
+      'mr.iid': 1561,
+      'mr.author': 'nish8',
+      'mr.author_name': 'nish8 name',
+      'mr.state': 'open',
+      'mr.pipeline_status': 'failed',
+      'mr.head_sha': '1561156115611561156115611561156115611561',
+      'mr.head_short': '15611561',
+      'mr.changes_count': 12,
+      'mr.reviewers': 'nish8',
+      'mr.labels': 'web',
+      'mr.target_branch': 'dev',
+      'mr.approved_count': 0,
+      'mr.owner_block': ''
     })
-    expect(items.map((i) => i.key)).toEqual(['mr:1', 'mr:2'])
-    expect(api.calls.filter((c) => c.startsWith('merge_requests?'))).toEqual([
-      'merge_requests?state=opened&author_username=nish8&per_page=100',
-      'merge_requests?state=opened&author_username=a%20b%2Fc&per_page=100'
+    expect(items[0].worktreeHint).toEqual({ branch: 'web-1493-add-digit' })
+    expect(api.calls[0]).toBe(
+      'merge_requests?state=opened&author_username=nish8&per_page=100&page=1'
+    )
+  })
+
+  it('asks for MRs I review and reads no details for MRs the list already rules out (09)', async () => {
+    const api = gitlab({
+      list: {
+        'merge_requests?state=opened&reviewer_username=nish8': [
+          listed(1600, 'nish8', 'web-1600-mine'),
+          listed(1588, 'shivan2418', 'web-2115-stop-ecs'),
+          listed(1579, 'alex1craig', 'web-1579-flag')
+        ]
+      },
+      approvals: { 1588: ['nish8'] }
+    })
+    const source = mergeRequestSource()
+    const { items } = await source.list(sourceContext({}, api), REVIEW)
+    const verdicts = items.map((i) => {
+      const scope = source.scope(i, REVIEW, PEOPLE)
+      return [i.key, scope.ok ? 'in' : scope.reason]
+    })
+    expect(verdicts).toEqual([
+      ['mr:1579', 'in'],
+      ['mr:1588', 'Approved by nish8'],
+      ['mr:1600', 'Author is Nish Sitapara; this automation leaves out Nish Sitapara']
+    ])
+    expect(api.calls).not.toContain('merge_requests/1600')
+  })
+
+  it('asks GitLab per handle, URL-encoded, and lists an MR two of them review once', async () => {
+    const shared = listed(1588, 'shivan2418', 'web-2115-stop-ecs')
+    const api = gitlab({
+      list: {
+        'merge_requests?state=opened&reviewer_username=nish8': [shared],
+        'merge_requests?state=opened&reviewer_username=a%20b%2Fc': [shared]
+      }
+    })
+    const people = {
+      people: [...PEOPLE.people, { id: 'odd', name: 'Odd Handle', gitlab: 'a b/c' }],
+      groups: []
+    }
+    const where = { reviewer: { people: ['nish', 'odd'] } }
+    const { items } = await mergeRequestSource().list(sourceContext({ people }, api), where)
+    expect(items.map((i) => i.key)).toEqual(['mr:1588'])
+    expect(api.calls.filter((c) => c.startsWith('merge_requests?state'))).toEqual([
+      'merge_requests?state=opened&reviewer_username=nish8&per_page=100&page=1',
+      'merge_requests?state=opened&reviewer_username=a%20b%2Fc&per_page=100&page=1'
     ])
   })
 
-  it('makes no request and returns nothing when no handle resolves', async () => {
-    const api = pagedApi(() => [mr(1, 'x')])
-    expect(await listMergeRequestItems(api, { authorUsernames: [], inScope: () => true })).toEqual(
-      []
-    )
+  it('makes no request when no handle resolves', async () => {
+    const api = gitlab({ list: {} })
+    const people = { people: [{ id: 'bot', name: 'Bot' }], groups: [] }
+    const got = await mergeRequestSource().list(sourceContext({ people }, api), {
+      author: { people: ['bot'] }
+    })
+    expect(got.items).toEqual([])
     expect(api.calls).toEqual([])
   })
 
-  it('warns once, naming the handle, when a per-handle page is full', async () => {
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
-    const full = Array.from({ length: 100 }, (_, i) => mr(i + 1, 'nish8'))
-    const api = pagedApi((path) =>
-      path.includes('author_username=nish8') ? full : [mr(500, 'sam1')]
-    )
-    await listMergeRequestItems(api, { authorUsernames: ['nish8', 'sam1'], inScope: () => true })
-    expect(warn).toHaveBeenCalledTimes(1)
-    expect(warn).toHaveBeenCalledWith(expect.stringContaining('nish8'))
-  })
-
-  it('still drops returned MRs whose author is out of scope', async () => {
-    const api = pagedApi(() => [mr(1, 'nish8'), mr(2, 'other')])
-    const items = await listMergeRequestItems(api, { ...nish, inScope: (u) => u === 'nish8' })
-    expect(items.map((i) => i.key)).toEqual(['mr:1'])
-  })
-
-  it('without an author filter, pages until a short page', async () => {
-    const full = Array.from({ length: 100 }, (_, i) => mr(i + 1, 'a'))
-    const api = pagedApi((path) => (path.endsWith('page=1') ? full : [mr(101, 'a')]))
-    const items = await listMergeRequestItems(api, { authorUsernames: null, inScope: () => true })
-    expect(items).toHaveLength(101)
-    expect(api.calls.filter((c) => c.startsWith('merge_requests?'))).toEqual([
-      'merge_requests?state=opened&per_page=100&page=1',
-      'merge_requests?state=opened&per_page=100&page=2'
-    ])
-  })
-
-  it('stops at 10 pages and logs that it capped', async () => {
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
-    let next = 0
-    const api = pagedApi(() => Array.from({ length: 100 }, () => mr(++next, 'a')))
-    const items = await listMergeRequestItems(api, { authorUsernames: null, inScope: () => true })
-    expect(items).toHaveLength(1000)
-    expect(api.calls.filter((c) => c.startsWith('merge_requests?'))).toHaveLength(10)
-    expect(warn).toHaveBeenCalledWith(expect.stringContaining('1000'))
-  })
-
-  it('rejects when glab fails, so the tick fails instead of seeing no MRs', async () => {
-    const api: GlabApi = {
-      projectPath: 'p',
-      async get() {
-        throw new Error('glab: 401')
-      }
-    }
-    await expect(
-      listMergeRequestItems(api, { authorUsernames: null, inScope: () => true })
-    ).rejects.toThrow('glab: 401')
-    await expect(listMergeRequestItems(api, nish)).rejects.toThrow('glab: 401')
-  })
-})
-
-describe('gitlabHandlesFor', () => {
-  const dir: PeopleDirectory = {
-    people: [
-      { id: 'nish', name: 'Nish', gitlab: 'nish8' },
-      { id: 'sam', name: 'Sam', gitlab: 'sam1' },
-      { id: 'bot', name: 'Bot' }
-    ],
-    groups: [{ id: 'eng', name: 'Eng', members: ['sam', 'bot', 'nish'] }]
-  }
-  it.each([
-    ['anyone', null],
-    [undefined, null],
-    [{ people: ['nish'] }, ['nish8']],
-    [{ people: ['bot'] }, []],
-    [{ group: 'eng' }, ['nish8', 'sam1']],
-    [{ people: ['nish'], group: 'eng' }, ['nish8', 'sam1']],
-    [{ group: 'missing' }, []]
-  ] as const)('%j -> %j', (ref, expected) => {
-    expect(gitlabHandlesFor(ref as PeopleRef | undefined, dir)).toEqual(expected)
-  })
-})
-
-describe('mergeRequestSource', () => {
-  const people: PeopleDirectory = {
-    people: [{ id: 'nish', name: 'Nish', gitlab: 'nish8' }],
-    groups: []
-  }
-  const where = { state: 'open', author: { people: ['nish'] } }
-  const contextFor = (api: GlabApi): SourceContext => ({
-    repo: { name: 'web-platform', id: 'r', path: '/repo', base: null },
-    people,
-    fetch: createPassFetchCache('pass-1', async () => api),
-    now: 0,
-    automationId: 'fix-failed-ci'
-  })
-
-  it("lists the where author's MRs, each with its kind and the branch its worktree is found by", async () => {
-    const { items, warnings } = await mergeRequestSource.list(contextFor(fakeApi()), where)
-    expect(warnings).toEqual([])
-    expect(items.map((i) => [i.key, i.kind, i.worktreeHint])).toEqual([
-      ['mr:1561', 'merge_request', { branch: 'web-1493-add-digit' }],
-      ['mr:1574', 'merge_request', { branch: 'web-1474-show-donor' }]
-    ])
-    expect(items[0].sortKeys).toEqual({ waitingSince: null, priority: null })
-  })
-
-  it('reads GitLab through the pass, so a second automation in the pass asks nothing again', async () => {
-    const api = fakeApi()
-    const ctx = contextFor(api)
-    const first = await mergeRequestSource.list(ctx, where)
-    const second = await mergeRequestSource.list(ctx, where)
-    expect(second.items).toEqual(first.items)
-    expect(api.calls).toEqual([
-      'merge_requests?state=opened&author_username=nish8&per_page=100',
-      'merge_requests/1561',
-      'merge_requests/1574'
-    ])
-  })
-
-  it('scopes an item with the merge_request where rules', () => {
-    const item = {
-      kind: 'merge_request' as const,
-      key: 'mr:1',
-      label: '!1 x',
-      fields: { 'mr.state': 'merged' },
-      worktreeHint: null,
-      sortKeys: { waitingSince: null, priority: null }
-    }
-    expect(mergeRequestSource.scope(item, where, people)).toEqual({
-      ok: false,
-      verdict: 'out_of_scope',
-      reason: 'MR is merged'
+  it('keeps an MR whose approvals or threads fail, with null fields and a warning each', async () => {
+    const api = gitlab({
+      list: {
+        'merge_requests?state=opened&author_username=nish8': [listed(1561, 'nish8', 'web-1493-a')]
+      },
+      approvals: { 1561: new Error('glab: 500') },
+      discussions: { 1561: new Error('glab: 404') }
     })
+    const source = mergeRequestSource()
+    const { items, warnings } = await source.list(sourceContext({}, api), MINE)
+    expect(items[0].fields['mr.approved_by']).toBeNull()
+    expect(items[0].fields['mr.waiting_threads']).toBeNull()
+    // The two reads run side by side, so either warning may come first.
+    expect([...warnings].sort()).toEqual([
+      "!1561: couldn't read its approvals: glab: 500",
+      "!1561: couldn't read its review threads: glab: 404"
+    ])
+    const scope = source.scope(items[0], { approved_by: 'none' }, PEOPLE)
+    expect(scope.ok ? null : scope.reason).toBe("Approvals couldn't be read")
+  })
+
+  it.each([
+    [
+      'the list',
+      { list: { 'merge_requests?state=opened&author_username=nish8': new Error('glab: 401') } }
+    ],
+    [
+      "an MR's details",
+      {
+        list: { 'merge_requests?state=opened&author_username=nish8': [listed(1561, 'nish8', 'b')] },
+        details: { 1561: new Error('glab: 401') }
+      }
+    ]
+  ] as [string, World][])(
+    'rejects when GitLab fails %s, so the tick fails',
+    async (_name, world) => {
+      const source = mergeRequestSource()
+      await expect(source.list(sourceContext({}, gitlab(world)), MINE)).rejects.toThrow('glab: 401')
+    }
+  )
+
+  it('shares every GitLab read between automations of one pass', async () => {
+    const api = gitlab({
+      list: {
+        'merge_requests?state=opened&author_username=nish8': [listed(1561, 'nish8', 'web-1493-a')]
+      }
+    })
+    const source = mergeRequestSource()
+    const pass = sourceContext({}, api)
+    await source.list(pass, MINE)
+    await source.list(pass, { ...MINE, head_pipeline: 'failed' })
+    expect(api.calls.filter((c) => c === 'merge_requests/1561')).toHaveLength(1)
+    expect(new Set(api.calls).size).toBe(api.calls.length)
+  })
+
+  it('warns when a listing stopped at 1000 MRs', async () => {
+    let next = 0
+    const api = fakeGlab((path) =>
+      path.startsWith('merge_requests?state=opened')
+        ? Array.from({ length: 100 }, () => listed(++next, 'nish8', `b${next}`))
+        : undefined
+    )
+    const { items, warnings } = await mergeRequestSource().list(sourceContext({}, api), {
+      draft: true
+    })
+    expect(items).toHaveLength(1000)
+    expect(warnings).toEqual([
+      'polygenx/web-platform: stopped at 1000 open MRs (merge_requests?state=opened); later ones are not checked'
+    ])
   })
 })

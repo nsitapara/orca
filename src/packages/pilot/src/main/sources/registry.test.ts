@@ -1,12 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import { WHERE_SCHEMAS } from '../../shared/definition/where'
-import { mergeRequestSource } from './merge-requests'
 import { itemSource } from './registry'
 
 describe('itemSource', () => {
   it('gives the merge request source, which reads the same where schema parsing checks', () => {
-    expect(itemSource('merge_request')).toBe(mergeRequestSource)
-    expect(mergeRequestSource.whereSchema).toBe(WHERE_SCHEMAS.merge_request)
+    expect(itemSource('merge_request').kind).toBe('merge_request')
+    expect(itemSource('merge_request').whereSchema).toBe(WHERE_SCHEMAS.merge_request)
   })
 
   it.each([
