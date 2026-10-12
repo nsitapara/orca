@@ -146,6 +146,36 @@ def cases():
     return [case for make in CASE_MAKERS for case in make()]
 
 
+def _02():
+    now = 1791712800000  # 03:00 Pacific, 2026-10-11
+
+    def limits(primary=40, secondary=61, *, allowed=True, secondary_reset=1792000000):
+        return {"rateLimits": {"primary": {"usedPercent": primary, "windowDurationMins": 300, "resetsAt": 1791730800},
+                               "secondary": {"usedPercent": secondary, "windowDurationMins": 10080, "resetsAt": secondary_reset},
+                               "rateLimitReachedType": None},
+                "ordinaryUsageAllowed": allowed}
+
+    raw = {
+        "quota-ok": limits(),
+        "weekly-at-ceiling": limits(secondary=90),
+        "session-at-ceiling": limits(primary=95),
+        "codex-says-out": limits(20, 30, allowed=False),
+        "reset-passed": limits(secondary=97, secondary_reset=1791700000),
+        "unreadable": None,
+    }
+    for name, answer in raw.items():
+        fixture = build("02", name, now=now, state={"quota/codex-rate-limits.json": answer})
+        # No GitLab reads, but the dry tick lists the repo's worktrees and terminals (none) for its main-checkout item.
+        fixture["reads"] += [
+            read(["orca", "worktree", "list", "--json"], json={"ok": True, "result": {"worktrees": []}}),
+            read(["orca", "terminal", "list", "--json"], json={"ok": True, "result": {"terminals": []}}),
+        ]
+        yield "02", name, fixture
+
+
+CASE_MAKERS.append(_02)
+
+
 def main(argv):
     check = argv[1:] == ["--check"]
     stale = []
