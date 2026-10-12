@@ -41,7 +41,8 @@ export const INBOX_COMMAND_SPECS: CommandSpec[] = [
   },
   {
     path: ['inbox', 'answer'],
-    summary: 'Answer a card: one of its options, or your own words',
+    summary:
+      "Answer a card from a paired device (--host); on this Mac answers go through Pilot's Waiting on you",
     usage: 'pilot inbox answer --id <id> (--option <n> | --text <answer>) [--json]',
     allowedFlags: [...GLOBAL_FLAGS, 'id', 'option', 'text'],
     examples: [
