@@ -168,6 +168,7 @@ describe('a Details bundle through the CLI, the store and the details RPCs', () 
       /^Details bundle refused: /
     )
 
+    const versionBefore = (rpc('pilot.inbox.get', { id }) as { version: number }).version
     const changed = copyBundle(f, 'F2-v2.json')
     rewriteBundle(changed, (b) => {
       b.blocks[0].rows = [['Applies', 'a different fact']]
@@ -180,6 +181,9 @@ describe('a Details bundle through the CLI, the store and the details RPCs', () 
         ref: { path: string }
       }
     }
+    expect((rpc('pilot.inbox.get', { id }) as { version: number }).version).toBeGreaterThan(
+      versionBefore
+    )
     expect(second.digest).not.toBe(first.digest)
     expect(second.snapshot.bundle.blocks[0].rows).toEqual([['Applies', 'a different fact']])
     expect(second.snapshot.ref.path).toBe(realpathSync(changed))

@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useState } from 'react'
+import { Fragment, useCallback, useEffect, useRef, useState } from 'react'
 import type { ScreensBlock, ShotsBlock } from '../../shared/details'
 import { Section } from './blocks'
 import { useImageUrl } from './use-image'
@@ -8,19 +8,32 @@ const LOAD_FAILED = "couldn't load the image"
 type Load = (file: string) => Promise<string>
 
 // An in-page zoom: the browser would not open a blob: link from Pilot's window (its window-open handler
-// hands only http(s) addresses on), so the same image is shown over the page. Escape or a click closes it.
+// hands only http(s) addresses on), so the same image is shown over the page. It takes focus when it opens
+// (its one control is itself, so Tab stays), Escape or a click closes it, and focus goes back to the button.
 function ZoomOverlay({ url, label, close }: { url: string; label: string; close: () => void }) {
+  const dialog = useRef<HTMLDivElement>(null)
   useEffect(() => {
-    const onKey = (event: KeyboardEvent): void => {
-      if (event.key === 'Escape') {
-        close()
-      }
+    dialog.current?.focus()
+  }, [])
+  const onKeyDown = (event: React.KeyboardEvent): void => {
+    if (event.key === 'Escape') {
+      event.stopPropagation()
+      close()
+    } else if (event.key === 'Tab') {
+      event.preventDefault()
     }
-    document.addEventListener('keydown', onKey)
-    return () => document.removeEventListener('keydown', onKey)
-  }, [close])
+  }
   return (
-    <div className="dt-zoom" role="dialog" aria-modal="true" aria-label={label} onClick={close}>
+    <div
+      ref={dialog}
+      className="dt-zoom"
+      role="dialog"
+      aria-modal="true"
+      aria-label={label}
+      tabIndex={-1}
+      onKeyDown={onKeyDown}
+      onClick={close}
+    >
       <img src={url} alt={label} />
     </div>
   )
@@ -37,6 +50,11 @@ function LoadedShot({
 }): React.JSX.Element {
   const { url, failed } = useImageUrl(() => loadImage(path))
   const [zoomed, setZoomed] = useState(false)
+  const button = useRef<HTMLButtonElement>(null)
+  const closeZoom = useCallback(() => {
+    setZoomed(false)
+    button.current?.focus()
+  }, [])
   if (failed) {
     return (
       <figure className="dt-shot">
@@ -50,6 +68,7 @@ function LoadedShot({
     <figure className="dt-shot">
       {caption ? <figcaption>{caption}</figcaption> : null}
       <button
+        ref={button}
         type="button"
         className="dt-zoom-btn"
         aria-label={`Zoom ${label}`}
@@ -58,9 +77,7 @@ function LoadedShot({
       >
         <img src={url ?? undefined} alt={label} />
       </button>
-      {zoomed && url ? (
-        <ZoomOverlay url={url} label={label} close={() => setZoomed(false)} />
-      ) : null}
+      {zoomed && url ? <ZoomOverlay url={url} label={label} close={closeZoom} /> : null}
     </figure>
   )
 }

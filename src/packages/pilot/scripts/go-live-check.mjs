@@ -229,7 +229,7 @@ const VAULT_BUNDLE_NOTE = 'Details bundle: '
 // Read from `inbox list --json`, which is GET-only: nothing is added or changed.
 export function detailsLine(listPayload, failure = '') {
   if (!listPayload || !Array.isArray(listPayload.items)) {
-    return `Card details: couldn't list the inbox (${firstLine(failure) || 'no answer from Pilot'})`
+    return `Card details: couldn't list the inbox (${firstLine(failure).slice(0, 200) || 'no answer from Pilot'})`
   }
   const items = listPayload.items
   const withBundle = items.filter((item) => item.details).length

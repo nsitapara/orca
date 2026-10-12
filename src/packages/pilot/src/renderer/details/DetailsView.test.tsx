@@ -110,11 +110,42 @@ describe('images', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Zoom QA' }))
     const zoomed = screen.getByRole('dialog').querySelector('img')
     expect(zoomed?.getAttribute('src')).toBe('blob:test/a.png')
-    fireEvent.keyDown(document, { key: 'Escape' })
+    fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Escape' })
     expect(screen.queryByRole('dialog')).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: 'Zoom QA' }))
     fireEvent.click(screen.getByRole('dialog'))
     expect(screen.queryByRole('dialog')).toBeNull()
+  })
+
+  it('moves focus into the zoom, keeps Tab there, and gives focus back on Escape without bubbling it', async () => {
+    const outer = vi.fn()
+    const listener = (event: KeyboardEvent): void => {
+      if (event.key === 'Escape') {
+        outer()
+      }
+    }
+    document.addEventListener('keydown', listener)
+    const { container } = render(
+      <DetailsView
+        snapshot={shots({ file: 'a.png', caption: 'QA' })}
+        loadImage={urlFor}
+        parts={null}
+      />
+    )
+    await waitFor(() => expect(container.querySelector('img[src]')).not.toBeNull())
+    const button = screen.getByRole('button', { name: 'Zoom QA' })
+    button.focus()
+    fireEvent.click(button)
+    const dialog = screen.getByRole('dialog')
+    expect(document.activeElement).toBe(dialog)
+    const tab = fireEvent.keyDown(dialog, { key: 'Tab' })
+    expect(tab).toBe(false)
+    expect(document.activeElement).toBe(dialog)
+    fireEvent.keyDown(dialog, { key: 'Escape' })
+    expect(screen.queryByRole('dialog')).toBeNull()
+    expect(document.activeElement).toBe(button)
+    expect(outer).not.toHaveBeenCalled()
+    document.removeEventListener('keydown', listener)
   })
 
   it('revokes a blob image URL when the view unmounts', async () => {
@@ -182,10 +213,7 @@ describe('review block', () => {
   })
 
   it('drops an unsafe MR link and names a missing review file', () => {
-    const bad = JSON.stringify({
-      ...JSON.parse(REVIEW),
-      web_url: 'javascript:x'
-    })
+    const bad = JSON.stringify({ ...JSON.parse(REVIEW), web_url: 'javascript:x' })
     const { container } = render(
       <DetailsView snapshot={reviewSnap('r.json', bad)} loadImage={urlFor} parts={null} />
     )

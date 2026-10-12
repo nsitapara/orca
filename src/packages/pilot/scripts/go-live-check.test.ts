@@ -233,6 +233,11 @@ describe('detailsLine', () => {
     expect(detailsLine({ items })).toContain('1 with a Details bundle, 0 imported')
   })
 
+  it('caps an unparseable reply to its first line, up to 200 characters', () => {
+    const line = detailsLine(null, `  ${'x'.repeat(300)}\nsecond line`)
+    expect(line).toBe(`Card details: couldn't list the inbox (${'x'.repeat(200)})`)
+  })
+
   it('says why the inbox could not be listed', () => {
     expect(detailsLine(null, 'Pilot is not running\nmore')).toBe(
       "Card details: couldn't list the inbox (Pilot is not running)"
