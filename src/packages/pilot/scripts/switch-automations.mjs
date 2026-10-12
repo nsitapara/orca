@@ -110,6 +110,17 @@ export function switchOne(job, to, clis, { apply, readOptions }) {
   }
 }
 
+// Moved automations are Orca-style jobs. A Pilot whose own Orca engine is off (the default since the
+// orca-automations-off hook) never runs them, so switching them there would leave them running nowhere.
+export function checkPilotRunsOrcaAutomations(pilot) {
+  const status = callJson(pilot, 'pilot automations status', ['automations', 'status', '--json'])
+  if (status?.orcaAutomationsOff !== false) {
+    throw new Error(
+      "Pilot's own Orca engine is off, so moved automations switched to Pilot would run nowhere. Use the YAML automations, or start Pilot with PILOT_ORCA_AUTOMATIONS=on."
+    )
+  }
+}
+
 export function switchAutomations({ to, apply, records, clis, log, readOptions }) {
   const jobs = switchable(records)
   if (jobs.length === 0) {
@@ -117,6 +128,9 @@ export function switchAutomations({ to, apply, records, clis, log, readOptions }
     return 0
   }
   checkApps(clis)
+  if (to === 'pilot') {
+    checkPilotRunsOrcaAutomations(clis.pilot)
+  }
   log(`${apply ? 'Switching' : 'Dry run: switching'} ${jobs.length} automation(s) to ${LABEL[to]}.`)
   const results = jobs.map((job) => switchOne(job, to, clis, { apply, readOptions }))
   for (const result of results) {

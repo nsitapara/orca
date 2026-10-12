@@ -23,6 +23,7 @@ type FakeOpts = {
   // Edits that report success but change nothing, as "<side> <id>".
   noEffect?: string[]
   sameRuntime?: boolean
+  orcaEngineInPilot?: boolean
 }
 
 // Each app as an in-memory CLI: `enabled` is keyed by automation id; `calls` records every edit in order.
@@ -33,6 +34,9 @@ function apps(enabled: Record<string, boolean>, opts: FakeOpts = {}) {
     (args: string[]): Result => {
       if (args[0] === 'status') {
         return ok({ runtime: { runtimeId: opts.sameRuntime ? 'one' : `${side}-runtime` } })
+      }
+      if (args[0] === 'automations' && args[1] === 'status') {
+        return ok({ orcaAutomationsOff: !(opts.orcaEngineInPilot ?? false) })
       }
       const id = args[3]
       if (args[1] === 'show') {
@@ -85,7 +89,7 @@ describe('switch-automations', () => {
   ] as const)(
     'to %s: off where it leaves before on where it goes; hand-started jobs stay off',
     (to, start, end) => {
-      const fake = apps({ ...start })
+      const fake = apps({ ...start }, { orcaEngineInPilot: true })
       expect(runSwitch(to, true, fake).code).toBe(0)
       expect(fake.enabled).toEqual(end)
       const from = to === 'orca' ? 'pilot' : 'orca'
@@ -126,6 +130,13 @@ describe('switch-automations', () => {
     const fake = apps(inPilot(), { sameRuntime: true })
     expect(() => runSwitch('orca', true, fake)).toThrow(/both reach runtime one/)
     expect(fake.calls).toEqual([])
+  })
+
+  it("refuses to switch to Pilot while Pilot's Orca engine is off, before any edit", () => {
+    const fake = apps(inOrca())
+    expect(() => runSwitch('pilot', true, fake)).toThrow(/would run nowhere/)
+    expect(fake.calls).toEqual([])
+    expect(fake.enabled).toEqual(inOrca())
   })
 
   it.each([[[]], [['--to', 'both']], [['--apply']]])('rejects %j without a valid --to', (argv) => {
