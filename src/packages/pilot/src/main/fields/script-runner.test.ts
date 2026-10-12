@@ -40,6 +40,36 @@ describe('runShellScript', () => {
     })
     expect(result.timedOut).toBe(true)
   })
+
+  // Like a shell step: the script runs in its own process group, so a timeout stops what it started too.
+  it("stops a timed-out script's children with it", async () => {
+    const result = await runShellScript({
+      command: 'sleep 30 & echo $!; wait',
+      cwd,
+      stdin: '',
+      env: {},
+      timeoutMs: 300
+    })
+    expect(result.timedOut).toBe(true)
+    const child = Number(result.stdout.trim())
+    expect(child).toBeGreaterThan(0)
+    const alive = () => {
+      try {
+        process.kill(child, 0)
+        return true
+      } catch {
+        return false
+      }
+    }
+    for (let i = 0; i < 40 && alive(); i++) {
+      await new Promise((r) => setTimeout(r, 50))
+    }
+    const stillAlive = alive()
+    if (stillAlive) {
+      process.kill(child, 'SIGKILL')
+    }
+    expect(stillAlive).toBe(false)
+  })
 })
 
 describe('resolveScriptCommand', () => {

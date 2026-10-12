@@ -30,8 +30,9 @@ export function resolveScriptCommand(command: string, automationFile: string): s
   return `${shellQuote(resolve(dirname(automationFile), match[1]))}${match[2]}`
 }
 
-// /bin/sh -c through Orca's process host (no child_process in Pilot's main code). Rejects only when
-// the shell can't be started; a non-zero exit or a timeout is data.
+// /bin/sh -c through Orca's process host (no child_process in Pilot's main code), in its own process group
+// like a shell step, so a timeout stops everything the script started. Rejects only when the shell can't
+// be started; a non-zero exit or a timeout is data.
 export const runShellScript: ScriptRunner = async (req) => {
   const result = await runProcess({
     program: '/bin/sh',
@@ -40,7 +41,9 @@ export const runShellScript: ScriptRunner = async (req) => {
     env: { ...process.env, ...req.env },
     input: req.stdin,
     timeoutMs: req.timeoutMs,
-    maxOutputBytes: MAX_OUTPUT_BYTES
+    maxOutputBytes: MAX_OUTPUT_BYTES,
+    // Spawned detached (its own process group) and, on a timeout, the whole tree is stopped.
+    terminationBarrier: true
   })
   return {
     code: result.code,

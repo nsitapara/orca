@@ -327,3 +327,34 @@ describe('runShell (a real /bin/sh)', () => {
     expect(r.timedOut).toBe(true)
   })
 })
+
+// A timeout stops the step's whole process tree, not just its /bin/sh.
+describe('runShell timeouts', () => {
+  it("stops a timed-out command's children with it", async () => {
+    const result = await runShell({
+      command: 'sleep 30 & echo $!; wait',
+      cwd: tmpdir(),
+      env: { PATH: process.env.PATH ?? '' },
+      timeoutMs: 300
+    })
+    expect(result.timedOut).toBe(true)
+    const child = Number(result.stdout.trim())
+    expect(child).toBeGreaterThan(0)
+    const alive = () => {
+      try {
+        process.kill(child, 0)
+        return true
+      } catch {
+        return false
+      }
+    }
+    for (let i = 0; i < 40 && alive(); i++) {
+      await new Promise((r) => setTimeout(r, 50))
+    }
+    const stillAlive = alive()
+    if (stillAlive) {
+      process.kill(child, 'SIGKILL')
+    }
+    expect(stillAlive).toBe(false)
+  })
+})
