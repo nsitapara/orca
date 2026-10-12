@@ -16,5 +16,5 @@ function subscribe(listener: () => void): () => void {
 }
 
 export function useActiveWorktreePath(): string | null {
-  return useSyncExternalStore(subscribe, activeWorktreePath)
+  return useSyncExternalStore(subscribe, activeWorktreePath, () => null)
 }

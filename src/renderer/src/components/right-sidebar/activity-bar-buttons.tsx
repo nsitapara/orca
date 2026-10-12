@@ -13,6 +13,7 @@ import {
   DropdownMenuTrigger
 } from '@/components/ui/dropdown-menu'
 import { translate } from '@/i18n/i18n'
+import { PilotActivityBadge } from '../../../../packages/pilot/src/renderer/sidebar/PilotActivityBadge' // pilot-hook: right-sidebar-badge
 
 export type ActivityBarItem = {
   id: ActiveRightSidebarTab
@@ -163,6 +164,9 @@ export function ActivityBarButton({
               )}
             />
           )}
+
+          <PilotActivityBadge itemId={item.id} layout={layout} />
+          {/* pilot-hook: right-sidebar-badge */}
 
           {active && isTop && (
             <div className="absolute bottom-0 left-[25%] right-[25%] h-[2px] bg-foreground rounded-t" />
