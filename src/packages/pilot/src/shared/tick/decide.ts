@@ -74,6 +74,17 @@ function handledGate(input: Omit<DecideInput, 'scriptChecks'>, onceKey: string):
   return { verdict: 'notdue', reason: `Its last run failed; due again in ${formatWait(wait)}` }
 }
 
+// A source that tracks its items' progress itself (the worktree kind's `commits` clause) says whether
+// an item is at first sight in `item.baseline`: a rewritten history is a first sight again (03), and
+// recent work seen for the first time is not (04). Otherwise an item is first seen when `seen` lacks it.
+export function firstSight(
+  item: { key: string; fields: ItemFields },
+  seenKeys: ReadonlySet<string>
+): boolean {
+  const own = item.fields['item.baseline']
+  return typeof own === 'boolean' ? own : !seenKeys.has(item.key)
+}
+
 // Spec §6 before the checks: scope (the source's scope() and items.match), once_per, first_seen.
 // Run-once automations skip scope and first_seen, and once_per unless they set one (once per local
 // day with "{run.date}"). Exported so the tick runner runs script checks only for items that reach
@@ -95,7 +106,7 @@ export function preCheckGate(
   if (handled) {
     return handled
   }
-  if (def.firstSeen === 'baseline' && !input.seenKeys.has(item.key)) {
+  if (def.firstSeen === 'baseline' && firstSight(item, input.seenKeys)) {
     return { verdict: 'baselined', reason: 'First time seen: recorded, not acted on' }
   }
   return null

@@ -16,6 +16,7 @@ import { DefinitionStore } from './store-definitions'
 import { EventStore } from './store-events'
 import { FieldCacheStore } from './store-fields'
 import { AgentSessionStore } from './store-sessions'
+import { MarkerStore } from './store-markers'
 import { AdvanceStore } from './store-advance'
 
 const DAY = 24 * 60 * 60_000
@@ -47,6 +48,7 @@ export class PilotStore {
   readonly definitions: DefinitionStore
   readonly fields: FieldCacheStore
   readonly sessions: AgentSessionStore
+  readonly markers: MarkerStore
   readonly advance: AdvanceStore
 
   private constructor(private readonly db: Database) {
@@ -58,6 +60,7 @@ export class PilotStore {
     this.definitions = new DefinitionStore(db)
     this.fields = new FieldCacheStore(db)
     this.sessions = new AgentSessionStore(db)
+    this.markers = new MarkerStore(db)
     this.advance = new AdvanceStore(db)
   }
 
