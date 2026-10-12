@@ -8,7 +8,7 @@ import { parsePeopleYaml } from '../../shared/people'
 import { addInboxItem } from '../inbox/inbox-add'
 import type { InboxDeps } from '../inbox/inbox-service'
 import { PilotStore } from '../store/store'
-import { APPROVE_ON_DESKTOP, queueEntries, routeOf } from './queue-view'
+import { APPROVE_ON_DESKTOP, DRAFT_ON_DESKTOP, queueEntries, routeOf } from './queue-view'
 import { saveAnswer } from './save'
 
 const def = parseAutomationYaml(
@@ -176,5 +176,67 @@ describe('an answer never routes to a script for a caller other than the desktop
     expect(queueEntries(deps, catalog, {})).toMatchObject([
       { how: 'reask', fires: APPROVE_ON_DESKTOP }
     ])
+  })
+})
+
+describe('a drafted change is approved only on the desktop', () => {
+  const REF = {
+    path: '/v/Automations/03/b/details/r/F2.json',
+    sha256: 'ab'.repeat(32),
+    inlined: {},
+    blocks: 2,
+    drafted: true,
+    draftedBase: 'c'.repeat(40)
+  }
+
+  function answered(
+    text: string,
+    callerKind: 'desktop' | 'paired-device' | undefined,
+    drafted = true
+  ) {
+    const { store } = queued(QUESTION, 'A', 'run-1')
+    const answer = {
+      option: null,
+      text,
+      digest: 'x',
+      via: 'cli' as const,
+      ...(callerKind ? { callerKind } : {})
+    }
+    const id = 'in_0000000000000001'
+    store.inbox.edit(
+      id,
+      { details: { ...REF, drafted }, digest: store.inbox.get(id)!.digest },
+      2_000
+    )
+    store.inbox.update(id, { answer }, 2_000)
+    return store.inbox.get(id)!
+  }
+
+  it.each<[string, string, 'desktop' | 'paired-device' | undefined, boolean, object]>([
+    [
+      'an imported approve',
+      'approve',
+      undefined,
+      true,
+      { kind: 'reask', reason: DRAFT_ON_DESKTOP }
+    ],
+    [
+      'a device approve',
+      'Approve.',
+      'paired-device',
+      true,
+      { kind: 'reask', reason: DRAFT_ON_DESKTOP }
+    ],
+    ["a device won't fix", "won't fix", 'paired-device', true, { kind: 'agent', revise: false }],
+    ['a desktop approve', 'approve', 'desktop', true, { kind: 'agent', revise: false }],
+    [
+      'a device approve, nothing drafted',
+      'approve',
+      'paired-device',
+      false,
+      { kind: 'agent', revise: false }
+    ]
+  ])('%s', (_name, text, callerKind, drafted, expected) => {
+    expect(routeOf(answered(text, callerKind, drafted), catalog)).toEqual(expected)
   })
 })

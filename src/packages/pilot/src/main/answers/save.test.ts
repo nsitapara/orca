@@ -11,6 +11,7 @@ import { routeOf } from './queue-view'
 import {
   APPROVE_ON_DESKTOP,
   CARD_CHANGED_ON_SAVE,
+  DRAFT_ON_DESKTOP,
   LOCAL_CLI_NO_ANSWER,
   NO_ANSWER_CALLER,
   saveAnswer as save,
@@ -262,5 +263,31 @@ describe('who may answer (caller kind x card)', () => {
     expect(
       saveAnswer(deps, { id: 'in_0000000000000001', text: 'approve', digest }).answer?.digest
     ).toBe(digest)
+  })
+})
+
+describe('a drafted change', () => {
+  it('says where a drafted change is approved', () => {
+    expect(DRAFT_ON_DESKTOP).toBe(
+      'A drafted change applies only on an approval saved in Pilot on this Mac, where its diff shows; approve it there.'
+    )
+  })
+
+  it('refuses a device approve and saves nothing; the desktop approve is saved', () => {
+    const { store, deps, digest } = setup(QUESTION)
+    const ref = {
+      path: '/v/Automations/03/b/details/r/F2.json',
+      sha256: 'ab'.repeat(32),
+      inlined: {},
+      blocks: 2,
+      drafted: true,
+      draftedBase: 'c'.repeat(40)
+    }
+    store.inbox.edit('in_0000000000000001', { details: ref, digest }, 1_000)
+    const params = { id: 'in_0000000000000001', text: 'approve', digest }
+    expect(() => saveAnswer(deps, params, PHONE)).toThrow(DRAFT_ON_DESKTOP)
+    expect(store.inbox.get('in_0000000000000001')).toMatchObject({ status: 'open', answer: null })
+    expect(store.queue.forInboxItem('in_0000000000000001')).toEqual([])
+    expect(saveAnswer(deps, params, DESKTOP).answer).toMatchObject({ text: 'approve' })
   })
 })

@@ -10,7 +10,7 @@ const RECORD =
   'if an answer is unclear, ask with `pilot inbox reply --id <id> --text "<question>"` and leave it open. ' +
   'Never wait in this tab for a reply.'
 
-function note(answer: AgentAnswer): string {
+function howNote(answer: AgentAnswer): string {
   if (answer.revise) {
     return REVISE
   }
@@ -19,6 +19,20 @@ function note(answer: AgentAnswer): string {
     return ` (approved; its action stopped for judgement: ${oneLine(answer.needsAgent)})`
   }
   return ''
+}
+
+// apply.py prompt(): the bundle the answer was given against, pinned by its SHA-256, so a drafted patch
+// applied is the one shown. The path is quoted: job folders contain ' · ', the prompt's separator.
+function detailsNote(item: InboxItemRow): string {
+  if (!item.details) {
+    return ''
+  }
+  const { path, sha256 } = item.details
+  return ` (Details "${oneLine(path)}" sha256 ${sha256}: a drafted patch applies only by ~/.agents/skills/item-details/references/apply.md)`
+}
+
+function note(answer: AgentAnswer): string {
+  return howNote(answer) + detailsNote(answer.item)
 }
 
 // apply.py prompt(): one line (a newline would submit early in a typed prompt), each claimed answer as

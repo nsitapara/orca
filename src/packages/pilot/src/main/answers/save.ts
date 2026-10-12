@@ -1,9 +1,12 @@
 import type { InboxAnswer, InboxItemRow } from '../../shared/api-types'
 import type { InboxAnswerParams } from '../../shared/inbox-types'
 import { oneLine } from '../inbox/card'
-import { APPROVE_ON_DESKTOP, routeFor, type CatalogLookup } from './queue-view'
+import { APPROVE_ON_DESKTOP, DRAFT_ON_DESKTOP, routeFor, type CatalogLookup } from './queue-view'
 
-export { APPROVE_ON_DESKTOP }
+export { APPROVE_ON_DESKTOP, DRAFT_ON_DESKTOP }
+
+// A re-ask the save refuses outright: words that would approve where only the desktop approves.
+const DESKTOP_ONLY: ReadonlySet<string> = new Set([APPROVE_ON_DESKTOP, DRAFT_ON_DESKTOP])
 import {
   getInboxItem,
   inboxEvent,
@@ -92,10 +95,11 @@ export function saveAnswer(
   const text = answerText(item, params)
   const at = deps.now()
   const option = optionKept(item, params)
-  // Only Pilot on this Mac approves: for any other caller routeFor turns a script route into this re-ask.
+  // Only Pilot on this Mac approves: for any other caller routeFor turns a script route, or an Approve of a
+  // drafted change, into one of these re-asks.
   const route = routeFor(item, origin.catalog, { text, option, callerKind })
-  if (text && route.kind === 'reask' && route.reason === APPROVE_ON_DESKTOP) {
-    throw new Error(APPROVE_ON_DESKTOP)
+  if (text && route.kind === 'reask' && DESKTOP_ONLY.has(route.reason)) {
+    throw new Error(route.reason)
   }
   if (!text) {
     return clearAnswer(deps, item, at)
