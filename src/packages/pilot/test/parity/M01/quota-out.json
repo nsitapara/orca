@@ -1,0 +1,261 @@
+{
+  "case": "quota-out",
+  "job": "M01",
+  "now": 1791766800000,
+  "recordedAt": "synthetic",
+  "repo": {
+    "id": "400fee61-a463-4f76-894a-39861e906007",
+    "path": "/Users/nishsitapara/Documents/web-platform",
+    "name": "web-platform",
+    "project": "polygenx/web-platform",
+    "host": "gitlab.com"
+  },
+  "reads": [
+    {
+      "argv": ["orca", "worktree", "list", "--json"],
+      "code": 0,
+      "json": { "ok": true, "result": { "worktrees": [] } }
+    },
+    {
+      "argv": ["orca", "terminal", "list", "--json"],
+      "code": 0,
+      "json": { "ok": true, "result": { "terminals": [] } }
+    },
+    {
+      "argv": ["glab", "api", "--hostname", "gitlab.com", "user"],
+      "code": 0,
+      "json": { "username": "nish8" }
+    },
+    {
+      "argv": [
+        "orca",
+        "linear",
+        "list",
+        "--filter",
+        "assigned",
+        "--workspace",
+        "all",
+        "--limit",
+        "200",
+        "--json"
+      ],
+      "code": 0,
+      "json": {
+        "ok": true,
+        "result": {
+          "issues": [
+            {
+              "id": "uuid-WEB-1",
+              "identifier": "WEB-1",
+              "title": "Fix hourly e2e failure (WEB-1)",
+              "url": "https://linear.app/herasight/issue/WEB-1",
+              "state": { "name": "unstarted", "type": "unstarted" },
+              "team": { "id": "team-web", "key": "WEB", "name": "Web Dev" },
+              "assignee": { "id": "u-nish", "displayName": "nish" },
+              "priority": 0,
+              "workspace": { "id": "ws1", "name": "Herasight" }
+            },
+            {
+              "id": "uuid-WEB-2",
+              "identifier": "WEB-2",
+              "title": "Fix hourly e2e failure (WEB-2)",
+              "url": "https://linear.app/herasight/issue/WEB-2",
+              "state": { "name": "unstarted", "type": "unstarted" },
+              "team": { "id": "team-web", "key": "WEB", "name": "Web Dev" },
+              "assignee": { "id": "u-nish", "displayName": "nish" },
+              "priority": 4,
+              "workspace": { "id": "ws1", "name": "Herasight" }
+            },
+            {
+              "id": "uuid-WEB-3",
+              "identifier": "WEB-3",
+              "title": "Fix hourly e2e failure (WEB-3)",
+              "url": "https://linear.app/herasight/issue/WEB-3",
+              "state": { "name": "unstarted", "type": "unstarted" },
+              "team": { "id": "team-web", "key": "WEB", "name": "Web Dev" },
+              "assignee": { "id": "u-nish", "displayName": "nish" },
+              "priority": 1,
+              "workspace": { "id": "ws1", "name": "Herasight" }
+            },
+            {
+              "id": "uuid-WEB-4",
+              "identifier": "WEB-4",
+              "title": "Fix hourly e2e failure (WEB-4)",
+              "url": "https://linear.app/herasight/issue/WEB-4",
+              "state": { "name": "unstarted", "type": "unstarted" },
+              "team": { "id": "team-web", "key": "WEB", "name": "Web Dev" },
+              "assignee": { "id": "u-nish", "displayName": "nish" },
+              "priority": 2,
+              "workspace": { "id": "ws1", "name": "Herasight" }
+            }
+          ],
+          "truncated": false,
+          "meta": {
+            "filter": "assigned",
+            "workspaceId": "all",
+            "limit": 200,
+            "returned": 4,
+            "hasMore": false,
+            "partial": false,
+            "workspaceErrors": []
+          }
+        }
+      }
+    },
+    {
+      "argv": ["orca", "linear", "issue", "WEB-1", "--workspace", "ws1", "--json"],
+      "code": 0,
+      "json": {
+        "ok": true,
+        "result": {
+          "issue": {
+            "id": "uuid-WEB-1",
+            "identifier": "WEB-1",
+            "title": "Fix hourly e2e failure (WEB-1)",
+            "url": "https://linear.app/herasight/issue/WEB-1",
+            "state": { "name": "unstarted", "type": "unstarted" },
+            "team": { "id": "team-web", "key": "WEB", "name": "Web Dev" },
+            "assignee": { "id": "u-nish", "displayName": "nish" },
+            "priority": 0,
+            "createdAt": "2026-01-01T00:00:00Z",
+            "branchName": "web-1-work",
+            "labels": [],
+            "workspace": { "id": "ws1", "name": "Herasight" }
+          }
+        }
+      }
+    },
+    {
+      "argv": [
+        "git",
+        "-C",
+        "/Users/nishsitapara/Documents/web-platform",
+        "show-ref",
+        "--verify",
+        "--quiet",
+        "refs/heads/web-1-work"
+      ],
+      "code": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "argv": ["orca", "linear", "issue", "WEB-2", "--workspace", "ws1", "--json"],
+      "code": 0,
+      "json": {
+        "ok": true,
+        "result": {
+          "issue": {
+            "id": "uuid-WEB-2",
+            "identifier": "WEB-2",
+            "title": "Fix hourly e2e failure (WEB-2)",
+            "url": "https://linear.app/herasight/issue/WEB-2",
+            "state": { "name": "unstarted", "type": "unstarted" },
+            "team": { "id": "team-web", "key": "WEB", "name": "Web Dev" },
+            "assignee": { "id": "u-nish", "displayName": "nish" },
+            "priority": 4,
+            "createdAt": "2026-09-01T00:00:00Z",
+            "branchName": "web-2-work",
+            "labels": [],
+            "workspace": { "id": "ws1", "name": "Herasight" }
+          }
+        }
+      }
+    },
+    {
+      "argv": [
+        "git",
+        "-C",
+        "/Users/nishsitapara/Documents/web-platform",
+        "show-ref",
+        "--verify",
+        "--quiet",
+        "refs/heads/web-2-work"
+      ],
+      "code": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "argv": ["orca", "linear", "issue", "WEB-3", "--workspace", "ws1", "--json"],
+      "code": 0,
+      "json": {
+        "ok": true,
+        "result": {
+          "issue": {
+            "id": "uuid-WEB-3",
+            "identifier": "WEB-3",
+            "title": "Fix hourly e2e failure (WEB-3)",
+            "url": "https://linear.app/herasight/issue/WEB-3",
+            "state": { "name": "unstarted", "type": "unstarted" },
+            "team": { "id": "team-web", "key": "WEB", "name": "Web Dev" },
+            "assignee": { "id": "u-nish", "displayName": "nish" },
+            "priority": 1,
+            "createdAt": "2026-10-01T00:00:00Z",
+            "branchName": "web-3-work",
+            "labels": [],
+            "workspace": { "id": "ws1", "name": "Herasight" }
+          }
+        }
+      }
+    },
+    {
+      "argv": [
+        "git",
+        "-C",
+        "/Users/nishsitapara/Documents/web-platform",
+        "show-ref",
+        "--verify",
+        "--quiet",
+        "refs/heads/web-3-work"
+      ],
+      "code": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "argv": ["orca", "linear", "issue", "WEB-4", "--workspace", "ws1", "--json"],
+      "code": 0,
+      "json": {
+        "ok": true,
+        "result": {
+          "issue": {
+            "id": "uuid-WEB-4",
+            "identifier": "WEB-4",
+            "title": "Fix hourly e2e failure (WEB-4)",
+            "url": "https://linear.app/herasight/issue/WEB-4",
+            "state": { "name": "unstarted", "type": "unstarted" },
+            "team": { "id": "team-web", "key": "WEB", "name": "Web Dev" },
+            "assignee": { "id": "u-nish", "displayName": "nish" },
+            "priority": 2,
+            "createdAt": "2026-10-05T00:00:00Z",
+            "branchName": "web-4-work",
+            "labels": [],
+            "workspace": { "id": "ws1", "name": "Herasight" }
+          }
+        }
+      }
+    },
+    {
+      "argv": [
+        "git",
+        "-C",
+        "/Users/nishsitapara/Documents/web-platform",
+        "show-ref",
+        "--verify",
+        "--quiet",
+        "refs/heads/web-4-work"
+      ],
+      "code": 1,
+      "stdout": "",
+      "stderr": ""
+    }
+  ],
+  "state": {
+    "linear-todo/started.json": {},
+    "linear-todo/tabs-codex.json": {},
+    "linear-todo/tabs.json": {},
+    "quota/claude.json": { "weekly": 95, "session": 30 }
+  },
+  "exists": {}
+}
