@@ -1,0 +1,3 @@
+# Recorded parity cases hold live MR titles, branches and usernames: they stay on this machine.
+live-*.json
+__pycache__/

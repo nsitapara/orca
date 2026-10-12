@@ -201,6 +201,15 @@ These need a phone, a second Mac and an iPad on Tailscale. Open Pilot (`dist/mac
 
 When you run `pnpm test` or orcad yourself from an Orca terminal, first `export ORCA_CLI_INSTALL_PATH=$(mktemp -u)` and `export ORCA_BROWSER_EXECUTABLE=` (empty, or a non-Orca Chromium path). Upstream's serve mode auto-installs the CLI at startup, and with no `ORCA_CLI_INSTALL_PATH` it searches PATH, where an Orca terminal puts `/Applications/Orca.app/Contents/Resources/bin` first, so it can replace real Orca's `bin/orca` with a link to itself. Orcad also starts `/Applications/Orca.app` as its browser host whenever that app is installed, before it ever reads `ORCA_BROWSER_EXECUTABLE`; no env var stops that (see the Known gaps). `update.mjs` sets both for its test steps; `dev.mjs` sets only `ORCA_CLI_INSTALL_PATH`.
 
+## Parity tests
+
+A job counts as ported only when its parity test passes (R17): the old sweep's own `plan()` (Python, `test/parity/run_old_plan.py`) and Pilot's dry-run tick read the same recorded inputs, and every item must get an agreeing decision (each job's table maps the old words to verdicts).
+
+- Record a case from live data, GET-only (anything that could write stops the recording before it runs): `node src/packages/pilot/scripts/record-parity-fixture.mjs --job 05 --case <name>`. It writes `test/parity/05/live-<name>.json`, which git ignores: recorded cases hold real MR titles, branches and usernames, so they stay on this machine. Synthetic cases are committed.
+- Run the parity tests: `pnpm exec vitest run --config config/vitest.config.ts src/packages/pilot/test/parity`. They skip when `python3` or `~/.agents/skills` is missing (`PARITY_SKILLS_DIR`, `PARITY_AUTOMATIONS_DIR` point elsewhere).
+- The harness's own tests: `cd src/packages/pilot/test/parity && PYTHONDONTWRITEBYTECODE=1 python3 -m unittest test_parity_io`.
+- A mismatch line names the item and both sides' reasons. Fix the engine, never the table.
+
 ## Updating from upstream
 
     node src/packages/pilot/scripts/update.mjs            # sync + verify
