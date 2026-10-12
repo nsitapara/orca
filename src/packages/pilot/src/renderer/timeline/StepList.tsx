@@ -40,7 +40,12 @@ function outputsText(step: StepRow): string | null {
 
 function ResumeButton({ runId, step }: { runId: string; step: StepRow }): React.JSX.Element {
   const [note, setNote] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
   const resume = async (): Promise<void> => {
+    if (busy) {
+      return
+    }
+    setBusy(true)
     try {
       const result = await pilotRpc<SessionResumeResult>('pilot.session.resume', {
         runId,
@@ -49,12 +54,15 @@ function ResumeButton({ runId, step }: { runId: string; step: StepRow }): React.
       setNote(RESUMED[result.action])
     } catch (e) {
       setNote(errorText(e))
+    } finally {
+      setBusy(false)
     }
   }
   return (
     <span className="flex items-center gap-2">
       <button
         type="button"
+        disabled={busy}
         className="inline-flex items-center gap-1 underline"
         onClick={() => void resume()}
       >

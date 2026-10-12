@@ -57,9 +57,13 @@ describe('runtimeSessionTabs', () => {
     receivedAt,
     providerSession: { key: 'session_id', id }
   })
-  const runtime = (rows: unknown[], terminals: unknown[]) =>
+  const runtime = (rows: unknown[], terminals: unknown[], paneRows?: Record<string, unknown[]>) =>
     ({
       getAgentProviderSessionRows: () => rows,
+      getAgentStatusRowsForPane: (paneKey: string) =>
+        paneRows
+          ? (paneRows[paneKey] ?? [])
+          : rows.filter((r) => (r as { paneKey: string }).paneKey === paneKey),
       listTerminals: vi.fn(async () => ({
         terminals,
         truncated: false,
@@ -86,5 +90,17 @@ describe('runtimeSessionTabs', () => {
     )
     expect(await runtimeSessionTabs(rt)('s1')).toEqual([])
     expect(await runtimeSessionTabs(runtime([], []))('s1')).toEqual([])
+  })
+
+  it("judges each candidate pane by the pane's own rows (as the per-pane check does), not the global table", async () => {
+    const rt = runtime(
+      [row('t1:l1', 's1'), row('t2:l2', 's1')],
+      [
+        { handle: 'h1', tabId: 't1', leafId: 'l1', connected: true },
+        { handle: 'h2', tabId: 't2', leafId: 'l2', connected: true }
+      ],
+      { 't1:l1': [row('t1:l1', 's1')], 't2:l2': [row('t2:l2', 's-other')] }
+    )
+    expect(await runtimeSessionTabs(rt)('s1')).toEqual([{ handle: 'h1', paneKey: 't1:l1' }])
   })
 })

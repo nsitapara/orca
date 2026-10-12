@@ -1,6 +1,5 @@
-import type { ItemFields, StepRow } from '../../shared/api-types'
+import type { ItemFields } from '../../shared/api-types'
 import type { AgentKind, AutomationDefinition, StepDef } from '../../shared/definition/types'
-import { SESSION_LOOKBACK_MS } from '../fields/runtime-facts'
 import { UnrecordedLaunchError, type LaunchResult } from '../scheduler/tick-runner'
 import type { PilotStore } from '../store/store'
 import type { PilotAgentLaunchOptions } from './agent-launch-hook'
@@ -11,7 +10,8 @@ import {
   terminalLaunchOptions,
   type SessionPlan
 } from './step-launch-plan'
-import { findLiveTab } from './session-tabs'
+import type { SessionClaimTable } from './session-claims'
+import { sessionHome } from './session-home'
 import type { Workspace } from './workspace'
 
 export type AgentStepRequest = {
@@ -40,6 +40,10 @@ export type SessionTerminals = {
   state(terminal: KnownTerminal, sessionId: string): Promise<SessionTerminalState>
   // Every terminal Orca says holds the session, whether or not a step row names it (session-tabs.ts).
   tabs?(sessionId: string): Promise<KnownTerminal[]>
+  // The terminal's unsent input, read right before closing a tab nobody of ours owns.
+  draft?(handle: string): Promise<string>
+  // Who is about to start a process on a session (session-claims.ts); shared by launcher, Resume, answers.
+  claims?: SessionClaimTable
   // Types the prompt in; refuses (PromptNotSentError) unless an idle agent is still in the foreground.
   send(handle: string, prompt: string): Promise<void>
   close(handle: string): Promise<void>
@@ -152,100 +156,6 @@ function openStepRow(
   })
 }
 
-// H10: the newest step that ran this session in a terminal: in this run for `continue`, among this
-// automation's steps in this worktree for `per_worktree`.
-function lastSessionStep(
-  store: PilotStore,
-  req: AgentStepRequest,
-  sessionId: string,
-  now: number
-): StepRow | undefined {
-  const { definition, runId, workspace } = req
-  const steps =
-    definition.steps[req.stepIdx].session.kind === 'continue'
-      ? store.runs.steps(runId)
-      : store.runs.sessionStepsIn(definition.id, workspace.path, now - SESSION_LOOKBACK_MS)
-  return steps.findLast((s) => s.sessionId === sessionId && s.terminalHandle !== null)
-}
-
-// A throwing look counts as busy: never a second process on a session that might be in use.
-async function lookAt(
-  deps: AgentStepDeps,
-  terminal: KnownTerminal,
-  sessionId: string
-): Promise<SessionTerminalState> {
-  try {
-    return (await deps.sessionTerminals?.state(terminal, sessionId)) ?? 'gone'
-  } catch {
-    return 'busy'
-  }
-}
-
-function sameArgs(a: readonly string[], b: readonly string[]): boolean {
-  return a.length === b.length && a.every((arg, i) => arg === b[i])
-}
-
-// H10, one process per session: the step's prompt goes into the terminal its session last ran in when
-// that is free and its process runs with this step's args (as stored at launch, not as the definition
-// now says: it may have reloaded since). An idle Pilot tab that can't take it (other or unknown args,
-// another session) is closed first; a busy one fails the step. Null: open a new terminal.
-async function sessionHome(
-  store: PilotStore,
-  req: AgentStepRequest,
-  sessionId: string,
-  deps: AgentStepDeps
-): Promise<(KnownTerminal & { launchArgs: string[] }) | null> {
-  const prior = lastSessionStep(store, req, sessionId, deps.now())
-  const stepOn = (handle: string): boolean =>
-    store.runs.runningSteps().some((s) => s.terminalHandle === handle)
-  const old = prior?.terminalHandle
-    ? { handle: prior.terminalHandle, paneKey: prior.paneKey }
-    : null
-  // The store before any probe: a Pilot step starting or running there is busy, whatever it shows.
-  let state: SessionTerminalState = 'gone'
-  if (old) {
-    state = stepOn(old.handle) ? 'busy' : await lookAt(deps, old, sessionId)
-  }
-  if (state === 'gone' && deps.sessionTerminals) {
-    // No row-named tab holds it: a tab Resume opened, another run's, or the person's may still.
-    const elsewhere = await findLiveTab(
-      { state: (t, id) => lookAt(deps, t, id), tabs: deps.sessionTerminals.tabs, stepOn },
-      sessionId,
-      [],
-      new Set(old ? [old.handle] : [])
-    )
-    if (elsewhere?.state === 'busy') {
-      throw new Error(`Session ${sessionId} is busy in terminal ${elsewhere.handle}`)
-    }
-    if (elsewhere) {
-      // Its process's args aren't recorded: an idle tab that can't be trusted is closed, then resumed.
-      await deps.sessionTerminals.close(elsewhere.handle)
-    }
-  }
-  if (!old || !prior) {
-    return null
-  }
-  const priorStep = req.definition.steps.find((s) => s.name === prior.name)
-  if (state === 'busy') {
-    const label = store.runs.get(prior.runId)?.itemLabel ?? req.label
-    const title = priorStep ? stepTitle(req.definition, priorStep, label) : `terminal ${old.handle}`
-    throw new Error(`Session ${sessionId} is busy in ${title}`)
-  }
-  if (state === 'gone' || !deps.sessionTerminals) {
-    return null
-  }
-  const launchArgs = prior.launchArgs
-  if (
-    state === 'free' &&
-    launchArgs &&
-    sameArgs(launchArgs, req.definition.steps[req.stepIdx].args)
-  ) {
-    return { ...old, launchArgs }
-  }
-  await deps.sessionTerminals.close(old.handle)
-  return null
-}
-
 // As M1: the terminal exists but no row may track it, so say which one and that it started.
 function recordRunning(
   store: PilotStore,
@@ -308,7 +218,16 @@ export async function launchAgentStep(
   }
   let terminal: Terminal
   let launchArgs = [...step.args]
+  // One process per session: taken before any look, so a Resume or launch overlapping this one finds it held.
+  const claims = deps.sessionTerminals?.claims
+  const by = `launch:${runId}:${idx}`
   try {
+    if (session.kind === 'resume' && claims) {
+      await claims.expireIfSeen(session.sessionId)
+      if (!claims.acquire(session.sessionId, by).ok) {
+        throw new Error(`Session ${session.sessionId} is busy: another caller is opening it`)
+      }
+    }
     const modeText = await deps.modeText(step, req.workspace.path)
     // A typed variable, not a literal: `pilot` is beyond launchAgentTerminal's declared options.
     const opts: PilotAgentLaunchOptions = launchOptions(req, agent, session, modeText)
@@ -320,10 +239,21 @@ export async function launchAgentStep(
       // The step runs under the args that process was launched with.
       ;({ launchArgs } = home)
       terminal = home
+      // No new process was started: nothing for the claim to guard.
+      if (session.kind === 'resume') {
+        claims?.release(session.sessionId, by)
+      }
     } else {
       terminal = await deps.launchTerminal(req.workspace.selector, opts)
+      // The claim stays until this terminal's first status row is seen, or its TTL.
+      if (session.kind === 'resume') {
+        claims?.setHandle(session.sessionId, by, terminal.handle)
+      }
     }
   } catch (error) {
+    if (session.kind === 'resume') {
+      claims?.release(session.sessionId, by)
+    }
     const message = messageOf(error)
     const reason = message === 'selector_not_found' ? 'worktree is gone' : message
     failStep(store, runId, idx, reason, deps.now())

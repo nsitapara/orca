@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 import type { SessionTerminalState } from '../run/agent-step'
+import { SessionClaims } from '../run/session-claims'
 import {
   DraftInProgressError,
   findTranscript,
@@ -92,6 +93,18 @@ describe('sessionTerminalProbe (the run launcher’s H10 look, plus who is on th
     ['gone when no tab holds the session', deps({ t: 'gone' }, '', false, []), 'gone']
   ])('a tab the asking step never recorded, opened by hand: %s', async (_name, d, expected) => {
     expect(await sessionTerminalProbe(d).terminalState(ASKING)).toBe(expected)
+  })
+
+  it('reads a session someone is about to start a process on as busy, without looking', async () => {
+    const d = deps('free')
+    const claims = new SessionClaims()
+    claims.acquire('s-1', 'resume')
+    expect(
+      await sessionTerminalProbe({ ...d, terminals: { ...d.terminals, claims } }).terminalState(
+        ASKING
+      )
+    ).toBe('busy')
+    expect(d.terminals.state).not.toHaveBeenCalled()
   })
 
   it('reads a tab a Pilot step is starting or running on as busy, without looking', async () => {

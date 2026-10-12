@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { timelineRun } from './timeline.fixtures'
 
@@ -39,5 +39,21 @@ describe('StepList', () => {
     render(<StepList runId="r1" steps={timelineRun().steps} />)
     fireEvent.click(screen.getByRole('button', { name: /resume/i }))
     expect(await screen.findByText('Run r1 has no worktree to resume in')).toBeTruthy()
+  })
+
+  it('disables Resume while its call is in flight, so a double click opens one tab', async () => {
+    let finish: (v: unknown) => void = () => {}
+    pilotRpc.mockReturnValue(new Promise((resolve) => (finish = resolve)))
+    render(<StepList runId="r1" steps={timelineRun().steps} />)
+    const button = screen.getByRole('button', { name: /resume/i })
+    fireEvent.click(button)
+    fireEvent.click(button)
+    expect(pilotRpc).toHaveBeenCalledTimes(1)
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /resume/i }).hasAttribute('disabled')).toBe(true)
+    )
+    finish({ action: 'opened', handle: 'term_9' })
+    expect(await screen.findByText('Opened in a new tab')).toBeTruthy()
+    expect(screen.getByRole('button', { name: /resume/i }).hasAttribute('disabled')).toBe(false)
   })
 })

@@ -136,9 +136,6 @@ export class RunStore {
       .map((r) => toStep(r as never))
   }
 
-  // The steps starting or running on a terminal, newest first (more than one when a step was sent into
-  // an earlier step's terminal while that one is still active): how `pilot run output|event` find their
-  // step from the terminal they run in.
   // A worktree's runs since `since`, plus any older one still running or asking; newest first. `paths` are
   // the spellings the worktree may be stored under (worktreePathSpellings).
   forWorktree(paths: readonly string[], since: number): RunRow[] {
@@ -151,6 +148,9 @@ export class RunStore {
       .map((r) => toRun(r as never))
   }
 
+  // The steps starting or running on a terminal, newest first (more than one when a step was sent into
+  // an earlier step's terminal while that one is still active): how `pilot run output|event` find their
+  // step from the terminal they run in.
   stepsOnTerminal(handle: string): StepRow[] {
     return this.db
       .prepare(
