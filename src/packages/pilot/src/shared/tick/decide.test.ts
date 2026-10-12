@@ -132,6 +132,16 @@ describe('decideTick: scope, once_per and baseline', () => {
     ])
   })
 
+  it.each([
+    ['a seen item whose source says first sight (history rewritten)', true, true, 'baselined'],
+    ['an unseen item whose source says not first sight (recent work)', false, false, 'started']
+  ])('lets the source own first sight: %s', (_name, seen, baseline, verdict) => {
+    const def = testDefinition({ firstSeen: 'baseline' })
+    const items = [item(1, { 'item.baseline': baseline })]
+    const seenKeys = new Set(seen ? ['mr:1'] : [])
+    expect(verdicts(input(def, items, { seenKeys })).map((v) => v[1])).toEqual([verdict])
+  })
+
   it('runs a run-once automation every tick: no scope, once_per or baseline', () => {
     const def = testDefinition({
       items: null,

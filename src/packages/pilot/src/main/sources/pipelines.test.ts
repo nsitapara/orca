@@ -30,10 +30,13 @@ const SUITE_OK = [job('e2e-checks-and-build'), job('notify-slack-recovery', 'ski
 const SUITE_RED = [
   job('e2e-checks-and-build', 'failed'),
   job('test-apps-smoke-test', 'failed', true),
-  job('notify-slack')
+  job('notify-slack', 'failed')
 ]
 const NO_OP = [job('e2e-skipped')]
+// A running child already has suite jobs: only its status keeps it out.
+const RUNNING = [job('e2e-checks-and-build', 'running'), job('notify-slack', 'created')]
 const JOBS: Record<number, GitLabJob[]> = {
+  6: RUNNING,
   5: SUITE_OK,
   4: SUITE_RED,
   3: NO_OP,
@@ -86,7 +89,7 @@ function gitlab(pipelines: GitLabPipeline[]) {
     if (path === 'pipelines?source=parent_pipeline&ref=dev&order_by=id&sort=desc&per_page=30') {
       return pipelines
     }
-    const jobs = /^pipelines\/(\d+)\/jobs\?per_page=100$/.exec(path)
+    const jobs = /^pipelines\/(\d+)\/jobs\?per_page=100&page=1$/.exec(path)
     return jobs ? (JOBS[Number(jobs[1])] ?? []) : undefined
   })
 }
@@ -142,6 +145,18 @@ describe('pipelineSource', () => {
       select: 'newest_suite_running'
     })
     expect(parsed.success).toBe(false)
+  })
+
+  it('pages a long job list instead of failing at 100 jobs', async () => {
+    const many = [...Array.from({ length: 100 }, (_, i) => job(`unit-${i}`)), ...SUITE_RED]
+    const api = fakeGlab((path) => {
+      if (path.startsWith('pipelines?')) {
+        return [child(4, 'failed')]
+      }
+      return path.endsWith('page=1') ? many.slice(0, 100) : many.slice(100)
+    })
+    const { items } = await pipelineSource().list(sourceContext({}, api), WHERE)
+    expect(items[0].fields['pipeline.failed_jobs']).toBe('e2e-checks-and-build')
   })
 
   it('fails closed on a malformed or possibly cut-short answer', async () => {

@@ -2,7 +2,7 @@ import type Database from '../../../../../main/sqlite/sync-database'
 
 // `<worktree id>@<sha>`: the worktree kind's worktree.at_head, which commit-tracking automations use as
 // their once_per key. The id may itself hold an '@', so the sha is what follows the last one.
-const AT_HEAD = /^(.+)@([0-9a-f]{7,40})$/
+const AT_HEAD = /^(.+)@([0-9a-f]{7,64})$/
 
 export class MarkerStore {
   constructor(private readonly db: Database) {}
