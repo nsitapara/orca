@@ -2,9 +2,13 @@ import { mkdtempSync, readdirSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { expect, it } from 'vitest'
+import { fixFailedCiState } from '../../src/main/importer/sweep-state/fix-failed-ci'
+import { compareDecisions, formatMismatches } from './compare'
 import { loadFixture } from './fixture'
-import { PARITY_05 } from './jobs/job-05'
+import { seedByImport } from './fixture-reader'
+import { JOB_05, PARITY_05, VERDICTS_05, load05 } from './jobs/job-05'
 import { PARITY_DIR, runOldPlan } from './old-side'
+import { caseFile, dryTick, failedCheck } from './ported'
 import { describeParity, expectParity, parityReport } from './parity-case'
 
 const CASES = join(PARITY_DIR, '05')
@@ -45,5 +49,82 @@ describeParity(PARITY_05, '05 · Fix failed CI: Pilot decides each MR as ci-fix-
     await expect(expectParity(PARITY_05, file)).rejects.toMatchObject({
       actual: `missed read: ${marker.join(' ')}`
     })
+  })
+})
+
+const IMPORTED = '2026-10-10-1210'
+
+// Task 38b: the same cases with the sweep's state brought in through `fixFailedCiState`, as `import-state --apply` does.
+describeParity(PARITY_05, "05 · Fix failed CI v2: the sweep's state, imported", () => {
+  const { def, people } = load05()
+  const decide = (name: string) =>
+    dryTick({
+      definition: def,
+      people,
+      fixture: loadFixture(caseFile(JOB_05.job, name)),
+      seed: seedByImport(fixFailedCiState)
+    })
+
+  it('decides as the sweep did with the state imported through the mapper', async () => {
+    const neu = await decide(IMPORTED)
+    expect(
+      formatMismatches(
+        compareDecisions(runOldPlan('05', caseFile('05', IMPORTED)), neu, VERDICTS_05)
+      )
+    ).toBe('')
+  })
+
+  it("never retries a pipeline the sweep's handled.json names, once imported", async () => {
+    const neu = await decide(IMPORTED)
+    expect(neu.find((d) => d.key === 'mr:1587')).toMatchObject({
+      verdict: 'notdue',
+      onceKey: '1587:2933991087'
+    })
+  })
+
+  it('starts the first three MRs the sweep started, skips with the check it named, and caps the fourth', async () => {
+    const neu = await decide(IMPORTED)
+    expect(neu.filter((d) => d.verdict === 'started').map((d) => d.key)).toEqual([
+      'mr:1561',
+      'mr:1605',
+      'mr:1606'
+    ])
+    expect(neu.find((d) => d.key === 'mr:1607')?.verdict).toBe('over_limit')
+    const skipped = neu.filter((d) => d.verdict === 'skipped').map((d) => [d.key, failedCheck(d)])
+    expect(skipped).toEqual([
+      ['mr:1574', 'Clean'],
+      ['mr:1592', 'No open session'],
+      ['mr:1601', 'Worktree'],
+      ['mr:1603', 'Clean'],
+      ['mr:1604', 'Clean']
+    ])
+  })
+
+  // The ruling for 05: skip reasons, not only verdicts (no worktree vs uncommitted vs tab still open).
+  it("skips each MR for the reason the sweep gave: the check named is the sweep's reason", async () => {
+    const neu = await decide(IMPORTED)
+    const byReason: [RegExp, string][] = [
+      [/^no Orca worktree$/, 'Worktree'],
+      [/^previous CI-fix session still open$/, 'No open session'],
+      [/^(uncommitted changes|\S+ present); retry next round$/, 'Clean']
+    ]
+    const old = runOldPlan('05', caseFile('05', IMPORTED)).filter((d) => d.decision === 'skip')
+    expect(old.map((d) => d.key)).toEqual(['mr:1574', 'mr:1592', 'mr:1601', 'mr:1603', 'mr:1604'])
+    for (const d of old) {
+      const expected = byReason.find(([re]) => re.test(d.reason))?.[1]
+      expect([d.key, d.reason, failedCheck(neu.find((n) => n.key === d.key))]).toEqual([
+        d.key,
+        d.reason,
+        expected
+      ])
+    }
+  })
+
+  it('stops what the sweep stopped at dispatch when Claude is out of quota', async () => {
+    const neu = await decide('quota-out')
+    expect(neu.map((d) => [d.key, d.verdict, failedCheck(d)])).toEqual([
+      ['mr:1561', 'skipped', 'Quota'],
+      ['mr:1574', 'skipped', 'Clean']
+    ])
   })
 })
