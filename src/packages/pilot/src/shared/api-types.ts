@@ -13,6 +13,9 @@ export type PilotStatus = {
   // without a scheduler (Pilot failed to start, or the scheduler is off in this process).
   loopStartedAt: number | null
   lastLoopFinishedAt: number | null
+  // True where Orca's own automation engine is stopped (desktop and serve Pilot, unless
+  // PILOT_ORCA_AUTOMATIONS=on). orcad keeps Orca's engine, so it reports false.
+  orcaAutomationsOff: boolean
 }
 
 export type FieldValue = string | number | boolean | null

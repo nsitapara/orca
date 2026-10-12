@@ -19,7 +19,8 @@ const status: PilotStatus = {
   peopleError: null,
   error: null,
   loopStartedAt: null,
-  lastLoopFinishedAt: null
+  lastLoopFinishedAt: null,
+  orcaAutomationsOff: true
 }
 const list: AutomationListPayload = {
   automations: [summary],

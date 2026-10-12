@@ -9,6 +9,9 @@ export function formatPilotStatus(s: PilotStatus): string {
     s.lastLoopFinishedAt === null ? null : `Last pass finished: ${formatTime(s.lastLoopFinishedAt)}`
   ].filter((line): line is string => line !== null)
   const people = s.peopleError ? [`People: ${s.peopleError}`] : []
+  const engine = s.orcaAutomationsOff
+    ? []
+    : ["Orca's own automations: on in this process (they run beside Pilot's YAML automations)"]
   return [
     `Pilot ${s.version} (${s.process})`,
     `Data: ${s.dataPath}`,
@@ -16,7 +19,8 @@ export function formatPilotStatus(s: PilotStatus): string {
     ...dirs,
     ...failed,
     ...passes,
-    ...people
+    ...people,
+    ...engine
   ].join('\n')
 }
 

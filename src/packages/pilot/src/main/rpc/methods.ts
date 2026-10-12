@@ -2,6 +2,7 @@ import { existsSync } from 'node:fs'
 import { z } from 'zod'
 import { defineMethod } from '../../../../../main/runtime/rpc/core'
 import type { PilotStatus } from '../../shared/api-types'
+import { isOrcaAutomationsOff } from '../orca-automations-off'
 import type { PilotContext, PilotHost } from '../pilot-services'
 import { setAutomationEnabled } from './automation-files'
 import { activity, dryRun, getAutomation, listAutomations, tickNow, validateYaml } from './handlers'
@@ -43,7 +44,9 @@ function pilotStatus(host: PilotHost): PilotStatus {
     peopleError: host.context?.loaded().peopleError ?? null,
     error: host.error,
     loopStartedAt: times?.loopStartedAt ?? null,
-    lastLoopFinishedAt: times?.lastLoopFinishedAt ?? null
+    lastLoopFinishedAt: times?.lastLoopFinishedAt ?? null,
+    // Why processKind: orcad runs on the Electron binary too, but the hook only stops desktop/serve's engine.
+    orcaAutomationsOff: host.processKind === 'main' && isOrcaAutomationsOff()
   }
 }
 

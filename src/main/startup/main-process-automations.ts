@@ -1,6 +1,7 @@
 import type { AutomationService } from '../automations/service'
 import { createRuntimeAutomationService } from '../automations/runtime-automation-service'
 import { mainProcessState as state } from './main-process-state'
+import { keepOrcaAutomationsOff } from '../../packages/pilot/src/main/orca-automations-off' // pilot-hook: orca-automations-off
 
 export function initializeMainProcessAutomations(): AutomationService {
   const store = state.store
@@ -19,5 +20,6 @@ export function initializeMainProcessAutomations(): AutomationService {
     headless: state.isServeMode
   })
   state.automations = service
+  keepOrcaAutomationsOff(service, store) // pilot-hook: orca-automations-off
   return service
 }

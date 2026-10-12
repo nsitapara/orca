@@ -14,7 +14,8 @@ describe('formatPilotStatus', () => {
         peopleError: null,
         error: null,
         loopStartedAt: null,
-        lastLoopFinishedAt: null
+        lastLoopFinishedAt: null,
+        orcaAutomationsOff: true
       })
     ).toBe(
       [
@@ -37,12 +38,31 @@ describe('formatPilotStatus', () => {
       peopleError: '/a/people.yaml: people.yaml and people.yml both exist; using people.yaml',
       error: 'file is not a database',
       loopStartedAt: null,
-      lastLoopFinishedAt: null
+      lastLoopFinishedAt: null,
+      orcaAutomationsOff: true
     })
     expect(out.split('\n').slice(-2)).toEqual([
       "Pilot couldn't start: file is not a database",
       'People: /a/people.yaml: people.yaml and people.yml both exist; using people.yaml'
     ])
+  })
+
+  it("says when Orca's own automation engine runs in this process", () => {
+    const out = formatPilotStatus({
+      version: '0.1.0',
+      process: 'orcad',
+      dataPath: '/d',
+      automationDirs: [],
+      missingDirs: [],
+      peopleError: null,
+      error: null,
+      loopStartedAt: null,
+      lastLoopFinishedAt: null,
+      orcaAutomationsOff: false
+    })
+    expect(out.split('\n').at(-1)).toBe(
+      "Orca's own automations: on in this process (they run beside Pilot's YAML automations)"
+    )
   })
 })
 
@@ -66,7 +86,8 @@ describe('formatPilotStatus scheduler passes', () => {
       peopleError: null,
       error: null,
       loopStartedAt: 1_700_000_100_000,
-      lastLoopFinishedAt: 1_700_000_000_000
+      lastLoopFinishedAt: 1_700_000_000_000,
+      orcaAutomationsOff: true
     }
     const lines = formatPilotStatus(status).split('\n')
     expect(lines.filter((l) => l.startsWith('Scheduler pass started'))).toHaveLength(1)

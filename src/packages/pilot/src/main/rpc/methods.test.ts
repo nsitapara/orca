@@ -1,12 +1,15 @@
 import { mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import type { PilotStatus } from '../../shared/api-types'
 import { loadDefinitions } from '../definitions/loader'
 import type { PilotHost } from '../pilot-services'
 import { PilotStore } from '../store/store'
 import { buildPilotMethods } from './methods'
+
+// Desktop/serve Pilot inside Electron: Orca's own engine is off there.
+vi.mock('../orca-automations-off', () => ({ isOrcaAutomationsOff: () => true }))
 
 type Callable = {
   name: string
@@ -73,6 +76,17 @@ describe('Pilot RPC methods', () => {
     ) as PilotStatus
     expect(none).toMatchObject({ loopStartedAt: null, lastLoopFinishedAt: null, error: 'boom' })
   })
+
+  it.each([
+    { processKind: 'main' as const, expected: true },
+    { processKind: 'orcad' as const, expected: false }
+  ])(
+    "pilot.status says Orca's engine is off only where the hook stops it: $processKind → $expected",
+    ({ processKind, expected }) => {
+      const status = setup({ processKind })('pilot.status').handler(null) as PilotStatus
+      expect(status.orcaAutomationsOff).toBe(expected)
+    }
+  )
 
   it("makes every automations method say Pilot isn't running when it failed to start", async () => {
     const find = setup({ context: null, error: 'file is not a database' })
