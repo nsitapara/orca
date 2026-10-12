@@ -1,55 +1,31 @@
 import { createHash } from 'node:crypto'
 import {
   copyFileSync,
-  mkdirSync,
-  mkdtempSync,
   readFileSync,
   realpathSync,
   rmSync,
   symlinkSync,
   writeFileSync
 } from 'node:fs'
-import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
+import {
+  detailsFixture as fixture,
+  REVIEW_BLOCK as REVIEW,
+  rewriteBundle,
+  type DetailsFixture as Fixture,
+  type FixtureBundle as Bundle
+} from './__fixtures__/details-fixture'
 import { loadDetails, readDetailsImage, DetailsRefused } from './details-bundle'
 
-const FIXTURES = join(import.meta.dirname, '../../../test/fixtures/details')
-const FILES = [
-  'F2.json',
-  'F2.patch',
-  'F2-before.png',
-  'F2-after.png',
-  'F2-qa.png',
-  'sample-review.json'
-]
 const sha = (data: string | Buffer) => createHash('sha256').update(data).digest('hex')
 
-type Fixture = { top: string; root: string; dir: string; bundle: string }
-
-// <top>/Automations is the root; the bundle sits at <root>/job/b/details/r/F2.json with its files.
-function fixture(): Fixture {
-  const top = mkdtempSync(join(tmpdir(), 'pilot-details-'))
-  const root = join(top, 'Automations')
-  const dir = join(root, 'job', 'b', 'details', 'r')
-  mkdirSync(dir, { recursive: true })
-  for (const file of FILES) {
-    copyFileSync(join(FIXTURES, file), join(dir, file))
-  }
-  writeFileSync(join(top, 'x.png'), readFileSync(join(FIXTURES, 'F2-qa.png')))
-  return { top, root, dir, bundle: join(dir, 'F2.json') }
-}
-
-type Bundle = { version: number; blocks: Record<string, unknown>[] } & Record<string, unknown>
 function rewrite(f: Fixture, change: (bundle: Bundle) => void): void {
-  const bundle = JSON.parse(readFileSync(f.bundle, 'utf8')) as Bundle
-  change(bundle)
-  writeFileSync(f.bundle, JSON.stringify(bundle))
+  rewriteBundle(f.bundle, change)
 }
 function shotsBlock(bundle: Bundle): { shots: { file: string }[] } {
   return bundle.blocks.find((b) => b.type === 'shots') as never
 }
-const REVIEW = { type: 'review', title: 'Review', file: 'sample-review.json' }
 
 function refusal(work: () => unknown): string {
   try {

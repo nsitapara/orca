@@ -1,10 +1,11 @@
 import { mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { join, resolve } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { normalizeCommandPositionals, parseArgs } from '../../../../cli/args'
 import type { HandlerContext } from '../../../../cli/dispatch'
 import type { InboxItemRow, InboxListPayload } from '../shared/api-types'
+import type { DetailsRef } from '../shared/details'
 import { INBOX_HANDLERS } from './handlers-inbox'
 import { PILOT_COMMAND_SPECS } from './specs'
 
@@ -33,7 +34,18 @@ function outsideRuns(): void {
     vi.stubEnv(name, '')
   }
 }
+// Why __dirname: it works under Vitest and the CommonJS emit the CLI is type-checked against.
+const DETAILS_FIXTURES = join(__dirname, '../../test/fixtures/details')
 const ADDED = { id: 'q1', existing: false, refused: null }
+const SHOWN = {
+  id: 'in_x',
+  type: 'bug',
+  status: 'answered',
+  version: 2,
+  title: 'Leaving asks to discard edits',
+  detailsMd: null,
+  details: null
+}
 const CARD = ['inbox', 'add', '--type', 'question', '--title', 'Push the fix?']
 
 beforeEach(() => vi.stubEnv('ORCA_TERMINAL_HANDLE', ''))
@@ -218,6 +230,72 @@ describe('pilot inbox add', () => {
     const { context, call } = contextFor(argv, ADDED)
     await expect(INBOX_HANDLERS['inbox add'](context)).rejects.toThrow(message)
     expect(call).not.toHaveBeenCalled()
+  })
+})
+
+describe('pilot inbox add with a Details bundle', () => {
+  it('sends --details-bundle as an absolute path for Pilot to read', async () => {
+    insideStep()
+    const { context, call } = contextFor([...CARD, '--details-bundle', 'rel/F2.json'], ADDED)
+    vi.spyOn(console, 'log').mockImplementation(() => {})
+    await INBOX_HANDLERS['inbox add'](context)
+    expect(call).toHaveBeenCalledWith(
+      'pilot.inbox.add',
+      expect.objectContaining({ detailsBundlePath: resolve(process.cwd(), 'rel/F2.json') })
+    )
+    expect(call.mock.calls[0][1]).not.toHaveProperty('detailsMd')
+  })
+
+  it.each([
+    [
+      'a bundle passed as --details-file',
+      ['--details-file', join(DETAILS_FIXTURES, 'F2.json')],
+      `--details-file ${join(DETAILS_FIXTURES, 'F2.json')} is a Details bundle: pass it with --details-bundle`
+    ],
+    [
+      '--details-file and --details-bundle together',
+      ['--details-file', join(DETAILS_FIXTURES, 'F2.patch'), '--details-bundle', 'F2.json'],
+      'Give Details as markdown (--details-file) or as a bundle (--details-bundle), not both'
+    ]
+  ])('refuses %s before calling Pilot', async (_n, flags, message) => {
+    insideStep()
+    const { context, call } = contextFor([...CARD, ...flags], ADDED)
+    await expect(INBOX_HANDLERS['inbox add'](context)).rejects.toThrow(message)
+    expect(call).not.toHaveBeenCalled()
+  })
+})
+
+describe('pilot inbox show', () => {
+  const REF: DetailsRef = {
+    path: '/v/Automations/job/b/details/r/F2.json',
+    sha256: 'a'.repeat(64),
+    inlined: {},
+    blocks: 8,
+    drafted: true,
+    draftedBase: '7cc153d0000000000000000000000000000000000'
+  }
+  it.each([
+    [
+      'a bundle',
+      { details: REF },
+      `Details: /v/Automations/job/b/details/r/F2.json (sha256 ${'a'.repeat(64)}, 8 blocks, drafted at 7cc153d0)`
+    ],
+    [
+      'an undrafted bundle',
+      { details: { ...REF, blocks: 1, drafted: false, draftedBase: null } },
+      `Details: /v/Automations/job/b/details/r/F2.json (sha256 ${'a'.repeat(64)}, 1 block)`
+    ],
+    ['markdown', { detailsMd: '## Why' }, 'Details: markdown'],
+    ['nothing', {}, 'Details: none']
+  ])('prints the card and where its Details are: %s', async (_n, over, line) => {
+    const row = { ...SHOWN, ...over }
+    const { context, call } = contextFor(['inbox', 'show', '--id', 'in_x'], row)
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {})
+    await INBOX_HANDLERS['inbox show'](context)
+    expect(call).toHaveBeenCalledWith('pilot.inbox.get', { id: 'in_x' })
+    expect(log).toHaveBeenCalledWith(
+      ['in_x · bug · answered · v2', 'Leaving asks to discard edits', line].join('\n')
+    )
   })
 })
 

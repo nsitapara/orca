@@ -1,9 +1,11 @@
 import { randomUUID } from 'node:crypto'
 import type { InboxItemRow, ItemFields } from '../../shared/api-types'
+import type { DetailsSnapshot } from '../../shared/details'
 import type { InboxAddParams, InboxAddResult } from '../../shared/inbox-types'
 import { CHANGED_AFTER_ANSWER } from '../../shared/pilot-replies'
 import type { NewInboxItem } from '../store/store-inbox'
-import { buildCard, inboxDigest, type InboxCard } from './card'
+import { buildCard, checkDetailsChoice, inboxDigest, type InboxCard } from './card'
+import { loadDetails } from './details-bundle'
 import { inboxEvent, syncRunWaiting, WAITING, type InboxDeps } from './inbox-service'
 import { resolveInboxPerson } from './person'
 import { fieldsForRun, latestFieldsFor } from './run-fields'
@@ -109,14 +111,16 @@ function skippedBefore(item: InboxItemRow, card: InboxCard, origin: Origin): boo
   )
 }
 
-// The open card again: unchanged, it is returned as is; changed, it becomes the next version, and an
-// answer given to the old version is cleared (that answer approved another card).
+// The open card again: unchanged, it is returned as is; changed, it becomes the next version (with the
+// snapshot of its bundle, or none), and an answer given to the old version is cleared (that answer
+// approved another card).
 function updateOpen(
   deps: InboxDeps,
   open: InboxItemRow,
   card: InboxCard,
   digest: string,
-  at: number
+  at: number,
+  snapshot: DetailsSnapshot | null
 ): InboxAddResult {
   if (open.digest === digest) {
     // The suggestion is not part of the digest: refresh it without making a new version.
@@ -135,6 +139,7 @@ function updateOpen(
   }
   deps.store.transaction(() => {
     deps.store.inbox.edit(open.id, { ...card, digest }, at)
+    deps.store.inbox.setSnapshot(open.id, snapshot)
     if (answered) {
       deps.store.inbox.update(open.id, cleared, at)
     }
@@ -164,7 +169,13 @@ export function addInboxItem(
   if (!def) {
     throw new Error(`No automation "${origin.automationId}"`)
   }
-  const card = buildCard(params)
+  // The bundle is read and checked whole before anything else about the card, on a dry run too: a
+  // refused bundle fails the add (DetailsRefused), and nothing is written.
+  checkDetailsChoice(params)
+  const loaded = params.detailsBundlePath
+    ? loadDetails(deps.detailsRoot ?? null, params.detailsBundlePath)
+    : null
+  const card = buildCard(params, loaded?.ref ?? null)
   if (card.action && deps.knownAction && !deps.knownAction(card.action)) {
     throw new Error(`No action named "${card.action}" in Pilot's catalog`)
   }
@@ -182,7 +193,7 @@ export function addInboxItem(
     return { id: null, existing: true, refused: SAME_CARD_OPEN }
   }
   if (open) {
-    return updateOpen(deps, open, card, digest, at)
+    return updateOpen(deps, open, card, digest, at, loaded)
   }
   if (card.action && mine.some((i) => skippedBefore(i, card, origin))) {
     return { id: null, existing: false, refused: SKIPPED_BEFORE }
@@ -210,7 +221,7 @@ export function addInboxItem(
     source: opts.source ?? 'engine',
     vaultRef: opts.vaultRef ?? null
   }
-  deps.store.inbox.add(item)
+  deps.store.inbox.add(item, loaded)
   inboxEvent(
     deps.store,
     item,

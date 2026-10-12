@@ -36,7 +36,7 @@ export const PILOT_HANDLER_GROUPS: readonly HandlerGroup[] = [
   },
   {
     name: 'pilot-inbox',
-    keys: ['inbox add', 'inbox list', 'inbox answer'],
+    keys: ['inbox add', 'inbox list', 'inbox show', 'inbox answer'],
     load: async () => (await import('./handlers-inbox.js')).INBOX_HANDLERS
   },
   {

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import { buildCard, inboxDigest, parseOption, toInboxSummary } from './card'
+import { buildCard, cardOf, inboxDigest, parseOption, toInboxSummary } from './card'
 import type { InboxItemRow } from '../../shared/api-types'
+import type { DetailsRef } from '../../shared/details'
 import type { InboxAddParams } from '../../shared/inbox-types'
 
 const PUSH: InboxAddParams = {
@@ -33,6 +34,10 @@ describe('buildCard', () => {
     ],
     [{ ...PUSH, detailsMd: 'x'.repeat(64 * 1024 + 1) }, 'Details are limited to 64 KB'],
     [
+      { ...PUSH, detailsMd: '## Why', detailsBundlePath: '/v/F2.json' },
+      'Give Details as markdown (--details-file) or as a bundle (--details-bundle), not both'
+    ],
+    [
       { ...PUSH, actionArgs: { argv: ['x'.repeat(16 * 1024)] } },
       'Action arguments are limited to 16 KB'
     ],
@@ -56,6 +61,15 @@ describe('buildCard', () => {
     })
   })
 })
+
+const F2: DetailsRef = {
+  path: '/v/A/job/details/r/F2.json',
+  sha256: 'a'.repeat(64),
+  inlined: {},
+  blocks: 8,
+  drafted: true,
+  draftedBase: '7cc153d0000000000000000000000000000000000'
+}
 
 describe('inboxDigest', () => {
   const base = inboxDigest(buildCard(PUSH))
@@ -81,6 +95,38 @@ describe('inboxDigest', () => {
 
   it('ignores the suggestion', () => {
     expect(inboxDigest(buildCard({ ...PUSH, suggested: 'Skip' }))).toBe(base)
+  })
+
+  // Pinned from the code before bundles: a card without one must keep its exact digest.
+  it.each([
+    ['a plain card', PUSH, '6ae9b6066ee89adc970fa8ed14f7926f918923f14c76564b025f2dc14eb4db18'],
+    [
+      'a card with parts and switch words',
+      { ...PUSH, parts: { F1: 'Null check' }, switchWords: ['Post', 'Leave out'] },
+      'fb4538db5ae6f6b0508fe9923973e4610e6fe2d6d60620c0c38e719457b24c7a'
+    ],
+    [
+      'a card with markdown Details',
+      { ...PUSH, detailsMd: '```diff\n-a\n+b\n```' },
+      '6dedf99646862f1ca0694721a6f7a94b935b343164c23646940469f08e27f316'
+    ]
+  ])('keeps %s at its digest from before bundles', (_name, params, digest) => {
+    expect(inboxDigest(buildCard(params))).toBe(digest)
+  })
+
+  it("binds to the bundle's path, its bytes and each inlined review text", () => {
+    const bundled = inboxDigest(buildCard(PUSH, F2))
+    expect(bundled).not.toBe(base)
+    expect(inboxDigest(buildCard(PUSH, { ...F2 }))).toBe(bundled)
+    expect(inboxDigest(buildCard(PUSH, { ...F2, path: '/v/A/job/details/s/F2.json' }))).not.toBe(
+      bundled
+    )
+    expect(inboxDigest(buildCard(PUSH, { ...F2, sha256: 'b'.repeat(64) }))).not.toBe(bundled)
+    const reviewed = { ...F2, inlined: { 'r.json': 'c'.repeat(64) } }
+    expect(inboxDigest(buildCard(PUSH, reviewed))).not.toBe(bundled)
+    expect(inboxDigest(buildCard(PUSH, { ...F2, inlined: { 'r.json': 'd'.repeat(64) } }))).not.toBe(
+      inboxDigest(buildCard(PUSH, reviewed))
+    )
   })
 })
 
@@ -123,5 +169,6 @@ describe('toInboxSummary', () => {
       status: 'open',
       createdAt: 5
     })
+    expect(cardOf({ ...row, details: F2 }).details).toEqual(F2)
   })
 })

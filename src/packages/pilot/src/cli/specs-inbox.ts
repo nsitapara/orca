@@ -6,7 +6,7 @@ export const INBOX_COMMAND_SPECS: CommandSpec[] = [
     path: ['inbox', 'add'],
     summary: 'Add a card to Waiting on you: a question, a flag, or a proposed action',
     usage:
-      'pilot inbox add --type <question|flagged|default|action|bug|left_for_you> --title <text> [--context <text>] [--suggested <text>] [--option "<label> — <meaning>"]... [--details-file <path>] [--action <name> --args-json <json object>] [--part <id>=<label>]... [--switch <on> --switch <off>] [--worktree <path>] [--automation <id> --item <key>] [--json]',
+      'pilot inbox add --type <question|flagged|default|action|bug|left_for_you> --title <text> [--context <text>] [--suggested <text>] [--option "<label> — <meaning>"]... [--details-file <path> | --details-bundle <path>] [--action <name> --args-json <json object>] [--part <id>=<label>]... [--switch <on> --switch <off>] [--worktree <path>] [--automation <id> --item <key>] [--json]',
     allowedFlags: [
       ...GLOBAL_FLAGS,
       'type',
@@ -15,6 +15,7 @@ export const INBOX_COMMAND_SPECS: CommandSpec[] = [
       'suggested',
       'option',
       'details-file',
+      'details-bundle',
       'action',
       'args-json',
       'part',
@@ -30,6 +31,7 @@ export const INBOX_COMMAND_SPECS: CommandSpec[] = [
     notes: [
       'Inside a step Pilot started, the card belongs to that run. Outside one, give --automation and --item.',
       'Prints the new card\'s id (with --json, {"id": …}).',
+      "--details-file is markdown. --details-bundle is a Details bundle (details.py build --for-pilot) inside the Automations folder; Pilot reads and checks it, and its bytes join the card's digest.",
       'Never wait for the answer in your tab: Pilot brings it back.'
     ]
   },
@@ -38,6 +40,16 @@ export const INBOX_COMMAND_SPECS: CommandSpec[] = [
     summary: 'The cards waiting on you (or on --person)',
     usage: 'pilot inbox list [--person <id>] [--json]',
     allowedFlags: [...GLOBAL_FLAGS, 'person']
+  },
+  {
+    path: ['inbox', 'show'],
+    summary: 'One card: its type, status, version, title and where its Details are',
+    usage: 'pilot inbox show --id <id> [--json]',
+    allowedFlags: [...GLOBAL_FLAGS, 'id'],
+    examples: ['pilot inbox show --id in_0123456789abcdef'],
+    notes: [
+      'With --json, the whole card, its Details ref included (path, sha256, blocks, drafted).'
+    ]
   },
   {
     path: ['inbox', 'answer'],

@@ -3,6 +3,9 @@
 
 // Every refusal's message starts `${DETAILS_REFUSED}: `.
 export const DETAILS_REFUSED = 'Details bundle refused'
+// A card's Details are markdown or a bundle, never both (the CLI and the server say the same).
+export const DETAILS_EITHER =
+  'Give Details as markdown (--details-file) or as a bundle (--details-bundle), not both'
 export const DETAILS_LIMITS = {
   bundleBytes: 2_000_000,
   reviewBytes: 1_000_000,

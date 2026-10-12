@@ -15,6 +15,22 @@ export function isInboxType(value: string): value is InboxType {
   return (INBOX_TYPES as readonly string[]).includes(value)
 }
 
+// A Details bundle (an object with a numeric version and a list of blocks) given as --details-file would
+// show as raw JSON on the card: it goes with --details-bundle instead.
+export function isDetailsBundleText(text: string): boolean {
+  let value: unknown
+  try {
+    value = JSON.parse(text)
+  } catch {
+    return false
+  }
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+    return false
+  }
+  const { version, blocks } = value as { version?: unknown; blocks?: unknown }
+  return typeof version === 'number' && Array.isArray(blocks)
+}
+
 // The server parses "<label> — <meaning>" (Task 20a's parseOption). The CLI only refuses an option with
 // no label, so a typo fails here and not after the card is written. No dash: the whole text is the label.
 export function checkInboxOption(raw: string): string {

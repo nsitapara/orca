@@ -1,3 +1,4 @@
+import { resolve } from 'node:path'
 import type { CommandHandler } from '../../../../cli/dispatch'
 import {
   getOptionalJsonFlag,
@@ -15,12 +16,14 @@ import type {
   InboxListParams,
   InboxListPayload
 } from '../shared/api-types'
+import { DETAILS_EITHER } from '../shared/details'
 import { invalid, jsonObjectFlag, readTextFile } from './cli-values'
-import { formatInboxList } from './format-inbox'
+import { formatInboxList, formatInboxShow } from './format-inbox'
 import {
   checkInboxOption,
   INBOX_TYPES,
   inboxTarget,
+  isDetailsBundleText,
   isInboxType,
   MAX_DETAILS_BYTES,
   parseParts,
@@ -49,6 +52,31 @@ function nonEmpty<T>(list: T[]): T[] | undefined {
   return list.length > 0 ? list : undefined
 }
 
+// --details-file is markdown, read here; a bundle given there is refused, since it would show as raw JSON.
+function detailsMarkdown(path: string): string {
+  const text = readTextFile(path, 'details-file', MAX_DETAILS_BYTES)
+  if (isDetailsBundleText(text)) {
+    throw invalid(`--details-file ${path} is a Details bundle: pass it with --details-bundle`)
+  }
+  return text
+}
+
+// --details-bundle is sent as an absolute path: Pilot reads and checks the bundle itself (ruling 1).
+function detailsFlags(flags: Flags): Pick<InboxAddParams, 'detailsMd' | 'detailsBundlePath'> {
+  const file = getOptionalStringFlag(flags, 'details-file')
+  const bundle = getOptionalStringFlag(flags, 'details-bundle')
+  if (file !== undefined && bundle !== undefined) {
+    throw invalid(DETAILS_EITHER)
+  }
+  if (bundle !== undefined) {
+    return { detailsBundlePath: resolve(process.cwd(), bundle) }
+  }
+  if (file !== undefined) {
+    return { detailsMd: detailsMarkdown(file) }
+  }
+  return {}
+}
+
 function addParams(flags: Flags): InboxAddParams {
   const type = getRequiredStringFlag(flags, 'type')
   if (!isInboxType(type)) {
@@ -59,7 +87,7 @@ function addParams(flags: Flags): InboxAddParams {
   if ((action === undefined) !== (argsJson === undefined)) {
     throw invalid('--action and --args-json go together')
   }
-  const detailsFile = getOptionalStringFlag(flags, 'details-file')
+  const details = detailsFlags(flags)
   const target = orInvalid(() =>
     inboxTarget(process.env, {
       automation: getOptionalStringFlag(flags, 'automation'),
@@ -76,12 +104,7 @@ function addParams(flags: Flags): InboxAddParams {
     ...given('context', getOptionalStringFlag(flags, 'context')),
     ...given('suggested', getOptionalStringFlag(flags, 'suggested')),
     ...given('options', nonEmpty(options)),
-    ...given(
-      'detailsMd',
-      detailsFile === undefined
-        ? undefined
-        : readTextFile(detailsFile, 'details-file', MAX_DETAILS_BYTES)
-    ),
+    ...details,
     ...given('action', action),
     ...given('actionArgs', jsonObjectFlag(argsJson, 'args-json')),
     ...given('parts', Object.keys(parts).length > 0 ? parts : undefined),
@@ -121,6 +144,10 @@ export const INBOX_HANDLERS: Record<string, CommandHandler> = {
       json,
       formatInboxList
     )
+  },
+  'inbox show': async ({ flags, client, json }) => {
+    const id = getRequiredStringFlag(flags, 'id')
+    printResult(await client.call<InboxItemRow>('pilot.inbox.get', { id }), json, formatInboxShow)
   },
   'inbox answer': async ({ flags, client, json }) => {
     const response = await client.call<InboxItemRow>('pilot.inbox.answer', answerParams(flags))
