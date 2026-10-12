@@ -16,7 +16,7 @@ import { incompleteListing, type LinearConnector } from '../linear-connector/lin
 import { mapLimit } from '../map-limit'
 import { gateFields, readBranchFacts } from './branch-facts'
 import type { GlabApi } from './gitlab-api'
-import { gitlabFor } from './gitlab-fetch'
+import { gitlabFor, messageOf } from './gitlab-fetch'
 import type { Item, ItemSource, RepoFacts, SourceContext } from './types'
 import type { GitRunner } from './worktree-git'
 import type { WorktreeRecord } from './worktree-records'
@@ -52,12 +52,46 @@ export function findTicketWorktree(
   return (branch && worktrees.find((w) => w.branch === branch)) || null
 }
 
+// sweep.py branch_exists: only git's own "no such ref" (exit 1) means absent. Any other failure
+// (timeout, spawn error, not a repo) is unknown and throws, so the item is blocked, never "mine".
 async function branchExists(git: GitRunner, repoPath: string, branch: string): Promise<boolean> {
   try {
     await git(['show-ref', '--verify', '--quiet', `refs/heads/${branch}`], { cwd: repoPath })
     return true
-  } catch {
-    return false
+  } catch (error) {
+    const { code, killed, signal } = (error ?? {}) as {
+      code?: unknown
+      killed?: unknown
+      signal?: unknown
+    }
+    if (code === 1 && !killed && !signal) {
+      return false
+    }
+    throw error
+  }
+}
+
+// M01 runs no ownership check for a ticket without a worktree (a new branch off origin/dev is mine),
+// but a branch whose existence can't be read blocks, as an unknown does everywhere.
+async function lonelyBranchFields(
+  git: GitRunner,
+  repoPath: string,
+  branch: string | null
+): Promise<ItemFields> {
+  if (!branch) {
+    return { ...OWN_NEW_BRANCH, 'ticket.branch_exists': null }
+  }
+  try {
+    return { ...OWN_NEW_BRANCH, 'ticket.branch_exists': await branchExists(git, repoPath, branch) }
+  } catch (error) {
+    const reason = `branch ${branch} unknown: ${messageOf(error)}`
+    return {
+      'mr.owner_block': reason,
+      'mr.finished_block': reason,
+      'mr.review_block': reason,
+      'mr.draft_block': reason,
+      'ticket.branch_exists': null
+    }
   }
 }
 
@@ -117,10 +151,7 @@ async function ticketItem(
     Object.assign(fields, gateFields(await readBranchFacts(api, wt.branch)))
     fields['ticket.branch_exists'] = null
   } else {
-    Object.assign(fields, OWN_NEW_BRANCH)
-    fields['ticket.branch_exists'] = branch
-      ? await branchExists(deps.git, ctx.repo.path, branch)
-      : null
+    Object.assign(fields, await lonelyBranchFields(deps.git, ctx.repo.path, branch))
   }
   const created = Date.parse(t.issue.createdAt ?? '')
   return {
@@ -149,9 +180,14 @@ export function linearTicketSource(deps: LinearTicketSourceDeps): ItemSource {
         stateTypeAllowed(t.state?.type, where)
       )
       const worktrees = (await deps.listWorktrees(ctx.repo)).filter((w) => !w.isArchived)
-      const api = await gitlabFor(ctx).catch(() => null)
+      const warnings: string[] = []
+      // Without GitLab every ownership fact is unknown, so the gate rules block (fail closed).
+      const api = await gitlabFor(ctx).catch((error: unknown) => {
+        warnings.push(`No GitLab project for ${ctx.repo.name}: ${messageOf(error)}`)
+        return null
+      })
       const items = await mapLimit(tickets, POOL, (t) => ticketItem(ctx, deps, api, t, worktrees))
-      return { items, warnings: [] }
+      return { items, warnings }
     },
     scope(item, rawWhere, people) {
       const where = linearTicketWhereSchema.parse(rawWhere ?? {})

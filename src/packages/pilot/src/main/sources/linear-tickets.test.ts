@@ -4,8 +4,9 @@ import type {
   LinearIssueSummary
 } from '../../../../../shared/linear/agent-access'
 import type { LinearConnector } from '../linear-connector/linear-connector'
-import { fakeGlab, sourceContext } from './__fixtures__/source-context'
+import { PEOPLE, fakeGlab, sourceContext } from './__fixtures__/source-context'
 import { findTicketWorktree, linearTicketSource } from './linear-tickets'
+import type { Item } from './types'
 import type { GitRunner } from './worktree-git'
 import type { WorktreeRecord } from './worktree-records'
 
@@ -92,7 +93,7 @@ const git: GitRunner = async (args) => {
   if (args.join(' ') === 'show-ref --verify --quiet refs/heads/web-3-high-new') {
     return { stdout: '' }
   }
-  throw new Error('exit 1')
+  throw Object.assign(new Error('exit 1'), { code: 1 })
 }
 const gitlab = fakeGlab((path) => {
   if (path === 'root:user') {
@@ -211,6 +212,60 @@ describe('linearTicketSource', () => {
     await source(linear).list(pass, { state_type: ['unstarted'] })
     expect(linear.listIssues).toHaveBeenCalledTimes(1)
     expect(linear.issue).toHaveBeenCalledTimes(5)
+  })
+})
+
+describe('linearTicketSource: who and what is blocked', () => {
+  it('lists every ticket when the assignee is a named non-viewer, and matches by display name', async () => {
+    const emils = [
+      { ...listed('URGENT', 'unstarted', 1), assignee: { id: 'u-emil', displayName: 'Emil' } },
+      listed('LOW', 'unstarted', 4)
+    ] as Listed[]
+    const linear = {
+      listIssues: vi.fn(async () => ({ issues: emils, meta: { ...meta, filter: 'all' } })),
+      issue: vi.fn(async (id: string) => {
+        const item = emils.find((i) => i.identifier === id) as Listed
+        return detail(item, CREATED[id], BRANCH[id])
+      })
+    } as unknown as ReturnType<typeof connector>
+    const people = {
+      ...PEOPLE,
+      people: PEOPLE.people.map((p) => (p.id === 'emil' ? { ...p, linear: 'Emil' } : p))
+    }
+    const where = { assignee: { people: ['emil'] } }
+    const src = source(linear)
+    const { items } = await src.list(context({ people }), where)
+    expect(linear.listIssues).toHaveBeenCalledWith('all')
+    const verdict = (key: string) => {
+      const r = src.scope(items.find((i) => i.key === key) as Item, where, people)
+      return r.ok ? null : r.reason
+    }
+    expect(verdict('linear:URGENT')).toBeNull()
+    expect(verdict('linear:LOW')).toBe(
+      'Assignee is Nish Sitapara; this automation looks at Emil Elgaard'
+    )
+  })
+
+  it('blocks a ticket whose branch existence cannot be read, and not a clean absence', async () => {
+    const failing: GitRunner = async () => {
+      throw Object.assign(new Error('git timed out'), { code: 0, killed: true })
+    }
+    const src = linearTicketSource({
+      linear: connector(),
+      listWorktrees: async () => [],
+      git: failing
+    })
+    const { items } = await src.list(context(), M01)
+    const urgent = items.find((i) => i.key === 'linear:URGENT') as Item
+    expect(urgent.fields['mr.owner_block']).toMatch(/^branch web-1-urgent unknown: git timed out/)
+    expect(urgent.fields['ticket.branch_exists']).toBeNull()
+  })
+
+  it('a worktree ticket whose GitLab lookup fails is blocked and says why', async () => {
+    const down = fakeGlab(() => new Error('gitlab down'))
+    const broken = await source(connector()).list(sourceContext({}, down), M01)
+    const old = broken.items.find((i) => i.key === 'linear:HIGH-OLD') as Item
+    expect(old.fields['mr.owner_block']).toMatch(/unknown/i)
   })
 })
 

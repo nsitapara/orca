@@ -102,10 +102,37 @@ describe('linearWriterOver sends what the orca linear CLI sends', () => {
       })
     })
     const writer = linearWriterOver(linear)
-    const made = await writer.createIssue({ team: 'WEB', title: 'T', body: '' })
+    const made = await writer.createIssue({ team: 'WEB', title: 'T', body: '', writeId: WRITE })
     expect(made.branchName).toBeNull()
     await expect(
-      writer.createIssue({ team: 'WEB', title: 'T', body: '', priority: 'highest' })
+      writer.createIssue({ team: 'WEB', title: 'T', body: '', priority: 'highest', writeId: WRITE })
     ).rejects.toThrow('unknown priority "highest"')
+  })
+
+  it.each([
+    [
+      'createIssue',
+      (w: ReturnType<typeof linearWriterOver>, id: string) =>
+        w.createIssue({ team: 'WEB', title: 'T', body: '', writeId: id })
+    ],
+    [
+      'addComment',
+      (w: ReturnType<typeof linearWriterOver>, id: string) =>
+        w.addComment('WEB-1', 'b', { writeId: id })
+    ],
+    [
+      'attachUrl',
+      (w: ReturnType<typeof linearWriterOver>, id: string) =>
+        w.attachUrl('WEB-1', 'https://x.y', 't', { writeId: id })
+    ]
+  ])('%s refuses a missing writeId and sends nothing', async (_name, call) => {
+    const linear = fakeLinear()
+    await expect(call(linearWriterOver(linear), '')).rejects.toThrow('needs a writeId')
+    await expect(call(linearWriterOver(linear), undefined as unknown as string)).rejects.toThrow(
+      'needs a writeId'
+    )
+    expect(linear.create).not.toHaveBeenCalled()
+    expect(linear.comment).not.toHaveBeenCalled()
+    expect(linear.attach).not.toHaveBeenCalled()
   })
 })
