@@ -114,6 +114,7 @@ describeParity(
     it('has its cases', () => {
       expect(cases()).toEqual([
         'check-order.json',
+        'failed-first-sight.json',
         'first-sight.json',
         'fixer-holds-the-slot.json',
         'gates.json',
@@ -169,6 +170,18 @@ describeParity(
       expect(fresh[0].onceKey).toBe(`${REPO}::/wt/web-401@${'c401'.padEnd(40, '0')}`)
       const gates = await decide('gates')
       expect(gates.filter((d) => d.verdict === 'started').map((d) => d.key)).toEqual([key(424)])
+    })
+
+    // The import end to end: a first sight whose run failed in the old app holds its head 12 hours from that failure
+    // (not due), and is tested after; the failed head is never Pilot's marker, so it stays a first sight.
+    it('holds an imported failed first sight for 12 hours, then starts it', async () => {
+      const fresh = await decide('failed-first-sight')
+      expect(fresh.map((d) => [d.key, d.verdict, d.fields['worktree.first_sight']])).toEqual([
+        [key(491), 'notdue', true],
+        [key(492), 'started', true]
+      ])
+      expect(fresh[0].reason).toBe('Its last run failed; due again in 11h')
+      expect(fresh[1].onceKey).toBe(`${REPO}::/wt/web-492@${'c492'.padEnd(40, '0')}`)
     })
 
     it("checks a worktree in the sweep's order: git operation, the MR rules, answers, agents, the window, then quota", async () => {
