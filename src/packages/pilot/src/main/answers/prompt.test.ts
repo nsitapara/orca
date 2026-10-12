@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { InboxItemRow } from '../../shared/api-types'
-import { answersLine, answersText, newSessionPrompt } from './prompt'
+import { answersLine, answersText, newSessionPrompt, withModePointer } from './prompt'
 
 const item = (id: string, title: string, text: string) =>
   ({
@@ -81,5 +81,14 @@ describe('newSessionPrompt', () => {
         'LINE'
       ].join('\n')
     )
+  })
+})
+
+describe('withModePointer', () => {
+  it('points a resumed or forked session at the answers mode file, and leaves a skill-less line alone', () => {
+    expect(withModePointer({ skill: 'fix-gitlab-ci', mode: 'answers' }, 'LINE')).toBe(
+      'Apply these answers as ~/.agents/skills/fix-gitlab-ci/modes/answers.md says. LINE'
+    )
+    expect(withModePointer({ skill: null, mode: 'answers' }, 'LINE')).toBe('LINE')
   })
 })

@@ -74,13 +74,24 @@ function forkable(facts: TranscriptFacts | null, now: number): boolean {
   return facts !== null && facts.size <= FORK_MAX_BYTES && now - facts.mtimeMs <= FORK_MAX_AGE_MS
 }
 
+// The skill and mode file that say how this automation's answers are applied.
+export function answersModeOf(
+  def: AutomationDefinition,
+  asking: Pick<AskingSession, 'skill'> | null
+): { skill: string | null; mode: string } {
+  const other = def.answers?.else ?? null
+  return {
+    skill: other?.skill ?? asking?.skill ?? def.steps.find((s) => s.skill)?.skill ?? null,
+    mode: other?.mode ?? 'answers'
+  }
+}
+
 function newSession(def: AutomationDefinition, asking: AskingSession | null): SessionTarget {
   const other = def.answers?.else ?? null
   return {
     kind: 'new',
     agent: other?.agent ?? asking?.agent ?? 'claude',
-    skill: other?.skill ?? asking?.skill ?? def.steps.find((s) => s.skill)?.skill ?? null,
-    mode: other?.mode ?? 'answers'
+    ...answersModeOf(def, asking)
   }
 }
 
