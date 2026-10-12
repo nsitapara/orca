@@ -1,4 +1,5 @@
 import type { InboxItemRow } from '../../../shared/api-types'
+import type { QueueEntry } from '../../../shared/inbox-types'
 import { actionButton } from '../../../shared/answer-actions'
 import { type Choice, choicesFor } from './answer-text'
 
@@ -90,4 +91,18 @@ export function answeredLine(item: InboxItemRow): Words {
 export function countdown(ms: number): string {
   const seconds = Math.max(0, Math.ceil(ms / 1000))
   return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`
+}
+
+// Where a saved answer stands. Only the first two can still be taken back: the server locks an answer once
+// its row is ready (a script may be running) or dispatched.
+export type Phase = 'settling' | 'held' | 'applying'
+
+export function phaseOf(queued: Pick<QueueEntry, 'state' | 'readyAt'> | null, now: number): Phase {
+  if (queued?.state === 'held') {
+    return 'held'
+  }
+  if (queued?.state === 'not_ready' && queued.readyAt > now) {
+    return 'settling'
+  }
+  return 'applying'
 }

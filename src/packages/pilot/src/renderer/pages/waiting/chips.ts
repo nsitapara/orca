@@ -1,13 +1,16 @@
 import type { InboxItemRow } from '../../../shared/api-types'
 import type { QueueEntry } from '../../../shared/inbox-types'
+import { phaseOf } from './answer-buttons'
 
 export type StatusPill = 'waiting' | 'answered' | 'applying' | 'done' | 'unsaved'
 
-// Where a card stands, for its pill. A pick not yet saved is "unsaved".
+// Where a card stands, for its pill. A pick not yet saved is "unsaved". An answered card is "applying" once
+// its settle time has passed (a ready row) or its row is gone (dispatched); until then it is "answered".
 export function statusOf(
   item: Pick<InboxItemRow, 'status'>,
-  queued: Pick<QueueEntry, 'state'> | null,
-  unsaved: boolean
+  queued: Pick<QueueEntry, 'state' | 'readyAt'> | null,
+  unsaved: boolean,
+  now: number
 ): StatusPill {
   if (unsaved) {
     return 'unsaved'
@@ -18,7 +21,7 @@ export function statusOf(
   if (item.status === 'done') {
     return 'done'
   }
-  return queued?.state === 'dispatched' ? 'applying' : 'answered'
+  return phaseOf(queued, now) === 'applying' ? 'applying' : 'answered'
 }
 
 const PILL = 'rounded-full px-2 font-mono text-xs font-semibold leading-[1.6]'

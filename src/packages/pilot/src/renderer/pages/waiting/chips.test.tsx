@@ -21,13 +21,17 @@ describe('chip colours (the console’s: answers.html)', () => {
     expect(statusPillClass(status)).toContain(colours)
   })
 
-  it('reads a card’s status: waiting, answered, applying once dispatched, done, unsaved over all', () => {
+  it('reads a card’s status: waiting, answered, applying once ready or with no row, done, unsaved over all', () => {
     const at = (status: InboxItemRow['status']) => ({ status })
-    expect(statusOf(at('open'), null, false)).toBe('waiting')
-    expect(statusOf(at('answered'), { state: 'held' }, false)).toBe('answered')
-    expect(statusOf(at('answered'), { state: 'dispatched' }, false)).toBe('applying')
-    expect(statusOf(at('done'), null, false)).toBe('done')
-    expect(statusOf(at('answered'), null, true)).toBe('unsaved')
+    const row = (state: 'not_ready' | 'ready' | 'held', readyAt: number) => ({ state, readyAt })
+    expect(statusOf(at('open'), null, false, 100)).toBe('waiting')
+    expect(statusOf(at('answered'), row('not_ready', 500), false, 100)).toBe('answered')
+    expect(statusOf(at('answered'), row('held', 50), false, 100)).toBe('answered')
+    expect(statusOf(at('answered'), row('ready', 50), false, 100)).toBe('applying')
+    expect(statusOf(at('answered'), row('not_ready', 90), false, 100)).toBe('applying')
+    expect(statusOf(at('answered'), null, false, 100)).toBe('applying')
+    expect(statusOf(at('done'), null, false, 100)).toBe('done')
+    expect(statusOf(at('answered'), null, true, 100)).toBe('unsaved')
   })
 
   it('defines the console’s tokens under .pilot-inbox, light and dark', () => {

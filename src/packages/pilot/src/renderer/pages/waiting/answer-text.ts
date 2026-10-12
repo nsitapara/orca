@@ -1,14 +1,6 @@
 import type { InboxItemRow, InboxType } from '../../../shared/api-types'
 import type { QueueEntry } from '../../../shared/inbox-types'
 
-export const KIND_LABEL: Record<InboxType, string> = {
-  question: 'Question',
-  flagged: 'Flagged',
-  default: 'Default taken',
-  action: 'Action',
-  bug: 'Bug',
-  left_for_you: 'Left for you'
-}
 const ACTION_TYPES = new Set<InboxType>(['action', 'bug', 'left_for_you'])
 
 const DEFAULT_ASK = [

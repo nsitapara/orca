@@ -83,8 +83,14 @@ export function AnswerRow({
       return
     }
     setSaving(true)
-    await onSave(answer)
+    const failed = await onSave(answer)
     setSaving(false)
+    if (!failed) {
+      // Sent: the words are no longer waiting to be sent (the card's "unsaved" pill).
+      setOpen(null)
+      setNotes('')
+      onPick(false)
+    }
   }
   const click = (b: AnswerButton) => {
     if (b.choice.notes === 'none') {

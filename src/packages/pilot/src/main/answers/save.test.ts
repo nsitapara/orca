@@ -9,6 +9,7 @@ import { resolveInboxItem, type InboxDeps } from '../inbox/inbox-service'
 import { PilotStore } from '../store/store'
 import { routeOf } from './queue-view'
 import {
+  ANSWER_LOCKED,
   APPROVE_ON_DESKTOP,
   CARD_CHANGED_ON_SAVE,
   DRAFT_ON_DESKTOP,
@@ -297,4 +298,67 @@ describe('a drafted change', () => {
       expect(saveAnswer(deps, params, DESKTOP).answer).toMatchObject({ text: 'approve' })
     }
   )
+})
+
+describe('an answer that may be being carried out', () => {
+  const ID = 'in_0000000000000001'
+  const answered = () => {
+    const s = setup()
+    saveAnswer(s.deps, { id: ID, option: 0, digest: s.digest })
+    const row = s.store.queue.forInboxItem(ID)[0]
+    return { ...s, row }
+  }
+  const attempts = (s: ReturnType<typeof answered>) => [
+    () => saveAnswer(s.deps, { id: ID, digest: s.digest }),
+    () => saveAnswer(s.deps, { id: ID, option: 1, digest: s.digest })
+  ]
+
+  it.each([
+    ['a ready row (past its settle time)', 'ready'],
+    ['a dispatched row whose run is still live', 'live']
+  ])('refuses both Undo and a new answer for %s', (_n, kind) => {
+    const s = answered()
+    if (kind === 'ready') {
+      s.advance(SETTLE_MS)
+      s.store.queue.update(s.row.id, { state: 'ready' }, 1_000 + SETTLE_MS)
+    } else {
+      s.store.runs.create({
+        id: 'ans-1',
+        automationId: 'ci',
+        tickId: null,
+        itemKey: 'mr:1',
+        itemLabel: '!1',
+        worktreePath: '/wt',
+        startedAt: 5,
+        status: 'running',
+        trigger: 'answer'
+      })
+      s.store.queue.update(
+        s.row.id,
+        { state: 'dispatched', dispatchedRunId: 'ans-1' },
+        1_000 + SETTLE_MS
+      )
+    }
+    for (const attempt of attempts(s)) {
+      expect(attempt).toThrow(ANSWER_LOCKED)
+    }
+    expect(s.store.inbox.get(ID)).toMatchObject({ status: 'answered', answer: { option: 0 } })
+    expect(s.store.queue.forInboxItem(ID)).toHaveLength(1)
+  })
+
+  it.each([
+    ['a not_ready row before its settle time', {}],
+    ['a held row', { state: 'held' as const, holdReason: 'typing' as const }]
+  ])('still allows Undo and a re-answer for %s', (_n, patch) => {
+    const s = answered()
+    if (Object.keys(patch).length > 0) {
+      s.store.queue.update(s.row.id, patch, 1_100)
+    }
+    s.advance(10_000)
+    expect(saveAnswer(s.deps, { id: ID, option: 1, digest: s.digest })).toMatchObject({
+      answer: { option: 1 }
+    })
+    expect(saveAnswer(s.deps, { id: ID, digest: s.digest })).toMatchObject({ status: 'open' })
+    expect(s.store.queue.forInboxItem(ID)).toHaveLength(0)
+  })
 })

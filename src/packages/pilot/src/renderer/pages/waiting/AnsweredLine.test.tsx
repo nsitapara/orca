@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { InboxItemRow } from '../../../shared/api-types'
 import type { QueueEntry } from '../../../shared/inbox-types'
@@ -123,11 +123,69 @@ describe('an answered card', () => {
     )
   })
 
-  it('says what is being done once the answer is dispatched, with no Undo', async () => {
-    serve(CARD, [entry({ state: 'dispatched', readyAt: NOW - 1000 })])
+  it.each([
+    ['no queue row (it was dispatched)', [] as QueueEntry[]],
+    ['a ready row', [entry({ state: 'ready', readyAt: NOW - 1000 })]],
+    ['a row whose settle time has passed', [entry({ readyAt: NOW - 1 })]]
+  ])('says what is being done, with no Undo, for %s', async (_n, queue) => {
+    serve(CARD, queue)
     render(<InboxPage />)
     expect(await screen.findByText('Posting review…')).toBeTruthy()
     expect(screen.queryByRole('button', { name: 'Undo' })).toBeNull()
+    expect(screen.getByText('applying')).toBeTruthy()
+  })
+
+  it('drops Undo when the countdown reaches zero', async () => {
+    serve(CARD, [entry({ readyAt: NOW + 2_000 })])
+    render(<InboxPage />)
+    expect(await screen.findByRole('button', { name: 'Undo' })).toBeTruthy()
+    await vi.advanceTimersByTimeAsync(2_500)
+    expect(screen.queryByRole('button', { name: 'Undo' })).toBeNull()
+    expect(screen.getByText('Posting review…')).toBeTruthy()
+  })
+
+  it('keeps Undo for a held row', async () => {
+    serve(CARD, [entry({ state: 'held', holdReason: 'typing', holdDetail: 'someone is typing' })])
+    render(<InboxPage />)
+    const line = await screen.findByRole('status')
+    expect(line.textContent).toContain('someone is typing')
+    expect(within(line).getByRole('button', { name: 'Undo' })).toBeTruthy()
+  })
+
+  it('is a status region, and takes focus to Undo when a click has just answered the card', async () => {
+    let answered = false
+    pilotRpc.mockImplementation(async (method: string) => {
+      if (method === 'pilot.inbox.list') {
+        const item = answered ? CARD : { ...CARD, status: 'open', answer: null }
+        return {
+          items: [item],
+          people: [{ id: 'n', name: 'N' }],
+          groups: [],
+          automations: [],
+          runLines: {}
+        }
+      }
+      if (method === 'pilot.queue.list') {
+        return { entries: answered ? [entry({})] : [] }
+      }
+      if (method === 'pilot.inbox.answer') {
+        answered = true
+      }
+      return { imported: 0, skipped: [] }
+    })
+    render(<InboxPage />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Post review' }))
+    const undo = await screen.findByRole('button', { name: 'Undo' })
+    expect(undo.closest('[role="status"]')).not.toBeNull()
+    await waitFor(() => expect(document.activeElement).toBe(undo))
+  })
+
+  it('does not take focus for a card that was already answered when the page loaded', async () => {
+    serve(CARD, [entry({})])
+    render(<InboxPage />)
+    const undo = await screen.findByRole('button', { name: 'Undo' })
+    expect(document.activeElement).not.toBe(undo)
+    expect(undo.closest('[role="status"]')).not.toBeNull()
   })
 
   it('says Skipped, with Undo while it can still be taken back', async () => {
@@ -204,5 +262,66 @@ describe('one click sends what the old radio + Save sent', () => {
         })
       )
     )
+  })
+
+  it('left_for_you with a draft: Apply fix sends approve at option 0', async () => {
+    serve(open({ action: null, type: 'left_for_you', details: { drafted: true } }), [])
+    render(<InboxPage />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Apply fix' }))
+    await waitFor(() =>
+      expect(pilotRpc).toHaveBeenCalledWith(
+        'pilot.inbox.answer',
+        expect.objectContaining({ id: 'in_a', digest: 'dig1', text: 'approve', option: 0 })
+      )
+    )
+  })
+
+  it('a question’s drafted option is picked like any option: its label and index', async () => {
+    serve(
+      open({
+        action: null,
+        type: 'question',
+        options: [
+          { label: 'Install', meaning: 'slow' },
+          { label: 'Bake it', meaning: 'fast' }
+        ],
+        details: { drafted: true, draftedOption: 'Bake it' }
+      }),
+      []
+    )
+    render(<InboxPage />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Bake it' }))
+    await waitFor(() =>
+      expect(pilotRpc).toHaveBeenCalledWith(
+        'pilot.inbox.answer',
+        expect.objectContaining({ id: 'in_a', digest: 'dig1', text: 'Bake it', option: 1 })
+      )
+    )
+  })
+
+  it('a review card with one part switched off sends "approve except: 1" with no option', async () => {
+    serve(
+      open({
+        action: 'post_review',
+        parts: { '1': 'one', '2': 'two' },
+        switchWords: ['Post', 'Skip']
+      }),
+      []
+    )
+    render(<InboxPage />)
+    fireEvent.click(await screen.findByLabelText('Post 1'))
+    fireEvent.click(screen.getByRole('button', { name: 'Post review' }))
+    await waitFor(() =>
+      expect(pilotRpc).toHaveBeenCalledWith(
+        'pilot.inbox.answer',
+        expect.objectContaining({
+          id: 'in_a',
+          digest: 'dig1',
+          text: 'approve except: 1'
+        })
+      )
+    )
+    const sent = pilotRpc.mock.calls.find((c) => c[0] === 'pilot.inbox.answer')![1]
+    expect(sent).not.toHaveProperty('option')
   })
 })
