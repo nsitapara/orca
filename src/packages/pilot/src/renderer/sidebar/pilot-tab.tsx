@@ -3,6 +3,7 @@ import { CalendarClock } from 'lucide-react'
 import type { ActivityBarItem } from '@/components/right-sidebar/activity-bar-buttons'
 import { PILOT_TAB, resolveActivityClick } from '../../shared/sidebar-click'
 import { pilotStore } from '../store'
+import { WorktreeTimelinePanel } from './WorktreeTimelinePanel'
 
 export { PILOT_TAB, isPilotTab } from '../../shared/sidebar-click'
 
@@ -16,17 +17,7 @@ export const pilotActivityItems: ActivityBarItem[] = [
 ]
 
 export function PilotRightSidebarPanel(): React.JSX.Element {
-  return (
-    <div className="flex flex-col gap-2 p-3 text-sm">
-      <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-        Automations
-      </div>
-      <p className="text-muted-foreground">
-        This worktree&apos;s timeline (next, now and earlier runs) arrives in M2. For now, open
-        Automations from the left navigation.
-      </p>
-    </div>
-  )
+  return <WorktreeTimelinePanel />
 }
 
 // pilot-hook: right-sidebar-reclick. Returns true when it handled the click (closed the panel).
