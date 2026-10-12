@@ -2,7 +2,8 @@ import type { CommandHandler } from '../../../../cli/dispatch'
 import { getOptionalStringFlag, getRequiredStringFlag } from '../../../../cli/flags'
 import { printResult } from '../../../../cli/format'
 import type { InboxItemRow } from '../shared/api-types'
-import { invalid } from './cli-values'
+import type { QueueListPayload } from '../shared/inbox-types'
+import { bindingFromEnv, invalid } from './cli-values'
 
 // The CLI never imports main code: its own copy of attempt.ts's EXIT_CODES.
 const ACTION_EXIT: Record<string, number> = {
@@ -17,7 +18,6 @@ const ACTION_EXIT: Record<string, number> = {
 const ACTION_TIMEOUT_MS = 660_000
 
 type ActionReply = { outcome: string; detail: string; link?: string | null }
-type EnvBinding = { terminal?: string; runId?: string; stepIdx?: number }
 
 function argsJson(raw: string | undefined): Record<string, unknown> {
   let value: unknown = {}
@@ -30,20 +30,6 @@ function argsJson(raw: string | undefined): Record<string, unknown> {
     throw invalid('--args-json must be a JSON object')
   }
   return value as Record<string, unknown>
-}
-
-// Who is calling, for the server to resolve (ruling 8d, Task 22b): the terminal this runs in, and the env's
-// run and step as the fallback. Only what is set is sent; with none of it the call is bound to no run, and
-// Pilot only dry-runs it.
-export function bindingFromEnv(env: NodeJS.ProcessEnv): EnvBinding {
-  const terminal = env.ORCA_TERMINAL_HANDLE?.trim() ?? ''
-  const runId = env.PILOT_RUN_ID?.trim() ?? ''
-  const rawIdx = env.PILOT_STEP_IDX?.trim() ?? ''
-  return {
-    ...(terminal ? { terminal } : {}),
-    ...(runId ? { runId } : {}),
-    ...(runId && /^\d+$/.test(rawIdx) ? { stepIdx: Number(rawIdx) } : {})
-  }
 }
 
 export function inboxItemLine(
@@ -87,5 +73,23 @@ export const ANSWERS_HANDLERS: Record<string, CommandHandler> = {
         .map((r) => `${r.name.padEnd(17)} ${(r.power ?? 'approval').padEnd(14)} ${r.usage}`)
         .join('\n')
     )
+  },
+  'inbox queue': async ({ flags, client, json }) => {
+    const person = getOptionalStringFlag(flags, 'person')
+    const response = await client.call<QueueListPayload>(
+      'pilot.queue.list',
+      person ? { person } : {}
+    )
+    printResult(response, json, ({ entries }) => {
+      if (entries.length === 0) {
+        return 'No saved answers waiting.'
+      }
+      return entries
+        .map((e) => {
+          const held = e.holdDetail ? ` · ${e.holdDetail}` : ''
+          return `${e.state.replace('_', ' ').padEnd(10)} ${e.title} · ${e.fires}${held}`
+        })
+        .join('\n')
+    })
   }
 }

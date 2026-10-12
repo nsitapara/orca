@@ -15,6 +15,8 @@ export const PILOT_SQLITE_RUNTIME_INCLUDE = [
   'src/packages/pilot/src/main/rpc/methods.test.ts',
   'src/packages/pilot/src/main/rpc/handlers.test.ts',
   'src/packages/pilot/src/main/pilot-services.test.ts',
+  'src/packages/pilot/src/main/answers/save.test.ts',
+  'src/packages/pilot/src/main/answers/queue-view.test.ts',
   'src/packages/pilot/src/main/inbox/inbox-service.test.ts',
   'src/packages/pilot/src/main/inbox/retire.test.ts',
   'src/packages/pilot/src/main/vault/export.test.ts',

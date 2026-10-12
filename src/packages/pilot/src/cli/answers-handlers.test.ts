@@ -118,3 +118,31 @@ describe('action run', () => {
     )
   })
 })
+
+describe('inbox queue', () => {
+  it('prints one line per queued answer with its hold reason', async () => {
+    const entries = [
+      {
+        state: 'held',
+        title: 'Push?',
+        fires: 'Run push; no agent',
+        holdReason: 'typing',
+        holdDetail: 'someone is typing in Claude · CI fix'
+      },
+      {
+        state: 'not_ready',
+        title: 'Which?',
+        fires: 'Mark it kept',
+        holdReason: null,
+        holdDetail: null
+      }
+    ]
+    const call = vi.fn().mockResolvedValue({ result: { entries } })
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {})
+    await ANSWERS_HANDLERS['inbox queue'](ctx({ person: 'nish' }, call))
+    expect(call).toHaveBeenCalledWith('pilot.queue.list', { person: 'nish' })
+    expect(log).toHaveBeenCalledWith(
+      'held       Push? · Run push; no agent · someone is typing in Claude · CI fix\nnot ready  Which? · Mark it kept'
+    )
+  })
+})

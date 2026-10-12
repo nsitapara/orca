@@ -1,4 +1,4 @@
-import type { InboxItemRow, InboxStatus, InboxType } from './api-types'
+import type { HoldReason, InboxItemRow, InboxStatus, InboxType, QueueState } from './api-types'
 
 // Waiting on you (contract §9-§10): the payloads of the inbox RPCs. Row types (InboxItemRow,
 // InboxStatus, …) are in api-types.ts. Task 11b's CLI shells send these; Tasks 20c and 23b implement
@@ -65,3 +65,25 @@ export type InboxItemSummary = Pick<
   | 'status'
   | 'createdAt'
 >
+
+export type QueueHow = 'tick' | 'script' | 'agent' | 'revise' | 'reask'
+export type QueueEntry = {
+  rowId: number
+  itemId: string
+  title: string
+  type: InboxType
+  automationId: string
+  automationName: string
+  worktreePath: string | null
+  person: string
+  answer: string
+  state: QueueState
+  // Why it waits (R-c): the code and the plain words.
+  holdReason: HoldReason | null
+  holdDetail: string | null
+  readyAt: number
+  how: QueueHow
+  fires: string
+  updatedAt: number
+}
+export type QueueListPayload = { entries: QueueEntry[] }

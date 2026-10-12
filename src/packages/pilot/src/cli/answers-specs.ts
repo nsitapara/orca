@@ -38,6 +38,13 @@ export const ANSWERS_COMMAND_SPECS: CommandSpec[] = [
     usage: 'pilot action list [--json]',
     allowedFlags: [...GLOBAL_FLAGS],
     examples: ['pilot action list']
+  },
+  {
+    path: ['inbox', 'queue'],
+    summary: 'Up next: every saved answer, what it sets off and why it waits',
+    usage: 'pilot inbox queue [--person <id>] [--json]',
+    allowedFlags: [...GLOBAL_FLAGS, 'person'],
+    examples: ['pilot inbox queue --person nish']
   }
 ]
 
