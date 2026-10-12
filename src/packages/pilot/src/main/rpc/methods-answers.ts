@@ -1,9 +1,16 @@
 import { z } from 'zod'
 import { defineMethod } from '../../../../../main/runtime/rpc/core'
+import type { OrcaRuntimeService } from '../../../../../main/runtime/orca-runtime'
 import { queueEntries } from '../answers/queue-view'
 import { saveAnswer } from '../answers/save'
+import { resolveRepoPath } from '../fields/runtime-facts'
+import { runtimeFieldDeps } from '../fields/runtime-field-deps'
+import { applyVaultImport } from '../inbox/import-apply'
+import { planVaultImport, reportOf } from '../inbox/import-vault'
+import { readOpenVaultItems } from '../inbox/vault-reader'
 import type { PilotContext } from '../pilot-services'
 import { inboxDeps } from './methods-inbox'
+import { runBinding } from './methods-actions'
 
 const Answer = z.object({
   id: z.string().min(1),
@@ -17,6 +24,41 @@ const Answer = z.object({
 })
 const QueueList = z.object({ person: z.string().min(1).optional() })
 const ApplyNow = z.object({ ids: z.array(z.string().min(1)).max(200).optional() })
+
+const ImportVault = z.object({
+  apply: z.boolean(),
+  terminal: z.string().min(1).optional(),
+  runId: z.string().min(1).optional(),
+  stepIdx: z.number().int().nonnegative().optional()
+})
+
+export const IMPORT_NO_CALLER = "Pilot can't tell who is calling; nothing was imported"
+export const IMPORT_FROM_RUN = 'The vault import is run by a person, not from inside a Pilot run'
+
+// Worktree ids by path for the worktree-kind automations' item keys; an unreadable repo just leaves them out.
+async function worktreeIds(
+  runtime: OrcaRuntimeService,
+  c: PilotContext
+): Promise<Map<string, string>> {
+  const ids = new Map<string, string>()
+  const repos = new Set(
+    c
+      .loaded()
+      .definitions.filter((d) => d.items?.kind === 'worktree')
+      .map((d) => d.repo)
+  )
+  for (const repo of repos) {
+    try {
+      const path = (await resolveRepoPath(runtime, repo)).path
+      for (const wt of await runtimeFieldDeps(runtime, c.store).listWorktrees(path)) {
+        ids.set(wt.path, wt.id)
+      }
+    } catch {
+      continue
+    }
+  }
+  return ids
+}
 
 export const APPLY_NOW_ELSEWHERE =
   "Answers are applied by the Pilot app that runs the scheduler; this process doesn't run it"
@@ -56,6 +98,33 @@ export function buildAnswerMethods(ctx: () => PilotContext) {
         }
         const ids = p.ids ? { ids: p.ids } : {}
         return c.dispatcher.applyNow({ ...ids, approver: kind === 'desktop' })
+      }
+    }),
+    defineMethod({
+      name: 'pilot.inbox.importVault',
+      permission: 'workspace',
+      params: ImportVault,
+      // A one-shot, idempotent import of the vault's open cards and answers (apply: false only reports).
+      // It needs a caller identity and refuses a call bound to a Pilot run, so an agent can't seed cards
+      // or answers; the cards go through the normal add path (catalog, argument and size checks, routing).
+      handler: async (p, rpc) => {
+        const c = ctx()
+        if (!rpc.caller) {
+          throw new Error(IMPORT_NO_CALLER)
+        }
+        if (runBinding(c, p) !== null) {
+          throw new Error(IMPORT_FROM_RUN)
+        }
+        const deps = inboxDeps(c)
+        const now = Date.now()
+        const plan = planVaultImport(await readOpenVaultItems(), {
+          definitions: c.loaded().definitions,
+          people: c.loaded().people,
+          worktreeIds: await worktreeIds(rpc.runtime, c),
+          existing: (id) => c.store.inbox.get(id) !== null,
+          now
+        })
+        return p.apply ? applyVaultImport(deps, plan, now) : reportOf(plan, false)
       }
     }),
     defineMethod({
