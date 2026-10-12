@@ -20,7 +20,8 @@ const MODES: [string, string][] = [
   ['dev-e2e-fix', 'answers'],
   ['ui-qa', 'run'],
   ['ui-qa', 'fix'],
-  ['ui-qa', 'answers']
+  ['ui-qa', 'answers'],
+  ['item-details', 'draft']
 ]
 
 describe.skipIf(!existsSync(skillsDir()))('ported agent modes read untrusted text as data', () => {

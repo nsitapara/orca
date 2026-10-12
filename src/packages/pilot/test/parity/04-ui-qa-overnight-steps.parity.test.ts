@@ -287,9 +287,33 @@ describeParity(PARITY_04, '04 · a night run ends as close_out would have counte
     expect(ran.includes('test')).toBe(n.stack === 'done')
     expect(ran.includes('fix')).toBe(reported && Boolean(n.bug) && expected.outcome === 'complete')
     expect(ran.includes('flag_failed')).toBe(!reported) // report flags every other ending itself: never twice
+    // Drafting follows only a complete report (never start_failed, stack_failed, …), and the draft step only a pick.
+    expect(ran.includes('drafts')).toBe(reported && expected.outcome === 'complete')
+    expect(ran.includes('draft')).toBe(false)
     // A cleanup step that broke never masks what the night counted as.
     if (status === 'done' && n.teardown === 'failed') {
       expect(outcome).toBe('Done; cleanup step teardown failed')
+    }
+  })
+
+  it('a draft step that fails or times out leaves the night as it counted', () => {
+    const complete = NIGHTS.findIndex((n) => n.name === 'a complete session with nothing to fix')
+    for (const broken of ['failed', 'timed_out'] as const) {
+      const drafting = (step: StepDef, fields: ItemFields): Ended => {
+        if (step.name === 'drafts') {
+          return { status: 'done', outputs: { draft: 'yes', cards: 'in_0000000000000001' } }
+        }
+        if (step.name === 'draft') {
+          return { status: broken, outputs: {} }
+        }
+        return play(NIGHTS[complete], old[complete])(step, fields)
+      }
+      const { ran, status, outcome } = simulate(def!, drafting)
+      expect(ran.slice(-2)).toEqual(['drafts', 'draft'])
+      expect(status).toBe('done')
+      expect(outcome).toBe(
+        `Done; cleanup step draft ${broken === 'failed' ? 'failed' : 'timed out'}`
+      )
     }
   })
 
