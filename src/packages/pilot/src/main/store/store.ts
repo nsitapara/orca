@@ -10,6 +10,7 @@ import type {
 import { migrate } from './migrations'
 import { RunStore } from './store-runs'
 import { UsageStore } from './store-usage'
+import { SpendStore } from './store-spend'
 import { InboxStore } from './store-inbox'
 import { QueueStore } from './store-queue'
 import { ActionRunStore } from './store-actions'
@@ -43,6 +44,7 @@ function toTick(r: Record<string, unknown>): TickRow {
 export class PilotStore {
   readonly runs: RunStore
   readonly usage: UsageStore
+  readonly spend: SpendStore
   readonly inbox: InboxStore
   readonly queue: QueueStore
   readonly events: EventStore
@@ -65,6 +67,7 @@ export class PilotStore {
     this.markers = new MarkerStore(db)
     this.advance = new AdvanceStore(db)
     this.usage = new UsageStore(db, this.advance)
+    this.spend = new SpendStore(db)
   }
 
   static open(path: string): PilotStore {
