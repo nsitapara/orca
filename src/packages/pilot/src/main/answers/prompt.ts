@@ -1,0 +1,58 @@
+import type { InboxItemRow } from '../../shared/api-types'
+import type { AutomationDefinition } from '../../shared/definition/types'
+
+export type AgentAnswer = { item: InboxItemRow; revise: boolean; needsAgent: string | null }
+
+const REVISE = " (revise: change the proposal and ask again as a new action; don't run it)"
+const RECORD =
+  'Act on each one in this worktree, then record it with `pilot inbox tick --id <id> --outcome "<what happened>"`; ' +
+  'if an answer is unclear, ask with `pilot inbox reply --id <id> --text "<question>"` and leave it open. ' +
+  'Never wait in this tab for a reply.'
+
+function note(answer: AgentAnswer): string {
+  if (answer.revise) {
+    return REVISE
+  }
+  if (answer.needsAgent) {
+    return ` (approved; its action stopped for judgement: ${answer.needsAgent})`
+  }
+  return ''
+}
+
+// apply.py prompt(): one line (a newline would submit early in a typed prompt), each claimed answer as
+// [id] "title" → answer, then how to record what happened.
+export function answersLine(
+  askingRunId: string | null,
+  answerRunId: string,
+  answers: AgentAnswer[]
+): string {
+  const head = askingRunId
+    ? `Answers to the questions run ${askingRunId} asked (answer run ${answerRunId}), already claimed:`
+    : `Answers saved on Waiting on you (answer run ${answerRunId}), already claimed:`
+  const lines = answers.map(
+    (a) => `[${a.item.id}] "${a.item.title}" → ${a.item.answer?.text ?? ''}${note(a)}`
+  )
+  return [head, ...lines, RECORD].join(' · ')
+}
+
+// What `{run.answer}` is in an answer run (G7): the answers, one per line.
+export function answersText(answers: AgentAnswer[]): string {
+  return answers.map((a) => a.item.answer?.text ?? '').join('\n')
+}
+
+// A new session knows nothing yet: the wrapped preamble (contract §7) and the skill's answers mode file.
+export function newSessionPrompt(
+  def: Pick<AutomationDefinition, 'name'>,
+  run: { id: string; label: string },
+  target: { skill: string | null; mode: string },
+  line: string
+): string {
+  const lines = [`Started by the Pilot automation "${def.name}" (run ${run.id}) for ${run.label}.`]
+  if (target.skill) {
+    lines.push(
+      `Use the ${target.skill} skill in its ${target.mode} mode (~/.agents/skills/${target.skill}/modes/${target.mode}.md).`
+    )
+  }
+  lines.push('', line)
+  return lines.join('\n')
+}

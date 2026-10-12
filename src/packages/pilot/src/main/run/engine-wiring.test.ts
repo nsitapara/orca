@@ -161,6 +161,55 @@ describe('wireRunEngine', () => {
     }
   )
 
+  // Task 9c ruling: an answer run's one step ("answers") is not the definition's step 0 (here 10m).
+  function answerRun(store: PilotStore): void {
+    store.runs.create({
+      id: 'ans-1',
+      automationId: 'test-uis',
+      tickId: null,
+      itemKey: 'repo:web-platform',
+      itemLabel: 'web-platform',
+      worktreePath: '/wt',
+      startedAt: 0,
+      trigger: 'answer',
+      parentRunId: 'run-1'
+    })
+    store.runs.createStep({
+      runId: 'ans-1',
+      idx: 0,
+      name: 'answers',
+      agent: 'claude',
+      skill: null,
+      startedAt: 0
+    })
+    store.runs.updateStep('ans-1', 0, { status: 'running', terminalHandle: 'ta', paneKey: 'pa' })
+  }
+
+  it("never times an answer run out on the definition's step at the same index", async () => {
+    const { store, runtime, wired } = setup()
+    answerRun(store)
+    await wired.poll()
+    expect(runtime.closeTerminal).not.toHaveBeenCalledWith('ta')
+    expect(store.runs.steps('ans-1')[0].status).toBe('running')
+  })
+
+  it('keeps an answer run past its timeout running while its process may be live, then ends it timed out', async () => {
+    const { store, runtime, wired } = setup(YAML.replace('timeout: 60m', 'timeout: 5m'))
+    answerRun(store)
+    const close = async (handle: string) => (handle === 'ta' ? { ptyStopVerdict: 'live' } : {})
+    runtime.closeTerminal.mockImplementation(close as never)
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    await wired.poll()
+    expect(store.runs.get('ans-1')?.status).toBe('running')
+    runtime.closeTerminal.mockImplementation(async () => ({}))
+    await wired.poll()
+    expect(store.runs.steps('ans-1')[0]).toMatchObject({
+      status: 'timed_out',
+      error: 'Timed out after 5m'
+    })
+    expect(store.runs.get('ans-1')?.status).toBe('timed_out')
+  })
+
   it('leaves a step with no timeout at all running', async () => {
     const { store, runtime, wired } = setup(
       YAML.replace('limits: { timeout: 60m }\n', '').replace(', timeout: 10m', '')
