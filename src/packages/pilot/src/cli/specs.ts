@@ -2,6 +2,7 @@ import type { CommandSpec } from '../../../../cli/args'
 import { GLOBAL_FLAGS } from '../../../../cli/args'
 import { ANSWERS_COMMAND_SPECS } from './answers-specs'
 import { INBOX_COMMAND_SPECS } from './specs-inbox'
+import { PILOT_SPEND_SPECS } from './spend-specs'
 import { RUN_COMMAND_SPECS } from './specs-run'
 
 export const PILOT_COMMAND_SPECS: CommandSpec[] = [
@@ -77,5 +78,6 @@ export const PILOT_COMMAND_SPECS: CommandSpec[] = [
   },
   ...RUN_COMMAND_SPECS,
   ...INBOX_COMMAND_SPECS,
-  ...ANSWERS_COMMAND_SPECS
+  ...ANSWERS_COMMAND_SPECS,
+  ...PILOT_SPEND_SPECS
 ]
