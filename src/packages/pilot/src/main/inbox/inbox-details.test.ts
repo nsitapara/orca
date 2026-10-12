@@ -244,11 +244,29 @@ describe('the Details summary chips', () => {
     expect(store.inbox.get(id)).toEqual(filled)
   })
 
+  it('takes the subject from the facts block’s MR row, and fills it into a ref stored without it', () => {
+    const { f, store, deps, id } = setup()
+    rewriteBundle(f.bundle, (b) => {
+      b.blocks.unshift({ type: 'facts', rows: [['MR', '!1579 web-2107-improve']] })
+    })
+    expect(loadDetails(f.root, f.bundle).ref.subject).toBe('!1579 web-2107-improve')
+    setInboxDetails(deps, id, f.bundle, OPEN)
+    const before = store.inbox.get(id)
+    const { subject: _s, ...old } = before?.details ?? ({} as never)
+    store.inbox.edit(id, { details: old as never, digest: before?.digest ?? '' }, 150)
+    listInbox(deps, {})
+    expect(store.inbox.get(id)?.details?.subject).toBe('!1579 web-2107-improve')
+    expect(store.inbox.get(id)?.digest).toBe(before?.digest)
+  })
+
   it('is not part of the digest', () => {
     const f = detailsFixture()
     const { ref } = loadDetails(f.root, f.bundle)
     const card = buildCard({ automationId: 'a', type: 'bug', title: 't' } as never, ref)
-    const { summary: _s, ...bare } = ref
+    const { summary: _s, subject: _j, ...bare } = ref
     expect(inboxDigest(card)).toBe(inboxDigest({ ...card, details: bare }))
+    expect(inboxDigest({ ...card, details: { ...ref, subject: '!1 other' } })).toBe(
+      inboxDigest(card)
+    )
   })
 })

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { DetailsBlock, DetailsBundle } from './details'
-import { summaryOf } from './details-summary'
+import { subjectOf, summaryOf } from './details-summary'
 
 function bundle(...blocks: DetailsBlock[]): DetailsBundle {
   return { version: 1, item: 'x', blocks }
@@ -74,5 +74,15 @@ describe('summaryOf', () => {
       false
     )
     expect(long[0].length).toBeLessThanOrEqual(40)
+  })
+})
+
+describe('subjectOf', () => {
+  it('is the facts block’s MR row, else nothing', () => {
+    expect(subjectOf(bundle(facts(['Origin', 'x'], ['MR', '!1579 web-2107-improve'])))).toBe(
+      '!1579 web-2107-improve'
+    )
+    expect(subjectOf(bundle(facts(['Origin', 'x'])))).toBeNull()
+    expect(subjectOf(bundle({ type: 'text', body: 'x' }))).toBeNull()
   })
 })

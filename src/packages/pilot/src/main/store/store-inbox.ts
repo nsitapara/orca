@@ -1,7 +1,7 @@
 import type Database from '../../../../../main/sqlite/sync-database'
 import type { InboxAnswer, InboxItemRow, InboxStatus } from '../../shared/api-types'
-import type { DetailsRef, DetailsSnapshot } from '../../shared/details'
-import { summaryOf } from '../../shared/details-summary'
+import type { DetailsSnapshot } from '../../shared/details'
+import { fillSummaries, itemLabels } from './store-inbox-labels'
 import { jsonOrNull, readCurrentDetails, readSnapshot, writeSnapshot } from './store-inbox-details'
 import { INBOX_ROW_COLUMNS, toItem } from './store-inbox-row'
 
@@ -213,29 +213,14 @@ export class InboxStore {
     return readCurrentDetails(this.db, id)
   }
 
-  // Refs stored before `summary` existed get it from their snapshot, once. Only the ref column changes: the
-  // digest, version and updated_at stay as they were (summary is not part of the digest).
   fillSummaries(): void {
-    const rows = this.db
-      .prepare(
-        `SELECT id, details_ref_json AS r, details_snapshot_json AS s FROM inbox_items
-          WHERE details_ref_json IS NOT NULL AND details_snapshot_json IS NOT NULL
-            AND json_extract(details_ref_json, '$.summary') IS NULL`
-      )
-      .all() as { id: string; r: string; s: string }[]
-    for (const row of rows) {
-      // One unreadable row must not fail the whole list: it stays as it was.
-      try {
-        const ref = JSON.parse(row.r) as DetailsRef
-        const snap = JSON.parse(row.s) as DetailsSnapshot
-        const summary = summaryOf(snap.bundle, snap.texts, ref.drafted)
-        this.db
-          .prepare('UPDATE inbox_items SET details_ref_json = ? WHERE id = ?')
-          .run(JSON.stringify({ ...ref, summary }), row.id)
-      } catch {
-        continue
-      }
-    }
+    fillSummaries(this.db)
+  }
+
+  itemLabels(
+    cards: { id: string; runId: string | null; automationId: string; itemKey: string | null }[]
+  ): Map<string, string> {
+    return itemLabels(this.db, cards)
   }
 
   setSnapshot(id: string, snapshot: DetailsSnapshot | null): void {

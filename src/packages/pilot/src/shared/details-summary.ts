@@ -107,3 +107,16 @@ export function summaryOf(
     .slice(0, MAX_CHIPS)
     .map(clip)
 }
+
+// What the card is about, from the facts block's MR row ("!1579 web-2107-improve-…"), or null.
+export function subjectOf(bundle: DetailsBundle): string | null {
+  for (const b of bundle.blocks) {
+    if (b.type === 'facts') {
+      const row = b.rows.find(([key]) => key === 'MR')
+      if (row?.[1]?.trim()) {
+        return row[1].trim()
+      }
+    }
+  }
+  return null
+}

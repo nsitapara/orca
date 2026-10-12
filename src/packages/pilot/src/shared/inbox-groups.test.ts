@@ -84,6 +84,34 @@ function row(id: string, type: InboxItemRow['type'], createdAt: number, k: Key):
   return { id, type, createdAt, ...k } as InboxItemRow
 }
 
+describe('an MR group’s name', () => {
+  const mr = (itemLabel?: string) => ({
+    ...of('mr:1571', null),
+    ...(itemLabel === undefined ? {} : { itemLabel })
+  })
+  it.each([
+    ['a run label', '!1571 web-2107-improve-reports', '!1571 · web-2107-improve-reports'],
+    ['a label without the iid', 'web-2107 improve', '!1571 · web-2107 improve'],
+    ['only the iid', '!1571', '!1571'],
+    ['nothing known', undefined, '!1571'],
+    ['an empty label', '  ', '!1571']
+  ])('from %s', (_n, label, want) => {
+    expect(groupOf(mr(label), AUTOMATIONS).label).toBe(want)
+  })
+
+  it('takes the name from the first card of the group that has one', () => {
+    const out = groupItems(
+      [
+        row('a', 'action', 1, mr()),
+        row('b', 'action', 2, mr('!1571 web-x')),
+        row('c', 'action', 3, mr('!1571 web-y'))
+      ],
+      AUTOMATIONS
+    )
+    expect(out.map((s) => [s.group.key, s.group.label])).toEqual([['mr:1571', '!1571 · web-x']])
+  })
+})
+
 describe('groupItems', () => {
   it('sorts interleaved cards into sections: worktrees, MRs, pipelines, tickets, jobs, Clean up last', () => {
     const items = [

@@ -432,3 +432,85 @@ describe('listInbox', () => {
     warn.mockRestore()
   })
 })
+
+describe('listInbox itemLabel', () => {
+  const ref = (subject?: string) =>
+    ({
+      path: '/p.json',
+      sha256: 'a'.repeat(64),
+      inlined: {},
+      blocks: 1,
+      drafted: false,
+      draftedBase: null,
+      summary: [],
+      ...(subject === undefined ? {} : { subject })
+    }) as never
+  const newCard = (id: string, over: Record<string, unknown>) =>
+    ({
+      id,
+      automationId: 'ci',
+      runId: null,
+      stepIdx: null,
+      itemKey: 'mr:1561',
+      worktreePath: null,
+      person: 'nish',
+      type: 'action',
+      title: id,
+      context: '',
+      options: [],
+      suggested: null,
+      detailsMd: null,
+      action: null,
+      actionArgs: null,
+      digest: id,
+      createdAt: 1,
+      source: 'engine',
+      vaultRef: null,
+      ...over
+    }) as never
+
+  it('names the item from its own run, else the newest tick that listed it, else the Details MR row, else nothing', () => {
+    const { store, deps } = setup()
+    const snap = (subject: string) => ({
+      ref: ref(subject),
+      bundle: { version: 1, item: 'x', blocks: [] },
+      texts: {}
+    })
+    store.inbox.add(newCard('from-run', { runId: 'run-1' }))
+    store.inbox.add(newCard('from-tick', { runId: 'gone' }))
+    store.inbox.add(
+      newCard('from-facts', { itemKey: 'mr:1579', details: ref('!1579 web-2107-improve') }),
+      snap('!1579 web-2107-improve') as never
+    )
+    store.inbox.add(newCard('none', { itemKey: 'mr:77' }))
+    store.inbox.add(
+      newCard('facts-not-mr', { itemKey: null, details: ref('!5 x') }),
+      snap('!5 x') as never
+    )
+    const labels = Object.fromEntries(listInbox(deps, {}).items.map((i) => [i.id, i.itemLabel]))
+    expect(labels).toEqual({
+      'from-run': '!1561 web-1493',
+      'from-tick': '!1561 web-1493',
+      'from-facts': '!1579 web-2107-improve',
+      none: undefined,
+      'facts-not-mr': undefined
+    })
+  })
+
+  it('reads the run and tick labels in one query each, not one per card', () => {
+    const { store, deps } = setup()
+    for (let i = 0; i < 5; i++) {
+      store.inbox.add(newCard(`c${i}`, { runId: 'run-1' }))
+    }
+    const calls: string[] = []
+    const db = (store as unknown as { db: { prepare: (sql: string) => unknown } }).db
+    const prepare = db.prepare.bind(db)
+    db.prepare = (sql: string) => {
+      calls.push(sql)
+      return prepare(sql)
+    }
+    listInbox(deps, {})
+    expect(calls.filter((c) => /FROM runs/.test(c))).toHaveLength(1)
+    expect(calls.filter((c) => /FROM tick_items/.test(c))).toHaveLength(1)
+  })
+})

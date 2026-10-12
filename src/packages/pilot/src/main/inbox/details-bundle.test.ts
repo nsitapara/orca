@@ -50,7 +50,8 @@ describe('loadDetails', () => {
       drafted: true,
       draftedBase: expect.stringMatching(/^7cc153d/),
       draftedOption: null,
-      summary: ['drafted fix', 'diff +1 −1', 'before / after', '1 screenshot']
+      summary: ['drafted fix', 'diff +1 −1', 'before / after', '1 screenshot'],
+      subject: ''
     })
     expect(snapshot.texts).toEqual({})
     expect(snapshot.bundle.blocks.map((b) => b.type)).toEqual([

@@ -476,3 +476,26 @@ describe('the filter by page width', () => {
     expect(badges()!.className).not.toContain('sticky')
   })
 })
+
+describe('an MR group’s name on screen', () => {
+  afterEach(() => {
+    cleanup()
+    pilotRpc.mockReset()
+  })
+  it('shows the MR’s branch beside its iid in the list, the heading and the badges, truncated with the full text in title', async () => {
+    vi.stubGlobal('ResizeObserver', FakeResizeObserver)
+    const named = { ...R1579, itemLabel: '!1579 web-2107-improve-reports-with-a-long-branch-name' }
+    serve({ ...LIST, items: [named] })
+    render(<InboxPage />)
+    await screen.findByRole('heading', { name: 'Post your review of !1579?' })
+    const full = '!1579 · web-2107-improve-reports-with-a-long-branch-name'
+    const region = screen.getByRole('region', { name: full })
+    expect(region.querySelector('h2')?.getAttribute('title')).toBe(full)
+    expect(region.querySelector('h2')?.className).toContain('truncate')
+    const nav = within(screen.getByRole('navigation', { name: 'Cards' }))
+    expect(nav.getByRole('button', { name: `${full} · 1` }).getAttribute('title')).toBe(full)
+    fireWidth(500)
+    expect(within(screen.getByRole('toolbar')).getByTitle(full)).toBeTruthy()
+    vi.unstubAllGlobals()
+  })
+})
