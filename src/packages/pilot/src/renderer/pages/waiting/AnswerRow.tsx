@@ -44,6 +44,11 @@ function Parts({
   )
 }
 
+// The console tags a question's first option as the recommended one (answers.html).
+function recommended(item: InboxItemRow, choice: Choice): boolean {
+  return item.type === 'question' && choice.option === 0
+}
+
 // The options as segmented buttons: one radiogroup, arrow keys move the pick, and the picked option's
 // meaning reads beside them.
 export function AnswerRow({
@@ -121,11 +126,14 @@ export function AnswerRow({
               className={cn(
                 'border-l border-border px-3 py-1 text-[13px] first:border-l-0',
                 picked === i
-                  ? 'bg-primary/15 font-semibold text-primary'
+                  ? 'bg-[var(--ib-accent-soft)] font-semibold text-[var(--ib-accent)]'
                   : 'bg-background text-foreground hover:bg-muted'
               )}
             >
               {c.label}
+              {recommended(item, c) ? (
+                <span className="ml-1.5 text-[10.5px] font-medium opacity-80">Recommended</span>
+              ) : null}
             </button>
           ))}
         </div>
@@ -142,7 +150,7 @@ export function AnswerRow({
           className={cn(
             'rounded-md px-3.5 py-1 text-[13px] font-semibold',
             answer && !saving
-              ? 'bg-primary text-primary-foreground'
+              ? 'bg-[var(--ib-accent)] text-[var(--ib-accent-fg)]'
               : 'cursor-not-allowed bg-muted text-muted-foreground'
           )}
         >

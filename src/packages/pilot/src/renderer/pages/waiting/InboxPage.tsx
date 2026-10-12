@@ -8,6 +8,7 @@ import { setAllDetailsOpen, useAllDetailsOpen } from './details-open'
 import { ALL, InboxHeader } from './InboxHeader'
 import { InboxCard } from './InboxCard'
 import { ImportNotice } from './ImportNotice'
+import { InboxStyle } from './inbox-style'
 import { UpNextPanel } from './UpNextPanel'
 import { useListOpen } from './use-list-open'
 import { useWaiting } from './use-waiting'
@@ -86,6 +87,7 @@ export function InboxPage(): React.JSX.Element {
   )
   return (
     <div className="pilot-inbox flex flex-col gap-3">
+      <InboxStyle />
       <InboxHeader
         listOpen={listOpen}
         onToggleList={toggleList}

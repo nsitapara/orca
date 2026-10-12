@@ -251,7 +251,7 @@ describe('the answer row', () => {
     expect(approve.getAttribute('aria-checked')).toBe('true')
     expect(article.textContent).toContain('fix it')
     expect(save.disabled).toBe(false)
-    expect(save.className).toContain('bg-primary')
+    expect(save.className).toContain('bg-[var(--ib-accent)]')
     fireEvent.keyDown(approve, { key: 'ArrowRight' })
     await waitFor(() => expect(notes.getAttribute('aria-checked')).toBe('true'))
     expect(article.textContent).toContain('say how it should be done')

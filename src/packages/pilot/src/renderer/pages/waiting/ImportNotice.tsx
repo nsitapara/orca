@@ -64,7 +64,11 @@ export function ImportNotice({ onImported }: { onImported: () => void }): React.
   return (
     <div className="flex items-center gap-2.5 rounded-md border border-dashed border-border bg-card px-2.5 py-1.5 text-[12.5px] text-muted-foreground">
       <span className="flex-1">{text}</span>
-      <button type="button" className="text-primary hover:underline" onClick={() => setOpen(true)}>
+      <button
+        type="button"
+        className="text-[var(--ib-accent)] hover:underline"
+        onClick={() => setOpen(true)}
+      >
         Import
       </button>
     </div>
