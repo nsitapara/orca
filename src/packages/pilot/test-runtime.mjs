@@ -40,5 +40,6 @@ export const PILOT_SQLITE_RUNTIME_INCLUDE = [
   'src/packages/pilot/test/parity/mr-feedback.test.ts',
   'src/packages/pilot/test/parity/review-requests.test.ts',
   'src/packages/pilot/test/parity/13-dev-e2e-fix.parity.test.ts',
-  'src/packages/pilot/test/parity/M01-linear-todo.parity.test.ts'
+  'src/packages/pilot/test/parity/M01-linear-todo.parity.test.ts',
+  'src/packages/pilot/test/parity/M02-M04-manual-jobs.parity.test.ts'
 ]
