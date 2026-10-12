@@ -659,6 +659,8 @@ def _03():
         wt03(327),                                                                     # due, but Claude is out
     ], claude={"weekly": 95, "session": 30})
     yield make("two-per-tick", [wt03(331), wt03(332), wt03(333)])                      # the third is over the limit
+    # A branch with no MR yet is mine and in scope on both sides (its cycle is reviewed; publish blocks until it's on origin).
+    yield make("no-mr-yet", [wt03(371, mrs=[])])
     done = lambda path: {path: {"lead": "claude", "round": 2, "base": "9" * 40, "head": "a" * 40}}  # noqa: E731
     yield make("codex-leads-and-is-out", [wt03(341)], cycles=done("/wt/web-341"), codex=codex_answer(weekly=95))
     yield make("quota-out-other-agent", [wt03(342)], codex=codex_answer(weekly=95))   # Claude leads; only Codex is out

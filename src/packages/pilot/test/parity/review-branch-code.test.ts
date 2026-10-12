@@ -117,17 +117,35 @@ describe('03 · Review and fix branch code: the definition (old job: orca automa
     }
   })
 
-  it('flags the worktree only when the run failed, and a flag that fails never fails the run', () => {
+  // The sweep flagged a cycle that failed to start. One a review block stopped (an approved MR) stayed unflagged, and the
+  // next sweep flagged an abandoned one as it restarted it (begin does that here), so neither is flagged twice.
+  it('flags the worktree only when the cycle failed to start, and a flag that fails never fails the run', () => {
     const flag = step('flag_failed')
     expect(flag).toMatchObject({
-      when: '{run.failed} == true',
+      when: "{run.failed} == true and {steps.begin.status} != 'done'",
       env: { WT: '{worktree.path}', RUN: '{run.id}' }
     })
     expect(flag.run).toContain('orca worktree set --worktree "path:$WT" --unread')
     expect(flag.run).toContain('|| echo')
-    const failed = [{ name: 'complete', status: 'failed' as const, always: false, error: null }]
-    expect(decideStep(flag, failed, { 'run.failed': true })).toEqual({ run: true })
-    expect(decideStep(flag, [], { 'run.failed': false })).toMatchObject({ run: false })
+    const ended = (begin: 'done' | 'failed' | 'timed_out') => [
+      { name: 'begin', status: begin, always: false, error: null },
+      {
+        name: 'complete',
+        status: begin === 'done' ? ('failed' as const) : ('skipped' as const),
+        always: false,
+        error: null
+      }
+    ]
+    const cases: [string, ReturnType<typeof ended>, boolean, boolean][] = [
+      ['begin failed', ended('failed'), true, true],
+      ['begin timed out', ended('timed_out'), true, true],
+      ['a round never handed off, or a review block stopped the cycle', ended('done'), true, false],
+      ['the cycle completed', ended('done').slice(0, 1), false, false]
+    ]
+    for (const [, steps, failed, flagged] of cases) {
+      const fields = { 'run.failed': failed, 'steps.begin.status': steps[0].status }
+      expect(decideStep(flag, steps, fields).run).toBe(flagged)
+    }
   })
 
   it("sends my answers back to the asking round's session, else to the skill's answers mode", () => {

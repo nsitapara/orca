@@ -150,9 +150,21 @@ describeParity(PARITY_03, "03 · the YAML's steps run the rounds loop.py's hand-
       // complete: the run is done and the marker moves; stopped or abandoned: it fails and the commits stay due
       expect(status === 'done').toBe(expected.end === 'complete')
       expect(ran.includes('publish')).toBe(expected.end === 'complete')
-      expect(ran.includes('flag_failed')).toBe(expected.end !== 'complete')
+      // a stopped cycle stays unflagged, as in the sweep; an abandoned one is flagged by the next cycle's begin
+      expect(ran.includes('flag_failed')).toBe(false)
     }
   )
+
+  it('flags the worktree when the cycle fails to start, and runs nothing else', () => {
+    const failsToStart = (step: StepDef, fields: ItemFields): Ended =>
+      step.name === 'begin'
+        ? { status: 'failed', outputs: {} }
+        : play('claude', ['no', 'no'])(step, fields)
+    expect(simulate(def!, failsToStart)).toEqual({
+      ran: ['begin', 'flag_failed'],
+      status: 'failed'
+    })
+  })
 
   it('every ending the old hand-offs know is covered', () => {
     expect(new Set(old.map((o) => o.end))).toEqual(new Set(['complete', 'stopped', 'abandoned']))
