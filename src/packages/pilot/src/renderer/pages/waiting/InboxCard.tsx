@@ -4,57 +4,13 @@ import { cn } from '@/lib/utils'
 import type { InboxItemRow, InboxReply } from '../../../shared/api-types'
 import type { QueueEntry, RunLine } from '../../../shared/inbox-types'
 import type { PartSwitches } from '../../details/ReviewBlock'
+import { AnsweredLine } from './AnsweredLine'
 import { AnswerRow } from './AnswerRow'
 import type { Answer } from './answer-types'
-import { KIND_LABEL, QUEUE_PILL, queueNote, runLineView } from './answer-text'
+import { approveWords } from './answer-buttons'
+import { runLineView } from './answer-text'
 import { CardDetails } from './CardDetails'
-import {
-  DRAFTED_PILL_CLASS,
-  JOB_CHIP_CLASS,
-  kindChipClass,
-  statusOf,
-  statusPillClass
-} from './chips'
-
-function clock(ms: number): string {
-  return new Date(ms).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
-}
-
-function Saved({
-  item,
-  queued,
-  onChange
-}: {
-  item: InboxItemRow
-  queued: QueueEntry | null
-  onChange: () => void
-}): React.JSX.Element {
-  const pill =
-    queued && queued.state !== 'dispatched' && queued.state !== 'failed'
-      ? QUEUE_PILL[queued.state]
-      : null
-  return (
-    <div className="flex flex-wrap items-center gap-2 rounded-md border border-border/50 bg-muted/30 px-3 py-2 text-sm">
-      <span>Saved: {item.answer?.text}</span>
-      <span className="rounded border px-1.5 text-xs">
-        {pill ? pill.label : 'Sent to its session'}
-      </span>
-      {queued && pill ? (
-        <span className="text-muted-foreground">
-          {queued.fires} · {queueNote(queued, clock)}
-        </span>
-      ) : null}
-      <span className="flex-1" />
-      <button
-        type="button"
-        className="rounded px-2 py-0.5 text-xs hover:bg-muted"
-        onClick={onChange}
-      >
-        Change answer
-      </button>
-    </div>
-  )
-}
+import { DRAFTED_PILL_CLASS, JOB_CHIP_CLASS, statusOf, statusPillClass } from './chips'
 
 // Who wrote a reply is stored with it (by), set by the path that wrote it; never guessed from its words.
 function Reply({ reply }: { reply: InboxReply }): React.JSX.Element {
@@ -68,10 +24,13 @@ function Reply({ reply }: { reply: InboxReply }): React.JSX.Element {
 // apart from the agent's words, shown only for the card version it was built for. Never cut silently.
 function RunLineBlock({
   line,
-  digest
+  digest,
+  button
 }: {
   line: RunLine | null
   digest: string
+  // The label of the button that runs it ("Post review").
+  button: string
 }): React.JSX.Element | null {
   if (!line || line.digest !== digest) {
     return null
@@ -82,7 +41,7 @@ function RunLineBlock({
       data-pilot-run-line=""
       className="flex flex-col gap-0.5 rounded-md border border-primary/40 bg-primary/5 px-2.5 py-1.5"
     >
-      <span className="text-[11.5px] font-semibold text-primary">Pilot · Approve runs</span>
+      <span className="text-[11.5px] font-semibold text-primary">Pilot · {button} runs</span>
       <code className="font-mono text-[11.5px] leading-[1.5] break-all">{head}</code>
       {more > 0 ? <RunLineRest text={line.text} more={more} /> : null}
     </div>
@@ -138,24 +97,37 @@ export function InboxCard({
   selected: boolean
   onSave: (answer: Answer) => Promise<string | null>
 }): React.JSX.Element {
-  const [editing, setEditing] = useState(item.status === 'open')
   const [unsaved, setUnsaved] = useState(false)
   const [off, setOff] = useState<string[]>([])
   const toggle = (id: string) =>
     setOff((now) => (now.includes(id) ? now.filter((x) => x !== id) : [...now, id]))
+  // An open card is answered with one click; an answered one is a line with its countdown and Undo.
+  const editing = item.status === 'open'
   const parts = editing ? partSwitches(item, off, toggle) : null
   const status = statusOf(item, queued, unsaved && editing)
+  const frame = cn(
+    'flex min-w-0 scroll-mt-14 flex-col gap-2 rounded-[10px] border bg-card px-3.5 py-3 text-card-foreground',
+    selected ? 'border-foreground/30' : 'border-border'
+  )
+  if (!editing) {
+    return (
+      <article id={`card-${item.id}`} data-selected={selected ? '' : undefined} className={frame}>
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+          <h3 className="min-w-0 flex-1 truncate text-sm font-semibold">{item.title}</h3>
+          <span className={statusPillClass(status)}>{status}</span>
+        </div>
+        <AnsweredLine
+          item={item}
+          queued={queued}
+          onUndo={() => void onSave({ option: null, text: '' })}
+        />
+        {error ? <p className="text-sm text-destructive">{error}</p> : null}
+      </article>
+    )
+  }
   return (
-    <article
-      id={`card-${item.id}`}
-      data-selected={selected ? '' : undefined}
-      className={cn(
-        'flex min-w-0 scroll-mt-14 flex-col gap-2 rounded-[10px] border bg-card px-3.5 py-3 text-card-foreground',
-        selected ? 'border-foreground/30' : 'border-border'
-      )}
-    >
+    <article id={`card-${item.id}`} data-selected={selected ? '' : undefined} className={frame}>
       <div className="flex flex-wrap items-center gap-1.5">
-        <span className={kindChipClass(item.type)}>{KIND_LABEL[item.type]}</span>
         <span className={JOB_CHIP_CLASS}>{automationName}</span>
         {item.details?.drafted ? <span className={DRAFTED_PILL_CLASS}>drafted</span> : null}
         <span className={statusPillClass(status)}>{status}</span>
@@ -167,33 +139,12 @@ export function InboxCard({
           <span className="text-muted-foreground">Suggested:</span> {item.suggested}
         </p>
       ) : null}
-      <RunLineBlock line={runLine} digest={item.digest} />
+      <RunLineBlock line={runLine} digest={item.digest} button={approveWords(item).label} />
       <CardDetails item={item} parts={parts} />
       {item.replies.map((r, i) => (
         <Reply key={i} reply={r} />
       ))}
-      {editing ? (
-        <AnswerRow
-          item={item}
-          off={off}
-          onToggle={toggle}
-          onSave={onSave}
-          onSaved={() => {
-            setEditing(false)
-            setUnsaved(false)
-          }}
-          onPick={setUnsaved}
-        />
-      ) : (
-        <Saved
-          item={item}
-          queued={queued}
-          onChange={() => {
-            setUnsaved(false)
-            setEditing(true)
-          }}
-        />
-      )}
+      <AnswerRow item={item} off={off} onToggle={toggle} onSave={onSave} onPick={setUnsaved} />
       {error ? <p className="text-sm text-destructive">{error}</p> : null}
     </article>
   )

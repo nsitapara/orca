@@ -1,8 +1,7 @@
 import { cn } from '@/lib/utils'
 import type { InboxItemRow } from '../../../shared/api-types'
 import type { Section } from '../../../shared/inbox-groups'
-import { ageLabel, jobCode, KIND_LABEL } from './answer-text'
-import { kindChipClass } from './chips'
+import { ageLabel, jobCode } from './answer-text'
 import { ALL } from './InboxHeader'
 
 // The left list: the same sections, in the same order, as the cards.
@@ -68,7 +67,6 @@ export function CardList({
               )}
             >
               <span className="flex items-center gap-1.5">
-                <span className={kindChipClass(i.type, true)}>{KIND_LABEL[i.type]}</span>
                 <span className="flex-1 text-[11.5px] text-muted-foreground">
                   {jobCode(names.get(i.automationId) ?? i.automationId, i.automationId)}
                 </span>

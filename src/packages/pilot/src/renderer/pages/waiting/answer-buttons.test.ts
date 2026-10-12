@@ -1,0 +1,133 @@
+import { describe, expect, it } from 'vitest'
+import type { InboxItemRow } from '../../../shared/api-types'
+import { composeAnswer } from './answer-text'
+import { answeredLine, buttonsFor, countdown } from './answer-buttons'
+
+const base = {
+  options: [],
+  parts: {},
+  switchWords: [],
+  details: null,
+  action: null
+} as unknown as InboxItemRow
+const opts = (...l: string[]) => l.map((label) => ({ label, meaning: `${label} m` }))
+const CARDS: Record<string, InboxItemRow> = {
+  push: { ...base, type: 'action', action: 'push', options: opts('Approve', 'Skip') },
+  postReview: { ...base, type: 'action', action: 'post_review', options: opts('Approve', 'Skip') },
+  startRun: { ...base, type: 'action', action: 'start_run', options: opts('Approve', 'Skip') },
+  leftNoDraft: { ...base, type: 'left_for_you', options: opts('Approve', 'Skip') },
+  bugDrafted: {
+    ...base,
+    type: 'bug',
+    options: opts('Approve', 'Skip'),
+    details: { drafted: true } as never
+  },
+  question: {
+    ...base,
+    type: 'question',
+    options: opts('Install in the job', 'Bake it', 'Change…')
+  },
+  flagged: { ...base, type: 'flagged', options: opts('Revert') },
+  default: { ...base, type: 'default', options: opts('Keep', 'Revert') }
+}
+
+// Every button, with the answer the old radio + Save flow saved for the same choice (notes "some notes"):
+// [button label, role, option index, words]. The words and indexes are what routing, the desktop-only
+// approval and the draft grant read, so they must never drift.
+const OLD: Record<string, [string, string, number | null, string][]> = {
+  push: [
+    ['Push to origin', 'primary', 0, 'approve'],
+    ['Revise…', 'notes', null, 'revise: some notes'],
+    ['Skip', 'skip', 1, 'skip']
+  ],
+  postReview: [
+    ['Post review', 'primary', 0, 'approve'],
+    ['Revise…', 'notes', null, 'revise: some notes'],
+    ['Skip', 'skip', 1, 'skip']
+  ],
+  startRun: [
+    ['Approve', 'primary', 0, 'Approve'],
+    ['With notes…', 'notes', null, 'approve: some notes'],
+    ['Skip', 'skip', 1, 'Skip']
+  ],
+  leftNoDraft: [
+    ['Fix it', 'primary', 0, 'approve'],
+    ['With notes…', 'notes', null, 'some notes'],
+    ['Skip', 'skip', 1, 'skip']
+  ],
+  bugDrafted: [
+    ['Apply fix', 'primary', 0, 'approve'],
+    ['With notes…', 'notes', null, 'some notes'],
+    ['Skip', 'skip', 1, 'skip']
+  ],
+  question: [
+    ['Install in the job', 'option', 0, 'Install in the job'],
+    ['Bake it', 'option', 1, 'Bake it'],
+    ['Change…', 'notes', 2, 'change: some notes'],
+    ['Something else…', 'notes', null, 'some notes']
+  ],
+  flagged: [
+    ['Revert', 'option', 0, 'Revert'],
+    ['Keep', 'option', null, 'keep'],
+    ['Something else…', 'notes', null, 'some notes']
+  ],
+  default: [
+    ['Keep', 'option', 0, 'Keep'],
+    ['Revert', 'option', 1, 'Revert'],
+    ['Something else…', 'notes', null, 'some notes']
+  ]
+}
+
+describe('buttonsFor', () => {
+  it.each(Object.keys(OLD))('%s: each button saves what the old radio + Save saved', (name) => {
+    const item = CARDS[name]
+    const got = buttonsFor(item).map((b) => [
+      b.label,
+      b.role,
+      composeAnswer(item, b.choice, 'some notes', [])
+    ])
+    expect(got).toEqual(
+      OLD[name].map(([label, role, option, text]) => [label, role, { option, text }])
+    )
+  })
+
+  it('shows an option’s meaning as its hint, and highlights a question’s first option', () => {
+    const buttons = buttonsFor(CARDS.question)
+    expect(buttons[0]).toMatchObject({ hint: 'Install in the job m', recommended: true })
+    expect(buttons[1]).toMatchObject({ recommended: false })
+    expect(buttonsFor(CARDS.default).some((b) => b.recommended)).toBe(false)
+  })
+
+  it('has no Save button among them', () => {
+    for (const item of Object.values(CARDS)) {
+      expect(buttonsFor(item).map((b) => b.label)).not.toContain('Save answer')
+    }
+  })
+})
+
+describe('answeredLine', () => {
+  const answered = (item: InboxItemRow, text: string) =>
+    ({ ...item, answer: { text } }) as unknown as InboxItemRow
+  it.each([
+    ['postReview', 'approve', 'Post review', 'Posting review…'],
+    ['bugDrafted', 'approve', 'Apply fix', 'Applying fix…'],
+    ['leftNoDraft', 'approve', 'Fix it', 'Starting the fix…'],
+    ['postReview', 'skip', 'Skipped', 'Skipped'],
+    ['startRun', 'Skip', 'Skipped', 'Skipped'],
+    ['question', 'Bake it', 'Bake it', 'Applying…']
+  ])('%s answered "%s"', (name, text, what, doing) => {
+    expect(answeredLine(answered(CARDS[name], text))).toEqual({ label: what, doing })
+  })
+})
+
+describe('countdown', () => {
+  it.each([
+    [179_000, '2:59'],
+    [60_000, '1:00'],
+    [5_400, '0:06'],
+    [0, '0:00'],
+    [-4_000, '0:00']
+  ])('%i ms is %s', (ms, text) => {
+    expect(countdown(ms)).toBe(text)
+  })
+})

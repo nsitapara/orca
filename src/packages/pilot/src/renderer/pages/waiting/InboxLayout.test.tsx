@@ -172,7 +172,7 @@ describe('the Inbox layout', () => {
       '09 · Prepare reviews requested of me · 1'
     ])
     const row = list.querySelector('[data-row="f1"]')!
-    expect(row.textContent).toContain('Left for you')
+    expect(row.textContent).not.toContain('Left for you')
     expect(row.textContent).toContain('04')
     expect(row.textContent).toMatch(/\d+d/)
     expect(row.textContent).toContain('F1 Fixture')
@@ -230,24 +230,55 @@ describe('the answer row', () => {
     pilotRpc.mockReset()
   })
 
-  it('is a radiogroup of segmented options; arrow keys move the pick and its meaning shows beside them', async () => {
+  it('has one button per choice named for what it does, no Save button, and saves on the click', async () => {
     serve()
     render(<InboxPage />)
     const article = (await screen.findByRole('heading', { name: 'F1 Fixture' })).closest('article')!
-    const group = within(article).getByRole('radiogroup')
-    const [approve, notes] = within(group).getAllByRole('radio')
-    const save = article.querySelector('button[data-save]') as HTMLButtonElement
-    expect(save.disabled).toBe(true)
-    expect(article.textContent).not.toContain('fix it')
-    fireEvent.click(approve)
-    expect(approve.getAttribute('aria-checked')).toBe('true')
+    const group = within(article).getByRole('group', { name: 'Answer' })
+    expect(
+      within(group)
+        .getAllByRole('button')
+        .map((b) => b.textContent)
+    ).toEqual(['Skip', 'Fix it', 'With notes…'])
+    expect(article.querySelector('button[data-save]')).toBeNull()
+    expect(within(article).queryByRole('button', { name: 'Save answer' })).toBeNull()
+    expect(within(article).queryByRole('radio')).toBeNull()
+    fireEvent.click(within(group).getByRole('button', { name: 'Fix it' }))
+    await waitFor(() =>
+      expect(pilotRpc).toHaveBeenCalledWith(
+        'pilot.inbox.answer',
+        expect.objectContaining({ id: 'f1', text: 'approve', option: 0 })
+      )
+    )
+  })
+
+  it('shows an option’s description beside the row on hover, and as the tooltip', async () => {
+    serve()
+    render(<InboxPage />)
+    const article = (await screen.findByRole('heading', { name: 'F1 Fixture' })).closest('article')!
+    const fix = within(article).getByRole('button', { name: 'Fix it' })
+    expect(fix.getAttribute('title')).toBe('fix it')
+    fireEvent.mouseEnter(fix)
     expect(article.textContent).toContain('fix it')
-    expect(save.disabled).toBe(false)
-    expect(save.className).toContain('bg-[var(--ib-accent)]')
-    fireEvent.keyDown(approve, { key: 'ArrowRight' })
-    await waitFor(() => expect(notes.getAttribute('aria-checked')).toBe('true'))
-    expect(article.textContent).toContain('say how it should be done')
-    expect(approve.getAttribute('aria-checked')).toBe('false')
+    fireEvent.mouseLeave(fix)
+    expect(within(article).getByRole('group', { name: 'Answer' }).textContent).not.toContain(
+      'fix it'
+    )
+  })
+
+  it('opens the notes box for “With notes…”, which needs Send, and Cancel closes it without saving', async () => {
+    serve()
+    render(<InboxPage />)
+    const article = (await screen.findByRole('heading', { name: 'F1 Fixture' })).closest('article')!
+    fireEvent.click(within(article).getByRole('button', { name: 'With notes…' }))
+    const send = within(article).getByRole('button', { name: 'Send' }) as HTMLButtonElement
+    expect(send.disabled).toBe(true)
+    fireEvent.change(article.querySelector('textarea')!, { target: { value: 'do it carefully' } })
+    expect(send.disabled).toBe(false)
+    expect(pilotRpc.mock.calls.some((c) => c[0] === 'pilot.inbox.answer')).toBe(false)
+    fireEvent.click(within(article).getByRole('button', { name: 'Cancel' }))
+    expect(article.querySelector('textarea')).toBeNull()
+    expect(pilotRpc.mock.calls.some((c) => c[0] === 'pilot.inbox.answer')).toBe(false)
   })
 })
 
@@ -320,27 +351,14 @@ describe('fix round 1', () => {
     ).not.toBeNull()
   })
 
-  it('clears the unsaved pill once the answer is saved, and when Change answer reopens it', async () => {
-    let status: InboxItemRow['status'] = 'open'
-    pilotRpc.mockImplementation(async (method: string) => {
-      if (method === 'pilot.inbox.list') {
-        return { ...LIST, items: [{ ...F1, status }] }
-      }
-      if (method === 'pilot.inbox.answer') {
-        status = 'answered'
-        return {}
-      }
-      return method === 'pilot.queue.list' ? { entries: [] } : { imported: 0, skipped: [] }
-    })
+  it('shows the unsaved pill while notes are typed, and clears it on Cancel', async () => {
+    serve({ ...LIST, items: [F1] })
     render(<InboxPage />)
     const article = (await screen.findByRole('heading', { name: 'F1 Fixture' })).closest('article')!
     const pill = () => [...article.querySelectorAll('span')].map((s) => s.textContent)
-    fireEvent.click(article.querySelector('[role="radio"]')!)
+    fireEvent.click(within(article).getByRole('button', { name: 'With notes…' }))
     expect(pill()).toContain('unsaved')
-    fireEvent.click(article.querySelector('button[data-save]')!)
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Change answer' })).toBeTruthy())
-    expect(pill()).not.toContain('unsaved')
-    fireEvent.click(screen.getByRole('button', { name: 'Change answer' }))
+    fireEvent.click(within(article).getByRole('button', { name: 'Cancel' }))
     expect(pill()).not.toContain('unsaved')
   })
 
