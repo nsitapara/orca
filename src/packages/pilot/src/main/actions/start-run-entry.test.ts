@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { parseAutomationYaml } from '../../shared/definition/parse'
 import { PilotStore } from '../store/store'
 import { SCHEDULER_OFF } from '../scheduler/scheduler'
+import { UnrecordedLaunchError } from '../scheduler/tick-runner'
 import { startRunEntry } from './start-run-entry'
 
 const parsed = parseAutomationYaml(
@@ -143,6 +144,23 @@ describe('start_run', () => {
       outcome: "Couldn't start: No worktree for !1588",
       finishedAt: 50
     })
+  })
+
+  // A start that failed launched nothing: the item's once_per key is freed so the head can be offered again.
+  // An agent left running untracked (UnrecordedLaunchError) keeps it, so no tick starts a second one.
+  it.each<[string, Error, string | null]>([
+    ['frees the key of a start that failed', new Error('No worktree for !1588'), null],
+    [
+      'keeps the key while an untracked agent may run',
+      new UnrecordedLaunchError('term-9', 'the runtime returned no pane to watch'),
+      'rev-1-ask'
+    ]
+  ])('%s', async (_name, error, runId) => {
+    const { store, entry } = setup(vi.fn().mockRejectedValue(error))
+    store.markHandled('rev', '1588:cd00', 'rev-1-ask', 1)
+    await entry.run(ARGS, { dryRun: false, runId: 'rev-1-ask' })
+    const handled = store.handledRows('rev').find((r) => r.onceKey === '1588:cd00')
+    expect(handled?.runId ?? null).toBe(runId)
   })
 
   it("starts nothing for a card that belongs to a different run (an agent's card naming another's run)", async () => {

@@ -1,7 +1,7 @@
 import type { ItemDecision, RunRow } from '../../shared/api-types'
 import type { AutomationDefinition } from '../../shared/definition/types'
 import { SCHEDULER_OFF } from '../scheduler/scheduler'
-import type { LaunchRequest } from '../scheduler/tick-runner'
+import { UnrecordedLaunchError, type LaunchRequest } from '../scheduler/tick-runner'
 import type { PilotStore } from '../store/store'
 import { actionDone, actionFailed, type ActionEntry } from './types'
 
@@ -92,6 +92,11 @@ export function startRunEntry(deps: {
           outcome: `Couldn't start: ${messageOf(error)}`,
           finishedAt: deps.now()
         })
+        // Nothing started, so the item's key is freed and its head can be offered again; an agent left
+        // running untracked keeps it, so no tick starts a second one beside it.
+        if (!(error instanceof UnrecordedLaunchError)) {
+          deps.store.unmarkHandledForRun(run.automationId, run.id)
+        }
         return actionFailed(`Couldn't start run ${run.id}: ${messageOf(error)}`)
       }
       return actionDone(`started run ${run.id}`)
