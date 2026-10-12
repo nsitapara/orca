@@ -30,6 +30,7 @@ import { registrySources } from './scheduler/tick-decide'
 import { runTick, type TickDeps } from './scheduler/tick-runner'
 import { createPassFetchCache } from './sources/fetch-cache'
 import { glabApiForRepo } from './sources/gitlab-api'
+import { registerPilotSources } from './sources/register-sources'
 import { PilotStore } from './store/store'
 
 export type PilotContext = {
@@ -86,6 +87,8 @@ function openPilot(
   mkdirSync(host.dataDir, { recursive: true })
   const store = PilotStore.open(join(host.dataDir, 'pilot-automations.db'))
   opened.push(() => store.close())
+  // Before the definitions load: a where clause of these kinds validates against their schemas.
+  registerPilotSources({ runtime, store })
   const kept = store.housekeep(now())
   if (kept.interrupted > 0 || kept.pruned > 0) {
     log(

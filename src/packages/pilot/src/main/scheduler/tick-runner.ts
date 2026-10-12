@@ -71,7 +71,8 @@ const ACTED_ON_WHERE: Partial<Record<ItemKind, ReadonlySet<string>>> = {
     'draft',
     'approved_by',
     'target_branch'
-  ])
+  ]),
+  worktree: new Set(['has_mr', 'mr_author', 'mr_state', 'branch_owner', 'commits'])
 }
 
 // Keys a later task implements (Task 2b ruling): until then a file using one fails the tick instead

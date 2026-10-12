@@ -37,7 +37,13 @@ export const worktreeWhereSchema: z.ZodType<WorktreeWhere> = z.strictObject({
   has_mr: z.boolean().optional(),
   mr_author: peopleRefSchema.optional(),
   mr_state: z.literal('open').optional(),
-  branch_owner: peopleRefSchema.optional()
+  branch_owner: peopleRefSchema.optional(),
+  commits: z
+    .strictObject({
+      ignore_trailer: z.string().min(1).optional(),
+      first_sight: z.enum(['baseline', 'test_recent']).optional()
+    })
+    .optional()
 })
 
 export const pipelineWhereSchema: z.ZodType<PipelineWhere> = z.strictObject({

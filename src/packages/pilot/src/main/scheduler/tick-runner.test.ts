@@ -554,8 +554,10 @@ describe('runTick on keys a later task implements (Task 2b ruling)', () => {
     ],
     [
       'a where key of a kind whose source has not landed',
-      { items: { kind: 'worktree', where: { has_mr: true }, match: [], customFields: [] } },
-      "items.where.has_mr isn't supported yet"
+      {
+        items: { kind: 'linear_ticket', where: { team: 'WEB' }, match: [], customFields: [] }
+      },
+      "items.where.team isn't supported yet"
     ]
   ])('fails the tick on %s, starting nothing and writing no keys', async (_name, over, error) => {
     const d = deps()
