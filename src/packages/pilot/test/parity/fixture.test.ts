@@ -1,0 +1,147 @@
+import { describe, expect, it } from 'vitest'
+import {
+  fixtureGitOperation,
+  fixtureGlab,
+  fixturePass,
+  fixtureQuota,
+  fixtureRuntime,
+  NotInFixture,
+  normalizeApiPath,
+  type ParityFixture
+} from './fixture'
+
+const marker = (path: string, name: string, out: string) => ({
+  argv: ['git', '-C', path, 'rev-parse', '--git-path', name],
+  code: 0,
+  stdout: `${out}\n`,
+  stderr: ''
+})
+const F: ParityFixture = {
+  job: 't',
+  case: 't',
+  recordedAt: '',
+  now: 1,
+  repo: { id: 'r1', path: '/main', name: 'web-platform', project: 'g/web', host: 'gitlab.com' },
+  reads: [
+    {
+      argv: ['glab', 'api', '--hostname', 'gitlab.com', 'user'],
+      code: 0,
+      json: { username: 'nish8' }
+    },
+    {
+      argv: [
+        'glab',
+        'api',
+        '--hostname',
+        'gitlab.com',
+        'projects/g%2Fweb/merge_requests?state=opened&author_username=nish8&per_page=100&page=1'
+      ],
+      code: 0,
+      json: [{ iid: 1 }]
+    },
+    {
+      argv: ['glab', 'api', '--hostname', 'gitlab.com', 'projects/g%2Fweb/merge_requests/1'],
+      code: 0,
+      stdout: '{"iid":1}',
+      stderr: ''
+    },
+    {
+      argv: ['orca', 'worktree', 'list', '--json'],
+      code: 0,
+      json: {
+        ok: true,
+        result: {
+          worktrees: [
+            {
+              id: 'r1::/wt/a',
+              repoId: 'r1',
+              path: '/wt/a',
+              branch: 'refs/heads/a',
+              isArchived: false
+            },
+            {
+              id: 'r1::/wt/old',
+              repoId: 'r1',
+              path: '/wt/old',
+              branch: 'refs/heads/old',
+              isArchived: true
+            },
+            { id: 'r2::/x', repoId: 'r2', path: '/x', branch: 'refs/heads/x', isArchived: false }
+          ]
+        }
+      }
+    },
+    marker('/wt/a', 'MERGE_HEAD', '.git/MERGE_HEAD'),
+    marker('/wt/a', 'rebase-merge', '/gitdirs/a/rebase-merge')
+  ],
+  state: {},
+  exists: { '/wt/a/.git/MERGE_HEAD': false, '/gitdirs/a/rebase-merge': true }
+}
+
+describe('normalizeApiPath', () => {
+  it.each([
+    [
+      'merge_requests?state=opened&author_username=nish8&per_page=100&page=1',
+      'merge_requests?author_username=nish8&per_page=100&state=opened'
+    ],
+    [
+      'merge_requests?state=opened&per_page=100&page=2',
+      'merge_requests?page=2&per_page=100&state=opened'
+    ],
+    ['merge_requests/1', 'merge_requests/1']
+  ])('%s', (path, normal) => expect(normalizeApiPath(path)).toBe(normal))
+})
+
+describe('fixtureGlab', () => {
+  it("answers Pilot's GETs from the old side's reads, and names one it lacks", async () => {
+    const api = fixtureGlab(F)
+    expect(await api.get('merge_requests?state=opened&author_username=nish8&per_page=100')).toEqual(
+      [{ iid: 1 }]
+    )
+    expect(await api.get('merge_requests/1')).toEqual({ iid: 1 })
+    await expect(api.get('merge_requests/2')).rejects.toThrow(NotInFixture)
+  })
+
+  it('answers GETs outside the project (getRoot) the same way, and names one it lacks', async () => {
+    const api = fixtureGlab(F)
+    expect(await api.getRoot('user')).toEqual({ username: 'nish8' })
+    await expect(api.getRoot('users')).rejects.toThrow(NotInFixture)
+  })
+
+  it("serves a pass's GitLab client from the fixture, so Pilot reads through its own per-pass memo", async () => {
+    const api = await fixturePass(F).gitlab('/main')
+    expect(await api.get('merge_requests/1')).toEqual({ iid: 1 })
+    // The pass client forwards getRoot from Task 14b on; that task's fetch-cache test pins it.
+  })
+})
+
+describe('fixtureRuntime', () => {
+  it("lists the repo's live worktrees only", async () => {
+    const listed = await fixtureRuntime(F).listManagedWorktrees('id:r1')
+    expect(listed.worktrees.map((w) => w.git.path)).toEqual(['/wt/a'])
+  })
+})
+
+describe('fixtureGitOperation', () => {
+  it('names the first marker that exists, and refuses a worktree the old side never checked', async () => {
+    const op = fixtureGitOperation(F)
+    expect(await op('/wt/a')).toBe('rebase')
+    await expect(op('/wt/b')).rejects.toThrow(NotInFixture)
+  })
+})
+
+describe('fixtureQuota', () => {
+  it("serves Claude's saved reading from state, else from the case's quota field", () => {
+    expect(
+      fixtureQuota({ ...F, state: { 'quota/claude.json': { weekly: 61, session: 38 } } }, 'claude')
+    ).toEqual({ weekly: 61, session: 38 })
+    expect(
+      fixtureQuota({ ...F, quota: { claude: { weekly: 95, session: 40 } } }, 'claude')
+    ).toEqual({ weekly: 95, session: 40 })
+  })
+
+  it('reads a case with no saved reading as unknown, for either agent', () => {
+    expect(fixtureQuota(F, 'claude')).toEqual({ weekly: null, session: null })
+    expect(fixtureQuota(F, 'codex')).toEqual({ weekly: null, session: null })
+  })
+})
