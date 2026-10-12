@@ -44,6 +44,12 @@ function messageOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
 }
 
+// Every definition but those shown only from their last valid version (their file is invalid now).
+function tickable(loaded: LoadedDefinitions): AutomationDefinition[] {
+  const displayOnly = new Set(loaded.displayOnly ?? [])
+  return loaded.definitions.filter((d) => !displayOnly.has(d.id))
+}
+
 function isScheduled(def: AutomationDefinition): boolean {
   return def.enabled && def.schedule !== 'manual'
 }
@@ -189,7 +195,7 @@ export class PilotScheduler {
     }
     let definitions: AutomationDefinition[]
     try {
-      definitions = this.deps.definitions().definitions
+      definitions = tickable(this.deps.definitions())
     } catch (error) {
       this.deps.log(`[pilot] couldn't read automations: ${messageOf(error)}`)
       return
@@ -247,9 +253,15 @@ export class PilotScheduler {
     if (this.running.has(id)) {
       return { status: 'busy' }
     }
-    const def = this.deps.definitions().definitions.find((d) => d.id === id)
+    const loaded = this.deps.definitions()
+    const def = loaded.definitions.find((d) => d.id === id)
     if (!def) {
       return { status: 'unknown' }
+    }
+    if (loaded.displayOnly?.includes(id)) {
+      throw new Error(
+        `${def.file} isn't valid: Pilot shows its last valid version but won't tick it until the file is fixed`
+      )
     }
     const promise = this.deps.runTick(def, opts)
     this.running.set(id, promise)

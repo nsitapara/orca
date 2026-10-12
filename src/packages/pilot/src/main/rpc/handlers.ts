@@ -24,7 +24,12 @@ function itemKindLabel(def: AutomationDefinition): string {
   return ITEM_KIND[def.items.kind]
 }
 
-function summarize(ctx: PilotContext, def: AutomationDefinition): AutomationSummary {
+// heldBack: its file is invalid and only its last valid version is shown, so it has no next tick.
+function summarize(
+  ctx: PilotContext,
+  def: AutomationDefinition,
+  heldBack = false
+): AutomationSummary {
   return {
     id: def.id,
     name: def.name,
@@ -36,15 +41,16 @@ function summarize(ctx: PilotContext, def: AutomationDefinition): AutomationSumm
     agent: def.steps[0]?.agent ?? 'claude',
     powers: def.powers,
     inbox: def.inbox,
-    nextTickAt: ctx.scheduler.nextTickAt(def),
+    nextTickAt: heldBack ? null : ctx.scheduler.nextTickAt(def),
     lastTick: ctx.store.lastTick(def.id)
   }
 }
 
 export function listAutomations(ctx: PilotContext): AutomationListPayload {
   const loaded = ctx.loaded()
+  const displayOnly = new Set(loaded.displayOnly ?? [])
   return {
-    automations: loaded.definitions.map((d) => summarize(ctx, d)),
+    automations: loaded.definitions.map((d) => summarize(ctx, d, displayOnly.has(d.id))),
     errors: loaded.errors,
     peopleError: loaded.peopleError,
     missingDirs: loaded.missingDirs

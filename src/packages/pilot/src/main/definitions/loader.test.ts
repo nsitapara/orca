@@ -249,7 +249,7 @@ describe('the last valid version', () => {
   const memory = () => PilotStore.open(':memory:').definitions
   const at = (hour: number) => () => Date.UTC(2026, 9, 11, hour, 0)
 
-  it('keeps running the last valid version after a broken edit, and says so (Review Focus)', () => {
+  it('keeps the last valid version after a broken edit for display only, and says so (Review Focus)', () => {
     const d = dir({ 'a.yaml': VALID })
     const file = join(d, 'a.yaml')
     const mem = memory()
@@ -257,12 +257,13 @@ describe('the last valid version', () => {
     writeFileSync(file, `${VALID.replace('name: A', 'name: B')}onceper: x\n`)
     const loaded = loadDefinitions([d], mem, at(10))
     expect(loaded.definitions.map((x) => [x.id, x.name])).toEqual([['a', 'A']])
+    expect(loaded.displayOnly).toEqual(['a'])
     expect(loaded.errors).toEqual([
       {
         file,
         errors: [
           `${file}: unknown key "onceper"`,
-          `${file}: Pilot keeps running the last valid version, saved 2026-10-11T09:00:00.000Z`
+          `${file}: Pilot shows the last valid version, saved 2026-10-11T09:00:00.000Z; it isn't ticked until the file is valid again`
         ]
       }
     ])
@@ -276,7 +277,9 @@ describe('the last valid version', () => {
     writeFileSync(file, 'name: [')
     loadDefinitions([d], mem)
     writeFileSync(file, VALID.replace('name: A', 'name: C'))
-    expect(loadDefinitions([d], mem).definitions.map((x) => x.name)).toEqual(['C'])
+    const fixed = loadDefinitions([d], mem)
+    expect(fixed.definitions.map((x) => x.name)).toEqual(['C'])
+    expect(fixed.displayOnly).toEqual([])
   })
 
   it('has nothing to keep for a file that never loaded', () => {
