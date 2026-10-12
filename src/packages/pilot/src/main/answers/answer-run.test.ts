@@ -12,7 +12,7 @@ import { DraftInProgressError } from './session-probe'
 import type { TerminalState } from './sessions'
 
 const parsed = parseAutomationYaml(
-  'name: Fix CI\nrepo: web-platform\nschedule: manual\nitems: { kind: merge_request }\nsteps: [ { agent: claude, skill: fix-gitlab-ci, prompt: x } ]\npowers: [commit, push]\ninbox: nish\n',
+  'name: Fix CI\nrepo: web-platform\nschedule: manual\nitems: { kind: merge_request }\nsteps: [ { agent: claude, skill: fix-gitlab-ci, prompt: x } ]\nanswers: { resume: asking_session, else: { agent: claude, skill: fix-gitlab-ci, mode: answers } }\npowers: [commit, push]\ninbox: nish\n',
   '/a/ci.yaml'
 )
 if (!parsed.ok) {
@@ -61,6 +61,8 @@ function setup(state: TerminalState, over: Partial<AgentDispatchDeps> = {}) {
     send: vi.fn().mockResolvedValue(undefined),
     mainCheckout: async () => '/main',
     current: (item) => item,
+    fileExists: () => true,
+    warn: () => {},
     ...over
   }
   const item = {
@@ -360,5 +362,46 @@ describe('dispatchToAgent', () => {
     await dispatchToAgent(deps, { ...group, worktreePath: null })
     expect(vi.mocked(deps.open).mock.calls[0][0].worktree).toEqual({ id: null, path: '/main' })
     expect(store.queue.claim('/main#ci', 'someone-else', NOW + 1, NOW)).toBe(false)
+  })
+
+  describe('the answers mode pointer', () => {
+    const POINTER = 'Apply these answers as'
+    const withoutAnswersBlock = (g: ReturnType<typeof setup>['group']) => ({
+      ...g,
+      def: { ...g.def, answers: null }
+    })
+
+    it('is left out for an automation with no answers block (02: a skill step, no modes/)', async () => {
+      const resumed = setup('free')
+      await dispatchToAgent(resumed.deps, withoutAnswersBlock(resumed.group))
+      expect(vi.mocked(resumed.deps.send).mock.calls[0][1]).not.toContain(POINTER)
+      const forked = setup('gone')
+      await dispatchToAgent(forked.deps, withoutAnswersBlock(forked.group))
+      expect(vi.mocked(forked.deps.open).mock.calls[0][0].prompt).not.toContain(POINTER)
+      const fresh = setup('gone', {
+        probe: { terminalState: async () => 'gone', transcript: () => null }
+      })
+      await dispatchToAgent(fresh.deps, withoutAnswersBlock(fresh.group))
+      expect(vi.mocked(fresh.deps.open).mock.calls[0][0].prompt).not.toContain('modes/')
+    })
+
+    it('is left out, with one warning, when the configured mode file is missing', async () => {
+      const warn = vi.fn()
+      const { deps, group } = setup('free', { fileExists: () => false, warn })
+      await dispatchToAgent(deps, group)
+      expect(vi.mocked(deps.send).mock.calls[0][1]).not.toContain(POINTER)
+      expect(warn).toHaveBeenCalledTimes(1)
+      expect(warn.mock.calls[0][0]).toContain('fix-gitlab-ci/modes/answers.md')
+    })
+
+    it('is given for the configured mode whose file exists, in the new-session text too', async () => {
+      const { deps, group } = setup('gone', {
+        probe: { terminalState: async () => 'gone', transcript: () => null }
+      })
+      await dispatchToAgent(deps, group)
+      expect(vi.mocked(deps.open).mock.calls[0][0].prompt).toContain(
+        'in its answers mode (~/.agents/skills/fix-gitlab-ci/modes/answers.md)'
+      )
+    })
   })
 })

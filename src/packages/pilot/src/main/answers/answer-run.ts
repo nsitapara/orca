@@ -27,6 +27,10 @@ export type AgentDispatchDeps = {
   // The card as it is now if it still waits on this very answer, else null (currentAnswer): read right
   // before the answer run is written, after every await of the dispatch.
   current(item: InboxItemRow): InboxItemRow | null
+  // Whether a skill's mode file is on disk (default: the real file); the mode pointer is sent only when it is.
+  fileExists?(path: string): boolean
+  // One line when a configured answers mode file is missing (default: console.warn).
+  warn?(message: string): void
 }
 export type AgentGroup = {
   def: AutomationDefinition
