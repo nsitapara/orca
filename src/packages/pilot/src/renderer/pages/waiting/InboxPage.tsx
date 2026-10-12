@@ -86,7 +86,7 @@ export function InboxPage(): React.JSX.Element {
       item={i}
       automationName={names.get(i.automationId) ?? i.automationId}
       runLine={inbox?.runLines[i.id] ?? null}
-      queued={queue.find((q) => q.itemId === i.id) ?? null}
+      answerState={inbox?.answerStates?.[i.id] ?? null}
       error={errors[i.id] ?? null}
       selected={selected === i.id}
       now={loadedAt}

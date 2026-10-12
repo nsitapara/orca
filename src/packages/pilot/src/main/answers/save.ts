@@ -17,7 +17,7 @@ const DESKTOP_ONLY: ReadonlySet<string> = new Set([
   DRAFT_ON_DESKTOP,
   DRAFT_OPTION_ON_DESKTOP
 ])
-import { answerBeingApplied } from '../inbox/inbox-details'
+import { ANSWER_LOCKED, answerLocked } from '../inbox/answer-lock'
 import {
   getInboxItem,
   inboxEvent,
@@ -28,7 +28,7 @@ import {
 
 // gate.py ANSWERS_SETTLE: a saved answer waits this long, so one still being typed is never sent.
 export const SETTLE_MS = 180_000
-export const ANSWER_LOCKED = "This answer is already being carried out; it can't be changed now"
+export { ANSWER_LOCKED }
 export const CARD_CHANGED_ON_SAVE = 'The card changed; review it again'
 export const LOCAL_CLI_NO_ANSWER = 'Answer cards in Pilot (Inbox)'
 export const NO_ANSWER_CALLER = "Pilot can't tell who is answering; nothing was saved"
@@ -66,19 +66,6 @@ function optionKept(item: InboxItemRow, params: InboxAnswerParams): number | nul
   return null
 }
 
-// An answer is locked once it may be being carried out: its row is ready (past its settle time, so a script
-// action may be running), or it was dispatched to an answer run that is still live. Undoing or replacing it
-// then would reopen a card whose action still happens. A held row, or one still settling, stays changeable.
-function answerLocked(deps: InboxDeps, item: InboxItemRow, at: number): boolean {
-  if (item.status !== 'answered') {
-    return false
-  }
-  if (answerBeingApplied(deps.store, item)) {
-    return true
-  }
-  return deps.store.queue.forInboxItem(item.id).some((r) => r.state === 'ready' && r.readyAt <= at)
-}
-
 function clearAnswer(deps: InboxDeps, item: InboxItemRow, at: number): InboxItemRow {
   const patch = { status: 'open' as const, answer: null, answeredAt: null, answeredBy: null }
   deps.store.transaction(() => {
@@ -112,7 +99,7 @@ export function saveAnswer(
   if (params.digest && params.digest !== item.digest) {
     throw new Error(CARD_CHANGED_ON_SAVE)
   }
-  if (answerLocked(deps, item, deps.now())) {
+  if (answerLocked(deps.store, item, deps.now())) {
     throw new Error(ANSWER_LOCKED)
   }
   // How it was given follows from the transport's caller, never from params.

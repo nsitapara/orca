@@ -9,7 +9,8 @@ import { PilotStore } from '../store/store'
 import { copyBundle, detailsFixture, rewriteBundle } from './__fixtures__/details-fixture'
 import { loadDetails } from './details-bundle'
 import { addInboxItem } from './inbox-add'
-import { ANSWER_BEING_APPLIED, HAS_DETAILS_SINCE, setInboxDetails } from './inbox-details'
+import { ANSWER_LOCKED } from './answer-lock'
+import { HAS_DETAILS_SINCE, setInboxDetails } from './inbox-details'
 import { buildCard, inboxDigest } from './card'
 import { listInbox, replyToInboxItem, type InboxDeps } from './inbox-service'
 import type { RunStatus } from '../../shared/api-types'
@@ -206,7 +207,16 @@ describe('setInboxDetails', () => {
         s.dispatch('running')
         return [s.f.bundle, OPEN]
       },
-      ANSWER_BEING_APPLIED
+      ANSWER_LOCKED
+    ],
+    [
+      'an answered card whose row is ready past its settle time (an action may be running)',
+      (s) => {
+        const row = s.answer()
+        s.store.queue.update(row, { state: 'ready', readyAt: 100 }, 100)
+        return [s.f.bundle, OPEN]
+      },
+      ANSWER_LOCKED
     ]
   ])('refuses %s and leaves the card as it was', (_name, arrange, message) => {
     const s = setup()

@@ -1,16 +1,14 @@
 import type { InboxItemRow } from '../../../shared/api-types'
-import type { QueueEntry } from '../../../shared/inbox-types'
-import { phaseOf } from './answer-buttons'
+import type { AnswerState } from '../../../shared/inbox-types'
 
-export type StatusPill = 'waiting' | 'answered' | 'applying' | 'done' | 'unsaved'
+export type StatusPill = 'waiting' | 'answered' | 'applying' | 'failed' | 'done' | 'unsaved'
 
-// Where a card stands, for its pill. A pick not yet saved is "unsaved". An answered card is "applying" once
-// its settle time has passed (a ready row) or its row is gone (dispatched); until then it is "answered".
+// Where a card stands, for its pill. A pick not yet saved is "unsaved". An answered card is "applying" only
+// when the server says its answer is locked (it may be being carried out), "failed" when its row failed.
 export function statusOf(
   item: Pick<InboxItemRow, 'status'>,
-  queued: Pick<QueueEntry, 'state' | 'readyAt'> | null,
-  unsaved: boolean,
-  now: number
+  answerState: AnswerState | null,
+  unsaved: boolean
 ): StatusPill {
   if (unsaved) {
     return 'unsaved'
@@ -21,7 +19,10 @@ export function statusOf(
   if (item.status === 'done') {
     return 'done'
   }
-  return phaseOf(queued, now) === 'applying' ? 'applying' : 'answered'
+  if (answerState?.locked) {
+    return 'applying'
+  }
+  return answerState?.state === 'failed' ? 'failed' : 'answered'
 }
 
 const PILL = 'rounded-full px-2 font-mono text-xs font-semibold leading-[1.6]'
@@ -32,6 +33,7 @@ const PILL_COLOURS: Record<StatusPill, string> = {
   waiting: WARN,
   answered: ACCENT,
   applying: `${ACCENT} animate-pulse`,
+  failed: 'bg-[var(--ib-bad-soft)] text-[var(--ib-bad)]',
   done: 'bg-[var(--ib-ok-soft)] text-[var(--ib-ok)]',
   unsaved: 'bg-[var(--ib-accent)] text-[var(--ib-accent-fg)]'
 }

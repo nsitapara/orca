@@ -11,7 +11,7 @@ import type { PilotHost } from '../pilot-services'
 import { PilotStore } from '../store/store'
 import { buildPilotMethods } from './methods'
 import { answerRunEnded } from '../answers/answer-run-end'
-import { ANSWER_BEING_APPLIED } from '../inbox/inbox-details'
+import { ANSWER_LOCKED } from '../inbox/answer-lock'
 import { redraftedReply } from '../../shared/pilot-replies'
 
 type Callable = {
@@ -383,7 +383,7 @@ describe("a card's own answer run re-attaches its Details", () => {
     const { store, id, redraft, callAs } = sentTo('ans-2')
     const before = store.inbox.get(id)
     const params = { id, bundlePath: redraft, terminal: 'term-a' }
-    expect(() => callAs(CLI, 'pilot.inbox.setDetails', params)).toThrow(ANSWER_BEING_APPLIED)
+    expect(() => callAs(CLI, 'pilot.inbox.setDetails', params)).toThrow(ANSWER_LOCKED)
     expect(store.inbox.get(id)).toEqual(before)
   })
 
@@ -394,7 +394,7 @@ describe("a card's own answer run re-attaches its Details", () => {
     expect(callAs(CLI, 'pilot.inbox.add', card)).toEqual({
       id: null,
       existing: true,
-      refused: ANSWER_BEING_APPLIED
+      refused: ANSWER_LOCKED
     })
     expect(store.inbox.get(id)).toEqual(before)
   })

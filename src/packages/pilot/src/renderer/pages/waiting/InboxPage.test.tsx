@@ -85,6 +85,7 @@ const LIST: InboxListPayload = {
   ],
   groups: [],
   automations: [{ id: 'ci', name: 'Fix failed CI on my MRs' }],
+  answerStates: {},
   runLines: {
     in_push: { digest: 'dp', text: 'python3 /a/act.py push run /wt/web-1493 web-1493-a' }
   }

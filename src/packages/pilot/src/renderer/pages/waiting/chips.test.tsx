@@ -2,6 +2,7 @@
 import { cleanup, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { InboxItemRow } from '../../../shared/api-types'
+import type { AnswerState } from '../../../shared/inbox-types'
 
 const pilotRpc = vi.fn()
 vi.mock('../../api', () => ({ pilotRpc: (...args: unknown[]) => pilotRpc(...args) }))
@@ -15,23 +16,29 @@ describe('chip colours (the console’s: answers.html)', () => {
     ['waiting', 'bg-[var(--ib-warn-soft)] text-[var(--ib-warn)]'],
     ['answered', 'bg-[var(--ib-accent-soft)] text-[var(--ib-accent)]'],
     ['applying', 'bg-[var(--ib-accent-soft)] text-[var(--ib-accent)] animate-pulse'],
+    ['failed', 'bg-[var(--ib-bad-soft)] text-[var(--ib-bad)]'],
     ['done', 'bg-[var(--ib-ok-soft)] text-[var(--ib-ok)]'],
     ['unsaved', 'bg-[var(--ib-accent)] text-[var(--ib-accent-fg)]']
   ] as const)('a %s status pill', (status, colours) => {
     expect(statusPillClass(status)).toContain(colours)
   })
 
-  it('reads a card’s status: waiting, answered, applying once ready or with no row, done, unsaved over all', () => {
+  it('reads a card’s status: waiting, answered, applying only when the server says locked, failed, done, unsaved over all', () => {
     const at = (status: InboxItemRow['status']) => ({ status })
-    const row = (state: 'not_ready' | 'ready' | 'held', readyAt: number) => ({ state, readyAt })
-    expect(statusOf(at('open'), null, false, 100)).toBe('waiting')
-    expect(statusOf(at('answered'), row('not_ready', 500), false, 100)).toBe('answered')
-    expect(statusOf(at('answered'), row('held', 50), false, 100)).toBe('answered')
-    expect(statusOf(at('answered'), row('ready', 50), false, 100)).toBe('applying')
-    expect(statusOf(at('answered'), row('not_ready', 90), false, 100)).toBe('applying')
-    expect(statusOf(at('answered'), null, false, 100)).toBe('applying')
-    expect(statusOf(at('done'), null, false, 100)).toBe('done')
-    expect(statusOf(at('answered'), null, true, 100)).toBe('unsaved')
+    const st = (locked: boolean, state: AnswerState['state']): AnswerState => ({
+      locked,
+      state,
+      readyAt: 100,
+      reason: null
+    })
+    expect(statusOf(at('open'), null, false)).toBe('waiting')
+    expect(statusOf(at('answered'), st(false, 'not_ready'), false)).toBe('answered')
+    expect(statusOf(at('answered'), st(false, 'held'), false)).toBe('answered')
+    expect(statusOf(at('answered'), st(false, null), false)).toBe('answered')
+    expect(statusOf(at('answered'), st(false, 'failed'), false)).toBe('failed')
+    expect(statusOf(at('answered'), st(true, 'ready'), false)).toBe('applying')
+    expect(statusOf(at('done'), null, false)).toBe('done')
+    expect(statusOf(at('answered'), null, true)).toBe('unsaved')
   })
 
   it('defines the console’s tokens under .pilot-inbox, light and dark', () => {

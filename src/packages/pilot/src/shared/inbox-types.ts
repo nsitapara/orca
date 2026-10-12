@@ -37,10 +37,21 @@ export type InboxAddResult = { id: string | null; existing: boolean; refused: st
 export type InboxListParams = { person?: string; statuses?: readonly InboxStatus[] }
 // What an action card's Approve runs, as Pilot wrote it (printable ASCII), for the card version `digest`.
 export type RunLine = { digest: string; text: string }
+// Where an answered card's answer stands, from the server (the one lock rule, main/inbox/answer-lock.ts):
+// `locked` means it may be being carried out and can't be undone; `state` is its newest queue row's (failed
+// included, which the pending queue list never shows) and `reason` that row's words.
+export type AnswerState = {
+  locked: boolean
+  state: QueueState | null
+  readyAt: number | null
+  reason: string | null
+}
 export type InboxListPayload = {
   items: InboxItemRow[]
   // An action card's Run line by card id (main/inbox/run-line.ts); none for other cards.
   runLines: Record<string, RunLine>
+  // By card id, for each answered card.
+  answerStates: Record<string, AnswerState>
   people: { id: string; name: string }[]
   groups: { id: string; name: string; members: string[] }[]
   automations: { id: string; name: string }[]

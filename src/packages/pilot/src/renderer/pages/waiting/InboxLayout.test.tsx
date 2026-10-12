@@ -76,7 +76,8 @@ const LIST: InboxListPayload = {
     { id: 'tests', name: '04 · Test branch UIs overnight' },
     { id: 'reviews', name: '09 · Prepare reviews requested of me' }
   ],
-  runLines: {}
+  runLines: {},
+  answerStates: {}
 }
 
 function serve(list = LIST) {

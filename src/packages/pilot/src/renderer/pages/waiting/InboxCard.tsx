@@ -2,7 +2,7 @@ import { useRef, useState } from 'react'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { cn } from '@/lib/utils'
 import type { InboxItemRow, InboxReply } from '../../../shared/api-types'
-import type { QueueEntry, RunLine } from '../../../shared/inbox-types'
+import type { AnswerState, RunLine } from '../../../shared/inbox-types'
 import type { PartSwitches } from '../../details/ReviewBlock'
 import { AnsweredLine } from './AnsweredLine'
 import { AnswerRow } from './AnswerRow'
@@ -81,7 +81,7 @@ export function InboxCard({
   item,
   automationName,
   runLine,
-  queued,
+  answerState,
   error,
   selected,
   now,
@@ -91,7 +91,8 @@ export function InboxCard({
   automationName: string
   // An action card's Run line (InboxListPayload.runLines); null on any other card.
   runLine: RunLine | null
-  queued: QueueEntry | null
+  // The server's lock and queue row for an answered card (InboxListPayload.answerStates).
+  answerState: AnswerState | null
   // Why the last save failed; held by the page so it survives the card remounting as a new version.
   error: string | null
   // The card picked in the list: a lighter border.
@@ -113,7 +114,7 @@ export function InboxCard({
   }
   const parts = editing ? partSwitches(item, off, toggle) : null
   const asked = askedLabel(item.createdAt, now)
-  const status = statusOf(item, queued, unsaved && editing, now)
+  const status = statusOf(item, answerState, unsaved && editing)
   const frame = cn(
     'flex min-w-0 scroll-mt-14 flex-col gap-2 rounded-[10px] border bg-card px-3.5 py-3 text-card-foreground',
     selected ? 'border-foreground/30' : 'border-border'
@@ -127,7 +128,7 @@ export function InboxCard({
         </div>
         <AnsweredLine
           item={item}
-          queued={queued}
+          answerState={answerState}
           focusUndo={justAnswered.current}
           onUndo={() => void onSave({ option: null, text: '' })}
         />

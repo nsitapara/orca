@@ -385,6 +385,7 @@ describe('pilot inbox list', () => {
     const payload: InboxListPayload = {
       items: [item],
       runLines: {},
+      answerStates: {},
       people: [],
       groups: [],
       automations: []

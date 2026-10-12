@@ -1,13 +1,12 @@
-import type { InboxItemRow, RunStatus } from '../../shared/api-types'
-import type { PilotStore } from '../store/store'
+import type { InboxItemRow } from '../../shared/api-types'
 import type { DetailsSnapshot } from '../../shared/details'
 import { redraftedReply } from '../../shared/pilot-replies'
+import { ANSWER_LOCKED, answerLocked } from './answer-lock'
 import { cardOf, inboxDigest } from './card'
 import { loadDetails } from './details-bundle'
 import { getInboxItem, inboxEvent, syncRunWaiting, WAITING, type InboxDeps } from './inbox-service'
 
 export const ANSWERED_SINCE = 'answered since; Details not attached'
-export const ANSWER_BEING_APPLIED = 'its answer is being applied; Details not attached'
 export const HAS_DETAILS_SINCE = 'has Details since; Details not attached'
 
 export type SetDetailsResult = { id: string; version: number; changed: boolean; cleared: boolean }
@@ -20,35 +19,6 @@ export type SetDetailsOptions = {
   onlyWithoutDetails?: boolean
   // The run the call is bound to (refuseOutsideScope): its own dispatched answer is not in the way.
   callerRunId?: string | null
-}
-
-// An answer run that may still be applying its answer. A finished one (done, needs_you, failed, …) has
-// had its onRunEnd (answer-run-end.ts), so its answer is no longer in flight.
-const LIVE_RUN: ReadonlySet<RunStatus> = new Set(['asking', 'running'])
-
-// The card's answer is being applied now: the card is 'answered' and a dispatched queue row names an
-// answer run still running. Clearing it would leave that run to end on, or tick, a version nobody
-// answered. A dispatched row outlives its run, and one with no run (sent before Pilot) never counts.
-// The caller's own run doesn't count either: an answer run re-drafting its card (apply.md step 5) clears the
-// answer it is applying, and answerRunEnded leaves a card that is no longer 'answered' alone.
-export function answerBeingApplied(
-  store: PilotStore,
-  item: InboxItemRow,
-  callerRunId: string | null = null
-): boolean {
-  if (item.status !== 'answered') {
-    return false
-  }
-  return store.queue.forInboxItem(item.id).some((row) => {
-    if (row.state !== 'dispatched' || row.dispatchedRunId === null) {
-      return false
-    }
-    if (row.dispatchedRunId === callerRunId) {
-      return false
-    }
-    const run = store.runs.get(row.dispatchedRunId)
-    return Boolean(run && LIVE_RUN.has(run.status))
-  })
 }
 
 function waitingItem(deps: InboxDeps, id: string): InboxItemRow {
@@ -80,10 +50,10 @@ function attach(
   if (opts.onlyUnanswered && answered) {
     throw new Error(ANSWERED_SINCE)
   }
-  if (answerBeingApplied(deps.store, item, opts.callerRunId ?? null)) {
-    throw new Error(ANSWER_BEING_APPLIED)
-  }
   const at = deps.now()
+  if (answerLocked(deps.store, item, at, opts.callerRunId ?? null)) {
+    throw new Error(ANSWER_LOCKED)
+  }
   const { inbox, queue } = deps.store
   inbox.edit(id, { details: loaded.ref, detailsMd: null, digest }, at)
   inbox.setSnapshot(id, loaded)
