@@ -639,3 +639,52 @@ describe('the answer lock during a pass', () => {
     expect(s.store.queue.forInboxItem(id)[0].holdDetail).toContain('boom')
   })
 })
+
+describe('the lock is per group', () => {
+  it('locks a group when it starts, not every due row at the start of the pass', async () => {
+    const s = setup()
+    s.store.runs.create({
+      id: 'run-2',
+      automationId: 'ci',
+      tickId: null,
+      itemKey: 'mr:1562',
+      itemLabel: '!1562',
+      worktreePath: '/wt2',
+      startedAt: 1
+    })
+    const first = s.answer(ACTION, 'approve')
+    const second = s.answer({ ...ACTION, runId: 'run-2', title: 'Push the other?' }, 'approve')
+    s.settle()
+    const seen: Record<string, string> = {}
+    vi.mocked(s.push.run).mockImplementationOnce(async () => {
+      seen.first = s.store.queue.forInboxItem(first)[0].state
+      seen.second = s.store.queue.forInboxItem(second)[0].state
+      return { outcome: 'done', detail: 'pushed', link: null, log: null, onYou: false }
+    })
+    await s.dispatcher.pass()
+    expect(seen).toEqual({ first: 'ready', second: 'not_ready' })
+    expect(s.push.run).toHaveBeenCalledTimes(2)
+  })
+
+  it('never shows a row that re-holds as ready', async () => {
+    const states: string[] = []
+    const s = setup({
+      holds: {
+        activity: async () => {
+          states.push(
+            s.store.queue
+              .list(['not_ready', 'ready', 'held'])
+              .map((r) => r.state)
+              .join()
+          )
+          return { typing: true, reason: 'someone is typing' }
+        }
+      }
+    })
+    s.answer(ACTION, 'approve')
+    s.settle()
+    await s.dispatcher.pass()
+    await s.dispatcher.pass()
+    expect(states).toEqual(['not_ready', 'held'])
+  })
+})

@@ -65,6 +65,19 @@ export class RunStore {
     }
   }
 
+  // Which of these runs are still live (asking or running), in one query.
+  liveAmong(ids: string[]): Set<string> {
+    if (ids.length === 0) {
+      return new Set()
+    }
+    const rows = this.db
+      .prepare(
+        "SELECT id FROM runs WHERE status IN ('asking', 'running') AND id IN (SELECT value FROM json_each(?))"
+      )
+      .all(JSON.stringify(ids)) as { id: string }[]
+    return new Set(rows.map((r) => r.id))
+  }
+
   get(id: string): RunRow | null {
     const r = this.db.prepare('SELECT * FROM runs WHERE id = ?').get(id)
     if (!r) {

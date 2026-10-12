@@ -42,6 +42,8 @@ export type RunLine = { digest: string; text: string }
 // included, which the pending queue list never shows) and `reason` that row's words.
 export type AnswerState = {
   locked: boolean
+  // Its row was dispatched with no answer run (sent before Pilot took over): nothing to wait for or undo.
+  sentBeforePilot: boolean
   state: QueueState | null
   readyAt: number | null
   reason: string | null

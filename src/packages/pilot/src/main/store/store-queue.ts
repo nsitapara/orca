@@ -97,17 +97,19 @@ export class QueueStore {
       .map((r) => toQueueRow(r as never))
   }
 
-  // The newest row of each of these items, in one query (the list's per-card answer state).
-  latestFor(inboxItemIds: string[]): Map<string, QueueRow> {
+  // Every row of each of these items, in one query.
+  forItems(inboxItemIds: string[]): Map<string, QueueRow[]> {
     const rows = this.db
       .prepare(
-        `SELECT * FROM queue WHERE id IN (
-           SELECT MAX(id) FROM queue WHERE inbox_item_id IN (SELECT value FROM json_each(?))
-           GROUP BY inbox_item_id)`
+        'SELECT * FROM queue WHERE inbox_item_id IN (SELECT value FROM json_each(?)) ORDER BY id'
       )
       .all(JSON.stringify(inboxItemIds))
       .map((r) => toQueueRow(r as never))
-    return new Map(rows.map((r) => [r.inboxItemId, r]))
+    const byItem = new Map<string, QueueRow[]>()
+    for (const r of rows) {
+      byItem.set(r.inboxItemId, [...(byItem.get(r.inboxItemId) ?? []), r])
+    }
+    return byItem
   }
 
   // What the dispatcher looks at each pass: rows not yet dispatched or failed, earliest ready first.

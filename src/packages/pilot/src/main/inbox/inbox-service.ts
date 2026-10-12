@@ -4,7 +4,7 @@ import type { AnswerState, InboxListPayload, RunLine } from '../../shared/inbox-
 import type { PeopleDirectory } from '../../shared/people'
 import type { ActionCatalog } from '../actions/types'
 import type { PilotStore } from '../store/store'
-import { answerLocked } from './answer-lock'
+import { answerLocked, lockedBy, ownsLiveAnswer } from './answer-lock'
 import { cardOf, inboxDigest, oneLine } from './card'
 
 export type InboxDeps = {
@@ -120,13 +120,19 @@ function runLinesOf(
 // Each answered card's lock and queue row, in one query.
 function answerStatesOf(deps: InboxDeps, items: InboxItemRow[]): Record<string, AnswerState> {
   const answered = items.filter((i) => i.status === 'answered')
-  const rows = deps.store.queue.latestFor(answered.map((i) => i.id))
+  const all = deps.store.queue.forItems(answered.map((i) => i.id))
+  const runIds = [...all.values()].flatMap((rows) =>
+    rows.flatMap((r) => (r.dispatchedRunId ? [r.dispatchedRunId] : []))
+  )
+  const live = deps.store.runs.liveAmong(runIds)
   const at = deps.now()
   const states: Record<string, AnswerState> = {}
   for (const item of answered) {
-    const row = rows.get(item.id) ?? null
+    const rows = all.get(item.id) ?? []
+    const row = rows.at(-1) ?? null
     states[item.id] = {
-      locked: answerLocked(deps.store, item, at),
+      locked: lockedBy(rows, live, at),
+      sentBeforePilot: row?.state === 'dispatched' && row.dispatchedRunId === null,
       state: row?.state ?? null,
       readyAt: row?.readyAt ?? null,
       reason: row?.holdDetail ?? null
@@ -211,22 +217,38 @@ export function resolveInboxItem(
 
 // An agent's question about an answer (vault `Reply:`): the card waits on its person again. The last
 // answer stays on the card for reference; nothing is dispatched until a new one is saved.
-export function replyToInboxItem(deps: InboxDeps, id: string, text: string): InboxItemRow {
-  const item = waitingItem(deps, id)
+//
+// While the answer may be being carried out (answerLocked), the reply is only added to the card, and the card
+// reopens (and its row goes) just for the live answer run that holds the answer (`ownRunId`, from the call's
+// run binding, never its params): anyone else's reply would otherwise get a second answer applied.
+export function replyToInboxItem(
+  deps: InboxDeps,
+  id: string,
+  text: string,
+  ownRunId: string | null = null
+): InboxItemRow {
   const reply = oneLine(text)
   if (!reply) {
     throw new Error('A reply needs text')
   }
-  const at = deps.now()
-  const patch = {
-    replies: [...item.replies, { text: reply, by: 'agent' as const }],
-    status: 'open' as const
-  }
-  deps.store.inbox.update(id, patch, at)
-  deps.store.queue.removePending(id)
-  inboxEvent(deps.store, item, 'item_replied', { text: reply }, at)
-  syncRunWaiting(deps.store, item.runId, at)
-  return { ...item, ...patch, updatedAt: at }
+  return deps.store.transaction(() => {
+    const item = waitingItem(deps, id)
+    const at = deps.now()
+    const replies = [...item.replies, { text: reply, by: 'agent' as const }]
+    const held =
+      answerLocked(deps.store, item, at) &&
+      !(ownRunId !== null && ownsLiveAnswer(deps.store, item, ownRunId))
+    const patch = held ? { replies } : { replies, status: 'open' as const }
+    deps.store.inbox.update(id, patch, at)
+    if (!held) {
+      deps.store.queue.removePending(id)
+    }
+    inboxEvent(deps.store, item, 'item_replied', { text: reply }, at)
+    if (!held) {
+      syncRunWaiting(deps.store, item.runId, at)
+    }
+    return { ...item, ...patch, updatedAt: at }
+  })
 }
 
 // The dispatcher refused an approval (not saved on the page, or the card changed): clear it and say why.

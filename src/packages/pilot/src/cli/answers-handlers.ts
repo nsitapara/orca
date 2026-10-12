@@ -89,7 +89,9 @@ export const ANSWERS_HANDLERS: Record<string, CommandHandler> = {
   'inbox reply': async ({ flags, client, json }) => {
     const params = {
       id: getRequiredStringFlag(flags, 'id'),
-      text: getRequiredStringFlag(flags, 'text')
+      text: getRequiredStringFlag(flags, 'text'),
+      // Which run is asking: only the answer run that holds the card's answer may leave it open.
+      ...bindingFromEnv(process.env)
     }
     printResult(await client.call<InboxItemRow>('pilot.inbox.reply', params), json, inboxItemLine)
   },

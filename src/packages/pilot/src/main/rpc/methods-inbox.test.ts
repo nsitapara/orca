@@ -405,3 +405,88 @@ describe('pilot inbox show says whether the current answer grants a drafted patc
     expect(call('pilot.inbox.get', { id })).toMatchObject({ details: null })
   })
 })
+
+describe('pilot.inbox.reply on a locked answer', () => {
+  const CLI: RpcCallerIdentity = { kind: 'local-cli' }
+  const PHONE: RpcCallerIdentity = { kind: 'paired-device', deviceId: 'ipad' }
+
+  // A question answered and sent to the live answer run ans-1, which has a running step.
+  function sent() {
+    const s = setup()
+    const added = s.call('pilot.inbox.add', {
+      runId: 'run-1',
+      type: 'question',
+      title: 'Which image?',
+      options: ['e2e', 'unit']
+    }) as { id: string }
+    const digest = s.store.inbox.get(added.id)!.digest
+    s.callAs({ kind: 'desktop' }, 'pilot.inbox.answer', { id: added.id, option: 0, digest })
+    for (const id of ['ans-1', 'ans-2']) {
+      s.store.runs.create({
+        id,
+        automationId: 'ci',
+        tickId: null,
+        itemKey: 'mr:1',
+        itemLabel: '!1',
+        worktreePath: '/wt',
+        startedAt: 5,
+        status: 'running',
+        trigger: 'answer'
+      })
+      s.store.runs.createStep({
+        runId: id,
+        idx: 0,
+        name: 'answers',
+        agent: 'claude',
+        skill: 'x',
+        startedAt: 5,
+        kind: 'agent'
+      })
+      s.store.runs.updateStep(id, 0, { status: 'running' })
+    }
+    const row = s.store.queue.forInboxItem(added.id)[0]
+    s.store.queue.update(row.id, { state: 'dispatched', dispatchedRunId: 'ans-1' }, 200)
+    return { ...s, id: added.id }
+  }
+
+  it('lets the answer run that holds the answer reopen the card with its question', () => {
+    const { callAs, store, id } = sent()
+    callAs(CLI, 'pilot.inbox.reply', { id, text: 'e2e or unit?', runId: 'ans-1', stepIdx: 0 })
+    expect(store.inbox.get(id)).toMatchObject({
+      status: 'open',
+      replies: [{ text: 'e2e or unit?', by: 'agent' }]
+    })
+  })
+
+  it.each<[string, RpcCallerIdentity | undefined, Record<string, unknown>]>([
+    ['the desktop', { kind: 'desktop' }, {}],
+    ['a paired device', PHONE, { runId: 'ans-1', stepIdx: 0 }],
+    ['no caller identity', undefined, {}],
+    ['the local CLI bound to no run', CLI, {}],
+    ['the local CLI bound to another run', CLI, { runId: 'ans-2', stepIdx: 0 }],
+    ['the local CLI with a binding that cannot be resolved', CLI, { runId: 'nope', stepIdx: 0 }]
+  ])('only appends the reply, changing nothing else, from %s', (_n, caller, extra) => {
+    const { callAs, store, id } = sent()
+    const rowsBefore = store.queue.forInboxItem(id)
+    const before = store.inbox.get(id)!
+    callAs(caller, 'pilot.inbox.reply', { id, text: 'e2e or unit?', ...extra })
+    expect(store.inbox.get(id)).toMatchObject({
+      status: 'answered',
+      answer: before.answer,
+      replies: [{ text: 'e2e or unit?', by: 'agent' }]
+    })
+    expect(store.queue.forInboxItem(id)).toEqual(rowsBefore)
+  })
+
+  it('reopens as before when the answer is not locked', () => {
+    const { callAs, store, id } = sent()
+    store.queue.update(
+      store.queue.forInboxItem(id)[0].id,
+      { state: 'not_ready', dispatchedRunId: null },
+      200
+    )
+    callAs({ kind: 'desktop' }, 'pilot.inbox.reply', { id, text: 'Which one?' })
+    expect(store.inbox.get(id)).toMatchObject({ status: 'open' })
+    expect(store.queue.forInboxItem(id)).toEqual([])
+  })
+})

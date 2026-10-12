@@ -34,6 +34,9 @@ function lineText(
   if (phase === 'settling' && state?.readyAt != null) {
     return `${words.label} in ${countdown(state.readyAt - now)}`
   }
+  if (phase === 'sent') {
+    return 'Answer sent before Pilot'
+  }
   if (phase === 'held') {
     return `${words.label} waiting${state?.reason ? ` · ${state.reason}` : ''}`
   }
@@ -41,6 +44,13 @@ function lineText(
     return 'Waiting for Pilot to carry it out'
   }
   return words.doing
+}
+
+function buttonFor(phase: Phase): string | null {
+  if (phase === 'failed' || phase === 'sent') {
+    return 'Change answer'
+  }
+  return phase === 'applying' ? null : 'Undo'
 }
 
 export function AnsweredLine({
@@ -58,7 +68,7 @@ export function AnsweredLine({
   const counting = answerState?.state === 'not_ready' && !answerState.locked
   const now = useNow(counting)
   const phase = phaseOf(answerState, now)
-  const button = phase === 'failed' ? 'Change answer' : phase === 'applying' ? null : 'Undo'
+  const button = buttonFor(phase)
   const undo = useRef<HTMLButtonElement>(null)
   useEffect(() => {
     if (focusUndo && button) {
