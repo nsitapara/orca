@@ -81,5 +81,5 @@ export function useWorktreeTimeline(path: string | null): Snapshot {
     [path]
   )
   const get = useCallback(() => (path ? (feeds.get(path)?.snapshot ?? EMPTY) : EMPTY), [path])
-  return useSyncExternalStore(sub, get)
+  return useSyncExternalStore(sub, get, () => EMPTY)
 }
