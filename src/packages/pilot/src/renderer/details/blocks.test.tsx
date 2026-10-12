@@ -58,6 +58,21 @@ describe('blocks', () => {
     ])
   })
 
+  it('puts one gap row between two hunks of a file', () => {
+    const two: DiffData = {
+      type: 'diff',
+      files: [
+        {
+          path: 'a.ts',
+          hunks: [[[1, 1, ' ', 'a']], [[40, 40, ' ', 'b']], [[90, 90, ' ', 'c']]]
+        }
+      ]
+    }
+    const { container } = render(<DiffBlock block={two} />)
+    expect(container.querySelectorAll('tr.gap')).toHaveLength(2)
+    expect(container.querySelector('tr.gap')?.textContent).toBe('⋯')
+  })
+
   it("draws F2's code block with its header and anchor row", () => {
     const { container } = render(<CodeBlock block={block<CodeData>('code')} />)
     expect(container.querySelector('.glr-path')?.textContent).toBe(

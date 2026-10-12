@@ -27,16 +27,18 @@ function remember(key: string, snapshot: DetailsSnapshot): void {
 }
 
 type Loaded = { key: string; snapshot: DetailsSnapshot | null; error: string | null }
+type Snapshot = { loaded: Loaded | null; retry: () => void }
 
 function whyOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
 }
 
-function useSnapshot(item: InboxItemRow, open: boolean): Loaded | null {
+function useSnapshot(item: InboxItemRow, open: boolean): Snapshot {
   const { id, digest } = item
   const wanted = item.details !== null && open
   const key = `${id}@${digest}`
   const [loaded, setLoaded] = useState<Loaded | null>(null)
+  const [attempt, setAttempt] = useState(0)
   useEffect(() => {
     if (!wanted || SNAPSHOTS.has(key)) {
       return undefined
@@ -58,12 +60,16 @@ function useSnapshot(item: InboxItemRow, open: boolean): Loaded | null {
     return () => {
       live = false
     }
-  }, [wanted, key, id, digest])
+  }, [wanted, key, id, digest, attempt])
   const cached = SNAPSHOTS.get(key)
-  if (wanted && cached) {
-    return { key, snapshot: cached, error: null }
+  const retry = () => {
+    setLoaded(null)
+    setAttempt((n) => n + 1)
   }
-  return loaded?.key === key ? loaded : null
+  if (wanted && cached) {
+    return { loaded: { key, snapshot: cached, error: null }, retry }
+  }
+  return { loaded: loaded?.key === key ? loaded : null, retry }
 }
 
 function base64Url(mime: string, base64: string): string {
@@ -78,10 +84,12 @@ function base64Url(mime: string, base64: string): string {
 function BundleBody({
   item,
   loaded,
+  retry,
   parts
 }: {
   item: InboxItemRow
   loaded: Loaded | null
+  retry: () => void
   parts: PartSwitches | null
 }): React.JSX.Element | null {
   if (!loaded) {
@@ -89,7 +97,12 @@ function BundleBody({
   }
   if (loaded.error || !loaded.snapshot) {
     return (
-      <p className="text-sm text-destructive">Couldn&apos;t load the details: {loaded.error}</p>
+      <p className="text-sm text-destructive">
+        Couldn&apos;t load the details: {loaded.error}{' '}
+        <button type="button" className="underline underline-offset-4" onClick={retry}>
+          Retry
+        </button>
+      </p>
     )
   }
   const loadImage = async (file: string): Promise<string> => {
@@ -112,9 +125,9 @@ function Body({
   open: boolean
   parts: PartSwitches | null
 }): React.JSX.Element | null {
-  const loaded = useSnapshot(item, open)
+  const { loaded, retry } = useSnapshot(item, open)
   if (item.details) {
-    return <BundleBody item={item} loaded={loaded} parts={parts} />
+    return <BundleBody item={item} loaded={loaded} retry={retry} parts={parts} />
   }
   return (
     <div className="glr glr-body min-w-0">

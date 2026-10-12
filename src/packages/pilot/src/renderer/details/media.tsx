@@ -1,4 +1,4 @@
-import { Fragment } from 'react'
+import { Fragment, useEffect, useState } from 'react'
 import type { ScreensBlock, ShotsBlock } from '../../shared/details'
 import { Section } from './blocks'
 import { useImageUrl } from './use-image'
@@ -6,6 +6,25 @@ import { useImageUrl } from './use-image'
 const LOAD_FAILED = "couldn't load the image"
 
 type Load = (file: string) => Promise<string>
+
+// An in-page zoom: the browser would not open a blob: link from Pilot's window (its window-open handler
+// hands only http(s) addresses on), so the same image is shown over the page. Escape or a click closes it.
+function ZoomOverlay({ url, label, close }: { url: string; label: string; close: () => void }) {
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent): void => {
+      if (event.key === 'Escape') {
+        close()
+      }
+    }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [close])
+  return (
+    <div className="dt-zoom" role="dialog" aria-modal="true" aria-label={label} onClick={close}>
+      <img src={url} alt={label} />
+    </div>
+  )
+}
 
 function LoadedShot({
   path,
@@ -17,20 +36,31 @@ function LoadedShot({
   loadImage: Load
 }): React.JSX.Element {
   const { url, failed } = useImageUrl(() => loadImage(path))
+  const [zoomed, setZoomed] = useState(false)
   if (failed) {
     return (
       <figure className="dt-shot">
-        <figcaption>{caption ?? ''}</figcaption>
+        {caption ? <figcaption>{caption}</figcaption> : null}
         <p className="dt-missing">{LOAD_FAILED}</p>
       </figure>
     )
   }
+  const label = caption || 'screenshot'
   return (
     <figure className="dt-shot">
       {caption ? <figcaption>{caption}</figcaption> : null}
-      <a href={url ?? undefined} target="_blank" rel="noopener noreferrer">
-        <img src={url ?? undefined} alt={caption || 'screenshot'} />
-      </a>
+      <button
+        type="button"
+        className="dt-zoom-btn"
+        aria-label={`Zoom ${label}`}
+        disabled={!url}
+        onClick={() => setZoomed(true)}
+      >
+        <img src={url ?? undefined} alt={label} />
+      </button>
+      {zoomed && url ? (
+        <ZoomOverlay url={url} label={label} close={() => setZoomed(false)} />
+      ) : null}
     </figure>
   )
 }
