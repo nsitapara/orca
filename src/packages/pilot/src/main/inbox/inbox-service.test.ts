@@ -404,4 +404,31 @@ describe('listInbox', () => {
     expect(Object.keys(lines)).toEqual(['in_0000000000000002'])
     expect(lines.in_0000000000000002.text).toBe('run in_0000000000000002')
   })
+
+  // One card whose Run line can't be built still shows (without it); the rest keep theirs, and it is logged once.
+  it("lists every card when one card's Run line can't be built", () => {
+    const { deps } = setup()
+    const push = {
+      ...QUESTION,
+      type: 'action' as const,
+      action: 'push',
+      actionArgs: { argv: ['a'] }
+    }
+    addInboxItem(deps, { ...push, title: 'First?' })
+    addInboxItem(deps, { ...push, title: 'Second?' })
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const payload = listInbox(deps, {}, (item) => {
+      if (item.id === 'in_0000000000000001') {
+        throw new Error('catalog read failed')
+      }
+      return { digest: item.digest, text: `run ${item.id}` }
+    })
+    expect(payload.items.map((i) => i.id)).toEqual(['in_0000000000000001', 'in_0000000000000002'])
+    expect(payload.runLines).toEqual({
+      in_0000000000000002: { digest: expect.any(String), text: 'run in_0000000000000002' }
+    })
+    expect(warn).toHaveBeenCalledTimes(1)
+    expect(String(warn.mock.calls[0][0])).toContain('in_0000000000000001')
+    warn.mockRestore()
+  })
 })

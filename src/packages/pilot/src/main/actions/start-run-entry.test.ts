@@ -21,7 +21,8 @@ function setup(
   start = vi.fn().mockResolvedValue(undefined),
   status = 'asking',
   tick = true,
-  schedulerOn = true
+  schedulerOn = true,
+  displayOnly: string[] = []
 ) {
   const store = PilotStore.open(join(mkdtempSync(join(tmpdir(), 'pilot-start-run-')), 'db.sqlite'))
   const tickId = store.startTick('rev', false, 1)
@@ -59,7 +60,8 @@ function setup(
       now: () => 50,
       definitions: () => [def],
       start,
-      schedulerOn: () => schedulerOn
+      schedulerOn: () => schedulerOn,
+      displayOnly: () => displayOnly
     })
   }
 }
@@ -120,6 +122,15 @@ describe('start_run', () => {
       {
         outcome: 'failed',
         detail: 'Run rev-1-ask has no recorded tick to start from'
+      }
+    ],
+    [
+      'an automation whose file is invalid (shown from its last valid version only)',
+      setup(undefined, 'asking', true, true, ['rev']),
+      ARGS,
+      {
+        outcome: 'failed',
+        detail: 'rev has an invalid definition; fix it before starting runs'
       }
     ],
     [

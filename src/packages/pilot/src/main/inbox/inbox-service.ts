@@ -88,6 +88,29 @@ export function personSees(item: InboxItemRow, person: string, people: PeopleDir
   return people.groups.some((g) => g.id === item.person && g.members.includes(person))
 }
 
+// One card whose Run line can't be built is listed without it (logged once per list), never emptying the list.
+function runLinesOf(
+  items: InboxItemRow[],
+  runLineOf: (item: InboxItemRow) => RunLine | null
+): Record<string, RunLine> {
+  const lines: Record<string, RunLine> = {}
+  const failed: string[] = []
+  for (const item of items) {
+    try {
+      const line = runLineOf(item)
+      if (line) {
+        lines[item.id] = line
+      }
+    } catch (error) {
+      failed.push(`${item.id} (${error instanceof Error ? error.message : String(error)})`)
+    }
+  }
+  if (failed.length > 0) {
+    console.warn(`[pilot] couldn't build the Run line of ${failed.join(', ')}`)
+  }
+  return lines
+}
+
 export function listInbox(
   deps: InboxDeps,
   filter: { person?: string; statuses?: readonly InboxStatus[] },
@@ -101,12 +124,7 @@ export function listInbox(
     .filter((i) => !person || personSees(i, person, people))
   return {
     items,
-    runLines: Object.fromEntries(
-      items.flatMap((item) => {
-        const line = runLineOf(item)
-        return line ? [[item.id, line] as const] : []
-      })
-    ),
+    runLines: runLinesOf(items, runLineOf),
     people: people.people.map((p) => ({ id: p.id, name: p.name })),
     groups: people.groups.map((g) => ({ id: g.id, name: g.name, members: [...g.members] })),
     automations: deps.definitions().map((d) => ({ id: d.id, name: d.name }))
