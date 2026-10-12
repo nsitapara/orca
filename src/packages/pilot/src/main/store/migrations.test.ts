@@ -18,6 +18,44 @@ function firstRow(db: Database, sql: string): Record<string, unknown> {
 }
 
 describe('migrate', () => {
+  // Desktop and orcad open the same file: one may read the version, then wait on the lock while the other
+  // migrates. Inside the transaction the version is read again, so nothing runs twice.
+  it('re-reads the version inside its transaction, so a migration another process just ran is not run again', () => {
+    const path = join(mkdtempSync(join(tmpdir(), 'pilot-migrate-')), 'db.sqlite')
+    const early = new Database(path)
+    migrate(early, PILOT_SCHEMA_VERSION - 1)
+    const late = new Database(path)
+    const pragma = late.pragma.bind(late)
+    let reads = 0
+    // The late process's first look predates the early process's migration below.
+    late.pragma = ((sql: string, opts?: unknown) => {
+      if (sql === 'user_version' && reads++ === 0) {
+        migrate(early)
+        return PILOT_SCHEMA_VERSION - 1
+      }
+      return pragma(sql, opts as never)
+    }) as typeof late.pragma
+    expect(() => migrate(late)).not.toThrow()
+    expect(pragma('user_version', { simple: true })).toBe(PILOT_SCHEMA_VERSION)
+  })
+
+  it('never lowers a version another process raised past its own target meanwhile', () => {
+    const path = join(mkdtempSync(join(tmpdir(), 'pilot-migrate-')), 'db.sqlite')
+    const db = new Database(path)
+    migrate(db, PILOT_SCHEMA_VERSION - 1)
+    const pragma = db.pragma.bind(db)
+    let reads = 0
+    db.pragma = ((sql: string, opts?: unknown) => {
+      if (sql === 'user_version' && reads++ === 0) {
+        new Database(path).pragma(`user_version = ${PILOT_SCHEMA_VERSION + 1}`)
+        return PILOT_SCHEMA_VERSION - 1
+      }
+      return pragma(sql, opts as never)
+    }) as typeof db.pragma
+    migrate(db)
+    expect(pragma('user_version', { simple: true })).toBe(PILOT_SCHEMA_VERSION + 1)
+  })
+
   it('creates every v2 table in a new database', () => {
     const db = openDb()
     migrate(db)
