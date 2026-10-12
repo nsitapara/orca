@@ -1,13 +1,17 @@
 // Who is about to start a process on an agent session. A launch or a Resume looks for the session's
 // tab, finds none, and starts `--resume S`; until the new agent posts its first status row nothing
 // else shows it, so a second caller in that window would start a second process. A claim closes the
-// window: taken (synchronously) before the look, held until the new tab's first row for S is seen or
-// the TTL passes, released at once when the start fails or needed no new process.
+// window: taken (synchronously) before the look, held until the start is judged landed (a live tab shows
+// a row for S from after the claim began) or dead (its terminal closed), the TTL passes, or the holder
+// releases it because the start failed or needed no new process.
 export const CLAIM_TTL_MS = 90_000
+// A just-opened terminal may not be listed yet: a start is only called dead after this long.
+export const DEAD_GRACE_MS = 10_000
 
+export type ClaimVerdict = 'landed' | 'dead' | 'pending'
 export type ClaimResult = { ok: true } | { ok: false; by: string; handle: string | null }
 export type SessionClaimTable = {
-  // Drops a held claim once a tab shows the session (the start it guarded has landed).
+  // Drops a held claim once its start has landed or died (judged by the table's judge).
   expireIfSeen(sessionId: string): Promise<void>
   acquire(sessionId: string, by: string): ClaimResult
   // The new terminal the holder opened, so a second caller can be sent to it.
@@ -23,8 +27,11 @@ export class SessionClaims implements SessionClaimTable {
 
   constructor(
     private readonly now: () => number = Date.now,
-    // Whether any live tab holds the session now (session-tabs.ts).
-    private readonly seen: (sessionId: string) => Promise<boolean> = async () => false,
+    // How the start this claim guards is going (judgeClaim); without one a claim lasts to its TTL.
+    private readonly judge: (
+      sessionId: string,
+      claim: { since: number; handle: string | null }
+    ) => Promise<ClaimVerdict> = async () => 'pending',
     private readonly ttlMs: number = CLAIM_TTL_MS
   ) {}
 
@@ -46,7 +53,8 @@ export class SessionClaims implements SessionClaimTable {
       return
     }
     try {
-      if (await this.seen(sessionId)) {
+      const verdict = await this.judge(sessionId, { since: claim.since, handle: claim.handle })
+      if (verdict !== 'pending') {
         // Only the claim this call looked at: a new one taken meanwhile stays.
         if (this.claims.get(sessionId) === claim) {
           this.claims.delete(sessionId)
@@ -83,4 +91,41 @@ export class SessionClaims implements SessionClaimTable {
     const held = this.live(sessionId)
     return held ? { by: held.by, handle: held.handle } : null
   }
+}
+
+export type ClaimJudgeDeps = {
+  // Every terminal Orca says holds the session, with the time of its newest live (not session-only) row for it.
+  panes(
+    sessionId: string
+  ): Promise<{ handle: string; paneKey: string | null; rowAt: number | null }[]>
+  // The launcher's own judgement of a tab (sessionTerminalState).
+  state(
+    terminal: { handle: string; paneKey: string | null },
+    sessionId: string
+  ): Promise<'free' | 'other' | 'busy' | 'gone'>
+  isOpen(handle: string): Promise<boolean>
+}
+
+// landed: a tab that is not gone shows a live row for the session from after the claim began. A surviving
+// shell's session-only remnant row never counts (it has no live row, and its tab reads gone). dead: the
+// terminal the start opened is no longer connected. Otherwise pending.
+export async function judgeClaim(
+  deps: ClaimJudgeDeps,
+  sessionId: string,
+  claim: { since: number; handle: string | null },
+  now: number
+): Promise<ClaimVerdict> {
+  for (const pane of await deps.panes(sessionId)) {
+    if (pane.rowAt === null || pane.rowAt < claim.since) {
+      continue
+    }
+    const state = await deps.state(pane, sessionId)
+    if (state === 'free' || state === 'busy') {
+      return 'landed'
+    }
+  }
+  if (claim.handle && now - claim.since >= DEAD_GRACE_MS && !(await deps.isOpen(claim.handle))) {
+    return 'dead'
+  }
+  return 'pending'
 }

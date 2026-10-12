@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { RunRow, StepRow } from '../../shared/api-types'
 import type { SessionTerminalState } from './agent-step'
-import { SessionClaims } from './session-claims'
+import { judgeClaim, SessionClaims } from './session-claims'
 import { resumeCommand, resumeStepSession, type ResumeDeps } from './resume-session'
 
 const run = { id: 'r1', itemLabel: '!1 web-1', worktreePath: '/wt/a' } as RunRow
@@ -41,6 +41,7 @@ function deps(
     stepOn: (h) => (opts.stepOn ?? []).includes(h),
     claims: opts.claims,
     startingOn: () => opts.starting === true,
+    isOpen: async () => true,
     focus: vi.fn(async () => {}),
     open: vi.fn(async () => ({ handle: 'term_new' }))
   }
@@ -186,5 +187,66 @@ describe('resumeStepSession, the race window before the new agent posts a row', 
     d.open.mockRejectedValueOnce(new Error('no pty'))
     await expect(resumeStepSession(d, req)).rejects.toThrow('no pty')
     expect(claims.holder('s1')).toBeNull()
+  })
+
+  it('a remnant row on the old tab never drops the in-flight claim: two Resumes open one tab', async () => {
+    const clock = { t: 100_000 }
+    // The old tab T1 is gone by the launcher's judgement, but its surviving shell keeps a session-only row.
+    const judgeDeps = {
+      panes: async () => [{ handle: 'T1', paneKey: 'T1:leaf', rowAt: null }],
+      state: async () => 'gone' as const,
+      isOpen: async () => true
+    }
+    const claims = new SessionClaims(
+      () => clock.t,
+      (id, claim) => judgeClaim(judgeDeps, id, claim, clock.t)
+    )
+    const d = deps(step({ terminalHandle: 'T1' }), { claims, tabs: ['T1'] })
+    d.open.mockResolvedValueOnce({ handle: 'T_new_1' }).mockResolvedValueOnce({ handle: 'T_new_2' })
+    const first = await resumeStepSession(d, req)
+    clock.t += 1_000
+    const second = await resumeStepSession(d, req)
+    expect(first).toEqual({ action: 'opened', handle: 'T_new_1' })
+    expect(second).toEqual({ action: 'focused', handle: 'T_new_1' })
+    expect(d.open).toHaveBeenCalledTimes(1)
+  })
+
+  it("a tabs() snapshot older than the first opener's row can't release its claim", async () => {
+    const clock = { t: 100_000 }
+    const judgeDeps = {
+      panes: async () => [{ handle: 'T_old', paneKey: 'T_old:leaf', rowAt: 50_000 }],
+      state: async () => 'free' as const,
+      isOpen: async () => true
+    }
+    const claims = new SessionClaims(
+      () => clock.t,
+      (id, claim) => judgeClaim(judgeDeps, id, claim, clock.t)
+    )
+    claims.acquire('s1', 'resume:first')
+    const d = deps(step({ terminalHandle: null }), { claims })
+    await expect(resumeStepSession(d, req)).rejects.toThrow('Session is opening…')
+    expect(d.open).not.toHaveBeenCalled()
+    expect(claims.holder('s1')).toMatchObject({ by: 'resume:first' })
+  })
+
+  it('acquires before it looks, and releases when the look finds a live tab (nothing opened)', async () => {
+    const claims = new SessionClaims()
+    const d = deps(step({}), { claims, state: { term_1: 'free' } })
+    expect((await resumeStepSession(d, req)).action).toBe('focused')
+    expect(claims.holder('s1')).toBeNull()
+  })
+
+  it('does not focus the tab of a claim whose start is closed; says the start did not come up', async () => {
+    const claims = new SessionClaims()
+    claims.acquire('s1', 'launch:r2:0')
+    claims.setHandle('s1', 'launch:r2:0', 'T_dead')
+    const d = {
+      ...deps(step({ terminalHandle: null }), { claims }),
+      isOpen: vi.fn(async () => false)
+    }
+    await expect(resumeStepSession(d, req)).rejects.toThrow(
+      "A previous start of this session didn't come up; try again"
+    )
+    expect(d.focus).not.toHaveBeenCalled()
   })
 })

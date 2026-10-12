@@ -1,5 +1,6 @@
 import type { OrcaRuntimeService } from '../../../../../main/runtime/orca-runtime'
 import type { KnownTerminal, SessionTerminalState } from './agent-step'
+import { judgeClaim, SessionClaims } from './session-claims'
 import { newestSessionRow, type AgentRow } from './agent-rows'
 import { inPane, LIST_LIMIT } from './terminal-relist'
 
@@ -12,10 +13,33 @@ function holdsSession(rows: readonly AgentRow[], sessionId: string): boolean {
   return newestSessionRow(rows)?.providerSession?.id === sessionId
 }
 
+export type SessionPane = KnownTerminal & { rowAt: number | null }
+
+// The time of the newest live row naming the session: session-only and restored-unconfirmed rows (an
+// exited agent's surviving shell) prove nothing.
+function liveRowAt(rows: readonly AgentRow[], sessionId: string): number | null {
+  let best: number | null = null
+  for (const row of rows) {
+    if (row.providerSessionOnly === true || row.restoredUnconfirmed === true) {
+      continue
+    }
+    if (row.providerSession?.id !== sessionId) {
+      continue
+    }
+    const at = row.stateStartedAt ?? row.receivedAt
+    if (best === null || at > best) {
+      best = at
+    }
+  }
+  return best
+}
+
 // Every terminal that holds this session. Candidate panes are found globally (any provider-session row
 // naming it), then each is judged by its own pane's rows, the same read sessionTerminalState makes, so a
 // legacy or tmux-inner row difference can't call a live tab gone.
-export function runtimeSessionTabs(runtime: OrcaRuntimeService): SessionTabs {
+export function runtimeSessionPanes(
+  runtime: OrcaRuntimeService
+): (id: string) => Promise<SessionPane[]> {
   return async (sessionId) => {
     const candidates = new Set<string>()
     for (const row of runtime.getAgentProviderSessionRows()) {
@@ -23,9 +47,12 @@ export function runtimeSessionTabs(runtime: OrcaRuntimeService): SessionTabs {
         candidates.add(row.paneKey)
       }
     }
-    const panes = [...candidates].filter((paneKey) =>
-      holdsSession(runtime.getAgentStatusRowsForPane(paneKey), sessionId)
-    )
+    const rowsOf = new Map<string, AgentRow[]>()
+    const panes = [...candidates].filter((paneKey) => {
+      const rows = runtime.getAgentStatusRowsForPane(paneKey)
+      rowsOf.set(paneKey, rows)
+      return holdsSession(rows, sessionId)
+    })
     if (panes.length === 0) {
       return []
     }
@@ -36,15 +63,34 @@ export function runtimeSessionTabs(runtime: OrcaRuntimeService): SessionTabs {
     if (listing.truncated) {
       throw new Error(`terminal list cut short (${listing.totalCount} terminals)`)
     }
-    const found: KnownTerminal[] = []
+    const found: SessionPane[] = []
     for (const paneKey of panes) {
       const terminal = listing.terminals.find((t) => inPane(t, paneKey))
       if (terminal) {
-        found.push({ handle: terminal.handle, paneKey })
+        found.push({
+          handle: terminal.handle,
+          paneKey,
+          rowAt: liveRowAt(rowsOf.get(paneKey) ?? [], sessionId)
+        })
       }
     }
     return found
   }
+}
+
+export function runtimeSessionTabs(runtime: OrcaRuntimeService): SessionTabs {
+  const panes = runtimeSessionPanes(runtime)
+  return async (sessionId) =>
+    (await panes(sessionId)).map(({ handle, paneKey }) => ({ handle, paneKey }))
+}
+
+// Whether the terminal is still connected (a fresh PTY liveness listing).
+export async function terminalOpen(runtime: OrcaRuntimeService, handle: string): Promise<boolean> {
+  const listing = await runtime.listTerminals(undefined, LIST_LIMIT, {
+    requireFreshPtyLiveness: true,
+    includeVisualLayouts: false
+  })
+  return listing.terminals.some((t) => t.handle === handle && t.connected)
 }
 
 export type SessionLook = {
@@ -101,4 +147,26 @@ export async function findLiveTab(
   }
   const busy = (await judge(hints)) ?? (look.tabs ? await judge(await look.tabs(sessionId)) : null)
   return busy ?? free
+}
+
+// One claim table per runtime, shared by every caller that can start a process on a session.
+const CLAIMS = new WeakMap<OrcaRuntimeService, SessionClaims>()
+export function runtimeClaims(
+  runtime: OrcaRuntimeService,
+  state: SessionLook['state']
+): SessionClaims {
+  let claims = CLAIMS.get(runtime)
+  if (!claims) {
+    const panes = runtimeSessionPanes(runtime)
+    claims = new SessionClaims(Date.now, (id, claim) =>
+      judgeClaim(
+        { panes, state, isOpen: (handle) => terminalOpen(runtime, handle) },
+        id,
+        claim,
+        Date.now()
+      )
+    )
+    CLAIMS.set(runtime, claims)
+  }
+  return claims
 }

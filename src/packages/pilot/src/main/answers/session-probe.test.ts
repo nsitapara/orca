@@ -107,6 +107,17 @@ describe('sessionTerminalProbe (the run launcher’s H10 look, plus who is on th
     expect(d.terminals.state).not.toHaveBeenCalled()
   })
 
+  it('a claim whose start has landed no longer forces busy', async () => {
+    const d = deps('free')
+    const claims = new SessionClaims(Date.now, async () => 'landed')
+    claims.acquire('s-1', 'resume')
+    expect(
+      await sessionTerminalProbe({ ...d, terminals: { ...d.terminals, claims } }).terminalState(
+        ASKING
+      )
+    ).toBe('free')
+  })
+
   it('reads a tab a Pilot step is starting or running on as busy, without looking', async () => {
     const d = deps('free', '', true)
     expect(await sessionTerminalProbe(d).terminalState(ASKING)).toBe('busy')

@@ -42,6 +42,8 @@ export type SessionTerminals = {
   tabs?(sessionId: string): Promise<KnownTerminal[]>
   // The terminal's unsent input, read right before closing a tab nobody of ours owns.
   draft?(handle: string): Promise<string>
+  // Whether a terminal is still connected (a claim's recorded start).
+  isOpen?(handle: string): Promise<boolean>
   // Who is about to start a process on a session (session-claims.ts); shared by launcher, Resume, answers.
   claims?: SessionClaimTable
   // Types the prompt in; refuses (PromptNotSentError) unless an idle agent is still in the foreground.
@@ -224,7 +226,17 @@ export async function launchAgentStep(
   try {
     if (session.kind === 'resume' && claims) {
       await claims.expireIfSeen(session.sessionId)
-      if (!claims.acquire(session.sessionId, by).ok) {
+      const claim = claims.acquire(session.sessionId, by)
+      if (!claim.ok) {
+        const closed =
+          claim.handle && deps.sessionTerminals?.isOpen
+            ? !(await deps.sessionTerminals.isOpen(claim.handle).catch(() => true))
+            : false
+        if (closed) {
+          throw new Error(
+            `A previous start of session ${session.sessionId} didn't come up; try again`
+          )
+        }
         throw new Error(`Session ${session.sessionId} is busy: another caller is opening it`)
       }
     }

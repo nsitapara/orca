@@ -13,8 +13,7 @@ import { stepKindOf } from '../store/store-advance'
 import type { RunStore } from '../store/store-runs'
 import type { PilotAgentLaunchOptions } from './agent-launch-hook'
 import { newestSessionRow } from './agent-rows'
-import { SessionClaims } from './session-claims'
-import { runtimeSessionTabs, type SessionTabs } from './session-tabs'
+import { runtimeClaims, runtimeSessionTabs, terminalOpen } from './session-tabs'
 import {
   launchAgentStep,
   type AgentStepDeps,
@@ -301,28 +300,19 @@ async function closeSessionTerminal(runtime: OrcaRuntimeService, handle: string)
 
 // H10's look at, typing into and closing of a session's terminal: the run launcher's, and the answer
 // dispatcher's (Task 24b) when it sends answers into the session that asked.
-// One claim table per runtime, shared by every caller that can start a process on a session.
-const CLAIMS = new WeakMap<OrcaRuntimeService, SessionClaims>()
-function claimsOf(runtime: OrcaRuntimeService, tabs: SessionTabs): SessionClaims {
-  let claims = CLAIMS.get(runtime)
-  if (!claims) {
-    claims = new SessionClaims(Date.now, async (id) => (await tabs(id)).length > 0)
-    CLAIMS.set(runtime, claims)
-  }
-  return claims
-}
-
 export function runtimeSessionTerminals(
   runtime: OrcaRuntimeService,
   worktrees: LauncherWorktrees,
   pause: Pause = wait
 ): SessionTerminals {
-  const tabs = runtimeSessionTabs(runtime)
+  const state: SessionTerminals['state'] = (terminal, id) =>
+    sessionTerminalState(runtime, worktrees, terminal, id, pause)
   return {
-    state: (terminal, id) => sessionTerminalState(runtime, worktrees, terminal, id, pause),
-    tabs,
+    state,
+    tabs: runtimeSessionTabs(runtime),
     draft: (handle) => worktrees.terminalDraft(handle),
-    claims: claimsOf(runtime, tabs),
+    isOpen: (handle) => terminalOpen(runtime, handle),
+    claims: runtimeClaims(runtime, state),
     send: (handle, prompt) => sendToIdleAgent(runtime, handle, prompt),
     close: (handle) => closeSessionTerminal(runtime, handle)
   }
