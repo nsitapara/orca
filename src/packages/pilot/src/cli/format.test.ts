@@ -208,7 +208,7 @@ describe('formatActivity', () => {
             runId: 'r1'
           }
         ],
-        runs: [{ ...run, status: 'failed', outcome: "Couldn't start: no terminal" }]
+        runs: [{ ...run, status: 'failed', outcome: "Couldn't start: no terminal", inbox: [] }]
       }
     ]
     const lines = formatActivity(ticks).split('\n')

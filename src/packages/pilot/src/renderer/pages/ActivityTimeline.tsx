@@ -1,21 +1,9 @@
 import { useState } from 'react'
 import { Badge } from '@/components/ui/badge'
-import type { ActivityTick, RunRow } from '../../shared/api-types'
+import type { ActivityTick } from '../../shared/api-types'
+import { RunCard } from '../timeline/RunCard'
 import { CheckTable } from './CheckTable'
-import { runStatusLabel, tickLine } from './format'
-
-function costText(run: RunRow): string {
-  return run.costUsd === null ? '' : ` · $${run.costUsd.toFixed(2)}`
-}
-
-function RunLine({ run }: { run: RunRow }): React.JSX.Element {
-  return (
-    <li className="text-sm">
-      <div>{`Run ${run.id} · ${run.itemLabel} · ${runStatusLabel(run.status)}${costText(run)}`}</div>
-      {run.outcome ? <div className="text-muted-foreground">{run.outcome}</div> : null}
-    </li>
-  )
-}
+import { tickLine } from './format'
 
 function TickNode({
   tick,
@@ -44,11 +32,11 @@ function TickNode({
         </button>
       ) : null}
       {open ? <CheckTable items={tick.items} checkNames={checkNames} /> : null}
-      <ul className="mt-2 space-y-1">
+      <ol className="mt-2">
         {tick.runs.map((run) => (
-          <RunLine key={run.id} run={run} />
+          <RunCard key={run.id} run={run} title={`Run ${run.id} · ${run.itemLabel}`} />
         ))}
-      </ul>
+      </ol>
     </li>
   )
 }

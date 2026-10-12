@@ -2,6 +2,7 @@ import { mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
+import Database from '../../../../../main/sqlite/sync-database'
 import { loadDefinitions } from '../definitions/loader'
 import { PilotStore } from '../store/store'
 import { activity, getAutomation, listAutomations, validateYaml } from './handlers'
@@ -110,5 +111,32 @@ describe('Pilot API handlers', () => {
     expect(validateYaml('name: x', 'draft.yaml').ok).toBe(false)
     const ok = validateYaml(YAML, 'my-draft.yaml')
     expect(ok.ok && ok.definition.id).toBe('my-draft')
+  })
+  it('lists what each run asked under it in Activity', () => {
+    const { ctx, store, dir } = context()
+    const t1 = store.startTick('ci', false, 1)
+    store.finishTick(t1, 'ok', null, {}, 1)
+    store.runs.create({
+      id: 'r1',
+      automationId: 'ci',
+      tickId: t1,
+      itemKey: 'mr:1',
+      itemLabel: '!1',
+      worktreePath: '/wt',
+      startedAt: 1
+    })
+    new Database(join(dir, 'db.sqlite'))
+      .prepare(
+        `INSERT INTO inbox_items (id, automation_id, run_id, person, type, title, digest, created_at, updated_at)
+         VALUES ('i1', 'ci', 'r1', 'nish', 'question', 'Push the fix?', 'd', 1, 1)`
+      )
+      .run()
+    expect(activity(ctx, 'ci', 10)[0].runs[0].inbox.map((i) => i.title)).toEqual(['Push the fix?'])
+  })
+
+  it("returns the definition's steps for the Overview", () => {
+    expect(getAutomation(context().ctx, 'ci').steps.map((s) => [s.name, s.agent])).toEqual([
+      ['step1', 'claude']
+    ])
   })
 })
