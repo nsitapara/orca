@@ -1,4 +1,4 @@
-import { ChevronDown, PanelLeft } from 'lucide-react'
+import { ChevronDown, ChevronsUpDown, PanelLeft } from 'lucide-react'
 import type { Section } from '../../../shared/inbox-groups'
 
 export const ALL = 'all'
@@ -42,7 +42,10 @@ export function InboxHeader({
   sections,
   total,
   group,
-  onGroup
+  onGroup,
+  canExpand,
+  allOpen,
+  onToggleAll
 }: {
   listOpen: boolean
   onToggleList: () => void
@@ -54,6 +57,10 @@ export function InboxHeader({
   total: number
   group: string
   onGroup: (key: string) => void
+  // Whether any card has Details, and whether they are all open.
+  canExpand: boolean
+  allOpen: boolean
+  onToggleAll: () => void
 }): React.JSX.Element {
   return (
     <header className="flex flex-wrap items-center gap-x-3 gap-y-2.5">
@@ -72,6 +79,16 @@ export function InboxHeader({
           {waiting} waiting
         </span>
       </div>
+      {canExpand ? (
+        <button
+          type="button"
+          onClick={onToggleAll}
+          className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-2.5 py-1 text-[13px] hover:bg-muted"
+        >
+          <ChevronsUpDown aria-hidden className="size-3.5" />
+          {allOpen ? 'Collapse all details' : 'Expand all details'}
+        </button>
+      ) : null}
       <Select label="Viewing as" prefix="Viewing as" value={viewer ?? ''} onChange={onViewer}>
         {people.map((p) => (
           <option key={p.id} value={p.id}>

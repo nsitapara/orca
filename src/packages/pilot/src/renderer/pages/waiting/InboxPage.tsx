@@ -4,6 +4,7 @@ import type { InboxItemRow } from '../../../shared/api-types'
 import { groupItems, type Section } from '../../../shared/inbox-groups'
 import { waitingCount } from './answer-text'
 import { CardList } from './CardList'
+import { setAllDetailsOpen, useAllDetailsOpen } from './details-open'
 import { ALL, InboxHeader } from './InboxHeader'
 import { InboxCard } from './InboxCard'
 import { ImportNotice } from './ImportNotice'
@@ -43,7 +44,7 @@ export function InboxPage(): React.JSX.Element {
       setViewer(firstPerson)
     }
   }, [viewer, firstPerson])
-  const items = inbox?.items ?? []
+  const items = useMemo(() => inbox?.items ?? [], [inbox])
   const automations = useMemo(() => inbox?.automations ?? [], [inbox])
   const names = useMemo(() => new Map(automations.map((a) => [a.id, a.name])), [automations])
   const openItems = items.filter((i) => i.type !== 'default')
@@ -51,6 +52,11 @@ export function InboxPage(): React.JSX.Element {
   const sections = groupItems(openItems, automations)
   const shown = sections.filter((s) => group === ALL || s.group.key === group)
   const defaultSections = groupItems(defaults, automations)
+  const detailIds = useMemo(
+    () => items.filter((i) => i.details || i.detailsMd).map((i) => i.id),
+    [items]
+  )
+  const allOpen = useAllDetailsOpen(detailIds)
   const viewerName = people.find((p) => p.id === viewer)?.name.split(' ')[0] ?? 'you'
   const select = (item: InboxItemRow) => {
     setSelected(item.id)
@@ -91,6 +97,9 @@ export function InboxPage(): React.JSX.Element {
         total={openItems.length}
         group={group}
         onGroup={setGroup}
+        canExpand={detailIds.length > 0}
+        allOpen={allOpen}
+        onToggleAll={() => setAllDetailsOpen(detailIds, !allOpen)}
       />
       {error ? <p className="text-sm text-destructive">{error}</p> : null}
       <ImportNotice onImported={() => void reload()} />
