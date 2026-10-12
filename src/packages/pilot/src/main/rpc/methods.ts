@@ -9,6 +9,7 @@ import { activity, dryRun, getAutomation, listAutomations, tickNow, validateYaml
 import { buildActionMethods } from './methods-actions'
 import { buildAnswerMethods } from './methods-answers'
 import { buildSpendMethods } from './methods-spend'
+import { buildTimelineMethods } from './methods-timeline'
 import { buildChannelMethods } from './methods-channel'
 import { buildInboxMethods } from './methods-inbox'
 
@@ -127,6 +128,7 @@ export function buildPilotMethods(host: PilotHost) {
     ...buildInboxMethods(ctx),
     ...buildActionMethods(ctx),
     ...buildAnswerMethods(ctx),
-    ...buildSpendMethods(ctx)
+    ...buildSpendMethods(ctx),
+    ...buildTimelineMethods(ctx)
   ].map((m) => Object.assign(m, { pilot: true }))
 }

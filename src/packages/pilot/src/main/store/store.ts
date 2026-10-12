@@ -3,11 +3,14 @@ import type {
   HandledRow,
   HandledStatus,
   ItemDecision,
+  ItemFields,
   TickItemRow,
   TickRow,
   Verdict
 } from '../../shared/api-types'
+import { worktreePathKey } from '../fields/agent-activity'
 import { migrate } from './migrations'
+import { TimelineStore } from './store-timeline'
 import { RunStore } from './store-runs'
 import { UsageStore } from './store-usage'
 import { SpendStore } from './store-spend'
@@ -41,11 +44,19 @@ function toTick(r: Record<string, unknown>): TickRow {
   }
 }
 
+// The worktree an item is about, in the one form the timeline reads it back in (worktreePathKey), so
+// the index finds it however the path was spelled.
+function worktreePathOf(fields: ItemFields): string | null {
+  const path = fields['worktree.path']
+  return typeof path === 'string' && path !== '' ? worktreePathKey(path) : null
+}
+
 export class PilotStore {
   readonly runs: RunStore
   readonly usage: UsageStore
   readonly spend: SpendStore
   readonly inbox: InboxStore
+  readonly timeline: TimelineStore
   readonly queue: QueueStore
   readonly events: EventStore
   readonly actions: ActionRunStore
@@ -58,6 +69,7 @@ export class PilotStore {
   private constructor(private readonly db: Database) {
     this.runs = new RunStore(db)
     this.inbox = new InboxStore(db)
+    this.timeline = new TimelineStore(db, this.inbox)
     this.queue = new QueueStore(db)
     this.events = new EventStore(db)
     this.actions = new ActionRunStore(db)
@@ -148,7 +160,7 @@ export class PilotStore {
 
   recordDecisions(tickId: number, decisions: ItemDecision[], runIds: Map<string, string>): void {
     const insert = this.db.prepare(
-      'INSERT INTO tick_items (tick_id, item_key, label, verdict, reason, checks_json, fields_json, run_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+      'INSERT INTO tick_items (tick_id, item_key, label, verdict, reason, checks_json, fields_json, run_id, worktree_path) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
     )
     this.db.exec('BEGIN IMMEDIATE')
     try {
@@ -161,7 +173,8 @@ export class PilotStore {
           d.reason,
           JSON.stringify(d.checks),
           JSON.stringify(d.fields),
-          runIds.get(d.key) ?? null
+          runIds.get(d.key) ?? null,
+          worktreePathOf(d.fields)
         )
       }
       this.db.exec('COMMIT')
