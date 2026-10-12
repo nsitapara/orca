@@ -1,0 +1,43 @@
+{
+  "sessions": [
+    {
+      "job": "ci-fix-sweep",
+      "agent": "claude",
+      "session": "s1",
+      "cwd": "/Users/nishsitapara/Documents/worktrees/web-platform/web-1493",
+      "title": "!1561 web-1493",
+      "at": 1791503740,
+      "files": [
+        ["claude/s1.jsonl", null],
+        ["claude/s1/subagents/agent-a.jsonl", null]
+      ]
+    },
+    {
+      "job": "mr-feedback-sweep",
+      "agent": "claude",
+      "session": "s2",
+      "cwd": "/Users/nishsitapara/Documents/worktrees/web-platform/web-1474",
+      "title": "!1574 web-1474",
+      "at": 1791503800,
+      "files": [["claude/s2.jsonl", null]]
+    },
+    {
+      "job": "update-my-mrs",
+      "agent": "codex",
+      "session": "c1",
+      "cwd": "/Users/nishsitapara/Documents/web-platform",
+      "title": "web-platform",
+      "at": 1791712805,
+      "files": [["codex/c1.jsonl", "c1"]]
+    },
+    {
+      "job": "update-my-mrs",
+      "agent": "codex",
+      "session": "c2",
+      "cwd": "/Users/nishsitapara/Documents/web-platform",
+      "title": "web-platform",
+      "at": 1791713100,
+      "files": [["codex/c2.jsonl", "c2"]]
+    }
+  ]
+}

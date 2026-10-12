@@ -1,3 +1,4 @@
+import { agentUsageState } from './agent-usage'
 import { noStateMapper } from './plans'
 import type { SweepStateMapper } from './types'
 
@@ -5,7 +6,8 @@ import type { SweepStateMapper } from './types'
 // never from here, so there is no import cycle.
 export const MAPPERS: SweepStateMapper[] = [
   noStateMapper('pull-dev', '01 keeps no state: every run pulls dev again'),
-  noStateMapper('docker-prune', '07 keeps no state: prune.sh measures the disk on every run')
+  noStateMapper('docker-prune', '07 keeps no state: prune.sh measures the disk on every run'),
+  agentUsageState
 ]
 
 export function sweepStateMapper(
