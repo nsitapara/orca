@@ -602,6 +602,20 @@ describe('launchAgentStep, one process per session: the row-named tab runs anoth
     expect(failed.claims.holder('uuid-new')).toBeNull()
   })
 
+  it.each([
+    ['createTerminal gave no reply', 'Terminal creation timed out'],
+    ['the handle never appeared', 'Timed out waiting for terminal handle after creation']
+  ])(
+    'keeps its claim when the launch times out (%s): the tab may still appear',
+    async (_n, message) => {
+      const h = held({ term_1: 'gone' })
+      await reviewedIn(h)
+      h.s.launchTerminal.mockRejectedValueOnce(new Error(message))
+      await expect(launchAgentStep(h.s.store, h.s.request(1), h.s.deps)).rejects.toThrow(message)
+      expect(h.claims.holder('uuid-new')).toMatchObject({ by: 'launch:run-1:1' })
+    }
+  )
+
   it('re-reads the draft of the row tab running another session right before closing it', async () => {
     const h = held({ term_1: 'other', resume_tab: 'gone' }, 'half a thought')
     await reviewedIn(h)

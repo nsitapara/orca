@@ -90,7 +90,11 @@ export async function terminalOpen(runtime: OrcaRuntimeService, handle: string):
     requireFreshPtyLiveness: true,
     includeVisualLayouts: false
   })
-  return listing.terminals.some((t) => t.handle === handle && t.connected)
+  if (listing.terminals.some((t) => t.handle === handle && t.connected)) {
+    return true
+  }
+  // A cut-short listing can't show it gone: count it open, never dead.
+  return listing.truncated === true
 }
 
 export type SessionLook = {

@@ -10,7 +10,7 @@ import {
   terminalLaunchOptions,
   type SessionPlan
 } from './step-launch-plan'
-import type { SessionClaimTable } from './session-claims'
+import { isStartTimeout, type SessionClaimTable } from './session-claims'
 import { sessionHome } from './session-home'
 import type { Workspace } from './workspace'
 
@@ -223,6 +223,7 @@ export async function launchAgentStep(
   // One process per session: taken before any look, so a Resume or launch overlapping this one finds it held.
   const claims = deps.sessionTerminals?.claims
   const by = `launch:${runId}:${idx}`
+  let launching = false
   try {
     if (session.kind === 'resume' && claims) {
       await claims.expireIfSeen(session.sessionId)
@@ -256,6 +257,7 @@ export async function launchAgentStep(
         claims?.release(session.sessionId, by)
       }
     } else {
+      launching = true
       terminal = await deps.launchTerminal(req.workspace.selector, opts)
       // The claim stays until this terminal's first status row is seen, or its TTL.
       if (session.kind === 'resume') {
@@ -263,7 +265,8 @@ export async function launchAgentStep(
       }
     }
   } catch (error) {
-    if (session.kind === 'resume') {
+    // A launch that timed out may still produce its tab: the claim stays (until landed, dead or the TTL).
+    if (session.kind === 'resume' && !(launching && isStartTimeout(error))) {
       claims?.release(session.sessionId, by)
     }
     const message = messageOf(error)
