@@ -13,6 +13,7 @@ import { stepKindOf } from '../store/store-advance'
 import type { RunStore } from '../store/store-runs'
 import type { PilotAgentLaunchOptions } from './agent-launch-hook'
 import { newestSessionRow } from './agent-rows'
+import { runtimeSessionTabs } from './session-tabs'
 import {
   launchAgentStep,
   type AgentStepDeps,
@@ -306,6 +307,7 @@ export function runtimeSessionTerminals(
 ): SessionTerminals {
   return {
     state: (terminal, id) => sessionTerminalState(runtime, worktrees, terminal, id, pause),
+    tabs: runtimeSessionTabs(runtime),
     send: (handle, prompt) => sendToIdleAgent(runtime, handle, prompt),
     close: (handle) => closeSessionTerminal(runtime, handle)
   }

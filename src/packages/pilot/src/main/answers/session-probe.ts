@@ -3,8 +3,9 @@ import { homedir } from 'node:os'
 import { basename, join } from 'node:path'
 import type { AgentKind } from '../../shared/definition/types'
 import { PromptNotSentError, type SessionTerminals } from '../run/agent-step'
+import { findLiveTab } from '../run/session-tabs'
 import { codexHomes } from '../usage/codex-homes'
-import type { SessionProbe, TranscriptFacts } from './sessions'
+import type { SessionProbe, TerminalState, TranscriptFacts } from './sessions'
 
 // Nothing was typed: someone's draft is in the input.
 export class DraftInProgressError extends PromptNotSentError {
@@ -83,6 +84,38 @@ export type SessionLookDeps = {
   stepOn(handle: string): boolean
 }
 
+async function busyOrTyping(deps: SessionLookDeps, handle: string): Promise<TerminalState> {
+  try {
+    return (await deps.draft(handle)).trim() ? 'typing' : 'busy'
+  } catch {
+    return 'busy'
+  }
+}
+
+// The asking tab is gone (or runs another session) but the session may live in a tab no step row names: one
+// the person opened, Resume opened, or another run holds. Never a second process: it reads as busy, or typing
+// when someone has a draft there; never free, since that tab's process args are not Pilot's to trust.
+async function elsewhere(
+  deps: SessionLookDeps,
+  askingHandle: string,
+  sessionId: string
+): Promise<TerminalState | null> {
+  const found = await findLiveTab(
+    {
+      state: (t, id) => deps.terminals.state(t, id),
+      tabs: deps.terminals.tabs,
+      stepOn: deps.stepOn
+    },
+    sessionId,
+    [],
+    new Set([askingHandle])
+  )
+  if (!found) {
+    return null
+  }
+  return busyOrTyping(deps, found.handle)
+}
+
 // The asking tab, looked at the way the run launcher looks before it sends a step into a session's
 // terminal: a Pilot step on it is busy whatever it shows; else the launcher's state (anything unreadable
 // is busy). A busy tab with a draft reads as typing, so its answers wait for the person.
@@ -96,14 +129,10 @@ export function sessionTerminalProbe(
         return 'busy'
       }
       const state = await deps.terminals.state({ handle, paneKey }, sessionId)
-      if (state !== 'busy') {
-        return state
+      if (state === 'gone' || state === 'other') {
+        return (await elsewhere(deps, handle, sessionId)) ?? state
       }
-      try {
-        return (await deps.draft(handle)).trim() ? 'typing' : 'busy'
-      } catch {
-        return 'busy'
-      }
+      return state === 'busy' ? busyOrTyping(deps, handle) : state
     },
     transcript: (agent, sessionId, knownPath) => findTranscript(agent, sessionId, knownPath, home)
   }

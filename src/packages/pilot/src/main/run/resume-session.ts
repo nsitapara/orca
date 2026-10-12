@@ -3,14 +3,12 @@ import { getAgentResumeArgv } from '../../../../../shared/agent-resume-argv'
 import type { RunRow, SessionResumeResult, StepRow } from '../../shared/api-types'
 import type { WorktreeFactDeps } from '../fields/worktree-facts'
 import type { PilotStore } from '../store/store'
-import type { KnownTerminal, SessionTerminalState } from './agent-step'
 import { runtimeSessionTerminals } from './launch'
+import { findLiveTab, type SessionLook } from './session-tabs'
 
-export type ResumeDeps = {
+export type ResumeDeps = SessionLook & {
   run(runId: string): RunRow | null
   steps(runId: string): StepRow[]
-  // The launcher's own look at a session's terminal (launch.ts sessionTerminalState): free, busy, other or gone.
-  state(terminal: KnownTerminal, sessionId: string): Promise<SessionTerminalState>
   focus(handle: string): Promise<void>
   open(selector: string, command: string, title: string): Promise<{ handle: string }>
 }
@@ -25,42 +23,6 @@ export function resumeCommand(agent: string, sessionId: string): string | null {
     return null
   }
   return getAgentResumeArgv(kind, { key: 'session_id', id: sessionId })?.join(' ') ?? null
-}
-
-// A throwing look counts as busy: never a second process on a session that might be in use.
-async function lookAt(
-  deps: ResumeDeps,
-  terminal: KnownTerminal,
-  sessionId: string
-): Promise<SessionTerminalState> {
-  try {
-    return await deps.state(terminal, sessionId)
-  } catch {
-    return 'busy'
-  }
-}
-
-// The tab this session is live in: the step's own, then the later steps of the run that continued it.
-// Live is anything but gone or running another session (H10: one process per agent session).
-async function liveTab(
-  deps: ResumeDeps,
-  step: StepRow,
-  sessionId: string,
-  all: StepRow[]
-): Promise<string | null> {
-  const seen = new Set<string>()
-  const sameSession = all.filter((s) => s.sessionId === sessionId && s.terminalHandle)
-  for (const s of [step, ...sameSession.toReversed()]) {
-    if (!s.terminalHandle || seen.has(s.terminalHandle)) {
-      continue
-    }
-    seen.add(s.terminalHandle)
-    const state = await lookAt(deps, { handle: s.terminalHandle, paneKey: s.paneKey }, sessionId)
-    if (state === 'free' || state === 'busy') {
-      return s.terminalHandle
-    }
-  }
-  return null
 }
 
 // The session's tab when it is still live; else its session reopened in a new tab in the run's
@@ -79,10 +41,15 @@ export async function resumeStepSession(
   if (!step.sessionId || !command) {
     throw new Error('This step has no agent session to resume')
   }
-  const live = await liveTab(deps, step, step.sessionId, all)
+  // Any run's, any tab: the step's own, the run's later steps of this session, then every terminal Orca
+  // says holds it (a tab Resume opened before, another run's per_worktree session, one opened by hand).
+  const hints = [step, ...all.filter((s) => s.sessionId === step.sessionId).toReversed()]
+    .filter((s) => s.terminalHandle)
+    .map((s) => ({ handle: s.terminalHandle as string, paneKey: s.paneKey }))
+  const live = await findLiveTab(deps, step.sessionId, hints)
   if (live) {
-    await deps.focus(live)
-    return { action: 'focused', handle: live }
+    await deps.focus(live.handle)
+    return { action: 'focused', handle: live.handle }
   }
   if (!run.worktreePath) {
     throw new Error(`Run ${run.id} has no worktree to resume in`)
@@ -108,6 +75,8 @@ export function runtimeResumeDeps(
     run: (id) => store.runs.get(id),
     steps: (id) => store.runs.steps(id),
     state: (terminal, sessionId) => terminals.state(terminal, sessionId),
+    tabs: terminals.tabs,
+    stepOn: (handle) => store.runs.runningSteps().some((s) => s.terminalHandle === handle),
     focus: async (handle) => {
       await runtime.focusTerminal(handle)
     },
