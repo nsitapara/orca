@@ -227,7 +227,7 @@ def main(argv):
         path = HERE / job / f"{name}.json"
         text = dump(fixture)
         if check:
-            if not path.exists() or path.read_text() != text:
+            if not path.exists() or json.loads(path.read_text()) != json.loads(text):  # parsed: the commit hook reformats the JSON
                 stale.append(str(path))
             continue
         path.parent.mkdir(parents=True, exist_ok=True)
