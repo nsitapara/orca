@@ -1,7 +1,15 @@
 import { describe, expect, it } from 'vitest'
 import type { InboxItemRow } from '../../../shared/api-types'
 import { startNotes } from '../../../shared/answers/route'
-import { choicesFor, composeAnswer, queueNote, waitingCount, worktreeName } from './answer-text'
+import {
+  ageLabel,
+  choicesFor,
+  composeAnswer,
+  jobCode,
+  queueNote,
+  waitingCount,
+  worktreeName
+} from './answer-text'
 
 function card(over: Partial<InboxItemRow>): InboxItemRow {
   return {
@@ -196,5 +204,23 @@ describe('queue and rail words', () => {
     expect(waitingCount([card({}), card({ type: 'default' }), card({ status: 'answered' })])).toBe(
       1
     )
+  })
+})
+
+describe('ageLabel and jobCode', () => {
+  const NOW = 10 * 24 * 3_600_000
+  it.each([
+    [NOW - 5 * 60_000, '5m'],
+    [NOW - 3 * 3_600_000, '3h'],
+    [NOW - 26 * 3_600_000, '1d'],
+    [NOW + 60_000, '0m']
+  ])('ages %i as %s', (at, want) => {
+    expect(ageLabel(at, NOW)).toBe(want)
+  })
+  it.each([
+    ['04 · Test branch UIs overnight', 'x', '04'],
+    ['Docker prune', 'docker-prune', 'docker-prune']
+  ])('codes %s as %s', (name, id, want) => {
+    expect(jobCode(name, id)).toBe(want)
   })
 })

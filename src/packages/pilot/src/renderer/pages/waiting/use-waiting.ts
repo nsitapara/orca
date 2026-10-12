@@ -12,6 +12,8 @@ export function useWaiting(person: string | null) {
   const [inbox, setInbox] = useState<InboxListPayload | null>(null)
   const [queue, setQueue] = useState<QueueEntry[]>([])
   const [error, setError] = useState<string | null>(null)
+  // When the list was read: card ages are measured from it, so a render never reads the clock.
+  const [loadedAt, setLoadedAt] = useState(0)
   const mounted = useRef(true)
   const reload = useCallback(async () => {
     const params = person ? { person } : {}
@@ -24,6 +26,7 @@ export function useWaiting(person: string | null) {
         return
       }
       setInbox(items)
+      setLoadedAt(Date.now())
       setQueue(queued.entries)
       setError(null)
     } catch (e) {
@@ -77,5 +80,5 @@ export function useWaiting(person: string | null) {
     }
   }, [reload])
 
-  return { inbox, queue, error, reload, save, applyNow }
+  return { inbox, queue, error, loadedAt, reload, save, applyNow }
 }

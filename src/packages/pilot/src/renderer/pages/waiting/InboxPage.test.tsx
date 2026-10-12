@@ -108,6 +108,9 @@ const HELD: QueueEntry = {
   updatedAt: 0
 }
 
+const radio = (from: ParentNode, value: string): Element =>
+  from.querySelector(`[role="radio"][data-value="${value}"]`)!
+
 function serve(list = LIST, queue: QueueEntry[] = [HELD]) {
   pilotRpc.mockImplementation(async (method: string) => {
     if (method === 'pilot.inbox.list') {
@@ -129,12 +132,14 @@ describe('InboxPage', () => {
   it('shows the cards waiting, folds the defaults, and lists what saved answers set off', async () => {
     serve()
     render(<InboxPage />)
-    expect(await screen.findByText("Push !1561's 2 commits to origin?")).toBeTruthy()
-    expect(screen.getByText('Install LibreOffice in the job?')).toBeTruthy()
+    expect(
+      await screen.findByRole('heading', { name: "Push !1561's 2 commits to origin?" })
+    ).toBeTruthy()
+    expect(screen.getByRole('heading', { name: 'Install LibreOffice in the job?' })).toBeTruthy()
     expect(screen.getByText('Defaults the agents took · 1')).toBeTruthy()
     expect(screen.getByText('Up next from your answers · 1')).toBeTruthy()
     expect(screen.getByText(/someone is typing in Claude · review/)).toBeTruthy()
-    expect(screen.getByRole('button', { name: /All worktrees/ }).textContent).toContain('2')
+    expect(screen.getByRole('option', { name: 'All worktrees · 2' })).toBeTruthy()
   })
 
   it("shows Pilot's Run line in its own Pilot block on an action card, and none on a question", async () => {
@@ -146,7 +151,9 @@ describe('InboxPage', () => {
     // Apart from the agent's words: the agent's context is not inside Pilot's block.
     expect(block?.textContent).not.toContain('Fixed the flaky spec.')
     expect(line.closest('article')?.textContent).toContain("Push !1561's 2 commits to origin?")
-    const question = screen.getByText('Install LibreOffice in the job?').closest('article')
+    const question = screen
+      .getByRole('heading', { name: 'Install LibreOffice in the job?' })
+      .closest('article')
     expect(question?.querySelector('[data-pilot-run-line]')).toBeNull()
   })
 
@@ -164,7 +171,7 @@ describe('InboxPage', () => {
   it('shows no Run line built for another version of the card than the one shown', async () => {
     serve({ ...LIST, items: [PUSH], runLines: { in_push: { digest: 'old', text: 'python3 x' } } })
     render(<InboxPage />)
-    await screen.findByText("Push !1561's 2 commits to origin?")
+    await screen.findByRole('heading', { name: "Push !1561's 2 commits to origin?" })
     expect(screen.queryByText('python3 x')).toBeNull()
   })
 
@@ -194,7 +201,9 @@ describe('InboxPage', () => {
   it('loads the cards of the person you view as', async () => {
     serve()
     render(<InboxPage />)
-    fireEvent.click(await screen.findByRole('button', { name: 'Emil Elgaard' }))
+    fireEvent.change(await screen.findByRole('combobox', { name: 'Viewing as' }), {
+      target: { value: 'emil' }
+    })
     await waitFor(() =>
       expect(pilotRpc).toHaveBeenCalledWith('pilot.inbox.list', { person: 'emil' })
     )
@@ -203,10 +212,10 @@ describe('InboxPage', () => {
   it('saves Approve against the version shown', async () => {
     serve()
     render(<InboxPage />)
-    const article = (await screen.findByText("Push !1561's 2 commits to origin?")).closest(
-      'article'
-    )!
-    fireEvent.click(article.querySelector('input[value="Approve"]')!)
+    const article = (
+      await screen.findByRole('heading', { name: "Push !1561's 2 commits to origin?" })
+    ).closest('article')!
+    fireEvent.click(radio(article, 'Approve'))
     fireEvent.click(article.querySelector('button[data-save]')!)
     await waitFor(() =>
       expect(pilotRpc).toHaveBeenCalledWith(
@@ -222,10 +231,10 @@ describe('InboxPage', () => {
   it('needs notes before it saves a revision', async () => {
     serve()
     render(<InboxPage />)
-    const article = (await screen.findByText("Push !1561's 2 commits to origin?")).closest(
-      'article'
-    )!
-    fireEvent.click(article.querySelector('input[value="Revise…"]')!)
+    const article = (
+      await screen.findByRole('heading', { name: "Push !1561's 2 commits to origin?" })
+    ).closest('article')!
+    fireEvent.click(radio(article, 'Revise…'))
     const save = article.querySelector('button[data-save]') as HTMLButtonElement
     expect(save.disabled).toBe(true)
     fireEvent.change(article.querySelector('textarea')!, { target: { value: 'push only the fix' } })
@@ -247,8 +256,10 @@ describe('InboxPage', () => {
       return method === 'pilot.inbox.list' ? LIST : { entries: [] }
     })
     render(<InboxPage />)
-    const article = (await screen.findByText('Install LibreOffice in the job?')).closest('article')!
-    fireEvent.click(article.querySelector('input[value="Bake it"]')!)
+    const article = (
+      await screen.findByRole('heading', { name: 'Install LibreOffice in the job?' })
+    ).closest('article')!
+    fireEvent.click(radio(article, 'Bake it'))
     fireEvent.click(article.querySelector('button[data-save]')!)
     expect(await screen.findByText('The card changed; review it again')).toBeTruthy()
   })
@@ -266,8 +277,10 @@ describe('InboxPage', () => {
       return { entries: [] }
     })
     render(<InboxPage />)
-    const article = (await screen.findByText('Install LibreOffice in the job?')).closest('article')!
-    fireEvent.click(article.querySelector('input[value="Bake it"]')!)
+    const article = (
+      await screen.findByRole('heading', { name: 'Install LibreOffice in the job?' })
+    ).closest('article')!
+    fireEvent.click(radio(article, 'Bake it'))
     fireEvent.click(article.querySelector('button[data-save]')!)
     expect(await screen.findByText('The card changed; review it again')).toBeTruthy()
     await waitFor(() => expect(version).toBe(2))
@@ -289,8 +302,10 @@ describe('InboxPage', () => {
     })
     serve({ ...LIST, items: [ask] }, [])
     render(<InboxPage />)
-    const article = (await screen.findByText('Prepare a review of !1588?')).closest('article')!
-    fireEvent.click(article.querySelector('input[value="Approve with notes…"]')!)
+    const article = (
+      await screen.findByRole('heading', { name: 'Prepare a review of !1588?' })
+    ).closest('article')!
+    fireEvent.click(radio(article, 'Approve with notes…'))
     fireEvent.change(article.querySelector('textarea')!, {
       target: { value: 'use the second fix' }
     })
@@ -303,43 +318,71 @@ describe('InboxPage', () => {
     )
   })
 
-  it('previews the vault import, then applies it from the page, and reloads', async () => {
-    const report = {
-      applied: false,
-      imported: 3,
-      answers: 1,
-      runs: 2,
-      skipped: [{ summary: 'Old?', reason: 'already imported' }]
-    }
+  const importServer = (report: Record<string, unknown>, apply?: () => unknown) =>
     pilotRpc.mockImplementation(async (method: string, params: { apply?: boolean }) => {
       if (method === 'pilot.inbox.importVault') {
-        return { ...report, applied: params.apply === true }
+        return params.apply === true && apply
+          ? apply()
+          : { ...report, applied: params.apply === true }
       }
       return method === 'pilot.inbox.list' ? LIST : { entries: [] }
     })
+  const NONE = { imported: 0, answers: 0, runs: 0, skipped: [] }
+
+  it.each([
+    ['new cards', { ...NONE, imported: 3, answers: 1 }, '3 vault card(s) not in Pilot'],
+    [
+      'Details to add to imported cards only',
+      { ...NONE, backfilled: 2 },
+      '2 imported card(s) have Details to add from the vault'
+    ]
+  ])('shows a quiet import notice for %s, and reads the preview once', async (_n, report, text) => {
+    importServer(report)
     render(<InboxPage />)
-    fireEvent.click(await screen.findByRole('button', { name: 'Import open vault cards' }))
+    expect(await screen.findByText(text)).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Import open vault cards' })).toBeNull()
+    expect(pilotRpc.mock.calls.filter((c) => c[0] === 'pilot.inbox.importVault')).toHaveLength(1)
+  })
+
+  it('shows no import notice when the import has nothing to do', async () => {
+    importServer(NONE)
+    render(<InboxPage />)
+    await screen.findByRole('heading', { name: "Push !1561's 2 commits to origin?" })
+    await waitFor(() =>
+      expect(pilotRpc).toHaveBeenCalledWith(
+        'pilot.inbox.importVault',
+        { apply: false },
+        expect.anything()
+      )
+    )
+    expect(screen.queryByRole('button', { name: 'Import' })).toBeNull()
+  })
+
+  it('opens the import panel from the notice, applies it from the page, and reloads', async () => {
+    const preview = {
+      ...NONE,
+      imported: 3,
+      answers: 1,
+      skipped: [{ summary: 'Old?', reason: 'already imported' }]
+    }
+    importServer(preview, () => ({ ...preview, applied: true }))
+    render(<InboxPage />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Import' }))
     expect(
       await screen.findByText('Would import 3 card(s), 1 with an answer; 1 skipped.')
     ).toBeTruthy()
     expect(screen.getByText(/Skipped “Old\?”: already imported/)).toBeTruthy()
-    expect(pilotRpc.mock.calls.filter((c) => c[0] === 'pilot.inbox.importVault')).toHaveLength(1)
     fireEvent.click(screen.getByRole('button', { name: 'Apply import' }))
     expect(await screen.findByText('Imported 3 card(s), 1 with an answer; 1 skipped.')).toBeTruthy()
     const calls = pilotRpc.mock.calls.filter((c) => c[0] === 'pilot.inbox.importVault')
-    expect(calls.map((c) => c[1])).toEqual([{ apply: false }, { apply: true }])
+    expect(calls.map((c) => c[1])).toEqual([{ apply: false }, { apply: true }, { apply: false }])
   })
 
   it('offers to apply an import that only fills Details into cards already imported', async () => {
-    const report = { applied: false, imported: 0, answers: 0, runs: 0, backfilled: 2, skipped: [] }
-    pilotRpc.mockImplementation(async (method: string, params: { apply?: boolean }) => {
-      if (method === 'pilot.inbox.importVault') {
-        return { ...report, applied: params.apply === true }
-      }
-      return method === 'pilot.inbox.list' ? LIST : { entries: [] }
-    })
+    const preview = { ...NONE, backfilled: 2 }
+    importServer(preview, () => ({ ...preview, applied: true }))
     render(<InboxPage />)
-    fireEvent.click(await screen.findByRole('button', { name: 'Import open vault cards' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Import' }))
     expect(
       await screen.findByText(
         'Would import 0 card(s), 0 with an answer; 0 skipped; would add Details for 2 card(s) already imported.'
@@ -354,14 +397,12 @@ describe('InboxPage', () => {
   })
 
   it('says why when the import is refused', async () => {
-    pilotRpc.mockImplementation(async (method: string) => {
-      if (method === 'pilot.inbox.importVault') {
-        throw new Error("Pilot can't tell who is calling; nothing was imported")
-      }
-      return method === 'pilot.inbox.list' ? LIST : { entries: [] }
+    importServer({ ...NONE, imported: 1 }, () => {
+      throw new Error("Pilot can't tell who is calling; nothing was imported")
     })
     render(<InboxPage />)
-    fireEvent.click(await screen.findByRole('button', { name: 'Import open vault cards' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Import' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Apply import' }))
     expect(await screen.findByText(/nothing was imported/)).toBeTruthy()
   })
 })
@@ -471,7 +512,7 @@ describe('Details on a card', () => {
   it('shows no Details on a card with neither', async () => {
     serveDetails(() => [card({ id: 'in_f', title: 'F', digest: 'df1' })])
     render(<InboxPage />)
-    await screen.findByText('F')
+    await screen.findByRole('heading', { name: 'F' })
     expect(screen.queryByRole('button', { name: 'Details' })).toBeNull()
   })
 
@@ -515,7 +556,7 @@ describe('Details on a card', () => {
     const { container } = render(<InboxPage />)
     fireEvent.click(await screen.findByRole('button', { name: 'Details' }))
     await screen.findByText('General comments')
-    fireEvent.click(container.querySelector('input[value="Approve"]')!)
+    fireEvent.click(radio(container, 'Approve'))
     const box = screen.getByLabelText('Post 1') as HTMLInputElement
     fireEvent.click(container.querySelector('[data-part="1"] button')!)
     expect(box.checked).toBe(false)
@@ -525,11 +566,11 @@ describe('Details on a card', () => {
     )
   })
 
-  it('lets the grid and the card shrink so a long line cannot widen the page', async () => {
+  it('lets the column and the card shrink so a long line cannot widen the page', async () => {
     serveDetails(() => [card({ id: 'in_h', title: 'H', digest: 'dh1' })])
     const { container } = render(<InboxPage />)
-    await screen.findByText('H')
-    expect(container.querySelector('[class*="minmax(0,1fr)"]')).not.toBeNull()
+    await screen.findByRole('heading', { name: 'H' })
+    expect(container.querySelector('main')?.className).toContain('min-w-0')
     expect(container.querySelector('article')?.className).toContain('min-w-0')
     expect(container.querySelector('article')?.parentElement?.className).toContain('min-w-0')
   })
