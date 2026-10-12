@@ -71,6 +71,23 @@ describe('ActivityTimeline', () => {
 
   afterEach(cleanup)
 
+  it.each([
+    ['asking', 'Asking first'],
+    ['running', 'Running'],
+    ['done', 'Done'],
+    ['failed', 'Failed'],
+    ['timed_out', 'Timed out'],
+    ['cancelled', 'Cancelled']
+  ] as const)('keeps the visible label of a %s run: %s', (status, label) => {
+    render(
+      <ActivityTimeline
+        ticks={[{ ...tick, runs: [{ ...tick.runs[0], status }] }]}
+        checkNames={[]}
+      />
+    )
+    expect(screen.getByText(`Run ci-1 · !1561 web-1493 · ${label} · $0.84`)).toBeTruthy()
+  })
+
   it('shows each tick with its runs, and its check table on demand', () => {
     render(<ActivityTimeline ticks={[tick]} checkNames={['Clean']} />)
     expect(screen.getByText('2 checked · 1 started · 1 skipped')).toBeTruthy()
