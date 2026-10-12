@@ -7,7 +7,8 @@ import { inboxItem, timelineRun, worktreeTimeline } from '../timeline/timeline.f
 
 let failing = false
 let feed: { data: WorktreeTimeline | null; error: string | null } = { data: null, error: null }
-vi.mock('./active-worktree', () => ({ useActiveWorktreePath: () => '/wt/a' }))
+let path = '/wt/a'
+vi.mock('./active-worktree', () => ({ useActiveWorktreePath: () => path }))
 vi.mock('./timeline-feed', () => ({
   useWorktreeTimeline: () => {
     if (failing) {
@@ -22,6 +23,8 @@ import { PilotActivityBadge } from './PilotActivityBadge'
 describe('PilotActivityBadge', () => {
   afterEach(() => {
     cleanup()
+    failing = false
+    path = '/wt/a'
     feed = { data: null, error: null }
   })
 
@@ -55,6 +58,17 @@ describe('PilotActivityBadge', () => {
       </div>
     )
     expect(screen.getByTestId('bar').innerHTML).toBe('')
+  })
+
+  it('logs the failure, and tries again when the worktree changes', () => {
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => {})
+    failing = true
+    const { rerender } = render(<PilotActivityBadge itemId={PILOT_TAB} layout="top" />)
+    expect(logged.mock.calls.some((c) => String(c[0]).startsWith('[pilot] badge'))).toBe(true)
     failing = false
+    feed = { data: worktreeTimeline({ waiting: [inboxItem()] }), error: null }
+    path = '/wt/b'
+    rerender(<PilotActivityBadge itemId={PILOT_TAB} layout="top" />)
+    expect(screen.getByLabelText('1 waiting on you')).toBeTruthy()
   })
 })

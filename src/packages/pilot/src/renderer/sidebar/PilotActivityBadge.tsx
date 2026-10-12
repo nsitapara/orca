@@ -42,6 +42,10 @@ class BadgeBoundary extends Component<{ children: ReactNode }, { failed: boolean
     return { failed: true }
   }
 
+  componentDidCatch(error: unknown): void {
+    console.error('[pilot] badge failed; hiding it', error)
+  }
+
   render(): ReactNode {
     return this.state.failed ? null : this.props.children
   }
@@ -56,11 +60,12 @@ export function PilotActivityBadge({
   itemId: string
   layout: 'top' | 'side'
 }): React.JSX.Element | null {
+  const path = useActiveWorktreePath()
   if (itemId !== PILOT_TAB) {
     return null
   }
   return (
-    <BadgeBoundary>
+    <BadgeBoundary key={path ?? ''}>
       <Badge layout={layout} />
     </BadgeBoundary>
   )
