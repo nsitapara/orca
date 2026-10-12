@@ -174,7 +174,7 @@ describe('the Inbox layout', () => {
     const row = list.querySelector('[data-row="f1"]')!
     expect(row.textContent).not.toContain('Left for you')
     expect(row.textContent).toContain('04')
-    expect(row.textContent).toMatch(/\d+d/)
+    expect(row.textContent).toMatch(/\d+d|[A-Z][a-z]{2} \d+/)
     expect(row.textContent).toContain('F1 Fixture')
   })
 
@@ -515,5 +515,28 @@ describe('an MR group’s name on screen', () => {
     fireWidth(500)
     expect(within(screen.getByRole('toolbar')).getByTitle(full)).toBeTruthy()
     vi.unstubAllGlobals()
+  })
+})
+
+describe('when the ask was made', () => {
+  afterEach(() => {
+    cleanup()
+    pilotRpc.mockReset()
+  })
+  it('opens the chip row, in muted text, before the job chip, with the full time in title', async () => {
+    const asked = new Date(2026, 9, 11, 2, 0).getTime()
+    serve({ ...LIST, items: [{ ...F1, createdAt: asked }] })
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    vi.setSystemTime(new Date(2026, 9, 12, 12, 0))
+    render(<InboxPage />)
+    const article = (await screen.findByRole('heading', { name: 'F1 Fixture' })).closest('article')!
+    const first = article.querySelector('div > span')!
+    expect(first.textContent).toBe('Asked Oct 11, 2:00 AM · 1d ago')
+    expect(first.className).toContain('text-muted-foreground')
+    expect(first.getAttribute('title')).toContain('2026')
+    expect(first.nextElementSibling?.textContent).toBe('04 · Test branch UIs overnight')
+    // The list keeps the short age.
+    expect(screen.getByRole('navigation', { name: 'Cards' }).textContent).toContain('1d')
+    vi.useRealTimers()
   })
 })

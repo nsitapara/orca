@@ -10,7 +10,7 @@ import {
   type PlannedItem
 } from './import-vault'
 import { DetailsRefused } from './details-bundle'
-import { backfillDetails } from './import-backfill'
+import { backfillDetails, fixDates } from './import-backfill'
 import { addInboxItem, SAME_CARD_OPEN } from './inbox-add'
 import { inboxEvent, syncRunWaiting, type InboxDeps } from './inbox-service'
 
@@ -156,6 +156,8 @@ function addCard(deps: InboxDeps, plan: ImportPlan, planned: PlannedItem, now: n
         throw new Skipped(result.refused ?? SAME_CARD_OPEN)
       }
       writeAnswer(deps, planned, now)
+      // The ask date is the vault's, not the import's; only the date, so nothing else of the card moves.
+      deps.store.inbox.setCreatedAt(planned.id, planned.askedAt)
     })
   let refused: string | null
   try {
@@ -220,10 +222,11 @@ export function applyVaultImport(
     }
   }
   const filled = backfillDetails(deps, plan.backfill, opts)
+  const dated = fixDates(deps, plan.dates, opts)
   return reportOf(
     { ...plan, items: done, skipped: [...skipped, ...filled.skipped], notes },
     !opts.dryRun,
     runs,
-    { backfilled: filled.backfilled, details: bundled + filled.backfilled }
+    { backfilled: filled.backfilled, details: bundled + filled.backfilled, dates: dated }
   )
 }

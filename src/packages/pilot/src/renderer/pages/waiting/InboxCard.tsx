@@ -8,7 +8,7 @@ import { AnsweredLine } from './AnsweredLine'
 import { AnswerRow } from './AnswerRow'
 import type { Answer } from './answer-types'
 import { approveWords } from './answer-buttons'
-import { runLineView } from './answer-text'
+import { askedLabel, runLineView } from './answer-text'
 import { CardDetails } from './CardDetails'
 import { DRAFTED_PILL_CLASS, JOB_CHIP_CLASS, statusOf, statusPillClass } from './chips'
 
@@ -84,6 +84,7 @@ export function InboxCard({
   queued,
   error,
   selected,
+  now,
   onSave
 }: {
   item: InboxItemRow
@@ -95,6 +96,8 @@ export function InboxCard({
   error: string | null
   // The card picked in the list: a lighter border.
   selected: boolean
+  // The clock the card's age is read against (when the list was loaded).
+  now: number
   onSave: (answer: Answer) => Promise<string | null>
 }): React.JSX.Element {
   const [unsaved, setUnsaved] = useState(false)
@@ -104,6 +107,7 @@ export function InboxCard({
   // An open card is answered with one click; an answered one is a line with its countdown and Undo.
   const editing = item.status === 'open'
   const parts = editing ? partSwitches(item, off, toggle) : null
+  const asked = askedLabel(item.createdAt, now)
   const status = statusOf(item, queued, unsaved && editing)
   const frame = cn(
     'flex min-w-0 scroll-mt-14 flex-col gap-2 rounded-[10px] border bg-card px-3.5 py-3 text-card-foreground',
@@ -128,6 +132,9 @@ export function InboxCard({
   return (
     <article id={`card-${item.id}`} data-selected={selected ? '' : undefined} className={frame}>
       <div className="flex flex-wrap items-center gap-1.5">
+        <span className="text-xs text-muted-foreground" title={asked.full}>
+          {asked.text}
+        </span>
         <span className={JOB_CHIP_CLASS}>{automationName}</span>
         {item.details?.drafted ? <span className={DRAFTED_PILL_CLASS}>drafted</span> : null}
         <span className={statusPillClass(status)}>{status}</span>

@@ -3,6 +3,7 @@ import type { InboxItemRow } from '../../../shared/api-types'
 import { startNotes } from '../../../shared/answers/route'
 import {
   ageLabel,
+  askedLabel,
   choicesFor,
   composeAnswer,
   jobCode,
@@ -208,12 +209,14 @@ describe('queue and rail words', () => {
 })
 
 describe('ageLabel and jobCode', () => {
-  const NOW = 10 * 24 * 3_600_000
+  const NOW = new Date(2026, 9, 12, 12, 0).getTime()
   it.each([
     [NOW - 5 * 60_000, '5m'],
     [NOW - 3 * 3_600_000, '3h'],
     [NOW - 26 * 3_600_000, '1d'],
-    [NOW + 60_000, '0m']
+    [NOW + 60_000, '0m'],
+    [NOW - 7 * 86_400_000, '7d'],
+    [new Date(2026, 8, 20, 2, 0).getTime(), 'Sep 20']
   ])('ages %i as %s', (at, want) => {
     expect(ageLabel(at, NOW)).toBe(want)
   })
@@ -222,5 +225,21 @@ describe('ageLabel and jobCode', () => {
     ['Docker prune', 'docker-prune', 'docker-prune']
   ])('codes %s as %s', (name, id, want) => {
     expect(jobCode(name, id)).toBe(want)
+  })
+})
+
+describe('askedLabel', () => {
+  const NOW = new Date(2026, 9, 12, 12, 0).getTime()
+  it.each([
+    [new Date(2026, 9, 11, 2, 0).getTime(), 'Asked Oct 11, 2:00 AM · 1d ago'],
+    [new Date(2026, 9, 12, 9, 30).getTime(), 'Asked Oct 12, 9:30 AM · 2h ago'],
+    [new Date(2026, 9, 12, 11, 55).getTime(), 'Asked Oct 12, 11:55 AM · 5m ago'],
+    [new Date(2026, 8, 20, 14, 5).getTime(), 'Asked Sep 20, 2:05 PM'],
+    [new Date(2025, 11, 31, 14, 5).getTime(), 'Asked Dec 31, 2025, 2:05 PM']
+  ])('reads %i as "%s"', (at, want) => {
+    expect(askedLabel(at, NOW).text).toBe(want)
+  })
+  it('keeps the full timestamp for the tooltip', () => {
+    expect(askedLabel(new Date(2026, 9, 11, 2, 0).getTime(), NOW).full).toContain('2026')
   })
 })

@@ -11,7 +11,13 @@ import { addInboxItem } from './inbox-add'
 import { splitCommand } from './split-command'
 import { copyBundle, detailsFixture, rewriteBundle } from './__fixtures__/details-fixture'
 import { setInboxDetails } from './inbox-details'
-import { isBackfillable, planVaultImport, vaultItemId, type ImportContext } from './import-vault'
+import {
+  isBackfillable,
+  isDatable,
+  planVaultImport,
+  vaultItemId,
+  type ImportContext
+} from './import-vault'
 import type { InboxDeps } from './inbox-service'
 import type { VaultRow } from './vault-reader'
 
@@ -530,5 +536,76 @@ describe('the vault import and Details bundles', () => {
       }
     ])
     expect(store.inbox.get(ID)).toEqual(before)
+  })
+})
+
+describe('the ask date of an imported card', () => {
+  const ASKED = Date.parse('2026-10-10T06:12:00-07:00')
+  const SECTION = Date.parse('2026-10-10 06:12')
+  const datable = (store: ReturnType<typeof open>['store']) => (id: string) => {
+    const item = store.inbox.get(id)
+    return item !== null && isDatable(item, ASKED)
+  }
+  const planWith = (store: ReturnType<typeof open>['store'], rows: VaultRow[]) =>
+    planVaultImport(rows, {
+      ...ctx((id) => store.inbox.get(id) !== null),
+      backfillable: () => false,
+      datable: (id, at) => {
+        const item = store.inbox.get(id)
+        return item !== null && isDatable(item, at)
+      }
+    })
+
+  it.each([
+    ['the vault row’s created_at', {}, ASKED],
+    ['the section time when created_at is missing', { created_at: null }, SECTION],
+    ['the import time when the row has neither', { created_at: null, section_time: '' }, 1_000]
+  ])('a new import takes the ask date from %s', (_n, over, want) => {
+    const { store, deps } = open()
+    applyVaultImport(deps, planVaultImport([row(over)], ctx()), 1_000)
+    expect(store.inbox.get(vaultItemId(NOTE, KEY))?.createdAt).toBe(want)
+  })
+
+  it('corrects only open imported cards whose time is later, once, leaving answers and digests alone', () => {
+    const { store, deps } = open()
+    const KEY2 = 'c'.repeat(16)
+    const rows = [row({}), row({ key: KEY2, summary: 'Second?', answer: 'A', status: 'answered' })]
+    // The 25-card state: imported at 9:01 on the 12th, not asked then.
+    applyVaultImport(deps, planVaultImport(rows, ctx()), Date.parse('2026-10-12T09:01:00-07:00'))
+    const open1 = vaultItemId(NOTE, KEY)
+    const answered = vaultItemId(NOTE, KEY2)
+    for (const id of [open1, answered]) {
+      store.inbox.setCreatedAt(id, Date.parse('2026-10-12T09:01:00-07:00'))
+    }
+    const before = { open: store.inbox.get(open1), answered: store.inbox.get(answered) }
+
+    const preview = applyVaultImport(deps, planWith(store, rows), 5_000, { dryRun: true })
+    expect(preview).toMatchObject({ dates: 1, applied: false })
+    expect(store.inbox.get(open1)?.createdAt).toBe(before.open?.createdAt)
+
+    const report = applyVaultImport(deps, planWith(store, rows), 5_000)
+    expect(report).toMatchObject({ dates: 1, applied: true, imported: 0 })
+    expect(store.inbox.get(open1)).toEqual({ ...before.open, createdAt: ASKED })
+    expect(store.inbox.get(answered)).toEqual(before.answered)
+
+    expect(applyVaultImport(deps, planWith(store, rows), 6_000, { dryRun: true })).toMatchObject({
+      dates: 0
+    })
+    expect(store.inbox.get(open1)?.createdAt).toBe(ASKED)
+    expect(datable(store)(open1)).toBe(false)
+  })
+
+  it('is not part of the digest', () => {
+    const a = open()
+    const b = open()
+    applyVaultImport(a.deps, planVaultImport([row({})], ctx()), 1_000)
+    applyVaultImport(
+      b.deps,
+      planVaultImport([row({ created_at: '2026-01-01T00:00:00Z' })], ctx()),
+      9_000
+    )
+    const id = vaultItemId(NOTE, KEY)
+    expect(a.store.inbox.get(id)?.createdAt).not.toBe(b.store.inbox.get(id)?.createdAt)
+    expect(a.store.inbox.get(id)?.digest).toBe(b.store.inbox.get(id)?.digest)
   })
 })

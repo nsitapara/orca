@@ -89,6 +89,7 @@ export function InboxPage(): React.JSX.Element {
       queued={queue.find((q) => q.itemId === i.id) ?? null}
       error={errors[i.id] ?? null}
       selected={selected === i.id}
+      now={loadedAt}
       onSave={async (answer) => {
         const failed = await save(i, answer, viewer)
         setErrors((now) => withError(now, i.id, failed))
