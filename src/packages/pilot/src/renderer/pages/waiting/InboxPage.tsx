@@ -1,18 +1,15 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Button } from '@/components/ui/button'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import type { InboxItemRow } from '../../../shared/api-types'
-import { waitingCount, worktreeName } from './answer-text'
-import { ImportVaultPanel } from './ImportVaultPanel'
+import { groupItems, type Section } from '../../../shared/inbox-groups'
+import { waitingCount } from './answer-text'
+import { CardList } from './CardList'
+import { ALL, InboxHeader } from './InboxHeader'
 import { InboxCard } from './InboxCard'
+import { ImportNotice } from './ImportNotice'
 import { UpNextPanel } from './UpNextPanel'
+import { useListOpen } from './use-list-open'
 import { useWaiting } from './use-waiting'
-
-const ALL = 'all'
-
-function railKey(item: InboxItemRow): string {
-  return item.worktreePath ?? ''
-}
 
 function withError(
   errors: Record<string, string>,
@@ -23,10 +20,20 @@ function withError(
   return failed ? { ...rest, [id]: failed } : rest
 }
 
+function SectionHeading({ section }: { section: Section }): React.JSX.Element {
+  return (
+    <h3 className="sticky top-0 z-10 bg-background py-1 font-mono text-xs font-semibold text-muted-foreground">
+      <span className="text-foreground">{section.group.label}</span> · {section.items.length}
+    </h3>
+  )
+}
+
 export function InboxPage(): React.JSX.Element {
   const [viewer, setViewer] = useState<string | null>(null)
-  const [rail, setRail] = useState<string>(ALL)
-  const { inbox, queue, error, save, applyNow, reload } = useWaiting(viewer)
+  const [group, setGroup] = useState<string>(ALL)
+  const [selected, setSelected] = useState<string | null>(null)
+  const [listOpen, toggleList] = useListOpen()
+  const { inbox, queue, error, loadedAt, save, applyNow, reload } = useWaiting(viewer)
   // Save errors are kept here, by card id: a card remounts as a new version on every reload.
   const [errors, setErrors] = useState<Record<string, string>>({})
   const people = inbox?.people ?? []
@@ -37,15 +44,18 @@ export function InboxPage(): React.JSX.Element {
     }
   }, [viewer, firstPerson])
   const items = inbox?.items ?? []
-  const names = useMemo(
-    () => new Map((inbox?.automations ?? []).map((a) => [a.id, a.name])),
-    [inbox]
-  )
-  const worktrees = [...new Set(items.map(railKey))]
-  const shown = items.filter((i) => rail === ALL || railKey(i) === rail)
-  const open = shown.filter((i) => i.type !== 'default')
-  const defaults = shown.filter((i) => i.type === 'default')
+  const automations = useMemo(() => inbox?.automations ?? [], [inbox])
+  const names = useMemo(() => new Map(automations.map((a) => [a.id, a.name])), [automations])
+  const openItems = items.filter((i) => i.type !== 'default')
+  const defaults = items.filter((i) => i.type === 'default')
+  const sections = groupItems(openItems, automations)
+  const shown = sections.filter((s) => group === ALL || s.group.key === group)
+  const defaultSections = groupItems(defaults, automations)
   const viewerName = people.find((p) => p.id === viewer)?.name.split(' ')[0] ?? 'you'
+  const select = (item: InboxItemRow) => {
+    setSelected(item.id)
+    document.getElementById(`card-${item.id}`)?.scrollIntoView?.({ block: 'start' })
+  }
   const cardOf = (i: InboxItemRow) => (
     <InboxCard
       key={`${i.id}@${i.version}`}
@@ -54,6 +64,7 @@ export function InboxPage(): React.JSX.Element {
       runLine={inbox?.runLines[i.id] ?? null}
       queued={queue.find((q) => q.itemId === i.id) ?? null}
       error={errors[i.id] ?? null}
+      selected={selected === i.id}
       onSave={async (answer) => {
         const failed = await save(i, answer, viewer)
         setErrors((now) => withError(now, i.id, failed))
@@ -61,57 +72,43 @@ export function InboxPage(): React.JSX.Element {
       }}
     />
   )
+  const sectionOf = (s: Section) => (
+    <section key={s.group.key} aria-label={s.group.label} className="flex min-w-0 flex-col gap-3">
+      <SectionHeading section={s} />
+      {s.items.map(cardOf)}
+    </section>
+  )
   return (
-    <div className="flex flex-col gap-4">
-      <div className="flex flex-wrap items-center gap-2">
-        <h2 className="text-lg font-semibold">Inbox</h2>
-        <span className="flex-1" />
-        <span className="text-sm text-muted-foreground">Viewing as</span>
-        {people.map((p) => (
-          <Button
-            key={p.id}
-            size="xs"
-            variant={p.id === viewer ? 'secondary' : 'ghost'}
-            onClick={() => setViewer(p.id)}
-          >
-            {p.name}
-          </Button>
-        ))}
-      </div>
-      <p className="max-w-prose text-sm text-muted-foreground">
-        Every automation leaves its questions and actions here, addressed to a person. An approved
-        action runs its script with no agent; any other answer goes back to the session that asked.
-      </p>
+    <div className="pilot-inbox flex flex-col gap-3">
+      <InboxHeader
+        listOpen={listOpen}
+        onToggleList={toggleList}
+        waiting={waitingCount(items)}
+        people={people}
+        viewer={viewer}
+        onViewer={setViewer}
+        sections={sections}
+        total={openItems.length}
+        group={group}
+        onGroup={setGroup}
+      />
       {error ? <p className="text-sm text-destructive">{error}</p> : null}
-      <ImportVaultPanel onImported={() => void reload()} />
+      <ImportNotice onImported={() => void reload()} />
       <UpNextPanel entries={queue} onApplyNow={applyNow} />
-      <div className="grid grid-cols-[minmax(10rem,14rem)_minmax(0,1fr)] gap-4">
-        <nav className="flex flex-col gap-1">
-          <Button
-            variant={rail === ALL ? 'secondary' : 'ghost'}
-            size="sm"
-            className="justify-between"
-            onClick={() => setRail(ALL)}
-          >
-            <span>All worktrees</span>
-            <span>{waitingCount(items) || ''}</span>
-          </Button>
-          {worktrees.map((w) => (
-            <Button
-              key={w}
-              variant={rail === w ? 'secondary' : 'ghost'}
-              size="sm"
-              className="justify-between"
-              onClick={() => setRail(w)}
-            >
-              <span className="truncate">{worktreeName(w || null)}</span>
-              <span>{waitingCount(items.filter((i) => railKey(i) === w)) || ''}</span>
-            </Button>
-          ))}
-        </nav>
-        <div className="flex min-w-0 flex-col gap-3">
-          {open.length ? (
-            open.map(cardOf)
+      <div className="flex flex-wrap items-start gap-4">
+        {listOpen ? (
+          <CardList
+            sections={sections}
+            selected={selected}
+            names={names}
+            now={loadedAt}
+            onGroup={setGroup}
+            onSelect={select}
+          />
+        ) : null}
+        <main className="flex min-w-0 flex-[999_1_480px] flex-col gap-3">
+          {shown.length ? (
+            shown.map(sectionOf)
           ) : (
             <p className="text-sm text-muted-foreground">Nothing waiting on {viewerName} here.</p>
           )}
@@ -124,11 +121,11 @@ export function InboxPage(): React.JSX.Element {
                 </span>
               </CollapsibleTrigger>
               <CollapsibleContent className="mt-2 flex flex-col gap-3">
-                {defaults.map(cardOf)}
+                {defaultSections.map(sectionOf)}
               </CollapsibleContent>
             </Collapsible>
           ) : null}
-        </div>
+        </main>
       </div>
     </div>
   )

@@ -247,7 +247,7 @@ The order, behaviour changes and follow-ups come from the build (`go-live-notes.
 
 **Order:**
 1. Close out what Orca still has open. Let a running Orca 03 review cycle finish. Close any open Orca 04 QA run or dispatched fix: a stale Orca `run.json` that isn't `done` blocks every Pilot 04 night at `stack`.
-2. Import the open vault cards: Inbox, "Import open vault cards" (applying needs Pilot's own window). After you rebuild Pilot, run "Import open vault cards" again: it fills Details into the open, unanswered imported cards, and the go-live check's "Card details" line shows what is left. From now on answer only in Pilot (Inbox): the old answers page is read-only on the Pilot backend.
+2. Import the open vault cards: the Inbox shows an "Import" notice while there are vault cards to bring in or Details to add (applying needs Pilot's own window). After you rebuild Pilot, use the Import notice again: it fills Details into the open, unanswered imported cards, and the go-live check's "Card details" line shows what is left. From now on answer only in Pilot (Inbox): the old answers page is read-only on the Pilot backend.
 3. Import each job's old state before enabling it: `pilot automations import-state --id <id>` (preview), then `--apply`. 03 and 04 need their `seen.json` first. 08 must be imported before Pilot first writes its own `usage.json` (the hand-over above). 12's sent answers come in as dispatched.
 4. Connect Linear in Pilot (Settings) before enabling 13 and M01. Pilot can't read Orca's Linear credential (see the Known gaps).
 5. Enable the YAMLs one at a time: `pilot automations enable --id <id>`. Keep Orca's copies disabled.

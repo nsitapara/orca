@@ -4,9 +4,9 @@ import { pilotRpc } from '../../api'
 import { errorText } from '../format'
 
 // The export asks GitLab for each branch's MR.
-const IMPORT_TIMEOUT_MS = 180_000
+export const IMPORT_TIMEOUT_MS = 180_000
 
-type Report = {
+export type ImportReport = {
   applied: boolean
   imported: number
   answers: number
@@ -16,7 +16,7 @@ type Report = {
   skipped: { summary: string; reason: string }[]
 }
 
-function detailsPart(report: Report): string {
+function detailsPart(report: ImportReport): string {
   const n = report.backfilled ?? 0
   if (n === 0) {
     return ''
@@ -25,50 +25,56 @@ function detailsPart(report: Report): string {
   return `; ${verb} Details for ${n} card(s) already imported`
 }
 
-function summaryOf(report: Report): string {
+function summaryOf(report: ImportReport): string {
   const verb = report.applied ? 'Imported' : 'Would import'
   const skipped = report.skipped.length
   return `${verb} ${report.imported} card(s), ${report.answers} with an answer; ${skipped} skipped${detailsPart(report)}.`
 }
 
-// A one-shot move of the vault's open cards into Pilot: preview first, then apply. Applying is the
-// desktop's alone (the server checks), so this page is the only place that can do it.
-export function ImportVaultPanel({ onImported }: { onImported: () => void }): React.JSX.Element {
+// The import's preview and its Apply. Applying is the desktop's alone (the server checks), so this page is
+// the only place that can do it.
+export function ImportVaultPanel({
+  preview,
+  onImported,
+  onClose
+}: {
+  preview: ImportReport
+  onImported: () => void
+  onClose: () => void
+}): React.JSX.Element {
   const [busy, setBusy] = useState(false)
-  const [report, setReport] = useState<Report | null>(null)
+  const [report, setReport] = useState<ImportReport>(preview)
   const [error, setError] = useState<string | null>(null)
-  const run = async (apply: boolean) => {
+  const apply = async () => {
     setBusy(true)
     setError(null)
     try {
-      const next = await pilotRpc<Report>(
-        'pilot.inbox.importVault',
-        { apply },
-        { timeoutMs: IMPORT_TIMEOUT_MS }
+      setReport(
+        await pilotRpc<ImportReport>(
+          'pilot.inbox.importVault',
+          { apply: true },
+          { timeoutMs: IMPORT_TIMEOUT_MS }
+        )
       )
-      setReport(next)
-      if (apply) {
-        onImported()
-      }
+      onImported()
     } catch (e) {
       setError(errorText(e))
     }
     setBusy(false)
   }
-  const canApply =
-    report !== null && !report.applied && (report.imported > 0 || (report.backfilled ?? 0) > 0)
+  const canApply = !report.applied && (report.imported > 0 || (report.backfilled ?? 0) > 0)
   return (
-    <section className="flex flex-wrap items-center gap-2 text-sm">
-      <Button size="xs" variant="outline" disabled={busy} onClick={() => void run(false)}>
-        Import open vault cards
-      </Button>
-      {report ? <span className="text-muted-foreground">{summaryOf(report)}</span> : null}
+    <section className="flex flex-wrap items-center gap-2 rounded-md border border-dashed border-border px-2.5 py-1.5 text-sm">
+      <span className="text-muted-foreground">{summaryOf(report)}</span>
       {canApply ? (
-        <Button size="xs" disabled={busy} onClick={() => void run(true)}>
+        <Button size="xs" disabled={busy} onClick={() => void apply()}>
           Apply import
         </Button>
       ) : null}
-      {report?.skipped.map((s) => (
+      <Button size="xs" variant="ghost" onClick={onClose}>
+        Close
+      </Button>
+      {report.skipped.map((s) => (
         <span key={s.summary + s.reason} className="w-full text-xs text-muted-foreground">
           Skipped “{s.summary}”: {s.reason}
         </span>

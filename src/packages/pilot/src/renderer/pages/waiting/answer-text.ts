@@ -195,3 +195,18 @@ export function worktreeName(path: string | null): string {
 export function waitingCount(items: InboxItemRow[]): number {
   return items.filter((i) => i.status === 'open' && i.type !== 'default').length
 }
+
+// "1d", "3h", "12m": how long a card has waited.
+export function ageLabel(createdAt: number, now: number): string {
+  const minutes = Math.max(0, Math.floor((now - createdAt) / 60_000))
+  if (minutes < 60) {
+    return `${minutes}m`
+  }
+  const hours = Math.floor(minutes / 60)
+  return hours < 24 ? `${hours}h` : `${Math.floor(hours / 24)}d`
+}
+
+// "04" from a job named "04 · Test branch UIs overnight"; the automation's id when its name has no code.
+export function jobCode(name: string, id: string): string {
+  return /^(\d+)\b/.exec(name)?.[1] ?? id
+}
