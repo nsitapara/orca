@@ -2,6 +2,7 @@ import type { InboxItemRow, QueueRow, RunRow } from '../../shared/api-types'
 import { oneLine } from '../inbox/card'
 import { inboxEvent, syncRunWaiting } from '../inbox/inbox-service'
 import type { PilotStore } from '../store/store'
+import { PENDING_STATES } from '../store/store-queue'
 import { hold } from './holds'
 
 // Tries per answer: a dispatch that fails, or an answers session that doesn't finish.
@@ -50,12 +51,23 @@ function settle(store: PilotStore, item: InboxItemRow, text: Text, at: number): 
   inboxEvent(store, item, 'item_ticked', { status: closed, outcome }, at)
 }
 
+const PENDING: ReadonlySet<string> = new Set(PENDING_STATES)
+
+// The card was answered again after this row was sent: the new answer has its own queue row (still
+// pending, or sent to another run) and settles on its own, so this run's outcome must not touch the card.
+function answeredAgain(store: PilotStore, item: InboxItemRow, row: QueueRow): boolean {
+  if ((item.answeredAt ?? 0) > row.updatedAt) {
+    return true
+  }
+  return store.queue.forInboxItem(item.id).some((r) => r.id !== row.id && PENDING.has(r.state))
+}
+
 // G6/E-19: an answer run reports back with the outputs `outcome` (one line), `item_status` (done | stale |
 // open) and an optional `reply`. When it ends, every card it was sent for that is still 'answered' gets that
 // status: done (the default) closes it, stale marks it stale, open puts it back to its person (answer
-// cleared) with the reply under it. A card the agent already ticked is left alone. A run that failed or
-// timed out queues its answers for another try (the dispatcher's usual three); one Nish stopped hands its
-// cards back to him instead. Agent text is kept to one line. Wired as RunEngineDeps.onRunEnd.
+// cleared) with the reply under it. A card the agent already ticked, or Nish answered again after it was
+// sent, is left alone. A run that failed or timed out queues its answers for another try (the
+// dispatcher's usual three); one Nish stopped hands its cards back to him instead. Agent text is kept to one line. Wired as RunEngineDeps.onRunEnd.
 export function answerRunEnded(store: PilotStore, run: RunRow): void {
   if (run.trigger !== 'answer') {
     return
@@ -68,6 +80,9 @@ export function answerRunEnded(store: PilotStore, run: RunRow): void {
   for (const row of store.queue.forRun(run.id)) {
     const item = store.inbox.get(row.inboxItemId)
     if (row.state !== 'dispatched' || !item || item.status !== 'answered') {
+      continue
+    }
+    if (answeredAgain(store, item, row)) {
       continue
     }
     if (run.status === 'cancelled') {

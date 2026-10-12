@@ -15,7 +15,7 @@ export type QueuePatch = Partial<
   >
 >
 
-const PENDING_STATES = ['not_ready', 'ready', 'held'] as const
+export const PENDING_STATES = ['not_ready', 'ready', 'held'] as const
 // holdReason and holdDetail share the hold_reason column, stored as "<code>: <words>".
 const QUEUE_COLUMNS: Record<Exclude<keyof QueuePatch, 'holdReason' | 'holdDetail'>, string> = {
   state: 'state',

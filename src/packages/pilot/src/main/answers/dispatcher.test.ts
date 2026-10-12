@@ -429,9 +429,56 @@ describe('answerRunEnded (G6)', () => {
     s.store.runs.updateStep('ans-1', 0, { status: 'done', outputs })
     s.store.runs.update('ans-1', { status, finishedAt: 2 })
     const row = s.store.queue.forInboxItem(id)[0]
-    s.store.queue.update(row.id, { state: 'dispatched', dispatchedRunId: 'ans-1' }, 1)
+    // Sent once the answer settled.
+    s.store.queue.update(row.id, { state: 'dispatched', dispatchedRunId: 'ans-1' }, s.settle())
     return { ...s, id, row, end: () => answerRunEnded(s.store, s.store.runs.get('ans-1')!) }
   }
+
+  // Nish revises the card after its answer went to ans-1: the revision settles on its own, so ans-1's
+  // outcome never closes the card (losing the revision) nor hands it back.
+  function revise(s: ReturnType<typeof ended>, text: string): void {
+    s.settle()
+    saveAnswer(
+      s.inbox,
+      { id: s.id, text, digest: s.store.inbox.get(s.id)!.digest },
+      { callerKind: 'paired-device', catalog: { get: () => null } }
+    )
+  }
+
+  it.each<[string, Record<string, string>, 'done' | 'cancelled' | 'failed']>([
+    ['closes it', { outcome: 'set the e2e image', item_status: 'done' }, 'done'],
+    ['reopens it', { item_status: 'open', reply: 'Which?' }, 'done'],
+    ['was stopped', {}, 'cancelled'],
+    ['failed', {}, 'failed']
+  ])(
+    'revise then approve after dispatch: the old run that %s leaves the revised card waiting',
+    (_name, outputs, status) => {
+      const s = ended(outputs, status)
+      revise(s, 'unit')
+      s.end()
+      expect(s.store.inbox.get(s.id)).toMatchObject({
+        status: 'answered',
+        answer: expect.objectContaining({ text: 'unit' }),
+        replies: []
+      })
+      expect(s.store.queue.forInboxItem(s.id)).toMatchObject([
+        { id: s.row.id, state: 'dispatched', attempts: 0 },
+        { state: 'not_ready' }
+      ])
+    }
+  )
+
+  it('leaves a revised card alone once the revision itself was sent to another run', () => {
+    const s = ended({ outcome: 'set the e2e image', item_status: 'done' })
+    revise(s, 'unit')
+    const next = s.store.queue.forInboxItem(s.id)[1]
+    s.store.queue.update(next.id, { state: 'dispatched', dispatchedRunId: 'ans-2' }, s.settle())
+    s.end()
+    expect(s.store.inbox.get(s.id)).toMatchObject({
+      status: 'answered',
+      answer: expect.objectContaining({ text: 'unit' })
+    })
+  })
 
   it.each<[string, Record<string, string>, object]>([
     [
