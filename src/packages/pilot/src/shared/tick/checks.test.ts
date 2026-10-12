@@ -225,78 +225,50 @@ describe('session, quota and answers checks', () => {
   })
 })
 
-describe('merge request checks', () => {
+describe('merge request checks (gate fields)', () => {
   it.each<Case>([
     [
       'not approved',
       { kind: 'mr', rule: 'not_approved' },
-      { 'mr.iid': 7, 'mr.approved': false },
+      { 'mr.review_block': '' },
       true,
-      "!7 isn't approved"
+      'Mine, not merged or closed, and not approved'
     ],
     [
       'approved',
       { kind: 'mr', rule: 'not_approved' },
-      { 'mr.iid': 7, 'mr.approved': true },
+      { 'mr.review_block': '!1577 approved by alex1craig' },
       false,
-      '!7 is approved'
-    ],
-    [
-      'approval unknown',
-      { kind: 'mr', rule: 'not_approved' },
-      { 'mr.iid': 7 },
-      false,
-      "Couldn't tell whether !7 is approved"
-    ],
-    [
-      'open',
-      { kind: 'mr', rule: 'not_merged' },
-      { 'mr.iid': 7, 'mr.state': 'open' },
-      true,
-      '!7 is open'
+      '!1577 approved by alex1craig'
     ],
     [
       'merged',
       { kind: 'mr', rule: 'not_merged' },
-      { 'mr.iid': 7, 'mr.state': 'merged' },
+      { 'mr.finished_block': '!1453 merged' },
       false,
-      '!7 is merged'
+      '!1453 merged'
     ],
-    [
-      'closed',
-      { kind: 'mr', rule: 'not_merged' },
-      { 'mr.iid': 7, 'mr.state': 'closed' },
-      false,
-      '!7 is closed'
-    ],
-    ['mine', { kind: 'mr', rule: 'mine' }, { 'mr.iid': 7, 'mr.mine': true }, true, '!7 is yours'],
+    ['mine', { kind: 'mr', rule: 'mine' }, { 'mr.owner_block': '' }, true, 'Mine (or no MR yet)'],
     [
       "someone else's",
       { kind: 'mr', rule: 'mine' },
-      { 'mr.iid': 7, 'mr.mine': false, 'mr.author': 'shivan2418' },
+      { 'mr.owner_block': "!1588 is shivan2418's MR" },
       false,
-      "!7 isn't yours (author shivan2418)"
-    ],
-    [
-      'owner unknown',
-      { kind: 'mr', rule: 'mine' },
-      { 'mr.iid': 7 },
-      false,
-      "Couldn't tell whose MR !7 is"
+      "!1588 is shivan2418's MR"
     ],
     [
       'a draft',
       { kind: 'mr', rule: 'not_draft' },
-      { 'mr.iid': 7, 'mr.draft': true },
+      { 'mr.draft_block': '!1590 is a draft' },
       false,
-      '!7 is a draft'
+      '!1590 is a draft'
     ],
     [
-      'ready',
+      'no branch facts',
       { kind: 'mr', rule: 'not_draft' },
-      { 'mr.iid': 7, 'mr.draft': false },
-      true,
-      "!7 isn't a draft"
+      {},
+      false,
+      "Couldn't read the branch's merge requests"
     ]
   ])('%s', (_name, c, fields, ok, reason) => {
     expect(run(c, fields)).toEqual([ok, reason])

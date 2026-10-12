@@ -2,10 +2,10 @@ import type { CheckOutcome, FieldValue, ItemFields } from '../api-types'
 import type { AgentKind, CheckDef } from '../definition/types'
 import { evalExpr, parseExpr } from '../expr'
 import { localTimeOfDay } from '../schedule/cron'
+import { gateCheckOutcome, type MrRule } from './checks-gate'
 
 export type CheckResult = { ok: boolean; reason: string }
 export type CheckContext = { label: string; fields: ItemFields; now: number; timeZone: string }
-type MrRule = Extract<CheckDef, { kind: 'mr' }>['rule']
 
 const AGENT_NAME: Record<AgentKind, string> = { claude: 'Claude', codex: 'Codex' }
 const MR_RULE_NAME: Record<MrRule, string> = {
@@ -150,62 +150,6 @@ function quota(c: Extract<CheckDef, { kind: 'quota' }>, f: ItemFields): CheckRes
   return pass(`${name} at ${weekly ?? '?'}% weekly, ${session ?? '?'}% session`)
 }
 
-function mrRef(f: ItemFields): string {
-  const iid = f['mr.iid']
-  return iid === undefined || iid === null ? 'the MR' : `!${iid}`
-}
-
-function mr(rule: MrRule, f: ItemFields): CheckResult {
-  const ref = mrRef(f)
-  if (rule === 'not_merged') {
-    const state = f['mr.state']
-    if (state === 'merged' || state === 'closed') {
-      return fail(`${ref} is ${state}`)
-    }
-    return typeof state === 'string'
-      ? pass(`${ref} is ${state}`)
-      : fail(`Couldn't read ${ref}'s state`)
-  }
-  if (rule === 'not_approved') {
-    return yesNo(
-      f['mr.approved'],
-      fail(`${ref} is approved`),
-      pass(`${ref} isn't approved`),
-      `Couldn't tell whether ${ref} is approved`
-    )
-  }
-  if (rule === 'mine') {
-    const author = f['mr.author'] ?? 'unknown'
-    return yesNo(
-      f['mr.mine'],
-      pass(`${ref} is yours`),
-      fail(`${ref} isn't yours (author ${author})`),
-      `Couldn't tell whose MR ${ref} is`
-    )
-  }
-  return yesNo(
-    f['mr.draft'],
-    fail(`${ref} is a draft`),
-    pass(`${ref} isn't a draft`),
-    `Couldn't tell whether ${ref} is a draft`
-  )
-}
-
-function yesNo(
-  value: FieldValue | undefined,
-  ifTrue: CheckResult,
-  ifFalse: CheckResult,
-  unknown: string
-): CheckResult {
-  if (value === true) {
-    return ifTrue
-  }
-  if (value === false) {
-    return ifFalse
-  }
-  return fail(unknown)
-}
-
 function windowCheck(c: Extract<CheckDef, { kind: 'window' }>, ctx: CheckContext): CheckResult {
   const now = localTimeOfDay(ctx.now, ctx.timeZone)
   const wraps = c.start > c.end
@@ -247,7 +191,7 @@ function outcome(c: CheckDef, ctx: CheckContext, script: CheckResult | undefined
     case 'quota':
       return quota(c, ctx.fields)
     case 'mr':
-      return mr(c.rule, ctx.fields)
+      return gateCheckOutcome(c, ctx.fields)
     case 'window':
       return windowCheck(c, ctx)
     case 'answers_none_pending':
