@@ -155,3 +155,18 @@ describe('groupItems', () => {
     expect(KIND_ORDER).toEqual(['question', 'flagged', 'action', 'bug', 'left_for_you', 'default'])
   })
 })
+
+describe('a worktree group’s id hint', () => {
+  it('comes from a wt: item key, and reaches the section even when another card named the path', () => {
+    const out = groupItems(
+      [
+        row('a', 'bug', 1, of('mr:1', '/w/web-5')),
+        row('b', 'bug', 2, of('wt:repo-2::/w/web-5', null))
+      ],
+      AUTOMATIONS
+    )
+    expect(out).toHaveLength(1)
+    expect(out[0].group).toMatchObject({ key: 'wt:/w/web-5', worktreeId: 'repo-2::/w/web-5' })
+    expect(groupOf(of('mr:1', '/w/web-5'), AUTOMATIONS).worktreeId).toBeUndefined()
+  })
+})
