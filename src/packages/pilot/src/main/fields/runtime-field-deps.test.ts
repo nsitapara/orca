@@ -69,6 +69,18 @@ describe('runtimeFieldDeps', () => {
     )
   })
 
+  it('finds the git dir for an operation in progress with optional locks off too', async () => {
+    const git = vi.fn(async () => ({ stdout: '/nowhere/.git\n' }))
+    expect(await runtimeFieldDeps(runtimeWith(), store, { git }).gitOperation('/wt')).toBeNull()
+    expect(git).toHaveBeenCalledWith(
+      ['rev-parse', '--git-dir'],
+      expect.objectContaining({
+        cwd: '/wt',
+        env: expect.objectContaining({ GIT_OPTIONAL_LOCKS: '0' })
+      })
+    )
+  })
+
   it('reads the unsent draft from the rendered screen', async () => {
     const readTerminal = vi.fn(async () => ({ handle: 't1', tail: [], draft: 'half a prompt' }))
     const deps = runtimeFieldDeps(runtimeWith({ readTerminal }), store)

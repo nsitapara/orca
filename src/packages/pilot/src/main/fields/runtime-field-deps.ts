@@ -84,7 +84,10 @@ export function runtimeFieldDeps(
       return countGitStatus(stdout)
     },
     async gitOperation(path) {
-      const { stdout } = await git(['rev-parse', '--git-dir'], { cwd: path })
+      const { stdout } = await git(['rev-parse', '--git-dir'], {
+        cwd: path,
+        env: gitOptionalLocksDisabledEnv()
+      })
       const gitDir = stdout.trim()
       return detectGitOperation(isAbsolute(gitDir) ? gitDir : join(path, gitDir))
     },
