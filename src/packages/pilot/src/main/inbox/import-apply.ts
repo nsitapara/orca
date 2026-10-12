@@ -1,5 +1,6 @@
 import type { InboxAnswer } from '../../shared/api-types'
 import type { InboxAddParams } from '../../shared/inbox-types'
+import { SENT_BEFORE_PILOT } from '../../shared/pilot-replies'
 import { SETTLE_MS } from '../answers/save'
 import {
   reportOf,
@@ -43,8 +44,7 @@ function createRun(deps: InboxDeps, run: ImportRun): boolean {
   return true
 }
 
-export const SENT_BEFORE_PILOT =
-  'Sent to the session before Pilot took over. Tick it (pilot inbox tick) once the session is done.'
+export { SENT_BEFORE_PILOT }
 
 class Skipped extends Error {}
 

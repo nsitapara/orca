@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import type { InboxItemRow, ItemFields } from '../../shared/api-types'
 import type { InboxAddParams, InboxAddResult } from '../../shared/inbox-types'
+import { CHANGED_AFTER_ANSWER } from '../../shared/pilot-replies'
 import type { NewInboxItem } from '../store/store-inbox'
 import { buildCard, inboxDigest, type InboxCard } from './card'
 import { inboxEvent, syncRunWaiting, WAITING, type InboxDeps } from './inbox-service'
@@ -10,7 +11,7 @@ import { fieldsForRun, latestFieldsFor } from './run-fields'
 export const SKIPPED_BEFORE =
   'Skipped before with the same arguments; not offered again until they change'
 export const SAME_CARD_OPEN = 'same card already open'
-export const CHANGED_AFTER_ANSWER = 'The card changed after you answered; answer this version.'
+export { CHANGED_AFTER_ANSWER }
 
 type Origin = {
   automationId: string

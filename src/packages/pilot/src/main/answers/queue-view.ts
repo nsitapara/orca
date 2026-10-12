@@ -3,7 +3,9 @@ import type { InboxAnswer, InboxItemRow } from '../../shared/api-types'
 import type { QueueEntry, QueueHow } from '../../shared/inbox-types'
 import { personSees, type InboxDeps } from '../inbox/inbox-service'
 
-export const APPROVE_ON_DESKTOP = 'Approve actions in Pilot on this Mac'
+import { APPROVE_ON_DESKTOP } from '../../shared/pilot-replies'
+
+export { APPROVE_ON_DESKTOP }
 
 export type CatalogLookup = { get(name: string): unknown }
 

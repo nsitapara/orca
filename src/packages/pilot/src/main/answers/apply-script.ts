@@ -7,15 +7,14 @@ import {
   reviseInboxItem,
   type InboxDeps
 } from '../inbox/inbox-service'
+import { CARD_CHANGED, INTERRUPTED_AGAIN } from '../../shared/pilot-replies'
 import { ACTION_INTERRUPTED } from '../store/store-actions'
 import { APPROVE_ON_DESKTOP } from './queue-view'
 
 // apply.py CARD_CHANGED / ASKED_AGAIN. An approval from anywhere but Pilot's desktop app is re-asked with
 // APPROVE_ON_DESKTOP (apply.py's PAGE_ONLY, under the desktop-only ruling).
-export const CARD_CHANGED = 'The card changed after you approved it; approve the version shown now.'
+export { CARD_CHANGED, INTERRUPTED_AGAIN }
 export const ASKED_AGAIN = ' since you approved; approve this version to go ahead. '
-export const INTERRUPTED_AGAIN =
-  'Pilot stopped while this action ran, so it may or may not have happened; check, then approve it again.'
 
 export type ScriptStep =
   | { kind: 'done' }
