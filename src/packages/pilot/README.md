@@ -1,6 +1,6 @@
 # Pilot
 
-Pilot is Nish's fork of Orca (`github.com/nsitapara/orca`), with Automations rebuilt: automations that check each MR, worktree or ticket, a Waiting on you inbox, timelines and agent actions. The spec and decision log are in the Obsidian vault: `Agent Work/Automation platform - Spec.md` and `Agent Work/Automation platform.md`.
+Pilot is Nish's fork of Orca (`github.com/nsitapara/orca`), with Automations rebuilt: automations that check each MR, worktree or ticket, an Inbox, timelines and agent actions. The spec and decision log are in the Obsidian vault: `Agent Work/Automation platform - Spec.md` and `Agent Work/Automation platform.md`.
 
 - **The drop-in rule:** everything Pilot adds lives in this folder. Upstream files only gain the hooks listed in `HOOKS.md`.
 - **Update from upstream:** `node src/packages/pilot/scripts/update.mjs` (see the script's `--help`).
@@ -179,9 +179,9 @@ A shell step's `run:` is plain shell. It takes no `{placeholders}`; validation r
 - **Never** use an env value in `$(( ))`, `(( ))`, `let`, `declare -i`, an array subscript, `[[ -eq ]]`, `eval`, or `sh -c "…$NAME…"`. The shell evaluates those as code. Quote it as `"$NAME"`, or validate it first.
 - **Never** put an item value in an env name that another program executes: `NODE_OPTIONS`, `GIT_SSH_COMMAND`, `GIT_CONFIG_*`, `PERL5OPT`, `JAVA_TOOL_OPTIONS`, `SHELL`, `EDITOR`, `PAGER`. Validation doesn't block these.
 
-## Waiting on you and Details bundles
+## Inbox and Details bundles
 
-The sidebar's **Waiting on you** item sits under Automations, with a count of the cards waiting on you. Clicking **Automations** leaves it, and the Waiting on you sub-view persists after you leave the page; the highlight always matches what is shown.
+The sidebar's **Inbox** item sits under Automations, with a count of the cards waiting on you. Clicking **Automations** leaves it, and the Inbox sub-view persists after you leave the page; the highlight always matches what is shown.
 
 A card carries its Details as markdown (`--details-file`) or as a structured **Details bundle** (`--details-bundle`), never both. The page renders a bundle as facts, diffs, reviews, screens and shots.
 
@@ -203,7 +203,7 @@ The calendar-clock icon in the right sidebar shows the active worktree's automat
 - **Next:** each automation's last check on this worktree, with its reason and when it ticks again. The ones with nothing due fold away.
 - **Now** and **Earlier today:** the runs here. Each shows its status, cost and outcome, what it asked, and its steps on demand: agent or shell, mode, status, cost, outputs.
 - **Resume** on an agent step switches to its tab while it's open. Otherwise it reopens the session (`claude --resume <id>`, `codex resume <id>`) in a new tab in the worktree.
-- **Waiting on you:** this worktree's open items. They're answered on the Waiting on you page.
+- **Inbox:** this worktree's open items. They're answered on the Inbox page.
 - **The badge:** the icon counts what waits on you here, or shows a dot while a run is going (hook `right-sidebar-badge`).
 
 An automation's Activity tab shows the same run cards: the run status in plain words (Asking first, Running, Needs you, Done, Failed, Timed out, Cancelled), the steps with Resume, and what each run asked. Its Overview lists the steps in order.
@@ -247,7 +247,7 @@ The order, behaviour changes and follow-ups come from the build (`go-live-notes.
 
 **Order:**
 1. Close out what Orca still has open. Let a running Orca 03 review cycle finish. Close any open Orca 04 QA run or dispatched fix: a stale Orca `run.json` that isn't `done` blocks every Pilot 04 night at `stack`.
-2. Import the open vault cards: Waiting on you, "Import open vault cards" (applying needs Pilot's own window). After you rebuild Pilot, run "Import open vault cards" again: it fills Details into the open, unanswered imported cards, and the go-live check's "Card details" line shows what is left. From now on answer only in Pilot (Waiting on you): the old answers page is read-only on the Pilot backend.
+2. Import the open vault cards: Inbox, "Import open vault cards" (applying needs Pilot's own window). After you rebuild Pilot, run "Import open vault cards" again: it fills Details into the open, unanswered imported cards, and the go-live check's "Card details" line shows what is left. From now on answer only in Pilot (Inbox): the old answers page is read-only on the Pilot backend.
 3. Import each job's old state before enabling it: `pilot automations import-state --id <id>` (preview), then `--apply`. 03 and 04 need their `seen.json` first. 08 must be imported before Pilot first writes its own `usage.json` (the hand-over above). 12's sent answers come in as dispatched.
 4. Connect Linear in Pilot (Settings) before enabling 13 and M01. Pilot can't read Orca's Linear credential (see the Known gaps).
 5. Enable the YAMLs one at a time: `pilot automations enable --id <id>`. Keep Orca's copies disabled.
@@ -270,7 +270,7 @@ The order, behaviour changes and follow-ups come from the build (`go-live-notes.
 - **03:** needs both agents' quota (it checked only the lead's).
 - **M01:** a quota-out tick skips every ticket (it deferred the fourth). A worktree linked to a ticket under another name isn't reused. A started ticket whose worktree was deleted isn't restarted.
 - **13:** a "Failed again" comment waits while quota is out. A canceled ticket is absent.
-- **05, 06, 03, 04:** worktree flags point at "Waiting on you in Pilot", not the old localhost link.
+- **05, 06, 03, 04:** worktree flags point at "Inbox in Pilot", not the old localhost link.
 - **04:** the old `loop.py status` shows a Pilot run in progress as `start_failed`. The old sweep leaves the run alone until its deadline plus 10 minutes.
 - **Leftovers:** M04 worktrees aren't cleaned up (as before). M03's `INSTRUCTIONS.md` still says "manual Orca automation"; reword it at go-live.
 
@@ -344,7 +344,7 @@ These need a phone, a second Mac and an iPad on Tailscale. Open Pilot (`dist/mac
 - **Recommended follow-ups** (parked, not done):
   - Per-step or propose-only powers, so card approval is the only path for 09's `post` and 05's answers `push`. Today only the prompt keeps an agent from using its automation's power, as under Orca.
   - Sandbox agents. 04's Codex runs with `--dangerously-bypass-approvals-and-sandbox`, as Orca's launch did.
-  - The Waiting on you page has no "done" button (imported already-sent cards need `pilot inbox tick`), and the vault-import preview doesn't list the session ids it will resume.
+  - The Inbox page has no "done" button (imported already-sent cards need `pilot inbox tick`), and the vault-import preview doesn't list the session ids it will resume.
   - The Agent Console page doesn't yet display the `also_on` flag.
   - A paired device can't approve actions. `pilot.inbox.tick` and `reply` act on any card id (as the old vault did); they could be scoped to the caller's automation.
   - A `mr: mine` check on 05 would close the "teammate's newer MR from my branch" edge, which the old sweep also left open.

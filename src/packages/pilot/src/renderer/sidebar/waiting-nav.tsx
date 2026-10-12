@@ -32,13 +32,13 @@ export function useWaitingTotal(): number {
   return total
 }
 
-// Automations is not highlighted while the Waiting on you view shows.
+// Automations is not highlighted while the Inbox view shows.
 export function useAutomationsActive(pageOpen: boolean): boolean {
   const view = usePilotAutomationsView()
-  return pageOpen && view !== 'waiting'
+  return pageOpen && view !== 'inbox'
 }
 
-// Clicking Automations leaves the Waiting on you view, and always lands on the list: an automation that was
+// Clicking Automations leaves the Inbox view, and always lands on the list: an automation that was
 // open is closed even when the view was already Automations.
 export function useOpenAutomations(open: () => void): () => void {
   return useCallback(() => {
@@ -68,9 +68,9 @@ function WaitingNavButton(): React.JSX.Element {
   const total = useWaitingTotal()
   const view = usePilotAutomationsView()
   const activeView = useActiveView()
-  const active = activeView === 'automations' && view === 'waiting'
+  const active = activeView === 'automations' && view === 'inbox'
   const open = (): void => {
-    setPilotAutomationsView('waiting')
+    setPilotAutomationsView('inbox')
     pilotStore()?.getState().openAutomationsPage?.()
   }
   return (
@@ -89,7 +89,7 @@ function WaitingNavButton(): React.JSX.Element {
         className={cn('size-4 shrink-0', !active && 'text-worktree-sidebar-foreground/30')}
         strokeWidth={active ? 2.25 : 1.75}
       />
-      <span className="flex-1">Waiting on you</span>
+      <span className="flex-1">Inbox</span>
       {total > 0 ? (
         <span className="shrink-0 rounded-full bg-primary px-1.5 py-px text-[10px] font-semibold text-primary-foreground">
           {total}

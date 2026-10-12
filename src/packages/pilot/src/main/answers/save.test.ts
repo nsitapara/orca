@@ -166,7 +166,7 @@ const START = {
 describe('who may answer (caller kind x card)', () => {
   it('says where to approve and where to answer', () => {
     expect(APPROVE_ON_DESKTOP).toBe('Approve actions in Pilot on this Mac')
-    expect(LOCAL_CLI_NO_ANSWER).toBe('Answer cards in Pilot (Waiting on you)')
+    expect(LOCAL_CLI_NO_ANSWER).toBe('Answer cards in Pilot (Inbox)')
   })
 
   it.each<[string, string | null, Record<string, unknown>, string, string | null]>([

@@ -4,7 +4,7 @@ import { GLOBAL_FLAGS } from '../../../../cli/args'
 export const INBOX_COMMAND_SPECS: CommandSpec[] = [
   {
     path: ['inbox', 'add'],
-    summary: 'Add a card to Waiting on you: a question, a flag, or a proposed action',
+    summary: 'Add a card to the Inbox: a question, a flag, or a proposed action',
     usage:
       'pilot inbox add --type <question|flagged|default|action|bug|left_for_you> --title <text> [--context <text>] [--suggested <text>] [--option "<label> — <meaning>"]... [--details-file <path> | --details-bundle <path>] [--action <name> --args-json <json object>] [--part <id>=<label>]... [--switch <on> --switch <off>] [--worktree <path>] [--automation <id> --item <key>] [--json]',
     allowedFlags: [
@@ -69,7 +69,7 @@ export const INBOX_COMMAND_SPECS: CommandSpec[] = [
   {
     path: ['inbox', 'answer'],
     summary:
-      "Answer a card from a paired device (--host); on this Mac answers go through Pilot's Waiting on you",
+      "Answer a card from a paired device (--host); on this Mac answers go through Pilot's Inbox",
     usage: 'pilot inbox answer --id <id> (--option <n> | --text <answer>) [--json]',
     allowedFlags: [...GLOBAL_FLAGS, 'id', 'option', 'text'],
     examples: [
@@ -77,7 +77,7 @@ export const INBOX_COMMAND_SPECS: CommandSpec[] = [
       'pilot inbox answer --id q1 --text "Rebase first"'
     ],
     notes: [
-      'Answers on this machine go through Pilot (Waiting on you): the local CLI is refused. Reach a host as a paired device with --host runtime:<name>. A paired device answers questions, skips and revises; approving an action is Pilot on the Mac only.'
+      'Answers on this machine go through Pilot (Inbox): the local CLI is refused. Reach a host as a paired device with --host runtime:<name>. A paired device answers questions, skips and revises; approving an action is Pilot on the Mac only.'
     ]
   }
 ]

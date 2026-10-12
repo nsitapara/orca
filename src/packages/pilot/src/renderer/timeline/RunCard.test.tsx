@@ -39,7 +39,7 @@ describe('RunCard', () => {
     )
     expect(screen.getByText('Needs you')).toBeTruthy()
     expect(screen.getByText('Push the fix?')).toBeTruthy()
-    expect(screen.getByText('Waiting on you:')).toBeTruthy()
+    expect(screen.getByText('Inbox:')).toBeTruthy()
     expect(screen.getByText('Answered:')).toBeTruthy()
   })
 })

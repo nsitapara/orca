@@ -135,13 +135,13 @@ describe('runEnd', () => {
       'needs_you with open items',
       [ended('a', 'done')],
       2,
-      { status: 'needs_you', outcome: 'Waiting on you: 2 open items' }
+      { status: 'needs_you', outcome: 'Inbox: 2 open items' }
     ],
     [
       'needs_you with one open item',
       [ended('a', 'done')],
       1,
-      { status: 'needs_you', outcome: 'Waiting on you: 1 open item' }
+      { status: 'needs_you', outcome: 'Inbox: 1 open item' }
     ],
     [
       'done when only a cleanup step failed',

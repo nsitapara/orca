@@ -6,7 +6,7 @@ export type PilotStoreState = {
   // Read by the Automations panel. Optional so the sidebar hooks' test fakes stay valid.
   activeWorktreeId?: string | null
   getKnownWorktreeById?(worktreeId: string): { path: string } | undefined
-  // Read by the sidebar's Waiting on you item.
+  // Read by the sidebar's Inbox item.
   activeView?: string
   openAutomationsPage?(): void
   settings?: { showAutomationsButton?: boolean } | null

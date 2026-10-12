@@ -58,7 +58,7 @@ export function applyImport(store: PilotStore, plan: ImportPlan, now: number): I
     unmatched > 0
       ? [
           ...plan.notes,
-          `${unmatched} answer(s) already sent have no imported card to mark; import the open vault cards in Pilot (Waiting on you) first`
+          `${unmatched} answer(s) already sent have no imported card to mark; import the open vault cards in Pilot (Inbox) first`
         ]
       : plan.notes
   return {

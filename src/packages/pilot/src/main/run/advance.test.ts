@@ -271,13 +271,7 @@ describe('createRunEngine', () => {
 
   it.each([
     ['timed_out when a step timed out', 'timed_out', false, 'timed_out', 'Step review timed out'],
-    [
-      'needs_you when an inbox item is still open',
-      'done',
-      true,
-      'needs_you',
-      'Waiting on you: 1 open item'
-    ]
+    ['needs_you when an inbox item is still open', 'done', true, 'needs_you', 'Inbox: 1 open item']
   ] as const)('ends the run %s', async (_n, firstEnd, openItem, status, outcome) => {
     const { store, engine, end, db } = setup()
     await startRun(engine)

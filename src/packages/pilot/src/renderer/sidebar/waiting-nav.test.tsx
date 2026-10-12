@@ -70,12 +70,12 @@ describe('waiting nav', () => {
     })
     render(<WaitingNavItem />)
     const button = await screen.findByRole('button', {
-      name: /Waiting on you/
+      name: /Inbox/
     })
     expect(await screen.findByText('2')).toBeTruthy()
     expect(button.getAttribute('aria-current')).toBeNull()
     fireEvent.click(button)
-    expect(pilotAutomationsView()).toBe('waiting')
+    expect(pilotAutomationsView()).toBe('inbox')
     expect(openAutomationsPage).toHaveBeenCalledTimes(1)
   })
 
@@ -83,15 +83,15 @@ describe('waiting nav', () => {
     useStore({ activeView: 'automations' })
     pilotRpc.mockResolvedValue({ items: [] })
     render(<WaitingNavItem />)
-    const button = screen.getByRole('button', { name: /Waiting on you/ })
+    const button = screen.getByRole('button', { name: /Inbox/ })
     expect(button.getAttribute('aria-current')).toBeNull()
-    act(() => setPilotAutomationsView('waiting'))
+    act(() => setPilotAutomationsView('inbox'))
     expect(button.getAttribute('aria-current')).toBe('page')
     expect(renderHook(() => useAutomationsActive(true)).result.current).toBe(false)
   })
 
   it('the wrapped open leaves the waiting view first', () => {
-    setPilotAutomationsView('waiting')
+    setPilotAutomationsView('inbox')
     const open = vi.fn(() => expect(pilotAutomationsView()).toBe('automations'))
     const { result } = renderHook(() => useOpenAutomations(open))
     result.current()
@@ -109,7 +109,7 @@ describe('waiting nav', () => {
     useStore({ activeView: 'mobile' })
     pilotRpc.mockRejectedValue(new Error('down'))
     render(<WaitingNavItem />)
-    await screen.findByRole('button', { name: /Waiting on you/ })
+    await screen.findByRole('button', { name: /Inbox/ })
     await act(async () => {})
     expect(screen.queryByText('0')).toBeNull()
   })

@@ -27,7 +27,7 @@ const ApplyNow = z.object({ ids: z.array(z.string().min(1)).max(200).optional() 
 const ImportVault = z.object({ apply: z.boolean() })
 
 export const IMPORT_NO_CALLER = "Pilot can't tell who is calling; nothing was imported"
-export const IMPORT_APPLY_DESKTOP = 'Apply the vault import in Pilot (Waiting on you)'
+export const IMPORT_APPLY_DESKTOP = 'Apply the vault import in Pilot (Inbox)'
 
 // Worktree ids by path for the worktree-kind automations' item keys; an unreadable repo just leaves them out.
 async function worktreeIds(

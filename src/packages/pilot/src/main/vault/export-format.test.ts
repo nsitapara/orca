@@ -111,7 +111,7 @@ describe('itemsBlock', () => {
   })
   it('stamps its heading', () => {
     expect(itemsBlock('ci', [item], () => 'b', AT)).toContain(
-      '## Waiting on you in Pilot · 2026-10-11 09:05'
+      '## Inbox in Pilot · 2026-10-11 09:05'
     )
   })
   it("escapes HTML comment openers, so agent text can't forge or hide a block marker", () => {
