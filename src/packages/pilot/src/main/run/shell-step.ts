@@ -54,7 +54,8 @@ export const runShell: ShellRunner = async (spec) => {
       env: spec.env,
       timeoutMs: spec.timeoutMs,
       maxOutputBytes: SHELL_CAPTURE_BYTES,
-      detached: true
+      // Its own process group (detached), and on a timeout the whole tree is stopped, not just /bin/sh.
+      terminationBarrier: true
     },
     'tail'
   )
