@@ -181,4 +181,44 @@ describe('inbox RPC', () => {
     }) as { id: string }
     expect(store.inbox.get(added.id)).toMatchObject({ runId: null, itemKey: 'mr:1' })
   })
+
+  it.each([
+    ['a terminal-bound step', { terminal: 'term-9' }],
+    ['the env step', { runId: 'run-2', stepIdx: 0 }],
+    ['a run without a step', { runId: 'run-2' }]
+  ])('takes worktree, automation and item from the run on %s', (_name, target) => {
+    const { store, call } = setup()
+    store.runs.create({
+      id: 'run-2',
+      automationId: 'ci',
+      tickId: null,
+      itemKey: 'mr:2',
+      itemLabel: '!2',
+      worktreePath: '/wt2',
+      startedAt: 2
+    })
+    store.runs.createStep({
+      runId: 'run-2',
+      idx: 0,
+      name: 's',
+      agent: 'claude',
+      skill: null,
+      mode: null,
+      startedAt: 2
+    })
+    store.runs.updateStep('run-2', 0, { status: 'running', terminalHandle: 'term-9' })
+    const added = call('pilot.inbox.add', {
+      ...target,
+      automationId: 'other',
+      itemKey: 'mr:99',
+      worktreePath: '/wt/elsewhere',
+      type: 'question',
+      title: 'Q?'
+    }) as { id: string }
+    expect(store.inbox.get(added.id)).toMatchObject({
+      automationId: 'ci',
+      itemKey: 'mr:2',
+      worktreePath: '/wt2'
+    })
+  })
 })

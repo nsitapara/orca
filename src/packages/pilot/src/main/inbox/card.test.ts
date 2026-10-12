@@ -31,7 +31,19 @@ describe('buildCard', () => {
       { ...PUSH, parts: { 'F 1': 'x' } },
       'Part id "F 1" must be letters, digits, dots, dashes or underscores'
     ],
-    [{ ...PUSH, detailsMd: 'x'.repeat(64 * 1024 + 1) }, 'Details are limited to 64 KB']
+    [{ ...PUSH, detailsMd: 'x'.repeat(64 * 1024 + 1) }, 'Details are limited to 64 KB'],
+    [
+      { ...PUSH, actionArgs: { argv: ['x'.repeat(16 * 1024)] } },
+      'Action arguments are limited to 16 KB'
+    ],
+    [
+      { ...PUSH, parts: Object.fromEntries(Array.from({ length: 21 }, (_, i) => [`p${i}`, 'x'])) },
+      'A card can have at most 20 parts'
+    ],
+    [
+      { ...PUSH, options: Array.from({ length: 11 }, () => 'x') },
+      'A card can have at most 10 options'
+    ]
   ])('refuses %#', (params, message) => expect(() => buildCard(params)).toThrow(message))
 
   it('collapses text to one line and keeps the pinned arguments', () => {

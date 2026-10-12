@@ -4,12 +4,13 @@ import { renderTemplate } from '../../shared/template'
 
 // Contract §10: the automation's `inbox` template, rendered with the item's fields, names a person id, a
 // group id, or a GitLab handle. A card that names nobody Pilot knows goes to the first person in
-// people.yaml (routed: false, so the caller records it), so a card is never lost.
+// people.yaml (routed: false, so the caller records it), so a card is never lost. With no people at all
+// there is nobody to address: person is null and the caller refuses.
 export function resolveInboxPerson(
   template: string,
   fields: ItemFields,
   people: PeopleDirectory
-): { person: string; routed: boolean } {
+): { person: string | null; routed: boolean } {
   const rendered = renderTemplate(template, fields).text.trim()
   if (
     people.people.some((p) => p.id === rendered) ||
@@ -21,5 +22,5 @@ export function resolveInboxPerson(
   if (byHandle) {
     return { person: byHandle.id, routed: true }
   }
-  return { person: people.people[0]?.id ?? rendered, routed: false }
+  return { person: people.people[0]?.id ?? null, routed: false }
 }

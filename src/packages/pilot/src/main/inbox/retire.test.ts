@@ -115,4 +115,20 @@ describe('InboxRetirer', () => {
     expect(await retirer.pass()).toBe(0)
     expect(get).not.toHaveBeenCalled()
   })
+
+  it('keeps retiring the rest when a card was ticked while the pass was waiting on GitLab', async () => {
+    const { store, inbox, retirer, get } = setup(() => 'merged')
+    addInboxItem(inbox, CARD)
+    addInboxItem(inbox, { ...CARD, title: 'Second?' })
+    get.mockImplementationOnce(async () => {
+      store.inbox.update('in_0000000000000001', { status: 'done', outcome: 'kept' }, 1000)
+      return { iid: 1561, state: 'merged' } as never
+    })
+    expect(await retirer.pass()).toBe(1)
+    expect(store.inbox.get('in_0000000000000001')).toMatchObject({
+      status: 'done',
+      outcome: 'kept'
+    })
+    expect(store.inbox.get('in_0000000000000002')?.status).toBe('obsolete')
+  })
 })
