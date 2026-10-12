@@ -4,6 +4,8 @@ import { join } from 'node:path'
 import { expect, it } from 'vitest'
 import type { ItemFields, StepStatus } from '../../src/shared/api-types'
 import type { AutomationDefinition, StepDef } from '../../src/shared/definition/types'
+import { closeRun } from '../../src/main/run/run-close'
+import { PilotStore } from '../../src/main/store/store'
 import { decideStep, runEnd, type EndedStep } from '../../src/shared/run/step-plan'
 import { stepFields, type StepResult } from '../../src/shared/template'
 import { JOB_03, PARITY_03 } from './jobs/job-03'
@@ -26,7 +28,7 @@ function broke(s: EndedStep): boolean {
 function simulate(
   def: AutomationDefinition,
   outcome: (step: StepDef, fields: ItemFields) => Ended
-): { ran: string[]; status: string } {
+): { ran: string[]; status: string; outcome: string; ended: EndedStep[] } {
   const rows: StepResult[] = []
   const ended: EndedStep[] = []
   const ran: string[] = []
@@ -43,7 +45,18 @@ function simulate(
     rows.push({ name: step.name, status: result.status, exitCode: null, outputs: result.outputs })
     ended.push({ name: step.name, status: result.status, always: step.always, error: null })
   })
-  return { ran, status: runEnd(ended, 0).status }
+  const end = runEnd(ended, 0)
+  return { ran, status: end.status, outcome: end.outcome, ended }
+}
+
+// The events closeRun records as the run ends (an `always_step_failed` per broken always step), on a scratch store.
+function closingEvents(ended: EndedStep[]): { kind: string; payload: unknown }[] {
+  const store = PilotStore.open(join(mkdtempSync(join(tmpdir(), 'parity-03-close-')), 'db.sqlite'))
+  const run = { id: 'run-1', automationId: 'review-branch-code', tickId: null, itemKey: 'wt:1' }
+  store.runs.create({ ...run, itemLabel: 'web-1', worktreePath: '/wt/web-1', startedAt: 1 })
+  const row = store.runs.get('run-1')!
+  closeRun({ store, now: () => 2, log: () => {} }, row, runEnd(ended, 0), { ended })
+  return store.events.forRun('run-1').map((e) => ({ kind: e.kind, payload: e.payload }))
 }
 
 // How a round's step ends on the Pilot side (pilot_mode.handoff, pinned by its Python tests): `changed` always, `blocked`
@@ -150,6 +163,9 @@ describeParity(PARITY_03, "03 · the YAML's steps run the rounds loop.py's hand-
       // complete: the run is done and the marker moves; stopped or abandoned: it fails and the commits stay due
       expect(status === 'done').toBe(expected.end === 'complete')
       expect(ran.includes('publish')).toBe(expected.end === 'complete')
+      // drafting follows only a completed cycle; with nothing picked, the draft step never starts
+      expect(ran.includes('drafts')).toBe(expected.end === 'complete')
+      expect(ran.includes('draft')).toBe(false)
       // a stopped cycle stays unflagged, as in the sweep; an abandoned one is flagged by the next cycle's begin
       expect(ran.includes('flag_failed')).toBe(false)
     }
@@ -160,10 +176,49 @@ describeParity(PARITY_03, "03 · the YAML's steps run the rounds loop.py's hand-
       step.name === 'begin'
         ? { status: 'failed', outputs: {} }
         : play('claude', ['no', 'no'])(step, fields)
-    expect(simulate(def!, failsToStart)).toEqual({
+    expect(simulate(def!, failsToStart)).toMatchObject({
       ran: ['begin', 'flag_failed'],
       status: 'failed'
     })
+  })
+
+  // The two drafting steps are `always`: they run after a completed cycle whatever publish did, and nothing they do
+  // changes how the run ends.
+  const picks =
+    (draft: ItemFields, ends: StepStatus = 'done') =>
+    (step: StepDef, fields: ItemFields): Ended => {
+      if (step.name === 'drafts') {
+        return { status: 'done', outputs: draft }
+      }
+      if (step.name === 'draft') {
+        return { status: ends, outputs: {} }
+      }
+      return play('claude', ['no', 'no'])(step, fields)
+    }
+
+  it("skips both drafting steps when complete failed, and the run fails for complete's reason only", () => {
+    const { ran, status, outcome } = simulate(def!, play('claude', ['none']))
+    expect(ran.filter((s) => s.startsWith('draft'))).toEqual([])
+    expect([status, outcome]).toEqual(['failed', 'Step complete failed'])
+  })
+
+  it('skips the draft step when drafts picks nothing, and the run is done', () => {
+    const { ran, status, outcome } = simulate(
+      def!,
+      picks({ draft: 'no', reason: 'nothing to draft' })
+    )
+    expect(ran.slice(-2)).toEqual(['publish', 'drafts'])
+    expect([status, outcome]).toEqual(['done', 'Done'])
+  })
+
+  it('keeps the run done when the draft step fails, with an always_step_failed event', () => {
+    const picked = { draft: 'yes', cards: 'in_0000000000000001', head: 'c'.repeat(40) }
+    const { ran, status, outcome, ended } = simulate(def!, picks(picked, 'failed'))
+    expect(ran.slice(-3)).toEqual(['publish', 'drafts', 'draft'])
+    expect([status, outcome]).toEqual(['done', 'Done; cleanup step draft failed'])
+    expect(closingEvents(ended)).toEqual([
+      { kind: 'always_step_failed', payload: { step: 'draft', status: 'failed', error: null } }
+    ])
   })
 
   it('every ending the old hand-offs know is covered', () => {
