@@ -17,7 +17,12 @@ import { definitionIo, liveDefinitions } from './definitions/live'
 import { buildInboxDeps } from './inbox/inbox-service'
 import type { LoadedDefinitions } from './definitions/loader'
 import { mergeRepoProblems, type RepoProblem } from './definitions/repo-problems'
-import { pilotAutomationDirs, pilotDataDir, pilotVaultAutomationsDir } from './env'
+import {
+  pilotAutomationDirs,
+  pilotDataDir,
+  pilotDetailsRoot,
+  pilotVaultAutomationsDir
+} from './env'
 import { resolveEngineEnv, type EngineEnv } from './engine-env'
 import { runtimeActivity } from './fields/activity-facts'
 import { cachedQuotas, type QuotaReader } from './fields/quota'
@@ -68,6 +73,8 @@ export type PilotContext = {
   engineEnv?: EngineEnv
   // Opens or focuses a step's agent session (pilot.session.resume); absent where there is no runtime.
   resumeSession?: (req: { runId: string; stepIdx: number }) => Promise<SessionResumeResult>
+  // The Automations folder every card's Details bundle must live in; null reads no bundle.
+  detailsRoot?: string | null
 }
 export type PilotServices = { stop: () => void; context: PilotContext }
 // What pilot.status reads. It is registered before anything opens, so status still answers (with
@@ -101,6 +108,7 @@ function openPilot(
 ): PilotContext {
   const now = Date.now
   const schedulerOn = options.schedulerEnabled ?? false
+  const detailsRoot = pilotDetailsRoot()
   mkdirSync(host.dataDir, { recursive: true })
   const store = PilotStore.open(join(host.dataDir, 'pilot-automations.db'))
   opened.push(() => store.close())
@@ -176,7 +184,8 @@ function openPilot(
     definitions: () => definitions.current().definitions,
     people: () => definitions.current().people,
     actions,
-    onResolved: (item) => cancelUnstartedRun(store, item, now())
+    onResolved: (item) => cancelUnstartedRun(store, item, now()),
+    detailsRoot
   })
   const tickDeps: TickDeps = {
     store,
@@ -263,6 +272,7 @@ function openPilot(
     dispatcher,
     schedulerOn,
     engineEnv,
+    detailsRoot,
     writeUsageReport: (dir) => usageReports.write(dir),
     resumeSession: (req) => resumeStepSession(runtimeResumeDeps(runtime, store, fieldDeps), req)
   }

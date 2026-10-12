@@ -1,0 +1,9 @@
+diff --git a/apps/staff/src/components/Pages/Family/PgtmReview/usePgtmWorkspaceRouting.ts b/apps/staff/src/components/Pages/Family/PgtmReview/usePgtmWorkspaceRouting.ts
+--- a/apps/staff/src/components/Pages/Family/PgtmReview/usePgtmWorkspaceRouting.ts
++++ b/apps/staff/src/components/Pages/Family/PgtmReview/usePgtmWorkspaceRouting.ts
+@@ -194,4 +194,4 @@ export function usePgtmWorkspaceRouting() {
+   const pending = useHasEdits()
+-  useBlocker(true)
++  useBlocker(pending)
+   return routing
+ }

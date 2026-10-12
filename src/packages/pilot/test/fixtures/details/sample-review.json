@@ -1,0 +1,137 @@
+{
+ "iid": 1579,
+ "title": "Example MR",
+ "web_url": "https://gitlab.com/polygenx/web-platform/-/merge_requests/1579",
+ "project": "polygenx/web-platform",
+ "head_sha": "815b38670000",
+ "diff_refs": {
+  "base_sha": "a",
+  "head_sha": "815b38670000",
+  "start_sha": "b"
+ },
+ "reviewer": {
+  "name": "Nish Sitapara",
+  "username": "nish8"
+ },
+ "parts": [
+  {
+   "id": "1",
+   "hash": "ad038928b6d8",
+   "file": "api/families/history_version.py",
+   "line": 210,
+   "side": "new",
+   "severity": "HIGH",
+   "title": "Openness isn't restored with donor status",
+   "body": "`hydrate_person` restores **donor status** but not openness, so a historical view shows today's value:\n\n```python\nperson.openness = snapshot.openness\n```",
+   "in_diff": true,
+   "comment": "🤖 Bot: ⚠️ **[HIGH] Openness isn't restored with donor status**\n\n`hydrate_person` restores **donor status** but not openness, so a historical view shows today's value:\n\n```python\nperson.openness = snapshot.openness\n```\n\n<!-- claude-review:ad038928b6d8 -->\n",
+   "context": [
+    [
+     208,
+     208,
+     " ",
+     "def hydrate_person(snapshot):"
+    ],
+    [
+     209,
+     209,
+     " ",
+     "    person = Person(**snapshot.base)"
+    ],
+    [
+     null,
+     210,
+     "+",
+     "    person.donor_status = snapshot.donor_status"
+    ],
+    [
+     null,
+     211,
+     "+",
+     "    person.relation = snapshot.relation"
+    ],
+    [
+     210,
+     212,
+     " ",
+     "    return person"
+    ],
+    [
+     211,
+     213,
+     " ",
+     ""
+    ]
+   ]
+  },
+  {
+   "id": "2",
+   "hash": "ab68d2ad212a",
+   "file": "apps/staff/src/components/Family/VersionViewer.tsx",
+   "line": 87,
+   "side": "new",
+   "severity": "MED",
+   "title": "Draft versions lose their label",
+   "body": "`formatVersionLabel` returns an empty string when `publishedAt` is null, so drafts render with no label.\n\n- Keep the `\"Draft\"` fallback\n- Or return it from the helper",
+   "in_diff": true,
+   "comment": "🤖 Bot: ⚠️ **[MED] Draft versions lose their label**\n\n`formatVersionLabel` returns an empty string when `publishedAt` is null, so drafts render with no label.\n\n- Keep the `\"Draft\"` fallback\n- Or return it from the helper\n\n<!-- claude-review:ab68d2ad212a -->\n",
+   "context": [
+    [
+     85,
+     85,
+     " ",
+     "  const {data} = useQuery(VERSION_QUERY);"
+    ],
+    [
+     86,
+     86,
+     " ",
+     "  const rows = data?.rows ?? [];"
+    ],
+    [
+     87,
+     null,
+     "-",
+     "  const label = version.publishedAt ?? \"Draft\";"
+    ],
+    [
+     null,
+     87,
+     "+",
+     "  const label = formatVersionLabel(version);"
+    ],
+    [
+     88,
+     88,
+     " ",
+     "  return ("
+    ],
+    [
+     89,
+     89,
+     " ",
+     "    <Panel title={label}>"
+    ],
+    [
+     90,
+     90,
+     " ",
+     "      <Rows rows={rows} />"
+    ]
+   ]
+  },
+  {
+   "id": "3",
+   "hash": "6f928525be60",
+   "file": "api/families/tests/test_history.py",
+   "line": 140,
+   "side": "new",
+   "severity": "LOW",
+   "title": "Test name doesn't match what it checks",
+   "body": "Rename it. This line must stay text: <img src=x onerror=\"document.body.dataset.pwned=1\"> and [a link](https://gitlab.com/polygenx/web-platform).",
+   "in_diff": false,
+   "comment": "🤖 Bot: ⚠️ **[LOW] Test name doesn't match what it checks** — `api/families/tests/test_history.py:140`\n\nRename it. This line must stay text: <img src=x onerror=\"document.body.dataset.pwned=1\"> and [a link](https://gitlab.com/polygenx/web-platform).\n\n<!-- claude-review:6f928525be60 -->\n",
+   "context": []
+  }
+ ]
+}

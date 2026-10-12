@@ -55,7 +55,8 @@ export function inboxDeps(c: PilotContext): InboxDeps {
     definitions: () => c.loaded().definitions,
     people: () => c.loaded().people,
     actions: c.actions,
-    onResolved: null
+    onResolved: null,
+    detailsRoot: c.detailsRoot ?? null
   })
 }
 
