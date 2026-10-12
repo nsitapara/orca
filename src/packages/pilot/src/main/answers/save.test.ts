@@ -230,6 +230,20 @@ describe('who may answer (caller kind x card)', () => {
     ).toMatchObject({ option: null, text: 'skip' })
   })
 
+  it("keeps the option when the typed text is exactly that option's label, so a custom first option starts the run", () => {
+    const custom = { ...START, options: ['Review', 'Skip'] }
+    const give = (text: string) => {
+      const { store, deps, digest } = setup(custom)
+      saveAnswer(deps, { id: 'in_0000000000000001', option: 0, text, digest })
+      const item = store.inbox.get('in_0000000000000001')!
+      return [item.answer?.option, routeOf(item, catalog).kind]
+    }
+    expect(give('Review')).toEqual([0, 'script'])
+    expect(give(' review ')).toEqual([0, 'script'])
+    expect(give('skip')).toEqual([null, 'tick'])
+    expect(give('something')).toEqual([null, 'reask'])
+  })
+
   it('a re-answer from a device replaces a desktop approval, which stops routing to a script', () => {
     const { store, deps, digest } = setup(PUSH)
     saveAnswer(deps, { id: 'in_0000000000000001', text: 'approve', digest })
