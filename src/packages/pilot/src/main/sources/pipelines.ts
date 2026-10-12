@@ -3,7 +3,7 @@ import type { PipelineWhere } from '../../shared/definition/types'
 import { WHERE_SCHEMAS, pipelineWhereSchema } from '../../shared/definition/where'
 import { pipelineScope } from '../../shared/tick/scope-pipeline'
 import type { GlabApi } from './gitlab-api'
-import { gitlabFor } from './gitlab-fetch'
+import { gitlabFor, readPages } from './gitlab-fetch'
 import type { Item, ItemSource } from './types'
 
 export type GitLabPipeline = {
@@ -25,7 +25,6 @@ type Latest = { pipeline: GitLabPipeline; jobs: GitLabJob[] }
 
 // sweep.py CHILDREN: the newest children scanned (the gate's no-op children sit between real runs).
 export const CHILDREN_SCANNED = 30
-const JOBS_PER_PAGE = 100
 const FINISHED = new Set(['success', 'failed'])
 
 // A pipeline that ran the suite has a marker job; without markers every finished pipeline counts.
@@ -123,14 +122,11 @@ function pipelineItem(
 // A job list that is malformed, or as long as the page cap (it may have been cut short), could hide a
 // real failure: the tick fails rather than call the pipeline green.
 async function jobsOf(api: GlabApi, id: number): Promise<GitLabJob[]> {
-  const jobs = await api.get<GitLabJob[]>(`pipelines/${id}/jobs?per_page=${JOBS_PER_PAGE}`)
-  if (!Array.isArray(jobs)) {
-    throw new Error(`GitLab did not answer pipeline ${id}'s jobs with a list`)
+  const { items, capped } = await readPages<GitLabJob>(api, `pipelines/${id}/jobs`)
+  if (capped) {
+    throw new Error(`Pipeline ${id}'s job list may be cut short (${items.length} jobs)`)
   }
-  if (jobs.length >= JOBS_PER_PAGE) {
-    throw new Error(`Pipeline ${id}'s job list may be cut short (${jobs.length} jobs)`)
-  }
-  return jobs
+  return items
 }
 
 export function pipelineSource(): ItemSource {

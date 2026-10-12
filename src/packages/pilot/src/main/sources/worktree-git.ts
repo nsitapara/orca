@@ -28,12 +28,25 @@ async function read(git: GitRunner, cwd: string, args: string[]): Promise<string
   return stdout.trim()
 }
 
+// Only git's own non-zero exit (a numeric code: 1 "no", 128 "not found") is an answer. A timeout, an
+// abort or a spawn error says nothing about the repo, so it propagates and the item is unreadable.
+function isGitExit(error: unknown): boolean {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    typeof (error as { code?: unknown }).code === 'number'
+  )
+}
+
 async function succeeds(git: GitRunner, cwd: string, args: string[]): Promise<boolean> {
   try {
     await read(git, cwd, args)
     return true
-  } catch {
-    return false
+  } catch (error) {
+    if (isGitExit(error)) {
+      return false
+    }
+    throw error
   }
 }
 
@@ -55,6 +68,9 @@ export function parseOwnCommits(stdout: string, ignoreTrailer: string | null): O
       continue
     }
     const [sha, when, ...message] = trimmed.split('\u0000')
+    if (!/^\d+$/.test(when ?? '')) {
+      throw new Error(`Unreadable commit time for ${sha}: ${JSON.stringify(when)}`)
+    }
     if (isIgnored(message.join('\u0000'), ignoreTrailer)) {
       continue
     }
@@ -97,7 +113,12 @@ export async function baseRef(
 ): Promise<string> {
   const candidates = mrTarget ? [`origin/${mrTarget}`, mrTarget] : []
   const recorded = await read(git, path, ['config', '--get', `branch.${branch}.base`]).catch(
-    () => ''
+    (error: unknown) => {
+      if (isGitExit(error)) {
+        return ''
+      }
+      throw error
+    }
   )
   if (recorded) {
     candidates.push(recorded.replace(/^refs\/heads\//, ''))

@@ -38,11 +38,16 @@ describe('MarkerStore.progressMarkers', () => {
     handledBy('review', 'repo::/wt/c@1111111', 6, 'needs_you') // finished, left me questions
     handledBy('qa', 'repo::/wt/a@fffffff', 7, 'done') // another automation's progress
     handledBy('review', '!1561:15610', 8, 'done') // not a worktree key
+    handledBy('review', `repo::/wt/d@${'a'.repeat(64)}`, 9, 'done') // a sha-256 head
+    handledBy('review', 'repo::/wt/e@9999999', 10, 'running') // run still going...
+    store.setHandledStatus('review', 'review-10', 'done', 11) // ...but its key settled done
     expect(store.markers.progressMarkers('review')).toEqual(
       new Map([
         ['repo::/wt/a', 'bbbbbbb'],
         ['repo::/wt/b', 'eeeeeee'],
-        ['repo::/wt/c', '1111111']
+        ['repo::/wt/c', '1111111'],
+        ['repo::/wt/d', 'a'.repeat(64)],
+        ['repo::/wt/e', '9999999']
       ])
     )
   })

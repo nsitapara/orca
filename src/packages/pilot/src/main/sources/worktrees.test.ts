@@ -33,6 +33,10 @@ describe('eligibleWorktree (gate.worktrees)', () => {
   })
 })
 
+// git's own non-zero exit carries a numeric code; a runner failure (timeout, spawn) does not.
+const exit1 = (message: string) => Object.assign(new Error(message), { code: 1 })
+
+const envSeen: (string | undefined)[] = []
 type FakeRepo = {
   head: string
   ancestors?: string[]
@@ -41,8 +45,9 @@ type FakeRepo = {
   fail?: string
 }
 function fakeGit(repos: Record<string, FakeRepo>): GitRunner {
-  return async (args, { cwd }) => {
+  return async (args, { cwd, env }) => {
     const r = repos[cwd]
+    envSeen.push(env?.GIT_OPTIONAL_LOCKS)
     if (!r || r.fail) {
       throw new Error(r?.fail ?? `no repo at ${cwd}`)
     }
@@ -53,7 +58,7 @@ function fakeGit(repos: Record<string, FakeRepo>): GitRunner {
       if (r.ancestors?.includes(args[2])) {
         return { stdout: '' }
       }
-      throw new Error('exit 1')
+      throw exit1('exit 1')
     }
     if (args[0] === 'log') {
       return { stdout: r.log ?? '' }
@@ -64,7 +69,7 @@ function fakeGit(repos: Record<string, FakeRepo>): GitRunner {
     if (args[0] === 'merge-base') {
       return { stdout: `${r.mergeBase ?? 'base0000'}\n` }
     }
-    throw new Error(`exit 1: git ${args.join(' ')}`)
+    throw exit1(`exit 1: git ${args.join(' ')}`)
   }
 }
 const log = (...commits: [string, number, string][]) =>
@@ -182,6 +187,27 @@ describe('worktreeSource', () => {
       branch: 'web-1-mine'
     })
     expect(items[3].fields['worktree.rewritten']).toBe(true)
+  })
+
+  it('reads git with optional locks off, and a runner failure is a git_error, not a rewrite', async () => {
+    const timeoutGit: GitRunner = async () => {
+      throw new Error('git timed out after 30000ms')
+    }
+    const flaky = worktreeSource({
+      listWorktrees: async () => [rec('web-1-mine')],
+      git: timeoutGit,
+      markers: () => markers,
+      pathExists: () => true
+    })
+    const where = { commits: {} }
+    const { items } = await flaky.list(sourceContext({}, gitlab), where)
+    expect(items[0].fields).toMatchObject({
+      'worktree.rewritten': null,
+      'worktree.git_error': 'git timed out after 30000ms'
+    })
+    expect(flaky.scope(items[0], where, PEOPLE)).toMatchObject({ ok: false })
+    expect(envSeen.length).toBeGreaterThan(0)
+    expect(new Set(envSeen)).toEqual(new Set(['0']))
   })
 
   it('04: a first sight is tested against its base when its own work is recent', async () => {

@@ -58,7 +58,18 @@ beforeAll(() => {
   clock += 3600
   sh(repo, 'merge', '-q', '--no-ff', '-m', 'merge main', 'main')
   sha.own2 = commit(repo, 'own 2')
+  // A commit on a side branch: it exists in the clone but is not an ancestor of HEAD.
+  sh(repo, 'checkout', '-q', '-b', 'side', sha.base)
+  sha.side = commit(repo, 'side work')
+  sh(repo, 'checkout', '-q', 'feature')
 })
+
+const timeout = (): GitRunner => async () => {
+  throw Object.assign(new Error('git timed out after 30000ms'), { name: 'GitCommandTimeoutError' })
+}
+const spawnFailure = (): GitRunner => async () => {
+  throw Object.assign(new Error('spawn git ENOENT'), { code: 'ENOENT' })
+}
 
 describe('ownCommits (gate.new_commits / due.own_commits)', () => {
   it.each([
@@ -88,6 +99,10 @@ describe('ownCommits (gate.new_commits / due.own_commits)', () => {
     expect(parseOwnCommits(out, null)).toEqual([{ sha: 'a', at: 1000 }])
   })
 
+  it('throws on a commit time that is not a number', () => {
+    expect(() => parseOwnCommits('a\u0000soon\u0000msg\n\u001e\n', null)).toThrow('Unreadable')
+  })
+
   it('matches the whole trailer line when one is configured, any Agent-Loop: line when none is (R-6)', () => {
     const record = (sha: string, message: string) => `${sha}\u00001\u0000${message}\n\u001e\n`
     const out =
@@ -103,9 +118,42 @@ describe('isAncestor (gate.evaluate rewrite rule)', () => {
   it.each([
     ['an earlier commit', () => sha.own1, true],
     ['a sha this clone does not have', () => 'deadbeef'.repeat(5), false],
-    ['a dev commit merged in', () => sha.devWork, true]
+    ['a dev commit merged in', () => sha.devWork, true],
+    ['a side-branch commit (git exits 1)', () => sha.side, false]
   ])('%s', async (_name, of, want) => {
     expect(await isAncestor(git, repo, of(), 'HEAD')).toBe(want)
+  })
+})
+
+describe('isAncestor fails closed on anything but gits own exit', () => {
+  it('git exit 128 (a missing object) is not an ancestor', async () => {
+    await expect(isAncestor(git, repo, 'deadbeef'.repeat(5), 'HEAD')).resolves.toBe(false)
+  })
+
+  it.each([
+    ['a timeout', timeout()],
+    ['a spawn error', spawnFailure()]
+  ])('%s is an error, not a rewrite', async (_name, runner) => {
+    await expect(isAncestor(runner, repo, sha.own1, 'HEAD')).rejects.toThrow()
+    await expect(
+      commitFacts(runner, repo, 'feature', sha.own1, null, 'baseline', null)
+    ).rejects.toThrow()
+    await expect(baseRef(runner, repo, 'feature', 'main')).rejects.toThrow()
+  })
+})
+
+describe('git reads run with optional locks off', () => {
+  it('passes GIT_OPTIONAL_LOCKS=0 on every call', async () => {
+    const seen: (string | undefined)[] = []
+    const recorder: GitRunner = (args, opts) => {
+      seen.push(opts.env?.GIT_OPTIONAL_LOCKS)
+      return git(args, opts)
+    }
+    await commitFacts(recorder, repo, 'feature', null, null, 'test_recent', 'main')
+    await commitFacts(recorder, repo, 'feature', sha.own1, null, 'baseline', null)
+    await baseRef(recorder, repo, 'feature', null)
+    expect(seen.length).toBeGreaterThan(5)
+    expect(new Set(seen)).toEqual(new Set(['0']))
   })
 })
 
