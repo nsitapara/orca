@@ -13,6 +13,8 @@ export type LoadedDefinitions = {
   people: PeopleDirectory
   peopleError: string | null
   missingDirs: string[]
+  // Ids whose file turned invalid: shown from their last valid version, never ticked (fail closed).
+  displayOnly?: string[]
 }
 
 // Where the loader keeps each automation's last valid version: the store's definitions tables.
@@ -179,12 +181,13 @@ function keptVersion(
   const when = new Date(saved.loadedAt).toISOString()
   return {
     definition: parsed.definition,
-    note: `${file}: Pilot keeps running the last valid version, saved ${when}`
+    note: `${file}: Pilot shows the last valid version, saved ${when}; it isn't ticked until the file is valid again`
   }
 }
 
-// With a memory, a file that turns invalid keeps running its last valid version and its error
-// entry says so; a deleted file is forgotten (contract §9, `definitions`).
+// With a memory, a file that turns invalid keeps its last valid version for display (a running run's
+// steps still read it) but is never ticked (displayOnly), and its error entry says so; a deleted file is
+// forgotten (contract §9, `definitions`).
 export function loadDefinitions(
   dirs: string[],
   memory: DefinitionMemory | null = null,
@@ -195,6 +198,7 @@ export function loadDefinitions(
   const definitions: AutomationDefinition[] = []
   const errors: LoadedDefinitions['errors'] = []
   const byId = new Map<string, string>()
+  const displayOnly: string[] = []
   const listings = present.map((d) => ({ dir: d, ...yamlFiles(d) }))
   for (const l of listings) {
     if (l.error) {
@@ -224,6 +228,7 @@ export function loadDefinitions(
     if (kept) {
       byId.set(id, file)
       definitions.push(kept.definition)
+      displayOnly.push(kept.definition.id)
     }
     errors.push({ file, errors: kept ? [...result.errors, kept.note] : result.errors })
   }
@@ -237,7 +242,8 @@ export function loadDefinitions(
     errors,
     people,
     peopleError,
-    missingDirs: dirs.filter((d) => !existsSync(d))
+    missingDirs: dirs.filter((d) => !existsSync(d)),
+    displayOnly
   }
 }
 

@@ -59,6 +59,14 @@ describe('Pilot API handlers', () => {
     expect(payload.errors.map((e) => e.file.endsWith('bad.yaml'))).toEqual([true])
   })
 
+  it('shows no next tick for an automation shown only from its last valid version', () => {
+    const { ctx } = context()
+    const loaded = ctx.loaded()
+    const held = { ...ctx, loaded: () => ({ ...loaded, displayOnly: ['ci'] }) }
+    expect(listAutomations(ctx).automations[0].nextTickAt).not.toBeNull()
+    expect(listAutomations(held).automations[0].nextTickAt).toBeNull()
+  })
+
   it('shows the newest tick as the last tick, saying whether it was a dry run', () => {
     const { ctx, store } = context()
     store.finishTick(store.startTick('ci', false, 1), 'ok', null, {}, 2)

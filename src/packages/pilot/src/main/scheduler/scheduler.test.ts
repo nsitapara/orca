@@ -85,6 +85,23 @@ describe('PilotScheduler', () => {
     expect(d.ran).toEqual([])
   })
 
+  // A file that turned invalid is shown from its last valid version, never ticked (fail closed).
+  it('never ticks an automation shown only from its last valid version, nor runs it by hand', async () => {
+    const d = deps([def('ci', '10 * * * *'), def('ok', '10 * * * *')], at1012, null)
+    const loaded = {
+      ...loadedOf([def('ci', '10 * * * *'), def('ok', '10 * * * *')]),
+      displayOnly: ['ci']
+    }
+    d.definitions = () => loaded
+    const scheduler = new PilotScheduler(d)
+    await scheduler.tickAll()
+    expect(d.ran).toEqual(['ok'])
+    for (const dryRun of [false, true]) {
+      await expect(scheduler.tickNow('ci', { dryRun })).rejects.toThrow("/a/ci.yaml isn't valid")
+    }
+    expect(d.ran).toEqual(['ok'])
+  })
+
   it('runs a missed hour once, not once per missed tick', async () => {
     const d = deps([def('ci', '10 * * * *')], at1012, Date.UTC(2026, 9, 10, 10, 10))
     await new PilotScheduler(d).tickAll()

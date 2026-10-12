@@ -56,10 +56,12 @@ afterEach(() => {
 })
 
 describe('startPilotServices', () => {
-  it('keeps running the last valid version of a file edited into an invalid one', () => {
+  it('keeps the last valid version of a file edited into an invalid one, for display only', () => {
     const services = startPilotServices(runtime, 'main')
     writeFileSync(join(dir, 'ci.yaml'), 'name: [')
-    expect(services.context.reload().definitions.map((d) => d.id)).toEqual(['ci'])
+    const reloaded = services.context.reload()
+    expect(reloaded.definitions.map((d) => d.id)).toEqual(['ci'])
+    expect(reloaded.displayOnly).toEqual(['ci'])
     services.stop()
   })
 
