@@ -1,3 +1,4 @@
+import { applyAnswersMapper } from './apply-answers'
 import { agentUsageState } from './agent-usage'
 import { devE2ePipelinesMapper, devE2eStartsMapper } from './dev-e2e'
 import { fixFailedCiState } from './fix-failed-ci'
@@ -22,7 +23,8 @@ export const MAPPERS: SweepStateMapper[] = [
   reviewRequestsState,
   devE2ePipelinesMapper,
   devE2eStartsMapper,
-  linearTodoMapper
+  linearTodoMapper,
+  applyAnswersMapper
 ]
 
 export function sweepStateMapper(
