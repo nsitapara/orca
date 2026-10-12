@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   CLAIM_TTL_MS,
   DEAD_GRACE_MS,
+  isStartTimeout,
   judgeClaim,
   SessionClaims,
   type ClaimVerdict
@@ -119,5 +120,20 @@ describe('judgeClaim', () => {
     expect(await judge(deps({ open: false }), 'term_9', SINCE + DEAD_GRACE_MS - 1)).toBe('pending')
     expect(await judge(deps({ open: true }), 'term_9', SINCE + DEAD_GRACE_MS)).toBe('pending')
     expect(await judge(deps({ open: false }), null, SINCE + DEAD_GRACE_MS)).toBe('pending')
+  })
+})
+
+describe('isStartTimeout', () => {
+  it.each([
+    ['createTerminal gave no reply', 'Terminal creation timed out', true],
+    ['the handle never appeared', 'Timed out waiting for terminal handle after creation', true],
+    ['an SSH connect timed out', 'SSH connect timed out', false],
+    ['an unrelated failure', 'spawn failed', false]
+  ])('%s', (_name, message, expected) => {
+    expect(isStartTimeout(new Error(message))).toBe(expected)
+  })
+
+  it('is false for a non-Error', () => {
+    expect(isStartTimeout('Terminal creation timed out')).toBe(false)
   })
 })

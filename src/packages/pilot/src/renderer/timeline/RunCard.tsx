@@ -38,7 +38,7 @@ export function RunCard({ run, title }: { run: RunWithDetail; title: string }): 
           {toggle}
         </button>
       ) : null}
-      {open ? <StepList runId={run.id} steps={run.steps} /> : null}
+      {open ? <StepList runId={run.id} worktreePath={run.worktreePath} steps={run.steps} /> : null}
     </li>
   )
 }

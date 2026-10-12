@@ -1,3 +1,4 @@
+import { Component, type ReactNode } from 'react'
 import { PILOT_TAB } from '../../shared/sidebar-click'
 import { useActiveWorktreePath } from './active-worktree'
 import { badgeFor } from './badge'
@@ -33,6 +34,19 @@ function Badge({ layout }: { layout: 'top' | 'side' }): React.JSX.Element | null
   )
 }
 
+// A Pilot failure must never unmount Orca's activity bar: the badge just disappears.
+class BadgeBoundary extends Component<{ children: ReactNode }, { failed: boolean }> {
+  state = { failed: false }
+
+  static getDerivedStateFromError(): { failed: boolean } {
+    return { failed: true }
+  }
+
+  render(): ReactNode {
+    return this.state.failed ? null : this.props.children
+  }
+}
+
 // pilot-hook: right-sidebar-badge. Rendered inside every activity-bar button; draws only on Pilot's, and only
 // once Pilot has attached (no store → no worktree → no poll).
 export function PilotActivityBadge({
@@ -45,5 +59,9 @@ export function PilotActivityBadge({
   if (itemId !== PILOT_TAB) {
     return null
   }
-  return <Badge layout={layout} />
+  return (
+    <BadgeBoundary>
+      <Badge layout={layout} />
+    </BadgeBoundary>
+  )
 }
