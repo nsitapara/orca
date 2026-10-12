@@ -803,6 +803,11 @@ def _04():
         wt04(404, rewritten=True, commits=[own04("c404", 1)]),                         # rewritten, recent: due, queued
         wt04(405, seen=None, commits=[loopfix04("f405", 1)]),                          # only the loops' fixes: baseline
     ])
+    # A first sight whose run failed (imported from failed.json) waits 12 hours from that failure, then is tested.
+    yield make("failed-first-sight", [
+        wt04(491, seen=None, commits=[own04("c491", 1)], failed=hours_ago(1)),         # failed 1h ago: waits
+        wt04(492, seen=None, commits=[own04("c492", 2)], failed=hours_ago(13)),        # failed 13h ago: starts
+    ])
     # Every way the sweep leaves a worktree alone, one worktree each, and the due ones.
     yield make("gates", [
         wt04(411, commits=[]),                                                         # HEAD is the tested head: idle

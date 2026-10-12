@@ -20,7 +20,6 @@ def quota_over(gate, agent):
     return f"{agent} {reason}" if reason else None
 
 
-
 def codex_over(gate):
     """gate.require_quota("codex") on the case's raw Codex answer (state `quota/codex-rate-limits.json`; None:
     unreadable, which lets the job run)."""
@@ -32,6 +31,7 @@ def codex_over(gate):
         return None
     reason = quota.out_reason(quota.codex_limits(raw)) if raw else None
     return f"codex {reason}" if reason else None
+
 
 def record_markers(gate, io):
     """Pilot reads the git-operation markers of every worktree whose status it reads; the old side stops at a dirty one."""
