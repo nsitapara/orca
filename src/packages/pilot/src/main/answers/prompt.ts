@@ -1,3 +1,4 @@
+import { answerWord, APPROVE } from '../../shared/answers/route'
 import type { InboxItemRow } from '../../shared/api-types'
 import type { AutomationDefinition } from '../../shared/definition/types'
 import { oneLine } from '../inbox/card'
@@ -21,18 +22,42 @@ function howNote(answer: AgentAnswer): string {
   return ''
 }
 
+const APPLY_MD = '~/.agents/skills/item-details/references/apply.md'
+export const DRAFT_GRANTED = `approved in Pilot's window, so its drafted patch may be applied, only by ${APPLY_MD}`
+export const DRAFT_FORBIDDEN =
+  "do not apply the drafted patch; this answer didn't approve it in Pilot's window"
+
+// Pilot, not the agent, decides whether an answer approved a drafted patch: given in Pilot's window on this
+// Mac, where the diff shows, and an Approve (never one with notes) or a pick of a question's option, which
+// apply.md then checks is the option drafted. Any other words ("apply it", "yes, go ahead") grant nothing.
+export function draftApproved(answer: AgentAnswer): boolean {
+  const given = answer.item.answer
+  if (!answer.item.details?.drafted || !given || answer.revise || given.callerKind !== 'desktop') {
+    return false
+  }
+  if (APPROVE.has(answerWord(given.text ?? ''))) {
+    return true
+  }
+  return answer.item.type === 'question' && given.option !== null
+}
+
 // apply.py prompt(): the bundle the answer was given against, pinned by its SHA-256, so a drafted patch
-// applied is the one shown. The path is quoted: job folders contain ' · ', the prompt's separator.
-function detailsNote(item: InboxItemRow): string {
-  if (!item.details) {
+// applied is the one shown. The path is JSON-quoted: job folders contain ' · ', the prompt's separator,
+// and no file name may close the quote (the loader refuses quotes, backslashes and control characters too).
+function detailsNote(answer: AgentAnswer): string {
+  const { details } = answer.item
+  if (!details) {
     return ''
   }
-  const { path, sha256 } = item.details
-  return ` (Details "${oneLine(path)}" sha256 ${sha256}: a drafted patch applies only by ~/.agents/skills/item-details/references/apply.md)`
+  let says = `a drafted patch applies only by ${APPLY_MD}`
+  if (details.drafted) {
+    says = draftApproved(answer) ? DRAFT_GRANTED : DRAFT_FORBIDDEN
+  }
+  return ` (Details ${JSON.stringify(oneLine(details.path))} sha256 ${details.sha256}: ${says})`
 }
 
 function note(answer: AgentAnswer): string {
-  return howNote(answer) + detailsNote(answer.item)
+  return howNote(answer) + detailsNote(answer)
 }
 
 // apply.py prompt(): one line (a newline would submit early in a typed prompt), each claimed answer as

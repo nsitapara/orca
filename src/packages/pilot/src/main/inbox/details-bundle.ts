@@ -198,6 +198,28 @@ function draftOf(bundle: DetailsBundle): Pick<DetailsRef, 'drafted' | 'draftedBa
   return { drafted: drafted !== undefined, draftedBase: base || judged || null }
 }
 
+// The bundle's path goes into an answer run's prompt in quotes: none of '"', '\\' or a control character
+// (C0, DEL, C1, or a Unicode line break) may close the quote or start a new line there.
+function unsafeForPrompt(path: string): boolean {
+  for (const ch of path) {
+    const code = ch.codePointAt(0) ?? 0
+    const control =
+      code < 0x20 || (code >= 0x7f && code <= 0x9f) || code === 0x2028 || code === 0x2029
+    if (control || ch === '"' || ch === '\\') {
+      return true
+    }
+  }
+  return false
+}
+
+function checkPromptSafe(path: string): void {
+  if (unsafeForPrompt(path)) {
+    throw new DetailsRefused(
+      `the bundle path ${JSON.stringify(path)} has a quote, backslash or control character`
+    )
+  }
+}
+
 // A card's bundle, read from an absolute path inside the Automations folder and checked whole: its shape,
 // and every file it names. Review files are inlined (their text is part of what Approve binds to); the
 // patch and the images are only checked to exist inside the root (ruling 3).
@@ -206,8 +228,10 @@ export function loadDetails(root: string | null, bundlePath: string): DetailsSna
   if (!isAbsolute(bundlePath) || bundlePath.includes('\0')) {
     throw new DetailsRefused(`${bundlePath} is not an absolute path`)
   }
+  checkPromptSafe(bundlePath)
   const label = `the bundle ${bundlePath}`
   const real = realInside(top, bundlePath, label)
+  checkPromptSafe(real)
   if (!hasExtension([real], isJson)) {
     throw new DetailsRefused(`${label} is not a .json file`)
   }
