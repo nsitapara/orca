@@ -100,16 +100,21 @@ const MIGRATIONS: readonly string[] = [V1, V2, V3, V4]
 // Same pattern as Orca's orchestration.db (migrate.ts): user_version + one transaction, all or nothing.
 // `target` lets tests build a database at an older version.
 export function migrate(db: Database, target = PILOT_SCHEMA_VERSION): void {
-  const current = db.pragma('user_version', { simple: true }) as number
-  if (current >= target) {
+  if ((db.pragma('user_version', { simple: true }) as number) >= target) {
     return
   }
   db.exec('BEGIN IMMEDIATE')
   try {
+    // Read again under the write lock: another process (desktop and orcad share the file) may have
+    // migrated between the look above and the lock.
+    const current = db.pragma('user_version', { simple: true }) as number
     for (let version = current + 1; version <= target; version++) {
       db.exec(MIGRATIONS[version - 1])
     }
-    db.pragma(`user_version = ${target}`)
+    // Never lowers the version a newer process wrote.
+    if (current < target) {
+      db.pragma(`user_version = ${target}`)
+    }
     db.exec('COMMIT')
   } catch (error) {
     db.exec('ROLLBACK')
