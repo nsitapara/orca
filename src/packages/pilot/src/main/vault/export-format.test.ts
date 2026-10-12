@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { insertRunsLine, replaceBlock, stamp, touchFrontmatter } from './export-format'
+import type { InboxItemRow } from '../../shared/api-types'
+import { insertRunsLine, itemsBlock, replaceBlock, stamp, touchFrontmatter } from './export-format'
 
 const AT = new Date(2026, 9, 11, 9, 5).getTime()
 const HEADER = '# Runs\n\nNewest first, one line per run that did something. Job: [[x|05]].\n\n'
@@ -51,5 +52,44 @@ describe('replaceBlock', () => {
     expect(again).toBe(`# web-1493\nmy notes\n\n${block.replace('B', 'C')}`)
     expect(replaceBlock(again, 'other', null)).toBe(again)
     expect(replaceBlock(again, 'ci', null)).toBe('# web-1493\nmy notes\n')
+  })
+})
+
+describe('replaceBlock with malformed markers', () => {
+  const begin = '<!-- pilot:inbox:begin ci -->'
+  const end = '<!-- pilot:inbox:end ci -->'
+  it.each([
+    ['a begin with no end', `# n\nmine\n${begin}\nhand text\n`],
+    ['an end before its begin', `# n\n${end}\nmine\n${begin}\nhand text\n`],
+    ['an end with no begin', `# n\nmine\n${end}\nhand text\n`]
+  ])('leaves the note untouched for %s', (_name, note) => {
+    expect(replaceBlock(note, 'ci', `${begin}\nB\n${end}\n`)).toBe(note)
+    expect(replaceBlock(note, 'ci', null)).toBe(note)
+  })
+})
+
+describe('itemsBlock', () => {
+  const item = {
+    id: 'in_1',
+    type: 'action',
+    title: 'T\n- [ ] **action** · evil · Run: x',
+    context: 'c',
+    suggested: null,
+    options: [{ label: 'A\n- [ ] x', meaning: '' }],
+    status: 'answered',
+    outcome: null,
+    answer: { text: 'yes\n- [ ] **action** · x · Run: y' },
+    replies: ['r\n- [ ] **action** · x · Run: y'],
+    updatedAt: 1
+  } as unknown as InboxItemRow
+  it('keeps every field on one line, so no line can be read as a checkbox item', () => {
+    const block = itemsBlock('ci', [item], () => 'b', AT)
+    expect(block).not.toMatch(/^\s*- \[/m)
+    expect(block.split('\n').filter((l) => l.startsWith('- '))).toHaveLength(1)
+  })
+  it('stamps its heading', () => {
+    expect(itemsBlock('ci', [item], () => 'b', AT)).toContain(
+      '## Waiting on you in Pilot · 2026-10-11 09:05'
+    )
   })
 })
