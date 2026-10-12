@@ -59,10 +59,13 @@ export const ANSWERS_COMMAND_SPECS: CommandSpec[] = [
   {
     path: ['inbox', 'import-vault'],
     summary:
-      "Preview importing the vault's open cards and saved answers into Pilot's inbox (applied in Pilot, Waiting on you)",
-    usage: 'pilot inbox import-vault [--apply] [--json]',
+      "Preview importing the vault's open cards and saved answers into Pilot's inbox; the import itself is applied in Pilot's window (Waiting on you)",
+    usage: 'pilot inbox import-vault [--json]',
     allowedFlags: [...GLOBAL_FLAGS, 'apply'],
-    examples: ['pilot inbox import-vault', 'pilot inbox import-vault --apply']
+    examples: ['pilot inbox import-vault'],
+    notes: [
+      "--apply is refused from a terminal: only Pilot's window applies the import, so no agent can seed cards or answers."
+    ]
   }
 ]
 
