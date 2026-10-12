@@ -81,11 +81,16 @@ export function inboxTarget(
   const stepIdx = runId !== undefined && /^\d+$/.test(rawIdx) ? Number(rawIdx) : undefined
   const automationId = flags.automation ?? envValue(env, 'PILOT_AUTOMATION_ID')
   const itemKey = flags.item ?? envValue(env, 'PILOT_ITEM_KEY')
-  if (runId === undefined && (automationId === undefined || itemKey === undefined)) {
+  const terminal = envValue(env, 'ORCA_TERMINAL_HANDLE')
+  // Inside a terminal the server resolves (or refuses) the step from the terminal itself.
+  if (
+    runId === undefined &&
+    terminal === undefined &&
+    (automationId === undefined || itemKey === undefined)
+  ) {
     throw new Error('Outside a Pilot run, give --automation <id> and --item <key>')
   }
   const target: InboxTarget = {}
-  const terminal = envValue(env, 'ORCA_TERMINAL_HANDLE')
   if (terminal !== undefined) {
     target.terminal = terminal
   }

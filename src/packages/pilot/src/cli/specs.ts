@@ -1,5 +1,6 @@
 import type { CommandSpec } from '../../../../cli/args'
 import { GLOBAL_FLAGS } from '../../../../cli/args'
+import { ANSWERS_COMMAND_SPECS } from './answers-specs'
 import { INBOX_COMMAND_SPECS } from './specs-inbox'
 import { RUN_COMMAND_SPECS } from './specs-run'
 
@@ -72,5 +73,6 @@ export const PILOT_COMMAND_SPECS: CommandSpec[] = [
     allowedFlags: [...GLOBAL_FLAGS, 'id']
   },
   ...RUN_COMMAND_SPECS,
-  ...INBOX_COMMAND_SPECS
+  ...INBOX_COMMAND_SPECS,
+  ...ANSWERS_COMMAND_SPECS
 ]

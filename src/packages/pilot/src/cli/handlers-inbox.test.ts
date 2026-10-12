@@ -134,6 +134,18 @@ describe('pilot inbox add', () => {
     )
   })
 
+  it('inside a terminal needs no PILOT_RUN_ID: the server resolves the step from the terminal', async () => {
+    outsideRuns()
+    vi.stubEnv('ORCA_TERMINAL_HANDLE', 'term-A')
+    const { context, call } = contextFor(CARD, ADDED)
+    vi.spyOn(console, 'log').mockImplementation(() => {})
+    await INBOX_HANDLERS['inbox add'](context)
+    expect(call).toHaveBeenCalledWith(
+      'pilot.inbox.add',
+      expect.objectContaining({ terminal: 'term-A' })
+    )
+  })
+
   it('needs --automation and --item outside a run, and sends them', async () => {
     outsideRuns()
     const bare = contextFor(CARD, ADDED)
