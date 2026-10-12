@@ -8,6 +8,7 @@ import { noStateMapper } from './plans'
 import { reviewBranchCodeMapper } from './review-branch-code'
 import { reviewRequestsState } from './review-requests'
 import type { SweepStateMapper } from './types'
+import { uiQaOvernightMapper } from './ui-qa-overnight'
 
 // One entry per ported job; each port task appends its own. Mappers import their helpers from plans.ts,
 // never from here, so there is no import cycle.
@@ -26,7 +27,8 @@ export const MAPPERS: SweepStateMapper[] = [
   devE2eStartsMapper,
   linearTodoMapper,
   applyAnswersMapper,
-  reviewBranchCodeMapper
+  reviewBranchCodeMapper,
+  uiQaOvernightMapper
 ]
 
 export function sweepStateMapper(

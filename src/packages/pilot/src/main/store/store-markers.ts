@@ -8,13 +8,15 @@ export class MarkerStore {
   constructor(private readonly db: Database) {}
 
   // Worktree id → the head it was last handled through by <automationId>: the newest key that was
-  // baselined (no run) or whose run finished well. Oldest first, so later rows win.
+  // baselined (no run) or whose run finished well. Oldest first, so later rows win. A failed key with no
+  // run (a sweep's failure, imported) only waits for retry_after_failure: it is no progress.
   progressMarkers(automationId: string): Map<string, string> {
     const rows = this.db
       .prepare(
         `SELECT h.once_key AS once_key FROM handled h LEFT JOIN runs r ON r.id = h.run_id
          WHERE h.automation_id = ?
-           AND (h.run_id IS NULL OR h.status = 'done' OR r.status IN ('done', 'needs_you'))
+           AND ((h.run_id IS NULL AND h.status != 'failed') OR h.status = 'done'
+                OR r.status IN ('done', 'needs_you'))
          ORDER BY h.at, h.rowid`
       )
       .all(automationId) as { once_key: string }[]

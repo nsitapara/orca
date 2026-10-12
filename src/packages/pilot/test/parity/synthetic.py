@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""The hand-built parity cases of the ported jobs (02, 03, 05, 06, 09, 13, M01), written in Task 13a's fixture format.
+"""The hand-built parity cases of the ported jobs (02, 03, 04, 05, 06, 09, 13, M01), written in Task 13a's fixture format.
 
   synthetic.py            rewrite every case's <job>/<case>.json
   synthetic.py --check    exit 1 when a committed case differs from what this file builds
@@ -677,6 +677,188 @@ def _03():
 
 CASE_MAKERS.append(_03)
 
+
+
+UIQA = "Agent-Loop: ui-qa"
+NOW_04 = 1791712800000  # 03:00 Pacific, 2026-10-11
+AFTER_04 = 1791727200000  # 07:00 Pacific: after the start window
+DAY = 86400
+
+
+def own04(n, days=1.0):
+    """One of my own commits on a branch, <days> before 03:00."""
+    return {"sha": n.ljust(40, "0"), "body": f"feat: change {n}\n", "at": NOW_04 // 1000 - int(days * DAY)}
+
+
+def loopfix04(n, days=0.5):
+    """A fix one of the agent loops committed: its Agent-Loop trailer means it isn't new work."""
+    return {"sha": n.ljust(40, "0"), "body": f"fix(x): y\n\n{UIQA}\n", "at": NOW_04 // 1000 - int(days * DAY)}
+
+
+def wt04(n, *, seen="a" * 40, head=None, commits=None, rewritten=False, mrs=None, author="nish8", state="opened",
+         approved_by=(), operation=None, mrs_error=None, approvals_error=None, failed=None):
+    """One worktree of a 04 case, on branch web-<n>-work: its last tested head in seen.json (None: first sight), HEAD,
+    its first-parent own commits since then (or since the merge base at first sight; newest first; one own commit a
+    day old by default), the branch's MRs (by default one MR, <author>'s, in <state>, approved by <approved_by>), and
+    its failed.json entry ({head, hours ago, outcome})."""
+    commits = [own04(f"c{n}")] if commits is None else commits
+    branch = f"web-{n}-work"
+    if mrs is None:
+        mrs = [{**mr(n, branch=branch, author=author, approved_by=approved_by), "state": state}]
+    return {**worktree(f"web-{n}", branch, operation=operation), "seen": seen, "rewritten": rewritten,
+            "head": head or (commits[0]["sha"] if commits else seen or f"d{n}".ljust(40, "0")), "commits": commits,
+            "mrs": mrs, "mrs_error": mrs_error, "approvals_error": approvals_error, "failed": failed}
+
+
+def terminal04(handle, path, *, title=None, draft="", state="idle", busy=False):
+    """An agent's tab in a worktree: its unsent draft, the state Orca's hooks report, and whether it is mid-turn."""
+    return {"handle": handle, "path": path, "title": title or handle, "draft": draft, "state": state, "busy": busy}
+
+
+def codex_answer04(weekly=20, session=10):
+    now = NOW_04 // 1000
+    return {"rateLimits": {"primary": {"usedPercent": session, "windowDurationMins": 300, "resetsAt": now + 3600},
+                           "secondary": {"usedPercent": weekly, "windowDurationMins": 10080, "resetsAt": now + 3 * DAY},
+                           "rateLimitReachedType": None},
+            "ordinaryUsageAllowed": True}
+
+
+def commit_reads_04(w, reads):
+    """HEAD, whether the last tested head is still in its history, and the own commits since it, as both sides read
+    them (due.own_commits and Pilot's worktree source share one log format). At first sight (no tested head, or a
+    rewritten history) the branch is measured from its base: the sweep's MR target lookup, the recorded base, the base
+    ref, and the merge base."""
+    path, head, seen, branch = w["path"], w["head"], w["seen"], w["branch"]
+    reads.append(read(["git", "-C", path, "rev-parse", "HEAD"], stdout=f"{head}\n", stderr=""))
+    since = seen
+    if seen:
+        reads.append(read(["git", "-C", path, "merge-base", "--is-ancestor", seen, head], code=1 if w["rewritten"] else 0,
+                          stdout="", stderr=""))
+    if not seen or w["rewritten"]:
+        if not w["mrs_error"]:
+            query = urllib.parse.urlencode({"state": "opened", "source_branch": branch})
+            reads.append(glab(f"{PROJECT}/merge_requests?{query}", [api_mr(m) for m in w["mrs"] if m["state"] == "opened"]))
+        reads.append(read(["git", "-C", path, "config", "--get", f"branch.{branch}.base"], code=1, stdout="", stderr=""))
+        reads.append(read(["git", "-C", path, "rev-parse", "--verify", "--quiet", "origin/dev^{commit}"], stdout=f"{'e' * 40}\n",
+                          stderr=""))
+        since = "f" * 40
+        reads.append(read(["git", "-C", path, "merge-base", "HEAD", "origin/dev"], stdout=f"{since}\n", stderr=""))
+    reads.append(read(["git", "-C", path, "log", "--first-parent", "--no-merges", "--format=%H%x00%ct%x00%B%x1e", f"{since}..HEAD"],
+                      stdout="".join(f"{c['sha']}\x00{c['at']}\x00{c['body']}\x1e\n" for c in w["commits"]), stderr=""))
+
+
+def terminal_reads_04(terminals, reads):
+    """Orca's terminal list, and for each agent tab what gate.worktree_busy and Pilot's activity pass read: its draft,
+    the agents' states (orca worktree ps) and whether it is mid-turn."""
+    listed = [{"handle": t["handle"], "title": t["title"], "connected": True, "agentIdentity": "claude",
+               "worktreePath": t["path"], "tabId": f"tab-{t['handle']}", "leafId": "leaf-1"} for t in terminals]
+    reads.append(read(["orca", "terminal", "list", "--json"], json={"ok": True, "result": {"terminals": listed}}))
+    agents = [{"paneKey": f"tab-{t['handle']}:leaf-1", "state": t["state"]} for t in terminals]
+    reads.append(read(["orca", "worktree", "ps", "--limit", "1000", "--json"],
+                      json={"ok": True, "result": {"worktrees": [{"agents": agents}], "truncated": False, "totalCount": 1}}))
+    for t in terminals:
+        reads.append(read(["orca", "terminal", "read", "--terminal", t["handle"], "--json"],
+                          json={"ok": True, "result": {"terminal": {"draft": t["draft"], "tail": []}}}))
+        reads.append(read(["orca", "terminal", "wait", "--terminal", t["handle"], "--for", "tui-idle", "--timeout-ms", "1500", "--json"],
+                          json={"ok": True, "result": {"wait": {"satisfied": not t["busy"]}}}))
+
+
+def case_04(name, worktrees, *, now=NOW_04, terminals=(), answers=None, run=None, fixes=None, codex=None):
+    """One 04 case: the worktrees (wt04), the agent tabs open in them (terminal04), the answers waiting in each
+    branch's note ({branch: count}), the sweep's run.json and fixes.json, and Codex's quota answer. The reads are loop.py
+    sweep's (gate.worktrees, due.decide, review_block, autofix.running, worktree_busy, the run's tab) and Pilot's (the
+    worktree source's listing, branch facts and commits, the worktree facts and the activity pass)."""
+    failed = {w["path"]: {"head": w["failed"]["head"] or w["head"], "at": now // 1000 - w["failed"]["hours"] * 3600,
+                          "outcome": w["failed"]["outcome"]} for w in worktrees if w["failed"]}
+    state = {"ui-qa/seen.json": {w["path"]: w["seen"] for w in worktrees if w["seen"]},
+             "ui-qa/failed.json": failed, "ui-qa/run.json": run or {}, "ui-qa/fixes.json": fixes or {},
+             "parity/answers.json": answers or {}, "quota/codex-rate-limits.json": codex or codex_answer04()}
+    fixture = build("04", name, now=now, state=state)
+    reads, exists = fixture["reads"], fixture["exists"]
+    listing = [{"id": f"{REPO['id']}::{w['path']}", "repoId": REPO["id"], "path": w["path"], "branch": f"refs/heads/{w['branch']}",
+                "isArchived": False} for w in worktrees]
+    reads.append(read(["orca", "worktree", "list", "--json"], json={"ok": True, "result": {"worktrees": listing}}))
+    terminal_reads_04(list(terminals), reads)
+    reads.append(glab("user", {"username": "nish8"}))
+    for w in worktrees:
+        exists[w["path"]] = True
+        git_reads(w, reads, exists)
+        mr_reads_03(w, reads)
+        commit_reads_04(w, reads)
+    return fixture
+
+
+def _04():
+    def make(name, worktrees, **kw):
+        return "04", name, case_04(name, worktrees, **kw)
+
+    unreadable = "glab: 502 Bad Gateway"
+    hours_ago = lambda hours, head=None, outcome="stack_failed": {"head": head, "hours": hours, "outcome": outcome}  # noqa: E731
+    # First sight tests the whole branch when an own commit is under 7 days old, else records a baseline; a rewritten
+    # history is a first sight again. The longest-waiting due worktree starts; the next waits a tick.
+    yield make("first-sight", [
+        wt04(401, seen=None, commits=[own04("c401", 2)]),                              # recent: due, waiting longest
+        wt04(402, seen=None, commits=[own04("c402", 9)]),                              # nothing in 7 days: baseline
+        wt04(403, seen=None, commits=[]),                                              # no own commit: baseline
+        wt04(404, rewritten=True, commits=[own04("c404", 1)]),                         # rewritten, recent: due, queued
+        wt04(405, seen=None, commits=[loopfix04("f405", 1)]),                          # only the loops' fixes: baseline
+    ])
+    # Every way the sweep leaves a worktree alone, one worktree each, and the due ones.
+    yield make("gates", [
+        wt04(411, commits=[]),                                                         # HEAD is the tested head: idle
+        wt04(412, commits=[loopfix04("f412")]),                                        # only the loops' fixes: idle
+        wt04(413, operation="MERGE_HEAD"),                                             # a merge in progress
+        wt04(414, state="merged"),                                                     # !414 merged
+        wt04(415, state="closed"),                                                     # !415 closed
+        wt04(416, approved_by=("alex1craig",)),                                        # !416 approved by alex1craig
+        wt04(417, approvals_error=unreadable),                                         # MR approval unknown
+        wt04(418, author="shivan2418"),                                                # a teammate's branch: never listed
+        wt04(419, mrs_error=unreadable),                                               # MR owner unknown: never listed
+        wt04(420, state="merged", commits=[]),                                         # merged with nothing new: idle
+        wt04(421, mrs=[], commits=[own04("c421", 1)]),                                 # no MR yet: due
+        wt04(422, failed=hours_ago(1)),                                                # failed at this head 1h ago: waits
+        wt04(423, failed=hours_ago(1, head="9" * 40), commits=[own04("c423", 2)]),     # failed at an older head: due
+        wt04(424, failed=hours_ago(13), commits=[own04("c424", 3)]),                   # failed 13h ago: due, waiting longest
+    ])
+    # Answers waiting and agents working hold QA; an idle tab of the loop's own doesn't.
+    yield make("holds", [wt04(431), wt04(432), wt04(433), wt04(434), wt04(435)], answers={"web-431-work": 1}, terminals=[
+        terminal04("term_432", "/wt/web-432", title="Review cycle · claude", busy=True),
+        terminal04("term_433", "/wt/web-433", title="MR feedback", draft="half a thought"),
+        terminal04("term_434", "/wt/web-434", title="CI fix", state="waiting"),
+        terminal04("term_435", "/wt/web-435", title="UI QA"),
+    ])
+    # After 05:59 nothing starts, and a worktree's own reasons still show; the window is checked before quota.
+    yield make("outside-window", [wt04(441, commits=[own04("c441", 2)]), wt04(442), wt04(443)], now=AFTER_04,
+               answers={"web-443-work": 1}, codex=codex_answer04(weekly=95))
+    yield make("quota-out", [wt04(451, commits=[own04("c451", 2)]), wt04(452)], codex=codex_answer04(weekly=95))
+    # A QA run in progress (its Codex tab mid-turn) holds its worktree and the night.
+    yield make("running-run", [wt04(461), wt04(462)], terminals=[terminal04("term_qa", "/wt/web-461", title="UI QA", busy=True)],
+               run={"id": "20261011-024000", "status": "running", "codex_tab": "term_qa", "branch": "web-461-work",
+                    "head": "c461".ljust(40, "0"), "deadline": NOW_04 // 1000 + 1800, "started": NOW_04 // 1000 - 1200,
+                    "worktree": {"id": f"{REPO['id']}::/wt/web-461", "path": "/wt/web-461", "branch": "web-461-work"}})
+    # Automatic fixes running in one branch hold that branch; the sweep started the next worktree beside them.
+    yield make("fixer-holds-the-slot", [wt04(471), wt04(472)],
+               terminals=[terminal04("term_fix", "/wt/web-471", title="UI QA fixes", busy=True)],
+               fixes={"/qa/web-471-work/2026-10-11": {"path": "/wt/web-471", "branch": "web-471-work", "head": "a" * 40,
+                                                       "note": "/n.md", "ids": ["F1"], "status": "dispatched",
+                                                       "terminal": "term_fix"}})
+    # Which reason wins when several hold a worktree.
+    yield make("check-order", [
+        wt04(481, operation="MERGE_HEAD", state="merged"),                             # the git operation before the MR
+        wt04(482, state="merged"),                                                     # merged before answers
+        wt04(483, approved_by=("alex1craig",)),                                        # approved before an agent working
+        wt04(484, failed=hours_ago(1)),                                                # answers vs a failed head
+        wt04(485, operation="MERGE_HEAD", commits=[]),                                 # a merge vs nothing new
+        wt04(486, seen=None, operation="MERGE_HEAD", commits=[own04("c486", 9)]),      # a merge vs a stale first sight
+        wt04(487, author="shivan2418", state="merged", operation="MERGE_HEAD"),        # a teammate's before anything
+        wt04(488),                                                                     # answers before an agent working
+    ], answers={"web-482-work": 1, "web-484-work": 1, "web-488-work": 1}, terminals=[
+        terminal04("term_483", "/wt/web-483", title="Review cycle · claude", busy=True),
+        terminal04("term_488", "/wt/web-488", title="Review cycle · codex", busy=True),
+    ])
+
+
+CASE_MAKERS.append(_04)
 
 def _canon(text):
     """JSON as data, with a fixed key order: formatting is free, but true vs 1 and 1 vs 1.0 are drift."""
