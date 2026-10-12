@@ -224,6 +224,61 @@ describe('addInboxItem', () => {
     ).toBe('in_0000000000000002')
   })
 
+  // Only the same action's card is edited in place: an open card never turns into an ask for another action,
+  // and a start_run card (Pilot's ask-first ask, one per run) never merges with any other card.
+  it.each<[string, Partial<InboxAddParams>, Partial<InboxAddParams>]>([
+    [
+      'a card for another action',
+      { action: 'push', actionArgs: { argv: ['a'] } },
+      { action: 'mark_ready', actionArgs: { argv: ['1561', 'abc'] } }
+    ],
+    [
+      "an agent's card where Pilot's ask-first card is open",
+      { action: 'start_run', actionArgs: { run_id: 'run-1' } },
+      { action: 'start_run', actionArgs: { run_id: 'run-1' } }
+    ],
+    [
+      "Pilot's ask-first card where an agent's card is open",
+      { action: 'push', actionArgs: { argv: ['a'] } },
+      { action: 'start_run', actionArgs: { run_id: 'run-1' } }
+    ],
+    [
+      'an action card where a question of that title is open',
+      {},
+      { action: 'push', actionArgs: { argv: ['a'] } }
+    ]
+  ])('files %s as a new card, leaving the open one as it was', (_name, first, second) => {
+    const { store, deps } = setup()
+    const base: InboxAddParams = { runId: 'run-1', type: 'action', title: 'Go ahead?' }
+    addInboxItem(deps, { ...base, ...first })
+    const before = store.inbox.get('in_0000000000000001')
+    expect(addInboxItem(deps, { ...base, ...second })).toMatchObject({
+      id: 'in_0000000000000002',
+      existing: false
+    })
+    expect(store.inbox.get('in_0000000000000001')).toEqual(before)
+  })
+
+  it('still edits the open card of the same action in place', () => {
+    const { store, deps } = setup()
+    const push: InboxAddParams = {
+      runId: 'run-1',
+      type: 'action',
+      title: 'Push?',
+      action: 'push',
+      actionArgs: { argv: ['a'] }
+    }
+    addInboxItem(deps, push)
+    expect(addInboxItem(deps, { ...push, actionArgs: { argv: ['b'] } })).toMatchObject({
+      id: 'in_0000000000000001',
+      existing: true
+    })
+    expect(store.inbox.get('in_0000000000000001')).toMatchObject({
+      version: 2,
+      actionArgs: { argv: ['b'] }
+    })
+  })
+
   it('needs an automation and item outside a run', () => {
     const { deps } = setup()
     expect(() => addInboxItem(deps, { ...QUESTION, runId: undefined })).toThrow(
