@@ -14,6 +14,11 @@ export const PILOT_HANDLER_GROUPS: readonly HandlerGroup[] = [
     load: async () => (await import('./handlers.js')).PILOT_HANDLERS
   },
   {
+    name: 'pilot-import',
+    keys: ['automations import-state'],
+    load: async () => (await import('./handlers-import.js')).IMPORT_HANDLERS
+  },
+  {
     name: 'pilot-automation-files',
     keys: [
       'automations list-yaml',
