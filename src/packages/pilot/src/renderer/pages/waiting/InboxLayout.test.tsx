@@ -127,10 +127,10 @@ describe('the Inbox layout', () => {
     ])
     expect(
       within(sections[0])
-        .getAllByRole('heading', { level: 3 })
+        .getAllByRole('heading')
         .map((h) => h.textContent)
     ).toEqual(['web-2099-carrier · 2', 'F1 Fixture', 'F2 Rescind'])
-    expect(sections[0].querySelector('h3')?.className).toContain('sticky')
+    expect(sections[0].querySelector('h2')?.className).toContain('sticky')
     expect(screen.queryByText('Job-wide')).toBeNull()
   })
 
@@ -256,5 +256,130 @@ describe('the answer row', () => {
     await waitFor(() => expect(notes.getAttribute('aria-checked')).toBe('true'))
     expect(article.textContent).toContain('say how it should be done')
     expect(approve.getAttribute('aria-checked')).toBe('false')
+  })
+})
+
+describe('fix round 1', () => {
+  beforeEach(() => window.localStorage.clear())
+  afterEach(() => {
+    cleanup()
+    pilotRpc.mockReset()
+  })
+
+  it('treats a selected group that has vanished as All, and shows the dropdown as All', async () => {
+    let list = LIST
+    pilotRpc.mockImplementation(async (method: string) => {
+      if (method === 'pilot.inbox.list') {
+        return list
+      }
+      return method === 'pilot.queue.list' ? { entries: [] } : { imported: 0, skipped: [] }
+    })
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    render(<InboxPage />)
+    await screen.findByRole('heading', { name: 'F1 Fixture' })
+    const filter = () =>
+      screen.getByRole('combobox', { name: 'Worktree filter' }) as HTMLSelectElement
+    fireEvent.change(filter(), { target: { value: 'mr:1579' } })
+    expect(screen.getAllByRole('region')).toHaveLength(1)
+    list = { ...LIST, items: [F1, F2, JOB] }
+    await vi.advanceTimersByTimeAsync(10_500)
+    vi.useRealTimers()
+    await waitFor(() => expect(screen.getAllByRole('region')).toHaveLength(2))
+    expect(filter().value).toBe('all')
+    expect(screen.queryByText(/Nothing waiting/)).toBeNull()
+  })
+
+  it('shows only the selected group’s defaults, or none', async () => {
+    const dWt = card({
+      id: 'dw',
+      type: 'default',
+      title: 'Default in worktree',
+      worktreePath: '/w/web-2099-carrier'
+    })
+    const dJob = card({
+      id: 'dj',
+      type: 'default',
+      title: 'Default in job',
+      automationId: 'reviews'
+    })
+    pilotRpc.mockImplementation(async (method: string) => {
+      if (method === 'pilot.inbox.list') {
+        return { ...LIST, items: [F1, R1579, dWt, dJob] }
+      }
+      return method === 'pilot.queue.list' ? { entries: [] } : { imported: 0, skipped: [] }
+    })
+    render(<InboxPage />)
+    await screen.findByRole('heading', { name: 'F1 Fixture' })
+    fireEvent.click(screen.getByText(/Defaults the agents took/))
+    expect(screen.getByRole('heading', { name: 'Default in job' })).toBeTruthy()
+    fireEvent.change(screen.getByRole('combobox', { name: 'Worktree filter' }), {
+      target: { value: 'wt:/w/web-2099-carrier' }
+    })
+    expect(screen.getByRole('heading', { name: 'Default in worktree' })).toBeTruthy()
+    expect(screen.queryByRole('heading', { name: 'Default in job' })).toBeNull()
+    fireEvent.change(screen.getByRole('combobox', { name: 'Worktree filter' }), {
+      target: { value: 'mr:1579' }
+    })
+    expect(screen.queryByText(/Defaults the agents took/)).toBeNull()
+  })
+
+  it('nests the headings: sections h2 above the card titles h3', async () => {
+    serve()
+    render(<InboxPage />)
+    const title = await screen.findByRole('heading', { name: 'F1 Fixture' })
+    expect(title.tagName).toBe('H3')
+    expect(
+      screen.getByRole('region', { name: 'web-2099-carrier' }).querySelector('h2')
+    ).not.toBeNull()
+  })
+
+  it('clears the unsaved pill once the answer is saved, and when Change answer reopens it', async () => {
+    let status: InboxItemRow['status'] = 'open'
+    pilotRpc.mockImplementation(async (method: string) => {
+      if (method === 'pilot.inbox.list') {
+        return { ...LIST, items: [{ ...F1, status }] }
+      }
+      if (method === 'pilot.inbox.answer') {
+        status = 'answered'
+        return {}
+      }
+      return method === 'pilot.queue.list' ? { entries: [] } : { imported: 0, skipped: [] }
+    })
+    render(<InboxPage />)
+    const article = (await screen.findByRole('heading', { name: 'F1 Fixture' })).closest('article')!
+    const pill = () => [...article.querySelectorAll('span')].map((s) => s.textContent)
+    fireEvent.click(article.querySelector('[role="radio"]')!)
+    expect(pill()).toContain('unsaved')
+    fireEvent.click(article.querySelector('button[data-save]')!)
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Change answer' })).toBeTruthy())
+    expect(pill()).not.toContain('unsaved')
+    fireEvent.click(screen.getByRole('button', { name: 'Change answer' }))
+    expect(pill()).not.toContain('unsaved')
+  })
+
+  it('keeps an open import panel when the re-preview after an import fails', async () => {
+    let previews = 0
+    pilotRpc.mockImplementation(async (method: string, params: { apply?: boolean }) => {
+      if (method === 'pilot.inbox.importVault') {
+        if (params.apply) {
+          return { applied: true, imported: 1, answers: 0, runs: 0, skipped: [] }
+        }
+        previews += 1
+        if (previews > 1) {
+          throw new Error('GitLab is down')
+        }
+        return { applied: false, imported: 1, answers: 0, runs: 0, skipped: [] }
+      }
+      if (method === 'pilot.inbox.list') {
+        return LIST
+      }
+      return { entries: [] }
+    })
+    render(<InboxPage />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Import' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Apply import' }))
+    expect(await screen.findByText(/^Imported 1 card/)).toBeTruthy()
+    await waitFor(() => expect(previews).toBe(2))
+    expect(screen.getByText(/^Imported 1 card/)).toBeTruthy()
   })
 })

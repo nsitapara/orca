@@ -24,9 +24,9 @@ function withError(
 
 function SectionHeading({ section }: { section: Section }): React.JSX.Element {
   return (
-    <h3 className="sticky top-0 z-10 bg-background py-1 font-mono text-xs font-semibold text-muted-foreground">
+    <h2 className="sticky top-0 z-10 bg-background py-1 font-mono text-xs font-semibold text-muted-foreground">
       <span className="text-foreground">{section.group.label}</span> · {section.items.length}
-    </h3>
+    </h2>
   )
 }
 
@@ -51,8 +51,13 @@ export function InboxPage(): React.JSX.Element {
   const openItems = items.filter((i) => i.type !== 'default')
   const defaults = items.filter((i) => i.type === 'default')
   const sections = groupItems(openItems, automations)
-  const shown = sections.filter((s) => group === ALL || s.group.key === group)
-  const defaultSections = groupItems(defaults, automations)
+  // A selected group with no card left (its last one was answered) counts as All.
+  const activeGroup = sections.some((s) => s.group.key === group) ? group : ALL
+  const shown = sections.filter((s) => activeGroup === ALL || s.group.key === activeGroup)
+  const defaultSections = groupItems(defaults, automations).filter(
+    (s) => activeGroup === ALL || s.group.key === activeGroup
+  )
+  const defaultCount = defaultSections.reduce((n, s) => n + s.items.length, 0)
   const detailIds = useMemo(
     () => items.filter((i) => i.details || i.detailsMd).map((i) => i.id),
     [items]
@@ -97,7 +102,7 @@ export function InboxPage(): React.JSX.Element {
         onViewer={setViewer}
         sections={sections}
         total={openItems.length}
-        group={group}
+        group={activeGroup}
         onGroup={setGroup}
         canExpand={detailIds.length > 0}
         allOpen={allOpen}
@@ -123,10 +128,10 @@ export function InboxPage(): React.JSX.Element {
           ) : (
             <p className="text-sm text-muted-foreground">Nothing waiting on {viewerName} here.</p>
           )}
-          {defaults.length ? (
+          {defaultCount ? (
             <Collapsible className="rounded-lg border border-border/50 px-3 py-2">
               <CollapsibleTrigger className="flex w-full items-center gap-2 text-sm font-semibold">
-                <span>Defaults the agents took · {defaults.length}</span>
+                <span>Defaults the agents took · {defaultCount}</span>
                 <span className="text-xs font-normal text-muted-foreground">
                   never counted as waiting
                 </span>
