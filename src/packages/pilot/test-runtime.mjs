@@ -46,5 +46,6 @@ export const PILOT_SQLITE_RUNTIME_INCLUDE = [
   'src/packages/pilot/test/parity/03-review-branch-code.parity.test.ts',
   'src/packages/pilot/test/parity/03-review-branch-code-steps.parity.test.ts',
   'src/packages/pilot/src/main/importer/sweep-state/ui-qa-overnight.test.ts',
-  'src/packages/pilot/test/parity/04-ui-qa-overnight.parity.test.ts'
+  'src/packages/pilot/test/parity/04-ui-qa-overnight.parity.test.ts',
+  'src/packages/pilot/test/parity/04-ui-qa-overnight-steps.parity.test.ts'
 ]
