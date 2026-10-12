@@ -114,7 +114,7 @@
         "linear",
         "list",
         "--filter",
-        "all",
+        "assigned",
         "--workspace",
         "all",
         "--limit",
@@ -128,7 +128,7 @@
           "issues": [],
           "truncated": false,
           "meta": {
-            "filter": "all",
+            "filter": "assigned",
             "workspaceId": "all",
             "limit": 200,
             "returned": 0,
