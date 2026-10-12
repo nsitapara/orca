@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import type { ScriptRunner } from '../../src/main/fields/script-runner'
-import { runTick } from '../../src/main/scheduler/tick-runner'
+import { runTick, type TickDeps } from '../../src/main/scheduler/tick-runner'
 import { PilotStore } from '../../src/main/store/store'
 import type { ItemDecision } from '../../src/shared/api-types'
 import { parseAutomationYaml } from '../../src/shared/definition/parse'
@@ -46,6 +46,8 @@ export async function dryTick(input: {
   fixture: ParityFixture
   seed?: (store: PilotStore, fixture: ParityFixture) => void
   runScript?: ScriptRunner
+  // Swaps parts of the tick's deps (13's Linear tickets).
+  tickDeps?: (deps: TickDeps, fixture: ParityFixture) => TickDeps
 }): Promise<ItemDecision[]> {
   const store = PilotStore.open(':memory:')
   try {
@@ -53,7 +55,7 @@ export async function dryTick(input: {
     const result = await runTick(
       input.definition,
       input.people,
-      fixtureTickDeps(input.fixture, store, { runScript: input.runScript }),
+      swapDeps(input, fixtureTickDeps(input.fixture, store, { runScript: input.runScript })),
       { dryRun: true }
     )
     if (result.error) {
@@ -63,6 +65,13 @@ export async function dryTick(input: {
   } finally {
     store.close()
   }
+}
+
+function swapDeps(
+  input: { fixture: ParityFixture; tickDeps?: (d: TickDeps, f: ParityFixture) => TickDeps },
+  deps: TickDeps
+): TickDeps {
+  return input.tickDeps ? input.tickDeps(deps, input.fixture) : deps
 }
 
 // The name of the first check an item failed, or null.
