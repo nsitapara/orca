@@ -48,3 +48,20 @@ export type InboxAnswerParams = {
   via?: 'page' | 'cli'
   by?: string
 }
+
+// What a timeline row shows of a card (F5): Task 30 imports it, Task 32's activity runs carry it.
+export type InboxItemSummary = Pick<
+  InboxItemRow,
+  | 'id'
+  | 'automationId'
+  | 'runId'
+  | 'stepIdx'
+  | 'itemKey'
+  | 'worktreePath'
+  | 'person'
+  | 'type'
+  | 'title'
+  | 'context'
+  | 'status'
+  | 'createdAt'
+>
