@@ -98,41 +98,6 @@ function clean(f: ItemFields): CheckResult {
   return pass('No uncommitted changes')
 }
 
-function idle(f: ItemFields): CheckResult {
-  const typing = f['worktree.typing']
-  if (typing === true) {
-    return fail('Someone is typing in an agent tab there')
-  }
-  if (typing !== false) {
-    return fail("Couldn't tell whether someone is typing there")
-  }
-  const state = f['worktree.agent_state']
-  if (state === 'working') {
-    return fail('An agent is working there')
-  }
-  if (state === 'waiting') {
-    return fail('An agent there is waiting for input')
-  }
-  if (state !== 'idle') {
-    return fail("Couldn't read the agents' state there")
-  }
-  return pass('No agent working and nobody typing')
-}
-
-function sessions(c: Extract<CheckDef, { kind: 'session_none_open' }>, f: ItemFields): CheckResult {
-  const open = c.scope === 'any' ? f['session.open_any'] : f['session.open_from_automation']
-  if (typeof open !== 'boolean') {
-    return fail("Couldn't tell whether a session is open")
-  }
-  if (!open) {
-    return pass('No session open')
-  }
-  if (c.scope === 'any') {
-    return fail('A session from an automation is still open there')
-  }
-  return fail('A session from this automation is still open there')
-}
-
 // Same rule as worktree-gate's quota.py: an unreadable quota lets the run start (fail-open).
 function quota(c: Extract<CheckDef, { kind: 'quota' }>, f: ItemFields): CheckResult {
   const name = AGENT_NAME[c.agent]
@@ -184,12 +149,10 @@ function outcome(c: CheckDef, ctx: CheckContext, script: CheckResult | undefined
       return exists(ctx)
     case 'worktree_clean':
       return clean(ctx.fields)
-    case 'worktree_idle':
-      return idle(ctx.fields)
-    case 'session_none_open':
-      return sessions(c, ctx.fields)
     case 'quota':
       return quota(c, ctx.fields)
+    case 'worktree_idle':
+    case 'session_none_open':
     case 'mr':
       return gateCheckOutcome(c, ctx.fields)
     case 'window':

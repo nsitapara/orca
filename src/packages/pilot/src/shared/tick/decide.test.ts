@@ -194,15 +194,9 @@ describe('decideTick: checks and the worktree rule', () => {
       ['mr:2', new Map([[1, { ok: true, reason: 'Ready' }]])]
     ])
     const out = decideTick(
-      input(
-        def,
-        [
-          item(1),
-          item(2, { 'worktree.agent_state': 'idle', 'worktree.typing': false }),
-          item(3, { 'worktree.path': null })
-        ],
-        { scriptChecks }
-      )
+      input(def, [item(1), item(2, { 'worktree.busy': '' }), item(3, { 'worktree.path': null })], {
+        scriptChecks
+      })
     )
     expect(out.map((d) => [d.verdict, d.reason, d.checks.length])).toEqual([
       ['skipped', 'Nothing to do', 2],

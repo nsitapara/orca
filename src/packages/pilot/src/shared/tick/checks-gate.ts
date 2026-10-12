@@ -36,10 +36,52 @@ export function mrOutcome(rule: MrRule, f: ItemFields): Outcome {
   return { ok: true, reason: MR_OK[rule] }
 }
 
-export type GateCheck = Extract<CheckDef, { kind: 'mr' }>
+function sentence(text: string): string {
+  return text.charAt(0).toUpperCase() + text.slice(1)
+}
 
-// Task 6a's `evaluateCheck` sends the gate-backed kinds here. Task 19b adds `worktree_idle` and
-// `session_none_open`.
+// `worktree: idle` (gate.worktree_busy): Task 19c's activity pass sets worktree.busy to '' or the reason.
+export function idleOutcome(f: ItemFields): Outcome {
+  if (typeof f['worktree.path'] !== 'string') {
+    return { ok: true, reason: 'No worktree yet, so nothing runs there' }
+  }
+  const busy = f['worktree.busy']
+  if (typeof busy !== 'string') {
+    return { ok: false, reason: "Couldn't tell whether an agent is working there" }
+  }
+  if (busy !== '') {
+    return { ok: false, reason: sentence(busy) }
+  }
+  return { ok: true, reason: 'No agent working and nobody typing' }
+}
+
+const OPEN_FIELD = { automation: 'session.open_from_automation', any: 'session.open_any' } as const
+const OPEN_REASON = {
+  automation: 'A session from this automation is still open there',
+  any: 'A session from an automation is still open there'
+} as const
+
+// `session: none_open` (M1 wording for this automation's sessions) and its `any` scope.
+export function sessionOutcome(scope: 'automation' | 'any', f: ItemFields): Outcome {
+  const open = f[OPEN_FIELD[scope]]
+  if (typeof open !== 'boolean') {
+    return { ok: false, reason: "Couldn't tell whether a session is open" }
+  }
+  if (open) {
+    return { ok: false, reason: OPEN_REASON[scope] }
+  }
+  return { ok: true, reason: 'No session open' }
+}
+
+export type GateCheck = Extract<CheckDef, { kind: 'mr' | 'worktree_idle' | 'session_none_open' }>
+
 export function gateCheckOutcome(c: GateCheck, f: ItemFields): Outcome {
-  return mrOutcome(c.rule, f)
+  switch (c.kind) {
+    case 'mr':
+      return mrOutcome(c.rule, f)
+    case 'worktree_idle':
+      return idleOutcome(f)
+    case 'session_none_open':
+      return sessionOutcome(c.scope, f)
+  }
 }
