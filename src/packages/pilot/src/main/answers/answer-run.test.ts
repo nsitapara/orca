@@ -44,7 +44,7 @@ function setup(state: TerminalState, over: Partial<AgentDispatchDeps> = {}) {
     status: 'done',
     terminalHandle: 'term-1',
     paneKey: 'tab:leaf',
-    sessionId: 'sess-1',
+    sessionId: '00000000-0000-4000-8000-000000000001',
     launchArgs: ['--model', 'opus']
   })
   const deps: AgentDispatchDeps = {
@@ -55,9 +55,11 @@ function setup(state: TerminalState, over: Partial<AgentDispatchDeps> = {}) {
       transcript: async () => ({ size: 10, mtimeMs: NOW })
     },
     quota: async () => ({ weekly: 10, session: 10 }),
-    open: vi
-      .fn()
-      .mockResolvedValue({ terminalHandle: 'term-2', paneKey: 'tab2:leaf', sessionId: 'sess-2' }),
+    open: vi.fn().mockResolvedValue({
+      terminalHandle: 'term-2',
+      paneKey: 'tab2:leaf',
+      sessionId: '00000000-0000-4000-8000-000000000002'
+    }),
     send: vi.fn().mockResolvedValue(undefined),
     mainCheckout: async () => '/main',
     current: (item) => item,
@@ -96,7 +98,7 @@ describe('dispatchToAgent', () => {
       kind: 'dispatched',
       runId: RUN_ID,
       route: 'resume',
-      sessionId: 'sess-1'
+      sessionId: '00000000-0000-4000-8000-000000000001'
     })
     expect(vi.mocked(deps.send).mock.calls[0][0]).toBe('term-1')
     expect(vi.mocked(deps.send).mock.calls[0][1]).toContain('[in_a] "Which image?" → e2e')
@@ -117,7 +119,7 @@ describe('dispatchToAgent', () => {
       name: 'answers',
       status: 'running',
       terminalHandle: 'term-1',
-      sessionId: 'sess-1',
+      sessionId: '00000000-0000-4000-8000-000000000001',
       launchArgs: ['--model', 'opus']
     })
     expect(store.events.forRun(RUN_ID)).toMatchObject([
@@ -127,7 +129,10 @@ describe('dispatchToAgent', () => {
 
   it('forks the asking session in a new tab when its tab is gone, recording the launch args', async () => {
     const { store, deps, group } = setup('gone')
-    expect(await dispatchToAgent(deps, group)).toMatchObject({ route: 'fork', sessionId: 'sess-2' })
+    expect(await dispatchToAgent(deps, group)).toMatchObject({
+      route: 'fork',
+      sessionId: '00000000-0000-4000-8000-000000000002'
+    })
     expect(deps.open).toHaveBeenCalledWith(
       expect.objectContaining({
         runId: RUN_ID,
@@ -137,7 +142,7 @@ describe('dispatchToAgent', () => {
         worktree: { id: null, path: '/wt' },
         title: 'Fix CI · answers',
         args: [],
-        session: { kind: 'fork', sessionId: 'sess-1' }
+        session: { kind: 'fork', sessionId: '00000000-0000-4000-8000-000000000001' }
       })
     )
     expect(vi.mocked(deps.open).mock.calls[0][0].prompt).toMatch(
@@ -281,7 +286,7 @@ describe('dispatchToAgent', () => {
       kind: 'dispatched',
       runId: RUN_ID,
       route: 'resume',
-      sessionId: 'sess-1'
+      sessionId: '00000000-0000-4000-8000-000000000001'
     })
     expect(store.runs.get(RUN_ID)?.status).toBe('running')
     expect(store.runs.steps(RUN_ID)[0]).toMatchObject({

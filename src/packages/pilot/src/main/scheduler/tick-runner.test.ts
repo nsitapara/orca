@@ -437,7 +437,7 @@ function launching(create: (name: string) => Promise<{ id: string; path: string 
       return { handle: `term_${selectors.length}`, paneKey: 'tab:leaf' }
     },
     modeText: async () => null,
-    newSessionId: () => 'sess',
+    newSessionId: () => '00000000-0000-4000-8000-000000000051',
     now: d.now,
     transcriptExists: async () => true
   })
@@ -531,7 +531,8 @@ describe('runTick launching into each workspace (Task 8d)', () => {
     const result = await runTick(shared, people, run.d, { dryRun: false })
     expect(result.status).toBe('ok')
     expect(run.selectors).toEqual(['path:/repo'])
-    const busy = "Couldn't start: Session sess is busy in Fix failed CI on my MRs · !1561"
+    const busy =
+      "Couldn't start: Session 00000000-0000-4000-8000-000000000051 is busy in Fix failed CI on my MRs · !1561"
     expect(
       run.d.store.runs.forTick(result.tickId).map((r) => [r.itemKey, r.status, r.outcome])
     ).toEqual([

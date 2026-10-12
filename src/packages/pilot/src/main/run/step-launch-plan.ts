@@ -1,3 +1,4 @@
+import { isSessionId, NOT_A_SESSION_ID } from '../../shared/session-id'
 import type { ItemFields, StepRow } from '../../shared/api-types'
 import type { AgentKind, AutomationDefinition, StepDef } from '../../shared/definition/types'
 import { renderTemplate } from '../../shared/template'
@@ -31,8 +32,13 @@ export function planSession(input: SessionInput): SessionPlan {
     return fresh(agent, input.newId)
   }
   if (session.kind === 'per_worktree') {
-    if (input.worktreeSession) {
+    if (isSessionId(input.worktreeSession)) {
       return { kind: 'resume', sessionId: input.worktreeSession }
+    }
+    if (input.worktreeSession) {
+      console.warn(
+        `pilot: stored session ${JSON.stringify(input.worktreeSession)} ${NOT_A_SESSION_ID}; starting fresh`
+      )
     }
     return fresh(agent, input.newId)
   }
@@ -52,7 +58,22 @@ export function planSession(input: SessionInput): SessionPlan {
   if (!earlier.sessionId) {
     return { kind: 'missing', reason: `Step "${session.step}" has no session id to continue` }
   }
+  if (!isSessionId(earlier.sessionId)) {
+    return {
+      kind: 'missing',
+      reason: `Step "${session.step}"'s session ${NOT_A_SESSION_ID}; it can't be continued`
+    }
+  }
   return { kind: 'resume', sessionId: earlier.sessionId }
+}
+
+// A session id only ever reaches argv in the UUID shape (shared/session-id.ts): checked again here, whoever
+// planned the session, so a flag-shaped id can never inject an argument.
+function idArg(sessionId: string): string {
+  if (!isSessionId(sessionId)) {
+    throw new Error(`${JSON.stringify(sessionId)} ${NOT_A_SESSION_ID}; nothing launched`)
+  }
+  return sessionId
 }
 
 // Goes before the prompt in the launch command (pilot-hook: agent-launch-env).
@@ -63,18 +84,18 @@ export function agentArgv(
 ): string[] {
   if (session.kind === 'resume') {
     if (agent === 'claude') {
-      return ['--resume', session.sessionId, ...args]
+      return ['--resume', idArg(session.sessionId), ...args]
     }
-    return ['resume', session.sessionId, ...args]
+    return ['resume', idArg(session.sessionId), ...args]
   }
   if (session.kind === 'fork') {
     if (agent === 'claude') {
-      return ['--resume', session.sessionId, '--fork-session', ...args]
+      return ['--resume', idArg(session.sessionId), '--fork-session', ...args]
     }
-    return ['fork', session.sessionId, ...args]
+    return ['fork', idArg(session.sessionId), ...args]
   }
   if (session.kind === 'fresh' && session.sessionId !== null) {
-    return ['--session-id', session.sessionId, ...args]
+    return ['--session-id', idArg(session.sessionId), ...args]
   }
   return [...args]
 }

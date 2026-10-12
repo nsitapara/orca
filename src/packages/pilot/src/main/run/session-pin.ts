@@ -1,3 +1,5 @@
+import { isSessionId } from '../../shared/session-id'
+
 type Seen = { id: string; transcriptPath: string | null } | null
 type Owned = { sessionId: string | null; transcriptPath: string | null }
 
@@ -8,7 +10,8 @@ export function sessionPatch(
   step: Owned,
   seen: Seen
 ): { sessionId?: string; transcriptPath?: string } | null {
-  if (!seen) {
+  // An id the hooks report is agent-reported and later becomes resume argv: only a session id is taken.
+  if (!seen || !isSessionId(seen.id)) {
     return null
   }
   if (step.sessionId === null) {

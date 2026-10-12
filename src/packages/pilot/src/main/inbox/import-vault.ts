@@ -1,3 +1,4 @@
+import { isSessionId } from '../../shared/session-id'
 import { createHash } from 'node:crypto'
 import type { InboxAnswer } from '../../shared/api-types'
 import type { AgentKind, AutomationDefinition } from '../../shared/definition/types'
@@ -123,8 +124,7 @@ function actionOf(row: VaultRow): ActionPin {
 }
 
 // A Resume: line is note text agents can write, and the dispatcher resumes whatever session id lands here:
-// only a UUID counts.
-const SESSION_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+// only a session id (shared/session-id.ts) counts.
 
 function runOf(
   row: VaultRow,
@@ -132,7 +132,7 @@ function runOf(
   itemKey: string | null,
   now: number
 ): ImportRun | null {
-  if (!SESSION_ID.test(row.session)) {
+  if (!isSessionId(row.session)) {
     return null
   }
   return {

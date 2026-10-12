@@ -1,3 +1,4 @@
+import { isSessionId } from '../../shared/session-id'
 import type { InboxItemRow } from '../../shared/api-types'
 import type { AgentKind, AutomationDefinition } from '../../shared/definition/types'
 import type { SessionTerminalState } from '../run/agent-step'
@@ -114,7 +115,8 @@ export async function chooseSession(
   now: number
 ): Promise<SessionTarget | { kind: 'hold'; hold: Hold }> {
   const asking = def.answers?.resume === 'never' ? null : askingSession(store, items)
-  if (!asking?.sessionId) {
+  // Only a session id is resumed or forked (it becomes argv); anything else starts a new session.
+  if (!asking?.sessionId || !isSessionId(asking.sessionId)) {
     return newSession(def, asking)
   }
   if (asking.terminalHandle) {

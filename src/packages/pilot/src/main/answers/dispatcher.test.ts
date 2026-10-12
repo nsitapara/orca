@@ -75,7 +75,10 @@ function setup(over: Over = {}) {
     skill: 'fix-gitlab-ci',
     startedAt: 1
   })
-  store.runs.updateStep('run-1', 0, { status: 'done', sessionId: 'sess-1' })
+  store.runs.updateStep('run-1', 0, {
+    status: 'done',
+    sessionId: '00000000-0000-4000-8000-000000000001'
+  })
   let clock = 1_000_000
   let n = 0
   const inbox: InboxDeps = {
@@ -102,7 +105,12 @@ function setup(over: Over = {}) {
   } as ActionEntry
   const catalog = { entries: () => [push], get: (name: string) => (name === 'push' ? push : null) }
   const open = vi.fn(
-    over.open ?? (async () => ({ terminalHandle: 'term-2', paneKey: 'p', sessionId: 'sess-2' }))
+    over.open ??
+      (async () => ({
+        terminalHandle: 'term-2',
+        paneKey: 'p',
+        sessionId: '00000000-0000-4000-8000-000000000002'
+      }))
   )
   const holds = { ...FREE, ...over.holds }
   const deps: DispatcherDeps = {
@@ -229,7 +237,11 @@ describe('AnswerDispatcher', () => {
     expect(prompt).toContain(`[${first}] "Which image?" → e2e`)
     expect(prompt).toContain(`[${second}] "Retry once?" → yes, once`)
     expect(store.queue.forInboxItem(first)).toMatchObject([
-      { state: 'dispatched', route: 'fork', targetSessionId: 'sess-2' }
+      {
+        state: 'dispatched',
+        route: 'fork',
+        targetSessionId: '00000000-0000-4000-8000-000000000002'
+      }
     ])
   })
 

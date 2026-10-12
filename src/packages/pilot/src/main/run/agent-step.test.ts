@@ -39,7 +39,7 @@ function setup(definition: AutomationDefinition, over: Partial<AgentStepDeps> = 
   const deps: AgentStepDeps = {
     launchTerminal,
     modeText: async () => null,
-    newSessionId: () => 'uuid-new',
+    newSessionId: () => '00000000-0000-4000-8000-00000000000a',
     now: () => 7,
     transcriptExists: async () => true,
     ...over
@@ -77,15 +77,18 @@ describe('launchAgentStep', () => {
     await launchAgentStep(store, request(0), deps)
     finish(store, 'run-1', 0)
     await launchAgentStep(store, request(1), deps)
-    expect(argvOf(launchTerminal.mock.calls[0])).toEqual(['--session-id', 'uuid-new'])
+    expect(argvOf(launchTerminal.mock.calls[0])).toEqual([
+      '--session-id',
+      '00000000-0000-4000-8000-00000000000a'
+    ])
     expect(argvOf(launchTerminal.mock.calls[1])).toEqual([
       '--resume',
-      'uuid-new',
+      '00000000-0000-4000-8000-00000000000a',
       '--dangerously-skip-permissions'
     ])
     expect(store.runs.steps('run-1').map((s) => [s.name, s.status, s.sessionId])).toEqual([
-      ['review', 'done', 'uuid-new'],
-      ['fix', 'running', 'uuid-new']
+      ['review', 'done', '00000000-0000-4000-8000-00000000000a'],
+      ['fix', 'running', '00000000-0000-4000-8000-00000000000a']
     ])
   })
 
@@ -115,7 +118,9 @@ describe('launchAgentStep', () => {
     })
     const { store, request, launchTerminal, deps } = setup(def)
     await launchAgentStep(store, request(0), deps)
-    expect(store.sessions.get('cycles', '/wt/a', 'claude')?.sessionId).toBe('uuid-new')
+    expect(store.sessions.get('cycles', '/wt/a', 'claude')?.sessionId).toBe(
+      '00000000-0000-4000-8000-00000000000a'
+    )
     finish(store, 'run-1', 0)
     store.runs.create({
       id: 'run-2',
@@ -126,17 +131,38 @@ describe('launchAgentStep', () => {
       worktreePath: '/wt/a',
       startedAt: 2
     })
-    await launchAgentStep(store, request(0, 'run-2'), { ...deps, newSessionId: () => 'uuid-other' })
-    expect(argvOf(launchTerminal.mock.calls[1])).toEqual(['--resume', 'uuid-new'])
+    await launchAgentStep(store, request(0, 'run-2'), {
+      ...deps,
+      newSessionId: () => '00000000-0000-4000-8000-00000000000b'
+    })
+    expect(argvOf(launchTerminal.mock.calls[1])).toEqual([
+      '--resume',
+      '00000000-0000-4000-8000-00000000000a'
+    ])
   })
 
   // A stored session whose transcript is gone (Claude deletes them after 30 days; a pinned one that never
   // started has none) would make `--resume` exit to a shell, and the step read working until its timeout.
   it.each<['claude' | 'codex', boolean, string[], string | null]>([
-    ['claude', false, ['--session-id', 'uuid-new'], 'uuid-new'],
-    ['claude', true, ['--resume', 'old-sess'], 'old-sess'],
+    [
+      'claude',
+      false,
+      ['--session-id', '00000000-0000-4000-8000-00000000000a'],
+      '00000000-0000-4000-8000-00000000000a'
+    ],
+    [
+      'claude',
+      true,
+      ['--resume', '00000000-0000-4000-8000-00000000000c'],
+      '00000000-0000-4000-8000-00000000000c'
+    ],
     ['codex', false, [], null],
-    ['codex', true, ['resume', 'old-sess'], 'old-sess']
+    [
+      'codex',
+      true,
+      ['resume', '00000000-0000-4000-8000-00000000000c'],
+      '00000000-0000-4000-8000-00000000000c'
+    ]
   ])(
     'per_worktree %s with its transcript on disk %s: resumes it only when it is there',
     async (agent, onDisk, argv, kept) => {
@@ -166,12 +192,17 @@ describe('launchAgentStep', () => {
       })
       store.runs.updateStep('run-0', 0, {
         status: 'done',
-        sessionId: 'old-sess',
-        transcriptPath: '/t/old-sess.jsonl'
+        sessionId: '00000000-0000-4000-8000-00000000000c',
+        transcriptPath: '/t/00000000-0000-4000-8000-00000000000c.jsonl'
       })
-      store.sessions.set('cycles', '/wt/a', agent, 'old-sess', 5)
+      store.sessions.set('cycles', '/wt/a', agent, '00000000-0000-4000-8000-00000000000c', 5)
       await launchAgentStep(store, request(0), deps)
-      expect(transcriptExists).toHaveBeenCalledWith(agent, 'old-sess', '/t/old-sess.jsonl', 2)
+      expect(transcriptExists).toHaveBeenCalledWith(
+        agent,
+        '00000000-0000-4000-8000-00000000000c',
+        '/t/00000000-0000-4000-8000-00000000000c.jsonl',
+        2
+      )
       expect(argvOf(launchTerminal.mock.calls[0])).toEqual(argv)
       expect(store.sessions.get('cycles', '/wt/a', agent)?.sessionId ?? null).toBe(kept)
     }
@@ -260,7 +291,7 @@ describe('launchAgentStep', () => {
     expect(store.runs.steps('run-1')).toHaveLength(1)
     expect(store.runs.steps('run-1')[0]).toMatchObject({
       status: 'running',
-      sessionId: 'uuid-new',
+      sessionId: '00000000-0000-4000-8000-00000000000a',
       sessionPinned: true,
       startedAt: 7
     })
@@ -299,7 +330,7 @@ describe('launchAgentStep for a session whose terminal may still be open', () =>
     finish(s.store, 'run-1', 0)
     return s
   }
-  const BUSY = 'Session uuid-new is busy in Auto · web-1-a · review'
+  const BUSY = 'Session 00000000-0000-4000-8000-00000000000a is busy in Auto · web-1-a · review'
 
   it.each<[string, SessionTerminalState, string[], boolean, boolean, string[] | null]>([
     ['free, started with the same args: the prompt goes in', 'free', [], true, false, null],
@@ -309,7 +340,7 @@ describe('launchAgentStep for a session whose terminal may still be open', () =>
       ['--x'],
       false,
       true,
-      ['--resume', 'uuid-new', '--x']
+      ['--resume', '00000000-0000-4000-8000-00000000000a', '--x']
     ],
     [
       'running another session: closed, then resumed',
@@ -317,16 +348,23 @@ describe('launchAgentStep for a session whose terminal may still be open', () =>
       [],
       false,
       true,
-      ['--resume', 'uuid-new']
+      ['--resume', '00000000-0000-4000-8000-00000000000a']
     ],
-    ['gone: resumed in a new terminal', 'gone', [], false, false, ['--resume', 'uuid-new']]
+    [
+      'gone: resumed in a new terminal',
+      'gone',
+      [],
+      false,
+      false,
+      ['--resume', '00000000-0000-4000-8000-00000000000a']
+    ]
   ])('%s', async (_name, state, fixArgs, sent, closed, argv) => {
     const terminals = terminalsIn(state)
     const { store, request, launchTerminal, deps } = await reviewed(terminals, fixArgs)
     await launchAgentStep(store, request(1), deps)
     expect(terminals.state).toHaveBeenCalledWith(
       { handle: 'term_1', paneKey: 'tab1:leaf' },
-      'uuid-new'
+      '00000000-0000-4000-8000-00000000000a'
     )
     const prompt = expect.stringContaining('Started by the Pilot automation')
     expect(terminals.send.mock.calls).toEqual(sent ? [['term_1', prompt]] : [])
@@ -335,7 +373,7 @@ describe('launchAgentStep for a session whose terminal may still be open', () =>
     expect(store.runs.steps('run-1')[1]).toMatchObject({
       status: 'running',
       terminalHandle: sent ? 'term_1' : 'term_2',
-      sessionId: 'uuid-new',
+      sessionId: '00000000-0000-4000-8000-00000000000a',
       launchArgs: fixArgs
     })
   })
@@ -376,7 +414,9 @@ describe('launchAgentStep for a session whose terminal may still be open', () =>
     expect(terminals.send.mock.calls.map(([handle]) => handle)).toEqual(sent ? ['term_1'] : [])
     expect(terminals.close.mock.calls).toEqual(sent ? [] : [['term_1']])
     const resumed = launchTerminal.mock.calls.slice(1).map(argvOf)
-    expect(resumed).toEqual(sent ? [] : [['--resume', 'uuid-new', ...nextArgs]])
+    expect(resumed).toEqual(
+      sent ? [] : [['--resume', '00000000-0000-4000-8000-00000000000a', ...nextArgs]]
+    )
     expect(store.runs.steps('run-2')[0]).toMatchObject({
       terminalHandle: sent ? 'term_1' : 'term_2',
       launchArgs: nextArgs
@@ -513,7 +553,7 @@ describe('launchAgentStep for a session whose terminal may still be open', () =>
     expect(store.runs.steps('run-2')[0]).toMatchObject({
       status: 'running',
       terminalHandle: 'term_1',
-      sessionId: 'uuid-new'
+      sessionId: '00000000-0000-4000-8000-00000000000a'
     })
   })
 })
@@ -543,7 +583,7 @@ describe('launchAgentStep for a session held in a tab no step row names', () => 
     await launchAgentStep(s.store, s.request(0), s.deps)
     finish(s.store, 'run-1', 0)
     await expect(launchAgentStep(s.store, s.request(1), s.deps)).rejects.toThrow(
-      'Session uuid-new is busy in terminal resume_tab'
+      'Session 00000000-0000-4000-8000-00000000000a is busy in terminal resume_tab'
     )
     expect(s.launchTerminal).toHaveBeenCalledTimes(1)
     expect(terminals.close).not.toHaveBeenCalled()
@@ -587,14 +627,14 @@ describe('launchAgentStep, one process per session: the row-named tab runs anoth
   async function reviewedIn(h: ReturnType<typeof held>) {
     await launchAgentStep(h.s.store, h.s.request(0), h.s.deps)
     finish(h.s.store, 'run-1', 0)
-    h.claims.release('uuid-new', 'launch:run-1:0')
+    h.claims.release('00000000-0000-4000-8000-00000000000a', 'launch:run-1:0')
   }
 
   it('finds the session in another tab when the step row tab was /cleared (other), and fails if it is busy', async () => {
     const h = held({ term_1: 'other', resume_tab: 'busy' })
     await reviewedIn(h)
     await expect(launchAgentStep(h.s.store, h.s.request(1), h.s.deps)).rejects.toThrow(
-      'Session uuid-new is busy in terminal resume_tab'
+      'Session 00000000-0000-4000-8000-00000000000a is busy in terminal resume_tab'
     )
     expect(h.s.launchTerminal).toHaveBeenCalledTimes(1)
     expect(h.terminals.close).not.toHaveBeenCalled()
@@ -612,7 +652,7 @@ describe('launchAgentStep, one process per session: the row-named tab runs anoth
     const h = held({ term_1: 'gone', resume_tab: 'free' }, 'half a thought')
     await reviewedIn(h)
     await expect(launchAgentStep(h.s.store, h.s.request(1), h.s.deps)).rejects.toThrow(
-      'Session uuid-new is busy in terminal resume_tab'
+      'Session 00000000-0000-4000-8000-00000000000a is busy in terminal resume_tab'
     )
     expect(h.terminals.close).not.toHaveBeenCalled()
   })
@@ -620,9 +660,9 @@ describe('launchAgentStep, one process per session: the row-named tab runs anoth
   it("fails the step, starting nothing, while another caller's claim holds the session", async () => {
     const h = held({ term_1: 'gone' })
     await reviewedIn(h)
-    h.claims.acquire('uuid-new', 'resume')
+    h.claims.acquire('00000000-0000-4000-8000-00000000000a', 'resume')
     await expect(launchAgentStep(h.s.store, h.s.request(1), h.s.deps)).rejects.toThrow(
-      'Session uuid-new is busy: another caller is opening it'
+      'Session 00000000-0000-4000-8000-00000000000a is busy: another caller is opening it'
     )
     expect(h.s.launchTerminal).toHaveBeenCalledTimes(1)
     expect(h.terminals.tabs).not.toHaveBeenCalled()
@@ -632,14 +672,16 @@ describe('launchAgentStep, one process per session: the row-named tab runs anoth
     const started = held({ term_1: 'gone' })
     await reviewedIn(started)
     await launchAgentStep(started.s.store, started.s.request(1), started.s.deps)
-    expect(started.claims.holder('uuid-new')).toMatchObject({ by: 'launch:run-1:1' })
+    expect(started.claims.holder('00000000-0000-4000-8000-00000000000a')).toMatchObject({
+      by: 'launch:run-1:1'
+    })
 
     const sent = held({ term_1: 'free' })
     await reviewedIn(sent)
     sent.s.store.runs.updateStep('run-1', 0, { launchArgs: [] })
     await launchAgentStep(sent.s.store, sent.s.request(1), sent.s.deps)
     expect(sent.terminals.send).toHaveBeenCalled()
-    expect(sent.claims.holder('uuid-new')).toBeNull()
+    expect(sent.claims.holder('00000000-0000-4000-8000-00000000000a')).toBeNull()
 
     const failed = held({ term_1: 'gone' })
     await reviewedIn(failed)
@@ -647,7 +689,7 @@ describe('launchAgentStep, one process per session: the row-named tab runs anoth
     await expect(
       launchAgentStep(failed.s.store, failed.s.request(1), failed.s.deps)
     ).rejects.toThrow('boom')
-    expect(failed.claims.holder('uuid-new')).toBeNull()
+    expect(failed.claims.holder('00000000-0000-4000-8000-00000000000a')).toBeNull()
   })
 
   it.each([
@@ -660,7 +702,9 @@ describe('launchAgentStep, one process per session: the row-named tab runs anoth
       await reviewedIn(h)
       h.s.launchTerminal.mockRejectedValueOnce(new Error(message))
       await expect(launchAgentStep(h.s.store, h.s.request(1), h.s.deps)).rejects.toThrow(message)
-      expect(h.claims.holder('uuid-new')).toMatchObject({ by: 'launch:run-1:1' })
+      expect(h.claims.holder('00000000-0000-4000-8000-00000000000a')).toMatchObject({
+        by: 'launch:run-1:1'
+      })
     }
   )
 
@@ -668,7 +712,7 @@ describe('launchAgentStep, one process per session: the row-named tab runs anoth
     const h = held({ term_1: 'other', resume_tab: 'gone' }, 'half a thought')
     await reviewedIn(h)
     await expect(launchAgentStep(h.s.store, h.s.request(1), h.s.deps)).rejects.toThrow(
-      'Session uuid-new is busy in terminal term_1'
+      'Session 00000000-0000-4000-8000-00000000000a is busy in terminal term_1'
     )
     expect(h.terminals.close).not.toHaveBeenCalled()
   })
@@ -676,11 +720,11 @@ describe('launchAgentStep, one process per session: the row-named tab runs anoth
   it("says so when the claim's start is closed, instead of that another caller is opening it", async () => {
     const h = held({ term_1: 'gone' })
     await reviewedIn(h)
-    h.claims.acquire('uuid-new', 'resume:1')
-    h.claims.setHandle('uuid-new', 'resume:1', 'T_dead')
+    h.claims.acquire('00000000-0000-4000-8000-00000000000a', 'resume:1')
+    h.claims.setHandle('00000000-0000-4000-8000-00000000000a', 'resume:1', 'T_dead')
     ;(h.terminals as Record<string, unknown>).isOpen = vi.fn(async () => false)
     await expect(launchAgentStep(h.s.store, h.s.request(1), h.s.deps)).rejects.toThrow(
-      "A previous start of session uuid-new didn't come up; try again"
+      "A previous start of session 00000000-0000-4000-8000-00000000000a didn't come up; try again"
     )
   })
 })

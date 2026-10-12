@@ -344,15 +344,18 @@ describe('wireRunEngine', () => {
   // A Codex CLI can't take a session id, so a per_worktree Codex step's id is only learned from its hooks:
   // stored then, so the automation's next run in that worktree resumes it instead of starting fresh.
   it.each([
-    ['per_worktree', 'session: per_worktree', 'codex-sess-1'],
+    ['per_worktree', 'session: per_worktree', '00000000-0000-4000-8000-00000000000d'],
     ['new', 'session: new', null]
   ])(
     'remembers the session a %s Codex step reports, once the watcher learns it',
     async (_kind, session, stored) => {
       const yaml = YAML.replace('timeout: 10m }', `timeout: 10m, ${session} }`)
-      const { store, wired } = setup(yaml, 11 * MIN, { id: 'codex-sess-1', transcriptPath: null })
+      const { store, wired } = setup(yaml, 11 * MIN, {
+        id: '00000000-0000-4000-8000-00000000000d',
+        transcriptPath: null
+      })
       await wired.poll()
-      expect(store.runs.steps('run-1')[0].sessionId).toBe('codex-sess-1')
+      expect(store.runs.steps('run-1')[0].sessionId).toBe('00000000-0000-4000-8000-00000000000d')
       expect(store.sessions.get('test-uis', '/wt', 'codex')?.sessionId ?? null).toBe(stored)
     }
   )

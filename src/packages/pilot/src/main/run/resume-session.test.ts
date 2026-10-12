@@ -10,7 +10,7 @@ const step = (over: Partial<StepRow>): StepRow =>
     idx: 0,
     name: 'fix',
     agent: 'claude',
-    sessionId: 's1',
+    sessionId: '00000000-0000-4000-8000-000000000021',
     terminalHandle: 'term_1',
     paneKey: 'tab:leaf',
     ...over
@@ -49,10 +49,18 @@ function deps(
 
 describe('resumeCommand', () => {
   it.each([
-    ['claude', 's1', 'claude --resume s1'],
-    ['codex', 'c-9', 'codex resume c-9'],
-    ['shell', 's1', null],
-    ['claude', 's1; rm -rf ~', null]
+    [
+      'claude',
+      '00000000-0000-4000-8000-000000000021',
+      'claude --resume 00000000-0000-4000-8000-000000000021'
+    ],
+    [
+      'codex',
+      '00000000-0000-4000-8000-000000000029',
+      'codex resume 00000000-0000-4000-8000-000000000029'
+    ],
+    ['shell', '00000000-0000-4000-8000-000000000021', null],
+    ['claude', '00000000-0000-4000-8000-000000000021; rm -rf ~', null]
   ])('%s %s → %s', (agent, id, expected) => {
     expect(resumeCommand(agent, id)).toBe(expected)
   })
@@ -85,14 +93,16 @@ describe('resumeStepSession', () => {
   it.each(['gone', 'other'] as const)(
     'opens the session in a new tab in the worktree when no tab holds it (%s)',
     async (state) => {
-      const d = deps(step({ agent: 'codex', sessionId: 'c1' }), { state })
+      const d = deps(step({ agent: 'codex', sessionId: '00000000-0000-4000-8000-000000000022' }), {
+        state
+      })
       expect(await resumeStepSession(d, { runId: 'r1', stepIdx: 0 })).toEqual({
         action: 'opened',
         handle: 'term_new'
       })
       expect(d.open).toHaveBeenCalledWith(
         'path:/wt/a',
-        'codex resume c1',
+        'codex resume 00000000-0000-4000-8000-000000000022',
         'Resume · !1 web-1 · fix'
       )
       expect(d.focus).not.toHaveBeenCalled()
@@ -175,7 +185,7 @@ describe('resumeStepSession, the race window before the new agent posts a row', 
 
   it("refuses while a launcher's claim holds the session", async () => {
     const claims = new SessionClaims()
-    claims.acquire('s1', 'launch:r2:0')
+    claims.acquire('00000000-0000-4000-8000-000000000021', 'launch:r2:0')
     const d = deps(step({}), { claims })
     await expect(resumeStepSession(d, req)).rejects.toThrow('Session is opening…')
     expect(d.open).not.toHaveBeenCalled()
@@ -186,7 +196,7 @@ describe('resumeStepSession, the race window before the new agent posts a row', 
     const d = deps(step({}), { claims })
     d.open.mockRejectedValueOnce(new Error('no pty'))
     await expect(resumeStepSession(d, req)).rejects.toThrow('no pty')
-    expect(claims.holder('s1')).toBeNull()
+    expect(claims.holder('00000000-0000-4000-8000-000000000021')).toBeNull()
   })
 
   it.each([
@@ -199,7 +209,7 @@ describe('resumeStepSession, the race window before the new agent posts a row', 
       const d = deps(step({}), { claims })
       d.open.mockRejectedValueOnce(new Error(message))
       await expect(resumeStepSession(d, req)).rejects.toThrow(message)
-      expect(claims.holder('s1')).toMatchObject({ handle: null })
+      expect(claims.holder('00000000-0000-4000-8000-000000000021')).toMatchObject({ handle: null })
       await expect(resumeStepSession(d, req)).rejects.toThrow('Session is opening…')
       expect(d.open).toHaveBeenCalledTimes(1)
     }
@@ -238,24 +248,26 @@ describe('resumeStepSession, the race window before the new agent posts a row', 
       () => clock.t,
       (id, claim) => judgeClaim(judgeDeps, id, claim, clock.t)
     )
-    claims.acquire('s1', 'resume:first')
+    claims.acquire('00000000-0000-4000-8000-000000000021', 'resume:first')
     const d = deps(step({ terminalHandle: null }), { claims })
     await expect(resumeStepSession(d, req)).rejects.toThrow('Session is opening…')
     expect(d.open).not.toHaveBeenCalled()
-    expect(claims.holder('s1')).toMatchObject({ by: 'resume:first' })
+    expect(claims.holder('00000000-0000-4000-8000-000000000021')).toMatchObject({
+      by: 'resume:first'
+    })
   })
 
   it('acquires before it looks, and releases when the look finds a live tab (nothing opened)', async () => {
     const claims = new SessionClaims()
     const d = deps(step({}), { claims, state: { term_1: 'free' } })
     expect((await resumeStepSession(d, req)).action).toBe('focused')
-    expect(claims.holder('s1')).toBeNull()
+    expect(claims.holder('00000000-0000-4000-8000-000000000021')).toBeNull()
   })
 
   it('does not focus the tab of a claim whose start is closed; says the start did not come up', async () => {
     const claims = new SessionClaims()
-    claims.acquire('s1', 'launch:r2:0')
-    claims.setHandle('s1', 'launch:r2:0', 'T_dead')
+    claims.acquire('00000000-0000-4000-8000-000000000021', 'launch:r2:0')
+    claims.setHandle('00000000-0000-4000-8000-000000000021', 'launch:r2:0', 'T_dead')
     const d = {
       ...deps(step({ terminalHandle: null }), { claims }),
       isOpen: vi.fn(async () => false)
