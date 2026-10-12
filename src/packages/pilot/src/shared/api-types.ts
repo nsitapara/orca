@@ -152,7 +152,7 @@ export type InboxAnswer = {
   option: number | null
   text: string | null
   digest: string
-  via: 'page' | 'cli' | 'import'
+  via: 'page' | 'device' | 'cli' | 'import'
   // Who gave it, as the transport stamped it (never from params). Absent on imported answers.
   callerKind?: 'local-cli' | 'desktop' | 'paired-device'
 }

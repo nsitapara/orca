@@ -8,7 +8,7 @@ import { parsePeopleYaml } from '../../shared/people'
 import { addInboxItem } from '../inbox/inbox-add'
 import type { InboxDeps } from '../inbox/inbox-service'
 import { PilotStore } from '../store/store'
-import { queueEntries } from './queue-view'
+import { APPROVE_ON_DESKTOP, queueEntries, routeOf } from './queue-view'
 import { saveAnswer } from './save'
 
 const def = parseAutomationYaml(
@@ -44,7 +44,11 @@ function queued(card: Omit<InboxAddParams, 'runId'>, text: string, runId: string
   }
   const extra = runId ? { runId } : { automationId: 'ci', itemKey: 'repo:r' }
   addInboxItem(deps, { ...card, ...extra })
-  saveAnswer(deps, { id: 'in_0000000000000001', text }, { callerKind: 'desktop', catalog })
+  saveAnswer(
+    deps,
+    { id: 'in_0000000000000001', text, digest: store.inbox.get('in_0000000000000001')!.digest },
+    { callerKind: 'desktop', catalog }
+  )
   return { deps, store }
 }
 
@@ -111,5 +115,66 @@ describe('queueEntries', () => {
     const { deps } = queued(QUESTION, 'A', 'run-1')
     expect(queueEntries(deps, catalog, { person: 'emil' })).toEqual([])
     expect(queueEntries(deps, catalog, { person: 'nish' })).toHaveLength(1)
+  })
+})
+
+describe('an answer never routes to a script for a caller other than the desktop', () => {
+  // Rows written as an older build, a hand edit or another path might: the route is bound to the caller.
+  function stored(
+    callerKind: 'desktop' | 'paired-device' | 'local-cli' | undefined,
+    text = 'approve'
+  ) {
+    const { deps, store } = queued(PUSH, 'skip', 'run-1')
+    const item = store.inbox.get('in_0000000000000001')!
+    const answer = {
+      option: null,
+      text,
+      digest: item.digest,
+      via: 'cli' as const,
+      ...(callerKind ? { callerKind } : {})
+    }
+    store.inbox.update(item.id, { answer }, 2_000)
+    return { deps, store, item: store.inbox.get(item.id)! }
+  }
+
+  it.each<['desktop' | 'paired-device' | 'local-cli' | undefined, object]>([
+    ['desktop', { kind: 'script', leaveOut: [] }],
+    ['paired-device', { kind: 'reask', reason: APPROVE_ON_DESKTOP }],
+    ['local-cli', { kind: 'reask', reason: APPROVE_ON_DESKTOP }],
+    [undefined, { kind: 'reask', reason: APPROVE_ON_DESKTOP }]
+  ])('caller %s', (callerKind, expected) => {
+    const { item } = stored(callerKind)
+    expect(routeOf(item, catalog)).toEqual(expected)
+  })
+
+  it('shows no script for an unknown caller or a device', () => {
+    for (const kind of [undefined, 'paired-device' as const]) {
+      const { deps } = stored(kind)
+      expect(queueEntries(deps, catalog, {})).toMatchObject([
+        { how: 'reask', fires: APPROVE_ON_DESKTOP }
+      ])
+    }
+  })
+
+  it('a device answer saved while the action was unknown does not become a script when the catalog learns it', () => {
+    const { deps } = queued(PUSH, 'skip', 'run-1')
+    deps.store.inbox.update(
+      'in_0000000000000001',
+      {
+        answer: {
+          option: null,
+          text: 'approve',
+          digest: 'x',
+          via: 'device',
+          callerKind: 'paired-device'
+        }
+      },
+      2_000
+    )
+    const unknown = { get: () => null }
+    expect(queueEntries(deps, unknown, {})).toMatchObject([{ how: 'agent' }])
+    expect(queueEntries(deps, catalog, {})).toMatchObject([
+      { how: 'reask', fires: APPROVE_ON_DESKTOP }
+    ])
   })
 })

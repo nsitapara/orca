@@ -7,9 +7,11 @@ import { parsePeopleYaml } from '../../shared/people'
 import { addInboxItem } from '../inbox/inbox-add'
 import { resolveInboxItem, type InboxDeps } from '../inbox/inbox-service'
 import { PilotStore } from '../store/store'
+import { routeOf } from './queue-view'
 import {
   APPROVE_ON_DESKTOP,
   CARD_CHANGED_ON_SAVE,
+  LOCAL_CLI_NO_ANSWER,
   NO_ANSWER_CALLER,
   saveAnswer as save,
   SETTLE_MS,
@@ -18,6 +20,7 @@ import {
 
 const catalog = { get: (name: string) => (name === 'push' || name === 'start_run' ? {} : null) }
 const DESKTOP: AnswerOrigin = { callerKind: 'desktop', catalog }
+const PHONE: AnswerOrigin = { callerKind: 'paired-device', catalog }
 const saveAnswer = (deps: InboxDeps, params: Parameters<typeof save>[1], origin = DESKTOP) =>
   save(deps, params, origin)
 
@@ -61,9 +64,9 @@ function setup(
 }
 
 describe('saveAnswer', () => {
-  it('saves a page answer against the version shown and queues it to settle for 180 s', () => {
+  it('saves a desktop answer against the version shown and queues it to settle for 180 s', () => {
     const { store, deps, digest } = setup()
-    const saved = saveAnswer(deps, { id: 'in_0000000000000001', option: 1, digest, via: 'page' })
+    const saved = saveAnswer(deps, { id: 'in_0000000000000001', option: 1, digest })
     expect(saved).toMatchObject({
       status: 'answered',
       answer: { option: 1, text: 'Bake it', digest, via: 'page', callerKind: 'desktop' },
@@ -78,14 +81,9 @@ describe('saveAnswer', () => {
 
   it('replaces the queued row when the answer changes', () => {
     const { store, deps, digest, advance } = setup()
-    saveAnswer(deps, { id: 'in_0000000000000001', option: 0, digest, via: 'page' })
+    saveAnswer(deps, { id: 'in_0000000000000001', option: 0, digest })
     advance(60_000)
-    saveAnswer(deps, {
-      id: 'in_0000000000000001',
-      text: 'Bake it, and drop the job step',
-      digest,
-      via: 'page'
-    })
+    saveAnswer(deps, { id: 'in_0000000000000001', text: 'Bake it, and drop the job step', digest })
     expect(store.queue.forInboxItem('in_0000000000000001')).toMatchObject([
       { state: 'not_ready', readyAt: 61_000 + SETTLE_MS }
     ])
@@ -94,19 +92,27 @@ describe('saveAnswer', () => {
     )
   })
 
-  it.each([
-    ['a card that changed', { digest: 'f'.repeat(64), via: 'page' as const }, CARD_CHANGED_ON_SAVE],
+  it.each<[string, AnswerOrigin, { digest?: string; option?: number }, string]>([
+    ['a card that changed', DESKTOP, { digest: 'f'.repeat(64) }, CARD_CHANGED_ON_SAVE],
+    ['a card that changed (device)', PHONE, { digest: 'f'.repeat(64) }, CARD_CHANGED_ON_SAVE],
     [
-      'a page save that names no version',
-      { via: 'page' as const },
+      'a desktop save that names no version',
+      DESKTOP,
+      {},
       'A page answer names the card version it answers'
     ],
-    ['an option the card lacks', { option: 5 }, "Option 6 isn't on this card"]
-  ])('refuses %s', (_name, params, message) => {
-    const { deps } = setup()
-    expect(() => saveAnswer(deps, { id: 'in_0000000000000001', option: 0, ...params })).toThrow(
-      message
-    )
+    [
+      'an option the card lacks',
+      DESKTOP,
+      { option: 5, digest: 'current' },
+      "Option 6 isn't on this card"
+    ]
+  ])('refuses %s', (_name, origin, params, message) => {
+    const { deps, digest } = setup()
+    const given = { ...params, digest: params.digest === 'current' ? digest : params.digest }
+    expect(() =>
+      saveAnswer(deps, { id: 'in_0000000000000001', option: 0, ...given }, origin)
+    ).toThrow(message)
   })
 
   it('refuses an answer on a closed card', () => {
@@ -117,23 +123,24 @@ describe('saveAnswer', () => {
     )
   })
 
-  it('takes a CLI answer as the current version, marked cli', () => {
+  it('takes a paired device answer as the current version, marked device', () => {
     const { deps, digest } = setup()
-    expect(saveAnswer(deps, { id: 'in_0000000000000001', text: 'Bake it' }).answer).toEqual({
+    expect(saveAnswer(deps, { id: 'in_0000000000000001', text: 'Bake it' }, PHONE).answer).toEqual({
       option: null,
       text: 'Bake it',
       digest,
-      via: 'cli',
-      callerKind: 'desktop'
+      via: 'device',
+      callerKind: 'paired-device'
     })
   })
 
   it('clears an answer: the card waits again and nothing is queued', () => {
     const { store, deps, digest } = setup()
-    saveAnswer(deps, { id: 'in_0000000000000001', option: 0, digest, via: 'page' })
-    expect(
-      saveAnswer(deps, { id: 'in_0000000000000001', text: '', digest, via: 'page' })
-    ).toMatchObject({ status: 'open', answer: null })
+    saveAnswer(deps, { id: 'in_0000000000000001', option: 0, digest })
+    expect(saveAnswer(deps, { id: 'in_0000000000000001', text: '', digest })).toMatchObject({
+      status: 'open',
+      answer: null
+    })
     expect(store.queue.forInboxItem('in_0000000000000001')).toEqual([])
   })
 })
@@ -145,6 +152,7 @@ const PUSH = {
   action: 'push',
   actionArgs: { argv: ['/wt', 'b', 'a', 'o'] }
 }
+const PARTS = { ...PUSH, parts: { x: 'Part x', y: 'Part y' } }
 const START = {
   type: 'action',
   title: 'Start?',
@@ -152,33 +160,51 @@ const START = {
   actionArgs: {},
   options: ['Approve — go', 'Skip — no']
 }
-const REFUSED = APPROVE_ON_DESKTOP
 
-describe('who may approve (caller kind x card)', () => {
-  it('says where to approve', () =>
-    expect(APPROVE_ON_DESKTOP).toBe('Approve actions in Pilot on this Mac'))
+describe('who may answer (caller kind x card)', () => {
+  it('says where to approve and where to answer', () => {
+    expect(APPROVE_ON_DESKTOP).toBe('Approve actions in Pilot on this Mac')
+    expect(LOCAL_CLI_NO_ANSWER).toBe('Answer cards in Pilot (Waiting on you)')
+  })
 
   it.each<[string, string | null, Record<string, unknown>, string, string | null]>([
     ['desktop approves an action', 'desktop', PUSH, 'approve', null],
     ['desktop approves an ask-first card', 'desktop', START, 'Approve', null],
-    ['local-cli approves an action', 'local-cli', PUSH, 'approve', REFUSED],
-    ['local-cli approves with the words "do it"', 'local-cli', PUSH, 'Do it', REFUSED],
-    ['local-cli approves an ask-first card', 'local-cli', START, 'approve: notes', REFUSED],
-    ['local-cli approves part of an action', 'local-cli', PUSH, 'approve', REFUSED],
-    ['local-cli skips an action', 'local-cli', PUSH, 'skip', null],
-    ['local-cli revises an action', 'local-cli', PUSH, 'revise: push only the fix', null],
-    ['local-cli answers a question', 'local-cli', QUESTION, 'A', null],
-    ['paired device approves an action', 'paired-device', PUSH, 'approve', REFUSED],
-    ['paired device approves an ask-first card', 'paired-device', START, 'approve', REFUSED],
+    ['desktop approves except a part', 'desktop', PARTS, 'approve except: x', null],
+    ['desktop skips', 'desktop', PUSH, 'skip', null],
+    ['desktop answers a question', 'desktop', QUESTION, 'A', null],
+    ['local-cli approves an action', 'local-cli', PUSH, 'approve', LOCAL_CLI_NO_ANSWER],
+    ['local-cli skips an action', 'local-cli', PUSH, 'skip', LOCAL_CLI_NO_ANSWER],
+    ['local-cli revises an action', 'local-cli', PUSH, 'revise: only the fix', LOCAL_CLI_NO_ANSWER],
+    ['local-cli answers a question', 'local-cli', QUESTION, 'A', LOCAL_CLI_NO_ANSWER],
+    ['local-cli clears an answer', 'local-cli', QUESTION, '', LOCAL_CLI_NO_ANSWER],
+    ['paired device approves an action', 'paired-device', PUSH, 'approve', APPROVE_ON_DESKTOP],
+    ['paired device approves with "do it"', 'paired-device', PUSH, 'Do it', APPROVE_ON_DESKTOP],
+    [
+      'paired device approves an ask-first card',
+      'paired-device',
+      START,
+      'approve',
+      APPROVE_ON_DESKTOP
+    ],
+    [
+      'paired device approves except a part',
+      'paired-device',
+      PARTS,
+      'approve except: x',
+      APPROVE_ON_DESKTOP
+    ],
+    ['paired device skips an action', 'paired-device', PUSH, 'skip', null],
+    ['paired device revises an action', 'paired-device', PUSH, 'revise: only the fix', null],
     ['paired device skips an ask-first card', 'paired-device', START, 'skip', null],
     ['paired device answers a question', 'paired-device', QUESTION, 'B', null],
     ['no caller identity answers a question', null, QUESTION, 'A', NO_ANSWER_CALLER],
     ['no caller identity approves an action', null, PUSH, 'approve', NO_ANSWER_CALLER],
     ['no caller identity clears an answer', null, QUESTION, '', NO_ANSWER_CALLER]
   ])('%s', (_name, callerKind, card, text, refused) => {
-    const { store, deps } = setup(card)
+    const { store, deps, digest } = setup(card)
     const origin = { callerKind: callerKind as AnswerOrigin['callerKind'], catalog }
-    const run = () => saveAnswer(deps, { id: 'in_0000000000000001', text }, origin)
+    const run = () => saveAnswer(deps, { id: 'in_0000000000000001', text, digest }, origin)
     if (refused) {
       expect(run).toThrow(refused)
       expect(store.inbox.get('in_0000000000000001')).toMatchObject({ status: 'open', answer: null })
@@ -188,30 +214,39 @@ describe('who may approve (caller kind x card)', () => {
     expect(run().answer).toMatchObject({ text, callerKind })
   })
 
-  it('an option 0 pick approves, so a typed word beats a stale option', () => {
-    const { deps } = setup(START)
-    const origin = { callerKind: 'local-cli' as const, catalog }
-    expect(() => saveAnswer(deps, { id: 'in_0000000000000001', option: 0 }, origin)).toThrow(
-      REFUSED
+  it('derives how it was given from the caller, not from params', () => {
+    const { deps, digest } = setup(QUESTION)
+    const given = { id: 'in_0000000000000001', text: 'A', digest, via: 'page' } as never
+    expect(saveAnswer(deps, given, PHONE).answer?.via).toBe('device')
+  })
+
+  it('a typed word beats a stale option', () => {
+    const { deps, digest } = setup(START)
+    expect(() => saveAnswer(deps, { id: 'in_0000000000000001', option: 0, digest }, PHONE)).toThrow(
+      APPROVE_ON_DESKTOP
     )
     expect(
-      saveAnswer(deps, { id: 'in_0000000000000001', option: 0, text: 'skip' }, origin).answer
+      saveAnswer(deps, { id: 'in_0000000000000001', option: 0, text: 'skip', digest }, PHONE).answer
     ).toMatchObject({ option: null, text: 'skip' })
   })
 
-  it('a card that changed after an approval cannot be approved on the stale digest', () => {
+  it('a re-answer from a device replaces a desktop approval, which stops routing to a script', () => {
+    const { store, deps, digest } = setup(PUSH)
+    saveAnswer(deps, { id: 'in_0000000000000001', text: 'approve', digest })
+    saveAnswer(deps, { id: 'in_0000000000000001', text: 'revise: only the fix', digest }, PHONE)
+    const item = store.inbox.get('in_0000000000000001')!
+    expect(item.answer).toMatchObject({ text: 'revise: only the fix', callerKind: 'paired-device' })
+    expect(routeOf(item, catalog)).toEqual({ kind: 'agent', revise: true })
+    expect(store.queue.forInboxItem('in_0000000000000001')).toHaveLength(1)
+  })
+
+  it('a card changed after the answer cannot be approved on the stale digest', () => {
     const { deps, digest } = setup(PUSH)
     expect(() =>
-      saveAnswer(deps, {
-        id: 'in_0000000000000001',
-        text: 'approve',
-        digest: 'a'.repeat(64),
-        via: 'page'
-      })
+      saveAnswer(deps, { id: 'in_0000000000000001', text: 'approve', digest: 'a'.repeat(64) })
     ).toThrow(CARD_CHANGED_ON_SAVE)
     expect(
-      saveAnswer(deps, { id: 'in_0000000000000001', text: 'approve', digest, via: 'page' }).answer
-        ?.digest
+      saveAnswer(deps, { id: 'in_0000000000000001', text: 'approve', digest }).answer?.digest
     ).toBe(digest)
   })
 })
