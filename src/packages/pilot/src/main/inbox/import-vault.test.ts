@@ -6,13 +6,12 @@ import { parseAutomationYaml } from '../../shared/definition/parse'
 import { parsePeopleYaml } from '../../shared/people'
 import { routeOf } from '../answers/queue-view'
 import { PilotStore } from '../store/store'
-import { applyVaultImport } from './import-apply'
+import { applyVaultImport, SENT_BEFORE_PILOT } from './import-apply'
 import { addInboxItem } from './inbox-add'
 import { splitCommand } from './split-command'
 import { planVaultImport, vaultItemId, type ImportContext } from './import-vault'
 import type { InboxDeps } from './inbox-service'
 import type { VaultRow } from './vault-reader'
-import { SENT_BEFORE_PILOT } from './import-apply'
 
 const def = parseAutomationYaml(
   'name: Fix failed CI on my MRs\nrepo: web-platform\nschedule: manual\nitems: { kind: merge_request }\nsteps: [ { agent: claude, prompt: x } ]\ninbox: nish\n',

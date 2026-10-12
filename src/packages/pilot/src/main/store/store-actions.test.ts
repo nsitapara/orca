@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { PilotStore } from './store'
-import { ACTION_INTERRUPTED, writerGone, type NewActionRun } from './store-actions'
+import { ACTION_INTERRUPTED, processIdentity, writerGone, type NewActionRun } from './store-actions'
 
 const attempt = (extra: Partial<NewActionRun> = {}): NewActionRun => ({
   inboxItemId: 'i1',
@@ -141,5 +141,14 @@ describe('writerGone', () => {
     ]
   ])('%s', (_name, recorded, now, gone) => {
     expect(writerGone(process.ppid, recorded, () => now)).toBe(gone)
+  })
+})
+
+describe('processIdentity', () => {
+  it("reads a live process's start time from ps, in UTC, and null for a pid that isn't running", () => {
+    expect(processIdentity(process.pid)).toMatch(
+      /^[A-Z][a-z]{2} [A-Z][a-z]{2} +\d{1,2} \d\d:\d\d:\d\d \d{4}$/
+    )
+    expect(processIdentity(2 ** 22 + 7)).toBeNull()
   })
 })

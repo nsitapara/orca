@@ -106,7 +106,8 @@ describe('runtimeSessionTabs', () => {
 })
 
 describe('terminalOpen', () => {
-  const runtime = (listing: object) =>
+  type TerminalListing = { terminals: { handle: string; connected: boolean }[]; truncated: boolean }
+  const runtime = (listing: TerminalListing) =>
     ({ listTerminals: vi.fn(async () => listing) }) as unknown as OrcaRuntimeService
 
   it.each([

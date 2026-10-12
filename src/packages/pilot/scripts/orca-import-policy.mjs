@@ -7,7 +7,7 @@ import { isRecord } from './orca-profile-reader.mjs'
 
 // Copied from Orca, with each domain's JSON shape (PersistedState in
 // src/shared/persisted-state-types.ts). Each one replaces Pilot's value.
-export const IMPORTED_DOMAIN_SHAPES = {
+export const IMPORTED_DOMAIN_JSON_TYPES = {
   settings: 'object',
   repos: 'array',
   projects: 'array',
@@ -29,7 +29,7 @@ export const IMPORTED_DOMAIN_SHAPES = {
   retiredWorktreeNamesByNamespace: 'object',
   onboarding: 'object'
 }
-export const IMPORTED_DOMAINS = Object.keys(IMPORTED_DOMAIN_SHAPES)
+export const IMPORTED_DOMAINS = Object.keys(IMPORTED_DOMAIN_JSON_TYPES)
 
 // Optional in PersistedState and only saved when set. Every other imported domain is in
 // getDefaultPersistedState (src/shared/constants.ts), so upstream always saves it.
@@ -143,7 +143,7 @@ export function mergeSettings(orcaSettings, pilotSettings, orcaDataDir) {
   return { settings, excluded }
 }
 
-function shapeOf(value) {
+function jsonTypeOf(value) {
   if (value === null) {
     return 'null'
   }
@@ -172,7 +172,7 @@ function assertDomainVersions(app, versions, domains) {
 export function assertImportable(orca, pilot) {
   assertDomainVersions('Orca', orca.versions, IMPORTED_DOMAINS)
   assertDomainVersions('Pilot', pilot.versions, [...pilot.domains.keys()])
-  for (const [domain, expected] of Object.entries(IMPORTED_DOMAIN_SHAPES)) {
+  for (const [domain, expected] of Object.entries(IMPORTED_DOMAIN_JSON_TYPES)) {
     const payload = orca.domains.get(domain)
     if (payload === undefined) {
       if (OPTIONAL_DOMAINS.includes(domain)) {
@@ -180,7 +180,7 @@ export function assertImportable(orca, pilot) {
       }
       throw new Error(`Orca has no ${domain}; upstream may have moved it. Update the script.`)
     }
-    const actual = shapeOf(JSON.parse(payload))
+    const actual = jsonTypeOf(JSON.parse(payload))
     if (actual !== expected) {
       throw new Error(
         `Orca's ${domain} is ${actual}, expected ${expected}; upstream may store it ` +

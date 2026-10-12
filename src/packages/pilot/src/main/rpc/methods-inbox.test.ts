@@ -302,9 +302,8 @@ describe('inbox RPC', () => {
 
   it('takes no caller-supplied via or run binding in the params', () => {
     const { find } = setup()
-    const params = find('pilot.inbox.answer').params as unknown as {
-      shape: Record<string, unknown>
-    }
+    // A zod object's fields, keyed by name.
+    const params = find('pilot.inbox.answer').params as unknown as Record<'shape', object>
     expect(Object.keys(params.shape).sort()).toEqual(['by', 'digest', 'id', 'option', 'text'])
   })
 

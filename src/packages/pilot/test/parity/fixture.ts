@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs'
 import { EMPTY_PEOPLE } from '../../src/shared/people'
 import { isAbsolute, join } from 'node:path'
 import type { OrcaRuntimeService } from '../../../../main/runtime/orca-runtime'
-import { cachedQuotas, type QuotaReading } from '../../src/main/fields/quota'
+import { cachedQuotas } from '../../src/main/fields/quota'
 import { runtimeFieldDeps } from '../../src/main/fields/runtime-field-deps'
 import type { ScriptRunner } from '../../src/main/fields/script-runner'
 import { listBusyTerminals } from '../../src/main/fields/worktree-busy'
@@ -11,55 +11,21 @@ import type { TickDeps } from '../../src/main/scheduler/tick-runner'
 import { createPassFetchCache, type PassFetchCache } from '../../src/main/sources/fetch-cache'
 import type { GlabApi } from '../../src/main/sources/gitlab-api'
 import type { PilotStore } from '../../src/main/store/store'
-import type { AgentKind } from '../../src/shared/definition/types'
 import { fixtureBusyReads, fixtureQuota } from './fixture-activity'
+import { fixtureRead, miss, orcaResult, stdoutOf, type ParityFixture } from './fixture-core'
 
 // Quota and busy reads live in fixture-activity.ts; re-exported so importers of './fixture' are unchanged.
 export { fixtureBusyReads, fixtureQuota }
-
-export type FixtureRead = {
-  argv: string[]
-  code?: number | null
-  stdout?: string
-  json?: unknown
-  stderr?: string
-  timeout?: boolean
-}
-export type ParityFixture = {
-  job: string
-  case: string
-  recordedAt: string
-  now: number
-  repo: { id: string; path: string; name: string; project: string; host: string }
-  quota?: Partial<Record<AgentKind, QuotaReading>>
-  reads: FixtureRead[]
-  state: Record<string, unknown>
-  exists: Record<string, boolean>
-}
-
-export class NotInFixture extends Error {
-  constructor(what: string) {
-    super(
-      `Not in the fixture: ${what}. Re-record the case, or add the read to the job adapter's record_extras.`
-    )
-    this.name = 'NotInFixture'
-  }
-}
-
-// Every read each fixture couldn't answer. Pilot's field reads fail soft (the field reads unknown),
-// so a miss can still end in the old side's verdict: parity-case.ts fails a case on any miss.
-const MISSES = new WeakMap<ParityFixture, Set<string>>()
-
-function miss(f: ParityFixture, what: string): NotInFixture {
-  const seen = MISSES.get(f) ?? new Set<string>()
-  seen.add(what)
-  MISSES.set(f, seen)
-  return new NotInFixture(what)
-}
-
-export function fixtureMisses(f: ParityFixture): string[] {
-  return [...(MISSES.get(f) ?? [])]
-}
+// The read primitives live in fixture-core.ts, which fixture-activity.ts also builds on.
+export {
+  fixtureMisses,
+  fixtureRead,
+  NotInFixture,
+  orcaResult,
+  stdoutOf,
+  type FixtureRead,
+  type ParityFixture
+} from './fixture-core'
 
 // gate.IN_PROGRESS, in its order, and the name Pilot's facts give each (worktree-fields.ts).
 const OLD_MARKERS: [string, string][] = [
@@ -90,16 +56,6 @@ export function loadFixture(path: string): ParityFixture {
   return JSON.parse(readFileSync(path, 'utf8')) as ParityFixture
 }
 
-export function stdoutOf(read: FixtureRead): string {
-  if (read.stdout !== undefined) {
-    return read.stdout
-  }
-  if (read.json !== undefined) {
-    return JSON.stringify(read.json)
-  }
-  return ''
-}
-
 // The old side appends &page=1 and puts params in its own order; Pilot doesn't. Same request either way.
 export function normalizeApiPath(path: string): string {
   const at = path.indexOf('?')
@@ -115,20 +71,6 @@ export function normalizeApiPath(path: string): string {
     .map(([k, v]) => `${k}=${encodeURIComponent(v)}`)
     .join('&')
   return query ? `${path.slice(0, at)}?${query}` : path.slice(0, at)
-}
-
-export function fixtureRead(f: ParityFixture, argv: string[]): FixtureRead {
-  const found = f.reads.find(
-    (r) => r.argv.length === argv.length && r.argv.every((a, i) => a === argv[i])
-  )
-  if (!found) {
-    throw miss(f, argv.join(' '))
-  }
-  return found
-}
-
-export function orcaResult<T>(f: ParityFixture, args: string[]): T {
-  return (JSON.parse(stdoutOf(fixtureRead(f, ['orca', ...args, '--json']))) as { result: T }).result
 }
 
 export function connectedHandles(f: ParityFixture): Set<string> {
