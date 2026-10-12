@@ -1,12 +1,14 @@
 """05 · Fix failed CI on my MRs (ci-fix-sweep): the decisions sweep.main() makes, without dispatching anything.
 
-Words: due (would start), skip (plan's reason), defer (past --max 3), absent (plan didn't list it: head pipeline
-not failed, or that pipeline already handled).
+Words: due (would start), skip (plan's reason), defer (past --max 3), quota (out at dispatch), absent (plan didn't
+list it: head pipeline not failed, or that pipeline already handled).
 """
 
 import subprocess
 import urllib.parse
 from pathlib import Path
+
+from jobs.common import quota_over
 
 SWEEP = "ci-fix-sweep"
 MAX = 3  # sweep.py --max default
@@ -39,6 +41,8 @@ def old_decisions(sweep, gate):
             out.append({"key": _key(mr), "label": _label(mr), "decision": "skip", "reason": detail})
         elif started >= MAX:
             out.append({"key": _key(mr), "label": _label(mr), "decision": "defer", "reason": f"--max {MAX} reached"})
+        elif over := quota_over(gate, "claude"):
+            out.append({"key": _key(mr), "label": _label(mr), "decision": "quota", "reason": over})
         else:
             started += 1
             out.append({"key": _key(mr), "label": _label(mr), "decision": "due", "reason": ""})

@@ -12,6 +12,7 @@ the JSON; never edit the JSON by hand. Each port task adds its cases below, abov
 
 import json
 import sys
+import urllib.parse
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -116,6 +117,10 @@ def build(job, name, *, now, mrs=None, listed_by="author", me="nish8", worktrees
                 reads.append(read(["glab", "mr", "list", "--source-branch", w["branch"], "--all", "--output", "json", "--repo", REPO["project"]],
                                   json=[{"iid": m["iid"], "state": m["state"], "author": {"username": m["author"]["username"]},
                                          "web_url": f"https://gitlab.com/{REPO['project']}/-/merge_requests/{m['iid']}"} for m in same]))
+        if branch_mrs:  # Pilot's MR source reads each listed MR's branch (the ownership blocks), worktree or not
+            for branch in sorted({m["source_branch"] for m in mine}):
+                reads.append(glab(f"{PROJECT}/merge_requests?source_branch={urllib.parse.quote(branch, safe='')}&per_page=100",
+                                  [api_mr(m) for m in mrs if m["source_branch"] == branch]))
     if loop:
         kept.setdefault(f"{loop}/tabs.json", {})
         kept.setdefault(f"{loop}/tabs-codex.json", {})
@@ -174,6 +179,45 @@ def _02():
 
 
 CASE_MAKERS.append(_02)
+
+
+def _05():
+    now = 1791659400000  # 12:10 Pacific, 2026-10-10
+    failed = lambda iid, pid: (pid, "failed")  # noqa: E731
+    mrs = [
+        mr(1347, branch="web-1689-app-id", pipeline=(2934300001, "success"), changes="3"),
+        mr(1561, branch="web-1493-confidence", pipeline=failed(1561, 2934410022), changes="4"),
+        mr(1574, branch="web-1474-donor-status", pipeline=failed(1574, 2934398811), changes="6"),
+        mr(1587, branch="web-2118-hourly-e2e", pipeline=failed(1587, 2933991087), draft=True, changes="2"),
+        mr(1588, branch="web-2115-ecs-deps", author="shivan2418", pipeline=failed(1588, 2934411111)),
+        mr(1590, branch="web-1690-filenames", pipeline=(2934400099, "running"), changes="2"),
+        mr(1592, branch="staff-feature-usage-page", pipeline=failed(1592, 2934120075), draft=True, changes="9"),
+        mr(1601, branch="web-2201-no-worktree", pipeline=failed(1601, 2934500001)),
+        mr(1603, branch="web-2203-untracked", pipeline=failed(1603, 2934500003)),
+        mr(1604, branch="web-2204-rebase", pipeline=failed(1604, 2934500004)),
+        mr(1605, branch="web-2205-due", pipeline=failed(1605, 2934500005)),
+        mr(1606, branch="web-2206-due", pipeline=failed(1606, 2934500006)),
+        mr(1607, branch="web-2207-due", pipeline=failed(1607, 2934500007)),
+    ]
+    worktrees = [
+        worktree("web-1689", "web-1689-app-id"), worktree("web-1493", "web-1493-confidence"),
+        worktree("web-1474", "web-1474-donor-status", dirty=2), worktree("web-2118", "web-2118-hourly-e2e"),
+        worktree("web-1690", "web-1690-filenames"), worktree("usage", "staff-feature-usage-page"),
+        worktree("web-2203", "web-2203-untracked", untracked=1), worktree("web-2204", "web-2204-rebase", operation="rebase-merge"),
+        worktree("web-2205", "web-2205-due"), worktree("web-2206", "web-2206-due"), worktree("web-2207", "web-2207-due"),
+    ]
+    yield "05", "2026-10-10-1210", build(
+        "05", "2026-10-10-1210", now=now, mrs=mrs, worktrees=worktrees, terminals=["term_usage"], loop="ci-fix", branch_mrs=True,
+        state={"ci-fix/handled.json": {"1587": 2933991087},
+               "ci-fix/tabs.json": {"/wt/usage": "term_usage", "/wt/web-1493": "term_gone"}},
+        quota={"weekly": 61, "session": 38})
+    yield "05", "quota-out", build(
+        "05", "quota-out", now=now, mrs=[m for m in mrs if m["iid"] in (1561, 1574)],
+        worktrees=[w for w in worktrees if w["path"] in ("/wt/web-1493", "/wt/web-1474")], loop="ci-fix", branch_mrs=True,
+        state={"ci-fix/handled.json": {}}, quota={"weekly": 91, "session": 38})
+
+
+CASE_MAKERS.append(_05)
 
 
 def main(argv):

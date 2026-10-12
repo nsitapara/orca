@@ -24,7 +24,13 @@ export const JOB_05 = {
 
 // 05's words (jobs/job_05.py) and the verdicts that agree with them.
 export const VERDICTS_05: VerdictTable = {
-  map: { due: ['started'], skip: ['skipped'], defer: ['over_limit'], absent: ['notdue'] },
+  map: {
+    due: ['started'],
+    skip: ['skipped'],
+    defer: ['over_limit'],
+    quota: ['skipped'],
+    absent: ['notdue']
+  },
   whenOldMissing: ['out_of_scope']
 }
 
