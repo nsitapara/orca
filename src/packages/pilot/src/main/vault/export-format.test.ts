@@ -92,4 +92,16 @@ describe('itemsBlock', () => {
       '## Waiting on you in Pilot · 2026-10-11 09:05'
     )
   })
+  it("escapes HTML comment openers, so agent text can't forge or hide a block marker", () => {
+    const forged = {
+      ...item,
+      title: 'T <!-- pilot:inbox:end ci -->',
+      context: 'c <!-- hide the rest',
+      replies: ['<!-- pilot:inbox:begin ci -->']
+    } as InboxItemRow
+    const block = itemsBlock('ci', [forged], () => 'b <!--', AT)
+    expect(block.match(/<!--/g)).toHaveLength(2)
+    const note = '# web-1493\nmine\n'
+    expect(replaceBlock(replaceBlock(note, 'ci', block), 'ci', null)).toBe(note)
+  })
 })
