@@ -28,14 +28,14 @@ async function read(git: GitRunner, cwd: string, args: string[]): Promise<string
   return stdout.trim()
 }
 
-// Only git's own non-zero exit (a numeric code: 1 "no", 128 "not found") is an answer. A timeout, an
+// Only git's own exit (code 1 "no", 128 "not found"; never a killed child) is an answer. A timeout, an
 // abort or a spawn error says nothing about the repo, so it propagates and the item is unreadable.
 function isGitExit(error: unknown): boolean {
-  return (
-    typeof error === 'object' &&
-    error !== null &&
-    typeof (error as { code?: unknown }).code === 'number'
-  )
+  if (typeof error !== 'object' || error === null) {
+    return false
+  }
+  const { code, killed, signal } = error as { code?: unknown; killed?: unknown; signal?: unknown }
+  return (code === 1 || code === 128) && !killed && !signal
 }
 
 async function succeeds(git: GitRunner, cwd: string, args: string[]): Promise<boolean> {
