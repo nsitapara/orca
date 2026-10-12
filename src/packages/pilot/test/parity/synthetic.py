@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""The hand-built parity cases of the ported jobs (02, 05, 06, 09, 13), written in Task 13a's fixture format.
+"""The hand-built parity cases of the ported jobs (02, 05, 06, 09, 13, M01), written in Task 13a's fixture format.
 
   synthetic.py            rewrite every case's <job>/<case>.json
   synthetic.py --check    exit 1 when a committed case differs from what this file builds
@@ -434,6 +434,83 @@ def _13():
 
 
 CASE_MAKERS.append(_13)
+
+
+def case_m01(name, tickets, *, now, worktrees=(), started=None, tabs=None, local_branches=(), teammates=(), quota=None, partial=False):
+    """One M01 case. <tickets>: (ident, state type, branch, priority, created) tuples, the tickets Linear lists as assigned to
+    me; <worktrees> may link one (`linked=`); <started>: M01's started.json; <tabs>: worktree path -> terminal handle of an open
+    kickoff tab; <local_branches>: branches that exist here; <teammates>: branches with a teammate's open MR. The reads are the
+    old sweep's, Pilot's linear_ticket source's and the gates' (in-flight state, MR owner of an existing worktree's branch)."""
+    tabs = tabs or {}
+    fixture = build("M01", name, now=now, loop="linear-todo", quota=quota or {"weekly": 20, "session": 10},
+                    state={"linear-todo/started.json": started or {}, "linear-todo/tabs.json": tabs})
+    reads, exists = fixture["reads"], fixture["exists"]
+    listing = [{"id": f"{REPO['id']}::{w['path']}", "repoId": REPO["id"], "path": w["path"], "branch": f"refs/heads/{w['branch']}",
+                "isArchived": w["archived"], "linkedLinearIssue": w["linked"]} for w in worktrees]
+    reads.append(read(["orca", "worktree", "list", "--json"], json={"ok": True, "result": {"worktrees": listing}}))
+    reads.append(read(["orca", "terminal", "list", "--json"],
+                      json={"ok": True, "result": {"terminals": [{"handle": h, "connected": True} for h in sorted(set(tabs.values()))]}}))
+    for w in worktrees:
+        exists[w["path"]] = True
+        git_reads(w, reads, exists)
+    reads.append(glab("user", {"username": "nish8"}))
+    issues = []
+    for ident, state, branch, priority, created in tickets:
+        issue = _issue(ident, state, branch, created)
+        issues.append({**issue, "priority": priority})
+    meta = {"filter": "assigned", "workspaceId": "all", "limit": 200, "returned": len(issues), "hasMore": partial, "partial": False, "workspaceErrors": []}
+    reads.append(read(["orca", "linear", "list", "--filter", "assigned", "--workspace", "all", "--limit", "200", "--json"],
+                      json={"ok": True, "result": {"issues": [{k: v for k, v in i.items() if k not in ("branchName", "createdAt", "labels")} for i in issues],
+                                                   "truncated": False, "meta": meta}}))
+    for issue in issues:
+        ident, branch = issue["identifier"], issue["branchName"]
+        if issue["state"]["type"] == "unstarted":  # both sides read the details of the Todo tickets only
+            reads.append(read(["orca", "linear", "issue", ident, "--workspace", "ws1", "--json"], json={"ok": True, "result": {"issue": issue}}))
+        if not branch:
+            continue
+        local = branch in local_branches
+        reads.append(read(["git", "-C", REPO["path"], "show-ref", "--verify", "--quiet", f"refs/heads/{branch}"],
+                          code=0 if local else 1, stdout="", stderr=""))
+        for w in worktrees:
+            if w["branch"] == branch or w["linked"] == ident:
+                mrs = [mr(1588, branch=w["branch"], author="shivan2418")] if w["branch"] in teammates else []
+                reads.append(glab(f"{PROJECT}/merge_requests?source_branch={urllib.parse.quote(w['branch'], safe='')}&per_page=100",
+                                  [api_mr(m) for m in mrs]))
+                reads.append(read(["glab", "mr", "list", "--source-branch", w["branch"], "--all", "--output", "json", "--repo", REPO["project"]],
+                                  json=[{"iid": m["iid"], "state": m["state"], "author": {"username": m["author"]["username"]},
+                                         "web_url": f"https://gitlab.com/{REPO['project']}/-/merge_requests/{m['iid']}"} for m in mrs]))
+    return fixture
+
+
+def _m01():
+    now = 1791766800000  # 10:00 Pacific, 2026-10-11
+    todo = lambda ident, priority=2, created="2026-10-01T00:00:00Z", **kw: (  # noqa: E731
+        ident, kw.get("state", "unstarted"), kw.get("branch", f"{ident.lower()}-work"), priority, created)
+    wt = lambda ident, **kw: worktree(ident.lower(), kw.pop("branch", f"{ident.lower()}-work"), linked=kw.pop("linked", ident), **kw)  # noqa: E731
+    five = [todo("WEB-1", 0, "2026-01-01T00:00:00Z"), todo("WEB-2", 4, "2026-09-01T00:00:00Z"), todo("WEB-3", 1, "2026-10-01T00:00:00Z"),
+            todo("WEB-4", 2, "2026-10-05T00:00:00Z"), todo("WEB-5", 2, "2026-09-01T00:00:00Z")]
+    started = lambda *idents: {i: {"path": f"/wt/{i.lower()}", "handle": f"term_{i.lower()}", "startedAt": "2026-10-08T12:00:00+00:00"} for i in idents}  # noqa: E731
+
+    def make(name, tickets, **kw):
+        return "M01", name, case_m01(name, tickets, now=now, **kw)
+
+    yield make("fresh-tickets-start-urgent-first-three-per-run", five)
+    yield make("no-branch-name", [todo("WEB-1", branch=None)])
+    yield make("local-branch-without-a-worktree", [todo("WEB-1")], local_branches=["web-1-work"])
+    yield make("worktree-with-uncommitted-work", [todo("WEB-1")], worktrees=[wt("WEB-1", dirty=1)], local_branches=["web-1-work"])
+    yield make("worktree-mid-rebase", [todo("WEB-1")], worktrees=[wt("WEB-1", operation="rebase-merge")], local_branches=["web-1-work"])
+    yield make("teammates-branch", [todo("WEB-1")], worktrees=[wt("WEB-1")], local_branches=["web-1-work"], teammates=["web-1-work"])
+    yield make("clean-worktree-gets-the-session", [todo("WEB-1")], worktrees=[wt("WEB-1")], local_branches=["web-1-work"])
+    yield make("worktree-linked-under-another-name", [todo("WEB-1")], worktrees=[wt("WEB-1", branch="renamed-work", dirty=1)])
+    yield make("kicked-off-tickets-never-start-again", [todo("WEB-1"), todo("WEB-2", created="2026-10-02T00:00:00Z")],
+               worktrees=[wt("WEB-1"), wt("WEB-2")], local_branches=["web-1-work", "web-2-work"], started=started("WEB-1", "WEB-2"),
+               tabs={"/wt/web-1": "term_web-1"})
+    yield make("tickets-not-in-todo", [todo("WEB-1", state="started"), todo("WEB-2", state="backlog")])
+    yield make("quota-out", five[:4], quota={"weekly": 95, "session": 30})
+    yield make("incomplete-listing", [todo("WEB-1")], partial=True)
+
+
+CASE_MAKERS.append(_m01)
 
 
 def _canon(text):

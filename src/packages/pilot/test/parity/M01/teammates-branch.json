@@ -1,0 +1,236 @@
+{
+  "case": "teammates-branch",
+  "job": "M01",
+  "now": 1791766800000,
+  "recordedAt": "synthetic",
+  "repo": {
+    "id": "400fee61-a463-4f76-894a-39861e906007",
+    "path": "/Users/nishsitapara/Documents/web-platform",
+    "name": "web-platform",
+    "project": "polygenx/web-platform",
+    "host": "gitlab.com"
+  },
+  "reads": [
+    {
+      "argv": ["orca", "worktree", "list", "--json"],
+      "code": 0,
+      "json": {
+        "ok": true,
+        "result": {
+          "worktrees": [
+            {
+              "id": "400fee61-a463-4f76-894a-39861e906007::/wt/web-1",
+              "repoId": "400fee61-a463-4f76-894a-39861e906007",
+              "path": "/wt/web-1",
+              "branch": "refs/heads/web-1-work",
+              "isArchived": false,
+              "linkedLinearIssue": "WEB-1"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "argv": ["orca", "terminal", "list", "--json"],
+      "code": 0,
+      "json": { "ok": true, "result": { "terminals": [] } }
+    },
+    {
+      "argv": ["git", "-C", "/wt/web-1", "status", "--porcelain"],
+      "code": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "argv": ["git", "-C", "/wt/web-1", "rev-parse", "--git-path", "MERGE_HEAD"],
+      "code": 0,
+      "stdout": "/parity-gitdirs/wt/web-1/MERGE_HEAD\n",
+      "stderr": ""
+    },
+    {
+      "argv": ["git", "-C", "/wt/web-1", "rev-parse", "--git-path", "rebase-merge"],
+      "code": 0,
+      "stdout": "/parity-gitdirs/wt/web-1/rebase-merge\n",
+      "stderr": ""
+    },
+    {
+      "argv": ["git", "-C", "/wt/web-1", "rev-parse", "--git-path", "rebase-apply"],
+      "code": 0,
+      "stdout": "/parity-gitdirs/wt/web-1/rebase-apply\n",
+      "stderr": ""
+    },
+    {
+      "argv": ["git", "-C", "/wt/web-1", "rev-parse", "--git-path", "CHERRY_PICK_HEAD"],
+      "code": 0,
+      "stdout": "/parity-gitdirs/wt/web-1/CHERRY_PICK_HEAD\n",
+      "stderr": ""
+    },
+    {
+      "argv": ["git", "-C", "/wt/web-1", "rev-parse", "--git-path", "REVERT_HEAD"],
+      "code": 0,
+      "stdout": "/parity-gitdirs/wt/web-1/REVERT_HEAD\n",
+      "stderr": ""
+    },
+    {
+      "argv": ["git", "-C", "/wt/web-1", "rev-parse", "--git-path", "BISECT_LOG"],
+      "code": 0,
+      "stdout": "/parity-gitdirs/wt/web-1/BISECT_LOG\n",
+      "stderr": ""
+    },
+    {
+      "argv": ["git", "-C", "/wt/web-1", "rev-parse", "--git-path", "index.lock"],
+      "code": 0,
+      "stdout": "/parity-gitdirs/wt/web-1/index.lock\n",
+      "stderr": ""
+    },
+    {
+      "argv": ["glab", "api", "--hostname", "gitlab.com", "user"],
+      "code": 0,
+      "json": { "username": "nish8" }
+    },
+    {
+      "argv": [
+        "orca",
+        "linear",
+        "list",
+        "--filter",
+        "assigned",
+        "--workspace",
+        "all",
+        "--limit",
+        "200",
+        "--json"
+      ],
+      "code": 0,
+      "json": {
+        "ok": true,
+        "result": {
+          "issues": [
+            {
+              "id": "uuid-WEB-1",
+              "identifier": "WEB-1",
+              "title": "Fix hourly e2e failure (WEB-1)",
+              "url": "https://linear.app/herasight/issue/WEB-1",
+              "state": { "name": "unstarted", "type": "unstarted" },
+              "team": { "id": "team-web", "key": "WEB", "name": "Web Dev" },
+              "assignee": { "id": "u-nish", "displayName": "nish" },
+              "priority": 2,
+              "workspace": { "id": "ws1", "name": "Herasight" }
+            }
+          ],
+          "truncated": false,
+          "meta": {
+            "filter": "assigned",
+            "workspaceId": "all",
+            "limit": 200,
+            "returned": 1,
+            "hasMore": false,
+            "partial": false,
+            "workspaceErrors": []
+          }
+        }
+      }
+    },
+    {
+      "argv": ["orca", "linear", "issue", "WEB-1", "--workspace", "ws1", "--json"],
+      "code": 0,
+      "json": {
+        "ok": true,
+        "result": {
+          "issue": {
+            "id": "uuid-WEB-1",
+            "identifier": "WEB-1",
+            "title": "Fix hourly e2e failure (WEB-1)",
+            "url": "https://linear.app/herasight/issue/WEB-1",
+            "state": { "name": "unstarted", "type": "unstarted" },
+            "team": { "id": "team-web", "key": "WEB", "name": "Web Dev" },
+            "assignee": { "id": "u-nish", "displayName": "nish" },
+            "priority": 2,
+            "createdAt": "2026-10-01T00:00:00Z",
+            "branchName": "web-1-work",
+            "labels": [],
+            "workspace": { "id": "ws1", "name": "Herasight" }
+          }
+        }
+      }
+    },
+    {
+      "argv": [
+        "git",
+        "-C",
+        "/Users/nishsitapara/Documents/web-platform",
+        "show-ref",
+        "--verify",
+        "--quiet",
+        "refs/heads/web-1-work"
+      ],
+      "code": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "glab",
+        "api",
+        "--hostname",
+        "gitlab.com",
+        "projects/polygenx%2Fweb-platform/merge_requests?source_branch=web-1-work&per_page=100"
+      ],
+      "code": 0,
+      "json": [
+        {
+          "iid": 1588,
+          "title": "MR 1588",
+          "state": "opened",
+          "draft": false,
+          "sha": "1588000000000000000000000000000000000000",
+          "source_branch": "web-1-work",
+          "target_branch": "dev",
+          "author": { "username": "shivan2418", "name": "Emil Elgaard" },
+          "reviewers": [],
+          "head_pipeline": null,
+          "changes_count": "1"
+        }
+      ]
+    },
+    {
+      "argv": [
+        "glab",
+        "mr",
+        "list",
+        "--source-branch",
+        "web-1-work",
+        "--all",
+        "--output",
+        "json",
+        "--repo",
+        "polygenx/web-platform"
+      ],
+      "code": 0,
+      "json": [
+        {
+          "iid": 1588,
+          "state": "opened",
+          "author": { "username": "shivan2418" },
+          "web_url": "https://gitlab.com/polygenx/web-platform/-/merge_requests/1588"
+        }
+      ]
+    }
+  ],
+  "state": {
+    "linear-todo/started.json": {},
+    "linear-todo/tabs-codex.json": {},
+    "linear-todo/tabs.json": {},
+    "quota/claude.json": { "weekly": 20, "session": 10 }
+  },
+  "exists": {
+    "/parity-gitdirs/wt/web-1/BISECT_LOG": false,
+    "/parity-gitdirs/wt/web-1/CHERRY_PICK_HEAD": false,
+    "/parity-gitdirs/wt/web-1/MERGE_HEAD": false,
+    "/parity-gitdirs/wt/web-1/REVERT_HEAD": false,
+    "/parity-gitdirs/wt/web-1/index.lock": false,
+    "/parity-gitdirs/wt/web-1/rebase-apply": false,
+    "/parity-gitdirs/wt/web-1/rebase-merge": false,
+    "/wt/web-1": true
+  }
+}
