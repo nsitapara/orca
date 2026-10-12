@@ -8,9 +8,8 @@ import { DetailsStyle } from '../../details/details-css'
 import { DetailsView } from '../../details/DetailsView'
 import { Markdown } from '../../details/markdown'
 import type { PartSwitches } from '../../details/ReviewBlock'
+import { setDetailsOpen, useDetailsOpen } from './details-open'
 
-// Cards whose fold-out is open, so a card remounting as a new version stays open.
-const OPEN_DETAILS = new Set<string>()
 // Snapshots by `${id}@${digest}`, newest last, capped: a snapshot is bound to one digest and never changes.
 const SNAPSHOTS = new Map<string, DetailsSnapshot>()
 const MAX_SNAPSHOTS = 30
@@ -138,6 +137,20 @@ function Body({
   )
 }
 
+// The labels beside "Details" on the bar (the ref's derived summary); a markdown-only card has none.
+function SummaryChips({ item }: { item: InboxItemRow }): React.JSX.Element[] {
+  return (item.details?.summary ?? []).map((label) => (
+    <span
+      key={label}
+      className="rounded bg-muted px-1.5 font-mono text-[11.5px] leading-[1.7] font-medium text-muted-foreground"
+    >
+      {label}
+    </span>
+  ))
+}
+
+// The card's Details as a panel of its own: a bar (arrow, "Details", summary chips, Show or Hide) that is the
+// toggle, and the Details below it when open.
 export function CardDetails({
   item,
   parts
@@ -145,28 +158,27 @@ export function CardDetails({
   item: InboxItemRow
   parts: PartSwitches | null
 }): React.JSX.Element | null {
-  const [open, setOpen] = useState(OPEN_DETAILS.has(item.id))
+  const open = useDetailsOpen(item.id)
   if (!item.details && !item.detailsMd) {
     return null
   }
-  const change = (next: boolean) => {
-    if (next) {
-      OPEN_DETAILS.add(item.id)
-    } else {
-      OPEN_DETAILS.delete(item.id)
-    }
-    setOpen(next)
-  }
   return (
-    <Collapsible open={open} onOpenChange={change} className="min-w-0">
-      <CollapsibleTrigger className="group inline-flex items-center gap-1 rounded-sm text-[13px] font-semibold text-foreground hover:text-foreground/80">
+    <Collapsible
+      open={open}
+      onOpenChange={(next) => setDetailsOpen(item.id, next)}
+      className="min-w-0 overflow-hidden rounded-lg border border-border bg-background/60"
+    >
+      <CollapsibleTrigger className="group flex w-full flex-wrap items-center gap-2 bg-muted/60 px-3 py-2 text-left">
         <ChevronRight
           aria-hidden
-          className="size-3.5 transition-transform group-data-[state=open]:rotate-90"
+          className="size-3.5 shrink-0 transition-transform group-data-[state=open]:rotate-90"
         />
-        Details
+        <span className="text-[13px] font-bold">Details</span>
+        <SummaryChips item={item} />
+        <span className="flex-1" />
+        <span className="text-xs text-muted-foreground">{open ? 'Hide' : 'Show'}</span>
       </CollapsibleTrigger>
-      <CollapsibleContent className="mt-2 min-w-0">
+      <CollapsibleContent className="min-w-0 border-t border-border p-3">
         <Body item={item} open={open} parts={parts} />
       </CollapsibleContent>
     </Collapsible>

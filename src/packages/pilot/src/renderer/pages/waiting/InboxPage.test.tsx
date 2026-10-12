@@ -444,7 +444,7 @@ describe('Details on a card', () => {
     const withDetails = card({ id: 'in_a', title: 'A', digest: 'da1', details: REF })
     serveDetails(() => [withDetails])
     render(<InboxPage />)
-    fireEvent.click(await screen.findByRole('button', { name: 'Details' }))
+    fireEvent.click(await screen.findByRole('button', { name: /^Details/ }))
     expect(await screen.findByText('What Approve does')).toBeTruthy()
     expect(detailCalls().map((c) => c[1])).toEqual([{ id: 'in_a', digest: 'da1' }])
   })
@@ -454,7 +454,7 @@ describe('Details on a card', () => {
     const withDetails = card({ id: 'in_b', title: 'B', digest: 'db1', details: REF })
     serveDetails(() => [{ ...withDetails }])
     render(<InboxPage />)
-    fireEvent.click(await screen.findByRole('button', { name: 'Details' }))
+    fireEvent.click(await screen.findByRole('button', { name: /^Details/ }))
     await screen.findByText('What Approve does')
     const lists = () => pilotRpc.mock.calls.filter((c) => c[0] === 'pilot.inbox.list').length
     const before = lists()
@@ -471,7 +471,7 @@ describe('Details on a card', () => {
       card({ id: 'in_c', title: 'C', version, digest: `dc${version}`, details: REF })
     ])
     render(<InboxPage />)
-    fireEvent.click(await screen.findByRole('button', { name: 'Details' }))
+    fireEvent.click(await screen.findByRole('button', { name: /^Details/ }))
     await screen.findByText('What Approve does')
     version = 2
     await vi.advanceTimersByTimeAsync(10_500)
@@ -490,7 +490,7 @@ describe('Details on a card', () => {
         : { entries: [] }
     })
     render(<InboxPage />)
-    fireEvent.click(await screen.findByRole('button', { name: 'Details' }))
+    fireEvent.click(await screen.findByRole('button', { name: /^Details/ }))
     expect(
       await screen.findByText(/Couldn.t load the details: The card changed; review it again/)
     ).toBeTruthy()
@@ -502,7 +502,7 @@ describe('Details on a card', () => {
       card({ id: 'in_e', title: 'E', digest: 'de1', detailsMd: `\`\`\`\n${long}\n\`\`\`` })
     ])
     const { container } = render(<InboxPage />)
-    fireEvent.click(await screen.findByRole('button', { name: 'Details' }))
+    fireEvent.click(await screen.findByRole('button', { name: /^Details/ }))
     await waitFor(() =>
       expect(container.querySelector('.glr-body pre code')?.textContent).toBe(long)
     )
@@ -513,7 +513,7 @@ describe('Details on a card', () => {
     serveDetails(() => [card({ id: 'in_f', title: 'F', digest: 'df1' })])
     render(<InboxPage />)
     await screen.findByRole('heading', { name: 'F' })
-    expect(screen.queryByRole('button', { name: 'Details' })).toBeNull()
+    expect(screen.queryByRole('button', { name: /^Details/ })).toBeNull()
   })
 
   it('keeps the review switches and the Parts list in step', async () => {
@@ -554,7 +554,7 @@ describe('Details on a card', () => {
       return { entries: [] }
     })
     const { container } = render(<InboxPage />)
-    fireEvent.click(await screen.findByRole('button', { name: 'Details' }))
+    fireEvent.click(await screen.findByRole('button', { name: /^Details/ }))
     await screen.findByText('General comments')
     fireEvent.click(radio(container, 'Approve'))
     const box = screen.getByLabelText('Post 1') as HTMLInputElement

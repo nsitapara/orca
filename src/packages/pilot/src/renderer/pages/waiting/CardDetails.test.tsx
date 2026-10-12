@@ -49,7 +49,7 @@ describe('CardDetails', () => {
   it('shows the Details toggle as a disclosure button with an arrow, as the console did', () => {
     pilotRpc.mockResolvedValue({ snapshot })
     render(<CardDetails item={item('toggle-1')} parts={null} />)
-    const toggle = screen.getByRole('button', { name: 'Details' })
+    const toggle = screen.getByRole('button', { name: /^Details/ })
     expect(toggle.querySelector('svg')).not.toBeNull()
     expect(toggle.getAttribute('aria-expanded')).toBe('false')
     fireEvent.click(toggle)
