@@ -27,6 +27,23 @@ describe('readOpenVaultItems', () => {
     })
   })
 
+  it("runs vault.py with Pilot's bin folder first on PATH and its data folder (H9)", async () => {
+    const run = vi.fn().mockResolvedValue({ code: 0, stdout: '[]', stderr: '', timedOut: false })
+    await readOpenVaultItems({
+      vaultPy: '/v.py',
+      python: 'python3',
+      run,
+      env: { PATH: '/bin' },
+      engineEnv: { binDir: '/pilot/bin', dataDir: '/data/pilot' }
+    })
+    expect(run.mock.calls[0][0].env).toEqual({
+      PATH: '/pilot/bin:/bin',
+      ORCA_USER_DATA_PATH: '/data/pilot',
+      PILOT_BRIDGE: '1',
+      AGENT_RUN: 'pilot'
+    })
+  })
+
   it('says why when vault.py fails', async () => {
     const run = vi.fn().mockResolvedValue({
       code: 1,

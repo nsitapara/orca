@@ -104,6 +104,26 @@ describe('actBridge', () => {
     })
   })
 
+  // H9: act.py (and what it runs) reaches Pilot's own `pilot`/`orca` launchers and data folder.
+  it("spawns act.py with Pilot's bin folder first on PATH and its data folder", async () => {
+    const run = vi.fn().mockResolvedValue(ok(JSON.stringify({ outcome: 'done' })))
+    const act = actBridge({
+      actPy: '/act.py',
+      python: 'python3',
+      run,
+      env: { PATH: '/bin', HOME: '/h' },
+      engineEnv: { binDir: '/pilot/bin', dataDir: '/data/pilot' }
+    })
+    await act.run('push', ['a'], { dryRun: false, runId: 'ci-1' })
+    expect(run.mock.calls[0][0].env).toEqual({
+      PATH: '/pilot/bin:/bin',
+      HOME: '/h',
+      ORCA_USER_DATA_PATH: '/data/pilot',
+      PILOT_BRIDGE: '1',
+      AGENT_RUN: 'ci-1'
+    })
+  })
+
   it.each([
     [
       'new args',

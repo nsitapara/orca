@@ -111,7 +111,7 @@ export function buildAnswerMethods(ctx: () => PilotContext) {
           throw new Error(IMPORT_APPLY_DESKTOP)
         }
         const now = Date.now()
-        const plan = planVaultImport(await readOpenVaultItems(), {
+        const plan = planVaultImport(await readOpenVaultItems({ engineEnv: c.engineEnv }), {
           definitions: c.loaded().definitions,
           people: c.loaded().people,
           worktreeIds: await worktreeIds(rpc.runtime, c),

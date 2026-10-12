@@ -1,6 +1,7 @@
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { runProcess } from '@orca/process-host'
+import { engineChildEnv, type EngineEnv } from '../engine-env'
 import { actionFailed, type ActionOutcome, type ActionResult, type ActionRunOpts } from './types'
 
 export type ProcessResultLike = {
@@ -39,9 +40,20 @@ export function defaultActPy(env: NodeJS.ProcessEnv = process.env): string {
 }
 
 // act.py routes `run` back into Pilot inside a Pilot run (Task 22c). Pilot's own act.py must never do that,
-// so it gets PILOT_BRIDGE=1 and no PILOT_RUN_ID; AGENT_RUN tags its events with the run that asked.
-export function bridgeEnv(base: NodeJS.ProcessEnv, runId: string | null): NodeJS.ProcessEnv {
-  const env: NodeJS.ProcessEnv = { ...base, PILOT_BRIDGE: '1', AGENT_RUN: runId ?? 'pilot' }
+// so it gets PILOT_BRIDGE=1 and no PILOT_RUN_ID; AGENT_RUN tags its events with the run that asked. With
+// the engine's env (H9) Pilot's bin folder leads PATH and its data folder is set, as for every engine child.
+export function bridgeEnv(
+  base: NodeJS.ProcessEnv,
+  runId: string | null,
+  engineEnv?: EngineEnv
+): NodeJS.ProcessEnv {
+  const engine = engineEnv ? engineChildEnv(engineEnv, {}, base) : {}
+  const env: NodeJS.ProcessEnv = {
+    ...base,
+    ...engine,
+    PILOT_BRIDGE: '1',
+    AGENT_RUN: runId ?? 'pilot'
+  }
   delete env.PILOT_RUN_ID
   return env
 }
@@ -100,7 +112,13 @@ export const runWithProcessHost: ProcessRun = async (spec) => {
 }
 
 export function actBridge(
-  opts: { actPy?: string; python?: string; run?: ProcessRun; env?: NodeJS.ProcessEnv } = {}
+  opts: {
+    actPy?: string
+    python?: string
+    run?: ProcessRun
+    env?: NodeJS.ProcessEnv
+    engineEnv?: EngineEnv
+  } = {}
 ): ActBridge {
   const run = opts.run ?? runWithProcessHost
   const program = opts.python ?? process.env.PILOT_PYTHON ?? 'python3'
@@ -109,7 +127,7 @@ export function actBridge(
     run({
       program,
       args: [actPy, ...args],
-      env: bridgeEnv(opts.env ?? process.env, runId),
+      env: bridgeEnv(opts.env ?? process.env, runId, opts.engineEnv),
       timeoutMs
     })
   // A process that couldn't start answers like a crash: run fails, describe and refresh fall back.

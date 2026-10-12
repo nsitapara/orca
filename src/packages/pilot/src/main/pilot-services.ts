@@ -64,6 +64,8 @@ export type PilotContext = {
   // This process runs the scheduler: only here does a real tick or an ask-first start launch anything.
   schedulerOn: boolean
   writeUsageReport?: (dir?: string) => UsageReportResult
+  // How engine children reach Pilot's CLI and data (H9): the vault import's vault.py too.
+  engineEnv?: EngineEnv
   // Opens or focuses a step's agent session (pilot.session.resume); absent where there is no runtime.
   resumeSession?: (req: { runId: string; stepIdx: number }) => Promise<SessionResumeResult>
 }
@@ -153,7 +155,7 @@ function openPilot(
   })
   // Built once; nothing runs until an action is attempted. start_run reaches the engine lazily.
   const actions = buildActionCatalog({
-    act: actBridge(),
+    act: actBridge({ engineEnv }),
     linear: createLinearWriter(runtime),
     extra: [
       startRunEntry({
@@ -259,6 +261,7 @@ function openPilot(
     actions,
     dispatcher,
     schedulerOn,
+    engineEnv,
     writeUsageReport: (dir) => usageReports.write(dir),
     resumeSession: (req) => resumeStepSession(runtimeResumeDeps(runtime, store, fieldDeps), req)
   }
