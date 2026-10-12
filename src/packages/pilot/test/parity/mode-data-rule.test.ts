@@ -17,7 +17,10 @@ const MODES: [string, string][] = [
   ['global-command-address-mr-feedback', 'answers'],
   ['review-mr', 'prepare'],
   ['review-mr', 'answers'],
-  ['dev-e2e-fix', 'answers']
+  ['dev-e2e-fix', 'answers'],
+  ['ui-qa', 'run'],
+  ['ui-qa', 'fix'],
+  ['ui-qa', 'answers']
 ]
 
 describe.skipIf(!existsSync(skillsDir()))('ported agent modes read untrusted text as data', () => {
