@@ -5,7 +5,7 @@ import {
 import type { QuotaReading } from '../../src/main/fields/quota'
 import type { BusyReads } from '../../src/main/fields/worktree-busy'
 import type { AgentKind } from '../../src/shared/definition/types'
-import { orcaResult, type ParityFixture } from './fixture'
+import { orcaResult, type ParityFixture } from './fixture-core'
 
 const UNKNOWN_QUOTA: QuotaReading = { weekly: null, session: null }
 

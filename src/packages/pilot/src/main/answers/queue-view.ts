@@ -1,6 +1,5 @@
 import { routeAnswer, type Route } from '../../shared/answers/route'
-import type { InboxAnswer } from '../../shared/api-types'
-import type { InboxItemRow } from '../../shared/api-types'
+import type { InboxAnswer, InboxItemRow } from '../../shared/api-types'
 import type { QueueEntry, QueueHow } from '../../shared/inbox-types'
 import { personSees, type InboxDeps } from '../inbox/inbox-service'
 

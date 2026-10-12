@@ -47,7 +47,7 @@ function recordRollout(dir: string): string {
     cache_write_input_tokens: 100,
     output_tokens: 100
   }
-  const record = (m: number, thread: string, response: string, u: object) => ({
+  const record = (m: number, thread: string, response: string, u: Record<string, number>) => ({
     timestamp: iso(10, m),
     type: 'token_usage_record',
     payload: { thread_id: thread, turn_id: 't1', response_id: response, usage: u }

@@ -17,7 +17,12 @@ function handledKeys(data: unknown): { handled: ImportedHandled[]; notes: string
     return { handled, notes: [`${HANDLED}: expected { "<iid>": <pipeline id> }`] }
   }
   for (const [iid, pipeline] of Object.entries(isRecord(data) ? data : {})) {
-    if (/^\d+$/.test(iid) && Number.isSafeInteger(pipeline) && (pipeline as number) > 0) {
+    if (
+      /^\d+$/.test(iid) &&
+      typeof pipeline === 'number' &&
+      Number.isSafeInteger(pipeline) &&
+      pipeline > 0
+    ) {
       handled.push({ onceKey: `${iid}:${pipeline}`, status: 'done' })
     } else {
       notes.push(`${HANDLED}: skipped ${iid}: ${JSON.stringify(pipeline)}`)

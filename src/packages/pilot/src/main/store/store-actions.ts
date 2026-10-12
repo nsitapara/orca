@@ -1,4 +1,4 @@
-import { execFileSync } from 'node:child_process'
+import { runProcessSync } from '@orca/process-host'
 import type Database from '../../../../../main/sqlite/sync-database'
 import type { ActionPhase, ActionRunRow, ActionRunStatus } from '../../shared/api-types'
 
@@ -48,14 +48,17 @@ function writerOf(output: string | null): { pid: number | null; identity: string
 // A pid alone is not an identity: the OS reuses pids, a reused one would read as the dead writer.
 export function processIdentity(pid: number): string | null {
   try {
-    const out = execFileSync('ps', ['-o', 'lstart=', '-p', String(pid)], {
-      encoding: 'utf8',
-      timeout: 2000,
+    const result = runProcessSync({
+      program: 'ps',
+      args: ['-o', 'lstart=', '-p', String(pid)],
       // ps prints lstart in local time: pin the zone so the same process always reads the same.
       env: { ...process.env, TZ: 'UTC' },
-      stdio: ['ignore', 'pipe', 'ignore']
+      timeoutMs: 2000
     })
-    return out.trim() || null
+    if (result.code !== 0 || result.timedOut) {
+      return null
+    }
+    return result.stdout.trim() || null
   } catch {
     return null
   }
