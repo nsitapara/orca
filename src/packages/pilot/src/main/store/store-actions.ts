@@ -51,6 +51,8 @@ export function processIdentity(pid: number): string | null {
     const out = execFileSync('ps', ['-o', 'lstart=', '-p', String(pid)], {
       encoding: 'utf8',
       timeout: 2000,
+      // ps prints lstart in local time: pin the zone so the same process always reads the same.
+      env: { ...process.env, TZ: 'UTC' },
       stdio: ['ignore', 'pipe', 'ignore']
     })
     return out.trim() || null
@@ -59,9 +61,12 @@ export function processIdentity(pid: number): string | null {
   }
 }
 
+// Read once, a failed read included, so a failing ps isn't run again on every start.
 let ownIdentity: string | null | undefined
 function ownProcessIdentity(): string | null {
-  ownIdentity ??= processIdentity(process.pid)
+  if (ownIdentity === undefined) {
+    ownIdentity = processIdentity(process.pid)
+  }
   return ownIdentity
 }
 

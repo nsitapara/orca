@@ -1,4 +1,4 @@
-import type { ItemDecision } from '../../shared/api-types'
+import type { ItemDecision, RunRow } from '../../shared/api-types'
 import type { AutomationDefinition } from '../../shared/definition/types'
 import type { LaunchRequest } from '../scheduler/tick-runner'
 import type { PilotStore } from '../store/store'
@@ -9,11 +9,8 @@ function messageOf(error: unknown): string {
 }
 
 // The decision the run's tick recorded for its item, now `started`: what the engine launches from.
-function decisionOf(
-  store: PilotStore,
-  tickId: number | null,
-  itemKey: string
-): ItemDecision | null {
+function decisionOf(store: PilotStore, run: RunRow): ItemDecision | null {
+  const { tickId, itemKey } = run
   const row = tickId === null ? null : store.tickItems(tickId).find((i) => i.itemKey === itemKey)
   if (!row) {
     return null
@@ -24,7 +21,7 @@ function decisionOf(
     verdict: 'started',
     reason: row.reason,
     checks: row.checks,
-    onceKey: '',
+    onceKey: store.handledRows(run.automationId).find((r) => r.runId === run.id)?.onceKey ?? '',
     fields: row.fields
   }
 }
@@ -49,7 +46,8 @@ export function startRunEntry(deps: {
         : 'usage: start_run { "run_id" }'
     },
     describe: async (args) => `Start run ${String(args.run_id ?? '')}`,
-    run: async (args, { dryRun }) => {
+    run: async (args, opts) => {
+      const { dryRun } = opts
       const runId = typeof args.run_id === 'string' ? args.run_id : ''
       if (!runId) {
         return actionFailed('usage: start_run { "run_id" }')
@@ -68,12 +66,16 @@ export function startRunEntry(deps: {
         }
       }
       const definition = deps.definitions().find((d) => d.id === run.automationId)
-      const decision = decisionOf(deps.store, run.tickId, run.itemKey)
+      const decision = decisionOf(deps.store, run)
       if (!definition || !decision) {
         return actionFailed(`Run ${run.id} has no recorded tick to start from`)
       }
       if (dryRun) {
         return actionDone(`would start run ${run.id}`)
+      }
+      // Only the run's own card starts it: a card an agent filed naming another run never does.
+      if (opts.runId !== run.id) {
+        return actionFailed(`start_run only runs from the card of run ${run.id}`)
       }
       deps.store.runs.update(run.id, { status: 'running' })
       try {

@@ -228,6 +228,11 @@ async function attemptForRun(
     const detail = `Run ${run.id}'s automation "${run.automationId}" isn't loaded; nothing runs`
     return refused(deps, row, args, actionFailed(detail))
   }
+  if (entry.power === null) {
+    // Approval-only: only Pilot's own asks (ask_first's recordAsked) file these, never a run's attempt.
+    const detail = `${entry.name} needs a person's approval; only Pilot asks for it`
+    return refused(deps, row, args, actionFailed(detail))
+  }
   if (!hasPower(entry, def)) {
     return askFirst(deps, entry, { ...req, runId: run.id }, def, args)
   }

@@ -3,7 +3,7 @@ import { startNotes } from '../../shared/answers/route'
 import type { AutomationDefinition } from '../../shared/definition/types'
 import { renderTemplate } from '../../shared/template'
 import { usesHandled } from '../../shared/tick/decide'
-import { recordPilotAsk } from '../actions/attempt'
+import { recordPilotAsk } from '../actions/refuse'
 import { addInboxItem } from '../inbox/inbox-add'
 import { resolveInboxItem, WAITING, type InboxDeps } from '../inbox/inbox-service'
 import type { PilotStore } from '../store/store'
@@ -78,6 +78,7 @@ export function recordAsked(
   if (usesHandled(def)) {
     deps.store.markHandled(def.id, decision.onceKey, runId, at)
   }
+  let askedCard: string | null = null
   try {
     supersede(deps, def, decision, runId)
     const card = askFirstCard(def, decision)
@@ -94,6 +95,7 @@ export function recordAsked(
       throw new Error(added.refused ?? 'the card was refused')
     }
     // Pilot's own ask: the only reason an approval of this card may start the run (start_run has no power).
+    askedCard = added.id
     recordPilotAsk(
       deps,
       { action: 'start_run', runId, inboxItemId: added.id },
@@ -101,6 +103,12 @@ export function recordAsked(
       `Asked ${decision.label} first`
     )
   } catch (error) {
+    if (askedCard) {
+      // A card without Pilot's ask row could never be approved: close it before the run is cancelled.
+      try {
+        resolveInboxItem(deps.inbox, askedCard, 'stale: the ask could not be recorded', 'stale')
+      } catch {}
+    }
     if (usesHandled(def)) {
       deps.store.unmarkHandledForRun(def.id, runId)
     }
@@ -146,7 +154,17 @@ export function cancelUnstartedRun(store: PilotStore, item: InboxItemRow, at: nu
     return
   }
   const runId = item.actionArgs?.run_id
-  const run = typeof runId === 'string' ? store.runs.get(runId) : null
+  if (typeof runId !== 'string') {
+    return
+  }
+  // Only the run's own card cancels it: a card an agent filed naming another run is not that run's.
+  if (item.runId !== runId) {
+    console.error(
+      `pilot: card ${item.id} names run ${runId} but belongs to ${item.runId ?? 'none'}`
+    )
+    return
+  }
+  const run = store.runs.get(runId)
   if (run?.status === 'asking') {
     store.runs.update(run.id, {
       status: 'cancelled',

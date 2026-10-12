@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { InboxItemRow } from '../../../shared/api-types'
+import { startNotes } from '../../../shared/answers/route'
 import { choicesFor, composeAnswer, queueNote, waitingCount, worktreeName } from './answer-text'
 
 function card(over: Partial<InboxItemRow>): InboxItemRow {
@@ -58,7 +59,7 @@ describe('choicesFor', () => {
     [
       'an ask-first card',
       card({ type: 'action', action: 'start_run', actionArgs: { run_id: 'r' } }),
-      ['Approve', 'Skip']
+      ['Approve', 'Approve with notes…', 'Skip']
     ],
     [
       'an ask-first card with its own options',
@@ -71,7 +72,7 @@ describe('choicesFor', () => {
           { label: 'Skip', meaning: 'not today' }
         ]
       }),
-      ['Review', 'Skip']
+      ['Review', 'Approve with notes…', 'Skip']
     ],
     [
       'a question',
@@ -100,6 +101,28 @@ describe('choicesFor', () => {
 })
 
 describe('composeAnswer', () => {
+  const ASK = card({
+    type: 'action',
+    action: 'start_run',
+    actionArgs: { run_id: 'r' },
+    options: [
+      { label: 'Approve', meaning: 'start it now' },
+      { label: 'Skip', meaning: 'nothing starts' }
+    ]
+  })
+  it.each([
+    ['notes', ' use the second fix ', 'approve: use the second fix'],
+    ['no notes', '  ', 'approve']
+  ])(
+    'an ask-first Approve with %s starts the run, and the notes are its {run.answer}',
+    (_n, notes, text) => {
+      const choice = choicesFor(ASK).find((c) => c.label === 'Approve with notes…')!
+      const answer = composeAnswer(ASK, choice, notes, [])
+      expect(answer).toEqual({ option: null, text })
+      expect(startNotes(answer!.text)).toBe(notes.trim())
+    }
+  )
+
   const pick = (item: InboxItemRow, label: string) =>
     choicesFor(item).find((c) => c.label === label)!
   const POST = { ...PUSH, action: 'post_review', parts: { F1: 'Null check', F2: 'Naming' } }

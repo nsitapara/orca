@@ -36,7 +36,9 @@ function definitionOf(yaml: string) {
   return parsed.definition
 }
 
-function setup(yaml = YAML, nowMs = 11 * MIN) {
+function setup(yaml = YAML, startMs = 11 * MIN) {
+  const clock = { now: startMs }
+  const removed = { on: false }
   const store = PilotStore.open(join(mkdtempSync(join(tmpdir(), 'pilot-wiring-')), 'db.sqlite'))
   const def = definitionOf(yaml)
   const runtime = { closeTerminal: vi.fn(async () => ({})) }
@@ -44,8 +46,8 @@ function setup(yaml = YAML, nowMs = 11 * MIN) {
   const wired = wireRunEngine({
     runtime: runtime as never,
     store,
-    now: () => nowMs,
-    definitionFor: (id) => (id === def.id ? def : null),
+    now: () => clock.now,
+    definitionFor: (id) => (id === def.id && !removed.on ? def : null),
     startAgentStep: async (req) => {
       started.push(req)
       const s = req.definition.steps[req.idx]
@@ -95,7 +97,7 @@ function setup(yaml = YAML, nowMs = 11 * MIN) {
     startedAt: 0
   })
   store.runs.updateStep('run-1', 0, { status: 'running', terminalHandle: 't0', paneKey: 'p0' })
-  return { store, runtime, started, wired }
+  return { store, runtime, started, wired, clock, removed }
 }
 
 describe('wireRunEngine', () => {
@@ -210,8 +212,7 @@ describe('wireRunEngine', () => {
     expect(store.runs.get('ans-1')?.status).toBe('timed_out')
   })
 
-  it("times out a step of a run whose automation isn't loaded after the default hour, so it can't hold its worktree for ever", async () => {
-    const { store, runtime, wired } = setup(YAML, 61 * MIN)
+  function orphan(store: ReturnType<typeof setup>['store']) {
     store.runs.create({
       id: 'orphan-1',
       automationId: 'removed-file',
@@ -230,33 +231,30 @@ describe('wireRunEngine', () => {
       startedAt: 0
     })
     store.runs.updateStep('orphan-1', 0, { status: 'running', terminalHandle: 'tx', paneKey: 'px' })
+  }
+
+  it('counts the default hour from when a never-known definition was found missing, so a step cannot hold its worktree for ever', async () => {
+    const { store, runtime, wired, clock } = setup(YAML, 30 * MIN)
+    orphan(store)
+    await wired.poll()
+    clock.now = 80 * MIN
+    await wired.poll()
+    expect(runtime.closeTerminal).not.toHaveBeenCalledWith('tx')
+    clock.now = 91 * MIN
     await wired.poll()
     expect(runtime.closeTerminal).toHaveBeenCalledWith('tx')
     expect(store.runs.steps('orphan-1')[0].status).toBe('timed_out')
   })
 
-  it('keeps a step of an unloaded automation running before that hour', async () => {
-    const { store, runtime, wired } = setup(YAML, 30 * MIN)
-    store.runs.create({
-      id: 'orphan-1',
-      automationId: 'removed-file',
-      tickId: null,
-      itemKey: 'x',
-      itemLabel: 'x',
-      worktreePath: '/wt2',
-      startedAt: 0
-    })
-    store.runs.createStep({
-      runId: 'orphan-1',
-      idx: 0,
-      name: 'a',
-      agent: 'claude',
-      skill: null,
-      startedAt: 0
-    })
-    store.runs.updateStep('orphan-1', 0, { status: 'running', terminalHandle: 'tx', paneKey: 'px' })
+  it("keeps a removed definition's own step timeout once it has been seen", async () => {
+    const { store, runtime, wired, clock, removed } = setup(YAML, 5 * MIN)
     await wired.poll()
-    expect(runtime.closeTerminal).not.toHaveBeenCalledWith('tx')
+    expect(runtime.closeTerminal).not.toHaveBeenCalled()
+    removed.on = true
+    clock.now = 12 * MIN
+    await wired.poll()
+    expect(runtime.closeTerminal).toHaveBeenCalledWith('t0')
+    expect(store.runs.steps('run-1')[0].status).toBe('timed_out')
   })
 
   it('leaves a step with no timeout at all running', async () => {

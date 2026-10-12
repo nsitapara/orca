@@ -191,4 +191,54 @@ describe('WaitingOnYouPage', () => {
     fireEvent.click(article.querySelector('button[data-save]')!)
     expect(await screen.findByText('The card changed; review it again')).toBeTruthy()
   })
+
+  it('keeps the save error when the reload brings the card back as a new version', async () => {
+    let version = 1
+    pilotRpc.mockImplementation(async (method: string) => {
+      if (method === 'pilot.inbox.answer') {
+        version = 2
+        throw new Error('The card changed; review it again')
+      }
+      if (method === 'pilot.inbox.list') {
+        return { ...LIST, items: [{ ...QUESTION, version, digest: `d${version}` }] }
+      }
+      return { entries: [] }
+    })
+    render(<WaitingOnYouPage />)
+    const article = (await screen.findByText('Install LibreOffice in the job?')).closest('article')!
+    fireEvent.click(article.querySelector('input[value="Bake it"]')!)
+    fireEvent.click(article.querySelector('button[data-save]')!)
+    expect(await screen.findByText('The card changed; review it again')).toBeTruthy()
+    await waitFor(() => expect(version).toBe(2))
+    expect(screen.getByText('The card changed; review it again')).toBeTruthy()
+  })
+
+  it('sends Approve with notes on an ask-first card as "approve: <notes>" with the digest', async () => {
+    const ask = card({
+      id: 'in_ask',
+      type: 'action',
+      title: 'Prepare a review of !1588?',
+      action: 'start_run',
+      actionArgs: { run_id: 'r' },
+      digest: 'da',
+      options: [
+        { label: 'Approve', meaning: 'start it now' },
+        { label: 'Skip', meaning: 'nothing starts' }
+      ]
+    })
+    serve({ ...LIST, items: [ask] }, [])
+    render(<WaitingOnYouPage />)
+    const article = (await screen.findByText('Prepare a review of !1588?')).closest('article')!
+    fireEvent.click(article.querySelector('input[value="Approve with notes…"]')!)
+    fireEvent.change(article.querySelector('textarea')!, {
+      target: { value: 'use the second fix' }
+    })
+    fireEvent.click(article.querySelector('button[data-save]')!)
+    await waitFor(() =>
+      expect(pilotRpc).toHaveBeenCalledWith(
+        'pilot.inbox.answer',
+        expect.objectContaining({ id: 'in_ask', text: 'approve: use the second fix', digest: 'da' })
+      )
+    )
+  })
 })

@@ -8,6 +8,7 @@ import type { InboxItemRow } from '../../../shared/api-types'
 import type { QueueEntry } from '../../../shared/inbox-types'
 import {
   choicesFor,
+  type Choice,
   composeAnswer,
   KIND_LABEL,
   QUEUE_PILL,
@@ -85,23 +86,19 @@ function Saved({
   )
 }
 
-export function InboxCard({
+function AnswerForm({
   item,
-  automationName,
-  queued,
-  onSave
+  onSave,
+  onSaved
 }: {
   item: InboxItemRow
-  automationName: string
-  queued: QueueEntry | null
   onSave: (answer: Answer) => Promise<string | null>
+  onSaved: () => void
 }): React.JSX.Element {
   const choices = choicesFor(item)
   const [picked, setPicked] = useState<number | null>(null)
   const [notes, setNotes] = useState('')
   const [off, setOff] = useState<string[]>([])
-  const [editing, setEditing] = useState(item.status === 'open')
-  const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const choice = picked === null ? null : choices[picked]
   const answer = choice ? composeAnswer(item, choice, notes, off) : null
@@ -114,11 +111,89 @@ export function InboxCard({
     setSaving(true)
     const failed = await onSave(answer)
     setSaving(false)
-    setError(failed)
     if (!failed) {
-      setEditing(false)
+      onSaved()
     }
   }
+  return (
+    <div className="flex flex-col gap-2">
+      <div role="radiogroup" className="flex flex-col gap-1">
+        {choices.map((c, i) => (
+          <label key={c.label} className="flex items-start gap-2 text-sm">
+            <input
+              type="radio"
+              name={`answer-${item.id}`}
+              value={c.label}
+              checked={picked === i}
+              onChange={() => setPicked(i)}
+            />
+            <span>
+              <span className="font-medium">{c.label}</span>
+              {c.meaning ? <span className="text-muted-foreground"> — {c.meaning}</span> : null}
+            </span>
+          </label>
+        ))}
+      </div>
+      {choice && choice.notes !== 'none' ? (
+        <Textarea
+          value={notes}
+          onChange={(e) => setNotes(e.target.value)}
+          placeholder={notesPlaceholder(choice)}
+        />
+      ) : null}
+      {Object.keys(item.parts).length > 0 && choice?.label === 'Approve' ? (
+        <Parts item={item} off={off} onToggle={toggle} />
+      ) : null}
+      <div className="flex flex-wrap items-center gap-2">
+        <Details markdown={item.detailsMd} />
+        <Button size="sm" data-save="" disabled={!answer || saving} onClick={() => void save()}>
+          Save answer
+        </Button>
+      </div>
+    </div>
+  )
+}
+
+function notesPlaceholder(choice: Choice): string {
+  if (choice.notes === 'optional') {
+    return 'Anything the run should know (optional)'
+  }
+  return 'What should happen instead?'
+}
+
+function Details({ markdown }: { markdown: string | null }): React.JSX.Element {
+  if (!markdown) {
+    return <span className="flex-1" />
+  }
+  return (
+    <Collapsible className="min-w-48 flex-1">
+      <CollapsibleTrigger className="text-sm text-muted-foreground underline-offset-4 hover:underline">
+        Details
+      </CollapsibleTrigger>
+      <CollapsibleContent>
+        <pre className="mt-2 overflow-auto rounded-md border border-border/50 bg-muted/20 p-2 text-xs">
+          {markdown}
+        </pre>
+      </CollapsibleContent>
+    </Collapsible>
+  )
+}
+
+export function InboxCard({
+  item,
+  automationName,
+  queued,
+  error,
+  onSave
+}: {
+  item: InboxItemRow
+  automationName: string
+  queued: QueueEntry | null
+  // Why the last save failed; held by the page so it survives the card remounting as a new version.
+  error: string | null
+  onSave: (answer: Answer) => Promise<string | null>
+}): React.JSX.Element {
+  const [editing, setEditing] = useState(item.status === 'open')
   return (
     <article>
       <Card className="gap-3 py-4">
@@ -141,68 +216,35 @@ export function InboxCard({
               Agent asked: {r}
             </p>
           ))}
-          {editing ? (
-            <div className="flex flex-col gap-2">
-              <div role="radiogroup" className="flex flex-col gap-1">
-                {choices.map((c, i) => (
-                  <label key={c.label} className="flex items-start gap-2 text-sm">
-                    <input
-                      type="radio"
-                      name={`answer-${item.id}`}
-                      value={c.label}
-                      checked={picked === i}
-                      onChange={() => setPicked(i)}
-                    />
-                    <span>
-                      <span className="font-medium">{c.label}</span>
-                      {c.meaning ? (
-                        <span className="text-muted-foreground"> — {c.meaning}</span>
-                      ) : null}
-                    </span>
-                  </label>
-                ))}
-              </div>
-              {choice?.notes === 'required' ? (
-                <Textarea
-                  value={notes}
-                  onChange={(e) => setNotes(e.target.value)}
-                  placeholder="What should happen instead?"
-                />
-              ) : null}
-              {Object.keys(item.parts).length > 0 && choice?.label === 'Approve' ? (
-                <Parts item={item} off={off} onToggle={toggle} />
-              ) : null}
-              <div className="flex flex-wrap items-center gap-2">
-                {item.detailsMd ? (
-                  <Collapsible className="min-w-48 flex-1">
-                    <CollapsibleTrigger className="text-sm text-muted-foreground underline-offset-4 hover:underline">
-                      Details
-                    </CollapsibleTrigger>
-                    <CollapsibleContent>
-                      <pre className="mt-2 overflow-auto rounded-md border border-border/50 bg-muted/20 p-2 text-xs">
-                        {item.detailsMd}
-                      </pre>
-                    </CollapsibleContent>
-                  </Collapsible>
-                ) : (
-                  <span className="flex-1" />
-                )}
-                <Button
-                  size="sm"
-                  data-save=""
-                  disabled={!answer || saving}
-                  onClick={() => void save()}
-                >
-                  Save answer
-                </Button>
-              </div>
-            </div>
-          ) : (
-            <Saved item={item} queued={queued} onChange={() => setEditing(true)} />
-          )}
+          <CardBody
+            item={item}
+            editing={editing}
+            queued={queued}
+            onSave={onSave}
+            setEditing={setEditing}
+          />
           {error ? <p className="text-sm text-destructive">{error}</p> : null}
         </CardContent>
       </Card>
     </article>
   )
+}
+
+function CardBody({
+  item,
+  editing,
+  queued,
+  onSave,
+  setEditing
+}: {
+  item: InboxItemRow
+  editing: boolean
+  queued: QueueEntry | null
+  onSave: (answer: Answer) => Promise<string | null>
+  setEditing: (editing: boolean) => void
+}): React.JSX.Element {
+  if (editing) {
+    return <AnswerForm item={item} onSave={onSave} onSaved={() => setEditing(false)} />
+  }
+  return <Saved item={item} queued={queued} onChange={() => setEditing(true)} />
 }

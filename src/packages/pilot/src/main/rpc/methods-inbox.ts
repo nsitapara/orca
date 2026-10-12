@@ -10,7 +10,6 @@ import {
   resolveInboxItem,
   type InboxDeps
 } from '../inbox/inbox-service'
-import { cancelUnstartedRun } from '../run/ask-first'
 import type { PilotContext } from '../pilot-services'
 import { resolveChannelRun, resolveChannelStep } from './run-channel'
 
@@ -52,8 +51,7 @@ export function inboxDeps(c: PilotContext): InboxDeps {
     definitions: () => c.loaded().definitions,
     people: () => c.loaded().people,
     knownAction: (name) => c.actions.get(name) !== null,
-    actionArgsProblem: (name, args) => c.actions.get(name)?.checkArgs(args) ?? null,
-    onResolved: (item) => cancelUnstartedRun(c.store, item, Date.now())
+    actionArgsProblem: (name, args) => c.actions.get(name)?.checkArgs(args) ?? null
   }
 }
 
@@ -140,7 +138,15 @@ export function buildInboxMethods(ctx: () => PilotContext) {
       name: 'pilot.inbox.tick',
       permission: 'workspace',
       params: Tick,
-      handler: (p) => resolveInboxItem(inboxDeps(ctx()), p.id, p.outcome)
+      handler: (p) => {
+        const deps = inboxDeps(ctx())
+        // An ask-first card is a person's Approve or Skip in Pilot; closing it from here would be a skip
+        // no one chose (the key stays handled).
+        if (getInboxItem(deps, p.id).action === 'start_run') {
+          throw new Error('Answer this in Pilot (Waiting on you)')
+        }
+        return resolveInboxItem(deps, p.id, p.outcome)
+      }
     }),
     defineMethod({
       name: 'pilot.inbox.reply',
