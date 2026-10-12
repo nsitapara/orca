@@ -9,6 +9,7 @@ import {
   type LinearIssueSummary,
   type LinearStatusSetResult
 } from '../../../../../shared/linear/agent-access'
+import type { LinearConnectionStatus } from '../../../../../shared/linear/workspace-types'
 
 // The runtime's own Linear commands: what `orca linear …` reaches over RPC. In Pilot they read the
 // Linear login kept in ~/.pilot (hook linear-credential-home), never Orca's ~/.orca.
@@ -20,6 +21,7 @@ export type LinearRuntime = Pick<
   | 'linearIssueAddComment'
   | 'linearIssueSetState'
   | 'linearIssueAttachLink'
+  | 'linearStatus'
 >
 
 export type LinearConnector = {
@@ -54,8 +56,20 @@ const NO_INCLUDES = {
 
 export function runtimeLinearConnector(runtime: LinearRuntime): LinearConnector {
   return {
-    listIssues: (filter) =>
-      runtime.linearIssueListForAgents({ filter, workspaceId: 'all', limit: LINEAR_LIST_LIMIT }),
+    async listIssues(filter) {
+      const listing = await runtime.linearIssueListForAgents({
+        filter,
+        workspaceId: 'all',
+        limit: LINEAR_LIST_LIMIT
+      })
+      // Why after the listing: it is what tries each workspace's saved login, and under "all" it skips one it
+      // can't read instead of failing. The status says whether an empty listing means no tickets or no Linear.
+      const problem = linearLoginProblem(runtime.linearStatus())
+      if (problem) {
+        throw new Error(problem)
+      }
+      return listing
+    },
     async issue(id, workspaceId) {
       const context = await runtime.linearIssueContext({
         input: id,
@@ -74,6 +88,19 @@ export function runtimeLinearConnector(runtime: LinearRuntime): LinearConnector 
     attach: ({ issue, url, title, workspaceId, writeId }) =>
       runtime.linearIssueAttachLink({ input: issue, url, title, workspaceId, writeId })
   }
+}
+
+// Why a listing can't be trusted to mean "no tickets": no workspace signed in, or a saved login that can't be read.
+export function linearLoginProblem(
+  status: Pick<LinearConnectionStatus, 'connected' | 'credentialError'>
+): string | null {
+  if (!status.connected) {
+    return "Linear isn't connected in Pilot (no Linear workspace is signed in; connect Linear in Pilot's Settings)"
+  }
+  if (status.credentialError) {
+    return `Linear isn't connected in Pilot (its saved Linear login can't be read: ${status.credentialError})`
+  }
+  return null
 }
 
 // linear-todo-sweep assigned_unstarted(): a listing that may be short (cut at the limit, more pages,

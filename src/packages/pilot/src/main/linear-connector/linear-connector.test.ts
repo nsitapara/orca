@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { LinearIssueListResult } from '../../../../../shared/linear/agent-access'
+import type { LinearConnectionStatus } from '../../../../../shared/linear/workspace-types'
 import { incompleteListing, runtimeLinearConnector, type LinearRuntime } from './linear-connector'
 
 function fakeRuntime() {
@@ -11,7 +12,8 @@ function fakeRuntime() {
     linearIssueCreate: vi.fn(async () => ({})),
     linearIssueAddComment: vi.fn(async () => ({})),
     linearIssueSetState: vi.fn(async () => ({})),
-    linearIssueAttachLink: vi.fn(async () => ({}))
+    linearIssueAttachLink: vi.fn(async () => ({})),
+    linearStatus: vi.fn(() => ({ connected: true, viewer: null }))
   }
 }
 
@@ -108,6 +110,44 @@ describe('runtimeLinearConnector sends what the orca linear CLI sends', () => {
     const runtime = fakeRuntime()
     const issue = await runtimeLinearConnector(runtime as unknown as LinearRuntime).issue('WEB-1')
     expect(issue).toEqual({ identifier: 'WEB-1', branchName: 'web-1-x' })
+  })
+})
+
+// The all-workspaces listing skips a workspace it can't sign in to, so an empty answer can mean "no Linear".
+describe('listIssues tells "not connected" from "connected, no tickets"', () => {
+  const connector = (status: LinearConnectionStatus) =>
+    runtimeLinearConnector({
+      ...fakeRuntime(),
+      linearStatus: vi.fn(() => status)
+    } as unknown as LinearRuntime)
+
+  it('returns an empty listing when Linear is connected and has no tickets', async () => {
+    await expect(
+      connector({ connected: true, viewer: null }).listIssues('assigned')
+    ).resolves.toEqual({
+      issues: [],
+      meta: {}
+    })
+  })
+
+  it.each([
+    [
+      'no Linear workspace signed in',
+      { connected: false, viewer: null },
+      "Linear isn't connected in Pilot (no Linear workspace is signed in; connect Linear in Pilot's Settings)"
+    ],
+    [
+      'a saved login it cannot read',
+      {
+        connected: true,
+        viewer: null,
+        credentialError:
+          'Could not decrypt saved Linear credential. Approve Keychain access or reconnect Linear.'
+      },
+      "Linear isn't connected in Pilot (its saved Linear login can't be read: Could not decrypt saved Linear credential. Approve Keychain access or reconnect Linear.)"
+    ]
+  ])('refuses the listing with %s', async (_name, status, refusal) => {
+    await expect(connector(status).listIssues('assigned')).rejects.toThrow(refusal)
   })
 })
 
