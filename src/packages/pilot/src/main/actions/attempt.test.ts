@@ -39,21 +39,17 @@ function setup(powers?: string[], loaded = true) {
     usage: 'push …',
     checkArgs: (args) => (Array.isArray(args.argv) ? null : 'usage: push …'),
     describe: async (args) => `Push ${(args.argv as string[])[1]} to origin`,
-    run: vi
-      .fn()
-      .mockResolvedValue({
-        outcome: 'done',
-        detail: 'pushed web-1 to 9c1e2f04',
-        link: 'https://x',
-        log: '/l',
-        onYou: false
-      }),
-    refresh: vi
-      .fn()
-      .mockResolvedValue({
-        args: { argv: ['/wt', 'web-1', 'ffff', 'bbb'] },
-        changed: 'head moved to ffff'
-      })
+    run: vi.fn().mockResolvedValue({
+      outcome: 'done',
+      detail: 'pushed web-1 to 9c1e2f04',
+      link: 'https://x',
+      log: '/l',
+      onYou: false
+    }),
+    refresh: vi.fn().mockResolvedValue({
+      args: { argv: ['/wt', 'web-1', 'ffff', 'bbb'] },
+      changed: 'head moved to ffff'
+    })
   }
   const catalog: ActionCatalog = { entries: () => [push], get: (n) => (n === 'push' ? push : null) }
   const definition = def.ok
@@ -169,7 +165,7 @@ describe('attemptAction', () => {
     [
       'no run behind an unapproved attempt',
       { runId: null },
-      "push isn't approved and no run asked for it"
+      'Outside a Pilot run, approve actions in Pilot (Waiting on you), or run act.py directly.'
     ],
     ['a run Pilot has no record of', { runId: 'run-9' }, 'No run run-9']
   ])('refuses %s and runs nothing', async (_name, change, detail) => {
@@ -188,6 +184,14 @@ describe('attemptAction', () => {
       detail: 'Run run-1\'s automation "ci" isn\'t loaded; nothing runs'
     })
     expect(push.run).not.toHaveBeenCalled()
+  })
+
+  it('dry-runs an unapproved call with no run, and nothing more', async () => {
+    const { push, deps } = setup()
+    expect(await attemptAction(deps, { ...REQ, runId: null, dryRun: true })).toMatchObject({
+      outcome: 'done'
+    })
+    expect(push.run).toHaveBeenCalledWith(REQ.args, { dryRun: true, runId: null })
   })
 
   it("runs a person's own approved call (no run, no card) without powers", async () => {
