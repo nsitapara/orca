@@ -44,10 +44,6 @@ function sameArgs(a: readonly string[], b: readonly string[]): boolean {
   return a.length === b.length && a.every((arg, i) => arg === b[i])
 }
 
-// H10, one process per session: the step's prompt goes into the terminal its session last ran in when
-// that is free and its process runs with this step's args (as stored at launch, not as the definition
-// now says: it may have reloaded since). An idle Pilot tab that can't take it (other or unknown args,
-// another session) is closed first; a busy one fails the step. Null: open a new terminal.
 // An unreadable input counts as a draft: never close a tab whose input can't be seen.
 async function hasDraft(terminals: SessionTerminals, handle: string): Promise<boolean> {
   if (!terminals.draft) {
@@ -60,6 +56,10 @@ async function hasDraft(terminals: SessionTerminals, handle: string): Promise<bo
   }
 }
 
+// H10, one process per session: the step's prompt goes into the terminal its session last ran in when
+// that is free and its process runs with this step's args (as stored at launch, not as the definition
+// now says: it may have reloaded since). An idle Pilot tab that can't take it (other or unknown args,
+// another session) is closed first; a busy one fails the step. Null: open a new terminal.
 export async function sessionHome(
   store: PilotStore,
   req: AgentStepRequest,
@@ -116,6 +116,10 @@ export async function sessionHome(
     sameArgs(launchArgs, req.definition.steps[req.stepIdx].args)
   ) {
     return { ...old, launchArgs }
+  }
+  // The row tab runs another session or other args: re-read its input right before closing it, too.
+  if (await hasDraft(deps.sessionTerminals, old.handle)) {
+    throw new Error(`Session ${sessionId} is busy in terminal ${old.handle}`)
   }
   await deps.sessionTerminals.close(old.handle)
   return null

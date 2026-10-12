@@ -125,6 +125,8 @@ export function sessionTerminalProbe(
 ): SessionProbe {
   return {
     async terminalState({ handle, paneKey, sessionId }) {
+      // A claim whose start has landed (or died) is dropped first, so it doesn't force forks until its TTL.
+      await deps.terminals.claims?.expireIfSeen(sessionId)
       if (deps.stepOn(handle) || deps.terminals.claims?.holder(sessionId)) {
         return 'busy'
       }

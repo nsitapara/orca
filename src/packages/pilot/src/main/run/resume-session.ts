@@ -5,13 +5,15 @@ import type { WorktreeFactDeps } from '../fields/worktree-facts'
 import type { PilotStore } from '../store/store'
 import { runtimeSessionTerminals } from './launch'
 import type { SessionClaimTable } from './session-claims'
-import { findLiveTab, type SessionLook } from './session-tabs'
+import { findLiveTab, terminalOpen, type SessionLook } from './session-tabs'
 
 export type ResumeDeps = SessionLook & {
   // Who is about to start a process on a session; absent where nothing shares one.
   claims?: SessionClaimTable
   // A Pilot step is starting on this session with no terminal recorded yet (the launcher's window).
   startingOn(sessionId: string): boolean
+  // Whether a terminal is still connected.
+  isOpen(handle: string): Promise<boolean>
   run(runId: string): RunRow | null
   steps(runId: string): StepRow[]
   focus(handle: string): Promise<void>
@@ -31,6 +33,7 @@ export function resumeCommand(agent: string, sessionId: string): string | null {
 }
 
 let resumeCalls = 0
+const DEAD_START = "A previous start of this session didn't come up; try again"
 const OPENING = 'Session is opening… try again in a moment'
 
 // The session's tab when it is still live; else its session reopened in a new tab in the run's
@@ -54,31 +57,29 @@ export async function resumeStepSession(
   const hints = [step, ...all.filter((s) => s.sessionId === step.sessionId).toReversed()]
     .filter((s) => s.terminalHandle)
     .map((s) => ({ handle: s.terminalHandle as string, paneKey: s.paneKey }))
-  const live = await findLiveTab(deps, step.sessionId, hints)
-  if (live) {
-    await deps.focus(live.handle)
-    return { action: 'focused', handle: live.handle }
-  }
-  // Nothing shows the session yet, but a start may be under way: a launcher's starting step, or another
-  // caller's claim (a double click, an overlapping Resume). Focus its tab when known, else wait.
-  if (deps.startingOn(step.sessionId)) {
-    throw new Error(OPENING)
-  }
+  const sessionId = step.sessionId
+  // Claim first, then look (as the launcher does): a look before the claim can predate another caller's
+  // new row and then open a second tab. One holder per call: two Resumes must not share a claim.
   const claims = deps.claims
-  // One holder per call: two Resumes of the same session must not share a claim.
   const by = `resume:${++resumeCalls}`
   if (claims) {
-    await claims.expireIfSeen(step.sessionId)
-    const claim = claims.acquire(step.sessionId, by)
+    await claims.expireIfSeen(sessionId)
+    const claim = claims.acquire(sessionId, by)
     if (!claim.ok) {
-      if (claim.handle) {
-        await deps.focus(claim.handle)
-        return { action: 'focused', handle: claim.handle }
-      }
-      throw new Error(OPENING)
+      return refuseOrFocus(deps, sessionId, hints, claim.handle)
     }
   }
   try {
+    // A launcher's step is starting on the session with no terminal recorded yet.
+    if (deps.startingOn(sessionId)) {
+      throw new Error(OPENING)
+    }
+    const live = await findLiveTab(deps, sessionId, hints)
+    if (live) {
+      claims?.release(sessionId, by)
+      await deps.focus(live.handle)
+      return { action: 'focused', handle: live.handle }
+    }
     if (!run.worktreePath) {
       throw new Error(`Run ${run.id} has no worktree to resume in`)
     }
@@ -87,12 +88,35 @@ export async function resumeStepSession(
       command,
       `Resume · ${run.itemLabel} · ${step.name}`
     )
-    claims?.setHandle(step.sessionId, by, opened.handle)
+    claims?.setHandle(sessionId, by, opened.handle)
     return { action: 'opened', handle: opened.handle }
   } catch (error) {
-    claims?.release(step.sessionId, by)
+    claims?.release(sessionId, by)
     throw error
   }
+}
+
+// Another caller's claim holds the session: its tab when it is known and still open; else any live tab
+// (a pure focus, nothing started); else wait. A closed start's tab is never focused.
+async function refuseOrFocus(
+  deps: ResumeDeps,
+  sessionId: string,
+  hints: { handle: string; paneKey: string | null }[],
+  handle: string | null
+): Promise<SessionResumeResult> {
+  if (handle) {
+    if (!(await deps.isOpen(handle).catch(() => true))) {
+      throw new Error(DEAD_START)
+    }
+    await deps.focus(handle)
+    return { action: 'focused', handle }
+  }
+  const live = await findLiveTab(deps, sessionId, hints)
+  if (live) {
+    await deps.focus(live.handle)
+    return { action: 'focused', handle: live.handle }
+  }
+  throw new Error(OPENING)
 }
 
 export function runtimeResumeDeps(
@@ -110,6 +134,7 @@ export function runtimeResumeDeps(
     state: (terminal, sessionId) => terminals.state(terminal, sessionId),
     tabs: terminals.tabs,
     claims: terminals.claims,
+    isOpen: (handle) => terminalOpen(runtime, handle),
     startingOn: (id) =>
       store.runs.runningSteps().some((s) => s.sessionId === id && s.terminalHandle === null),
     stepOn: (handle) => store.runs.runningSteps().some((s) => s.terminalHandle === handle),

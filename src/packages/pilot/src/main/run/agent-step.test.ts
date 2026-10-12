@@ -601,4 +601,24 @@ describe('launchAgentStep, one process per session: the row-named tab runs anoth
     ).rejects.toThrow('boom')
     expect(failed.claims.holder('uuid-new')).toBeNull()
   })
+
+  it('re-reads the draft of the row tab running another session right before closing it', async () => {
+    const h = held({ term_1: 'other', resume_tab: 'gone' }, 'half a thought')
+    await reviewedIn(h)
+    await expect(launchAgentStep(h.s.store, h.s.request(1), h.s.deps)).rejects.toThrow(
+      'Session uuid-new is busy in terminal term_1'
+    )
+    expect(h.terminals.close).not.toHaveBeenCalled()
+  })
+
+  it("says so when the claim's start is closed, instead of that another caller is opening it", async () => {
+    const h = held({ term_1: 'gone' })
+    await reviewedIn(h)
+    h.claims.acquire('uuid-new', 'resume:1')
+    h.claims.setHandle('uuid-new', 'resume:1', 'T_dead')
+    ;(h.terminals as Record<string, unknown>).isOpen = vi.fn(async () => false)
+    await expect(launchAgentStep(h.s.store, h.s.request(1), h.s.deps)).rejects.toThrow(
+      "A previous start of session uuid-new didn't come up; try again"
+    )
+  })
 })
