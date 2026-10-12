@@ -1,4 +1,5 @@
 import type Database from '../../../../../main/sqlite/sync-database'
+import type { AdvanceStore } from './store-advance'
 import { totalsOf, type UsageBucket } from '../usage/buckets'
 
 export type MeasurableStep = {
@@ -37,7 +38,10 @@ function toBucket(r: Record<string, unknown>): UsageBucket {
 }
 
 export class UsageStore {
-  constructor(private readonly db: Database) {}
+  constructor(
+    private readonly db: Database,
+    private readonly advance: AdvanceStore
+  ) {}
 
   // Agent steps that ended and haven't had their usage read, oldest first, a page at a time.
   unmeasuredSteps(limit = 50): MeasurableStep[] {
@@ -52,8 +56,10 @@ export class UsageStore {
       .map((r) => toMeasurable(r as never))
   }
 
-  // Replaces the step's buckets and sets its cost, tokens and model. A step whose session was never found keeps
-  // a null cost and null tokens; one found with no turns in its window has 0 tokens.
+  // Replaces the step's buckets and sets its cost, tokens and model, then re-sums the run (run cost = sum of its
+  // steps, even when the run already closed), all in one transaction. A step whose session can't be found is only
+  // marked measured: what it already has (an earlier read, the watcher's) is kept, so a pruned transcript never
+  // erases a historical cost. One found with no turns in its window has 0 tokens.
   saveStepUsage(
     runId: string,
     idx: number,
@@ -61,33 +67,19 @@ export class UsageStore {
     sessionFound: boolean,
     at: number
   ): void {
-    const totals = totalsOf(buckets)
-    const tokens = sessionFound ? totals.tokens : null
-    const insert = this.db.prepare(
-      'INSERT INTO step_usage (run_id, idx, day, model, requests, input, cache_read, cache_write, output, cost_usd) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
-    )
     this.db.exec('BEGIN IMMEDIATE')
     try {
-      this.db.prepare('DELETE FROM step_usage WHERE run_id = ? AND idx = ?').run(runId, idx)
-      for (const b of buckets) {
-        insert.run(
-          runId,
-          idx,
-          b.day,
-          b.model,
-          b.requests,
-          b.input,
-          b.cacheRead,
-          b.cacheWrite,
-          b.output,
-          b.costUsd
-        )
+      if (sessionFound) {
+        this.writeBuckets(runId, idx, buckets, at)
+      } else {
+        this.db
+          .prepare('UPDATE steps SET usage_measured_at = ? WHERE run_id = ? AND idx = ?')
+          .run(at, runId, idx)
       }
+      const spent = this.advance.rollupCost(runId)
       this.db
-        .prepare(
-          'UPDATE steps SET cost_usd = ?, tokens = ?, model = COALESCE(?, model), usage_measured_at = ? WHERE run_id = ? AND idx = ?'
-        )
-        .run(totals.costUsd, tokens, totals.model, at, runId, idx)
+        .prepare('UPDATE runs SET cost_usd = ?, tokens = ? WHERE id = ?')
+        .run(spent.costUsd, spent.tokens, runId)
       this.db.exec('COMMIT')
     } catch (error) {
       this.db.exec('ROLLBACK')
@@ -95,13 +87,43 @@ export class UsageStore {
     }
   }
 
-  // A run costs what its steps cost (spec: run cost = sum of steps). SUM over only nulls stays null.
-  rollupRun(runId: string): void {
+  // Gives up on a step whose usage can't be read, so it stops being offered; its cost stays as it is.
+  markMeasured(runId: string, idx: number, at: number): void {
+    this.db
+      .prepare('UPDATE steps SET usage_measured_at = ? WHERE run_id = ? AND idx = ?')
+      .run(at, runId, idx)
+  }
+
+  private writeBuckets(
+    runId: string,
+    idx: number,
+    buckets: readonly UsageBucket[],
+    at: number
+  ): void {
+    const totals = totalsOf(buckets)
+    const insert = this.db.prepare(
+      'INSERT INTO step_usage (run_id, idx, day, model, requests, input, cache_read, cache_write, output, cost_usd) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+    )
+    this.db.prepare('DELETE FROM step_usage WHERE run_id = ? AND idx = ?').run(runId, idx)
+    for (const b of buckets) {
+      insert.run(
+        runId,
+        idx,
+        b.day,
+        b.model,
+        b.requests,
+        b.input,
+        b.cacheRead,
+        b.cacheWrite,
+        b.output,
+        b.costUsd
+      )
+    }
     this.db
       .prepare(
-        'UPDATE runs SET cost_usd = (SELECT SUM(cost_usd) FROM steps WHERE run_id = ?), tokens = (SELECT SUM(tokens) FROM steps WHERE run_id = ?) WHERE id = ?'
+        'UPDATE steps SET cost_usd = ?, tokens = ?, model = COALESCE(?, model), usage_measured_at = ? WHERE run_id = ? AND idx = ?'
       )
-      .run(runId, runId, runId)
+      .run(totals.costUsd, totals.tokens, totals.model, at, runId, idx)
   }
 
   stepBuckets(runId: string, idx: number): UsageBucket[] {

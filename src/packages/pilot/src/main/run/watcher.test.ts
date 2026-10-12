@@ -319,6 +319,18 @@ describe('runtimeStepProbe.status', () => {
     expect(p.session('pane')).toEqual({ id: 'new', transcriptPath: '/t' })
   })
 
+  it("never takes a session an earlier step's turn left in the tab", () => {
+    const p = probeFor(
+      async () => ({}),
+      [
+        { receivedAt: 3, providerSession: { id: 'previous' } },
+        { receivedAt: 4, stateStartedAt: 20, providerSession: { id: 'mine' } }
+      ]
+    )
+    expect(p.session('pane', 10)).toEqual({ id: 'mine', transcriptPath: null })
+    expect(p.session('pane', 30)).toBeNull()
+  })
+
   // A step sent into an earlier step's terminal: that turn's rows aren't this step's (Task 24 fix).
   it('reads only rows received since the step started, else asks the terminal', async () => {
     const show = vi.fn(async () => ({}))

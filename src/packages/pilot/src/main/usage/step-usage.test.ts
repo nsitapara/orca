@@ -94,6 +94,22 @@ describe('measureFinishedSteps', () => {
     expect(store.runs.get('r1')).toMatchObject({ status: 'done', costUsd: 2, tokens: 10 })
   })
 
+  it('stops retrying a step whose read keeps failing, after 3 polls in a row', async () => {
+    const store = storeWithFinishedSteps(1)
+    const log = vi.fn()
+    const read = async (): Promise<never> => {
+      throw new Error('disk on fire')
+    }
+    const failures = new Map<string, number>()
+    for (const t of [5_000, 6_000]) {
+      await measureFinishedSteps(store, read, () => t, log, failures)
+      expect(store.usage.unmeasuredSteps()).toHaveLength(1)
+    }
+    await measureFinishedSteps(store, read, () => 7_000, log, failures)
+    expect(store.usage.unmeasuredSteps()).toEqual([])
+    expect(log).toHaveBeenLastCalledWith('[pilot] gave up measuring step r1/0 after 3 failed reads')
+  })
+
   it('waits for a transcript that is not there yet, then records the gap after 10 minutes', async () => {
     const store = storeWithFinishedSteps(1, 1_000)
     const read = async () => ({ buckets: [], sessionFound: false })

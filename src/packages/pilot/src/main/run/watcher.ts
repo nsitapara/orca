@@ -11,7 +11,12 @@ export type StepProbe = {
   // `since`: only rows received from then on are the step's (an earlier step's turn in the same
   // terminal isn't); without one, every row counts.
   status(handle: string, paneKey: string, since?: number | null): Promise<ObservedState>
-  session(paneKey: string): { id: string; transcriptPath: string | null } | null
+  // `since`: only rows whose state began from then on are the step's (a fresh Codex step in a reused tab must
+  // not pin the previous session's id).
+  session(
+    paneKey: string,
+    since?: number | null
+  ): { id: string; transcriptPath: string | null } | null
 }
 
 export function runtimeStepProbe(
@@ -46,8 +51,13 @@ export function runtimeStepProbe(
         return 'gone'
       }
     },
-    session(paneKey) {
-      const s = newestSessionRow(runtime.getAgentStatusRowsForPane(paneKey))?.providerSession
+    session(paneKey, since) {
+      const rows = runtime.getAgentStatusRowsForPane(paneKey)
+      const mine =
+        since === null || since === undefined
+          ? rows
+          : rows.filter((r) => (r.stateStartedAt ?? r.receivedAt) >= since)
+      const s = newestSessionRow(mine)?.providerSession
       if (!s?.id) {
         return null
       }
@@ -126,7 +136,7 @@ async function pollStep(
   if (!handle || !step.paneKey) {
     return
   }
-  const session = probe.session(step.paneKey)
+  const session = probe.session(step.paneKey, step.startedAt)
   const patch = sessionPatch(step, session)
   if (patch) {
     store.runs.updateStep(step.runId, step.idx, patch)
@@ -134,7 +144,8 @@ async function pollStep(
   const state = await probe.status(handle, step.paneKey, step.startedAt)
   if (state === 'done') {
     const path = session?.transcriptPath ?? step.transcriptPath
-    // Codex cost isn't read here: the step shows, with cost "—".
+    // Only a provisional Claude cost is read here; measureFinishedSteps (usage/) overwrites it, for both agents, with
+    // the step's own window.
     const spent =
       path && step.agent === 'claude' ? await cost(path) : { costUsd: null, tokens: null }
     await endStep(

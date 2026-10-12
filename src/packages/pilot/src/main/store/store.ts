@@ -55,7 +55,6 @@ export class PilotStore {
 
   private constructor(private readonly db: Database) {
     this.runs = new RunStore(db)
-    this.usage = new UsageStore(db)
     this.inbox = new InboxStore(db)
     this.queue = new QueueStore(db)
     this.events = new EventStore(db)
@@ -65,6 +64,7 @@ export class PilotStore {
     this.sessions = new AgentSessionStore(db)
     this.markers = new MarkerStore(db)
     this.advance = new AdvanceStore(db)
+    this.usage = new UsageStore(db, this.advance)
   }
 
   static open(path: string): PilotStore {
