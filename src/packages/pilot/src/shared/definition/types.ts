@@ -26,6 +26,8 @@ export type PipelineWhere = {
   ref: string
   status?: 'failed' | 'any'
   select?: 'newest_complete' | 'newest_suite_running'
+  source?: string
+  marker_jobs?: string[]
 }
 export type LinearTicketWhere = {
   assignee?: PeopleRef

@@ -22,7 +22,15 @@ describe('WHERE_SCHEMAS', () => {
       'worktree',
       { has_mr: true, mr_author: { people: ['nish'] }, mr_state: 'open', branch_owner: 'anyone' }
     ],
-    ['pipeline', { ref: 'dev', status: 'failed', select: 'newest_suite_running' }],
+    [
+      'pipeline',
+      {
+        ref: 'dev',
+        status: 'failed',
+        select: 'newest_suite_running',
+        marker_jobs: ['notify-slack']
+      }
+    ],
     [
       'linear_ticket',
       { assignee: { people: ['nish'] }, state_type: ['unstarted'], team: 'WEB', has_branch: false }

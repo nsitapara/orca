@@ -72,6 +72,7 @@ const ACTED_ON_WHERE: Partial<Record<ItemKind, ReadonlySet<string>>> = {
     'approved_by',
     'target_branch'
   ]),
+  pipeline: new Set(['ref', 'status', 'select', 'source', 'marker_jobs']),
   worktree: new Set(['has_mr', 'mr_author', 'mr_state', 'branch_owner', 'commits'])
 }
 

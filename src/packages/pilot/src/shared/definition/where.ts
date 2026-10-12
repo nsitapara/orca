@@ -46,11 +46,19 @@ export const worktreeWhereSchema: z.ZodType<WorktreeWhere> = z.strictObject({
     .optional()
 })
 
-export const pipelineWhereSchema: z.ZodType<PipelineWhere> = z.strictObject({
-  ref: z.string().min(1),
-  status: z.enum(['failed', 'any']).optional(),
-  select: z.enum(['newest_complete', 'newest_suite_running']).optional()
-})
+export const pipelineWhereSchema: z.ZodType<PipelineWhere> = z
+  .strictObject({
+    ref: z.string().min(1),
+    status: z.enum(['failed', 'any']).optional(),
+    select: z.enum(['newest_complete', 'newest_suite_running']).optional(),
+    source: z.string().min(1).optional(),
+    marker_jobs: z.array(z.string().min(1)).min(1).optional()
+  })
+  .refine((w) => w.select !== 'newest_suite_running' || w.marker_jobs !== undefined, {
+    message:
+      'select: newest_suite_running needs marker_jobs (the jobs a pipeline that ran the suite always has)',
+    path: ['marker_jobs']
+  })
 
 export const linearTicketWhereSchema: z.ZodType<LinearTicketWhere> = z.strictObject({
   assignee: peopleRefSchema.optional(),
