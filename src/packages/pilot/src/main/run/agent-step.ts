@@ -110,7 +110,7 @@ function launchOptions(
   })
 }
 
-// B8: Task 9b's startRun (and makeLauncher) write the row as `pending` before the workspace exists; take it
+// B8: Task 9b's startRun (and the tests' makeLauncher) write the row as `pending` before the workspace exists; take it
 // over. Otherwise the row is created here, as M1 did.
 function openStepRow(
   store: PilotStore,

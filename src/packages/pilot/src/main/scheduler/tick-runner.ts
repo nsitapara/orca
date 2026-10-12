@@ -1,5 +1,5 @@
 import type { ItemDecision, TickResult, Verdict } from '../../shared/api-types'
-import type { AutomationDefinition, ItemKind } from '../../shared/definition/types'
+import type { AutomationDefinition } from '../../shared/definition/types'
 import type { PeopleDirectory } from '../../shared/people'
 import { usesHandled, workspacePathOf } from '../../shared/tick/decide'
 import { askDecisions, type AskDeps } from '../run/ask-first'
@@ -61,37 +61,6 @@ function countVerdicts(decisions: ItemDecision[]): Partial<Record<Verdict, numbe
     counts[d.verdict] = (counts[d.verdict] ?? 0) + 1
   }
   return counts
-}
-
-// The where keys each kind's source acts on: merge_request's since Task 14c; the other kinds' keys
-// land with their sources (Tasks 15–17).
-const ACTED_ON_WHERE: Partial<Record<ItemKind, ReadonlySet<string>>> = {
-  merge_request: new Set([
-    'state',
-    'author',
-    'reviewer',
-    'head_pipeline',
-    'draft',
-    'approved_by',
-    'target_branch'
-  ]),
-  pipeline: new Set(['ref', 'status', 'select', 'source', 'marker_jobs']),
-  worktree: new Set(['has_mr', 'mr_author', 'mr_state', 'branch_owner', 'commits']),
-  linear_ticket: new Set(['assignee', 'state_type', 'team', 'has_branch'])
-}
-
-// Keys a later task implements (Task 2b ruling): until then a file using one fails the tick instead
-// of running wider. Every workspace launches (Task 8d); start: ask_first is Task 25.
-function unactedKey(def: AutomationDefinition): string | null {
-  if (!def.items) {
-    return null
-  }
-  const acted = ACTED_ON_WHERE[def.items.kind]
-  const clause = Object.keys(def.items.where).find((k) => !acted?.has(k))
-  if (clause) {
-    return `items.where.${clause} isn't supported yet`
-  }
-  return null
 }
 
 // Seen keys (first_seen, oldest_waiting_first) belong to automations with items; a run-once tick
@@ -247,10 +216,6 @@ async function decide(
   opts: TickOptions,
   tickId: number
 ): Promise<DecideOutcome> {
-  const unsupported = unactedKey(def)
-  if (unsupported) {
-    throw new Error(unsupported)
-  }
   const pass = opts.pass ?? createPassFetchCache(`tick-${tickId}`, deps.gitlab ?? glabApiForRepo)
   return decideTickItems(def, people, deps, pass, tickId)
 }
