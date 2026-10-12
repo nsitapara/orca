@@ -68,3 +68,18 @@ export function pilotDataDir(
   }
   return userData
 }
+
+// Where the vault's job folders live (Agent Work/Automations). PILOT_VAULT_EXPORT=off turns the export off.
+export function pilotVaultAutomationsDir(
+  env: NodeJS.ProcessEnv = process.env,
+  home: string = homedir()
+): string | null {
+  if (env.PILOT_VAULT_EXPORT === 'off') {
+    return null
+  }
+  const raw = env.PILOT_VAULT_AUTOMATIONS?.trim()
+  if (raw) {
+    return raw.replace(/^~(?=\/|$)/, home)
+  }
+  return join(home, 'Documents', 'WebPortal', 'Agent Work', 'Automations')
+}

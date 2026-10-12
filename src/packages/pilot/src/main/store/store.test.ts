@@ -179,6 +179,41 @@ describe('PilotStore', () => {
   })
 
   // Spec §7: ticks and items for 30 days, runs and steps indefinitely.
+  it('finishedSince lists runs that finished at or after a time, oldest finish first', () => {
+    const store = PilotStore.open(':memory:')
+    store.runs.create({
+      id: 'a',
+      automationId: 'x',
+      tickId: null,
+      itemKey: 'k1',
+      itemLabel: 'one',
+      worktreePath: null,
+      startedAt: 1
+    })
+    store.runs.create({
+      id: 'b',
+      automationId: 'x',
+      tickId: null,
+      itemKey: 'k2',
+      itemLabel: 'two',
+      worktreePath: null,
+      startedAt: 2
+    })
+    store.runs.create({
+      id: 'c',
+      automationId: 'x',
+      tickId: null,
+      itemKey: 'k3',
+      itemLabel: 'three',
+      worktreePath: null,
+      startedAt: 3
+    })
+    store.runs.update('a', { status: 'done', finishedAt: 50 })
+    store.runs.update('b', { status: 'done', finishedAt: 40 })
+    expect(store.runs.finishedSince(45).map((r) => r.id)).toEqual(['a'])
+    expect(store.runs.finishedSince(0).map((r) => r.id)).toEqual(['b', 'a'])
+  })
+
   it('removes ticks older than 30 days with their items, keeping runs and each newest tick', () => {
     const store = freshStore()
     const now = TICK_RETENTION_MS + 1_000
