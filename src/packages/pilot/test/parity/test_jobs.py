@@ -4,7 +4,9 @@ import subprocess
 import types
 import unittest
 
-from jobs import job_05
+from unittest import mock
+
+from jobs import job_03, job_05
 
 
 class Job05RecordExtrasTest(unittest.TestCase):
@@ -65,6 +67,52 @@ class Job05RecordExtrasTest(unittest.TestCase):
             "projects/p/merge_requests?source_branch=b&per_page=100",
             "projects/p/merge_requests/2",
             "projects/p/repository/commits/list2",
+        ])
+
+
+class Job03RecordExtrasTest(unittest.TestCase):
+    def test_reads_what_the_worktree_source_reads_of_every_listed_worktree_even_where_a_read_fails(self):
+        calls = []
+
+        def git(path, *args):
+            calls.append((path, *args))
+            if path == "/wt/b" and args[0] == "status":
+                raise subprocess.CalledProcessError(128, ["git", "-C", path, *args])
+            return {"rev-parse": f"{path}/.git/{args[-1]}" if args[1:2] == ("--git-path",) else "h" * 40}.get(args[0], "")
+
+        def glab(path):
+            calls.append(path)
+            if path.endswith("source_branch=b&per_page=100"):
+                raise subprocess.CalledProcessError(1, ["glab", "api", path])
+            return [{"iid": 7, "state": "opened"}, {"iid": 6, "state": "merged"}]
+
+        listed = [{"repoId": "r", "path": "/wt/a", "branch": "refs/heads/feature/a"},
+                  {"repoId": "r", "path": "/wt/b", "branch": "refs/heads/b"},
+                  {"repoId": "r", "path": "/wt/old", "branch": "refs/heads/old", "isArchived": True},
+                  {"repoId": "r", "path": "/main", "branch": "refs/heads/dev"},
+                  {"repoId": "other", "path": "/x", "branch": "refs/heads/a"}]
+        gate = types.SimpleNamespace(REPO_ID="r", MAIN_CHECKOUT=job_03.Path("/main"), IN_PROGRESS=("MERGE_HEAD",), PROJECT="p",
+                                     git=git, glab=glab, me=lambda: calls.append("user"),
+                                     load=lambda loop, name: {"/wt/a": "a" * 40, "/wt/b": "b" * 40},
+                                     orca=lambda *args: {"worktrees": listed})
+        ancestor = {"/wt/a": 0, "/wt/b": 1}
+        with mock.patch.object(job_03.Path, "exists", lambda self: True), \
+             mock.patch.object(job_03.subprocess, "run", lambda argv: calls.append(tuple(argv)) or types.SimpleNamespace(returncode=ancestor[argv[2]])):
+            job_03.record_extras(gate, None)
+        self.assertEqual(calls, [
+            "user",
+            ("/wt/a", "status", "--porcelain"),
+            ("/wt/a", "rev-parse", "--git-path", "MERGE_HEAD"),
+            "projects/p/merge_requests?source_branch=feature%2Fa&per_page=100",
+            "projects/p/merge_requests/7/approvals",
+            ("/wt/a", "rev-parse", "HEAD"),
+            ("git", "-C", "/wt/a", "merge-base", "--is-ancestor", "a" * 40, "h" * 40),
+            ("/wt/a", "log", "--first-parent", "--no-merges", "--format=%H%x00%ct%x00%B%x1e", f"{'a' * 40}..HEAD"),
+            ("/wt/b", "status", "--porcelain"),
+            ("/wt/b", "rev-parse", "--git-path", "MERGE_HEAD"),
+            "projects/p/merge_requests?source_branch=b&per_page=100",
+            ("/wt/b", "rev-parse", "HEAD"),
+            ("git", "-C", "/wt/b", "merge-base", "--is-ancestor", "b" * 40, "h" * 40),  # rewritten: no log
         ])
 
 

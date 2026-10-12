@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""The hand-built parity cases of the ported jobs (02, 05, 06, 09, 13, M01), written in Task 13a's fixture format.
+"""The hand-built parity cases of the ported jobs (02, 03, 05, 06, 09, 13, M01), written in Task 13a's fixture format.
 
   synthetic.py            rewrite every case's <job>/<case>.json
   synthetic.py --check    exit 1 when a committed case differs from what this file builds
@@ -511,6 +511,169 @@ def _m01():
 
 
 CASE_MAKERS.append(_m01)
+
+
+STANDARDS = "Agent-Loop: standards"
+NOW_03 = 1791739200000  # 10:20 Pacific, 2026-10-11
+
+
+def own(n, at=1791735600):
+    """One of my own commits on a branch (first-parent, not a merge)."""
+    return {"sha": n.ljust(40, "0"), "body": f"feat: change {n}\n", "at": at}
+
+
+def fix(n, at=1791736200):
+    """One of the review cycle's own fixes: it carries the loop's trailer, so it isn't new work."""
+    return {"sha": n.ljust(40, "0"), "body": f"refactor: standards round 1 by claude\n\n- src/a.ts: x -> y\n\n{STANDARDS}\nAgent-Round: 1\n",
+            "at": at}
+
+
+def wt03(n, *, seen="a" * 40, head=None, commits=None, rewritten=False, mrs=None, author="nish8", state="opened", approved_by=(),
+         dirty=0, operation=None, mrs_error=None, approvals_error=None):
+    """One worktree of a 03 case, on branch web-<n>-work: its review marker in seen.json (None: first sight), HEAD, its
+    first-parent own commits since the marker (newest first; one own commit by default), and the branch's MRs (by default
+    one MR, <author>'s, in <state>, approved by <approved_by>). <mrs_error>/<approvals_error>: GitLab can't list the
+    branch's MRs / an open MR's approvals."""
+    commits = [own(f"c{n}")] if commits is None else commits
+    branch = f"web-{n}-work"
+    if mrs is None:
+        mrs = [{**mr(n, branch=branch, author=author, approved_by=approved_by), "state": state}]
+    return {**worktree(f"web-{n}", branch, dirty=dirty, operation=operation), "seen": seen, "rewritten": rewritten,
+            "head": head or (commits[0]["sha"] if commits else seen), "commits": commits, "mrs": mrs, "mrs_error": mrs_error,
+            "approvals_error": approvals_error}
+
+
+def codex_answer(session=10, weekly=20):
+    """Codex's raw account/rateLimits/read answer, both windows resetting after the case's time."""
+    now = NOW_03 // 1000
+    return {"rateLimits": {"primary": {"usedPercent": session, "windowDurationMins": 300, "resetsAt": now + 3600},
+                           "secondary": {"usedPercent": weekly, "windowDurationMins": 10080, "resetsAt": now + 3 * 86400},
+                           "rateLimitReachedType": None},
+            "ordinaryUsageAllowed": True}
+
+
+def mr_reads_03(w, reads):
+    """The branch's MRs as gate.branch_mrs lists them (glab mr list) and as Pilot's branch facts read them (the API), and
+    each open MR's approvals, which both sides read the same way."""
+    branch, mrs = w["branch"], w["mrs"]
+    url = lambda m: f"https://gitlab.com/{REPO['project']}/-/merge_requests/{m['iid']}"  # noqa: E731
+    cli = ["glab", "mr", "list", "--source-branch", branch, "--all", "--output", "json", "--repo", REPO["project"]]
+    api = ["glab", "api", "--hostname", REPO["host"], f"{PROJECT}/merge_requests?source_branch={urllib.parse.quote(branch, safe='')}&per_page=100"]
+    if w["mrs_error"]:
+        reads.append(read(cli, code=1, stdout="", stderr=w["mrs_error"]))
+        reads.append(read(api, code=1, stdout="", stderr=w["mrs_error"]))
+        return
+    reads.append(read(cli, json=[{"iid": m["iid"], "state": m["state"], "author": {"username": m["author"]["username"]},
+                                  "web_url": url(m)} for m in mrs]))
+    reads.append(read(api, json=[{**api_mr(m), "web_url": url(m)} for m in mrs]))
+    for m in mrs:
+        if m["state"] != "opened":
+            continue
+        approvals = ["glab", "api", "--hostname", REPO["host"], f"{PROJECT}/merge_requests/{m['iid']}/approvals"]
+        if w["approvals_error"]:
+            reads.append(read(approvals, code=1, stdout="", stderr=w["approvals_error"]))
+        else:
+            reads.append(read(approvals, json={"approved_by": [{"user": {"username": u}} for u in m["_approved_by"]]}))
+
+
+def commit_reads_03(w, reads):
+    """HEAD and whether the marker is still in its history, then the commits since it: the sweep's (gate.new_commits:
+    rev-list, then each message) and Pilot's (one log in its own record format)."""
+    path, head, seen = w["path"], w["head"], w["seen"]
+    reads.append(read(["git", "-C", path, "rev-parse", "HEAD"], stdout=f"{head}\n", stderr=""))
+    if not seen:
+        return
+    reads.append(read(["git", "-C", path, "merge-base", "--is-ancestor", seen, head], code=1 if w["rewritten"] else 0, stdout="", stderr=""))
+    if w["rewritten"]:
+        return
+    commits = w["commits"]
+    reads.append(read(["git", "-C", path, "rev-list", "--first-parent", "--no-merges", f"{seen}..HEAD"],
+                      stdout="".join(f"{c['sha']}\n" for c in commits), stderr=""))
+    for c in commits:
+        reads.append(read(["git", "-C", path, "log", "-1", "--format=%B", c["sha"]], stdout=c["body"], stderr=""))
+    reads.append(read(["git", "-C", path, "log", "--first-parent", "--no-merges", "--format=%H%x00%ct%x00%B%x1e", f"{seen}..HEAD"],
+                      stdout="".join(f"{c['sha']}\x00{c['at']}\x00{c['body']}\x1e\n" for c in commits), stderr=""))
+
+
+def case_03(name, worktrees, *, cycles=None, tabs=None, busy=(), claude=None, codex=None):
+    """One 03 case: the worktrees (wt03), the sweep's cycles.json, its open tabs (worktree path -> (agent, handle)), the
+    handles of those mid-turn (<busy>), and each agent's quota (Claude's {weekly, session}; Codex's raw answer). The
+    reads are loop.py sweep's (gate.worktrees, evaluate, review_block, the tabs) and Pilot's (the worktree source's
+    listing, branch facts and commits since the marker, and the worktree facts)."""
+    tabs = tabs or {}
+    state = {"standards/seen.json": {w["path"]: w["seen"] for w in worktrees if w["seen"]},
+             "standards/cycles.json": cycles or {},
+             "standards/tabs.json": {p: h for p, (agent, h) in tabs.items() if agent == "claude"},
+             "standards/tabs-codex.json": {p: h for p, (agent, h) in tabs.items() if agent == "codex"},
+             "quota/codex-rate-limits.json": codex or codex_answer()}
+    fixture = build("03", name, now=NOW_03, quota=claude or {"weekly": 20, "session": 10}, state=state)
+    reads, exists = fixture["reads"], fixture["exists"]
+    listing = [{"id": f"{REPO['id']}::{w['path']}", "repoId": REPO["id"], "path": w["path"], "branch": f"refs/heads/{w['branch']}",
+                "isArchived": False} for w in worktrees]
+    reads.append(read(["orca", "worktree", "list", "--json"], json={"ok": True, "result": {"worktrees": listing}}))
+    handles = sorted(h for _, h in tabs.values())
+    reads.append(read(["orca", "terminal", "list", "--json"],
+                      json={"ok": True, "result": {"terminals": [{"handle": h, "connected": True} for h in handles]}}))
+    for h in handles:
+        reads.append(read(["orca", "terminal", "wait", "--terminal", h, "--for", "tui-idle", "--timeout-ms", "1500", "--json"],
+                          json={"ok": True, "result": {"wait": {"satisfied": h not in busy}}}))
+    reads.append(glab("user", {"username": "nish8"}))
+    for w in worktrees:
+        exists[w["path"]] = True
+        git_reads(w, reads, exists)
+        mr_reads_03(w, reads)
+        commit_reads_03(w, reads)
+    return fixture
+
+
+def _03():
+    def make(name, worktrees, **kw):
+        return "03", name, case_03(name, worktrees, **kw)
+
+    unreadable = "glab: 502 Bad Gateway"
+    # Every way the sweep leaves a worktree alone, one worktree each, and one due worktree.
+    yield make("gates", [
+        wt03(301, seen=None, head="d301".ljust(40, "0")),                              # first sight: baseline
+        wt03(302, rewritten=True, head="d302".ljust(40, "0")),                         # rewritten history: baseline again
+        wt03(303, commits=[fix("f303")]),                                              # only this loop's fixes: nothing new
+        wt03(304, commits=[]),                                                         # HEAD is the reviewed head
+        wt03(305, dirty=1),                                                            # uncommitted changes
+        wt03(306, operation="MERGE_HEAD"),                                             # a merge in progress
+        wt03(307, state="merged"),                                                     # !307 merged
+        wt03(308, state="closed"),                                                     # !308 closed
+        wt03(309, approved_by=("alex1craig",)),                                        # !309 approved by alex1craig
+        wt03(310, approvals_error=unreadable),                                         # MR approval unknown
+        wt03(311, author="shivan2418"),                                                # a teammate's branch: never listed
+        wt03(312, mrs_error=unreadable),                                               # MR owner unknown: never listed
+        wt03(313, state="merged", commits=[]),                                         # merged with nothing new: nothing new
+        wt03(314, commits=[fix("f314"), own("c314")]),                                 # new work under a fix: due
+    ])
+    # The sweep's order: commits, then work in flight, then the MR rules; quota only when it starts a cycle.
+    yield make("check-order", [
+        wt03(321, dirty=1, approved_by=("alex1craig",)),                               # uncommitted, not approved
+        wt03(322, dirty=1, state="merged"),                                            # uncommitted, not merged
+        wt03(323, dirty=2, operation="rebase-merge"),                                  # the sweep says uncommitted; Pilot the rebase
+        wt03(324, seen=None, head="d324".ljust(40, "0"), dirty=1),                     # first sight before the dirty tree
+        wt03(325, author="shivan2418", dirty=1),                                       # a teammate's before anything
+        wt03(326, approved_by=("alex1craig",)),                                        # approved before quota
+        wt03(327),                                                                     # due, but Claude is out
+    ], claude={"weekly": 95, "session": 30})
+    yield make("two-per-tick", [wt03(331), wt03(332), wt03(333)])                      # the third is over the limit
+    done = lambda path: {path: {"lead": "claude", "round": 2, "base": "9" * 40, "head": "a" * 40}}  # noqa: E731
+    yield make("codex-leads-and-is-out", [wt03(341)], cycles=done("/wt/web-341"), codex=codex_answer(weekly=95))
+    yield make("quota-out-other-agent", [wt03(342)], codex=codex_answer(weekly=95))   # Claude leads; only Codex is out
+    # A cycle's agent mid-turn holds its worktree; an idle tab of the loop's doesn't.
+    yield make("running-cycle", [wt03(351), wt03(352)], tabs={"/wt/web-351": ("claude", "term_351"), "/wt/web-352": ("codex", "term_352")},
+               busy=["term_351"])
+    # A cycle that stopped without a hand-off restarts; a parked hand-off carries on.
+    yield make("abandoned-and-parked", [wt03(361), wt03(362)], cycles={
+        "/wt/web-361": {"lead": "claude", "round": 2, "base": "a" * 40, "head": "9" * 40},
+        "/wt/web-362": {"lead": "claude", "round": 2, "base": "a" * 40, "head": "c362".ljust(40, "0"),
+                        "pending": {"agent": "codex", "text": f"$review-cycles review {'a' * 40} round 2 --push"}},
+    })
+
+
+CASE_MAKERS.append(_03)
 
 
 def _canon(text):

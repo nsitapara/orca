@@ -5,6 +5,7 @@ import { fixFailedCiState } from './fix-failed-ci'
 import { linearTodoMapper } from './linear-todo'
 import { mrFeedbackState } from './mr-feedback'
 import { noStateMapper } from './plans'
+import { reviewBranchCodeMapper } from './review-branch-code'
 import { reviewRequestsState } from './review-requests'
 import type { SweepStateMapper } from './types'
 
@@ -24,7 +25,8 @@ export const MAPPERS: SweepStateMapper[] = [
   devE2ePipelinesMapper,
   devE2eStartsMapper,
   linearTodoMapper,
-  applyAnswersMapper
+  applyAnswersMapper,
+  reviewBranchCodeMapper
 ]
 
 export function sweepStateMapper(
