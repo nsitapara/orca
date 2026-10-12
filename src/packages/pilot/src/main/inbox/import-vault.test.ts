@@ -362,11 +362,19 @@ describe('applyVaultImport: what it must not disturb or lose', () => {
     expect(store.inbox.get(vaultItemId(NOTE, KEY))?.replies).toEqual([SENT_BEFORE_PILOT])
   })
 
-  it('files a sessionless branch card with its worktree', () => {
+  it('files a sessionless branch card with an unknown worktree job-wide, without it, in a dry run and for real', () => {
+    const { store, deps } = open()
     const plan = planVaultImport([row({ session: '' })], ctx())
-    expect(plan.items[0].params).toMatchObject({
-      worktreePath: '/wt/web-1-x',
-      automationId: 'fix-failed-ci'
+    expect(plan.items[0].params).toMatchObject({ worktreePath: '/wt/web-1-x', itemKey: 'mr:1214' })
+    expect(applyVaultImport(deps, plan, 1_000, { dryRun: true })).toMatchObject({
+      imported: 1,
+      skipped: []
+    })
+    expect(applyVaultImport(deps, plan, 1_000)).toMatchObject({ imported: 1, skipped: [] })
+    expect(store.inbox.get(vaultItemId(NOTE, KEY))).toMatchObject({
+      worktreePath: null,
+      itemKey: 'mr:1214',
+      source: 'import'
     })
   })
 })

@@ -1,4 +1,5 @@
 import type { InboxAnswer } from '../../shared/api-types'
+import type { InboxAddParams } from '../../shared/inbox-types'
 import { SETTLE_MS } from '../answers/save'
 import {
   reportOf,
@@ -83,6 +84,21 @@ function writeAnswer(deps: InboxDeps, planned: PlannedItem, now: number): void {
 
 // The card (and its asking run, and its answer) in one transaction, so a crash or a refusal leaves
 // nothing behind. Returns whether it created the run.
+const UNKNOWN_WORKTREE = /is not a worktree of/
+
+// A sessionless branch card names a worktree the automation may not have shown yet: it is then filed
+// job-wide, without it, rather than lost.
+function withoutWorktree(params: InboxAddParams): InboxAddParams {
+  const { worktreePath: _dropped, ...rest } = params
+  return rest
+}
+
+function isUnknownWorktree(error: unknown, params: InboxAddParams): boolean {
+  return (
+    Boolean(params.worktreePath) && error instanceof Error && UNKNOWN_WORKTREE.test(error.message)
+  )
+}
+
 function addCard(
   deps: InboxDeps,
   plan: ImportPlan,
@@ -94,19 +110,28 @@ function addCard(
   }
   const run = plan.runs.find((r) => r.id === planned.runId)
   let madeRun = false
-  try {
+  const attempt = (params: InboxAddParams) =>
     deps.store.transaction(() => {
       madeRun = run ? createRun(deps, run) : false
-      const result = addInboxItem(
-        { ...deps, now: () => now, newId: () => planned.id },
-        planned.params,
-        { source: 'import', vaultRef: planned.vaultRef, noMerge: true }
-      )
+      const result = addInboxItem({ ...deps, now: () => now, newId: () => planned.id }, params, {
+        source: 'import',
+        vaultRef: planned.vaultRef,
+        noMerge: true
+      })
       if (result.id !== planned.id) {
         throw new Skipped(result.refused ?? SAME_CARD_OPEN)
       }
       writeAnswer(deps, planned, now)
     })
+  try {
+    try {
+      attempt(planned.params)
+    } catch (error) {
+      if (!isUnknownWorktree(error, planned.params)) {
+        throw error
+      }
+      attempt(withoutWorktree(planned.params))
+    }
   } catch (error) {
     return { reason: error instanceof Error ? error.message : String(error), madeRun: false }
   }
@@ -119,13 +144,21 @@ function wouldAdd(deps: InboxDeps, planned: PlannedItem, now: number): string | 
   if (deps.store.inbox.get(planned.id)) {
     return 'already imported'
   }
-  try {
-    const result = addInboxItem({ ...deps, now: () => now }, planned.plain, {
+  const check = (params: InboxAddParams) =>
+    addInboxItem({ ...deps, now: () => now }, params, {
       source: 'import',
       noMerge: true,
       dryRun: true
-    })
-    return result.refused
+    }).refused
+  try {
+    try {
+      return check(planned.plain)
+    } catch (error) {
+      if (!isUnknownWorktree(error, planned.plain)) {
+        throw error
+      }
+      return check(withoutWorktree(planned.plain))
+    }
   } catch (error) {
     return error instanceof Error ? error.message : String(error)
   }
