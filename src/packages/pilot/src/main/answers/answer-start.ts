@@ -1,10 +1,12 @@
+import { existsSync } from 'node:fs'
+import { homedir } from 'node:os'
 import { PromptNotSentError } from '../run/agent-step'
 import type { AgentSessionMode } from '../run/launch'
 import { UnrecordedLaunchError } from '../scheduler/tick-runner'
 import type { AgentKind } from '../../shared/definition/types'
 import type { AgentDispatch, AgentDispatchDeps, AgentGroup, AnswerRun } from './answer-run'
 import { hold } from './holds'
-import { answersLine, newSessionPrompt, withModePointer } from './prompt'
+import { answersLine, modeFile, newSessionPrompt, withModePointer } from './prompt'
 import { DraftInProgressError } from './session-probe'
 import { answersModeOf, type SessionTarget } from './sessions'
 
@@ -24,16 +26,27 @@ function messageOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
 }
 
-function openingPrompt(
-  group: AgentGroup,
-  run: AnswerRun,
-  target: Exclude<SessionTarget, { kind: 'resume' }>,
-  line: string
-): string {
-  if (target.kind === 'new') {
-    return newSessionPrompt(group.def, run, target, line)
+type Mode = { skill: string | null; mode: string }
+const NO_MODE: Mode = { skill: null, mode: 'answers' }
+
+// The answers mode this route tells the agent to follow: only when the automation configures one
+// (an `answers:` block) and its file is on disk. Else the plain answers line, as before modes existed.
+function answersMode(deps: AgentDispatchDeps, group: AgentGroup, target: SessionTarget): Mode {
+  if (!group.def.answers) {
+    return NO_MODE
   }
-  return withModePointer(answersModeOf(group.def, target.asking), line)
+  const mode = target.kind === 'new' ? target : answersModeOf(group.def, target.asking)
+  if (!mode.skill) {
+    return NO_MODE
+  }
+  const file = modeFile(mode.skill, mode.mode)
+  const onDisk = deps.fileExists ?? existsSync
+  if (onDisk(file.replace(/^~/, homedir()))) {
+    return { skill: mode.skill, mode: mode.mode }
+  }
+  const warn = deps.warn ?? ((m: string) => console.warn(m))
+  warn(`${group.def.id}: answers mode file ${file} is missing; sending the answers without it`)
+  return NO_MODE
 }
 
 // The asking tab (its own process, under the args it was launched with), or a new terminal opened
@@ -46,11 +59,15 @@ async function start(
   path: string
 ): Promise<Started> {
   const line = answersLine(askingRunOf(group, target), run.id, group.answers)
+  const mode = answersMode(deps, group, target)
   if (target.kind === 'resume') {
-    await deps.send(target.handle, withModePointer(answersModeOf(group.def, target.asking), line))
+    await deps.send(target.handle, withModePointer(mode, line))
     return askingTab(target)
   }
-  const prompt = openingPrompt(group, run, target, line)
+  const prompt =
+    target.kind === 'new'
+      ? newSessionPrompt(group.def, run, mode, line)
+      : withModePointer(mode, line)
   const session: AgentSessionMode =
     target.kind === 'fork' ? { kind: 'fork', sessionId: target.sessionId } : { kind: 'new' }
   const args: string[] = []
