@@ -1,0 +1,1050 @@
+{
+  "case": "first-sight",
+  "job": "04",
+  "now": 1791712800000,
+  "recordedAt": "synthetic",
+  "repo": {
+    "id": "400fee61-a463-4f76-894a-39861e906007",
+    "path": "/Users/nishsitapara/Documents/web-platform",
+    "name": "web-platform",
+    "project": "polygenx/web-platform",
+    "host": "gitlab.com"
+  },
+  "reads": [
+    {
+      "argv": ["orca", "worktree", "list", "--json"],
+      "code": 0,
+      "json": {
+        "ok": true,
+        "result": {
+          "worktrees": [
+            {
+              "id": "400fee61-a463-4f76-894a-39861e906007::/wt/web-401",
+              "repoId": "400fee61-a463-4f76-894a-39861e906007",
+              "path": "/wt/web-401",
+              "branch": "refs/heads/web-401-work",
+              "isArchived": false
+            },
+            {
+              "id": "400fee61-a463-4f76-894a-39861e906007::/wt/web-402",
+              "repoId": "400fee61-a463-4f76-894a-39861e906007",
+              "path": "/wt/web-402",
+              "branch": "refs/heads/web-402-work",
+              "isArchived": false
+            },
+            {
+              "id": "400fee61-a463-4f76-894a-39861e906007::/wt/web-403",
+              "repoId": "400fee61-a463-4f76-894a-39861e906007",
+              "path": "/wt/web-403",
+              "branch": "refs/heads/web-403-work",
+              "isArchived": false
+            },
+            {
+              "id": "400fee61-a463-4f76-894a-39861e906007::/wt/web-404",
+              "repoId": "400fee61-a463-4f76-894a-39861e906007",
+              "path": "/wt/web-404",
+              "branch": "refs/heads/web-404-work",
+              "isArchived": false
+            },
+            {
+              "id": "400fee61-a463-4f76-894a-39861e906007::/wt/web-405",
+              "repoId": "400fee61-a463-4f76-894a-39861e906007",
+              "path": "/wt/web-405",
+              "branch": "refs/heads/web-405-work",
+              "isArchived": false
+            }
+          ]
+        }
+      }
+    },
+    {
+      "argv": ["orca", "terminal", "list", "--json"],
+      "code": 0,
+      "json": { "ok": true, "result": { "terminals": [] } }
+    },
+    {
+      "argv": ["orca", "worktree", "ps", "--limit", "1000", "--json"],
+      "code": 0,
+      "json": {
+        "ok": true,
+        "result": { "worktrees": [{ "agents": [] }], "truncated": false, "totalCount": 1 }
+      }
+    },
+    {
+      "argv": ["glab", "api", "--hostname", "gitlab.com", "user"],
+      "code": 0,
+      "json": { "username": "nish8" }
+    },
+    {
+      "argv": ["git", "-C", "/wt/web-401", "status", "--porcelain"],
+      "code": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "argv": ["git", "-C", "/wt/web-401", "rev-parse", "--git-path", "MERGE_HEAD"],
+      "code": 0,
+      "stdout": "/parity-gitdirs/wt/web-401/MERGE_HEAD\n",
+      "stderr": ""
+    },
+    {
+      "argv": ["git", "-C", "/wt/web-401", "rev-parse", "--git-path", "rebase-merge"],
+      "code": 0,
+      "stdout": "/parity-gitdirs/wt/web-401/rebase-merge\n",
+      "stderr": ""
+    },
+    {
+      "argv": ["git", "-C", "/wt/web-401", "rev-parse", "--git-path", "rebase-apply"],
+      "code": 0,
+      "stdout": "/parity-gitdirs/wt/web-401/rebase-apply\n",
+      "stderr": ""
+    },
+    {
+      "argv": ["git", "-C", "/wt/web-401", "rev-parse", "--git-path", "CHERRY_PICK_HEAD"],
+      "code": 0,
+      "stdout": "/parity-gitdirs/wt/web-401/CHERRY_PICK_HEAD\n",
+      "stderr": ""
+    },
+    {
+      "argv": ["git", "-C", "/wt/web-401", "rev-parse", "--git-path", "REVERT_HEAD"],
+      "code": 0,
+      "stdout": "/parity-gitdirs/wt/web-401/REVERT_HEAD\n",
+      "stderr": ""
+    },
+    {
+      "argv": ["git", "-C", "/wt/web-401", "rev-parse", "--git-path", "BISECT_LOG"],
+      "code": 0,
+      "stdout": "/parity-gitdirs/wt/web-401/BISECT_LOG\n",
+      "stderr": ""
+    },
+    {
+      "argv": ["git", "-C", "/wt/web-401", "rev-parse", "--git-path", "index.lock"],
+      "code": 0,
+      "stdout": "/parity-gitdirs/wt/web-401/index.lock\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "glab",
+        "mr",
+        "list",
+        "--source-branch",
+        "web-401-work",
+        "--all",
+        "--output",
+        "json",
+        "--repo",
+        "polygenx/web-platform"
+      ],
+      "code": 0,
+      "json": [
+        {
+          "iid": 401,
+          "state": "opened",
+          "author": { "username": "nish8" },
+          "web_url": "https://gitlab.com/polygenx/web-platform/-/merge_requests/401"
+        }
+      ]
+    },
+    {
+      "argv": [
+        "glab",
+        "api",
+        "--hostname",
+        "gitlab.com",
+        "projects/polygenx%2Fweb-platform/merge_requests?source_branch=web-401-work&per_page=100"
+      ],
+      "code": 0,
+      "json": [
+        {
+          "iid": 401,
+          "title": "MR 401",
+          "state": "opened",
+          "draft": false,
+          "sha": "4010000000000000000000000000000000000000",
+          "source_branch": "web-401-work",
+          "target_branch": "dev",
+          "author": { "username": "nish8", "name": "Nish Sitapara" },
+          "reviewers": [],
+          "head_pipeline": null,
+          "changes_count": "1",
+          "web_url": "https://gitlab.com/polygenx/web-platform/-/merge_requests/401"
+        }
+      ]
+    },
+    {
+      "argv": [
+        "glab",
+        "api",
+        "--hostname",
+        "gitlab.com",
+        "projects/polygenx%2Fweb-platform/merge_requests/401/approvals"
+      ],
+      "code": 0,
+      "json": { "approved_by": [] }
+    },
+    {
+      "argv": ["git", "-C", "/wt/web-401", "rev-parse", "HEAD"],
+      "code": 0,
+      "stdout": "c401000000000000000000000000000000000000\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "glab",
+        "api",
+        "--hostname",
+        "gitlab.com",
+        "projects/polygenx%2Fweb-platform/merge_requests?state=opened&source_branch=web-401-work"
+      ],
+      "code": 0,
+      "json": [
+        {
+          "iid": 401,
+          "title": "MR 401",
+          "state": "opened",
+          "draft": false,
+          "sha": "4010000000000000000000000000000000000000",
+          "source_branch": "web-401-work",
+          "target_branch": "dev",
+          "author": { "username": "nish8", "name": "Nish Sitapara" },
+          "reviewers": [],
+          "head_pipeline": null,
+          "changes_count": "1"
+        }
+      ]
+    },
+    {
+      "argv": ["git", "-C", "/wt/web-401", "config", "--get", "branch.web-401-work.base"],
+      "code": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "git",
+        "-C",
+        "/wt/web-401",
+        "rev-parse",
+        "--verify",
+        "--quiet",
+        "origin/dev^{commit}"
+      ],
+      "code": 0,
+      "stdout": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee\n",
+      "stderr": ""
+    },
+    {
+      "argv": ["git", "-C", "/wt/web-401", "merge-base", "HEAD", "origin/dev"],
+      "code": 0,
+      "stdout": "ffffffffffffffffffffffffffffffffffffffff\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "git",
+        "-C",
+        "/wt/web-401",
+        "log",
+        "--first-parent",
+        "--no-merges",
+        "--format=%H%x00%ct%x00%B%x1e",
+        "ffffffffffffffffffffffffffffffffffffffff..HEAD"
+      ],
+      "code": 0,
+      "stdout": "c401000000000000000000000000000000000000\u00001791540000\u0000feat: change c401\n\u001e\n",
+      "stderr": ""
+    },
+    {
+      "argv": ["git", "-C", "/wt/web-402", "status", "--porcelain"],
+      "code": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "argv": ["git", "-C", "/wt/web-402", "rev-parse", "--git-path", "MERGE_HEAD"],
+      "code": 0,
+      "stdout": "/parity-gitdirs/wt/web-402/MERGE_HEAD\n",
+      "stderr": ""
+    },
+    {
+      "argv": ["git", "-C", "/wt/web-402", "rev-parse", "--git-path", "rebase-merge"],
+      "code": 0,
+      "stdout": "/parity-gitdirs/wt/web-402/rebase-merge\n",
+      "stderr": ""
+    },
+    {
+      "argv": ["git", "-C", "/wt/web-402", "rev-parse", "--git-path", "rebase-apply"],
+      "code": 0,
+      "stdout": "/parity-gitdirs/wt/web-402/rebase-apply\n",
+      "stderr": ""
+    },
+    {
+      "argv": ["git", "-C", "/wt/web-402", "rev-parse", "--git-path", "CHERRY_PICK_HEAD"],
+      "code": 0,
+      "stdout": "/parity-gitdirs/wt/web-402/CHERRY_PICK_HEAD\n",
+      "stderr": ""
+    },
+    {
+      "argv": ["git", "-C", "/wt/web-402", "rev-parse", "--git-path", "REVERT_HEAD"],
+      "code": 0,
+      "stdout": "/parity-gitdirs/wt/web-402/REVERT_HEAD\n",
+      "stderr": ""
+    },
+    {
+      "argv": ["git", "-C", "/wt/web-402", "rev-parse", "--git-path", "BISECT_LOG"],
+      "code": 0,
+      "stdout": "/parity-gitdirs/wt/web-402/BISECT_LOG\n",
+      "stderr": ""
+    },
+    {
+      "argv": ["git", "-C", "/wt/web-402", "rev-parse", "--git-path", "index.lock"],
+      "code": 0,
+      "stdout": "/parity-gitdirs/wt/web-402/index.lock\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "glab",
+        "mr",
+        "list",
+        "--source-branch",
+        "web-402-work",
+        "--all",
+        "--output",
+        "json",
+        "--repo",
+        "polygenx/web-platform"
+      ],
+      "code": 0,
+      "json": [
+        {
+          "iid": 402,
+          "state": "opened",
+          "author": { "username": "nish8" },
+          "web_url": "https://gitlab.com/polygenx/web-platform/-/merge_requests/402"
+        }
+      ]
+    },
+    {
+      "argv": [
+        "glab",
+        "api",
+        "--hostname",
+        "gitlab.com",
+        "projects/polygenx%2Fweb-platform/merge_requests?source_branch=web-402-work&per_page=100"
+      ],
+      "code": 0,
+      "json": [
+        {
+          "iid": 402,
+          "title": "MR 402",
+          "state": "opened",
+          "draft": false,
+          "sha": "4020000000000000000000000000000000000000",
+          "source_branch": "web-402-work",
+          "target_branch": "dev",
+          "author": { "username": "nish8", "name": "Nish Sitapara" },
+          "reviewers": [],
+          "head_pipeline": null,
+          "changes_count": "1",
+          "web_url": "https://gitlab.com/polygenx/web-platform/-/merge_requests/402"
+        }
+      ]
+    },
+    {
+      "argv": [
+        "glab",
+        "api",
+        "--hostname",
+        "gitlab.com",
+        "projects/polygenx%2Fweb-platform/merge_requests/402/approvals"
+      ],
+      "code": 0,
+      "json": { "approved_by": [] }
+    },
+    {
+      "argv": ["git", "-C", "/wt/web-402", "rev-parse", "HEAD"],
+      "code": 0,
+      "stdout": "c402000000000000000000000000000000000000\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "glab",
+        "api",
+        "--hostname",
+        "gitlab.com",
+        "projects/polygenx%2Fweb-platform/merge_requests?state=opened&source_branch=web-402-work"
+      ],
+      "code": 0,
+      "json": [
+        {
+          "iid": 402,
+          "title": "MR 402",
+          "state": "opened",
+          "draft": false,
+          "sha": "4020000000000000000000000000000000000000",
+          "source_branch": "web-402-work",
+          "target_branch": "dev",
+          "author": { "username": "nish8", "name": "Nish Sitapara" },
+          "reviewers": [],
+          "head_pipeline": null,
+          "changes_count": "1"
+        }
+      ]
+    },
+    {
+      "argv": ["git", "-C", "/wt/web-402", "config", "--get", "branch.web-402-work.base"],
+      "code": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "git",
+        "-C",
+        "/wt/web-402",
+        "rev-parse",
+        "--verify",
+        "--quiet",
+        "origin/dev^{commit}"
+      ],
+      "code": 0,
+      "stdout": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee\n",
+      "stderr": ""
+    },
+    {
+      "argv": ["git", "-C", "/wt/web-402", "merge-base", "HEAD", "origin/dev"],
+      "code": 0,
+      "stdout": "ffffffffffffffffffffffffffffffffffffffff\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "git",
+        "-C",
+        "/wt/web-402",
+        "log",
+        "--first-parent",
+        "--no-merges",
+        "--format=%H%x00%ct%x00%B%x1e",
+        "ffffffffffffffffffffffffffffffffffffffff..HEAD"
+      ],
+      "code": 0,
+      "stdout": "c402000000000000000000000000000000000000\u00001790935200\u0000feat: change c402\n\u001e\n",
+      "stderr": ""
+    },
+    {
+      "argv": ["git", "-C", "/wt/web-403", "status", "--porcelain"],
+      "code": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "argv": ["git", "-C", "/wt/web-403", "rev-parse", "--git-path", "MERGE_HEAD"],
+      "code": 0,
+      "stdout": "/parity-gitdirs/wt/web-403/MERGE_HEAD\n",
+      "stderr": ""
+    },
+    {
+      "argv": ["git", "-C", "/wt/web-403", "rev-parse", "--git-path", "rebase-merge"],
+      "code": 0,
+      "stdout": "/parity-gitdirs/wt/web-403/rebase-merge\n",
+      "stderr": ""
+    },
+    {
+      "argv": ["git", "-C", "/wt/web-403", "rev-parse", "--git-path", "rebase-apply"],
+      "code": 0,
+      "stdout": "/parity-gitdirs/wt/web-403/rebase-apply\n",
+      "stderr": ""
+    },
+    {
+      "argv": ["git", "-C", "/wt/web-403", "rev-parse", "--git-path", "CHERRY_PICK_HEAD"],
+      "code": 0,
+      "stdout": "/parity-gitdirs/wt/web-403/CHERRY_PICK_HEAD\n",
+      "stderr": ""
+    },
+    {
+      "argv": ["git", "-C", "/wt/web-403", "rev-parse", "--git-path", "REVERT_HEAD"],
+      "code": 0,
+      "stdout": "/parity-gitdirs/wt/web-403/REVERT_HEAD\n",
+      "stderr": ""
+    },
+    {
+      "argv": ["git", "-C", "/wt/web-403", "rev-parse", "--git-path", "BISECT_LOG"],
+      "code": 0,
+      "stdout": "/parity-gitdirs/wt/web-403/BISECT_LOG\n",
+      "stderr": ""
+    },
+    {
+      "argv": ["git", "-C", "/wt/web-403", "rev-parse", "--git-path", "index.lock"],
+      "code": 0,
+      "stdout": "/parity-gitdirs/wt/web-403/index.lock\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "glab",
+        "mr",
+        "list",
+        "--source-branch",
+        "web-403-work",
+        "--all",
+        "--output",
+        "json",
+        "--repo",
+        "polygenx/web-platform"
+      ],
+      "code": 0,
+      "json": [
+        {
+          "iid": 403,
+          "state": "opened",
+          "author": { "username": "nish8" },
+          "web_url": "https://gitlab.com/polygenx/web-platform/-/merge_requests/403"
+        }
+      ]
+    },
+    {
+      "argv": [
+        "glab",
+        "api",
+        "--hostname",
+        "gitlab.com",
+        "projects/polygenx%2Fweb-platform/merge_requests?source_branch=web-403-work&per_page=100"
+      ],
+      "code": 0,
+      "json": [
+        {
+          "iid": 403,
+          "title": "MR 403",
+          "state": "opened",
+          "draft": false,
+          "sha": "4030000000000000000000000000000000000000",
+          "source_branch": "web-403-work",
+          "target_branch": "dev",
+          "author": { "username": "nish8", "name": "Nish Sitapara" },
+          "reviewers": [],
+          "head_pipeline": null,
+          "changes_count": "1",
+          "web_url": "https://gitlab.com/polygenx/web-platform/-/merge_requests/403"
+        }
+      ]
+    },
+    {
+      "argv": [
+        "glab",
+        "api",
+        "--hostname",
+        "gitlab.com",
+        "projects/polygenx%2Fweb-platform/merge_requests/403/approvals"
+      ],
+      "code": 0,
+      "json": { "approved_by": [] }
+    },
+    {
+      "argv": ["git", "-C", "/wt/web-403", "rev-parse", "HEAD"],
+      "code": 0,
+      "stdout": "d403000000000000000000000000000000000000\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "glab",
+        "api",
+        "--hostname",
+        "gitlab.com",
+        "projects/polygenx%2Fweb-platform/merge_requests?state=opened&source_branch=web-403-work"
+      ],
+      "code": 0,
+      "json": [
+        {
+          "iid": 403,
+          "title": "MR 403",
+          "state": "opened",
+          "draft": false,
+          "sha": "4030000000000000000000000000000000000000",
+          "source_branch": "web-403-work",
+          "target_branch": "dev",
+          "author": { "username": "nish8", "name": "Nish Sitapara" },
+          "reviewers": [],
+          "head_pipeline": null,
+          "changes_count": "1"
+        }
+      ]
+    },
+    {
+      "argv": ["git", "-C", "/wt/web-403", "config", "--get", "branch.web-403-work.base"],
+      "code": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "git",
+        "-C",
+        "/wt/web-403",
+        "rev-parse",
+        "--verify",
+        "--quiet",
+        "origin/dev^{commit}"
+      ],
+      "code": 0,
+      "stdout": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee\n",
+      "stderr": ""
+    },
+    {
+      "argv": ["git", "-C", "/wt/web-403", "merge-base", "HEAD", "origin/dev"],
+      "code": 0,
+      "stdout": "ffffffffffffffffffffffffffffffffffffffff\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "git",
+        "-C",
+        "/wt/web-403",
+        "log",
+        "--first-parent",
+        "--no-merges",
+        "--format=%H%x00%ct%x00%B%x1e",
+        "ffffffffffffffffffffffffffffffffffffffff..HEAD"
+      ],
+      "code": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "argv": ["git", "-C", "/wt/web-404", "status", "--porcelain"],
+      "code": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "argv": ["git", "-C", "/wt/web-404", "rev-parse", "--git-path", "MERGE_HEAD"],
+      "code": 0,
+      "stdout": "/parity-gitdirs/wt/web-404/MERGE_HEAD\n",
+      "stderr": ""
+    },
+    {
+      "argv": ["git", "-C", "/wt/web-404", "rev-parse", "--git-path", "rebase-merge"],
+      "code": 0,
+      "stdout": "/parity-gitdirs/wt/web-404/rebase-merge\n",
+      "stderr": ""
+    },
+    {
+      "argv": ["git", "-C", "/wt/web-404", "rev-parse", "--git-path", "rebase-apply"],
+      "code": 0,
+      "stdout": "/parity-gitdirs/wt/web-404/rebase-apply\n",
+      "stderr": ""
+    },
+    {
+      "argv": ["git", "-C", "/wt/web-404", "rev-parse", "--git-path", "CHERRY_PICK_HEAD"],
+      "code": 0,
+      "stdout": "/parity-gitdirs/wt/web-404/CHERRY_PICK_HEAD\n",
+      "stderr": ""
+    },
+    {
+      "argv": ["git", "-C", "/wt/web-404", "rev-parse", "--git-path", "REVERT_HEAD"],
+      "code": 0,
+      "stdout": "/parity-gitdirs/wt/web-404/REVERT_HEAD\n",
+      "stderr": ""
+    },
+    {
+      "argv": ["git", "-C", "/wt/web-404", "rev-parse", "--git-path", "BISECT_LOG"],
+      "code": 0,
+      "stdout": "/parity-gitdirs/wt/web-404/BISECT_LOG\n",
+      "stderr": ""
+    },
+    {
+      "argv": ["git", "-C", "/wt/web-404", "rev-parse", "--git-path", "index.lock"],
+      "code": 0,
+      "stdout": "/parity-gitdirs/wt/web-404/index.lock\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "glab",
+        "mr",
+        "list",
+        "--source-branch",
+        "web-404-work",
+        "--all",
+        "--output",
+        "json",
+        "--repo",
+        "polygenx/web-platform"
+      ],
+      "code": 0,
+      "json": [
+        {
+          "iid": 404,
+          "state": "opened",
+          "author": { "username": "nish8" },
+          "web_url": "https://gitlab.com/polygenx/web-platform/-/merge_requests/404"
+        }
+      ]
+    },
+    {
+      "argv": [
+        "glab",
+        "api",
+        "--hostname",
+        "gitlab.com",
+        "projects/polygenx%2Fweb-platform/merge_requests?source_branch=web-404-work&per_page=100"
+      ],
+      "code": 0,
+      "json": [
+        {
+          "iid": 404,
+          "title": "MR 404",
+          "state": "opened",
+          "draft": false,
+          "sha": "4040000000000000000000000000000000000000",
+          "source_branch": "web-404-work",
+          "target_branch": "dev",
+          "author": { "username": "nish8", "name": "Nish Sitapara" },
+          "reviewers": [],
+          "head_pipeline": null,
+          "changes_count": "1",
+          "web_url": "https://gitlab.com/polygenx/web-platform/-/merge_requests/404"
+        }
+      ]
+    },
+    {
+      "argv": [
+        "glab",
+        "api",
+        "--hostname",
+        "gitlab.com",
+        "projects/polygenx%2Fweb-platform/merge_requests/404/approvals"
+      ],
+      "code": 0,
+      "json": { "approved_by": [] }
+    },
+    {
+      "argv": ["git", "-C", "/wt/web-404", "rev-parse", "HEAD"],
+      "code": 0,
+      "stdout": "c404000000000000000000000000000000000000\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "git",
+        "-C",
+        "/wt/web-404",
+        "merge-base",
+        "--is-ancestor",
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "c404000000000000000000000000000000000000"
+      ],
+      "code": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "glab",
+        "api",
+        "--hostname",
+        "gitlab.com",
+        "projects/polygenx%2Fweb-platform/merge_requests?state=opened&source_branch=web-404-work"
+      ],
+      "code": 0,
+      "json": [
+        {
+          "iid": 404,
+          "title": "MR 404",
+          "state": "opened",
+          "draft": false,
+          "sha": "4040000000000000000000000000000000000000",
+          "source_branch": "web-404-work",
+          "target_branch": "dev",
+          "author": { "username": "nish8", "name": "Nish Sitapara" },
+          "reviewers": [],
+          "head_pipeline": null,
+          "changes_count": "1"
+        }
+      ]
+    },
+    {
+      "argv": ["git", "-C", "/wt/web-404", "config", "--get", "branch.web-404-work.base"],
+      "code": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "git",
+        "-C",
+        "/wt/web-404",
+        "rev-parse",
+        "--verify",
+        "--quiet",
+        "origin/dev^{commit}"
+      ],
+      "code": 0,
+      "stdout": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee\n",
+      "stderr": ""
+    },
+    {
+      "argv": ["git", "-C", "/wt/web-404", "merge-base", "HEAD", "origin/dev"],
+      "code": 0,
+      "stdout": "ffffffffffffffffffffffffffffffffffffffff\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "git",
+        "-C",
+        "/wt/web-404",
+        "log",
+        "--first-parent",
+        "--no-merges",
+        "--format=%H%x00%ct%x00%B%x1e",
+        "ffffffffffffffffffffffffffffffffffffffff..HEAD"
+      ],
+      "code": 0,
+      "stdout": "c404000000000000000000000000000000000000\u00001791626400\u0000feat: change c404\n\u001e\n",
+      "stderr": ""
+    },
+    {
+      "argv": ["git", "-C", "/wt/web-405", "status", "--porcelain"],
+      "code": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "argv": ["git", "-C", "/wt/web-405", "rev-parse", "--git-path", "MERGE_HEAD"],
+      "code": 0,
+      "stdout": "/parity-gitdirs/wt/web-405/MERGE_HEAD\n",
+      "stderr": ""
+    },
+    {
+      "argv": ["git", "-C", "/wt/web-405", "rev-parse", "--git-path", "rebase-merge"],
+      "code": 0,
+      "stdout": "/parity-gitdirs/wt/web-405/rebase-merge\n",
+      "stderr": ""
+    },
+    {
+      "argv": ["git", "-C", "/wt/web-405", "rev-parse", "--git-path", "rebase-apply"],
+      "code": 0,
+      "stdout": "/parity-gitdirs/wt/web-405/rebase-apply\n",
+      "stderr": ""
+    },
+    {
+      "argv": ["git", "-C", "/wt/web-405", "rev-parse", "--git-path", "CHERRY_PICK_HEAD"],
+      "code": 0,
+      "stdout": "/parity-gitdirs/wt/web-405/CHERRY_PICK_HEAD\n",
+      "stderr": ""
+    },
+    {
+      "argv": ["git", "-C", "/wt/web-405", "rev-parse", "--git-path", "REVERT_HEAD"],
+      "code": 0,
+      "stdout": "/parity-gitdirs/wt/web-405/REVERT_HEAD\n",
+      "stderr": ""
+    },
+    {
+      "argv": ["git", "-C", "/wt/web-405", "rev-parse", "--git-path", "BISECT_LOG"],
+      "code": 0,
+      "stdout": "/parity-gitdirs/wt/web-405/BISECT_LOG\n",
+      "stderr": ""
+    },
+    {
+      "argv": ["git", "-C", "/wt/web-405", "rev-parse", "--git-path", "index.lock"],
+      "code": 0,
+      "stdout": "/parity-gitdirs/wt/web-405/index.lock\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "glab",
+        "mr",
+        "list",
+        "--source-branch",
+        "web-405-work",
+        "--all",
+        "--output",
+        "json",
+        "--repo",
+        "polygenx/web-platform"
+      ],
+      "code": 0,
+      "json": [
+        {
+          "iid": 405,
+          "state": "opened",
+          "author": { "username": "nish8" },
+          "web_url": "https://gitlab.com/polygenx/web-platform/-/merge_requests/405"
+        }
+      ]
+    },
+    {
+      "argv": [
+        "glab",
+        "api",
+        "--hostname",
+        "gitlab.com",
+        "projects/polygenx%2Fweb-platform/merge_requests?source_branch=web-405-work&per_page=100"
+      ],
+      "code": 0,
+      "json": [
+        {
+          "iid": 405,
+          "title": "MR 405",
+          "state": "opened",
+          "draft": false,
+          "sha": "4050000000000000000000000000000000000000",
+          "source_branch": "web-405-work",
+          "target_branch": "dev",
+          "author": { "username": "nish8", "name": "Nish Sitapara" },
+          "reviewers": [],
+          "head_pipeline": null,
+          "changes_count": "1",
+          "web_url": "https://gitlab.com/polygenx/web-platform/-/merge_requests/405"
+        }
+      ]
+    },
+    {
+      "argv": [
+        "glab",
+        "api",
+        "--hostname",
+        "gitlab.com",
+        "projects/polygenx%2Fweb-platform/merge_requests/405/approvals"
+      ],
+      "code": 0,
+      "json": { "approved_by": [] }
+    },
+    {
+      "argv": ["git", "-C", "/wt/web-405", "rev-parse", "HEAD"],
+      "code": 0,
+      "stdout": "f405000000000000000000000000000000000000\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "glab",
+        "api",
+        "--hostname",
+        "gitlab.com",
+        "projects/polygenx%2Fweb-platform/merge_requests?state=opened&source_branch=web-405-work"
+      ],
+      "code": 0,
+      "json": [
+        {
+          "iid": 405,
+          "title": "MR 405",
+          "state": "opened",
+          "draft": false,
+          "sha": "4050000000000000000000000000000000000000",
+          "source_branch": "web-405-work",
+          "target_branch": "dev",
+          "author": { "username": "nish8", "name": "Nish Sitapara" },
+          "reviewers": [],
+          "head_pipeline": null,
+          "changes_count": "1"
+        }
+      ]
+    },
+    {
+      "argv": ["git", "-C", "/wt/web-405", "config", "--get", "branch.web-405-work.base"],
+      "code": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "git",
+        "-C",
+        "/wt/web-405",
+        "rev-parse",
+        "--verify",
+        "--quiet",
+        "origin/dev^{commit}"
+      ],
+      "code": 0,
+      "stdout": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee\n",
+      "stderr": ""
+    },
+    {
+      "argv": ["git", "-C", "/wt/web-405", "merge-base", "HEAD", "origin/dev"],
+      "code": 0,
+      "stdout": "ffffffffffffffffffffffffffffffffffffffff\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "git",
+        "-C",
+        "/wt/web-405",
+        "log",
+        "--first-parent",
+        "--no-merges",
+        "--format=%H%x00%ct%x00%B%x1e",
+        "ffffffffffffffffffffffffffffffffffffffff..HEAD"
+      ],
+      "code": 0,
+      "stdout": "f405000000000000000000000000000000000000\u00001791626400\u0000fix(x): y\n\nAgent-Loop: ui-qa\n\u001e\n",
+      "stderr": ""
+    }
+  ],
+  "state": {
+    "parity/answers.json": {},
+    "quota/codex-rate-limits.json": {
+      "rateLimits": {
+        "primary": { "usedPercent": 10, "windowDurationMins": 300, "resetsAt": 1791716400 },
+        "secondary": { "usedPercent": 20, "windowDurationMins": 10080, "resetsAt": 1791972000 },
+        "rateLimitReachedType": null
+      },
+      "ordinaryUsageAllowed": true
+    },
+    "ui-qa/failed.json": {},
+    "ui-qa/fixes.json": {},
+    "ui-qa/run.json": {},
+    "ui-qa/seen.json": { "/wt/web-404": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" }
+  },
+  "exists": {
+    "/parity-gitdirs/wt/web-401/BISECT_LOG": false,
+    "/parity-gitdirs/wt/web-401/CHERRY_PICK_HEAD": false,
+    "/parity-gitdirs/wt/web-401/MERGE_HEAD": false,
+    "/parity-gitdirs/wt/web-401/REVERT_HEAD": false,
+    "/parity-gitdirs/wt/web-401/index.lock": false,
+    "/parity-gitdirs/wt/web-401/rebase-apply": false,
+    "/parity-gitdirs/wt/web-401/rebase-merge": false,
+    "/parity-gitdirs/wt/web-402/BISECT_LOG": false,
+    "/parity-gitdirs/wt/web-402/CHERRY_PICK_HEAD": false,
+    "/parity-gitdirs/wt/web-402/MERGE_HEAD": false,
+    "/parity-gitdirs/wt/web-402/REVERT_HEAD": false,
+    "/parity-gitdirs/wt/web-402/index.lock": false,
+    "/parity-gitdirs/wt/web-402/rebase-apply": false,
+    "/parity-gitdirs/wt/web-402/rebase-merge": false,
+    "/parity-gitdirs/wt/web-403/BISECT_LOG": false,
+    "/parity-gitdirs/wt/web-403/CHERRY_PICK_HEAD": false,
+    "/parity-gitdirs/wt/web-403/MERGE_HEAD": false,
+    "/parity-gitdirs/wt/web-403/REVERT_HEAD": false,
+    "/parity-gitdirs/wt/web-403/index.lock": false,
+    "/parity-gitdirs/wt/web-403/rebase-apply": false,
+    "/parity-gitdirs/wt/web-403/rebase-merge": false,
+    "/parity-gitdirs/wt/web-404/BISECT_LOG": false,
+    "/parity-gitdirs/wt/web-404/CHERRY_PICK_HEAD": false,
+    "/parity-gitdirs/wt/web-404/MERGE_HEAD": false,
+    "/parity-gitdirs/wt/web-404/REVERT_HEAD": false,
+    "/parity-gitdirs/wt/web-404/index.lock": false,
+    "/parity-gitdirs/wt/web-404/rebase-apply": false,
+    "/parity-gitdirs/wt/web-404/rebase-merge": false,
+    "/parity-gitdirs/wt/web-405/BISECT_LOG": false,
+    "/parity-gitdirs/wt/web-405/CHERRY_PICK_HEAD": false,
+    "/parity-gitdirs/wt/web-405/MERGE_HEAD": false,
+    "/parity-gitdirs/wt/web-405/REVERT_HEAD": false,
+    "/parity-gitdirs/wt/web-405/index.lock": false,
+    "/parity-gitdirs/wt/web-405/rebase-apply": false,
+    "/parity-gitdirs/wt/web-405/rebase-merge": false,
+    "/wt/web-401": true,
+    "/wt/web-402": true,
+    "/wt/web-403": true,
+    "/wt/web-404": true,
+    "/wt/web-405": true
+  }
+}

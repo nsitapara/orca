@@ -28,7 +28,7 @@ from copy import deepcopy
 from pathlib import Path
 from unittest import mock
 
-from jobs.common import quota_over, repo_extras
+from jobs.common import codex_over, quota_over, repo_extras
 from parity_io import NotInFixture, is_read
 
 SWEEP = None  # no sweep.py: old_decisions imports review-cycles' loop.py itself
@@ -53,18 +53,6 @@ def _scenarios(gate):
         return (gate.load("parity", "case.json") or {}).get("scenarios")
     except NotInFixture:
         return None
-
-
-def codex_over(gate):
-    """gate.require_quota("codex") on the case's raw Codex answer (None: unreadable, which lets the job run)."""
-    import quota
-
-    try:
-        raw = gate.load("quota", "codex-rate-limits.json")
-    except NotInFixture:
-        return None
-    reason = quota.out_reason(quota.codex_limits(raw)) if raw else None
-    return f"codex {reason}" if reason else None
 
 
 def rounds(loop, gate, lead, script):

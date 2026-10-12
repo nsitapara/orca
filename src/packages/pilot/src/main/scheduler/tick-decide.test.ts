@@ -278,8 +278,9 @@ describe('decideTickItems', () => {
 })
 
 describe('handledStates', () => {
-  // Seeded and baselined keys (run_id NULL) never become retryable, whatever their row says.
-  it("reads each key's status, and a key no run holds as started", () => {
+  // Seeded and baselined keys (run_id NULL) never become retryable, whatever their row says, except an old sweep's
+  // failure the importer brought in with its time (04's failed.json): it waits retry_after_failure from that time.
+  it("reads each key's status, and a key no run holds as started unless it is an imported failure", () => {
     const row = (
       onceKey: string,
       runId: string | null,
@@ -292,15 +293,19 @@ describe('handledStates', () => {
         row('2', 'run-2', 'done', null),
         row('3', 'run-3', 'started', null),
         row('4', null, 'failed', 50),
-        row('5', null, 'started', null)
+        row('5', null, 'started', null),
+        row('6', null, 'failed', null),
+        row('7', null, 'done', null)
       ])
     ).toEqual(
       new Map<string, HandledState>([
         ['1', { status: 'failed', failedAt: 50 }],
         ['2', { status: 'done', failedAt: null }],
         ['3', { status: 'started', failedAt: null }],
-        ['4', { status: 'started', failedAt: null }],
-        ['5', { status: 'started', failedAt: null }]
+        ['4', { status: 'failed', failedAt: 50 }],
+        ['5', { status: 'started', failedAt: null }],
+        ['6', { status: 'started', failedAt: null }],
+        ['7', { status: 'started', failedAt: null }]
       ])
     )
   })
