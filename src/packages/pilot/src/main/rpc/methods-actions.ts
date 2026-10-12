@@ -1,7 +1,6 @@
 import { z } from 'zod'
 import { defineMethod } from '../../../../../main/runtime/rpc/core'
-import type { RpcCallerIdentity } from '../../../../../main/runtime/rpc/rpc-caller-identity'
-import { attemptAction, type AttemptDeps, type AttemptResult } from '../actions/attempt'
+import { attemptAction, refuseCall, type AttemptDeps, type AttemptResult } from '../actions/attempt'
 import type { PilotContext } from '../pilot-services'
 import { inboxDeps } from './methods-inbox'
 import { resolveChannelStep } from './run-channel'
@@ -32,16 +31,14 @@ export function attemptDeps(c: PilotContext): AttemptDeps {
 
 export const NO_CALLER = "Pilot can't tell who is calling; nothing runs"
 
-// A person's own approval comes only from what the transport proved (rpc-caller-identity.ts): Pilot's
-// desktop app or a paired device. Never from params, and never for the local CLI, which agents use too.
-function personCalling(caller: RpcCallerIdentity | undefined): boolean {
-  return caller?.kind === 'desktop' || caller?.kind === 'paired-device'
+function messageOf(error: unknown): string {
+  return error instanceof Error ? error.message : String(error)
 }
 
-// Whose powers apply to a local CLI caller (Task 22b ruling): the step starting or running on its terminal,
-// else the env's PILOT_RUN_ID/PILOT_STEP_IDX only while that step is active in an open run (run-channel's
-// resolver, which refuses anything else). With neither it is bound to no run (null), and approves nothing.
-export function actionCaller(
+// Whose powers apply (Task 22b ruling): the step starting or running on the caller's terminal, else the
+// env's PILOT_RUN_ID/PILOT_STEP_IDX only while that step is active in an open run (run-channel's resolver,
+// which refuses anything else). With neither the call is bound to no run (null).
+export function runBinding(
   c: PilotContext,
   p: Pick<z.infer<typeof ActionRun>, 'terminal' | 'runId' | 'stepIdx'>
 ): { runId: string; stepIdx: number } | null {
@@ -58,21 +55,28 @@ export function buildActionMethods(ctx: () => PilotContext) {
       name: 'pilot.action.run',
       permission: 'workspace',
       params: ActionRun,
+      // This method never approves anything, whoever calls: the transport's caller identity
+      // (rpc-caller-identity.ts) is only required, never trusted further, since the CLI and runtime-scope
+      // pairings share it with agents. A call bound to a run gets that run's powers (without the power its
+      // person is asked, and nothing runs); an unbound call only dry-runs. A person approves on a card.
       handler: async (p, rpc): Promise<AttemptResult> => {
         const c = ctx()
-        const req = { action: p.action, args: p.args, dryRun: p.dryRun ?? false, inboxItemId: null }
-        if (personCalling(rpc.caller)) {
-          return attemptAction(attemptDeps(c), { ...req, runId: null, approved: true })
+        const deps = attemptDeps(c)
+        const call = { action: p.action, args: p.args, dryRun: p.dryRun ?? false }
+        if (!rpc.caller) {
+          return refuseCall(deps, call, NO_CALLER)
         }
-        if (rpc.caller?.kind !== 'local-cli') {
-          return { outcome: 'failed', detail: NO_CALLER, link: null, log: null, onYou: false }
+        let bound: { runId: string; stepIdx: number } | null
+        try {
+          bound = runBinding(c, p)
+        } catch (error) {
+          return refuseCall(deps, call, messageOf(error))
         }
-        // Bound: the run's powers apply. Unbound: only a dry run (attemptAction refuses the rest).
-        const bound = actionCaller(c, p)
-        return attemptAction(attemptDeps(c), {
-          ...req,
+        return attemptAction(deps, {
+          ...call,
           runId: bound?.runId ?? null,
           stepIdx: bound?.stepIdx ?? null,
+          inboxItemId: null,
           approved: false
         })
       }

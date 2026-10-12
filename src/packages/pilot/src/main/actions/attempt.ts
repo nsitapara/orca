@@ -1,11 +1,18 @@
-import { createHash } from 'node:crypto'
 import type { AutomationDefinition } from '../../shared/definition/types'
 import { addInboxItem } from '../inbox/inbox-add'
 import type { InboxDeps } from '../inbox/inbox-service'
 import { resolveInboxPerson } from '../inbox/person'
 import { fieldsForRun } from '../inbox/run-fields'
 import type { PilotStore } from '../store/store'
-import { approvedCardProblem, definitionOf, hasPower, missingWhat, unknownAction } from './powers'
+import {
+  argsDigest,
+  cardToRun,
+  definitionOf,
+  hasPower,
+  missingWhat,
+  stableJson,
+  unknownAction
+} from './powers'
 import {
   actionFailed,
   type ActionCatalog,
@@ -14,22 +21,30 @@ import {
   type Refreshed
 } from './types'
 
-export type AttemptRequest = {
+type AttemptBase = {
   action: string
-  args: Record<string, unknown>
   dryRun: boolean
   // The run that asked (resolved from the caller's step binding), or the run an approved card belongs to.
   runId: string | null
   // The step that asked; with the run and card it keys the attempt's pinned write id. Null outside a step.
   stepIdx?: number | null
-  // Set for a card's Approve: the card is re-read and re-checked before anything runs.
-  inboxItemId: string | null
-  // A person approved it (a card's Approve, or a call from Pilot's desktop app or a paired device, as the
-  // RPC transport proved it; never the CLI): powers don't apply.
-  approved: boolean
-  // The approved card's digest; absent, the args' own.
-  digest?: string
 }
+// A run's own attempt, or an unbound dry run: the args it asks with; the run's powers apply.
+export type RunAttempt = AttemptBase & {
+  approved: false
+  inboxItemId: null
+  args: Record<string, unknown>
+}
+// A card's Approve, and nothing else: what runs is the card's own pinned args, re-read here, less the
+// parts the person left out. Powers don't apply; the card's claim is re-checked (powers.ts cardToRun).
+export type CardAttempt = AttemptBase & {
+  approved: true
+  inboxItemId: string
+  // The digest the answer approved; a card that changed since is refused.
+  digest: string
+  leftOut?: string[]
+}
+export type AttemptRequest = RunAttempt | CardAttempt
 export type AskedResult = { outcome: 'asked'; detail: string; inboxItemId: string | null }
 export type AttemptResult = ActionResult | AskedResult
 export type AttemptDeps = {
@@ -52,69 +67,92 @@ export const EXIT_CODES: Record<AttemptResult['outcome'], number> = {
 
 export const OUTSIDE_A_RUN =
   'Outside a Pilot run, approve actions in Pilot (Waiting on you), or run act.py directly.'
+const NO_CARD = "An approval needs its card and the card's digest"
 
-function argsDigest(action: string, args: Record<string, unknown>): string {
-  return createHash('sha256')
-    .update(JSON.stringify([action, args]))
-    .digest('hex')
+// What an attempt's action_runs rows say about it.
+type Row = {
+  action: string
+  dryRun: boolean
+  runId: string | null
+  inboxItemId: string | null
+  approved: boolean
+  digest?: string
 }
 
-// Key order never changes what an attempt is.
-function stableJson(value: unknown): string {
-  if (Array.isArray(value)) {
-    return `[${value.map(stableJson).join(',')}]`
+function rowOf(req: AttemptRequest): Row {
+  const { action, dryRun, runId, inboxItemId, approved } = req
+  return {
+    action,
+    dryRun,
+    runId,
+    inboxItemId,
+    approved,
+    ...(req.approved ? { digest: req.digest } : {})
   }
-  if (value && typeof value === 'object') {
-    const entries = Object.entries(value as Record<string, unknown>).toSorted(([a], [b]) =>
-      a < b ? -1 : 1
-    )
-    return `{${entries.map(([k, v]) => `${JSON.stringify(k)}:${stableJson(v)}`).join(',')}}`
-  }
-  return JSON.stringify(value) ?? 'null'
+}
+
+// A run attempt's own args; a card's come from the card. Anything malformed reads as none.
+function argsOf(req: AttemptRequest): Record<string, unknown> {
+  const given: unknown = req.approved ? null : req.args
+  return given && typeof given === 'object' && !Array.isArray(given)
+    ? (given as Record<string, unknown>)
+    : {}
 }
 
 // What the entry's pin (a Linear write id) derives from: the run, step and card that asked, the action
 // and its args. A retried attempt repeats all of them, so it pins the same id and Linear deduplicates it.
-function attemptKey(entry: ActionEntry, req: AttemptRequest): string {
-  return stableJson([req.runId, req.stepIdx ?? null, req.inboxItemId, entry.name, req.args])
+function pinned(
+  entry: ActionEntry,
+  req: AttemptRequest,
+  args: Record<string, unknown>
+): Record<string, unknown> {
+  const key = stableJson([req.runId, req.stepIdx ?? null, req.inboxItemId, entry.name, args])
+  return entry.pin ? entry.pin(args, key) : args
 }
 
 function startRow(
-  deps: AttemptDeps,
-  req: AttemptRequest,
-  action: string,
-  args: Record<string, unknown>,
-  inboxItemId = req.inboxItemId
+  deps: { store: PilotStore; now(): number },
+  row: Row,
+  args: Record<string, unknown>
 ): number {
   return deps.store.actions.start({
-    inboxItemId,
-    runId: req.runId,
-    action,
+    inboxItemId: row.inboxItemId,
+    runId: row.runId,
+    action: row.action,
     args,
-    digest: req.digest ?? argsDigest(action, args),
+    digest: row.digest ?? argsDigest(row.action, args),
     phase: 'do',
-    dryRun: req.dryRun,
+    dryRun: row.dryRun,
     startedAt: deps.now()
   })
 }
 
 // An attempt turned away is still an action_runs row (contract §10), with why in its output.
-function refused(
-  deps: AttemptDeps,
-  req: AttemptRequest,
-  result: AttemptResult,
-  args: Record<string, unknown> = req.args,
-  inboxItemId = req.inboxItemId
-): AttemptResult {
-  const row = startRow(deps, req, req.action, args, inboxItemId)
-  deps.store.actions.finish(row, 'refused', JSON.stringify(result), deps.now())
+function refused<R extends AttemptResult>(
+  deps: { store: PilotStore; now(): number },
+  row: Row,
+  args: Record<string, unknown>,
+  result: R
+): R {
+  const id = startRow(deps, row, args)
+  deps.store.actions.finish(id, 'refused', JSON.stringify(result), deps.now())
   return result
+}
+
+// A call refused before it is an attempt (who is calling, or which run it is, can't be told): still a row.
+export function refuseCall(
+  deps: { store: PilotStore; now(): number },
+  call: { action: string; args: Record<string, unknown>; dryRun: boolean },
+  detail: string
+): ActionResult {
+  const row = { ...call, runId: null, inboxItemId: null, approved: false }
+  return refused(deps, row, call.args, actionFailed(detail))
 }
 
 async function askFirst(
   deps: AttemptDeps,
   entry: ActionEntry,
-  req: AttemptRequest & { runId: string },
+  req: RunAttempt & { runId: string },
   def: AutomationDefinition,
   args: Record<string, unknown>
 ): Promise<AttemptResult> {
@@ -124,7 +162,7 @@ async function askFirst(
     const fields = fieldsForRun(deps.store, req.runId)
     const person = resolveInboxPerson(def.inbox, fields, deps.inbox.people()).person
     const detail = `Would ask ${person ?? 'its person'} first: ${why}`
-    return refused(deps, req, { outcome: 'asked', detail, inboxItemId: null }, args, null)
+    return refused(deps, rowOf(req), args, { outcome: 'asked', detail, inboxItemId: null })
   }
   const what = await entry.describe(args)
   const added = addInboxItem(deps.inbox, {
@@ -137,117 +175,133 @@ async function askFirst(
     action: entry.name,
     actionArgs: args
   })
-  if (!added.id) {
-    const result = {
-      outcome: 'asked' as const,
-      detail: `Not asked again: ${added.refused ?? 'refused'}`,
-      inboxItemId: null
-    }
-    return refused(deps, req, result, args, null)
-  }
-  const person = deps.store.inbox.get(added.id)?.person ?? 'its person'
-  const result = {
-    outcome: 'asked' as const,
-    detail: `Asked ${person} first: ${why}`,
-    inboxItemId: added.id
-  }
-  return refused(deps, req, result, args, added.id)
+  const person = added.id ? (deps.store.inbox.get(added.id)?.person ?? 'its person') : null
+  const detail = person
+    ? `Asked ${person} first: ${why}`
+    : `Not asked again: ${added.refused ?? 'refused'}`
+  // Under the card, this row is how a later approval knows Pilot itself asked (powers.ts askedByPilot).
+  const row = { ...rowOf(req), inboxItemId: added.id }
+  return refused(deps, row, args, { outcome: 'asked', detail, inboxItemId: added.id })
 }
 
 function record(
   deps: AttemptDeps,
-  req: AttemptRequest,
-  entry: ActionEntry,
+  row: Row,
   args: Record<string, unknown>,
   result: ActionResult,
   at: number
 ): void {
-  const run = req.runId ? deps.store.runs.get(req.runId) : null
+  const run = row.runId ? deps.store.runs.get(row.runId) : null
   deps.store.events.add({
     at,
     automationId: run?.automationId ?? null,
-    runId: req.runId,
+    runId: row.runId,
     worktreePath: run?.worktreePath ?? null,
     itemKey: run?.itemKey ?? null,
     kind: 'action_run',
     payload: {
-      action: entry.name,
+      action: row.action,
       args,
       outcome: result.outcome,
       detail: result.detail,
       link: result.link,
       log: result.log,
-      dryRun: req.dryRun,
-      approved: req.approved,
-      inboxItemId: req.inboxItemId
+      dryRun: row.dryRun,
+      approved: row.approved,
+      inboxItemId: row.inboxItemId
     }
   })
 }
 
 async function runEntry(
   deps: AttemptDeps,
-  req: AttemptRequest,
+  row: Row,
   entry: ActionEntry,
   args: Record<string, unknown>
 ): Promise<ActionResult> {
-  const row = startRow(deps, req, entry.name, args)
-  const result = await entry.run(args, { dryRun: req.dryRun, runId: req.runId })
+  const id = startRow(deps, row, args)
+  const result = await entry.run(args, { dryRun: row.dryRun, runId: row.runId })
   const at = deps.now()
-  deps.store.actions.finish(row, result.outcome, JSON.stringify(result), at)
+  deps.store.actions.finish(id, result.outcome, JSON.stringify(result), at)
   if (result.outcome !== 'not_yet') {
-    record(deps, req, entry, args, result, at)
+    record(deps, row, args, result, at)
   }
   return result
 }
 
-// The one way anything in Pilot makes an outside effect. Every call re-checks, fail closed: the action
+async function attemptCard(
+  deps: AttemptDeps,
+  entry: ActionEntry,
+  req: CardAttempt
+): Promise<AttemptResult> {
+  const row = rowOf(req)
+  if (typeof req.inboxItemId !== 'string' || typeof req.digest !== 'string' || !req.digest) {
+    return refused(deps, row, {}, actionFailed(NO_CARD))
+  }
+  const card = cardToRun(deps, entry, req, req.inboxItemId)
+  if ('problem' in card) {
+    const stored = deps.store.inbox.get(req.inboxItemId)?.actionArgs ?? {}
+    return refused(deps, row, stored, actionFailed(card.problem))
+  }
+  return runEntry(deps, row, entry, pinned(entry, req, card.args))
+}
+
+async function attemptForRun(
+  deps: AttemptDeps,
+  entry: ActionEntry,
+  req: RunAttempt
+): Promise<AttemptResult> {
+  const row = rowOf(req)
+  const given = argsOf(req)
+  const bad = entry.checkArgs(given)
+  if (bad) {
+    return refused(deps, row, given, actionFailed(bad))
+  }
+  const args = pinned(entry, req, given)
+  if (!req.runId) {
+    // No run asked, and only a card's Approve is a person's approval: a dry run, which changes nothing.
+    return req.dryRun
+      ? runEntry(deps, row, entry, args)
+      : refused(deps, row, args, actionFailed(OUTSIDE_A_RUN))
+  }
+  const run = deps.store.runs.get(req.runId)
+  if (!run) {
+    return refused(deps, row, args, actionFailed(`No run ${req.runId}`))
+  }
+  const def = definitionOf(deps, run.automationId)
+  if (!def) {
+    const detail = `Run ${run.id}'s automation "${run.automationId}" isn't loaded; nothing runs`
+    return refused(deps, row, args, actionFailed(detail))
+  }
+  if (!hasPower(entry, def)) {
+    return askFirst(deps, entry, { ...req, runId: run.id }, def, args)
+  }
+  return runEntry(deps, row, entry, args)
+}
+
+// The one way anything in Pilot makes an outside effect, re-checked on every call, fail closed: the action
 // is in the catalog and its args fit; a run's own attempt needs the run's automation to have the power
-// (else its person is asked, and nothing runs); a card's approval re-reads the card and the powers
-// (approvedCardProblem); only a person's own call (approved, no card: the transport proved Pilot's desktop
-// app or a paired device) runs on their word, and an unapproved call with no run only dry-runs. Task 24c's
-// Approve / Apply now calls this with { approved: true, inboxItemId: card.id, runId: card.runId,
-// digest: card.digest }, so every approved card goes through those checks.
+// (else its person is asked, and nothing runs); with no run, only a dry run goes ahead.
+// A person's approval exists only through a card: Task 24c's Approve / Apply now calls this with
+// { action: card.action, approved: true, inboxItemId: card.id, runId: card.runId, digest: <the digest the
+// answer approved>, leftOut, dryRun: false }, and only for an answer saved from Pilot's desktop app (the
+// approving caller must be `desktop`, never the CLI). The card is re-read and its own args run.
 export async function attemptAction(
   deps: AttemptDeps,
   req: AttemptRequest
 ): Promise<AttemptResult> {
   const entry = deps.catalog.get(req.action)
   if (!entry) {
-    return refused(deps, req, actionFailed(unknownAction(req.action)))
+    return refused(deps, rowOf(req), argsOf(req), actionFailed(unknownAction(req.action)))
   }
-  const bad = entry.checkArgs(req.args)
-  if (bad) {
-    return refused(deps, req, actionFailed(bad))
+  if (req.approved === true) {
+    return attemptCard(deps, entry, req)
   }
-  const args = entry.pin ? entry.pin(req.args, attemptKey(entry, req)) : req.args
-  if (req.approved && req.inboxItemId !== null) {
-    const problem = approvedCardProblem(deps, entry, req, req.inboxItemId)
-    return problem
-      ? refused(deps, req, actionFailed(problem), args)
-      : runEntry(deps, req, entry, args)
+  if (req.approved !== false || req.inboxItemId !== null) {
+    // Not a shape the types allow: an approval must name its card, and a card is only run approved.
+    return refused(deps, { ...rowOf(req), approved: false }, {}, actionFailed(NO_CARD))
   }
-  if (req.approved) {
-    return runEntry(deps, req, entry, args)
-  }
-  if (!req.runId) {
-    // Nobody approved it and no run asked: only a dry run, which changes nothing, goes ahead.
-    return req.dryRun
-      ? runEntry(deps, req, entry, args)
-      : refused(deps, req, actionFailed(OUTSIDE_A_RUN))
-  }
-  const run = deps.store.runs.get(req.runId)
-  if (!run) {
-    return refused(deps, req, actionFailed(`No run ${req.runId}`))
-  }
-  const def = definitionOf(deps, run.automationId)
-  if (!def) {
-    const detail = `Run ${run.id}'s automation "${run.automationId}" isn't loaded; nothing runs`
-    return refused(deps, req, actionFailed(detail))
-  }
-  if (!hasPower(entry, def)) {
-    return askFirst(deps, entry, { ...req, runId: run.id }, def, args)
-  }
-  return runEntry(deps, req, entry, args)
+  return attemptForRun(deps, entry, req)
 }
 
 export async function refreshAction(

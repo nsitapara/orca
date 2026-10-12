@@ -4,11 +4,13 @@ import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 import { parseAutomationYaml } from '../../shared/definition/parse'
 import { parsePeopleYaml } from '../../shared/people'
-import { cardOf } from '../inbox/card'
+import { cardOf, inboxDigest } from '../inbox/card'
 import { addInboxItem } from '../inbox/inbox-add'
 import type { InboxDeps } from '../inbox/inbox-service'
+import type { InboxAddParams } from '../../shared/inbox-types'
 import { PilotStore } from '../store/store'
-import { attemptAction, refreshAction } from './attempt'
+import type { InboxItemRow } from '../../shared/api-types'
+import { attemptAction, refreshAction, type CardAttempt, type RunAttempt } from './attempt'
 import { proposalProblem } from './powers'
 import type { ActionCatalog, ActionEntry } from './types'
 
@@ -67,13 +69,26 @@ function setup(powers?: string[], loaded = true) {
   return { store, push, inbox, deps: { store, now: () => 50, catalog, definitions, inbox } }
 }
 
-const REQ = {
+const REQ: RunAttempt = {
   action: 'push',
   args: { argv: ['/wt', 'web-1', 'aaa', 'bbb'] },
   dryRun: false,
   runId: 'run-1',
   inboxItemId: null,
   approved: false
+}
+
+// A card's Approve, as Task 24c sends it: the card, the digest the answer approved, and parts left out.
+function approve(card: InboxItemRow, extra: Partial<CardAttempt> = {}): CardAttempt {
+  return {
+    action: card.action ?? '',
+    dryRun: false,
+    runId: card.runId,
+    approved: true,
+    inboxItemId: card.id,
+    digest: card.digest,
+    ...extra
+  }
 }
 
 describe('attemptAction', () => {
@@ -152,7 +167,11 @@ describe('attemptAction', () => {
     const { push, deps } = setup(['push'])
     push.pin = (args, key) => ({ ...args, write_id: key })
     await attemptAction(deps, { ...REQ, stepIdx: 0 })
-    await attemptAction(deps, { ...REQ, stepIdx: 0, args: { argv: [...REQ.args.argv] } })
+    await attemptAction(deps, {
+      ...REQ,
+      stepIdx: 0,
+      args: { argv: [...(REQ.args.argv as string[])] }
+    })
     await attemptAction(deps, { ...REQ, stepIdx: 1 })
     const ids = vi.mocked(push.run).mock.calls.map(([args]) => args.write_id)
     expect(ids[0]).toBe(ids[1])
@@ -194,12 +213,14 @@ describe('attemptAction', () => {
     expect(push.run).toHaveBeenCalledWith(REQ.args, { dryRun: true, runId: null })
   })
 
-  it("runs a person's own approved call (no run, no card) without powers", async () => {
+  it('refuses an approval that names no card, or no digest', async () => {
     const { push, deps } = setup()
-    expect(await attemptAction(deps, { ...REQ, runId: null, approved: true })).toMatchObject({
-      outcome: 'done'
+    const noCard = { ...REQ, approved: true } as unknown as CardAttempt
+    expect(await attemptAction(deps, noCard)).toMatchObject({
+      outcome: 'failed',
+      detail: "An approval needs its card and the card's digest"
     })
-    expect(push.run).toHaveBeenCalled()
+    expect(push.run).not.toHaveBeenCalled()
   })
 })
 
@@ -210,31 +231,85 @@ describe('attemptAction on an approved card', () => {
     return { ...s, card: s.store.inbox.get('in_0000000000000001')! }
   }
 
-  it('runs a card Pilot asked about, without the power: the approval is the go-ahead', async () => {
-    const { push, deps, card } = await asked()
-    const result = await attemptAction(deps, {
-      ...REQ,
-      approved: true,
-      inboxItemId: card.id,
-      digest: card.digest
-    })
-    expect(result).toMatchObject({ outcome: 'done' })
-    expect(push.run).toHaveBeenCalledWith(REQ.args, { dryRun: false, runId: 'run-1' })
-  })
-
-  it("runs a card the automation filed itself while it has the action's power", async () => {
-    const { push, deps, inbox } = setup(['push'])
+  function file(inbox: InboxDeps, extra: Partial<InboxAddParams> = {}): InboxItemRow {
     const id = addInboxItem(inbox, {
       runId: 'run-1',
       type: 'action',
       title: 'Push?',
       action: 'push',
-      actionArgs: REQ.args
+      actionArgs: REQ.args,
+      ...extra
     }).id!
-    expect(await attemptAction(deps, { ...REQ, approved: true, inboxItemId: id })).toMatchObject({
+    return inbox.store.inbox.get(id)!
+  }
+
+  // As 24c's revise would: new args on the card, a new digest.
+  function revise(
+    store: PilotStore,
+    card: InboxItemRow,
+    actionArgs: Record<string, unknown>
+  ): InboxItemRow {
+    const next = { ...cardOf(card), actionArgs }
+    store.inbox.edit(card.id, { ...next, digest: inboxDigest(next) }, 60)
+    return store.inbox.get(card.id)!
+  }
+
+  it('runs a card Pilot asked about, without the power: the approval is the go-ahead', async () => {
+    const { push, deps, card } = await asked()
+    expect(await attemptAction(deps, approve(card))).toMatchObject({ outcome: 'done' })
+    expect(push.run).toHaveBeenCalledWith(REQ.args, { dryRun: false, runId: 'run-1' })
+  })
+
+  it("runs the card's own args, whatever args the request carries", async () => {
+    const { push, deps, card } = await asked()
+    const sneaky = { ...approve(card), args: { argv: ['/elsewhere', 'main', 'x', 'y'] } }
+    expect(await attemptAction(deps, sneaky)).toMatchObject({ outcome: 'done' })
+    expect(push.run).toHaveBeenCalledWith(REQ.args, { dryRun: false, runId: 'run-1' })
+  })
+
+  it("runs a card the automation filed itself while it has the action's power", async () => {
+    const { push, deps, inbox } = setup(['push'])
+    expect(await attemptAction(deps, approve(file(inbox)))).toMatchObject({ outcome: 'done' })
+    expect(push.run).toHaveBeenCalled()
+  })
+
+  it('runs a card once: a second approval is refused', async () => {
+    const { push, deps, card } = await asked()
+    expect(await attemptAction(deps, approve(card))).toMatchObject({ outcome: 'done' })
+    expect(await attemptAction(deps, approve(card))).toMatchObject({
+      outcome: 'failed',
+      detail: "Card in_0000000000000001's action already ran"
+    })
+    expect(push.run).toHaveBeenCalledTimes(1)
+  })
+
+  it("passes the parts left out the entry's way, and only parts the card has", async () => {
+    const { push, deps, inbox } = setup(['push'])
+    push.exceptArgs = (args, leftOut) => ({
+      argv: [...(args.argv as string[]), '--except', leftOut.join(',')]
+    })
+    const card = file(inbox, { parts: { F1: 'Null check', F2: 'Naming' } })
+    expect(await attemptAction(deps, approve(card, { leftOut: ['F9'] }))).toMatchObject({
+      outcome: 'failed',
+      detail: 'Card in_0000000000000001 has no part F9'
+    })
+    expect(await attemptAction(deps, approve(card, { leftOut: ['F2'] }))).toMatchObject({
       outcome: 'done'
     })
-    expect(push.run).toHaveBeenCalled()
+    expect(push.run).toHaveBeenCalledWith(
+      { argv: [...(REQ.args.argv as string[]), '--except', 'F2'] },
+      { dryRun: false, runId: 'run-1' }
+    )
+  })
+
+  it("refuses parts left out by an entry that can't leave any out", async () => {
+    const { push, deps, inbox } = setup(['push'])
+    const card = file(inbox, { parts: { F1: 'Null check' } })
+    expect(await attemptAction(deps, approve(card, { leftOut: ['F1'] }))).toMatchObject({
+      outcome: 'failed',
+      detail: "push can't leave parts out"
+    })
+    expect(push.run).not.toHaveBeenCalled()
   })
 
   it.each([
@@ -252,25 +327,24 @@ describe('attemptAction on an approved card', () => {
       'a changed card',
       () => ({ digest: 'old' }),
       'Card in_0000000000000001 changed since it was approved'
-    ]
+    ],
+    ['no digest', () => ({ digest: '' }), "An approval needs its card and the card's digest"]
   ])('refuses %s', async (_name, change, detail) => {
     const { push, deps, card } = await asked()
-    const result = await attemptAction(deps, {
-      ...REQ,
-      approved: true,
-      inboxItemId: card.id,
-      ...change(card.id)
+    expect(await attemptAction(deps, approve(card, change(card.id)))).toMatchObject({
+      outcome: 'failed',
+      detail
     })
-    expect(result).toMatchObject({ outcome: 'failed', detail })
     expect(push.run).not.toHaveBeenCalled()
   })
 
   it('refuses a closed card', async () => {
     const { push, deps, store, card } = await asked()
     store.inbox.update(card.id, { status: 'done', outcome: 'skipped' }, 60)
-    expect(
-      await attemptAction(deps, { ...REQ, approved: true, inboxItemId: card.id })
-    ).toMatchObject({ outcome: 'failed', detail: 'Card in_0000000000000001 is already done' })
+    expect(await attemptAction(deps, approve(card))).toMatchObject({
+      outcome: 'failed',
+      detail: 'Card in_0000000000000001 is already done'
+    })
     expect(push.run).not.toHaveBeenCalled()
   })
 
@@ -281,11 +355,9 @@ describe('attemptAction on an approved card', () => {
       entries: () => [push, other],
       get: (n) => [push, other].find((e) => e.name === n) ?? null
     }
-    const result = await attemptAction(
-      { ...deps, catalog },
-      { ...REQ, action: 'mark_ready', approved: true, inboxItemId: card.id }
-    )
-    expect(result).toMatchObject({
+    expect(
+      await attemptAction({ ...deps, catalog }, approve(card, { action: 'mark_ready' }))
+    ).toMatchObject({
       outcome: 'failed',
       detail: 'Card in_0000000000000001 is for push, not mark_ready'
     })
@@ -294,25 +366,41 @@ describe('attemptAction on an approved card', () => {
 
   it("refuses a card its automation filed itself once the automation no longer has the action's power", async () => {
     const withPower = setup(['push'])
-    const id = addInboxItem(withPower.inbox, {
-      runId: 'run-1',
-      type: 'action',
-      title: 'Push?',
-      action: 'push',
-      actionArgs: REQ.args
-    }).id!
+    const card = file(withPower.inbox)
     const without = { ...withPower.deps, definitions: setup().deps.definitions }
     const detail =
       "\"Fix CI\" doesn't have the push power and Pilot didn't ask for card in_0000000000000001; it can't run"
-    expect(await attemptAction(without, { ...REQ, approved: true, inboxItemId: id })).toMatchObject(
-      { outcome: 'failed', detail }
-    )
-    expect(withPower.store.actions.forInboxItem(id)).toMatchObject([{ status: 'refused' }])
+    expect(await attemptAction(without, approve(card))).toMatchObject({ outcome: 'failed', detail })
+    expect(withPower.store.actions.forInboxItem(card.id)).toMatchObject([{ status: 'refused' }])
     // Its own refusal is no ask: approving it again is refused again.
-    expect(await attemptAction(without, { ...REQ, approved: true, inboxItemId: id })).toMatchObject(
-      { outcome: 'failed', detail }
-    )
+    expect(await attemptAction(without, approve(card))).toMatchObject({ outcome: 'failed', detail })
     expect(withPower.push.run).not.toHaveBeenCalled()
+  })
+
+  it('refuses a card Pilot asked about once its args changed other than by its own refresh', async () => {
+    const { push, deps, store, card } = await asked()
+    const changed = revise(store, card, { argv: ['/elsewhere', 'main', 'x', 'y'] })
+    expect(await attemptAction(deps, approve(changed))).toMatchObject({
+      outcome: 'failed',
+      detail: expect.stringContaining("Pilot didn't ask for card")
+    })
+    expect(push.run).not.toHaveBeenCalled()
+  })
+
+  it('runs a card Pilot asked about with the args its own refresh pinned again', async () => {
+    const { push, deps, store, card } = await asked()
+    const again = await refreshAction(deps, {
+      action: 'push',
+      args: REQ.args,
+      runId: 'run-1',
+      inboxItemId: card.id
+    })
+    const revised = revise(store, card, again!.args)
+    expect(await attemptAction(deps, approve(revised))).toMatchObject({ outcome: 'done' })
+    expect(push.run).toHaveBeenCalledWith(
+      { argv: ['/wt', 'web-1', 'ffff', 'bbb'] },
+      { dryRun: false, runId: 'run-1' }
+    )
   })
 
   it('refuses stored args that no longer fit the entry', async () => {
@@ -322,14 +410,10 @@ describe('attemptAction on an approved card', () => {
       { ...cardOf(card), actionArgs: { argv: 'x' }, digest: card.digest },
       60
     )
-    expect(
-      await attemptAction(deps, {
-        ...REQ,
-        args: { argv: 'x' },
-        approved: true,
-        inboxItemId: card.id
-      })
-    ).toMatchObject({ outcome: 'failed', detail: 'usage: push …' })
+    expect(await attemptAction(deps, approve(card))).toMatchObject({
+      outcome: 'failed',
+      detail: 'usage: push …'
+    })
     expect(push.run).not.toHaveBeenCalled()
   })
 })

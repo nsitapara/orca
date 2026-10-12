@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto'
+import type { InboxItemRow } from '../../shared/api-types'
 import type { AutomationDefinition } from '../../shared/definition/types'
 import { WAITING } from '../inbox/inbox-service'
 import type { PilotStore } from '../store/store'
@@ -9,6 +11,26 @@ export type PowersDeps = { store: PilotStore; definitions(): AutomationDefinitio
 
 export const unknownAction = (name: string): string =>
   `No action named "${name}" in Pilot's catalog`
+
+export function argsDigest(action: string, args: Record<string, unknown>): string {
+  return createHash('sha256')
+    .update(JSON.stringify([action, args]))
+    .digest('hex')
+}
+
+// Key order never changes what an attempt is.
+export function stableJson(value: unknown): string {
+  if (Array.isArray(value)) {
+    return `[${value.map(stableJson).join(',')}]`
+  }
+  if (value && typeof value === 'object') {
+    const entries = Object.entries(value as Record<string, unknown>).toSorted(([a], [b]) =>
+      a < b ? -1 : 1
+    )
+    return `{${entries.map(([k, v]) => `${JSON.stringify(k)}:${stableJson(v)}`).join(',')}}`
+  }
+  return JSON.stringify(value) ?? 'null'
+}
 
 export function definitionOf(
   deps: Pick<PowersDeps, 'definitions'>,
@@ -50,57 +72,104 @@ export function proposalProblem(
     : `"${def.name}" doesn't have the ${entry.power} power, so it can't propose ${entry.name}`
 }
 
-function outcomeOf(output: string | null): unknown {
+function parsed(output: string | null): Record<string, unknown> | null {
   try {
-    return (JSON.parse(output ?? 'null') as { outcome?: unknown } | null)?.outcome
+    const value: unknown = JSON.parse(output ?? 'null')
+    return value && typeof value === 'object' ? (value as Record<string, unknown>) : null
   } catch {
     return null
   }
 }
 
-// Whether Pilot itself wrote this card to ask about its action (a run lacked the power): that ask is an
-// action_runs row under the card, refused with the outcome `asked` (other refusals are `failed`).
-function askedByPilot(store: PilotStore, cardId: string, action: string): boolean {
-  return store.actions
-    .forInboxItem(cardId)
-    .some((r) => r.status === 'refused' && r.action === action && outcomeOf(r.output) === 'asked')
+// Whether Pilot itself wrote this card's current args: it asked about the action (a run lacked the power;
+// that ask is a row under the card refused with the outcome `asked`), and the card's args are the ones it
+// asked with or ones its own refresh produced since. Args changed any other way lose that.
+function askedByPilot(store: PilotStore, card: InboxItemRow): boolean {
+  const action = card.action ?? ''
+  const rows = store.actions.forInboxItem(card.id).filter((r) => r.action === action)
+  const asked = rows.filter((r) => r.status === 'refused' && parsed(r.output)?.outcome === 'asked')
+  const refreshed = rows
+    .filter((r) => r.phase === 'refresh' && r.status === 'done')
+    .map((r) => parsed(r.output)?.args)
+    .filter((a): a is Record<string, unknown> => !!a && typeof a === 'object')
+    .map((a) => argsDigest(action, a))
+  const made = new Set([...asked.map((r) => r.digest), ...refreshed])
+  return asked.length > 0 && made.has(argsDigest(action, card.actionArgs ?? {}))
+}
+
+// Parts a person left out, passed the entry's way (post-review's --except), or why they can't be.
+function leaveOut(
+  entry: ActionEntry,
+  card: InboxItemRow,
+  args: Record<string, unknown>,
+  leftOut: string[]
+): { args: Record<string, unknown> } | { problem: string } {
+  if (leftOut.length === 0) {
+    return { args }
+  }
+  if (!entry.exceptArgs) {
+    return { problem: `${entry.name} can't leave parts out` }
+  }
+  const unknown = leftOut.filter((id) => !Object.hasOwn(card.parts, id))
+  if (unknown.length > 0) {
+    return { problem: `Card ${card.id} has no part ${unknown.join(', ')}` }
+  }
+  return { args: entry.exceptArgs(args, leftOut) }
 }
 
 // A stored card is only a claim. Before its approval runs anything, the card must still be waiting, be for
-// this action, run and version, carry args that fit, and either come from an automation that has the power
-// (re-read now: a power removed since takes the card's right to run with it) or be one Pilot asked about.
-export function approvedCardProblem(
+// this action, run and version, not have run already, carry args that fit, and either come from an
+// automation that has the power (re-read now: a power removed since takes the card's right with it) or be
+// one Pilot asked about itself. What runs is the card's own args, less the parts left out.
+export function cardToRun(
   deps: PowersDeps,
   entry: ActionEntry,
-  req: { runId: string | null; digest?: string },
+  req: { runId: string | null; digest: string; leftOut?: string[] },
   id: string
-): string | null {
+): { args: Record<string, unknown> } | { problem: string } {
   const card = deps.store.inbox.get(id)
   if (!card) {
-    return `No inbox item ${id}`
+    return { problem: `No inbox item ${id}` }
   }
   if (card.action !== entry.name) {
-    return `Card ${id} is for ${card.action ?? 'no action'}, not ${entry.name}`
+    return { problem: `Card ${id} is for ${card.action ?? 'no action'}, not ${entry.name}` }
   }
   if (card.runId !== req.runId) {
-    return `Card ${id} belongs to run ${card.runId ?? 'none'}, not ${req.runId ?? 'none'}`
+    return {
+      problem: `Card ${id} belongs to run ${card.runId ?? 'none'}, not ${req.runId ?? 'none'}`
+    }
   }
   if (!WAITING.includes(card.status)) {
-    return `Card ${id} is already ${card.status}`
+    return { problem: `Card ${id} is already ${card.status}` }
   }
-  if (req.digest !== undefined && req.digest !== card.digest) {
-    return `Card ${id} changed since it was approved`
+  if (req.digest !== card.digest) {
+    return { problem: `Card ${id} changed since it was approved` }
   }
-  const bad = entry.checkArgs(card.actionArgs ?? {})
+  const ran = deps.store.actions
+    .forInboxItem(id)
+    .find((r) => r.phase === 'do' && !r.dryRun && (r.status === 'running' || r.status === 'done'))
+  if (ran) {
+    const when = ran.status === 'done' ? 'already ran' : 'is already running'
+    return { problem: `Card ${id}'s action ${when}` }
+  }
+  const stored = card.actionArgs ?? {}
+  const bad = entry.checkArgs(stored)
   if (bad) {
-    return bad
+    return { problem: bad }
   }
   const def = definitionOf(deps, card.automationId)
   if (!def) {
-    return `Card ${id}'s automation "${card.automationId}" isn't loaded; it can't run`
+    return { problem: `Card ${id}'s automation "${card.automationId}" isn't loaded; it can't run` }
   }
-  if (hasPower(entry, def) || askedByPilot(deps.store, id, entry.name)) {
-    return null
+  if (!hasPower(entry, def) && !askedByPilot(deps.store, card)) {
+    return {
+      problem: `"${def.name}" doesn't have ${missingWhat(entry)} and Pilot didn't ask for card ${id}; it can't run`
+    }
   }
-  return `"${def.name}" doesn't have ${missingWhat(entry)} and Pilot didn't ask for card ${id}; it can't run`
+  const out = leaveOut(entry, card, stored, req.leftOut ?? [])
+  if ('problem' in out) {
+    return out
+  }
+  const worse = entry.checkArgs(out.args)
+  return worse ? { problem: worse } : out
 }
