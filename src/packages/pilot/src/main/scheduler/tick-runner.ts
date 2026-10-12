@@ -73,7 +73,8 @@ const ACTED_ON_WHERE: Partial<Record<ItemKind, ReadonlySet<string>>> = {
     'target_branch'
   ]),
   pipeline: new Set(['ref', 'status', 'select', 'source', 'marker_jobs']),
-  worktree: new Set(['has_mr', 'mr_author', 'mr_state', 'branch_owner', 'commits'])
+  worktree: new Set(['has_mr', 'mr_author', 'mr_state', 'branch_owner', 'commits']),
+  linear_ticket: new Set(['assignee', 'state_type', 'team', 'has_branch'])
 }
 
 // Keys a later task implements (Task 2b ruling): until then a file using one fails the tick instead

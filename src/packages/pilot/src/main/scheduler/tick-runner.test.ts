@@ -553,11 +553,16 @@ describe('runTick on keys a later task implements (Task 2b ruling)', () => {
       "items.where.labels isn't supported yet"
     ],
     [
-      'a where key of a kind whose source has not landed',
+      'a linear_ticket where key no source reads',
       {
-        items: { kind: 'linear_ticket', where: { team: 'WEB' }, match: [], customFields: [] }
+        items: {
+          kind: 'linear_ticket',
+          where: { priority: 'urgent' } as never,
+          match: [],
+          customFields: []
+        }
       },
-      "items.where.team isn't supported yet"
+      "items.where.priority isn't supported yet"
     ]
   ])('fails the tick on %s, starting nothing and writing no keys', async (_name, over, error) => {
     const d = deps()

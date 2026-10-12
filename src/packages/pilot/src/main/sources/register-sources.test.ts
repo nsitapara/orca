@@ -11,5 +11,6 @@ describe('registerPilotSources', () => {
       store: {} as PilotStore
     })
     expect(itemSource('worktree').kind).toBe('worktree')
+    expect(itemSource('linear_ticket').kind).toBe('linear_ticket')
   })
 })
