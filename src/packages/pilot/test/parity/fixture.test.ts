@@ -180,6 +180,33 @@ describe('fixtureQuota', () => {
   })
 })
 
+describe('fixtureQuota (Codex)', () => {
+  const reading = (state: Record<string, unknown>, agent: 'claude' | 'codex') =>
+    fixtureQuota({ ...F, state }, agent)
+
+  it("serves Codex's saved raw answer through Task 18's reader", () => {
+    const codex = {
+      ordinaryUsageAllowed: true,
+      rateLimits: {
+        primary: { usedPercent: 40, windowDurationMins: 300, resetsAt: 9_999_999_999 },
+        secondary: { usedPercent: 90, windowDurationMins: 10080, resetsAt: 9_999_999_999 },
+        rateLimitReachedType: null
+      }
+    }
+    expect(reading({ 'quota/codex-rate-limits.json': codex }, 'codex')).toEqual({
+      weekly: 90,
+      session: 40
+    })
+  })
+
+  it('reads an unreadable Codex answer (null) as unknown', () => {
+    expect(reading({ 'quota/codex-rate-limits.json': null }, 'codex')).toEqual({
+      weekly: null,
+      session: null
+    })
+  })
+})
+
 describe('fixtureBusyReads', () => {
   const recorded = (argv: string[], result: unknown) => ({
     argv: ['orca', ...argv, '--json'],

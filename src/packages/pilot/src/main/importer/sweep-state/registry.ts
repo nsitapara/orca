@@ -7,7 +7,11 @@ import type { SweepStateMapper } from './types'
 export const MAPPERS: SweepStateMapper[] = [
   noStateMapper('pull-dev', '01 keeps no state: every run pulls dev again'),
   noStateMapper('docker-prune', '07 keeps no state: prune.sh measures the disk on every run'),
-  agentUsageState
+  agentUsageState,
+  noStateMapper(
+    'merge-dev',
+    '02 keeps no state: its run records stay in the vault, written by the agent'
+  )
 ]
 
 export function sweepStateMapper(

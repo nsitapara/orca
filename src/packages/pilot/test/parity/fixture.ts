@@ -2,6 +2,10 @@ import { readFileSync } from 'node:fs'
 import { EMPTY_PEOPLE } from '../../src/shared/people'
 import { isAbsolute, join } from 'node:path'
 import type { OrcaRuntimeService } from '../../../../main/runtime/orca-runtime'
+import {
+  codexQuotaReading,
+  type CodexRateLimitsResult
+} from '../../src/main/fields/codex-quota-reading'
 import { cachedQuotas, type QuotaReading } from '../../src/main/fields/quota'
 import { runtimeFieldDeps } from '../../src/main/fields/runtime-field-deps'
 import { listBusyTerminals, type BusyReads } from '../../src/main/fields/worktree-busy'
@@ -238,9 +242,14 @@ const UNKNOWN_QUOTA: QuotaReading = { weekly: null, session: null }
 
 // The quota the old sweep read (quota.py), as the case saved it: Claude's `{ weekly, session }` percentages in
 // state `quota/claude.json`, else the case's `quota` field. A case without one has an unknown quota, which lets a
-// job run. Codex reads unknown until Task 37 adds its raw-answer branch.
+// job run. Codex's raw answer is in state `quota/codex-rate-limits.json`.
 export function fixtureQuota(f: ParityFixture, agent: AgentKind): QuotaReading {
   if (agent === 'codex') {
+    // Codex's raw `account/rateLimits/read` answer, as quota.py read it (null: unreadable).
+    if ('quota/codex-rate-limits.json' in f.state) {
+      const raw = f.state['quota/codex-rate-limits.json']
+      return raw ? codexQuotaReading(raw as CodexRateLimitsResult, f.now) : UNKNOWN_QUOTA
+    }
     return f.quota?.codex ?? UNKNOWN_QUOTA
   }
   const saved = (f.state['quota/claude.json'] ?? f.quota?.claude) as
