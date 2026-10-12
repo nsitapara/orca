@@ -26,6 +26,14 @@ if (!def.ok || !people.ok) {
 }
 const DAY = 24 * 60 * 60_000
 
+// The fixture definition, renamed when a test names it.
+function namedDefinition(name: string | undefined) {
+  if (!def.ok) {
+    throw new Error('setup')
+  }
+  return name ? { ...def.definition, name } : def.definition
+}
+
 function setup(dirName = 'Automations', name?: string) {
   const root = mkdtempSync(join(tmpdir(), 'pilot-vault-'))
   const dir = join(root, 'Agent Work', dirName)
@@ -72,9 +80,7 @@ function setup(dirName = 'Automations', name?: string) {
       store,
       now: () => clock,
       dir,
-      definitions: () => [
-        def.ok ? (name ? { ...def.definition, name } : def.definition) : (null as never)
-      ],
+      definitions: () => [namedDefinition(name)],
       log: (m) => logs.push(m)
     })
   const exporter = make()
