@@ -1,7 +1,7 @@
 import type Database from '../../../../../main/sqlite/sync-database'
 import type { InboxAnswer, InboxItemRow, InboxStatus } from '../../shared/api-types'
 import type { DetailsSnapshot } from '../../shared/details'
-import { jsonOrNull, readSnapshot, writeSnapshot } from './store-inbox-details'
+import { jsonOrNull, readCurrentDetails, readSnapshot, writeSnapshot } from './store-inbox-details'
 import { INBOX_ROW_COLUMNS, toItem } from './store-inbox-row'
 
 export type NewInboxItem = Omit<
@@ -205,6 +205,11 @@ export class InboxStore {
   // The Details snapshot of a card's current version, or null when it has no bundle.
   snapshot(id: string): DetailsSnapshot | null {
     return readSnapshot(this.db, id)
+  }
+
+  // The digest and snapshot of the same version, read together (pilot.inbox.details and .image).
+  currentDetails(id: string): { digest: string; snapshot: DetailsSnapshot | null } | null {
+    return readCurrentDetails(this.db, id)
   }
 
   setSnapshot(id: string, snapshot: DetailsSnapshot | null): void {
