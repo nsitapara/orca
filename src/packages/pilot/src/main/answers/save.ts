@@ -37,6 +37,20 @@ function answerText(item: InboxItemRow, params: InboxAnswerParams): string {
   return option.label
 }
 
+// Typed words win over a picked option, so a stale option can't route a different answer; the one exception is
+// text that is exactly the picked option's label (what the page sends for a click).
+function optionKept(item: InboxItemRow, params: InboxAnswerParams): number | null {
+  const typed = oneLine(params.text)
+  if (!typed) {
+    return params.option ?? null
+  }
+  const label = params.option === undefined ? undefined : item.options[params.option]?.label
+  if (label !== undefined && label.trim().toLowerCase() === typed.toLowerCase()) {
+    return params.option ?? null
+  }
+  return null
+}
+
 function clearAnswer(deps: InboxDeps, item: InboxItemRow, at: number): InboxItemRow {
   const patch = { status: 'open' as const, answer: null, answeredAt: null, answeredBy: null }
   deps.store.transaction(() => {
@@ -77,8 +91,7 @@ export function saveAnswer(
   }
   const text = answerText(item, params)
   const at = deps.now()
-  // Typed words win over a picked option, so a stale option can't route a different answer.
-  const option = oneLine(params.text) ? null : (params.option ?? null)
+  const option = optionKept(item, params)
   // Only Pilot on this Mac approves: for any other caller routeFor turns a script route into this re-ask.
   const route = routeFor(item, origin.catalog, { text, option, callerKind })
   if (text && route.kind === 'reask' && route.reason === APPROVE_ON_DESKTOP) {
