@@ -142,7 +142,7 @@ function updateOpen(
 export function addInboxItem(
   deps: InboxDeps,
   params: InboxAddParams,
-  opts: { source?: InboxItemRow['source'] } = {}
+  opts: { source?: InboxItemRow['source']; vaultRef?: string } = {}
 ): InboxAddResult {
   const origin = originOf(deps, params)
   const def = deps.definitions().find((d) => d.id === origin.automationId)
@@ -187,7 +187,7 @@ export function addInboxItem(
     outcome: null,
     createdAt: at,
     source: opts.source ?? 'engine',
-    vaultRef: null
+    vaultRef: opts.vaultRef ?? null
   }
   deps.store.inbox.add(item)
   inboxEvent(

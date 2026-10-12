@@ -55,6 +55,14 @@ export const ANSWERS_COMMAND_SPECS: CommandSpec[] = [
     notes: [
       "From a terminal it hurries only answers that run no action: an approval keeps its 180 s settle unless Apply now is pressed in Pilot's app."
     ]
+  },
+  {
+    path: ['inbox', 'import-vault'],
+    summary:
+      "Import the vault's open cards and saved answers into Pilot's inbox, once (a dry run unless --apply)",
+    usage: 'pilot inbox import-vault [--apply] [--json]',
+    allowedFlags: [...GLOBAL_FLAGS, 'apply'],
+    examples: ['pilot inbox import-vault', 'pilot inbox import-vault --apply']
   }
 ]
 

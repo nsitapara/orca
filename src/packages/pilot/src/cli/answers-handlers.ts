@@ -16,6 +16,8 @@ const ACTION_EXIT: Record<string, number> = {
 }
 // Generous: act.py's run allows 10 min (RUN_TIMEOUT_MS) and the call needs a little more.
 const ACTION_TIMEOUT_MS = 660_000
+// The export asks GitLab for each branch's MR.
+const LONG_IMPORT_MS = 180_000
 
 type ActionReply = { outcome: string; detail: string; link?: string | null }
 
@@ -38,7 +40,29 @@ export function inboxItemLine(
   return [i.id, i.status, i.outcome, i.title].filter(Boolean).join(' · ')
 }
 
+type ImportReport = {
+  applied: boolean
+  imported: number
+  answers: number
+  runs: number
+  skipped: { summary: string; reason: string }[]
+  notes: { id: string; note: string }[]
+}
+
 export const ANSWERS_HANDLERS: Record<string, CommandHandler> = {
+  'inbox import-vault': async ({ flags, client, json }) => {
+    const params = { apply: flags.get('apply') === true, ...bindingFromEnv(process.env) }
+    const response = await client.call<ImportReport>('pilot.inbox.importVault', params, {
+      timeoutMs: LONG_IMPORT_MS
+    })
+    printResult(response, json, (r) =>
+      [
+        `${r.applied ? 'Imported' : 'Would import'} ${r.imported} card(s), ${r.answers} with an answer, and ${r.runs} asking session(s).`,
+        ...r.notes.map((n) => `  note ${n.id}: ${n.note}`),
+        ...r.skipped.map((s) => `  skip "${s.summary}": ${s.reason}`)
+      ].join('\n')
+    )
+  },
   'inbox tick': async ({ flags, client, json }) => {
     const params = {
       id: getRequiredStringFlag(flags, 'id'),
