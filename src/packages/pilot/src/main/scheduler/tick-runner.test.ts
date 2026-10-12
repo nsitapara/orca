@@ -638,13 +638,16 @@ describe('runTick v2', () => {
   })
 
   it('fails the tick on an item kind no source lists yet', async () => {
-    const pipelines = {
+    const tickets = {
       ...def,
-      items: { kind: 'pipeline' as const, where: {}, match: [], customFields: [] }
+      items: { kind: 'linear_ticket' as const, where: {}, match: [], customFields: [] }
     }
     const d = deps({ sources: registrySources })
-    const result = await runTick(pipelines, people, d, { dryRun: false })
-    expect(result).toMatchObject({ status: 'failed', error: "Pilot can't list pipelines yet" })
+    const result = await runTick(tickets, people, d, { dryRun: false })
+    expect(result).toMatchObject({
+      status: 'failed',
+      error: "Pilot can't list Linear tickets yet"
+    })
     expect(d.store.lastTick('fix-failed-ci')).toMatchObject({ status: 'failed' })
   })
 
