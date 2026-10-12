@@ -40,6 +40,7 @@ describe('migrate', () => {
       'queue',
       'runs',
       'seen',
+      'step_usage',
       'steps',
       'tick_items',
       'ticks'
@@ -160,9 +161,38 @@ describe('migrate', () => {
     db.exec(
       "INSERT INTO steps (run_id, idx, name, agent, status) VALUES ('r1', 0, 'fix', 'claude', 'done')"
     )
-    migrate(db)
+    migrate(db, 3)
     expect(db.pragma('user_version', { simple: true })).toBe(3)
     expect(firstRow(db, 'SELECT launch_args_json FROM steps')).toEqual({ launch_args_json: null })
+  })
+
+  it('moves a v3 database to v4, keeping its steps and adding the usage table', () => {
+    const db = openDb()
+    migrate(db, 3)
+    db.exec(
+      "INSERT INTO runs (id, automation_id, item_key, item_label, status, started_at) VALUES ('r1', 'a', 'k', 'l', 'done', 1)"
+    )
+    db.exec(
+      "INSERT INTO steps (run_id, idx, name, agent, status) VALUES ('r1', 0, 'fix', 'claude', 'done')"
+    )
+    migrate(db)
+    expect(firstRow(db, 'SELECT run_id, usage_measured_at FROM steps')).toEqual({
+      run_id: 'r1',
+      usage_measured_at: null
+    })
+    expect(columnsOf(db, 'step_usage')).toEqual([
+      'run_id',
+      'idx',
+      'day',
+      'model',
+      'requests',
+      'input',
+      'cache_read',
+      'cache_write',
+      'output',
+      'cost_usd'
+    ])
+    expect(db.pragma('user_version', { simple: true })).toBe(4)
   })
 
   it('does nothing to a database that is already current', () => {

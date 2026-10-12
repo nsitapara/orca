@@ -1,3 +1,4 @@
+import { defaultUsagePaths, measureFinishedSteps, stepUsageReader } from './usage/step-usage'
 import { mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 import type { OrcaRuntimeService } from '../../../../main/runtime/orca-runtime'
@@ -248,6 +249,7 @@ function openPilot(
           log
         })
       : null
+  const readUsage = stepUsageReader(defaultUsagePaths(), now)
   const scheduler = new PilotScheduler({
     now,
     definitions: definitions.current,
@@ -255,6 +257,7 @@ function openPilot(
     lastTickAt: (id) => store.lastRealTick(id)?.startedAt ?? null,
     poll: async () => {
       await wired.poll()
+      await softly('usage', () => measureFinishedSteps(store, readUsage, now, log), log)
       await softly('answers', () => dispatcher?.pass(), log)
       await softly('vault export', () => exporter?.pass(), log)
     },

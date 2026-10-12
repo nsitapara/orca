@@ -1,6 +1,6 @@
 import type Database from '../../../../../main/sqlite/sync-database'
 
-export const PILOT_SCHEMA_VERSION = 3
+export const PILOT_SCHEMA_VERSION = 4
 
 const V1 = `
 CREATE TABLE ticks (id INTEGER PRIMARY KEY AUTOINCREMENT, automation_id TEXT NOT NULL, started_at INTEGER NOT NULL,
@@ -84,8 +84,18 @@ const V3 = `
 ALTER TABLE steps ADD COLUMN launch_args_json TEXT;
 `
 
+// Task 28b: each step's token usage, read once when it ends, by local day and model (usage.py's buckets).
+const V4 = `
+ALTER TABLE steps ADD COLUMN usage_measured_at INTEGER;
+CREATE TABLE step_usage (run_id TEXT NOT NULL, idx INTEGER NOT NULL, day TEXT NOT NULL, model TEXT NOT NULL,
+  requests INTEGER NOT NULL, input INTEGER NOT NULL, cache_read INTEGER NOT NULL, cache_write INTEGER NOT NULL,
+  output INTEGER NOT NULL, cost_usd REAL, PRIMARY KEY (run_id, idx, day, model),
+  FOREIGN KEY (run_id, idx) REFERENCES steps(run_id, idx) ON DELETE CASCADE);
+CREATE INDEX step_usage_by_day ON step_usage (day);
+`
+
 // MIGRATIONS[n - 1] takes a database from version n - 1 to n.
-const MIGRATIONS: readonly string[] = [V1, V2, V3]
+const MIGRATIONS: readonly string[] = [V1, V2, V3, V4]
 
 // Same pattern as Orca's orchestration.db (migrate.ts): user_version + one transaction, all or nothing.
 // `target` lets tests build a database at an older version.

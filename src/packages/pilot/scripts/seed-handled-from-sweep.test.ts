@@ -116,16 +116,16 @@ describe.skipIf(sqlite === undefined)('seedHandled', () => {
   it.each([
     {
       name: 'the database is at another schema version',
-      arrange: (p: Paths) => withDb(p.dbFile, 'PRAGMA user_version = 4'),
-      reason: 'the database is at schema 4'
+      arrange: (p: Paths) => withDb(p.dbFile, 'PRAGMA user_version = 5'),
+      reason: 'the database is at schema 5'
     },
     {
       name: "Pilot's migrations moved past the script",
       arrange: (p: Paths) => {
         p.migrationsFile = join(p.dir, 'migrations.ts')
-        writeFileSync(p.migrationsFile, 'export const PILOT_SCHEMA_VERSION = 4\n')
+        writeFileSync(p.migrationsFile, 'export const PILOT_SCHEMA_VERSION = 5\n')
       },
-      reason: "Pilot's migrations are at schema 4"
+      reason: "Pilot's migrations are at schema 5"
     },
     {
       name: 'handled has other columns',

@@ -1,3 +1,4 @@
+import { sessionPatch } from './session-pin'
 import type { OrcaRuntimeService } from '../../../../../main/runtime/orca-runtime'
 import { formatDuration } from '../../shared/run/format-duration'
 import type { PilotStore } from '../store/store'
@@ -126,10 +127,8 @@ async function pollStep(
     return
   }
   const session = probe.session(step.paneKey)
-  if (session && session.id !== step.sessionId) {
-    const patch = session.transcriptPath
-      ? { sessionId: session.id, transcriptPath: session.transcriptPath }
-      : { sessionId: session.id }
+  const patch = sessionPatch(step, session)
+  if (patch) {
     store.runs.updateStep(step.runId, step.idx, patch)
   }
   const state = await probe.status(handle, step.paneKey, step.startedAt)
