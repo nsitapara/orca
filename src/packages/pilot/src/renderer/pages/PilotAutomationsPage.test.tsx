@@ -1,7 +1,8 @@
 // @vitest-environment happy-dom
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { AutomationListPayload, PilotStatus } from '../../shared/api-types'
+import { setPilotAutomationsView } from './automations-view'
 import { detail, summary } from './fixtures'
 
 const pilotRpc = vi.fn()
@@ -68,12 +69,14 @@ describe('PilotAutomationsPage', () => {
     expect(await screen.findByText('No ticks yet.')).toBeTruthy()
   })
 
-  it('switches to Waiting on you and back', async () => {
+  it('shows no Waiting on you tab; the sub-view renders it', async () => {
     serve(list)
     render(<PilotAutomationsPage />)
-    fireEvent.click(screen.getByRole('button', { name: /Waiting on you/ }))
-    expect(await screen.findByText(/Nothing waiting on/)).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: 'Automations' }))
+    await screen.findByRole('button', { name: /Fix failed CI/ })
+    expect(screen.queryByText('Waiting on you')).toBeNull()
+    act(() => setPilotAutomationsView('waiting'))
+    expect(await screen.findByRole('heading', { name: 'Waiting on you' })).toBeTruthy()
+    act(() => setPilotAutomationsView('automations'))
     expect(await screen.findByRole('button', { name: /Fix failed CI/ })).toBeTruthy()
   })
 
