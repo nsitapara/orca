@@ -8,6 +8,7 @@ import {
   assertScratch,
   automationFiles,
   checkAutomations,
+  detailsLine,
   dryRunLine,
   missingUnattendedFlags,
   parityRows,
@@ -175,6 +176,17 @@ describe('renderSummary', () => {
     expect(md).toContain('**Before you switch them on (Task 50)**')
   })
 
+  it('prints the card details line right after the parity line', () => {
+    const md = renderSummary({
+      stamp: 's',
+      sha: 'x',
+      rows: [rows[0]],
+      parity: [],
+      cardDetails: 'Card details: 0 open cards, 0 with a Details bundle, 0 imported cards.'
+    })
+    expect(md).toContain('Parity tests: none ran.\n\nCard details: 0 open cards')
+  })
+
   it('says None when nothing is wrong', () => {
     const md = renderSummary({
       stamp: 's',
@@ -184,6 +196,47 @@ describe('renderSummary', () => {
     })
     expect(md).toContain('Parity tests: 1 file, all passing.')
     expect(md).toContain('**Problems**\n- None.')
+  })
+})
+
+describe('detailsLine', () => {
+  const LEGACY = 'Details bundle: /vault/Automations/ci/b/details/r/F2.json'
+  const card = (over: Record<string, unknown>) => ({
+    source: 'engine',
+    details: null,
+    detailsMd: null,
+    ...over
+  })
+
+  it('counts the open cards, those with a bundle, and imports still pointing at a vault bundle', () => {
+    const items = [
+      card({ details: { path: '/x.json' } }),
+      card({ source: 'import', detailsMd: LEGACY }),
+      card({ detailsMd: 'plain notes' })
+    ]
+    expect(detailsLine({ items })).toBe(
+      'Card details: 3 open cards, 1 with a Details bundle, 1 imported cards still pointing at a vault bundle (re-run "Import open vault cards" in Pilot\'s window).'
+    )
+  })
+
+  it('reads an empty inbox', () => {
+    expect(detailsLine({ items: [] })).toMatch(
+      /^Card details: 0 open cards, 0 with a Details bundle, 0 imported/
+    )
+  })
+
+  it('does not count an engine card whose notes start the same way, or an import that has a bundle', () => {
+    const items = [
+      card({ detailsMd: LEGACY }),
+      card({ source: 'import', details: { path: '/x.json' }, detailsMd: LEGACY })
+    ]
+    expect(detailsLine({ items })).toContain('1 with a Details bundle, 0 imported')
+  })
+
+  it('says why the inbox could not be listed', () => {
+    expect(detailsLine(null, 'Pilot is not running\nmore')).toBe(
+      "Card details: couldn't list the inbox (Pilot is not running)"
+    )
   })
 })
 

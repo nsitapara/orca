@@ -223,6 +223,26 @@ function parityLine(parity) {
   return `Parity tests: ${files}, ${failed} failing.`
 }
 
+const VAULT_BUNDLE_NOTE = 'Details bundle: '
+
+// How many open cards carry a Details bundle, and how many imported ones still only point at a vault bundle.
+// Read from `inbox list --json`, which is GET-only: nothing is added or changed.
+export function detailsLine(listPayload, failure = '') {
+  if (!listPayload || !Array.isArray(listPayload.items)) {
+    return `Card details: couldn't list the inbox (${firstLine(failure) || 'no answer from Pilot'})`
+  }
+  const items = listPayload.items
+  const withBundle = items.filter((item) => item.details).length
+  const legacy = items.filter(
+    (item) =>
+      item.source === 'import' &&
+      !item.details &&
+      typeof item.detailsMd === 'string' &&
+      item.detailsMd.startsWith(VAULT_BUNDLE_NOTE)
+  ).length
+  return `Card details: ${items.length} open cards, ${withBundle} with a Details bundle, ${legacy} imported cards still pointing at a vault bundle (re-run "Import open vault cards" in Pilot's window).`
+}
+
 function problemLines(rows, parity) {
   const lines = [
     ...rows.flatMap((r) => r.problems.map((p) => `- ${r.id}: ${p}`)),
@@ -231,7 +251,7 @@ function problemLines(rows, parity) {
   return lines.length > 0 ? lines : ['- None.']
 }
 
-export function renderSummary({ stamp, sha, rows, parity }) {
+export function renderSummary({ stamp, sha, rows, parity, cardDetails }) {
   const ready = rows.filter((r) => r.valid && r.problems.length === 0).length
   return [
     `## ${stamp} Go-live readiness check · ${ready} of ${rows.length} automations ready`,
@@ -246,6 +266,7 @@ export function renderSummary({ stamp, sha, rows, parity }) {
     '',
     parityLine(parity),
     '',
+    ...(cardDetails ? [cardDetails, ''] : []),
     '| Parity test | Passed | Failed |',
     '|---|---:|---:|',
     ...parity.map((p) => `| ${p.file} | ${p.passed} | ${p.failed} |`),
@@ -301,8 +322,15 @@ function main(argv) {
   const commands = agentCommands(settingsFromData(options.data))
   const rows = checkAutomations({ files: automationFiles(options.dirs), call, commands })
   const report = options.parityJson ? parseJson(readFileSync(options.parityJson, 'utf8')) : null
+  const listed = call(['inbox', 'list', '--json'])
+  const cardDetails = detailsLine(
+    listed.code === 0 ? parseJson(listed.stdout)?.result : null,
+    listed.stderr || listed.stdout
+  )
   const sha = run('git', ['rev-parse', '--short', 'HEAD']).stdout.trim()
-  console.log(renderSummary({ stamp: stampNow(), sha, rows, parity: parityRows(report) }))
+  console.log(
+    renderSummary({ stamp: stampNow(), sha, rows, parity: parityRows(report), cardDetails })
+  )
   return 0
 }
 
