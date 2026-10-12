@@ -3,10 +3,13 @@ import type { InboxItemRow } from '../../../shared/api-types'
 import type { Section } from '../../../shared/inbox-groups'
 import { ageLabel, jobCode, KIND_LABEL } from './answer-text'
 import { kindChipClass } from './chips'
+import { ALL } from './InboxHeader'
 
 // The left list: the same sections, in the same order, as the cards.
 export function CardList({
   sections,
+  total,
+  group,
   selected,
   names,
   now,
@@ -14,6 +17,8 @@ export function CardList({
   onSelect
 }: {
   sections: Section[]
+  total: number
+  group: string
   selected: string | null
   names: Map<string, string>
   now: number
@@ -23,14 +28,30 @@ export function CardList({
   return (
     <nav
       aria-label="Cards"
-      className="sticky top-3 flex max-h-[calc(100vh-6rem)] min-w-0 flex-[0_1_250px] flex-col gap-0.5 overflow-y-auto scrollbar-sleek"
+      className="sticky top-3 z-20 flex max-h-[calc(100vh-6rem)] min-w-0 flex-[0_1_250px] flex-col gap-0.5 self-start overflow-y-auto bg-background scrollbar-sleek"
     >
+      <button
+        type="button"
+        aria-pressed={group === ALL}
+        onClick={() => onGroup(ALL)}
+        className={cn(
+          'truncate px-2 pt-1 pb-1 text-left font-mono text-[11.5px] font-semibold hover:text-foreground',
+          group === ALL ? 'text-foreground' : 'text-muted-foreground'
+        )}
+      >
+        All · {total}
+      </button>
       {sections.map((s) => (
         <div key={s.group.key} className="flex flex-col gap-0.5">
           <button
             type="button"
+            aria-pressed={group === s.group.key}
+            title={s.group.label}
             onClick={() => onGroup(s.group.key)}
-            className="truncate px-2 pt-2.5 pb-1 text-left font-mono text-[11.5px] font-semibold text-muted-foreground hover:text-foreground"
+            className={cn(
+              'truncate px-2 pt-2.5 pb-1 text-left font-mono text-[11.5px] font-semibold hover:text-foreground',
+              group === s.group.key ? 'text-foreground' : 'text-muted-foreground'
+            )}
           >
             {s.group.label} · {s.items.length}
           </button>

@@ -4,14 +4,19 @@ import type { InboxItemRow } from '../../../shared/api-types'
 import { groupItems, type Section } from '../../../shared/inbox-groups'
 import { waitingCount } from './answer-text'
 import { CardList } from './CardList'
+import { FilterBadges } from './FilterBadges'
 import { setAllDetailsOpen, useAllDetailsOpen } from './details-open'
 import { ALL, InboxHeader } from './InboxHeader'
 import { InboxCard } from './InboxCard'
 import { ImportNotice } from './ImportNotice'
 import { InboxStyle } from './inbox-style'
 import { UpNextPanel } from './UpNextPanel'
+import { useElementWidth } from './use-element-width'
 import { useListOpen } from './use-list-open'
 import { useWaiting } from './use-waiting'
+
+// The page's own width from which the card list sits beside the cards.
+const WIDE_PX = 960
 
 function withError(
   errors: Record<string, string>,
@@ -24,7 +29,7 @@ function withError(
 
 function SectionHeading({ section }: { section: Section }): React.JSX.Element {
   return (
-    <h2 className="sticky top-0 z-10 bg-background py-1 font-mono text-xs font-semibold text-muted-foreground">
+    <h2 className="sticky top-0 z-20 -mx-5 border-b border-border bg-background px-5 py-1.5 font-mono text-xs font-semibold text-muted-foreground">
       <span className="text-foreground">{section.group.label}</span> · {section.items.length}
     </h2>
   )
@@ -35,6 +40,7 @@ export function InboxPage(): React.JSX.Element {
   const [group, setGroup] = useState<string>(ALL)
   const [selected, setSelected] = useState<string | null>(null)
   const [listOpen, toggleList] = useListOpen()
+  const [rootRef, width] = useElementWidth()
   const { inbox, queue, error, loadedAt, save, applyNow, reload } = useWaiting(viewer)
   // Save errors are kept here, by card id: a card remounts as a new version on every reload.
   const [errors, setErrors] = useState<Record<string, string>>({})
@@ -63,6 +69,9 @@ export function InboxPage(): React.JSX.Element {
     [items]
   )
   const allOpen = useAllDetailsOpen(detailIds)
+  // The list sits beside the cards only on a wide page (measured on the page, not the window) while it is open.
+  const wide = width === null || width >= WIDE_PX
+  const showList = wide && listOpen
   const viewerName = people.find((p) => p.id === viewer)?.name.split(' ')[0] ?? 'you'
   const select = (item: InboxItemRow) => {
     setSelected(item.id)
@@ -91,7 +100,7 @@ export function InboxPage(): React.JSX.Element {
     </section>
   )
   return (
-    <div className="pilot-inbox flex flex-col gap-3">
+    <div ref={rootRef} className="pilot-inbox flex flex-col gap-3 pt-6">
       <InboxStyle />
       <InboxHeader
         listOpen={listOpen}
@@ -100,21 +109,28 @@ export function InboxPage(): React.JSX.Element {
         people={people}
         viewer={viewer}
         onViewer={setViewer}
-        sections={sections}
-        total={openItems.length}
-        group={activeGroup}
-        onGroup={setGroup}
+        wide={wide}
         canExpand={detailIds.length > 0}
         allOpen={allOpen}
         onToggleAll={() => setAllDetailsOpen(detailIds, !allOpen)}
       />
       {error ? <p className="text-sm text-destructive">{error}</p> : null}
       <ImportNotice onImported={() => void reload()} />
+      {showList ? null : (
+        <FilterBadges
+          sections={sections}
+          total={openItems.length}
+          group={activeGroup}
+          onGroup={setGroup}
+        />
+      )}
       <UpNextPanel entries={queue} onApplyNow={applyNow} />
       <div className="flex flex-wrap items-start gap-4">
-        {listOpen ? (
+        {showList ? (
           <CardList
             sections={sections}
+            total={openItems.length}
+            group={activeGroup}
             selected={selected}
             names={names}
             now={loadedAt}
