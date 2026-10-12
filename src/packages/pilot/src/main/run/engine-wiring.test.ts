@@ -36,7 +36,7 @@ function definitionOf(yaml: string) {
   return parsed.definition
 }
 
-function setup(yaml = YAML) {
+function setup(yaml = YAML, nowMs = 11 * MIN) {
   const store = PilotStore.open(join(mkdtempSync(join(tmpdir(), 'pilot-wiring-')), 'db.sqlite'))
   const def = definitionOf(yaml)
   const runtime = { closeTerminal: vi.fn(async () => ({})) }
@@ -44,7 +44,7 @@ function setup(yaml = YAML) {
   const wired = wireRunEngine({
     runtime: runtime as never,
     store,
-    now: () => 11 * MIN,
+    now: () => nowMs,
     definitionFor: (id) => (id === def.id ? def : null),
     startAgentStep: async (req) => {
       started.push(req)
@@ -208,6 +208,55 @@ describe('wireRunEngine', () => {
       error: 'Timed out after 5m'
     })
     expect(store.runs.get('ans-1')?.status).toBe('timed_out')
+  })
+
+  it("times out a step of a run whose automation isn't loaded after the default hour, so it can't hold its worktree for ever", async () => {
+    const { store, runtime, wired } = setup(YAML, 61 * MIN)
+    store.runs.create({
+      id: 'orphan-1',
+      automationId: 'removed-file',
+      tickId: null,
+      itemKey: 'x',
+      itemLabel: 'x',
+      worktreePath: '/wt2',
+      startedAt: 0
+    })
+    store.runs.createStep({
+      runId: 'orphan-1',
+      idx: 0,
+      name: 'a',
+      agent: 'claude',
+      skill: null,
+      startedAt: 0
+    })
+    store.runs.updateStep('orphan-1', 0, { status: 'running', terminalHandle: 'tx', paneKey: 'px' })
+    await wired.poll()
+    expect(runtime.closeTerminal).toHaveBeenCalledWith('tx')
+    expect(store.runs.steps('orphan-1')[0].status).toBe('timed_out')
+  })
+
+  it('keeps a step of an unloaded automation running before that hour', async () => {
+    const { store, runtime, wired } = setup(YAML, 30 * MIN)
+    store.runs.create({
+      id: 'orphan-1',
+      automationId: 'removed-file',
+      tickId: null,
+      itemKey: 'x',
+      itemLabel: 'x',
+      worktreePath: '/wt2',
+      startedAt: 0
+    })
+    store.runs.createStep({
+      runId: 'orphan-1',
+      idx: 0,
+      name: 'a',
+      agent: 'claude',
+      skill: null,
+      startedAt: 0
+    })
+    store.runs.updateStep('orphan-1', 0, { status: 'running', terminalHandle: 'tx', paneKey: 'px' })
+    await wired.poll()
+    expect(runtime.closeTerminal).not.toHaveBeenCalledWith('tx')
   })
 
   it('leaves a step with no timeout at all running', async () => {

@@ -20,8 +20,12 @@ export function runtimeStepProbe(
   return {
     async status(handle, paneKey, since) {
       const rows = runtime.getAgentStatusRowsForPane(paneKey)
+      // Keyed on when the row's state began, not receivedAt: the hook server re-stamps receivedAt on a
+      // same-state refresh, so an earlier turn's `done` row would otherwise look like this step's.
       const row = newestLiveRow(
-        since === null || since === undefined ? rows : rows.filter((r) => r.receivedAt >= since)
+        since === null || since === undefined
+          ? rows
+          : rows.filter((r) => (r.stateStartedAt ?? r.receivedAt) >= since)
       )
       if (row) {
         return observedState(row)

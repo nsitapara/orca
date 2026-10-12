@@ -3,6 +3,7 @@ import type { AutomationDefinition } from '../../shared/definition/types'
 import type { EngineEnv } from '../engine-env'
 import type { PilotStore } from '../store/store'
 import {
+  ANSWER_STEP_TIMEOUT_MS,
   createRunEngine,
   runStepTimeoutMs,
   stepTimeoutMs,
@@ -99,7 +100,12 @@ export function wireRunEngine(input: EngineWiringInput): WiredEngine {
   const timeoutOf = (step: { runId: string; idx: number }): number | null => {
     const run = store.runs.get(step.runId)
     const def = run ? input.definitionFor(run.automationId) : null
-    return run && def ? runStepTimeoutMs(def, run, step.idx) : null
+    if (run && def) {
+      return runStepTimeoutMs(def, run, step.idx)
+    }
+    // Its definition isn't loaded (the file was removed or no longer parses): the default hour, so the
+    // run can't hold its worktree for ever.
+    return ANSWER_STEP_TIMEOUT_MS
   }
   return {
     engine,

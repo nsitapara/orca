@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { PilotStore } from './store'
-import { ACTION_INTERRUPTED, type NewActionRun } from './store-actions'
+import { ACTION_INTERRUPTED, writerGone, type NewActionRun } from './store-actions'
 
 const attempt = (extra: Partial<NewActionRun> = {}): NewActionRun => ({
   inboxItemId: 'i1',
@@ -23,7 +23,7 @@ describe('ActionRunStore', () => {
       id,
       ...attempt(),
       status: 'running',
-      output: JSON.stringify({ writer: process.pid }),
+      output: expect.stringContaining(`{"writer":${process.pid}`),
       finishedAt: null
     })
     actions.finish(id, 'refused', 'No push power', 12)
@@ -86,5 +86,60 @@ describe('ActionRunStore', () => {
     gone.add(process.pid)
     expect(actions.interruptRunning(20, 25, (pid) => gone.has(pid))).toBe(1)
     expect(actions.get(mine)?.status).toBe('failed')
+  })
+
+  // A recycled pid is a different process: the start identity recorded beside the pid tells them apart.
+  it('records the writer start identity, and hands it to the gone check', () => {
+    const { actions } = PilotStore.open(':memory:')
+    const other = actions.start(
+      attempt({
+        phase: 'do',
+        startedAt: 10,
+        writer: 4242,
+        writerIdentity: 'Mon Oct 5 09:00:00 2026'
+      })
+    )
+    expect(JSON.parse(actions.get(other)!.output!)).toEqual({
+      writer: 4242,
+      identity: 'Mon Oct 5 09:00:00 2026'
+    })
+    const seen: unknown[] = []
+    actions.interruptRunning(20, 25, (pid, identity) => {
+      seen.push([pid, identity])
+      return false
+    })
+    expect(seen).toEqual([[4242, 'Mon Oct 5 09:00:00 2026']])
+  })
+
+  it("records this process's own identity when no writer is named", () => {
+    const { actions } = PilotStore.open(':memory:')
+    const id = actions.start(attempt({ phase: 'do', startedAt: 10 }))
+    expect(JSON.parse(actions.get(id)!.output!).writer).toBe(process.pid)
+  })
+})
+
+describe('writerGone', () => {
+  it.each([
+    [
+      'a live pid started at another time (the pid was reused)',
+      'Mon Oct 5 09:00:00 2026',
+      'Tue Oct 6 10:00:00 2026',
+      true
+    ],
+    [
+      'a live pid with the identity recorded',
+      'Mon Oct 5 09:00:00 2026',
+      'Mon Oct 5 09:00:00 2026',
+      false
+    ],
+    ['a live pid whose identity cannot be read now', 'Mon Oct 5 09:00:00 2026', null, false],
+    [
+      'a live pid recorded without an identity (an older row)',
+      null,
+      'Tue Oct 6 10:00:00 2026',
+      false
+    ]
+  ])('%s', (_name, recorded, now, gone) => {
+    expect(writerGone(process.ppid, recorded, () => now)).toBe(gone)
   })
 })
