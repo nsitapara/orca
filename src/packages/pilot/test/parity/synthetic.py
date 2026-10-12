@@ -228,6 +228,46 @@ def _05():
 CASE_MAKERS.append(_05)
 
 
+def _06():
+    now = 1791747600000  # 12:40 Pacific, 2026-10-11
+
+    def request(iid, *threads, **extra):
+        return mr(iid, reviewers=("alex1craig",), discussions=list(threads), **extra)
+
+    def open_thread(iid):
+        return thread(iid, note())
+
+    clean = lambda iids: [worktree(f"web-{i}", f"web-{i}") for i in iids]  # noqa: E731
+    well = {"weekly": 40, "session": 20}
+    threads = [
+        request(1700, open_thread(1700)),
+        request(1701, thread(1701, note(kind="R-done"))),
+        request(1702, thread(1702, note("nish8"), note(at="15:30"))),
+        request(1703, thread(1703, note(), note("nish8", "15:30"))),
+        request(1704, thread(1704, note(at="17:00", kind="top"))),
+        request(1705, thread(1705, note(kind="top"))),
+        request(1706, thread(1706, note(at="17:00", kind="top", system=True))),
+    ]
+    yield "06", "threads", build("06", "threads", now=now, mrs=threads, worktrees=clean(range(1700, 1707)), loop="mr-feedback",
+                                 quota=well, branch_mrs=True)
+    gates = [request(i, open_thread(i)) for i in range(1710, 1717)]
+    yield "06", "gates", build(
+        "06", "gates", now=now, mrs=gates, loop="mr-feedback", terminals=["term_fb"], quota=well, branch_mrs=True,
+        worktrees=[worktree(f"web-{i}", f"web-{i}", untracked=2 if i == 1712 else 0) for i in range(1711, 1717)],
+        state={"mr-feedback/tabs.json": {"/wt/web-1711": "term_fb"}})
+    quota = [request(1720, open_thread(1720)), request(1721, thread(1721, note(kind="R-done")))]
+    yield "06", "quota-out", build("06", "quota-out", now=now, mrs=quota, worktrees=clean((1720, 1721)), loop="mr-feedback",
+                                   quota={"weekly": 40, "session": 96}, branch_mrs=True)
+    # The sweep tests the open tab before the dirty worktree.
+    busy = request(1730, open_thread(1730))
+    yield "06", "tab-and-dirty", build(
+        "06", "tab-and-dirty", now=now, mrs=[busy], worktrees=[worktree("web-1730", "web-1730", dirty=1)], terminals=["term_fb"],
+        loop="mr-feedback", quota=well, branch_mrs=True, state={"mr-feedback/tabs.json": {"/wt/web-1730": "term_fb"}})
+
+
+CASE_MAKERS.append(_06)
+
+
 def _canon(text):
     """JSON as data, with a fixed key order: formatting is free, but true vs 1 and 1 vs 1.0 are drift."""
     return json.dumps(json.loads(text), sort_keys=True)
