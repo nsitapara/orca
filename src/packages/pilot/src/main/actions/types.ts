@@ -50,3 +50,18 @@ export function actionDone(
 export function actionFailed(detail: string): ActionResult {
   return { outcome: 'failed', detail, link: null, log: null, onYou: false }
 }
+
+// Entries never throw (a crash is a failed result). One that does still ends with a result, so its
+// action_runs row is finished, never left 'running' (which would block its card for ever).
+export async function runSafely(
+  entry: ActionEntry,
+  args: Record<string, unknown>,
+  opts: ActionRunOpts
+): Promise<ActionResult> {
+  try {
+    return await entry.run(args, opts)
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    return actionFailed(`${entry.name} crashed: ${message}`)
+  }
+}

@@ -36,7 +36,8 @@ function setup(over: Partial<PilotHost> = {}, scheduler: unknown = null) {
       loaded: () => loaded,
       reload: () => loaded,
       scheduler: scheduler as never,
-      actions: { entries: () => [], get: () => null }
+      actions: { entries: () => [], get: () => null },
+      dispatcher: null
     },
     ...over
   }

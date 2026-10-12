@@ -221,6 +221,25 @@ describe('dispatchToAgent', () => {
     expect(store.runs.get(`${RUN_ID}-2`)).toMatchObject({ trigger: 'answer', status: 'failed' })
   })
 
+  it("holds job-wide answers while this automation's last answer run still works in the main checkout", async () => {
+    const { store, deps, group } = setup('gone')
+    store.runs.create({
+      id: 'ans-0',
+      automationId: 'ci',
+      tickId: null,
+      itemKey: 'repo:web-platform',
+      itemLabel: 'web-platform',
+      worktreePath: '/main',
+      startedAt: 1,
+      trigger: 'answer'
+    })
+    expect(await dispatchToAgent(deps, { ...group, worktreePath: null })).toEqual({
+      kind: 'held',
+      hold: { holdReason: 'worktree_busy', holdDetail: 'answer run ans-0 is still working there' }
+    })
+    expect(deps.open).not.toHaveBeenCalled()
+  })
+
   it('runs job-wide answers in the main checkout under a per-automation claim', async () => {
     const { store, deps, group } = setup('gone')
     await dispatchToAgent(deps, { ...group, worktreePath: null })

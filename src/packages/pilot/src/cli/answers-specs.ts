@@ -45,6 +45,16 @@ export const ANSWERS_COMMAND_SPECS: CommandSpec[] = [
     usage: 'pilot inbox queue [--person <id>] [--json]',
     allowedFlags: [...GLOBAL_FLAGS, 'person'],
     examples: ['pilot inbox queue --person nish']
+  },
+  {
+    path: ['inbox', 'apply-now'],
+    summary: 'Apply saved answers now, without the 180 s settle (one card, or all)',
+    usage: 'pilot inbox apply-now [--id <id>] [--json]',
+    allowedFlags: [...GLOBAL_FLAGS, 'id'],
+    examples: ['pilot inbox apply-now', 'pilot inbox apply-now --id in_0123456789abcdef'],
+    notes: [
+      "From a terminal it hurries only answers that run no action: an approval keeps its 180 s settle unless Apply now is pressed in Pilot's app."
+    ]
   }
 ]
 

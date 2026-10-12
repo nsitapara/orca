@@ -18,6 +18,14 @@ const ACTION_EXIT: Record<string, number> = {
 const ACTION_TIMEOUT_MS = 660_000
 
 type ActionReply = { outcome: string; detail: string; link?: string | null }
+type DispatchReport = {
+  retired: number
+  ticked: number
+  actions: number
+  agents: number
+  held: number
+  reasked: number
+}
 
 function argsJson(raw: string | undefined): Record<string, unknown> {
   let value: unknown = {}
@@ -72,6 +80,21 @@ export const ANSWERS_HANDLERS: Record<string, CommandHandler> = {
       rows
         .map((r) => `${r.name.padEnd(17)} ${(r.power ?? 'approval').padEnd(14)} ${r.usage}`)
         .join('\n')
+    )
+  },
+  // Applying runs actions and starts agents: as long as `action run` may take.
+  'inbox apply-now': async ({ flags, client, json }) => {
+    const id = getOptionalStringFlag(flags, 'id')
+    const response = await client.call<DispatchReport>(
+      'pilot.answers.applyNow',
+      id ? { ids: [id] } : {},
+      { timeoutMs: ACTION_TIMEOUT_MS }
+    )
+    printResult(
+      response,
+      json,
+      (r) =>
+        `retired ${r.retired} · ticked ${r.ticked} · actions ${r.actions} · agents ${r.agents} · held ${r.held} · re-asked ${r.reasked}`
     )
   },
   'inbox queue': async ({ flags, client, json }) => {

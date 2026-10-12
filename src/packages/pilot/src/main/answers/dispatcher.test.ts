@@ -1,0 +1,418 @@
+import { mkdtempSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { describe, expect, it, vi } from 'vitest'
+import { parseAutomationYaml } from '../../shared/definition/parse'
+import type { InboxAddParams } from '../../shared/inbox-types'
+import { parsePeopleYaml } from '../../shared/people'
+import type { ActionEntry } from '../actions/types'
+import { addInboxItem } from '../inbox/inbox-add'
+import { resolveInboxItem, type InboxDeps } from '../inbox/inbox-service'
+import type { MrBlock } from '../inbox/mr-state'
+import { PilotStore } from '../store/store'
+import { AnswerDispatcher, answerRunEnded, MAX_ATTEMPTS, type DispatcherDeps } from './dispatcher'
+import type { HoldDeps } from './holds'
+import { saveAnswer, SETTLE_MS } from './save'
+
+const def = parseAutomationYaml(
+  'name: Fix CI\nrepo: r\nschedule: manual\nitems: { kind: merge_request }\nsteps: [ { agent: claude, skill: fix-gitlab-ci, prompt: x } ]\npowers: [push]\ninbox: nish\n',
+  '/a/ci.yaml'
+)
+const people = parsePeopleYaml('people:\n  - { id: nish, name: Nish }\n')
+if (!def.ok || !people.ok) {
+  throw new Error('setup')
+}
+const FREE: HoldDeps = {
+  exists: () => true,
+  inFlight: async () => null,
+  activity: async () => null,
+  runsIn: () => []
+}
+const QUESTION: InboxAddParams = {
+  runId: 'run-1',
+  type: 'question',
+  title: 'Which image?',
+  options: ['e2e', 'unit']
+}
+const ACTION: InboxAddParams = {
+  ...QUESTION,
+  type: 'action',
+  title: 'Push?',
+  action: 'push',
+  actionArgs: { argv: ['a'] }
+}
+
+type Over = {
+  holds?: Partial<HoldDeps>
+  block?: MrBlock | null
+  open?: () => Promise<unknown>
+}
+
+function setup(over: Over = {}) {
+  const store = PilotStore.open(join(mkdtempSync(join(tmpdir(), 'pilot-dispatch-')), 'db.sqlite'))
+  store.runs.create({
+    id: 'run-1',
+    automationId: 'ci',
+    tickId: null,
+    itemKey: 'mr:1561',
+    itemLabel: '!1561',
+    worktreePath: '/wt',
+    startedAt: 1
+  })
+  store.runs.createStep({
+    runId: 'run-1',
+    idx: 0,
+    name: 'fix',
+    agent: 'claude',
+    skill: 'fix-gitlab-ci',
+    startedAt: 1
+  })
+  store.runs.updateStep('run-1', 0, { status: 'done', sessionId: 'sess-1' })
+  let clock = 1_000_000
+  let n = 0
+  const inbox: InboxDeps = {
+    store,
+    now: () => clock,
+    definitions: () => [def.ok ? def.definition : (null as never)],
+    people: () => (people.ok ? people.directory : (null as never)),
+    newId: () => `in_${String(++n).padStart(16, '0')}`
+  }
+  const push = {
+    name: 'push',
+    power: 'push',
+    label: 'x',
+    usage: 'x',
+    checkArgs: () => null,
+    describe: async () => 'x',
+    run: vi.fn().mockResolvedValue({
+      outcome: 'done',
+      detail: 'pushed',
+      link: null,
+      log: null,
+      onYou: false
+    })
+  } as ActionEntry
+  const catalog = { entries: () => [push], get: (name: string) => (name === 'push' ? push : null) }
+  const open = vi.fn(
+    over.open ?? (async () => ({ terminalHandle: 'term-2', paneKey: 'p', sessionId: 'sess-2' }))
+  )
+  const holds = { ...FREE, ...over.holds }
+  const deps: DispatcherDeps = {
+    inbox,
+    attempt: { store, now: () => clock, catalog, definitions: inbox.definitions, inbox },
+    // An open MR unless a test says otherwise.
+    retirer: {
+      pass: async () => 0,
+      blockFor: () => ('block' in over ? (over.block ?? null) : { finished: null })
+    },
+    holds: () => holds,
+    agents: {
+      store,
+      now: () => clock,
+      probe: {
+        terminalState: async () => 'gone',
+        transcript: () => ({ size: 1, mtimeMs: clock })
+      },
+      quota: async () => ({ weekly: 1, session: 1 }),
+      open: open as never,
+      send: vi.fn(),
+      mainCheckout: async () => '/main'
+    },
+    log: () => {}
+  }
+  // Approvals come from the desktop app; a paired device answers questions.
+  const answer = (params: InboxAddParams, text: string) => {
+    const { id } = addInboxItem(inbox, params)
+    const callerKind = params.type === 'action' ? 'desktop' : 'paired-device'
+    saveAnswer(
+      inbox,
+      { id: id!, text, digest: store.inbox.get(id!)!.digest },
+      { callerKind, catalog }
+    )
+    return id!
+  }
+  return {
+    store,
+    inbox,
+    open,
+    push,
+    holds,
+    dispatcher: new AnswerDispatcher(deps),
+    answer,
+    settle: () => (clock += SETTLE_MS)
+  }
+}
+
+describe('AnswerDispatcher', () => {
+  it('waits out the 180 s settle, then applies the answer', async () => {
+    const { store, dispatcher, answer, settle } = setup()
+    const id = answer({ ...QUESTION, type: 'default' }, 'keep')
+    await dispatcher.pass()
+    expect(store.inbox.get(id)?.status).toBe('answered')
+    settle()
+    expect(await dispatcher.pass()).toMatchObject({ ticked: 1 })
+    expect(store.inbox.get(id)).toMatchObject({ status: 'done', outcome: 'kept' })
+  })
+
+  it.each<[string, Partial<HoldDeps>, string, string]>([
+    ['the worktree is gone', { exists: () => false }, 'no_worktree', 'no worktree for this branch'],
+    [
+      'a run is working there',
+      { runsIn: () => [{ id: 'review-9' }] },
+      'worktree_busy',
+      'run review-9 is working there'
+    ],
+    [
+      'work is in flight',
+      { inFlight: async () => 'uncommitted changes' },
+      'in_flight',
+      'uncommitted changes'
+    ],
+    [
+      'someone is typing',
+      { activity: async () => ({ typing: true, reason: 'someone is typing in zsh' }) },
+      'typing',
+      'someone is typing in zsh'
+    ]
+  ])(
+    'holds every answer in the worktree while %s',
+    async (_name, holds, holdReason, holdDetail) => {
+      const { store, push, dispatcher, answer, settle } = setup({ holds })
+      const action = answer(ACTION, 'approve')
+      settle()
+      expect(await dispatcher.pass()).toMatchObject({ held: 1, actions: 0 })
+      expect(push.run).not.toHaveBeenCalled()
+      expect(store.queue.forInboxItem(action)).toMatchObject([
+        { state: 'held', holdReason, holdDetail }
+      ])
+    }
+  )
+
+  it.each<[string, MrBlock | null, string]>([
+    [
+      "GitLab can't say whether the MR is finished",
+      { unknown: 'MR state unknown: glab: 502' },
+      'MR state unknown: glab: 502'
+    ],
+    ["the MR's state wasn't read", null, "MR state unknown: it hasn't been read yet"]
+  ])('holds while %s', async (_name, block, holdDetail) => {
+    const { store, dispatcher, answer, settle } = setup({ block })
+    const id = answer(QUESTION, 'e2e')
+    settle()
+    await dispatcher.pass()
+    expect(store.queue.forInboxItem(id)).toMatchObject([
+      { state: 'held', holdReason: 'mr_unknown', holdDetail }
+    ])
+  })
+
+  it('runs an approved action and sends every other answer of the worktree to one session', async () => {
+    const { store, open, push, dispatcher, answer, settle } = setup()
+    const action = answer(ACTION, 'approve')
+    const first = answer(QUESTION, 'e2e')
+    const second = answer({ ...QUESTION, title: 'Retry once?' }, 'yes, once')
+    settle()
+    expect(await dispatcher.pass()).toMatchObject({ actions: 1, agents: 1 })
+    expect(push.run).toHaveBeenCalledTimes(1)
+    expect(store.inbox.get(action)).toMatchObject({ status: 'done', outcome: 'done: pushed' })
+    expect(open).toHaveBeenCalledTimes(1)
+    const prompt = (open.mock.calls[0] as unknown as [{ prompt: string }])[0].prompt
+    expect(prompt).toContain(`[${first}] "Which image?" → e2e`)
+    expect(prompt).toContain(`[${second}] "Retry once?" → yes, once`)
+    expect(store.queue.forInboxItem(first)).toMatchObject([
+      { state: 'dispatched', route: 'fork', targetSessionId: 'sess-2' }
+    ])
+  })
+
+  it('re-asks an approval a paired device gave, running nothing', async () => {
+    const { store, push, inbox, dispatcher, settle } = setup()
+    const { id } = addInboxItem(inbox, ACTION)
+    // Saved before the desktop-only rule, or imported: the stored caller isn't the desktop.
+    store.inbox.update(
+      id!,
+      {
+        status: 'answered',
+        answer: {
+          option: null,
+          text: 'approve',
+          digest: store.inbox.get(id!)!.digest,
+          via: 'device',
+          callerKind: 'paired-device'
+        }
+      },
+      1
+    )
+    store.queue.enqueue(id!, 0, 0)
+    settle()
+    expect(await dispatcher.pass()).toMatchObject({ reasked: 1, actions: 0 })
+    expect(push.run).not.toHaveBeenCalled()
+    expect(store.inbox.get(id!)).toMatchObject({ status: 'open', answer: null })
+  })
+
+  it('acts only on what is still answered: a card ticked, or an answer changed, while the pass was busy', async () => {
+    const s = setup()
+    const action = s.answer(ACTION, 'approve')
+    const question = s.answer(QUESTION, 'e2e')
+    s.settle()
+    // While the action runs, the agent ticks the question itself.
+    vi.mocked(s.push.run).mockImplementationOnce(async () => {
+      resolveInboxItem(s.inbox, question, 'done: answered by hand')
+      return { outcome: 'done', detail: 'pushed', link: null, log: null, onYou: false }
+    })
+    expect(await s.dispatcher.pass()).toMatchObject({ actions: 1, agents: 0 })
+    expect(s.store.inbox.get(action)).toMatchObject({ status: 'done', outcome: 'done: pushed' })
+    expect(s.open).not.toHaveBeenCalled()
+    expect(s.store.inbox.get(question)).toMatchObject({ outcome: 'done: answered by hand' })
+    // An approval changed to Skip while the worktree was being checked is not run.
+    const again = s.answer({ ...ACTION, title: 'Push again?' }, 'approve')
+    s.settle()
+    s.holds.inFlight = async () => {
+      saveAnswer(
+        s.inbox,
+        { id: again, text: 'skip', digest: s.store.inbox.get(again)!.digest },
+        { callerKind: 'desktop', catalog: { get: () => s.push } }
+      )
+      return null
+    }
+    await s.dispatcher.pass()
+    expect(s.push.run).toHaveBeenCalledTimes(1)
+    expect(s.store.inbox.get(again)?.answer?.text).toBe('skip')
+  })
+
+  it(`retries a failed dispatch, then marks it failed after ${MAX_ATTEMPTS} tries`, async () => {
+    const { store, dispatcher, answer, settle } = setup({
+      open: async () => {
+        throw new Error('worktree is gone')
+      }
+    })
+    const id = answer(QUESTION, 'e2e')
+    settle()
+    for (let i = 0; i < MAX_ATTEMPTS; i += 1) {
+      await dispatcher.pass()
+    }
+    expect(store.queue.forInboxItem(id)).toMatchObject([
+      {
+        state: 'failed',
+        attempts: MAX_ATTEMPTS,
+        holdReason: 'retry',
+        holdDetail: 'worktree is gone'
+      }
+    ])
+  })
+
+  it('lets a second caller join the pass already running', async () => {
+    const { dispatcher } = setup()
+    const a = dispatcher.pass()
+    expect(dispatcher.pass()).toBe(a)
+    await a
+  })
+})
+
+describe('AnswerDispatcher.applyNow (apply.py now)', () => {
+  it('skips the settle of the answers it names, then runs a pass', async () => {
+    const { store, open, dispatcher, answer } = setup()
+    const first = answer(QUESTION, 'e2e')
+    const second = answer({ ...QUESTION, title: 'Retry once?' }, 'yes')
+    expect(await dispatcher.applyNow({ ids: [first], approver: false })).toMatchObject({
+      agents: 1
+    })
+    expect(open).toHaveBeenCalledTimes(1)
+    expect(store.queue.forInboxItem(first)).toMatchObject([{ state: 'dispatched' }])
+    expect(store.queue.forInboxItem(second)).toMatchObject([{ state: 'not_ready' }])
+  })
+
+  it("hurries an approval past its settle only for Pilot's desktop app", async () => {
+    const { store, push, dispatcher, answer } = setup()
+    const action = answer(ACTION, 'approve')
+    await dispatcher.applyNow({ approver: false })
+    expect(push.run).not.toHaveBeenCalled()
+    expect(store.queue.forInboxItem(action)).toMatchObject([{ state: 'not_ready' }])
+    expect(await dispatcher.applyNow({ approver: true })).toMatchObject({ actions: 1 })
+    expect(push.run).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('answerRunEnded (G6)', () => {
+  // An answer run that carried one dispatched answer, ended with these outputs and this status.
+  function ended(
+    outputs: Record<string, string>,
+    status: 'done' | 'needs_you' | 'failed' | 'timed_out' = 'done'
+  ) {
+    const s = setup()
+    const id = s.answer(QUESTION, 'e2e')
+    s.store.runs.create({
+      id: 'ans-1',
+      automationId: 'ci',
+      tickId: null,
+      itemKey: 'mr:1561',
+      itemLabel: '!1561',
+      worktreePath: '/wt',
+      startedAt: 1,
+      trigger: 'answer',
+      parentRunId: 'run-1'
+    })
+    s.store.runs.createStep({
+      runId: 'ans-1',
+      idx: 0,
+      name: 'answers',
+      agent: 'claude',
+      skill: 'fix-gitlab-ci',
+      startedAt: 1,
+      kind: 'agent'
+    })
+    s.store.runs.updateStep('ans-1', 0, { status: 'done', outputs })
+    s.store.runs.update('ans-1', { status, finishedAt: 2 })
+    const row = s.store.queue.forInboxItem(id)[0]
+    s.store.queue.update(row.id, { state: 'dispatched', dispatchedRunId: 'ans-1' }, 1)
+    return { ...s, id, row, end: () => answerRunEnded(s.store, s.store.runs.get('ans-1')!) }
+  }
+
+  it.each<[string, Record<string, string>, object]>([
+    [
+      'reports done',
+      { outcome: 'set the e2e image', item_status: 'done' },
+      { status: 'done', outcome: 'set the e2e image' }
+    ],
+    ['reports nothing', {}, { status: 'done' }],
+    [
+      'finds the card stale',
+      { outcome: 'head moved', item_status: 'stale' },
+      { status: 'stale', outcome: 'head moved' }
+    ],
+    [
+      'leaves it open with a question',
+      { item_status: 'open', reply: 'Which image:\n- [ ] e2e or unit?' },
+      { status: 'open', replies: ['Which image: - [ ] e2e or unit?'] }
+    ]
+  ])('a run that %s', (_name, outputs, expected) => {
+    const { store, id, end } = ended(outputs)
+    end()
+    expect(store.inbox.get(id)).toMatchObject(expected)
+  })
+
+  it('closes the card of a run that ended waiting on new cards it filed', () => {
+    const { store, id, end } = ended({ outcome: 'asked again' }, 'needs_you')
+    end()
+    expect(store.inbox.get(id)).toMatchObject({ status: 'done', outcome: 'asked again' })
+  })
+
+  it('leaves a card the agent already ticked alone', () => {
+    const { store, id, end } = ended({ outcome: 'later words', item_status: 'done' })
+    store.inbox.update(id, { status: 'done', outcome: 'done: pushed' }, 5)
+    end()
+    expect(store.inbox.get(id)).toMatchObject({ status: 'done', outcome: 'done: pushed' })
+  })
+
+  it.each(['failed', 'timed_out'] as const)(
+    'queues the answer for another try when the run %s',
+    (status) => {
+      const { store, id, row, end } = ended({}, status)
+      end()
+      expect(store.inbox.get(id)?.status).toBe('answered')
+      expect(store.queue.get(row.id)).toMatchObject({
+        state: 'held',
+        holdReason: 'retry',
+        attempts: 1
+      })
+    }
+  )
+})

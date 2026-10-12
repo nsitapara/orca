@@ -6,6 +6,8 @@ import { getAppEnvironment } from '../../../../shared/app-environment'
 import type { PilotStatus } from '../shared/api-types'
 import type { AgentKind } from '../shared/definition/types'
 import { actBridge } from './actions/act-bridge'
+import { answerRunEnded, type AnswerDispatcher } from './answers/dispatcher'
+import { wireAnswerDispatcher } from './answers/wiring'
 import { buildActionCatalog } from './actions/catalog'
 import type { ActionCatalog } from './actions/types'
 import { definitionIo, liveDefinitions } from './definitions/live'
@@ -48,6 +50,8 @@ export type PilotContext = {
   scheduler: PilotScheduler
   // Every outside effect goes through it (contract §10).
   actions: ActionCatalog
+  // Saved answers' dispatcher (Task 24c); null in a process that doesn't run the scheduler.
+  dispatcher: AnswerDispatcher | null
 }
 export type PilotServices = { stop: () => void; context: PilotContext }
 // What pilot.status reads. It is registered before anything opens, so status still answers (with
@@ -156,7 +160,9 @@ function openPilot(
         })
     },
     probe: runtimeStepProbe(runtime, relist),
-    log
+    log,
+    // An answer run's outputs reach the cards it was sent for (G6).
+    onRunEnd: (run) => answerRunEnded(store, run)
   })
   const tickDeps: TickDeps = {
     store,
@@ -191,6 +197,21 @@ function openPilot(
     : null
   // Built once; nothing runs until an action is attempted.
   const actions = buildActionCatalog({ act: actBridge(), linear: createLinearWriter(runtime) })
+  // Only the process that runs the scheduler applies answers, like the vault export.
+  const dispatcher =
+    (options.schedulerEnabled ?? false)
+      ? wireAnswerDispatcher({
+          runtime,
+          store,
+          now,
+          definitions: () => definitions.current().definitions,
+          people: () => definitions.current().people,
+          actions,
+          quotas,
+          facts: fieldDeps,
+          log
+        })
+      : null
   const scheduler = new PilotScheduler({
     now,
     definitions: definitions.current,
@@ -198,6 +219,7 @@ function openPilot(
     lastTickAt: (id) => store.lastRealTick(id)?.startedAt ?? null,
     poll: async () => {
       await wired.poll()
+      await softly('answers', () => dispatcher?.pass(), log)
       await softly('vault export', () => exporter?.pass(), log)
     },
     reposListed: (repos) => reposListed(runtime, repos),
@@ -210,6 +232,10 @@ function openPilot(
   // The attach hooks decide (pilotSchedulerEnabled); a caller that doesn't say gets no scheduler.
   if (options.schedulerEnabled ?? false) {
     sweepStaleStarts(store, now, log)
+    const interrupted = store.actions.interruptRunning(now(), now())
+    if (interrupted > 0) {
+      log(`[pilot] store: ${interrupted} action(s) a stop interrupted marked failed`)
+    }
     scheduler.start()
   } else {
     log(`[pilot] scheduler off in ${host.processKind} (PILOT_SCHEDULER=on runs it here)`)
@@ -221,7 +247,8 @@ function openPilot(
     loaded: () => withRepoProblems(definitions.current()),
     reload: () => withRepoProblems(definitions.reload()),
     scheduler,
-    actions
+    actions,
+    dispatcher
   }
 }
 

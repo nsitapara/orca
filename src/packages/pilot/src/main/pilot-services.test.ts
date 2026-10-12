@@ -116,6 +116,29 @@ describe('startPilotServices', () => {
     on.stop()
   })
 
+  // Group 22 note: a 'running' card action left by a crash would block its card for ever.
+  it('marks actions a stop left running as failed when the scheduler starts', () => {
+    const seed = PilotStore.open(join(userData, 'pilot-automations.db'))
+    const left = seed.actions.start({
+      inboxItemId: 'in_1',
+      runId: null,
+      action: 'push',
+      args: {},
+      digest: 'd',
+      phase: 'do',
+      dryRun: false,
+      startedAt: 1
+    })
+    seed.close()
+    const off = startPilotServices(runtime, 'orcad')
+    expect(off.context.store.actions.get(left)?.status).toBe('running')
+    off.stop()
+    const on = startPilotServices(runtime, 'orcad', { schedulerEnabled: true })
+    expect(on.context.store.actions.get(left)?.status).toBe('failed')
+    expect(logs).toContain('[pilot] store: 1 action(s) a stop interrupted marked failed')
+    on.stop()
+  })
+
   it('closes interrupted ticks and prunes old ones when Pilot starts', () => {
     const seed = PilotStore.open(join(userData, 'pilot-automations.db'))
     const stuck = seed.startTick('ci', false, 0)
