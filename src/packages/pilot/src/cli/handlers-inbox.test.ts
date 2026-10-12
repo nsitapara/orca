@@ -257,7 +257,13 @@ describe('pilot inbox list', () => {
       source: 'engine',
       vaultRef: null
     }
-    const payload: InboxListPayload = { items: [item], people: [], groups: [], automations: [] }
+    const payload: InboxListPayload = {
+      items: [item],
+      runLines: {},
+      people: [],
+      groups: [],
+      automations: []
+    }
     const { context, call } = contextFor(['inbox', 'list', '--person', 'nish'], payload)
     const log = vi.spyOn(console, 'log').mockImplementation(() => {})
     await INBOX_HANDLERS['inbox list'](context)

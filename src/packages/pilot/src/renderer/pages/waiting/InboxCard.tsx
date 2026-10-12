@@ -179,15 +179,31 @@ function Details({ markdown }: { markdown: string | null }): React.JSX.Element {
   )
 }
 
+// What approving an action card runs, as Pilot wrote it from the stored card (never the agent's words).
+function RunLine({ line }: { line: string | null }): React.JSX.Element | null {
+  if (!line) {
+    return null
+  }
+  return (
+    <p className="text-sm">
+      <span className="text-muted-foreground">Run:</span>{' '}
+      <code className="font-mono text-xs break-all">{line}</code>
+    </p>
+  )
+}
+
 export function InboxCard({
   item,
   automationName,
+  runLine,
   queued,
   error,
   onSave
 }: {
   item: InboxItemRow
   automationName: string
+  // An action card's Run line (InboxListPayload.runLines); null on any other card.
+  runLine: string | null
   queued: QueueEntry | null
   // Why the last save failed; held by the page so it survives the card remounting as a new version.
   error: string | null
@@ -211,6 +227,7 @@ export function InboxCard({
               <span className="text-muted-foreground">Suggested:</span> {item.suggested}
             </p>
           ) : null}
+          <RunLine line={runLine} />
           {item.replies.map((r, i) => (
             <p key={i} className="text-sm">
               Agent asked: {r}

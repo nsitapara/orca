@@ -51,6 +51,7 @@ export function WaitingOnYouPage(): React.JSX.Element {
       key={`${i.id}@${i.version}`}
       item={i}
       automationName={names.get(i.automationId) ?? i.automationId}
+      runLine={inbox?.runLines[i.id] ?? null}
       queued={queue.find((q) => q.itemId === i.id) ?? null}
       error={errors[i.id] ?? null}
       onSave={async (answer) => {

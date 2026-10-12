@@ -34,6 +34,8 @@ export type InboxAddResult = { id: string | null; existing: boolean; refused: st
 export type InboxListParams = { person?: string; statuses?: readonly InboxStatus[] }
 export type InboxListPayload = {
   items: InboxItemRow[]
+  // An action card's Run line by card id: what approving it runs, written by Pilot from the stored card.
+  runLines: Record<string, string>
   people: { id: string; name: string }[]
   groups: { id: string; name: string; members: string[] }[]
   automations: { id: string; name: string }[]
