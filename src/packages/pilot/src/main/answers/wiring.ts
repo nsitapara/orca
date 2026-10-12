@@ -8,6 +8,7 @@ import { resolveRepoPath } from '../fields/runtime-facts'
 import type { WorktreeFactDeps } from '../fields/worktree-facts'
 import type { InboxDeps } from '../inbox/inbox-service'
 import { InboxRetirer } from '../inbox/retire'
+import { cancelUnstartedRun } from '../run/ask-first'
 import { openAgentTerminal, runtimeSessionTerminals } from '../run/launch'
 import { glabApiForRepo } from '../sources/gitlab-api'
 import type { PilotStore } from '../store/store'
@@ -41,7 +42,8 @@ export function wireAnswerDispatcher(w: AnswerWiring): AnswerDispatcher {
     definitions: w.definitions,
     people: w.people,
     knownAction: (name) => w.actions.get(name) !== null,
-    actionArgsProblem: (name, args) => w.actions.get(name)?.checkArgs(args) ?? null
+    actionArgsProblem: (name, args) => w.actions.get(name)?.checkArgs(args) ?? null,
+    onResolved: (item) => cancelUnstartedRun(store, item, now())
   }
   const retirer = new InboxRetirer({
     inbox,

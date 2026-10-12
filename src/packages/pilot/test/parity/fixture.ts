@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs'
+import { EMPTY_PEOPLE } from '../../src/shared/people'
 import { isAbsolute, join } from 'node:path'
 import type { OrcaRuntimeService } from '../../../../main/runtime/orca-runtime'
 import { cachedQuotas, type QuotaReading } from '../../src/main/fields/quota'
@@ -325,6 +326,7 @@ export function fixtureTickDeps(f: ParityFixture, store: PilotStore): TickDeps {
       reads: () => fixtureBusyReads(f),
       terminalAlive: async (handle) => connectedHandles(f).has(handle)
     },
+    ask: { store, now, inbox: { store, now, definitions: () => [], people: () => EMPTY_PEOPLE } },
     launch: async () => {
       throw new Error('parity: a dry run never launches')
     }

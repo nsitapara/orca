@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest'
 import type { OrcaRuntimeService } from '../../../../../main/runtime/orca-runtime'
 import { testDefinition, testStep } from '../../shared/definition/__fixtures__/definition'
 import type { AutomationDefinition } from '../../shared/definition/types'
-import { EMPTY_PEOPLE } from '../../shared/people'
+import { EMPTY_PEOPLE, parsePeopleYaml } from '../../shared/people'
 import { fakeFieldDeps, testItem } from '../fields/__fixtures__/field-deps'
 import type { FieldEngineDeps } from '../fields/engine'
 import type { WorktreeInfo } from '../fields/worktree-facts'
@@ -81,6 +81,11 @@ function deps(overrides: Partial<TickDeps> = {}): TickDeps & { launched: string[
     resolveRepo: async () => ({ name: 'web-platform', id: 'r', path: '/repo', base: 'origin/dev' }),
     sources: sourcesWith(),
     fields: fieldsWith(),
+    ask: {
+      store,
+      now: () => 0,
+      inbox: { store, now: () => 0, definitions: () => [], people: () => EMPTY_PEOPLE }
+    },
     launch: async (req) => {
       launched.push(req.decision.key)
       return { terminalHandle: `term_${req.decision.key}`, paneKey: 'tab:leaf' }
@@ -540,13 +545,59 @@ const whereOf = (where: Record<string, unknown>) => ({
   items: { kind: 'merge_request' as const, where, match: [], customFields: [] }
 })
 
+describe('runTick with start: ask_first (Task 25)', () => {
+  const askDef: AutomationDefinition = {
+    ...def,
+    start: 'ask_first',
+    askFirst: { title: 'Fix !{mr.iid}?', context: '', options: [] },
+    inbox: 'nish'
+  }
+  const asking = parsePeopleYaml('people:\n  - { id: nish, name: Nish }\n')
+
+  it('asks first: a card and an asking run per item, the keys handled, nothing launched', async () => {
+    const d = deps()
+    if (!asking.ok) {
+      throw new Error('setup')
+    }
+    const directory = asking.directory
+    d.ask.inbox.definitions = () => [askDef]
+    d.ask.inbox.people = () => directory
+    const result = await runTick(askDef, directory, d, { dryRun: false })
+    expect(result.status).toBe('ok')
+    expect(d.launched).toEqual([])
+    expect(
+      d.store.runs.forTick(result.tickId).map((r) => [r.itemKey, r.status, r.trigger])
+    ).toEqual([
+      ['mr:1561', 'asking', 'ask_first'],
+      ['mr:1574', 'asking', 'ask_first']
+    ])
+    expect(
+      d.store.inbox
+        .list({ automationId: 'fix-failed-ci' })
+        .map((i) => [i.title, i.action])
+        .toSorted()
+    ).toEqual([
+      ['Fix !1561?', 'start_run'],
+      ['Fix !1574?', 'start_run']
+    ])
+    expect(d.store.handledKeys('fix-failed-ci')).toEqual(new Set(['1561:1561', '1574:1574']))
+    expect(d.store.tickItems(result.tickId).map((i) => [i.verdict, i.runId])).toEqual([
+      ['asked', `${makeRunId('fix-failed-ci', d.now(), 1, result.tickId)}-ask`],
+      ['asked', `${makeRunId('fix-failed-ci', d.now(), 2, result.tickId)}-ask`]
+    ])
+  })
+
+  it('files nothing on a dry run', async () => {
+    const d = deps()
+    const result = await runTick(askDef, people, d, { dryRun: true })
+    expect(result.decisions.map((x) => x.verdict)).toEqual(['asked', 'asked'])
+    expect(d.store.runs.forTick(result.tickId)).toEqual([])
+    expect(d.store.inbox.list({})).toEqual([])
+  })
+})
+
 describe('runTick on keys a later task implements (Task 2b ruling)', () => {
   it.each<[string, Partial<AutomationDefinition>, string]>([
-    [
-      'start: ask_first',
-      { start: 'ask_first', askFirst: { title: 'Fix !{mr.iid}?', context: '', options: [] } },
-      "start: ask_first isn't supported yet"
-    ],
     [
       'a merge_request where key no source reads',
       whereOf({ labels: ['web'] }),

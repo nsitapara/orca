@@ -1,0 +1,92 @@
+import type { ItemDecision } from '../../shared/api-types'
+import type { AutomationDefinition } from '../../shared/definition/types'
+import type { LaunchRequest } from '../scheduler/tick-runner'
+import type { PilotStore } from '../store/store'
+import { actionDone, actionFailed, type ActionEntry } from './types'
+
+function messageOf(error: unknown): string {
+  return error instanceof Error ? error.message : String(error)
+}
+
+// The decision the run's tick recorded for its item, now `started`: what the engine launches from.
+function decisionOf(
+  store: PilotStore,
+  tickId: number | null,
+  itemKey: string
+): ItemDecision | null {
+  const row = tickId === null ? null : store.tickItems(tickId).find((i) => i.itemKey === itemKey)
+  if (!row) {
+    return null
+  }
+  return {
+    key: row.itemKey,
+    label: row.label,
+    verdict: 'started',
+    reason: row.reason,
+    checks: row.checks,
+    onceKey: '',
+    fields: row.fields
+  }
+}
+
+// Approve on an ask-first card. Power null: the catalog never runs it without a person's approval.
+export function startRunEntry(deps: {
+  store: PilotStore
+  now(): number
+  definitions(): AutomationDefinition[]
+  // RunEngine.startRun (Task 9b).
+  start(req: LaunchRequest): Promise<unknown>
+}): ActionEntry {
+  return {
+    name: 'start_run',
+    power: null,
+    label: 'Start a run that asked first',
+    usage: 'start_run { "run_id" }',
+    checkArgs: (args) => {
+      const only = Object.keys(args).length === 1
+      return only && typeof args.run_id === 'string' && args.run_id !== ''
+        ? null
+        : 'usage: start_run { "run_id" }'
+    },
+    describe: async (args) => `Start run ${String(args.run_id ?? '')}`,
+    run: async (args, { dryRun }) => {
+      const runId = typeof args.run_id === 'string' ? args.run_id : ''
+      if (!runId) {
+        return actionFailed('usage: start_run { "run_id" }')
+      }
+      const run = deps.store.runs.get(runId)
+      if (!run) {
+        return actionFailed(`No run ${runId}`)
+      }
+      if (run.status !== 'asking') {
+        return {
+          outcome: 'stale',
+          detail: `run ${run.id} is ${run.status}`,
+          link: null,
+          log: null,
+          onYou: false
+        }
+      }
+      const definition = deps.definitions().find((d) => d.id === run.automationId)
+      const decision = decisionOf(deps.store, run.tickId, run.itemKey)
+      if (!definition || !decision) {
+        return actionFailed(`Run ${run.id} has no recorded tick to start from`)
+      }
+      if (dryRun) {
+        return actionDone(`would start run ${run.id}`)
+      }
+      deps.store.runs.update(run.id, { status: 'running' })
+      try {
+        await deps.start({ runId: run.id, definition, decision })
+      } catch (error) {
+        deps.store.runs.update(run.id, {
+          status: 'failed',
+          outcome: `Couldn't start: ${messageOf(error)}`,
+          finishedAt: deps.now()
+        })
+        return actionFailed(`Couldn't start run ${run.id}: ${messageOf(error)}`)
+      }
+      return actionDone(`started run ${run.id}`)
+    }
+  }
+}

@@ -9,6 +9,7 @@ import { actBridge } from './actions/act-bridge'
 import { answerRunEnded } from './answers/answer-run-end'
 import type { AnswerDispatcher } from './answers/dispatcher'
 import { wireAnswerDispatcher } from './answers/wiring'
+import { startRunEntry } from './actions/start-run-entry'
 import { buildActionCatalog } from './actions/catalog'
 import type { ActionCatalog } from './actions/types'
 import { definitionIo, liveDefinitions } from './definitions/live'
@@ -24,6 +25,7 @@ import { runShellScript } from './fields/script-runner'
 import { launchAgentStep } from './run/agent-step'
 import { wireRunEngine } from './run/engine-wiring'
 import { pilotStepEnv } from './run/step-launch-plan'
+import { cancelUnstartedRun, runAnswerOf } from './run/ask-first'
 import { runtimeLauncherDeps } from './run/launch'
 import { modeTextFor, readMode } from './run/modes'
 import { sweepStaleStarts } from './run/stale-starts'
@@ -169,7 +171,22 @@ function openPilot(
     probe: runtimeStepProbe(runtime, relist),
     log,
     // An answer run's outputs reach the cards it was sent for (G6).
-    onRunEnd: (run) => answerRunEnded(store, run)
+    onRunEnd: (run) => answerRunEnded(store, run),
+    // {run.answer}: the free text that started an ask-first or answer run.
+    runAnswer: (run) => runAnswerOf(store, run)
+  })
+  // Built once; nothing runs until an action is attempted. start_run reaches the engine lazily.
+  const actions = buildActionCatalog({
+    act: actBridge(),
+    linear: createLinearWriter(runtime),
+    extra: [
+      startRunEntry({
+        store,
+        now,
+        definitions: () => definitions.current().definitions,
+        start: (req) => wired.engine.startRun(req)
+      })
+    ]
   })
   const tickDeps: TickDeps = {
     store,
@@ -187,7 +204,19 @@ function openPilot(
       now
     },
     activity: runtimeActivity(runtime, fieldDeps.terminalAlive),
-    launch: (req) => wired.engine.startRun(req)
+    launch: (req) => wired.engine.startRun(req),
+    // A card closed without starting its run (Skip, stale, obsolete) cancels that run.
+    ask: {
+      store,
+      now,
+      inbox: {
+        store,
+        now,
+        definitions: () => definitions.current().definitions,
+        people: () => definitions.current().people,
+        onResolved: (item) => cancelUnstartedRun(store, item, now())
+      }
+    }
   }
   const repoProblems = new Map<string, RepoProblem>()
   const withRepoProblems = (loaded: LoadedDefinitions): LoadedDefinitions =>
@@ -202,8 +231,6 @@ function openPilot(
         log
       })
     : null
-  // Built once; nothing runs until an action is attempted.
-  const actions = buildActionCatalog({ act: actBridge(), linear: createLinearWriter(runtime) })
   // Only the process that runs the scheduler applies answers, like the vault export.
   const dispatcher =
     (options.schedulerEnabled ?? false)
