@@ -67,6 +67,10 @@ beforeAll(() => {
 const timeout = (): GitRunner => async () => {
   throw Object.assign(new Error('git timed out after 30000ms'), { name: 'GitCommandTimeoutError' })
 }
+// A killed child: node reports the exit code 0 (or the signal) beside `killed`, never git's own 1/128.
+const killedWithCodeZero = (): GitRunner => async () => {
+  throw Object.assign(new Error('git timed out'), { code: 0, killed: true, signal: 'SIGTERM' })
+}
 const spawnFailure = (): GitRunner => async () => {
   throw Object.assign(new Error('spawn git ENOENT'), { code: 'ENOENT' })
 }
@@ -132,7 +136,8 @@ describe('isAncestor fails closed on anything but gits own exit', () => {
 
   it.each([
     ['a timeout', timeout()],
-    ['a spawn error', spawnFailure()]
+    ['a spawn error', spawnFailure()],
+    ['a killed child with numeric code 0', killedWithCodeZero()]
   ])('%s is an error, not a rewrite', async (_name, runner) => {
     await expect(isAncestor(runner, repo, sha.own1, 'HEAD')).rejects.toThrow()
     await expect(
