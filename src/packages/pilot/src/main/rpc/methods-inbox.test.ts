@@ -42,7 +42,8 @@ function setup() {
       dirs: [dir],
       loaded: () => loaded,
       reload: () => loaded,
-      scheduler: null as never
+      scheduler: null as never,
+      actions: { entries: () => [], get: () => null }
     }
   }
   const methods = buildPilotMethods(host) as unknown as Callable[]

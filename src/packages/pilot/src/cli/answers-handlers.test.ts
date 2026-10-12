@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { HandlerContext } from '../../../../cli/dispatch'
 import { ANSWERS_HANDLERS } from './answers-handlers'
 
@@ -24,5 +24,97 @@ describe('inbox tick and reply', () => {
     await ANSWERS_HANDLERS[key](ctx(flags, call))
     expect(call).toHaveBeenCalledWith(method, flags)
     expect(log).toHaveBeenCalledWith('in_1 · done · done: pushed · Push?')
+  })
+})
+
+describe('action run', () => {
+  const BOUND = ['PILOT_RUN_ID', 'PILOT_STEP_IDX', 'ORCA_TERMINAL_HANDLE'] as const
+  const saved = Object.fromEntries(BOUND.map((k) => [k, process.env[k]]))
+  beforeEach(() => BOUND.forEach((k) => delete process.env[k]))
+  afterEach(() => {
+    process.exitCode = 0
+    vi.restoreAllMocks()
+    for (const k of BOUND) {
+      if (saved[k] === undefined) {
+        delete process.env[k]
+      } else {
+        process.env[k] = saved[k]
+      }
+    }
+  })
+
+  it.each([
+    ['done', 0],
+    ['stale', 3],
+    ['asked', 6],
+    ['something new', 1]
+  ])('sends the caller binding and pinned args, and exits %s with %i', async (outcome, code) => {
+    Object.assign(process.env, {
+      PILOT_RUN_ID: 'run-1',
+      PILOT_STEP_IDX: '2',
+      ORCA_TERMINAL_HANDLE: 'term-1'
+    })
+    const call = vi.fn().mockResolvedValue({ result: { outcome, detail: 'x' } })
+    vi.spyOn(console, 'log').mockImplementation(() => {})
+    await ANSWERS_HANDLERS['action run'](
+      ctx({ name: 'push', 'args-json': '{"argv":["/wt","b","aaa","bbb"]}' }, call)
+    )
+    expect(call).toHaveBeenCalledWith(
+      'pilot.action.run',
+      {
+        action: 'push',
+        args: { argv: ['/wt', 'b', 'aaa', 'bbb'] },
+        dryRun: false,
+        terminal: 'term-1',
+        runId: 'run-1',
+        stepIdx: 2
+      },
+      { timeoutMs: 660_000 }
+    )
+    expect(process.exitCode ?? 0).toBe(code)
+  })
+
+  it('sends no binding outside a Pilot run, and the run id alone when the step index is missing', async () => {
+    const call = vi.fn().mockResolvedValue({ result: { outcome: 'done', detail: 'x' } })
+    vi.spyOn(console, 'log').mockImplementation(() => {})
+    await ANSWERS_HANDLERS['action run'](
+      ctx({ name: 'push', 'args-json': '{}', 'dry-run': true } as never, call)
+    )
+    expect(call).toHaveBeenLastCalledWith(
+      'pilot.action.run',
+      { action: 'push', args: {}, dryRun: true },
+      { timeoutMs: 660_000 }
+    )
+    process.env.PILOT_RUN_ID = 'run-1'
+    await ANSWERS_HANDLERS['action run'](ctx({ name: 'push', 'args-json': '{}' }, call))
+    expect(call).toHaveBeenLastCalledWith(
+      'pilot.action.run',
+      { action: 'push', args: {}, dryRun: false, runId: 'run-1' },
+      { timeoutMs: 660_000 }
+    )
+  })
+
+  it.each([['["a"]'], ['"a"'], ['not json']])(
+    'refuses args that are not a JSON object: %s',
+    async (raw) => {
+      await expect(
+        ANSWERS_HANDLERS['action run'](ctx({ name: 'push', 'args-json': raw }, vi.fn()))
+      ).rejects.toThrow('--args-json must be a JSON object')
+    }
+  )
+
+  it('lists the catalog, one action per line', async () => {
+    const call = vi.fn().mockResolvedValue({
+      result: [
+        { name: 'push', power: 'push', usage: 'push { … }' },
+        { name: 'start_run', power: null, usage: 'start_run { … }' }
+      ]
+    })
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {})
+    await ANSWERS_HANDLERS['action list'](ctx({}, call))
+    expect(call).toHaveBeenCalledWith('pilot.action.list')
+    expect(log).toHaveBeenCalledWith(
+      'push              push           push { … }\nstart_run         approval       start_run { … }'
+    )
   })
 })

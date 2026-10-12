@@ -153,6 +153,12 @@ export function addInboxItem(
   if (card.action && deps.knownAction && !deps.knownAction(card.action)) {
     throw new Error(`No action named "${card.action}" in Pilot's catalog`)
   }
+  const argsProblem = card.action
+    ? deps.actionArgsProblem?.(card.action, card.actionArgs ?? {})
+    : null
+  if (argsProblem) {
+    throw new Error(argsProblem)
+  }
   const digest = inboxDigest(card)
   const at = deps.now()
   const mine = deps.store.inbox.list({ automationId: origin.automationId })
