@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { RunRow, StepRow } from '../../shared/api-types'
 import type { SessionTerminalState } from './agent-step'
+import { SessionClaims } from './session-claims'
 import { resumeCommand, resumeStepSession, type ResumeDeps } from './resume-session'
 
 const run = { id: 'r1', itemLabel: '!1 web-1', worktreePath: '/wt/a' } as RunRow
@@ -21,6 +22,8 @@ type Opts = {
   more?: StepRow[]
   tabs?: string[]
   stepOn?: string[]
+  claims?: SessionClaims
+  starting?: boolean
 }
 
 function deps(
@@ -36,6 +39,8 @@ function deps(
       (opts.tabs ?? []).map((handle) => ({ handle, paneKey: `${handle}:leaf` }))
     ),
     stepOn: (h) => (opts.stepOn ?? []).includes(h),
+    claims: opts.claims,
+    startingOn: () => opts.starting === true,
     focus: vi.fn(async () => {}),
     open: vi.fn(async () => ({ handle: 'term_new' }))
   }
@@ -134,5 +139,52 @@ describe('resumeStepSession', () => {
     await expect(
       resumeStepSession(deps(s, opts as Opts), { runId: 'r1', stepIdx: 0 })
     ).rejects.toThrow(message)
+  })
+})
+
+describe('resumeStepSession, the race window before the new agent posts a row', () => {
+  const req = { runId: 'r1', stepIdx: 0 }
+
+  it('two Resumes at once open one tab; the second is told it is opening', async () => {
+    const claims = new SessionClaims()
+    const d = deps(step({}), { claims })
+    const results = await Promise.allSettled([resumeStepSession(d, req), resumeStepSession(d, req)])
+    expect(d.open).toHaveBeenCalledTimes(1)
+    expect(results.map((r) => r.status).toSorted()).toEqual(['fulfilled', 'rejected'])
+    expect(results.find((r) => r.status === 'rejected')).toMatchObject({
+      reason: expect.objectContaining({ message: 'Session is opening… try again in a moment' })
+    })
+  })
+
+  it('a second Resume focuses the tab the first opened, once its handle is known', async () => {
+    const claims = new SessionClaims()
+    const d = deps(step({}), { claims })
+    await resumeStepSession(d, req)
+    expect(await resumeStepSession(d, req)).toEqual({ action: 'focused', handle: 'term_new' })
+    expect(d.open).toHaveBeenCalledTimes(1)
+  })
+
+  it("refuses while a launcher's step is starting on the session, opening nothing", async () => {
+    const d = deps(step({ terminalHandle: null }), { claims: new SessionClaims(), starting: true })
+    await expect(resumeStepSession(d, req)).rejects.toThrow(
+      'Session is opening… try again in a moment'
+    )
+    expect(d.open).not.toHaveBeenCalled()
+  })
+
+  it("refuses while a launcher's claim holds the session", async () => {
+    const claims = new SessionClaims()
+    claims.acquire('s1', 'launch:r2:0')
+    const d = deps(step({}), { claims })
+    await expect(resumeStepSession(d, req)).rejects.toThrow('Session is opening…')
+    expect(d.open).not.toHaveBeenCalled()
+  })
+
+  it('releases the claim when opening fails, and after the TTL', async () => {
+    const claims = new SessionClaims()
+    const d = deps(step({}), { claims })
+    d.open.mockRejectedValueOnce(new Error('no pty'))
+    await expect(resumeStepSession(d, req)).rejects.toThrow('no pty')
+    expect(claims.holder('s1')).toBeNull()
   })
 })

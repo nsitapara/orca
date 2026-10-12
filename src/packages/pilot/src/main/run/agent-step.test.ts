@@ -9,6 +9,7 @@ import {
   type AgentStepRequest,
   type SessionTerminalState
 } from './agent-step'
+import { SessionClaims } from './session-claims'
 import type { Workspace } from './workspace'
 
 const workspace: Workspace = {
@@ -512,5 +513,92 @@ describe('launchAgentStep for a session held in a tab no step row names', () => 
     finish(none.s.store, 'run-1', 0)
     await launchAgentStep(none.s.store, none.s.request(1), none.s.deps)
     expect(none.terminals.close).not.toHaveBeenCalled()
+  })
+})
+
+describe('launchAgentStep, one process per session: the row-named tab runs another session, and the claim', () => {
+  const continuing = testDefinition({
+    id: 'review',
+    steps: [
+      testStep({ name: 'review' }),
+      testStep({ name: 'fix', session: { kind: 'continue', step: 'review' } })
+    ]
+  })
+  function held(states: Record<string, SessionTerminalState>, draft = '') {
+    const claims = new SessionClaims()
+    const terminals = {
+      state: vi.fn(async (t: { handle: string }, _id: string) => states[t.handle] ?? 'gone'),
+      tabs: vi.fn(async (_id: string) => [{ handle: 'resume_tab', paneKey: 'rt:leaf' }]),
+      draft: vi.fn(async (_h: string) => draft),
+      send: vi.fn(async (_h: string, _p: string) => {}),
+      close: vi.fn(async (_h: string) => {}),
+      claims
+    }
+    return { terminals, claims, s: setup(continuing, { sessionTerminals: terminals }) }
+  }
+  async function reviewedIn(h: ReturnType<typeof held>) {
+    await launchAgentStep(h.s.store, h.s.request(0), h.s.deps)
+    finish(h.s.store, 'run-1', 0)
+    h.claims.release('uuid-new', 'launch:run-1:0')
+  }
+
+  it('finds the session in another tab when the step row tab was /cleared (other), and fails if it is busy', async () => {
+    const h = held({ term_1: 'other', resume_tab: 'busy' })
+    await reviewedIn(h)
+    await expect(launchAgentStep(h.s.store, h.s.request(1), h.s.deps)).rejects.toThrow(
+      'Session uuid-new is busy in terminal resume_tab'
+    )
+    expect(h.s.launchTerminal).toHaveBeenCalledTimes(1)
+    expect(h.terminals.close).not.toHaveBeenCalled()
+  })
+
+  it('closes an idle foreign tab and the /cleared one, then resumes once', async () => {
+    const h = held({ term_1: 'other', resume_tab: 'free' })
+    await reviewedIn(h)
+    await launchAgentStep(h.s.store, h.s.request(1), h.s.deps)
+    expect(h.terminals.close.mock.calls).toEqual([['resume_tab'], ['term_1']])
+    expect(h.s.launchTerminal).toHaveBeenCalledTimes(2)
+  })
+
+  it('treats an idle foreign tab as busy when a draft has appeared by the time it would be closed', async () => {
+    const h = held({ term_1: 'gone', resume_tab: 'free' }, 'half a thought')
+    await reviewedIn(h)
+    await expect(launchAgentStep(h.s.store, h.s.request(1), h.s.deps)).rejects.toThrow(
+      'Session uuid-new is busy in terminal resume_tab'
+    )
+    expect(h.terminals.close).not.toHaveBeenCalled()
+  })
+
+  it("fails the step, starting nothing, while another caller's claim holds the session", async () => {
+    const h = held({ term_1: 'gone' })
+    await reviewedIn(h)
+    h.claims.acquire('uuid-new', 'resume')
+    await expect(launchAgentStep(h.s.store, h.s.request(1), h.s.deps)).rejects.toThrow(
+      'Session uuid-new is busy: another caller is opening it'
+    )
+    expect(h.s.launchTerminal).toHaveBeenCalledTimes(1)
+    expect(h.terminals.tabs).not.toHaveBeenCalled()
+  })
+
+  it('keeps its claim after starting a new process (the first row has not arrived), releases it after a send, and on failure', async () => {
+    const started = held({ term_1: 'gone' })
+    await reviewedIn(started)
+    await launchAgentStep(started.s.store, started.s.request(1), started.s.deps)
+    expect(started.claims.holder('uuid-new')).toMatchObject({ by: 'launch:run-1:1' })
+
+    const sent = held({ term_1: 'free' })
+    await reviewedIn(sent)
+    sent.s.store.runs.updateStep('run-1', 0, { launchArgs: [] })
+    await launchAgentStep(sent.s.store, sent.s.request(1), sent.s.deps)
+    expect(sent.terminals.send).toHaveBeenCalled()
+    expect(sent.claims.holder('uuid-new')).toBeNull()
+
+    const failed = held({ term_1: 'gone' })
+    await reviewedIn(failed)
+    failed.s.launchTerminal.mockRejectedValueOnce(new Error('boom'))
+    await expect(
+      launchAgentStep(failed.s.store, failed.s.request(1), failed.s.deps)
+    ).rejects.toThrow('boom')
+    expect(failed.claims.holder('uuid-new')).toBeNull()
   })
 })

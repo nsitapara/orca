@@ -25,11 +25,16 @@ export function isTerminalGoneError(error: unknown): boolean {
 // Second opinion on a terminal that showTerminal can't find: is it still alive?
 export type TerminalRelist = (handle: string, paneKey: string | null) => Promise<boolean>
 
-type Listed = Awaited<ReturnType<OrcaRuntimeService['listTerminals']>>['terminals'][number]
+export type Listed = Awaited<ReturnType<OrcaRuntimeService['listTerminals']>>['terminals'][number]
 
-const LIST_LIMIT = 10_000
+export const LIST_LIMIT = 10_000
 // One listing serves every lookup in a tick or a poll: each one refreshes the whole PTY inventory.
 export const RELIST_REUSE_MS = 5_000
+
+// A connected terminal that sits in this pane.
+export function inPane(t: Listed, paneKey: string): boolean {
+  return t.connected && (`${t.tabId}:${t.leafId}` === paneKey || t.recordedPaneKey === paneKey)
+}
 
 function sameTerminal(t: Listed, handle: string, paneKey: string | null): boolean {
   if (!t.connected) {
@@ -41,7 +46,7 @@ function sameTerminal(t: Listed, handle: string, paneKey: string | null): boolea
   if (paneKey === null) {
     return false
   }
-  return `${t.tabId}:${t.leafId}` === paneKey || t.recordedPaneKey === paneKey
+  return inPane(t, paneKey)
 }
 
 // Why: after an app restart the runtime's handle map is empty, so showTerminal reports a terminal the

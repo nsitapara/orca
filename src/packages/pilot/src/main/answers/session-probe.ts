@@ -125,7 +125,7 @@ export function sessionTerminalProbe(
 ): SessionProbe {
   return {
     async terminalState({ handle, paneKey, sessionId }) {
-      if (deps.stepOn(handle)) {
+      if (deps.stepOn(handle) || deps.terminals.claims?.holder(sessionId)) {
         return 'busy'
       }
       const state = await deps.terminals.state({ handle, paneKey }, sessionId)
