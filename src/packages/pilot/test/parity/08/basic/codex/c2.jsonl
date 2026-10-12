@@ -1,0 +1,4 @@
+{"type":"session_meta","timestamp":"2026-10-11T10:05:00.000Z","payload":{"id":"c2","cwd":"/Users/nishsitapara/Documents/web-platform","timestamp":"2026-10-11T10:05:00.000Z"}}
+{"type":"turn_context","timestamp":"2026-10-11T10:05:01.000Z","payload":{"turn_id":"t1","model":"gpt-6-sol"}}
+{"type":"event_msg","timestamp":"2026-10-11T10:05:30.000Z","payload":{"type":"token_count","info":{"last_token_usage":{"input_tokens":5000,"cached_input_tokens":1000,"output_tokens":300}}}}
+{"type":"event_msg","timestamp":"2026-10-11T10:06:00.000Z","payload":{"type":"token_count","info":{"last_token_usage":{"input_tokens":6000,"cached_input_tokens":5000,"output_tokens":100}}}}
