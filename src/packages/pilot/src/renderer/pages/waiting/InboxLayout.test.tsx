@@ -524,20 +524,61 @@ describe('when the ask was made', () => {
     cleanup()
     pilotRpc.mockReset()
   })
-  it('opens the chip row, in muted text, before the job chip, with the full time in title', async () => {
-    const asked = new Date(2026, 9, 11, 2, 0).getTime()
-    serve({ ...LIST, items: [{ ...F1, createdAt: asked }] })
+  const asked = new Date(2026, 9, 11, 2, 0).getTime()
+  const eyebrowOf = async (item: InboxItemRow) => {
+    serve({ ...LIST, items: [item] })
     vi.useFakeTimers({ shouldAdvanceTime: true })
     vi.setSystemTime(new Date(2026, 9, 12, 12, 0))
     render(<InboxPage />)
-    const article = (await screen.findByRole('heading', { name: 'F1 Fixture' })).closest('article')!
-    const first = article.querySelector('div > span')!
-    expect(first.textContent).toBe('Asked Oct 11, 2:00 AM · 1d ago')
-    expect(first.className).toContain('text-muted-foreground')
-    expect(first.getAttribute('title')).toContain('2026')
-    expect(first.nextElementSibling?.textContent).toBe('04 · Test branch UIs overnight')
+    const article = (await screen.findByRole('heading', { name: item.title })).closest('article')!
+    return { article, eyebrow: article.querySelector('[data-eyebrow]')! }
+  }
+
+  it('is a muted upper-case line above the title: job code and name, the date, the age', async () => {
+    const { article, eyebrow } = await eyebrowOf({ ...F1, createdAt: asked })
+    expect(eyebrow.textContent).toBe('04 · Test branch UIs overnight · Oct 11, 2:00 AM · 1d ago')
+    for (const c of ['uppercase', 'text-muted-foreground', 'text-[11.5px]', 'tracking-[0.04em]']) {
+      expect(eyebrow.className).toContain(c)
+    }
+    const line = eyebrow.firstElementChild!
+    expect(line.className).toContain('truncate')
+    expect(line.getAttribute('title')).toBe(eyebrow.textContent)
+    expect(
+      within(eyebrow as HTMLElement)
+        .getByText('Oct 11, 2:00 AM')
+        .getAttribute('title')
+    ).toContain('2026')
+    // Above the title, and nothing of it left in a chip row.
+    const title = within(article).getByRole('heading', { name: 'F1 Fixture' })
+    expect(eyebrow.compareDocumentPosition(title) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(article.textContent).not.toContain('Asked')
     // The list keeps the short age.
     expect(screen.getByRole('navigation', { name: 'Cards' }).textContent).toContain('1d')
+    vi.useRealTimers()
+  })
+
+  it('has no waiting pill and no job chip, and says "drafted" on the right, in normal case', async () => {
+    const { eyebrow } = await eyebrowOf({
+      ...F1,
+      createdAt: asked,
+      details: { drafted: true } as never
+    })
+    const pills = [...eyebrow.querySelectorAll('span')].filter((s) => s.parentElement === eyebrow)
+    expect(pills.map((p) => p.textContent)).toEqual([
+      '04 · Test branch UIs overnight · Oct 11, 2:00 AM · 1d ago',
+      'drafted'
+    ])
+    expect(pills[1].className).toContain('normal-case')
+    expect(screen.queryByText('waiting')).toBeNull()
+    expect(screen.queryAllByText('04 · Test branch UIs overnight')).toHaveLength(0)
+    vi.useRealTimers()
+  })
+
+  it('shows a status pill only when the card is not plainly waiting (unsaved while notes are typed)', async () => {
+    const { article, eyebrow } = await eyebrowOf({ ...F1, createdAt: asked })
+    expect(eyebrow.textContent).not.toContain('waiting')
+    fireEvent.click(within(article).getByRole('button', { name: 'With notes…' }))
+    expect(eyebrow.textContent).toContain('unsaved')
     vi.useRealTimers()
   })
 })

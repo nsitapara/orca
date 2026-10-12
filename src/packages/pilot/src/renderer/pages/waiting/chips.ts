@@ -25,7 +25,8 @@ export function statusOf(
   return answerState?.state === 'failed' ? 'failed' : 'answered'
 }
 
-const PILL = 'rounded-full px-2 font-mono text-xs font-semibold leading-[1.6]'
+const PILL =
+  'rounded-full px-2 font-mono text-xs font-semibold leading-[1.6] normal-case tracking-normal'
 const WARN = 'bg-[var(--ib-warn-soft)] text-[var(--ib-warn)]'
 const ACCENT = 'bg-[var(--ib-accent-soft)] text-[var(--ib-accent)]'
 
@@ -42,6 +43,4 @@ export function statusPillClass(status: StatusPill): string {
   return `${PILL} ${PILL_COLOURS[status]}`
 }
 
-export const JOB_CHIP_CLASS =
-  'rounded bg-muted px-1.5 font-mono text-[12.5px] font-semibold text-foreground/80'
 export const DRAFTED_PILL_CLASS = `${PILL} ${ACCENT}`

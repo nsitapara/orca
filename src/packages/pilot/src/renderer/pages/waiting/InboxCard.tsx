@@ -10,7 +10,7 @@ import type { Answer } from './answer-types'
 import { approveWords } from './answer-buttons'
 import { askedLabel, runLineView } from './answer-text'
 import { CardDetails } from './CardDetails'
-import { DRAFTED_PILL_CLASS, JOB_CHIP_CLASS, statusOf, statusPillClass } from './chips'
+import { DRAFTED_PILL_CLASS, type StatusPill, statusOf, statusPillClass } from './chips'
 
 // Who wrote a reply is stored with it (by), set by the path that wrote it; never guessed from its words.
 function Reply({ reply }: { reply: InboxReply }): React.JSX.Element {
@@ -77,6 +77,35 @@ function partSwitches(
   return { off, toggle, words }
 }
 
+// The line above the title: job code and name, when it was asked and how long ago, small and muted, on one
+// line; on its right only what differs from plain waiting (drafted, the countdown state, applying, failed).
+function Eyebrow({
+  job,
+  asked,
+  drafted,
+  status
+}: {
+  job: string
+  asked: ReturnType<typeof askedLabel>
+  drafted: boolean
+  status: StatusPill
+}): React.JSX.Element {
+  const full = `${job} · ${asked.when}${asked.relative ? ` · ${asked.relative}` : ''}`
+  return (
+    <div
+      data-eyebrow=""
+      className="flex items-center gap-2 text-[11.5px] tracking-[0.04em] text-muted-foreground uppercase"
+    >
+      <span className="min-w-0 flex-1 truncate" title={full}>
+        {job} · <span title={asked.full}>{asked.when}</span>
+        {asked.relative ? ` · ${asked.relative}` : null}
+      </span>
+      {drafted ? <span className={DRAFTED_PILL_CLASS}>drafted</span> : null}
+      {status === 'waiting' ? null : <span className={statusPillClass(status)}>{status}</span>}
+    </div>
+  )
+}
+
 export function InboxCard({
   item,
   automationName,
@@ -138,14 +167,12 @@ export function InboxCard({
   }
   return (
     <article id={`card-${item.id}`} data-selected={selected ? '' : undefined} className={frame}>
-      <div className="flex flex-wrap items-center gap-1.5">
-        <span className="text-xs text-muted-foreground" title={asked.full}>
-          {asked.text}
-        </span>
-        <span className={JOB_CHIP_CLASS}>{automationName}</span>
-        {item.details?.drafted ? <span className={DRAFTED_PILL_CLASS}>drafted</span> : null}
-        <span className={statusPillClass(status)}>{status}</span>
-      </div>
+      <Eyebrow
+        job={automationName}
+        asked={asked}
+        drafted={item.details?.drafted === true}
+        status={status}
+      />
       <h3 className="text-[15px] font-semibold">{item.title}</h3>
       {item.context ? <p className="text-sm text-muted-foreground">{item.context}</p> : null}
       {item.suggested ? (

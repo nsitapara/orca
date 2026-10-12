@@ -114,7 +114,7 @@ describe('colours on the page', () => {
     pilotRpc.mockReset()
   })
 
-  it('colours a card’s status pill, has no kind chip, and highlights a question’s first option', async () => {
+  it('has no waiting pill and no kind chip, and highlights a question’s first option', async () => {
     const items = [
       card({ id: 'b', type: 'bug', title: 'A bug' }),
       card({
@@ -141,8 +141,7 @@ describe('colours on the page', () => {
     })
     const { container } = render(<InboxPage />)
     const bug = (await screen.findByRole('heading', { name: 'A bug' })).closest('article')!
-    const waiting = [...bug.querySelectorAll('span')].find((s) => s.textContent === 'waiting')
-    expect(waiting?.className).toContain('text-[var(--ib-warn)]')
+    expect(bug.textContent).not.toContain('waiting')
     // No kind chip: neither the card nor its list row says "Left for you" or "Question".
     expect(container.textContent).not.toMatch(/Left for you|Question|Action\b/)
     const q = screen.getByRole('heading', { name: 'A question' }).closest('article')!
