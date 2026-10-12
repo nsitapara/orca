@@ -42,6 +42,10 @@ Which hooks were added for the YAML engine, and why:
 - `orca-automations-off`: the desktop app and `serve` never start Orca's automation service. Pilot's `orcad` keeps upstream's engine; `PILOT_ORCA_AUTOMATIONS=on` turns Orca's service back on.
 - `agent-launch-env` (required): carries each agent terminal's environment and its agent arguments (a pinned session id, `--resume`, `codex resume <id>`, a step's `args`) through one call, so upstream's `extraAgentArgs` allowlist isn't used for them.
 
+Which hooks were added for card details, and why:
+
+- `sidebar-waiting-item`, `sidebar-automations-active` and `sidebar-automations-open`: the Waiting on you item under Automations, its highlight rule, and the Automations click that leaves it. They are three one-line hooks in `SidebarNav.tsx` and add no `activeView`; the card Details themselves live wholly in Pilot's folder.
+
 The table says which of these are in place.
 | sidebar-waiting-item | src/renderer/src/components/sidebar/SidebarNav.tsx | <PilotWaiting.WaitingNavItem /> | Waiting on you under Automations, with its count |
 | sidebar-automations-active | src/renderer/src/components/sidebar/SidebarNav.tsx | PilotWaiting.useAutomationsActive( | Automations isn't highlighted while Waiting on you shows |

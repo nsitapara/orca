@@ -179,6 +179,23 @@ A shell step's `run:` is plain shell. It takes no `{placeholders}`; validation r
 - **Never** use an env value in `$(( ))`, `(( ))`, `let`, `declare -i`, an array subscript, `[[ -eq ]]`, `eval`, or `sh -c "…$NAME…"`. The shell evaluates those as code. Quote it as `"$NAME"`, or validate it first.
 - **Never** put an item value in an env name that another program executes: `NODE_OPTIONS`, `GIT_SSH_COMMAND`, `GIT_CONFIG_*`, `PERL5OPT`, `JAVA_TOOL_OPTIONS`, `SHELL`, `EDITOR`, `PAGER`. Validation doesn't block these.
 
+## Waiting on you and Details bundles
+
+The sidebar's **Waiting on you** item sits under Automations, with a count of the cards waiting on you. Clicking **Automations** leaves it, and the Waiting on you sub-view persists after you leave the page; the highlight always matches what is shown.
+
+A card carries its Details as markdown (`--details-file`) or as a structured **Details bundle** (`--details-bundle`), never both. The page renders a bundle as facts, diffs, reviews, screens and shots.
+
+- **Folder rule:** a bundle and its files (review JSON, images) must sit inside the Automations folder, `PILOT_VAULT_AUTOMATIONS`, else `~/Documents/WebPortal/Agent Work/Automations`. The skills' `vault.AUTOMATIONS` must be the same folder, or every bundle is refused (the card is still offered, without it).
+- **Limits:** a bundle is at most 2 MB, a review file 1 MB, an image 8 MB, and a bundle at most 40 blocks. An unknown block type is refused.
+- **What joins the digest:** the bundle's bytes and the review files it inlines. Images and the patch do not: images are read live, and the patch is bound through its `patch_sha256` inside the bundle and checked when an approval applies it. So an image swapped on disk after the card was added shows the new image.
+- **Commands:**
+  - `pilot inbox add --details-bundle <file>` sends the absolute path; Pilot's main process reads and checks the file itself.
+  - `pilot inbox show --id <id>` prints one card, with its Details.
+  - `pilot inbox set-details --id <id> --bundle <file> [--head <sha>]` replaces a waiting card's bundle and clears any answer it had.
+- **Who may attach a bundle** (`add --details-bundle` and `set-details` ask the same rule): the desktop, or the local CLI inside a Pilot run's step of the card's own automation. An unbound CLI and a paired device are refused. Only a desktop Approve applies a drafted patch.
+- **Drafting:** 03 and 04 end each run with two `always` steps that draft a bundle for their open code cards (03: `--cap 8`, 90 minutes; 04: `--cap 3`, 60 minutes). There is no idle-night drain: an undrafted card comes round on the branch's next run.
+- **Go-live:** the check's "Card details" line (read-only) counts open cards, those with a bundle, and imported cards still pointing at a vault bundle.
+
 ## The worktree panel
 
 The calendar-clock icon in the right sidebar shows the active worktree's automations (`pilot.worktree.timeline`, polled every 15 s while shown):
@@ -230,7 +247,7 @@ The order, behaviour changes and follow-ups come from the build (`go-live-notes.
 
 **Order:**
 1. Close out what Orca still has open. Let a running Orca 03 review cycle finish. Close any open Orca 04 QA run or dispatched fix: a stale Orca `run.json` that isn't `done` blocks every Pilot 04 night at `stack`.
-2. Import the open vault cards: Waiting on you, "Import open vault cards" (applying needs Pilot's own window). From now on answer only in Pilot (Waiting on you): the old answers page is read-only on the Pilot backend.
+2. Import the open vault cards: Waiting on you, "Import open vault cards" (applying needs Pilot's own window). After you rebuild Pilot, run "Import open vault cards" again: it fills Details into the open, unanswered imported cards, and the go-live check's "Card details" line shows what is left. From now on answer only in Pilot (Waiting on you): the old answers page is read-only on the Pilot backend.
 3. Import each job's old state before enabling it: `pilot automations import-state --id <id>` (preview), then `--apply`. 03 and 04 need their `seen.json` first. 08 must be imported before Pilot first writes its own `usage.json` (the hand-over above). 12's sent answers come in as dispatched.
 4. Connect Linear in Pilot (Settings) before enabling 13 and M01. Pilot can't read Orca's Linear credential (see the Known gaps).
 5. Enable the YAMLs one at a time: `pilot automations enable --id <id>`. Keep Orca's copies disabled.
@@ -313,6 +330,8 @@ These need a phone, a second Mac and an iPad on Tailscale. Open Pilot (`dist/mac
   - **Agent hook scripts** in `~/.orca/agent-hooks`. Both apps install them, and they reach their app through each terminal's environment. Not checked: whether different upstream versions rewrite each other's scripts.
 - Upstream orcad starts `/Applications/Orca.app/Contents/MacOS/Orca --serve` (then `~/Applications/Orca.app`) as its browser host whenever it exists, and only reads `ORCA_BROWSER_EXECUTABLE` if that fails (`orcad-browser-provider.ts`). It starts before Pilot's orcad hook runs. Pilot can't redirect it without editing upstream; its only protection is that the sidecar inherits `ORCA_CLI_INSTALL_PATH` (set by the `bin/pilot` launcher) so its CLI install can't touch real Orca's `orca`.
 - Pilot's orcad still starts Orca's own automation engine (`src/main/orcad/orcad-automations.ts`): the `orca-automations-off` hook covers desktop and serve only. Pilot's own scheduler doesn't run in orcad unless `PILOT_SCHEDULER=on`.
+- No idle-night drafting drain: a card the 03 or 04 draft step left undrafted waits for that branch's next run.
+- Images in a Details bundle are not bound to the digest; they are read live.
 - Codex subagent rollouts (child threads) aren't added to their parent step's usage; `usage.py` added them.
 - Pilot's Claude price table differs from `usage.py`'s for Sonnet 4 and 4.5 long-context and for old models. That is intended.
 - Resume runs the agent's plain resume command, without the Settings default arguments a launch gets.
