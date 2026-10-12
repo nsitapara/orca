@@ -153,6 +153,8 @@ export type InboxAnswer = {
   text: string | null
   digest: string
   via: 'page' | 'cli' | 'import'
+  // Who gave it, as the transport stamped it (never from params). Absent on imported answers.
+  callerKind?: 'local-cli' | 'desktop' | 'paired-device'
 }
 export type InboxItemRow = {
   id: string

@@ -38,3 +38,19 @@ export function readTextFile(path: string, flag: string, maxBytes: number): stri
   }
   return text
 }
+
+type EnvBinding = { terminal?: string; runId?: string; stepIdx?: number }
+
+// Who is calling, for the server to resolve (ruling 8d, Task 22b): the terminal this runs in, and the env's
+// run and step as the fallback. Only what is set is sent; with none of it the call is bound to no run, and
+// Pilot only dry-runs it.
+export function bindingFromEnv(env: NodeJS.ProcessEnv): EnvBinding {
+  const terminal = env.ORCA_TERMINAL_HANDLE?.trim() ?? ''
+  const runId = env.PILOT_RUN_ID?.trim() ?? ''
+  const rawIdx = env.PILOT_STEP_IDX?.trim() ?? ''
+  return {
+    ...(terminal ? { terminal } : {}),
+    ...(runId ? { runId } : {}),
+    ...(runId && /^\d+$/.test(rawIdx) ? { stepIdx: Number(rawIdx) } : {})
+  }
+}

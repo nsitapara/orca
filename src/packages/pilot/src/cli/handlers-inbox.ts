@@ -15,7 +15,7 @@ import type {
   InboxListParams,
   InboxListPayload
 } from '../shared/api-types'
-import { invalid, jsonObjectFlag, readTextFile } from './cli-values'
+import { bindingFromEnv, invalid, jsonObjectFlag, readTextFile } from './cli-values'
 import { formatInboxList } from './format-inbox'
 import {
   checkInboxOption,
@@ -123,7 +123,10 @@ export const INBOX_HANDLERS: Record<string, CommandHandler> = {
     )
   },
   'inbox answer': async ({ flags, client, json }) => {
-    const response = await client.call<InboxItemRow>('pilot.inbox.answer', answerParams(flags))
+    const response = await client.call<InboxItemRow>('pilot.inbox.answer', {
+      ...answerParams(flags),
+      ...bindingFromEnv(process.env)
+    })
     printResult(response, json, (r) => `Saved your answer to ${r.id} (${r.status})`)
   }
 }

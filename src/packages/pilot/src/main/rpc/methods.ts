@@ -7,6 +7,7 @@ import type { PilotContext, PilotHost } from '../pilot-services'
 import { setAutomationEnabled } from './automation-files'
 import { activity, dryRun, getAutomation, listAutomations, tickNow, validateYaml } from './handlers'
 import { buildActionMethods } from './methods-actions'
+import { buildAnswerMethods } from './methods-answers'
 import { buildChannelMethods } from './methods-channel'
 import { buildInboxMethods } from './methods-inbox'
 
@@ -123,6 +124,7 @@ export function buildPilotMethods(host: PilotHost) {
     }),
     ...buildChannelMethods(ctx),
     ...buildInboxMethods(ctx),
-    ...buildActionMethods(ctx)
+    ...buildActionMethods(ctx),
+    ...buildAnswerMethods(ctx)
   ].map((m) => Object.assign(m, { pilot: true }))
 }

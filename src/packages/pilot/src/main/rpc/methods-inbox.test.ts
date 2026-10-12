@@ -2,6 +2,7 @@ import { mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
+import type { RpcCallerIdentity } from '../../../../../main/runtime/rpc/rpc-caller-identity'
 import { loadDefinitions } from '../definitions/loader'
 import type { PilotHost } from '../pilot-services'
 import { PilotStore } from '../store/store'
@@ -10,7 +11,7 @@ import { buildPilotMethods } from './methods'
 type Callable = {
   name: string
   params: { safeParse(v: unknown): { success: boolean } } | null
-  handler(p: unknown): unknown
+  handler(p: unknown, ctx?: { caller?: RpcCallerIdentity }): unknown
 }
 
 function setup() {
@@ -50,6 +51,8 @@ function setup() {
   return {
     store,
     call: (name: string, p: unknown) => methods.find((m) => m.name === name)!.handler(p),
+    callAs: (caller: RpcCallerIdentity | undefined, name: string, p: unknown) =>
+      methods.find((m) => m.name === name)!.handler(p, caller ? { caller } : {}),
     find: (n: string) => methods.find((m) => m.name === n)!,
     methods
   }
@@ -221,5 +224,77 @@ describe('inbox RPC', () => {
       itemKey: 'mr:2',
       worktreePath: '/wt2'
     })
+  })
+  it('saves an answer and lists it as up next', () => {
+    const { call, callAs } = setup()
+    const added = call('pilot.inbox.add', {
+      runId: 'run-1',
+      type: 'question',
+      title: 'Which image?',
+      options: ['e2e', 'unit']
+    }) as { id: string }
+    const digest = (call('pilot.inbox.get', { id: added.id }) as { digest: string }).digest
+    expect(
+      callAs({ kind: 'desktop' }, 'pilot.inbox.answer', {
+        id: added.id,
+        option: 0,
+        digest,
+        via: 'page'
+      })
+    ).toMatchObject({ status: 'answered', answer: { callerKind: 'desktop' } })
+    expect(call('pilot.queue.list', { person: 'nish' })).toMatchObject({
+      entries: [{ itemId: added.id, state: 'not_ready', how: 'agent' }]
+    })
+  })
+
+  it.each<[string, RpcCallerIdentity | undefined, Record<string, unknown>, string]>([
+    ['no caller identity', undefined, {}, "Pilot can't tell who is answering"],
+    [
+      'an agent inside a run (env)',
+      { kind: 'local-cli' },
+      { runId: 'run-1', stepIdx: 0 },
+      "Agents don't answer"
+    ],
+    [
+      'an agent inside a run (terminal)',
+      { kind: 'local-cli' },
+      { terminal: 'term-1' },
+      "Agents don't answer"
+    ],
+    [
+      'an agent whose env step ended',
+      { kind: 'local-cli' },
+      { runId: 'run-1', stepIdx: 9 },
+      'Agents'
+    ]
+  ])('refuses an answer from %s', (_name, caller, extra, message) => {
+    const { store, call, callAs } = setup()
+    store.runs.createStep({
+      runId: 'run-1',
+      idx: 0,
+      name: 's',
+      agent: 'claude',
+      skill: null,
+      mode: null,
+      startedAt: 1
+    })
+    store.runs.updateStep('run-1', 0, { status: 'running', terminalHandle: 'term-1' })
+    const added = call('pilot.inbox.add', { runId: 'run-1', type: 'question', title: 'Q?' }) as {
+      id: string
+    }
+    expect(() =>
+      callAs(caller, 'pilot.inbox.answer', { id: added.id, text: 'A', ...extra })
+    ).toThrow(message)
+    expect(store.inbox.get(added.id)).toMatchObject({ status: 'open', answer: null })
+  })
+
+  it('lets the local CLI outside a run answer a plain question, and records the caller', () => {
+    const { call, callAs } = setup()
+    const added = call('pilot.inbox.add', { runId: 'run-1', type: 'question', title: 'Q?' }) as {
+      id: string
+    }
+    expect(
+      callAs({ kind: 'local-cli' }, 'pilot.inbox.answer', { id: added.id, text: 'A' })
+    ).toMatchObject({ answer: { callerKind: 'local-cli', via: 'cli' } })
   })
 })
