@@ -180,10 +180,26 @@ export function cardToRun(
       problem: `"${def.name}" doesn't have ${missingWhat(entry)} and Pilot didn't ask for card ${id}; it can't run`
     }
   }
-  const out = leaveOut(entry, card, stored, req.leftOut ?? [])
+  const out = approvedArgs(entry, card, req.leftOut ?? [])
   if ('problem' in out) {
     return out
   }
   const worse = entry.checkArgs(out.args)
   return worse ? { problem: worse } : out
+}
+
+// What a card's Approve runs: its stored args less the parts left out, pinned (a Linear write id) with the
+// card attempt's key (its run, no step, the card, the action and those args). cardToRun runs exactly this,
+// and the card's Run line (inbox/run-line.ts) shows exactly this: one function, so they can't disagree.
+export function approvedArgs(
+  entry: ActionEntry,
+  card: InboxItemRow,
+  leftOut: string[]
+): { args: Record<string, unknown> } | { problem: string } {
+  const out = leaveOut(entry, card, card.actionArgs ?? {}, leftOut)
+  if ('problem' in out || !entry.pin) {
+    return out
+  }
+  const key = stableJson([card.runId, null, card.id, entry.name, out.args])
+  return { args: entry.pin(out.args, key) }
 }

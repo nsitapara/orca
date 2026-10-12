@@ -62,6 +62,10 @@ function bridged(spec: Bridged, act: ActBridge): ActionEntry {
       const argv = argvOf(args)
       return argv ? act.describe(spec.script, argv) : spec.usage
     },
+    command: (args) => {
+      const argv = argvOf(args)
+      return argv ? act.command(spec.script, argv) : null
+    },
     run: async (args, opts) => {
       const argv = argvOf(args)
       return argv ? act.run(spec.script, argv, opts) : actionFailed(usage)

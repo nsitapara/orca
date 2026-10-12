@@ -19,8 +19,15 @@ export type ProcessRun = (spec: {
 export type ActBridge = {
   // act.py's own positional arguments (the `argv` of a catalog action's args object).
   run(script: string, argv: string[], opts: ActionRunOpts): Promise<ActionResult>
+  // What run() spawns for a real (not dry) run: program, act.py, then actRunArgs. A card's Run line.
+  command(script: string, argv: string[]): string[]
   describe(script: string, argv: string[]): Promise<string>
   refresh(script: string, argv: string[]): Promise<{ argv: string[]; changed: string } | null>
+}
+
+// act.py's arguments for `run`: run() spawns these, and command() shows them.
+export function actRunArgs(script: string, argv: string[], dryRun: boolean): string[] {
+  return [script, 'run', ...argv, ...(dryRun ? ['--dry-run'] : [])]
 }
 
 export const RUN_TIMEOUT_MS = 10 * 60_000
@@ -109,10 +116,10 @@ export function actBridge(
   const quiet = async (args: string[]): Promise<ProcessResultLike | null> =>
     call(args, null, QUICK_TIMEOUT_MS).catch(() => null)
   return {
+    command: (script, args) => [program, actPy, ...actRunArgs(script, args, false)],
     async run(script, args, { dryRun, runId }) {
-      const dry = dryRun ? ['--dry-run'] : []
       try {
-        return parseRunOutput(await call([script, 'run', ...args, ...dry], runId, RUN_TIMEOUT_MS))
+        return parseRunOutput(await call(actRunArgs(script, args, dryRun), runId, RUN_TIMEOUT_MS))
       } catch (error) {
         return actionFailed(`act.py couldn't start: ${messageOf(error)}`)
       }

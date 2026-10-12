@@ -5,7 +5,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { Textarea } from '@/components/ui/textarea'
 import type { InboxItemRow } from '../../../shared/api-types'
-import type { QueueEntry } from '../../../shared/inbox-types'
+import type { QueueEntry, RunLine } from '../../../shared/inbox-types'
 import { isPilotReply } from '../../../shared/pilot-replies'
 import {
   choicesFor,
@@ -14,6 +14,7 @@ import {
   KIND_LABEL,
   QUEUE_PILL,
   queueNote,
+  runLineView,
   worktreeName
 } from './answer-text'
 
@@ -185,16 +186,42 @@ function replyLabel(reply: string): string {
   return isPilotReply(reply) ? 'Pilot:' : 'Agent asked:'
 }
 
-// What approving an action card runs, as Pilot wrote it from the stored card (never the agent's words).
-function RunLine({ line }: { line: string | null }): React.JSX.Element | null {
-  if (!line) {
+// What approving an action card runs, as Pilot wrote it from the stored card: a Pilot block of its own,
+// apart from the agent's words, shown only for the card version it was built for. Never cut silently.
+function RunLineBlock({
+  line,
+  digest
+}: {
+  line: RunLine | null
+  digest: string
+}): React.JSX.Element | null {
+  if (!line || line.digest !== digest) {
     return null
   }
+  const { head, more } = runLineView(line.text)
   return (
-    <p className="text-sm">
-      <span className="text-muted-foreground">Run:</span>{' '}
-      <code className="font-mono text-xs break-all">{line}</code>
-    </p>
+    <div
+      data-pilot-run-line=""
+      className="flex flex-col gap-1 rounded-md border border-primary/40 bg-primary/5 px-3 py-2"
+    >
+      <span className="text-xs font-medium text-primary">Pilot · Approve runs</span>
+      <code className="font-mono text-xs break-all">{head}</code>
+      {more > 0 ? <RunLineRest text={line.text} more={more} /> : null}
+    </div>
+  )
+}
+
+function RunLineRest({ text, more }: { text: string; more: number }): React.JSX.Element {
+  return (
+    <Collapsible>
+      <span className="text-xs text-muted-foreground">… ({more} more chars)</span>{' '}
+      <CollapsibleTrigger className="text-xs text-muted-foreground underline-offset-4 hover:underline">
+        Show the whole command
+      </CollapsibleTrigger>
+      <CollapsibleContent>
+        <pre className="mt-1 font-mono text-xs break-all whitespace-pre-wrap">{text}</pre>
+      </CollapsibleContent>
+    </Collapsible>
   )
 }
 
@@ -209,7 +236,7 @@ export function InboxCard({
   item: InboxItemRow
   automationName: string
   // An action card's Run line (InboxListPayload.runLines); null on any other card.
-  runLine: string | null
+  runLine: RunLine | null
   queued: QueueEntry | null
   // Why the last save failed; held by the page so it survives the card remounting as a new version.
   error: string | null
@@ -233,7 +260,7 @@ export function InboxCard({
               <span className="text-muted-foreground">Suggested:</span> {item.suggested}
             </p>
           ) : null}
-          <RunLine line={runLine} />
+          <RunLineBlock line={runLine} digest={item.digest} />
           {item.replies.map((r, i) => (
             <p key={i} className="text-sm">
               {replyLabel(r)} {r}

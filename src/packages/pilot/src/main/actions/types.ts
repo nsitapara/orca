@@ -31,6 +31,9 @@ export type ActionEntry = {
   // derived from `key`, the attempt's own key), so a retried write is deduplicated. Idempotent: pinned args
   // come back unchanged. Entries with nothing to pin leave it out.
   pin?(args: Record<string, unknown>, key: string): Record<string, unknown>
+  // The exact argv this entry spawns for these args (program first), built by the code run() spawns with,
+  // so a card's Run line is what runs. Absent for an entry that runs inside Pilot (its args are what runs).
+  command?(args: Record<string, unknown>): string[] | null
   // A stale action that still makes sense at the new state: the args that pin it, and what changed.
   refresh?(args: Record<string, unknown>): Promise<Refreshed | null>
   // How parts a person left out are passed (post-review's --except).
