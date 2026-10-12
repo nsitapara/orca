@@ -78,8 +78,9 @@ export function runSummary(run: RunRow, steps: StepRow[]): string {
   if (summary) {
     return oneLine(summary)
   }
-  const outcome = run.outcome ? `: ${oneLine(run.outcome)}` : ''
-  return `${run.itemLabel} · ${ENDED[run.status] ?? run.status}${outcome} · run ${run.id}`
+  const outcome = run.outcome ? `: ${run.outcome}` : ''
+  // The whole line: the item label is agent-influenced too, and a newline would start another line.
+  return oneLine(`${run.itemLabel} · ${ENDED[run.status] ?? run.status}${outcome} · run ${run.id}`)
 }
 
 const begin = (id: string): string => `<!-- pilot:inbox:begin ${id} -->`

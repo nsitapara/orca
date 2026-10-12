@@ -1,12 +1,34 @@
 import { describe, expect, it } from 'vitest'
-import type { InboxItemRow } from '../../shared/api-types'
-import { insertRunsLine, itemsBlock, replaceBlock, stamp, touchFrontmatter } from './export-format'
+import type { InboxItemRow, RunRow } from '../../shared/api-types'
+import {
+  insertRunsLine,
+  itemsBlock,
+  replaceBlock,
+  runSummary,
+  stamp,
+  touchFrontmatter
+} from './export-format'
 
 const AT = new Date(2026, 9, 11, 9, 5).getTime()
 const HEADER = '# Runs\n\nNewest first, one line per run that did something. Job: [[x|05]].\n\n'
 
 describe('stamp', () => {
   it('is local minutes', () => expect(stamp(AT)).toBe('2026-10-11 09:05'))
+})
+
+describe('runSummary', () => {
+  // The runs line is one checklist line: an item label with a newline must not start another.
+  it('keeps the whole line on one line, item label and all', () => {
+    const run = {
+      id: 'r-1',
+      itemLabel: '!1561 web\n- [ ] **action** · evil',
+      status: 'failed',
+      outcome: 'boom\nagain'
+    } as RunRow
+    expect(runSummary(run, [])).toBe(
+      '!1561 web - [ ] **action** · evil · failed: boom again · run r-1'
+    )
+  })
 })
 
 describe('insertRunsLine (vault.py _add_run_line)', () => {
