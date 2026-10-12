@@ -1,0 +1,664 @@
+{
+  "case": "requests",
+  "job": "09",
+  "now": 1791747000000,
+  "recordedAt": "synthetic",
+  "repo": {
+    "id": "400fee61-a463-4f76-894a-39861e906007",
+    "path": "/Users/nishsitapara/Documents/web-platform",
+    "name": "web-platform",
+    "project": "polygenx/web-platform",
+    "host": "gitlab.com"
+  },
+  "reads": [
+    {
+      "argv": ["glab", "api", "--hostname", "gitlab.com", "user"],
+      "code": 0,
+      "json": { "username": "nish8" }
+    },
+    {
+      "argv": [
+        "glab",
+        "api",
+        "--hostname",
+        "gitlab.com",
+        "projects/polygenx%2Fweb-platform/merge_requests?state=opened&reviewer_username=nish8&per_page=100&page=1"
+      ],
+      "code": 0,
+      "json": [
+        {
+          "iid": 1571,
+          "title": "Run the fix-cves skill on a schedule",
+          "state": "opened",
+          "draft": false,
+          "sha": "2b7e4c9000000000000000000000000000000000",
+          "source_branch": "web-2097-fix-cves-schedule",
+          "target_branch": "dev",
+          "author": { "username": "alex1craig", "name": "Alex Craig" },
+          "reviewers": [{ "username": "nish8" }],
+          "changes_count": "7"
+        },
+        {
+          "iid": 1579,
+          "title": "Improve source figaro run selector",
+          "state": "opened",
+          "draft": false,
+          "sha": "815b3867aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "source_branch": "web-2107-figaro-selector",
+          "target_branch": "dev",
+          "author": { "username": "jonathan.walker2", "name": "Jonathan Walker" },
+          "reviewers": [{ "username": "nish8" }],
+          "changes_count": "5"
+        },
+        {
+          "iid": 1580,
+          "title": "Donor import fixes",
+          "state": "opened",
+          "draft": false,
+          "sha": "1580000000000000000000000000000000000000",
+          "source_branch": "web-2110-donor-import",
+          "target_branch": "dev",
+          "author": { "username": "alex1craig", "name": "Alex Craig" },
+          "reviewers": [{ "username": "nish8" }],
+          "changes_count": "2"
+        },
+        {
+          "iid": 1588,
+          "title": "Stop ECS containers installing dev dependencies",
+          "state": "opened",
+          "draft": false,
+          "sha": "1588000000000000000000000000000000000000",
+          "source_branch": "web-2115-ecs-deps",
+          "target_branch": "dev",
+          "author": { "username": "shivan2418", "name": "Emil Elgaard" },
+          "reviewers": [{ "username": "nish8" }],
+          "changes_count": "1"
+        },
+        {
+          "iid": 1592,
+          "title": "Staff feature usage page",
+          "state": "opened",
+          "draft": true,
+          "sha": "1592000000000000000000000000000000000000",
+          "source_branch": "staff-feature-usage-page",
+          "target_branch": "dev",
+          "author": { "username": "nish8", "name": "Nish Sitapara" },
+          "reviewers": [{ "username": "nish8" }],
+          "changes_count": "9"
+        },
+        {
+          "iid": 1600,
+          "title": "Add donor status",
+          "state": "opened",
+          "draft": true,
+          "sha": "1e3456789abcdef0000000000000000000000000",
+          "source_branch": "web-1600-donor-status",
+          "target_branch": "dev",
+          "author": { "username": "alex1craig", "name": "Alex Craig" },
+          "reviewers": [{ "username": "nish8" }, { "username": "jonathan.walker2" }],
+          "changes_count": "3"
+        }
+      ]
+    },
+    {
+      "argv": [
+        "glab",
+        "api",
+        "--hostname",
+        "gitlab.com",
+        "projects/polygenx%2Fweb-platform/merge_requests/1571"
+      ],
+      "code": 0,
+      "json": {
+        "iid": 1571,
+        "title": "Run the fix-cves skill on a schedule",
+        "state": "opened",
+        "draft": false,
+        "sha": "2b7e4c9000000000000000000000000000000000",
+        "source_branch": "web-2097-fix-cves-schedule",
+        "target_branch": "dev",
+        "author": { "username": "alex1craig", "name": "Alex Craig" },
+        "reviewers": [{ "username": "nish8" }],
+        "head_pipeline": null,
+        "changes_count": "7"
+      }
+    },
+    {
+      "argv": [
+        "glab",
+        "api",
+        "--hostname",
+        "gitlab.com",
+        "projects/polygenx%2Fweb-platform/merge_requests/1571/approvals"
+      ],
+      "code": 0,
+      "json": { "approved_by": [] }
+    },
+    {
+      "argv": [
+        "glab",
+        "api",
+        "--hostname",
+        "gitlab.com",
+        "projects/polygenx%2Fweb-platform/merge_requests/1571/discussions?per_page=100&page=1"
+      ],
+      "code": 0,
+      "json": []
+    },
+    {
+      "argv": [
+        "glab",
+        "api",
+        "--hostname",
+        "gitlab.com",
+        "projects/polygenx%2Fweb-platform/repository/commits/2b7e4c9000000000000000000000000000000000"
+      ],
+      "code": 0,
+      "json": { "committed_date": "2026-10-11T16:00:00.000Z" }
+    },
+    {
+      "argv": [
+        "glab",
+        "api",
+        "--hostname",
+        "gitlab.com",
+        "projects/polygenx%2Fweb-platform/merge_requests/1579"
+      ],
+      "code": 0,
+      "json": {
+        "iid": 1579,
+        "title": "Improve source figaro run selector",
+        "state": "opened",
+        "draft": false,
+        "sha": "815b3867aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "source_branch": "web-2107-figaro-selector",
+        "target_branch": "dev",
+        "author": { "username": "jonathan.walker2", "name": "Jonathan Walker" },
+        "reviewers": [{ "username": "nish8" }],
+        "head_pipeline": null,
+        "changes_count": "5"
+      }
+    },
+    {
+      "argv": [
+        "glab",
+        "api",
+        "--hostname",
+        "gitlab.com",
+        "projects/polygenx%2Fweb-platform/merge_requests/1579/approvals"
+      ],
+      "code": 0,
+      "json": { "approved_by": [] }
+    },
+    {
+      "argv": [
+        "glab",
+        "api",
+        "--hostname",
+        "gitlab.com",
+        "projects/polygenx%2Fweb-platform/merge_requests/1579/discussions?per_page=100&page=1"
+      ],
+      "code": 0,
+      "json": []
+    },
+    {
+      "argv": [
+        "glab",
+        "api",
+        "--hostname",
+        "gitlab.com",
+        "projects/polygenx%2Fweb-platform/repository/commits/815b3867aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      ],
+      "code": 0,
+      "json": { "committed_date": "2026-10-11T16:00:00.000Z" }
+    },
+    {
+      "argv": [
+        "glab",
+        "api",
+        "--hostname",
+        "gitlab.com",
+        "projects/polygenx%2Fweb-platform/merge_requests/1580"
+      ],
+      "code": 0,
+      "json": {
+        "iid": 1580,
+        "title": "Donor import fixes",
+        "state": "opened",
+        "draft": false,
+        "sha": "1580000000000000000000000000000000000000",
+        "source_branch": "web-2110-donor-import",
+        "target_branch": "dev",
+        "author": { "username": "alex1craig", "name": "Alex Craig" },
+        "reviewers": [{ "username": "nish8" }],
+        "head_pipeline": null,
+        "changes_count": "2"
+      }
+    },
+    {
+      "argv": [
+        "glab",
+        "api",
+        "--hostname",
+        "gitlab.com",
+        "projects/polygenx%2Fweb-platform/merge_requests/1580/approvals"
+      ],
+      "code": 0,
+      "json": { "approved_by": [{ "user": { "username": "nish8" } }] }
+    },
+    {
+      "argv": [
+        "glab",
+        "api",
+        "--hostname",
+        "gitlab.com",
+        "projects/polygenx%2Fweb-platform/merge_requests/1580/discussions?per_page=100&page=1"
+      ],
+      "code": 0,
+      "json": []
+    },
+    {
+      "argv": [
+        "glab",
+        "api",
+        "--hostname",
+        "gitlab.com",
+        "projects/polygenx%2Fweb-platform/repository/commits/1580000000000000000000000000000000000000"
+      ],
+      "code": 0,
+      "json": { "committed_date": "2026-10-11T16:00:00.000Z" }
+    },
+    {
+      "argv": [
+        "glab",
+        "api",
+        "--hostname",
+        "gitlab.com",
+        "projects/polygenx%2Fweb-platform/merge_requests/1588"
+      ],
+      "code": 0,
+      "json": {
+        "iid": 1588,
+        "title": "Stop ECS containers installing dev dependencies",
+        "state": "opened",
+        "draft": false,
+        "sha": "1588000000000000000000000000000000000000",
+        "source_branch": "web-2115-ecs-deps",
+        "target_branch": "dev",
+        "author": { "username": "shivan2418", "name": "Emil Elgaard" },
+        "reviewers": [{ "username": "nish8" }],
+        "head_pipeline": null,
+        "changes_count": "1"
+      }
+    },
+    {
+      "argv": [
+        "glab",
+        "api",
+        "--hostname",
+        "gitlab.com",
+        "projects/polygenx%2Fweb-platform/merge_requests/1588/approvals"
+      ],
+      "code": 0,
+      "json": { "approved_by": [{ "user": { "username": "alex1craig" } }] }
+    },
+    {
+      "argv": [
+        "glab",
+        "api",
+        "--hostname",
+        "gitlab.com",
+        "projects/polygenx%2Fweb-platform/merge_requests/1588/discussions?per_page=100&page=1"
+      ],
+      "code": 0,
+      "json": []
+    },
+    {
+      "argv": [
+        "glab",
+        "api",
+        "--hostname",
+        "gitlab.com",
+        "projects/polygenx%2Fweb-platform/repository/commits/1588000000000000000000000000000000000000"
+      ],
+      "code": 0,
+      "json": { "committed_date": "2026-10-11T16:00:00.000Z" }
+    },
+    {
+      "argv": [
+        "glab",
+        "api",
+        "--hostname",
+        "gitlab.com",
+        "projects/polygenx%2Fweb-platform/merge_requests/1592"
+      ],
+      "code": 0,
+      "json": {
+        "iid": 1592,
+        "title": "Staff feature usage page",
+        "state": "opened",
+        "draft": true,
+        "sha": "1592000000000000000000000000000000000000",
+        "source_branch": "staff-feature-usage-page",
+        "target_branch": "dev",
+        "author": { "username": "nish8", "name": "Nish Sitapara" },
+        "reviewers": [{ "username": "nish8" }],
+        "head_pipeline": null,
+        "changes_count": "9"
+      }
+    },
+    {
+      "argv": [
+        "glab",
+        "api",
+        "--hostname",
+        "gitlab.com",
+        "projects/polygenx%2Fweb-platform/merge_requests/1592/approvals"
+      ],
+      "code": 0,
+      "json": { "approved_by": [] }
+    },
+    {
+      "argv": [
+        "glab",
+        "api",
+        "--hostname",
+        "gitlab.com",
+        "projects/polygenx%2Fweb-platform/merge_requests/1592/discussions?per_page=100&page=1"
+      ],
+      "code": 0,
+      "json": []
+    },
+    {
+      "argv": [
+        "glab",
+        "api",
+        "--hostname",
+        "gitlab.com",
+        "projects/polygenx%2Fweb-platform/repository/commits/1592000000000000000000000000000000000000"
+      ],
+      "code": 0,
+      "json": { "committed_date": "2026-10-11T16:00:00.000Z" }
+    },
+    {
+      "argv": [
+        "glab",
+        "api",
+        "--hostname",
+        "gitlab.com",
+        "projects/polygenx%2Fweb-platform/merge_requests/1600"
+      ],
+      "code": 0,
+      "json": {
+        "iid": 1600,
+        "title": "Add donor status",
+        "state": "opened",
+        "draft": true,
+        "sha": "1e3456789abcdef0000000000000000000000000",
+        "source_branch": "web-1600-donor-status",
+        "target_branch": "dev",
+        "author": { "username": "alex1craig", "name": "Alex Craig" },
+        "reviewers": [{ "username": "nish8" }, { "username": "jonathan.walker2" }],
+        "head_pipeline": null,
+        "changes_count": "3"
+      }
+    },
+    {
+      "argv": [
+        "glab",
+        "api",
+        "--hostname",
+        "gitlab.com",
+        "projects/polygenx%2Fweb-platform/merge_requests/1600/approvals"
+      ],
+      "code": 0,
+      "json": { "approved_by": [] }
+    },
+    {
+      "argv": [
+        "glab",
+        "api",
+        "--hostname",
+        "gitlab.com",
+        "projects/polygenx%2Fweb-platform/merge_requests/1600/discussions?per_page=100&page=1"
+      ],
+      "code": 0,
+      "json": []
+    },
+    {
+      "argv": [
+        "glab",
+        "api",
+        "--hostname",
+        "gitlab.com",
+        "projects/polygenx%2Fweb-platform/repository/commits/1e3456789abcdef0000000000000000000000000"
+      ],
+      "code": 0,
+      "json": { "committed_date": "2026-10-11T16:00:00.000Z" }
+    },
+    {
+      "argv": [
+        "glab",
+        "api",
+        "--hostname",
+        "gitlab.com",
+        "projects/polygenx%2Fweb-platform/merge_requests/1601"
+      ],
+      "code": 0,
+      "json": {
+        "iid": 1601,
+        "title": "Not my review",
+        "state": "opened",
+        "draft": false,
+        "sha": "1601000000000000000000000000000000000000",
+        "source_branch": "web-1601-other",
+        "target_branch": "dev",
+        "author": { "username": "alex1craig", "name": "Alex Craig" },
+        "reviewers": [{ "username": "jonathan.walker2" }],
+        "head_pipeline": null,
+        "changes_count": "1"
+      }
+    },
+    {
+      "argv": [
+        "glab",
+        "api",
+        "--hostname",
+        "gitlab.com",
+        "projects/polygenx%2Fweb-platform/merge_requests/1601/approvals"
+      ],
+      "code": 0,
+      "json": { "approved_by": [] }
+    },
+    {
+      "argv": [
+        "glab",
+        "api",
+        "--hostname",
+        "gitlab.com",
+        "projects/polygenx%2Fweb-platform/merge_requests/1601/discussions?per_page=100&page=1"
+      ],
+      "code": 0,
+      "json": []
+    },
+    {
+      "argv": [
+        "glab",
+        "api",
+        "--hostname",
+        "gitlab.com",
+        "projects/polygenx%2Fweb-platform/repository/commits/1601000000000000000000000000000000000000"
+      ],
+      "code": 0,
+      "json": { "committed_date": "2026-10-11T16:00:00.000Z" }
+    },
+    {
+      "argv": ["orca", "worktree", "list", "--json"],
+      "code": 0,
+      "json": { "ok": true, "result": { "worktrees": [] } }
+    },
+    {
+      "argv": ["orca", "terminal", "list", "--json"],
+      "code": 0,
+      "json": { "ok": true, "result": { "terminals": [] } }
+    },
+    {
+      "argv": [
+        "glab",
+        "api",
+        "--hostname",
+        "gitlab.com",
+        "projects/polygenx%2Fweb-platform/merge_requests?source_branch=staff-feature-usage-page&per_page=100"
+      ],
+      "code": 0,
+      "json": [
+        {
+          "iid": 1592,
+          "title": "Staff feature usage page",
+          "state": "opened",
+          "draft": true,
+          "sha": "1592000000000000000000000000000000000000",
+          "source_branch": "staff-feature-usage-page",
+          "target_branch": "dev",
+          "author": { "username": "nish8", "name": "Nish Sitapara" },
+          "reviewers": [{ "username": "nish8" }],
+          "head_pipeline": null,
+          "changes_count": "9"
+        }
+      ]
+    },
+    {
+      "argv": [
+        "glab",
+        "api",
+        "--hostname",
+        "gitlab.com",
+        "projects/polygenx%2Fweb-platform/merge_requests?source_branch=web-1600-donor-status&per_page=100"
+      ],
+      "code": 0,
+      "json": [
+        {
+          "iid": 1600,
+          "title": "Add donor status",
+          "state": "opened",
+          "draft": true,
+          "sha": "1e3456789abcdef0000000000000000000000000",
+          "source_branch": "web-1600-donor-status",
+          "target_branch": "dev",
+          "author": { "username": "alex1craig", "name": "Alex Craig" },
+          "reviewers": [{ "username": "nish8" }, { "username": "jonathan.walker2" }],
+          "head_pipeline": null,
+          "changes_count": "3"
+        }
+      ]
+    },
+    {
+      "argv": [
+        "glab",
+        "api",
+        "--hostname",
+        "gitlab.com",
+        "projects/polygenx%2Fweb-platform/merge_requests?source_branch=web-2097-fix-cves-schedule&per_page=100"
+      ],
+      "code": 0,
+      "json": [
+        {
+          "iid": 1571,
+          "title": "Run the fix-cves skill on a schedule",
+          "state": "opened",
+          "draft": false,
+          "sha": "2b7e4c9000000000000000000000000000000000",
+          "source_branch": "web-2097-fix-cves-schedule",
+          "target_branch": "dev",
+          "author": { "username": "alex1craig", "name": "Alex Craig" },
+          "reviewers": [{ "username": "nish8" }],
+          "head_pipeline": null,
+          "changes_count": "7"
+        }
+      ]
+    },
+    {
+      "argv": [
+        "glab",
+        "api",
+        "--hostname",
+        "gitlab.com",
+        "projects/polygenx%2Fweb-platform/merge_requests?source_branch=web-2107-figaro-selector&per_page=100"
+      ],
+      "code": 0,
+      "json": [
+        {
+          "iid": 1579,
+          "title": "Improve source figaro run selector",
+          "state": "opened",
+          "draft": false,
+          "sha": "815b3867aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "source_branch": "web-2107-figaro-selector",
+          "target_branch": "dev",
+          "author": { "username": "jonathan.walker2", "name": "Jonathan Walker" },
+          "reviewers": [{ "username": "nish8" }],
+          "head_pipeline": null,
+          "changes_count": "5"
+        }
+      ]
+    },
+    {
+      "argv": [
+        "glab",
+        "api",
+        "--hostname",
+        "gitlab.com",
+        "projects/polygenx%2Fweb-platform/merge_requests?source_branch=web-2110-donor-import&per_page=100"
+      ],
+      "code": 0,
+      "json": [
+        {
+          "iid": 1580,
+          "title": "Donor import fixes",
+          "state": "opened",
+          "draft": false,
+          "sha": "1580000000000000000000000000000000000000",
+          "source_branch": "web-2110-donor-import",
+          "target_branch": "dev",
+          "author": { "username": "alex1craig", "name": "Alex Craig" },
+          "reviewers": [{ "username": "nish8" }],
+          "head_pipeline": null,
+          "changes_count": "2"
+        }
+      ]
+    },
+    {
+      "argv": [
+        "glab",
+        "api",
+        "--hostname",
+        "gitlab.com",
+        "projects/polygenx%2Fweb-platform/merge_requests?source_branch=web-2115-ecs-deps&per_page=100"
+      ],
+      "code": 0,
+      "json": [
+        {
+          "iid": 1588,
+          "title": "Stop ECS containers installing dev dependencies",
+          "state": "opened",
+          "draft": false,
+          "sha": "1588000000000000000000000000000000000000",
+          "source_branch": "web-2115-ecs-deps",
+          "target_branch": "dev",
+          "author": { "username": "shivan2418", "name": "Emil Elgaard" },
+          "reviewers": [{ "username": "nish8" }],
+          "head_pipeline": null,
+          "changes_count": "1"
+        }
+      ]
+    }
+  ],
+  "state": {
+    "review-requests/vault.json": {
+      "notes": {
+        "09 \u00b7 Prepare reviews requested of me/Items.md": "---\ncreated: 2026-10-09T10:00\nupdated: 2026-10-11T09:30\n---\n\n# Prepare reviews requested of me\n\n## 2026-10-10 09:30 \u00b7 09a-20261010T0930 \u00b7 shell\n\n- [x] **action** \u00b7 Prepare a review of !1571? \u2014 `web-2097-fix-cves-schedule @12cace69` \u00b7 \u2713 skipped\n  Run the fix-cves skill on a schedule \u00b7 by Alex Craig \u00b7 7 files \u00b7 head 12cace69. Nothing reaches GitLab until you approve the findings.\n  Options: Approve \u2014 check the branch out in a worktree and prepare the review there; nothing posts yet | Skip \u2014 don't review this head\n  Answer: skip\n- [x] **action** \u00b7 Prepare a review of !1579? \u2014 `web-2107-figaro-selector @815b3867` \u00b7 \u2713 prepared \u2192 3a3f25b54519589a\n  Improve source figaro run selector \u00b7 by Jonathan Walker \u00b7 5 files \u00b7 head 815b3867. Nothing reaches GitLab until you approve the findings.\n  Options: Approve \u2014 check the branch out in a worktree and prepare the review there; nothing posts yet | Skip \u2014 don't review this head\n  Answer: approve\n"
+      }
+    }
+  },
+  "exists": {}
+}

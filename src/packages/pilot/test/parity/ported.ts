@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
+import type { ScriptRunner } from '../../src/main/fields/script-runner'
 import { runTick } from '../../src/main/scheduler/tick-runner'
 import { PilotStore } from '../../src/main/store/store'
 import type { ItemDecision } from '../../src/shared/api-types'
@@ -44,6 +45,7 @@ export async function dryTick(input: {
   people: PeopleDirectory
   fixture: ParityFixture
   seed?: (store: PilotStore, fixture: ParityFixture) => void
+  runScript?: ScriptRunner
 }): Promise<ItemDecision[]> {
   const store = PilotStore.open(':memory:')
   try {
@@ -51,7 +53,7 @@ export async function dryTick(input: {
     const result = await runTick(
       input.definition,
       input.people,
-      fixtureTickDeps(input.fixture, store),
+      fixtureTickDeps(input.fixture, store, { runScript: input.runScript }),
       { dryRun: true }
     )
     if (result.error) {

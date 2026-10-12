@@ -2,6 +2,7 @@ import { agentUsageState } from './agent-usage'
 import { fixFailedCiState } from './fix-failed-ci'
 import { mrFeedbackState } from './mr-feedback'
 import { noStateMapper } from './plans'
+import { reviewRequestsState } from './review-requests'
 import type { SweepStateMapper } from './types'
 
 // One entry per ported job; each port task appends its own. Mappers import their helpers from plans.ts,
@@ -15,7 +16,8 @@ export const MAPPERS: SweepStateMapper[] = [
     '02 keeps no state: its run records stay in the vault, written by the agent'
   ),
   fixFailedCiState,
-  mrFeedbackState
+  mrFeedbackState,
+  reviewRequestsState
 ]
 
 export function sweepStateMapper(

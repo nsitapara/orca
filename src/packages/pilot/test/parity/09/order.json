@@ -1,0 +1,525 @@
+{
+  "case": "order",
+  "job": "09",
+  "now": 1791747000000,
+  "recordedAt": "synthetic",
+  "repo": {
+    "id": "400fee61-a463-4f76-894a-39861e906007",
+    "path": "/Users/nishsitapara/Documents/web-platform",
+    "name": "web-platform",
+    "project": "polygenx/web-platform",
+    "host": "gitlab.com"
+  },
+  "reads": [
+    {
+      "argv": ["glab", "api", "--hostname", "gitlab.com", "user"],
+      "code": 0,
+      "json": { "username": "nish8" }
+    },
+    {
+      "argv": [
+        "glab",
+        "api",
+        "--hostname",
+        "gitlab.com",
+        "projects/polygenx%2Fweb-platform/merge_requests?state=opened&reviewer_username=nish8&per_page=100&page=1"
+      ],
+      "code": 0,
+      "json": [
+        {
+          "iid": 1810,
+          "title": "MR 1810",
+          "state": "opened",
+          "draft": false,
+          "sha": "1810000000000000000000000000000000000000",
+          "source_branch": "web-1810-own-approved",
+          "target_branch": "dev",
+          "author": { "username": "nish8", "name": "Nish Sitapara" },
+          "reviewers": [{ "username": "nish8" }],
+          "changes_count": "1"
+        },
+        {
+          "iid": 1811,
+          "title": "MR 1811",
+          "state": "opened",
+          "draft": false,
+          "sha": "1811000000000000000000000000000000000000",
+          "source_branch": "web-1811-both",
+          "target_branch": "dev",
+          "author": { "username": "alex1craig", "name": "Alex Craig" },
+          "reviewers": [{ "username": "nish8" }],
+          "changes_count": "1"
+        },
+        {
+          "iid": 1812,
+          "title": "MR 1812",
+          "state": "opened",
+          "draft": false,
+          "sha": "1812000000000000000000000000000000000000",
+          "source_branch": "web-1812-two",
+          "target_branch": "dev",
+          "author": { "username": "alex1craig", "name": "Alex Craig" },
+          "reviewers": [{ "username": "nish8" }],
+          "changes_count": "1"
+        },
+        {
+          "iid": 1813,
+          "title": "MR 1813",
+          "state": "opened",
+          "draft": false,
+          "sha": "aa11bb2200000000000000000000000000000000",
+          "source_branch": "web-1813-offered",
+          "target_branch": "dev",
+          "author": { "username": "alex1craig", "name": "Alex Craig" },
+          "reviewers": [{ "username": "nish8" }],
+          "changes_count": "1"
+        },
+        {
+          "iid": 1814,
+          "title": "MR 1814",
+          "state": "opened",
+          "draft": false,
+          "sha": "cc33dd4400000000000000000000000000000000",
+          "source_branch": "web-1814-new-head",
+          "target_branch": "dev",
+          "author": { "username": "alex1craig", "name": "Alex Craig" },
+          "reviewers": [{ "username": "nish8" }],
+          "changes_count": "1"
+        }
+      ]
+    },
+    {
+      "argv": [
+        "glab",
+        "api",
+        "--hostname",
+        "gitlab.com",
+        "projects/polygenx%2Fweb-platform/merge_requests/1810"
+      ],
+      "code": 0,
+      "json": {
+        "iid": 1810,
+        "title": "MR 1810",
+        "state": "opened",
+        "draft": false,
+        "sha": "1810000000000000000000000000000000000000",
+        "source_branch": "web-1810-own-approved",
+        "target_branch": "dev",
+        "author": { "username": "nish8", "name": "Nish Sitapara" },
+        "reviewers": [{ "username": "nish8" }],
+        "head_pipeline": null,
+        "changes_count": "1"
+      }
+    },
+    {
+      "argv": [
+        "glab",
+        "api",
+        "--hostname",
+        "gitlab.com",
+        "projects/polygenx%2Fweb-platform/merge_requests/1810/approvals"
+      ],
+      "code": 0,
+      "json": { "approved_by": [{ "user": { "username": "alex1craig" } }] }
+    },
+    {
+      "argv": [
+        "glab",
+        "api",
+        "--hostname",
+        "gitlab.com",
+        "projects/polygenx%2Fweb-platform/merge_requests/1810/discussions?per_page=100&page=1"
+      ],
+      "code": 0,
+      "json": []
+    },
+    {
+      "argv": [
+        "glab",
+        "api",
+        "--hostname",
+        "gitlab.com",
+        "projects/polygenx%2Fweb-platform/repository/commits/1810000000000000000000000000000000000000"
+      ],
+      "code": 0,
+      "json": { "committed_date": "2026-10-11T16:00:00.000Z" }
+    },
+    {
+      "argv": [
+        "glab",
+        "api",
+        "--hostname",
+        "gitlab.com",
+        "projects/polygenx%2Fweb-platform/merge_requests/1811"
+      ],
+      "code": 0,
+      "json": {
+        "iid": 1811,
+        "title": "MR 1811",
+        "state": "opened",
+        "draft": false,
+        "sha": "1811000000000000000000000000000000000000",
+        "source_branch": "web-1811-both",
+        "target_branch": "dev",
+        "author": { "username": "alex1craig", "name": "Alex Craig" },
+        "reviewers": [{ "username": "nish8" }],
+        "head_pipeline": null,
+        "changes_count": "1"
+      }
+    },
+    {
+      "argv": [
+        "glab",
+        "api",
+        "--hostname",
+        "gitlab.com",
+        "projects/polygenx%2Fweb-platform/merge_requests/1811/approvals"
+      ],
+      "code": 0,
+      "json": {
+        "approved_by": [
+          { "user": { "username": "jonathan.walker2" } },
+          { "user": { "username": "nish8" } }
+        ]
+      }
+    },
+    {
+      "argv": [
+        "glab",
+        "api",
+        "--hostname",
+        "gitlab.com",
+        "projects/polygenx%2Fweb-platform/merge_requests/1811/discussions?per_page=100&page=1"
+      ],
+      "code": 0,
+      "json": []
+    },
+    {
+      "argv": [
+        "glab",
+        "api",
+        "--hostname",
+        "gitlab.com",
+        "projects/polygenx%2Fweb-platform/repository/commits/1811000000000000000000000000000000000000"
+      ],
+      "code": 0,
+      "json": { "committed_date": "2026-10-11T16:00:00.000Z" }
+    },
+    {
+      "argv": [
+        "glab",
+        "api",
+        "--hostname",
+        "gitlab.com",
+        "projects/polygenx%2Fweb-platform/merge_requests/1812"
+      ],
+      "code": 0,
+      "json": {
+        "iid": 1812,
+        "title": "MR 1812",
+        "state": "opened",
+        "draft": false,
+        "sha": "1812000000000000000000000000000000000000",
+        "source_branch": "web-1812-two",
+        "target_branch": "dev",
+        "author": { "username": "alex1craig", "name": "Alex Craig" },
+        "reviewers": [{ "username": "nish8" }],
+        "head_pipeline": null,
+        "changes_count": "1"
+      }
+    },
+    {
+      "argv": [
+        "glab",
+        "api",
+        "--hostname",
+        "gitlab.com",
+        "projects/polygenx%2Fweb-platform/merge_requests/1812/approvals"
+      ],
+      "code": 0,
+      "json": {
+        "approved_by": [
+          { "user": { "username": "jonathan.walker2" } },
+          { "user": { "username": "shivan2418" } }
+        ]
+      }
+    },
+    {
+      "argv": [
+        "glab",
+        "api",
+        "--hostname",
+        "gitlab.com",
+        "projects/polygenx%2Fweb-platform/merge_requests/1812/discussions?per_page=100&page=1"
+      ],
+      "code": 0,
+      "json": []
+    },
+    {
+      "argv": [
+        "glab",
+        "api",
+        "--hostname",
+        "gitlab.com",
+        "projects/polygenx%2Fweb-platform/repository/commits/1812000000000000000000000000000000000000"
+      ],
+      "code": 0,
+      "json": { "committed_date": "2026-10-11T16:00:00.000Z" }
+    },
+    {
+      "argv": [
+        "glab",
+        "api",
+        "--hostname",
+        "gitlab.com",
+        "projects/polygenx%2Fweb-platform/merge_requests/1813"
+      ],
+      "code": 0,
+      "json": {
+        "iid": 1813,
+        "title": "MR 1813",
+        "state": "opened",
+        "draft": false,
+        "sha": "aa11bb2200000000000000000000000000000000",
+        "source_branch": "web-1813-offered",
+        "target_branch": "dev",
+        "author": { "username": "alex1craig", "name": "Alex Craig" },
+        "reviewers": [{ "username": "nish8" }],
+        "head_pipeline": null,
+        "changes_count": "1"
+      }
+    },
+    {
+      "argv": [
+        "glab",
+        "api",
+        "--hostname",
+        "gitlab.com",
+        "projects/polygenx%2Fweb-platform/merge_requests/1813/approvals"
+      ],
+      "code": 0,
+      "json": { "approved_by": [] }
+    },
+    {
+      "argv": [
+        "glab",
+        "api",
+        "--hostname",
+        "gitlab.com",
+        "projects/polygenx%2Fweb-platform/merge_requests/1813/discussions?per_page=100&page=1"
+      ],
+      "code": 0,
+      "json": []
+    },
+    {
+      "argv": [
+        "glab",
+        "api",
+        "--hostname",
+        "gitlab.com",
+        "projects/polygenx%2Fweb-platform/repository/commits/aa11bb2200000000000000000000000000000000"
+      ],
+      "code": 0,
+      "json": { "committed_date": "2026-10-11T16:00:00.000Z" }
+    },
+    {
+      "argv": [
+        "glab",
+        "api",
+        "--hostname",
+        "gitlab.com",
+        "projects/polygenx%2Fweb-platform/merge_requests/1814"
+      ],
+      "code": 0,
+      "json": {
+        "iid": 1814,
+        "title": "MR 1814",
+        "state": "opened",
+        "draft": false,
+        "sha": "cc33dd4400000000000000000000000000000000",
+        "source_branch": "web-1814-new-head",
+        "target_branch": "dev",
+        "author": { "username": "alex1craig", "name": "Alex Craig" },
+        "reviewers": [{ "username": "nish8" }],
+        "head_pipeline": null,
+        "changes_count": "1"
+      }
+    },
+    {
+      "argv": [
+        "glab",
+        "api",
+        "--hostname",
+        "gitlab.com",
+        "projects/polygenx%2Fweb-platform/merge_requests/1814/approvals"
+      ],
+      "code": 0,
+      "json": { "approved_by": [] }
+    },
+    {
+      "argv": [
+        "glab",
+        "api",
+        "--hostname",
+        "gitlab.com",
+        "projects/polygenx%2Fweb-platform/merge_requests/1814/discussions?per_page=100&page=1"
+      ],
+      "code": 0,
+      "json": []
+    },
+    {
+      "argv": [
+        "glab",
+        "api",
+        "--hostname",
+        "gitlab.com",
+        "projects/polygenx%2Fweb-platform/repository/commits/cc33dd4400000000000000000000000000000000"
+      ],
+      "code": 0,
+      "json": { "committed_date": "2026-10-11T16:00:00.000Z" }
+    },
+    {
+      "argv": ["orca", "worktree", "list", "--json"],
+      "code": 0,
+      "json": { "ok": true, "result": { "worktrees": [] } }
+    },
+    {
+      "argv": ["orca", "terminal", "list", "--json"],
+      "code": 0,
+      "json": { "ok": true, "result": { "terminals": [] } }
+    },
+    {
+      "argv": [
+        "glab",
+        "api",
+        "--hostname",
+        "gitlab.com",
+        "projects/polygenx%2Fweb-platform/merge_requests?source_branch=web-1810-own-approved&per_page=100"
+      ],
+      "code": 0,
+      "json": [
+        {
+          "iid": 1810,
+          "title": "MR 1810",
+          "state": "opened",
+          "draft": false,
+          "sha": "1810000000000000000000000000000000000000",
+          "source_branch": "web-1810-own-approved",
+          "target_branch": "dev",
+          "author": { "username": "nish8", "name": "Nish Sitapara" },
+          "reviewers": [{ "username": "nish8" }],
+          "head_pipeline": null,
+          "changes_count": "1"
+        }
+      ]
+    },
+    {
+      "argv": [
+        "glab",
+        "api",
+        "--hostname",
+        "gitlab.com",
+        "projects/polygenx%2Fweb-platform/merge_requests?source_branch=web-1811-both&per_page=100"
+      ],
+      "code": 0,
+      "json": [
+        {
+          "iid": 1811,
+          "title": "MR 1811",
+          "state": "opened",
+          "draft": false,
+          "sha": "1811000000000000000000000000000000000000",
+          "source_branch": "web-1811-both",
+          "target_branch": "dev",
+          "author": { "username": "alex1craig", "name": "Alex Craig" },
+          "reviewers": [{ "username": "nish8" }],
+          "head_pipeline": null,
+          "changes_count": "1"
+        }
+      ]
+    },
+    {
+      "argv": [
+        "glab",
+        "api",
+        "--hostname",
+        "gitlab.com",
+        "projects/polygenx%2Fweb-platform/merge_requests?source_branch=web-1812-two&per_page=100"
+      ],
+      "code": 0,
+      "json": [
+        {
+          "iid": 1812,
+          "title": "MR 1812",
+          "state": "opened",
+          "draft": false,
+          "sha": "1812000000000000000000000000000000000000",
+          "source_branch": "web-1812-two",
+          "target_branch": "dev",
+          "author": { "username": "alex1craig", "name": "Alex Craig" },
+          "reviewers": [{ "username": "nish8" }],
+          "head_pipeline": null,
+          "changes_count": "1"
+        }
+      ]
+    },
+    {
+      "argv": [
+        "glab",
+        "api",
+        "--hostname",
+        "gitlab.com",
+        "projects/polygenx%2Fweb-platform/merge_requests?source_branch=web-1813-offered&per_page=100"
+      ],
+      "code": 0,
+      "json": [
+        {
+          "iid": 1813,
+          "title": "MR 1813",
+          "state": "opened",
+          "draft": false,
+          "sha": "aa11bb2200000000000000000000000000000000",
+          "source_branch": "web-1813-offered",
+          "target_branch": "dev",
+          "author": { "username": "alex1craig", "name": "Alex Craig" },
+          "reviewers": [{ "username": "nish8" }],
+          "head_pipeline": null,
+          "changes_count": "1"
+        }
+      ]
+    },
+    {
+      "argv": [
+        "glab",
+        "api",
+        "--hostname",
+        "gitlab.com",
+        "projects/polygenx%2Fweb-platform/merge_requests?source_branch=web-1814-new-head&per_page=100"
+      ],
+      "code": 0,
+      "json": [
+        {
+          "iid": 1814,
+          "title": "MR 1814",
+          "state": "opened",
+          "draft": false,
+          "sha": "cc33dd4400000000000000000000000000000000",
+          "source_branch": "web-1814-new-head",
+          "target_branch": "dev",
+          "author": { "username": "alex1craig", "name": "Alex Craig" },
+          "reviewers": [{ "username": "nish8" }],
+          "head_pipeline": null,
+          "changes_count": "1"
+        }
+      ]
+    }
+  ],
+  "state": {
+    "review-requests/vault.json": {
+      "notes": {
+        "09 \u00b7 Prepare reviews requested of me/Items.md": "---\ncreated: 2026-10-09T10:00\nupdated: 2026-10-11T09:30\n---\n\n# Prepare reviews requested of me\n\n## 2026-10-10 09:30 \u00b7 09a-20261010T0930 \u00b7 shell\n\n- [x] **action** \u00b7 Prepare a review of !1813? \u2014 `web-1813-offered @aa11bb22` \u00b7 \u2713 skipped\n  Run the fix-cves skill on a schedule \u00b7 by Alex Craig \u00b7 7 files \u00b7 head aa11bb22. Nothing reaches GitLab until you approve the findings.\n  Options: Approve \u2014 check the branch out in a worktree and prepare the review there; nothing posts yet | Skip \u2014 don't review this head\n  Answer: skip\n- [x] **action** \u00b7 Prepare a review of !1814? \u2014 `web-1814-new-head @99887766` \u00b7 \u2713 prepared \u2192 3a3f25b54519589a\n  Improve source figaro run selector \u00b7 by Jonathan Walker \u00b7 5 files \u00b7 head 99887766. Nothing reaches GitLab until you approve the findings.\n  Options: Approve \u2014 check the branch out in a worktree and prepare the review there; nothing posts yet | Skip \u2014 don't review this head\n  Answer: approve\n"
+      }
+    }
+  },
+  "exists": {}
+}

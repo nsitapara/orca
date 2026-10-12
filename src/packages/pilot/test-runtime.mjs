@@ -37,5 +37,6 @@ export const PILOT_SQLITE_RUNTIME_INCLUDE = [
   'src/packages/pilot/scripts/import-orca-settings.test.ts',
   'src/packages/pilot/test/parity/05-fix-failed-ci.parity.test.ts',
   'src/packages/pilot/test/parity/merge-dev.test.ts',
-  'src/packages/pilot/test/parity/mr-feedback.test.ts'
+  'src/packages/pilot/test/parity/mr-feedback.test.ts',
+  'src/packages/pilot/test/parity/review-requests.test.ts'
 ]

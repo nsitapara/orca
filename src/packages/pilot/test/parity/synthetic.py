@@ -268,6 +268,66 @@ def _06():
 CASE_MAKERS.append(_06)
 
 
+ITEMS_09 = """---
+created: 2026-10-09T10:00
+updated: 2026-10-11T09:30
+---
+
+# Prepare reviews requested of me
+
+## 2026-10-10 09:30 · 09a-20261010T0930 · shell
+
+- [x] **action** · Prepare a review of !1571? — `web-2097-fix-cves-schedule @12cace69` · ✓ skipped
+  Run the fix-cves skill on a schedule · by Alex Craig · 7 files · head 12cace69. Nothing reaches GitLab until you approve the findings.
+  Options: Approve — check the branch out in a worktree and prepare the review there; nothing posts yet | Skip — don't review this head
+  Answer: skip
+- [x] **action** · Prepare a review of !1579? — `web-2107-figaro-selector @815b3867` · ✓ prepared → 3a3f25b54519589a
+  Improve source figaro run selector · by Jonathan Walker · 5 files · head 815b3867. Nothing reaches GitLab until you approve the findings.
+  Options: Approve — check the branch out in a worktree and prepare the review there; nothing posts yet | Skip — don't review this head
+  Answer: approve
+"""
+
+
+def _09():
+    now = 1791747000000  # 12:30 Pacific, 2026-10-11
+    me = ("nish8",)
+    vault = lambda text: {"review-requests/vault.json": {"notes": {"09 \u00b7 Prepare reviews requested of me/Items.md": text}}}  # noqa: E731
+    mrs = [
+        mr(1571, branch="web-2097-fix-cves-schedule", author="alex1craig", reviewers=me, title="Run the fix-cves skill on a schedule",
+           changes="7", sha="2b7e4c9".ljust(40, "0")),
+        mr(1579, branch="web-2107-figaro-selector", author="jonathan.walker2", reviewers=me, title="Improve source figaro run selector",
+           changes="5", sha="815b3867".ljust(40, "a")),
+        mr(1580, branch="web-2110-donor-import", author="alex1craig", reviewers=me, title="Donor import fixes", changes="2",
+           approved_by=("nish8",)),
+        mr(1588, branch="web-2115-ecs-deps", author="shivan2418", reviewers=me, title="Stop ECS containers installing dev dependencies",
+           approved_by=("alex1craig",)),
+        mr(1592, branch="staff-feature-usage-page", reviewers=me, draft=True, title="Staff feature usage page", changes="9"),
+        mr(1600, branch="web-1600-donor-status", author="alex1craig", reviewers=("nish8", "jonathan.walker2"), draft=True,
+           title="Add donor status", changes="3", sha="1e3456789abcdef0".ljust(40, "0")),
+        mr(1601, branch="web-1601-other", author="alex1craig", reviewers=("jonathan.walker2",), title="Not my review"),
+    ]
+    yield "09", "requests", build("09", "requests", now=now, mrs=mrs, listed_by="reviewer", branch_mrs=True, state=vault(ITEMS_09))
+    # No cap: the sweep offered every head in one pass (no --max, no per-tick limit), six of them here.
+    many = [mr(1800 + i, branch=f"web-18{i:02d}-many", author="alex1craig", reviewers=me, title=f"Change {i}", changes=str(i + 1))
+            for i in range(6)]
+    yield "09", "many", build("09", "many", now=now, mrs=many, listed_by="reviewer", branch_mrs=True, state=vault(ITEMS_09))
+    # The sweep's order of reasons: my own MR before any approval; my approval before anybody's; a later head
+    # after the approval is still approved. Heads already offered stay offered, a new head asks again.
+    order = [
+        mr(1810, branch="web-1810-own-approved", reviewers=me, approved_by=("alex1craig",)),
+        mr(1811, branch="web-1811-both", author="alex1craig", reviewers=me, approved_by=("jonathan.walker2", "nish8")),
+        mr(1812, branch="web-1812-two", author="alex1craig", reviewers=me, approved_by=("jonathan.walker2", "shivan2418")),
+        mr(1813, branch="web-1813-offered", author="alex1craig", reviewers=me, sha="aa11bb22".ljust(40, "0")),
+        mr(1814, branch="web-1814-new-head", author="alex1craig", reviewers=me, sha="cc33dd44".ljust(40, "0")),
+    ]
+    offered = (ITEMS_09.replace("!1571?", "!1813?").replace("web-2097-fix-cves-schedule", "web-1813-offered").replace("12cace69", "aa11bb22")
+               .replace("!1579?", "!1814?").replace("web-2107-figaro-selector", "web-1814-new-head").replace("815b3867", "99887766"))
+    yield "09", "order", build("09", "order", now=now, mrs=order, listed_by="reviewer", branch_mrs=True, state=vault(offered))
+
+
+CASE_MAKERS.append(_09)
+
+
 def _canon(text):
     """JSON as data, with a fixed key order: formatting is free, but true vs 1 and 1 vs 1.0 are drift."""
     return json.dumps(json.loads(text), sort_keys=True)
