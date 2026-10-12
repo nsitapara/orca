@@ -95,7 +95,7 @@ const HOLDS: HoldCase[] = [
 
 const DAY = 86_400_000
 const NOW = Date.parse('2026-10-12T16:00:00Z')
-const ASKER = { agent: 'claude' as const, sessionId: '11111111-aaaa' }
+const ASKER = { agent: 'claude' as const, sessionId: '11111111-aaaa-4aaa-8aaa-aaaaaaaaaaaa' }
 type SessionCase = {
   launchArgs?: string[] | null
   name: string
