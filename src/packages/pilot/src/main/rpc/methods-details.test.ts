@@ -144,3 +144,101 @@ describe("a card's Details over RPC", () => {
     )
   })
 })
+
+// run-1 (ci) runs its step on term-1; run-2 (qa) runs its step for the env; run-3 (ci)'s step has ended.
+function withRuns(store: PilotStore): void {
+  for (const [id, automationId] of [
+    ['run-1', 'ci'],
+    ['run-2', 'qa'],
+    ['run-3', 'ci']
+  ]) {
+    store.runs.create({
+      id,
+      automationId,
+      tickId: null,
+      itemKey: 'mr:1',
+      itemLabel: '!1',
+      worktreePath: '/wt',
+      startedAt: 1
+    })
+    store.runs.createStep({
+      runId: id,
+      idx: 0,
+      name: 'draft',
+      agent: 'claude',
+      skill: null,
+      mode: null,
+      startedAt: 1,
+      status: 'running'
+    })
+  }
+  store.runs.updateStep('run-1', 0, { terminalHandle: 'term-1' })
+  store.runs.updateStep('run-3', 0, { status: 'done' })
+}
+
+const PAIRED: RpcCallerIdentity = { kind: 'paired-device', deviceId: 'phone' }
+const RUN_ONLY = "Attach Details from a Pilot run's step, for a card of that run's automation"
+
+describe('pilot.inbox.setDetails: who may replace a bundle', () => {
+  it.each<[string, RpcCallerIdentity, Record<string, unknown>]>([
+    ['the desktop', DESKTOP, {}],
+    ["a step of the card's automation, on its terminal", CLI, { terminal: 'term-1' }]
+  ])('lets %s attach it', (_name, caller, binding) => {
+    const { f, store, add, callAs } = detailsSetup()
+    withRuns(store)
+    const id = add(null)
+    expect(
+      callAs(caller, 'pilot.inbox.setDetails', { id, bundlePath: f.bundle, ...binding })
+    ).toEqual({ id, version: 2, changed: true, cleared: false })
+    expect(store.inbox.get(id)?.details?.sha256).toBe(store.inbox.snapshot(id)?.ref.sha256)
+  })
+
+  it.each<[string, RpcCallerIdentity | undefined, Record<string, unknown>, string]>([
+    [
+      "a step of another automation's run",
+      CLI,
+      { runId: 'run-2', stepIdx: 0 },
+      'This run belongs to another automation than the card'
+    ],
+    ['the local CLI bound to no run', CLI, {}, RUN_ONLY],
+    [
+      "an ended run's env binding",
+      CLI,
+      { runId: 'run-3', stepIdx: 0 },
+      `${RUN_ONLY} (Step 0 of run run-3 has ended`
+    ],
+    ['a paired device', PAIRED, {}, RUN_ONLY],
+    ['a caller Pilot cannot name', undefined, {}, "Pilot can't tell who is calling"]
+  ])('refuses %s and leaves the card alone', (_name, caller, binding, message) => {
+    const { f, store, add, callAs } = detailsSetup()
+    withRuns(store)
+    const id = add(null)
+    const before = store.inbox.get(id)
+    expect(() =>
+      callAs(caller, 'pilot.inbox.setDetails', { id, bundlePath: f.bundle, ...binding })
+    ).toThrow(message)
+    expect(store.inbox.get(id)).toEqual(before)
+    expect(store.inbox.snapshot(id)).toBeNull()
+  })
+
+  it('refuses a caller kind it does not know', () => {
+    const { f, add, callAs } = detailsSetup()
+    const id = add(null)
+    const odd = { kind: 'plugin' } as unknown as RpcCallerIdentity
+    expect(() => callAs(odd, 'pilot.inbox.setDetails', { id, bundlePath: f.bundle })).toThrow(
+      RUN_ONLY
+    )
+  })
+
+  it.each([
+    [{ id: 'in_x', bundlePath: '' }],
+    [{ id: 'in_x', bundlePath: '/v/F2.json', head: 'xyz' }],
+    [{ id: 'in_x', bundlePath: '/v/F2.json', head: '12345' }]
+  ])('refuses params %j', (params) => {
+    const { find } = detailsSetup()
+    const method = find('pilot.inbox.setDetails') as unknown as {
+      params: { safeParse(v: unknown): { success: boolean } }
+    }
+    expect(method.params.safeParse(params).success).toBe(false)
+  })
+})
