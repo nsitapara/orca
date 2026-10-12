@@ -6,14 +6,17 @@ import type {
   AutomationListPayload,
   AutomationSummary
 } from '../shared/api-types'
+import { bindingFromEnv } from './cli-values'
 import { formatAutomationDetail, formatAutomationList } from './format-automations'
 
+// Says where it is called from: Pilot refuses enable/disable from an agent in a run.
 function setEnabled(enabled: boolean): CommandHandler {
   return async ({ flags, client, json }) => {
     const id = getRequiredStringFlag(flags, 'id')
     const response = await client.call<AutomationSummary>('pilot.automations.setEnabled', {
       id,
-      enabled
+      enabled,
+      ...bindingFromEnv(process.env)
     })
     printResult(response, json, (a) => `${a.enabled ? 'Enabled' : 'Paused'} ${a.id} (${a.file})`)
   }

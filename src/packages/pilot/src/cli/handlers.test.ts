@@ -18,7 +18,12 @@ steps:
 `
 
 function ctx(flags: Record<string, string>, client: unknown = {}): HandlerContext {
-  return { flags: new Map(Object.entries(flags)), client, cwd: '/', json: false } as HandlerContext
+  return {
+    flags: new Map(Object.entries(flags)),
+    client,
+    cwd: '/',
+    json: false
+  } as HandlerContext
 }
 
 describe('automations validate', () => {
@@ -67,8 +72,27 @@ describe('long calls', () => {
   ])('%s calls %s with a timeout of at least 120 s', async (key, method) => {
     const call = vi.fn().mockResolvedValue({ result: { status: 'busy' } })
     vi.spyOn(console, 'log').mockImplementation(() => {})
+    vi.stubEnv('ORCA_TERMINAL_HANDLE', '')
+    vi.stubEnv('PILOT_RUN_ID', '')
     await PILOT_HANDLERS[key](ctx({ id: 'a' }, { call }))
+    vi.unstubAllEnvs()
     expect(call).toHaveBeenCalledWith(method, { id: 'a' }, { timeoutMs: LONG_CALL_TIMEOUT_MS })
     expect(LONG_CALL_TIMEOUT_MS).toBeGreaterThanOrEqual(120_000)
+  })
+
+  // The server refuses a tick from an agent in a run; it can only tell from where the call comes.
+  it('automations tick sends the terminal and run it is called from', async () => {
+    const call = vi.fn().mockResolvedValue({ result: { status: 'busy' } })
+    vi.spyOn(console, 'log').mockImplementation(() => {})
+    vi.stubEnv('ORCA_TERMINAL_HANDLE', 'term-1')
+    vi.stubEnv('PILOT_RUN_ID', 'run-1')
+    vi.stubEnv('PILOT_STEP_IDX', '0')
+    await PILOT_HANDLERS['automations tick'](ctx({ id: 'a' }, { call }))
+    vi.unstubAllEnvs()
+    expect(call).toHaveBeenCalledWith(
+      'pilot.automations.tickNow',
+      { id: 'a', terminal: 'term-1', runId: 'run-1', stepIdx: 0 },
+      { timeoutMs: LONG_CALL_TIMEOUT_MS }
+    )
   })
 })

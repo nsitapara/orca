@@ -93,7 +93,8 @@ function setup() {
       reload: () => loaded,
       scheduler: null as never,
       actions,
-      dispatcher: null
+      dispatcher: null,
+      schedulerOn: true
     }
   }
   const method = (buildPilotMethods(host) as unknown as Callable[]).find(

@@ -2,7 +2,12 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { HandlerContext } from '../../../../cli/dispatch'
 import { AUTOMATION_FILE_HANDLERS } from './handlers-automations'
 
-const LIST = { automations: [], errors: [], peopleError: null, missingDirs: [] }
+const LIST = {
+  automations: [],
+  errors: [],
+  peopleError: null,
+  missingDirs: []
+}
 
 function contextFor(flags: Record<string, string>, result: unknown) {
   const call = vi.fn().mockResolvedValue({ result })
@@ -15,7 +20,10 @@ function contextFor(flags: Record<string, string>, result: unknown) {
   return { context, call }
 }
 
-afterEach(() => vi.restoreAllMocks())
+afterEach(() => {
+  vi.restoreAllMocks()
+  vi.unstubAllEnvs()
+})
 
 describe("Pilot's automation file commands", () => {
   it.each([
@@ -55,6 +63,8 @@ describe("Pilot's automation file commands", () => {
       { id: 'fix-ci', enabled: false }
     ]
   ])('%s', async (key, flags, method, params, result) => {
+    vi.stubEnv('ORCA_TERMINAL_HANDLE', '')
+    vi.stubEnv('PILOT_RUN_ID', '')
     const { context, call } = contextFor(flags, result)
     vi.spyOn(console, 'log').mockImplementation(() => {})
     await AUTOMATION_FILE_HANDLERS[key](context)
@@ -63,5 +73,25 @@ describe("Pilot's automation file commands", () => {
     } else {
       expect(call).toHaveBeenCalledWith(method, params)
     }
+  })
+
+  // The server refuses enable/disable from an agent in a run; the CLI says where it is called from.
+  it.each([
+    ['automations enable', true],
+    ['automations disable', false]
+  ])('%s sends the terminal and run it is called from', async (key, enabled) => {
+    vi.stubEnv('ORCA_TERMINAL_HANDLE', 'term-1')
+    vi.stubEnv('PILOT_RUN_ID', 'run-1')
+    vi.stubEnv('PILOT_STEP_IDX', '2')
+    const { context, call } = contextFor({ id: 'fix-ci' }, { id: 'fix-ci', enabled })
+    vi.spyOn(console, 'log').mockImplementation(() => {})
+    await AUTOMATION_FILE_HANDLERS[key](context)
+    expect(call).toHaveBeenCalledWith('pilot.automations.setEnabled', {
+      id: 'fix-ci',
+      enabled,
+      terminal: 'term-1',
+      runId: 'run-1',
+      stepIdx: 2
+    })
   })
 })

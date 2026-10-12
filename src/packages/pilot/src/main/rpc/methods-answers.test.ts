@@ -33,7 +33,8 @@ function setup(withDispatcher = true) {
       reload: () => loaded,
       scheduler: null as never,
       actions: { entries: () => [], get: () => null },
-      dispatcher: withDispatcher ? ({ applyNow } as unknown as AnswerDispatcher) : null
+      dispatcher: withDispatcher ? ({ applyNow } as unknown as AnswerDispatcher) : null,
+      schedulerOn: withDispatcher
     }
   }
   writeFileSync(join(dir, 'people.yaml'), 'people:\n  - { id: nish, name: Nish }\n')

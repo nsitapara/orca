@@ -280,7 +280,8 @@ describe('approving an ask-first card (Group 22)', () => {
       store: s.store,
       now: () => 1_000,
       definitions: () => [def],
-      start
+      start,
+      schedulerOn: () => true
     })
     const catalog: ActionCatalog = {
       entries: () => [entry],

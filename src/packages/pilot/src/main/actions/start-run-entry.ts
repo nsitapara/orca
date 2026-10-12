@@ -1,5 +1,6 @@
 import type { ItemDecision, RunRow } from '../../shared/api-types'
 import type { AutomationDefinition } from '../../shared/definition/types'
+import { SCHEDULER_OFF } from '../scheduler/scheduler'
 import type { LaunchRequest } from '../scheduler/tick-runner'
 import type { PilotStore } from '../store/store'
 import { actionDone, actionFailed, type ActionEntry } from './types'
@@ -33,6 +34,8 @@ export function startRunEntry(deps: {
   definitions(): AutomationDefinition[]
   // RunEngine.startRun (Task 9b).
   start(req: LaunchRequest): Promise<unknown>
+  // Only the process that runs the scheduler starts a run: its engine watches and ends it.
+  schedulerOn(): boolean
 }): ActionEntry {
   return {
     name: 'start_run',
@@ -72,6 +75,9 @@ export function startRunEntry(deps: {
       }
       if (dryRun) {
         return actionDone(`would start run ${run.id}`)
+      }
+      if (!deps.schedulerOn()) {
+        return actionFailed(SCHEDULER_OFF)
       }
       // Only the run's own card starts it: a card an agent filed naming another run never does.
       if (opts.runId !== run.id) {

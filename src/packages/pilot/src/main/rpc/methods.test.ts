@@ -1,29 +1,45 @@
-import { mkdtempSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
+import type { RpcCallerIdentity } from '../../../../../main/runtime/rpc/rpc-caller-identity'
 import type { PilotStatus } from '../../shared/api-types'
 import { loadDefinitions } from '../definitions/loader'
 import type { PilotHost } from '../pilot-services'
 import { PilotStore } from '../store/store'
-import { buildPilotMethods } from './methods'
+import { AGENT_IN_RUN, buildPilotMethods, NO_CALLER_CHANGE } from './methods'
+import { SCHEDULER_OFF } from '../scheduler/scheduler'
 
 // Desktop/serve Pilot inside Electron: Orca's own engine is off there.
-vi.mock('../orca-automations-off', () => ({ isOrcaAutomationsOff: () => true }))
+vi.mock('../orca-automations-off', () => ({
+  isOrcaAutomationsOff: () => true
+}))
 
 type Callable = {
   name: string
   params: { safeParse(v: unknown): { success: boolean } } | null
-  handler(p: unknown): unknown
+  handler(p: unknown, rpc?: { caller?: RpcCallerIdentity }): unknown
 }
 
-function setup(over: Partial<PilotHost> = {}, scheduler: unknown = null) {
+const DESKTOP = { caller: { kind: 'desktop' } as RpcCallerIdentity }
+
+function setup(over: Partial<PilotHost> = {}, scheduler: unknown = null, schedulerOn = true) {
+  return setupWithStore(over, scheduler, schedulerOn).find
+}
+
+function setupWithStore(
+  over: Partial<PilotHost> = {},
+  scheduler: unknown = null,
+  schedulerOn = true
+) {
   const dir = mkdtempSync(join(tmpdir(), 'pilot-methods-'))
   writeFileSync(
     join(dir, 'ci.yaml'),
     'name: X\nrepo: r\nschedule: manual\nitems: { kind: merge_request }\nsteps: [ { agent: claude, prompt: x } ]\n'
   )
   const loaded = loadDefinitions([dir])
+  let current = loaded
+  const store = PilotStore.open(join(dir, 'db.sqlite'))
   const host: PilotHost = {
     processKind: 'main',
     dirs: [dir],
@@ -31,18 +47,26 @@ function setup(over: Partial<PilotHost> = {}, scheduler: unknown = null) {
     error: null,
     context: {
       processKind: 'main',
-      store: PilotStore.open(join(dir, 'db.sqlite')),
+      store,
       dirs: [dir],
-      loaded: () => loaded,
-      reload: () => loaded,
+      loaded: () => current,
+      reload: () => {
+        current = loadDefinitions([dir])
+        return current
+      },
       scheduler: scheduler as never,
       actions: { entries: () => [], get: () => null },
-      dispatcher: null
+      dispatcher: null,
+      schedulerOn
     },
     ...over
   }
   const methods = buildPilotMethods(host) as unknown as Callable[]
-  return (name: string) => methods.find((m) => m.name === name)!
+  return {
+    find: (name: string) => methods.find((m) => m.name === name)!,
+    store,
+    dir
+  }
 }
 
 describe('Pilot RPC methods', () => {
@@ -62,7 +86,11 @@ describe('Pilot RPC methods', () => {
       'pilot.run.event'
     ]
     for (const n of names) {
-      expect(find(n)).toMatchObject({ name: n, permission: 'workspace', pilot: true })
+      expect(find(n)).toMatchObject({
+        name: n,
+        permission: 'workspace',
+        pilot: true
+      })
     }
   })
 
@@ -76,7 +104,11 @@ describe('Pilot RPC methods', () => {
     const none = setup({ context: null, error: 'boom' })('pilot.status').handler(
       null
     ) as PilotStatus
-    expect(none).toMatchObject({ loopStartedAt: null, lastLoopFinishedAt: null, error: 'boom' })
+    expect(none).toMatchObject({
+      loopStartedAt: null,
+      lastLoopFinishedAt: null,
+      error: 'boom'
+    })
   })
 
   it.each([
@@ -112,7 +144,12 @@ describe('Pilot RPC methods', () => {
     for (const name of ['pilot.run.output', 'pilot.run.event']) {
       await expect(
         Promise.resolve().then(() =>
-          find(name).handler({ runId: 'r', stepIdx: 0, outputs: { a: 1 }, kind: 'x' })
+          find(name).handler({
+            runId: 'r',
+            stepIdx: 0,
+            outputs: { a: 1 },
+            kind: 'x'
+          })
         )
       ).rejects.toThrow("Pilot isn't running: file is not a database")
     }
@@ -141,7 +178,11 @@ describe('Pilot RPC methods', () => {
     expect(event.safeParse({ terminal: 't', kind: 'pushed' }).success).toBe(true)
     expect(event.safeParse({ runId: 'r', kind: 'Pushed!' }).success).toBe(false)
     expect(
-      event.safeParse({ runId: 'r', kind: 'big', payload: { x: 'y'.repeat(64 * 1024) } }).success
+      event.safeParse({
+        runId: 'r',
+        kind: 'big',
+        payload: { x: 'y'.repeat(64 * 1024) }
+      }).success
     ).toBe(false)
   })
 
@@ -165,15 +206,126 @@ describe('Pilot RPC methods', () => {
     }
     const find = setup({}, scheduler)
     expect(await find('pilot.automations.dryRun').handler({ id: 'ci' })).toEqual({ status: 'busy' })
-    expect(await find('pilot.automations.tickNow').handler({ id: 'ci' })).toEqual({
+    expect(await find('pilot.automations.tickNow').handler({ id: 'ci' }, DESKTOP)).toEqual({
       status: 'busy'
     })
     expect(calls).toEqual([
       ['ci', { dryRun: true }],
       ['ci', { dryRun: false }]
     ])
-    await expect(find('pilot.automations.tickNow').handler({ id: 'nope' })).rejects.toThrow(
-      'No automation "nope"'
-    )
+    await expect(
+      find('pilot.automations.tickNow').handler({ id: 'nope' }, DESKTOP)
+    ).rejects.toThrow('No automation "nope"')
+  })
+})
+
+// An agent reaches Pilot as the local CLI with its step's terminal (bindingFromEnv); Nish's own CLI has no
+// step on its terminal. Only callers that aren't an agent in a run may tick or flip an automation.
+describe('who may tick, enable or pause an automation', () => {
+  const LOCAL = { kind: 'local-cli' } as RpcCallerIdentity
+  const PHONE = {
+    kind: 'paired-device',
+    deviceId: 'ipad'
+  } as RpcCallerIdentity
+
+  // ci.yaml with an agent's step running on term-agent (run-1, step 0).
+  function agentSetup() {
+    const ticks: unknown[] = []
+    const scheduler = {
+      tickNow: async (id: string, o: unknown) => {
+        ticks.push([id, o])
+        return { status: 'busy' }
+      },
+      nextTickAt: () => null
+    }
+    const { find, store, dir } = setupWithStore({}, scheduler)
+    store.runs.create({
+      id: 'run-1',
+      automationId: 'ci',
+      tickId: null,
+      itemKey: 'mr:1',
+      itemLabel: '!1',
+      worktreePath: '/wt',
+      startedAt: 1
+    })
+    store.runs.createStep({
+      runId: 'run-1',
+      idx: 0,
+      name: 's',
+      agent: 'claude',
+      skill: null,
+      mode: null,
+      startedAt: 1
+    })
+    store.runs.updateStep('run-1', 0, {
+      status: 'running',
+      terminalHandle: 'term-agent'
+    })
+    return { find, ticks, store, file: join(dir, 'ci.yaml') }
+  }
+
+  it.each([
+    ['the desktop', DESKTOP.caller, {}, true],
+    ['a paired device', PHONE, {}, true],
+    ["Nish's CLI in a terminal no step runs on", LOCAL, { terminal: 'term-nish' }, true],
+    ['the CLI with no terminal at all', LOCAL, {}, true],
+    ['an agent on its step terminal', LOCAL, { terminal: 'term-agent' }, false],
+    ['an agent naming its run by env only', LOCAL, { runId: 'run-1', stepIdx: 0 }, false],
+    ['an env naming a run that ended', LOCAL, { runId: 'gone', stepIdx: 0 }, false],
+    ['no identity', undefined, {}, false]
+  ])('tickNow from %s', async (_name, caller, binding, allowed) => {
+    const { find, ticks } = agentSetup()
+    const call = () =>
+      find('pilot.automations.tickNow').handler({ id: 'ci', ...binding }, { caller })
+    if (allowed) {
+      expect(await call()).toEqual({ status: 'busy' })
+      expect(ticks).toEqual([['ci', { dryRun: false }]])
+    } else {
+      await expect(Promise.resolve().then(call)).rejects.toThrow(
+        caller ? AGENT_IN_RUN : NO_CALLER_CHANGE
+      )
+      expect(ticks).toEqual([])
+    }
+  })
+
+  it.each([
+    ['the desktop', DESKTOP.caller, {}, true],
+    ['a paired device', PHONE, {}, true],
+    ["Nish's unbound CLI", LOCAL, { terminal: 'term-nish' }, true],
+    ['an agent on its step terminal', LOCAL, { terminal: 'term-agent' }, false],
+    ['an agent naming its run by env only', LOCAL, { runId: 'run-1', stepIdx: 0 }, false],
+    ['no identity', undefined, {}, false]
+  ])('setEnabled from %s', async (_name, caller, binding, allowed) => {
+    const { find, file } = agentSetup()
+    const call = () =>
+      find('pilot.automations.setEnabled').handler(
+        { id: 'ci', enabled: false, ...binding },
+        { caller }
+      )
+    if (allowed) {
+      expect(call()).toMatchObject({ id: 'ci', enabled: false })
+      expect(readFileSync(file, 'utf8')).toContain('enabled: false')
+    } else {
+      expect(call).toThrow(caller ? AGENT_IN_RUN : NO_CALLER_CHANGE)
+      expect(readFileSync(file, 'utf8')).not.toContain('enabled:')
+    }
+  })
+
+  it("refuses a real tick where the scheduler doesn't run, and still dry-runs there", async () => {
+    const ticks: unknown[] = []
+    const scheduler = {
+      tickNow: async (id: string, o: unknown) => {
+        ticks.push([id, o])
+        return { status: 'busy' }
+      }
+    }
+    const find = setup({}, scheduler, false)
+    await expect(
+      Promise.resolve().then(() => find('pilot.automations.tickNow').handler({ id: 'ci' }, DESKTOP))
+    ).rejects.toThrow(SCHEDULER_OFF)
+    expect(await find('pilot.automations.dryRun').handler({ id: 'ci' }, DESKTOP)).toEqual({
+      status: 'busy'
+    })
+    expect(ticks).toEqual([['ci', { dryRun: true }]])
   })
 })
