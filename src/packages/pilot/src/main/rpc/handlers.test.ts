@@ -25,7 +25,8 @@ function context() {
       loaded: () => loaded,
       reload: () => loaded,
       scheduler: { nextTickAt: () => Date.UTC(2026, 9, 10, 20, 10) } as never,
-      actions: { entries: () => [], get: () => null }
+      actions: { entries: () => [], get: () => null },
+      dispatcher: null
     }
   }
 }

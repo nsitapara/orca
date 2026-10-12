@@ -23,6 +23,9 @@ function toActionRun(r: Record<string, unknown>): ActionRunRow {
   }
 }
 
+// Why an attempt a quit or a crash cut off was closed: it may or may not have done its effect.
+export const ACTION_INTERRUPTED = 'interrupted: Pilot stopped while it ran'
+
 // Every action attempt is a row (contract §10), refused ones included.
 export class ActionRunStore {
   constructor(private readonly db: Database) {}
@@ -54,6 +57,24 @@ export class ActionRunStore {
     this.db
       .prepare('UPDATE action_runs SET status = ?, output = ?, finished_at = ? WHERE id = ?')
       .run(status, output, at, id)
+  }
+
+  // At start: an attempt still 'running' from before this process was cut off. Left running, it would
+  // block its card for ever (powers.ts cardToRun: "is already running"). Returns how many.
+  interruptRunning(startedBefore: number, at: number): number {
+    const output = JSON.stringify({
+      outcome: 'failed',
+      detail: ACTION_INTERRUPTED,
+      link: null,
+      log: null,
+      onYou: false
+    })
+    const r = this.db
+      .prepare(
+        "UPDATE action_runs SET status = 'failed', output = ?, finished_at = ? WHERE status = 'running' AND started_at < ?"
+      )
+      .run(output, at, startedBefore)
+    return Number(r.changes)
   }
 
   get(id: number): ActionRunRow | null {

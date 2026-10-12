@@ -146,3 +146,22 @@ describe('inbox queue', () => {
     )
   })
 })
+
+describe('inbox apply-now', () => {
+  afterEach(() => vi.restoreAllMocks())
+
+  it('asks for one card or all, with a long timeout, and prints the report', async () => {
+    const report = { retired: 0, ticked: 1, actions: 0, agents: 1, held: 0, reasked: 0 }
+    const call = vi.fn().mockResolvedValue({ result: report })
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {})
+    await ANSWERS_HANDLERS['inbox apply-now'](ctx({ id: 'in_1' }, call))
+    await ANSWERS_HANDLERS['inbox apply-now'](ctx({}, call))
+    expect(call.mock.calls.map((c) => c.slice(0, 3))).toEqual([
+      ['pilot.answers.applyNow', { ids: ['in_1'] }, { timeoutMs: 660_000 }],
+      ['pilot.answers.applyNow', {}, { timeoutMs: 660_000 }]
+    ])
+    expect(log).toHaveBeenCalledWith(
+      'retired 0 · ticked 1 · actions 0 · agents 1 · held 0 · re-asked 0'
+    )
+  })
+})

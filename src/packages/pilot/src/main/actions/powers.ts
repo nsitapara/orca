@@ -81,20 +81,34 @@ function parsed(output: string | null): Record<string, unknown> | null {
   }
 }
 
+function refreshedArgs(output: string | null): Record<string, unknown> | null {
+  const args = parsed(output)?.args
+  return args && typeof args === 'object' && !Array.isArray(args)
+    ? (args as Record<string, unknown>)
+    : null
+}
+
 // Whether Pilot itself wrote this card's current args: it asked about the action (a run lacked the power;
 // that ask is a row under the card refused with the outcome `asked`), and the card's args are the ones it
-// asked with or ones its own refresh produced since. Args changed any other way lose that.
+// asked with or ones a chain of its own refreshes produced from them. A refresh counts only when the args
+// it refreshed were already Pilot's (its row's digest is of its input), walking the rows oldest first, so a
+// refresh of args from anywhere else never makes its output Pilot's. Args changed any other way lose that.
 function askedByPilot(store: PilotStore, card: InboxItemRow): boolean {
   const action = card.action ?? ''
-  const rows = store.actions.forInboxItem(card.id).filter((r) => r.action === action)
-  const asked = rows.filter((r) => r.status === 'refused' && parsed(r.output)?.outcome === 'asked')
-  const refreshed = rows
-    .filter((r) => r.phase === 'refresh' && r.status === 'done')
-    .map((r) => parsed(r.output)?.args)
-    .filter((a): a is Record<string, unknown> => !!a && typeof a === 'object')
-    .map((a) => argsDigest(action, a))
-  const made = new Set([...asked.map((r) => r.digest), ...refreshed])
-  return asked.length > 0 && made.has(argsDigest(action, card.actionArgs ?? {}))
+  const made = new Set<string>()
+  for (const row of store.actions.forInboxItem(card.id)) {
+    if (row.action !== action) {
+      continue
+    }
+    if (row.status === 'refused' && parsed(row.output)?.outcome === 'asked') {
+      made.add(row.digest)
+    }
+    const args = row.phase === 'refresh' && row.status === 'done' ? refreshedArgs(row.output) : null
+    if (args && made.has(row.digest)) {
+      made.add(argsDigest(action, args))
+    }
+  }
+  return made.has(argsDigest(action, card.actionArgs ?? {}))
 }
 
 // Parts a person left out, passed the entry's way (post-review's --except), or why they can't be.

@@ -44,7 +44,8 @@ function setup() {
       loaded: () => loaded,
       reload: () => loaded,
       scheduler: null as never,
-      actions: { entries: () => [], get: () => null }
+      actions: { entries: () => [], get: () => null },
+      dispatcher: null
     }
   }
   const methods = buildPilotMethods(host) as unknown as Callable[]

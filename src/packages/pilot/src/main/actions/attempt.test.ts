@@ -139,6 +139,16 @@ describe('attemptAction', () => {
     expect(store.inbox.list({})).toEqual([])
   })
 
+  it('finishes its row as failed when an entry throws, instead of leaving it running', async () => {
+    const { store, push, deps } = setup(['push'])
+    vi.mocked(push.run).mockRejectedValueOnce(new Error('act.py vanished'))
+    expect(await attemptAction(deps, REQ)).toMatchObject({
+      outcome: 'failed',
+      detail: 'push crashed: act.py vanished'
+    })
+    expect(store.actions.forRun('run-1')).toMatchObject([{ status: 'failed', finishedAt: 50 }])
+  })
+
   it('records a not-yet attempt but no event', async () => {
     const { store, push, deps } = setup(['push'])
     vi.mocked(push.run).mockResolvedValueOnce({
@@ -399,6 +409,42 @@ describe('attemptAction on an approved card', () => {
     expect(await attemptAction(deps, approve(revised))).toMatchObject({ outcome: 'done' })
     expect(push.run).toHaveBeenCalledWith(
       { argv: ['/wt', 'web-1', 'ffff', 'bbb'] },
+      { dryRun: false, runId: 'run-1' }
+    )
+  })
+
+  // Group 22 note: a refresh row counts as Pilot's own only when what it refreshed was Pilot's already.
+  it('refuses a card whose args came from a refresh of args Pilot never asked with', async () => {
+    const { push, deps, store, card } = await asked()
+    const foreign = await refreshAction(deps, {
+      action: 'push',
+      args: { argv: ['/elsewhere', 'main', 'x', 'y'] },
+      runId: 'run-1',
+      inboxItemId: card.id
+    })
+    const revised = revise(store, card, foreign!.args)
+    expect(await attemptAction(deps, approve(revised))).toMatchObject({
+      outcome: 'failed',
+      detail: expect.stringContaining("Pilot didn't ask for card")
+    })
+    expect(push.run).not.toHaveBeenCalled()
+  })
+
+  it('follows a chain of its own refreshes: asked, refreshed, refreshed again', async () => {
+    const { push, deps, store, card } = await asked()
+    const refresh = (args: Record<string, unknown>) =>
+      refreshAction(deps, { action: 'push', args, runId: 'run-1', inboxItemId: card.id })
+    const first = await refresh(REQ.args)
+    const once = revise(store, card, first!.args)
+    vi.mocked(push.refresh!).mockResolvedValueOnce({
+      args: { argv: ['/wt', 'web-1', 'eeee', 'bbb'] },
+      changed: 'head moved to eeee'
+    })
+    const second = await refresh(once.actionArgs!)
+    const twice = revise(store, once, second!.args)
+    expect(await attemptAction(deps, approve(twice))).toMatchObject({ outcome: 'done' })
+    expect(push.run).toHaveBeenCalledWith(
+      { argv: ['/wt', 'web-1', 'eeee', 'bbb'] },
       { dryRun: false, runId: 'run-1' }
     )
   })

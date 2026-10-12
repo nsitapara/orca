@@ -59,6 +59,11 @@ function freshRunId(store: PilotStore, base: string): string {
   return id
 }
 
+function liveAnswerRun(store: PilotStore, path: string, automationId: string): string | null {
+  const runs = store.runs.runningInWorktree(path)
+  return runs.find((r) => r.trigger === 'answer' && r.automationId === automationId)?.id ?? null
+}
+
 function agentOf(target: SessionTarget): AgentKind {
   return target.kind === 'new' ? target.agent : target.asking.agent
 }
@@ -210,6 +215,15 @@ export async function dispatchToAgent(
     path = group.worktreePath ?? (await deps.mainCheckout(group.def.repo))
   } catch (error) {
     return { kind: 'held', hold: hold('retry', `no main checkout: ${messageOf(error)}`) }
+  }
+  // A worktree's own hold (runs working there) covers it; the main checkout is shared (G2), so job-wide
+  // answers wait only for this automation's answer run still live there: never a second one beside it.
+  const live = group.worktreePath === null ? liveAnswerRun(deps.store, path, group.def.id) : null
+  if (live) {
+    return {
+      kind: 'held',
+      hold: hold('worktree_busy', `answer run ${live} is still working there`)
+    }
   }
   const claimKey = group.worktreePath ?? `${path}#${group.def.id}`
   if (!deps.store.queue.claim(claimKey, group.def.id, now + CLAIM_MS, now)) {

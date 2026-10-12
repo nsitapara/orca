@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { PilotStore } from './store'
-import type { NewActionRun } from './store-actions'
+import { ACTION_INTERRUPTED, type NewActionRun } from './store-actions'
 
 const attempt = (extra: Partial<NewActionRun> = {}): NewActionRun => ({
   inboxItemId: 'i1',
@@ -57,4 +57,19 @@ describe('ActionRunStore', () => {
       expect(actions.get(id)).toMatchObject({ status, output: '{"outcome":"x"}', finishedAt: 12 })
     }
   )
+
+  it('marks attempts a stop left running as failed and interrupted, and leaves the rest', () => {
+    const { actions } = PilotStore.open(':memory:')
+    const left = actions.start(attempt({ phase: 'do', startedAt: 10 }))
+    const done = actions.start(attempt({ phase: 'do', startedAt: 11 }))
+    actions.finish(done, 'done', null, 12)
+    const fresh = actions.start(attempt({ phase: 'do', startedAt: 30 }))
+    expect(actions.interruptRunning(20, 25)).toBe(1)
+    expect(actions.get(left)).toMatchObject({ status: 'failed', finishedAt: 25 })
+    expect(JSON.parse(actions.get(left)!.output!)).toMatchObject({
+      outcome: 'failed',
+      detail: ACTION_INTERRUPTED
+    })
+    expect([actions.get(done)?.status, actions.get(fresh)?.status]).toEqual(['done', 'running'])
+  })
 })
