@@ -3,6 +3,7 @@ import { homedir } from 'node:os'
 import { basename, join } from 'node:path'
 import type { AgentKind } from '../../shared/definition/types'
 import { PromptNotSentError, type SessionTerminals } from '../run/agent-step'
+import { codexHomes } from '../usage/codex-homes'
 import type { SessionProbe, TranscriptFacts } from './sessions'
 
 // Nothing was typed: someone's draft is in the input.
@@ -63,15 +64,9 @@ export function findTranscript(
     }
     return null
   }
-  const support = join(home, 'Library', 'Application Support')
-  const homes = [
-    codexHome,
-    join(home, '.codex'),
-    join(support, 'orca', 'codex-runtime-home', 'home'),
-    join(support, 'Pilot', 'codex-runtime-home', 'home')
-  ]
+  const homes = codexHomes(codexHome, home)
   for (const root of homes) {
-    const file = root ? codexRollout(join(root, 'sessions'), sessionId) : null
+    const file = codexRollout(join(root, 'sessions'), sessionId)
     if (file) {
       return statOf(file)
     }

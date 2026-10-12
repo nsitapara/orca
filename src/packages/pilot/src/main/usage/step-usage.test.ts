@@ -142,7 +142,7 @@ describe('measureFinishedSteps', () => {
       }
       return { buckets: [bucket(1)], sessionFound: true }
     }
-    expect(await measureFinishedSteps(store, read, () => 5_000, log)).toBe(1)
+    expect(await measureFinishedSteps(store, read, () => 5_000, log, new Map())).toBe(1)
     expect(log).toHaveBeenCalledWith("[pilot] couldn't measure step r1/0: disk on fire")
     expect(store.usage.unmeasuredSteps().map((s) => s.idx)).toEqual([0])
   })
@@ -184,13 +184,18 @@ describe('stepUsageReader', () => {
   })
 
   it('defaults to ~/.claude/projects and the Codex homes', () => {
+    const support = '/h/Library/Application Support'
+    const runtimeHomes = [
+      `${support}/orca/codex-runtime-home/home`,
+      `${support}/Pilot/codex-runtime-home/home`
+    ]
     expect(defaultUsagePaths({}, '/h')).toEqual({
       claudeProjects: '/h/.claude/projects',
-      codexHomes: ['/h/.codex']
+      codexHomes: ['/h/.codex', ...runtimeHomes]
     })
     expect(defaultUsagePaths({ CLAUDE_CONFIG_DIR: '/c', CODEX_HOME: '/x' }, '/h')).toEqual({
       claudeProjects: '/c/projects',
-      codexHomes: ['/x', '/h/.codex']
+      codexHomes: ['/x', '/h/.codex', ...runtimeHomes]
     })
   })
 })
