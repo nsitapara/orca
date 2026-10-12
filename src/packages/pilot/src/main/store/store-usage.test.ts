@@ -83,7 +83,6 @@ describe('UsageStore', () => {
       true,
       41
     )
-    store.usage.rollupRun('r1')
     expect(store.runs.steps('r1').map((s) => [s.costUsd, s.tokens, s.model])).toEqual([
       [1.5, 100, 'claude-opus-5-5'],
       [0.25, 60, 'claude-haiku-4-5']
@@ -97,11 +96,19 @@ describe('UsageStore', () => {
     expect(store.usage.lastMeasuredAt()).toBe(41)
   })
 
+  it('a step whose session is gone keeps the cost it already had, and the run keeps its sum', () => {
+    const { store } = setup()
+    store.runs.updateStep('r1', 0, { status: 'done', finishedAt: 20, costUsd: 2, tokens: 50 })
+    store.usage.saveStepUsage('r1', 0, [], false, 60)
+    expect(store.runs.steps('r1')[0]).toMatchObject({ costUsd: 2, tokens: 50 })
+    expect(store.runs.get('r1')).toMatchObject({ costUsd: 2, tokens: 50 })
+    expect(store.usage.unmeasuredSteps()).toEqual([])
+  })
+
   it('a step whose session was never found has no cost and no tokens, but counts as measured', () => {
     const { store } = setup()
     store.runs.updateStep('r1', 0, { status: 'failed', finishedAt: 20 })
     store.usage.saveStepUsage('r1', 0, [], false, 50)
-    store.usage.rollupRun('r1')
     expect(store.runs.steps('r1')[0]).toMatchObject({ costUsd: null, tokens: null })
     expect(store.runs.get('r1')).toMatchObject({ costUsd: null, tokens: null })
     expect(store.usage.unmeasuredSteps()).toEqual([])

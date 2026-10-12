@@ -28,9 +28,11 @@ export function fileLines(path: string): AsyncIterable<string> {
 }
 
 const DAY_MS = 86_400_000
+// A session resumed later keeps growing the rollout in its first day's folder, so look back a week before the step.
+const DAY_OFFSETS = [0, 1, -1, -2, -3, -4, -5, -6, -7]
 
 // Codex names a rollout rollout-<local time>-<session id>.jsonl under <home>/sessions/YYYY/MM/DD. The hook's
-// path wins; else the start day, the next day and the one before are searched in each home.
+// path wins; else the start day, the next one and the seven before are searched in each home.
 export async function findCodexRollout(
   sessionId: string,
   hinted: string | null,
@@ -41,7 +43,7 @@ export async function findCodexRollout(
     return hinted
   }
   for (const home of homes) {
-    for (const offset of [0, 1, -1]) {
+    for (const offset of DAY_OFFSETS) {
       const [y, m, d] = localDay(startedAt + offset * DAY_MS).split('-')
       const folder = join(home, 'sessions', y, m, d)
       let names: string[]

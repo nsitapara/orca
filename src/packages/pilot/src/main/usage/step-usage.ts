@@ -69,11 +69,16 @@ function messageOf(error: unknown): string {
 
 // Called after every poll. Each agent step that ended is read once, inside its own window, so a session a later
 // step or answer run resumes is never counted twice. One step's failure never stops the others.
+export const MEASURE_MAX_FAILURES = 3
+// Consecutive failed reads per step, kept across polls.
+const readFailures = new Map<string, number>()
+
 export async function measureFinishedSteps(
   store: PilotStore,
   read: StepUsageReader,
   now: () => number,
-  log: (message: string) => void
+  log: (message: string) => void,
+  failures: Map<string, number> = readFailures
 ): Promise<number> {
   let measured = 0
   for (const step of store.usage.unmeasuredSteps()) {
@@ -87,10 +92,18 @@ export async function measureFinishedSteps(
         continue
       }
       store.usage.saveStepUsage(step.runId, step.idx, usage.buckets, usage.sessionFound, now())
-      store.usage.rollupRun(step.runId)
+      failures.delete(`${step.runId}/${step.idx}`)
       measured += 1
     } catch (error) {
       log(`[pilot] couldn't measure step ${step.runId}/${step.idx}: ${messageOf(error)}`)
+      const key = `${step.runId}/${step.idx}`
+      const count = (failures.get(key) ?? 0) + 1
+      failures.set(key, count)
+      if (count >= MEASURE_MAX_FAILURES) {
+        failures.delete(key)
+        store.usage.markMeasured(step.runId, step.idx, now())
+        log(`[pilot] gave up measuring step ${key} after ${count} failed reads`)
+      }
     }
   }
   return measured

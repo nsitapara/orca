@@ -130,4 +130,12 @@ describe('findCodexRollout', () => {
     expect(await findCodexRollout('sess-c', null, at(10), ['/no/home', home])).toBe(path)
     expect(await findCodexRollout('sess-x', null, at(10), [home])).toBeNull()
   })
+
+  it('finds a session that started days before the step that resumed it', async () => {
+    const home = mkdtempSync(join(tmpdir(), 'pilot-codex-home-'))
+    const day = join(home, 'sessions', '2026', '10', '06')
+    mkdirSync(day, { recursive: true })
+    const path = rollout(day)
+    expect(await findCodexRollout('sess-c', null, at(10), [home])).toBe(path)
+  })
 })
