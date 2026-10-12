@@ -7,6 +7,17 @@ export type QuotaReader = () => Promise<QuotaReading>
 
 const NONE: QuotaReading = { weekly: null, session: null }
 const LAST_GOOD_MAX_AGE = 60 * 60_000
+const READ_TIMEOUT_MS = 60_000
+
+// A reader that never settles must not hang every caller sharing the read in flight: after the timeout
+// the read counts as failed, like any other failure.
+function withTimeout(read: QuotaReader, timeoutMs: number): Promise<QuotaReading> {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error('Quota read timed out')), timeoutMs)
+  })
+  return Promise.race([read(), timeout]).finally(() => clearTimeout(timer))
+}
 
 // Orca's fetch does not throw on a 429, a stale token or missing credentials: it returns status 'error'
 // with null windows. Throwing here lets cachedQuota keep the last good reading instead of overwriting it.
@@ -29,7 +40,8 @@ export function toQuotaReading(
 export function cachedQuota(
   read: QuotaReader,
   ttlMs = 5 * 60_000,
-  now: () => number = Date.now
+  now: () => number = Date.now,
+  timeoutMs = READ_TIMEOUT_MS
 ): QuotaReader {
   let good: { at: number; value: QuotaReading } | null = null
   let answer: { at: number; value: QuotaReading } | null = null
@@ -37,7 +49,7 @@ export function cachedQuota(
   async function refresh(): Promise<QuotaReading> {
     let value: QuotaReading
     try {
-      value = await read()
+      value = await withTimeout(read, timeoutMs)
       good = { at: now(), value }
     } catch {
       value = good && now() - good.at < LAST_GOOD_MAX_AGE ? good.value : NONE

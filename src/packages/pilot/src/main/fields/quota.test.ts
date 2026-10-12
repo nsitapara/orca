@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cachedQuota, cachedQuotas, quotaFields, readQuotas, toQuotaReading } from './quota'
 
 describe('cachedQuota', () => {
@@ -165,5 +165,25 @@ describe('per-agent quota', () => {
     await quotas.claude()
     expect(calls).toBe(1)
     expect(await quotas.codex()).toEqual({ weekly: null, session: null })
+  })
+})
+
+describe('cachedQuota timeout', () => {
+  afterEach(() => vi.useRealTimers())
+
+  it('treats a read that never settles as a failed read, for every caller sharing it', async () => {
+    vi.useFakeTimers()
+    let calls = 0
+    const read = cachedQuota(() => {
+      calls++
+      return new Promise(() => {})
+    }, 300_000)
+    const first = read()
+    const second = read()
+    await vi.advanceTimersByTimeAsync(60_000)
+    expect(await first).toEqual({ weekly: null, session: null })
+    expect(await second).toEqual({ weekly: null, session: null })
+    expect(await read()).toEqual({ weekly: null, session: null })
+    expect(calls).toBe(1)
   })
 })
