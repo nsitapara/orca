@@ -177,4 +177,51 @@ describe('buildUsageReport', () => {
       ['fix-failed-ci', 'Fix failed CI on my MRs']
     ])
   })
+
+  it('gives every row of a session spanning days the session earliest start, title and cwd', () => {
+    const r = buildUsageReport({
+      buckets: [
+        bucket({
+          day: '2026-10-12',
+          stepStartedAt: at(10, 40),
+          itemLabel: 'later step',
+          worktreePath: '/w/later'
+        }),
+        bucket({
+          day: '2026-10-11',
+          stepStartedAt: at(10, 10),
+          itemLabel: 'first step',
+          worktreePath: '/w/first'
+        }),
+        bucket({
+          day: '2026-10-12',
+          stepStartedAt: at(10, 10),
+          itemLabel: 'first step',
+          worktreePath: '/w/first'
+        })
+      ],
+      sessionless: [],
+      pending: 0,
+      automations: AUTOMATIONS,
+      legacy: null,
+      now: at(11)
+    })
+    expect(r.rows.map((x) => [x.day, x.started, x.title, x.cwd])).toEqual([
+      ['2026-10-11', '2026-10-11T10:10', 'first step', '/w/first'],
+      ['2026-10-12', '2026-10-11T10:10', 'first step', '/w/first']
+    ])
+  })
+
+  it('adds the raw costs of merged buckets and rounds once', () => {
+    const tiny = { costUsd: 4e-7 }
+    const r = buildUsageReport({
+      buckets: [bucket(tiny), bucket(tiny), bucket(tiny)],
+      sessionless: [],
+      pending: 0,
+      automations: AUTOMATIONS,
+      legacy: null,
+      now: at(11)
+    })
+    expect(r.rows[0].cost_usd).toBe(0.000001)
+  })
 })

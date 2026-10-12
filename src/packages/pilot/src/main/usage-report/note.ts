@@ -7,9 +7,18 @@ import type { UsageReport, UsageRow } from './report'
 
 const WINDOWS: (number | null)[] = [0, 6, 29, null]
 
-// Python's f"${x:,.2f}".
+// Python's f"${x:,.2f}": the exact binary value rounds to the nearest cent, and an exact tie (only j/8 with j odd
+// can be one) goes to the even cent. toFixed picks the larger cent on a tie, so ties are settled here.
 export function moneyCommas(usd: number): string {
-  return `$${usd.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+  const abs = Math.abs(usd)
+  const eighths = abs * 8
+  let cents = Math.round(Number(abs.toFixed(2)) * 100)
+  if (Number.isInteger(eighths) && eighths % 2 === 1) {
+    const down = Math.floor(abs * 100)
+    cents = down % 2 === 0 ? down : down + 1
+  }
+  const sign = usd < 0 ? '-' : ''
+  return `$${sign}${(cents / 100).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 }
 
 function dayBack(today: Date, back: number): string {

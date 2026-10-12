@@ -1,4 +1,12 @@
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import {
+  symlinkSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync
+} from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
@@ -79,5 +87,13 @@ describe('createUsageReporter', () => {
     const first = readFileSync(join(dir, 'usage.csv'), 'utf8')
     reporter.write()
     expect(readFileSync(join(dir, 'usage.csv'), 'utf8')).toBe(first)
+  })
+
+  it('sees a symlinked alias of the job 08 folder as the same folder', () => {
+    const { root, dir, deps: d } = deps(false)
+    mkdirSync(dir, { recursive: true })
+    const alias = join(root, 'alias')
+    symlinkSync(dir, alias)
+    expect(() => createUsageReporter(d).write(alias)).toThrow(/Job 08 still owns/)
   })
 })

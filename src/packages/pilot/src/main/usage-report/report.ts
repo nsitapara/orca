@@ -97,18 +97,26 @@ export function jobResolver(
   return (id) => byId.get(id) ?? { key: id, name: id }
 }
 
-function addCost(a: number | null, b: number | null): number | null {
-  if (a === null || b === null) {
-    return null
+// A session's rows all carry the start, title and cwd of its earliest step (usage.py keeps one `started` per session).
+function earliestStepPerSession(buckets: readonly ReportBucketRow[]): Map<string, ReportBucketRow> {
+  const first = new Map<string, ReportBucketRow>()
+  for (const b of buckets) {
+    const seen = first.get(b.sessionId)
+    if (!seen || b.stepStartedAt < seen.stepStartedAt) {
+      first.set(b.sessionId, b)
+    }
   }
-  return round6(a + b)
+  return first
 }
 
 function pilotRows(
   buckets: readonly ReportBucketRow[],
   jobOf: (id: string) => UsageJob
 ): UsageRow[] {
+  const first = earliestStepPerSession(buckets)
   const merged = new Map<string, UsageRow>()
+  // Raw costs are added and rounded once at the end, as usage.py does; null once any part has no price.
+  const rawCost = new Map<string, number | null>()
   for (const b of buckets) {
     const tokens = b.input + b.cacheRead + b.cacheWrite + b.output
     const key = `${b.sessionId}|${b.day}|${b.model}`
@@ -120,10 +128,13 @@ function pilotRows(
       old.cache_write += b.cacheWrite
       old.output += b.output
       old.tokens += tokens
-      old.cost_usd = addCost(old.cost_usd, b.costUsd)
+      const sum = rawCost.get(key) ?? null
+      rawCost.set(key, sum === null || b.costUsd === null ? null : sum + b.costUsd)
       continue
     }
     const job = jobOf(b.automationId)
+    const start = first.get(b.sessionId) ?? b
+    rawCost.set(key, b.costUsd)
     merged.set(key, {
       day: b.day,
       job: job.key,
@@ -132,18 +143,22 @@ function pilotRows(
       agent: b.agent,
       model: b.model,
       session: b.sessionId,
-      worktree: folderName(b.worktreePath),
-      cwd: b.worktreePath ?? '',
-      started: localIsoMinute(b.stepStartedAt),
-      title: b.itemLabel,
+      worktree: folderName(start.worktreePath),
+      cwd: start.worktreePath ?? '',
+      started: localIsoMinute(start.stepStartedAt),
+      title: start.itemLabel,
       requests: b.requests,
       input: b.input,
       cache_read: b.cacheRead,
       cache_write: b.cacheWrite,
       output: b.output,
       tokens,
-      cost_usd: b.costUsd === null ? null : round6(b.costUsd)
+      cost_usd: null
     })
+  }
+  for (const [key, row] of merged) {
+    const cost = rawCost.get(key) ?? null
+    row.cost_usd = cost === null ? null : round6(cost)
   }
   return [...merged.values()]
 }

@@ -163,3 +163,15 @@ describe('report queries', () => {
     ])
   })
 })
+
+describe('SpendStore.totals by group', () => {
+  it("--by mr totals only the MR runs, so the total equals the rows' sum", () => {
+    const store = setup()
+    expect(store.spend.totals('2026-10-01', 'mr')).toEqual({ costUsd: 3, tokens: 350, runs: 2 })
+    expect(store.spend.totals('2026-10-01', 'skill')).toEqual({
+      costUsd: 3.5,
+      tokens: 360,
+      runs: 3
+    })
+  })
+})

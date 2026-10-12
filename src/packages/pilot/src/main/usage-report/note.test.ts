@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { renderUsageNote, vaultPrefixOf, withFrontmatter } from './note'
+import { moneyCommas, renderUsageNote, vaultPrefixOf, withFrontmatter } from './note'
 import type { UsageReport } from './report'
 
 const DIR = '/Users/me/Documents/WebPortal/Agent Work/Automations/08 · Tally token usage by job'
@@ -112,4 +112,16 @@ describe('withFrontmatter', () => {
       '---\ncreated: 2026-10-08T21:15\nupdated: 2026-10-11T12:00\nautomation: 08 · Tally token usage by job\ntags: [usage]\n---\n\nNew\n'
     )
   })
+})
+
+describe('moneyCommas (Python f"{x:,.2f}")', () => {
+  it.each([
+    [0.125, '$0.12'],
+    [0.375, '$0.38'],
+    [0.135, '$0.14'],
+    [0.145, '$0.14'],
+    [1234.565, '$1,234.57'],
+    [0, '$0.00'],
+    [1234.5, '$1,234.50']
+  ])('%s → %s', (v, s) => expect(moneyCommas(v)).toBe(s))
 })
