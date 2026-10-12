@@ -1,0 +1,109 @@
+import type { DetailsBlock, DetailsBundle } from './details'
+
+const MAX_CHIPS = 4
+const MAX_LABEL = 40
+
+function clip(label: string): string {
+  return label.length <= MAX_LABEL ? label : `${label.slice(0, MAX_LABEL - 1)}…`
+}
+
+function plural(n: number, one: string, many: string): string {
+  return n === 1 ? `${n} ${one}` : `${n} ${many}`
+}
+
+function diffChip(blocks: DetailsBlock[]): string | null {
+  let found = false
+  let added = 0
+  let removed = 0
+  for (const b of blocks) {
+    if (b.type !== 'diff') {
+      continue
+    }
+    for (const f of b.files) {
+      found = true
+      added += f.added ?? 0
+      removed += f.removed ?? 0
+    }
+  }
+  return found ? `diff +${added} −${removed}` : null
+}
+
+function screensChip(blocks: DetailsBlock[]): string | null {
+  let pairs = 0
+  for (const b of blocks) {
+    if (b.type === 'screens') {
+      pairs += b.pairs.length
+    }
+  }
+  if (pairs === 0) {
+    return null
+  }
+  return pairs === 1 ? 'before / after' : `${pairs} before / after`
+}
+
+function shotsChip(blocks: DetailsBlock[]): string | null {
+  let shots = 0
+  for (const b of blocks) {
+    if (b.type === 'shots') {
+      shots += b.shots.length
+    }
+  }
+  return shots === 0 ? null : plural(shots, 'screenshot', 'screenshots')
+}
+
+function partsIn(text: string | undefined): number {
+  if (!text) {
+    return 0
+  }
+  try {
+    const parts = (JSON.parse(text) as { parts?: unknown }).parts
+    return Array.isArray(parts) ? parts.length : 0
+  } catch {
+    return 0
+  }
+}
+
+function findingsChip(blocks: DetailsBlock[], texts: Record<string, string>): string | null {
+  let findings = 0
+  for (const b of blocks) {
+    if (b.type === 'review') {
+      findings += partsIn(texts[b.file])
+    }
+  }
+  return findings === 0 ? null : plural(findings, 'finding', 'findings')
+}
+
+function factsChip(blocks: DetailsBlock[]): string | null {
+  for (const b of blocks) {
+    if (b.type !== 'facts') {
+      continue
+    }
+    const severity = b.rows.find(([k]) => k === 'Severity')
+    const status = b.rows.find(([k]) => k === 'Status')
+    if (severity && status) {
+      return `${severity[1].toLowerCase()} · ${status[1].toLowerCase()}`
+    }
+  }
+  return null
+}
+
+// The short labels on a card's Details bar (derived from the bundle; never part of the card's digest).
+export function summaryOf(
+  bundle: DetailsBundle,
+  texts: Record<string, string>,
+  drafted: boolean
+): string[] {
+  const blocks = bundle.blocks
+  const chips = [
+    drafted ? 'drafted fix' : null,
+    diffChip(blocks),
+    screensChip(blocks),
+    shotsChip(blocks),
+    findingsChip(blocks, texts),
+    factsChip(blocks)
+  ]
+  return chips
+    .filter((c): c is string => c !== null)
+    .slice(0, MAX_CHIPS)
+    .map(clip)
+}

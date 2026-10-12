@@ -138,6 +138,9 @@ export type DetailsRef = {
   // On a question, the label of the option the draft implements (the facts block's Drafted row); absent on
   // refs stored before it was read.
   draftedOption?: string | null
+  // The short labels on the Details bar (shared/details-summary.ts). Derived, so never part of the digest;
+  // absent on refs stored before it existed (the list fills it in from the snapshot).
+  summary?: string[]
 }
 // The whole of it, read once through pilot.inbox.details: the bundle, and each inlined review file's text
 // by the ref the bundle names it with.
