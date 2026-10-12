@@ -19,6 +19,8 @@ type Opts = {
   state?: SessionTerminalState | Record<string, SessionTerminalState>
   r?: RunRow
   more?: StepRow[]
+  tabs?: string[]
+  stepOn?: string[]
 }
 
 function deps(
@@ -30,6 +32,10 @@ function deps(
     run: () => opts.r ?? run,
     steps: () => [s, ...(opts.more ?? [])],
     state: vi.fn(async (t) => (typeof state === 'string' ? state : (state[t.handle] ?? 'gone'))),
+    tabs: vi.fn(async () =>
+      (opts.tabs ?? []).map((handle) => ({ handle, paneKey: `${handle}:leaf` }))
+    ),
+    stepOn: (h) => (opts.stepOn ?? []).includes(h),
     focus: vi.fn(async () => {}),
     open: vi.fn(async () => ({ handle: 'term_new' }))
   }
@@ -86,6 +92,23 @@ describe('resumeStepSession', () => {
       expect(d.focus).not.toHaveBeenCalled()
     }
   )
+
+  it("focuses a tab no step row of this run names: another run's per_worktree session, one opened by hand or by an earlier Resume", async () => {
+    const d = deps(step({}), {
+      state: { term_1: 'gone', other_run_tab: 'busy' },
+      tabs: ['other_run_tab']
+    })
+    expect(await resumeStepSession(d, { runId: 'r1', stepIdx: 0 })).toEqual({
+      action: 'focused',
+      handle: 'other_run_tab'
+    })
+    expect(d.open).not.toHaveBeenCalled()
+  })
+
+  it('a second Resume focuses the tab the first one opened instead of opening another', async () => {
+    const d = deps(step({}), { state: { new_tab: 'free' }, tabs: ['new_tab'] })
+    expect((await resumeStepSession(d, { runId: 'r1', stepIdx: 0 })).action).toBe('focused')
+  })
 
   it('opens a new tab for a step that never recorded a tab', async () => {
     const d = deps(step({ terminalHandle: null, paneKey: null }))

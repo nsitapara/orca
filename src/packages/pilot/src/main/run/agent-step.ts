@@ -11,6 +11,7 @@ import {
   terminalLaunchOptions,
   type SessionPlan
 } from './step-launch-plan'
+import { findLiveTab } from './session-tabs'
 import type { Workspace } from './workspace'
 
 export type AgentStepRequest = {
@@ -37,6 +38,8 @@ export class PromptNotSentError extends Error {
 }
 export type SessionTerminals = {
   state(terminal: KnownTerminal, sessionId: string): Promise<SessionTerminalState>
+  // Every terminal Orca says holds the session, whether or not a step row names it (session-tabs.ts).
+  tabs?(sessionId: string): Promise<KnownTerminal[]>
   // Types the prompt in; refuses (PromptNotSentError) unless an idle agent is still in the foreground.
   send(handle: string, prompt: string): Promise<void>
   close(handle: string): Promise<void>
@@ -193,13 +196,35 @@ async function sessionHome(
   deps: AgentStepDeps
 ): Promise<(KnownTerminal & { launchArgs: string[] }) | null> {
   const prior = lastSessionStep(store, req, sessionId, deps.now())
-  if (!prior?.terminalHandle) {
+  const stepOn = (handle: string): boolean =>
+    store.runs.runningSteps().some((s) => s.terminalHandle === handle)
+  const old = prior?.terminalHandle
+    ? { handle: prior.terminalHandle, paneKey: prior.paneKey }
+    : null
+  // The store before any probe: a Pilot step starting or running there is busy, whatever it shows.
+  let state: SessionTerminalState = 'gone'
+  if (old) {
+    state = stepOn(old.handle) ? 'busy' : await lookAt(deps, old, sessionId)
+  }
+  if (state === 'gone' && deps.sessionTerminals) {
+    // No row-named tab holds it: a tab Resume opened, another run's, or the person's may still.
+    const elsewhere = await findLiveTab(
+      { state: (t, id) => lookAt(deps, t, id), tabs: deps.sessionTerminals.tabs, stepOn },
+      sessionId,
+      [],
+      new Set(old ? [old.handle] : [])
+    )
+    if (elsewhere?.state === 'busy') {
+      throw new Error(`Session ${sessionId} is busy in terminal ${elsewhere.handle}`)
+    }
+    if (elsewhere) {
+      // Its process's args aren't recorded: an idle tab that can't be trusted is closed, then resumed.
+      await deps.sessionTerminals.close(elsewhere.handle)
+    }
+  }
+  if (!old || !prior) {
     return null
   }
-  const old = { handle: prior.terminalHandle, paneKey: prior.paneKey }
-  // The store before any probe: a Pilot step starting or running there is busy, whatever it shows.
-  const inUse = store.runs.runningSteps().some((s) => s.terminalHandle === old.handle)
-  const state = inUse ? 'busy' : await lookAt(deps, old, sessionId)
   const priorStep = req.definition.steps.find((s) => s.name === prior.name)
   if (state === 'busy') {
     const label = store.runs.get(prior.runId)?.itemLabel ?? req.label

@@ -468,3 +468,49 @@ describe('launchAgentStep for a session whose terminal may still be open', () =>
     })
   })
 })
+
+// One process per session across ALL terminals: a tab no step row names (opened by Resume, by hand, or
+// by another run) is found through Orca's agent rows before a new process is started.
+describe('launchAgentStep for a session held in a tab no step row names', () => {
+  const continuing = testDefinition({
+    id: 'review',
+    steps: [
+      testStep({ name: 'review' }),
+      testStep({ name: 'fix', session: { kind: 'continue', step: 'review' } })
+    ]
+  })
+  function withForeignTab(states: Record<string, SessionTerminalState>) {
+    const terminals = {
+      state: vi.fn(async (t: { handle: string }, _id: string) => states[t.handle] ?? 'gone'),
+      tabs: vi.fn(async (_id: string) => [{ handle: 'resume_tab', paneKey: 'rt:leaf' }]),
+      send: vi.fn(async (_h: string, _p: string) => {}),
+      close: vi.fn(async (_h: string) => {})
+    }
+    return { terminals, s: setup(continuing, { sessionTerminals: terminals }) }
+  }
+
+  it('fails the step instead of starting a second process when that tab is busy', async () => {
+    const { terminals, s } = withForeignTab({ term_1: 'gone', resume_tab: 'busy' })
+    await launchAgentStep(s.store, s.request(0), s.deps)
+    finish(s.store, 'run-1', 0)
+    await expect(launchAgentStep(s.store, s.request(1), s.deps)).rejects.toThrow(
+      'Session uuid-new is busy in terminal resume_tab'
+    )
+    expect(s.launchTerminal).toHaveBeenCalledTimes(1)
+    expect(terminals.close).not.toHaveBeenCalled()
+  })
+
+  it("closes an idle one (its args aren't known) before resuming, and with no such tab resumes as before", async () => {
+    const idle = withForeignTab({ term_1: 'gone', resume_tab: 'free' })
+    await launchAgentStep(idle.s.store, idle.s.request(0), idle.s.deps)
+    finish(idle.s.store, 'run-1', 0)
+    await launchAgentStep(idle.s.store, idle.s.request(1), idle.s.deps)
+    expect(idle.terminals.close).toHaveBeenCalledWith('resume_tab')
+    expect(idle.s.launchTerminal).toHaveBeenCalledTimes(2)
+    const none = withForeignTab({ term_1: 'gone' })
+    await launchAgentStep(none.s.store, none.s.request(0), none.s.deps)
+    finish(none.s.store, 'run-1', 0)
+    await launchAgentStep(none.s.store, none.s.request(1), none.s.deps)
+    expect(none.terminals.close).not.toHaveBeenCalled()
+  })
+})

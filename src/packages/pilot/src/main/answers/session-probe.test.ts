@@ -39,10 +39,18 @@ describe('findTranscript', () => {
 })
 
 describe('sessionTerminalProbe (the run launcher’s H10 look, plus who is on the tab)', () => {
-  function deps(state: SessionTerminalState, draft: string | Error = '', pilotStep = false) {
+  function deps(
+    state: SessionTerminalState | Record<string, SessionTerminalState>,
+    draft: string | Error = '',
+    pilotStep = false,
+    tabs: string[] = []
+  ) {
     return {
       terminals: {
-        state: vi.fn(async () => state),
+        state: vi.fn(async (t: { handle: string }) =>
+          typeof state === 'string' ? state : (state[t.handle] ?? 'gone')
+        ),
+        tabs: vi.fn(async () => tabs.map((handle) => ({ handle, paneKey: `${handle}:leaf` }))),
         send: vi.fn(),
         close: vi.fn()
       },
@@ -67,6 +75,23 @@ describe('sessionTerminalProbe (the run launcher’s H10 look, plus who is on th
   ])('%s → %s', async (_name, d, expected) => {
     expect(await sessionTerminalProbe(d).terminalState(ASKING)).toBe(expected)
     expect(d.terminals.state).toHaveBeenCalledWith({ handle: 't', paneKey: 'tab:leaf' }, 's-1')
+  })
+
+  it.each<[string, ReturnType<typeof deps>, string]>([
+    ['busy: it is working', deps({ t: 'gone', user: 'busy' }, '', false, ['user']), 'busy'],
+    [
+      'typing: someone has a draft in it',
+      deps({ t: 'gone', user: 'busy' }, 'hi', false, ['user']),
+      'typing'
+    ],
+    [
+      "busy, never free: its process args aren't Pilot's to trust",
+      deps({ t: 'other', user: 'free' }, '', false, ['user']),
+      'busy'
+    ],
+    ['gone when no tab holds the session', deps({ t: 'gone' }, '', false, []), 'gone']
+  ])('a tab the asking step never recorded, opened by hand: %s', async (_name, d, expected) => {
+    expect(await sessionTerminalProbe(d).terminalState(ASKING)).toBe(expected)
   })
 
   it('reads a tab a Pilot step is starting or running on as busy, without looking', async () => {
