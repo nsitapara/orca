@@ -240,6 +240,7 @@ describe('pilot inbox list', () => {
       ],
       suggested: 'Push',
       detailsMd: null,
+      details: null,
       action: null,
       actionArgs: null,
       digest: 'd',

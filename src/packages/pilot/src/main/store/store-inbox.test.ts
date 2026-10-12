@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { InboxAnswer, InboxStatus } from '../../shared/api-types'
+import type { DetailsRef, DetailsSnapshot } from '../../shared/details'
 import { PilotStore } from './store'
 import type { InboxFilter, NewInboxItem } from './store-inbox'
 
@@ -29,6 +30,19 @@ const item = (id: string, extra: Partial<NewInboxItem> = {}): NewInboxItem => ({
   ...extra
 })
 const answer = (digest: string): InboxAnswer => ({ option: 0, text: null, digest, via: 'page' })
+const DETAILS: DetailsRef = {
+  path: '/v/Automations/job/b/details/r/F2.json',
+  sha256: 'a'.repeat(64),
+  inlined: {},
+  blocks: 1,
+  drafted: false,
+  draftedBase: null
+}
+const SNAPSHOT: DetailsSnapshot = {
+  ref: DETAILS,
+  bundle: { version: 1, item: 'F2', blocks: [{ type: 'text', title: 'Notes', body: 'b' }] },
+  texts: {}
+}
 
 describe('InboxStore', () => {
   it('adds an item that is open at version 1, and reads it back', () => {
@@ -46,9 +60,32 @@ describe('InboxStore', () => {
       outcome: null,
       replies: [],
       parts: {},
-      switchWords: []
+      switchWords: [],
+      details: null
     })
     expect(store.inbox.get('missing')).toBeNull()
+    expect(store.inbox.snapshot('i1')).toBeNull()
+  })
+
+  it("keeps a card's Details ref on the row and its snapshot apart, read only by id", () => {
+    const store = PilotStore.open(':memory:')
+    store.inbox.add(item('i1', { details: DETAILS }), SNAPSHOT)
+    expect(store.inbox.get('i1')?.details).toEqual(DETAILS)
+    expect(store.inbox.snapshot('i1')).toEqual(SNAPSHOT)
+    expect(Object.keys(store.inbox.list()[0])).not.toContain('snapshot')
+    expect(JSON.stringify(store.inbox.list())).not.toContain('Notes')
+    store.inbox.setSnapshot('i1', null)
+    expect(store.inbox.snapshot('i1')).toBeNull()
+  })
+
+  it("clears a card's Details ref as a new version", () => {
+    const store = PilotStore.open(':memory:')
+    store.inbox.add(item('i1', { details: DETAILS }), SNAPSHOT)
+    expect(store.inbox.edit('i1', { details: null, digest: 'd2' }, 150)).toMatchObject({
+      details: null,
+      digest: 'd2',
+      version: 2
+    })
   })
 
   it('keeps the parts, switch words, outcome and replies a card is added with', () => {

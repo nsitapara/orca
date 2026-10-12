@@ -1,5 +1,6 @@
 import type { StepDef } from './definition/types'
 import type { InboxItemSummary } from './inbox-types'
+import type { DetailsRef } from './details'
 
 export type PilotStatus = {
   version: string
@@ -177,6 +178,8 @@ export type InboxItemRow = {
   options: InboxOption[]
   suggested: string | null
   detailsMd: string | null
+  // The card's Details bundle (its path and SHA-256, part of the digest); the snapshot is read by id.
+  details: DetailsRef | null
   action: string | null
   actionArgs: Record<string, unknown> | null
   digest: string

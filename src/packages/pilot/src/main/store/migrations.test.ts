@@ -213,7 +213,7 @@ describe('migrate', () => {
     db.exec(
       "INSERT INTO steps (run_id, idx, name, agent, status) VALUES ('r1', 0, 'fix', 'claude', 'done')"
     )
-    migrate(db)
+    migrate(db, 4)
     expect(firstRow(db, 'SELECT run_id, usage_measured_at FROM steps')).toEqual({
       run_id: 'r1',
       usage_measured_at: null
@@ -231,6 +231,28 @@ describe('migrate', () => {
       'cost_usd'
     ])
     expect(db.pragma('user_version', { simple: true })).toBe(4)
+  })
+
+  it('moves a v4 database to v5: a card gains its Details ref and snapshot, none on existing rows', () => {
+    const db = openDb()
+    migrate(db, 4)
+    db.exec(
+      "INSERT INTO inbox_items (id, automation_id, person, type, title, digest, created_at, updated_at) VALUES ('i1', 'a', 'p', 'question', 't', 'd', 1, 1)"
+    )
+    migrate(db)
+    expect(PILOT_SCHEMA_VERSION).toBe(5)
+    expect(db.pragma('user_version', { simple: true })).toBe(5)
+    expect(
+      firstRow(db, 'SELECT id, details_ref_json, details_snapshot_json FROM inbox_items')
+    ).toEqual({ id: 'i1', details_ref_json: null, details_snapshot_json: null })
+  })
+
+  it('leaves a database a newer process moved to v6 at v6', () => {
+    const db = openDb()
+    migrate(db)
+    db.pragma('user_version = 6')
+    migrate(db)
+    expect(db.pragma('user_version', { simple: true })).toBe(6)
   })
 
   it('does nothing to a database that is already current', () => {

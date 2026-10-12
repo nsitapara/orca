@@ -29,8 +29,9 @@ Without --apply it is a dry run: it prints the counts and writes nothing.
 // The schema this script writes into. When migrations.ts moves past it, check the handled insert
 // below against the new schema, then raise this. V2 added status (DEFAULT 'started') and failed_at
 // (NULL), which the insert leaves to their defaults: a seeded key is an attempt the sweep made.
-// V3 added steps.launch_args_json only; handled is unchanged.
-export const SEED_SCHEMA_VERSION = 4
+// V3 added steps.launch_args_json only; handled is unchanged. V4 added step usage and V5 inbox_items'
+// Details columns; handled is unchanged by both.
+export const SEED_SCHEMA_VERSION = 5
 const HANDLED_COLUMNS = ['automation_id', 'once_key', 'run_id', 'at', 'status', 'failed_at']
 const BUSY_TIMEOUT_MS = 5000
 const MIGRATIONS_FILE = fileURLToPath(new URL('../src/main/store/migrations.ts', import.meta.url))
