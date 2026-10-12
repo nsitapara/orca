@@ -1,45 +1,19 @@
 import type { ScopeResult, TickItem } from '../api-types'
 import type { MergeRequestWhere, PeopleRef } from '../definition/types'
-import {
-  describeRef,
-  EMPTY_PEOPLE,
-  matchRefAny,
-  personByGitlab,
-  refIncludes,
-  type PeopleDirectory
-} from '../people'
+import { EMPTY_PEOPLE, matchRef, matchRefAny, type PeopleDirectory } from '../people'
 import { IN_SCOPE, firstFailure, listOf, notDue, outOfScope, textOf } from './scope-helpers'
 
 export { IN_SCOPE }
 
 // anyone/absent: no lookup. A people or group ref needs the author in people.yaml. A `not` ref leaves
-// out only the people it names, so an author people.yaml doesn't know stays in scope.
+// out only the people it names, so an author people.yaml doesn't know stays in scope (matchRef).
 export function authorScope(
   ref: PeopleRef | undefined,
   username: string,
   people: PeopleDirectory
 ): ScopeResult {
-  if (ref === undefined || ref === 'anyone') {
-    return IN_SCOPE
-  }
-  const person = personByGitlab(people, username)
-  if ('not' in ref) {
-    if (!person || refIncludes(ref, person.id, people)) {
-      return IN_SCOPE
-    }
-    return outOfScope(
-      `Author is ${person.name}; this automation leaves out ${describeRef(ref.not, people)}`
-    )
-  }
-  if (!person) {
-    return outOfScope(`Author ${username} isn't in people.yaml`)
-  }
-  if (refIncludes(ref, person.id, people)) {
-    return IN_SCOPE
-  }
-  return outOfScope(
-    `Author is ${person.name}; this automation looks at ${describeRef(ref, people)}`
-  )
+  const match = matchRef(ref, 'Author', 'gitlab', username, people)
+  return match.ok ? IN_SCOPE : outOfScope(match.reason)
 }
 
 function stateScope(item: TickItem, where: MergeRequestWhere): ScopeResult {
