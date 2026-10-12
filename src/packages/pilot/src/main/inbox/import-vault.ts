@@ -147,6 +147,29 @@ function runOf(
   }
 }
 
+type CardTarget = Pick<
+  InboxAddParams,
+  'runId' | 'stepIdx' | 'automationId' | 'itemKey' | 'worktreePath'
+>
+
+// In a run the card's automation, item and worktree come from the run alone; otherwise they are named,
+// with the worktree only for a branch-scoped card that names one.
+function targetOf(
+  row: VaultRow,
+  run: ImportRun | null,
+  def: AutomationDefinition,
+  itemKey: string | null
+): CardTarget {
+  if (run) {
+    return { runId: run.id, stepIdx: 0 }
+  }
+  const named: CardTarget = { automationId: def.id, itemKey: itemKey ?? `repo:${def.repo}` }
+  if (row.scope === 'branch' && row.worktree) {
+    named.worktreePath = row.worktree
+  }
+  return named
+}
+
 function paramsOf(
   row: VaultRow,
   action: ActionPin,
@@ -154,19 +177,8 @@ function paramsOf(
   def: AutomationDefinition,
   itemKey: string | null
 ): InboxAddParams {
-  // In a run the card's automation, item and worktree come from the run alone; otherwise they are named.
-  const target: Pick<
-    InboxAddParams,
-    'runId' | 'stepIdx' | 'automationId' | 'itemKey' | 'worktreePath'
-  > = run
-    ? { runId: run.id, stepIdx: 0 }
-    : {
-        automationId: def.id,
-        itemKey: itemKey ?? `repo:${def.repo}`,
-        ...(row.scope === 'branch' && row.worktree ? { worktreePath: row.worktree } : {})
-      }
   return {
-    ...target,
+    ...targetOf(row, run, def, itemKey),
     type: row.kind,
     title: row.summary,
     context: row.context,
