@@ -8,7 +8,13 @@ import { parsePeopleYaml } from '../../shared/people'
 import { addInboxItem } from '../inbox/inbox-add'
 import type { InboxDeps } from '../inbox/inbox-service'
 import { PilotStore } from '../store/store'
-import { APPROVE_ON_DESKTOP, DRAFT_ON_DESKTOP, queueEntries, routeOf } from './queue-view'
+import {
+  APPROVE_ON_DESKTOP,
+  DRAFT_ON_DESKTOP,
+  DRAFT_OPTION_ON_DESKTOP,
+  queueEntries,
+  routeOf
+} from './queue-view'
 import { saveAnswer } from './save'
 
 const def = parseAutomationYaml(
@@ -67,6 +73,7 @@ const POST = {
   parts: { F1: 'Null check', F2: 'Naming' }
 }
 const QUESTION = { type: 'question' as const, title: 'Which?', options: ['A', 'B'] }
+const BUG = { type: 'bug' as const, title: 'Guard the null?' }
 
 describe('queueEntries', () => {
   it.each([
@@ -192,9 +199,10 @@ describe('a drafted change is approved only on the desktop', () => {
   function answered(
     text: string,
     callerKind: 'desktop' | 'paired-device' | undefined,
-    drafted = true
+    drafted = true,
+    card: Omit<InboxAddParams, 'runId'> = BUG
   ) {
-    const { store } = queued(QUESTION, 'A', 'run-1')
+    const { store } = queued(card, 'A', 'run-1')
     const answer = {
       option: null,
       text,
@@ -240,13 +248,24 @@ describe('a drafted change is approved only on the desktop', () => {
     expect(routeOf(answered(text, callerKind, drafted), catalog)).toEqual(expected)
   })
 
+  // A question's drafted change is approved by picking its option, so the re-ask says that, not "approve".
+  it('re-asks a device approve on a question by its drafted option', () => {
+    expect(routeOf(answered('approve', 'paired-device', true, QUESTION), catalog)).toEqual({
+      kind: 'reask',
+      reason: DRAFT_OPTION_ON_DESKTOP
+    })
+    expect(DRAFT_OPTION_ON_DESKTOP).toBe(
+      "A drafted change applies only on a pick saved in Pilot on this Mac, where its diff shows; pick the drafted option in Pilot's window."
+    )
+  })
+
   // On a question the draft implements one option (its bundle's Drafted row): picking it asks for the patch.
   it.each<[string, number, 'desktop' | 'paired-device', object]>([
     [
       'a device pick of the drafted option',
       1,
       'paired-device',
-      { kind: 'reask', reason: DRAFT_ON_DESKTOP }
+      { kind: 'reask', reason: DRAFT_OPTION_ON_DESKTOP }
     ],
     ['a device pick of the other option', 0, 'paired-device', { kind: 'agent', revise: false }],
     ['a desktop pick of the drafted option', 1, 'desktop', { kind: 'agent', revise: false }]

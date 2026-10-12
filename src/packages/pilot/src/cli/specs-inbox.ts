@@ -53,7 +53,8 @@ export const INBOX_COMMAND_SPECS: CommandSpec[] = [
   },
   {
     path: ['inbox', 'set-details'],
-    summary: "Replace a waiting card's Details with a bundle; an answer it had is cleared",
+    summary:
+      "Replace a waiting card's Details with a bundle; its answer is cleared and it asks again",
     usage: 'pilot inbox set-details --id <id> --bundle <path> [--head <sha>] [--json]',
     allowedFlags: [...GLOBAL_FLAGS, 'id', 'bundle', 'head'],
     examples: [
@@ -61,7 +62,8 @@ export const INBOX_COMMAND_SPECS: CommandSpec[] = [
     ],
     notes: [
       "Run it from a step of a Pilot run of the card's own automation (the desktop may too): Pilot refuses any other caller.",
-      'The bundle must be inside the Automations folder. --head names the commit the patch was drafted against; the cleared answer gets a reply saying so.'
+      'The bundle must be inside the Automations folder. --head names the commit the patch was drafted against; the cleared answer gets a reply saying so.',
+      "While an answer run other than the caller is still applying the card's answer, Pilot refuses (its answer is being applied). That answer run itself may re-attach it, which clears the answer."
     ]
   },
   {

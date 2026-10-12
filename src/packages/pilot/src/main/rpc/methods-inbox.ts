@@ -139,11 +139,13 @@ export function buildInboxMethods(ctx: () => PilotContext) {
         const c = ctx()
         const target = resolveAddTarget(c, p)
         refuseUnproposable(c, target)
-        // A bundle can change an open card and clear its answer: only set-details' callers may give one.
+        // A bundle can change an open card and clear its answer: only set-details' callers may give one,
+        // and, like set-details, the card's own answer run may re-add it while it applies the answer.
+        let callerRunId: string | null = null
         if (target.detailsBundlePath !== undefined) {
-          refuseOutsideScope(c, rpc.caller, p, targetAutomation(c, target))
+          callerRunId = refuseOutsideScope(c, rpc.caller, p, targetAutomation(c, target))
         }
-        return addInboxItem(inboxDeps(c), target)
+        return addInboxItem(inboxDeps(c), target, { callerRunId })
       }
     }),
     defineMethod({

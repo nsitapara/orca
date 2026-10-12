@@ -18,6 +18,8 @@ export type SetDetailsOptions = {
   onlyUnanswered: boolean
   // Refuse a card that has a bundle (the backfill: a draft attached meanwhile is kept).
   onlyWithoutDetails?: boolean
+  // The run the call is bound to (refuseOutsideScope): its own dispatched answer is not in the way.
+  callerRunId?: string | null
 }
 
 // An answer run that may still be applying its answer. A finished one (done, needs_you, failed, …) has
@@ -27,12 +29,21 @@ const LIVE_RUN: ReadonlySet<RunStatus> = new Set(['asking', 'running'])
 // The card's answer is being applied now: the card is 'answered' and a dispatched queue row names an
 // answer run still running. Clearing it would leave that run to end on, or tick, a version nobody
 // answered. A dispatched row outlives its run, and one with no run (sent before Pilot) never counts.
-export function answerBeingApplied(store: PilotStore, item: InboxItemRow): boolean {
+// The caller's own run doesn't count either: an answer run re-drafting its card (apply.md step 5) clears the
+// answer it is applying, and answerRunEnded leaves a card that is no longer 'answered' alone.
+export function answerBeingApplied(
+  store: PilotStore,
+  item: InboxItemRow,
+  callerRunId: string | null = null
+): boolean {
   if (item.status !== 'answered') {
     return false
   }
   return store.queue.forInboxItem(item.id).some((row) => {
     if (row.state !== 'dispatched' || row.dispatchedRunId === null) {
+      return false
+    }
+    if (row.dispatchedRunId === callerRunId) {
       return false
     }
     const run = store.runs.get(row.dispatchedRunId)
@@ -69,7 +80,7 @@ function attach(
   if (opts.onlyUnanswered && answered) {
     throw new Error(ANSWERED_SINCE)
   }
-  if (answerBeingApplied(deps.store, item)) {
+  if (answerBeingApplied(deps.store, item, opts.callerRunId ?? null)) {
     throw new Error(ANSWER_BEING_APPLIED)
   }
   const at = deps.now()

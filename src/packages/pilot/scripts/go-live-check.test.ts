@@ -182,9 +182,9 @@ describe('renderSummary', () => {
       sha: 'x',
       rows: [rows[0]],
       parity: [],
-      cardDetails: 'Card details: 0 open cards, 0 with a Details bundle, 0 imported cards.'
+      cardDetails: 'Card details: 0 waiting cards, 0 with a Details bundle, 0 imported cards.'
     })
-    expect(md).toContain('Parity tests: none ran.\n\nCard details: 0 open cards')
+    expect(md).toContain('Parity tests: none ran.\n\nCard details: 0 waiting cards')
   })
 
   it('says None when nothing is wrong', () => {
@@ -208,20 +208,21 @@ describe('detailsLine', () => {
     ...over
   })
 
-  it('counts the open cards, those with a bundle, and imports still pointing at a vault bundle', () => {
+  // `inbox list` returns the waiting cards: open and answered alike.
+  it('counts the waiting cards, those with a bundle, and imports still pointing at a vault bundle', () => {
     const items = [
-      card({ details: { path: '/x.json' } }),
-      card({ source: 'import', detailsMd: LEGACY }),
-      card({ detailsMd: 'plain notes' })
+      card({ status: 'open', details: { path: '/x.json' } }),
+      card({ status: 'answered', source: 'import', detailsMd: LEGACY }),
+      card({ status: 'open', detailsMd: 'plain notes' })
     ]
     expect(detailsLine({ items })).toBe(
-      'Card details: 3 open cards, 1 with a Details bundle, 1 imported cards still pointing at a vault bundle (re-run "Import open vault cards" in Pilot\'s window).'
+      'Card details: 3 waiting cards, 1 with a Details bundle, 1 imported cards still pointing at a vault bundle (re-run "Import open vault cards" in Pilot\'s window).'
     )
   })
 
   it('reads an empty inbox', () => {
     expect(detailsLine({ items: [] })).toMatch(
-      /^Card details: 0 open cards, 0 with a Details bundle, 0 imported/
+      /^Card details: 0 waiting cards, 0 with a Details bundle, 0 imported/
     )
   })
 

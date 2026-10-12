@@ -1,12 +1,22 @@
 import type { InboxAnswer, InboxItemRow } from '../../shared/api-types'
 import type { InboxAnswerParams } from '../../shared/inbox-types'
 import { oneLine } from '../inbox/card'
-import { APPROVE_ON_DESKTOP, DRAFT_ON_DESKTOP, routeFor, type CatalogLookup } from './queue-view'
+import {
+  APPROVE_ON_DESKTOP,
+  DRAFT_ON_DESKTOP,
+  DRAFT_OPTION_ON_DESKTOP,
+  routeFor,
+  type CatalogLookup
+} from './queue-view'
 
-export { APPROVE_ON_DESKTOP, DRAFT_ON_DESKTOP }
+export { APPROVE_ON_DESKTOP, DRAFT_ON_DESKTOP, DRAFT_OPTION_ON_DESKTOP }
 
 // A re-ask the save refuses outright: words that would approve where only the desktop approves.
-const DESKTOP_ONLY: ReadonlySet<string> = new Set([APPROVE_ON_DESKTOP, DRAFT_ON_DESKTOP])
+const DESKTOP_ONLY: ReadonlySet<string> = new Set([
+  APPROVE_ON_DESKTOP,
+  DRAFT_ON_DESKTOP,
+  DRAFT_OPTION_ON_DESKTOP
+])
 import {
   getInboxItem,
   inboxEvent,
