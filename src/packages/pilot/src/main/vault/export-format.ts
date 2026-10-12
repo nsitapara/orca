@@ -95,9 +95,12 @@ function stateWords(item: InboxItemRow): string {
   return `✓ ${field(item.outcome) || item.status}`
 }
 
-// One line, and never starting like a vault checkbox item ("- [ ]"): these fields come from agents and people.
+// One line, never starting like a vault checkbox item ("- [ ]"), and with no HTML comment opener (it renders as
+// "<!--" but can't forge or hide a block marker): these fields come from agents and people.
 function field(text: string | null | undefined): string {
-  return oneLine(text).replace(/^-\s*\[/, '- (')
+  return oneLine(text)
+    .replace(/^-\s*\[/, '- (')
+    .replaceAll('<!--', '<\\!--')
 }
 
 // No checkbox on purpose: vault.py's ITEM pattern needs "- [ ]", so no vault reader takes these as items.
@@ -152,11 +155,11 @@ export function hasBrokenMarkers(content: string, automationId: string): boolean
   return (from === -1) !== (to === -1) || (from !== -1 && to < from)
 }
 
-// Replace this automation's block, append it, or (block null) remove it. Nothing else in the note moves.
 export function hasMarkers(content: string, automationId: string): boolean {
   return content.includes(begin(automationId))
 }
 
+// Replace this automation's block, append it, or (block null) remove it. Nothing else in the note moves.
 export function replaceBlock(content: string, automationId: string, block: string | null): string {
   const from = content.indexOf(begin(automationId))
   const to = content.indexOf(end(automationId))
