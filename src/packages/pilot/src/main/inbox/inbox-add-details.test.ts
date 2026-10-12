@@ -21,6 +21,29 @@ if (!def.ok || !people.ok) {
   throw new Error('setup')
 }
 
+function plain(card: InboxAddParams): InboxAddParams {
+  const { detailsBundlePath: _bundle, ...rest } = card
+  return rest
+}
+
+// The card's answer, sent to an answer run that is still running.
+function answerRunning(s: { store: PilotStore }, id: string): void {
+  const digest = s.store.inbox.get(id)?.digest ?? ''
+  s.store.inbox.saveAnswer(id, { option: 0, text: null, digest, via: 'page' }, 'nish', 110)
+  s.store.runs.create({
+    id: 'ans-1',
+    automationId: 'ci',
+    tickId: null,
+    itemKey: 'mr:1561',
+    itemLabel: '!1561',
+    worktreePath: null,
+    startedAt: 115,
+    trigger: 'answer'
+  })
+  const row = s.store.queue.enqueue(id, 200, 110)
+  s.store.queue.update(row, { state: 'dispatched', readyAt: 120, dispatchedRunId: 'ans-1' }, 120)
+}
+
 function setup() {
   const f = detailsFixture()
   const store = PilotStore.open(join(mkdtempSync(join(tmpdir(), 'pilot-inbox-')), 'db.sqlite'))
@@ -88,21 +111,45 @@ describe('addInboxItem with a Details bundle', () => {
     expect(store.queue.forInboxItem(id)).toEqual([])
   })
 
-  it('refuses a new bundle on a card whose answer is being applied, and leaves the card as it was', () => {
-    const { f, store, deps, card } = setup()
+  it.each<[string, (s: ReturnType<typeof setup>) => InboxAddParams]>([
+    [
+      'a new bundle',
+      (s) => {
+        rewriteBundle(s.f.bundle, (b) => b.blocks.push({ type: 'text', title: 'More', body: 'b' }))
+        return s.card
+      }
+    ],
+    ['a change without a bundle', (s) => ({ ...plain(s.card), context: 'Changed' })]
+  ])('refuses %s on a card whose answer run is still running', (_name, change) => {
+    const s = setup()
+    const id = addInboxItem(s.deps, s.card).id ?? ''
+    answerRunning(s, id)
+    const params = change(s)
+    const before = s.store.inbox.get(id)
+    const snapshot = s.store.inbox.snapshot(id)
+    expect(addInboxItem(s.deps, params)).toEqual({
+      id: null,
+      existing: true,
+      refused: ANSWER_BEING_APPLIED
+    })
+    expect(s.store.inbox.get(id)).toEqual(before)
+    expect(s.store.inbox.snapshot(id)).toEqual(snapshot)
+  })
+
+  it('keeps the bundle when the card is added again without one', () => {
+    const { store, deps, card } = setup()
     const id = addInboxItem(deps, card).id ?? ''
-    const digest = store.inbox.get(id)?.digest ?? ''
-    store.inbox.saveAnswer(id, { option: 0, text: null, digest, via: 'page' }, 'nish', 110)
-    store.queue.update(
-      store.queue.enqueue(id, 200, 110),
-      { state: 'dispatched', readyAt: 120 },
-      120
-    )
-    rewriteBundle(f.bundle, (b) => b.blocks.push({ type: 'text', title: 'More', body: 'b' }))
-    const before = store.inbox.get(id)
+    const row = store.inbox.get(id)
     const snapshot = store.inbox.snapshot(id)
-    expect(() => addInboxItem(deps, card)).toThrow(ANSWER_BEING_APPLIED)
-    expect(store.inbox.get(id)).toEqual(before)
+    expect(addInboxItem(deps, plain(card))).toEqual({ id, existing: true, refused: null })
+    expect(store.inbox.get(id)).toMatchObject({ version: 1, digest: row?.digest })
+    addInboxItem(deps, { ...plain(card), context: 'Changed', detailsMd: '## Why' })
+    expect(store.inbox.get(id)).toMatchObject({
+      version: 2,
+      context: 'Changed',
+      details: row?.details,
+      detailsMd: null
+    })
     expect(store.inbox.snapshot(id)).toEqual(snapshot)
   })
 

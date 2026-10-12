@@ -112,6 +112,19 @@ function skippedBefore(item: InboxItemRow, card: InboxCard, origin: Origin): boo
   )
 }
 
+// A card added again without a bundle keeps the one it has: a step's retry without its refused bundle, or
+// a plain re-add, never drops the Details shown. A card with a bundle carries no markdown (ruling 6).
+function keepingBundle(
+  card: InboxCard,
+  open: InboxItemRow,
+  loaded: DetailsSnapshot | null
+): InboxCard {
+  if (loaded || !open.details) {
+    return card
+  }
+  return { ...card, details: open.details, detailsMd: null }
+}
+
 // The open card again: unchanged, it is returned as is; changed, it becomes the next version (with the
 // snapshot of its bundle, or none), and an answer given to the old version is cleared (that answer
 // approved another card).
@@ -138,17 +151,25 @@ function updateOpen(
     answeredBy: null,
     replies: [...open.replies, { text: CHANGED_AFTER_ANSWER, by: 'pilot' as const }]
   }
-  deps.store.transaction(() => {
-    // A new bundle never clears an answer whose work is running (set-details refuses the same).
-    if (card.details && answerBeingApplied(deps.store, deps.store.inbox.get(open.id) ?? open)) {
-      throw new Error(ANSWER_BEING_APPLIED)
+  // A card that keeps its bundle (added again without one) keeps that bundle's snapshot too.
+  const keepSnapshot = snapshot === null && card.details !== null
+  const written = deps.store.transaction(() => {
+    // No change clears an answer whose answer run is still running (set-details refuses the same).
+    if (answerBeingApplied(deps.store, deps.store.inbox.get(open.id) ?? open)) {
+      return false
     }
     deps.store.inbox.edit(open.id, { ...card, digest }, at)
-    deps.store.inbox.setSnapshot(open.id, snapshot)
+    if (!keepSnapshot) {
+      deps.store.inbox.setSnapshot(open.id, snapshot)
+    }
     if (answered) {
       deps.store.inbox.update(open.id, cleared, at)
     }
+    return true
   })
+  if (!written) {
+    return { id: null, existing: true, refused: ANSWER_BEING_APPLIED }
+  }
   if (answered) {
     deps.store.queue.removePending(open.id)
   }
@@ -198,7 +219,8 @@ export function addInboxItem(
     return { id: null, existing: true, refused: SAME_CARD_OPEN }
   }
   if (open) {
-    return updateOpen(deps, open, card, digest, at, loaded)
+    const merged = keepingBundle(card, open, loaded)
+    return updateOpen(deps, open, merged, inboxDigest(merged), at, loaded)
   }
   if (card.action && mine.some((i) => skippedBefore(i, card, origin))) {
     return { id: null, existing: false, refused: SKIPPED_BEFORE }
