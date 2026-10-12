@@ -253,6 +253,15 @@ The order, behaviour changes and follow-ups come from the build (`go-live-notes.
 - **04:** the old `loop.py status` shows a Pilot run in progress as `start_failed`. The old sweep leaves the run alone until its deadline plus 10 minutes.
 - **Leftovers:** M04 worktrees aren't cleaned up (as before). M03's `INSTRUCTIONS.md` still says "manual Orca automation"; reword it at go-live.
 
+### Going back to Orca
+
+1. Disable each YAML: `pilot automations disable --id <id>`. Let running steps finish first.
+2. Re-enable the jobs in Orca's Automations page.
+3. If job 12 was retired, remove `<STATE_ROOT>/apply/retired`. While it exists, `apply.py` sends nothing.
+4. Point the console at Orca: `console.py stop`, then `AGENT_CONSOLE_BACKEND=orca python3 ~/.agents/skills/agent-console/console.py ensure`.
+5. The old jobs resume from their own state. `import-state` only reads the old files, and adds to Pilot's data. Pilot's runs leave 03's `cycles.json` and 04's `run.json` readable by the Orca sweeps: a stopped cycle is forgotten, an unfinished one restarts as abandoned, and 04 treats a live Pilot run as active until its deadline plus 10 minutes. Rolling back needs no cleanup of them.
+6. What Pilot did alone stays in Pilot: its runs and cards, and answers it already sent (the old job won't resend what it never saw).
+
 ## Remote use (D25)
 
 Pilot keeps Orca's pairing, WebSocket server, web client and `orcad` protocols unchanged. Pilot's runtime listens on 6868 (override `PILOT_WS_PORT`), so it runs beside real Orca on 6768. Pairing links stay `orca://pair?code=...` and carry Pilot's endpoint.
