@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest'
 import type { RpcCallerIdentity } from '../../../../../main/runtime/rpc/rpc-caller-identity'
 import { loadDefinitions } from '../definitions/loader'
 import { detailsFixture } from '../inbox/__fixtures__/details-fixture'
+import { loadDetails } from '../inbox/details-bundle'
 import { addInboxItem } from '../inbox/inbox-add'
 import type { PilotHost } from '../pilot-services'
 import { PilotStore } from '../store/store'
@@ -240,5 +241,69 @@ describe('pilot.inbox.setDetails: who may replace a bundle', () => {
       params: { safeParse(v: unknown): { success: boolean } }
     }
     expect(method.params.safeParse(params).success).toBe(false)
+  })
+})
+
+// pilot.inbox.add with a bundle can change an open card (and clear its answer), so it asks what
+// set-details asks: the desktop, or the local CLI bound to a run of the card's own automation.
+describe('pilot.inbox.add with a bundle: the scope of set-details', () => {
+  function answeredCiCard() {
+    const s = detailsSetup()
+    withRuns(s.store)
+    const id = s.add(null)
+    const digest = s.store.inbox.get(id)?.digest ?? ''
+    s.store.inbox.saveAnswer(id, { option: 0, text: null, digest, via: 'page' }, 'nish', 110)
+    const card = {
+      automationId: 'ci',
+      itemKey: 'mr:1',
+      type: 'bug',
+      title: 'A ci card',
+      detailsBundlePath: s.f.bundle
+    }
+    return { ...s, id, card }
+  }
+
+  it.each<[string, RpcCallerIdentity | undefined, Record<string, unknown>, string]>([
+    ['the local CLI bound to no run', CLI, {}, RUN_ONLY],
+    ['the local CLI in a terminal with no step', CLI, { terminal: 'term-9' }, RUN_ONLY],
+    ['a paired device', PAIRED, {}, RUN_ONLY],
+    ['a caller Pilot cannot name', undefined, {}, "Pilot can't tell who is calling"]
+  ])('refuses %s, and the answered card keeps its answer', (_name, caller, binding, message) => {
+    const { store, id, card, callAs } = answeredCiCard()
+    const before = store.inbox.get(id)
+    expect(() => callAs(caller, 'pilot.inbox.add', { ...card, ...binding })).toThrow(message)
+    expect(store.inbox.get(id)).toEqual(before)
+    expect(store.inbox.list()).toHaveLength(1)
+  })
+
+  it("files another automation's run's bundle under that run, never on this card", () => {
+    const { store, id, card, callAs } = answeredCiCard()
+    const before = store.inbox.get(id)
+    const added = callAs(CLI, 'pilot.inbox.add', { ...card, runId: 'run-2', stepIdx: 0 }) as {
+      id: string
+    }
+    expect(store.inbox.get(added.id)).toMatchObject({ automationId: 'qa', runId: 'run-2' })
+    expect(store.inbox.get(id)).toEqual(before)
+  })
+
+  it.each<[string, RpcCallerIdentity, Record<string, unknown>]>([
+    ['the desktop', DESKTOP, {}],
+    ["a step of the card's own automation", CLI, { terminal: 'term-1' }]
+  ])('lets %s add it', (_name, caller, binding) => {
+    const { f, store, card, callAs } = answeredCiCard()
+    const added = callAs(caller, 'pilot.inbox.add', { ...card, ...binding }) as { id: string }
+    expect(store.inbox.get(added.id)?.details?.sha256).toBe(
+      loadDetails(f.root, f.bundle).ref.sha256
+    )
+  })
+
+  it('still takes the card without its bundle when a bound step retries after a refused bundle', () => {
+    const { f, store, card, callAs } = answeredCiCard()
+    writeFileSync(f.bundle, '{"version": 2}')
+    const bound = { ...card, terminal: 'term-1' }
+    expect(() => callAs(CLI, 'pilot.inbox.add', bound)).toThrow(/^Details bundle refused: /)
+    const { detailsBundlePath: _bundle, ...plain } = bound
+    const added = callAs(CLI, 'pilot.inbox.add', plain) as { id: string }
+    expect(store.inbox.get(added.id)).toMatchObject({ automationId: 'ci', runId: 'run-1' })
   })
 })

@@ -14,6 +14,7 @@ import {
   type InboxDeps
 } from '../inbox/inbox-service'
 import type { PilotContext } from '../pilot-services'
+import { refuseOutsideScope } from './details-scope'
 import { resolveChannelRun, resolveChannelStep } from './run-channel'
 
 const TYPES = ['question', 'flagged', 'default', 'action', 'bug', 'left_for_you'] as const
@@ -85,6 +86,14 @@ function refuseUnproposable(c: PilotContext, target: InboxAddParams): void {
   }
 }
 
+// The automation whose card an add is: the resolved run's, else the one it names.
+function targetAutomation(c: PilotContext, target: InboxAddParams): string {
+  if (target.runId) {
+    return c.store.runs.get(target.runId)?.automationId ?? ''
+  }
+  return target.automationId ?? ''
+}
+
 // Which run (and step) a card belongs to: the step running on the caller's terminal first, the env's step
 // only as the fallback (ruling 8d, run-channel's resolver). With no terminal-bound step and no env run,
 // an explicit --automation and --item still files a job-wide card; otherwise the resolver refuses.
@@ -125,10 +134,14 @@ export function buildInboxMethods(ctx: () => PilotContext) {
       name: 'pilot.inbox.add',
       permission: 'workspace',
       params: InboxAdd,
-      handler: (p) => {
+      handler: (p, rpc) => {
         const c = ctx()
         const target = resolveAddTarget(c, p)
         refuseUnproposable(c, target)
+        // A bundle can change an open card and clear its answer: only set-details' callers may give one.
+        if (target.detailsBundlePath !== undefined) {
+          refuseOutsideScope(c, rpc.caller, p, targetAutomation(c, target))
+        }
         return addInboxItem(inboxDeps(c), target)
       }
     }),

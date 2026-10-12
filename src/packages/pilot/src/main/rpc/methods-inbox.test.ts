@@ -111,8 +111,8 @@ describe('inbox RPC', () => {
 
   it("lists a bundled card with its Details ref only: the snapshot isn't in the payload", () => {
     const f = detailsFixture()
-    const { call } = setup(f.root)
-    call('pilot.inbox.add', {
+    const { call, callAs } = setup(f.root)
+    callAs({ kind: 'desktop' }, 'pilot.inbox.add', {
       runId: 'run-1',
       type: 'bug',
       title: 'Leaving asks to discard edits',

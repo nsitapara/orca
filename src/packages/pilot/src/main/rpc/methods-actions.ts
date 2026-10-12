@@ -3,7 +3,7 @@ import { defineMethod } from '../../../../../main/runtime/rpc/core'
 import { attemptAction, refuseCall, type AttemptDeps, type AttemptResult } from '../actions/attempt'
 import type { PilotContext } from '../pilot-services'
 import { inboxDeps } from './methods-inbox'
-import { resolveChannelStep } from './run-channel'
+import { runBinding } from './run-binding'
 
 export const MAX_ACTION_ARGS = 64 * 1024
 
@@ -33,20 +33,6 @@ export const NO_CALLER = "Pilot can't tell who is calling; nothing runs"
 
 function messageOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
-}
-
-// Whose powers apply (Task 22b ruling): the step starting or running on the caller's terminal, else the
-// env's PILOT_RUN_ID/PILOT_STEP_IDX only while that step is active in an open run (run-channel's resolver,
-// which refuses anything else). With neither the call is bound to no run (null).
-export function runBinding(
-  c: PilotContext,
-  p: Pick<z.infer<typeof ActionRun>, 'terminal' | 'runId' | 'stepIdx'>
-): { runId: string; stepIdx: number } | null {
-  const bound = p.terminal ? c.store.runs.stepsOnTerminal(p.terminal) : []
-  if (bound.length === 0 && p.runId === undefined && p.stepIdx === undefined) {
-    return null
-  }
-  return resolveChannelStep(c, { terminal: p.terminal, runId: p.runId, stepIdx: p.stepIdx })
 }
 
 export function buildActionMethods(ctx: () => PilotContext) {
