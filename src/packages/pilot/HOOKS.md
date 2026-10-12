@@ -27,3 +27,18 @@ Every change Pilot makes to an upstream file is listed here (D24). Each one is a
 | orca-automations-off | src/main/startup/main-process-automations.ts | keepOrcaAutomationsOff(service, store) | Pilot runs YAML automations only: Orca's own engine is stopped at startup (spec hook 1) |
 | agent-launch-env | src/main/runtime/orca-runtime-terminal-create-deduplication.ts | withPilotAgentLaunch( | a Pilot step's env (PILOT_*, AGENT_RUN) and its --session-id/--resume/args reach the agent; launchAgentTerminal forwards no env and extraAgentArgs allows only --model/--effort/--add-dir |
 | right-sidebar-badge | src/renderer/src/components/right-sidebar/activity-bar-buttons.tsx | <PilotActivityBadge | waiting count or running dot on the Automations icon (the bar's own slot is a status dot with no count, fed from a memo Pilot can't refresh) |
+
+## After an upstream sync
+
+Run the guard, then the upstream tests next to every hooked file (R10). Those are the folders of the `src/` files in the table above. The renderer root `src/renderer/src` is left out: its hook, `attachPilotRenderer()`, is covered by Pilot's own attach tests.
+
+    node src/packages/pilot/scripts/hook-guard.mjs
+    HOOK_DIRS=$(node --input-type=module -e "import {readFileSync} from 'node:fs'; import {dirname} from 'node:path'; import {parseHooksTable} from './src/packages/pilot/scripts/hook-guard.mjs'; const rows = parseHooksTable(readFileSync('src/packages/pilot/HOOKS.md', 'utf8')); console.log([...new Set(rows.map((r) => dirname(r.file)).filter((d) => d.startsWith('src/') && d !== 'src/renderer/src'))].join(' '))")
+    ORCA_CLI_INSTALL_PATH=$(mktemp -u)/orca ORCA_BROWSER_EXECUTABLE= pnpm exec vitest run --config config/vitest.config.ts $HOOK_DIRS src/cli/handler-group-manifest.test.ts
+
+Which hooks were added for the YAML engine, and why:
+- `right-sidebar-badge`: the activity bar's own slot is a status dot with no count, fed from a memo Pilot can't refresh.
+- `orca-automations-off`: the desktop app and `serve` never start Orca's automation service. Pilot's `orcad` keeps upstream's engine; `PILOT_ORCA_AUTOMATIONS=on` turns Orca's service back on.
+- `agent-launch-env` (required): carries each agent terminal's environment and its agent arguments (a pinned session id, `--resume`, `codex resume <id>`, a step's `args`) through one call, so upstream's `extraAgentArgs` allowlist isn't used for them.
+
+The table says which of these are in place.
