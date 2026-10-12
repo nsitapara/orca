@@ -242,6 +242,24 @@ describe('addInboxItem', () => {
       addInboxItem(withCatalog, { ...QUESTION, type: 'action', action: 'deploy', actionArgs: {} })
     ).toThrow('No action named "deploy" in Pilot\'s catalog')
   })
+
+  it("refuses action args that don't fit the action's schema", () => {
+    const { store, deps } = setup()
+    const withCatalog = {
+      ...deps,
+      knownAction: () => true,
+      actionArgsProblem: (_name: string, args: Record<string, unknown>) =>
+        Array.isArray(args.argv) ? null : 'usage: push { "argv": [...] }'
+    }
+    const card = { ...QUESTION, type: 'action' as const, action: 'push' }
+    expect(() => addInboxItem(withCatalog, { ...card, actionArgs: { argv: 'x' } })).toThrow(
+      'usage: push { "argv": [...] }'
+    )
+    expect(store.inbox.list({})).toEqual([])
+    expect(addInboxItem(withCatalog, { ...card, actionArgs: { argv: ['x'] } }).id).toBe(
+      'in_0000000000000001'
+    )
+  })
 })
 
 describe('resolving and replying', () => {

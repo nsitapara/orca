@@ -6,6 +6,7 @@ import { isOrcaAutomationsOff } from '../orca-automations-off'
 import type { PilotContext, PilotHost } from '../pilot-services'
 import { setAutomationEnabled } from './automation-files'
 import { activity, dryRun, getAutomation, listAutomations, tickNow, validateYaml } from './handlers'
+import { buildActionMethods } from './methods-actions'
 import { buildChannelMethods } from './methods-channel'
 import { buildInboxMethods } from './methods-inbox'
 
@@ -121,6 +122,7 @@ export function buildPilotMethods(host: PilotHost) {
       handler: (p) => setAutomationEnabled(ctx(), p.id, p.enabled)
     }),
     ...buildChannelMethods(ctx),
-    ...buildInboxMethods(ctx)
+    ...buildInboxMethods(ctx),
+    ...buildActionMethods(ctx)
   ].map((m) => Object.assign(m, { pilot: true }))
 }

@@ -5,6 +5,9 @@ import { ALL_RPC_METHODS } from '../../../../main/runtime/rpc/methods/index'
 import { getAppEnvironment } from '../../../../shared/app-environment'
 import type { PilotStatus } from '../shared/api-types'
 import type { AgentKind } from '../shared/definition/types'
+import { actBridge } from './actions/act-bridge'
+import { buildActionCatalog } from './actions/catalog'
+import type { ActionCatalog } from './actions/types'
 import { definitionIo, liveDefinitions } from './definitions/live'
 import type { LoadedDefinitions } from './definitions/loader'
 import { mergeRepoProblems, type RepoProblem } from './definitions/repo-problems'
@@ -30,6 +33,7 @@ import { PilotScheduler } from './scheduler/scheduler'
 import { registrySources } from './scheduler/tick-decide'
 import { runTick, type TickDeps } from './scheduler/tick-runner'
 import { createPassFetchCache } from './sources/fetch-cache'
+import { createLinearWriter } from './linear-connector/linear-writer'
 import { glabApiForRepo } from './sources/gitlab-api'
 import { registerPilotSources } from './sources/register-sources'
 import { PilotStore } from './store/store'
@@ -42,6 +46,8 @@ export type PilotContext = {
   loaded(): LoadedDefinitions
   reload(): LoadedDefinitions
   scheduler: PilotScheduler
+  // Every outside effect goes through it (contract §10).
+  actions: ActionCatalog
 }
 export type PilotServices = { stop: () => void; context: PilotContext }
 // What pilot.status reads. It is registered before anything opens, so status still answers (with
@@ -183,6 +189,8 @@ function openPilot(
         log
       })
     : null
+  // Built once; nothing runs until an action is attempted.
+  const actions = buildActionCatalog({ act: actBridge(), linear: createLinearWriter(runtime) })
   const scheduler = new PilotScheduler({
     now,
     definitions: definitions.current,
@@ -212,7 +220,8 @@ function openPilot(
     dirs: host.dirs,
     loaded: () => withRepoProblems(definitions.current()),
     reload: () => withRepoProblems(definitions.reload()),
-    scheduler
+    scheduler,
+    actions
   }
 }
 

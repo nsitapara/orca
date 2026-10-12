@@ -11,8 +11,10 @@ export type InboxDeps = {
   definitions(): AutomationDefinition[]
   people(): PeopleDirectory
   newId?(): string
-  // Set once the action catalog exists (Task 22b): an add naming an unknown action is refused.
+  // Set with the action catalog (Task 22b): an add naming an unknown action, or args that don't fit the
+  // action's schema (the problem, else null), is refused.
   knownAction?(name: string): boolean
+  actionArgsProblem?(name: string, args: Record<string, unknown>): string | null
   // Called after a card closes (Task 25 cancels an ask-first run whose card closed without starting it).
   onResolved?(item: InboxItemRow): void
 }

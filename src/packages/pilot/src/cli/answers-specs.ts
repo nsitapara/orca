@@ -17,6 +17,27 @@ export const ANSWERS_COMMAND_SPECS: CommandSpec[] = [
     usage: 'pilot inbox reply --id <id> --text <question> [--json]',
     allowedFlags: [...GLOBAL_FLAGS, 'id', 'text'],
     examples: ['pilot inbox reply --id in_0123456789abcdef --text "Which image: e2e or unit?"']
+  },
+  {
+    path: ['action', 'run'],
+    summary:
+      'Run a catalog action; inside a Pilot run, one the run lacks the power for is asked of a person instead',
+    usage: 'pilot action run --name <entry> --args-json <json object> [--dry-run] [--json]',
+    allowedFlags: [...GLOBAL_FLAGS, 'name', 'args-json', 'dry-run'],
+    examples: [
+      'pilot action run --name push --args-json \'{"argv":["/wt/web-1493","web-1493-a","9c1e2f0","1a2b3c4"]}\' --dry-run'
+    ],
+    notes: [
+      "Inside a Pilot step, the step running in this terminal is the caller (PILOT_RUN_ID and PILOT_STEP_IDX are the fallback, only while that step is active); its run's powers apply. Run with no Pilot step at all, it acts on your own approval.",
+      'Exit codes: done 0, failed 1, stale 3, needs_agent 4, not_yet 5, asked 6.'
+    ]
+  },
+  {
+    path: ['action', 'list'],
+    summary: "Pilot's action catalog: each action, the power it needs and its arguments",
+    usage: 'pilot action list [--json]',
+    allowedFlags: [...GLOBAL_FLAGS],
+    examples: ['pilot action list']
   }
 ]
 

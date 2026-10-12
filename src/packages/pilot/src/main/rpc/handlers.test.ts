@@ -24,7 +24,8 @@ function context() {
       dirs: [dir],
       loaded: () => loaded,
       reload: () => loaded,
-      scheduler: { nextTickAt: () => Date.UTC(2026, 9, 10, 20, 10) } as never
+      scheduler: { nextTickAt: () => Date.UTC(2026, 9, 10, 20, 10) } as never,
+      actions: { entries: () => [], get: () => null }
     }
   }
 }
