@@ -9,6 +9,23 @@ class SyntheticTest(unittest.TestCase):
     def test_every_committed_case_is_what_the_builder_writes(self):
         self.assertEqual(synthetic.main(["synthetic.py", "--check"]), 0)
 
+    def test_check_catches_a_value_that_only_looks_equal_in_python(self):
+        # True == 1 and 1 == 1.0 in Python, but they are different JSON; --check must see the drift.
+        import tempfile
+        from pathlib import Path
+        from unittest import mock
+
+        with tempfile.TemporaryDirectory() as tmp:
+            for job, name, fixture in synthetic.cases():
+                path = Path(tmp) / job / f"{name}.json"
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(synthetic.dump(fixture))
+            with mock.patch.object(synthetic, "HERE", Path(tmp)):
+                self.assertEqual(synthetic.main(["synthetic.py", "--check"]), 0)
+                target = next(Path(tmp).glob("05/*.json"))
+                target.write_text(target.read_text().replace(": true", ": 1", 1))
+                self.assertEqual(synthetic.main(["synthetic.py", "--check"]), 1)
+
     def test_a_case_holds_the_reads_of_the_old_sweep_and_of_pilots_dry_tick(self):
         wt = synthetic.worktree("w7", "web-7", dirty=1, operation="rebase-merge")
         fixture = synthetic.build("T", "c", now=5, mrs=[synthetic.mr(7, pipeline=(70, "failed"))], worktrees=[wt], loop="ci-fix",
