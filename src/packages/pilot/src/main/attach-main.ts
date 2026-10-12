@@ -5,6 +5,7 @@ import { getAppEnvironment } from '../../../../shared/app-environment'
 import { applyPilotEnvDefaults, pilotSchedulerEnabled, type PilotHostKind } from './env'
 import { pilotBinDir } from './engine-env'
 import { claudeQuotaReader } from './fields/claude-quota'
+import { codexQuotaReader } from './fields/codex-quota'
 import { startPilotServices, type PilotServices } from './pilot-services'
 
 // Hook target: src/main/startup/main-process-ready-runtime.ts (pilot-hook: main). Runs once in desktop
@@ -43,7 +44,7 @@ export function attachPilotMain(runtime: OrcaRuntimeService): void {
   let services: PilotServices
   try {
     services = startPilotServices(runtime, 'main', {
-      quotas: { claude: claudeQuotaReader() },
+      quotas: { claude: claudeQuotaReader(), codex: codexQuotaReader() },
       engineEnv: {
         binDir: pilotBinDir({
           packaged: app.isPackaged,
