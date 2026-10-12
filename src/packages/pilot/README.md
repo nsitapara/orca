@@ -87,7 +87,9 @@ How one of the old sweeps that real Orca schedules (`~/.agents/skills/<name>-swe
 - [ ] 3. Shadow for a working day: **pending, Nish**.
 - [ ] 4. Cut over (disable Orca's 05, schedule `"10 * * * *"`): **pending, Nish**.
 
-## Moving an Orca automation into Pilot
+## Moving an Orca automation into Pilot (retired)
+
+**Retired.** Orca's own automation engine is off inside Pilot (hook `orca-automations-off`), so an automation this script copies into Pilot never runs there. Jobs move to Pilot as YAML automations instead (Migrating an automation, above). The script stays for the record; don't run it with `--apply`.
 
 `scripts/move-orca-automation.mjs` copies one automation from real Orca into Pilot so it never runs in both at once. It reads Orca with `orca automations show` (read-only), maps each field onto `pilot automations create` flags, and never deletes anything in Orca. Pilot has to be running (its CLI talks to it).
 
@@ -118,13 +120,13 @@ orca automations edit --id <orca id> --enabled
 
 ## Pilot and Orca side by side
 
-Both apps can run at once, each with its own backend and data. An automation runs in one of them; the other keeps a disabled copy.
+Both apps can run at once, each with its own backend and data. Pilot runs YAML automations only: Orca's own automation engine is off inside Pilot (hook `orca-automations-off`; starting Pilot with `PILOT_ORCA_AUTOMATIONS=on` turns it back on, as a fallback before go-live). Orca keeps the Orca-style jobs, disabled, as the fallback.
 
 | | Pilot (where the jobs run) | Orca (the fallback) |
 |---|---|---|
 | App | `dist/mac-arm64/Pilot.app`, port 6868 | `/Applications/Orca.app`, port 6768 |
 | Data | `~/Library/Application Support/Pilot` | `~/Library/Application Support/orca` |
-| Jobs | every moved automation, enabled as it was in Orca | the same automations, all disabled |
+| Jobs | YAML automations (Orca's own engine is off) | the Orca-style jobs, disabled (the fallback) |
 | `orca` in its terminals and prechecks | reaches Pilot | reaches Orca |
 | Agent Console | `AGENT_CONSOLE_BACKEND=pilot` (the default) | `AGENT_CONSOLE_BACKEND=orca` |
 
@@ -136,7 +138,7 @@ What follows from that:
 - **History:** each app keeps its own runs. The Agent Console shows both, by job code.
 - **A restart can skip one slot.** A slot missed while Pilot was closed is retried at launch. That retry can come before Pilot has loaded its projects, and then it's recorded as `skipped_unavailable` ("The target project is no longer available."). The next slot runs normally. To cover the gap, use the job's Run now in the Agent Console. Seen 2026-10-11 10:10 for 05 and 12.
 
-Switch every moved automation at once (dry run without `--apply`):
+Switch every moved automation at once (dry run without `--apply`). `--to pilot` refuses while Pilot's Orca engine is off, which is the default: the moved copies would run nowhere.
 
 ```
 node src/packages/pilot/scripts/switch-automations.mjs --to orca --apply    # back to Orca
@@ -193,6 +195,7 @@ These need a phone, a second Mac and an iPad on Tailscale. Open Pilot (`dist/mac
     - Pilot's orcad (plain Node) still uses `~/.orca` for Linear.
   - **Agent hook scripts** in `~/.orca/agent-hooks`. Both apps install them, and they reach their app through each terminal's environment. Not checked: whether different upstream versions rewrite each other's scripts.
 - Upstream orcad starts `/Applications/Orca.app/Contents/MacOS/Orca --serve` (then `~/Applications/Orca.app`) as its browser host whenever it exists, and only reads `ORCA_BROWSER_EXECUTABLE` if that fails (`orcad-browser-provider.ts`). It starts before Pilot's orcad hook runs. Pilot can't redirect it without editing upstream; its only protection is that the sidecar inherits `ORCA_CLI_INSTALL_PATH` (set by the `bin/pilot` launcher) so its CLI install can't touch real Orca's `orca`.
+- Pilot's orcad still starts Orca's own automation engine (`src/main/orcad/orcad-automations.ts`): the `orca-automations-off` hook covers desktop and serve only. Pilot's own scheduler doesn't run in orcad unless `PILOT_SCHEDULER=on`.
 
 ## Running upstream tests
 

@@ -6,7 +6,10 @@ import { detail, summary } from './fixtures'
 
 const pilotRpc = vi.fn()
 vi.mock('../api', () => ({ pilotRpc: (...args: unknown[]) => pilotRpc(...args) }))
-vi.mock('./OrcaAutomationsPanel', () => ({ OrcaAutomationsPanel: () => <div>orca-page</div> }))
+const orcaPage = vi.hoisted(() => vi.fn(() => null))
+vi.mock('../../../../../renderer/src/components/automations/AutomationsPage', () => ({
+  default: () => orcaPage()
+}))
 
 import PilotAutomationsPage from './PilotAutomationsPage'
 
@@ -50,14 +53,20 @@ describe('PilotAutomationsPage', () => {
     pilotRpc.mockReset()
   })
 
-  it("lists automations under Orca's and opens one full page", async () => {
+  it('lists the YAML automations only, and opens one full page', async () => {
     serve(list)
     render(<PilotAutomationsPage />)
-    expect(screen.getByText('orca-page')).toBeTruthy()
-    expect(screen.getByText('YAML automations')).toBeTruthy()
+    expect(screen.getByRole('heading', { name: 'Automations' })).toBeTruthy()
+    expect(screen.queryByText('YAML automations')).toBeNull()
     fireEvent.click(await screen.findByRole('button', { name: /Fix failed CI/ }))
     expect(await screen.findByText('No ticks yet.')).toBeTruthy()
-    expect(screen.queryByText('orca-page')).toBeNull()
+  })
+
+  it("never loads Orca's own Automations page", async () => {
+    serve(list)
+    render(<PilotAutomationsPage />)
+    await screen.findByRole('button', { name: /Fix failed CI/ })
+    expect(orcaPage).not.toHaveBeenCalled()
   })
 
   it('shows bad files, a people notice and missing folders above the table', async () => {

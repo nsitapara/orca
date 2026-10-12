@@ -5,7 +5,7 @@ import { AutomationsTable } from './AutomationsTable'
 import { errorText } from './format'
 import { ProblemNotices } from './ProblemNotices'
 
-// Pilot's YAML automations, under Orca's list on the Automations page.
+// The Automations page's list: Pilot's YAML automations.
 export function PilotAutomationsSection({
   onOpen
 }: {
@@ -54,9 +54,9 @@ export function PilotAutomationsSection({
   return (
     <section className="flex flex-col gap-3 px-5 pb-6 pt-4">
       <div>
-        <h2 className="text-sm font-semibold leading-6">YAML automations</h2>
+        <h2 className="text-sm font-semibold leading-6">Automations</h2>
         <p className="text-xs text-muted-foreground">
-          Pilot&apos;s new engine. Each one is a YAML file in an automation folder.
+          Each automation is a YAML file in an automation folder.
         </p>
       </div>
       {error ? <p className="text-sm text-destructive">{error}</p> : null}
