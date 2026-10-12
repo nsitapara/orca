@@ -4,6 +4,7 @@ import type { PilotStore } from '../store/store'
 import type { MeasurableStep } from '../store/store-usage'
 import type { UsageBucket } from './buckets'
 import { claudeSubagentFiles, claudeUsage, findClaudeTranscript } from './claude'
+import { codexHomes as sharedCodexHomes } from './codex-homes'
 import { codexUsage, findCodexRollout } from './codex'
 
 export type StepUsage = { buckets: UsageBucket[]; sessionFound: boolean }
@@ -21,9 +22,7 @@ export function defaultUsagePaths(
   home: string = homedir()
 ): UsagePaths {
   const claudeDir = env.CLAUDE_CONFIG_DIR?.trim() || join(home, '.claude')
-  const codexHomes = [env.CODEX_HOME?.trim(), join(home, '.codex')].filter((d): d is string =>
-    Boolean(d)
-  )
+  const codexHomes = sharedCodexHomes(env.CODEX_HOME, home)
   return { claudeProjects: join(claudeDir, 'projects'), codexHomes }
 }
 
