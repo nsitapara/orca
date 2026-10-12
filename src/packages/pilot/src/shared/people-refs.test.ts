@@ -23,6 +23,11 @@ describe('personByAccount', () => {
   })
 })
 
+it('finds nobody by an empty handle, even beside an empty account', () => {
+  const blank: PeopleDirectory = { people: [{ id: 'bot', name: 'Bot', slack: '' }], groups: [] }
+  expect(personByAccount(blank, 'slack', '')).toBeNull()
+})
+
 // M1's author reasons stay; a not-ref is 09's "author: { not: me }" (sweep.py plan: "your own MR").
 describe('matchRef', () => {
   it.each([

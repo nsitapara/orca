@@ -61,10 +61,20 @@ function gitlab(world: World) {
     if (path.startsWith('repository/commits/')) {
       return { committed_date: '2026-10-08T13:36:51-07:00' }
     }
-    const branch = /^merge_requests\?source_branch=([^&]+)&per_page=100$/.exec(path)
+    const branch = /^merge_requests\?source_branch=([^&]+)&per_page=100&page=1$/.exec(path)
     if (branch) {
       const mr = all.find((m) => m.source_branch === decodeURIComponent(branch[1]))
-      return mr ? [{ iid: mr.iid, state: 'opened', author: mr.author, draft: mr.draft }] : []
+      return mr
+        ? [
+            {
+              iid: mr.iid,
+              state: 'opened',
+              author: mr.author,
+              draft: mr.draft,
+              web_url: mr.web_url
+            }
+          ]
+        : []
     }
     return undefined
   })

@@ -45,6 +45,16 @@ describe('waitingThreads (mr-feedback-sweep waiting())', () => {
   })
 })
 
+// sweep.py's datetime.fromisoformat(notes[-1]["created_at"]) raises on a top-level note without a date.
+it('fails on a top-level note without a valid date', () => {
+  for (const at of [undefined, 'yesterday']) {
+    const notes = [{ ...note('bot', { resolvable: false }), created_at: at }]
+    expect(() => waitingThreads([{ notes }], 'me', HEAD)).toThrow(
+      "a review thread's last note has no valid created_at"
+    )
+  }
+})
+
 describe('readWaitingThreads', () => {
   it('pages the discussions and compares with the head commit time', async () => {
     const api = fakeGlab((path) => {
@@ -57,6 +67,17 @@ describe('readWaitingThreads', () => {
       return undefined
     })
     expect(await readWaitingThreads(sourceContext(), api, 7, 'me', 'abc')).toBe(1)
+  })
+
+  it('fails when the discussions stop at 1000 threads', async () => {
+    const api = fakeGlab((path) =>
+      path.startsWith('repository/')
+        ? { committed_date: '2026-10-08T13:36:51-07:00' }
+        : Array.from({ length: 100 }, () => thread(note('emil')))
+    )
+    await expect(readWaitingThreads(sourceContext(), api, 7, 'me', 'abc')).rejects.toThrow(
+      '!7 has 1000+ review threads; not all were read'
+    )
   })
 
   it('fails when the head commit has no date', async () => {

@@ -6,7 +6,7 @@ import { mergeRequestListScope, mergeRequestScope } from '../../shared/tick/scop
 import { mapLimit } from '../map-limit'
 import { gateFields, readApprovers, readBranchFacts } from './branch-facts'
 import type { GlabApi } from './gitlab-api'
-import { MAX_PAGES, PER_PAGE, gitlabFor, messageOf, pageAll } from './gitlab-fetch'
+import { MAX_PAGES, MR_STATE, PER_PAGE, gitlabFor, messageOf, pageAll } from './gitlab-fetch'
 import { readWaitingThreads } from './mr-threads'
 import type { Item, ItemSource, SourceContext } from './types'
 
@@ -29,12 +29,6 @@ type GitLabMRDetail = GitLabMR & {
 }
 
 const POOL = 3
-const STATE: Record<string, string> = {
-  opened: 'open',
-  merged: 'merged',
-  closed: 'closed',
-  locked: 'locked'
-}
 
 export function shortBranch(branch: string): string {
   const ticket = /^web-\d+/.exec(branch)
@@ -65,7 +59,7 @@ function listFields(mr: GitLabMR): ItemFields {
     'mr.target_branch': mr.target_branch ?? null,
     'mr.author': mr.author.username,
     'mr.author_name': mr.author.name ?? null,
-    'mr.state': STATE[mr.state] ?? mr.state,
+    'mr.state': MR_STATE[mr.state] ?? mr.state,
     'mr.draft': mr.draft ?? false,
     'mr.labels': (mr.labels ?? []).join(','),
     'mr.reviewers': (mr.reviewers ?? []).map((r) => r.username).join(','),
