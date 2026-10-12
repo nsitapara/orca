@@ -1,3 +1,4 @@
+import { runtimeActivity } from './fields/activity-facts'
 import { mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 import type { OrcaRuntimeService } from '../../../../main/runtime/orca-runtime'
@@ -152,6 +153,7 @@ function openPilot(
       engineEnv,
       now
     },
+    activity: runtimeActivity(runtime, fieldDeps.terminalAlive),
     launch: (req) => wired.engine.startRun(req)
   }
   const repoProblems = new Map<string, RepoProblem>()

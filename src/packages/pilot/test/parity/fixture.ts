@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs'
 import { isAbsolute, join } from 'node:path'
 import type { OrcaRuntimeService } from '../../../../main/runtime/orca-runtime'
 import { cachedQuotas, type QuotaReading } from '../../src/main/fields/quota'
+import { listBusyTerminals } from '../../src/main/fields/worktree-busy'
 import { runtimeFieldDeps } from '../../src/main/fields/runtime-field-deps'
 import { registrySources } from '../../src/main/scheduler/tick-decide'
 import type { TickDeps } from '../../src/main/scheduler/tick-runner'
@@ -280,6 +281,15 @@ export function fixtureTickDeps(f: ParityFixture, store: PilotStore): TickDeps {
       },
       engineEnv: { binDir: '', dataDir: '/tmp/pilot-parity' },
       now
+    },
+    activity: {
+      terminals: () => listBusyTerminals(fixtureRuntime(f)),
+      reads: () => ({
+        draft: async () => '',
+        agentStates: async () => new Map(),
+        tabBusy: async () => false
+      }),
+      terminalAlive: async (handle) => connectedHandles(f).has(handle)
     },
     launch: async () => {
       throw new Error('parity: a dry run never launches')

@@ -1,3 +1,4 @@
+import { addActivityFacts, type ActivityRuntime } from '../fields/activity-facts'
 import type { HandledRow, ItemDecision } from '../../shared/api-types'
 import type { AutomationDefinition, CheckDef } from '../../shared/definition/types'
 import type { PeopleDirectory } from '../../shared/people'
@@ -56,6 +57,8 @@ export type DecideDeps = {
   resolveRepo(repo: string): Promise<RepoFacts>
   sources: SourceAccess
   fields: FieldEngineDeps
+  // Terminal activity for a `worktree: idle` check (Task 19c). Absent: the pre-pass is skipped.
+  activity?: ActivityRuntime
 }
 export type DecideOutcome = { decisions: ItemDecision[]; warnings: string[] }
 type ScriptCheck = Extract<CheckDef, { kind: 'script' }>
@@ -237,10 +240,13 @@ export async function decideTickItems(
     { inScope: (item) => !scope.has(item.key), repoPath: repo.path, pass },
     deps.fields
   )
+  const activity = deps.activity
+    ? await addActivityFacts(custom.items, def.checks, deps.activity)
+    : { items: custom.items, warnings: [] }
   const seenAt = deps.store.seenTimes(def.id)
   const input = {
     definition: def,
-    items: custom.items.map((item) => toDecideItem(item, seenAt, now)),
+    items: activity.items.map((item) => toDecideItem(item, seenAt, now)),
     now,
     scope,
     handled: handledStates(deps.store.handledRows(def.id)),
@@ -252,5 +258,5 @@ export async function decideTickItems(
     ...input,
     scriptChecks: await scriptChecks(input, repo, deps.fields.runScript, deps.fields.engineEnv)
   })
-  return { decisions, warnings: [...listed.warnings, ...custom.warnings] }
+  return { decisions, warnings: [...listed.warnings, ...custom.warnings, ...activity.warnings] }
 }

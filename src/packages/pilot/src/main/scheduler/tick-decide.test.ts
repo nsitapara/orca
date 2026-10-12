@@ -6,6 +6,7 @@ import { EMPTY_PEOPLE, parsePeopleYaml } from '../../shared/people'
 import { fixture } from '../../shared/tick/__fixtures__/ci-05-2026-10-10'
 import { decideTick, type HandledState } from '../../shared/tick/decide'
 import { fakeFieldDeps, TEST_ENGINE_ENV, testItem } from '../fields/__fixtures__/field-deps'
+import type { ActivityRuntime } from '../fields/activity-facts'
 import type { FieldEngineDeps } from '../fields/engine'
 import type { ScriptRequest, ScriptResult } from '../fields/script-runner'
 import type { WorktreeInfo } from '../fields/worktree-facts'
@@ -222,6 +223,46 @@ describe('decideTickItems', () => {
       ['mr:1', 'started', 'All checks pass'],
       ['mr:2', 'notdue', 'Already handled 2']
     ])
+  })
+
+  it('runs the activity pre-pass for a worktree: idle check, and only then', async () => {
+    const def = testDefinition({ id: 'a', checks: [{ kind: 'worktree_idle' }] })
+    const terminals = vi.fn(async () => [
+      {
+        handle: 't1',
+        title: 'Fix',
+        connected: true,
+        agentIdentity: 'claude',
+        worktreePath: '/wt/1',
+        tabId: 'x',
+        leafId: 'l'
+      }
+    ])
+    const activity: ActivityRuntime = {
+      terminals,
+      reads: () => ({
+        draft: async () => 'half a prompt',
+        agentStates: async () => new Map(),
+        tabBusy: async () => false
+      }),
+      terminalAlive: async () => false
+    }
+    const { deps } = setup(def)
+    const pass = createPassFetchCache('pass-1', unusedGitlab)
+    const out = await decideTickItems(def, EMPTY_PEOPLE, { ...deps, activity }, pass, 7)
+    expect(summary(out)).toEqual([
+      ['mr:1', 'skipped', 'Someone is typing in Fix'],
+      ['mr:2', 'started', 'All checks pass'],
+      ['mr:3', 'out_of_scope', 'MR is closed']
+    ])
+    await decideTickItems(
+      testDefinition({ id: 'a', checks: [] }),
+      EMPTY_PEOPLE,
+      { ...deps, activity },
+      pass,
+      7
+    )
+    expect(terminals).toHaveBeenCalledTimes(1)
   })
 
   it('fails when the source fails, so the tick is recorded failed', async () => {
