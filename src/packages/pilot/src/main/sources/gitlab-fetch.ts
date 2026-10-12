@@ -15,22 +15,39 @@ export function gitlabFor(ctx: SourceContext): Promise<GlabApi> {
 }
 
 // gate.glab_all: pages of 100 until a short page, at most MAX_PAGES; `capped` says there may be more.
-// The whole listing is memoized in the pass too, so a second reader skips the page loop.
+// Each page is read through <api>, so the pass client memoizes it. An answer that isn't a list fails.
+export async function readPages<T>(
+  api: GlabApi,
+  path: string
+): Promise<{ items: T[]; capped: boolean }> {
+  const sep = path.includes('?') ? '&' : '?'
+  const items: T[] = []
+  for (let page = 1; page <= MAX_PAGES; page++) {
+    const batch = await api.get<unknown>(`${path}${sep}per_page=${PER_PAGE}&page=${page}`)
+    if (!Array.isArray(batch)) {
+      throw new Error(`GitLab didn't answer ${path} with a list`)
+    }
+    items.push(...(batch as T[]))
+    if (batch.length < PER_PAGE) {
+      return { items, capped: false }
+    }
+  }
+  return { items, capped: true }
+}
+
+// readPages, with the whole listing memoized in the pass too, so a second reader skips the page loop.
 export function pageAll<T>(
   ctx: SourceContext,
   api: GlabApi,
   path: string
 ): Promise<{ items: T[]; capped: boolean }> {
-  return ctx.fetch.memo(`glab-pages:${api.projectPath}:${path}`, async () => {
-    const sep = path.includes('?') ? '&' : '?'
-    const items: T[] = []
-    for (let page = 1; page <= MAX_PAGES; page++) {
-      const batch = await api.get<T[]>(`${path}${sep}per_page=${PER_PAGE}&page=${page}`)
-      items.push(...batch)
-      if (batch.length < PER_PAGE) {
-        return { items, capped: false }
-      }
-    }
-    return { items, capped: true }
-  })
+  return ctx.fetch.memo(`glab-pages:${api.projectPath}:${path}`, () => readPages<T>(api, path))
+}
+
+// GitLab's MR states, in the words Pilot's fields use.
+export const MR_STATE: Readonly<Record<string, string>> = {
+  opened: 'open',
+  merged: 'merged',
+  closed: 'closed',
+  locked: 'locked'
 }

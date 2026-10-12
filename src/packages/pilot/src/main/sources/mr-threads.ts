@@ -1,5 +1,5 @@
 import type { GlabApi } from './gitlab-api'
-import { pageAll } from './gitlab-fetch'
+import { MAX_PAGES, PER_PAGE, pageAll } from './gitlab-fetch'
 import type { SourceContext } from './types'
 
 export type GitLabNote = {
@@ -10,6 +10,15 @@ export type GitLabNote = {
   created_at?: string
 }
 export type GitLabDiscussion = { notes?: GitLabNote[] }
+
+// sweep.py's datetime.fromisoformat(notes[-1]["created_at"]) raises on a missing or bad date: so does this.
+function postedAt(note: GitLabNote): number {
+  const at = Date.parse(note.created_at ?? '')
+  if (Number.isNaN(at)) {
+    throw new Error("a review thread's last note has no valid created_at")
+  }
+  return at
+}
 
 // Port of mr-feedback-sweep/sweep.py waiting(): reviewer-started threads where the reviewer spoke
 // last. System notes don't count; a thread whose first or last note is <author>'s is skipped; a
@@ -31,10 +40,7 @@ export function waitingThreads(
     if (first.author?.username === author || last.author?.username === author) {
       continue
     }
-    const waiting = first.resolvable
-      ? !first.resolved
-      : Date.parse(last.created_at ?? '') > headCommittedAt
-    if (waiting) {
+    if (first.resolvable ? !first.resolved : postedAt(last) > headCommittedAt) {
       count += 1
     }
   }
@@ -53,6 +59,9 @@ export async function readWaitingThreads(
     pageAll<GitLabDiscussion>(ctx, api, `merge_requests/${iid}/discussions`),
     api.get<{ committed_date?: string }>(`repository/commits/${headSha}`)
   ])
+  if (discussions.capped) {
+    throw new Error(`!${iid} has ${PER_PAGE * MAX_PAGES}+ review threads; not all were read`)
+  }
   const at = Date.parse(commit.committed_date ?? '')
   if (Number.isNaN(at)) {
     throw new Error(`commit ${headSha.slice(0, 8)} has no committed date`)

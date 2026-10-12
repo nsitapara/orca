@@ -11,31 +11,27 @@ import {
   type Known
 } from '../../shared/branch-rules'
 import type { GlabApi } from './gitlab-api'
-import { messageOf } from './gitlab-fetch'
+import { MAX_PAGES, MR_STATE, PER_PAGE, messageOf, readPages } from './gitlab-fetch'
 
+// What GitLab may send; readBranchMrs checks what gate.branch_mrs indexes.
 type GitLabBranchMr = {
-  iid: number
-  state: string
+  iid?: unknown
+  state?: unknown
   author?: { username?: string } | null
   draft?: boolean
   target_branch?: string
-  web_url?: string
+  web_url?: unknown
 }
-type GitLabApprovals = { approved_by?: { user?: { username?: string } }[] }
+type GitLabApprovals = { approved_by?: unknown }
+type GitLabApproval = { user?: { username?: string } | null } | null
 
-export type BranchMr = BranchMrFact & { targetBranch: string | null; webUrl: string | null }
+export type BranchMr = BranchMrFact & { targetBranch: string | null; webUrl: string }
 export type BranchFacts = {
   mrs: Known<BranchMr[]>
   me: Known<string>
   approvals: ReadonlyMap<number, Known<string[]>>
 }
 
-const STATE: Record<string, string> = {
-  opened: 'open',
-  merged: 'merged',
-  closed: 'closed',
-  locked: 'locked'
-}
 const NO_API = 'no GitLab project for this repo'
 
 async function attempt<T>(read: () => Promise<T>): Promise<Known<T>> {
@@ -46,18 +42,30 @@ async function attempt<T>(read: () => Promise<T>): Promise<Known<T>> {
   }
 }
 
-// gate.branch_mrs: every MR opened from <branch>, in any state (GitLab's default without `state`).
-export async function readBranchMrs(api: GlabApi, branch: string): Promise<BranchMr[]> {
-  const path = `merge_requests?source_branch=${encodeURIComponent(branch)}&per_page=100`
-  const list = await api.get<GitLabBranchMr[]>(path)
-  return list.map((m) => ({
+function branchMr(m: GitLabBranchMr, branch: string): BranchMr {
+  if (typeof m.iid !== 'number' || typeof m.state !== 'string' || typeof m.web_url !== 'string') {
+    throw new Error(`GitLab listed an MR from ${branch} without its iid, state or web URL`)
+  }
+  return {
     iid: m.iid,
     state: m.state,
     author: m.author?.username ?? null,
     draft: m.draft ?? false,
     targetBranch: m.target_branch ?? null,
-    webUrl: m.web_url ?? null
-  }))
+    webUrl: m.web_url
+  }
+}
+
+// gate.branch_mrs: every MR opened from <branch>, in any state (GitLab's default without `state`).
+// What gate.py indexes (iid, state, web_url) must be there, and a listing cut short is unknown: both
+// throw, so the rules block, as gate.py's KeyError does.
+export async function readBranchMrs(api: GlabApi, branch: string): Promise<BranchMr[]> {
+  const path = `merge_requests?source_branch=${encodeURIComponent(branch)}`
+  const { items, capped } = await readPages<GitLabBranchMr>(api, path)
+  if (capped) {
+    throw new Error(`GitLab lists ${PER_PAGE * MAX_PAGES}+ MRs from ${branch}; not all were read`)
+  }
+  return items.map((m) => branchMr(m, branch))
 }
 
 // gate.me: the GitLab user glab is signed in as.
@@ -73,13 +81,18 @@ export async function readMe(api: GlabApi): Promise<string> {
 }
 
 // gate.mr_approvers: who approved !<iid>, sorted. Only approved_by counts: GitLab's own `approved` is
-// true with no approval at all in a project that requires none. An approval GitLab doesn't name is an
-// error, as gate.py's a["user"]["username"] is, so it can't pass for "nobody approved".
+// true with no approval at all in a project that requires none. gate.py reads .get("approved_by", [])
+// and a["user"]["username"]: an approved_by that isn't a list, or an approval GitLab doesn't name, is
+// an error, so it can't pass for "nobody approved".
 export async function readApprovers(api: GlabApi, iid: number): Promise<string[]> {
   const answer = await api.get<GitLabApprovals>(`merge_requests/${iid}/approvals`)
-  return (answer.approved_by ?? [])
-    .map((a) => {
-      const username = a.user?.username
+  const found = answer.approved_by === undefined ? [] : answer.approved_by
+  if (!Array.isArray(found)) {
+    throw new Error(`GitLab didn't list !${iid}'s approvals`)
+  }
+  return found
+    .map((a: GitLabApproval) => {
+      const username = a?.user?.username
       if (!username) {
         throw new Error(`GitLab didn't name an approver of !${iid}`)
       }
@@ -146,6 +159,7 @@ function approvedFields(owner: BranchMr, approvals: Known<string[]> | undefined)
 }
 
 // The MR that says whose the branch is (gate.branch_owner), for items that aren't MRs themselves.
+// Without my username it ranks as if none were mine, and says why on mr.lookup_error.
 export function linkFields(facts: BranchFacts): ItemFields {
   if (!facts.mrs.ok) {
     return { ...NO_MR, 'mr.lookup_error': facts.mrs.error }
@@ -156,12 +170,12 @@ export function linkFields(facts: BranchFacts): ItemFields {
   }
   return {
     'mr.iid': owner.iid,
-    'mr.state': STATE[owner.state] ?? owner.state,
+    'mr.state': MR_STATE[owner.state] ?? owner.state,
     'mr.author': owner.author,
     'mr.draft': owner.draft,
     'mr.target_branch': owner.targetBranch,
     'mr.web_url': owner.webUrl,
     ...approvedFields(owner, facts.approvals.get(owner.iid)),
-    'mr.lookup_error': null
+    'mr.lookup_error': facts.me.ok ? null : facts.me.error
   }
 }

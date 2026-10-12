@@ -183,6 +183,9 @@ export function personByAccount(
   account: Account,
   handle: string
 ): Person | null {
+  if (handle === '') {
+    return null
+  }
   const wanted = handle.toLowerCase()
   return dir.people.find((p) => p[account]?.toLowerCase() === wanted) ?? null
 }
