@@ -101,7 +101,7 @@ describe('dispatchToAgent', () => {
       sessionId: '00000000-0000-4000-8000-000000000001'
     })
     expect(vi.mocked(deps.send).mock.calls[0][0]).toBe('term-1')
-    expect(vi.mocked(deps.send).mock.calls[0][1]).toContain('[in_a] "Which image?" → e2e')
+    expect(vi.mocked(deps.send).mock.calls[0][1]).toContain('[in_a] "Which image?" → "e2e"')
     // A resumed session gets the mode's rules too (never push yourself), as a pointer to the mode file.
     expect(vi.mocked(deps.send).mock.calls[0][1]).toMatch(
       /^Apply these answers as ~\/\.agents\/skills\/fix-gitlab-ci\/modes\/answers\.md says\. Answers to/

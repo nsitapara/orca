@@ -239,4 +239,30 @@ describe('a drafted change is approved only on the desktop', () => {
   ])('%s', (_name, text, callerKind, drafted, expected) => {
     expect(routeOf(answered(text, callerKind, drafted), catalog)).toEqual(expected)
   })
+
+  // On a question the draft implements one option (its bundle's Drafted row): picking it asks for the patch.
+  it.each<[string, number, 'desktop' | 'paired-device', object]>([
+    [
+      'a device pick of the drafted option',
+      1,
+      'paired-device',
+      { kind: 'reask', reason: DRAFT_ON_DESKTOP }
+    ],
+    ['a device pick of the other option', 0, 'paired-device', { kind: 'agent', revise: false }],
+    ['a desktop pick of the drafted option', 1, 'desktop', { kind: 'agent', revise: false }]
+  ])('%s', (_name, option, callerKind, expected) => {
+    const { store } = queued(QUESTION, 'A', 'run-1')
+    const id = 'in_0000000000000001'
+    const details = { ...REF, draftedOption: 'b' }
+    store.inbox.edit(id, { details, digest: store.inbox.get(id)!.digest }, 2_000)
+    const answer = {
+      option,
+      text: ['A', 'B'][option],
+      digest: 'x',
+      via: 'page' as const,
+      callerKind
+    }
+    store.inbox.update(id, { answer }, 2_000)
+    expect(routeOf(store.inbox.get(id)!, catalog)).toEqual(expected)
+  })
 })

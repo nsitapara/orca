@@ -234,8 +234,8 @@ describe('AnswerDispatcher', () => {
     expect(store.inbox.get(action)).toMatchObject({ status: 'done', outcome: 'done: pushed' })
     expect(open).toHaveBeenCalledTimes(1)
     const prompt = (open.mock.calls[0] as unknown as [{ prompt: string }])[0].prompt
-    expect(prompt).toContain(`[${first}] "Which image?" → e2e`)
-    expect(prompt).toContain(`[${second}] "Retry once?" → yes, once`)
+    expect(prompt).toContain(`[${first}] "Which image?" → "e2e"`)
+    expect(prompt).toContain(`[${second}] "Retry once?" → "yes, once"`)
     expect(store.queue.forInboxItem(first)).toMatchObject([
       {
         state: 'dispatched',

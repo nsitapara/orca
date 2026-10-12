@@ -48,7 +48,8 @@ describe('loadDetails', () => {
       inlined: {},
       blocks: 8,
       drafted: true,
-      draftedBase: expect.stringMatching(/^7cc153d/)
+      draftedBase: expect.stringMatching(/^7cc153d/),
+      draftedOption: null
     })
     expect(snapshot.texts).toEqual({})
     expect(snapshot.bundle.blocks.map((b) => b.type)).toEqual([
@@ -61,6 +62,19 @@ describe('loadDetails', () => {
       'thread',
       'text'
     ])
+  })
+
+  it("names the question's drafted option from a facts block's Drafted row", () => {
+    const f = fixture()
+    rewrite(f, (b) => {
+      const facts = b.blocks.find((x) => x.type === 'facts') as { rows: string[][]; title: string }
+      facts.title = 'What the drafted option does'
+      facts.rows.unshift(['Drafted', 'Bake it — fast'])
+    })
+    expect(loadDetails(f.root, f.bundle).ref).toMatchObject({
+      drafted: true,
+      draftedOption: 'Bake it — fast'
+    })
   })
 
   it('inlines a review file the bundle names, and keeps its sha', () => {

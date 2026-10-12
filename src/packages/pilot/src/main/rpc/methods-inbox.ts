@@ -2,6 +2,7 @@ import { z } from 'zod'
 import { defineMethod } from '../../../../../main/runtime/rpc/core'
 import type { InboxAddParams } from '../../shared/inbox-types'
 import { proposalProblem } from '../actions/powers'
+import { shownItem } from '../answers/draft-grant'
 import { DETAILS_EITHER } from '../inbox/card'
 import { addInboxItem } from '../inbox/inbox-add'
 import { cardRunLine } from '../inbox/run-line'
@@ -158,7 +159,8 @@ export function buildInboxMethods(ctx: () => PilotContext) {
       name: 'pilot.inbox.get',
       permission: 'workspace',
       params: Id,
-      handler: (p) => getInboxItem(inboxDeps(ctx()), p.id)
+      // `pilot inbox show`: the card, its Details ref carrying whether the current answer grants the drafted patch.
+      handler: (p) => shownItem(getInboxItem(inboxDeps(ctx()), p.id))
     }),
     defineMethod({
       name: 'pilot.inbox.tick',

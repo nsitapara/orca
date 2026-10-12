@@ -135,6 +135,9 @@ export type DetailsRef = {
   blocks: number
   drafted: boolean
   draftedBase: string | null
+  // On a question, the label of the option the draft implements (the facts block's Drafted row); absent on
+  // refs stored before it was read.
+  draftedOption?: string | null
 }
 // The whole of it, read once through pilot.inbox.details: the bundle, and each inlined review file's text
 // by the ref the bundle names it with.
