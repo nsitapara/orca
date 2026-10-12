@@ -7,10 +7,12 @@ import { parsePeopleYaml } from '../../shared/people'
 import { routeOf } from '../answers/queue-view'
 import { PilotStore } from '../store/store'
 import { applyVaultImport } from './import-apply'
+import { addInboxItem } from './inbox-add'
 import { splitCommand } from './split-command'
 import { planVaultImport, vaultItemId, type ImportContext } from './import-vault'
 import type { InboxDeps } from './inbox-service'
 import type { VaultRow } from './vault-reader'
+import { SENT_BEFORE_PILOT } from './import-apply'
 
 const def = parseAutomationYaml(
   'name: Fix failed CI on my MRs\nrepo: web-platform\nschedule: manual\nitems: { kind: merge_request }\nsteps: [ { agent: claude, prompt: x } ]\ninbox: nish\n',
@@ -47,8 +49,8 @@ function row(over: Partial<VaultRow>): VaultRow {
     answer: '',
     replies: [],
     status: 'waiting',
-    resume: 'claude --resume 1b2c3d4e-0000',
-    session: '1b2c3d4e-0000',
+    resume: 'claude --resume 1b2c3d4e-0000-4000-8000-00000000abcd',
+    session: '1b2c3d4e-0000-4000-8000-00000000abcd',
     asked_in: '05a-20261010T0612',
     section_time: '2026-10-10 06:12',
     created_at: '2026-10-10T06:12:00-07:00',
@@ -136,7 +138,12 @@ describe('planVaultImport', () => {
     const plan = planVaultImport(
       [
         row({ ...PUSH_ROW, key: 'a'.repeat(16) }),
-        row({ ...PUSH_ROW, key: 'b'.repeat(16), run_command: 'remove-worktree /wt/x abc' })
+        row({
+          ...PUSH_ROW,
+          key: 'b'.repeat(16),
+          summary: 'Remove?',
+          run_command: 'remove-worktree /wt/x abc'
+        })
       ],
       ctx()
     )
@@ -158,7 +165,7 @@ describe('planVaultImport', () => {
     expect(plan.runs[0]).toMatchObject({
       automationId: 'fix-failed-ci',
       agent: 'claude',
-      sessionId: '1b2c3d4e-0000',
+      sessionId: '1b2c3d4e-0000-4000-8000-00000000abcd',
       itemKey: 'mr:1214',
       itemLabel: '!1214 web-1-x'
     })
@@ -194,7 +201,7 @@ describe('applyVaultImport', () => {
     expect(run).toMatchObject({ status: 'needs_you', trigger: 'import', imported: true })
     expect(store.runs.steps(run!.id)[0]).toMatchObject({
       status: 'done',
-      sessionId: '1b2c3d4e-0000',
+      sessionId: '1b2c3d4e-0000-4000-8000-00000000abcd',
       agent: 'claude'
     })
     const id = vaultItemId(NOTE, KEY)
@@ -266,4 +273,112 @@ describe('applyVaultImport', () => {
     expect(report).toMatchObject({ imported: 0 })
     expect(store.inbox.get(vaultItemId(NOTE, KEY))).toBeNull()
   })
+})
+
+describe('applyVaultImport: what it must not disturb or lose', () => {
+  const second = { key: 'c'.repeat(16) }
+
+  it('leaves a same-titled open engine card untouched and skips the vault card, every run', () => {
+    const { store, deps } = open()
+    const engine = addInboxItem(
+      { ...deps, newId: () => 'in_engine00000001' },
+      {
+        automationId: 'fix-failed-ci',
+        itemKey: 'mr:1214',
+        type: 'question',
+        title: 'Which?',
+        options: ['X', 'Y']
+      }
+    )
+    store.inbox.update(
+      'in_engine00000001',
+      { status: 'answered', answer: { option: 0, text: 'X', digest: 'x', via: 'page' } },
+      1
+    )
+    const before = store.inbox.get(engine.id!)
+    for (let i = 0; i < 2; i += 1) {
+      const report = applyVaultImport(
+        deps,
+        planVaultImport([row({ session: '', worktree: null })], ctx()),
+        1_000 + i
+      )
+      expect(report).toMatchObject({ imported: 0, skipped: [{ reason: 'same card already open' }] })
+    }
+    expect(store.inbox.get(engine.id!)).toEqual(before)
+  })
+
+  it('skips the second of two vault cards sharing a title, and keeps the first answer', () => {
+    const { store, deps } = open()
+    const rows = [
+      row({ answer: 'A', status: 'answered' }),
+      row({ ...second, answer: 'B', status: 'answered' })
+    ]
+    const plan = planVaultImport(rows, ctx())
+    expect(plan.skipped).toMatchObject([{ key: second.key, reason: 'same card already open' }])
+    applyVaultImport(deps, plan, 1_000)
+    expect(store.inbox.get(vaultItemId(NOTE, KEY))?.answer).toMatchObject({ text: 'A' })
+  })
+
+  it('writes the card and its answer together: the answer_saved event; nobody is left waiting on the run', () => {
+    const { store, deps } = open()
+    const plan = planVaultImport([row({ answer: 'A', status: 'answered' })], ctx())
+    applyVaultImport(deps, plan, 1_000)
+    expect(store.events.list({ kinds: ['answer_saved'] })).toHaveLength(1)
+    expect(store.runs.get(plan.runs[0].id)?.status).toBe('done')
+  })
+
+  it('makes no run for a card that is skipped', () => {
+    const { store, deps } = open()
+    const options = Array.from({ length: 11 }, (_, i) => ({ label: `o${i}`, description: '' }))
+    const plan = planVaultImport([row({ options })], ctx())
+    expect(applyVaultImport(deps, plan, 1_000)).toMatchObject({ imported: 0, runs: 0 })
+    expect(store.runs.get(plan.runs[0].id)).toBeNull()
+  })
+
+  it('a dry run counts only what apply would add, and writes nothing', () => {
+    const { store, deps } = open()
+    const options = Array.from({ length: 11 }, (_, i) => ({ label: `o${i}`, description: '' }))
+    const plan = planVaultImport(
+      [row({ options }), row({ key: 'e'.repeat(16), summary: 'Fine?' })],
+      ctx()
+    )
+    expect(applyVaultImport(deps, plan, 1_000, { dryRun: true })).toMatchObject({
+      applied: false,
+      imported: 1,
+      runs: 1,
+      skipped: [{ reason: 'A card can have at most 10 options' }]
+    })
+    expect(store.inbox.list({})).toEqual([])
+    expect(store.runs.get(plan.runs[0].id)).toBeNull()
+  })
+
+  it('marks a card whose answer apply.py already sent, so Nish can tick it', () => {
+    const { store, deps } = open()
+    applyVaultImport(
+      deps,
+      planVaultImport([row({ answer: 'A', status: 'applying' })], ctx()),
+      1_000
+    )
+    expect(store.inbox.get(vaultItemId(NOTE, KEY))?.replies).toEqual([SENT_BEFORE_PILOT])
+  })
+
+  it('files a sessionless branch card with its worktree', () => {
+    const plan = planVaultImport([row({ session: '' })], ctx())
+    expect(plan.items[0].params).toMatchObject({
+      worktreePath: '/wt/web-1-x',
+      automationId: 'fix-failed-ci'
+    })
+  })
+})
+
+describe('the asking session', () => {
+  it.each(['1b2c3d4e-0000', '--dangerously-skip-permissions', 'abc; rm -rf /'])(
+    'does not trust %s as a session id: the card is job-wide, with no run',
+    (session) => {
+      const plan = planVaultImport([row({ session })], ctx())
+      expect(plan.runs).toEqual([])
+      expect(plan.items[0].params).toMatchObject({ automationId: 'fix-failed-ci' })
+      expect(plan.items[0].params.runId).toBeUndefined()
+    }
+  )
 })

@@ -59,7 +59,7 @@ export const ANSWERS_COMMAND_SPECS: CommandSpec[] = [
   {
     path: ['inbox', 'import-vault'],
     summary:
-      "Import the vault's open cards and saved answers into Pilot's inbox, once (a dry run unless --apply)",
+      "Preview importing the vault's open cards and saved answers into Pilot's inbox (applied in Pilot, Waiting on you)",
     usage: 'pilot inbox import-vault [--apply] [--json]',
     allowedFlags: [...GLOBAL_FLAGS, 'apply'],
     examples: ['pilot inbox import-vault', 'pilot inbox import-vault --apply']

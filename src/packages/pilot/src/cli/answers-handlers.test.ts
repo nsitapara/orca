@@ -169,21 +169,26 @@ describe('inbox apply-now', () => {
 describe('inbox import-vault', () => {
   afterEach(() => vi.restoreAllMocks())
 
-  it.each([
-    [{}, false, 'Would import 3 card(s), 1 with an answer, and 2 asking session(s).'],
-    [{ apply: true }, true, 'Imported 3 card(s), 1 with an answer, and 2 asking session(s).']
-  ])('%j calls pilot.inbox.importVault (apply %s)', async (flags, apply, line) => {
-    const report = { applied: apply, imported: 3, answers: 1, runs: 2, skipped: [], notes: [] }
+  it('previews, and points to the page for applying', async () => {
+    const report = { applied: false, imported: 3, answers: 1, runs: 2, skipped: [], notes: [] }
     const call = vi.fn().mockResolvedValue({ result: report })
     const log = vi.spyOn(console, 'log').mockImplementation(() => {})
-    await ANSWERS_HANDLERS['inbox import-vault'](ctx(flags as never, call))
+    await ANSWERS_HANDLERS['inbox import-vault'](ctx({}, call))
     expect(call).toHaveBeenCalledWith(
       'pilot.inbox.importVault',
-      expect.objectContaining({ apply }),
-      {
-        timeoutMs: 180_000
-      }
+      { apply: false },
+      { timeoutMs: 180_000 }
     )
-    expect(log).toHaveBeenCalledWith(line)
+    expect(log).toHaveBeenCalledWith(
+      'Would import 3 card(s), 1 with an answer, and 2 asking session(s).\nApply the vault import in Pilot (Waiting on you)'
+    )
+  })
+
+  it('refuses --apply without calling Pilot', async () => {
+    const call = vi.fn()
+    await expect(
+      ANSWERS_HANDLERS['inbox import-vault'](ctx({ apply: true } as never, call))
+    ).rejects.toThrow('Apply the vault import in Pilot (Waiting on you)')
+    expect(call).not.toHaveBeenCalled()
   })
 })

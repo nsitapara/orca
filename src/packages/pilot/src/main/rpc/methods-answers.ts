@@ -6,11 +6,10 @@ import { saveAnswer } from '../answers/save'
 import { resolveRepoPath } from '../fields/runtime-facts'
 import { runtimeFieldDeps } from '../fields/runtime-field-deps'
 import { applyVaultImport } from '../inbox/import-apply'
-import { planVaultImport, reportOf } from '../inbox/import-vault'
+import { planVaultImport } from '../inbox/import-vault'
 import { readOpenVaultItems } from '../inbox/vault-reader'
 import type { PilotContext } from '../pilot-services'
 import { inboxDeps } from './methods-inbox'
-import { runBinding } from './methods-actions'
 
 const Answer = z.object({
   id: z.string().min(1),
@@ -25,15 +24,10 @@ const Answer = z.object({
 const QueueList = z.object({ person: z.string().min(1).optional() })
 const ApplyNow = z.object({ ids: z.array(z.string().min(1)).max(200).optional() })
 
-const ImportVault = z.object({
-  apply: z.boolean(),
-  terminal: z.string().min(1).optional(),
-  runId: z.string().min(1).optional(),
-  stepIdx: z.number().int().nonnegative().optional()
-})
+const ImportVault = z.object({ apply: z.boolean() })
 
 export const IMPORT_NO_CALLER = "Pilot can't tell who is calling; nothing was imported"
-export const IMPORT_FROM_RUN = 'The vault import is run by a person, not from inside a Pilot run'
+export const IMPORT_APPLY_DESKTOP = 'Apply the vault import in Pilot (Waiting on you)'
 
 // Worktree ids by path for the worktree-kind automations' item keys; an unreadable repo just leaves them out.
 async function worktreeIds(
@@ -104,18 +98,18 @@ export function buildAnswerMethods(ctx: () => PilotContext) {
       name: 'pilot.inbox.importVault',
       permission: 'workspace',
       params: ImportVault,
-      // A one-shot, idempotent import of the vault's open cards and answers (apply: false only reports).
-      // It needs a caller identity and refuses a call bound to a Pilot run, so an agent can't seed cards
-      // or answers; the cards go through the normal add path (catalog, argument and size checks, routing).
+      // A one-shot, idempotent import of the vault's open cards and answers. A preview (apply: false) is
+      // open to any identified caller and writes nothing; applying is the desktop's alone (the transport's
+      // stamp, never a param), so an agent can't seed cards or answers. The cards go through the normal
+      // add path (catalog, argument and size checks, routing).
       handler: async (p, rpc) => {
         const c = ctx()
         if (!rpc.caller) {
           throw new Error(IMPORT_NO_CALLER)
         }
-        if (runBinding(c, p) !== null) {
-          throw new Error(IMPORT_FROM_RUN)
+        if (p.apply && rpc.caller.kind !== 'desktop') {
+          throw new Error(IMPORT_APPLY_DESKTOP)
         }
-        const deps = inboxDeps(c)
         const now = Date.now()
         const plan = planVaultImport(await readOpenVaultItems(), {
           definitions: c.loaded().definitions,
@@ -124,7 +118,7 @@ export function buildAnswerMethods(ctx: () => PilotContext) {
           existing: (id) => c.store.inbox.get(id) !== null,
           now
         })
-        return p.apply ? applyVaultImport(deps, plan, now) : reportOf(plan, false)
+        return applyVaultImport(inboxDeps(c), plan, now, { dryRun: !p.apply })
       }
     }),
     defineMethod({

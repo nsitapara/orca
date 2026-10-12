@@ -3,6 +3,7 @@ import { Button } from '@/components/ui/button'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import type { InboxItemRow } from '../../../shared/api-types'
 import { waitingCount, worktreeName } from './answer-text'
+import { ImportVaultPanel } from './ImportVaultPanel'
 import { InboxCard } from './InboxCard'
 import { UpNextPanel } from './UpNextPanel'
 import { useWaiting } from './use-waiting'
@@ -25,7 +26,7 @@ function withError(
 export function WaitingOnYouPage(): React.JSX.Element {
   const [viewer, setViewer] = useState<string | null>(null)
   const [rail, setRail] = useState<string>(ALL)
-  const { inbox, queue, error, save, applyNow } = useWaiting(viewer)
+  const { inbox, queue, error, save, applyNow, reload } = useWaiting(viewer)
   // Save errors are kept here, by card id: a card remounts as a new version on every reload.
   const [errors, setErrors] = useState<Record<string, string>>({})
   const people = inbox?.people ?? []
@@ -81,6 +82,7 @@ export function WaitingOnYouPage(): React.JSX.Element {
         action runs its script with no agent; any other answer goes back to the session that asked.
       </p>
       {error ? <p className="text-sm text-destructive">{error}</p> : null}
+      <ImportVaultPanel onImported={() => void reload()} />
       <UpNextPanel entries={queue} onApplyNow={applyNow} />
       <div className="grid grid-cols-[minmax(10rem,14rem)_1fr] gap-4">
         <nav className="flex flex-col gap-1">

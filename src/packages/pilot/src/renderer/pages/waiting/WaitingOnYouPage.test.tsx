@@ -241,4 +241,43 @@ describe('WaitingOnYouPage', () => {
       )
     )
   })
+
+  it('previews the vault import, then applies it from the page, and reloads', async () => {
+    const report = {
+      applied: false,
+      imported: 3,
+      answers: 1,
+      runs: 2,
+      skipped: [{ summary: 'Old?', reason: 'already imported' }]
+    }
+    pilotRpc.mockImplementation(async (method: string, params: { apply?: boolean }) => {
+      if (method === 'pilot.inbox.importVault') {
+        return { ...report, applied: params.apply === true }
+      }
+      return method === 'pilot.inbox.list' ? LIST : { entries: [] }
+    })
+    render(<WaitingOnYouPage />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Import open vault cards' }))
+    expect(
+      await screen.findByText('Would import 3 card(s), 1 with an answer; 1 skipped.')
+    ).toBeTruthy()
+    expect(screen.getByText(/Skipped “Old\?”: already imported/)).toBeTruthy()
+    expect(pilotRpc.mock.calls.filter((c) => c[0] === 'pilot.inbox.importVault')).toHaveLength(1)
+    fireEvent.click(screen.getByRole('button', { name: 'Apply import' }))
+    expect(await screen.findByText('Imported 3 card(s), 1 with an answer; 1 skipped.')).toBeTruthy()
+    const calls = pilotRpc.mock.calls.filter((c) => c[0] === 'pilot.inbox.importVault')
+    expect(calls.map((c) => c[1])).toEqual([{ apply: false }, { apply: true }])
+  })
+
+  it('says why when the import is refused', async () => {
+    pilotRpc.mockImplementation(async (method: string) => {
+      if (method === 'pilot.inbox.importVault') {
+        throw new Error("Pilot can't tell who is calling; nothing was imported")
+      }
+      return method === 'pilot.inbox.list' ? LIST : { entries: [] }
+    })
+    render(<WaitingOnYouPage />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Import open vault cards' }))
+    expect(await screen.findByText(/nothing was imported/)).toBeTruthy()
+  })
 })

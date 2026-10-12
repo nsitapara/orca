@@ -8,7 +8,7 @@ import type { VaultRow } from '../inbox/vault-reader'
 import type { PilotHost } from '../pilot-services'
 import { PilotStore } from '../store/store'
 import { buildPilotMethods } from './methods'
-import { IMPORT_FROM_RUN, IMPORT_NO_CALLER } from './methods-answers'
+import { IMPORT_APPLY_DESKTOP, IMPORT_NO_CALLER } from './methods-answers'
 
 const read = vi.hoisted(() => vi.fn())
 vi.mock('../inbox/vault-reader', () => ({ readOpenVaultItems: read }))
@@ -108,11 +108,24 @@ describe('pilot.inbox.importVault', () => {
     expect(store.inbox.list({ source: 'import' })).toEqual([])
   })
 
-  it('refuses a call bound to a Pilot run', async () => {
-    const { call, store } = setup()
+  it.each<RpcCallerIdentity>([{ kind: 'local-cli' }, { kind: 'paired-device', deviceId: 'd1' }])(
+    'applies for no %j caller, and writes nothing',
+    async (caller) => {
+      const { call, store } = setup()
+      read.mockResolvedValue([ROW])
+      await expect(call({ apply: true }, caller)).rejects.toThrow(IMPORT_APPLY_DESKTOP)
+      expect(store.inbox.list({ source: 'import' })).toEqual([])
+    }
+  )
+
+  it.each<RpcCallerIdentity>([
+    { kind: 'local-cli' },
+    { kind: 'paired-device', deviceId: 'd1' },
+    { kind: 'desktop' }
+  ])('previews for a %j caller', async (caller) => {
+    const { call } = setup()
     read.mockResolvedValue([ROW])
-    await expect(call({ apply: true, runId: 'run-1', stepIdx: 0 })).rejects.toThrow(IMPORT_FROM_RUN)
-    expect(store.inbox.list({ source: 'import' })).toEqual([])
+    expect(await call({ apply: false }, caller)).toMatchObject({ applied: false, imported: 1 })
   })
 
   it('reports on a dry run, imports on --apply, and imports nothing the second time', async () => {
