@@ -4,6 +4,7 @@ import {
   outcomeLine,
   relativeTime,
   runStatusLabel,
+  spentLabel,
   stepStatusLabel,
   tickLine,
   verdictLabel
@@ -87,4 +88,14 @@ describe('status labels', () => {
     ['skipped', 'Skipped'],
     ['timed_out', 'Timed out']
   ] as const)('step %s → %s', (s, label) => expect(stepStatusLabel(s)).toBe(label))
+})
+
+describe('spentLabel', () => {
+  it.each([
+    [0.84, 0, '$0.84'],
+    [0.84, 2, '$0.84 + unpriced'],
+    [0, 1, '$0.00 + unpriced']
+  ])('%s with %s unpriced → %s', (usd, unpriced, label) =>
+    expect(spentLabel(usd, unpriced)).toBe(label)
+  )
 })

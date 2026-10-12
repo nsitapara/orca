@@ -1,7 +1,7 @@
 import type Database from '../../../../../main/sqlite/sync-database'
 import type { Verdict } from '../../shared/api-types'
 import type { InboxItemSummary } from '../../shared/inbox-types'
-import { worktreePathKey } from '../fields/agent-activity'
+import { worktreePathKey, worktreePathSpellings } from '../fields/agent-activity'
 import { toInboxSummary } from '../inbox/card'
 import type { InboxStore } from './store-inbox'
 
@@ -49,20 +49,19 @@ export class TimelineStore {
       })
   }
 
-  // Open items about this worktree, oldest first; for one person when given (never anyone else's then).
+  // Open items about this worktree (under any spelling of its path), oldest first; for one person when given
+  // (never anyone else's then).
   openInbox(worktreePath: string, person: string | null): InboxItemSummary[] {
-    const filter =
-      person === null
-        ? { worktreePath, status: ['open' as const] }
-        : { worktreePath, status: ['open' as const], person }
+    const where = { worktreePath: worktreePathSpellings(worktreePath), status: ['open' as const] }
+    const filter = person === null ? where : { ...where, person }
     return this.inbox.list(filter).map(toInboxSummary)
   }
 
-  // What these runs asked: still open, or answered and not yet done.
+  // What these runs asked: still open, or answered and not yet done. One query for all of them.
   inboxForRuns(runIds: readonly string[]): InboxItemSummary[] {
-    return runIds
-      .flatMap((runId) => this.inbox.list({ runId, status: ['open', 'answered'] }))
-      .sort((a, b) => a.createdAt - b.createdAt || a.id.localeCompare(b.id))
-      .map(toInboxSummary)
+    if (runIds.length === 0) {
+      return []
+    }
+    return this.inbox.list({ runId: runIds, status: ['open', 'answered'] }).map(toInboxSummary)
   }
 }

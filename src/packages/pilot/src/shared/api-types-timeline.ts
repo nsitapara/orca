@@ -26,6 +26,8 @@ export type WorktreeTimeline = {
   earlier: TimelineRun[]
   waiting: InboxItemSummary[]
   spentTodayUsd: number
+  // Today's usage buckets with no price: the total is then "+ unpriced" (renderer spentLabel).
+  unpricedBuckets: number
 }
 
 // pilot.session.resume (Task 31a): switched to the step's live tab, or opened its session in a new one.

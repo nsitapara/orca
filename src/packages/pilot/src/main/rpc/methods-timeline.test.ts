@@ -15,7 +15,7 @@ function timelineMethod(): Callable {
     store: {
       timeline: { nextFor: () => [], openInbox: () => [], inboxForRuns: () => [] },
       runs: { forWorktree: () => [], steps: () => [] },
-      usage: { costForWorktreeOn: () => 0 }
+      usage: { costForWorktreeOn: () => ({ costUsd: 0, unpricedBuckets: 0 }) }
     },
     loaded: () => ({ definitions: [] }),
     scheduler: { nextTickAt: () => null }
@@ -32,7 +32,8 @@ describe('pilot.worktree.timeline', () => {
       now: [],
       earlier: [],
       waiting: [],
-      spentTodayUsd: 0
+      spentTodayUsd: 0,
+      unpricedBuckets: 0
     })
   })
 

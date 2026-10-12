@@ -140,13 +140,100 @@ describe('buildWorktreeTimeline', () => {
     ])
   })
 
+  it.each(['/wt/a/', '/wt/./a', '/wt//a/'])(
+    'finds the runs, cards and spend of a worktree asked for as %s',
+    (spelled) => {
+      const { deps } = setup()
+      const t = buildWorktreeTimeline(deps, spelled, null)
+      expect(t.now.map((r) => r.id)).toEqual(['r-now', 'r-old-running'])
+      expect(t.earlier.map((r) => r.id)).toEqual(['r-done'])
+      expect(t.waiting.map((i) => i.id)).toEqual(['i1', 'i2', 'i4'])
+      expect(t.spentTodayUsd).toBe(0.84)
+    }
+  )
+
+  it('finds a run, card and spend stored under the slash-spelled path too', () => {
+    const { store, deps } = setup()
+    store.runs.create({
+      id: 'r-slash',
+      automationId: 'fix-ci',
+      tickId: null,
+      itemKey: 'mr:9',
+      itemLabel: '!9',
+      worktreePath: '/wt/a/',
+      startedAt: NOON - 5_000
+    })
+    store.runs.createStep({
+      runId: 'r-slash',
+      idx: 0,
+      name: 's',
+      agent: 'claude',
+      skill: null,
+      startedAt: NOON
+    })
+    store.usage.saveStepUsage(
+      'r-slash',
+      0,
+      [
+        {
+          day: '2026-10-11',
+          model: 'm',
+          requests: 1,
+          input: 1,
+          cacheRead: 0,
+          cacheWrite: 0,
+          output: 0,
+          costUsd: 0.16
+        }
+      ],
+      true,
+      NOON
+    )
+    const t = buildWorktreeTimeline(deps, '/wt/a', null)
+    expect(t.now.map((r) => r.id)).toContain('r-slash')
+    expect(t.spentTodayUsd).toBeCloseTo(1, 5)
+  })
+
+  it('counts the buckets of today it could not price', () => {
+    const { store, deps } = setup()
+    store.runs.createStep({
+      runId: 'r-now',
+      idx: 0,
+      name: 's',
+      agent: 'claude',
+      skill: null,
+      startedAt: NOON
+    })
+    store.usage.saveStepUsage(
+      'r-now',
+      0,
+      [
+        {
+          day: '2026-10-11',
+          model: 'mystery',
+          requests: 1,
+          input: 1,
+          cacheRead: 0,
+          cacheWrite: 0,
+          output: 0,
+          costUsd: null
+        }
+      ],
+      true,
+      NOON
+    )
+    const t = buildWorktreeTimeline(deps, '/wt/a', null)
+    expect(t).toMatchObject({ spentTodayUsd: 0.84, unpricedBuckets: 1 })
+  })
+
   it('an unknown worktree is empty', () => {
     expect(buildWorktreeTimeline(setup().deps, '/wt/none', null)).toEqual({
       next: [],
       now: [],
       earlier: [],
       waiting: [],
-      spentTodayUsd: 0
+      spentTodayUsd: 0,
+      unpricedBuckets: 0
     })
   })
 

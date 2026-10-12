@@ -95,5 +95,13 @@ export function timelineRun(over: Partial<TimelineRun> = {}): TimelineRun {
 }
 
 export function worktreeTimeline(over: Partial<WorktreeTimeline> = {}): WorktreeTimeline {
-  return { next: [], now: [], earlier: [], waiting: [], spentTodayUsd: 0, ...over }
+  return {
+    next: [],
+    now: [],
+    earlier: [],
+    waiting: [],
+    spentTodayUsd: 0,
+    unpricedBuckets: 0,
+    ...over
+  }
 }

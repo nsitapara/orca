@@ -41,9 +41,10 @@ export type InboxFilter = Partial<{
   status: readonly InboxStatus[]
   person: string
   automationId: string
-  runId: string
+  // One value, or any of several (a run's ids, the spellings of a path).
+  runId: string | readonly string[]
   itemKey: string
-  worktreePath: string
+  worktreePath: string | readonly string[]
   source: InboxItemRow['source']
   // Rows touched at or after this time (`updated_at >= ?`).
   updatedSince: number
@@ -220,7 +221,10 @@ export class InboxStore {
     }
     for (const [key, column] of Object.entries(FILTER_COLUMNS)) {
       const value = filter[key as keyof typeof FILTER_COLUMNS]
-      if (value !== undefined) {
+      if (Array.isArray(value)) {
+        where.push(`${column} IN (SELECT value FROM json_each(?))`)
+        values.push(JSON.stringify(value))
+      } else if (value !== undefined) {
         where.push(`${column} = ?`)
         values.push(value)
       }
