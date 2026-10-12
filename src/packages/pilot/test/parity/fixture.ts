@@ -2,20 +2,20 @@ import { readFileSync } from 'node:fs'
 import { EMPTY_PEOPLE } from '../../src/shared/people'
 import { isAbsolute, join } from 'node:path'
 import type { OrcaRuntimeService } from '../../../../main/runtime/orca-runtime'
-import {
-  codexQuotaReading,
-  type CodexRateLimitsResult
-} from '../../src/main/fields/codex-quota-reading'
 import { cachedQuotas, type QuotaReading } from '../../src/main/fields/quota'
 import { runtimeFieldDeps } from '../../src/main/fields/runtime-field-deps'
 import type { ScriptRunner } from '../../src/main/fields/script-runner'
-import { listBusyTerminals, type BusyReads } from '../../src/main/fields/worktree-busy'
+import { listBusyTerminals } from '../../src/main/fields/worktree-busy'
 import { registrySources } from '../../src/main/scheduler/tick-decide'
 import type { TickDeps } from '../../src/main/scheduler/tick-runner'
 import { createPassFetchCache, type PassFetchCache } from '../../src/main/sources/fetch-cache'
 import type { GlabApi } from '../../src/main/sources/gitlab-api'
 import type { PilotStore } from '../../src/main/store/store'
 import type { AgentKind } from '../../src/shared/definition/types'
+import { fixtureBusyReads, fixtureQuota } from './fixture-activity'
+
+// Quota and busy reads live in fixture-activity.ts; re-exported so importers of './fixture' are unchanged.
+export { fixtureBusyReads, fixtureQuota }
 
 export type FixtureRead = {
   argv: string[]
@@ -127,7 +127,7 @@ export function fixtureRead(f: ParityFixture, argv: string[]): FixtureRead {
   return found
 }
 
-function orcaResult<T>(f: ParityFixture, args: string[]): T {
+export function orcaResult<T>(f: ParityFixture, args: string[]): T {
   return (JSON.parse(stdoutOf(fixtureRead(f, ['orca', ...args, '--json']))) as { result: T }).result
 }
 
@@ -239,70 +239,11 @@ export function fixtureGitOperation(f: ParityFixture): (path: string) => Promise
   }
 }
 
-const UNKNOWN_QUOTA: QuotaReading = { weekly: null, session: null }
-
-// The quota the old sweep read (quota.py), as the case saved it: Claude's `{ weekly, session }` percentages in
-// state `quota/claude.json`, else the case's `quota` field. A case without one has an unknown quota, which lets a
-// job run. Codex's raw answer is in state `quota/codex-rate-limits.json`.
-export function fixtureQuota(f: ParityFixture, agent: AgentKind): QuotaReading {
-  if (agent === 'codex') {
-    // Codex's raw `account/rateLimits/read` answer, as quota.py read it (null: unreadable).
-    if ('quota/codex-rate-limits.json' in f.state) {
-      const raw = f.state['quota/codex-rate-limits.json']
-      return raw ? codexQuotaReading(raw as CodexRateLimitsResult, f.now) : UNKNOWN_QUOTA
-    }
-    return f.quota?.codex ?? UNKNOWN_QUOTA
-  }
-  const saved = (f.state['quota/claude.json'] ?? f.quota?.claude) as
-    | Partial<QuotaReading>
-    | null
-    | undefined
-  return { weekly: saved?.weekly ?? null, session: saved?.session ?? null }
-}
-
 // TickDeps for a dry run on a fixture. Every outside read comes from the fixture; nothing launches, and
 // a script never runs (a job whose checks or fields use scripts overrides `fields.runScript`). Tasks 19c
 // (`activity`) and 25 (`ask`) add a fixture-backed value here when they add the TickDeps member. A dry
 // run takes `{ dryRun: true, pass: fixturePass(f) }`; one given no pass makes its own over `gitlab`, which is the
 // fixture's too, so no parity tick ever reaches the real GitLab.
-// The reads gate.py's worktree_busy makes, answered from the recording: one the case lacks is a miss,
-// which worktreeBusy reports as "could not be read" (and parity-case.ts fails the case on).
-export function fixtureBusyReads(f: ParityFixture): BusyReads {
-  return {
-    draft: async (handle) => {
-      const read = orcaResult<{ terminal: { draft?: string | null } }>(f, [
-        'terminal',
-        'read',
-        '--terminal',
-        handle
-      ])
-      return read.terminal.draft ?? ''
-    },
-    agentStates: async () => {
-      const ps = orcaResult<{ worktrees: { agents?: { paneKey: string; state: string }[] }[] }>(f, [
-        'worktree',
-        'ps',
-        '--limit',
-        '1000'
-      ])
-      return new Map(ps.worktrees.flatMap((w) => (w.agents ?? []).map((a) => [a.paneKey, a.state])))
-    },
-    tabBusy: async (handle) => {
-      const wait = orcaResult<{ wait: { satisfied: boolean } }>(f, [
-        'terminal',
-        'wait',
-        '--terminal',
-        handle,
-        '--for',
-        'tui-idle',
-        '--timeout-ms',
-        '1500'
-      ])
-      return !wait.wait.satisfied
-    }
-  }
-}
-
 export function fixtureTickDeps(
   f: ParityFixture,
   store: PilotStore,
