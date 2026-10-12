@@ -32,10 +32,12 @@ export type InboxAddParams = {
 // already waiting.
 export type InboxAddResult = { id: string | null; existing: boolean; refused: string | null }
 export type InboxListParams = { person?: string; statuses?: readonly InboxStatus[] }
+// What an action card's Approve runs, as Pilot wrote it (printable ASCII), for the card version `digest`.
+export type RunLine = { digest: string; text: string }
 export type InboxListPayload = {
   items: InboxItemRow[]
-  // An action card's Run line by card id: what approving it runs, written by Pilot from the stored card.
-  runLines: Record<string, string>
+  // An action card's Run line by card id (main/inbox/run-line.ts); none for other cards.
+  runLines: Record<string, RunLine>
   people: { id: string; name: string }[]
   groups: { id: string; name: string; members: string[] }[]
   automations: { id: string; name: string }[]

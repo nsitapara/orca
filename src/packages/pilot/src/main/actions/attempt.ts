@@ -198,7 +198,8 @@ async function attemptCard(
     const stored = deps.store.inbox.get(req.inboxItemId)?.actionArgs ?? {}
     return refused(deps, row, stored, actionFailed(card.problem))
   }
-  return runEntry(deps, row, entry, pinned(entry, req, card.args))
+  // Already pinned with the card's key (powers.ts approvedArgs, which the card's Run line shows).
+  return runEntry(deps, row, entry, card.args)
 }
 
 async function attemptForRun(

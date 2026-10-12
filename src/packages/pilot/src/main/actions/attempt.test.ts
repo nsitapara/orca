@@ -11,7 +11,7 @@ import type { InboxAddParams } from '../../shared/inbox-types'
 import { PilotStore } from '../store/store'
 import type { InboxItemRow } from '../../shared/api-types'
 import { attemptAction, refreshAction, type CardAttempt, type RunAttempt } from './attempt'
-import { proposalProblem } from './powers'
+import { approvedArgs, proposalProblem } from './powers'
 import type { ActionCatalog, ActionEntry } from './types'
 
 const def = parseAutomationYaml(
@@ -291,6 +291,24 @@ describe('attemptAction on an approved card', () => {
       detail: "Card in_0000000000000001's action already ran"
     })
     expect(push.run).toHaveBeenCalledTimes(1)
+  })
+
+  // Display = execution: the Run line (run-line.ts) shows approvedArgs, and the approval runs exactly them.
+  it("runs exactly approvedArgs: the card's args less the parts left out, pinned with the card's key", async () => {
+    const { push, deps, inbox } = setup(['push'])
+    push.exceptArgs = (args, leftOut) => ({
+      argv: [...(args.argv as string[]), '--except', leftOut.join(',')]
+    })
+    push.pin = (args, key) => ({ ...args, write_id: key })
+    const card = file(inbox, { parts: { F1: 'Null check', F2: 'Naming' } })
+    const shown = approvedArgs(push, card, ['F2'])
+    expect(await attemptAction(deps, approve(card, { leftOut: ['F2'] }))).toMatchObject({
+      outcome: 'done'
+    })
+    expect(push.run).toHaveBeenCalledWith('args' in shown ? shown.args : null, {
+      dryRun: false,
+      runId: 'run-1'
+    })
   })
 
   it("passes the parts left out the entry's way, and only parts the card has", async () => {

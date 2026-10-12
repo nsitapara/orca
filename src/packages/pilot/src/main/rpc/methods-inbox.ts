@@ -3,6 +3,7 @@ import { defineMethod } from '../../../../../main/runtime/rpc/core'
 import type { InboxAddParams } from '../../shared/inbox-types'
 import { proposalProblem } from '../actions/powers'
 import { addInboxItem } from '../inbox/inbox-add'
+import { cardRunLine } from '../inbox/run-line'
 import {
   buildInboxDeps,
   getInboxItem,
@@ -131,7 +132,7 @@ export function buildInboxMethods(ctx: () => PilotContext) {
       params: List,
       handler: (p) => {
         const c = ctx()
-        return listInbox(inboxDeps(c), p, c.actions)
+        return listInbox(inboxDeps(c), p, (item) => cardRunLine(c.actions, item))
       }
     }),
     defineMethod({

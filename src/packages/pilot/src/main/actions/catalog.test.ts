@@ -8,7 +8,8 @@ const act: ActBridge = {
     .fn()
     .mockResolvedValue({ outcome: 'done', detail: 'ok', link: null, log: null, onYou: false }),
   describe: vi.fn().mockResolvedValue('Post 2 findings on !1579'),
-  refresh: vi.fn().mockResolvedValue(null)
+  refresh: vi.fn().mockResolvedValue(null),
+  command: (script, argv) => ['python3', '/act.py', script, 'run', ...argv]
 }
 
 describe('buildActionCatalog', () => {

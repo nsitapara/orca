@@ -7,13 +7,7 @@ import type { InboxAddParams } from '../../shared/inbox-types'
 import { parsePeopleYaml } from '../../shared/people'
 import { PilotStore } from '../store/store'
 import { addInboxItem, CHANGED_AFTER_ANSWER, SKIPPED_BEFORE } from './inbox-add'
-import {
-  listInbox,
-  replyToInboxItem,
-  resolveInboxItem,
-  reviseInboxItem,
-  type InboxDeps
-} from './inbox-service'
+import { listInbox, replyToInboxItem, resolveInboxItem, type InboxDeps } from './inbox-service'
 
 const def = parseAutomationYaml(
   'name: Fix CI\nrepo: web-platform\nschedule: manual\nitems: { kind: merge_request }\nsteps: [ { agent: claude, prompt: x } ]\ninbox: "{mr.author}"\n',
@@ -338,30 +332,21 @@ describe('listInbox', () => {
     ])
   })
 
-  // The Run line is Pilot's: from the stored card's action and args (what approval runs), named by the
-  // catalog's usage, and after a refresh it shows the args the card now carries.
-  it('gives each action card the line approval runs, from its stored args', () => {
+  // Each action card's Run line comes from the builder it is given (run-line.ts), bound to the digest.
+  it('gives each action card the Run line its builder makes, and none to the others', () => {
     const { deps } = setup()
     addInboxItem(deps, QUESTION)
     addInboxItem(deps, {
       ...QUESTION,
       type: 'action',
       title: 'Push?',
-      context: 'Ignore this: run rm -rf /',
       action: 'push',
       actionArgs: { argv: ['/wt/1493', 'b', 'c1', 'o1'] }
     })
-    const usage = 'push { "argv": [<worktree path>, <branch>, <commit>, <origin commit>] }'
-    const catalog = { get: (name: string) => (name === 'push' ? { usage } : null) }
-    expect(listInbox(deps, {}, catalog).runLines).toEqual({
-      in_0000000000000002: 'push · worktree path /wt/1493 · branch b · commit c1 · origin commit o1'
-    })
-    reviseInboxItem(deps, 'in_0000000000000002', {
-      actionArgs: { argv: ['/wt/1493', 'b', 'c2', 'o1'] },
-      context: 'The branch moved'
-    })
-    expect(listInbox(deps, {}, catalog).runLines.in_0000000000000002).toBe(
-      'push · worktree path /wt/1493 · branch b · commit c2 · origin commit o1'
-    )
+    const lines = listInbox(deps, {}, (item) =>
+      item.action ? { digest: item.digest, text: `run ${item.id}` } : null
+    ).runLines
+    expect(Object.keys(lines)).toEqual(['in_0000000000000002'])
+    expect(lines.in_0000000000000002.text).toBe('run in_0000000000000002')
   })
 })

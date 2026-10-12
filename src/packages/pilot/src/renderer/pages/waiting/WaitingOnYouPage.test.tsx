@@ -81,7 +81,9 @@ const LIST: InboxListPayload = {
   ],
   groups: [],
   automations: [{ id: 'ci', name: 'Fix failed CI on my MRs' }],
-  runLines: { in_push: 'push · worktree path /wt/web-1493 · branch web-1493-a' }
+  runLines: {
+    in_push: { digest: 'dp', text: 'python3 /a/act.py push run /wt/web-1493 web-1493-a' }
+  }
 }
 const HELD: QueueEntry = {
   rowId: 1,
@@ -131,14 +133,35 @@ describe('WaitingOnYouPage', () => {
     expect(screen.getByRole('button', { name: /All worktrees/ }).textContent).toContain('2')
   })
 
-  it("shows Pilot's Run line on an action card, and none on a question", async () => {
+  it("shows Pilot's Run line in its own Pilot block on an action card, and none on a question", async () => {
     serve()
     render(<WaitingOnYouPage />)
-    const line = await screen.findByText('push · worktree path /wt/web-1493 · branch web-1493-a')
+    const line = await screen.findByText('python3 /a/act.py push run /wt/web-1493 web-1493-a')
+    const block = line.closest('[data-pilot-run-line]')
+    expect(block?.textContent).toMatch(/^Pilot · Approve runs/)
+    // Apart from the agent's words: the agent's context is not inside Pilot's block.
+    expect(block?.textContent).not.toContain('Fixed the flaky spec.')
     expect(line.closest('article')?.textContent).toContain("Push !1561's 2 commits to origin?")
-    expect(line.parentElement?.textContent).toMatch(/^Run:/)
     const question = screen.getByText('Install LibreOffice in the job?').closest('article')
-    expect(question?.textContent).not.toContain('Run:')
+    expect(question?.querySelector('[data-pilot-run-line]')).toBeNull()
+  })
+
+  it('caps a long Run line out loud and keeps the whole of it on the card', async () => {
+    const text = `python3 /a/act.py push run ${'x'.repeat(400)}`
+    serve({ ...LIST, items: [PUSH], runLines: { in_push: { digest: 'dp', text } } })
+    render(<WaitingOnYouPage />)
+    const more = text.length - 300
+    expect(await screen.findByText(`… (${more} more chars)`)).toBeTruthy()
+    expect(screen.getByText(text.slice(0, 300))).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Show the whole command' }))
+    expect(await screen.findByText(text)).toBeTruthy()
+  })
+
+  it('shows no Run line built for another version of the card than the one shown', async () => {
+    serve({ ...LIST, items: [PUSH], runLines: { in_push: { digest: 'old', text: 'python3 x' } } })
+    render(<WaitingOnYouPage />)
+    await screen.findByText("Push !1561's 2 commits to origin?")
+    expect(screen.queryByText('python3 x')).toBeNull()
   })
 
   it("labels Pilot's own re-asks Pilot: and the agent's replies Agent asked:", async () => {

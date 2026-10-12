@@ -155,6 +155,16 @@ export function composeAnswer(
   return { option: choice.option, text: choice.text(notes) }
 }
 
+// The one-line view of a Run line; past this it says how much more there is, and the card keeps it all.
+export const RUN_LINE_MAX = 300
+
+export function runLineView(text: string): { head: string; more: number } {
+  if (text.length <= RUN_LINE_MAX) {
+    return { head: text, more: 0 }
+  }
+  return { head: text.slice(0, RUN_LINE_MAX), more: text.length - RUN_LINE_MAX }
+}
+
 export const QUEUE_PILL = {
   not_ready: { label: 'Not ready', variant: 'outline' },
   ready: { label: 'Ready', variant: 'secondary' },
