@@ -41,12 +41,24 @@ describe('recordFixture', () => {
       [
         'python3',
         [join(PARITY_DIR, 'run_old_plan.py'), '05', '--record', out, '--case', 'today'],
-        { timeoutMs: 600_000 }
+        expect.objectContaining({ timeoutMs: 600_000 })
       ]
     ])
     expect(() =>
       recordFixture({ job: '05', kase: 'today', force: false }, { runner, root, log: () => {} })
     ).toThrow(`${out} exists; pass --force to replace it`)
+  })
+
+  // gate.git's `git status` on live worktrees must not take index.lock from under an agent working there.
+  it("runs the recording with git's optional locks off, keeping the rest of the environment", () => {
+    const root = mkdtempSync(join(tmpdir(), 'pilot-record-'))
+    let env: Record<string, string | undefined> = {}
+    const runner = (_cmd: string, _args: string[], opts: { env: typeof env }) => {
+      env = opts.env
+      return { code: 0, stdout: '', stderr: '' }
+    }
+    recordFixture({ job: '05', kase: 'x', force: false }, { runner, root, log: () => {} })
+    expect(env).toEqual({ ...process.env, GIT_OPTIONAL_LOCKS: '0' })
   })
 
   it('says why when a recording stops', () => {

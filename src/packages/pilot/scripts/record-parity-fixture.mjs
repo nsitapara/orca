@@ -70,7 +70,10 @@ export function recordFixture({ job, kase, force }, deps = {}) {
     'python3',
     [join(PARITY_DIR, 'run_old_plan.py'), job, '--record', out, '--case', kase],
     {
-      timeoutMs: RECORD_TIMEOUT_MS
+      timeoutMs: RECORD_TIMEOUT_MS,
+      // The old sweep's `git status` runs on live worktrees: without optional locks it never takes an
+      // agent's index.lock. The python recorder and gate.git inherit this environment.
+      env: { ...process.env, GIT_OPTIONAL_LOCKS: '0' }
     }
   )
   if (result.code !== 0) {
