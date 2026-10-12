@@ -63,7 +63,7 @@ function asNumber(v: unknown): number | null {
 
 function exists(ctx: CheckContext): CheckResult {
   const path = ctx.fields['worktree.path']
-  if (typeof path === 'string') {
+  if (typeof path === 'string' && path !== '') {
     return pass(path)
   }
   const branch = ctx.fields['mr.branch']

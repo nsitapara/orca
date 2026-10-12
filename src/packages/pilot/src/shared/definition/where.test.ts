@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { ItemKind } from './types'
-import { WHERE_SCHEMAS } from './where'
+import { WHERE_SCHEMAS, worktreeWhereSchema } from './where'
 
 describe('WHERE_SCHEMAS', () => {
   const valid: [ItemKind, Record<string, unknown>][] = [
@@ -44,5 +44,18 @@ describe('WHERE_SCHEMAS', () => {
   ]
   it.each(invalid)('rejects a %s where block %j', (kind, where) => {
     expect(WHERE_SCHEMAS[kind].safeParse(where).success).toBe(false)
+  })
+})
+
+describe('worktreeWhereSchema commits clause', () => {
+  it.each([
+    ['an ignore_trailer', { commits: { ignore_trailer: 'Agent-Loop: standards' } }, true],
+    ['first_sight: baseline', { commits: { first_sight: 'baseline' } }, true],
+    ['first_sight: test_recent', { commits: { first_sight: 'test_recent' } }, true],
+    ['an empty clause', { commits: {} }, true],
+    ['a duration instead of a mode', { commits: { first_sight: '7d' } }, false],
+    ['the old exclude key', { commits: { exclude: 'Agent-Loop:' } }, false]
+  ])('%s', (_name, where, ok) => {
+    expect(worktreeWhereSchema.safeParse(where).success).toBe(ok)
   })
 })

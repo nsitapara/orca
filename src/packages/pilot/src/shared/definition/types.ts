@@ -14,11 +14,13 @@ export type MergeRequestWhere = {
   approved_by?: 'none' | PeopleRef
   target_branch?: string
 }
+export type WorktreeCommits = { ignore_trailer?: string; first_sight?: 'baseline' | 'test_recent' }
 export type WorktreeWhere = {
   has_mr?: boolean
   mr_author?: PeopleRef
   mr_state?: 'open'
   branch_owner?: PeopleRef
+  commits?: WorktreeCommits
 }
 export type PipelineWhere = {
   ref: string

@@ -37,6 +37,13 @@ describe('worktree checks', () => {
       false,
       'No worktree for !1561 web-1493'
     ],
+    [
+      'an empty path is no worktree',
+      { kind: 'worktree_exists' },
+      { 'worktree.path': '' },
+      false,
+      'No worktree for !1561 web-1493'
+    ],
     ['clean', { kind: 'worktree_clean' }, CLEAN, true, 'No uncommitted changes'],
     [
       'uncommitted files',
