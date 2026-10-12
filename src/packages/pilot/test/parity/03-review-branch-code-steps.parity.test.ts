@@ -187,6 +187,7 @@ describeParity(PARITY_03, "03 · the YAML's steps run the rounds loop.py's hand-
     }
     const codex = rounds.filter((s) => s.agent === 'codex').map((s) => s.args)
     expect(new Set(codex.map((a) => JSON.stringify(a))).size).toBe(1)
-    expect(codex[0]).toContain('--dangerously-bypass-approvals-and-sandbox') // Codex commits
+    // Codex commits through Settings' permission flag on Pilot's Codex command; repeated here, Codex refuses to start.
+    expect(codex[0]).not.toContain('--dangerously-bypass-approvals-and-sandbox')
   })
 })
