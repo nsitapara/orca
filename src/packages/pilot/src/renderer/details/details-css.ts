@@ -41,6 +41,9 @@ export const DETAILS_CSS = `
 .dt figure{margin:0;display:grid;gap:4px;min-width:0}
 .dt figcaption,.dt-meta{font-size:12px;color:var(--g-sub);margin:0}
 .dt-shot img{display:block;max-width:100%;height:auto;border:1px solid var(--g-line);border-radius:6px}
+.dt-zoom-btn{display:block;padding:0;border:0;background:none;cursor:zoom-in;text-align:left}
+.dt-zoom{position:fixed;inset:0;z-index:60;display:grid;place-items:center;padding:16px;background:rgba(0,0,0,.82);cursor:zoom-out}
+.dt-zoom img{max-width:100%;max-height:100%;object-fit:contain}
 .dt-missing{margin:0;font-size:13px;font-style:italic;color:var(--g-sub)}
 .glr-omitted{padding:8px 12px}
 .dt-note{display:grid;gap:4px;padding:8px 0;border-top:1px solid var(--g-line)}

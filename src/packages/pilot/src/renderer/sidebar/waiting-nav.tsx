@@ -3,7 +3,11 @@ import { Inbox } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { InboxListPayload } from '../../shared/inbox-types'
 import { pilotRpc } from '../api'
-import { setPilotAutomationsView, usePilotAutomationsView } from '../pages/automations-view'
+import {
+  setPilotAutomationsView,
+  setPilotOpenAutomation,
+  usePilotAutomationsView
+} from '../pages/automations-view'
 import { waitingCount } from '../pages/waiting/answer-text'
 import { pilotStore } from '../store'
 
@@ -34,10 +38,12 @@ export function useAutomationsActive(pageOpen: boolean): boolean {
   return pageOpen && view !== 'waiting'
 }
 
-// Clicking Automations leaves the Waiting on you view first.
+// Clicking Automations leaves the Waiting on you view, and always lands on the list: an automation that was
+// open is closed even when the view was already Automations.
 export function useOpenAutomations(open: () => void): () => void {
   return useCallback(() => {
     setPilotAutomationsView('automations')
+    setPilotOpenAutomation(null)
     open()
   }, [open])
 }

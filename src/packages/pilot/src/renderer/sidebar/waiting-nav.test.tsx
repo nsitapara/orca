@@ -1,7 +1,12 @@
 // @vitest-environment happy-dom
 import { act, cleanup, fireEvent, render, renderHook, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { pilotAutomationsView, setPilotAutomationsView } from '../pages/automations-view'
+import {
+  pilotAutomationsView,
+  pilotOpenAutomation,
+  setPilotAutomationsView,
+  setPilotOpenAutomation
+} from '../pages/automations-view'
 import { registerPilotStore, type PilotStoreState } from '../store'
 
 const pilotRpc = vi.fn()
@@ -9,7 +14,12 @@ vi.mock('../api', () => ({
   pilotRpc: (...args: unknown[]) => pilotRpc(...args)
 }))
 
-import { useAutomationsActive, useOpenAutomations, WaitingNavItem } from './waiting-nav'
+import {
+  useAutomationsActive,
+  useOpenAutomations,
+  useOpenAutomationsPage,
+  WaitingNavItem
+} from './waiting-nav'
 
 const card = (id: string, type: string): Record<string, unknown> => ({
   id,
@@ -28,6 +38,18 @@ describe('waiting nav', () => {
     pilotRpc.mockReset()
     registerPilotStore(null)
     setPilotAutomationsView('automations')
+    setPilotOpenAutomation(null)
+  })
+
+  it('shows the list when Automations is clicked while an automation is open', () => {
+    const open = vi.fn()
+    setPilotOpenAutomation('fix-failed-ci')
+    const click = renderHook(() =>
+      useOpenAutomationsPage((select) => select({ openAutomationsPage: open }) as never)
+    ).result.current
+    click()
+    expect(pilotOpenAutomation()).toBeNull()
+    expect(open).toHaveBeenCalledTimes(1)
   })
 
   it('does nothing without a store', () => {
