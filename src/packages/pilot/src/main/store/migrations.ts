@@ -1,6 +1,6 @@
 import type Database from '../../../../../main/sqlite/sync-database'
 
-export const PILOT_SCHEMA_VERSION = 4
+export const PILOT_SCHEMA_VERSION = 5
 
 const V1 = `
 CREATE TABLE ticks (id INTEGER PRIMARY KEY AUTOINCREMENT, automation_id TEXT NOT NULL, started_at INTEGER NOT NULL,
@@ -94,8 +94,14 @@ CREATE TABLE step_usage (run_id TEXT NOT NULL, idx INTEGER NOT NULL, day TEXT NO
 CREATE INDEX step_usage_by_day ON step_usage (day);
 `
 
+// Card Details parity: a card's Details bundle, as the light ref the list carries and the snapshot read by id.
+const V5 = `
+ALTER TABLE inbox_items ADD COLUMN details_ref_json TEXT;
+ALTER TABLE inbox_items ADD COLUMN details_snapshot_json TEXT;
+`
+
 // MIGRATIONS[n - 1] takes a database from version n - 1 to n.
-const MIGRATIONS: readonly string[] = [V1, V2, V3, V4]
+const MIGRATIONS: readonly string[] = [V1, V2, V3, V4, V5]
 
 // Same pattern as Orca's orchestration.db (migrate.ts): user_version + one transaction, all or nothing.
 // `target` lets tests build a database at an older version.

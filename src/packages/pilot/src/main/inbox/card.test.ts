@@ -95,6 +95,7 @@ describe('toInboxSummary', () => {
       worktreePath: '/wt/1493',
       person: 'nish',
       ...buildCard(PUSH),
+      details: null,
       digest: 'd',
       version: 1,
       status: 'open',

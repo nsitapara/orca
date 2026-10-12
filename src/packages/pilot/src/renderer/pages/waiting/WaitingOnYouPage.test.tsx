@@ -24,6 +24,7 @@ function card(over: Partial<InboxItemRow>): InboxItemRow {
     options: [],
     suggested: null,
     detailsMd: null,
+    details: null,
     action: null,
     actionArgs: null,
     parts: {},

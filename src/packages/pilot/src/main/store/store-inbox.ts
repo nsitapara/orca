@@ -1,12 +1,8 @@
 import type Database from '../../../../../main/sqlite/sync-database'
-import type {
-  InboxAnswer,
-  InboxItemRow,
-  InboxOption,
-  InboxReply,
-  InboxStatus,
-  InboxType
-} from '../../shared/api-types'
+import type { InboxAnswer, InboxItemRow, InboxStatus } from '../../shared/api-types'
+import type { DetailsSnapshot } from '../../shared/details'
+import { jsonOrNull, readSnapshot, writeSnapshot } from './store-inbox-details'
+import { INBOX_ROW_COLUMNS, toItem } from './store-inbox-row'
 
 export type NewInboxItem = Omit<
   InboxItemRow,
@@ -20,8 +16,9 @@ export type NewInboxItem = Omit<
   | 'replies'
   | 'parts'
   | 'switchWords'
+  | 'details'
 > &
-  Partial<Pick<InboxItemRow, 'outcome' | 'replies' | 'parts' | 'switchWords'>>
+  Partial<Pick<InboxItemRow, 'outcome' | 'replies' | 'parts' | 'switchWords' | 'details'>>
 // An edit is a new version of the card, so it always brings the new digest (contract §10).
 export type InboxEdit = Partial<
   Pick<
@@ -32,6 +29,7 @@ export type InboxEdit = Partial<
     | 'options'
     | 'suggested'
     | 'detailsMd'
+    | 'details'
     | 'action'
     | 'actionArgs'
     | 'parts'
@@ -94,68 +92,12 @@ const EDIT_COLUMNS: Record<keyof InboxEdit, string> = {
   options: 'options_json',
   suggested: 'suggested',
   detailsMd: 'details_md',
+  details: 'details_ref_json',
   action: 'action',
   actionArgs: 'action_args_json',
   parts: 'parts_json',
   switchWords: 'switch_json',
   digest: 'digest'
-}
-
-function parsedOrNull(text: unknown): unknown {
-  if (text === null || text === undefined) {
-    return null
-  }
-  return JSON.parse(String(text))
-}
-
-function toItem(r: Record<string, unknown>): InboxItemRow {
-  return {
-    id: String(r.id),
-    automationId: String(r.automation_id),
-    runId: (r.run_id as string | null) ?? null,
-    stepIdx: (r.step_idx as number | null) ?? null,
-    itemKey: (r.item_key as string | null) ?? null,
-    worktreePath: (r.worktree_path as string | null) ?? null,
-    person: String(r.person),
-    type: r.type as InboxType,
-    title: String(r.title),
-    context: String(r.context),
-    options: JSON.parse(String(r.options_json)) as InboxOption[],
-    suggested: (r.suggested as string | null) ?? null,
-    detailsMd: (r.details_md as string | null) ?? null,
-    action: (r.action as string | null) ?? null,
-    actionArgs: parsedOrNull(r.action_args_json) as Record<string, unknown> | null,
-    digest: String(r.digest),
-    version: Number(r.version),
-    status: r.status as InboxStatus,
-    answer: parsedOrNull(r.answer_json) as InboxAnswer | null,
-    answeredAt: (r.answered_at as number | null) ?? null,
-    answeredBy: (r.answered_by as string | null) ?? null,
-    createdAt: Number(r.created_at),
-    updatedAt: Number(r.updated_at),
-    outcome: (r.outcome as string | null) ?? null,
-    replies: repliesOf(r.replies_json),
-    parts: JSON.parse(String(r.parts_json)) as Record<string, string>,
-    switchWords: JSON.parse(String(r.switch_json)) as string[],
-    source: r.source as InboxItemRow['source'],
-    vaultRef: (r.vault_ref as string | null) ?? null
-  }
-}
-
-// Only a stored { by: 'pilot' } reply is Pilot's. A plain string (written before authors were stored) or
-// anything else reads as the agent's, so an old or odd row can never pass for Pilot.
-function repliesOf(json: unknown): InboxReply[] {
-  const stored: unknown = JSON.parse(String(json))
-  if (!Array.isArray(stored)) {
-    return []
-  }
-  return stored.map((r): InboxReply => {
-    if (r && typeof r === 'object' && typeof (r as InboxReply).text === 'string') {
-      const by = (r as InboxReply).by === 'pilot' ? 'pilot' : 'agent'
-      return { text: (r as InboxReply).text, by }
-    }
-    return { text: String(r), by: 'agent' }
-  })
 }
 
 // replies and answer are stored as JSON text; null stays null.
@@ -174,8 +116,8 @@ function encodeEdit(edit: InboxEdit): [string, unknown][] {
       if (key === 'options' || key === 'parts' || key === 'switchWords') {
         return [key, JSON.stringify(value)]
       }
-      if (key === 'actionArgs') {
-        return [key, value === null ? null : JSON.stringify(value)]
+      if (key === 'actionArgs' || key === 'details') {
+        return [key, jsonOrNull(value)]
       }
       return [key, value]
     })
@@ -184,13 +126,14 @@ function encodeEdit(edit: InboxEdit): [string, unknown][] {
 export class InboxStore {
   constructor(private readonly db: Database) {}
 
-  add(item: NewInboxItem): void {
+  // A card with a bundle is added with its snapshot, in the same row write.
+  add(item: NewInboxItem, snapshot: DetailsSnapshot | null = null): void {
     this.db
       .prepare(
         `INSERT INTO inbox_items (id, automation_id, run_id, step_idx, item_key, worktree_path, person, type, title,
           context, options_json, suggested, details_md, action, action_args_json, digest, created_at, updated_at,
-          outcome, replies_json, parts_json, switch_json, source, vault_ref)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+          outcome, replies_json, parts_json, switch_json, source, vault_ref, details_ref_json, details_snapshot_json)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       )
       .run(
         item.id,
@@ -216,12 +159,14 @@ export class InboxStore {
         JSON.stringify(item.parts ?? {}),
         JSON.stringify(item.switchWords ?? []),
         item.source,
-        item.vaultRef
+        item.vaultRef,
+        jsonOrNull(item.details),
+        jsonOrNull(snapshot)
       )
   }
 
   get(id: string): InboxItemRow | null {
-    const r = this.db.prepare('SELECT * FROM inbox_items WHERE id = ?').get(id)
+    const r = this.db.prepare(`SELECT ${INBOX_ROW_COLUMNS} FROM inbox_items WHERE id = ?`).get(id)
     if (!r) {
       return null
     }
@@ -252,9 +197,18 @@ export class InboxStore {
     }
     const clause = where.length > 0 ? `WHERE ${where.join(' AND ')}` : ''
     return this.db
-      .prepare(`SELECT * FROM inbox_items ${clause} ORDER BY created_at, id`)
+      .prepare(`SELECT ${INBOX_ROW_COLUMNS} FROM inbox_items ${clause} ORDER BY created_at, id`)
       .all(...(values as never[]))
       .map((r) => toItem(r as never))
+  }
+
+  // The Details snapshot of a card's current version, or null when it has no bundle.
+  snapshot(id: string): DetailsSnapshot | null {
+    return readSnapshot(this.db, id)
+  }
+
+  setSnapshot(id: string, snapshot: DetailsSnapshot | null): void {
+    writeSnapshot(this.db, id, snapshot)
   }
 
   edit(id: string, edit: InboxEdit, at: number): InboxItemRow | null {

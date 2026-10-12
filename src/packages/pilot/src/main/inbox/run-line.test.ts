@@ -34,6 +34,7 @@ function card(over: Partial<InboxItemRow>): InboxItemRow {
     options: [],
     suggested: null,
     detailsMd: null,
+    details: null,
     action: 'push',
     actionArgs: { argv: ['/wt/web-1493', 'web-1493-a', 'abc123', 'def456'] },
     parts: {},
