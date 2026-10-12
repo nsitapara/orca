@@ -100,9 +100,11 @@ describe.skipIf(!existsSync(SKILL))(
         when: "{steps.stack.status} == 'done'",
         timeoutMs: HOUR
       })
+      // No --permission-mode: Pilot's Claude command already carries --dangerously-skip-permissions, which Claude
+      // Code ranks above it, so an acceptEdits here never took effect.
       expect(step('fix')).toMatchObject({
         skill: 'ui-qa',
-        args: ['--permission-mode', 'acceptEdits'],
+        args: [],
         when: "{steps.report.fix} == 'yes'",
         timeoutMs: 90 * MINUTE
       })
@@ -168,6 +170,16 @@ describe.skipIf(!existsSync(SKILL))(
       )
       expect(readFileSync(join(SKILL, 'modes', 'answers.md'), 'utf8')).toContain('never `git push`')
       expect(readFileSync(join(SKILL, 'modes', 'fix.md'), 'utf8')).toContain('never push')
+    })
+
+    // In a Pilot run the report files each finding as a card in Pilot's inbox (Pilot never reads the note's items),
+    // so the fixer closes the cards it fixed and files new questions there, never as `- [ ]` lines.
+    it("has the fixer close the finding cards it fixed in Pilot's inbox, not the note's items", () => {
+      const fix = readFileSync(join(SKILL, 'modes', 'fix.md'), 'utf8')
+      expect(fix).toContain("the report's findings are cards in Pilot's inbox")
+      expect(fix).toContain("pilot inbox tick --id <the handoff's cards[<finding id>]>")
+      expect(fix).toContain('pilot inbox add --type <default|flagged|question>')
+      expect(fix).toContain('write no `- [ ]` line')
     })
 
     it('loads through the loader on a copy', () => {

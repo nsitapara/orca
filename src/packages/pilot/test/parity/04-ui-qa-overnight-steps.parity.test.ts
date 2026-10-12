@@ -318,7 +318,7 @@ describeParity(PARITY_04, '04 · a night run ends as close_out would have counte
     expect(def!.steps.find((s) => s.name === 'fix')).toMatchObject({
       agent: 'claude',
       always: true,
-      args: ['--permission-mode', 'acceptEdits']
+      args: [] // no --permission-mode: Pilot's Claude command's --dangerously-skip-permissions outranks it
     })
   })
 })

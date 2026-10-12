@@ -2,6 +2,10 @@ import { readdirSync, readFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
+import type { PilotContext } from '../../src/main/pilot-services'
+import { recordRunOutput } from '../../src/main/rpc/run-channel'
+import { readMode } from '../../src/main/run/modes'
+import { PilotStore } from '../../src/main/store/store'
 import { renderTemplate } from '../../src/shared/template'
 import { loadFixture } from './fixture'
 import { JOB_09, PARITY_09, runFieldScript, seed09 } from './jobs/job-09'
@@ -79,14 +83,56 @@ describe('09 · Prepare reviews requested of me: the definition', () => {
       resume: 'asking_session',
       else: { agent: 'claude', skill: 'review-mr', mode: 'answers' }
     })
+    // answers declares post_card too: an approved Prepare card imported from the vault runs prepare.md from its
+    // step 2 inside the answer run, whose `pilot run output post_card=…` lands on that run.
     expect([modeOutputs('review-mr', 'prepare'), modeOutputs('review-mr', 'answers')]).toEqual([
       ['outcome', 'post_card'],
-      ['outcome', 'item_status', 'reply']
+      ['outcome', 'item_status', 'reply', 'post_card']
     ])
     expect(modeText('review-mr', 'prepare')).toContain(
       '~/.agents/skills/review-mr/modes/answers.md'
     )
-    expect(modeText('review-mr', 'answers')).toContain('item_status=stale')
+    const answers = modeText('review-mr', 'answers')
+    expect(answers).toContain('item_status=stale')
+    expect(answers).toContain('An approved Prepare card (imported from the vault)')
+    expect(answers).toContain(
+      'Follow `~/.agents/skills/review-mr/modes/prepare.md` for !<iid> from its step 2'
+    )
+  })
+
+  // What the declaration buys: Pilot takes post_card from an answers-mode run (read from the skill's real mode
+  // file), and still refuses a name no mode declares.
+  it('takes post_card from an answer run in review-mr answers mode, and refuses an undeclared output', () => {
+    const store = PilotStore.open(':memory:')
+    store.runs.create({
+      id: 'ans-1',
+      automationId: definition.id,
+      tickId: null,
+      itemKey: 'mr:1588',
+      itemLabel: '!1588',
+      worktreePath: null,
+      startedAt: 1,
+      trigger: 'answer'
+    })
+    store.runs.createStep({
+      runId: 'ans-1',
+      idx: 0,
+      name: 'answers',
+      agent: 'claude',
+      skill: 'review-mr',
+      mode: 'answers',
+      startedAt: 1
+    })
+    const ctx = { store } as unknown as PilotContext
+    const read = (skill: string, mode: string, path: string | null) =>
+      readMode(skill, mode, path, homedir())
+    const card = { post_card: 'in_0000000000000009', item_status: 'done', outcome: 'prepared' }
+    expect(
+      recordRunOutput(ctx, { runId: 'ans-1', stepIdx: 0, outputs: card }, read).outputs
+    ).toEqual(card)
+    expect(() =>
+      recordRunOutput(ctx, { runId: 'ans-1', stepIdx: 0, outputs: { posted: 'yes' } }, read)
+    ).toThrow("posted isn't one of them")
   })
 
   it('names no placeholder in a script, and every field script is the skill’s own `sweep.py field`', () => {
