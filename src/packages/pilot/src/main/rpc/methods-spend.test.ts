@@ -9,7 +9,7 @@ import { buildSpendMethods } from './methods-spend'
 type Callable = {
   name: string
   params: { safeParse(v: unknown): { success: boolean } }
-  handler(p: unknown): unknown
+  handler(p: unknown, rpc?: { caller?: { kind: string } }): unknown
 }
 
 function method(): Callable {
@@ -51,16 +51,26 @@ describe('pilot.usage.writeReport', () => {
     )!
   }
 
+  const LOCAL = { caller: { kind: 'local-cli' as const } }
+
   it('passes the folder through to the reporter', () => {
     const write = vi.fn(() => ({ dir: '/x', rows: 0, sessions: 0, costUsd: 0, files: [] }))
-    expect(writeMethod(write).handler({ dir: '/x' })).toMatchObject({ dir: '/x' })
+    expect(writeMethod(write).handler({ dir: '/x' }, LOCAL)).toMatchObject({ dir: '/x' })
     expect(write).toHaveBeenCalledWith('/x')
   })
 
   it('needs an absolute folder, and a process that runs the reporter', () => {
     expect(writeMethod().params.safeParse({ dir: 'relative/path' }).success).toBe(false)
-    expect(() => writeMethod().handler({})).toThrow(
+    expect(() => writeMethod().handler({}, LOCAL)).toThrow(
       "The usage report isn't available in this process"
     )
+  })
+
+  it('writes nothing for a caller the transport did not identify', () => {
+    const write = vi.fn()
+    expect(() => writeMethod(write).handler({ dir: '/x' }, {})).toThrow(
+      "Pilot can't tell who is calling; nothing was written"
+    )
+    expect(write).not.toHaveBeenCalled()
   })
 })
