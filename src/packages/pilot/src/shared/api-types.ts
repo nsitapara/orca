@@ -312,6 +312,7 @@ export type {
   InboxAddParams,
   InboxAddResult,
   InboxAnswerParams,
+  InboxItemSummary,
   InboxListParams,
   InboxListPayload
 } from './inbox-types'

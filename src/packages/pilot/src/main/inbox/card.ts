@@ -1,0 +1,152 @@
+import { createHash } from 'node:crypto'
+import type { InboxItemRow, InboxOption, InboxType } from '../../shared/api-types'
+import type { InboxAddParams, InboxItemSummary } from '../../shared/inbox-types'
+
+export type InboxCard = {
+  type: InboxType
+  title: string
+  context: string
+  suggested: string | null
+  options: InboxOption[]
+  detailsMd: string | null
+  action: string | null
+  actionArgs: Record<string, unknown> | null
+  parts: Record<string, string>
+  switchWords: string[]
+}
+
+const PART_ID = /^[\w.-]+$/
+export const MAX_DETAILS_CHARS = 64 * 1024
+
+// One line, like vault.py's _clean: a card reads the same on the page, in the vault export and in a prompt.
+export function oneLine(text: string | null | undefined): string {
+  return (text ?? '').split(/\s+/).filter(Boolean).join(' ')
+}
+
+// "<label> — <meaning>", the way card.py and `pilot inbox add --option` write an option (vault.py _options).
+export function parseOption(raw: string): InboxOption | null {
+  const text = oneLine(raw)
+  const at = text.indexOf(' — ')
+  if (at === -1) {
+    return text ? { label: text, meaning: '' } : null
+  }
+  const label = text.slice(0, at).trim()
+  return label ? { label, meaning: text.slice(at + 3).trim() } : null
+}
+
+function checkCard(params: InboxAddParams): void {
+  if (!oneLine(params.title)) {
+    throw new Error('A card needs a title')
+  }
+  if (params.action && params.type !== 'action') {
+    throw new Error('Only an action card can carry an action')
+  }
+  if (params.actionArgs && !params.action) {
+    throw new Error('Action arguments need an action')
+  }
+  for (const id of Object.keys(params.parts ?? {})) {
+    if (!PART_ID.test(id)) {
+      throw new Error(`Part id "${id}" must be letters, digits, dots, dashes or underscores`)
+    }
+  }
+  if ((params.detailsMd?.length ?? 0) > MAX_DETAILS_CHARS) {
+    throw new Error('Details are limited to 64 KB')
+  }
+}
+
+export function buildCard(params: InboxAddParams): InboxCard {
+  checkCard(params)
+  return {
+    type: params.type,
+    title: oneLine(params.title),
+    context: oneLine(params.context),
+    suggested: oneLine(params.suggested) || null,
+    options: (params.options ?? []).map(parseOption).filter((o): o is InboxOption => o !== null),
+    detailsMd: params.detailsMd?.trim() ? params.detailsMd : null,
+    action: params.action ?? null,
+    actionArgs: params.action ? (params.actionArgs ?? {}) : null,
+    parts: Object.fromEntries(
+      Object.entries(params.parts ?? {}).map(([id, label]) => [id, oneLine(label)])
+    ),
+    switchWords: (params.switchWords ?? []).map(oneLine)
+  }
+}
+
+export function cardOf(item: InboxItemRow): InboxCard {
+  const {
+    type,
+    title,
+    context,
+    suggested,
+    options,
+    detailsMd,
+    action,
+    actionArgs,
+    parts,
+    switchWords
+  } = item
+  return {
+    type,
+    title,
+    context,
+    suggested,
+    options,
+    detailsMd,
+    action,
+    actionArgs,
+    parts,
+    switchWords
+  }
+}
+
+// What an answer approves (contract §10): type, title, context, options, action and its pinned args (an object).
+// Parts with their switch words, and details, join only when present (E3), so a plain card keeps the six-field
+// digest. The suggestion and replies never count: they don't change what Approve does.
+export function inboxDigest(card: InboxCard): string {
+  const fields: unknown[] = [
+    card.type,
+    card.title,
+    card.context,
+    card.options,
+    card.action,
+    card.actionArgs
+  ]
+  if (Object.keys(card.parts).length > 0 || card.switchWords.length > 0) {
+    fields.push(card.parts, card.switchWords)
+  }
+  if (card.detailsMd) {
+    fields.push(card.detailsMd)
+  }
+  return createHash('sha256').update(JSON.stringify(fields)).digest('hex')
+}
+
+export function toInboxSummary(row: InboxItemRow): InboxItemSummary {
+  const {
+    id,
+    automationId,
+    runId,
+    stepIdx,
+    itemKey,
+    worktreePath,
+    person,
+    type,
+    title,
+    context,
+    status,
+    createdAt
+  } = row
+  return {
+    id,
+    automationId,
+    runId,
+    stepIdx,
+    itemKey,
+    worktreePath,
+    person,
+    type,
+    title,
+    context,
+    status,
+    createdAt
+  }
+}
