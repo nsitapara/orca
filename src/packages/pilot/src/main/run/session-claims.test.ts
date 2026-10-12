@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import {
   CLAIM_TTL_MS,
@@ -135,5 +137,18 @@ describe('isStartTimeout', () => {
 
   it('is false for a non-Error', () => {
     expect(isStartTimeout('Terminal creation timed out')).toBe(false)
+  })
+})
+
+describe('the upstream start-timeout messages', () => {
+  it.each([
+    ['orca-runtime-create-terminal-desktop.ts', 'Terminal creation timed out'],
+    [
+      'orca-runtime-restore-live-paired-renderer-session-owned-mobile-terminals.ts',
+      'Timed out waiting for terminal handle after creation'
+    ]
+  ])('%s still says "%s"', (file, message) => {
+    const source = readFileSync(join(process.cwd(), 'src/main/runtime', file), 'utf8')
+    expect(source).toContain(`new Error('${message}')`)
   })
 })
