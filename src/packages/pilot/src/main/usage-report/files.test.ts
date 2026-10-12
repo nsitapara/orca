@@ -97,3 +97,23 @@ describe('writeReportFiles safety', () => {
     expect(readFileSync(elsewhere, 'utf8')).toBe('keep')
   })
 })
+
+describe('writeReportFiles refuses a folder that is not a report folder', () => {
+  it('leaves a non-empty directory with no report files untouched', () => {
+    const dir = tmp()
+    writeFileSync(join(dir, 'usage.json'.replace('usage', 'package')), 'mine')
+    expect(() => writeReportFiles(dir, report, '/no/template.html')).toThrow(
+      /isn't a report folder/
+    )
+    expect(existsSync(join(dir, 'usage.json'))).toBe(false)
+  })
+
+  it.each(['usage.json', 'Token usage.md', LEGACY_FILE])(
+    'writes when the folder already holds %s',
+    (name) => {
+      const dir = tmp()
+      writeFileSync(join(dir, name), '{}')
+      expect(() => writeReportFiles(dir, report, '/no/template.html')).not.toThrow()
+    }
+  )
+})

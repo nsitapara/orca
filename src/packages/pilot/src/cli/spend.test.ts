@@ -51,6 +51,24 @@ describe('formatSpend', () => {
   })
 })
 
+describe('formatSpend total label', () => {
+  const row = { key: 'k', label: 'K', costUsd: 1, tokens: 1, runs: 1, steps: 1, unpricedBuckets: 0 }
+  it.each([
+    ['automation', 'total'],
+    ['mr', 'total'],
+    ['skill', 'total (runs counted once)'],
+    ['agent', 'total (runs counted once)']
+  ] as const)('by %s ends in "%s"', (by, label) => {
+    const lines = formatSpend({
+      ...base,
+      by,
+      rows: [row],
+      total: { costUsd: 1, tokens: 1, runs: 1 }
+    }).split('\n')
+    expect(lines.at(-1)).toMatch(new RegExp(`${label.replace(/[()]/g, '\\$&')}$`))
+  })
+})
+
 describe('formatUsageReport', () => {
   it('says where it wrote and what is in it', () => {
     expect(

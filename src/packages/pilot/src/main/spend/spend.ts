@@ -42,5 +42,5 @@ export function spendPayload(
     steps: raw.steps,
     unpricedBuckets: raw.unpricedBuckets
   }))
-  return { by, days, sinceDay, rows, total: store.spend.totals(sinceDay) }
+  return { by, days, sinceDay, rows, total: store.spend.totals(sinceDay, by) }
 }

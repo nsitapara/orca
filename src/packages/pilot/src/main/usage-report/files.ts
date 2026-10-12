@@ -3,6 +3,7 @@ import {
   existsSync,
   lstatSync,
   mkdirSync,
+  readdirSync,
   readFileSync,
   renameSync,
   writeFileSync
@@ -70,9 +71,26 @@ export function readLegacy(dir: string): LegacyReport | null {
   return { jobs: listOf(data.jobs), rows: listOf(data.rows), gaps: listOf(data.gaps) }
 }
 
+// A folder that already holds other files is only written into when it is a report folder, so a wrong --out can't
+// overwrite files in a repo.
+const MARKERS: string[] = [REPORT_FILES.json, REPORT_FILES.note, LEGACY_FILE]
+
+function assertReportFolder(dir: string): void {
+  if (!existsSync(dir)) {
+    return
+  }
+  const names = readdirSync(dir)
+  if (names.length > 0 && !names.some((n) => MARKERS.includes(n))) {
+    throw new Error(
+      `${dir} isn't a report folder (it holds other files and no ${REPORT_FILES.json}): pick an empty folder`
+    )
+  }
+}
+
 // usage.py write_data: usage.json (indent 1), the same JSON as usage-data.js for the page opened from disk,
 // usage.csv, and the HTML report copied from its template.
 export function writeReportFiles(dir: string, report: UsageReport, templatePath: string): string[] {
+  assertReportFolder(dir)
   mkdirSync(dir, { recursive: true })
   const text = JSON.stringify(report, null, 1)
   const json = join(dir, REPORT_FILES.json)

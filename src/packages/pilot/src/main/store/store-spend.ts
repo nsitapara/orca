@@ -102,11 +102,12 @@ export class SpendStore {
       .map((r) => toRaw(r as never))
   }
 
-  totals(sinceDay: string): { costUsd: number; tokens: number; runs: number } {
+  // `by` applies the same filter as byGroup, so a group's total equals the sum of the rows shown.
+  totals(sinceDay: string, by?: SpendGroup): { costUsd: number; tokens: number; runs: number } {
     const r = this.db
       .prepare(
         `SELECT COALESCE(SUM(u.cost_usd), 0) AS cost, COALESCE(SUM(${TOKENS}), 0) AS tokens,
-           COUNT(DISTINCT r.id) AS runs ${FROM} WHERE u.day >= ?`
+           COUNT(DISTINCT r.id) AS runs ${FROM} WHERE u.day >= ? ${by ? GROUP_FILTER[by] : ''}`
       )
       .get(sinceDay) as { cost: number; tokens: number; runs: number }
     return { costUsd: Number(r.cost), tokens: Number(r.tokens), runs: Number(r.runs) }

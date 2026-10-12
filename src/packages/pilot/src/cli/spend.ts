@@ -29,6 +29,14 @@ function unpricedNote(r: SpendRow): string {
   return r.unpricedBuckets > 0 ? ' (some models have no price)' : ''
 }
 
+// A run can have steps in several skills or agents, so those groups' run counts needn't add up to the total's.
+function totalLabel(by: SpendGroup): string {
+  if (by === 'skill' || by === 'agent') {
+    return 'total (runs counted once)'
+  }
+  return 'total'
+}
+
 export function formatSpend(p: SpendPayload): string {
   const head = `Spend since ${p.sinceDay} (last ${p.days} ${p.days === 1 ? 'day' : 'days'}), by ${p.by}`
   if (p.rows.length === 0) {
@@ -37,7 +45,7 @@ export function formatSpend(p: SpendPayload): string {
   return [
     head,
     ...p.rows.map((r) => line(r.costUsd, r.tokens, r.runs, `${r.label}${unpricedNote(r)}`)),
-    line(p.total.costUsd, p.total.tokens, p.total.runs, 'total')
+    line(p.total.costUsd, p.total.tokens, p.total.runs, totalLabel(p.by))
   ].join('\n')
 }
 

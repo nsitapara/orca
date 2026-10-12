@@ -1,5 +1,5 @@
-import { existsSync } from 'node:fs'
-import { join, resolve } from 'node:path'
+import { existsSync, realpathSync } from 'node:fs'
+import { basename, dirname, join, resolve } from 'node:path'
 import type { UsageReportResult } from '../../shared/api-types'
 import type { PilotStore } from '../store/store'
 import { pilotUsageReportDir, pilotUsageTemplate } from '../env'
@@ -31,6 +31,18 @@ export function isReportDue(
   return lastMeasuredAt !== null && lastMeasuredAt > lastWrittenAt
 }
 
+// The real path, so a symlink or a case variant of the same folder compares equal; a folder not made yet resolves
+// through its nearest existing parent.
+function canonical(path: string): string {
+  const full = resolve(path)
+  try {
+    return realpathSync.native(full)
+  } catch {
+    const parent = dirname(full)
+    return parent === full ? full : join(canonical(parent), basename(full))
+  }
+}
+
 function messageOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
 }
@@ -59,7 +71,7 @@ export function createUsageReporter(deps: ReporterDeps): UsageReporter {
 
   function write(dir: string = deps.dir): UsageReportResult {
     const legacy = readLegacy(deps.dir)
-    if (resolve(dir) === resolve(deps.dir) && legacy === null) {
+    if (canonical(dir) === canonical(deps.dir) && legacy === null) {
       throw new Error(
         `Job 08 still owns ${deps.dir}: hand the report over first (README, "Spend and token usage"), or write elsewhere with --out <dir>`
       )
