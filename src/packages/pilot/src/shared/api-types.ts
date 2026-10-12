@@ -199,6 +199,8 @@ export type InboxItemRow = {
   switchWords: string[]
   source: 'engine' | 'import'
   vaultRef: string | null
+  // Only on the inbox list: what the card's item is called (its run's or tick's label, or the Details MR row).
+  itemLabel?: string
 }
 export type QueueState = 'not_ready' | 'ready' | 'held' | 'dispatched' | 'failed'
 export type HoldReason =

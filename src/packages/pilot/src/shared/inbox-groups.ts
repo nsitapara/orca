@@ -17,7 +17,9 @@ export type InboxGroup = {
   // Section order: worktrees, MRs, pipelines, tickets, jobs, then Clean up.
   rank: number
 }
-export type GroupableItem = Pick<InboxItemRow, 'itemKey' | 'worktreePath' | 'automationId'>
+export type GroupableItem = Pick<InboxItemRow, 'itemKey' | 'worktreePath' | 'automationId'> & {
+  itemLabel?: string
+}
 export type Section = { group: InboxGroup; items: InboxItemRow[] }
 
 const RANK = { worktree: 0, mr: 1, pipeline: 2, ticket: 3, job: 4, cleanup: 5 } as const
@@ -50,6 +52,15 @@ function after(key: string, prefix: string): string | null {
   }
   const rest = key.slice(prefix.length).trim()
   return rest === '' ? null : rest
+}
+
+// "!<iid> · <branch or title>": the item's label with a leading "!<iid> " dropped so it isn't said twice.
+function mrLabel(iid: string, itemLabel: string | undefined): string {
+  const name = (itemLabel ?? '')
+    .trim()
+    .replace(new RegExp(`^!${iid}\\b\\s*(?:·\\s*)?`), '')
+    .trim()
+  return name ? `!${iid} · ${name}` : `!${iid}`
 }
 
 // A pipeline key is `pipeline:<id>`; one that names a ref (not a number) is that ref's pipeline.
@@ -85,7 +96,9 @@ export function groupOf(
   const iid = after(key, 'mr:')
   if (iid) {
     const known = mrWorktrees.get(key)
-    return known ? worktreeGroup(known) : { key: `mr:${iid}`, label: `!${iid}`, rank: RANK.mr }
+    return known
+      ? worktreeGroup(known)
+      : { key: `mr:${iid}`, label: mrLabel(iid, item.itemLabel), rank: RANK.mr }
   }
   const pipeline = after(key, 'pipeline:')
   if (pipeline) {
@@ -131,6 +144,14 @@ export function groupItems(
   for (const item of items) {
     const group = groupOf(item, automations, mrWorktrees)
     const section = sections.get(group.key) ?? { group, items: [] }
+    // The first card of an MR group that has a name gives the group its name.
+    if (
+      group.rank === RANK.mr &&
+      section.items.length > 0 &&
+      !section.group.label.includes(' · ')
+    ) {
+      section.group = group
+    }
     section.items.push(item)
     sections.set(group.key, section)
   }

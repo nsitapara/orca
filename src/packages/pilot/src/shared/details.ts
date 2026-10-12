@@ -141,6 +141,8 @@ export type DetailsRef = {
   // The short labels on the Details bar (shared/details-summary.ts). Derived, so never part of the digest;
   // absent on refs stored before it existed (the list fills it in from the snapshot).
   summary?: string[]
+  // What the card is about, from the facts block's MR row ('' when it names none). Derived like `summary`.
+  subject?: string
 }
 // The whole of it, read once through pilot.inbox.details: the bundle, and each inlined review file's text
 // by the ref the bundle names it with.

@@ -125,9 +125,14 @@ export function listInbox(
   const people = deps.people()
   const person = filter.person
   deps.store.inbox.fillSummaries()
-  const items = deps.store.inbox
+  const listed = deps.store.inbox
     .list({ status: filter.statuses ?? WAITING })
     .filter((i) => !person || personSees(i, person, people))
+  const labels = deps.store.inbox.itemLabels(listed)
+  const items = listed.map((i) => {
+    const label = labels.get(i.id) ?? (i.itemKey?.startsWith('mr:') ? i.details?.subject : '')
+    return label ? { ...i, itemLabel: label } : i
+  })
   return {
     items,
     runLines: runLinesOf(items, runLineOf),

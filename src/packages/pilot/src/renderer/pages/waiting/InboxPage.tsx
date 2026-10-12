@@ -29,7 +29,10 @@ function withError(
 
 function SectionHeading({ section }: { section: Section }): React.JSX.Element {
   return (
-    <h2 className="sticky top-0 z-20 -mx-5 border-b border-border bg-background px-5 py-1.5 font-mono text-xs font-semibold text-muted-foreground">
+    <h2
+      title={section.group.label}
+      className="sticky top-0 z-20 -mx-5 truncate border-b border-border bg-background px-5 py-1.5 font-mono text-xs font-semibold text-muted-foreground"
+    >
       <span className="text-foreground">{section.group.label}</span> · {section.items.length}
     </h2>
   )
