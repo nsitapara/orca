@@ -153,6 +153,13 @@ describeParity(
       })
     })
 
+    it('reviews a branch with no MR yet: it is mine, in scope, and due', async () => {
+      const fresh = await decide('no-mr-yet')
+      expect(fresh.map((d) => [d.key, d.verdict, d.fields['mr.iid']])).toEqual([
+        [key(371), 'started', null]
+      ])
+    })
+
     // The ruling for 03: the one deliberate difference is real, and the harness reports it once its entry is gone.
     it('fails the other-agent quota case without its known entry', async () => {
       const file = join(CASES, 'quota-out-other-agent.json')
