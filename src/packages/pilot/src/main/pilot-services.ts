@@ -48,6 +48,7 @@ import { PilotStore } from './store/store'
 import { VaultExporter } from './vault/export'
 import { housekeepStore } from './store/housekeep'
 import { usageReporter } from './usage-report/reporter'
+import { closeAll, softly } from './pilot-lifecycle'
 
 export type PilotContext = {
   processKind: PilotStatus['process']
@@ -87,31 +88,6 @@ const log = (message: string): void => console.log(message)
 
 function messageOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
-}
-
-// One failing part of a scheduler pass (answers, the vault export) never stops the others (R13).
-export async function softly(
-  what: string,
-  work: () => unknown,
-  log: (message: string) => void
-): Promise<void> {
-  try {
-    await work()
-  } catch (error) {
-    log(`[pilot] ${what} failed: ${messageOf(error)}`)
-  }
-}
-
-// Newest first: the scheduler stops before the watcher, and both before the store closes.
-function closeAll(opened: (() => void)[]): void {
-  while (opened.length > 0) {
-    const close = opened.pop()!
-    try {
-      close()
-    } catch (error) {
-      log(`[pilot] couldn't close cleanly: ${messageOf(error)}`)
-    }
-  }
 }
 
 // Each thing opened is pushed on `opened`, so a failure part way closes exactly what is open.
@@ -310,7 +286,7 @@ export function startPilotServices(
     context = openPilot(runtime, host, options, opened)
   } catch (error) {
     host.error = messageOf(error)
-    closeAll(opened)
+    closeAll(opened, log)
     throw error
   }
   host.context = context
@@ -324,7 +300,7 @@ export function startPilotServices(
         return
       }
       stopped = true
-      closeAll(opened)
+      closeAll(opened, log)
       log(`[pilot] stopped (${processKind})`)
     }
   }
