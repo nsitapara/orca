@@ -1,0 +1,91 @@
+import { useCallback, useEffect, useState, useSyncExternalStore } from 'react'
+import { Inbox } from 'lucide-react'
+import { cn } from '@/lib/utils'
+import type { InboxListPayload } from '../../shared/inbox-types'
+import { pilotRpc } from '../api'
+import { setPilotAutomationsView, usePilotAutomationsView } from '../pages/automations-view'
+import { waitingCount } from '../pages/waiting/answer-text'
+import { pilotStore } from '../store'
+
+// The count on the sidebar item: every open card, whoever it is for (one person uses Pilot today).
+export function useWaitingTotal(): number {
+  const [total, setTotal] = useState(0)
+  const load = useCallback(() => {
+    pilotRpc<InboxListPayload>('pilot.inbox.list', {}).then(
+      (p) => setTotal(waitingCount(p.items)),
+      () => setTotal(0)
+    )
+  }, [])
+  useEffect(() => {
+    load()
+    const timer = setInterval(load, 20_000)
+    return () => clearInterval(timer)
+  }, [load])
+  return total
+}
+
+// Automations is not highlighted while the Waiting on you view shows.
+export function useAutomationsActive(pageOpen: boolean): boolean {
+  const view = usePilotAutomationsView()
+  return pageOpen && view !== 'waiting'
+}
+
+// Clicking Automations leaves the Waiting on you view first.
+export function useOpenAutomations(open: () => void): () => void {
+  return useCallback(() => {
+    setPilotAutomationsView('automations')
+    open()
+  }, [open])
+}
+
+function useActiveView(): string | undefined {
+  const store = pilotStore()
+  const subscribe = useCallback(
+    (listener: () => void) => store?.subscribe?.(listener) ?? (() => {}),
+    [store]
+  )
+  return useSyncExternalStore(subscribe, () => store?.getState().activeView)
+}
+
+function WaitingNavButton(): React.JSX.Element {
+  const total = useWaitingTotal()
+  const view = usePilotAutomationsView()
+  const activeView = useActiveView()
+  const active = activeView === 'automations' && view === 'waiting'
+  const open = (): void => {
+    setPilotAutomationsView('waiting')
+    pilotStore()?.getState().openAutomationsPage?.()
+  }
+  return (
+    <button
+      type="button"
+      onClick={open}
+      aria-current={active ? 'page' : undefined}
+      className={cn(
+        'flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] font-medium tracking-tight transition-colors',
+        active
+          ? 'bg-worktree-sidebar-accent text-worktree-sidebar-accent-foreground'
+          : 'text-worktree-sidebar-foreground/60 hover:bg-worktree-sidebar-foreground/8'
+      )}
+    >
+      <Inbox
+        className={cn('size-4 shrink-0', !active && 'text-worktree-sidebar-foreground/30')}
+        strokeWidth={active ? 2.25 : 1.75}
+      />
+      <span className="flex-1">Waiting on you</span>
+      {total > 0 ? (
+        <span className="shrink-0 rounded-full bg-primary px-1.5 py-px text-[10px] font-semibold text-primary-foreground">
+          {total}
+        </span>
+      ) : null}
+    </button>
+  )
+}
+
+export function WaitingNavItem(): React.JSX.Element | null {
+  const store = pilotStore()
+  if (!store || store.getState().settings?.showAutomationsButton === false) {
+    return null
+  }
+  return <WaitingNavButton />
+}
