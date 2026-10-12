@@ -1,6 +1,7 @@
 import { existsSync } from 'node:fs'
 import { describe, expect } from 'vitest'
 import { runTick } from '../../src/main/scheduler/tick-runner'
+import type { ScriptRunner } from '../../src/main/fields/script-runner'
 import { PilotStore } from '../../src/main/store/store'
 import type { AutomationDefinition } from '../../src/shared/definition/types'
 import type { PeopleDirectory } from '../../src/shared/people'
@@ -23,6 +24,8 @@ export type ParityJob = {
   // The files the new side reads: the automation's YAML and people.yaml.
   files: string[]
   table: VerdictTable
+  // Runs a custom field's script for real; 09's fields call the skill's own pure `sweep.py field`.
+  runScript?: ScriptRunner
   seed(store: PilotStore, f: ParityFixture): void
   load(): { def: AutomationDefinition; people: PeopleDirectory }
 }
@@ -56,10 +59,15 @@ export async function parityReport(
   try {
     job.seed(store, fixture)
     const { def, people } = job.load()
-    const result = await runTick(def, people, fixtureTickDeps(fixture, store), {
-      dryRun: true,
-      pass: fixturePass(fixture)
-    })
+    const result = await runTick(
+      def,
+      people,
+      fixtureTickDeps(fixture, store, { runScript: job.runScript }),
+      {
+        dryRun: true,
+        pass: fixturePass(fixture)
+      }
+    )
     return [
       result.error === null ? '' : `tick failed: ${result.error}`,
       ...fixtureMisses(fixture).map((what) => `missed read: ${what}`),

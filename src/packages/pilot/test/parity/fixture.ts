@@ -8,6 +8,7 @@ import {
 } from '../../src/main/fields/codex-quota-reading'
 import { cachedQuotas, type QuotaReading } from '../../src/main/fields/quota'
 import { runtimeFieldDeps } from '../../src/main/fields/runtime-field-deps'
+import type { ScriptRunner } from '../../src/main/fields/script-runner'
 import { listBusyTerminals, type BusyReads } from '../../src/main/fields/worktree-busy'
 import { registrySources } from '../../src/main/scheduler/tick-decide'
 import type { TickDeps } from '../../src/main/scheduler/tick-runner'
@@ -302,7 +303,11 @@ export function fixtureBusyReads(f: ParityFixture): BusyReads {
   }
 }
 
-export function fixtureTickDeps(f: ParityFixture, store: PilotStore): TickDeps {
+export function fixtureTickDeps(
+  f: ParityFixture,
+  store: PilotStore,
+  o: { runScript?: ScriptRunner } = {}
+): TickDeps {
   const now = () => f.now
   return {
     store,
@@ -324,9 +329,7 @@ export function fixtureTickDeps(f: ParityFixture, store: PilotStore): TickDeps {
       pendingAnswers: (automationId, itemKey) =>
         store.queue.pendingAnswerCount(automationId, itemKey),
       cache: store.fields,
-      runScript: async (req) => {
-        throw miss(f, `script ${req.command}`)
-      },
+      runScript: o.runScript ?? ((req) => Promise.reject(miss(f, `script ${req.command}`))),
       engineEnv: { binDir: '', dataDir: '/tmp/pilot-parity' },
       now
     },
