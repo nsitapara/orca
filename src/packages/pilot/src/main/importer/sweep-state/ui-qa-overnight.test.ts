@@ -85,6 +85,14 @@ describe('04 state import', () => {
       "no Orca worktree at /wt/gone; its QA state isn't imported"
     ],
     [
+      'a removed worktree once, though both files name it',
+      {
+        'ui-qa/seen.json': { '/wt/gone': A },
+        'ui-qa/failed.json': { '/wt/gone': { head: B, at: 1_760_000_000, outcome: 'stopped' } }
+      },
+      "no Orca worktree at /wt/gone; its QA state isn't imported"
+    ],
+    [
       'a tested value that is not a sha',
       { 'ui-qa/seen.json': { '/wt/a': 'HEAD' } },
       '/wt/a: "HEAD" isn\'t a commit sha; skipped'

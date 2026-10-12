@@ -51,9 +51,11 @@ export const uiQaOvernightMapper: SweepStateMapper = {
     const handled: ImportedHandled[] = []
     const seenRows: ImportedSeen[] = []
     const byPath = new Map(read.worktrees().map((w) => [w.path, w]))
+    const gone = new Set<string>()
     const worktreeOf = (path: string): string | null => {
       const wt = byPath.get(path)
-      if (!wt) {
+      if (!wt && !gone.has(path)) {
+        gone.add(path)
         notes.push(`no Orca worktree at ${path}; its QA state isn't imported`)
       }
       return wt?.id ?? null
