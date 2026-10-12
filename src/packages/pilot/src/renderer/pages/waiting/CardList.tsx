@@ -3,6 +3,7 @@ import type { InboxItemRow } from '../../../shared/api-types'
 import type { Section } from '../../../shared/inbox-groups'
 import { ageLabel, jobCode } from './answer-text'
 import { ALL } from './InboxHeader'
+import { OpenWorktreeButton } from './WorktreeLink'
 
 // The left list: the same sections, in the same order, as the cards.
 export function CardList({
@@ -42,18 +43,21 @@ export function CardList({
       </button>
       {sections.map((s) => (
         <div key={s.group.key} className="flex flex-col gap-0.5">
-          <button
-            type="button"
-            aria-pressed={group === s.group.key}
-            title={s.group.label}
-            onClick={() => onGroup(s.group.key)}
-            className={cn(
-              'truncate px-2 pt-2.5 pb-1 text-left font-mono text-[11.5px] font-semibold hover:text-foreground',
-              group === s.group.key ? 'text-foreground' : 'text-muted-foreground'
-            )}
-          >
-            {s.group.label} · {s.items.length}
-          </button>
+          <div className="flex items-center gap-1 pt-2.5 pb-1 pr-1">
+            <button
+              type="button"
+              aria-pressed={group === s.group.key}
+              title={s.group.label}
+              onClick={() => onGroup(s.group.key)}
+              className={cn(
+                'truncate min-w-0 flex-1 px-2 text-left font-mono text-[11.5px] font-semibold hover:text-foreground',
+                group === s.group.key ? 'text-foreground' : 'text-muted-foreground'
+              )}
+            >
+              {s.group.label} · {s.items.length}
+            </button>
+            <OpenWorktreeButton group={s.group} />
+          </div>
           {s.items.map((i) => (
             <button
               key={i.id}

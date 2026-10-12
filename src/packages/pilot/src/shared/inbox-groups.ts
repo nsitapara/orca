@@ -14,6 +14,8 @@ export type InboxGroup = {
   // Stable id of the group: the filter's value and the section's key.
   key: string
   label: string
+  // For a worktree group: the app's worktree id when an item key named it (`wt:<id>`); else looked up by path.
+  worktreeId?: string
   // Section order: worktrees, MRs, pipelines, tickets, jobs, then Clean up.
   rank: number
 }
@@ -31,9 +33,10 @@ function folderName(path: string): string {
   return trimmed.split('/').at(-1) || trimmed
 }
 
-function worktreeGroup(path: string): InboxGroup {
+function worktreeGroup(path: string, worktreeId?: string): InboxGroup {
   const trimmed = path.replace(/\/+$/, '')
-  return { key: `wt:${trimmed}`, label: folderName(trimmed), rank: RANK.worktree }
+  const group = { key: `wt:${trimmed}`, label: folderName(trimmed), rank: RANK.worktree }
+  return worktreeId ? { ...group, worktreeId } : group
 }
 
 // The path in a `wt:<repoId>::<path>` item key, or null when the key is not that shape.
@@ -91,7 +94,7 @@ export function groupOf(
   const key = item.itemKey ?? ''
   const wt = wtPathOf(key)
   if (wt) {
-    return worktreeGroup(wt)
+    return worktreeGroup(wt, key.slice('wt:'.length))
   }
   const iid = after(key, 'mr:')
   if (iid) {
@@ -144,6 +147,9 @@ export function groupItems(
   for (const item of items) {
     const group = groupOf(item, automations, mrWorktrees)
     const section = sections.get(group.key) ?? { group, items: [] }
+    if (group.worktreeId && !section.group.worktreeId) {
+      section.group = { ...section.group, worktreeId: group.worktreeId }
+    }
     // The first card of an MR group that has a name gives the group its name.
     if (
       group.rank === RANK.mr &&

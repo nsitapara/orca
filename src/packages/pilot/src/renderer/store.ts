@@ -10,6 +10,8 @@ export type PilotStoreState = {
   activeView?: string
   openAutomationsPage?(): void
   settings?: { showAutomationsButton?: boolean } | null
+  // Read by the Inbox to open a worktree from its section.
+  worktreesByRepo?: Record<string, { id: string; path: string }[]>
 }
 export type PilotStore = {
   getState(): PilotStoreState

@@ -11,6 +11,7 @@ import { InboxCard } from './InboxCard'
 import { ImportNotice } from './ImportNotice'
 import { InboxStyle } from './inbox-style'
 import { UpNextPanel } from './UpNextPanel'
+import { WorktreeName } from './WorktreeLink'
 import { useElementWidth } from './use-element-width'
 import { useListOpen } from './use-list-open'
 import { useWaiting } from './use-waiting'
@@ -33,7 +34,7 @@ function SectionHeading({ section }: { section: Section }): React.JSX.Element {
       title={section.group.label}
       className="sticky top-0 z-20 -mx-5 truncate border-b border-border bg-background px-5 py-1.5 font-mono text-xs font-semibold text-muted-foreground"
     >
-      <span className="text-foreground">{section.group.label}</span> · {section.items.length}
+      <WorktreeName group={section.group} /> · {section.items.length}
     </h2>
   )
 }
