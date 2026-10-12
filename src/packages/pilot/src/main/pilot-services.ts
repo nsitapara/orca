@@ -60,6 +60,8 @@ export type PilotContext = {
   actions: ActionCatalog
   // Saved answers' dispatcher (Task 24c); null in a process that doesn't run the scheduler.
   dispatcher: AnswerDispatcher | null
+  // This process runs the scheduler: only here does a real tick or an ask-first start launch anything.
+  schedulerOn: boolean
   writeUsageReport?: (dir?: string) => UsageReportResult
   // Opens or focuses a step's agent session (pilot.session.resume); absent where there is no runtime.
   resumeSession?: (req: { runId: string; stepIdx: number }) => Promise<SessionResumeResult>
@@ -120,6 +122,7 @@ function openPilot(
   opened: (() => void)[]
 ): PilotContext {
   const now = Date.now
+  const schedulerOn = options.schedulerEnabled ?? false
   mkdirSync(host.dataDir, { recursive: true })
   const store = PilotStore.open(join(host.dataDir, 'pilot-automations.db'))
   opened.push(() => store.close())
@@ -181,7 +184,8 @@ function openPilot(
         store,
         now,
         definitions: () => definitions.current().definitions,
-        start: (req) => wired.engine.startRun(req)
+        start: (req) => wired.engine.startRun(req),
+        schedulerOn: () => schedulerOn
       })
     ]
   })
@@ -228,20 +232,19 @@ function openPilot(
       })
     : null
   // Only the process that runs the scheduler applies answers, like the vault export.
-  const dispatcher =
-    (options.schedulerEnabled ?? false)
-      ? wireAnswerDispatcher({
-          runtime,
-          store,
-          now,
-          definitions: () => definitions.current().definitions,
-          inbox,
-          actions,
-          quotas,
-          facts: fieldDeps,
-          log
-        })
-      : null
+  const dispatcher = schedulerOn
+    ? wireAnswerDispatcher({
+        runtime,
+        store,
+        now,
+        definitions: () => definitions.current().definitions,
+        inbox,
+        actions,
+        quotas,
+        facts: fieldDeps,
+        log
+      })
+    : null
   const readUsage = stepUsageReader(defaultUsagePaths(), now)
   const usageReports = usageReporter(store, () => definitions.current().definitions, now, log)
   const scheduler = new PilotScheduler({
@@ -264,7 +267,7 @@ function openPilot(
   })
   opened.push(() => scheduler.stop())
   // The attach hooks decide (pilotSchedulerEnabled); a caller that doesn't say gets no scheduler.
-  if (options.schedulerEnabled ?? false) {
+  if (schedulerOn) {
     sweepStaleStarts(store, now, log)
     scheduler.start()
   } else {
@@ -279,6 +282,7 @@ function openPilot(
     scheduler,
     actions,
     dispatcher,
+    schedulerOn,
     writeUsageReport: (dir) => usageReports.write(dir),
     resumeSession: (req) => resumeStepSession(runtimeResumeDeps(runtime, store, fieldDeps), req)
   }

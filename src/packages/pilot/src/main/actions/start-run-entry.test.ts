@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 import { parseAutomationYaml } from '../../shared/definition/parse'
 import { PilotStore } from '../store/store'
+import { SCHEDULER_OFF } from '../scheduler/scheduler'
 import { startRunEntry } from './start-run-entry'
 
 const parsed = parseAutomationYaml(
@@ -15,7 +16,12 @@ if (!parsed.ok) {
 }
 const def = parsed.definition
 
-function setup(start = vi.fn().mockResolvedValue(undefined), status = 'asking', tick = true) {
+function setup(
+  start = vi.fn().mockResolvedValue(undefined),
+  status = 'asking',
+  tick = true,
+  schedulerOn = true
+) {
   const store = PilotStore.open(join(mkdtempSync(join(tmpdir(), 'pilot-start-run-')), 'db.sqlite'))
   const tickId = store.startTick('rev', false, 1)
   store.recordDecisions(
@@ -47,7 +53,13 @@ function setup(start = vi.fn().mockResolvedValue(undefined), status = 'asking', 
   return {
     store,
     start,
-    entry: startRunEntry({ store, now: () => 50, definitions: () => [def], start })
+    entry: startRunEntry({
+      store,
+      now: () => 50,
+      definitions: () => [def],
+      start,
+      schedulerOn: () => schedulerOn
+    })
   }
 }
 
@@ -104,7 +116,16 @@ describe('start_run', () => {
       'a run whose tick has aged out',
       setup(undefined, 'asking', false),
       ARGS,
-      { outcome: 'failed', detail: 'Run rev-1-ask has no recorded tick to start from' }
+      {
+        outcome: 'failed',
+        detail: 'Run rev-1-ask has no recorded tick to start from'
+      }
+    ],
+    [
+      "a process that doesn't run the scheduler",
+      setup(undefined, 'asking', true, false),
+      ARGS,
+      { outcome: 'failed', detail: SCHEDULER_OFF }
     ]
   ])('refuses %s', async (_name, s, args, expected) => {
     expect(await s.entry.run(args, { dryRun: false, runId: 'rev-1-ask' })).toMatchObject(expected)
@@ -142,7 +163,9 @@ describe('start_run', () => {
     store.markHandled('rev', '1588:cd00', 'rev-1-ask', 1)
     await entry.run(ARGS, { dryRun: false, runId: 'rev-1-ask' })
     expect(start).toHaveBeenCalledWith(
-      expect.objectContaining({ decision: expect.objectContaining({ onceKey: '1588:cd00' }) })
+      expect.objectContaining({
+        decision: expect.objectContaining({ onceKey: '1588:cd00' })
+      })
     )
   })
 

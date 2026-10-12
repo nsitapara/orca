@@ -78,7 +78,8 @@ function setup(powers = '') {
       reload: () => loaded,
       scheduler: null as never,
       actions,
-      dispatcher: null
+      dispatcher: null,
+      schedulerOn: true
     }
   }
   const methods = buildPilotMethods(host) as unknown as Callable[]

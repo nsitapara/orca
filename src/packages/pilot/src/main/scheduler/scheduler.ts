@@ -24,6 +24,10 @@ export type SchedulerDeps = {
 
 export type TickNowResult = TickResult | { status: 'busy' } | { status: 'unknown' }
 
+// What a real tick or an ask-first start says in a process that doesn't run the scheduler: its run engine,
+// answers and stale-start sweep live only where it runs, so a run started elsewhere would go unwatched.
+export const SCHEDULER_OFF = "Pilot's scheduler isn't running in this process"
+
 export const SCHEDULER_INTERVAL_MS = 15_000
 export const SCHEDULER_START_DELAY_MS = 60_000
 export const MAX_CONCURRENT_TICKS = 4

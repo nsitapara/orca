@@ -5,6 +5,7 @@ import { printResult } from '../../../../cli/format'
 import { RuntimeClientError } from '../../../../cli/runtime/types'
 import type { ActivityTick, PilotStatus, TickOutcome } from '../shared/api-types'
 import { parseAutomationYaml } from '../shared/definition/parse'
+import { bindingFromEnv } from './cli-values'
 import { formatActivity, formatDecisions, formatPilotStatus } from './format'
 
 // tick and dry-run hit GitLab and read facts for every item, so they get far more than the
@@ -48,11 +49,12 @@ export const PILOT_HANDLERS: Record<string, CommandHandler> = {
     )
     printResult(response, json, (outcome) => formatDecisions(outcome, id))
   },
+  // Says where it is called from: Pilot refuses a tick from an agent in a run.
   'automations tick': async ({ flags, client, json }) => {
     const id = getRequiredStringFlag(flags, 'id')
     const response = await client.call<TickOutcome>(
       'pilot.automations.tickNow',
-      { id },
+      { id, ...bindingFromEnv(process.env) },
       { timeoutMs: LONG_CALL_TIMEOUT_MS }
     )
     printResult(response, json, (outcome) => formatDecisions(outcome, id))
