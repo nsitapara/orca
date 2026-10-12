@@ -1,4 +1,11 @@
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  writeFileSync
+} from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
@@ -19,9 +26,9 @@ if (!def.ok || !people.ok) {
 }
 const DAY = 24 * 60 * 60_000
 
-function setup() {
+function setup(dirName = 'Automations', name?: string) {
   const root = mkdtempSync(join(tmpdir(), 'pilot-vault-'))
-  const dir = join(root, 'Agent Work', 'Automations')
+  const dir = join(root, 'Agent Work', dirName)
   const folder = join(dir, '05 · Fix failed CI on my MRs')
   mkdirSync(folder, { recursive: true })
   const store = PilotStore.open(join(root, 'db.sqlite'))
@@ -58,21 +65,37 @@ function setup() {
     skill: 'fix-gitlab-ci',
     startedAt: 1
   })
+  const logs: string[] = []
   let clock = new Date(2026, 9, 11, 9, 5).getTime()
-  const exporter = new VaultExporter({
-    store,
-    now: () => clock,
-    dir,
-    definitions: () => [def.ok ? def.definition : (null as never)],
-    log: () => {}
-  })
+  const make = () =>
+    new VaultExporter({
+      store,
+      now: () => clock,
+      dir,
+      definitions: () => [
+        def.ok ? (name ? { ...def.definition, name } : def.definition) : (null as never)
+      ],
+      log: (m) => logs.push(m)
+    })
+  const exporter = make()
   const inbox = {
     store,
     now: () => clock,
     definitions: () => [def.ok ? def.definition : (null as never)],
     people: () => (people.ok ? people.directory : (null as never))
   }
-  return { store, folder, exporter, inbox, advance: (ms: number) => (clock += ms), at: () => clock }
+  return {
+    make,
+    dir,
+    logs,
+    root,
+    store,
+    folder,
+    exporter,
+    inbox,
+    advance: (ms: number) => (clock += ms),
+    at: () => clock
+  }
 }
 
 describe('VaultExporter: Runs.md', () => {
@@ -181,11 +204,98 @@ describe('jobFolderFor', () => {
     ['Fix failed CI on my MRs', '05 · Fix failed CI on my MRs'],
     ['05 · Fix failed CI on my MRs', '05 · Fix failed CI on my MRs'],
     ['Exact name', 'Exact name'],
-    ['New one', 'New one']
+    ['New one', 'New one'],
+    ['05 · ../../x', '05 · ..-..-x'],
+    ['New/one', 'New-one']
   ])('%s → %s', (name, folder) => {
     const dir = mkdtempSync(join(tmpdir(), 'pilot-jobs-'))
     mkdirSync(join(dir, '05 · Fix failed CI on my MRs'))
     mkdirSync(join(dir, 'Exact name'))
     expect(jobFolderFor(dir, name)).toBe(join(dir, folder))
+  })
+})
+
+describe('jobFolderFor refuses to leave the automations folder', () => {
+  it.each([['..'], ['.'], ['']])('"%s" has no folder', (name) => {
+    const dir = mkdtempSync(join(tmpdir(), 'pilot-jobs-'))
+    expect(jobFolderFor(dir, name)).toBeNull()
+  })
+})
+
+describe('VaultExporter: hardening', () => {
+  it('exports nothing and warns for a job whose name would escape the vault', () => {
+    const { root, exporter, store, inbox, logs, at } = setup('Automations', '..')
+    store.runs.update('run-1', { status: 'done', finishedAt: at() })
+    addInboxItem(inbox, { runId: 'run-1', type: 'question', title: 'Q?', options: ['a', 'b'] })
+    expect(() => exporter.pass()).not.toThrow()
+    expect(existsSync(join(root, 'Agent Work', 'Runs.md'))).toBe(false)
+    expect(existsSync(join(root, 'Agent Work', 'web-1493-a.md'))).toBe(false)
+    expect(logs.join('\n')).toContain('outside')
+  })
+
+  it("one note that can't be written doesn't stop the others", () => {
+    const { folder, exporter, inbox, logs } = setup()
+    mkdirSync(join(folder, 'web-1493-a.md'))
+    addInboxItem(inbox, { runId: 'run-1', type: 'question', title: 'Q?', options: ['a', 'b'] })
+    addInboxItem(inbox, {
+      automationId: 'ci',
+      itemKey: 'repo:r',
+      type: 'question',
+      title: 'Job wide?',
+      options: ['a', 'b']
+    })
+    exporter.pass()
+    expect(readFileSync(join(folder, 'Items.md'), 'utf8')).toContain('Job wide?')
+    expect(logs.join('\n')).toContain('web-1493-a.md')
+  })
+
+  it('a failing Runs.md write does not stop the notes', () => {
+    const { store, folder, exporter, inbox, at } = setup()
+    mkdirSync(join(folder, 'Runs.md'))
+    store.runs.update('run-1', { status: 'done', finishedAt: at() })
+    addInboxItem(inbox, {
+      automationId: 'ci',
+      itemKey: 'repo:r',
+      type: 'question',
+      title: 'Job wide?',
+      options: ['a', 'b']
+    })
+    exporter.pass()
+    expect(readFileSync(join(folder, 'Items.md'), 'utf8')).toContain('Job wide?')
+  })
+
+  it('removes a block whose cards all closed while Pilot was down', () => {
+    const { make, store, folder, exporter, inbox, advance } = setup()
+    const added = addInboxItem(inbox, {
+      runId: 'run-1',
+      type: 'question',
+      title: 'Which image?',
+      options: ['e2e', 'unit']
+    })
+    exporter.pass()
+    store.inbox.update(added.id!, { status: 'done', outcome: 'done: e2e' }, inbox.now())
+    advance(2 * DAY)
+    make().pass()
+    expect(readFileSync(join(folder, 'web-1493-a.md'), 'utf8')).not.toContain('pilot:inbox')
+  })
+
+  it('keeps hand-written text when a begin marker has no end, and says so', () => {
+    const { folder, exporter, inbox, logs } = setup()
+    writeFileSync(join(folder, 'web-1493-a.md'), '# n\nmine\n<!-- pilot:inbox:begin ci -->\nhand\n')
+    addInboxItem(inbox, { runId: 'run-1', type: 'question', title: 'Q?', options: ['a', 'b'] })
+    exporter.pass()
+    expect(readFileSync(join(folder, 'web-1493-a.md'), 'utf8')).toContain(
+      'mine\n<!-- pilot:inbox:begin ci -->\nhand\n'
+    )
+    expect(logs.join('\n')).toContain('markers')
+  })
+
+  it("links Runs.md to the job note only under a vault's Agent Work folder", () => {
+    const { store, folder, exporter, at } = setup('Elsewhere')
+    store.runs.update('run-1', { status: 'done', finishedAt: at() })
+    exporter.pass()
+    const runs = readFileSync(join(folder, 'Runs.md'), 'utf8')
+    expect(runs).toContain('Job: [[05 · Fix failed CI on my MRs]].')
+    expect(readdirSync(folder)).toContain('Runs.md')
   })
 })

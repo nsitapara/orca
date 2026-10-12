@@ -92,29 +92,37 @@ function stateWords(item: InboxItemRow): string {
   if (item.status === 'answered') {
     return 'answered, not applied yet'
   }
-  return `✓ ${item.outcome ?? item.status}`
+  return `✓ ${field(item.outcome) || item.status}`
+}
+
+// One line, and never starting like a vault checkbox item ("- [ ]"): these fields come from agents and people.
+function field(text: string | null | undefined): string {
+  return oneLine(text).replace(/^-\s*\[/, '- (')
 }
 
 // No checkbox on purpose: vault.py's ITEM pattern needs "- [ ]", so no vault reader takes these as items.
 function itemLines(item: InboxItemRow, location: string): string[] {
-  const lines = [`- **${item.type}** · ${item.title} — \`${location}\` · ${stateWords(item)}`]
-  const context = [item.context, item.suggested ? `Suggested: ${item.suggested}` : ''].filter(
-    Boolean
-  )
+  const lines = [
+    `- **${field(item.type)}** · ${field(item.title)} — \`${field(location)}\` · ${stateWords(item)}`
+  ]
+  const context = [
+    field(item.context),
+    item.suggested ? `Suggested: ${field(item.suggested)}` : ''
+  ].filter(Boolean)
   if (context.length) {
     lines.push(`  ${context.join(' ')}`)
   }
   if (item.options.length) {
     lines.push(
-      `  Options: ${item.options.map((o) => [o.label, o.meaning].filter(Boolean).join(' — ')).join(' | ')}`
+      `  Options: ${item.options.map((o) => field([o.label, o.meaning].filter(Boolean).join(' — '))).join(' | ')}`
     )
   }
   if (item.answer) {
     const said = item.answer.text ?? item.options[item.answer.option ?? -1]?.label ?? ''
-    lines.push(`  Answer: ${said}`)
+    lines.push(`  Answer: ${field(said)}`)
   }
   for (const reply of item.replies) {
-    lines.push(`  Reply: ${reply}`)
+    lines.push(`  Reply: ${field(reply)}`)
   }
   return lines
 }
@@ -122,11 +130,12 @@ function itemLines(item: InboxItemRow, location: string): string[] {
 export function itemsBlock(
   automationId: string,
   items: InboxItemRow[],
-  locationOf: (item: InboxItemRow) => string
+  locationOf: (item: InboxItemRow) => string,
+  at: number
 ): string {
   return [
     begin(automationId),
-    '## Waiting on you in Pilot',
+    `## Waiting on you in Pilot · ${stamp(at)}`,
     "Read-only: answer on Pilot's Waiting on you page. Pilot rewrites this section after every change.",
     '',
     ...items.flatMap((i) => itemLines(i, locationOf(i))),
@@ -135,10 +144,25 @@ export function itemsBlock(
   ].join('\n')
 }
 
+// True when this automation's markers can't be paired (a begin with no end, an end with no begin, or the
+// end first): the block can't be found, so nothing in the note may be spliced.
+export function hasBrokenMarkers(content: string, automationId: string): boolean {
+  const from = content.indexOf(begin(automationId))
+  const to = content.indexOf(end(automationId))
+  return (from === -1) !== (to === -1) || (from !== -1 && to < from)
+}
+
 // Replace this automation's block, append it, or (block null) remove it. Nothing else in the note moves.
+export function hasMarkers(content: string, automationId: string): boolean {
+  return content.includes(begin(automationId))
+}
+
 export function replaceBlock(content: string, automationId: string, block: string | null): string {
   const from = content.indexOf(begin(automationId))
   const to = content.indexOf(end(automationId))
+  if (hasBrokenMarkers(content, automationId)) {
+    return content
+  }
   if (from === -1 || to === -1) {
     if (block === null) {
       return content

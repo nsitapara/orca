@@ -1,11 +1,20 @@
-import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
-import { basename, dirname, join, relative } from 'node:path'
+import {
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  renameSync,
+  writeFileSync
+} from 'node:fs'
+import { basename, dirname, join, relative, sep } from 'node:path'
 import type { InboxItemRow, RunRow } from '../../shared/api-types'
 import type { AutomationDefinition } from '../../shared/definition/types'
 import { WAITING } from '../inbox/inbox-service'
 import { branchOfRun } from '../inbox/run-fields'
 import type { PilotStore } from '../store/store'
 import {
+  hasBrokenMarkers,
+  hasMarkers,
   insertRunsLine,
   itemsBlock,
   replaceBlock,
@@ -20,6 +29,10 @@ const DAY = 24 * 60 * 60_000
 const LOOKBACK = 7 * DAY
 const NOT_EXPORTED = new Set(['running', 'asking', 'cancelled'])
 const CLOSED = ['done', 'obsolete', 'stale', 'dismissed'] as const
+
+function messageOf(error: unknown): string {
+  return error instanceof Error ? error.message : String(error)
+}
 
 export type VaultExportDeps = {
   store: PilotStore
@@ -44,6 +57,8 @@ function writeNote(path: string, text: string): void {
 export class VaultExporter {
   // note path → signature of the cards last written there, so an unchanged note isn't rewritten
   private readonly written = new Map<string, string>()
+  private readonly warned = new Set<string>()
+  private scanned = false
 
   constructor(private readonly deps: VaultExportDeps) {}
 
@@ -51,17 +66,36 @@ export class VaultExporter {
     return this.deps.definitions().find((d) => d.id === id) ?? null
   }
 
-  private folderOf(def: AutomationDefinition): string {
-    return jobFolderFor(this.deps.dir, def.name)
+  // Null (and a warning, once per name) for a job name that would reach outside the automations folder.
+  private folderOf(def: AutomationDefinition): string | null {
+    const folder = jobFolderFor(this.deps.dir, def.name)
+    if (folder === null && !this.warned.has(def.name)) {
+      this.warned.add(def.name)
+      this.deps.log(
+        `[pilot] vault export: "${def.name}" names a folder outside ${this.deps.dir}; not exporting it`
+      )
+    }
+    return folder
   }
 
-  private exportRun(run: RunRow, def: AutomationDefinition, at: number): void {
+  // [[Agent Work/Automations/<job>/<job>|<job>]] when the folder sits in a vault's Agent Work/Automations,
+  // else just the job's name: a vault-relative path can't be known for any other layout.
+  private jobLink(folder: string): string {
+    const name = basename(folder)
+    const dir = this.deps.dir
+    if (basename(dir) === 'Automations' && basename(dirname(dir)) === 'Agent Work') {
+      return `[[${relative(dirname(dirname(dir)), join(folder, name))}|${name}]]`
+    }
+    return `[[${name}]]`
+  }
+
+  private exportRun(run: RunRow, def: AutomationDefinition, at: number): boolean {
     const folder = this.folderOf(def)
+    if (folder === null) {
+      return false
+    }
     const path = join(folder, 'Runs.md')
-    const root = dirname(dirname(this.deps.dir))
-    const header = runsHeader(
-      `[[${relative(root, join(folder, basename(folder)))}|${basename(folder)}]]`
-    )
+    const header = runsHeader(this.jobLink(folder))
     const line = `- ${stamp(run.finishedAt ?? at)} · ${runSummary(run, this.deps.store.runs.steps(run.id))}\n`
     const content = insertRunsLine(readNote(path) ?? header, header, line)
     writeNote(path, touchFrontmatter(content, at, basename(folder)))
@@ -74,6 +108,7 @@ export class VaultExporter {
       kind: 'vault_export',
       payload: { path }
     })
+    return true
   }
 
   private exportRuns(at: number): number {
@@ -87,8 +122,13 @@ export class VaultExporter {
       if (done.has(run.id) || NOT_EXPORTED.has(run.status) || run.imported || !def) {
         continue
       }
-      this.exportRun(run, def, at)
-      lines += 1
+      try {
+        if (this.exportRun(run, def, at)) {
+          lines += 1
+        }
+      } catch (error) {
+        this.deps.log(`[pilot] vault export of run ${run.id} failed: ${messageOf(error)}`)
+      }
     }
     return lines
   }
@@ -98,10 +138,14 @@ export class VaultExporter {
     return fromRun ?? (item.worktreePath ? basename(item.worktreePath) : null)
   }
 
-  private notePathOf(item: InboxItemRow, def: AutomationDefinition): string {
-    const branch = this.branchOf(item)
-    const name = branch ? `${branch.replace(/\//g, '-')}.md` : 'Items.md'
-    return join(this.folderOf(def), name)
+  private notePathOf(item: InboxItemRow, def: AutomationDefinition): string | null {
+    const folder = this.folderOf(def)
+    if (folder === null) {
+      return null
+    }
+    const branch = this.branchOf(item)?.replace(/[/\\:]/g, '-')
+    const name = branch && branch !== '.' && branch !== '..' ? `${branch}.md` : 'Items.md'
+    return join(folder, name)
   }
 
   private cardsByNote(
@@ -119,6 +163,9 @@ export class VaultExporter {
         continue
       }
       const path = this.notePathOf(item, def)
+      if (path === null) {
+        continue
+      }
       const entry = notes.get(path) ?? { def, items: [] }
       entry.items.push(item)
       notes.set(path, entry)
@@ -132,15 +179,74 @@ export class VaultExporter {
     items: InboxItemRow[],
     at: number
   ): void {
-    const block = items.length ? itemsBlock(def.id, items, (i) => this.branchOf(i) ?? 'job') : null
+    const block = items.length
+      ? itemsBlock(def.id, items, (i) => this.branchOf(i) ?? 'job', at)
+      : null
     const existing = readNote(path)
     if (existing === null && block === null) {
+      return
+    }
+    if (existing !== null && hasBrokenMarkers(existing, def.id)) {
+      this.deps.log(
+        `[pilot] vault export: ${path} has unpaired pilot:inbox markers; left untouched`
+      )
       return
     }
     const base = existing ?? `# ${basename(path, '.md')}\n`
     writeNote(
       path,
       touchFrontmatter(replaceBlock(base, def.id, block), at, basename(dirname(path)))
+    )
+  }
+
+  private tryBlock(
+    path: string,
+    def: AutomationDefinition,
+    items: InboxItemRow[],
+    at: number
+  ): boolean {
+    try {
+      this.writeBlock(path, def, items, at)
+      return true
+    } catch (error) {
+      this.deps.log(`[pilot] vault export of ${path} failed: ${messageOf(error)}`)
+      return false
+    }
+  }
+
+  // After a restart `written` is empty: notes that kept a block of cards which have all closed since are found
+  // by their markers, and (being absent from `live`) get it removed.
+  private staleBlocks(live: Map<string, unknown>, at: number): number {
+    let removed = 0
+    for (const def of this.deps.definitions()) {
+      const folder = this.folderOf(def)
+      if (folder === null || !existsSync(folder)) {
+        continue
+      }
+      for (const file of readdirSync(folder).filter((f) => f.endsWith('.md'))) {
+        const path = join(folder, file)
+        try {
+          if (
+            !live.has(path) &&
+            hasMarkers(readNote(path) ?? '', def.id) &&
+            this.tryBlock(path, def, [], at)
+          ) {
+            removed += 1
+          }
+        } catch (error) {
+          this.deps.log(`[pilot] vault export of ${path} failed: ${messageOf(error)}`)
+        }
+      }
+    }
+    return removed
+  }
+
+  private ownerOf(path: string): AutomationDefinition | null {
+    return (
+      this.deps.definitions().find((d) => {
+        const folder = this.folderOf(d)
+        return folder !== null && path.startsWith(folder + sep)
+      }) ?? null
     )
   }
 
@@ -152,26 +258,42 @@ export class VaultExporter {
       if (this.written.get(path) === signature) {
         continue
       }
-      this.writeBlock(path, def, items, at)
-      this.written.set(path, signature)
-      written += 1
+      if (this.tryBlock(path, def, items, at)) {
+        this.written.set(path, signature)
+        written += 1
+      }
     }
     for (const [path, signature] of this.written) {
       if (notes.has(path) || signature === '') {
         continue
       }
-      const owner = this.deps.definitions().find((d) => path.startsWith(this.folderOf(d)))
-      if (owner) {
-        this.writeBlock(path, owner, [], at)
+      const owner = this.ownerOf(path)
+      if (owner && this.tryBlock(path, owner, [], at)) {
         written += 1
       }
       this.written.set(path, '')
+    }
+    if (!this.scanned) {
+      this.scanned = true
+      written += this.staleBlocks(notes, at)
     }
     return written
   }
 
   pass(): { lines: number; notes: number } {
     const at = this.deps.now()
-    return { lines: this.exportRuns(at), notes: this.exportNotes(at) }
+    return {
+      lines: this.part('runs', () => this.exportRuns(at)),
+      notes: this.part('notes', () => this.exportNotes(at))
+    }
+  }
+
+  private part(what: string, work: () => number): number {
+    try {
+      return work()
+    } catch (error) {
+      this.deps.log(`[pilot] vault export of ${what} failed: ${messageOf(error)}`)
+      return 0
+    }
   }
 }
