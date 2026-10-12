@@ -2,7 +2,7 @@
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { AutomationListPayload, PilotStatus } from '../../shared/api-types'
-import { setPilotAutomationsView } from './automations-view'
+import { setPilotAutomationsView, setPilotOpenAutomation } from './automations-view'
 import { detail, summary } from './fixtures'
 
 const pilotRpc = vi.fn()
@@ -58,6 +58,8 @@ describe('PilotAutomationsPage', () => {
   afterEach(() => {
     cleanup()
     pilotRpc.mockReset()
+    setPilotOpenAutomation(null)
+    setPilotAutomationsView('automations')
   })
 
   it('lists the YAML automations only, and opens one full page', async () => {
@@ -78,6 +80,18 @@ describe('PilotAutomationsPage', () => {
     expect(await screen.findByRole('heading', { name: 'Waiting on you' })).toBeTruthy()
     act(() => setPilotAutomationsView('automations'))
     expect(await screen.findByRole('button', { name: /Fix failed CI/ })).toBeTruthy()
+  })
+
+  it('returns to the list after a visit to Waiting on you', async () => {
+    serve(list)
+    render(<PilotAutomationsPage />)
+    fireEvent.click(await screen.findByRole('button', { name: /Fix failed CI/ }))
+    expect(await screen.findByText('No ticks yet.')).toBeTruthy()
+    act(() => setPilotAutomationsView('waiting'))
+    await screen.findByRole('heading', { name: 'Waiting on you' })
+    act(() => setPilotAutomationsView('automations'))
+    expect(await screen.findByRole('button', { name: /Fix failed CI/ })).toBeTruthy()
+    expect(screen.queryByText('No ticks yet.')).toBeNull()
   })
 
   it("never loads Orca's own Automations page", async () => {

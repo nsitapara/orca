@@ -45,4 +45,4 @@ Which hooks were added for the YAML engine, and why:
 The table says which of these are in place.
 | sidebar-waiting-item | src/renderer/src/components/sidebar/SidebarNav.tsx | <PilotWaiting.WaitingNavItem /> | Waiting on you under Automations, with its count |
 | sidebar-automations-active | src/renderer/src/components/sidebar/SidebarNav.tsx | PilotWaiting.useAutomationsActive( | Automations isn't highlighted while Waiting on you shows |
-| sidebar-automations-open | src/renderer/src/components/sidebar/SidebarNav.tsx | PilotWaiting.useOpenAutomations( | clicking Automations leaves Waiting on you |
+| sidebar-automations-open | src/renderer/src/components/sidebar/SidebarNav.tsx | PilotWaiting.useOpenAutomationsPage( | clicking Automations leaves Waiting on you |

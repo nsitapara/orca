@@ -10,17 +10,21 @@ import { pilotStore } from '../store'
 // The count on the sidebar item: every open card, whoever it is for (one person uses Pilot today).
 export function useWaitingTotal(): number {
   const [total, setTotal] = useState(0)
-  const load = useCallback(() => {
-    pilotRpc<InboxListPayload>('pilot.inbox.list', {}).then(
-      (p) => setTotal(waitingCount(p.items)),
-      () => setTotal(0)
-    )
-  }, [])
   useEffect(() => {
+    let alive = true
+    const load = (): void => {
+      pilotRpc<InboxListPayload>('pilot.inbox.list', {}).then(
+        (p) => alive && setTotal(waitingCount(p.items)),
+        () => alive && setTotal(0)
+      )
+    }
     load()
     const timer = setInterval(load, 20_000)
-    return () => clearInterval(timer)
-  }, [load])
+    return () => {
+      alive = false
+      clearInterval(timer)
+    }
+  }, [])
   return total
 }
 
@@ -36,6 +40,13 @@ export function useOpenAutomations(open: () => void): () => void {
     setPilotAutomationsView('automations')
     open()
   }, [open])
+}
+
+// Upstream's one-line hook: the store selector lives here.
+export function useOpenAutomationsPage(
+  useStore: (selector: (s: { openAutomationsPage: () => void }) => () => void) => () => void
+): () => void {
+  return useOpenAutomations(useStore((s) => s.openAutomationsPage))
 }
 
 function useActiveView(): string | undefined {
