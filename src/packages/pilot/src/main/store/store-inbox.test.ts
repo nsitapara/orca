@@ -243,3 +243,23 @@ describe('InboxStore', () => {
     expect(store.inbox.openCountForRun('run-9')).toBe(0)
   })
 })
+
+describe('fillSummaries', () => {
+  it('skips a row it cannot read and still fills the others', () => {
+    const store = PilotStore.open(':memory:')
+    const good: DetailsSnapshot = {
+      ref: DETAILS,
+      bundle: { version: 1, item: 'x', blocks: [{ type: 'shots', shots: [{ file: 'a.png' }] }] },
+      texts: {}
+    }
+    store.inbox.add(item('bad', { details: DETAILS }), {
+      ref: DETAILS,
+      bundle: null,
+      texts: {}
+    } as never)
+    store.inbox.add(item('good', { details: DETAILS }), good)
+    expect(() => store.inbox.fillSummaries()).not.toThrow()
+    expect(store.inbox.get('bad')?.details?.summary).toBeUndefined()
+    expect(store.inbox.get('good')?.details?.summary).toEqual(['1 screenshot'])
+  })
+})

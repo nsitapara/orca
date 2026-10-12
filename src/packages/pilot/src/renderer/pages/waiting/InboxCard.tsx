@@ -178,11 +178,21 @@ export function InboxCard({
           off={off}
           onToggle={toggle}
           onSave={onSave}
-          onSaved={() => setEditing(false)}
+          onSaved={() => {
+            setEditing(false)
+            setUnsaved(false)
+          }}
           onPick={setUnsaved}
         />
       ) : (
-        <Saved item={item} queued={queued} onChange={() => setEditing(true)} />
+        <Saved
+          item={item}
+          queued={queued}
+          onChange={() => {
+            setUnsaved(false)
+            setEditing(true)
+          }}
+        />
       )}
       {error ? <p className="text-sm text-destructive">{error}</p> : null}
     </article>

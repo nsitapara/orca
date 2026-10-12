@@ -224,12 +224,17 @@ export class InboxStore {
       )
       .all() as { id: string; r: string; s: string }[]
     for (const row of rows) {
-      const ref = JSON.parse(row.r) as DetailsRef
-      const snap = JSON.parse(row.s) as DetailsSnapshot
-      const summary = summaryOf(snap.bundle, snap.texts, ref.drafted)
-      this.db
-        .prepare('UPDATE inbox_items SET details_ref_json = ? WHERE id = ?')
-        .run(JSON.stringify({ ...ref, summary }), row.id)
+      // One unreadable row must not fail the whole list: it stays as it was.
+      try {
+        const ref = JSON.parse(row.r) as DetailsRef
+        const snap = JSON.parse(row.s) as DetailsSnapshot
+        const summary = summaryOf(snap.bundle, snap.texts, ref.drafted)
+        this.db
+          .prepare('UPDATE inbox_items SET details_ref_json = ? WHERE id = ?')
+          .run(JSON.stringify({ ...ref, summary }), row.id)
+      } catch {
+        continue
+      }
     }
   }
 

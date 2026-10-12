@@ -19,6 +19,8 @@ export function ImportNotice({ onImported }: { onImported: () => void }): React.
   const [report, setReport] = useState<ImportReport | null>(null)
   const [open, setOpen] = useState(false)
   const alive = useRef(true)
+  const openRef = useRef(false)
+  openRef.current = open
   const preview = useCallback(async () => {
     try {
       const next = await pilotRpc<ImportReport>(
@@ -30,8 +32,9 @@ export function ImportNotice({ onImported }: { onImported: () => void }): React.
         setReport(next)
       }
     } catch {
+      // A failed look keeps what was last seen while the panel is open (it would unmount under the user).
       if (alive.current) {
-        setReport(null)
+        setReport((last) => (openRef.current ? last : null))
       }
     }
   }, [])
