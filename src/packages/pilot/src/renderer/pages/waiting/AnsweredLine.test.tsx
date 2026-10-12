@@ -68,6 +68,7 @@ const entry = (over: Partial<QueueEntry>): QueueEntry =>
 
 const state = (over: Partial<AnswerState>): AnswerState => ({
   locked: false,
+  sentBeforePilot: false,
   state: 'not_ready',
   readyAt: NOW + 179_000,
   reason: null,
@@ -171,6 +172,29 @@ describe('an answered card', () => {
         expect.objectContaining({ id: 'in_a', text: '', digest: 'dig1' })
       )
     )
+  })
+
+  it('says an answer sent before Pilot was sent, with no Undo and no waiting; Change answer only because the server allows it', async () => {
+    serve(CARD, [], state({ state: 'dispatched', sentBeforePilot: true, readyAt: NOW - 5 }))
+    render(<InboxPage />)
+    const line = await screen.findByRole('status')
+    expect(line.textContent).toContain('Answer sent before Pilot')
+    expect(line.textContent).not.toContain('Waiting for Pilot')
+    expect(within(line).queryByRole('button', { name: 'Undo' })).toBeNull()
+    fireEvent.click(within(line).getByRole('button', { name: 'Change answer' }))
+    await waitFor(() =>
+      expect(pilotRpc).toHaveBeenCalledWith(
+        'pilot.inbox.answer',
+        expect.objectContaining({ id: 'in_a', text: '', digest: 'dig1' })
+      )
+    )
+  })
+
+  it('shows no Change answer for a sent-before-Pilot answer the server has locked', async () => {
+    serve(CARD, [], state({ state: 'dispatched', sentBeforePilot: true, locked: true }))
+    render(<InboxPage />)
+    const line = await screen.findByRole('status')
+    expect(within(line).queryByRole('button')).toBeNull()
   })
 
   it('keeps Undo for a held row, with its reason', async () => {

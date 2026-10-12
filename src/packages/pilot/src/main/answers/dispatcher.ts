@@ -11,7 +11,7 @@ import type { MrBlock } from '../inbox/mr-state'
 import { dispatchToAgent, type AgentDispatchDeps } from './answer-run'
 import { MAX_ATTEMPTS } from './answer-run-end'
 import { applyScript } from './apply-script'
-import { dueGroups, mrHold, type Entry, type Group } from './dispatch-groups'
+import { dueGroups, lockEntries, mrHold, type Entry, type Group } from './dispatch-groups'
 import { hold, worktreeHold, type Hold, type HoldDeps } from './holds'
 import type { AgentAnswer } from './prompt'
 import { routeOf } from './queue-view'
@@ -238,7 +238,8 @@ export class AnswerDispatcher {
       return
     }
     const forAgent: { entry: Entry; answer: AgentAnswer }[] = []
-    for (const read of mr.open) {
+    const locked = lockEntries(this.deps.inbox.store, mr.open, this.deps.inbox.now())
+    for (const read of locked) {
       const entry = this.fresh(read)
       if (!entry) {
         continue

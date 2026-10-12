@@ -541,7 +541,7 @@ describe('listInbox answerStates', () => {
 
   it('tells the page, per answered card, whether its answer is locked and where its row stands', () => {
     const { store, deps } = setup()
-    const states = ['settling', 'held', 'ready', 'failed', 'none'] as const
+    const states = ['settling', 'held', 'ready', 'failed', 'none', 'sent', 'running'] as const
     for (const name of states) {
       store.inbox.add(card(name))
       const answer = { option: 0, text: 'approve', digest: name, via: 'page' as const }
@@ -558,13 +558,80 @@ describe('listInbox answerStates', () => {
     row('held', 50, { state: 'held', holdReason: 'typing', holdDetail: 'someone is typing' })
     row('ready', 50, { state: 'ready' })
     row('failed', 50, { state: 'failed', holdReason: 'retry', holdDetail: 'no main checkout' })
+    // Sent before Pilot took over (no run), and sent to an answer run that is still running.
+    row('sent', 50, { state: 'dispatched' })
+    store.runs.create({
+      id: 'ans-1',
+      automationId: 'ci',
+      tickId: null,
+      itemKey: 'mr:1',
+      itemLabel: '!1',
+      worktreePath: null,
+      startedAt: 5,
+      status: 'running',
+      trigger: 'answer'
+    })
+    row('running', 50, { state: 'dispatched', dispatchedRunId: 'ans-1' })
     const { answerStates } = listInbox(deps, {})
     expect(answerStates).toEqual({
-      settling: { locked: false, state: 'not_ready', readyAt: 500_000, reason: null },
-      held: { locked: false, state: 'held', readyAt: 50, reason: 'someone is typing' },
-      ready: { locked: true, state: 'ready', readyAt: 50, reason: null },
-      failed: { locked: false, state: 'failed', readyAt: 50, reason: 'no main checkout' },
-      none: { locked: false, state: null, readyAt: null, reason: null }
+      settling: {
+        locked: false,
+        sentBeforePilot: false,
+        state: 'not_ready',
+        readyAt: 500_000,
+        reason: null
+      },
+      held: {
+        locked: false,
+        sentBeforePilot: false,
+        state: 'held',
+        readyAt: 50,
+        reason: 'someone is typing'
+      },
+      ready: { locked: true, sentBeforePilot: false, state: 'ready', readyAt: 50, reason: null },
+      running: {
+        locked: true,
+        sentBeforePilot: false,
+        state: 'dispatched',
+        readyAt: 50,
+        reason: null
+      },
+      sent: {
+        locked: false,
+        sentBeforePilot: true,
+        state: 'dispatched',
+        readyAt: 50,
+        reason: null
+      },
+      failed: {
+        locked: false,
+        sentBeforePilot: false,
+        state: 'failed',
+        readyAt: 50,
+        reason: 'no main checkout'
+      },
+      none: { locked: false, sentBeforePilot: false, state: null, readyAt: null, reason: null }
     })
+  })
+
+  it('reads the queue and the runs once for the whole list, not once per answered card', () => {
+    const { store, deps } = setup()
+    for (let i = 0; i < 6; i++) {
+      const id = `c${i}`
+      store.inbox.add(card(id))
+      const answer = { option: 0, text: 'approve', digest: id, via: 'page' as const }
+      store.inbox.update(id, { status: 'answered', answer, answeredAt: 10, answeredBy: 'nish' }, 10)
+      store.queue.enqueue(id, 500_000, 10)
+    }
+    const calls: string[] = []
+    const db = (store as unknown as { db: { prepare: (sql: string) => unknown } }).db
+    const prepare = db.prepare.bind(db)
+    db.prepare = (sql: string) => {
+      calls.push(sql)
+      return prepare(sql)
+    }
+    listInbox(deps, {})
+    expect(calls.filter((c) => /FROM queue/.test(c))).toHaveLength(1)
+    expect(calls.filter((c) => /FROM runs/.test(c)).length).toBeLessThanOrEqual(2)
   })
 })

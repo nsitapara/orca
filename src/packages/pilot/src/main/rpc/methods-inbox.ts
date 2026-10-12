@@ -15,7 +15,9 @@ import {
   type InboxDeps
 } from '../inbox/inbox-service'
 import type { PilotContext } from '../pilot-services'
+import type { RpcCallerIdentity } from '../../../../../main/runtime/rpc/rpc-caller-identity'
 import { refuseOutsideScope } from './details-scope'
+import { runBinding, type CallBinding } from './run-binding'
 import { resolveChannelRun, resolveChannelStep } from './run-channel'
 
 const TYPES = ['question', 'flagged', 'default', 'action', 'bug', 'left_for_you'] as const
@@ -51,7 +53,30 @@ const List = z.object({
   statuses: z.array(z.enum(STATUSES)).optional()
 })
 const Tick = Id.extend({ outcome: z.string().min(1).max(2000) })
-const Reply = Id.extend({ text: z.string().min(1).max(4000) })
+// The run binding is the CLI's terminal and env step (never trusted from a paired device or the desktop).
+const Reply = Id.extend({
+  text: z.string().min(1).max(4000),
+  terminal: z.string().min(1).optional(),
+  runId: z.string().min(1).optional(),
+  stepIdx: z.number().int().nonnegative().optional()
+})
+
+// The run a reply comes from: only a local CLI call bound to a run of a Pilot step has one. A binding that
+// can't be resolved is no run at all.
+function replyingRun(
+  c: PilotContext,
+  caller: RpcCallerIdentity | undefined,
+  p: CallBinding
+): string | null {
+  if (caller?.kind !== 'local-cli') {
+    return null
+  }
+  try {
+    return runBinding(c, p)?.runId ?? null
+  } catch {
+    return null
+  }
+}
 
 // A card an RPC call closes leaves its run alone (onResolved null): only the scheduler's tick and answers
 // pass cancel an ask-first run whose card closed, in the process that runs the engine.
@@ -182,7 +207,10 @@ export function buildInboxMethods(ctx: () => PilotContext) {
       name: 'pilot.inbox.reply',
       permission: 'workspace',
       params: Reply,
-      handler: (p) => replyToInboxItem(inboxDeps(ctx()), p.id, p.text)
+      handler: (p, rpc) => {
+        const c = ctx()
+        return replyToInboxItem(inboxDeps(c), p.id, p.text, replyingRun(c, rpc?.caller, p))
+      }
     })
   ]
 }

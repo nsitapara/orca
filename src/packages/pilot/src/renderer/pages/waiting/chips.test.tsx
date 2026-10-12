@@ -27,6 +27,7 @@ describe('chip colours (the console’s: answers.html)', () => {
     const at = (status: InboxItemRow['status']) => ({ status })
     const st = (locked: boolean, state: AnswerState['state']): AnswerState => ({
       locked,
+      sentBeforePilot: false,
       state,
       readyAt: 100,
       reason: null

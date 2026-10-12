@@ -94,9 +94,9 @@ export function countdown(ms: number): string {
 }
 
 // Where a saved answer stands, from the server's answer state. Settling and held can be undone; applying
-// (locked: it may be being carried out) cannot; failed offers Change answer; waiting is an unlocked answer
+// (locked: it may be being carried out) cannot; failed and sent-before-Pilot offer Change answer; waiting is an unlocked answer
 // nothing has picked up yet (past its settle time, or no row), which can still be undone.
-export type Phase = 'settling' | 'held' | 'applying' | 'failed' | 'waiting'
+export type Phase = 'settling' | 'held' | 'applying' | 'failed' | 'sent' | 'waiting'
 
 export function phaseOf(state: AnswerState | null, now: number): Phase {
   if (state?.locked) {
@@ -104,6 +104,9 @@ export function phaseOf(state: AnswerState | null, now: number): Phase {
   }
   if (state?.state === 'failed') {
     return 'failed'
+  }
+  if (state?.sentBeforePilot) {
+    return 'sent'
   }
   if (state?.state === 'held') {
     return 'held'

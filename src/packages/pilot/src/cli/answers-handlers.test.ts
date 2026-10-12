@@ -12,7 +12,16 @@ function ctx(flags: Record<string, string>, call: unknown): HandlerContext {
 }
 
 describe('inbox tick and reply', () => {
-  afterEach(() => vi.restoreAllMocks())
+  // The reply names the run it comes from (the env's binding); none is set here.
+  beforeEach(() => {
+    for (const name of ['ORCA_TERMINAL_HANDLE', 'PILOT_RUN_ID', 'PILOT_STEP_IDX']) {
+      vi.stubEnv(name, '')
+    }
+  })
+  afterEach(() => {
+    vi.restoreAllMocks()
+    vi.unstubAllEnvs()
+  })
 
   it.each([
     ['inbox tick', { id: 'in_1', outcome: 'done: pushed' }, 'pilot.inbox.tick'],
@@ -24,6 +33,25 @@ describe('inbox tick and reply', () => {
     await ANSWERS_HANDLERS[key](ctx(flags, call))
     expect(call).toHaveBeenCalledWith(method, flags)
     expect(log).toHaveBeenCalledWith('in_1 · done · done: pushed · Push?')
+  })
+})
+
+describe('inbox reply names the run it comes from', () => {
+  afterEach(() => vi.unstubAllEnvs())
+  it('sends the env binding with the reply', async () => {
+    vi.stubEnv('ORCA_TERMINAL_HANDLE', 'term-9')
+    vi.stubEnv('PILOT_RUN_ID', 'ans-1')
+    vi.stubEnv('PILOT_STEP_IDX', '0')
+    const call = vi.fn().mockResolvedValue({ result: { id: 'in_1', status: 'open', title: 't' } })
+    vi.spyOn(console, 'log').mockImplementation(() => {})
+    await ANSWERS_HANDLERS['inbox reply'](ctx({ id: 'in_1', text: 'Which one?' }, call))
+    expect(call).toHaveBeenCalledWith('pilot.inbox.reply', {
+      id: 'in_1',
+      text: 'Which one?',
+      terminal: 'term-9',
+      runId: 'ans-1',
+      stepIdx: 0
+    })
   })
 })
 
