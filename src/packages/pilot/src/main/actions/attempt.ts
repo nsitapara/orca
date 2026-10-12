@@ -24,7 +24,8 @@ export type AttemptRequest = {
   stepIdx?: number | null
   // Set for a card's Approve: the card is re-read and re-checked before anything runs.
   inboxItemId: string | null
-  // A person approved it (a card's Approve, or a person at the CLI outside any run): powers don't apply.
+  // A person approved it (a card's Approve, or a call from Pilot's desktop app or a paired device, as the
+  // RPC transport proved it; never the CLI): powers don't apply.
   approved: boolean
   // The approved card's digest; absent, the args' own.
   digest?: string
@@ -48,6 +49,9 @@ export const EXIT_CODES: Record<AttemptResult['outcome'], number> = {
   not_yet: 5,
   asked: 6
 }
+
+export const OUTSIDE_A_RUN =
+  'Outside a Pilot run, approve actions in Pilot (Waiting on you), or run act.py directly.'
 
 function argsDigest(action: string, args: Record<string, unknown>): string {
   return createHash('sha256')
@@ -199,7 +203,8 @@ async function runEntry(
 // The one way anything in Pilot makes an outside effect. Every call re-checks, fail closed: the action
 // is in the catalog and its args fit; a run's own attempt needs the run's automation to have the power
 // (else its person is asked, and nothing runs); a card's approval re-reads the card and the powers
-// (approvedCardProblem); only a person's own call (approved, no card) runs on their word. Task 24c's
+// (approvedCardProblem); only a person's own call (approved, no card: the transport proved Pilot's desktop
+// app or a paired device) runs on their word, and an unapproved call with no run only dry-runs. Task 24c's
 // Approve / Apply now calls this with { approved: true, inboxItemId: card.id, runId: card.runId,
 // digest: card.digest }, so every approved card goes through those checks.
 export async function attemptAction(
@@ -225,7 +230,10 @@ export async function attemptAction(
     return runEntry(deps, req, entry, args)
   }
   if (!req.runId) {
-    return refused(deps, req, actionFailed(`${entry.name} isn't approved and no run asked for it`))
+    // Nobody approved it and no run asked: only a dry run, which changes nothing, goes ahead.
+    return req.dryRun
+      ? runEntry(deps, req, entry, args)
+      : refused(deps, req, actionFailed(OUTSIDE_A_RUN))
   }
   const run = deps.store.runs.get(req.runId)
   if (!run) {

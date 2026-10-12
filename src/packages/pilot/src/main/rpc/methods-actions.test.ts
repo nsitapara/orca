@@ -2,6 +2,7 @@ import { mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
+import type { RpcCallerIdentity } from '../../../../../main/runtime/rpc/rpc-caller-identity'
 import type { ActionEntry } from '../actions/types'
 import { loadDefinitions } from '../definitions/loader'
 import type { PilotHost } from '../pilot-services'
@@ -11,8 +12,10 @@ import { buildPilotMethods } from './methods'
 type Callable = {
   name: string
   params: { safeParse(v: unknown): { success: boolean } } | null
-  handler(p: unknown): unknown
+  handler(p: unknown, ctx: { caller?: RpcCallerIdentity }): unknown
 }
+
+const LOCAL: RpcCallerIdentity = { kind: 'local-cli' }
 
 const CI =
   'name: Fix CI\nrepo: r\nschedule: manual\nitems: { kind: merge_request }\nsteps: [ { agent: claude, prompt: x } ]\ninbox: nish\n'
@@ -79,7 +82,13 @@ function setup(powers = '') {
   }
   const methods = buildPilotMethods(host) as unknown as Callable[]
   const find = (name: string) => methods.find((m) => m.name === name)!
-  return { store, push, find, call: (name: string, p: unknown) => find(name).handler(p) }
+  // The transport stamps who is calling (rpc-caller-identity.ts); agents reach Pilot as the local CLI.
+  const call = (
+    name: string,
+    p: unknown,
+    ctx: { caller?: RpcCallerIdentity } = { caller: LOCAL }
+  ) => find(name).handler(p, ctx)
+  return { store, push, find, call }
 }
 
 const PUSH = { action: 'push', args: { argv: ['a'] } }
@@ -101,16 +110,65 @@ describe('action RPC', () => {
     ])
   })
 
-  it("enforces the env step's run powers, and treats a caller with no step at all as a person", async () => {
+  const OUTSIDE =
+    'Outside a Pilot run, approve actions in Pilot (Waiting on you), or run act.py directly.'
+  const DESKTOP: RpcCallerIdentity = { kind: 'desktop' }
+  const PHONE: RpcCallerIdentity = { kind: 'paired-device', deviceId: 'ipad' }
+  const BOUND = { runId: 'run-2', stepIdx: 0 }
+
+  // Approval comes only from the transport's caller identity (a person's own app or paired device),
+  // never from params: an agent that drops its binding is an unbound local CLI, and is refused.
+  it.each<[string, RpcCallerIdentity | undefined, Record<string, unknown>, string, object]>([
+    ['desktop, unbound', DESKTOP, {}, '', { outcome: 'done' }],
+    ['a paired device, unbound', PHONE, {}, '', { outcome: 'done' }],
+    ['desktop, naming a run without its power', DESKTOP, BOUND, '', { outcome: 'done' }],
+    ['the local CLI, unbound', LOCAL, {}, 'push', { outcome: 'failed', detail: OUTSIDE }],
+    [
+      'the local CLI, unbound, in a terminal of its own',
+      LOCAL,
+      { terminal: 'my-own-tab' },
+      'push',
+      { outcome: 'failed', detail: OUTSIDE }
+    ],
+    ['the local CLI bound to a step without the power', LOCAL, BOUND, '', { outcome: 'asked' }],
+    ['the local CLI bound to a step with the power', LOCAL, BOUND, 'push', { outcome: 'done' }],
+    [
+      'no caller identity, unbound',
+      undefined,
+      {},
+      'push',
+      { outcome: 'failed', detail: "Pilot can't tell who is calling; nothing runs" }
+    ],
+    [
+      'no caller identity, bound',
+      undefined,
+      BOUND,
+      'push',
+      { outcome: 'failed', detail: "Pilot can't tell who is calling; nothing runs" }
+    ]
+  ])('%s', async (_name, caller, target, powers, expected) => {
+    const { push, call } = setup(powers)
+    const ctx = caller ? { caller } : {}
+    expect(await call('pilot.action.run', { ...PUSH, ...target }, ctx)).toMatchObject(expected)
+    expect(vi.mocked(push.run).mock.calls.length).toBe(
+      'outcome' in expected && expected.outcome === 'done' ? 1 : 0
+    )
+  })
+
+  it.each<[string, RpcCallerIdentity | undefined, number]>([
+    ['the local CLI, unbound, may dry-run', LOCAL, 1],
+    ['no caller identity may not even dry-run', undefined, 0]
+  ])('%s', async (_name, caller, runs) => {
     const { push, call } = setup()
-    expect(await call('pilot.action.run', { ...PUSH, runId: 'run-1', stepIdx: 0 })).toMatchObject({
-      outcome: 'asked'
-    })
-    expect(push.run).not.toHaveBeenCalled()
-    expect(await call('pilot.action.run', { ...PUSH, terminal: 'my-own-tab' })).toMatchObject({
-      outcome: 'done'
-    })
-    expect(await call('pilot.action.run', PUSH)).toMatchObject({ outcome: 'done' })
+    await call('pilot.action.run', { ...PUSH, dryRun: true }, caller ? { caller } : {})
+    expect(push.run).toHaveBeenCalledTimes(runs)
+    if (runs) {
+      expect(push.run).toHaveBeenCalledWith(PUSH.args, { dryRun: true, runId: null })
+    }
+  })
+
+  it('lists the catalog for any caller', () => {
+    expect(setup().call('pilot.action.list', null, {})).toHaveLength(1)
   })
 
   it("takes the powers of the step bound to the caller's terminal, never the env's", async () => {

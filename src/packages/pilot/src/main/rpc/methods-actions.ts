@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import { defineMethod } from '../../../../../main/runtime/rpc/core'
-import { attemptAction, type AttemptDeps } from '../actions/attempt'
+import type { RpcCallerIdentity } from '../../../../../main/runtime/rpc/rpc-caller-identity'
+import { attemptAction, type AttemptDeps, type AttemptResult } from '../actions/attempt'
 import type { PilotContext } from '../pilot-services'
 import { inboxDeps } from './methods-inbox'
 import { resolveChannelStep } from './run-channel'
@@ -29,10 +30,17 @@ export function attemptDeps(c: PilotContext): AttemptDeps {
   }
 }
 
-// Whose powers apply (Task 22b ruling): the step starting or running on the caller's terminal, else the
-// env's PILOT_RUN_ID/PILOT_STEP_IDX only while that step is active in an open run (run-channel's resolver,
-// which refuses anything else). A caller with neither, no Pilot step on its terminal and no run in its
-// env, is a person acting on their own approval: null.
+export const NO_CALLER = "Pilot can't tell who is calling; nothing runs"
+
+// A person's own approval comes only from what the transport proved (rpc-caller-identity.ts): Pilot's
+// desktop app or a paired device. Never from params, and never for the local CLI, which agents use too.
+function personCalling(caller: RpcCallerIdentity | undefined): boolean {
+  return caller?.kind === 'desktop' || caller?.kind === 'paired-device'
+}
+
+// Whose powers apply to a local CLI caller (Task 22b ruling): the step starting or running on its terminal,
+// else the env's PILOT_RUN_ID/PILOT_STEP_IDX only while that step is active in an open run (run-channel's
+// resolver, which refuses anything else). With neither it is bound to no run (null), and approves nothing.
 export function actionCaller(
   c: PilotContext,
   p: Pick<z.infer<typeof ActionRun>, 'terminal' | 'runId' | 'stepIdx'>
@@ -50,17 +58,22 @@ export function buildActionMethods(ctx: () => PilotContext) {
       name: 'pilot.action.run',
       permission: 'workspace',
       params: ActionRun,
-      handler: (p) => {
+      handler: async (p, rpc): Promise<AttemptResult> => {
         const c = ctx()
-        const caller = actionCaller(c, p)
+        const req = { action: p.action, args: p.args, dryRun: p.dryRun ?? false, inboxItemId: null }
+        if (personCalling(rpc.caller)) {
+          return attemptAction(attemptDeps(c), { ...req, runId: null, approved: true })
+        }
+        if (rpc.caller?.kind !== 'local-cli') {
+          return { outcome: 'failed', detail: NO_CALLER, link: null, log: null, onYou: false }
+        }
+        // Bound: the run's powers apply. Unbound: only a dry run (attemptAction refuses the rest).
+        const bound = actionCaller(c, p)
         return attemptAction(attemptDeps(c), {
-          action: p.action,
-          args: p.args,
-          dryRun: p.dryRun ?? false,
-          runId: caller?.runId ?? null,
-          stepIdx: caller?.stepIdx ?? null,
-          inboxItemId: null,
-          approved: caller === null
+          ...req,
+          runId: bound?.runId ?? null,
+          stepIdx: bound?.stepIdx ?? null,
+          approved: false
         })
       }
     }),
