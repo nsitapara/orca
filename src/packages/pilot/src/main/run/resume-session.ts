@@ -1,6 +1,7 @@
 import type { OrcaRuntimeService } from '../../../../../main/runtime/orca-runtime'
 import { getAgentResumeArgv } from '../../../../../shared/agent-resume-argv'
 import type { RunRow, SessionResumeResult, StepRow } from '../../shared/api-types'
+import { isSessionId } from '../../shared/session-id'
 import type { WorktreeFactDeps } from '../fields/worktree-facts'
 import type { PilotStore } from '../store/store'
 import { runtimeSessionTerminals } from './launch'
@@ -21,12 +22,11 @@ export type ResumeDeps = SessionLook & {
 }
 
 const RESUMABLE: Record<string, 'claude' | 'codex'> = { claude: 'claude', codex: 'codex' }
-// Session ids are uuids or rollout ids; anything else never reaches a shell command line.
-const SAFE_ID = /^[A-Za-z0-9._-]+$/
 
 export function resumeCommand(agent: string, sessionId: string): string | null {
   const kind = RESUMABLE[agent]
-  if (!kind || !SAFE_ID.test(sessionId)) {
+  // A session id (shared/session-id.ts) only: anything else never reaches a shell command line.
+  if (!kind || !isSessionId(sessionId)) {
     return null
   }
   return getAgentResumeArgv(kind, { key: 'session_id', id: sessionId })?.join(' ') ?? null

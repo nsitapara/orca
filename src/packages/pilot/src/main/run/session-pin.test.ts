@@ -12,28 +12,48 @@ describe('sessionPatch', () => {
     [
       'a Codex step takes the first id its hooks report',
       step(null),
-      { id: 'c1', transcriptPath: '/r/c1.jsonl' },
-      { sessionId: 'c1', transcriptPath: '/r/c1.jsonl' }
+      {
+        id: '00000000-0000-4000-8000-000000000031',
+        transcriptPath: '/r/00000000-0000-4000-8000-000000000031.jsonl'
+      },
+      {
+        sessionId: '00000000-0000-4000-8000-000000000031',
+        transcriptPath: '/r/00000000-0000-4000-8000-000000000031.jsonl'
+      }
     ],
     [
       'the first id without a path yet',
       step(null),
-      { id: 'c1', transcriptPath: null },
-      { sessionId: 'c1' }
+      { id: '00000000-0000-4000-8000-000000000031', transcriptPath: null },
+      { sessionId: '00000000-0000-4000-8000-000000000031' }
     ],
     [
       'a later session in the same tab never re-points the step',
-      step('c1', '/r/c1.jsonl'),
-      { id: 'c2', transcriptPath: '/r/c2.jsonl' },
+      step('00000000-0000-4000-8000-000000000031', '/r/00000000-0000-4000-8000-000000000031.jsonl'),
+      {
+        id: '00000000-0000-4000-8000-000000000032',
+        transcriptPath: '/r/00000000-0000-4000-8000-000000000032.jsonl'
+      },
       null
     ],
     [
       'a pinned Claude id gets its transcript path from its own hook row',
-      step('s1'),
-      { id: 's1', transcriptPath: '/t/s1.jsonl' },
-      { transcriptPath: '/t/s1.jsonl' }
+      step('00000000-0000-4000-8000-000000000033'),
+      {
+        id: '00000000-0000-4000-8000-000000000033',
+        transcriptPath: '/t/00000000-0000-4000-8000-000000000033.jsonl'
+      },
+      { transcriptPath: '/t/00000000-0000-4000-8000-000000000033.jsonl' }
     ],
-    ['nothing new', step('s1', '/t/s1.jsonl'), { id: 's1', transcriptPath: '/t/s1.jsonl' }, null]
+    [
+      'nothing new',
+      step('00000000-0000-4000-8000-000000000033', '/t/00000000-0000-4000-8000-000000000033.jsonl'),
+      {
+        id: '00000000-0000-4000-8000-000000000033',
+        transcriptPath: '/t/00000000-0000-4000-8000-000000000033.jsonl'
+      },
+      null
+    ]
   ])('%s', (_name, s, seen, expected) => {
     expect(sessionPatch(s, seen)).toEqual(expected)
   })

@@ -11,7 +11,7 @@ import {
   type StepStarter,
   type StepStartRequest
 } from './advance'
-import { rememberLearnedSession } from './agent-step'
+import { rememberLearnedSession } from './worktree-session'
 import { claudeTranscriptCost, type CostReader } from './cost'
 import {
   makeShellSteps,

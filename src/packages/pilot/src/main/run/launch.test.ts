@@ -80,7 +80,7 @@ function setup(launch: Launch, over: Partial<LauncherDeps> = {}) {
     },
     launchTerminal: vi.fn(launch),
     modeText: async () => null,
-    newSessionId: () => 'sess-pinned',
+    newSessionId: () => '00000000-0000-4000-8000-000000000013',
     now: () => 7,
     transcriptExists: async () => true,
     ...over
@@ -118,7 +118,7 @@ describe('makeLauncher', () => {
             PILOT_POWERS: 'commit,push',
             AGENT_RUN: 'run-1'
           },
-          argv: ['--session-id', 'sess-pinned']
+          argv: ['--session-id', '00000000-0000-4000-8000-000000000013']
         }
       }
     ])
@@ -127,7 +127,7 @@ describe('makeLauncher', () => {
       status: 'running',
       terminalHandle: 'term_1',
       paneKey: 'tab:leaf',
-      sessionId: 'sess-pinned',
+      sessionId: '00000000-0000-4000-8000-000000000013',
       startedAt: 7
     })
   })
@@ -306,7 +306,7 @@ const noPause = async () => {}
 // The runtime's view of a terminal: whether an agent is in the foreground and its state (what
 // upstream's send guard reads), and the session the pane's hooks report.
 function runtimeSeeing(look: AgentLook = {}, more: Record<string, unknown> = {}) {
-  const session = 'session' in look ? look.session : 's-1'
+  const session = 'session' in look ? look.session : '00000000-0000-4000-8000-000000000011'
   const reads = look.reads ?? [look.running ?? true]
   let read = 0
   return {
@@ -350,7 +350,13 @@ describe('runtimeLauncherDeps', () => {
   // screen (B6); anything unreadable is busy, never gone.
   it.each<[string, Partial<typeof idleWorktrees>, AgentLook, string | null, SessionTerminalState]>([
     ['an idle agent running this session, nobody typing', {}, {}, 'p', 'free'],
-    ['an idle agent running another session', {}, { session: 's-2' }, 'p', 'other'],
+    [
+      'an idle agent running another session',
+      {},
+      { session: '00000000-0000-4000-8000-000000000012' },
+      'p',
+      'other'
+    ],
     ['an idle agent whose session is unknown', {}, { session: null }, 'p', 'other'],
     ['closed', { terminalAlive: async () => false }, {}, 'p', 'gone'],
     ['an agent that exited, leaving a shell', {}, { running: false }, 'p', 'gone'],
@@ -366,7 +372,12 @@ describe('runtimeLauncherDeps', () => {
   ])('sessionTerminals.state: %s', async (_name, worktrees, look, paneKey, expected) => {
     const seen = { ...idleWorktrees, ...worktrees }
     const deps = runtimeLauncherDeps(runtimeSeeing(look), seen, () => 1, runs(), noPause)
-    expect(await deps.sessionTerminals?.state({ handle: 't', paneKey }, 's-1')).toBe(expected)
+    expect(
+      await deps.sessionTerminals?.state(
+        { handle: 't', paneKey },
+        '00000000-0000-4000-8000-000000000011'
+      )
+    ).toBe(expected)
   })
 
   // Title and foreground caches lag, so "its agent exited" needs fresh evidence for about a second, as
@@ -381,9 +392,12 @@ describe('runtimeLauncherDeps', () => {
       const pause = vi.fn(async (_ms: number) => {})
       const runtime = runtimeSeeing({ reads })
       const deps = runtimeLauncherDeps(runtime, idleWorktrees, () => 1, runs(), pause)
-      expect(await deps.sessionTerminals?.state({ handle: 't', paneKey: 'p' }, 's-1')).toBe(
-        expected
-      )
+      expect(
+        await deps.sessionTerminals?.state(
+          { handle: 't', paneKey: 'p' },
+          '00000000-0000-4000-8000-000000000011'
+        )
+      ).toBe(expected)
       expect(pause.mock.calls).toEqual(Array.from({ length: waits }, () => [150]))
     }
   )
@@ -483,23 +497,39 @@ describe('openAgentTerminal', () => {
       'a new Claude session is pinned',
       'claude',
       { kind: 'new' },
-      ['--session-id', 'uuid-9'],
-      'uuid-9'
+      ['--session-id', '00000000-0000-4000-8000-000000000019'],
+      '00000000-0000-4000-8000-000000000019'
     ],
     ['a new Codex session is learned from its hooks', 'codex', { kind: 'new' }, [], null],
-    ['resume', 'claude', { kind: 'resume', sessionId: 's-1' }, ['--resume', 's-1'], 's-1'],
+    [
+      'resume',
+      'claude',
+      { kind: 'resume', sessionId: '00000000-0000-4000-8000-000000000011' },
+      ['--resume', '00000000-0000-4000-8000-000000000011'],
+      '00000000-0000-4000-8000-000000000011'
+    ],
     [
       'a Claude fork',
       'claude',
-      { kind: 'fork', sessionId: 's-1' },
-      ['--resume', 's-1', '--fork-session'],
+      { kind: 'fork', sessionId: '00000000-0000-4000-8000-000000000011' },
+      ['--resume', '00000000-0000-4000-8000-000000000011', '--fork-session'],
       null
     ],
-    ['a Codex fork', 'codex', { kind: 'fork', sessionId: 's-2' }, ['fork', 's-2'], null]
+    [
+      'a Codex fork',
+      'codex',
+      { kind: 'fork', sessionId: '00000000-0000-4000-8000-000000000012' },
+      ['fork', '00000000-0000-4000-8000-000000000012'],
+      null
+    ]
   ])('%s', async (_name, agent, session, argv, sessionId) => {
     const launchAgentTerminal = vi.fn(async () => ({ handle: 'term_7', paneKey: 'tab:leaf' }))
     const runtime = { launchAgentTerminal } as unknown as OrcaRuntimeService
-    const result = await openAgentTerminal(runtime, { ...base, agent, session }, () => 'uuid-9')
+    const result = await openAgentTerminal(
+      runtime,
+      { ...base, agent, session },
+      () => '00000000-0000-4000-8000-000000000019'
+    )
     expect(launchAgentTerminal).toHaveBeenCalledWith('id:r1::/wt', {
       agent,
       prompt: 'Apply the answers.',

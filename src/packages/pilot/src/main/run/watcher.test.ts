@@ -49,7 +49,10 @@ function storeWithRunningStep(): PilotStore {
 
 const probe = (state: ObservedState): StepProbe => ({
   status: async () => state,
-  session: () => ({ id: 'sess-1', transcriptPath: '/t/sess-1.jsonl' })
+  session: () => ({
+    id: '00000000-0000-4000-8000-000000000001',
+    transcriptPath: '/t/00000000-0000-4000-8000-000000000001.jsonl'
+  })
 })
 const noCost = async () => ({ costUsd: null, tokens: 0 })
 const HOUR = 60 * 60_000
@@ -76,8 +79,8 @@ describe('pollRunningSteps', () => {
     await pollRunningSteps(store, probe('working'), noCost, () => 5, hooks())
     expect(store.runs.steps('run-1')[0]).toMatchObject({
       status: 'running',
-      sessionId: 'sess-1',
-      transcriptPath: '/t/sess-1.jsonl'
+      sessionId: '00000000-0000-4000-8000-000000000001',
+      transcriptPath: '/t/00000000-0000-4000-8000-000000000001.jsonl'
     })
   })
 

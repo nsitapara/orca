@@ -12,10 +12,10 @@ import {
 } from './step-launch-plan'
 
 const prior = [
-  { name: 'review', agent: 'claude', sessionId: 'sess-review' },
+  { name: 'review', agent: 'claude', sessionId: '00000000-0000-4000-8000-000000000043' },
   { name: 'lint', agent: 'codex', sessionId: null }
 ]
-const newId = () => 'uuid-1'
+const newId = () => '00000000-0000-4000-8000-000000000041'
 
 describe('planSession', () => {
   it.each<[string, StepDef['session'], AgentKind, string | null, SessionPlan]>([
@@ -24,7 +24,7 @@ describe('planSession', () => {
       { kind: 'new' },
       'claude',
       null,
-      { kind: 'fresh', sessionId: 'uuid-1' }
+      { kind: 'fresh', sessionId: '00000000-0000-4000-8000-000000000041' }
     ],
     [
       'new Codex session: learned later',
@@ -38,7 +38,7 @@ describe('planSession', () => {
       { kind: 'continue', step: 'review' },
       'claude',
       null,
-      { kind: 'resume', sessionId: 'sess-review' }
+      { kind: 'resume', sessionId: '00000000-0000-4000-8000-000000000043' }
     ],
     [
       "continue a step that hasn't run",
@@ -68,15 +68,15 @@ describe('planSession', () => {
       "per worktree, the worktree's stored session",
       { kind: 'per_worktree' },
       'codex',
-      'sess-wt',
-      { kind: 'resume', sessionId: 'sess-wt' }
+      '00000000-0000-4000-8000-000000000044',
+      { kind: 'resume', sessionId: '00000000-0000-4000-8000-000000000044' }
     ],
     [
       'per worktree, first time: a fresh pinned one',
       { kind: 'per_worktree' },
       'claude',
       null,
-      { kind: 'fresh', sessionId: 'uuid-1' }
+      { kind: 'fresh', sessionId: '00000000-0000-4000-8000-000000000041' }
     ]
   ])('%s', (_name, session, agent, worktreeSession, plan) => {
     const step = testStep({ name: 'next', agent, session })
@@ -88,11 +88,16 @@ describe('agentArgv', () => {
   it.each<[AgentKind, SessionPlan, string[], string[]]>([
     [
       'claude',
-      { kind: 'fresh', sessionId: 'u-1' },
+      { kind: 'fresh', sessionId: '00000000-0000-4000-8000-000000000042' },
       ['--dangerously-skip-permissions'],
-      ['--session-id', 'u-1', '--dangerously-skip-permissions']
+      ['--session-id', '00000000-0000-4000-8000-000000000042', '--dangerously-skip-permissions']
     ],
-    ['claude', { kind: 'resume', sessionId: 's-1' }, [], ['--resume', 's-1']],
+    [
+      'claude',
+      { kind: 'resume', sessionId: '00000000-0000-4000-8000-000000000045' },
+      [],
+      ['--resume', '00000000-0000-4000-8000-000000000045']
+    ],
     [
       'codex',
       { kind: 'fresh', sessionId: null },
@@ -101,17 +106,27 @@ describe('agentArgv', () => {
     ],
     [
       'codex',
-      { kind: 'resume', sessionId: 's-2' },
+      { kind: 'resume', sessionId: '00000000-0000-4000-8000-000000000046' },
       ['-c', 'check_for_update_on_startup=false'],
-      ['resume', 's-2', '-c', 'check_for_update_on_startup=false']
+      ['resume', '00000000-0000-4000-8000-000000000046', '-c', 'check_for_update_on_startup=false']
     ],
     [
       'claude',
-      { kind: 'fork', sessionId: 's-3' },
+      { kind: 'fork', sessionId: '00000000-0000-4000-8000-000000000047' },
       ['--dangerously-skip-permissions'],
-      ['--resume', 's-3', '--fork-session', '--dangerously-skip-permissions']
+      [
+        '--resume',
+        '00000000-0000-4000-8000-000000000047',
+        '--fork-session',
+        '--dangerously-skip-permissions'
+      ]
     ],
-    ['codex', { kind: 'fork', sessionId: 's-4' }, [], ['fork', 's-4']],
+    [
+      'codex',
+      { kind: 'fork', sessionId: '00000000-0000-4000-8000-000000000048' },
+      [],
+      ['fork', '00000000-0000-4000-8000-000000000048']
+    ],
     ['claude', { kind: 'missing', reason: 'x' }, ['--model', 'opus'], ['--model', 'opus']]
   ])('%s %j', (agent, session, args, argv) => {
     expect(agentArgv(agent, session, args)).toEqual(argv)
@@ -157,7 +172,7 @@ describe('terminalLaunchOptions', () => {
           powers: ['commit']
         },
         args: ['--dangerously-skip-permissions'],
-        session: { kind: 'fresh', sessionId: 'u-1' }
+        session: { kind: 'fresh', sessionId: '00000000-0000-4000-8000-000000000042' }
       })
     ).toEqual({
       agent: 'claude',
@@ -173,7 +188,11 @@ describe('terminalLaunchOptions', () => {
           PILOT_POWERS: 'commit',
           AGENT_RUN: 'r-1'
         },
-        argv: ['--session-id', 'u-1', '--dangerously-skip-permissions']
+        argv: [
+          '--session-id',
+          '00000000-0000-4000-8000-000000000042',
+          '--dangerously-skip-permissions'
+        ]
       }
     })
   })

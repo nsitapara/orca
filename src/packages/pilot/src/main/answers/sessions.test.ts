@@ -18,7 +18,10 @@ function definition(extra = '') {
 }
 const NOW = 10 * 24 * 60 * 60_000
 
-function setup(session: string | null = 'sess-1', launchArgs: string[] | null = []) {
+function setup(
+  session: string | null = '00000000-0000-4000-8000-000000000001',
+  launchArgs: string[] | null = []
+) {
   const store = PilotStore.open(join(mkdtempSync(join(tmpdir(), 'pilot-sessions-')), 'db.sqlite'))
   store.runs.create({
     id: 'run-1',
@@ -82,6 +85,16 @@ describe('chooseSession (apply.py start_agent)', () => {
     ).toBe(kind)
   })
 
+  // An agent-reported id shaped like a flag never reaches a resume or fork argv: a new session instead.
+  it.each(['free', 'gone'] as const)(
+    'starts a new session when the asking id is not a session id (tab %s)',
+    async (state) => {
+      const { store, items } = setup('--dangerously-skip-permissions')
+      const target = await chooseSession(definition(), items, store, probe(state, FRESH), NOW)
+      expect(target).toMatchObject({ kind: 'new' })
+    }
+  )
+
   it('looks at the tab that asked, for the session that asked', async () => {
     const { store, items } = setup()
     const look = probe('free', FRESH)
@@ -89,7 +102,7 @@ describe('chooseSession (apply.py start_agent)', () => {
     expect(look.terminalState).toHaveBeenCalledWith({
       handle: 'term-1',
       paneKey: 'tab:leaf',
-      sessionId: 'sess-1'
+      sessionId: '00000000-0000-4000-8000-000000000001'
     })
   })
 
@@ -102,7 +115,7 @@ describe('chooseSession (apply.py start_agent)', () => {
   })
 
   it("forks instead of typing into a free tab whose process args aren't known", async () => {
-    const { store, items } = setup('sess-1', null)
+    const { store, items } = setup('00000000-0000-4000-8000-000000000001', null)
     expect((await chooseSession(definition(), items, store, probe('free', FRESH), NOW)).kind).toBe(
       'fork'
     )
