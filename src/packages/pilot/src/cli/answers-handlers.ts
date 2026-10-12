@@ -47,8 +47,16 @@ type ImportReport = {
   imported: number
   answers: number
   runs: number
+  // Cards already imported that would get their Details bundle (absent from an older Pilot).
+  backfilled?: number
   skipped: { summary: string; reason: string }[]
   notes: { id: string; note: string }[]
+}
+
+function previewLine(r: ImportReport): string {
+  const backfilled = r.backfilled ?? 0
+  const details = backfilled > 0 ? `, and Details for ${backfilled} already-imported card(s)` : ''
+  return `Would import ${r.imported} card(s), ${r.answers} with an answer, and ${r.runs} asking session(s)${details}.`
 }
 
 export const ANSWERS_HANDLERS: Record<string, CommandHandler> = {
@@ -64,7 +72,7 @@ export const ANSWERS_HANDLERS: Record<string, CommandHandler> = {
     )
     printResult(response, json, (r) =>
       [
-        `Would import ${r.imported} card(s), ${r.answers} with an answer, and ${r.runs} asking session(s).`,
+        previewLine(r),
         ...r.notes.map((n) => `  note ${n.id}: ${n.note}`),
         ...r.skipped.map((s) => `  skip "${s.summary}": ${s.reason}`),
         IMPORT_ON_PAGE

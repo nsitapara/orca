@@ -11,13 +11,24 @@ type Report = {
   imported: number
   answers: number
   runs: number
+  // Cards already imported that get (or would get) their Details bundle.
+  backfilled?: number
   skipped: { summary: string; reason: string }[]
+}
+
+function detailsPart(report: Report): string {
+  const n = report.backfilled ?? 0
+  if (n === 0) {
+    return ''
+  }
+  const verb = report.applied ? 'added' : 'would add'
+  return `; ${verb} Details for ${n} card(s) already imported`
 }
 
 function summaryOf(report: Report): string {
   const verb = report.applied ? 'Imported' : 'Would import'
   const skipped = report.skipped.length
-  return `${verb} ${report.imported} card(s), ${report.answers} with an answer; ${skipped} skipped.`
+  return `${verb} ${report.imported} card(s), ${report.answers} with an answer; ${skipped} skipped${detailsPart(report)}.`
 }
 
 // A one-shot move of the vault's open cards into Pilot: preview first, then apply. Applying is the
@@ -44,7 +55,8 @@ export function ImportVaultPanel({ onImported }: { onImported: () => void }): Re
     }
     setBusy(false)
   }
-  const canApply = report !== null && !report.applied && report.imported > 0
+  const canApply =
+    report !== null && !report.applied && (report.imported > 0 || (report.backfilled ?? 0) > 0)
   return (
     <section className="flex flex-wrap items-center gap-2 text-sm">
       <Button size="xs" variant="outline" disabled={busy} onClick={() => void run(false)}>

@@ -6,7 +6,7 @@ import { saveAnswer } from '../answers/save'
 import { resolveRepoPath } from '../fields/runtime-facts'
 import { runtimeFieldDeps } from '../fields/runtime-field-deps'
 import { applyVaultImport } from '../inbox/import-apply'
-import { planVaultImport } from '../inbox/import-vault'
+import { isBackfillable, planVaultImport } from '../inbox/import-vault'
 import { readOpenVaultItems } from '../inbox/vault-reader'
 import type { PilotContext } from '../pilot-services'
 import { inboxDeps } from './methods-inbox'
@@ -116,6 +116,7 @@ export function buildAnswerMethods(ctx: () => PilotContext) {
           people: c.loaded().people,
           worktreeIds: await worktreeIds(rpc.runtime, c),
           existing: (id) => c.store.inbox.get(id) !== null,
+          backfillable: (id) => isBackfillable(c.store.inbox.get(id)),
           now
         })
         return applyVaultImport(inboxDeps(c), plan, now, { dryRun: !p.apply })

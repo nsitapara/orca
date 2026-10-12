@@ -1,6 +1,6 @@
 import { isSessionId } from '../../shared/session-id'
 import { createHash } from 'node:crypto'
-import type { InboxAnswer } from '../../shared/api-types'
+import type { InboxAnswer, InboxItemRow } from '../../shared/api-types'
 import type { AgentKind, AutomationDefinition } from '../../shared/definition/types'
 import type { InboxAddParams } from '../../shared/inbox-types'
 import type { PeopleDirectory } from '../../shared/people'
@@ -24,6 +24,8 @@ export type ImportContext = {
   // Worktree id by path, for worktree-kind automations' item keys.
   worktreeIds: Map<string, string>
   existing(id: string): boolean
+  // An imported card that may still get its bundle (isBackfillable); absent: none may.
+  backfillable?(id: string): boolean
   now: number
 }
 export type ImportRun = {
@@ -57,8 +59,12 @@ export type PlannedItem = {
     sent: boolean
   } | null
 }
+// A card the import wrote before it carried bundles, and the bundle its vault item names.
+export type PlannedBackfill = { id: string; vaultRef: string; title: string; path: string }
 export type ImportPlan = {
   items: PlannedItem[]
+  // Existing open, unanswered cards without a bundle whose vault item names one (the backfill).
+  backfill: PlannedBackfill[]
   runs: ImportRun[]
   skipped: { note: string; key: string; summary: string; reason: string }[]
   notes: { id: string; note: string }[]
@@ -68,6 +74,10 @@ export type ImportReport = {
   imported: number
   answers: number
   runs: number
+  // Cards already imported that got (or would get) their bundle.
+  backfilled: number
+  // New cards imported with their bundle, plus the backfilled ones.
+  details: number
   skipped: ImportPlan['skipped']
   notes: ImportPlan['notes']
 }
@@ -76,6 +86,18 @@ const sha = (text: string): string => createHash('sha256').update(text).digest('
 
 export function vaultItemId(note: string, key: string): string {
   return `in_${sha(`vault|${note}|${key}`).slice(0, 16)}`
+}
+
+// Only a card nobody has answered, still open and without a bundle, gets one from the import: an answer
+// was given to what the card showed, and a card with a bundle keeps it (the import stays idempotent).
+export function isBackfillable(item: InboxItemRow | null): boolean {
+  return (
+    item !== null &&
+    item.status === 'open' &&
+    item.answer === null &&
+    item.answeredAt === null &&
+    item.details === null
+  )
 }
 
 function automationFor(row: VaultRow, defs: AutomationDefinition[]): AutomationDefinition | null {
@@ -184,7 +206,8 @@ function paramsOf(
     context: row.context,
     suggested: row.suggested,
     options: row.options.map((o) => (o.description ? `${o.label} — ${o.description}` : o.label)),
-    detailsMd: row.details_path ? `Details bundle: ${row.details_path}` : undefined,
+    // The bundle itself (Pilot reads and checks it); a refused one falls back to a line (import-apply.ts).
+    detailsBundlePath: row.details_path || undefined,
     action: action.action ?? undefined,
     actionArgs: action.args ?? undefined,
     parts: Object.fromEntries(row.parts.map((p) => [p.id, p.label])),
@@ -206,7 +229,7 @@ function answerOf(row: VaultRow): PlannedItem['answer'] {
 }
 
 export function planVaultImport(rows: VaultRow[], ctx: ImportContext): ImportPlan {
-  const plan: ImportPlan = { items: [], runs: [], skipped: [], notes: [] }
+  const plan: ImportPlan = { items: [], backfill: [], runs: [], skipped: [], notes: [] }
   const runs = new Map<string, ImportRun>()
   const seen = new Set<string>()
   for (const row of rows) {
@@ -219,7 +242,12 @@ export function planVaultImport(rows: VaultRow[], ctx: ImportContext): ImportPla
       continue
     }
     if (ctx.existing(id)) {
-      skip('already imported')
+      if (row.details_path && ctx.backfillable?.(id)) {
+        const vaultRef = `${row.note}#${row.key}`
+        plan.backfill.push({ id, vaultRef, title: oneLine(row.summary), path: row.details_path })
+      } else {
+        skip('already imported')
+      }
       continue
     }
     const itemKey = itemKeyOf(row, def, ctx.worktreeIds)
@@ -260,13 +288,15 @@ export function planVaultImport(rows: VaultRow[], ctx: ImportContext): ImportPla
 export function reportOf(
   plan: ImportPlan,
   applied: boolean,
-  runs = plan.runs.length
+  runs = plan.runs.length,
+  counts: Pick<ImportReport, 'backfilled' | 'details'> = { backfilled: 0, details: 0 }
 ): ImportReport {
   return {
     applied,
     imported: plan.items.length,
     answers: plan.items.filter((i) => i.answer).length,
     runs,
+    ...counts,
     skipped: plan.skipped,
     notes: plan.notes
   }

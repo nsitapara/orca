@@ -9,6 +9,8 @@ import {
   type ImportRun,
   type PlannedItem
 } from './import-vault'
+import { DetailsRefused } from './details-bundle'
+import { backfillDetails } from './import-backfill'
 import { addInboxItem, SAME_CARD_OPEN } from './inbox-add'
 import { inboxEvent, syncRunWaiting, type InboxDeps } from './inbox-service'
 
@@ -83,8 +85,6 @@ function writeAnswer(deps: InboxDeps, planned: PlannedItem, now: number): void {
   )
 }
 
-// The card (and its asking run, and its answer) in one transaction, so a crash or a refusal leaves
-// nothing behind. Returns whether it created the run.
 const UNKNOWN_WORKTREE = /is not a worktree of/
 
 // A sessionless branch card names a worktree the automation may not have shown yet: it is then filed
@@ -100,14 +100,47 @@ function isUnknownWorktree(error: unknown, params: InboxAddParams): boolean {
   )
 }
 
-function addCard(
-  deps: InboxDeps,
-  plan: ImportPlan,
-  planned: PlannedItem,
-  now: number
-): { reason: string | null; madeRun: boolean } {
+function messageOf(error: unknown): string {
+  return error instanceof Error ? error.message : String(error)
+}
+
+// Tries the params, then (a branch card naming a worktree the automation hasn't shown) without the worktree.
+function orWithoutWorktree<T>(params: InboxAddParams, add: (p: InboxAddParams) => T): T {
+  try {
+    return add(params)
+  } catch (error) {
+    if (!isUnknownWorktree(error, params)) {
+      throw error
+    }
+    return add(withoutWorktree(params))
+  }
+}
+
+// A refused bundle never loses the card (ruling 8): it is offered without it, with a line naming the bundle
+// and why Pilot doesn't show it. `refused` is that reason, null when the bundle (if any) was taken.
+function orWithoutBundle<T>(
+  params: InboxAddParams,
+  add: (p: InboxAddParams) => T
+): { value: T; refused: string | null } {
+  try {
+    return { value: add(params), refused: null }
+  } catch (error) {
+    if (!(error instanceof DetailsRefused)) {
+      throw error
+    }
+    const { detailsBundlePath, ...rest } = params
+    const detailsMd = `Details bundle: ${detailsBundlePath} (not shown in Pilot: ${error.reason})`
+    return { value: add({ ...rest, detailsMd }), refused: error.reason }
+  }
+}
+
+type Outcome = { reason: string | null; madeRun: boolean; refused: string | null }
+
+// The card (and its asking run, and its answer) in one transaction, so a crash or a refusal leaves
+// nothing behind. Says whether it created the run, and why its bundle was refused, if it was.
+function addCard(deps: InboxDeps, plan: ImportPlan, planned: PlannedItem, now: number): Outcome {
   if (deps.store.inbox.get(planned.id)) {
-    return { reason: 'already imported', madeRun: false }
+    return { reason: 'already imported', madeRun: false, refused: null }
   }
   const run = plan.runs.find((r) => r.id === planned.runId)
   let madeRun = false
@@ -124,26 +157,20 @@ function addCard(
       }
       writeAnswer(deps, planned, now)
     })
+  let refused: string | null
   try {
-    try {
-      attempt(planned.params)
-    } catch (error) {
-      if (!isUnknownWorktree(error, planned.params)) {
-        throw error
-      }
-      attempt(withoutWorktree(planned.params))
-    }
+    refused = orWithoutBundle(planned.params, (p) => orWithoutWorktree(p, attempt)).refused
   } catch (error) {
-    return { reason: error instanceof Error ? error.message : String(error), madeRun: false }
+    return { reason: messageOf(error), madeRun: false, refused: null }
   }
   syncRunWaiting(deps.store, planned.runId, now)
-  return { reason: null, madeRun }
+  return { reason: null, madeRun, refused }
 }
 
-// Every check addInboxItem makes, writing nothing.
-function wouldAdd(deps: InboxDeps, planned: PlannedItem, now: number): string | null {
+// Every check addInboxItem makes, the bundle's included, writing nothing.
+function wouldAdd(deps: InboxDeps, planned: PlannedItem, now: number): Outcome {
   if (deps.store.inbox.get(planned.id)) {
-    return 'already imported'
+    return { reason: 'already imported', madeRun: false, refused: null }
   }
   const check = (params: InboxAddParams) =>
     addInboxItem({ ...deps, now: () => now }, params, {
@@ -152,16 +179,10 @@ function wouldAdd(deps: InboxDeps, planned: PlannedItem, now: number): string | 
       dryRun: true
     }).refused
   try {
-    try {
-      return check(planned.plain)
-    } catch (error) {
-      if (!isUnknownWorktree(error, planned.plain)) {
-        throw error
-      }
-      return check(withoutWorktree(planned.plain))
-    }
+    const { value, refused } = orWithoutBundle(planned.plain, (p) => orWithoutWorktree(p, check))
+    return { reason: value, madeRun: false, refused }
   } catch (error) {
-    return error instanceof Error ? error.message : String(error)
+    return { reason: messageOf(error), madeRun: false, refused: null }
   }
 }
 
@@ -172,19 +193,24 @@ export function applyVaultImport(
   opts: { dryRun?: boolean } = {}
 ): ImportReport {
   const skipped = [...plan.skipped]
+  const notes = [...plan.notes]
   const done: PlannedItem[] = []
   let runs = 0
+  let bundled = 0
   const runsSeen = new Set<string>()
   for (const planned of plan.items) {
-    const outcome = opts.dryRun
-      ? { reason: wouldAdd(deps, planned, now), madeRun: false }
-      : addCard(deps, plan, planned, now)
+    const outcome = opts.dryRun ? wouldAdd(deps, planned, now) : addCard(deps, plan, planned, now)
     if (outcome.reason) {
       const [note, key] = planned.vaultRef.split('#')
       skipped.push({ note, key, summary: planned.title, reason: outcome.reason })
       continue
     }
     done.push(planned)
+    if (outcome.refused) {
+      notes.push({ id: planned.id, note: `Details not attached: ${outcome.refused}` })
+    } else if (planned.params.detailsBundlePath) {
+      bundled += 1
+    }
     if (outcome.madeRun) {
       runs += 1
     }
@@ -193,5 +219,11 @@ export function applyVaultImport(
       runs += opts.dryRun && !deps.store.runs.get(planned.runId) ? 1 : 0
     }
   }
-  return reportOf({ ...plan, items: done, skipped }, !opts.dryRun, runs)
+  const filled = backfillDetails(deps, plan.backfill, opts)
+  return reportOf(
+    { ...plan, items: done, skipped: [...skipped, ...filled.skipped], notes },
+    !opts.dryRun,
+    runs,
+    { backfilled: filled.backfilled, details: bundled + filled.backfilled }
+  )
 }
