@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import {
+  fixtureGit,
   fixtureGitOperation,
   fixtureGlab,
+  fixtureMisses,
   fixturePass,
   fixtureQuota,
   fixtureRuntime,
@@ -127,6 +129,37 @@ describe('fixtureGitOperation', () => {
     const op = fixtureGitOperation(F)
     expect(await op('/wt/a')).toBe('rebase')
     await expect(op('/wt/b')).rejects.toThrow(NotInFixture)
+  })
+})
+
+describe('fixtureMisses', () => {
+  it('keeps every read the fixture lacked, once each, even when the caller swallowed the error', async () => {
+    const f: ParityFixture = { ...F }
+    await fixtureGlab(f)
+      .get('merge_requests/2')
+      .catch(() => null)
+    await fixtureGlab(f)
+      .get('merge_requests/2')
+      .catch(() => null)
+    await fixtureGitOperation(f)('/wt/b').catch(() => null)
+    expect(fixtureMisses(f)).toEqual([
+      'GET projects/g%2Fweb/merge_requests/2',
+      'git -C /wt/b rev-parse --git-path MERGE_HEAD'
+    ])
+  })
+
+  it('fails a read the old side saw fail the same way, without counting it as a miss', async () => {
+    const failed = {
+      argv: ['git', '-C', '/wt/c', 'status', '--porcelain'],
+      code: 128,
+      stdout: '',
+      stderr: 'fatal: not a git repository'
+    }
+    const f: ParityFixture = { ...F, reads: [...F.reads, failed] }
+    await expect(fixtureGit(f)(['status', '--porcelain=v1'], { cwd: '/wt/c' })).rejects.toThrow(
+      'fatal: not a git repository'
+    )
+    expect(fixtureMisses(f)).toEqual([])
   })
 })
 

@@ -7,6 +7,7 @@ import type { AutomationDefinition } from '../../../src/shared/definition/types'
 import { parsePeopleYaml, type PeopleDirectory } from '../../../src/shared/people'
 import type { VerdictTable } from '../compare'
 import type { ParityFixture } from '../fixture'
+import type { ParityJob } from '../parity-case'
 
 const HOUR = 60 * 60_000
 
@@ -79,4 +80,14 @@ export function load05(): { def: AutomationDefinition; people: PeopleDirectory }
     throw new Error(people.errors.join('\n'))
   }
   return { def: parsed.definition, people: people.directory }
+}
+
+// What the shared parity runner (parity-case.ts) needs for 05.
+export const PARITY_05: ParityJob = {
+  job: JOB_05.job,
+  folder: JOB_05.sweep,
+  files: [JOB_05.yaml, join(dirname(JOB_05.yaml), 'people.yaml')],
+  table: VERDICTS_05,
+  seed: seed05,
+  load: load05
 }

@@ -39,6 +39,21 @@ export class NotInFixture extends Error {
   }
 }
 
+// Every read each fixture couldn't answer. Pilot's field reads fail soft (the field reads unknown),
+// so a miss can still end in the old side's verdict: parity-case.ts fails a case on any miss.
+const MISSES = new WeakMap<ParityFixture, Set<string>>()
+
+function miss(f: ParityFixture, what: string): NotInFixture {
+  const seen = MISSES.get(f) ?? new Set<string>()
+  seen.add(what)
+  MISSES.set(f, seen)
+  return new NotInFixture(what)
+}
+
+export function fixtureMisses(f: ParityFixture): string[] {
+  return [...(MISSES.get(f) ?? [])]
+}
+
 // gate.IN_PROGRESS, in its order, and the name Pilot's facts give each (worktree-fields.ts).
 const OLD_MARKERS: [string, string][] = [
   ['MERGE_HEAD', 'merge'],
@@ -100,7 +115,7 @@ export function fixtureRead(f: ParityFixture, argv: string[]): FixtureRead {
     (r) => r.argv.length === argv.length && r.argv.every((a, i) => a === argv[i])
   )
   if (!found) {
-    throw new NotInFixture(argv.join(' '))
+    throw miss(f, argv.join(' '))
   }
   return found
 }
@@ -122,7 +137,7 @@ function glabRead(f: ParityFixture, wanted: string): unknown {
       normalizeApiPath(r.argv.at(-1) ?? '') === wanted
   )
   if (!read) {
-    throw new NotInFixture(`GET ${wanted}`)
+    throw miss(f, `GET ${wanted}`)
   }
   if ((read.code ?? 0) !== 0) {
     throw new Error(`glab api ${wanted} failed: ${read.stderr ?? ''}`)
@@ -181,26 +196,33 @@ export function fixtureRuntime(f: ParityFixture): OrcaRuntimeService {
   return fake as unknown as OrcaRuntimeService
 }
 
+// A git read that failed or timed out when it was recorded fails here too, as git would.
+function gitStdout(f: ParityFixture, argv: string[]): string {
+  const read = fixtureRead(f, argv)
+  if (read.timeout || (read.code ?? 0) !== 0) {
+    throw new Error(`${argv.join(' ')} failed: ${read.stderr ?? 'timed out'}`)
+  }
+  return stdoutOf(read)
+}
+
 // Pilot's `git status --porcelain=v1` lists what the old side's `git -C <path> status --porcelain` did.
 export function fixtureGit(f: ParityFixture): GitRunner {
   return async (args, { cwd }) => {
     if (args[0] === 'status') {
-      return { stdout: stdoutOf(fixtureRead(f, ['git', '-C', cwd, 'status', '--porcelain'])) }
+      return { stdout: gitStdout(f, ['git', '-C', cwd, 'status', '--porcelain']) }
     }
-    throw new NotInFixture(`git ${args.join(' ')} in ${cwd}`)
+    throw miss(f, `git ${args.join(' ')} in ${cwd}`)
   }
 }
 
 export function fixtureGitOperation(f: ParityFixture): (path: string) => Promise<string | null> {
   return async (path) => {
     for (const [marker, op] of OLD_MARKERS) {
-      const out = stdoutOf(
-        fixtureRead(f, ['git', '-C', path, 'rev-parse', '--git-path', marker])
-      ).trim()
+      const out = gitStdout(f, ['git', '-C', path, 'rev-parse', '--git-path', marker]).trim()
       const full = isAbsolute(out) ? out : join(path, out)
       const exists = f.exists[full]
       if (exists === undefined) {
-        throw new NotInFixture(`exists ${full}`)
+        throw miss(f, `exists ${full}`)
       }
       if (exists) {
         return op
@@ -254,7 +276,7 @@ export function fixtureTickDeps(f: ParityFixture, store: PilotStore): TickDeps {
         store.queue.pendingAnswerCount(automationId, itemKey),
       cache: store.fields,
       runScript: async (req) => {
-        throw new NotInFixture(`script ${req.command}`)
+        throw miss(f, `script ${req.command}`)
       },
       engineEnv: { binDir: '', dataDir: '/tmp/pilot-parity' },
       now

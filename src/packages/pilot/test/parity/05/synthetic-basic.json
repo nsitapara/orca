@@ -14,7 +14,9 @@
     {
       "argv": ["glab", "api", "--hostname", "gitlab.com", "user"],
       "code": 0,
-      "json": { "username": "nish8" }
+      "json": {
+        "username": "nish8"
+      }
     },
     {
       "argv": [
@@ -31,7 +33,10 @@
           "title": "Show donor status",
           "source_branch": "web-101-a",
           "target_branch": "dev",
-          "author": { "username": "nish8", "name": "Nish Sitapara" },
+          "author": {
+            "username": "nish8",
+            "name": "Nish Sitapara"
+          },
           "state": "opened",
           "draft": false,
           "sha": "0101aaaabbbbcccc"
@@ -41,7 +46,10 @@
           "title": "Fix the family tree",
           "source_branch": "web-102-b",
           "target_branch": "dev",
-          "author": { "username": "nish8", "name": "Nish Sitapara" },
+          "author": {
+            "username": "nish8",
+            "name": "Nish Sitapara"
+          },
           "state": "opened",
           "draft": false,
           "sha": "0102aaaabbbbcccc"
@@ -51,7 +59,10 @@
           "title": "Speed up the report",
           "source_branch": "web-103-c",
           "target_branch": "dev",
-          "author": { "username": "nish8", "name": "Nish Sitapara" },
+          "author": {
+            "username": "nish8",
+            "name": "Nish Sitapara"
+          },
           "state": "opened",
           "draft": false,
           "sha": "0103aaaabbbbcccc"
@@ -61,7 +72,10 @@
           "title": "Retry the upload",
           "source_branch": "web-104-d",
           "target_branch": "dev",
-          "author": { "username": "nish8", "name": "Nish Sitapara" },
+          "author": {
+            "username": "nish8",
+            "name": "Nish Sitapara"
+          },
           "state": "opened",
           "draft": false,
           "sha": "0104aaaabbbbcccc"
@@ -71,7 +85,10 @@
           "title": "Tidy the settings page",
           "source_branch": "web-105-e",
           "target_branch": "dev",
-          "author": { "username": "nish8", "name": "Nish Sitapara" },
+          "author": {
+            "username": "nish8",
+            "name": "Nish Sitapara"
+          },
           "state": "opened",
           "draft": false,
           "sha": "0105aaaabbbbcccc"
@@ -92,11 +109,17 @@
         "title": "Show donor status",
         "source_branch": "web-101-a",
         "target_branch": "dev",
-        "author": { "username": "nish8", "name": "Nish Sitapara" },
+        "author": {
+          "username": "nish8",
+          "name": "Nish Sitapara"
+        },
         "state": "opened",
         "draft": false,
         "sha": "0101aaaabbbbcccc",
-        "head_pipeline": { "id": 9101, "status": "failed" }
+        "head_pipeline": {
+          "id": 9101,
+          "status": "failed"
+        }
       }
     },
     {
@@ -113,11 +136,17 @@
         "title": "Fix the family tree",
         "source_branch": "web-102-b",
         "target_branch": "dev",
-        "author": { "username": "nish8", "name": "Nish Sitapara" },
+        "author": {
+          "username": "nish8",
+          "name": "Nish Sitapara"
+        },
         "state": "opened",
         "draft": false,
         "sha": "0102aaaabbbbcccc",
-        "head_pipeline": { "id": 9102, "status": "failed" }
+        "head_pipeline": {
+          "id": 9102,
+          "status": "failed"
+        }
       }
     },
     {
@@ -134,11 +163,17 @@
         "title": "Speed up the report",
         "source_branch": "web-103-c",
         "target_branch": "dev",
-        "author": { "username": "nish8", "name": "Nish Sitapara" },
+        "author": {
+          "username": "nish8",
+          "name": "Nish Sitapara"
+        },
         "state": "opened",
         "draft": false,
         "sha": "0103aaaabbbbcccc",
-        "head_pipeline": { "id": 9103, "status": "success" }
+        "head_pipeline": {
+          "id": 9103,
+          "status": "success"
+        }
       }
     },
     {
@@ -155,11 +190,17 @@
         "title": "Retry the upload",
         "source_branch": "web-104-d",
         "target_branch": "dev",
-        "author": { "username": "nish8", "name": "Nish Sitapara" },
+        "author": {
+          "username": "nish8",
+          "name": "Nish Sitapara"
+        },
         "state": "opened",
         "draft": false,
         "sha": "0104aaaabbbbcccc",
-        "head_pipeline": { "id": 9104, "status": "failed" }
+        "head_pipeline": {
+          "id": 9104,
+          "status": "failed"
+        }
       }
     },
     {
@@ -176,11 +217,17 @@
         "title": "Tidy the settings page",
         "source_branch": "web-105-e",
         "target_branch": "dev",
-        "author": { "username": "nish8", "name": "Nish Sitapara" },
+        "author": {
+          "username": "nish8",
+          "name": "Nish Sitapara"
+        },
         "state": "opened",
         "draft": false,
         "sha": "0105aaaabbbbcccc",
-        "head_pipeline": { "id": 9105, "status": "failed" }
+        "head_pipeline": {
+          "id": 9105,
+          "status": "failed"
+        }
       }
     },
     {
@@ -241,7 +288,9 @@
           "iid": 101,
           "state": "opened",
           "web_url": "https://gitlab.com/polygenx/web-platform/-/merge_requests/101",
-          "author": { "username": "nish8" }
+          "author": {
+            "username": "nish8"
+          }
         }
       ]
     },
@@ -264,7 +313,9 @@
           "iid": 103,
           "state": "opened",
           "web_url": "https://gitlab.com/polygenx/web-platform/-/merge_requests/103",
-          "author": { "username": "nish8" }
+          "author": {
+            "username": "nish8"
+          }
         }
       ]
     },
@@ -287,7 +338,9 @@
           "iid": 104,
           "state": "opened",
           "web_url": "https://gitlab.com/polygenx/web-platform/-/merge_requests/104",
-          "author": { "username": "nish8" }
+          "author": {
+            "username": "nish8"
+          }
         }
       ]
     },
@@ -310,14 +363,21 @@
           "iid": 105,
           "state": "opened",
           "web_url": "https://gitlab.com/polygenx/web-platform/-/merge_requests/105",
-          "author": { "username": "nish8" }
+          "author": {
+            "username": "nish8"
+          }
         }
       ]
     },
     {
       "argv": ["orca", "terminal", "list", "--json"],
       "code": 0,
-      "json": { "ok": true, "result": { "terminals": [] } }
+      "json": {
+        "ok": true,
+        "result": {
+          "terminals": []
+        }
+      }
     },
     {
       "argv": ["git", "-C", "/tmp/parity-05/wt-101", "status", "--porcelain"],
@@ -365,6 +425,102 @@
       "argv": ["git", "-C", "/tmp/parity-05/wt-101", "rev-parse", "--git-path", "index.lock"],
       "code": 0,
       "stdout": "/tmp/parity-05/gitdirs/wt-101/index.lock\n",
+      "stderr": ""
+    },
+    {
+      "argv": ["git", "-C", "/tmp/parity-05/wt-103", "status", "--porcelain"],
+      "code": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "argv": ["git", "-C", "/tmp/parity-05/wt-103", "rev-parse", "--git-path", "MERGE_HEAD"],
+      "code": 0,
+      "stdout": "/tmp/parity-05/gitdirs/wt-103/MERGE_HEAD\n",
+      "stderr": ""
+    },
+    {
+      "argv": ["git", "-C", "/tmp/parity-05/wt-103", "rev-parse", "--git-path", "rebase-merge"],
+      "code": 0,
+      "stdout": "/tmp/parity-05/gitdirs/wt-103/rebase-merge\n",
+      "stderr": ""
+    },
+    {
+      "argv": ["git", "-C", "/tmp/parity-05/wt-103", "rev-parse", "--git-path", "rebase-apply"],
+      "code": 0,
+      "stdout": "/tmp/parity-05/gitdirs/wt-103/rebase-apply\n",
+      "stderr": ""
+    },
+    {
+      "argv": ["git", "-C", "/tmp/parity-05/wt-103", "rev-parse", "--git-path", "CHERRY_PICK_HEAD"],
+      "code": 0,
+      "stdout": "/tmp/parity-05/gitdirs/wt-103/CHERRY_PICK_HEAD\n",
+      "stderr": ""
+    },
+    {
+      "argv": ["git", "-C", "/tmp/parity-05/wt-103", "rev-parse", "--git-path", "REVERT_HEAD"],
+      "code": 0,
+      "stdout": "/tmp/parity-05/gitdirs/wt-103/REVERT_HEAD\n",
+      "stderr": ""
+    },
+    {
+      "argv": ["git", "-C", "/tmp/parity-05/wt-103", "rev-parse", "--git-path", "BISECT_LOG"],
+      "code": 0,
+      "stdout": "/tmp/parity-05/gitdirs/wt-103/BISECT_LOG\n",
+      "stderr": ""
+    },
+    {
+      "argv": ["git", "-C", "/tmp/parity-05/wt-103", "rev-parse", "--git-path", "index.lock"],
+      "code": 0,
+      "stdout": "/tmp/parity-05/gitdirs/wt-103/index.lock\n",
+      "stderr": ""
+    },
+    {
+      "argv": ["git", "-C", "/tmp/parity-05/wt-104", "status", "--porcelain"],
+      "code": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "argv": ["git", "-C", "/tmp/parity-05/wt-104", "rev-parse", "--git-path", "MERGE_HEAD"],
+      "code": 0,
+      "stdout": "/tmp/parity-05/gitdirs/wt-104/MERGE_HEAD\n",
+      "stderr": ""
+    },
+    {
+      "argv": ["git", "-C", "/tmp/parity-05/wt-104", "rev-parse", "--git-path", "rebase-merge"],
+      "code": 0,
+      "stdout": "/tmp/parity-05/gitdirs/wt-104/rebase-merge\n",
+      "stderr": ""
+    },
+    {
+      "argv": ["git", "-C", "/tmp/parity-05/wt-104", "rev-parse", "--git-path", "rebase-apply"],
+      "code": 0,
+      "stdout": "/tmp/parity-05/gitdirs/wt-104/rebase-apply\n",
+      "stderr": ""
+    },
+    {
+      "argv": ["git", "-C", "/tmp/parity-05/wt-104", "rev-parse", "--git-path", "CHERRY_PICK_HEAD"],
+      "code": 0,
+      "stdout": "/tmp/parity-05/gitdirs/wt-104/CHERRY_PICK_HEAD\n",
+      "stderr": ""
+    },
+    {
+      "argv": ["git", "-C", "/tmp/parity-05/wt-104", "rev-parse", "--git-path", "REVERT_HEAD"],
+      "code": 0,
+      "stdout": "/tmp/parity-05/gitdirs/wt-104/REVERT_HEAD\n",
+      "stderr": ""
+    },
+    {
+      "argv": ["git", "-C", "/tmp/parity-05/wt-104", "rev-parse", "--git-path", "BISECT_LOG"],
+      "code": 0,
+      "stdout": "/tmp/parity-05/gitdirs/wt-104/BISECT_LOG\n",
+      "stderr": ""
+    },
+    {
+      "argv": ["git", "-C", "/tmp/parity-05/wt-104", "rev-parse", "--git-path", "index.lock"],
+      "code": 0,
+      "stdout": "/tmp/parity-05/gitdirs/wt-104/index.lock\n",
       "stderr": ""
     },
     {
@@ -417,28 +573,44 @@
     }
   ],
   "state": {
-    "ci-fix/handled.json": { "104": 9104 },
+    "ci-fix/handled.json": {
+      "104": 9104
+    },
     "ci-fix/tabs.json": {},
     "ci-fix/tabs-codex.json": {}
   },
   "exists": {
+    "/tmp/parity-05/gitdirs/wt-101/BISECT_LOG": false,
+    "/tmp/parity-05/gitdirs/wt-101/CHERRY_PICK_HEAD": false,
+    "/tmp/parity-05/gitdirs/wt-101/MERGE_HEAD": false,
+    "/tmp/parity-05/gitdirs/wt-101/REVERT_HEAD": false,
+    "/tmp/parity-05/gitdirs/wt-101/index.lock": false,
+    "/tmp/parity-05/gitdirs/wt-101/rebase-apply": false,
+    "/tmp/parity-05/gitdirs/wt-101/rebase-merge": false,
+    "/tmp/parity-05/gitdirs/wt-103/BISECT_LOG": false,
+    "/tmp/parity-05/gitdirs/wt-103/CHERRY_PICK_HEAD": false,
+    "/tmp/parity-05/gitdirs/wt-103/MERGE_HEAD": false,
+    "/tmp/parity-05/gitdirs/wt-103/REVERT_HEAD": false,
+    "/tmp/parity-05/gitdirs/wt-103/index.lock": false,
+    "/tmp/parity-05/gitdirs/wt-103/rebase-apply": false,
+    "/tmp/parity-05/gitdirs/wt-103/rebase-merge": false,
+    "/tmp/parity-05/gitdirs/wt-104/BISECT_LOG": false,
+    "/tmp/parity-05/gitdirs/wt-104/CHERRY_PICK_HEAD": false,
+    "/tmp/parity-05/gitdirs/wt-104/MERGE_HEAD": false,
+    "/tmp/parity-05/gitdirs/wt-104/REVERT_HEAD": false,
+    "/tmp/parity-05/gitdirs/wt-104/index.lock": false,
+    "/tmp/parity-05/gitdirs/wt-104/rebase-apply": false,
+    "/tmp/parity-05/gitdirs/wt-104/rebase-merge": false,
+    "/tmp/parity-05/gitdirs/wt-105/BISECT_LOG": false,
+    "/tmp/parity-05/gitdirs/wt-105/CHERRY_PICK_HEAD": false,
+    "/tmp/parity-05/gitdirs/wt-105/MERGE_HEAD": false,
+    "/tmp/parity-05/gitdirs/wt-105/REVERT_HEAD": false,
+    "/tmp/parity-05/gitdirs/wt-105/index.lock": false,
+    "/tmp/parity-05/gitdirs/wt-105/rebase-apply": false,
+    "/tmp/parity-05/gitdirs/wt-105/rebase-merge": false,
     "/tmp/parity-05/wt-101": true,
     "/tmp/parity-05/wt-103": true,
     "/tmp/parity-05/wt-104": true,
-    "/tmp/parity-05/wt-105": true,
-    "/tmp/parity-05/gitdirs/wt-101/MERGE_HEAD": false,
-    "/tmp/parity-05/gitdirs/wt-101/rebase-merge": false,
-    "/tmp/parity-05/gitdirs/wt-101/rebase-apply": false,
-    "/tmp/parity-05/gitdirs/wt-101/CHERRY_PICK_HEAD": false,
-    "/tmp/parity-05/gitdirs/wt-101/REVERT_HEAD": false,
-    "/tmp/parity-05/gitdirs/wt-101/BISECT_LOG": false,
-    "/tmp/parity-05/gitdirs/wt-101/index.lock": false,
-    "/tmp/parity-05/gitdirs/wt-105/MERGE_HEAD": false,
-    "/tmp/parity-05/gitdirs/wt-105/rebase-merge": false,
-    "/tmp/parity-05/gitdirs/wt-105/rebase-apply": false,
-    "/tmp/parity-05/gitdirs/wt-105/CHERRY_PICK_HEAD": false,
-    "/tmp/parity-05/gitdirs/wt-105/REVERT_HEAD": false,
-    "/tmp/parity-05/gitdirs/wt-105/BISECT_LOG": false,
-    "/tmp/parity-05/gitdirs/wt-105/index.lock": false
+    "/tmp/parity-05/wt-105": true
   }
 }
