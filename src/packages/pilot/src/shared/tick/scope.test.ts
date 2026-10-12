@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { FieldValue, ScopeResult, TickItem } from '../api-types'
 import type { MergeRequestWhere, PeopleRef } from '../definition/types'
 import { parsePeopleYaml } from '../people'
-import { authorScope, IN_SCOPE, mergeRequestScope } from './scope'
+import { authorScope, IN_SCOPE, mergeRequestListScope, mergeRequestScope } from './scope'
 
 const parsed = parsePeopleYaml(`
 people:
@@ -55,23 +55,30 @@ describe('authorScope', () => {
   })
 })
 
-describe('mergeRequestScope', () => {
-  const CI: MergeRequestWhere = {
-    state: 'open',
-    author: { people: ['nish'] },
-    head_pipeline: 'failed'
+const CI: MergeRequestWhere = {
+  state: 'open',
+  author: { people: ['nish'] },
+  head_pipeline: 'failed'
+}
+const REVIEW: MergeRequestWhere = {
+  state: 'open',
+  reviewer: { people: ['nish'] },
+  author: { not: { people: ['nish'] } },
+  approved_by: 'none'
+}
+const mr = (fields: Record<string, FieldValue>): TickItem => ({
+  key: 'mr:1',
+  label: '!1 x',
+  fields: {
+    'mr.state': 'open',
+    'mr.author': 'nish8',
+    'mr.draft': false,
+    'mr.pipeline_status': 'failed',
+    ...fields
   }
-  const mr = (fields: Record<string, FieldValue>): TickItem => ({
-    key: 'mr:1',
-    label: '!1 x',
-    fields: {
-      'mr.state': 'open',
-      'mr.author': 'nish8',
-      'mr.draft': false,
-      'mr.pipeline_status': 'failed',
-      ...fields
-    }
-  })
+})
+
+describe('mergeRequestScope', () => {
   const cases: [string, MergeRequestWhere, Record<string, FieldValue>, ScopeResult][] = [
     ["an open MR of nish's with a failed pipeline", CI, {}, IN_SCOPE],
     ['a merged MR', CI, { 'mr.state': 'merged' }, out('MR is merged')],
@@ -109,22 +116,76 @@ describe('mergeRequestScope', () => {
     ],
     ['a ready MR when only drafts count', { draft: true }, {}, out("MR isn't a draft")],
     [
-      'a reviewer clause',
+      'a reviewer of the set',
       { reviewer: { people: ['nish'] } },
-      {},
-      out("Pilot doesn't read MR reviewers yet, so where.reviewer can't be checked")
+      { 'mr.reviewers': 'shivan2418,nish8' },
+      IN_SCOPE
     ],
     [
-      'an approvals clause',
+      'a reviewer outside the set',
+      { reviewer: { people: ['nish'] } },
+      { 'mr.reviewers': 'shivan2418' },
+      out('Reviewers: shivan2418; this automation looks at Nish Sitapara')
+    ],
+    [
+      'no reviewers',
+      { reviewer: { people: ['nish'] } },
+      { 'mr.reviewers': '' },
+      out('Reviewers: nobody; this automation looks at Nish Sitapara')
+    ],
+    [
+      '09: a teammate MR waiting on me',
+      REVIEW,
+      { 'mr.author': 'shivan2418', 'mr.reviewers': 'nish8', 'mr.approved_by': '' },
+      IN_SCOPE
+    ],
+    [
+      '09: my own MR',
+      REVIEW,
+      { 'mr.reviewers': 'nish8', 'mr.approved_by': '' },
+      out('Author is Nish Sitapara; this automation leaves out Nish Sitapara')
+    ],
+    [
+      'another target',
+      { target_branch: 'main' },
+      { 'mr.target_branch': 'dev' },
+      out('MR targets dev, not main')
+    ],
+    [
+      'an unknown target',
+      { target_branch: 'main' },
+      { 'mr.target_branch': null },
+      out('MR targets (unknown), not main')
+    ],
+    [
+      'approved by me',
       { approved_by: 'none' },
-      {},
-      out("Pilot doesn't read MR approvals yet, so where.approved_by can't be checked")
+      { 'mr.approved_by': 'nish8' },
+      out('Approved by nish8')
     ],
     [
-      'a target branch clause',
-      { target_branch: 'dev' },
-      {},
-      out("Pilot doesn't read MR target branches yet, so where.target_branch can't be checked")
+      'approved by others',
+      { approved_by: 'none' },
+      { 'mr.approved_by': 'shivan2418,alex1craig' },
+      out('Approved by shivan2418, alex1craig')
+    ],
+    [
+      'approvals unknown',
+      { approved_by: 'none' },
+      { 'mr.approved_by': null },
+      out("Approvals couldn't be read")
+    ],
+    [
+      'approved by a named person',
+      { approved_by: { people: ['emil'] } },
+      { 'mr.approved_by': 'shivan2418' },
+      IN_SCOPE
+    ],
+    [
+      'out of scope wins over not due',
+      { state: 'open', head_pipeline: 'failed' },
+      { 'mr.state': 'closed', 'mr.pipeline_status': 'running' },
+      out('MR is closed')
     ],
     [
       'a stranger under a not author ref',
@@ -139,5 +200,26 @@ describe('mergeRequestScope', () => {
 
   it('reads a missing people.yaml as an empty one', () => {
     expect(mergeRequestScope(mr({}), CI, null)).toEqual(out("Author nish8 isn't in people.yaml"))
+  })
+})
+
+describe('mergeRequestListScope', () => {
+  const fields = {
+    'mr.author': 'shivan2418',
+    'mr.reviewers': 'nish8',
+    'mr.approved_by': null,
+    'mr.pipeline_status': null
+  }
+
+  it('decides from what the list response carries: approvals and the pipeline wait for the details', () => {
+    const where: MergeRequestWhere = { ...REVIEW, head_pipeline: 'failed' }
+    expect(mergeRequestListScope(mr(fields), where, people)).toEqual(IN_SCOPE)
+    expect(mergeRequestScope(mr(fields), where, people)).toEqual(out("Approvals couldn't be read"))
+  })
+
+  it('rules an MR out on the list alone', () => {
+    expect(mergeRequestListScope(mr({ ...fields, 'mr.author': 'nish8' }), REVIEW, people)).toEqual(
+      out('Author is Nish Sitapara; this automation leaves out Nish Sitapara')
+    )
   })
 })

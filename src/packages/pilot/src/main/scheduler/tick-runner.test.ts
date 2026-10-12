@@ -547,17 +547,15 @@ describe('runTick on keys a later task implements (Task 2b ruling)', () => {
       { start: 'ask_first', askFirst: { title: 'Fix !{mr.iid}?', context: '', options: [] } },
       "start: ask_first isn't supported yet"
     ],
-    ['where.reviewer', whereOf({ reviewer: 'anyone' }), "items.where.reviewer isn't supported yet"],
-    ['where.draft', whereOf({ draft: false }), "items.where.draft isn't supported yet"],
     [
-      'where.approved_by',
-      whereOf({ approved_by: 'none' }),
-      "items.where.approved_by isn't supported yet"
+      'a merge_request where key no source reads',
+      whereOf({ labels: ['web'] }),
+      "items.where.labels isn't supported yet"
     ],
     [
-      'where.target_branch',
-      whereOf({ target_branch: 'dev' }),
-      "items.where.target_branch isn't supported yet"
+      'a where key of a kind whose source has not landed',
+      { items: { kind: 'worktree', where: { has_mr: true }, match: [], customFields: [] } },
+      "items.where.has_mr isn't supported yet"
     ]
   ])('fails the tick on %s, starting nothing and writing no keys', async (_name, over, error) => {
     const d = deps()
@@ -567,6 +565,22 @@ describe('runTick on keys a later task implements (Task 2b ruling)', () => {
     expect(d.store.handledKeys('fix-failed-ci').size).toBe(0)
     expect(d.store.seenKeys('fix-failed-ci').size).toBe(0)
     expect(d.store.lastTick('fix-failed-ci')).toMatchObject({ status: 'failed', error })
+  })
+
+  // Task 14c: the MR source reads reviewers, drafts, approvals and target branches.
+  it('ticks on every merge_request where key now that the MR source reads them', async () => {
+    const every = whereOf({
+      state: 'open',
+      author: 'anyone',
+      reviewer: 'anyone',
+      head_pipeline: 'any',
+      draft: false,
+      approved_by: 'none',
+      target_branch: 'dev'
+    })
+    const result = await runTick({ ...def, ...every }, people, deps(), { dryRun: true })
+    expect(result).toMatchObject({ status: 'ok', error: null })
+    expect(result.decisions.map((x) => x.key)).toEqual(['mr:1561', 'mr:1574'])
   })
 
   it('decides on items.match now that the tick evaluates it', async () => {

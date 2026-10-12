@@ -570,6 +570,306 @@
       "code": 0,
       "stdout": "/tmp/parity-05/gitdirs/wt-105/index.lock\n",
       "stderr": ""
+    },
+    {
+      "argv": [
+        "glab",
+        "api",
+        "--hostname",
+        "gitlab.com",
+        "projects/polygenx%2Fweb-platform/merge_requests/101/approvals"
+      ],
+      "code": 0,
+      "json": {
+        "approved_by": []
+      }
+    },
+    {
+      "argv": [
+        "glab",
+        "api",
+        "--hostname",
+        "gitlab.com",
+        "projects/polygenx%2Fweb-platform/merge_requests/101/discussions?per_page=100&page=1"
+      ],
+      "code": 0,
+      "json": []
+    },
+    {
+      "argv": [
+        "glab",
+        "api",
+        "--hostname",
+        "gitlab.com",
+        "projects/polygenx%2Fweb-platform/merge_requests?source_branch=web-101-a&per_page=100"
+      ],
+      "code": 0,
+      "json": [
+        {
+          "iid": 101,
+          "state": "opened",
+          "author": {
+            "username": "nish8"
+          },
+          "draft": false,
+          "target_branch": "dev",
+          "web_url": "https://gitlab.com/polygenx/web-platform/-/merge_requests/101"
+        }
+      ]
+    },
+    {
+      "argv": [
+        "glab",
+        "api",
+        "--hostname",
+        "gitlab.com",
+        "projects/polygenx%2Fweb-platform/repository/commits/0101aaaabbbbcccc"
+      ],
+      "code": 0,
+      "json": {
+        "id": "0101aaaabbbbcccc",
+        "committed_date": "2026-10-11T09:00:00-07:00"
+      }
+    },
+    {
+      "argv": [
+        "glab",
+        "api",
+        "--hostname",
+        "gitlab.com",
+        "projects/polygenx%2Fweb-platform/merge_requests/102/approvals"
+      ],
+      "code": 0,
+      "json": {
+        "approved_by": []
+      }
+    },
+    {
+      "argv": [
+        "glab",
+        "api",
+        "--hostname",
+        "gitlab.com",
+        "projects/polygenx%2Fweb-platform/merge_requests/102/discussions?per_page=100&page=1"
+      ],
+      "code": 0,
+      "json": []
+    },
+    {
+      "argv": [
+        "glab",
+        "api",
+        "--hostname",
+        "gitlab.com",
+        "projects/polygenx%2Fweb-platform/merge_requests?source_branch=web-102-b&per_page=100"
+      ],
+      "code": 0,
+      "json": [
+        {
+          "iid": 102,
+          "state": "opened",
+          "author": {
+            "username": "nish8"
+          },
+          "draft": false,
+          "target_branch": "dev",
+          "web_url": "https://gitlab.com/polygenx/web-platform/-/merge_requests/102"
+        }
+      ]
+    },
+    {
+      "argv": [
+        "glab",
+        "api",
+        "--hostname",
+        "gitlab.com",
+        "projects/polygenx%2Fweb-platform/repository/commits/0102aaaabbbbcccc"
+      ],
+      "code": 0,
+      "json": {
+        "id": "0102aaaabbbbcccc",
+        "committed_date": "2026-10-11T09:00:00-07:00"
+      }
+    },
+    {
+      "argv": [
+        "glab",
+        "api",
+        "--hostname",
+        "gitlab.com",
+        "projects/polygenx%2Fweb-platform/merge_requests/103/approvals"
+      ],
+      "code": 0,
+      "json": {
+        "approved_by": []
+      }
+    },
+    {
+      "argv": [
+        "glab",
+        "api",
+        "--hostname",
+        "gitlab.com",
+        "projects/polygenx%2Fweb-platform/merge_requests/103/discussions?per_page=100&page=1"
+      ],
+      "code": 0,
+      "json": []
+    },
+    {
+      "argv": [
+        "glab",
+        "api",
+        "--hostname",
+        "gitlab.com",
+        "projects/polygenx%2Fweb-platform/merge_requests?source_branch=web-103-c&per_page=100"
+      ],
+      "code": 0,
+      "json": [
+        {
+          "iid": 103,
+          "state": "opened",
+          "author": {
+            "username": "nish8"
+          },
+          "draft": false,
+          "target_branch": "dev",
+          "web_url": "https://gitlab.com/polygenx/web-platform/-/merge_requests/103"
+        }
+      ]
+    },
+    {
+      "argv": [
+        "glab",
+        "api",
+        "--hostname",
+        "gitlab.com",
+        "projects/polygenx%2Fweb-platform/repository/commits/0103aaaabbbbcccc"
+      ],
+      "code": 0,
+      "json": {
+        "id": "0103aaaabbbbcccc",
+        "committed_date": "2026-10-11T09:00:00-07:00"
+      }
+    },
+    {
+      "argv": [
+        "glab",
+        "api",
+        "--hostname",
+        "gitlab.com",
+        "projects/polygenx%2Fweb-platform/merge_requests/104/approvals"
+      ],
+      "code": 0,
+      "json": {
+        "approved_by": []
+      }
+    },
+    {
+      "argv": [
+        "glab",
+        "api",
+        "--hostname",
+        "gitlab.com",
+        "projects/polygenx%2Fweb-platform/merge_requests/104/discussions?per_page=100&page=1"
+      ],
+      "code": 0,
+      "json": []
+    },
+    {
+      "argv": [
+        "glab",
+        "api",
+        "--hostname",
+        "gitlab.com",
+        "projects/polygenx%2Fweb-platform/merge_requests?source_branch=web-104-d&per_page=100"
+      ],
+      "code": 0,
+      "json": [
+        {
+          "iid": 104,
+          "state": "opened",
+          "author": {
+            "username": "nish8"
+          },
+          "draft": false,
+          "target_branch": "dev",
+          "web_url": "https://gitlab.com/polygenx/web-platform/-/merge_requests/104"
+        }
+      ]
+    },
+    {
+      "argv": [
+        "glab",
+        "api",
+        "--hostname",
+        "gitlab.com",
+        "projects/polygenx%2Fweb-platform/repository/commits/0104aaaabbbbcccc"
+      ],
+      "code": 0,
+      "json": {
+        "id": "0104aaaabbbbcccc",
+        "committed_date": "2026-10-11T09:00:00-07:00"
+      }
+    },
+    {
+      "argv": [
+        "glab",
+        "api",
+        "--hostname",
+        "gitlab.com",
+        "projects/polygenx%2Fweb-platform/merge_requests/105/approvals"
+      ],
+      "code": 0,
+      "json": {
+        "approved_by": []
+      }
+    },
+    {
+      "argv": [
+        "glab",
+        "api",
+        "--hostname",
+        "gitlab.com",
+        "projects/polygenx%2Fweb-platform/merge_requests/105/discussions?per_page=100&page=1"
+      ],
+      "code": 0,
+      "json": []
+    },
+    {
+      "argv": [
+        "glab",
+        "api",
+        "--hostname",
+        "gitlab.com",
+        "projects/polygenx%2Fweb-platform/merge_requests?source_branch=web-105-e&per_page=100"
+      ],
+      "code": 0,
+      "json": [
+        {
+          "iid": 105,
+          "state": "opened",
+          "author": {
+            "username": "nish8"
+          },
+          "draft": false,
+          "target_branch": "dev",
+          "web_url": "https://gitlab.com/polygenx/web-platform/-/merge_requests/105"
+        }
+      ]
+    },
+    {
+      "argv": [
+        "glab",
+        "api",
+        "--hostname",
+        "gitlab.com",
+        "projects/polygenx%2Fweb-platform/repository/commits/0105aaaabbbbcccc"
+      ],
+      "code": 0,
+      "json": {
+        "id": "0105aaaabbbbcccc",
+        "committed_date": "2026-10-11T09:00:00-07:00"
+      }
     }
   ],
   "state": {

@@ -1,5 +1,5 @@
 import type { ItemDecision, TickResult, Verdict } from '../../shared/api-types'
-import type { AutomationDefinition } from '../../shared/definition/types'
+import type { AutomationDefinition, ItemKind } from '../../shared/definition/types'
 import type { PeopleDirectory } from '../../shared/people'
 import { usesHandled, workspacePathOf } from '../../shared/tick/decide'
 import { createPassFetchCache, type PassFetchCache } from '../sources/fetch-cache'
@@ -60,16 +60,31 @@ function countVerdicts(decisions: ItemDecision[]): Partial<Record<Verdict, numbe
   return counts
 }
 
-const ACTED_ON_WHERE = new Set(['state', 'author', 'head_pipeline'])
+// The where keys each kind's source acts on: merge_request's since Task 14c; the other kinds' keys
+// land with their sources (Tasks 15–17).
+const ACTED_ON_WHERE: Partial<Record<ItemKind, ReadonlySet<string>>> = {
+  merge_request: new Set([
+    'state',
+    'author',
+    'reviewer',
+    'head_pipeline',
+    'draft',
+    'approved_by',
+    'target_branch'
+  ])
+}
 
 // Keys a later task implements (Task 2b ruling): until then a file using one fails the tick instead
-// of running wider. start: ask_first → Task 25; more MR where → Task 14c. Every workspace launches
-// (Task 8d).
+// of running wider. start: ask_first → Task 25. Every workspace launches (Task 8d).
 function unactedKey(def: AutomationDefinition): string | null {
   if (def.start === 'ask_first') {
     return "start: ask_first isn't supported yet"
   }
-  const clause = Object.keys(def.items?.where ?? {}).find((k) => !ACTED_ON_WHERE.has(k))
+  if (!def.items) {
+    return null
+  }
+  const acted = ACTED_ON_WHERE[def.items.kind]
+  const clause = Object.keys(def.items.where).find((k) => !acted?.has(k))
   if (clause) {
     return `items.where.${clause} isn't supported yet`
   }
