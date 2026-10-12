@@ -1,0 +1,891 @@
+{
+  "case": "no-suite-run-in-30",
+  "job": "13",
+  "now": 1791738300000,
+  "recordedAt": "synthetic",
+  "repo": {
+    "id": "400fee61-a463-4f76-894a-39861e906007",
+    "path": "/Users/nishsitapara/Documents/web-platform",
+    "name": "web-platform",
+    "project": "polygenx/web-platform",
+    "host": "gitlab.com"
+  },
+  "reads": [
+    {
+      "argv": [
+        "glab",
+        "api",
+        "--hostname",
+        "gitlab.com",
+        "projects/polygenx%2Fweb-platform/pipelines?source=parent_pipeline&ref=dev&order_by=id&sort=desc&per_page=30"
+      ],
+      "code": 0,
+      "json": [
+        {
+          "id": 100,
+          "status": "success",
+          "ref": "dev",
+          "sha": "0000000000000000000000000000000000000100",
+          "web_url": "https://gitlab.com/p/100",
+          "created_at": "2026-10-11T17:00:00Z"
+        },
+        {
+          "id": 99,
+          "status": "success",
+          "ref": "dev",
+          "sha": "0000000000000000000000000000000000000099",
+          "web_url": "https://gitlab.com/p/99",
+          "created_at": "2026-10-11T17:00:00Z"
+        },
+        {
+          "id": 98,
+          "status": "success",
+          "ref": "dev",
+          "sha": "0000000000000000000000000000000000000098",
+          "web_url": "https://gitlab.com/p/98",
+          "created_at": "2026-10-11T17:00:00Z"
+        },
+        {
+          "id": 97,
+          "status": "success",
+          "ref": "dev",
+          "sha": "0000000000000000000000000000000000000097",
+          "web_url": "https://gitlab.com/p/97",
+          "created_at": "2026-10-11T17:00:00Z"
+        },
+        {
+          "id": 96,
+          "status": "success",
+          "ref": "dev",
+          "sha": "0000000000000000000000000000000000000096",
+          "web_url": "https://gitlab.com/p/96",
+          "created_at": "2026-10-11T17:00:00Z"
+        },
+        {
+          "id": 95,
+          "status": "success",
+          "ref": "dev",
+          "sha": "0000000000000000000000000000000000000095",
+          "web_url": "https://gitlab.com/p/95",
+          "created_at": "2026-10-11T17:00:00Z"
+        },
+        {
+          "id": 94,
+          "status": "success",
+          "ref": "dev",
+          "sha": "0000000000000000000000000000000000000094",
+          "web_url": "https://gitlab.com/p/94",
+          "created_at": "2026-10-11T17:00:00Z"
+        },
+        {
+          "id": 93,
+          "status": "success",
+          "ref": "dev",
+          "sha": "0000000000000000000000000000000000000093",
+          "web_url": "https://gitlab.com/p/93",
+          "created_at": "2026-10-11T17:00:00Z"
+        },
+        {
+          "id": 92,
+          "status": "success",
+          "ref": "dev",
+          "sha": "0000000000000000000000000000000000000092",
+          "web_url": "https://gitlab.com/p/92",
+          "created_at": "2026-10-11T17:00:00Z"
+        },
+        {
+          "id": 91,
+          "status": "success",
+          "ref": "dev",
+          "sha": "0000000000000000000000000000000000000091",
+          "web_url": "https://gitlab.com/p/91",
+          "created_at": "2026-10-11T17:00:00Z"
+        },
+        {
+          "id": 90,
+          "status": "success",
+          "ref": "dev",
+          "sha": "0000000000000000000000000000000000000090",
+          "web_url": "https://gitlab.com/p/90",
+          "created_at": "2026-10-11T17:00:00Z"
+        },
+        {
+          "id": 89,
+          "status": "success",
+          "ref": "dev",
+          "sha": "0000000000000000000000000000000000000089",
+          "web_url": "https://gitlab.com/p/89",
+          "created_at": "2026-10-11T17:00:00Z"
+        },
+        {
+          "id": 88,
+          "status": "success",
+          "ref": "dev",
+          "sha": "0000000000000000000000000000000000000088",
+          "web_url": "https://gitlab.com/p/88",
+          "created_at": "2026-10-11T17:00:00Z"
+        },
+        {
+          "id": 87,
+          "status": "success",
+          "ref": "dev",
+          "sha": "0000000000000000000000000000000000000087",
+          "web_url": "https://gitlab.com/p/87",
+          "created_at": "2026-10-11T17:00:00Z"
+        },
+        {
+          "id": 86,
+          "status": "success",
+          "ref": "dev",
+          "sha": "0000000000000000000000000000000000000086",
+          "web_url": "https://gitlab.com/p/86",
+          "created_at": "2026-10-11T17:00:00Z"
+        },
+        {
+          "id": 85,
+          "status": "success",
+          "ref": "dev",
+          "sha": "0000000000000000000000000000000000000085",
+          "web_url": "https://gitlab.com/p/85",
+          "created_at": "2026-10-11T17:00:00Z"
+        },
+        {
+          "id": 84,
+          "status": "success",
+          "ref": "dev",
+          "sha": "0000000000000000000000000000000000000084",
+          "web_url": "https://gitlab.com/p/84",
+          "created_at": "2026-10-11T17:00:00Z"
+        },
+        {
+          "id": 83,
+          "status": "success",
+          "ref": "dev",
+          "sha": "0000000000000000000000000000000000000083",
+          "web_url": "https://gitlab.com/p/83",
+          "created_at": "2026-10-11T17:00:00Z"
+        },
+        {
+          "id": 82,
+          "status": "success",
+          "ref": "dev",
+          "sha": "0000000000000000000000000000000000000082",
+          "web_url": "https://gitlab.com/p/82",
+          "created_at": "2026-10-11T17:00:00Z"
+        },
+        {
+          "id": 81,
+          "status": "success",
+          "ref": "dev",
+          "sha": "0000000000000000000000000000000000000081",
+          "web_url": "https://gitlab.com/p/81",
+          "created_at": "2026-10-11T17:00:00Z"
+        },
+        {
+          "id": 80,
+          "status": "success",
+          "ref": "dev",
+          "sha": "0000000000000000000000000000000000000080",
+          "web_url": "https://gitlab.com/p/80",
+          "created_at": "2026-10-11T17:00:00Z"
+        },
+        {
+          "id": 79,
+          "status": "success",
+          "ref": "dev",
+          "sha": "0000000000000000000000000000000000000079",
+          "web_url": "https://gitlab.com/p/79",
+          "created_at": "2026-10-11T17:00:00Z"
+        },
+        {
+          "id": 78,
+          "status": "success",
+          "ref": "dev",
+          "sha": "0000000000000000000000000000000000000078",
+          "web_url": "https://gitlab.com/p/78",
+          "created_at": "2026-10-11T17:00:00Z"
+        },
+        {
+          "id": 77,
+          "status": "success",
+          "ref": "dev",
+          "sha": "0000000000000000000000000000000000000077",
+          "web_url": "https://gitlab.com/p/77",
+          "created_at": "2026-10-11T17:00:00Z"
+        },
+        {
+          "id": 76,
+          "status": "success",
+          "ref": "dev",
+          "sha": "0000000000000000000000000000000000000076",
+          "web_url": "https://gitlab.com/p/76",
+          "created_at": "2026-10-11T17:00:00Z"
+        },
+        {
+          "id": 75,
+          "status": "success",
+          "ref": "dev",
+          "sha": "0000000000000000000000000000000000000075",
+          "web_url": "https://gitlab.com/p/75",
+          "created_at": "2026-10-11T17:00:00Z"
+        },
+        {
+          "id": 74,
+          "status": "success",
+          "ref": "dev",
+          "sha": "0000000000000000000000000000000000000074",
+          "web_url": "https://gitlab.com/p/74",
+          "created_at": "2026-10-11T17:00:00Z"
+        },
+        {
+          "id": 73,
+          "status": "success",
+          "ref": "dev",
+          "sha": "0000000000000000000000000000000000000073",
+          "web_url": "https://gitlab.com/p/73",
+          "created_at": "2026-10-11T17:00:00Z"
+        },
+        {
+          "id": 72,
+          "status": "success",
+          "ref": "dev",
+          "sha": "0000000000000000000000000000000000000072",
+          "web_url": "https://gitlab.com/p/72",
+          "created_at": "2026-10-11T17:00:00Z"
+        },
+        {
+          "id": 71,
+          "status": "success",
+          "ref": "dev",
+          "sha": "0000000000000000000000000000000000000071",
+          "web_url": "https://gitlab.com/p/71",
+          "created_at": "2026-10-11T17:00:00Z"
+        }
+      ]
+    },
+    {
+      "argv": [
+        "glab",
+        "api",
+        "--hostname",
+        "gitlab.com",
+        "projects/polygenx%2Fweb-platform/pipelines/71/jobs?per_page=100"
+      ],
+      "code": 0,
+      "json": [
+        {
+          "id": 711,
+          "name": "e2e-skipped",
+          "status": "success",
+          "allow_failure": false,
+          "web_url": "https://gitlab.com/j/711"
+        }
+      ]
+    },
+    {
+      "argv": [
+        "glab",
+        "api",
+        "--hostname",
+        "gitlab.com",
+        "projects/polygenx%2Fweb-platform/pipelines/72/jobs?per_page=100"
+      ],
+      "code": 0,
+      "json": [
+        {
+          "id": 721,
+          "name": "e2e-skipped",
+          "status": "success",
+          "allow_failure": false,
+          "web_url": "https://gitlab.com/j/721"
+        }
+      ]
+    },
+    {
+      "argv": [
+        "glab",
+        "api",
+        "--hostname",
+        "gitlab.com",
+        "projects/polygenx%2Fweb-platform/pipelines/73/jobs?per_page=100"
+      ],
+      "code": 0,
+      "json": [
+        {
+          "id": 731,
+          "name": "e2e-skipped",
+          "status": "success",
+          "allow_failure": false,
+          "web_url": "https://gitlab.com/j/731"
+        }
+      ]
+    },
+    {
+      "argv": [
+        "glab",
+        "api",
+        "--hostname",
+        "gitlab.com",
+        "projects/polygenx%2Fweb-platform/pipelines/74/jobs?per_page=100"
+      ],
+      "code": 0,
+      "json": [
+        {
+          "id": 741,
+          "name": "e2e-skipped",
+          "status": "success",
+          "allow_failure": false,
+          "web_url": "https://gitlab.com/j/741"
+        }
+      ]
+    },
+    {
+      "argv": [
+        "glab",
+        "api",
+        "--hostname",
+        "gitlab.com",
+        "projects/polygenx%2Fweb-platform/pipelines/75/jobs?per_page=100"
+      ],
+      "code": 0,
+      "json": [
+        {
+          "id": 751,
+          "name": "e2e-skipped",
+          "status": "success",
+          "allow_failure": false,
+          "web_url": "https://gitlab.com/j/751"
+        }
+      ]
+    },
+    {
+      "argv": [
+        "glab",
+        "api",
+        "--hostname",
+        "gitlab.com",
+        "projects/polygenx%2Fweb-platform/pipelines/76/jobs?per_page=100"
+      ],
+      "code": 0,
+      "json": [
+        {
+          "id": 761,
+          "name": "e2e-skipped",
+          "status": "success",
+          "allow_failure": false,
+          "web_url": "https://gitlab.com/j/761"
+        }
+      ]
+    },
+    {
+      "argv": [
+        "glab",
+        "api",
+        "--hostname",
+        "gitlab.com",
+        "projects/polygenx%2Fweb-platform/pipelines/77/jobs?per_page=100"
+      ],
+      "code": 0,
+      "json": [
+        {
+          "id": 771,
+          "name": "e2e-skipped",
+          "status": "success",
+          "allow_failure": false,
+          "web_url": "https://gitlab.com/j/771"
+        }
+      ]
+    },
+    {
+      "argv": [
+        "glab",
+        "api",
+        "--hostname",
+        "gitlab.com",
+        "projects/polygenx%2Fweb-platform/pipelines/78/jobs?per_page=100"
+      ],
+      "code": 0,
+      "json": [
+        {
+          "id": 781,
+          "name": "e2e-skipped",
+          "status": "success",
+          "allow_failure": false,
+          "web_url": "https://gitlab.com/j/781"
+        }
+      ]
+    },
+    {
+      "argv": [
+        "glab",
+        "api",
+        "--hostname",
+        "gitlab.com",
+        "projects/polygenx%2Fweb-platform/pipelines/79/jobs?per_page=100"
+      ],
+      "code": 0,
+      "json": [
+        {
+          "id": 791,
+          "name": "e2e-skipped",
+          "status": "success",
+          "allow_failure": false,
+          "web_url": "https://gitlab.com/j/791"
+        }
+      ]
+    },
+    {
+      "argv": [
+        "glab",
+        "api",
+        "--hostname",
+        "gitlab.com",
+        "projects/polygenx%2Fweb-platform/pipelines/80/jobs?per_page=100"
+      ],
+      "code": 0,
+      "json": [
+        {
+          "id": 801,
+          "name": "e2e-skipped",
+          "status": "success",
+          "allow_failure": false,
+          "web_url": "https://gitlab.com/j/801"
+        }
+      ]
+    },
+    {
+      "argv": [
+        "glab",
+        "api",
+        "--hostname",
+        "gitlab.com",
+        "projects/polygenx%2Fweb-platform/pipelines/81/jobs?per_page=100"
+      ],
+      "code": 0,
+      "json": [
+        {
+          "id": 811,
+          "name": "e2e-skipped",
+          "status": "success",
+          "allow_failure": false,
+          "web_url": "https://gitlab.com/j/811"
+        }
+      ]
+    },
+    {
+      "argv": [
+        "glab",
+        "api",
+        "--hostname",
+        "gitlab.com",
+        "projects/polygenx%2Fweb-platform/pipelines/82/jobs?per_page=100"
+      ],
+      "code": 0,
+      "json": [
+        {
+          "id": 821,
+          "name": "e2e-skipped",
+          "status": "success",
+          "allow_failure": false,
+          "web_url": "https://gitlab.com/j/821"
+        }
+      ]
+    },
+    {
+      "argv": [
+        "glab",
+        "api",
+        "--hostname",
+        "gitlab.com",
+        "projects/polygenx%2Fweb-platform/pipelines/83/jobs?per_page=100"
+      ],
+      "code": 0,
+      "json": [
+        {
+          "id": 831,
+          "name": "e2e-skipped",
+          "status": "success",
+          "allow_failure": false,
+          "web_url": "https://gitlab.com/j/831"
+        }
+      ]
+    },
+    {
+      "argv": [
+        "glab",
+        "api",
+        "--hostname",
+        "gitlab.com",
+        "projects/polygenx%2Fweb-platform/pipelines/84/jobs?per_page=100"
+      ],
+      "code": 0,
+      "json": [
+        {
+          "id": 841,
+          "name": "e2e-skipped",
+          "status": "success",
+          "allow_failure": false,
+          "web_url": "https://gitlab.com/j/841"
+        }
+      ]
+    },
+    {
+      "argv": [
+        "glab",
+        "api",
+        "--hostname",
+        "gitlab.com",
+        "projects/polygenx%2Fweb-platform/pipelines/85/jobs?per_page=100"
+      ],
+      "code": 0,
+      "json": [
+        {
+          "id": 851,
+          "name": "e2e-skipped",
+          "status": "success",
+          "allow_failure": false,
+          "web_url": "https://gitlab.com/j/851"
+        }
+      ]
+    },
+    {
+      "argv": [
+        "glab",
+        "api",
+        "--hostname",
+        "gitlab.com",
+        "projects/polygenx%2Fweb-platform/pipelines/86/jobs?per_page=100"
+      ],
+      "code": 0,
+      "json": [
+        {
+          "id": 861,
+          "name": "e2e-skipped",
+          "status": "success",
+          "allow_failure": false,
+          "web_url": "https://gitlab.com/j/861"
+        }
+      ]
+    },
+    {
+      "argv": [
+        "glab",
+        "api",
+        "--hostname",
+        "gitlab.com",
+        "projects/polygenx%2Fweb-platform/pipelines/87/jobs?per_page=100"
+      ],
+      "code": 0,
+      "json": [
+        {
+          "id": 871,
+          "name": "e2e-skipped",
+          "status": "success",
+          "allow_failure": false,
+          "web_url": "https://gitlab.com/j/871"
+        }
+      ]
+    },
+    {
+      "argv": [
+        "glab",
+        "api",
+        "--hostname",
+        "gitlab.com",
+        "projects/polygenx%2Fweb-platform/pipelines/88/jobs?per_page=100"
+      ],
+      "code": 0,
+      "json": [
+        {
+          "id": 881,
+          "name": "e2e-skipped",
+          "status": "success",
+          "allow_failure": false,
+          "web_url": "https://gitlab.com/j/881"
+        }
+      ]
+    },
+    {
+      "argv": [
+        "glab",
+        "api",
+        "--hostname",
+        "gitlab.com",
+        "projects/polygenx%2Fweb-platform/pipelines/89/jobs?per_page=100"
+      ],
+      "code": 0,
+      "json": [
+        {
+          "id": 891,
+          "name": "e2e-skipped",
+          "status": "success",
+          "allow_failure": false,
+          "web_url": "https://gitlab.com/j/891"
+        }
+      ]
+    },
+    {
+      "argv": [
+        "glab",
+        "api",
+        "--hostname",
+        "gitlab.com",
+        "projects/polygenx%2Fweb-platform/pipelines/90/jobs?per_page=100"
+      ],
+      "code": 0,
+      "json": [
+        {
+          "id": 901,
+          "name": "e2e-skipped",
+          "status": "success",
+          "allow_failure": false,
+          "web_url": "https://gitlab.com/j/901"
+        }
+      ]
+    },
+    {
+      "argv": [
+        "glab",
+        "api",
+        "--hostname",
+        "gitlab.com",
+        "projects/polygenx%2Fweb-platform/pipelines/91/jobs?per_page=100"
+      ],
+      "code": 0,
+      "json": [
+        {
+          "id": 911,
+          "name": "e2e-skipped",
+          "status": "success",
+          "allow_failure": false,
+          "web_url": "https://gitlab.com/j/911"
+        }
+      ]
+    },
+    {
+      "argv": [
+        "glab",
+        "api",
+        "--hostname",
+        "gitlab.com",
+        "projects/polygenx%2Fweb-platform/pipelines/92/jobs?per_page=100"
+      ],
+      "code": 0,
+      "json": [
+        {
+          "id": 921,
+          "name": "e2e-skipped",
+          "status": "success",
+          "allow_failure": false,
+          "web_url": "https://gitlab.com/j/921"
+        }
+      ]
+    },
+    {
+      "argv": [
+        "glab",
+        "api",
+        "--hostname",
+        "gitlab.com",
+        "projects/polygenx%2Fweb-platform/pipelines/93/jobs?per_page=100"
+      ],
+      "code": 0,
+      "json": [
+        {
+          "id": 931,
+          "name": "e2e-skipped",
+          "status": "success",
+          "allow_failure": false,
+          "web_url": "https://gitlab.com/j/931"
+        }
+      ]
+    },
+    {
+      "argv": [
+        "glab",
+        "api",
+        "--hostname",
+        "gitlab.com",
+        "projects/polygenx%2Fweb-platform/pipelines/94/jobs?per_page=100"
+      ],
+      "code": 0,
+      "json": [
+        {
+          "id": 941,
+          "name": "e2e-skipped",
+          "status": "success",
+          "allow_failure": false,
+          "web_url": "https://gitlab.com/j/941"
+        }
+      ]
+    },
+    {
+      "argv": [
+        "glab",
+        "api",
+        "--hostname",
+        "gitlab.com",
+        "projects/polygenx%2Fweb-platform/pipelines/95/jobs?per_page=100"
+      ],
+      "code": 0,
+      "json": [
+        {
+          "id": 951,
+          "name": "e2e-skipped",
+          "status": "success",
+          "allow_failure": false,
+          "web_url": "https://gitlab.com/j/951"
+        }
+      ]
+    },
+    {
+      "argv": [
+        "glab",
+        "api",
+        "--hostname",
+        "gitlab.com",
+        "projects/polygenx%2Fweb-platform/pipelines/96/jobs?per_page=100"
+      ],
+      "code": 0,
+      "json": [
+        {
+          "id": 961,
+          "name": "e2e-skipped",
+          "status": "success",
+          "allow_failure": false,
+          "web_url": "https://gitlab.com/j/961"
+        }
+      ]
+    },
+    {
+      "argv": [
+        "glab",
+        "api",
+        "--hostname",
+        "gitlab.com",
+        "projects/polygenx%2Fweb-platform/pipelines/97/jobs?per_page=100"
+      ],
+      "code": 0,
+      "json": [
+        {
+          "id": 971,
+          "name": "e2e-skipped",
+          "status": "success",
+          "allow_failure": false,
+          "web_url": "https://gitlab.com/j/971"
+        }
+      ]
+    },
+    {
+      "argv": [
+        "glab",
+        "api",
+        "--hostname",
+        "gitlab.com",
+        "projects/polygenx%2Fweb-platform/pipelines/98/jobs?per_page=100"
+      ],
+      "code": 0,
+      "json": [
+        {
+          "id": 981,
+          "name": "e2e-skipped",
+          "status": "success",
+          "allow_failure": false,
+          "web_url": "https://gitlab.com/j/981"
+        }
+      ]
+    },
+    {
+      "argv": [
+        "glab",
+        "api",
+        "--hostname",
+        "gitlab.com",
+        "projects/polygenx%2Fweb-platform/pipelines/99/jobs?per_page=100"
+      ],
+      "code": 0,
+      "json": [
+        {
+          "id": 991,
+          "name": "e2e-skipped",
+          "status": "success",
+          "allow_failure": false,
+          "web_url": "https://gitlab.com/j/991"
+        }
+      ]
+    },
+    {
+      "argv": [
+        "glab",
+        "api",
+        "--hostname",
+        "gitlab.com",
+        "projects/polygenx%2Fweb-platform/pipelines/100/jobs?per_page=100"
+      ],
+      "code": 0,
+      "json": [
+        {
+          "id": 1001,
+          "name": "e2e-skipped",
+          "status": "success",
+          "allow_failure": false,
+          "web_url": "https://gitlab.com/j/1001"
+        }
+      ]
+    },
+    {
+      "argv": ["orca", "worktree", "list", "--json"],
+      "code": 0,
+      "json": { "ok": true, "result": { "worktrees": [] } }
+    },
+    {
+      "argv": ["orca", "terminal", "list", "--json"],
+      "code": 0,
+      "json": { "ok": true, "result": { "terminals": [] } }
+    },
+    {
+      "argv": [
+        "orca",
+        "linear",
+        "list",
+        "--filter",
+        "all",
+        "--workspace",
+        "all",
+        "--limit",
+        "200",
+        "--json"
+      ],
+      "code": 0,
+      "json": {
+        "ok": true,
+        "result": {
+          "issues": [],
+          "truncated": false,
+          "meta": {
+            "filter": "all",
+            "workspaceId": "all",
+            "limit": 200,
+            "returned": 0,
+            "hasMore": false,
+            "partial": false,
+            "workspaceErrors": []
+          }
+        }
+      }
+    },
+    {
+      "argv": ["glab", "api", "--hostname", "gitlab.com", "user"],
+      "code": 0,
+      "json": { "username": "nish8" }
+    }
+  ],
+  "state": {
+    "dev-e2e/handled.json": {},
+    "dev-e2e/tabs-codex.json": {},
+    "dev-e2e/tabs.json": {},
+    "dev-e2e/tickets.json": {},
+    "quota/claude.json": { "weekly": 20, "session": 10 }
+  },
+  "exists": {}
+}

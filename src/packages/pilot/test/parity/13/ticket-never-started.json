@@ -1,0 +1,171 @@
+{
+  "case": "ticket-never-started",
+  "job": "13",
+  "now": 1791738300000,
+  "recordedAt": "synthetic",
+  "repo": {
+    "id": "400fee61-a463-4f76-894a-39861e906007",
+    "path": "/Users/nishsitapara/Documents/web-platform",
+    "name": "web-platform",
+    "project": "polygenx/web-platform",
+    "host": "gitlab.com"
+  },
+  "reads": [
+    {
+      "argv": [
+        "glab",
+        "api",
+        "--hostname",
+        "gitlab.com",
+        "projects/polygenx%2Fweb-platform/pipelines?source=parent_pipeline&ref=dev&order_by=id&sort=desc&per_page=30"
+      ],
+      "code": 0,
+      "json": [
+        {
+          "id": 9,
+          "status": "success",
+          "ref": "dev",
+          "sha": "0000000000000000000000000000000000000009",
+          "web_url": "https://gitlab.com/p/9",
+          "created_at": "2026-10-11T17:00:00Z"
+        }
+      ]
+    },
+    {
+      "argv": [
+        "glab",
+        "api",
+        "--hostname",
+        "gitlab.com",
+        "projects/polygenx%2Fweb-platform/pipelines/9/jobs?per_page=100"
+      ],
+      "code": 0,
+      "json": [
+        {
+          "id": 91,
+          "name": "e2e-checks-and-build",
+          "status": "success",
+          "allow_failure": false,
+          "web_url": "https://gitlab.com/j/91"
+        },
+        {
+          "id": 93,
+          "name": "notify-slack-recovery",
+          "status": "skipped",
+          "allow_failure": false,
+          "web_url": "https://gitlab.com/j/93"
+        }
+      ]
+    },
+    {
+      "argv": ["orca", "worktree", "list", "--json"],
+      "code": 0,
+      "json": { "ok": true, "result": { "worktrees": [] } }
+    },
+    {
+      "argv": ["orca", "terminal", "list", "--json"],
+      "code": 0,
+      "json": { "ok": true, "result": { "terminals": [] } }
+    },
+    {
+      "argv": ["orca", "linear", "issue", "WEB-2", "--json"],
+      "code": 0,
+      "json": { "ok": true, "result": { "issue": { "state": { "type": "started" } } } }
+    },
+    {
+      "argv": [
+        "orca",
+        "linear",
+        "list",
+        "--filter",
+        "all",
+        "--workspace",
+        "all",
+        "--limit",
+        "200",
+        "--json"
+      ],
+      "code": 0,
+      "json": {
+        "ok": true,
+        "result": {
+          "issues": [
+            {
+              "id": "uuid-WEB-2",
+              "identifier": "WEB-2",
+              "title": "Fix hourly e2e failure (WEB-2)",
+              "url": "https://linear.app/herasight/issue/WEB-2",
+              "state": { "name": "started", "type": "started" },
+              "team": { "id": "team-web", "key": "WEB", "name": "Web Dev" },
+              "assignee": { "id": "u-nish", "displayName": "nish" },
+              "priority": 2,
+              "workspace": { "id": "ws1", "name": "Herasight" }
+            }
+          ],
+          "truncated": false,
+          "meta": {
+            "filter": "all",
+            "workspaceId": "all",
+            "limit": 200,
+            "returned": 1,
+            "hasMore": false,
+            "partial": false,
+            "workspaceErrors": []
+          }
+        }
+      }
+    },
+    {
+      "argv": ["glab", "api", "--hostname", "gitlab.com", "user"],
+      "code": 0,
+      "json": { "username": "nish8" }
+    },
+    {
+      "argv": ["orca", "linear", "issue", "WEB-2", "--workspace", "ws1", "--json"],
+      "code": 0,
+      "json": {
+        "ok": true,
+        "result": {
+          "issue": {
+            "id": "uuid-WEB-2",
+            "identifier": "WEB-2",
+            "title": "Fix hourly e2e failure (WEB-2)",
+            "url": "https://linear.app/herasight/issue/WEB-2",
+            "state": { "name": "started", "type": "started" },
+            "team": { "id": "team-web", "key": "WEB", "name": "Web Dev" },
+            "assignee": { "id": "u-nish", "displayName": "nish" },
+            "priority": 2,
+            "createdAt": "2026-10-11T17:10:00.000Z",
+            "branchName": "web-2-fix",
+            "labels": [],
+            "workspace": { "id": "ws1", "name": "Herasight" }
+          }
+        }
+      }
+    },
+    {
+      "argv": [
+        "git",
+        "-C",
+        "/Users/nishsitapara/Documents/web-platform",
+        "show-ref",
+        "--verify",
+        "--quiet",
+        "refs/heads/web-2-fix"
+      ],
+      "code": 1,
+      "stdout": "",
+      "stderr": ""
+    }
+  ],
+  "state": {
+    "dev-e2e/handled.json": {},
+    "dev-e2e/tabs-codex.json": {},
+    "dev-e2e/tabs.json": {},
+    "dev-e2e/tickets.json": {
+      "WEB-2": { "jobs": ["e2e-checks-and-build"], "pipeline": 3, "branch": "web-2-fix" }
+    },
+    "quota/claude.json": { "weekly": 20, "session": 10 }
+  },
+  "exists": {}
+}

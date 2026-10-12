@@ -1,0 +1,217 @@
+{
+  "case": "red-covered-by-open-ticket",
+  "job": "13",
+  "now": 1791738300000,
+  "recordedAt": "synthetic",
+  "repo": {
+    "id": "400fee61-a463-4f76-894a-39861e906007",
+    "path": "/Users/nishsitapara/Documents/web-platform",
+    "name": "web-platform",
+    "project": "polygenx/web-platform",
+    "host": "gitlab.com"
+  },
+  "reads": [
+    {
+      "argv": [
+        "glab",
+        "api",
+        "--hostname",
+        "gitlab.com",
+        "projects/polygenx%2Fweb-platform/pipelines?source=parent_pipeline&ref=dev&order_by=id&sort=desc&per_page=30"
+      ],
+      "code": 0,
+      "json": [
+        {
+          "id": 9,
+          "status": "failed",
+          "ref": "dev",
+          "sha": "0000000000000000000000000000000000000009",
+          "web_url": "https://gitlab.com/p/9",
+          "created_at": "2026-10-11T17:00:00Z"
+        },
+        {
+          "id": 8,
+          "status": "success",
+          "ref": "dev",
+          "sha": "0000000000000000000000000000000000000008",
+          "web_url": "https://gitlab.com/p/8",
+          "created_at": "2026-10-11T17:00:00Z"
+        }
+      ]
+    },
+    {
+      "argv": [
+        "glab",
+        "api",
+        "--hostname",
+        "gitlab.com",
+        "projects/polygenx%2Fweb-platform/pipelines/8/jobs?per_page=100"
+      ],
+      "code": 0,
+      "json": [
+        {
+          "id": 81,
+          "name": "e2e-checks-and-build",
+          "status": "success",
+          "allow_failure": false,
+          "web_url": "https://gitlab.com/j/81"
+        },
+        {
+          "id": 83,
+          "name": "notify-slack-recovery",
+          "status": "skipped",
+          "allow_failure": false,
+          "web_url": "https://gitlab.com/j/83"
+        }
+      ]
+    },
+    {
+      "argv": [
+        "glab",
+        "api",
+        "--hostname",
+        "gitlab.com",
+        "projects/polygenx%2Fweb-platform/pipelines/9/jobs?per_page=100"
+      ],
+      "code": 0,
+      "json": [
+        {
+          "id": 91,
+          "name": "e2e-checks-and-build",
+          "status": "failed",
+          "allow_failure": false,
+          "web_url": "https://gitlab.com/j/91"
+        },
+        {
+          "id": 92,
+          "name": "test-apps-e2e: [tasks]",
+          "status": "failed",
+          "allow_failure": false,
+          "web_url": "https://gitlab.com/j/92"
+        },
+        {
+          "id": 93,
+          "name": "notify-slack",
+          "status": "success",
+          "allow_failure": false,
+          "web_url": "https://gitlab.com/j/93"
+        }
+      ]
+    },
+    {
+      "argv": ["orca", "worktree", "list", "--json"],
+      "code": 0,
+      "json": { "ok": true, "result": { "worktrees": [] } }
+    },
+    {
+      "argv": ["orca", "terminal", "list", "--json"],
+      "code": 0,
+      "json": { "ok": true, "result": { "terminals": [] } }
+    },
+    {
+      "argv": ["orca", "linear", "issue", "WEB-1", "--json"],
+      "code": 0,
+      "json": { "ok": true, "result": { "issue": { "state": { "type": "started" } } } }
+    },
+    {
+      "argv": [
+        "orca",
+        "linear",
+        "list",
+        "--filter",
+        "all",
+        "--workspace",
+        "all",
+        "--limit",
+        "200",
+        "--json"
+      ],
+      "code": 0,
+      "json": {
+        "ok": true,
+        "result": {
+          "issues": [
+            {
+              "id": "uuid-WEB-1",
+              "identifier": "WEB-1",
+              "title": "Fix hourly e2e failure (WEB-1)",
+              "url": "https://linear.app/herasight/issue/WEB-1",
+              "state": { "name": "started", "type": "started" },
+              "team": { "id": "team-web", "key": "WEB", "name": "Web Dev" },
+              "assignee": { "id": "u-nish", "displayName": "nish" },
+              "priority": 2,
+              "workspace": { "id": "ws1", "name": "Herasight" }
+            }
+          ],
+          "truncated": false,
+          "meta": {
+            "filter": "all",
+            "workspaceId": "all",
+            "limit": 200,
+            "returned": 1,
+            "hasMore": false,
+            "partial": false,
+            "workspaceErrors": []
+          }
+        }
+      }
+    },
+    {
+      "argv": ["glab", "api", "--hostname", "gitlab.com", "user"],
+      "code": 0,
+      "json": { "username": "nish8" }
+    },
+    {
+      "argv": ["orca", "linear", "issue", "WEB-1", "--workspace", "ws1", "--json"],
+      "code": 0,
+      "json": {
+        "ok": true,
+        "result": {
+          "issue": {
+            "id": "uuid-WEB-1",
+            "identifier": "WEB-1",
+            "title": "Fix hourly e2e failure (WEB-1)",
+            "url": "https://linear.app/herasight/issue/WEB-1",
+            "state": { "name": "started", "type": "started" },
+            "team": { "id": "team-web", "key": "WEB", "name": "Web Dev" },
+            "assignee": { "id": "u-nish", "displayName": "nish" },
+            "priority": 2,
+            "createdAt": "2026-10-11T17:10:00.000Z",
+            "branchName": "web-1-fix",
+            "labels": [],
+            "workspace": { "id": "ws1", "name": "Herasight" }
+          }
+        }
+      }
+    },
+    {
+      "argv": [
+        "git",
+        "-C",
+        "/Users/nishsitapara/Documents/web-platform",
+        "show-ref",
+        "--verify",
+        "--quiet",
+        "refs/heads/web-1-fix"
+      ],
+      "code": 1,
+      "stdout": "",
+      "stderr": ""
+    }
+  ],
+  "state": {
+    "dev-e2e/handled.json": {},
+    "dev-e2e/tabs-codex.json": {},
+    "dev-e2e/tabs.json": {},
+    "dev-e2e/tickets.json": {
+      "WEB-1": {
+        "jobs": ["e2e-checks-and-build", "test-apps-e2e: [tasks]"],
+        "pipeline": 3,
+        "branch": "web-1-fix",
+        "path": "/wt/web-1"
+      }
+    },
+    "quota/claude.json": { "weekly": 20, "session": 10 }
+  },
+  "exists": {}
+}

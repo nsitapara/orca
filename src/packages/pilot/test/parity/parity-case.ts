@@ -1,6 +1,6 @@
 import { existsSync } from 'node:fs'
 import { describe, expect } from 'vitest'
-import { runTick } from '../../src/main/scheduler/tick-runner'
+import { runTick, type TickDeps } from '../../src/main/scheduler/tick-runner'
 import type { ScriptRunner } from '../../src/main/fields/script-runner'
 import { PilotStore } from '../../src/main/store/store'
 import type { AutomationDefinition } from '../../src/shared/definition/types'
@@ -26,6 +26,13 @@ export type ParityJob = {
   table: VerdictTable
   // Runs a custom field's script for real; 09's fields call the skill's own pure `sweep.py field`.
   runScript?: ScriptRunner
+  // The old side's own answers, for a script the new side can only run against the case (13's worktree check): a decision
+  // word `script_check` (key, reason: '' = passed) is no verdict, only the answer this returns for that key.
+  runScriptFor?(old: OldDecision[], fixture: ParityFixture): ScriptRunner
+  // Swaps parts of the tick's deps: 13's Linear tickets, which the case's reads supply (test/parity/linear-fixture.ts).
+  tickDeps?(deps: TickDeps, fixture: ParityFixture): TickDeps
+  // One old sweep, two automations (13): each job compares the old decisions whose key it lists.
+  ownsKey?(key: string): boolean
   seed(store: PilotStore, f: ParityFixture): void
   load(): { def: AutomationDefinition; people: PeopleDirectory }
 }
@@ -47,6 +54,23 @@ export function describeParity(job: ParityJob, title: string, body: () => void):
   describe.skip(`${title} (${reason})`, body)
 }
 
+function scripts(
+  job: ParityJob,
+  old: OldDecision[],
+  fixture: ParityFixture
+): ScriptRunner | undefined {
+  return job.runScriptFor ? job.runScriptFor(old, fixture) : job.runScript
+}
+
+function withJobDeps(job: ParityJob, fixture: ParityFixture, deps: TickDeps): TickDeps {
+  return job.tickDeps ? job.tickDeps(deps, fixture) : deps
+}
+
+// The old decisions this job's verdicts are compared with: no script answers, only the keys the job owns.
+function compared(job: ParityJob, old: OldDecision[]): OldDecision[] {
+  return old.filter((d) => d.decision !== 'script_check' && (job.ownsKey?.(d.key) ?? true))
+}
+
 // What keeps a case from passing, a line each: the tick's error, every read the new side made that
 // the case lacks, and every verdict that disagrees. Pilot's field reads fail soft (the field reads
 // unknown), so a missed read can still land on the old side's verdict: it fails the case by itself.
@@ -62,7 +86,11 @@ export async function parityReport(
     const result = await runTick(
       def,
       people,
-      fixtureTickDeps(fixture, store, { runScript: job.runScript }),
+      withJobDeps(
+        job,
+        fixture,
+        fixtureTickDeps(fixture, store, { runScript: scripts(job, old, fixture) })
+      ),
       {
         dryRun: true,
         pass: fixturePass(fixture)
@@ -71,7 +99,7 @@ export async function parityReport(
     return [
       result.error === null ? '' : `tick failed: ${result.error}`,
       ...fixtureMisses(fixture).map((what) => `missed read: ${what}`),
-      formatMismatches(compareDecisions(old, result.decisions, job.table))
+      formatMismatches(compareDecisions(compared(job, old), result.decisions, job.table))
     ]
       .filter((line) => line !== '')
       .join('\n')

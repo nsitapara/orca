@@ -1,4 +1,5 @@
 import { agentUsageState } from './agent-usage'
+import { devE2ePipelinesMapper, devE2eStartsMapper } from './dev-e2e'
 import { fixFailedCiState } from './fix-failed-ci'
 import { mrFeedbackState } from './mr-feedback'
 import { noStateMapper } from './plans'
@@ -17,7 +18,9 @@ export const MAPPERS: SweepStateMapper[] = [
   ),
   fixFailedCiState,
   mrFeedbackState,
-  reviewRequestsState
+  reviewRequestsState,
+  devE2ePipelinesMapper,
+  devE2eStartsMapper
 ]
 
 export function sweepStateMapper(

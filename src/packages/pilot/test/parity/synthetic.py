@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""The hand-built parity cases of the ported jobs (02, 05, 06, 09), written in Task 13a's fixture format.
+"""The hand-built parity cases of the ported jobs (02, 05, 06, 09, 13), written in Task 13a's fixture format.
 
   synthetic.py            rewrite every case's <job>/<case>.json
   synthetic.py --check    exit 1 when a committed case differs from what this file builds
@@ -49,9 +49,9 @@ def thread(iid, *notes):
     return {"id": f"d{iid}", "notes": list(notes)}
 
 
-def worktree(name, branch, *, dirty=0, untracked=0, operation=None, comment=None, archived=False):
+def worktree(name, branch, *, dirty=0, untracked=0, operation=None, comment=None, archived=False, linked=None):
     return {"path": f"/wt/{name}", "branch": branch, "dirty": dirty, "untracked": untracked, "operation": operation,
-            "comment": comment, "archived": archived}
+            "comment": comment, "archived": archived, "linked": linked}
 
 
 def read(argv, **result):
@@ -326,6 +326,112 @@ def _09():
 
 
 CASE_MAKERS.append(_09)
+
+
+def pjob(ident, name, status="success", allow_failure=False):
+    return {"id": ident, "name": name, "status": status, "allow_failure": allow_failure, "web_url": f"https://gitlab.com/j/{ident}"}
+
+
+def pchild(ident, status):
+    return {"id": ident, "status": status, "ref": "dev", "sha": str(ident).rjust(40, "0"), "web_url": f"https://gitlab.com/p/{ident}",
+            "created_at": "2026-10-11T17:00:00Z"}
+
+
+def _issue(ident, state, branch, created="2026-10-11T17:10:00.000Z"):
+    return {"id": f"uuid-{ident}", "identifier": ident, "title": f"Fix hourly e2e failure ({ident})",
+            "url": f"https://linear.app/herasight/issue/{ident}", "state": {"name": state, "type": state},
+            "team": {"id": "team-web", "key": "WEB", "name": "Web Dev"}, "assignee": {"id": "u-nish", "displayName": "nish"},
+            "priority": 2, "createdAt": created, "branchName": branch, "labels": [], "workspace": {"id": "ws1", "name": "Herasight"}}
+
+
+def case_13(name, *, children, jobs, now, handled=None, tickets=None, linear_state=None, others=(), worktrees=(), quota=None):
+    """One 13 case: the hourly children and their jobs, 13's own state (handled pipelines, tickets), what Linear says about
+    each ticket (`linear_state`: ident -> state type, or "!why" when the old sweep's read of it fails), and the worktrees.
+    The reads are the old sweep's, Pilot's pipeline source's, and Pilot's Linear listing (every ticket, since the assignee is matched by display name): the old state read is
+    `orca linear issue <ID>`; Pilot's listing and its per-ticket details come with a workspace."""
+    tickets, linear_state, handled = tickets or {}, linear_state or {}, handled or {}
+    fixture = build("13", name, now=now, loop="dev-e2e", quota=quota or {"weekly": 20, "session": 10},
+                    state={"dev-e2e/handled.json": handled, "dev-e2e/tickets.json": tickets})
+    reads, exists = fixture["reads"], fixture["exists"]
+    reads.append(glab(f"{PROJECT}/pipelines?source=parent_pipeline&ref=dev&order_by=id&sort=desc&per_page=30", children))
+    for pid, listed in sorted(jobs.items()):
+        reads.append(glab(f"{PROJECT}/pipelines/{pid}/jobs?per_page=100", listed))
+    listing = [{"id": f"{REPO['id']}::{w['path']}", "repoId": REPO["id"], "path": w["path"], "branch": f"refs/heads/{w['branch']}",
+                "isArchived": w["archived"], "linkedLinearIssue": w["linked"]} for w in worktrees]
+    reads.append(read(["orca", "worktree", "list", "--json"], json={"ok": True, "result": {"worktrees": listing}}))
+    reads.append(read(["orca", "terminal", "list", "--json"], json={"ok": True, "result": {"terminals": []}}))
+    for w in worktrees:
+        exists[w["path"]] = True
+        git_reads(w, reads, exists)
+    every = {ident: t["branch"] for ident, t in tickets.items()} | {ident: f"{ident.lower()}-other" for ident in others}
+    state_of = lambda ident: (lambda v: "started" if v.startswith("!") else v)(linear_state.get(ident, "started"))  # noqa: E731
+    for ident in tickets:
+        why = linear_state.get(ident, "")
+        if why.startswith("!"):
+            reads.append(read(["orca", "linear", "issue", ident, "--json"], code=1, stdout="", stderr=why[1:]))
+        else:
+            reads.append(read(["orca", "linear", "issue", ident, "--json"], json={"ok": True, "result": {"issue": {"state": {"type": state_of(ident)}}}}))
+    issues = [_issue(i, state_of(i), b) for i, b in sorted(every.items())]
+    meta = {"filter": "all", "workspaceId": "all", "limit": 200, "returned": len(issues), "hasMore": False, "partial": False, "workspaceErrors": []}
+    reads.append(read(["orca", "linear", "list", "--filter", "all", "--workspace", "all", "--limit", "200", "--json"],
+                      json={"ok": True, "result": {"issues": [{k: v for k, v in i.items() if k not in ("branchName", "createdAt", "labels")} for i in issues],
+                                                   "truncated": False, "meta": meta}}))
+    reads.append(glab("user", {"username": "nish8"}))
+    for issue in issues:
+        if issue["state"]["type"] not in ("triage", "backlog", "unstarted", "started"):
+            continue  # Pilot reads the details of the tickets it lists only
+        ident, branch = issue["identifier"], issue["branchName"]
+        reads.append(read(["orca", "linear", "issue", ident, "--workspace", "ws1", "--json"], json={"ok": True, "result": {"issue": issue}}))
+        if any(w["linked"] == ident or w["branch"] == branch for w in worktrees):
+            reads.append(glab(f"{PROJECT}/merge_requests?source_branch={urllib.parse.quote(branch, safe='')}&per_page=100", []))
+        else:  # no worktree: whether the branch exists here (exit 1: it does not)
+            reads.append(read(["git", "-C", REPO["path"], "show-ref", "--verify", "--quiet", f"refs/heads/{branch}"], code=1, stdout="", stderr=""))
+    return fixture
+
+
+def _13():
+    now = 1791738300000  # 10:05 Pacific, 2026-10-11
+    red = lambda base: [pjob(base + 1, "e2e-checks-and-build", "failed"), pjob(base + 2, "test-apps-e2e: [tasks]", "failed"),  # noqa: E731
+                        pjob(base + 3, "notify-slack")]
+    green = lambda base: [pjob(base + 1, "e2e-checks-and-build"), pjob(base + 3, "notify-slack-recovery", "skipped")]  # noqa: E731
+    no_op = lambda base: [pjob(base + 1, "e2e-skipped")]  # noqa: E731
+    both = ["e2e-checks-and-build", "test-apps-e2e: [tasks]"]
+    ticket = lambda jobs, branch, **extra: {"jobs": jobs, "pipeline": 3, "branch": branch, **extra}  # noqa: E731
+    red_run = {"children": [pchild(9, "failed"), pchild(8, "success")], "jobs": {9: red(90), 8: green(80)}}
+    green_run = {"children": [pchild(9, "success")], "jobs": {9: green(90)}}
+    unstarted = {"WEB-2": ticket(["e2e-checks-and-build"], "web-2-fix")}
+    out = {"weekly": 95, "session": 40}
+
+    def make(name, **kw):
+        return "13", name, case_13(name, now=now, **kw)
+
+    yield make("no-suite-run", children=[pchild(9, "running"), pchild(8, "success")], jobs={8: no_op(80)})
+    # All 30 children scanned ran nothing: no item, which is not the same as a run that passed.
+    yield make("no-suite-run-in-30", children=[pchild(100 - n, "success") for n in range(30)],
+               jobs={100 - n: no_op((100 - n) * 10) for n in range(30)})
+    yield make("green-newest", **green_run)
+    yield make("green-after-older-red", children=[pchild(9, "success"), pchild(8, "failed")], jobs={9: green(90), 8: red(80)})
+    yield make("red-already-handled", **red_run, handled={"9": ["WEB-1"]})
+    yield make("red-new-failures", **red_run)
+    yield make("red-covered-by-open-ticket", **red_run, tickets={"WEB-1": ticket(both, "web-1-fix", path="/wt/web-1")})
+    yield make("red-quota-out", **red_run, quota=out)
+    yield make("red-covered-quota-out", **red_run, quota=out, tickets={"WEB-1": ticket(both, "web-1-fix", path="/wt/web-1")})
+    yield make("allowed-failure-and-notifier-only", children=[pchild(9, "failed")],
+               jobs={9: [pjob(91, "smoke", "failed", allow_failure=True), pjob(92, "notify-slack", "failed"), pjob(93, "e2e-checks-and-build")]})
+    yield make("ticket-never-started", **green_run, tickets=unstarted)
+    yield make("ticket-worktree-in-flight", **green_run, tickets=unstarted, worktrees=[worktree("web-2", "web-2-fix", dirty=1, linked="WEB-2")])
+    yield make("ticket-worktree-clean", **green_run, tickets=unstarted, worktrees=[worktree("web-2", "web-2-fix", linked="WEB-2")])
+    yield make("ticket-worktree-rebasing", **green_run, tickets=unstarted, worktrees=[worktree("web-2", "web-2-fix", operation="rebase-merge")])
+    yield make("ticket-quota-out", **green_run, tickets=unstarted, quota=out)
+    yield make("ticket-quota-out-and-dirty", **green_run, tickets=unstarted, quota=out, worktrees=[worktree("web-2", "web-2-fix", dirty=1, linked="WEB-2")])
+    yield make("ticket-canceled", **green_run, tickets={"WEB-3": ticket(["e2e-checks-and-build"], "web-3-fix")}, linear_state={"WEB-3": "canceled"})
+    yield make("ticket-state-unreadable", **green_run, tickets={"WEB-4": ticket(["e2e-checks-and-build"], "web-4-fix")},
+               linear_state={"WEB-4": "!Linear timed out"})
+    yield make("tickets-not-opened-by-13", **green_run, others=["WEB-50"])
+    yield make("red-run-and-unstarted-ticket", **red_run, tickets={"WEB-2": unstarted["WEB-2"], "WEB-1": ticket(both, "web-1-fix", path="/wt/web-1")})
+
+
+CASE_MAKERS.append(_13)
 
 
 def _canon(text):
