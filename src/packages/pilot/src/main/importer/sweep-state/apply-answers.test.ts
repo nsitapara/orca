@@ -25,6 +25,21 @@ describe('12 state import', () => {
     ])
   })
 
+  it('matches the answer the way the vault import stores it: one line, at most 4000 characters', () => {
+    const plan = applyAnswersMapper.plan(
+      reader({
+        [NOTE]: [
+          ['k1', 'revise:\n  drop   finding 2\n'],
+          ['k2', 'x'.repeat(4500)]
+        ]
+      })
+    )
+    expect(plan.dispatched).toEqual([
+      { vaultRef: `${NOTE}#k1`, answer: 'revise: drop finding 2' },
+      { vaultRef: `${NOTE}#k2`, answer: 'x'.repeat(4000) }
+    ])
+  })
+
   it.each([
     [
       'a note whose value is not a list',

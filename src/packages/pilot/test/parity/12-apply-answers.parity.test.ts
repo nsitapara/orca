@@ -181,7 +181,7 @@ const TAB: BusyTerminal = {
 }
 
 // The dispatcher's ladder in apply.py's order: the worktree (in flight, then its tabs), then quota, then the claim.
-async function holdOf2(c: HoldCase): Promise<{ code: string; detail: string } | null> {
+async function pilotHoldFor(c: HoldCase): Promise<{ code: string; detail: string } | null> {
   const deps: HoldDeps = {
     exists: () => true,
     runsIn: () => [],
@@ -340,8 +340,13 @@ describe.skipIf(!ready)(
     // Codes always agree; the plain words agree too for worktree holds, except where KNOWN_HOLD_WORDS says why not.
     it.each(HOLDS.map((c, n) => [n, c] as const))('hold %i', async (n, c) => {
       const word = old.get(`hold:${n}`) ?? 'missing'
-      const hold = await holdOf2(c)
+      const hold = await pilotHoldFor(c)
       expect(hold?.code ?? null).toBe(holdOf(word))
+      // apply.py's QUOTA and claimed holds are bare words (its log line carries the quota text from gate.QuotaOut, not a
+      // reason string the card shows), so only Pilot's own wording is pinned for them.
+      if (hold?.code === 'quota') {
+        expect(hold.detail).toMatch(/^claude (weekly|session) limit at \d+%/)
+      }
       if (hold && ['in_flight', 'typing', 'worktree_busy'].includes(hold.code)) {
         expect(hold.detail).toBe(KNOWN_HOLD_WORDS[word] ?? word)
       }
