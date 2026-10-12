@@ -2,6 +2,7 @@ import type { AutomationDefinition } from '../../shared/definition/types'
 import type { InboxItemRow, InboxStatus } from '../../shared/api-types'
 import type { InboxListPayload } from '../../shared/inbox-types'
 import type { PeopleDirectory } from '../../shared/people'
+import type { ActionCatalog } from '../actions/types'
 import type { PilotStore } from '../store/store'
 import { cardOf, inboxDigest, oneLine } from './card'
 
@@ -17,6 +18,28 @@ export type InboxDeps = {
   actionArgsProblem?(name: string, args: Record<string, unknown>): string | null
   // Called after a card closes (Task 25 cancels an ask-first run whose card closed without starting it).
   onResolved?(item: InboxItemRow): void
+}
+
+// The one builder of InboxDeps (the tick's asks, the answers pass, the RPC methods): adds are checked
+// against the action catalog. What a closed card does is each caller's explicit choice (null: nothing).
+export function buildInboxDeps(src: {
+  store: PilotStore
+  now(): number
+  definitions(): AutomationDefinition[]
+  people(): PeopleDirectory
+  actions: ActionCatalog
+  onResolved: ((item: InboxItemRow) => void) | null
+}): InboxDeps {
+  const { actions, onResolved } = src
+  return {
+    store: src.store,
+    now: src.now,
+    definitions: src.definitions,
+    people: src.people,
+    knownAction: (name) => actions.get(name) !== null,
+    actionArgsProblem: (name, args) => actions.get(name)?.checkArgs(args) ?? null,
+    ...(onResolved ? { onResolved } : {})
+  }
 }
 
 // A card still waiting on its person, or answered and not yet applied.

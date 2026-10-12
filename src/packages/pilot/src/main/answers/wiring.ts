@@ -1,14 +1,12 @@
 import { existsSync } from 'node:fs'
 import type { OrcaRuntimeService } from '../../../../../main/runtime/orca-runtime'
 import type { AutomationDefinition } from '../../shared/definition/types'
-import type { PeopleDirectory } from '../../shared/people'
 import type { ActionCatalog } from '../actions/types'
 import type { QuotaReaders } from '../fields/quota'
 import { resolveRepoPath } from '../fields/runtime-facts'
 import type { WorktreeFactDeps } from '../fields/worktree-facts'
 import type { InboxDeps } from '../inbox/inbox-service'
 import { InboxRetirer } from '../inbox/retire'
-import { cancelUnstartedRun } from '../run/ask-first'
 import { openAgentTerminal, runtimeSessionTerminals } from '../run/launch'
 import { glabApiForRepo } from '../sources/gitlab-api'
 import type { PilotStore } from '../store/store'
@@ -22,7 +20,8 @@ export type AnswerWiring = {
   store: PilotStore
   now(): number
   definitions(): AutomationDefinition[]
-  people(): PeopleDirectory
+  // buildInboxDeps' (shared with the tick's asks): a card closed without starting its run cancels it.
+  inbox: InboxDeps
   actions: ActionCatalog
   // The same cached readers the field engine's `quota` check reads (Task 5b).
   quotas: QuotaReaders
@@ -34,17 +33,8 @@ export type AnswerWiring = {
 // The scheduler's answers pass (contract §10): Task 20b's retirer first, then the dispatcher, wired
 // to Orca's runtime. Built only in the process that runs the scheduler, like the vault export.
 export function wireAnswerDispatcher(w: AnswerWiring): AnswerDispatcher {
-  const { runtime, store, now, log } = w
+  const { runtime, store, now, inbox, log } = w
   const repoPath = async (repo: string) => (await resolveRepoPath(runtime, repo)).path
-  const inbox: InboxDeps = {
-    store,
-    now,
-    definitions: w.definitions,
-    people: w.people,
-    knownAction: (name) => w.actions.get(name) !== null,
-    actionArgsProblem: (name, args) => w.actions.get(name)?.checkArgs(args) ?? null,
-    onResolved: (item) => cancelUnstartedRun(store, item, now())
-  }
   const retirer = new InboxRetirer({
     inbox,
     repoOf: (id) => w.definitions().find((d) => d.id === id)?.repo ?? null,
