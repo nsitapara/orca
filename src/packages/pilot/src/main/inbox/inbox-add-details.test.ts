@@ -9,6 +9,7 @@ import { PilotStore } from '../store/store'
 import { detailsFixture, REVIEW_BLOCK, rewriteBundle } from './__fixtures__/details-fixture'
 import { loadDetails } from './details-bundle'
 import { addInboxItem, CHANGED_AFTER_ANSWER } from './inbox-add'
+import { ANSWER_BEING_APPLIED } from './inbox-details'
 import type { InboxDeps } from './inbox-service'
 
 const def = parseAutomationYaml(
@@ -85,6 +86,24 @@ describe('addInboxItem with a Details bundle', () => {
     expect(store.inbox.snapshot(id)?.ref.blocks).toBe(9)
     expect(store.inbox.snapshot(id)?.ref).toEqual(row?.details)
     expect(store.queue.forInboxItem(id)).toEqual([])
+  })
+
+  it('refuses a new bundle on a card whose answer is being applied, and leaves the card as it was', () => {
+    const { f, store, deps, card } = setup()
+    const id = addInboxItem(deps, card).id ?? ''
+    const digest = store.inbox.get(id)?.digest ?? ''
+    store.inbox.saveAnswer(id, { option: 0, text: null, digest, via: 'page' }, 'nish', 110)
+    store.queue.update(
+      store.queue.enqueue(id, 200, 110),
+      { state: 'dispatched', readyAt: 120 },
+      120
+    )
+    rewriteBundle(f.bundle, (b) => b.blocks.push({ type: 'text', title: 'More', body: 'b' }))
+    const before = store.inbox.get(id)
+    const snapshot = store.inbox.snapshot(id)
+    expect(() => addInboxItem(deps, card)).toThrow(ANSWER_BEING_APPLIED)
+    expect(store.inbox.get(id)).toEqual(before)
+    expect(store.inbox.snapshot(id)).toEqual(snapshot)
   })
 
   it('refuses markdown Details and a bundle together', () => {

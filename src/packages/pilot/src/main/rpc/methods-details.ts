@@ -7,15 +7,12 @@ import { readDetailsImage } from '../inbox/details-bundle'
 import { setInboxDetails } from '../inbox/inbox-details'
 import { getInboxItem } from '../inbox/inbox-service'
 import type { PilotContext } from '../pilot-services'
-import { runBinding } from './methods-actions'
+import { DETAILS_NO_CALLER_CHANGE, refuseOutsideScope } from './details-scope'
 import { inboxDeps } from './methods-inbox'
 
 export const DETAILS_NO_CALLER = "Pilot can't tell who is calling; nothing was read"
 export const NO_DETAILS = 'This card has no Details bundle'
-export const DETAILS_RUN_ONLY =
-  "Attach Details from a Pilot run's step, for a card of that run's automation"
-export const DETAILS_OWN_AUTOMATION = 'This run belongs to another automation than the card'
-export const DETAILS_NO_CALLER_CHANGE = "Pilot can't tell who is calling; nothing was changed"
+export { DETAILS_NO_CALLER_CHANGE, DETAILS_OWN_AUTOMATION, DETAILS_RUN_ONLY } from './details-scope'
 
 const Digest = z.string().regex(/^[0-9a-f]{64}$/)
 const Details = z.object({ id: z.string().min(1), digest: Digest.optional() })
@@ -57,37 +54,6 @@ function currentSnapshot(
     throw new Error(NO_DETAILS)
   }
   return { digest: current.digest, snapshot: current.snapshot }
-}
-
-// Who may replace a card's bundle (ruling 4), from the transport's stamp only: the desktop, or the local
-// CLI bound to a run (the step on its terminal, else the env's active step) of the card's own automation.
-// A binding that can't be resolved fails closed; a paired device, an unnamed or unknown caller is refused.
-function refuseOutsideScope(
-  c: PilotContext,
-  caller: RpcCallerIdentity | undefined,
-  p: z.infer<typeof SetDetails>,
-  automationId: string
-): void {
-  if (caller?.kind === 'desktop') {
-    return
-  }
-  if (caller?.kind !== 'local-cli') {
-    throw new Error(DETAILS_RUN_ONLY)
-  }
-  let bound: { runId: string; stepIdx: number } | null
-  try {
-    bound = runBinding(c, p)
-  } catch (error) {
-    throw new Error(
-      `${DETAILS_RUN_ONLY} (${error instanceof Error ? error.message : String(error)})`
-    )
-  }
-  if (!bound) {
-    throw new Error(DETAILS_RUN_ONLY)
-  }
-  if (c.store.runs.get(bound.runId)?.automationId !== automationId) {
-    throw new Error(DETAILS_OWN_AUTOMATION)
-  }
 }
 
 // A card's Details (ruling 2): the list carries only the light ref; the snapshot, and each image its

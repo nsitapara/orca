@@ -9,7 +9,8 @@ import { PilotStore } from '../store/store'
 import { applyVaultImport, SENT_BEFORE_PILOT } from './import-apply'
 import { addInboxItem } from './inbox-add'
 import { splitCommand } from './split-command'
-import { detailsFixture } from './__fixtures__/details-fixture'
+import { copyBundle, detailsFixture, rewriteBundle } from './__fixtures__/details-fixture'
+import { setInboxDetails } from './inbox-details'
 import { isBackfillable, planVaultImport, vaultItemId, type ImportContext } from './import-vault'
 import type { InboxDeps } from './inbox-service'
 import type { VaultRow } from './vault-reader'
@@ -490,6 +491,25 @@ describe('the vault import and Details bundles', () => {
       backfill: [],
       skipped: [{ reason: 'already imported' }]
     })
+  })
+
+  it('keeps a bundle a draft attached between the preview and the apply', () => {
+    const { f, store, deps, plan, imported } = withDetails()
+    imported()
+    const planned = plan([row({ details_path: f.bundle })])
+    const drafted = copyBundle(f, 'F3.json')
+    rewriteBundle(drafted, (b) => (b.item = 'F3'))
+    setInboxDetails(deps, ID, drafted, { head: null, onlyUnanswered: false })
+    const before = store.inbox.get(ID)
+    const report = applyVaultImport(deps, planned, 1_000)
+    expect(report).toMatchObject({ backfilled: 0, details: 0 })
+    expect(report.skipped).toEqual([
+      expect.objectContaining({
+        reason: expect.stringMatching(/^Details not attached: has Details since/)
+      })
+    ])
+    expect(store.inbox.get(ID)).toEqual(before)
+    expect(store.inbox.snapshot(ID)?.bundle.item).toBe('F3')
   })
 
   it('leaves a card answered between the preview and the apply as it is', () => {

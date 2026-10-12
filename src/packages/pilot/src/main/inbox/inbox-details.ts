@@ -1,4 +1,5 @@
 import type { InboxItemRow } from '../../shared/api-types'
+import type { PilotStore } from '../store/store'
 import type { DetailsSnapshot } from '../../shared/details'
 import { redraftedReply } from '../../shared/pilot-replies'
 import { cardOf, inboxDigest } from './card'
@@ -6,8 +7,27 @@ import { loadDetails } from './details-bundle'
 import { getInboxItem, inboxEvent, syncRunWaiting, WAITING, type InboxDeps } from './inbox-service'
 
 export const ANSWERED_SINCE = 'answered since; Details not attached'
+export const ANSWER_BEING_APPLIED = 'its answer is being applied; Details not attached'
+export const HAS_DETAILS_SINCE = 'has Details since; Details not attached'
 
 export type SetDetailsResult = { id: string; version: number; changed: boolean; cleared: boolean }
+export type SetDetailsOptions = {
+  // The commit a drafted patch was drafted against, named in the reply under a cleared answer.
+  head: string | null
+  // Refuse a card that has an answer (the vault import's backfill).
+  onlyUnanswered: boolean
+  // Refuse a card that has a bundle (the backfill: a draft attached meanwhile is kept).
+  onlyWithoutDetails?: boolean
+}
+
+// An answer whose work was dispatched (its queue row 'dispatched', the card still 'answered') is being
+// applied now: clearing it would leave that work to end on, or tick, a version nobody answered.
+export function answerBeingApplied(store: PilotStore, item: InboxItemRow): boolean {
+  return (
+    item.status === 'answered' &&
+    store.queue.forInboxItem(item.id).some((row) => row.state === 'dispatched')
+  )
+}
 
 function waitingItem(deps: InboxDeps, id: string): InboxItemRow {
   const item = getInboxItem(deps, id)
@@ -23,9 +43,12 @@ function attach(
   deps: InboxDeps,
   id: string,
   loaded: DetailsSnapshot,
-  opts: { head: string | null; onlyUnanswered: boolean }
+  opts: SetDetailsOptions
 ): { item: InboxItemRow; result: SetDetailsResult } {
   const item = waitingItem(deps, id)
+  if (opts.onlyWithoutDetails && item.details !== null) {
+    throw new Error(HAS_DETAILS_SINCE)
+  }
   const card = { ...cardOf(item), details: loaded.ref, detailsMd: null }
   const digest = inboxDigest(card)
   if (digest === item.digest) {
@@ -34,6 +57,9 @@ function attach(
   const answered = item.status === 'answered' || item.answer !== null
   if (opts.onlyUnanswered && answered) {
     throw new Error(ANSWERED_SINCE)
+  }
+  if (answerBeingApplied(deps.store, item)) {
+    throw new Error(ANSWER_BEING_APPLIED)
   }
   const at = deps.now()
   const { inbox, queue } = deps.store
@@ -55,7 +81,7 @@ export function setInboxDetails(
   deps: InboxDeps,
   id: string,
   bundlePath: string,
-  opts: { head: string | null; onlyUnanswered: boolean }
+  opts: SetDetailsOptions
 ): SetDetailsResult {
   waitingItem(deps, id)
   const loaded = loadDetails(deps.detailsRoot ?? null, bundlePath)

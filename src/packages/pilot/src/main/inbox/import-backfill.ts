@@ -13,9 +13,9 @@ function skippedRow(b: PlannedBackfill, reason: string): ImportPlan['skipped'][n
 }
 
 // The cards the import wrote before it carried bundles get theirs (after the new cards): a dry run counts
-// each bundle Pilot would accept; applying sets it only on a card nobody has answered since the plan
-// (setInboxDetails' onlyUnanswered, checked under the write lock). A card that got a bundle meanwhile
-// keeps it. Anything refused is skipped with the reason, and the card is left as it was.
+// each bundle Pilot would accept; applying sets it only on a card that, under the write lock, nobody has
+// answered and no draft has given a bundle since the plan (setInboxDetails' onlyUnanswered and
+// onlyWithoutDetails). Anything refused is skipped with the reason, and the card is left as it was.
 export function backfillDetails(
   deps: InboxDeps,
   backfill: readonly PlannedBackfill[],
@@ -24,15 +24,15 @@ export function backfillDetails(
   const skipped: ImportPlan['skipped'] = []
   let backfilled = 0
   for (const b of backfill) {
-    if (deps.store.inbox.get(b.id)?.details) {
-      skipped.push(skippedRow(b, 'already imported'))
-      continue
-    }
     try {
       if (opts.dryRun) {
         loadDetails(deps.detailsRoot ?? null, b.path)
       } else {
-        setInboxDetails(deps, b.id, b.path, { head: null, onlyUnanswered: true })
+        setInboxDetails(deps, b.id, b.path, {
+          head: null,
+          onlyUnanswered: true,
+          onlyWithoutDetails: true
+        })
       }
       backfilled += 1
     } catch (error) {

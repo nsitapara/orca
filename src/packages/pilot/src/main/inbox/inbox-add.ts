@@ -6,6 +6,7 @@ import { CHANGED_AFTER_ANSWER } from '../../shared/pilot-replies'
 import type { NewInboxItem } from '../store/store-inbox'
 import { buildCard, checkDetailsChoice, inboxDigest, type InboxCard } from './card'
 import { loadDetails } from './details-bundle'
+import { ANSWER_BEING_APPLIED, answerBeingApplied } from './inbox-details'
 import { inboxEvent, syncRunWaiting, WAITING, type InboxDeps } from './inbox-service'
 import { resolveInboxPerson } from './person'
 import { fieldsForRun, latestFieldsFor } from './run-fields'
@@ -138,6 +139,10 @@ function updateOpen(
     replies: [...open.replies, { text: CHANGED_AFTER_ANSWER, by: 'pilot' as const }]
   }
   deps.store.transaction(() => {
+    // A new bundle never clears an answer whose work is running (set-details refuses the same).
+    if (card.details && answerBeingApplied(deps.store, deps.store.inbox.get(open.id) ?? open)) {
+      throw new Error(ANSWER_BEING_APPLIED)
+    }
     deps.store.inbox.edit(open.id, { ...card, digest }, at)
     deps.store.inbox.setSnapshot(open.id, snapshot)
     if (answered) {

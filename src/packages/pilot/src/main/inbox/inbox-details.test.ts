@@ -9,7 +9,7 @@ import { PilotStore } from '../store/store'
 import { copyBundle, detailsFixture, rewriteBundle } from './__fixtures__/details-fixture'
 import { loadDetails } from './details-bundle'
 import { addInboxItem } from './inbox-add'
-import { setInboxDetails } from './inbox-details'
+import { ANSWER_BEING_APPLIED, HAS_DETAILS_SINCE, setInboxDetails } from './inbox-details'
 import type { InboxDeps } from './inbox-service'
 
 const def = parseAutomationYaml(
@@ -44,7 +44,7 @@ function setup() {
   const answer = () => {
     const digest = store.inbox.get(id)?.digest ?? ''
     store.inbox.saveAnswer(id, { option: 0, text: null, digest, via: 'page' }, 'nish', 110)
-    store.queue.enqueue(id, 200, 110)
+    return store.queue.enqueue(id, 200, 110)
   }
   return { f, store, deps, id, answer }
 }
@@ -108,6 +108,19 @@ describe('setInboxDetails', () => {
     expect(store.queue.forInboxItem(id)).toEqual([])
   })
 
+  it('leaves a bundle attached meanwhile when only a card without one may change', () => {
+    const { f, store, deps, id } = setup()
+    const drafted = copyBundle(f, 'F3.json')
+    rewriteBundle(drafted, (b) => (b.item = 'F3'))
+    setInboxDetails(deps, id, drafted, OPEN)
+    const before = store.inbox.get(id)
+    expect(() =>
+      setInboxDetails(deps, id, f.bundle, { ...OPEN, onlyWithoutDetails: true })
+    ).toThrow(HAS_DETAILS_SINCE)
+    expect(store.inbox.get(id)).toEqual(before)
+    expect(store.inbox.snapshot(id)?.bundle.item).toBe('F3')
+  })
+
   it('replaces one bundle with another', () => {
     const { f, store, deps, id } = setup()
     setInboxDetails(deps, id, f.bundle, OPEN)
@@ -142,6 +155,14 @@ describe('setInboxDetails', () => {
         return [s.f.bundle, { head: null, onlyUnanswered: true }]
       },
       'answered since; Details not attached'
+    ],
+    [
+      'an answered card whose answer is being applied',
+      (s) => {
+        s.store.queue.update(s.answer(), { state: 'dispatched', readyAt: 120 }, 120)
+        return [s.f.bundle, OPEN]
+      },
+      ANSWER_BEING_APPLIED
     ]
   ])('refuses %s and leaves the card as it was', (_name, arrange, message) => {
     const s = setup()

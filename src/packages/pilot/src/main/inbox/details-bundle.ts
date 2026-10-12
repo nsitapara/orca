@@ -66,7 +66,10 @@ function realInside(root: string, path: string, label: string): string {
 }
 
 // A regular file's bytes through one descriptor, opened without following a last symlink, checked with
-// fstat before anything is read, and never more than it said.
+// fstat before anything is read, and never more than it said. Accepted race: O_NOFOLLOW covers only the
+// last path part, so a parent folder swapped for a symlink between realInside's check and this open could
+// lead outside the root. That needs write access to the vault already, and reaches only a file of the
+// same name (a .json bundle or review, or an image), still capped and type-checked here.
 function readCapped(real: string, max: number, label: string): Buffer {
   let fd: number
   try {
