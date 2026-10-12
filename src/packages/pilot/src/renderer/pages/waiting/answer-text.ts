@@ -213,7 +213,10 @@ function plain(text: string): string {
 }
 
 // "Asked Oct 11, 2:00 AM · 1d ago" (no "ago" past a week, when the date says it), and the full timestamp.
-export function askedLabel(createdAt: number, now: number): { text: string; full: string } {
+export function askedLabel(
+  createdAt: number,
+  now: number
+): { text: string; full: string; when: string; relative: string | null } {
   const sameYear = new Date(createdAt).getFullYear() === new Date(now).getFullYear()
   const when = plain(
     new Date(createdAt).toLocaleString('en-US', {
@@ -225,11 +228,12 @@ export function askedLabel(createdAt: number, now: number): { text: string; full
     })
   )
   const recent = now - createdAt <= 7 * DAY_MS
-  const text = recent ? `Asked ${when} · ${ageLabel(createdAt, now)} ago` : `Asked ${when}`
+  const relative = recent ? `${ageLabel(createdAt, now)} ago` : null
+  const text = relative ? `Asked ${when} · ${relative}` : `Asked ${when}`
   const full = plain(
     new Date(createdAt).toLocaleString('en-US', { dateStyle: 'full', timeStyle: 'short' })
   )
-  return { text, full }
+  return { text, full, when, relative }
 }
 
 // "04" from a job named "04 · Test branch UIs overnight"; the automation's id when its name has no code.
