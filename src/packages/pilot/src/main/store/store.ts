@@ -9,6 +9,7 @@ import type {
 } from '../../shared/api-types'
 import { migrate } from './migrations'
 import { RunStore } from './store-runs'
+import { UsageStore } from './store-usage'
 import { InboxStore } from './store-inbox'
 import { QueueStore } from './store-queue'
 import { ActionRunStore } from './store-actions'
@@ -41,6 +42,7 @@ function toTick(r: Record<string, unknown>): TickRow {
 
 export class PilotStore {
   readonly runs: RunStore
+  readonly usage: UsageStore
   readonly inbox: InboxStore
   readonly queue: QueueStore
   readonly events: EventStore
@@ -53,6 +55,7 @@ export class PilotStore {
 
   private constructor(private readonly db: Database) {
     this.runs = new RunStore(db)
+    this.usage = new UsageStore(db)
     this.inbox = new InboxStore(db)
     this.queue = new QueueStore(db)
     this.events = new EventStore(db)
