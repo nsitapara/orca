@@ -173,7 +173,7 @@ export function buildInboxMethods(ctx: () => PilotContext) {
         // An ask-first card is a person's Approve or Skip in Pilot; closing it from here would be a skip
         // no one chose (the key stays handled).
         if (getInboxItem(deps, p.id).action === 'start_run') {
-          throw new Error('Answer this in Pilot (Waiting on you)')
+          throw new Error('Answer this in Pilot (Inbox)')
         }
         return resolveInboxItem(deps, p.id, p.outcome)
       }

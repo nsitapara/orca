@@ -100,7 +100,7 @@ export function runEnd(steps: EndedStep[], openInboxItems: number): RunEnd {
   if (openInboxItems > 0) {
     return {
       status: 'needs_you',
-      outcome: `Waiting on you: ${plural(openInboxItems, 'open item')}`
+      outcome: `Inbox: ${plural(openInboxItems, 'open item')}`
     }
   }
   const cleanup = steps.find((s) => s.always && broke(s))

@@ -68,7 +68,7 @@ export function answersLine(
 ): string {
   const head = askingRunId
     ? `Answers to the questions run ${askingRunId} asked (answer run ${answerRunId}), already claimed:`
-    : `Answers saved on Waiting on you (answer run ${answerRunId}), already claimed:`
+    : `Answers saved in the Inbox (answer run ${answerRunId}), already claimed:`
   const lines = answers.map(
     (a) => `[${a.item.id}] ${quoted(a.item.title)} → ${quoted(a.item.answer?.text ?? '')}${note(a)}`
   )

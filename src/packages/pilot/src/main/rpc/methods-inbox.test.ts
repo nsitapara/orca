@@ -86,7 +86,7 @@ describe('inbox RPC', () => {
     )
     const card = { id: added.id ?? '' }
     expect(() => call('pilot.inbox.tick', { id: card.id, outcome: 'skipped' })).toThrow(
-      'Answer this in Pilot (Waiting on you)'
+      'Answer this in Pilot (Inbox)'
     )
     expect(store.inbox.get(card.id)?.status).toBe('open')
   })
@@ -303,18 +303,18 @@ describe('inbox RPC', () => {
 
   it.each<[string, RpcCallerIdentity | undefined, Record<string, unknown>, string]>([
     ['no caller identity', undefined, {}, "Pilot can't tell who is answering"],
-    ['the local CLI', { kind: 'local-cli' }, {}, 'Answer cards in Pilot (Waiting on you)'],
+    ['the local CLI', { kind: 'local-cli' }, {}, 'Answer cards in Pilot (Inbox)'],
     [
       'the local CLI claiming to be outside a run',
       { kind: 'local-cli' },
       { text: 'A' },
-      'Answer cards in Pilot (Waiting on you)'
+      'Answer cards in Pilot (Inbox)'
     ],
     [
       'the local CLI inside a run',
       { kind: 'local-cli' },
       { runId: 'run-1', stepIdx: 0, terminal: 'term-1' },
-      'Answer cards in Pilot (Waiting on you)'
+      'Answer cards in Pilot (Inbox)'
     ]
   ])('refuses an answer from %s', (_name, caller, extra, message) => {
     const { store, call, callAs } = setup()

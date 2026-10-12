@@ -180,7 +180,7 @@ describe('inbox import-vault', () => {
       { timeoutMs: 180_000 }
     )
     expect(log).toHaveBeenCalledWith(
-      'Would import 3 card(s), 1 with an answer, and 2 asking session(s).\nApply the vault import in Pilot (Waiting on you)'
+      'Would import 3 card(s), 1 with an answer, and 2 asking session(s).\nApply the vault import in Pilot (Inbox)'
     )
   })
 
@@ -199,7 +199,7 @@ describe('inbox import-vault', () => {
     const log = vi.spyOn(console, 'log').mockImplementation(() => {})
     await ANSWERS_HANDLERS['inbox import-vault'](ctx({}, call))
     expect(log).toHaveBeenCalledWith(
-      'Would import 3 card(s), 1 with an answer, and 2 asking session(s), and Details for 2 already-imported card(s).\nApply the vault import in Pilot (Waiting on you)'
+      'Would import 3 card(s), 1 with an answer, and 2 asking session(s), and Details for 2 already-imported card(s).\nApply the vault import in Pilot (Inbox)'
     )
   })
 
@@ -207,7 +207,7 @@ describe('inbox import-vault', () => {
     const call = vi.fn()
     await expect(
       ANSWERS_HANDLERS['inbox import-vault'](ctx({ apply: true } as never, call))
-    ).rejects.toThrow('Apply the vault import in Pilot (Waiting on you)')
+    ).rejects.toThrow('Apply the vault import in Pilot (Inbox)')
     expect(call).not.toHaveBeenCalled()
   })
 })

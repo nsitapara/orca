@@ -164,7 +164,7 @@ describe('applyImport', () => {
     expect(store.queue.get(queued)?.state).toBe('dispatched')
     expect(first.dispatched).toEqual({ total: 3, present: 0, added: 1 })
     expect(first.plan.notes).toEqual([
-      '2 answer(s) already sent have no imported card to mark; import the open vault cards in Pilot (Waiting on you) first'
+      '2 answer(s) already sent have no imported card to mark; import the open vault cards in Pilot (Inbox) first'
     ])
     expect(applyImport(store, plan(only), 10).dispatched).toEqual({
       total: 3,

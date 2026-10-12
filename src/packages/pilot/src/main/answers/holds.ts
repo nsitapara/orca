@@ -11,7 +11,7 @@ import {
 import type { WorktreeFactDeps } from '../fields/worktree-facts'
 
 export type HoldCode = HoldReason
-// The two QueuePatch fields: the code, and the plain words the Waiting on you page shows.
+// The two QueuePatch fields: the code, and the plain words the Inbox page shows.
 export type Hold = { holdReason: HoldCode; holdDetail: string }
 
 export function hold(code: HoldCode, words: string): Hold {

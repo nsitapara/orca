@@ -28,7 +28,7 @@ import {
 // gate.py ANSWERS_SETTLE: a saved answer waits this long, so one still being typed is never sent.
 export const SETTLE_MS = 180_000
 export const CARD_CHANGED_ON_SAVE = 'The card changed; review it again'
-export const LOCAL_CLI_NO_ANSWER = 'Answer cards in Pilot (Waiting on you)'
+export const LOCAL_CLI_NO_ANSWER = 'Answer cards in Pilot (Inbox)'
 export const NO_ANSWER_CALLER = "Pilot can't tell who is answering; nothing was saved"
 
 // Who is answering and what the catalog can run: the caller kind is the transport's stamp (null: it named

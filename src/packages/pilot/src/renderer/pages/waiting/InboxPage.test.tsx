@@ -10,7 +10,7 @@ import type { InboxListPayload, QueueEntry } from '../../../shared/inbox-types'
 const pilotRpc = vi.fn()
 vi.mock('../../api', () => ({ pilotRpc: (...args: unknown[]) => pilotRpc(...args) }))
 
-import { WaitingOnYouPage } from './WaitingOnYouPage'
+import { InboxPage } from './InboxPage'
 
 function card(over: Partial<InboxItemRow>): InboxItemRow {
   return {
@@ -120,7 +120,7 @@ function serve(list = LIST, queue: QueueEntry[] = [HELD]) {
   })
 }
 
-describe('WaitingOnYouPage', () => {
+describe('InboxPage', () => {
   afterEach(() => {
     cleanup()
     pilotRpc.mockReset()
@@ -128,7 +128,7 @@ describe('WaitingOnYouPage', () => {
 
   it('shows the cards waiting, folds the defaults, and lists what saved answers set off', async () => {
     serve()
-    render(<WaitingOnYouPage />)
+    render(<InboxPage />)
     expect(await screen.findByText("Push !1561's 2 commits to origin?")).toBeTruthy()
     expect(screen.getByText('Install LibreOffice in the job?')).toBeTruthy()
     expect(screen.getByText('Defaults the agents took · 1')).toBeTruthy()
@@ -139,7 +139,7 @@ describe('WaitingOnYouPage', () => {
 
   it("shows Pilot's Run line in its own Pilot block on an action card, and none on a question", async () => {
     serve()
-    render(<WaitingOnYouPage />)
+    render(<InboxPage />)
     const line = await screen.findByText('python3 /a/act.py push run /wt/web-1493 web-1493-a')
     const block = line.closest('[data-pilot-run-line]')
     expect(block?.textContent).toMatch(/^Pilot · Approve runs/)
@@ -153,7 +153,7 @@ describe('WaitingOnYouPage', () => {
   it('caps a long Run line out loud and keeps the whole of it on the card', async () => {
     const text = `python3 /a/act.py push run ${'x'.repeat(400)}`
     serve({ ...LIST, items: [PUSH], runLines: { in_push: { digest: 'dp', text } } })
-    render(<WaitingOnYouPage />)
+    render(<InboxPage />)
     const more = text.length - 300
     expect(await screen.findByText(`… (${more} more chars)`)).toBeTruthy()
     expect(screen.getByText(text.slice(0, 300))).toBeTruthy()
@@ -163,7 +163,7 @@ describe('WaitingOnYouPage', () => {
 
   it('shows no Run line built for another version of the card than the one shown', async () => {
     serve({ ...LIST, items: [PUSH], runLines: { in_push: { digest: 'old', text: 'python3 x' } } })
-    render(<WaitingOnYouPage />)
+    render(<InboxPage />)
     await screen.findByText("Push !1561's 2 commits to origin?")
     expect(screen.queryByText('python3 x')).toBeNull()
   })
@@ -184,7 +184,7 @@ describe('WaitingOnYouPage', () => {
       ]
     })
     serve({ ...LIST, items: [asked] })
-    render(<WaitingOnYouPage />)
+    render(<InboxPage />)
     expect(await screen.findByText(/^Pilot: The card changed after you approved it/)).toBeTruthy()
     expect(screen.getByText('Agent asked: Approve actions in Pilot on this Mac')).toBeTruthy()
     expect(screen.queryByText('Pilot: Approve actions in Pilot on this Mac')).toBeNull()
@@ -193,7 +193,7 @@ describe('WaitingOnYouPage', () => {
 
   it('loads the cards of the person you view as', async () => {
     serve()
-    render(<WaitingOnYouPage />)
+    render(<InboxPage />)
     fireEvent.click(await screen.findByRole('button', { name: 'Emil Elgaard' }))
     await waitFor(() =>
       expect(pilotRpc).toHaveBeenCalledWith('pilot.inbox.list', { person: 'emil' })
@@ -202,7 +202,7 @@ describe('WaitingOnYouPage', () => {
 
   it('saves Approve against the version shown', async () => {
     serve()
-    render(<WaitingOnYouPage />)
+    render(<InboxPage />)
     const article = (await screen.findByText("Push !1561's 2 commits to origin?")).closest(
       'article'
     )!
@@ -221,7 +221,7 @@ describe('WaitingOnYouPage', () => {
 
   it('needs notes before it saves a revision', async () => {
     serve()
-    render(<WaitingOnYouPage />)
+    render(<InboxPage />)
     const article = (await screen.findByText("Push !1561's 2 commits to origin?")).closest(
       'article'
     )!
@@ -246,7 +246,7 @@ describe('WaitingOnYouPage', () => {
       }
       return method === 'pilot.inbox.list' ? LIST : { entries: [] }
     })
-    render(<WaitingOnYouPage />)
+    render(<InboxPage />)
     const article = (await screen.findByText('Install LibreOffice in the job?')).closest('article')!
     fireEvent.click(article.querySelector('input[value="Bake it"]')!)
     fireEvent.click(article.querySelector('button[data-save]')!)
@@ -265,7 +265,7 @@ describe('WaitingOnYouPage', () => {
       }
       return { entries: [] }
     })
-    render(<WaitingOnYouPage />)
+    render(<InboxPage />)
     const article = (await screen.findByText('Install LibreOffice in the job?')).closest('article')!
     fireEvent.click(article.querySelector('input[value="Bake it"]')!)
     fireEvent.click(article.querySelector('button[data-save]')!)
@@ -288,7 +288,7 @@ describe('WaitingOnYouPage', () => {
       ]
     })
     serve({ ...LIST, items: [ask] }, [])
-    render(<WaitingOnYouPage />)
+    render(<InboxPage />)
     const article = (await screen.findByText('Prepare a review of !1588?')).closest('article')!
     fireEvent.click(article.querySelector('input[value="Approve with notes…"]')!)
     fireEvent.change(article.querySelector('textarea')!, {
@@ -317,7 +317,7 @@ describe('WaitingOnYouPage', () => {
       }
       return method === 'pilot.inbox.list' ? LIST : { entries: [] }
     })
-    render(<WaitingOnYouPage />)
+    render(<InboxPage />)
     fireEvent.click(await screen.findByRole('button', { name: 'Import open vault cards' }))
     expect(
       await screen.findByText('Would import 3 card(s), 1 with an answer; 1 skipped.')
@@ -338,7 +338,7 @@ describe('WaitingOnYouPage', () => {
       }
       return method === 'pilot.inbox.list' ? LIST : { entries: [] }
     })
-    render(<WaitingOnYouPage />)
+    render(<InboxPage />)
     fireEvent.click(await screen.findByRole('button', { name: 'Import open vault cards' }))
     expect(
       await screen.findByText(
@@ -360,7 +360,7 @@ describe('WaitingOnYouPage', () => {
       }
       return method === 'pilot.inbox.list' ? LIST : { entries: [] }
     })
-    render(<WaitingOnYouPage />)
+    render(<InboxPage />)
     fireEvent.click(await screen.findByRole('button', { name: 'Import open vault cards' }))
     expect(await screen.findByText(/nothing was imported/)).toBeTruthy()
   })
@@ -402,7 +402,7 @@ describe('Details on a card', () => {
   it('loads the snapshot for the digest shown when it opens, and draws the titles', async () => {
     const withDetails = card({ id: 'in_a', title: 'A', digest: 'da1', details: REF })
     serveDetails(() => [withDetails])
-    render(<WaitingOnYouPage />)
+    render(<InboxPage />)
     fireEvent.click(await screen.findByRole('button', { name: 'Details' }))
     expect(await screen.findByText('What Approve does')).toBeTruthy()
     expect(detailCalls().map((c) => c[1])).toEqual([{ id: 'in_a', digest: 'da1' }])
@@ -412,7 +412,7 @@ describe('Details on a card', () => {
     vi.useFakeTimers({ shouldAdvanceTime: true })
     const withDetails = card({ id: 'in_b', title: 'B', digest: 'db1', details: REF })
     serveDetails(() => [{ ...withDetails }])
-    render(<WaitingOnYouPage />)
+    render(<InboxPage />)
     fireEvent.click(await screen.findByRole('button', { name: 'Details' }))
     await screen.findByText('What Approve does')
     const lists = () => pilotRpc.mock.calls.filter((c) => c[0] === 'pilot.inbox.list').length
@@ -429,7 +429,7 @@ describe('Details on a card', () => {
     serveDetails(() => [
       card({ id: 'in_c', title: 'C', version, digest: `dc${version}`, details: REF })
     ])
-    render(<WaitingOnYouPage />)
+    render(<InboxPage />)
     fireEvent.click(await screen.findByRole('button', { name: 'Details' }))
     await screen.findByText('What Approve does')
     version = 2
@@ -448,7 +448,7 @@ describe('Details on a card', () => {
         ? { ...LIST, items: [card({ id: 'in_d', title: 'D', digest: 'dd1', details: REF })] }
         : { entries: [] }
     })
-    render(<WaitingOnYouPage />)
+    render(<InboxPage />)
     fireEvent.click(await screen.findByRole('button', { name: 'Details' }))
     expect(
       await screen.findByText(/Couldn.t load the details: The card changed; review it again/)
@@ -460,7 +460,7 @@ describe('Details on a card', () => {
     serveDetails(() => [
       card({ id: 'in_e', title: 'E', digest: 'de1', detailsMd: `\`\`\`\n${long}\n\`\`\`` })
     ])
-    const { container } = render(<WaitingOnYouPage />)
+    const { container } = render(<InboxPage />)
     fireEvent.click(await screen.findByRole('button', { name: 'Details' }))
     await waitFor(() =>
       expect(container.querySelector('.glr-body pre code')?.textContent).toBe(long)
@@ -470,7 +470,7 @@ describe('Details on a card', () => {
 
   it('shows no Details on a card with neither', async () => {
     serveDetails(() => [card({ id: 'in_f', title: 'F', digest: 'df1' })])
-    render(<WaitingOnYouPage />)
+    render(<InboxPage />)
     await screen.findByText('F')
     expect(screen.queryByRole('button', { name: 'Details' })).toBeNull()
   })
@@ -512,7 +512,7 @@ describe('Details on a card', () => {
       }
       return { entries: [] }
     })
-    const { container } = render(<WaitingOnYouPage />)
+    const { container } = render(<InboxPage />)
     fireEvent.click(await screen.findByRole('button', { name: 'Details' }))
     await screen.findByText('General comments')
     fireEvent.click(container.querySelector('input[value="Approve"]')!)
@@ -527,7 +527,7 @@ describe('Details on a card', () => {
 
   it('lets the grid and the card shrink so a long line cannot widen the page', async () => {
     serveDetails(() => [card({ id: 'in_h', title: 'H', digest: 'dh1' })])
-    const { container } = render(<WaitingOnYouPage />)
+    const { container } = render(<InboxPage />)
     await screen.findByText('H')
     expect(container.querySelector('[class*="minmax(0,1fr)"]')).not.toBeNull()
     expect(container.querySelector('article')?.className).toContain('min-w-0')

@@ -6,7 +6,7 @@ import { GLOBAL_FLAGS } from '../../../../cli/args'
 export const ANSWERS_COMMAND_SPECS: CommandSpec[] = [
   {
     path: ['inbox', 'tick'],
-    summary: 'Close a Waiting on you card, saying what happened',
+    summary: 'Close an Inbox card, saying what happened',
     usage: 'pilot inbox tick --id <id> --outcome <text> [--json]',
     allowedFlags: [...GLOBAL_FLAGS, 'id', 'outcome'],
     examples: ['pilot inbox tick --id in_0123456789abcdef --outcome "done: pushed 9c1e2f0"']
@@ -28,7 +28,7 @@ export const ANSWERS_COMMAND_SPECS: CommandSpec[] = [
       'pilot action run --name push --args-json \'{"argv":["/wt/web-1493","web-1493-a","9c1e2f0","1a2b3c4"]}\' --dry-run'
     ],
     notes: [
-      "Inside a Pilot step, the step running in this terminal is the caller (PILOT_RUN_ID and PILOT_STEP_IDX are the fallback, only while that step is active); its run's powers apply. Outside a Pilot run it only dry-runs: approve actions in Pilot (Waiting on you), or run act.py directly.",
+      "Inside a Pilot step, the step running in this terminal is the caller (PILOT_RUN_ID and PILOT_STEP_IDX are the fallback, only while that step is active); its run's powers apply. Outside a Pilot run it only dry-runs: approve actions in Pilot (Inbox), or run act.py directly.",
       'Exit codes: done 0, failed 1, stale 3, needs_agent 4, not_yet 5, asked 6.'
     ]
   },
@@ -59,7 +59,7 @@ export const ANSWERS_COMMAND_SPECS: CommandSpec[] = [
   {
     path: ['inbox', 'import-vault'],
     summary:
-      "Preview importing the vault's open cards and saved answers into Pilot's inbox; the import itself is applied in Pilot's window (Waiting on you)",
+      "Preview importing the vault's open cards and saved answers into Pilot's inbox; the import itself is applied in Pilot's window (Inbox)",
     usage: 'pilot inbox import-vault [--json]',
     allowedFlags: [...GLOBAL_FLAGS, 'apply'],
     examples: ['pilot inbox import-vault'],

@@ -27,9 +27,9 @@ Every change Pilot makes to an upstream file is listed here (D24). Each one is a
 | orca-automations-off       | src/main/startup/main-process-automations.ts                                  | keepOrcaAutomationsOff(service, store)                 | Pilot runs YAML automations only: Orca's own engine is stopped at startup (spec hook 1)                                                                                                   |
 | agent-launch-env           | src/main/runtime/orca-runtime-terminal-create-deduplication.ts                | withPilotAgentLaunch(                                  | a Pilot step's env (PILOT_*, AGENT_RUN) and its --session-id/--resume/args reach the agent; launchAgentTerminal forwards no env and extraAgentArgs allows only --model/--effort/--add-dir |
 | right-sidebar-badge        | src/renderer/src/components/right-sidebar/activity-bar-buttons.tsx            | <PilotActivityBadge                                    | waiting count or running dot on the Automations icon (the bar's own slot is a status dot with no count, fed from a memo Pilot can't refresh)                                              |
-| sidebar-waiting-item       | src/renderer/src/components/sidebar/SidebarNav.tsx                            | <PilotWaiting.WaitingNavItem />                        | Waiting on you under Automations, with its count                                                                                                                                          |
-| sidebar-automations-active | src/renderer/src/components/sidebar/SidebarNav.tsx                            | PilotWaiting.useAutomationsActive(                     | Automations isn't highlighted while Waiting on you shows                                                                                                                                  |
-| sidebar-automations-open   | src/renderer/src/components/sidebar/SidebarNav.tsx                            | PilotWaiting.useOpenAutomationsPage(                   | clicking Automations leaves Waiting on you                                                                                                                                                |
+| sidebar-waiting-item       | src/renderer/src/components/sidebar/SidebarNav.tsx                            | <PilotWaiting.WaitingNavItem />                        | Inbox under Automations, with its count                                                                                                                                          |
+| sidebar-automations-active | src/renderer/src/components/sidebar/SidebarNav.tsx                            | PilotWaiting.useAutomationsActive(                     | Automations isn't highlighted while Inbox shows                                                                                                                                  |
+| sidebar-automations-open   | src/renderer/src/components/sidebar/SidebarNav.tsx                            | PilotWaiting.useOpenAutomationsPage(                   | clicking Automations leaves Inbox                                                                                                                                                |
 
 ## After an upstream sync
 
@@ -47,6 +47,6 @@ Which hooks were added for the YAML engine, and why:
 
 Which hooks were added for card details, and why:
 
-- `sidebar-waiting-item`, `sidebar-automations-active` and `sidebar-automations-open`: the Waiting on you item under Automations, its highlight rule, and the Automations click that leaves it. They are three one-line hooks in `SidebarNav.tsx` and add no `activeView`; the card Details themselves live wholly in Pilot's folder.
+- `sidebar-waiting-item`, `sidebar-automations-active` and `sidebar-automations-open`: the Inbox item under Automations, its highlight rule, and the Automations click that leaves it. They are three one-line hooks in `SidebarNav.tsx` and add no `activeView`; the card Details themselves live wholly in Pilot's folder.
 
 The table says which of these are in place.

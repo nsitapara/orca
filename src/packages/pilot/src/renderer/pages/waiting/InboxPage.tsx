@@ -23,7 +23,7 @@ function withError(
   return failed ? { ...rest, [id]: failed } : rest
 }
 
-export function WaitingOnYouPage(): React.JSX.Element {
+export function InboxPage(): React.JSX.Element {
   const [viewer, setViewer] = useState<string | null>(null)
   const [rail, setRail] = useState<string>(ALL)
   const { inbox, queue, error, save, applyNow, reload } = useWaiting(viewer)
@@ -64,7 +64,7 @@ export function WaitingOnYouPage(): React.JSX.Element {
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center gap-2">
-        <h2 className="text-lg font-semibold">Waiting on you</h2>
+        <h2 className="text-lg font-semibold">Inbox</h2>
         <span className="flex-1" />
         <span className="text-sm text-muted-foreground">Viewing as</span>
         {people.map((p) => (

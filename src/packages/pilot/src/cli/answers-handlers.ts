@@ -40,7 +40,7 @@ export function inboxItemLine(
   return [i.id, i.status, i.outcome, i.title].filter(Boolean).join(' · ')
 }
 
-const IMPORT_ON_PAGE = 'Apply the vault import in Pilot (Waiting on you)'
+const IMPORT_ON_PAGE = 'Apply the vault import in Pilot (Inbox)'
 
 type ImportReport = {
   applied: boolean

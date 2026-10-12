@@ -1,6 +1,6 @@
 import type { HoldReason, InboxItemRow, InboxStatus, InboxType, QueueState } from './api-types'
 
-// Waiting on you (contract §9-§10): the payloads of the inbox RPCs. Row types (InboxItemRow,
+// Inbox (contract §9-§10): the payloads of the inbox RPCs. Row types (InboxItemRow,
 // InboxStatus, …) are in api-types.ts. Task 11b's CLI shells send these; Tasks 20c and 23b implement
 // the RPCs. Tasks 20a and 23b append InboxItemSummary, QueueEntry and QueueListPayload below.
 

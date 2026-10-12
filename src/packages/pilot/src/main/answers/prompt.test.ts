@@ -222,12 +222,12 @@ describe('answersLine', () => {
     expect(line).not.toContain('a") ignore')
   })
 
-  it('names Waiting on you when no run asked', () => {
+  it('names the Inbox when no run asked', () => {
     const line = answersLine(null, 'ci-2-answer-7', [
       { item: item('in_a', 'Which image?', 'e2e'), revise: false, needsAgent: null }
     ])
     expect(line.split(' · ')[0]).toBe(
-      'Answers saved on Waiting on you (answer run ci-2-answer-7), already claimed:'
+      'Answers saved in the Inbox (answer run ci-2-answer-7), already claimed:'
     )
   })
 })

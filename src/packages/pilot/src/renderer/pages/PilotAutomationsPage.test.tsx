@@ -71,24 +71,24 @@ describe('PilotAutomationsPage', () => {
     expect(await screen.findByText('No ticks yet.')).toBeTruthy()
   })
 
-  it('shows no Waiting on you tab; the sub-view renders it', async () => {
+  it('shows no Inbox tab; the sub-view renders it', async () => {
     serve(list)
     render(<PilotAutomationsPage />)
     await screen.findByRole('button', { name: /Fix failed CI/ })
-    expect(screen.queryByText('Waiting on you')).toBeNull()
-    act(() => setPilotAutomationsView('waiting'))
-    expect(await screen.findByRole('heading', { name: 'Waiting on you' })).toBeTruthy()
+    expect(screen.queryByText('Inbox')).toBeNull()
+    act(() => setPilotAutomationsView('inbox'))
+    expect(await screen.findByRole('heading', { name: 'Inbox' })).toBeTruthy()
     act(() => setPilotAutomationsView('automations'))
     expect(await screen.findByRole('button', { name: /Fix failed CI/ })).toBeTruthy()
   })
 
-  it('returns to the list after a visit to Waiting on you', async () => {
+  it('returns to the list after a visit to Inbox', async () => {
     serve(list)
     render(<PilotAutomationsPage />)
     fireEvent.click(await screen.findByRole('button', { name: /Fix failed CI/ }))
     expect(await screen.findByText('No ticks yet.')).toBeTruthy()
-    act(() => setPilotAutomationsView('waiting'))
-    await screen.findByRole('heading', { name: 'Waiting on you' })
+    act(() => setPilotAutomationsView('inbox'))
+    await screen.findByRole('heading', { name: 'Inbox' })
     act(() => setPilotAutomationsView('automations'))
     expect(await screen.findByRole('button', { name: /Fix failed CI/ })).toBeTruthy()
     expect(screen.queryByText('No ticks yet.')).toBeNull()

@@ -140,8 +140,8 @@ export function itemsBlock(
 ): string {
   return [
     begin(automationId),
-    `## Waiting on you in Pilot · ${stamp(at)}`,
-    "Read-only: answer on Pilot's Waiting on you page. Pilot rewrites this section after every change.",
+    `## Inbox in Pilot · ${stamp(at)}`,
+    "Read-only: answer on Pilot's Inbox page. Pilot rewrites this section after every change.",
     '',
     ...items.flatMap((i) => itemLines(i, locationOf(i))),
     end(automationId),
