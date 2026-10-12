@@ -9,6 +9,20 @@ export function detailsRefOf(json: unknown): DetailsRef | null {
   return json === null || json === undefined ? null : (JSON.parse(String(json)) as DetailsRef)
 }
 
+// The card's digest and the snapshot of that same version, in one read (null: no such card).
+export function readCurrentDetails(
+  db: Database,
+  id: string
+): { digest: string; snapshot: DetailsSnapshot | null } | null {
+  const row = db
+    .prepare('SELECT digest, details_snapshot_json AS s FROM inbox_items WHERE id = ?')
+    .get(id) as { digest: string; s: string | null } | undefined
+  if (!row) {
+    return null
+  }
+  return { digest: row.digest, snapshot: row.s ? (JSON.parse(row.s) as DetailsSnapshot) : null }
+}
+
 export function readSnapshot(db: Database, id: string): DetailsSnapshot | null {
   const row = db.prepare('SELECT details_snapshot_json AS s FROM inbox_items WHERE id = ?').get(id)
   const json = (row as { s: string | null } | undefined)?.s

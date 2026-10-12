@@ -13,6 +13,7 @@ import { buildAnswerMethods } from './methods-answers'
 import { buildSpendMethods } from './methods-spend'
 import { buildTimelineMethods } from './methods-timeline'
 import { buildChannelMethods } from './methods-channel'
+import { buildDetailsMethods } from './methods-details'
 import { buildInboxMethods } from './methods-inbox'
 import { buildImportMethods } from './methods-import'
 
@@ -178,6 +179,7 @@ export function buildPilotMethods(host: PilotHost) {
     }),
     ...buildChannelMethods(ctx),
     ...buildInboxMethods(ctx),
+    ...buildDetailsMethods(ctx),
     ...buildActionMethods(ctx),
     ...buildAnswerMethods(ctx),
     ...buildSpendMethods(ctx),
