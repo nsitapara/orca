@@ -14,7 +14,7 @@ import { validatePreparationEvidence } from './details-preparation'
 import { pushRangeProblems } from './push-range'
 import { getInboxItem, inboxEvent, type InboxDeps } from './inbox-service'
 
-export function completePreparation(
+export async function completePreparation(
   deps: InboxDeps,
   id: string,
   claim: PreparationClaim,
@@ -23,7 +23,7 @@ export function completePreparation(
   const claimed = deps.store.inboxPreparations.requireClaim(id, claim, deps.now())
   const snapshot = loadDetails(deps.detailsRoot ?? null, bundlePath, { prepared: true })
   // Read-only git, outside the write: a revise (new args) moves the revision, so the claim re-check refuses it.
-  const range = pushRangeProblems(claimed, snapshot)
+  const range = await pushRangeProblems(claimed, snapshot)
   return deps.store.transaction(() => {
     const at = deps.now()
     const item = deps.store.inboxPreparations.requireClaim(id, claim, at)

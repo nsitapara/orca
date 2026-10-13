@@ -1,6 +1,6 @@
 import { execFileSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
-import { existsSync, mkdtempSync, realpathSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
@@ -10,7 +10,12 @@ import { queuedPreparation } from '../../shared/preparation'
 import { PilotStore } from '../store/store'
 import { detailsFixture, rewriteBundle } from './__fixtures__/details-fixture'
 import { completePreparation } from './preparation'
-import { PUSH_DIFF_ARGS, pushRangeProblems } from './push-range'
+import {
+  committedRangeSha256,
+  PUSH_DIFF_ARGS,
+  PUSH_DIFF_ENV,
+  pushRangeProblems
+} from './push-range'
 
 // R-P5 item 2: a prepared push's patch is not taken on its word. Pilot recomputes the pushed range itself, read-only,
 // with the one canonical diff command the worker uses (context.py push-patch), and compares the bytes' sha256.
@@ -51,10 +56,12 @@ const snapshot = (patchSha: string, base: string, head: string) =>
   }) as unknown as DetailsSnapshot
 
 describe('a prepared push range, recomputed by Pilot', () => {
-  it('passes when the patch is the canonical diff of the pinned range', () => {
+  it('passes when the patch is the canonical diff of the pinned range', async () => {
     const r = repo()
     const item = card(r.dir, [r.dir, 'web-1', r.head, r.base])
-    expect(pushRangeProblems(item, snapshot(r.sha(r.base, r.head), r.base, r.head))).toEqual([])
+    expect(await pushRangeProblems(item, snapshot(r.sha(r.base, r.head), r.base, r.head))).toEqual(
+      []
+    )
   })
 
   it.each<[string, (r: ReturnType<typeof repo>) => [InboxItemRow, DetailsSnapshot]]>([
@@ -89,12 +96,12 @@ describe('a prepared push range, recomputed by Pilot', () => {
         snapshot(r.sha(r.base, r.head), r.base, 'f'.repeat(40))
       ]
     ]
-  ])('refuses %s', (_name, arrange) => {
+  ])('refuses %s', async (_name, arrange) => {
     const [item, snap] = arrange(repo())
-    expect(pushRangeProblems(item, snap)).not.toEqual([])
+    expect(await pushRangeProblems(item, snap)).not.toEqual([])
   })
 
-  it('is plumbing with every external hook off, the worktree only as -C and the commits after --end-of-options', () => {
+  it('is plumbing with every external hook off, the worktree only as -C and the commits after --end-of-options', async () => {
     expect(PUSH_DIFF_ARGS('/wt', 'b'.repeat(40), 'h'.repeat(40))).toEqual([
       '-c',
       'core.fsmonitor=false',
@@ -129,16 +136,18 @@ describe('the pushed range from untrusted args', () => {
     ['a ref name', (r) => [r.dir, 'web-1', 'web-1', r.base]],
     ['a non-hex commit', (r) => [r.dir, 'web-1', 'z'.repeat(40), r.base]],
     ['a relative worktree', (r) => ['.', 'web-1', r.head, r.base]]
-  ])('refuses %s and runs no git', (_name, argv) => {
+  ])('refuses %s and runs no git', async (_name, argv) => {
     const r = repo()
     const out = join(r.dir, 'written-by-git')
     const item = card(r.dir, argv(r, out))
-    expect(pushRangeProblems(item, snapshot(r.sha(r.base, r.head), r.base, r.head))).not.toEqual([])
+    expect(
+      await pushRangeProblems(item, snapshot(r.sha(r.base, r.head), r.base, r.head))
+    ).not.toEqual([])
     expect(existsSync(out)).toBe(false)
   })
 
   // Job 09 checks out teammates' branches: their repo-local config and attributes must never run anything here.
-  it("never runs a repo's diff.external, textconv driver or fsmonitor", () => {
+  it("never runs a repo's diff.external, textconv driver or fsmonitor", async () => {
     const r = repo()
     const marker = (name: string) => join(r.dir, '..', `${name}-${Date.now()}`)
     const markers = ['external', 'textconv', 'fsmonitor'].map(marker)
@@ -147,13 +156,64 @@ describe('the pushed range from untrusted args', () => {
     git(r.dir, 'config', 'core.fsmonitor', `touch ${markers[2]}`)
     writeFileSync(join(r.dir, '.gitattributes'), '* diff=evil\n')
     const item = card(r.dir, [r.dir, 'web-1', r.head, r.base])
-    expect(pushRangeProblems(item, snapshot(r.sha(r.base, r.head), r.base, r.head))).toEqual([])
+    expect(await pushRangeProblems(item, snapshot(r.sha(r.base, r.head), r.base, r.head))).toEqual(
+      []
+    )
     expect(markers.filter((m) => existsSync(m))).toEqual([])
   })
 })
 
+// Fix round 3: a partial clone's promisor remote fetches missing objects through its configured transport, which
+// can run a command. The read never fetches: no lazy fetch, no protocol but file.
+describe('the pushed range in a partial clone with a hostile promisor remote', () => {
+  it('fetches nothing and runs no transport', async () => {
+    const r = repo()
+    const marker = join(r.dir, '..', `lazy-${Date.now()}`)
+    const blob = git(r.dir, 'rev-parse', `${r.head}:b.txt`)
+    rmSync(join(r.dir, '.git', 'objects', blob.slice(0, 2), blob.slice(2)))
+    git(r.dir, 'config', 'core.repositoryformatversion', '1')
+    git(r.dir, 'config', 'extensions.partialClone', 'origin')
+    git(r.dir, 'config', 'remote.origin.promisor', 'true')
+    git(r.dir, 'config', 'remote.origin.url', `ext::sh -c touch% ${marker}`)
+    git(r.dir, 'config', 'protocol.ext.allow', 'always')
+    const item = card(r.dir, [r.dir, 'web-1', r.head, r.base])
+    expect(await pushRangeProblems(item, snapshot('0'.repeat(64), r.base, r.head))).not.toEqual([])
+    expect(existsSync(marker)).toBe(false)
+  })
+
+  it('sets the env that forbids it', () => {
+    expect(PUSH_DIFF_ENV).toMatchObject({
+      GIT_NO_LAZY_FETCH: '1',
+      GIT_PROTOCOL_FROM_USER: '0',
+      GIT_ALLOW_PROTOCOL: 'file'
+    })
+  })
+})
+
+// Fix round 3: the recompute never blocks Pilot's main thread, and the cap and timeout stop git before any hashing.
+describe('reading the pushed range', () => {
+  it('lets the event loop run while git works', async () => {
+    const r = repo()
+    let ticked = false
+    const read = committedRangeSha256(r.dir, r.base, r.head)
+    setImmediate(() => {
+      ticked = true
+    })
+    expect(await read).toBe(r.sha(r.base, r.head))
+    expect(ticked).toBe(true)
+  })
+
+  it.each([
+    ['over its size cap', { maxBytes: 10 }],
+    ['past its timeout', { timeoutMs: 1 }]
+  ])('stops git %s and hashes nothing', async (_name, limits) => {
+    const r = repo()
+    await expect(committedRangeSha256(r.dir, r.base, r.head, limits)).rejects.toThrow()
+  })
+})
+
 describe('completing a prepared push', () => {
-  it('is refused when its patch is another range than the one it pushes', () => {
+  it('is refused when its patch is another range than the one it pushes', async () => {
     const r = repo()
     const f = detailsFixture()
     const other = execFileSync('git', PUSH_DIFF_ARGS(r.dir, r.middle, r.head))
@@ -216,7 +276,9 @@ describe('completing a prepared push', () => {
       detailsRoot: f.root
     }
     const claim = { runId: 'worker', stepIdx: 0, revision: 1, attempt: 1 }
-    expect(() => completePreparation(deps as never, id, claim, f.bundle)).toThrow('as git shows it')
+    await expect(completePreparation(deps as never, id, claim, f.bundle)).rejects.toThrow(
+      'as git shows it'
+    )
     expect(store.inbox.get(id)?.preparation?.state).toBe('generating')
   })
 })

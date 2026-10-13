@@ -1,4 +1,4 @@
-import { execFileSync } from 'node:child_process'
+import { execFile } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import { realpathSync } from 'node:fs'
 import { isAbsolute } from 'node:path'
@@ -34,14 +34,26 @@ export const PUSH_DIFF_ARGS = (worktree: string, base: string, head: string): st
 ]
 // A commit is a full object id (SHA-1 or SHA-256), never a ref name or anything git could read as an option.
 const OBJECT_ID = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/
+export type RangeLimits = { timeoutMs?: number; maxBytes?: number }
 const GIT_TIMEOUT_MS = 30_000
 const GIT_MAX_BYTES = 64 * 1024 * 1024
 
-// git's environment: nothing GIT_* inherited (no GIT_DIR, GIT_WORK_TREE, GIT_CONFIG_* or GIT_EXTERNAL_DIFF), no
-// system config, no prompt, and no optional locks (read-only).
+// What git runs with, on top of an environment with nothing GIT_* inherited (no GIT_DIR, GIT_WORK_TREE, GIT_CONFIG_*
+// or GIT_EXTERNAL_DIFF): no system config, no prompt, no optional locks (read-only), and no fetching at all: no lazy
+// fetch of a partial clone's missing objects, no transport or helper but local files. context.py's PUSH_DIFF_ENV is
+// the same (a parity test keeps them equal).
+export const PUSH_DIFF_ENV: Readonly<Record<string, string>> = {
+  GIT_OPTIONAL_LOCKS: '0',
+  GIT_CONFIG_NOSYSTEM: '1',
+  GIT_TERMINAL_PROMPT: '0',
+  GIT_NO_LAZY_FETCH: '1',
+  GIT_PROTOCOL_FROM_USER: '0',
+  GIT_ALLOW_PROTOCOL: 'file'
+}
+
 function gitEnv(): NodeJS.ProcessEnv {
   const env = Object.fromEntries(Object.entries(process.env).filter(([k]) => !k.startsWith('GIT_')))
-  return { ...env, GIT_OPTIONAL_LOCKS: '0', GIT_CONFIG_NOSYSTEM: '1', GIT_TERMINAL_PROMPT: '0' }
+  return { ...env, ...PUSH_DIFF_ENV }
 }
 
 function realOrNull(path: string | null): string | null {
@@ -52,25 +64,42 @@ function realOrNull(path: string | null): string | null {
   }
 }
 
-// The sha256 of the canonical diff of <base>..<head> in <worktree> (an argv array, no shell).
-export function committedRangeSha256(worktree: string, base: string, head: string): string {
+// The sha256 of the canonical diff of <base>..<head> in <worktree> (an argv array, no shell), read without
+// blocking the event loop. Past the timeout or the size cap git is killed and nothing is hashed.
+export function committedRangeSha256(
+  worktree: string,
+  base: string,
+  head: string,
+  limits: RangeLimits = {}
+): Promise<string> {
   if (!OBJECT_ID.test(base) || !OBJECT_ID.test(head)) {
-    throw new Error('a pushed range is two full commit ids')
+    return Promise.reject(new Error('a pushed range is two full commit ids'))
   }
-  const bytes = execFileSync('git', PUSH_DIFF_ARGS(worktree, base, head), {
-    env: gitEnv(),
-    timeout: GIT_TIMEOUT_MS,
-    maxBuffer: GIT_MAX_BYTES,
-    stdio: ['ignore', 'pipe', 'pipe']
+  return new Promise((resolve, reject) => {
+    const options = {
+      env: gitEnv(),
+      timeout: limits.timeoutMs ?? GIT_TIMEOUT_MS,
+      maxBuffer: limits.maxBytes ?? GIT_MAX_BYTES,
+      encoding: 'buffer' as const
+    }
+    execFile('git', PUSH_DIFF_ARGS(worktree, base, head), options, (error, stdout) => {
+      if (error) {
+        reject(error)
+        return
+      }
+      resolve(createHash('sha256').update(stdout).digest('hex'))
+    })
   })
-  return createHash('sha256').update(bytes).digest('hex')
 }
 
 // A prepared push binds its patch to what git shows for its pinned range (R-P5): the catalog's push argv is
 // [<worktree path>, <branch>, <commit>, <origin commit>] (act.py push), the commits are full object ids, the
 // worktree is absolute and resolves to the card's own (the one its run recorded), and every diff's patch_sha256 is
 // the sha256 of the canonical diff of origin..commit there.
-export function pushRangeProblems(item: InboxItemRow, snapshot: DetailsSnapshot): string[] {
+export async function pushRangeProblems(
+  item: InboxItemRow,
+  snapshot: DetailsSnapshot
+): Promise<string[]> {
   if (item.action !== 'push') {
     return []
   }
@@ -88,7 +117,7 @@ export function pushRangeProblems(item: InboxItemRow, snapshot: DetailsSnapshot)
   }
   let sha: string
   try {
-    sha = committedRangeSha256(own, base, head)
+    sha = await committedRangeSha256(own, base, head)
   } catch (error) {
     return [`Pilot couldn't read the pushed range from git: ${String(error).slice(0, 300)}`]
   }
