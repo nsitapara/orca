@@ -23,6 +23,9 @@ export function isRecord(value) {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
+// A finite wait on a lock, like every SQLite open in Pilot; it reads a private copy, so it rarely waits.
+const BUSY_TIMEOUT_MS = 5000
+
 // Loaded like upstream's sync-database.ts, so a runtime without node:sqlite (Bun) fails with a
 // clear message when a database is opened, not when this module is imported.
 function openReadOnly(path) {
@@ -30,7 +33,7 @@ function openReadOnly(path) {
   if (sqlite === undefined) {
     throw new Error('node:sqlite is unavailable; run this script with Node 22.16 or newer')
   }
-  return new sqlite.DatabaseSync(path, { readOnly: true })
+  return new sqlite.DatabaseSync(path, { readOnly: true, timeout: BUSY_TIMEOUT_MS })
 }
 
 function tableExists(db, name) {

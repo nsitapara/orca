@@ -2,6 +2,7 @@ import { mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
+import Database from '../../../../../main/sqlite/sync-database'
 import type { ItemDecision } from '../../shared/api-types'
 import { PILOT_SCHEMA_VERSION } from './migrations'
 import { INTERRUPTED, PilotStore, STUCK_TICK_MS, TICK_RETENTION_MS } from './store'
@@ -28,6 +29,27 @@ describe('PilotStore', () => {
     const again = PilotStore.open(path)
     expect(again.schemaVersion()).toBe(PILOT_SCHEMA_VERSION)
     again.close()
+  })
+
+  // RED before the fix: the open waited the fixed 5s, then threw a bare "database is locked".
+  it('fails loudly within its busy timeout, naming the file, while another connection holds it locked', () => {
+    const path = join(mkdtempSync(join(tmpdir(), 'pilot-store-')), 'pilot-automations.db')
+    const holder = new Database(path)
+    holder.exec('BEGIN EXCLUSIVE')
+    const started = Date.now()
+    let error: unknown = null
+    try {
+      PilotStore.open(path, { busyTimeoutMs: 300 }).close()
+    } catch (thrown) {
+      error = thrown
+    } finally {
+      holder.exec('ROLLBACK')
+      holder.close()
+    }
+    const waited = Date.now() - started
+    expect(String(error)).toContain(`${path} stayed locked for 0.3s`)
+    expect(waited).toBeGreaterThanOrEqual(250)
+    expect(waited).toBeLessThan(3000)
   })
 
   it("settles a run's key as done or failed, and marking it again starts it over", () => {
