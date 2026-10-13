@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { AutomationListPayload, AutomationSummary, TickRow } from '../../shared/api-types'
 import { AutomationsTable } from './AutomationsTable'
 import { summary } from './fixtures'
@@ -73,18 +73,21 @@ function renderTable(automations: AutomationSummary[]) {
 }
 
 describe('AutomationsTable: a job of several automations', () => {
+  beforeEach(() => localStorage.clear())
   afterEach(cleanup)
 
   it('shows 13 as one row with a stages chip, then its stages indented in stage order', () => {
     renderTable([SOLO, STAGE_2, STAGE_1])
-    const rows = screen.getAllByRole('button')
+    const rows = screen
+      .getAllByRole('button')
+      .filter((r) => !r.closest('[role="row"]') && r.getAttribute('aria-expanded') === null)
     expect(rows.map((r) => r.getAttribute('aria-label') ?? r.textContent)).toEqual([
       expect.stringContaining('07 · Clean Docker'),
       'Job 13 · Fix red hourly e2e on dev, 2 stages',
       'Stage 1 Open or update the ticket',
       'Stage 2 Start a fix session per ticket'
     ])
-    const job = within(rows[1])
+    const job = within(rows[1].parentElement?.parentElement as HTMLElement)
     expect(job.getByText('2 stages')).toBeTruthy()
     expect(job.getByText('Pipelines → Linear tickets')).toBeTruthy()
     // combined: on because stage 2 is; the newest tick is stage 2's
@@ -109,9 +112,103 @@ describe('AutomationsTable: a job of several automations', () => {
 
   it('keeps an automation without a job one plain row', () => {
     const { onOpen } = renderTable([SOLO])
-    expect(screen.getAllByRole('button')).toHaveLength(1)
     expect(screen.queryByText(/stages?$/)).toBeNull()
-    fireEvent.click(screen.getByRole('button'))
+    expect(screen.queryByRole('button', { name: /stages$/ })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: /Clean Docker/ }))
     expect(onOpen).toHaveBeenCalledWith('docker-prune')
+  })
+})
+
+const stageNames = (): string[] =>
+  screen
+    .queryAllByRole('button', { name: /^Stage / })
+    .map((b) => b.getAttribute('aria-label') ?? '')
+
+describe('AutomationsTable: folding a job', () => {
+  beforeEach(() => localStorage.clear())
+  afterEach(() => {
+    cleanup()
+    vi.restoreAllMocks()
+  })
+
+  it('toggles the stages with the chevron without opening the job, and remembers it', () => {
+    const { onOpenJob } = renderTable([STAGE_1, STAGE_2])
+    expect(stageNames()).toHaveLength(2)
+    const hide = screen.getByRole('button', { name: 'Hide stages' })
+    expect(hide.getAttribute('aria-expanded')).toBe('true')
+    fireEvent.click(hide)
+    expect(onOpenJob).not.toHaveBeenCalled()
+    expect(stageNames()).toHaveLength(0)
+    const show = screen.getByRole('button', { name: 'Show stages' })
+    expect(show.getAttribute('aria-expanded')).toBe('false')
+    cleanup()
+    renderTable([STAGE_1, STAGE_2])
+    expect(stageNames()).toHaveLength(0)
+    fireEvent.click(screen.getByRole('button', { name: 'Show stages' }))
+    expect(stageNames()).toHaveLength(2)
+  })
+
+  it('is a real button, so Enter and Space toggle it natively', () => {
+    renderTable([STAGE_1, STAGE_2])
+    const chevron = screen.getByRole('button', { name: 'Hide stages' })
+    expect(chevron.tagName).toBe('BUTTON')
+    expect(chevron.getAttribute('type')).toBe('button')
+    expect(chevron.tabIndex).toBe(0)
+  })
+
+  it('still works when localStorage throws', () => {
+    const boom = (): never => {
+      throw new Error('denied')
+    }
+    vi.spyOn(Storage.prototype, 'getItem').mockImplementation(boom)
+    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(boom)
+    vi.spyOn(Storage.prototype, 'removeItem').mockImplementation(boom)
+    renderTable([STAGE_1, STAGE_2])
+    expect(stageNames()).toHaveLength(2)
+    fireEvent.click(screen.getByRole('button', { name: 'Hide stages' }))
+    expect(stageNames()).toHaveLength(0)
+  })
+
+  it('opens the job from the row’s other cells too', () => {
+    const { onOpenJob } = renderTable([STAGE_1, STAGE_2])
+    fireEvent.click(screen.getByText('Pipelines → Linear tickets'))
+    expect(onOpenJob).toHaveBeenCalledWith('13')
+  })
+})
+
+describe('AutomationsTable: sorting', () => {
+  beforeEach(() => localStorage.clear())
+  afterEach(cleanup)
+  const rowNames = (): string[] =>
+    screen
+      .getAllByRole('button')
+      .filter((b) => !b.closest('[role="row"]') && b.getAttribute('aria-expanded') === null)
+      .map((b) => b.getAttribute('aria-label') ?? b.textContent ?? '')
+
+  it('defaults to natural code order and toggles with aria-sort, remembering the choice', () => {
+    const list = ['M01 · c', '14 · b', 'Zed', '02 · a'].map((n) => ({ ...summary, id: n, name: n }))
+    renderTable(list)
+    expect(rowNames().map((n) => n.slice(0, 3))).toEqual(['02 ', '14 ', 'M01', 'Zed'])
+    const header = screen.getByRole('columnheader', { name: /Name/ })
+    expect(header.getAttribute('aria-sort')).toBe('ascending')
+    fireEvent.click(within(header).getByRole('button'))
+    expect(header.getAttribute('aria-sort')).toBe('descending')
+    expect(rowNames()[0]).toContain('Zed')
+    cleanup()
+    renderTable(list)
+    expect(screen.getByRole('columnheader', { name: /Name/ }).getAttribute('aria-sort')).toBe(
+      'descending'
+    )
+  })
+
+  it('keeps stages under their job whatever the sort', () => {
+    renderTable([STAGE_2, SOLO, STAGE_1])
+    fireEvent.click(screen.getByRole('button', { name: /Status/ }))
+    const names = rowNames()
+    const i = names.findIndex((n) => n.startsWith('Job 13'))
+    expect(names.slice(i + 1, i + 3)).toEqual([
+      'Stage 1 Open or update the ticket',
+      'Stage 2 Start a fix session per ticket'
+    ])
   })
 })

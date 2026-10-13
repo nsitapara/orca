@@ -1,7 +1,18 @@
-import { ChevronDown } from 'lucide-react'
+import { useState } from 'react'
+import { ChevronDown, ChevronRight } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import type { AutomationListPayload, AutomationSummary } from '../../shared/api-types'
 import { jobEnabled, jobLastTick, listEntries, type JobGroup } from '../../shared/job-stages'
+import {
+  loadFolded,
+  loadSort,
+  nextSort,
+  saveFolded,
+  saveSort,
+  sortEntries,
+  type SortColumn,
+  type SortState
+} from './automations-sort'
 import { lastTickText } from './format'
 
 const COLS =
@@ -98,20 +109,39 @@ function JobRows({
 }): React.JSX.Element {
   const title = `${job.id} · ${job.name}`
   const count = stagesText(job.stages.length)
+  const [folded, setFolded] = useState(() => loadFolded(job.id))
+  const toggle = (e: React.MouseEvent): void => {
+    e.stopPropagation()
+    saveFolded(job.id, !folded)
+    setFolded(!folded)
+  }
+  const Chevron = folded ? ChevronRight : ChevronDown
   return (
     <div>
-      <button
-        type="button"
-        aria-label={`Job ${title}, ${count}`}
+      <div
         onClick={() => onOpenJob(job.id)}
-        className={`${COLS} ${ROW} bg-muted/30`}
+        className={`${COLS} ${ROW} cursor-pointer bg-muted/30`}
       >
         <span className="flex min-w-0 items-center gap-2 font-medium">
-          <ChevronDown className="size-3 shrink-0 text-muted-foreground" aria-hidden="true" />
-          <span className="truncate">{title}</span>
-          <Badge variant="outline" className="shrink-0">
-            {count}
-          </Badge>
+          <button
+            type="button"
+            aria-expanded={!folded}
+            aria-label={folded ? 'Show stages' : 'Hide stages'}
+            onClick={toggle}
+            className="-m-1 shrink-0 rounded p-1 hover:bg-accent"
+          >
+            <Chevron className="size-3 text-muted-foreground" aria-hidden="true" />
+          </button>
+          <button
+            type="button"
+            aria-label={`Job ${title}, ${count}`}
+            className="flex min-w-0 items-center gap-2 text-left font-medium"
+          >
+            <span className="truncate">{title}</span>
+            <Badge variant="outline" className="shrink-0">
+              {count}
+            </Badge>
+          </button>
         </span>
         <span className="truncate text-muted-foreground">{jobLooksAt(job)}</span>
         <span />
@@ -121,12 +151,34 @@ function JobRows({
         <span>
           <StatusBadge enabled={jobEnabled(job)} />
         </span>
-      </button>
-      {job.stages.map((s) => (
-        <StageRow key={s.id} a={s} now={now} onOpen={onOpen} />
-      ))}
+      </div>
+      {folded
+        ? null
+        : job.stages.map((s) => <StageRow key={s.id} a={s} now={now} onOpen={onOpen} />)}
     </div>
   )
+}
+
+const HEADERS: [SortColumn, string][] = [
+  ['name', 'Name'],
+  ['looksAt', 'Looks at'],
+  ['schedule', 'Schedule'],
+  ['lastTick', 'Last tick'],
+  ['status', 'Status']
+]
+
+function ariaSort(sort: SortState, column: SortColumn): 'ascending' | 'descending' | 'none' {
+  if (sort.column !== column) {
+    return 'none'
+  }
+  return sort.direction === 'asc' ? 'ascending' : 'descending'
+}
+
+function sortMark(sort: SortState, column: SortColumn): string {
+  if (sort.column !== column) {
+    return ''
+  }
+  return sort.direction === 'asc' ? ' ↑' : ' ↓'
 }
 
 export function AutomationsTable({
@@ -140,21 +192,35 @@ export function AutomationsTable({
   onOpen: (id: string) => void
   onOpenJob: (jobId: string) => void
 }): React.JSX.Element {
+  const [sort, setSort] = useState<SortState>(loadSort)
+  const choose = (column: SortColumn): void => {
+    const next = nextSort(sort, column)
+    saveSort(next)
+    setSort(next)
+  }
   if (!payload.automations.length) {
     return <p className="text-sm text-muted-foreground">No automations found.</p>
   }
   return (
     <div className="rounded-md border border-border/50 bg-muted/20">
       <div
+        role="row"
         className={`${COLS} h-8 items-center px-3 text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground`}
       >
-        <span>Name</span>
-        <span>Looks at</span>
-        <span>Schedule</span>
-        <span>Last tick</span>
-        <span>Status</span>
+        {HEADERS.map(([column, label]) => (
+          <span key={column} role="columnheader" aria-sort={ariaSort(sort, column)}>
+            <button
+              type="button"
+              onClick={() => choose(column)}
+              className="uppercase hover:text-foreground"
+            >
+              {label}
+              {sortMark(sort, column)}
+            </button>
+          </span>
+        ))}
       </div>
-      {listEntries(payload.automations).map((entry) =>
+      {sortEntries(listEntries(payload.automations), sort).map((entry) =>
         entry.kind === 'job' ? (
           <JobRows
             key={`job:${entry.id}`}
