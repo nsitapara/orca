@@ -39,6 +39,7 @@ import {
 } from './synthetic-title-runtime'
 import { requireMainWindowServices } from './main-window-service-readiness'
 import { recordRendererLaunchFailureProbe } from '../window/renderer-launch-failure-probe'
+import { deferTrayPastLaunch } from '../../packages/pilot/src/main/startup/tray-after-launch' // pilot-hook: tray-after-launch
 
 const TRAY_CREATE_FALLBACK_MS = 12_000
 const AGENT_STATE_CRASH_BREADCRUMB_MIN_INTERVAL_MS = 30_000
@@ -162,7 +163,11 @@ export function openMainWindow(options: { revealOnDidFinishLoad?: boolean } = {}
   })
   recordCrashBreadcrumb('main_window_created')
   logStartupMilestone('window-created')
-  const createTray = createSystemTrayDeferred(window, () => logStartupMilestone('tray-created'))
+  // pilot-hook: tray-after-launch
+  const createTray = deferTrayPastLaunch(
+    window,
+    createSystemTrayDeferred(window, () => logStartupMilestone('tray-created'))
+  )
   window.once('ready-to-show', () => {
     logStartupMilestone('ready-to-show')
     setImmediate(createTray)
