@@ -7,9 +7,11 @@ import { ProblemNotices } from './ProblemNotices'
 
 // The Automations page's list: Pilot's YAML automations.
 export function PilotAutomationsSection({
-  onOpen
+  onOpen,
+  onOpenJob
 }: {
   onOpen: (id: string) => void
+  onOpenJob: (jobId: string) => void
 }): React.JSX.Element {
   const [payload, setPayload] = useState<AutomationListPayload | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -62,7 +64,9 @@ export function PilotAutomationsSection({
       {error ? <p className="text-sm text-destructive">{error}</p> : null}
       <ProblemNotices payload={payload} startError={startError} />
       {loading ? <p className="text-sm text-muted-foreground">Loading…</p> : null}
-      {payload ? <AutomationsTable payload={payload} now={now} onOpen={onOpen} /> : null}
+      {payload ? (
+        <AutomationsTable payload={payload} now={now} onOpen={onOpen} onOpenJob={onOpenJob} />
+      ) : null}
     </section>
   )
 }

@@ -1,5 +1,6 @@
 import { existsSync, lstatSync, readdirSync, readFileSync, watch, type FSWatcher } from 'node:fs'
 import { dirname, join } from 'node:path'
+import { jobProblems } from '../../shared/definition/jobs'
 import { idFromFile } from '../../shared/definition/normalize'
 import { parseAutomationYaml } from '../../shared/definition/parse'
 import type { AutomationDefinition, PeopleRef } from '../../shared/definition/types'
@@ -206,18 +207,15 @@ export function loadDefinitions(
     }
   }
   const files = listings.flatMap((l) => l.files)
+  // Saved as the last valid version only once the job rules across files accept them.
+  const fresh: { file: string; definition: AutomationDefinition; yaml: string }[] = []
   for (const file of files) {
     const id = idFromFile(file)
     const result = loadFile(file, people, byId)
     if (result.ok) {
       byId.set(id, file)
       definitions.push(result.definition)
-      if (memory) {
-        const { definition, yaml } = result
-        remember('save the valid version', undefined, () =>
-          memory.saveValid(definition, yaml, now())
-        )
-      }
+      fresh.push({ file, definition: result.definition, yaml: result.yaml })
       continue
     }
     // A duplicate id never falls back; neither does an id another file already loaded.
@@ -231,6 +229,29 @@ export function loadDefinitions(
       displayOnly.push(kept.definition.id)
     }
     errors.push({ file, errors: kept ? [...result.errors, kept.note] : result.errors })
+  }
+  // A job rule broken across files makes every definition it involves invalid, like a broken file.
+  const problems = jobProblems(definitions)
+  for (const { file, definition, yaml } of fresh) {
+    const own = problems.get(definition.id)
+    if (!own) {
+      if (memory) {
+        remember('save the valid version', undefined, () =>
+          memory.saveValid(definition, yaml, now())
+        )
+      }
+      continue
+    }
+    const refused = own.map((p) => `${file}: ${p}`)
+    const kept = memory ? keptVersion(memory, file, refused, people, now()) : null
+    const at = definitions.indexOf(definition)
+    if (kept) {
+      definitions.splice(at, 1, kept.definition)
+      displayOnly.push(kept.definition.id)
+    } else {
+      definitions.splice(at, 1)
+    }
+    errors.push({ file, errors: kept ? [...refused, kept.note] : refused })
   }
   // Only a complete listing can say which files are gone.
   if (memory && present.length === dirs.length && listings.every((l) => !l.error)) {

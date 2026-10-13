@@ -43,7 +43,8 @@ function summarize(
     powers: def.powers,
     inbox: def.inbox,
     nextTickAt: heldBack ? null : ctx.scheduler.nextTickAt(def),
-    lastTick: ctx.store.lastTick(def.id)
+    lastTick: ctx.store.lastTick(def.id),
+    job: def.job
   }
 }
 

@@ -5,6 +5,7 @@ import type {
   AutomationDefinition,
   CheckDef,
   ItemsDef,
+  JobDef,
   StepDef,
   StepSession,
   WorkspaceDef
@@ -201,6 +202,23 @@ export function normalize(
     steps: raw.steps.map((s, i) => normalizeStep(s, names[i])),
     answers: normalizeAnswers(raw),
     powers: raw.powers ?? [],
-    inbox: raw.inbox ?? '{mr.author}'
+    inbox: raw.inbox ?? '{mr.author}',
+    job: normalizeJob(raw)
+  }
+}
+
+function normalizeJob(raw: RawAutomation): JobDef | null {
+  const job = raw.job
+  if (!job) {
+    return null
+  }
+  const feeds = job.feeds ?? []
+  return {
+    id: job.id,
+    name: job.name ?? null,
+    stage: job.stage,
+    label: job.label,
+    feeds: typeof feeds === 'string' ? [feeds] : feeds,
+    handsOver: job.hands_over ?? null
   }
 }

@@ -1,0 +1,242 @@
+// @vitest-environment happy-dom
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import type {
+  ActivityTick,
+  AutomationDetailPayload,
+  AutomationListPayload,
+  AutomationSummary
+} from '../../shared/api-types'
+import { detail, summary } from './fixtures'
+
+const pilotRpc = vi.fn()
+vi.mock('../api', () => ({ pilotRpc: (...args: unknown[]) => pilotRpc(...args) }))
+
+import { JobView } from './JobView'
+
+const STAGE_1: AutomationSummary = {
+  ...summary,
+  id: 'dev-e2e-fix',
+  name: '13 · Fix red hourly e2e on dev',
+  enabled: false,
+  schedule: '5,35 * * * *',
+  itemKind: 'Pipelines',
+  powers: ['create_ticket', 'update_ticket'],
+  job: {
+    id: '13',
+    name: 'Fix red hourly e2e on dev',
+    stage: 1,
+    label: 'Open or update the ticket',
+    feeds: ['dev-e2e-fix-start'],
+    handsOver: 'the tickets it opens'
+  }
+}
+const STAGE_2: AutomationSummary = {
+  ...summary,
+  id: 'dev-e2e-fix-start',
+  name: '13 · Start fix sessions for red e2e tickets',
+  enabled: false,
+  schedule: '6,36 * * * *',
+  itemKind: 'Linear tickets',
+  job: {
+    id: '13',
+    name: null,
+    stage: 2,
+    label: 'Start a fix session per ticket',
+    feeds: [],
+    handsOver: null
+  }
+}
+const YAML: Record<string, string> = {
+  'dev-e2e-fix': '# A red hourly e2e run on dev opens one Linear ticket.\nname: one\n',
+  'dev-e2e-fix-start': '# Each open ticket gets one Claude session.\nname: two\n'
+}
+function tick(
+  id: number,
+  automationId: string,
+  minute: number,
+  over: Partial<ActivityTick> = {}
+): ActivityTick {
+  return {
+    id,
+    automationId,
+    startedAt: Date.UTC(2026, 9, 13, 17, minute),
+    finishedAt: Date.UTC(2026, 9, 13, 17, minute, 5),
+    dryRun: true,
+    status: 'ok',
+    error: null,
+    counts: {},
+    items: [],
+    runs: [],
+    ...over
+  }
+}
+const OUTSIDE = {
+  tickId: 8,
+  itemKey: 'linear:WEB-50',
+  label: 'WEB-50',
+  verdict: 'out_of_scope' as const,
+  reason: 'Team is OPS',
+  checks: [],
+  fields: {},
+  runId: null
+}
+const TICKS: Record<string, ActivityTick[]> = {
+  'dev-e2e-fix': [
+    tick(7, 'dev-e2e-fix', 44, { counts: { notdue: 1 } }),
+    tick(3, 'dev-e2e-fix', 14)
+  ],
+  'dev-e2e-fix-start': [
+    tick(8, 'dev-e2e-fix-start', 45, { counts: { out_of_scope: 1 }, items: [OUTSIDE] })
+  ]
+}
+
+function serve(
+  stages: AutomationSummary[],
+  over: Record<string, (p: { id: string }) => unknown> = {}
+) {
+  const list: AutomationListPayload = {
+    automations: [{ ...summary, id: 'docker-prune' }, ...stages],
+    errors: [],
+    peopleError: null,
+    missingDirs: []
+  }
+  pilotRpc.mockImplementation(async (method: string, params: { id: string }) => {
+    if (over[method]) {
+      return over[method](params)
+    }
+    if (method === 'pilot.automations.list') {
+      return list
+    }
+    if (method === 'pilot.automations.get') {
+      const s = stages.find((x) => x.id === params.id)!
+      return {
+        ...detail,
+        summary: s,
+        yaml: YAML[s.id],
+        checkNames: ['Quota']
+      } satisfies AutomationDetailPayload
+    }
+    if (method === 'pilot.automations.activity') {
+      return TICKS[params.id] ?? []
+    }
+    throw new Error(`unexpected ${method}`)
+  })
+}
+const calls = (method: string) => pilotRpc.mock.calls.filter((c) => c[0] === method)
+
+describe('JobView: a job of several automations on one page', () => {
+  afterEach(() => {
+    cleanup()
+    pilotRpc.mockReset()
+  })
+
+  it('shows each stage as a card, joined by the arrow its feeds draw, with the hands_over caption', async () => {
+    serve([STAGE_2, STAGE_1])
+    render(<JobView jobId="13" onBack={() => {}} onOpenStage={() => {}} />)
+    expect(
+      await screen.findByRole('heading', { name: '13 · Fix red hourly e2e on dev' })
+    ).toBeTruthy()
+    expect(screen.getByText('Stage 1 · Pipelines')).toBeTruthy()
+    expect(screen.getByText('Stage 2 · Linear tickets')).toBeTruthy()
+    expect(screen.getByText('A red hourly e2e run on dev opens one Linear ticket.')).toBeTruthy()
+    expect(screen.getByText('create_ticket, update_ticket')).toBeTruthy()
+    const arrow = screen.getByRole('img', { name: 'Stage 1 hands stage 2 the tickets it opens' })
+    expect(arrow.textContent).toContain('the tickets it opens')
+  })
+
+  it('draws no arrow between stages that feed nothing', async () => {
+    serve([{ ...STAGE_1, job: { ...STAGE_1.job!, feeds: [], handsOver: null } }, STAGE_2])
+    render(<JobView jobId="13" onBack={() => {}} onOpenStage={() => {}} />)
+    await screen.findByText('Stage 2 · Linear tickets')
+    expect(screen.queryByRole('img', { name: /hands stage/ })).toBeNull()
+  })
+
+  it('merges every stage’s activity newest first, each tick tagged with its stage, out-of-scope items hidden', async () => {
+    serve([STAGE_1, STAGE_2])
+    render(<JobView jobId="13" onBack={() => {}} onOpenStage={() => {}} />)
+    await screen.findByText('Stage 1 · Pipelines')
+    await waitFor(() => expect(screen.getAllByText(/^Stage \d$/)).toHaveLength(3))
+    expect(screen.getAllByText(/^Stage \d$/).map((t) => t.textContent)).toEqual([
+      'Stage 2',
+      'Stage 1',
+      'Stage 1'
+    ])
+    expect(screen.queryByText('WEB-50')).toBeNull()
+    expect(screen.getAllByText('0 checked')).toHaveLength(2)
+  })
+
+  it('shows each stage’s YAML in its own tab', async () => {
+    serve([STAGE_1, STAGE_2])
+    render(<JobView jobId="13" onBack={() => {}} onOpenStage={() => {}} />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Stage 2 YAML' }))
+    expect(screen.getByText(/Each open ticket gets one Claude session\.\s+name: two/)).toBeTruthy()
+  })
+
+  it('Dry run all dry-runs each stage in stage order, and never ticks for real', async () => {
+    serve([STAGE_2, STAGE_1], {
+      'pilot.automations.dryRun': ({ id }) => ({
+        tickId: id === 'dev-e2e-fix' ? 21 : 22,
+        status: 'ok',
+        error: null,
+        decisions: []
+      })
+    })
+    render(<JobView jobId="13" onBack={() => {}} onOpenStage={() => {}} />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Dry run all' }))
+    expect(await screen.findByText('Stage 2: Tick 22 · ok')).toBeTruthy()
+    expect(screen.getByText('Stage 1: Tick 21 · ok')).toBeTruthy()
+    expect(calls('pilot.automations.dryRun').map((c) => c[1])).toEqual([
+      { id: 'dev-e2e-fix' },
+      { id: 'dev-e2e-fix-start' }
+    ])
+    expect(calls('pilot.automations.tickNow')).toEqual([])
+  })
+
+  it('Turn on asks first, then enables each paused stage in stage order, through the same call as one automation', async () => {
+    serve([STAGE_1, STAGE_2], { 'pilot.automations.setEnabled': (p) => p })
+    render(<JobView jobId="13" onBack={() => {}} onOpenStage={() => {}} />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Turn on' }))
+    expect(calls('pilot.automations.setEnabled')).toEqual([])
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm' }))
+    await waitFor(() => expect(calls('pilot.automations.setEnabled')).toHaveLength(2))
+    // No caller binding is sent: Pilot decides who is calling, as for a single automation.
+    expect(calls('pilot.automations.setEnabled').map((c) => c[1])).toEqual([
+      { id: 'dev-e2e-fix', enabled: true },
+      { id: 'dev-e2e-fix-start', enabled: true }
+    ])
+  })
+
+  it('Turn off pauses the enabled stages, and a refusal stops it there and says why', async () => {
+    const refusal =
+      "An agent in a Pilot run can't tick, enable or pause an automation; Nish does that in Pilot"
+    serve(
+      [
+        { ...STAGE_1, enabled: true },
+        { ...STAGE_2, enabled: true }
+      ],
+      {
+        'pilot.automations.setEnabled': () => {
+          throw new Error(refusal)
+        }
+      }
+    )
+    render(<JobView jobId="13" onBack={() => {}} onOpenStage={() => {}} />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Turn off' }))
+    expect(await screen.findByText(`Stage 1: ${refusal}`)).toBeTruthy()
+    expect(calls('pilot.automations.setEnabled').map((c) => c[1])).toEqual([
+      { id: 'dev-e2e-fix', enabled: false }
+    ])
+  })
+
+  it('opens a stage’s own page from its card, and says when no automation has the job', async () => {
+    serve([STAGE_1, STAGE_2])
+    const onOpenStage = vi.fn()
+    render(<JobView jobId="13" onBack={() => {}} onOpenStage={onOpenStage} />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Start a fix session per ticket' }))
+    expect(onOpenStage).toHaveBeenCalledWith('dev-e2e-fix-start')
+    cleanup()
+    render(<JobView jobId="99" onBack={() => {}} onOpenStage={() => {}} />)
+    expect(await screen.findByText('No automation is part of job 99.')).toBeTruthy()
+  })
+})

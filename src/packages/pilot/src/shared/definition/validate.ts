@@ -195,6 +195,13 @@ export function fieldNameErrors(raw: RawAutomation): string[] {
     )
 }
 
+export function jobErrors(raw: RawAutomation): string[] {
+  if (raw.job?.hands_over !== undefined && raw.job.feeds === undefined) {
+    return ['job.hands_over: only with job.feeds (it captions the arrow to the stage it feeds)']
+  }
+  return []
+}
+
 // Everything a file that fits the schema can still get wrong, in the order it is reported.
 export function definitionErrors(raw: RawAutomation): string[] {
   return [
@@ -210,6 +217,7 @@ export function definitionErrors(raw: RawAutomation): string[] {
     ...oncePerErrors(raw),
     ...combinationErrors(raw),
     ...windowErrors(raw),
-    ...fieldNameErrors(raw)
+    ...fieldNameErrors(raw),
+    ...jobErrors(raw)
   ]
 }

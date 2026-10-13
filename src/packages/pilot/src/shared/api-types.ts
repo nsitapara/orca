@@ -1,4 +1,4 @@
-import type { StepDef } from './definition/types'
+import type { JobDef, StepDef } from './definition/types'
 import type { InboxItemSummary } from './inbox-types'
 import type { DetailsRef } from './details'
 import type { InboxPreparation, PreparationRef } from './preparation'
@@ -305,6 +305,8 @@ export type AutomationSummary = {
   nextTickAt: number | null
   // The newest tick of either kind; its dryRun says which.
   lastTick: TickRow | null
+  // Its stage of a job of several automations (job: block); null: a job of its own.
+  job: JobDef | null
 }
 export type AutomationListPayload = {
   automations: AutomationSummary[]

@@ -341,3 +341,63 @@ describe('the last valid version', () => {
     warn.mockRestore()
   })
 })
+
+describe('jobs of several automations', () => {
+  const memory = () => PilotStore.open(':memory:').definitions
+  const at = (hour: number) => () => Date.UTC(2026, 9, 11, hour, 0)
+  const STAGE_1 =
+    'job: { id: "13", name: Fix red e2e, stage: 1, label: Open the ticket, feeds: b, hands_over: its tickets }\n'
+  const stageOf = (n: number) => `job: { id: "13", stage: ${n}, label: Start fixes }\n`
+
+  it('loads the stages of a job that keeps the rules', () => {
+    const d = dir({ 'a.yaml': VALID + STAGE_1, 'b.yaml': VALID + stageOf(2) })
+    const loaded = loadDefinitions([d])
+    expect(loaded.errors).toEqual([])
+    expect(loaded.definitions.map((x) => [x.id, x.job?.stage])).toEqual([
+      ['a', 1],
+      ['b', 2]
+    ])
+  })
+
+  it('marks every definition a broken rule involves invalid, keeping each one’s last valid version for display', () => {
+    const d = dir({ 'a.yaml': VALID + STAGE_1, 'b.yaml': VALID + stageOf(2) })
+    const mem = memory()
+    loadDefinitions([d], mem, at(9))
+    writeFileSync(join(d, 'b.yaml'), VALID + stageOf(1))
+    const loaded = loadDefinitions([d], mem, at(10))
+    expect(loaded.definitions.map((x) => [x.id, x.job?.stage])).toEqual([
+      ['a', 1],
+      ['b', 2]
+    ])
+    expect(loaded.displayOnly).toEqual(['a', 'b'])
+    const kept = (file: string) =>
+      `${join(d, file)}: Pilot shows the last valid version, saved 2026-10-11T09:00:00.000Z; it isn't ticked until the file is valid again`
+    expect(loaded.errors).toEqual([
+      {
+        file: join(d, 'a.yaml'),
+        errors: [`${join(d, 'a.yaml')}: job 13: stage 1 is set by both a and b`, kept('a.yaml')]
+      },
+      {
+        file: join(d, 'b.yaml'),
+        errors: [`${join(d, 'b.yaml')}: job 13: stage 1 is set by both a and b`, kept('b.yaml')]
+      }
+    ])
+    // The refused version was never saved as valid: fixing the file runs the fix, breaking it again keeps stage 2.
+    writeFileSync(join(d, 'b.yaml'), 'name: [')
+    const broken = loadDefinitions([d], mem, at(11))
+    expect(broken.definitions.map((x) => [x.id, x.job?.stage])).toEqual([
+      ['a', 1],
+      ['b', 2]
+    ])
+    expect(broken.displayOnly).toEqual(['b'])
+  })
+
+  it('refuses an involved definition that never loaded validly, and leaves the rest alone', () => {
+    const d = dir({ 'a.yaml': VALID + STAGE_1.replace('feeds: b', 'feeds: c'), 'z.yaml': VALID })
+    const loaded = loadDefinitions([d], memory())
+    expect(loaded.definitions.map((x) => x.id)).toEqual(['z'])
+    expect(loaded.errors).toEqual([
+      { file: join(d, 'a.yaml'), errors: [`${join(d, 'a.yaml')}: job.feeds: no automation "c"`] }
+    ])
+  })
+})

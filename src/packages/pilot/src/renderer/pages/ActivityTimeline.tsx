@@ -4,13 +4,17 @@ import type { ActivityTick } from '../../shared/api-types'
 import { RunCard } from '../timeline/RunCard'
 import { CheckTable } from './CheckTable'
 import { checkedItems, tickLine } from './format'
+import type { JobActivityEntry } from './job-flow'
 
+// `tag`: on a job's page, the stage the tick belongs to.
 function TickNode({
   tick,
-  checkNames
+  checkNames,
+  tag
 }: {
   tick: ActivityTick
   checkNames: string[]
+  tag?: string
 }): React.JSX.Element {
   const [open, setOpen] = useState(false)
   const checked = checkedItems(tick.items)
@@ -19,6 +23,7 @@ function TickNode({
       <span className="absolute -left-[5px] top-1.5 size-2.5 rounded-full border border-border bg-background" />
       <div className="flex items-center gap-2 text-xs text-muted-foreground">
         <span>{new Date(tick.startedAt).toLocaleString()}</span>
+        {tag ? <Badge variant="outline">{tag}</Badge> : null}
         {tick.dryRun ? (
           <Badge variant="secondary">Dry run</Badge>
         ) : (
@@ -56,6 +61,29 @@ export function ActivityTimeline({
     <ol className="ml-1">
       {ticks.map((t) => (
         <TickNode key={t.id} tick={t} checkNames={checkNames} />
+      ))}
+    </ol>
+  )
+}
+
+// A job's page: every stage's ticks in one timeline (mergeJobActivity), each tagged with its stage.
+export function JobActivityTimeline({
+  entries
+}: {
+  entries: JobActivityEntry[]
+}): React.JSX.Element {
+  if (!entries.length) {
+    return <p className="text-sm text-muted-foreground">No ticks yet.</p>
+  }
+  return (
+    <ol className="ml-1">
+      {entries.map((e) => (
+        <TickNode
+          key={e.tick.id}
+          tick={e.tick}
+          checkNames={e.checkNames}
+          tag={`Stage ${e.stage}`}
+        />
       ))}
     </ol>
   )
