@@ -15,6 +15,7 @@ export const MAIN_PROCESS_PATTERN =
 export const EXIT_TIMEOUT_MS = 30_000
 export const CLI_TIMEOUT_MS = 60_000
 const POLL_MS = 500
+export const RELAUNCH_PAUSE_MS = 8000 // lets macOS release the old menu-bar item (orca #17045)
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 
@@ -51,22 +52,73 @@ export function isRunning(deps) {
   return deps.run('pgrep', ['-f', MAIN_PROCESS_PATTERN]).code === 0
 }
 
-// Asks Pilot to quit and waits for its main process to exit. Never force-kills.
-export async function quitPilot(deps, timeoutMs = EXIT_TIMEOUT_MS) {
-  if (!isRunning(deps)) {
-    return
-  }
-  deps.log('Quitting the running Pilot…')
-  deps.run('osascript', ['-e', `tell application id "${BUNDLE_ID}" to quit`])
+function pids(result) {
+  return result.code === 0 ? result.stdout.split(/\s+/).filter(Boolean) : []
+}
+
+export function mainPids(deps) {
+  return pids(deps.run('pgrep', ['-f', MAIN_PROCESS_PATTERN]))
+}
+
+// Why: helpers whose parent is the old main pid die with it. The terminal daemon is spawned detached
+// (parent 1) and survives quits on purpose, so it is never in this list. Read it before the quit:
+// afterwards the orphans have parent 1 too.
+export function helperPids(deps, mainPid) {
+  return pids(deps.run('pgrep', ['-P', mainPid]))
+}
+
+export function dbFiles(home) {
+  const base = join(logPath(home), '..', 'pilot-automations.db')
+  return [base, `${base}-wal`, `${base}-shm`]
+}
+
+function alive(deps, pid) {
+  return deps.run('ps', ['-p', pid]).code === 0
+}
+
+function holdsDb(deps) {
+  return deps.run('lsof', ['-t', ...dbFiles(deps.home)]).stdout.trim() !== ''
+}
+
+async function waitUntil(deps, done, timeoutMs, failure) {
   const deadline = deps.now() + timeoutMs
-  while (isRunning(deps)) {
+  while (!done()) {
     if (deps.now() >= deadline) {
-      throw new Error(
-        `Pilot is still running after ${timeoutMs / 1000}s. Quit it yourself (it may be asking to save or confirm), then build again.`
-      )
+      throw new Error(failure)
     }
     await deps.sleep(POLL_MS)
   }
+}
+
+// Asks Pilot to quit and waits for its main process, that instance's own helpers and the automations
+// database to be released. Never force-kills. Returns true when Pilot was running.
+export async function quitPilot(deps, timeoutMs = EXIT_TIMEOUT_MS) {
+  const mains = mainPids(deps)
+  if (mains.length === 0) {
+    return false
+  }
+  const helpers = mains.flatMap((pid) => helperPids(deps, pid))
+  deps.log('Quitting the running Pilot…')
+  deps.run('osascript', ['-e', `tell application id "${BUNDLE_ID}" to quit`])
+  await waitUntil(
+    deps,
+    () => !isRunning(deps),
+    timeoutMs,
+    `Pilot is still running after ${timeoutMs / 1000}s. Quit it yourself (it may be asking to save or confirm), then build again.`
+  )
+  await waitUntil(
+    deps,
+    () => !helpers.some((pid) => alive(deps, pid)),
+    timeoutMs,
+    `Pilot's helper processes are still running after ${timeoutMs / 1000}s (pids ${helpers.join(', ')}). Quit them yourself, then build again.`
+  )
+  await waitUntil(
+    deps,
+    () => !holdsDb(deps),
+    timeoutMs,
+    `Something still holds pilot-automations.db after ${timeoutMs / 1000}s (see lsof). Close it, then build again.`
+  )
+  return true
 }
 
 export function copyApp(deps, source) {
@@ -134,6 +186,29 @@ export async function waitForCli(deps, timeoutMs = CLI_TIMEOUT_MS, parentEnv = p
   }
 }
 
+export function traceFile(home) {
+  return join(logPath(home), 'main.trace.ndjson')
+}
+
+// The newest "startup stuck in" event in the trace's last 50 lines, plus what to do by hand.
+export function stuckReport(deps) {
+  const tail = deps.run('tail', ['-n', '50', traceFile(deps.home)])
+  const event =
+    tail.code === 0
+      ? tail.stdout.split('\n').findLast((l) => l.includes('startup stuck in'))
+      : undefined
+  const pid = mainPids(deps)[0] ?? '<pid>'
+  return [
+    event
+      ? `Last startup event: ${event}`
+      : `No "startup stuck in" event in ${traceFile(deps.home)}.`,
+    'Nothing was killed. To recover:',
+    `  1. sample ${pid} 2`,
+    `  2. kill -9 ${pid}`,
+    '  3. rerun with --no-install, or relaunch /Applications/Pilot.app'
+  ].join('\n')
+}
+
 export function enabledNames(automations) {
   return automations.filter((a) => a.enabled).map((a) => a.name ?? a.id)
 }
@@ -167,14 +242,22 @@ export async function installPilot({
   deps = defaultDeps(),
   parentEnv = process.env
 }) {
-  await quitPilot(deps)
+  const wasRunning = await quitPilot(deps)
   copyApp(deps, source)
   linkCli(deps)
   registerApp(deps)
   if (!launch) {
     return `Installed at: ${INSTALL_PATH} (not launched)`
   }
+  if (wasRunning) {
+    await deps.sleep(RELAUNCH_PAUSE_MS)
+  }
   launchApp(deps, parentEnv)
-  const automations = await waitForCli(deps, CLI_TIMEOUT_MS, parentEnv)
+  let automations
+  try {
+    automations = await waitForCli(deps, CLI_TIMEOUT_MS, parentEnv)
+  } catch (error) {
+    throw new Error(`${error.message}\n${stuckReport(deps)}`, { cause: error })
+  }
   return summary({ commit: buildCommit(deps, repo), automations })
 }
