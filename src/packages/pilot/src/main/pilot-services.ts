@@ -162,10 +162,8 @@ function openPilot(
     probe: runtimeStepProbe(runtime, relist),
     log,
     // A stage's run hands its outputs to the next stage (job.feeds); an answer run's reach its cards (G6).
-    onRunEnd: (run, end) => {
-      handover.runEnded(run, end)
-      answerRunEnded(store, run)
-    },
+    onRunEnd: (run) => answerRunEnded(store, run),
+    handover: handover.runEnd,
     // {run.answer}: the free text that started an ask-first or answer run.
     runAnswer: (run) => runAnswerOf(store, run)
   })

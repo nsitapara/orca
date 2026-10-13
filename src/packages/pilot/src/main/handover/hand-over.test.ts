@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import type { ItemFields, RunRow, RunTrigger, TickTrigger } from '../../shared/api-types'
 import { testDefinition, testStep } from '../../shared/definition/__fixtures__/definition'
 import type { AutomationDefinition, FeedDef } from '../../shared/definition/types'
@@ -191,20 +191,38 @@ describe('handOverRunEnd: a stage run that ends hands its output to the next sta
     expect(s.pending()).toEqual([[s.run.id, 'WEB-1']])
   })
 
-  it('never throws: a store that fails is logged', () => {
+  it('logs a failed planning read and hands nothing over, so the run’s end stands', () => {
     const s = setup(sender([feed()]), [{ ticket: 'WEB-1' }])
-    const broken = {
-      ...s.deps,
-      store: {
-        ...s.store,
-        runs: {
-          steps: () => {
-            throw new Error('database is closed')
-          }
-        }
-      } as unknown as PilotStore
-    }
-    expect(() => handOverRunEnd(broken, s.run, DONE)).not.toThrow()
+    vi.spyOn(s.store.runs, 'steps').mockImplementation(() => {
+      throw new Error('database is closed')
+    })
+    expect(() => handOverRunEnd(s.deps, s.run, DONE)).not.toThrow()
     expect(s.logs.join('\n')).toContain('database is closed')
+    expect(s.pending()).toEqual([])
+    expect(s.triggered).toEqual([])
+  })
+
+  it('throws when a handover row can’t be written, so closeRun rolls the run’s end back with it', () => {
+    const s = setup(sender([feed()]), [{ ticket: 'WEB-1' }])
+    vi.spyOn(s.store.handovers, 'add').mockImplementation(() => {
+      throw new Error('disk I/O error')
+    })
+    expect(() => handOverRunEnd(s.deps, s.run, DONE)).toThrow('disk I/O error')
+    expect(s.triggered).toEqual([])
+  })
+
+  it('keeps the rows when the trigger fails after the commit: they wait for the next tick', () => {
+    const s = setup(sender([feed()]), [{ ticket: 'WEB-1' }])
+    const deps = {
+      ...s.deps,
+      trigger: () => {
+        throw new Error('scheduler gone')
+      }
+    }
+    handOverRunEnd(deps, s.run, DONE)
+    expect(s.pending()).toEqual([[s.run.id, 'WEB-1']])
+    expect(s.logs.join('\n')).toContain(
+      "couldn't trigger dev-e2e-fix-start: scheduler gone; its ids stay pending"
+    )
   })
 })

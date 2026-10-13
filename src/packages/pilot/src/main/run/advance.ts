@@ -6,7 +6,7 @@ import { UnrecordedLaunchError, type LaunchRequest } from '../scheduler/tick-run
 import type { PilotStore } from '../store/store'
 import { stepKindOf, type AdvancedStep } from '../store/store-advance'
 import { endedSteps, runFieldsOf, stepInputFields } from './advance-fields'
-import { addRunEvent, closeRun, type CloseOptions } from './run-close'
+import { addRunEvent, closeRun, type CloseOptions, type RunEndHandover } from './run-close'
 import { resolveWorkspace, type WorkspaceDeps } from './workspace'
 
 export type StepStartRequest = {
@@ -30,6 +30,8 @@ export type RunEngineDeps = {
   log(message: string): void
   // Called once when a run reaches its end status (Task 24c applies answer runs' outputs here).
   onRunEnd?(run: RunRow, end: RunEnd): void
+  // What a stage's run hands the next stage, written in the transaction that ends it (main/handover).
+  handover?: RunEndHandover
   // The answer text for {run.answer}: set for runs an answer starts, '' for a plain Approve, null
   // for any other run (Task 25 wires it).
   runAnswer?(run: RunRow): string | null

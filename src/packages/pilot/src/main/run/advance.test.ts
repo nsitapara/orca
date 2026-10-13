@@ -559,6 +559,28 @@ describe('createRunEngine', () => {
     expect(ended).toEqual([['run-1', 'done', 'Done']])
   })
 
+  it('hands the run’s end to its handover inside the closing transaction, then its triggers', async () => {
+    const seen: string[] = []
+    const { store, engine, end } = setup(DEF, {
+      handover: {
+        write: (run, e) => {
+          seen.push(`write ${run.id} ${e.status} while ${store.runs.get(run.id)?.status}`)
+          return { note: null, triggers: [] }
+        },
+        after: () => {
+          seen.push(`after while ${store.runs.get('run-1')?.status}`)
+        }
+      }
+    })
+    await startRun(engine)
+    store.advance.mergeStepOutputs('run-1', 0, { changed: false })
+    end(0, 'done')
+    await engine.advance('run-1')
+    end(2, 'done')
+    await engine.advance('run-1')
+    expect(seen).toEqual(['write run-1 done while running', 'after while done'])
+  })
+
   it('ends an answer run after its last recorded step without reading the definition, then calls onRunEnd', async () => {
     const ended: string[] = []
     const { store, engine, started } = setup(null, { onRunEnd: (run) => ended.push(run.id) })
