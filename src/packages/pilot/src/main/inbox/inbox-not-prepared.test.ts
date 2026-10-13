@@ -6,7 +6,7 @@ import { parseAutomationYaml } from '../../shared/definition/parse'
 import type { InboxAddParams } from '../../shared/inbox-types'
 import { parsePeopleYaml } from '../../shared/people'
 import { PREPARATION_REFUSED } from '../../shared/preparation'
-import { routeOf } from '../answers/queue-view'
+import { routeFor, routeOf } from '../answers/queue-view'
 import { PilotStore } from '../store/store'
 import { addInboxItem } from './inbox-add'
 import type { InboxDeps } from './inbox-service'
@@ -122,7 +122,8 @@ describe('a refused preparation request', () => {
     ['an action', { action: 'push', actionArgs: PUSH.actionArgs, type: 'action' }],
     ['parts', { parts: { F1: 'A' } }],
     ['a preparation request', { preparation: PREPARATION }],
-    ['a type other than flagged', { type: 'question' }]
+    ['a type other than flagged', { type: 'question' }],
+    ['a Details bundle', { detailsBundlePath: '/v/Automations/b.json' }]
   ])('never carries %s', (_name, extra) => {
     const { deps } = setup()
     expect(() => addInboxItem(deps, { ...NOT_PREPARED, ...extra })).toThrow('A "Not prepared" card')
@@ -143,5 +144,82 @@ describe('a refused preparation request', () => {
     })
     expect(store.inbox.get(other)?.status).toBe('open')
     expect(store.inbox.get(prepared)?.preparation?.state).toBe('queued')
+  })
+})
+
+// Security review of the fallback: who may retire a notice, which notice, and what an answer on one can do.
+describe('retiring a "Not prepared" notice', () => {
+  function withRun(store: PilotStore, id: string, itemKey: string) {
+    store.runs.create({
+      id,
+      automationId: 'ci',
+      tickId: null,
+      itemKey,
+      itemLabel: itemKey,
+      worktreePath: `/wt/${itemKey}`,
+      startedAt: 1
+    })
+  }
+
+  it("never retires another item's notice that claims the same key", () => {
+    const { deps, store } = setup()
+    withRun(store, 'run-2', 'mr:2')
+    const theirs = addInboxItem(deps, { ...NOT_PREPARED, runId: 'run-2' }).id!
+    addInboxItem(deps, { ...PUSH, preparation: PREPARATION })
+    expect(store.inbox.get(theirs)?.status).toBe('open')
+  })
+
+  it('never retires an answered notice', () => {
+    const { deps, store } = setup()
+    const id = addInboxItem(deps, NOT_PREPARED).id!
+    const digest = store.inbox.get(id)!.digest
+    store.inbox.update(
+      id,
+      { status: 'answered', answer: { option: null, text: 'ok', digest, via: 'page' } },
+      101
+    )
+    addInboxItem(deps, { ...PUSH, preparation: PREPARATION })
+    expect(store.inbox.get(id)?.status).toBe('answered')
+  })
+
+  it('is only done by a run: a prepared add from outside one leaves the notice', () => {
+    const { deps, store } = setup()
+    const id = addInboxItem(deps, NOT_PREPARED).id!
+    // The automation's last real tick showed the item's worktree, so an add from outside a run may name it.
+    const tickId = store.startTick('ci', false, 1)
+    const decision = {
+      key: 'mr:1',
+      label: '!1',
+      verdict: 'started' as const,
+      reason: '',
+      checks: [],
+      onceKey: '1',
+      fields: { 'worktree.path': '/wt' }
+    }
+    store.recordDecisions(tickId, [decision], new Map([['mr:1', 'run-1']]))
+    const { runId: _run, ...card } = PUSH
+    addInboxItem(deps, {
+      ...card,
+      automationId: 'ci',
+      itemKey: 'mr:1',
+      worktreePath: '/wt',
+      preparation: PREPARATION
+    })
+    expect(store.inbox.get(id)?.status).toBe('open')
+  })
+
+  it('runs nothing on an Approve or a pick from the desktop', () => {
+    const { deps, store } = setup()
+    const card = store.inbox.get(addInboxItem(deps, NOT_PREPARED).id!)!
+    const catalog = { get: () => ({}) }
+    for (const answer of [
+      { text: 'Approve', option: null },
+      { text: 'Install', option: 0 }
+    ]) {
+      expect(routeFor(card, catalog, { ...answer, callerKind: 'desktop' })).toEqual({
+        kind: 'tick',
+        outcome: 'skipped'
+      })
+    }
   })
 })
