@@ -100,6 +100,38 @@ describe('ActivityTimeline', () => {
     expect(screen.getByText('2 uncommitted files', { selector: 'td,div,span' })).toBeTruthy()
   })
 
+  it('never lists an item that was out of scope; the count and the table hold only checked items', () => {
+    const outside = {
+      ...tick.items[1],
+      itemKey: 'linear:WEB-50',
+      label: 'WEB-50',
+      verdict: 'out_of_scope' as const,
+      reason: 'Doesn\'t match "{ticket.dev_e2e} == true"'
+    }
+    render(
+      <ActivityTimeline
+        ticks={[{ ...tick, items: [...tick.items, outside] }]}
+        checkNames={['Clean']}
+      />
+    )
+    fireEvent.click(screen.getByRole('button', { name: /why: 2 items checked/i }))
+    expect(screen.getByText('!1574 web-1474')).toBeTruthy()
+    expect(screen.queryByText('WEB-50')).toBeNull()
+    expect(screen.queryByText('Not in scope')).toBeNull()
+  })
+
+  it('offers no check table for a tick whose every item was out of scope', () => {
+    const outside = tick.items.map((i) => ({ ...i, verdict: 'out_of_scope' as const }))
+    render(
+      <ActivityTimeline
+        ticks={[{ ...tick, counts: { out_of_scope: 2 }, items: outside, runs: [] }]}
+        checkNames={[]}
+      />
+    )
+    expect(screen.getByText('0 checked')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: /why/i })).toBeNull()
+  })
+
   it('marks dry runs, shows run outcome and cost, and the empty state', () => {
     const failedRun = {
       ...tick.runs[0],

@@ -1,5 +1,12 @@
 import { money } from '../../shared/money'
-import type { RunStatus, StepStatus, TickOutcome, TickRow, Verdict } from '../../shared/api-types'
+import type {
+  RunStatus,
+  StepStatus,
+  TickItemRow,
+  TickOutcome,
+  TickRow,
+  Verdict
+} from '../../shared/api-types'
 
 const VERDICT: Record<Verdict, string> = {
   started: 'Started',
@@ -21,6 +28,11 @@ const COUNT_ORDER: [Verdict, string][] = [
 
 export function verdictLabel(v: Verdict): string {
   return VERDICT[v]
+}
+
+// What Activity lists: an out-of-scope item was never checked, so it is left out (the CLI's dry run still prints it).
+export function checkedItems(items: readonly TickItemRow[]): TickItemRow[] {
+  return items.filter((i) => i.verdict !== 'out_of_scope')
 }
 
 export function relativeTime(ms: number, now: number): string {

@@ -3,7 +3,7 @@ import { Badge } from '@/components/ui/badge'
 import type { ActivityTick } from '../../shared/api-types'
 import { RunCard } from '../timeline/RunCard'
 import { CheckTable } from './CheckTable'
-import { tickLine } from './format'
+import { checkedItems, tickLine } from './format'
 
 function TickNode({
   tick,
@@ -13,7 +13,7 @@ function TickNode({
   checkNames: string[]
 }): React.JSX.Element {
   const [open, setOpen] = useState(false)
-  const checked = tick.items.filter((i) => i.verdict !== 'out_of_scope').length
+  const checked = checkedItems(tick.items)
   return (
     <li className="relative border-l border-border pb-4 pl-5">
       <span className="absolute -left-[5px] top-1.5 size-2.5 rounded-full border border-border bg-background" />
@@ -26,12 +26,12 @@ function TickNode({
         )}
       </div>
       <div className="text-sm">{tickLine(tick)}</div>
-      {tick.items.length ? (
+      {checked.length ? (
         <button type="button" className="mt-1 text-xs underline" onClick={() => setOpen(!open)}>
-          {open ? 'Hide checks' : `Why: ${checked} items checked`}
+          {open ? 'Hide checks' : `Why: ${checked.length} items checked`}
         </button>
       ) : null}
-      {open ? <CheckTable items={tick.items} checkNames={checkNames} /> : null}
+      {open && checked.length ? <CheckTable items={checked} checkNames={checkNames} /> : null}
       <ol className="mt-2">
         {tick.runs.map((run) => (
           <RunCard key={run.id} run={run} title={`Run ${run.id} · ${run.itemLabel}`} />
