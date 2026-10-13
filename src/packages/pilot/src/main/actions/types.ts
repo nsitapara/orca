@@ -21,8 +21,6 @@ export type ActionEntry = {
   power: Power | null
   label: string
   usage: string
-  // A run may offer it only as a prepared card: Approve runs it with no agent in between (push, post_review).
-  needsEvidence?: boolean
   // Null when the args fit the entry's schema, else what's wrong ("usage: …"). Checked when a card names
   // the action and again before every attempt: nothing runs on args that don't fit.
   checkArgs(args: Record<string, unknown>): string | null

@@ -219,7 +219,7 @@ describe('addInboxItem', () => {
       type: 'action',
       title: 'Push?',
       options: ['Approve — push', 'Skip — keep'],
-      action: 'push',
+      action: 'publish',
       actionArgs: { argv: ['/wt/1493', 'b', 'aaa', 'bbb'] }
     }
     addInboxItem(deps, push)
@@ -235,7 +235,7 @@ describe('addInboxItem', () => {
   it.each<[string, Partial<InboxAddParams>, Partial<InboxAddParams>]>([
     [
       'a card for another action',
-      { action: 'push', actionArgs: { argv: ['a'] } },
+      { action: 'publish', actionArgs: { argv: ['a'] } },
       { action: 'mark_ready', actionArgs: { argv: ['1561', 'abc'] } }
     ],
     [
@@ -245,13 +245,13 @@ describe('addInboxItem', () => {
     ],
     [
       "Pilot's ask-first card where an agent's card is open",
-      { action: 'push', actionArgs: { argv: ['a'] } },
+      { action: 'publish', actionArgs: { argv: ['a'] } },
       { action: 'start_run', actionArgs: { run_id: 'run-1' } }
     ],
     [
       'an action card where a question of that title is open',
       {},
-      { action: 'push', actionArgs: { argv: ['a'] } }
+      { action: 'publish', actionArgs: { argv: ['a'] } }
     ]
   ])('files %s as a new card, leaving the open one as it was', (_name, first, second) => {
     const { store, deps } = setup()
@@ -271,7 +271,7 @@ describe('addInboxItem', () => {
       runId: 'run-1',
       type: 'action',
       title: 'Push?',
-      action: 'push',
+      action: 'publish',
       actionArgs: { argv: ['a'] }
     }
     addInboxItem(deps, push)
@@ -298,7 +298,7 @@ describe('addInboxItem', () => {
 
   it('refuses an action the catalog does not know', () => {
     const { deps } = setup()
-    const withCatalog = { ...deps, knownAction: (name: string) => name === 'push' }
+    const withCatalog = { ...deps, knownAction: (name: string) => name === 'publish' }
     expect(() =>
       addInboxItem(withCatalog, { ...QUESTION, type: 'action', action: 'deploy', actionArgs: {} })
     ).toThrow('No action named "deploy" in Pilot\'s catalog')
@@ -310,11 +310,11 @@ describe('addInboxItem', () => {
       ...deps,
       knownAction: () => true,
       actionArgsProblem: (_name: string, args: Record<string, unknown>) =>
-        Array.isArray(args.argv) ? null : 'usage: push { "argv": [...] }'
+        Array.isArray(args.argv) ? null : 'usage: publish { "argv": [...] }'
     }
-    const card = { ...QUESTION, type: 'action' as const, action: 'push' }
+    const card = { ...QUESTION, type: 'action' as const, action: 'publish' }
     expect(() => addInboxItem(withCatalog, { ...card, actionArgs: { argv: 'x' } })).toThrow(
-      'usage: push { "argv": [...] }'
+      'usage: publish { "argv": [...] }'
     )
     expect(store.inbox.list({})).toEqual([])
     expect(addInboxItem(withCatalog, { ...card, actionArgs: { argv: ['x'] } }).id).toBe(
@@ -401,7 +401,7 @@ describe('listInbox', () => {
       ...QUESTION,
       type: 'action',
       title: 'Push?',
-      action: 'push',
+      action: 'publish',
       actionArgs: { argv: ['/wt/1493', 'b', 'c1', 'o1'] }
     })
     const lines = listInbox(deps, {}, (item) =>
@@ -417,7 +417,7 @@ describe('listInbox', () => {
     const push = {
       ...QUESTION,
       type: 'action' as const,
-      action: 'push',
+      action: 'publish',
       actionArgs: { argv: ['a'] }
     }
     addInboxItem(deps, { ...push, title: 'First?' })

@@ -1,5 +1,6 @@
 import type { InboxItemRow } from '../../shared/api-types'
 import type { InboxAddParams } from '../../shared/inbox-types'
+import { EVIDENCE_ACTIONS } from '../../shared/evidence'
 import { PREPARATION_REFUSED, PreparationInputSchema } from '../../shared/preparation'
 import { answerLocked } from './answer-lock'
 import { inboxEvent, syncRunWaiting, type InboxDeps } from './inbox-service'
@@ -34,15 +35,15 @@ export function checkNotPrepared(params: InboxAddParams): void {
   }
 }
 
-// An action whose Approve runs with no agent in between (push, post_review) is offered by a run only prepared:
-// its evidence is verified before Approve can run it. A card outside a run (an imported one) is as before.
+// R-P5 at add: an action whose Approve runs with no agent in between (push, post_review) is offered only with a
+// preparation request, whoever adds it and however the caller is bound. An imported card is the one exception: it
+// comes in as "Needs evidence", and nothing runs from it until a person prepares it.
 export function refuseUnpreparedEvidence(
-  deps: InboxDeps,
   params: InboxAddParams,
-  runId: string | null,
-  action: string | null
+  source: InboxItemRow['source'] | undefined
 ): void {
-  if (runId && action && !params.preparation && deps.actionNeedsEvidence?.(action)) {
+  const action = params.action
+  if (source !== 'import' && action && !params.preparation && EVIDENCE_ACTIONS.has(action)) {
     throw new Error(
       `${action} needs prepared evidence: offer it with a preparation request (--preparation-file)`
     )

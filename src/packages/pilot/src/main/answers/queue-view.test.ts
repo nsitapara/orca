@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest'
 import { parseAutomationYaml } from '../../shared/definition/parse'
 import type { InboxAddParams } from '../../shared/inbox-types'
 import { parsePeopleYaml } from '../../shared/people'
-import { addInboxItem } from '../inbox/inbox-add'
+import { addReady } from '../inbox/__fixtures__/prepared'
 import type { InboxDeps } from '../inbox/inbox-service'
 import { PilotStore } from '../store/store'
 import {
@@ -49,7 +49,7 @@ function queued(card: Omit<InboxAddParams, 'runId'>, text: string, runId: string
     newId: () => 'in_0000000000000001'
   }
   const extra = runId ? { runId } : { automationId: 'ci', itemKey: 'repo:r' }
-  addInboxItem(deps, { ...card, ...extra })
+  addReady(deps, { ...card, ...extra })
   saveAnswer(
     deps,
     { id: 'in_0000000000000001', text, digest: store.inbox.get('in_0000000000000001')!.digest },

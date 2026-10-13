@@ -35,7 +35,7 @@ function setup(powers?: string[], loaded = true) {
     startedAt: 1
   })
   const push: ActionEntry = {
-    name: 'push',
+    name: 'publish',
     power: 'push',
     label: 'Push',
     usage: 'push …',
@@ -53,7 +53,10 @@ function setup(powers?: string[], loaded = true) {
       changed: 'head moved to ffff'
     })
   }
-  const catalog: ActionCatalog = { entries: () => [push], get: (n) => (n === 'push' ? push : null) }
+  const catalog: ActionCatalog = {
+    entries: () => [push],
+    get: (n) => (n === 'publish' ? push : null)
+  }
   const definition = def.ok
     ? { ...def.definition, powers: (powers ?? def.definition.powers) as never }
     : (null as never)
@@ -70,7 +73,7 @@ function setup(powers?: string[], loaded = true) {
 }
 
 const REQ: RunAttempt = {
-  action: 'push',
+  action: 'publish',
   args: { argv: ['/wt', 'web-1', 'aaa', 'bbb'] },
   dryRun: false,
   runId: 'run-1',
@@ -100,7 +103,7 @@ describe('attemptAction', () => {
     })
     expect(push.run).toHaveBeenCalledWith(REQ.args, { dryRun: false, runId: 'run-1' })
     expect(store.actions.forRun('run-1')).toMatchObject([
-      { action: 'push', phase: 'do', status: 'done', dryRun: false, finishedAt: 50 }
+      { action: 'publish', phase: 'do', status: 'done', dryRun: false, finishedAt: 50 }
     ])
     expect(store.events.list({ runId: 'run-1', kinds: ['action_run'] })).toHaveLength(1)
   })
@@ -117,13 +120,13 @@ describe('attemptAction', () => {
     expect(store.inbox.get('in_0000000000000001')).toMatchObject({
       type: 'action',
       title: 'Push web-1 to origin?',
-      action: 'push',
+      action: 'publish',
       actionArgs: REQ.args,
       person: 'nish',
       runId: 'run-1'
     })
     expect(store.actions.forInboxItem('in_0000000000000001')).toMatchObject([
-      { action: 'push', status: 'refused', runId: 'run-1' }
+      { action: 'publish', status: 'refused', runId: 'run-1' }
     ])
     expect(store.events.list({ runId: 'run-1', kinds: ['action_run'] })).toEqual([])
   })
@@ -144,7 +147,7 @@ describe('attemptAction', () => {
     vi.mocked(push.run).mockRejectedValueOnce(new Error('act.py vanished'))
     expect(await attemptAction(deps, REQ)).toMatchObject({
       outcome: 'failed',
-      detail: 'push crashed: act.py vanished'
+      detail: 'publish crashed: act.py vanished'
     })
     expect(store.actions.forRun('run-1')).toMatchObject([{ status: 'failed', finishedAt: 50 }])
   })
@@ -246,7 +249,7 @@ describe('attemptAction on an approved card', () => {
       runId: 'run-1',
       type: 'action',
       title: 'Push?',
-      action: 'push',
+      action: 'publish',
       actionArgs: REQ.args,
       ...extra
     }).id!
@@ -335,7 +338,7 @@ describe('attemptAction on an approved card', () => {
     const card = file(inbox, { parts: { F1: 'Null check' } })
     expect(await attemptAction(deps, approve(card, { leftOut: ['F1'] }))).toMatchObject({
       outcome: 'failed',
-      detail: "push can't leave parts out"
+      detail: "publish can't leave parts out"
     })
     expect(push.run).not.toHaveBeenCalled()
   })
@@ -387,7 +390,7 @@ describe('attemptAction on an approved card', () => {
       await attemptAction({ ...deps, catalog }, approve(card, { action: 'mark_ready' }))
     ).toMatchObject({
       outcome: 'failed',
-      detail: 'Card in_0000000000000001 is for push, not mark_ready'
+      detail: 'Card in_0000000000000001 is for publish, not mark_ready'
     })
     expect(other.run).not.toHaveBeenCalled()
   })
@@ -418,7 +421,7 @@ describe('attemptAction on an approved card', () => {
   it('runs a card Pilot asked about with the args its own refresh pinned again', async () => {
     const { push, deps, store, card } = await asked()
     const again = await refreshAction(deps, {
-      action: 'push',
+      action: 'publish',
       args: REQ.args,
       runId: 'run-1',
       inboxItemId: card.id
@@ -435,7 +438,7 @@ describe('attemptAction on an approved card', () => {
   it('refuses a card whose args came from a refresh of args Pilot never asked with', async () => {
     const { push, deps, store, card } = await asked()
     const foreign = await refreshAction(deps, {
-      action: 'push',
+      action: 'publish',
       args: { argv: ['/elsewhere', 'main', 'x', 'y'] },
       runId: 'run-1',
       inboxItemId: card.id
@@ -451,7 +454,7 @@ describe('attemptAction on an approved card', () => {
   it('follows a chain of its own refreshes: asked, refreshed, refreshed again', async () => {
     const { push, deps, store, card } = await asked()
     const refresh = (args: Record<string, unknown>) =>
-      refreshAction(deps, { action: 'push', args, runId: 'run-1', inboxItemId: card.id })
+      refreshAction(deps, { action: 'publish', args, runId: 'run-1', inboxItemId: card.id })
     const first = await refresh(REQ.args)
     const once = revise(store, card, first!.args)
     vi.mocked(push.refresh!).mockResolvedValueOnce({
@@ -482,17 +485,38 @@ describe('attemptAction on an approved card', () => {
   })
 })
 
+// R-P5: push and post_review are only ever offered prepared, so a run without the power can't be asked about
+// first. attemptAction never throws: the refusal is returned and recorded, and no card is filed.
+describe('a run without the power trying an evidence-needing action', () => {
+  it.each(['push', 'post_review'])('gets a recorded refusal for %s, and no card', async (name) => {
+    const { push, deps, inbox } = setup(['commit'])
+    const evidence: ActionEntry = { ...push, name, power: 'push', run: vi.fn() }
+    const catalog: ActionCatalog = {
+      entries: () => [evidence],
+      get: (n) => (n === name ? evidence : null)
+    }
+    const result = await attemptAction({ ...deps, catalog }, { ...REQ, action: name })
+    expect(result).toMatchObject({
+      outcome: 'failed',
+      detail: expect.stringContaining(`${name} needs prepared evidence`)
+    })
+    expect(evidence.run).not.toHaveBeenCalled()
+    expect(deps.store.actions.forRun('run-1')).toMatchObject([{ action: name, status: 'refused' }])
+    expect(inbox.store.inbox.list()).toEqual([])
+  })
+})
+
 describe('proposalProblem', () => {
   it.each([
-    [['push'], 'push', REQ.args, null],
+    [['push'], 'publish', REQ.args, null],
     [
       ['commit'],
-      'push',
+      'publish',
       REQ.args,
-      '"Fix CI" doesn\'t have the push power, so it can\'t propose push'
+      '"Fix CI" doesn\'t have the push power, so it can\'t propose publish'
     ],
     [['push'], 'deploy', {}, 'No action named "deploy" in Pilot\'s catalog'],
-    [['push'], 'push', { argv: 1 }, 'usage: push …']
+    [['push'], 'publish', { argv: 1 }, 'usage: push …']
   ])('with powers %j, %s %j → %s', (powers, action, args, problem) => {
     const { deps } = setup(powers)
     expect(proposalProblem(deps.catalog, deps.definitions()[0], action, args)).toBe(problem)
@@ -517,7 +541,7 @@ describe('refreshAction', () => {
     const { store, deps } = setup(['push'])
     expect(
       await refreshAction(deps, {
-        action: 'push',
+        action: 'publish',
         args: REQ.args,
         runId: 'run-1',
         inboxItemId: 'in_x'
@@ -530,7 +554,7 @@ describe('refreshAction', () => {
     const { push, deps } = setup(['push'])
     expect(
       await refreshAction(deps, {
-        action: 'push',
+        action: 'publish',
         args: { argv: 1 },
         runId: 'run-1',
         inboxItemId: 'in_x'
@@ -540,7 +564,7 @@ describe('refreshAction', () => {
     vi.mocked(push.refresh!).mockResolvedValueOnce({ args: { argv: 2 }, changed: 'x' })
     expect(
       await refreshAction(deps, {
-        action: 'push',
+        action: 'publish',
         args: REQ.args,
         runId: 'run-1',
         inboxItemId: 'in_x'

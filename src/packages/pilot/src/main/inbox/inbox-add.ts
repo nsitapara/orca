@@ -203,6 +203,7 @@ function addInboxItemUnlocked(
 ): InboxAddResult {
   checkPreparationRequest(params)
   checkNotPrepared(params)
+  refuseUnpreparedEvidence(params, opts.source)
   const origin = originOf(deps, params)
   const def = deps.definitions().find((d) => d.id === origin.automationId)
   if (!def) {
@@ -224,7 +225,6 @@ function addInboxItemUnlocked(
   if (argsProblem) {
     throw new Error(argsProblem)
   }
-  refuseUnpreparedEvidence(deps, params, origin.runId, card.action)
   const digest = inboxDigest(card)
   const at = deps.now()
   const mine = deps.store.inbox.list({ automationId: origin.automationId })

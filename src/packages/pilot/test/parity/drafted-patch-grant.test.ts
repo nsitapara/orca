@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { DRAFT_FORBIDDEN, DRAFT_GRANTED } from '../../src/main/answers/prompt'
 import { DRAFT_ON_DESKTOP, DRAFT_OPTION_ON_DESKTOP } from '../../src/shared/pilot-replies'
 import { cliHarness } from '../../src/main/inbox/__fixtures__/cli-harness'
+import { markReady } from '../../src/main/inbox/__fixtures__/prepared'
 import { skillsDir } from './old-side'
 
 // Pilot decides whether an answer approved a drafted patch and says so on the card's prompt line; apply.md
@@ -79,6 +80,7 @@ async function shownJson(): Promise<{ shown: unknown; sha256: string }> {
     f.bundle
   ])
   const [item] = store.inbox.list()
+  markReady(store, item.id) // R-P5: a drafted change is granted only on a prepared, ready card
   const answer = { option: null, text: 'approve', digest: item.digest, via: 'page' as const }
   store.inbox.saveAnswer(item.id, { ...answer, callerKind: 'desktop' }, 'nish', 110)
   log.mockClear()

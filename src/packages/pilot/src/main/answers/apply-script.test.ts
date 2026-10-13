@@ -8,7 +8,7 @@ import type { InboxAddParams } from '../../shared/inbox-types'
 import { parsePeopleYaml } from '../../shared/people'
 import type { AttemptDeps } from '../actions/attempt'
 import type { ActionEntry, ActionResult } from '../actions/types'
-import { addInboxItem } from '../inbox/inbox-add'
+import { addReady } from '../inbox/__fixtures__/prepared'
 import type { InboxDeps } from '../inbox/inbox-service'
 import { PilotStore } from '../store/store'
 import { applyScript, CARD_CHANGED, INTERRUPTED_AGAIN } from './apply-script'
@@ -87,7 +87,7 @@ function setup(
     definitions: inbox.definitions,
     inbox
   }
-  addInboxItem(inbox, card)
+  addReady(inbox, card)
   const item = () => store.inbox.get(ID)!
   // Approvals come only from Pilot's desktop app (the transport's caller kind).
   const approve = (text = 'approve') =>

@@ -1,5 +1,6 @@
 import { APPROVE, answerWord } from '../../shared/answers/route'
-import { PREPARATION_NOT_READY, requeuedPreparation } from '../../shared/preparation'
+import { evidenceGate } from '../../shared/evidence'
+import { requeuedPreparation } from '../../shared/preparation'
 import type { InboxAnswer, InboxItemRow } from '../../shared/api-types'
 import type { InboxAnswerParams } from '../../shared/inbox-types'
 import { oneLine } from '../inbox/card'
@@ -124,12 +125,10 @@ export function saveAnswer(
   if (!text) {
     return clearAnswer(deps, item, at)
   }
-  if (
-    item.preparation &&
-    item.preparation.state !== 'ready' &&
-    (route.kind === 'script' || APPROVE.has(answerWord(text)) || option !== null)
-  ) {
-    throw new Error(PREPARATION_NOT_READY)
+  // R-P5: nothing that would run (a script, an Approve, a pick) is saved on a card whose evidence isn't ready.
+  const gate = evidenceGate(item)
+  if (gate && (route.kind === 'script' || APPROVE.has(answerWord(text)) || option !== null)) {
+    throw new Error(gate)
   }
   const answer: InboxAnswer = { option, text, digest: item.digest, via, callerKind }
   // `by` is recorded for display only; nothing may use it to authorize anything (the caller kind does).

@@ -1,4 +1,5 @@
 import type { InboxItemRow } from '../../shared/api-types'
+import { evidenceGate } from '../../shared/evidence'
 import { attemptAction, refreshAction, type AttemptDeps } from '../actions/attempt'
 import { actionFailed, type ActionResult } from '../actions/types'
 import {
@@ -79,6 +80,10 @@ function interruptedSinceApproval(deps: ScriptDeps, item: InboxItemRow): boolean
 // Why an approval can't run now, or null. Checked on the card as just re-read, with nothing awaited
 // between the check and the attempt: only Pilot's desktop app approves, and only the version it saw.
 function approvalProblem(deps: ScriptDeps, item: InboxItemRow): string | null {
+  const gate = evidenceGate(item)
+  if (gate) {
+    return gate
+  }
   if (item.answer?.callerKind !== 'desktop') {
     return APPROVE_ON_DESKTOP
   }
