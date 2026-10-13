@@ -1,5 +1,12 @@
 import type { PreparationInput } from './preparation'
-import type { HoldReason, InboxItemRow, InboxStatus, InboxType, QueueState } from './api-types'
+import type {
+  HoldReason,
+  InboxItemRow,
+  InboxListRow,
+  InboxStatus,
+  InboxType,
+  QueueState
+} from './api-types'
 
 // Inbox (contract §9-§10): the payloads of the inbox RPCs. Row types (InboxItemRow,
 // InboxStatus, …) are in api-types.ts. Task 11b's CLI shells send these; Tasks 20c and 23b implement
@@ -51,7 +58,7 @@ export type AnswerState = {
   reason: string | null
 }
 export type InboxListPayload = {
-  items: InboxItemRow[]
+  items: InboxListRow[]
   // An action card's Run line by card id (main/inbox/run-line.ts); none for other cards.
   runLines: Record<string, RunLine>
   // By card id, for each answered card.

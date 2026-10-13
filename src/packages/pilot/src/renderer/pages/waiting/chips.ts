@@ -1,4 +1,4 @@
-import type { InboxItemRow } from '../../../shared/api-types'
+import type { InboxListRow } from '../../../shared/api-types'
 import type { AnswerState } from '../../../shared/inbox-types'
 
 export type StatusPill =
@@ -16,7 +16,7 @@ export type StatusPill =
 // Where a card stands, for its pill. A pick not yet saved is "unsaved". An answered card is "applying" only
 // when the server says its answer is locked (it may be being carried out), "failed" when its row failed.
 export function statusOf(
-  item: Pick<InboxItemRow, 'status' | 'preparation'>,
+  item: Pick<InboxListRow, 'status' | 'preparation'>,
   answerState: AnswerState | null,
   unsaved: boolean
 ): StatusPill {

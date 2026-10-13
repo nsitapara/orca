@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { cn } from '@/lib/utils'
-import type { InboxItemRow, InboxReply } from '../../../shared/api-types'
+import type { InboxListRow, InboxReply } from '../../../shared/api-types'
 import type { AnswerState, RunLine } from '../../../shared/inbox-types'
 import type { PartSwitches } from '../../details/ReviewBlock'
 import { PreparationProgress } from './PreparationProgress'
@@ -64,7 +64,7 @@ function RunLineRest({ text, more }: { text: string; more: number }): React.JSX.
 }
 
 function partSwitches(
-  item: InboxItemRow,
+  item: InboxListRow,
   off: string[],
   toggle: (id: string) => void
 ): PartSwitches | null {
@@ -115,9 +115,10 @@ export function InboxCard({
   error,
   selected,
   now,
-  onSave
+  onSave,
+  onRetryPreparation
 }: {
-  item: InboxItemRow
+  item: InboxListRow
   automationName: string
   // An action card's Run line (InboxListPayload.runLines); null on any other card.
   runLine: RunLine | null
@@ -130,6 +131,8 @@ export function InboxCard({
   // The clock the card's age is read against (when the list was loaded).
   now: number
   onSave: (answer: Answer) => Promise<string | null>
+  // Retry on a blocked preparation: null once requeued, else why not.
+  onRetryPreparation: () => Promise<string | null>
 }): React.JSX.Element {
   const [unsaved, setUnsaved] = useState(false)
   // Set while the card is open: when it is answered from here the next line takes focus (not on page load).
@@ -156,7 +159,7 @@ export function InboxCard({
           <h3 className="min-w-0 flex-1 truncate text-sm font-semibold">{item.title}</h3>
           <span className={statusPillClass(status)}>{status}</span>
         </div>
-        <PreparationProgress item={item} />
+        <PreparationProgress item={item} onRetry={onRetryPreparation} />
         <AnsweredLine
           item={item}
           answerState={answerState}
@@ -175,7 +178,7 @@ export function InboxCard({
         drafted={item.details?.drafted === true}
         status={status}
       />
-      <PreparationProgress item={item} />
+      <PreparationProgress item={item} onRetry={onRetryPreparation} />
       <h3 className="text-[15px] font-semibold">{item.title}</h3>
       {item.context ? <p className="text-sm text-muted-foreground">{item.context}</p> : null}
       {item.suggested ? (

@@ -1,5 +1,5 @@
 import { cn } from '@/lib/utils'
-import type { InboxItemRow } from '../../../shared/api-types'
+import type { InboxListRow } from '../../../shared/api-types'
 import type { Section } from '../../../shared/inbox-groups'
 import { ageLabel, jobCode } from './answer-text'
 import { ALL } from './InboxHeader'
@@ -23,7 +23,7 @@ export function CardList({
   names: Map<string, string>
   now: number
   onGroup: (key: string) => void
-  onSelect: (item: InboxItemRow) => void
+  onSelect: (item: InboxListRow) => void
 }): React.JSX.Element {
   return (
     <nav

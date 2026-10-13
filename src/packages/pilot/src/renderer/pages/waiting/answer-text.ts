@@ -1,4 +1,4 @@
-import type { InboxItemRow, InboxType } from '../../../shared/api-types'
+import type { InboxListRow, InboxType } from '../../../shared/api-types'
 import type { QueueEntry } from '../../../shared/inbox-types'
 
 const ACTION_TYPES = new Set<InboxType>(['action', 'bug', 'left_for_you'])
@@ -18,18 +18,18 @@ export type Choice = {
   text(notes: string): string
 }
 
-function optionAt(item: InboxItemRow, pattern: RegExp): number | null {
+function optionAt(item: InboxListRow, pattern: RegExp): number | null {
   const at = item.options.findIndex((o) => pattern.test(o.label))
   return at === -1 ? null : at
 }
 
-function meaningAt(item: InboxItemRow, at: number | null): string {
+function meaningAt(item: InboxListRow, at: number | null): string {
   return at === null ? '' : item.options[at].meaning
 }
 
 // An ask-first card (G4): its options are the choices, the first one starts the run. Approve with notes…
 // starts it too, and the notes become the run's {run.answer} ("approve: <notes>", R-2).
-function askFirstChoices(item: InboxItemRow): Choice[] {
+function askFirstChoices(item: InboxListRow): Choice[] {
   const options = item.options.length > 0 ? item.options : DEFAULT_ASK
   const choices: Choice[] = options.map((o, i) => ({
     label: o.label,
@@ -48,7 +48,7 @@ function askFirstChoices(item: InboxItemRow): Choice[] {
   return [choices[0], withNotes, ...choices.slice(1)]
 }
 
-function actionChoices(item: InboxItemRow): Choice[] {
+function actionChoices(item: InboxListRow): Choice[] {
   if (item.action === 'start_run') {
     return askFirstChoices(item)
   }
@@ -100,7 +100,7 @@ function optionChoice(label: string, meaning: string, index: number): Choice {
   return { label, meaning, notes: 'required', option: index, text: (n) => `${word}: ${n.trim()}` }
 }
 
-function questionChoices(item: InboxItemRow): Choice[] {
+function questionChoices(item: InboxListRow): Choice[] {
   const choices = item.options.map((o, i) => optionChoice(o.label, o.meaning, i))
   const keeps = item.type === 'default' || item.type === 'flagged'
   if (keeps && !item.options.some((o) => /^keep$/i.test(o.label))) {
@@ -122,13 +122,13 @@ function questionChoices(item: InboxItemRow): Choice[] {
   return choices
 }
 
-export function choicesFor(item: InboxItemRow): Choice[] {
+export function choicesFor(item: InboxListRow): Choice[] {
   return ACTION_TYPES.has(item.type) ? actionChoices(item) : questionChoices(item)
 }
 
 // The text a saved answer carries (what apply.py's routing reads), or null while notes are missing.
 export function composeAnswer(
-  item: InboxItemRow,
+  item: InboxListRow,
   choice: Choice,
   notes: string,
   partsOff: string[]
@@ -184,7 +184,7 @@ export function worktreeName(path: string | null): string {
 }
 
 // What counts as waiting on you: open cards, never the defaults the agents took.
-export function waitingCount(items: InboxItemRow[]): number {
+export function waitingCount(items: InboxListRow[]): number {
   return items.filter(
     (i) =>
       i.status === 'open' &&
@@ -193,7 +193,7 @@ export function waitingCount(items: InboxItemRow[]): number {
   ).length
 }
 
-export function preparingCount(items: InboxItemRow[]): number {
+export function preparingCount(items: InboxListRow[]): number {
   return items.filter(
     (item) =>
       item.status === 'open' &&
@@ -202,7 +202,7 @@ export function preparingCount(items: InboxItemRow[]): number {
   ).length
 }
 
-export function preparationBlockedCount(items: InboxItemRow[]): number {
+export function preparationBlockedCount(items: InboxListRow[]): number {
   return items.filter(
     (item) =>
       item.status === 'open' && item.type !== 'default' && item.preparation?.state === 'blocked'
