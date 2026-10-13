@@ -7,6 +7,7 @@ import type { InboxAddParams } from '../../shared/inbox-types'
 import { parsePeopleYaml } from '../../shared/people'
 import { PilotStore } from '../store/store'
 import { detailsFixture, REVIEW_BLOCK, rewriteBundle } from './__fixtures__/details-fixture'
+import { cardOf, inboxDigest } from './card'
 import { loadDetails } from './details-bundle'
 import { addInboxItem, CHANGED_AFTER_ANSWER } from './inbox-add'
 import { ANSWER_LOCKED } from './answer-lock'
@@ -182,5 +183,32 @@ describe('addInboxItem with a Details bundle', () => {
     writeFileSync(f.bundle, '{"version": 2}')
     expect(() => addInboxItem(deps, card, { dryRun })).toThrow(/^Details bundle refused: /)
     expect(store.inbox.list()).toEqual([])
+  })
+})
+
+// D1 never weakens a prepared card: a re-add without --preparation-file (a producer's plain add, or the bridge's
+// plain fallback) is the same card, kept as it is, with its preparation, manifest, snapshot and digest.
+describe('a prepared card re-added as a plain one', () => {
+  it.each(['queued', 'ready'] as const)('stays the %s prepared card, bundle or not', (state) => {
+    const { f, store, deps, card } = setup()
+    const preparation = { key: 'k', context: 'Pinned context', requirements: ['context' as const] }
+    const id = addInboxItem(deps, { ...plain(card), preparation }).id ?? ''
+    if (state === 'ready') {
+      const snapshot = loadDetails(f.root, f.bundle, { prepared: true })
+      const row = store.inbox.get(id)!
+      const digest = inboxDigest({ ...cardOf(row), details: snapshot.ref, detailsMd: null })
+      store.inbox.edit(id, { details: snapshot.ref, detailsMd: null, digest }, 100)
+      store.inbox.setSnapshot(id, snapshot)
+      store.inboxPreparations.write(id, { ...row.preparation!, state: 'ready', updatedAt: 100 })
+    }
+    const before = store.inbox.get(id)
+    const snapshot = store.inbox.snapshot(id)
+    for (const again of [card, plain(card)]) {
+      expect(addInboxItem(deps, again)).toEqual({ id, existing: true, refused: null })
+    }
+    expect(store.inbox.get(id)).toEqual(before)
+    expect(store.inbox.get(id)?.preparation?.state).toBe(state)
+    expect(store.inbox.snapshot(id)).toEqual(snapshot)
+    expect(store.inbox.list()).toHaveLength(1)
   })
 })
