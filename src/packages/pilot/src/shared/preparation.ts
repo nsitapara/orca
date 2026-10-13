@@ -27,6 +27,8 @@ export const InboxPreparationSchema = z.object({
   runId: z.string().nullable(),
   stepIdx: z.number().int().nonnegative().nullable(),
   leaseUntil: z.number().nullable(),
+  // When the current attempt was claimed: its claim never holds past this plus PREPARATION_HOLD_MAX_MS.
+  claimedAt: z.number().nullable().optional(),
   progress: z.string(),
   error: z.string().nullable(),
   updatedAt: z.number()
@@ -60,6 +62,8 @@ export const PREPARATION_REFUSED = 'Preparation request refused'
 export const notPreparedReply = (reason: string): string => `Not prepared: ${reason}`
 
 export const PREPARATION_LEASE_MS = 10 * 60_000
+// The hard cap on one attempt's claim: past it the claim has expired even while its step still reports running.
+export const PREPARATION_HOLD_MAX_MS = 3 * 60 * 60_000
 export const PREPARATION_NOT_READY =
   'Context is still being prepared; generated changes cannot be approved yet'
 

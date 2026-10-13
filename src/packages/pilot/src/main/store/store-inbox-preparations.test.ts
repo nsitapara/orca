@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { queuedPreparation, PREPARATION_LEASE_MS } from '../../shared/preparation'
+import {
+  queuedPreparation,
+  PREPARATION_HOLD_MAX_MS,
+  PREPARATION_LEASE_MS
+} from '../../shared/preparation'
 import { PilotStore } from './store'
 
 function setup() {
@@ -110,6 +114,18 @@ describe('a lapsed lease', () => {
     expect(queue.listEligible(later * 2)).toEqual([])
     expect(() => queue.claim('item', 1, 'worker-2', 0, later * 2)).toThrow('stale')
     expect(queue.claim('item', 1, 'worker-1', 0, later * 2).preparation?.attempt).toBe(1)
+    store.close()
+  })
+
+  // A step that never ends (no timeout, a terminal that won't close) can't hold a card forever.
+  it('expires at the hard cap even while its step runs and its lease is fresh', () => {
+    const { store, queue } = claimed('running')
+    const cap = 100 + PREPARATION_HOLD_MAX_MS
+    queue.progress('item', mine, 'Still drafting', cap - 1)
+    expect(() => queue.requireClaim('item', mine, cap)).toThrow('stale')
+    expect(queue.listEligible(cap)).toHaveLength(1)
+    queue.recoverExpired(cap)
+    expect(store.inbox.get('item')?.preparation).toMatchObject({ state: 'queued' })
     store.close()
   })
 
