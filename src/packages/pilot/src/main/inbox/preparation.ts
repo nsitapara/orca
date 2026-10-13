@@ -11,6 +11,7 @@ import { cardOf, inboxDigest } from './card'
 import { loadDetails } from './details-bundle'
 import { validatePreparationAction } from './preparation-action-evidence'
 import { validatePreparationEvidence } from './details-preparation'
+import { pushRangeProblems } from './push-range'
 import { getInboxItem, inboxEvent, type InboxDeps } from './inbox-service'
 
 export function completePreparation(
@@ -19,8 +20,10 @@ export function completePreparation(
   claim: PreparationClaim,
   bundlePath: string
 ) {
-  deps.store.inboxPreparations.requireClaim(id, claim, deps.now())
+  const claimed = deps.store.inboxPreparations.requireClaim(id, claim, deps.now())
   const snapshot = loadDetails(deps.detailsRoot ?? null, bundlePath, { prepared: true })
+  // Read-only git, outside the write: a revise (new args) moves the revision, so the claim re-check refuses it.
+  const range = pushRangeProblems(claimed, snapshot)
   return deps.store.transaction(() => {
     const at = deps.now()
     const item = deps.store.inboxPreparations.requireClaim(id, claim, at)
@@ -36,7 +39,8 @@ export function completePreparation(
     }
     const errors = [
       ...validatePreparationEvidence(snapshot, item.preparation.input.requirements),
-      ...validatePreparationAction(item, snapshot)
+      ...validatePreparationAction(item, snapshot),
+      ...range
     ]
     if (errors.length) {
       throw new Error(`Context incomplete: ${errors.join('; ')}`)
