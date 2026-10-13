@@ -240,8 +240,8 @@ describe('migrate', () => {
       "INSERT INTO inbox_items (id, automation_id, person, type, title, digest, created_at, updated_at) VALUES ('i1', 'a', 'p', 'question', 't', 'd', 1, 1)"
     )
     migrate(db)
-    expect(PILOT_SCHEMA_VERSION).toBe(7)
-    expect(db.pragma('user_version', { simple: true })).toBe(7)
+    expect(PILOT_SCHEMA_VERSION).toBe(8)
+    expect(db.pragma('user_version', { simple: true })).toBe(8)
     expect(
       firstRow(
         db,
@@ -253,6 +253,19 @@ describe('migrate', () => {
       details_snapshot_json: null,
       preparation_json: null,
       not_prepared_key: null
+    })
+  })
+
+  it('moves a v7 database on: each tick gains its warnings, none for the ticks it already has', () => {
+    const db = openDb()
+    migrate(db, 7)
+    db.exec(
+      "INSERT INTO ticks (automation_id, started_at, status) VALUES ('dev-e2e-fix-start', 1, 'ok')"
+    )
+    migrate(db)
+    expect(firstRow(db, 'SELECT automation_id, warnings_json FROM ticks')).toEqual({
+      automation_id: 'dev-e2e-fix-start',
+      warnings_json: '[]'
     })
   })
 

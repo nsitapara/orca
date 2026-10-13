@@ -214,10 +214,11 @@ function finishFailed(
   tickId: number,
   message: string,
   counts: Partial<Record<Verdict, number>>,
-  deps: TickDeps
+  deps: TickDeps,
+  warnings: readonly string[] = []
 ): void {
   try {
-    deps.store.finishTick(tickId, 'failed', message, counts, deps.now())
+    deps.store.finishTick(tickId, 'failed', message, counts, deps.now(), warnings)
   } catch (error) {
     console.error(`pilot: couldn't finish tick ${tickId}: ${errorMessage(error)}`)
   }
@@ -268,14 +269,14 @@ export async function runTick(
       await startRuns(def, decisions, tickId, deps, runIds, unlaunched)
     }
     deps.store.recordDecisions(tickId, decisions, runIds)
-    deps.store.finishTick(tickId, 'ok', null, countVerdicts(decisions), deps.now())
+    deps.store.finishTick(tickId, 'ok', null, countVerdicts(decisions), deps.now(), warnings)
     return { tickId, status: 'ok', error: null, decisions, warnings }
   } catch (error) {
     const message = errorMessage(error)
     if (unlaunched.current) {
       releaseUnlaunched(def, unlaunched.current, message, deps)
     }
-    finishFailed(tickId, message, countVerdicts(decisions), deps)
+    finishFailed(tickId, message, countVerdicts(decisions), deps, warnings)
     return { tickId, status: 'failed', error: message, decisions, warnings }
   }
 }

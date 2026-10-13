@@ -60,6 +60,8 @@ export type TickRow = {
   status: 'running' | 'ok' | 'failed'
   error: string | null
   counts: Partial<Record<Verdict, number>>
+  // What the tick warned about (an id its source couldn't read). Absent: none.
+  warnings?: string[]
 }
 export type TickItemRow = {
   tickId: number

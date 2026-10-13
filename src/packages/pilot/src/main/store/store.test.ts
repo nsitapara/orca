@@ -59,13 +59,19 @@ describe('PilotStore', () => {
       [decision('!1561', 'started'), decision('!1574', 'skipped')],
       new Map([['!1561', 'run-1']])
     )
-    store.finishTick(tick, 'ok', null, { started: 1, skipped: 1 }, 2000)
+    store.finishTick(tick, 'ok', null, { started: 1, skipped: 1 }, 2000, [
+      "WEB-9 isn't readable in Linear; skipped"
+    ])
     expect(store.lastTick('fix-failed-ci')).toMatchObject({
       id: tick,
       status: 'ok',
       dryRun: false,
-      counts: { started: 1, skipped: 1 }
+      counts: { started: 1, skipped: 1 },
+      warnings: ["WEB-9 isn't readable in Linear; skipped"]
     })
+    const quiet = store.startTick('fix-failed-ci', true, 3000)
+    store.finishTick(quiet, 'ok', null, {}, 3001)
+    expect(store.listTicks('fix-failed-ci', 1)[0].warnings).toEqual([])
     expect(store.tickItems(tick).map((i) => [i.itemKey, i.verdict, i.runId])).toEqual([
       ['!1561', 'started', 'run-1'],
       ['!1574', 'skipped', null]
