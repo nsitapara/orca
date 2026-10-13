@@ -91,10 +91,15 @@ export function activity(ctx: PilotContext, id: string, limit: number): Activity
   const tickIds = ticks.map((t) => t.tick.id)
   const triggers = ctx.store.handovers.tickTriggers(tickIds)
   const handedOver = ctx.store.handovers.consumedBy(tickIds)
+  const definitions = ctx.loaded().definitions
+  const stageOf = (id: string) => definitions.find((d) => d.id === id)?.job?.stage ?? null
   return ticks.map(({ tick, runs }) => ({
     ...tick,
     trigger: triggers.get(tick.id) ?? null,
-    handedOver: handedOver.get(tick.id) ?? [],
+    handedOver: (handedOver.get(tick.id) ?? []).map((h) => ({
+      ...h,
+      senderStage: stageOf(h.senderId)
+    })),
     items: ctx.store.tickItems(tick.id),
     runs: runs.map((run) => ({
       ...run,

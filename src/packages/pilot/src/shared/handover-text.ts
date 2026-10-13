@@ -30,14 +30,15 @@ function sender(trigger: TickTrigger): string {
   return `stage ${trigger.stage}`
 }
 
-// Activity's lines for a tick of a fed stage: the run whose feed triggered it and what that run handed over, then the
-// ids the tick read, when they are more than (or other than) the trigger's.
+// Activity's lines for a tick of a fed stage: the run whose feed triggered it and what that run handed over, the ids
+// the tick consumed when they are more than (or other than) the trigger's, and each handover it found expired.
 export function handoverActivityLines(tick: {
   trigger?: TickTrigger | null
   handedOver?: readonly HandoverRow[]
 }): string[] {
   const lines: string[] = []
-  const read = unique((tick.handedOver ?? []).map((h) => h.itemId))
+  const rows = tick.handedOver ?? []
+  const read = unique(rows.filter((h) => h.state === 'consumed').map((h) => h.itemId))
   const trigger = tick.trigger ?? null
   if (trigger) {
     const handed = trigger.ids.length > 0 ? `, handed over ${trigger.ids.join(', ')}` : ''
@@ -50,7 +51,17 @@ export function handoverActivityLines(tick: {
   if (read.length > 0 && !same) {
     lines.push(`Read handed-over ids: ${read.join(', ')}`)
   }
+  for (const h of rows.filter((r) => r.state === 'expired')) {
+    lines.push(`Handover of ${h.itemId} from ${senderName(h)} expired after 7 days`)
+  }
   return lines
+}
+
+function senderName(h: HandoverRow): string {
+  if (h.senderStage === undefined || h.senderStage === null) {
+    return h.senderId
+  }
+  return `stage ${h.senderStage}`
 }
 
 // The runs' pronouns: one run is "it", several "they".
@@ -122,6 +133,9 @@ export function lastHandoverText(rows: readonly HandoverRow[], now: number): str
   const each = rows.map((h) => {
     if (h.state === 'pending') {
       return `${h.itemId} waiting`
+    }
+    if (h.state === 'expired') {
+      return `${h.itemId} expired`
     }
     return `${h.itemId} ${h.verdict ? OUTCOME[h.verdict] : 'not read'}`
   })

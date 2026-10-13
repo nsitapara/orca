@@ -119,4 +119,63 @@ describe('HandoverStore: ids one stage hands the next, kept until a tick of the 
     store.handovers.setTickTrigger(tickId, trigger)
     expect(store.handovers.tickTriggers([tickId, other])).toEqual(new Map([[tickId, trigger]]))
   })
+
+  it('reads only pending rows handed over since <notBefore>', () => {
+    const store = open()
+    store.handovers.add({ ...SENT, at: 100, senderRunId: 'r1', itemIds: ['OLD-1'] })
+    store.handovers.add({ ...SENT, at: 500, senderRunId: 'r2', itemIds: ['NEW-1'] })
+    expect(store.handovers.pending('dev-e2e-fix-start', 10, 200).map((h) => h.itemId)).toEqual([
+      'NEW-1'
+    ])
+  })
+
+  it("expires a receiver's rows pending since before <before>, on the tick that saw them, keeping them", () => {
+    const store = open()
+    store.handovers.add({ ...SENT, at: 100, senderRunId: 'r1', itemIds: ['OLD-1'] })
+    store.handovers.add({ ...SENT, at: 500, senderRunId: 'r2', itemIds: ['NEW-1'] })
+    store.handovers.add({
+      ...SENT,
+      at: 100,
+      senderRunId: 'r3',
+      receiverId: 'other',
+      itemIds: ['X-1']
+    })
+    expect(store.handovers.expire('dev-e2e-fix-start', 200, 7, 900)).toBe(1)
+    expect(store.handovers.pending('dev-e2e-fix-start', 10).map((h) => h.itemId)).toEqual(['NEW-1'])
+    expect(store.handovers.consumedBy([7]).get(7)).toEqual([
+      expect.objectContaining({ itemId: 'OLD-1', state: 'expired', consumedAt: 900, tickId: 7 })
+    ])
+    expect(store.handovers.pending('other', 10).map((h) => h.itemId)).toEqual(['X-1'])
+  })
+
+  it('housekeeps: expires every row pending too long (no tick), and prunes settled rows past retention', () => {
+    const store = open()
+    const DAY = 86_400_000
+    const now = 100 * DAY
+    store.handovers.add({
+      ...SENT,
+      at: now - 40 * DAY,
+      senderRunId: 'old',
+      itemIds: ['A-1', 'A-2']
+    })
+    store.handovers.add({ ...SENT, at: now - 10 * DAY, senderRunId: 'stale', itemIds: ['B-1'] })
+    store.handovers.add({ ...SENT, at: now - DAY, senderRunId: 'fresh', itemIds: ['C-1'] })
+    const [a1, a2] = store.handovers.pending('dev-e2e-fix-start', 10)
+    store.handovers.consume(3, now - 35 * DAY, [
+      { rowId: a1.id, verdict: 'started', reason: 'Started', runId: 'x' }
+    ])
+    store.handovers.consume(4, now - 5 * DAY, [
+      { rowId: a2.id, verdict: 'started', reason: 'Started', runId: 'y' }
+    ])
+    expect(store.handovers.housekeep(now, 7 * DAY, 30 * DAY)).toEqual({ expired: 1, pruned: 1 })
+    const all = [
+      ...store.handovers.latest('dev-e2e-fix', 'dev-e2e-fix-start'),
+      ...store.handovers.consumedBy([4]).get(4)!
+    ]
+    expect(all.map((h) => [h.itemId, h.state])).toEqual([
+      ['C-1', 'pending'],
+      ['A-2', 'consumed']
+    ])
+    expect(store.handovers.pending('dev-e2e-fix-start', 10).map((h) => h.itemId)).toEqual(['C-1'])
+  })
 })

@@ -1,6 +1,11 @@
 import type Database from '../../../../../main/sqlite/sync-database'
 import type { HandoverRow, HandoverState, TickTrigger, Verdict } from '../../shared/api-types'
 
+const DAY_MS = 24 * 60 * 60_000
+// A handover still pending this long expires (kept as expired, not deleted); settled rows are pruned after retention.
+export const HANDOVER_EXPIRY_MS = 7 * DAY_MS
+export const HANDOVER_RETENTION_MS = 30 * DAY_MS
+
 export type NewHandover = {
   senderId: string
   senderRunId: string
@@ -56,14 +61,47 @@ export class HandoverStore {
     return written
   }
 
-  // The receiver's pending rows, oldest first; the rest wait for a later tick.
-  pending(receiverId: string, limit: number): HandoverRow[] {
+  // The receiver's pending rows handed over since <notBefore>, oldest first; the rest wait for a later tick.
+  pending(receiverId: string, limit: number, notBefore = 0): HandoverRow[] {
     return this.db
       .prepare(
-        "SELECT * FROM handovers WHERE receiver_id = ? AND state = 'pending' ORDER BY id LIMIT ?"
+        "SELECT * FROM handovers WHERE receiver_id = ? AND state = 'pending' AND created_at >= ? ORDER BY id LIMIT ?"
       )
-      .all(receiverId, limit)
+      .all(receiverId, notBefore, limit)
       .map((r) => toHandover(r as never))
+  }
+
+  // What a tick reads: the receiver's pending rows not yet expired (handed over within HANDOVER_EXPIRY_MS of now).
+  fresh(receiverId: string, limit: number, now: number): HandoverRow[] {
+    return this.pending(receiverId, limit, now - HANDOVER_EXPIRY_MS)
+  }
+
+  // The receiver's rows pending since before <before> expire on the tick that found them. Returns how many.
+  expire(receiverId: string, before: number, tickId: number, at: number): number {
+    const result = this.db
+      .prepare(
+        "UPDATE handovers SET state = 'expired', consumed_at = ?, tick_id = ? WHERE receiver_id = ? AND state = 'pending' AND created_at < ?"
+      )
+      .run(at, tickId, receiverId, before)
+    return Number(result.changes)
+  }
+
+  // The scheduler pass's housekeeping: rows pending longer than <expiryMs> expire with no tick (their receiver is off
+  // or gone), and settled rows (consumed or expired) older than <retentionMs> are deleted.
+  housekeep(
+    now: number,
+    expiryMs: number,
+    retentionMs: number
+  ): { expired: number; pruned: number } {
+    const expired = this.db
+      .prepare(
+        "UPDATE handovers SET state = 'expired', consumed_at = ? WHERE state = 'pending' AND created_at < ?"
+      )
+      .run(now, now - expiryMs)
+    const pruned = this.db
+      .prepare("DELETE FROM handovers WHERE state != 'pending' AND consumed_at < ?")
+      .run(now - retentionMs)
+    return { expired: Number(expired.changes), pruned: Number(pruned.changes) }
   }
 
   // The rows a tick read, each with how it decided the item. A row already consumed keeps its first record.
@@ -96,7 +134,7 @@ export class HandoverStore {
       .map((r) => toHandover(r as never))
   }
 
-  // The rows each of these ticks consumed, oldest first.
+  // The rows each of these ticks settled (consumed or expired), oldest first.
   consumedBy(tickIds: readonly number[]): Map<number, HandoverRow[]> {
     const found = new Map<number, HandoverRow[]>()
     if (tickIds.length === 0) {

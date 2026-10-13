@@ -113,7 +113,7 @@ const V8 = `ALTER TABLE ticks ADD COLUMN warnings_json TEXT NOT NULL DEFAULT '[]
 const V9 = `
 CREATE TABLE handovers (id INTEGER PRIMARY KEY AUTOINCREMENT, sender_id TEXT NOT NULL, sender_run_id TEXT NOT NULL,
   receiver_id TEXT NOT NULL, item_id TEXT NOT NULL, created_at INTEGER NOT NULL,
-  state TEXT NOT NULL DEFAULT 'pending', -- pending|consumed
+  state TEXT NOT NULL DEFAULT 'pending', -- pending|consumed|expired
   consumed_at INTEGER, tick_id INTEGER, verdict TEXT, reason TEXT, run_id TEXT,
   UNIQUE (sender_run_id, receiver_id, item_id));
 CREATE INDEX handovers_pending ON handovers (receiver_id, state, id);
