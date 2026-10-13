@@ -79,7 +79,7 @@ describe('01 · Pull latest dev into local dev, as a run-once shell step', () =>
       repo: 'web-platform',
       schedule: '0 * * * *',
       timezone: 'America/Los_Angeles',
-      enabled: false,
+      enabled: true, // live since go-live stage A (2026-10-13)
       missedRunGraceMs: 12 * 3_600_000,
       items: null,
       checks: [],
