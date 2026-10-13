@@ -78,6 +78,17 @@ export class HandoverStore {
     return this.pending(receiverId, limit, now - HANDOVER_EXPIRY_MS)
   }
 
+  // The rows a receiving run consumed go back to pending when that run fails: its next tick retries them (after
+  // retry_after_failure). Returns how many.
+  reopen(runId: string): number {
+    const result = this.db
+      .prepare(
+        "UPDATE handovers SET state = 'pending', consumed_at = NULL, tick_id = NULL, verdict = NULL, reason = NULL, run_id = NULL WHERE run_id = ? AND state = 'consumed'"
+      )
+      .run(runId)
+    return Number(result.changes)
+  }
+
   // The receiver's rows pending since before <before> expire on the tick that found them. Returns how many.
   expire(receiverId: string, before: number, tickId: number, at: number): number {
     const result = this.db
