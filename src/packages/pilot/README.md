@@ -177,32 +177,76 @@ Every job is a YAML automation in `~/.agents/automations/` (one file per automat
 
 A shell step's `run:` is plain shell. It takes no `{placeholders}`; validation rejects them.
 - **Values in:** `env: { NAME: "{mr.title}" }`. The script reads `"$NAME"`. Pilot fills the text in; the shell never parses it.
-- **Values out:** append `key=value` lines to `$PILOT_OUTPUT_FILE`. The last line per key wins. A value that reads as JSON (`true`, `3`, `null`) becomes that value. Stdout is never read for outputs, so what a child process prints can't forge one. Names are letters, digits and `_`; a value is at most 4096 characters. A bad line is a warning, not a failure.
+- **Values out:** append `key=value` lines to `$PILOT_OUTPUT_FILE`. The last line per key wins. Declare the keys a later stage relies on with `outputs: [key]` (Multi-stage jobs, below). A value that reads as JSON (`true`, `3`, `null`) becomes that value. Stdout is never read for outputs, so what a child process prints can't forge one. Names are letters, digits and `_`; a value is at most 4096 characters. A bad line is a warning, not a failure.
 - **Reserved env names:** `PATH`, `IFS`, `HOME`, `ENV`, `BASH_ENV`, `SHELLOPTS`, `BASHOPTS`, `PS4`, `CDPATH`, `GLOBIGNORE`, `AGENT_RUN`, and anything starting `PILOT_`, `ORCA_`, `LD_` or `DYLD_`.
 - **Never** use an env value in `$(( ))`, `(( ))`, `let`, `declare -i`, an array subscript, `[[ -eq ]]`, `eval`, or `sh -c "…$NAME…"`. The shell evaluates those as code. Quote it as `"$NAME"`, or validate it first.
 - **Never** put an item value in an env name that another program executes: `NODE_OPTIONS`, `GIT_SSH_COMMAND`, `GIT_CONFIG_*`, `PERL5OPT`, `JAVA_TOOL_OPTIONS`, `SHELL`, `EDITOR`, `PAGER`. Validation doesn't block these.
 
-### A job of several automations (`job:`)
+### Multi-stage jobs (`job:`)
 
 A job ported as several automations, such as 13's ticket step and its fix sessions, shows as one job. Each automation is a **stage** of it. ("Step" already means the steps inside an automation.)
 
+**Stages or steps?**
+- **Steps** run one after another inside one run, on one item, in one workspace. Use them when the later work belongs to the same item and should run right away (review, then fix).
+- **Stages** are separate automations with their own items, schedule, checks, `once_per`, limits, quota and switch. Use them when the next part works on different items than the first produced (a pipeline opens a ticket; the ticket gets a fix session), or needs its own gates or timing.
+
+**The YAML.** The sending stage lists its connections under `feeds`; the receiving stage reads what it is fed.
+
+    # stage 1
     job:
       id: "13"                            # the stages of one job share it (quoted text)
       name: Fix red hourly e2e on dev     # the job's name; at least one stage sets it
       stage: 1                            # whole number from 1, its place in the job
       label: Open or update the ticket    # the stage's short label
-      feeds: dev-e2e-fix-start            # optional: the automation(s) it hands work to (one or a list)
-      hands_over: the tickets it opens    # optional, only with feeds: the arrow's caption
+      feeds:
+        - to: dev-e2e-fix-start           # a stage of the same job
+          pass: { id: ticket }            # this run's `ticket` output becomes the next stage's item ids
+          run: now                        # now (tick it as soon as this run ends) | next_schedule (the default)
+          when: success                   # success (the default: the run ended done or needs you) | always
+          caption: the tickets it opens   # the arrow's caption on the job page
+    steps:
+      - name: ticket
+        agent: shell
+        run: ./ticket.sh                  # appends ticket=WEB-2123 (or WEB-1,WEB-9) to $PILOT_OUTPUT_FILE
+        outputs: [ticket]                 # a pass may hand on only a declared output
 
-- **Rules across files:** a stage number is used once per job. Feeds never form a cycle. The stages that set `name` agree. A broken rule marks every automation it involves invalid, the way a broken file is: its last valid version is shown and never ticked, and the error names the rule.
-- **A `feeds` target that is missing (renamed), in no job or in another job** only loses its arrow: the list shows a warning on the stage that names it, and that stage loads and ticks as usual. `pilot automations validate --file` checks one file, so a rule across files shows in the list's errors and in `reload`.
-- **Display only:** `feeds` and `hands_over` draw the arrows on the job's page. Each stage still ticks on its own schedule.
-- **The list** shows the job as one row (its id and name, an "N stages" chip, on when any stage is, the newest tick of any stage), with its stages indented under it in stage order. Click a stage for its own page, or the job for the job's page. That page shows the stages as cards joined by their `feeds` arrows, one Activity timeline with each tick tagged by its stage, and each stage's YAML. "Dry run all" dry-runs every stage in order. "Turn on" (it asks first) and "Turn off" set every stage through the same call, and the same caller rules, as one automation.
+    # stage 2
+    job: { id: "13", stage: 2, label: Start a fix session per ticket }
+    items:
+      kind: linear_ticket
+      where:
+        ids_from: { feed: true, run: "python3 /abs/pilot_mode.py list-fix-tickets", field: identifier }
+
+- **The old shape** still loads: `feeds: <name>` (or a list of names) with `hands_over: <caption>` is an arrow only, with no handover. `hands_over` captions only feeds given by name; a connection has its own `caption`.
+- **An output's value** may name several ids, separated by commas or spaces. A step that reports outputs declares them with `outputs:`. When two steps report the passed output, the later step's value wins.
+- **`ids_from: { feed: true }`** reads the ids earlier stages handed over. With `run:` too, the stage reads both, fed ids first, each once. The command is the fallback for ids that never came through a feed (opened before the stage existed, or while it was off).
+
+**Guarantees.**
+- **Durable:** when a sending run ends and `when` holds, each id is written to the store's `handovers` table, once per (sending run, receiving stage, id). A pending id survives a restart.
+- **Consumed by a real tick:** the receiving stage's next real tick (triggered or scheduled) reads its pending ids and consumes each one when the tick ends well, whatever it decided for the item (started, skipped, not due, …). An id its source returned nothing for (closed, or not found) is consumed as not read. An item over the per-tick limit stays pending for the next tick. A failed tick consumes nothing.
+- **The receiver's own rules apply:** a triggered tick is an ordinary tick of that stage, so its switch, checks, `once_per`, limits and quota apply unchanged. A stage that is off, invalid or missing is never triggered; its ids wait.
+- **`run: now`** ticks the receiver as soon as the sending run ends, but only after it handed over at least one id (a feed without `pass` always triggers). A receiver whose tick is already running gets one more tick after it ends. At most 4 triggered ticks of a stage a minute; past that, the ids wait for its schedule. Only the process that runs the scheduler triggers.
+- **No loops:** feeds never form a cycle (the loader refuses one).
+- **Dry runs** never write a handover, consume one or trigger anything. They say what they would read and hand on.
+- **Not handed over:** runs that apply an answer, and imported runs.
+
+**Validation.** A broken rule marks the involved automation invalid (shown from its last valid version, never ticked), and the error names the rule.
+- In one file: a `pass` output must be declared by a step; a stage is fed once per connection; `ids_from.feed` needs `job:`.
+- Across files: a stage number is used once per job; the stages that set `name` agree; feeds never form a cycle; a feed that passes ids or runs now must reach a stage of the same job; a stage passed ids must read them (`ids_from: { feed: true }`); a stage that reads its feed must be the `to` of some passing feed.
+- An arrow-only feed whose target is missing (renamed), in no job or in another job only loses its arrow: a warning, and the stage still ticks.
+- `pilot automations validate --file` checks one file, so a rule across files shows in the list's errors and in `reload`.
+
+**Where it shows.**
+- **The list** shows the job as one row (its id and name, an "N stages" chip, on when any stage is, the newest tick of any stage), with its stages under it in stage order.
+- **The job page** shows the stages as cards joined by their arrows. Each arrow shows its caption and the most recent handover with how it went ("Last: WEB-2123 started · 5 min ago", or "waiting" while pending). It has one Activity timeline with each tick tagged by its stage, and each stage's YAML.
+- **Activity** says which run triggered a tick and what it handed over ("Triggered by stage 1 run …, handed over WEB-2123"), and which handed-over ids a tick read.
+- **Dry run all** dry-runs every stage in order and says what each would read and hand on ("1 run would hand stage 2 its ticket output if it succeeds; stage 2 then ticks at once"). `pilot automations dry-run` prints the same lines.
+- "Turn on" (it asks first) and "Turn off" set every stage through the same call, and the same caller rules, as one automation.
 - An automation without `job:` is a job of its own, as before. The card's one-line description is the first line of the file's opening comment.
 
 ### Item ids from a command (`where.ids_from`)
 
-A source can read only the ids a command names, instead of listing everything and dropping what isn't its own. `linear_ticket` takes it (13-start reads the tickets job 13 opened).
+A source can read only the ids a command names, instead of listing everything and dropping what isn't its own. `linear_ticket` takes it (13-start reads the tickets job 13 opened). `feed: true` adds the ids an earlier stage hands over (Multi-stage jobs, above); `field`, `env` and `timeout` belong to `run`.
 
     where:
       ids_from: { run: "python3 /abs/pilot_mode.py list-fix-tickets", field: identifier }   # also: env:, timeout: (60s)
