@@ -223,3 +223,24 @@ describe('retiring a "Not prepared" notice', () => {
     }
   })
 })
+
+// A notice and a plain card never merge, whatever their titles: the notice's key is part of the card's identity.
+describe('a "Not prepared" notice and a plain flagged card of the same title', () => {
+  const PLAIN = { runId: 'run-1', type: 'flagged' as const, title: 'Push !1?', context: 'A flag' }
+  it.each([
+    ['a plain card after the notice', [NOT_PREPARED, PLAIN]],
+    ['a notice after the plain card', [PLAIN, NOT_PREPARED]]
+  ] as const)('stay two cards: %s', (_name, [first, second]) => {
+    const { deps, store } = setup()
+    const a = addInboxItem(deps, first).id!
+    const b = addInboxItem(deps, second)
+    expect(b).toMatchObject({ existing: false })
+    expect(b.id).not.toBe(a)
+    expect(
+      store.inbox
+        .list()
+        .map((card) => card.notPreparedKey ?? null)
+        .sort()
+    ).toEqual([PREPARATION.key, null])
+  })
+})

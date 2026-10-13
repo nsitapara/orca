@@ -24,6 +24,8 @@ export const SAME_CARD_OPEN = 'same card already open'
 export { CHANGED_AFTER_ANSWER }
 
 type Origin = {
+  // A "Not prepared" notice's key (D2): a notice and a plain card are never the same card.
+  noticeKey?: string | null
   automationId: string
   runId: string | null
   stepIdx: number | null
@@ -99,7 +101,8 @@ function sameCard(item: InboxItemRow, card: InboxCard, origin: Origin): boolean 
     item.itemKey === origin.itemKey &&
     item.worktreePath === origin.worktreePath &&
     item.type === card.type &&
-    item.title === card.title
+    item.title === card.title &&
+    (item.notPreparedKey ?? null) === (origin.noticeKey ?? null)
   )
 }
 
@@ -204,7 +207,7 @@ function addInboxItemUnlocked(
   checkPreparationRequest(params)
   checkNotPrepared(params)
   refuseUnpreparedEvidence(params, opts.source)
-  const origin = originOf(deps, params)
+  const origin = { ...originOf(deps, params), noticeKey: params.notPrepared?.key ?? null }
   const def = deps.definitions().find((d) => d.id === origin.automationId)
   if (!def) {
     throw new Error(`No automation "${origin.automationId}"`)
