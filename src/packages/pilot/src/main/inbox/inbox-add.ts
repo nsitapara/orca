@@ -240,7 +240,7 @@ function addInboxItemUnlocked(
   )
   if (managed) {
     if (params.preparation && !opts.dryRun) {
-      retireNotPrepared(deps, mine, params.preparation.key, managed.id, at)
+      retireNotPrepared(deps, mine, origin, params.preparation.key, managed.id, at)
     }
     return { id: managed.id, existing: true, refused: null }
   }
@@ -287,7 +287,7 @@ function addInboxItemUnlocked(
   }
   deps.store.inbox.add(item, loaded)
   if (params.preparation) {
-    retireNotPrepared(deps, mine, params.preparation.key, item.id, at)
+    retireNotPrepared(deps, mine, origin, params.preparation.key, item.id, at)
   }
   inboxEvent(
     deps.store,

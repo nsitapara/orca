@@ -2,10 +2,10 @@ import type { InboxItemRow } from '../../shared/api-types'
 import type { InboxAddParams } from '../../shared/inbox-types'
 import { PREPARATION_REFUSED, PreparationInputSchema } from '../../shared/preparation'
 import { answerLocked } from './answer-lock'
-import { inboxEvent, syncRunWaiting, WAITING, type InboxDeps } from './inbox-service'
+import { inboxEvent, syncRunWaiting, type InboxDeps } from './inbox-service'
 
 export const NOT_PREPARED_SHAPE =
-  'A "Not prepared" card is a flagged notice: no action, parts, switch or preparation request'
+  'A "Not prepared" card is a flagged notice: no action, parts, switch, Details bundle or preparation request'
 
 // A preparation request's own shape and size, checked before anything else about the card. Its refusal starts
 // with PREPARATION_REFUSED, so the bridge falls back to a "Not prepared" card only for it (D2).
@@ -26,8 +26,8 @@ export function checkNotPrepared(params: InboxAddParams): void {
   if (!params.notPrepared) {
     return
   }
-  const { action, actionArgs, parts, switchWords, preparation, type } = params
-  const carries = [action, actionArgs, preparation].some((x) => x !== undefined)
+  const { action, actionArgs, parts, switchWords, preparation, type, detailsBundlePath } = params
+  const carries = [action, actionArgs, preparation, detailsBundlePath].some((x) => x !== undefined)
   const extras = Object.keys(parts ?? {}).length > 0 || (switchWords ?? []).length > 0
   if (type !== 'flagged' || carries || extras) {
     throw new Error(NOT_PREPARED_SHAPE)
@@ -49,18 +49,27 @@ export function refuseUnpreparedEvidence(
   }
 }
 
-// The prepared card for a key retires the waiting "Not prepared" notices that stood in for it, in its own write.
+// The prepared card for a key retires the open "Not prepared" notices that stood in for it, in its own write: only
+// when a run adds it (never an add from outside one), and only its own item's notices (the run's automation, item and
+// worktree). A notice already answered, or any other card, is never touched.
 export function retireNotPrepared(
   deps: InboxDeps,
-  waiting: InboxItemRow[],
+  cards: InboxItemRow[],
+  origin: { runId: string | null; itemKey: string | null; worktreePath: string | null },
   key: string,
   replacement: string,
   at: number
 ): void {
-  for (const notice of waiting) {
+  if (!origin.runId) {
+    return
+  }
+  for (const notice of cards) {
     if (
       notice.notPreparedKey !== key ||
-      !WAITING.includes(notice.status) ||
+      notice.status !== 'open' ||
+      notice.itemKey !== origin.itemKey ||
+      notice.worktreePath !== origin.worktreePath ||
+      notice.action !== null ||
       answerLocked(deps.store, notice, at)
     ) {
       continue
