@@ -1,41 +1,64 @@
 import { execFileSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import { realpathSync } from 'node:fs'
+import { isAbsolute } from 'node:path'
 import type { InboxItemRow } from '../../shared/api-types'
 import type { DetailsSnapshot } from '../../shared/details'
 
-// The one canonical diff of a pushed range, base to head. The preparation worker makes a push's patch with the same
-// arguments (~/.agents/skills/prepare-inbox-item-context/scripts/context.py push-patch, PUSH_DIFF; a parity test
-// keeps them equal), so Pilot can recompute the bytes itself. The -c settings pin the a/ b/ prefixes a user's
-// config could change.
-export const PUSH_DIFF_ARGS = (base: string, head: string): string[] => [
+// The one canonical diff of a pushed range, base to head: plumbing (diff-tree), with every external hook a
+// repository could set (diff.external, a textconv driver from .gitattributes, core.fsmonitor, hooks) switched off,
+// the worktree only as -C, and the commits after --end-of-options. The preparation worker makes a push's patch with
+// the same argv (~/.agents/skills/prepare-inbox-item-context/scripts/context.py push_diff; a parity test keeps them
+// equal), so Pilot recomputes the same bytes.
+export const PUSH_DIFF_ARGS = (worktree: string, base: string, head: string): string[] => [
   '-c',
-  'diff.noprefix=false',
+  'core.fsmonitor=false',
   '-c',
-  'diff.mnemonicPrefix=false',
-  'diff',
+  'core.hooksPath=/dev/null',
+  '-c',
+  'diff.external=',
+  '--no-pager',
+  '-C',
+  worktree,
+  'diff-tree',
+  '-r',
+  '-p',
   '--binary',
-  '--no-color',
+  '--full-index',
   '--no-ext-diff',
   '--no-textconv',
+  '--no-color',
+  '--end-of-options',
   base,
   head
 ]
+// A commit is a full object id (SHA-1 or SHA-256), never a ref name or anything git could read as an option.
+const OBJECT_ID = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/
 const GIT_TIMEOUT_MS = 30_000
 const GIT_MAX_BYTES = 64 * 1024 * 1024
 
+// git's environment: nothing GIT_* inherited (no GIT_DIR, GIT_WORK_TREE, GIT_CONFIG_* or GIT_EXTERNAL_DIFF), no
+// system config, no prompt, and no optional locks (read-only).
+function gitEnv(): NodeJS.ProcessEnv {
+  const env = Object.fromEntries(Object.entries(process.env).filter(([k]) => !k.startsWith('GIT_')))
+  return { ...env, GIT_OPTIONAL_LOCKS: '0', GIT_CONFIG_NOSYSTEM: '1', GIT_TERMINAL_PROMPT: '0' }
+}
+
 function realOrNull(path: string | null): string | null {
   try {
-    return path ? realpathSync(path) : null
+    return path && isAbsolute(path) ? realpathSync(path) : null
   } catch {
     return null
   }
 }
 
-// The sha256 of the canonical diff of <base>..<head> in <worktree>, read-only (no optional locks).
+// The sha256 of the canonical diff of <base>..<head> in <worktree> (an argv array, no shell).
 export function committedRangeSha256(worktree: string, base: string, head: string): string {
-  const bytes = execFileSync('git', ['-C', worktree, ...PUSH_DIFF_ARGS(base, head)], {
-    env: { ...process.env, GIT_OPTIONAL_LOCKS: '0' },
+  if (!OBJECT_ID.test(base) || !OBJECT_ID.test(head)) {
+    throw new Error('a pushed range is two full commit ids')
+  }
+  const bytes = execFileSync('git', PUSH_DIFF_ARGS(worktree, base, head), {
+    env: gitEnv(),
     timeout: GIT_TIMEOUT_MS,
     maxBuffer: GIT_MAX_BYTES,
     stdio: ['ignore', 'pipe', 'pipe']
@@ -44,8 +67,9 @@ export function committedRangeSha256(worktree: string, base: string, head: strin
 }
 
 // A prepared push binds its patch to what git shows for its pinned range (R-P5): the catalog's push argv is
-// [<worktree path>, <branch>, <commit>, <origin commit>] (act.py push), the worktree must be the card's own (the one
-// its run recorded), and every diff's patch_sha256 must be the sha256 of the canonical diff of origin..commit there.
+// [<worktree path>, <branch>, <commit>, <origin commit>] (act.py push), the commits are full object ids, the
+// worktree is absolute and resolves to the card's own (the one its run recorded), and every diff's patch_sha256 is
+// the sha256 of the canonical diff of origin..commit there.
 export function pushRangeProblems(item: InboxItemRow, snapshot: DetailsSnapshot): string[] {
   if (item.action !== 'push') {
     return []
@@ -55,6 +79,9 @@ export function pushRangeProblems(item: InboxItemRow, snapshot: DetailsSnapshot)
     return ['Push requires its pinned worktree, commit and origin commit']
   }
   const [worktree, , head, base] = argv as string[]
+  if (!OBJECT_ID.test(head) || !OBJECT_ID.test(base)) {
+    return ["Push's commit and origin commit must be full commit ids"]
+  }
   const own = realOrNull(item.worktreePath)
   if (!own || realOrNull(worktree) !== own) {
     return ["Push's worktree is not the card's own worktree"]

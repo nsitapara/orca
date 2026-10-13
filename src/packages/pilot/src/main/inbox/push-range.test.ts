@@ -1,6 +1,6 @@
 import { execFileSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
-import { mkdtempSync, realpathSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdtempSync, realpathSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
@@ -33,7 +33,7 @@ function repo() {
   const head = commit('b.txt', 'three\n')
   const sha = (from: string, to: string) =>
     createHash('sha256')
-      .update(execFileSync('git', ['-C', dir, ...PUSH_DIFF_ARGS(from, to)]))
+      .update(execFileSync('git', PUSH_DIFF_ARGS(dir, from, to)))
       .digest('hex')
   return { dir, base, middle, head, sha }
 }
@@ -94,20 +94,61 @@ describe('a prepared push range, recomputed by Pilot', () => {
     expect(pushRangeProblems(item, snap)).not.toEqual([])
   })
 
-  it('reads git without taking its optional locks', () => {
-    expect(PUSH_DIFF_ARGS('b', 'h')).toEqual([
+  it('is plumbing with every external hook off, the worktree only as -C and the commits after --end-of-options', () => {
+    expect(PUSH_DIFF_ARGS('/wt', 'b'.repeat(40), 'h'.repeat(40))).toEqual([
       '-c',
-      'diff.noprefix=false',
+      'core.fsmonitor=false',
       '-c',
-      'diff.mnemonicPrefix=false',
-      'diff',
+      'core.hooksPath=/dev/null',
+      '-c',
+      'diff.external=',
+      '--no-pager',
+      '-C',
+      '/wt',
+      'diff-tree',
+      '-r',
+      '-p',
       '--binary',
-      '--no-color',
+      '--full-index',
       '--no-ext-diff',
       '--no-textconv',
-      'b',
-      'h'
+      '--no-color',
+      '--end-of-options',
+      'b'.repeat(40),
+      'h'.repeat(40)
     ])
+  })
+})
+
+// Security review: the card's argv is untrusted. A commit is a full hex object id or nothing.
+describe('the pushed range from untrusted args', () => {
+  it.each<[string, (r: ReturnType<typeof repo>, out: string) => string[]]>([
+    ['a leading-dash head (an option)', (r, out) => [r.dir, 'web-1', `--output=${out}`, r.base]],
+    ['a leading-dash base (an option)', (r, out) => [r.dir, 'web-1', r.head, `--output=${out}`]],
+    ['a short commit', (r) => [r.dir, 'web-1', r.head.slice(0, 12), r.base]],
+    ['a ref name', (r) => [r.dir, 'web-1', 'web-1', r.base]],
+    ['a non-hex commit', (r) => [r.dir, 'web-1', 'z'.repeat(40), r.base]],
+    ['a relative worktree', (r) => ['.', 'web-1', r.head, r.base]]
+  ])('refuses %s and runs no git', (_name, argv) => {
+    const r = repo()
+    const out = join(r.dir, 'written-by-git')
+    const item = card(r.dir, argv(r, out))
+    expect(pushRangeProblems(item, snapshot(r.sha(r.base, r.head), r.base, r.head))).not.toEqual([])
+    expect(existsSync(out)).toBe(false)
+  })
+
+  // Job 09 checks out teammates' branches: their repo-local config and attributes must never run anything here.
+  it("never runs a repo's diff.external, textconv driver or fsmonitor", () => {
+    const r = repo()
+    const marker = (name: string) => join(r.dir, '..', `${name}-${Date.now()}`)
+    const markers = ['external', 'textconv', 'fsmonitor'].map(marker)
+    git(r.dir, 'config', 'diff.external', `touch ${markers[0]}`)
+    git(r.dir, 'config', 'diff.evil.textconv', `touch ${markers[1]}; cat`)
+    git(r.dir, 'config', 'core.fsmonitor', `touch ${markers[2]}`)
+    writeFileSync(join(r.dir, '.gitattributes'), '* diff=evil\n')
+    const item = card(r.dir, [r.dir, 'web-1', r.head, r.base])
+    expect(pushRangeProblems(item, snapshot(r.sha(r.base, r.head), r.base, r.head))).toEqual([])
+    expect(markers.filter((m) => existsSync(m))).toEqual([])
   })
 })
 
@@ -115,7 +156,7 @@ describe('completing a prepared push', () => {
   it('is refused when its patch is another range than the one it pushes', () => {
     const r = repo()
     const f = detailsFixture()
-    const other = execFileSync('git', ['-C', r.dir, ...PUSH_DIFF_ARGS(r.middle, r.head)])
+    const other = execFileSync('git', PUSH_DIFF_ARGS(r.dir, r.middle, r.head))
     writeFileSync(join(f.dir, 'F2.patch'), other)
     const store = PilotStore.open(
       join(mkdtempSync(join(tmpdir(), 'pilot-push-done-')), 'db.sqlite')
