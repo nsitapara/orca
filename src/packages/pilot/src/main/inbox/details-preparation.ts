@@ -7,7 +7,7 @@ import type {
   DetailsBundle,
   DetailsSnapshot,
   DiffBlock,
-  DiffFile,
+  DiffRow,
   ScreenPair
 } from '../../shared/details'
 import { DetailsRefused, readCapped } from './details-read'
@@ -26,11 +26,39 @@ function recorded(
 }
 
 type PatchStats = NonNullable<ArtifactFile['diff']>
+type PatchHunk = { oldStart: number; newStart: number; lines: string[] }
 
-function changesHash(lines: string[]): string {
-  return createHash('sha256').update(JSON.stringify(lines)).digest('hex')
+function hunksHash(hunks: DiffRow[][]): string {
+  return createHash('sha256').update(JSON.stringify(hunks)).digest('hex')
 }
 
+// A hunk's rows as details.py diff_rows writes them: [old line or null, new line or null, ' ' | '+' | '-', text]. A
+// "\ No newline" marker is no row. (jsdiff moves a 0-line side's start by one; no row of that side has a number.)
+function rowsOf(hunk: PatchHunk): DiffRow[] {
+  const rows: DiffRow[] = []
+  let old = hunk.oldStart
+  let now = hunk.newStart
+  for (const line of hunk.lines) {
+    const text = line.slice(1)
+    if (line.startsWith('+')) {
+      rows.push([null, now, '+', text])
+      now += 1
+    } else if (line.startsWith('-')) {
+      rows.push([old, null, '-', text])
+      old += 1
+    } else if (!line.startsWith('\\')) {
+      rows.push([old, now, ' ', text])
+      old += 1
+      now += 1
+    }
+  }
+  return rows
+}
+
+const bare = (name: string | undefined): string => (name ?? '').replace(/^[ab]\//, '')
+
+// Each file of a patch: its path, the path it was renamed from (null unless renamed), its +/- counts, and the hash
+// of its hunks' rows, line numbers and text included.
 export function patchStats(text: string): ArtifactFile['diff'] {
   try {
     const parsed = parsePatch(text)
@@ -38,15 +66,17 @@ export function patchStats(text: string): ArtifactFile['diff'] {
       return undefined
     }
     return parsed.map((file) => {
-      const lines = file.hunks.flatMap((hunk) => hunk.lines)
-      const path = file.newFileName === '/dev/null' ? file.oldFileName : file.newFileName
+      const hunks = file.hunks.map(rowsOf)
+      const rows = hunks.flat()
+      const gone = file.newFileName === '/dev/null'
+      const path = bare(gone ? file.oldFileName : file.newFileName)
+      const from = bare(file.oldFileName)
       return {
-        path: (path ?? '').replace(/^[ab]\//, ''),
-        added: lines.filter((line) => line.startsWith('+')).length,
-        removed: lines.filter((line) => line.startsWith('-')).length,
-        changesSha256: changesHash(
-          lines.filter((line) => line.startsWith('+') || line.startsWith('-'))
-        )
+        path,
+        oldPath: file.oldFileName === '/dev/null' || from === path ? null : from,
+        added: rows.filter((row) => row[2] === '+').length,
+        removed: rows.filter((row) => row[2] === '-').length,
+        hunksSha256: hunksHash(hunks)
       }
     })
   } catch {
@@ -54,18 +84,16 @@ export function patchStats(text: string): ArtifactFile['diff'] {
   }
 }
 
-function shownChanges(file: DiffFile): string {
-  return changesHash(
-    file.hunks.flatMap((hunk) => hunk.filter((row) => row[2] !== ' ').map((row) => row[2] + row[3]))
-  )
-}
-
-// The diff shown against the hashed patch. details.py may trim a big one: a file past its row cap keeps its counts
-// with no hunks (`omitted`), and the files past its file cap are only counted (`more_files`). Every shown file is a
-// distinct file of the patch with its counts, its hunks are the patch's unless omitted, and more_files is the rest.
+// The diff shown against the hashed patch, exactly. details.py may trim a big one: a file past its row cap keeps its
+// counts with no hunks (`omitted`), and the files past its file cap are only counted (`more_files`). Every shown file
+// is a distinct file of the patch with its rename and counts, its hunks are the patch's row for row unless omitted,
+// and the shown files plus more_files are the patch's files, no more and no fewer.
 function shownMatchesPatch(block: DiffBlock, stats: PatchStats): boolean {
   const paths = block.files.map((file) => file.path)
-  if (new Set(paths).size !== paths.length) {
+  if (
+    new Set(paths).size !== paths.length ||
+    new Set(stats.map((s) => s.path)).size !== stats.length
+  ) {
     return false
   }
   if (stats.length !== block.files.length + (block.more_files ?? 0)) {
@@ -73,10 +101,14 @@ function shownMatchesPatch(block: DiffBlock, stats: PatchStats): boolean {
   }
   return block.files.every((file) => {
     const stat = stats.find((s) => s.path === file.path)
-    if (!stat || stat.added !== file.added || stat.removed !== file.removed) {
+    const renamedFrom = file.old_path && file.old_path !== file.path ? file.old_path : null
+    if (!stat || stat.oldPath !== renamedFrom) {
       return false
     }
-    return file.omitted ? file.hunks.length === 0 : stat.changesSha256 === shownChanges(file)
+    if (stat.added !== file.added || stat.removed !== file.removed) {
+      return false
+    }
+    return file.omitted ? file.hunks.length === 0 : stat.hunksSha256 === hunksHash(file.hunks)
   })
 }
 

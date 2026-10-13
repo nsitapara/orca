@@ -73,7 +73,14 @@ export type ArtifactFile = {
   role: 'patch' | 'review' | 'before' | 'after' | 'screenshot' | 'check'
   sha256: string
   bytes: number
-  diff?: { path: string; added: number; removed: number; changesSha256: string }[]
+  // The patch's files, read from its bytes: rename source (null unless renamed), counts, and the hash of the rows.
+  diff?: {
+    path: string
+    oldPath: string | null
+    added: number
+    removed: number
+    hunksSha256: string
+  }[]
 }
 export type ArtifactManifest = {
   provenance?: ArtifactProvenance

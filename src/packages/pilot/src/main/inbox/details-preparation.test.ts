@@ -22,6 +22,16 @@ function prepared() {
     bundle.blocks = bundle.blocks.filter((block) => block.type !== 'missing')
     const diff = bundle.blocks.find((block) => block.type === 'diff')!
     diff.patch_sha256 = patch
+    // F2.json's sample hunk trims its context; a prepared diff shows the patch's rows exactly.
+    ;(diff.files as { hunks: unknown }[])[0].hunks = [
+      [
+        [194, 194, ' ', '  const pending = useHasEdits()'],
+        [195, null, '-', '  useBlocker(true)'],
+        [null, 195, '+', '  useBlocker(pending)'],
+        [196, 196, ' ', '  return routing'],
+        [197, 197, ' ', '}']
+      ]
+    ]
     diff.check_records = [
       {
         command: 'pnpm test',
@@ -115,15 +125,30 @@ describe('a trimmed diff (details.py past its row or file cap)', () => {
 
   it.each<[string, (diff: { files: ShownFile[]; more_files?: number }) => void]>([
     ['an omitted file whose count lies', (diff) => void (diff.files[1].added = 5)],
-    ['a more_files that lies', (diff) => void (diff.more_files = 2)],
-    ['no more_files for a dropped file', (diff) => void delete diff.more_files],
+    ['a lying more_files', (diff) => void (diff.more_files = 2)],
+    [
+      'a hidden extra file (no more_files for a dropped one)',
+      (diff) => void delete diff.more_files
+    ],
     [
       'a shown file the patch does not have',
       (diff) =>
         void diff.files.push({ path: 'd.ts', added: 1, removed: 0, hunks: [], omitted: true })
     ],
     ['a file shown twice', (diff) => void diff.files.push({ ...diff.files[1] })],
-    ["a shown hunk that is not the patch's", (diff) => void (diff.files[0].hunks = [])]
+    ['a shown file with no hunks', (diff) => void (diff.files[0].hunks = [])],
+    [
+      'a mismatched hunk on a shown file (its context)',
+      (diff) => void ((diff.files[0].hunks as unknown[][][])[0][0][3] = 'not the patch')
+    ],
+    [
+      'a mismatched hunk on a shown file (its line numbers)',
+      (diff) => void ((diff.files[0].hunks as unknown[][][])[0][0][0] = 7)
+    ],
+    [
+      'a shown rename the patch does not make',
+      (diff) => void ((diff.files[0] as { old_path?: string }).old_path = 'elsewhere.ts')
+    ]
   ])('refuses %s', (_name, change) => {
     const f = trimmed(change)
     expect(

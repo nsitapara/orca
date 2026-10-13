@@ -66,12 +66,30 @@ describe('blocks', () => {
       more_files: 3,
       files: [{ path: 'big.ts', hunks: [], omitted: true }]
     }
-    const { container } = render(<DiffBlock block={trimmed} />)
+    const stats = [
+      { path: 'big.ts', added: 900, removed: 100 },
+      { path: 'x.ts', added: 1, removed: 1 },
+      { path: 'y.ts', added: 2, removed: 0 },
+      { path: 'z.ts', added: 0, removed: 6 }
+    ]
+    const { container } = render(<DiffBlock block={trimmed} patchStats={stats} />)
     const lines = [...container.querySelectorAll('.dt-missing')].map((n) => n.textContent)
     expect(lines).toEqual([
-      'big.ts: diff too large to show here (in the patch)',
-      '3 more files not shown (in the patch)'
+      '4 files / 1010 lines not shown — only the patch file has them',
+      'big.ts: diff too large to show here (in the patch)'
     ])
+  })
+
+  it('counts the lines it can when no manifest gives the dropped files', () => {
+    const omitted: DiffData = {
+      type: 'diff',
+      patch: 'F2.patch',
+      files: [{ path: 'big.ts', added: 3, removed: 1, hunks: [], omitted: true }]
+    }
+    const { container } = render(<DiffBlock block={omitted} />)
+    expect(container.querySelector('.dt-missing')?.textContent).toBe(
+      '1 file / 4 lines not shown — only the patch file has them'
+    )
   })
 
   it('puts one gap row between two hunks of a file', () => {
