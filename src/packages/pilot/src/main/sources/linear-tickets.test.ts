@@ -302,8 +302,9 @@ describe('linearTicketSource: the ids where.ids_from gave', () => {
     detail(listed('WEB-1', 'started', 1), '2026-10-09T00:00:00Z', 'web-1-fix'),
     detail(listed('WEB-2', 'started', 2), '2026-09-01T00:00:00Z', 'web-2-fix')
   ]
-  const byId = () => {
-    const linear = {
+  const refuse = (): Promise<never> => Promise.reject(new Error('a source never writes'))
+  const byId = () =>
+    ({
       listIssues: vi.fn(async () => ({ issues: [], meta })),
       issue: vi.fn(async (id: string) => {
         const found = TICKETS.find((t) => t.identifier === id)
@@ -313,10 +314,12 @@ describe('linearTicketSource: the ids where.ids_from gave', () => {
           })
         }
         return found
-      })
-    }
-    return linear as typeof linear & LinearConnector
-  }
+      }),
+      create: refuse,
+      comment: refuse,
+      setState: refuse,
+      attach: refuse
+    }) satisfies LinearConnector
 
   it('reads only those tickets, by identifier and GET only, never the listing; open ones in the usual order', async () => {
     const linear = byId()
