@@ -26,6 +26,8 @@ export type SourceContext = {
   fetch: PassFetchCache
   now: number
   automationId: string
+  // where.ids_from's ids: the source reads these alone instead of listing. null (or absent): no ids_from.
+  ids?: readonly string[] | null
 }
 
 // One per item kind (contract §3). A type, not an interface: the repo's lint asks for types.

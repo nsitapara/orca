@@ -1,5 +1,6 @@
 import type { HandledRow, ItemDecision } from '../../shared/api-types'
 import type { AutomationDefinition, CheckDef } from '../../shared/definition/types'
+import { idsFromSchema } from '../../shared/definition/where'
 import type { PeopleDirectory } from '../../shared/people'
 import { evaluateCheck, type CheckResult } from '../../shared/tick/checks'
 import {
@@ -18,6 +19,7 @@ import { addBuiltinFields, addCustomFields, type FieldEngineDeps } from '../fiel
 import { resolveScriptCommand, type ScriptRunner } from '../fields/script-runner'
 import { mapLimit } from '../map-limit'
 import type { PassFetchCache } from '../sources/fetch-cache'
+import { readIdsFrom, runIdsCommand, type IdsRunner } from '../sources/ids-from'
 import { itemSource } from '../sources/registry'
 import { runOnceItem } from '../sources/run-once'
 import type { Item, RepoFacts, SourceContext } from '../sources/types'
@@ -59,6 +61,8 @@ export type DecideDeps = {
   fields: FieldEngineDeps
   // Terminal activity for a `worktree: idle` check (Task 19c). Absent: the pre-pass is skipped.
   activity?: ActivityRuntime
+  // Runs where.ids_from's command; absent, the real process (runIdsCommand).
+  runIds?: IdsRunner
 }
 export type DecideOutcome = { decisions: ItemDecision[]; warnings: string[] }
 type ScriptCheck = Extract<CheckDef, { kind: 'script' }>
@@ -213,6 +217,27 @@ export function worktreeTakenSinceDecide(
   return taken ? path : null
 }
 
+// where.ids_from, when the automation has one: the ids its source reads instead of listing. A failure throws, so
+// the tick is recorded failed with the reason.
+async function idsForTick(
+  def: AutomationDefinition,
+  repo: RepoFacts,
+  deps: DecideDeps
+): Promise<string[] | null> {
+  const raw = def.items?.where.ids_from
+  if (raw === undefined) {
+    return null
+  }
+  const spec = idsFromSchema.parse(raw)
+  const opts = {
+    automationId: def.id,
+    file: def.file,
+    repoPath: repo.path,
+    engineEnv: deps.fields.engineEnv
+  }
+  return readIdsFrom(spec, opts, deps.runIds ?? runIdsCommand)
+}
+
 // One automation's decision (spec §6): repo → items → built-in fields → scope → custom fields →
 // script checks → decideTick. A failing source or worktree listing throws; the tick runner records
 // the tick as failed and the next one retries. `tickId` is the tick row the runner started first (G3).
@@ -225,7 +250,8 @@ export async function decideTickItems(
 ): Promise<DecideOutcome> {
   const now = deps.now()
   const repo = await deps.resolveRepo(def.repo)
-  const ctx: SourceContext = { repo, people, fetch: pass, now, automationId: def.id }
+  const ids = await idsForTick(def, repo, deps)
+  const ctx: SourceContext = { repo, people, fetch: pass, now, automationId: def.id, ids }
   const listed = await deps.sources.list(def, ctx)
   const tickFields = runFields({ automationId: def.id, at: now, timezone: def.timezone, tickId })
   const withTick = listed.items.map((item) => ({

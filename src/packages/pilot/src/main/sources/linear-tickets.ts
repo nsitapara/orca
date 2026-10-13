@@ -1,5 +1,6 @@
 import { gitOptionalLocksDisabledEnv } from '../../../../../main/git/command-runner/git-process-env'
 import type { ItemFields } from '../../shared/api-types'
+import type { LinearTicketWhere } from '../../shared/definition/types'
 import type {
   LinearIssueListResult,
   LinearIssueSummary
@@ -29,9 +30,11 @@ export type LinearTicketSourceDeps = {
 }
 
 type Listed = LinearIssueListResult['issues'][number]
-type Ticket = { listed: Listed; issue: LinearIssueSummary }
+// workspace: the listing's workspace id; null for a ticket read by identifier (where.ids_from).
+type Ticket = { workspace: string | null; issue: LinearIssueSummary }
 
 const POOL = 3
+const LINEAR_IDENTIFIER = /^[A-Za-z][A-Za-z0-9]*-\d+$/
 // A branch Pilot creates for the ticket (M01: from origin/dev) is mine: no ownership block.
 const OWN_NEW_BRANCH: ItemFields = {
   'mr.owner_block': '',
@@ -116,9 +119,49 @@ async function readTickets(
     const issue = await ctx.fetch.memo(`linear:issue:${t.workspace.id}:${t.identifier}`, () =>
       linear.issue(t.identifier, workspace)
     )
-    return { listed: t, issue }
+    return { workspace: t.workspace.id || null, issue }
   })
   return tickets.sort((a, b) => compareTickets(a.issue, b.issue))
+}
+
+function notFound(error: unknown): boolean {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    Reflect.get(error, 'code') === 'linear_issue_not_found'
+  )
+}
+
+// where.ids_from: each id read by identifier (Linear resolves it across the signed-in workspaces), no listing. A
+// ticket Linear doesn't know is skipped with a warning; any other failed read fails the tick, as a listing's does.
+// Like the listing, only a ticket in a wanted state is kept.
+async function readTicketsByIds(
+  ctx: SourceContext,
+  linear: LinearConnector,
+  ids: readonly string[],
+  where: LinearTicketWhere,
+  warnings: string[]
+): Promise<Ticket[]> {
+  const bad = ids.find((id) => !LINEAR_IDENTIFIER.test(id))
+  if (bad !== undefined) {
+    throw new Error(`ids_from gave "${bad}", which isn't a Linear identifier (like WEB-123)`)
+  }
+  const read = await mapLimit([...ids], POOL, async (id) => {
+    try {
+      return await ctx.fetch.memo(`linear:issue::${id}`, () => linear.issue(id))
+    } catch (error) {
+      if (notFound(error)) {
+        warnings.push(`${id}: Linear has no such ticket; it isn't checked`)
+        return null
+      }
+      throw error
+    }
+  })
+  return read
+    .filter((issue): issue is LinearIssueSummary => issue !== null)
+    .filter((issue) => stateTypeAllowed(issue.state?.type, where))
+    .map((issue) => ({ workspace: null, issue }))
+    .sort((a, b) => compareTickets(a.issue, b.issue))
 }
 
 function ticketFields(t: Ticket, branch: string | null): ItemFields {
@@ -137,7 +180,7 @@ function ticketFields(t: Ticket, branch: string | null): ItemFields {
     'ticket.team_name': issue.team?.name ?? null,
     'ticket.assignee': issue.assignee?.displayName ?? null,
     'ticket.assignee_id': issue.assignee?.id ?? null,
-    'ticket.workspace': t.listed.workspace.id || null
+    'ticket.workspace': t.workspace
   }
 }
 
@@ -179,12 +222,14 @@ export function linearTicketSource(deps: LinearTicketSourceDeps): ItemSource {
     whereSchema: WHERE_SCHEMAS.linear_ticket,
     async list(ctx, rawWhere) {
       const where = linearTicketWhereSchema.parse(rawWhere ?? {})
-      // Like M01's unstarted(): only tickets of a wanted state get a details read.
-      const tickets = await readTickets(ctx, deps.linear, linearListFilter(where), (t) =>
-        stateTypeAllowed(t.state?.type, where)
-      )
-      const worktrees = (await deps.listWorktrees(ctx.repo)).filter((w) => !w.isArchived)
       const warnings: string[] = []
+      // Like M01's unstarted(): only tickets of a wanted state get a details read.
+      const tickets = ctx.ids
+        ? await readTicketsByIds(ctx, deps.linear, ctx.ids, where, warnings)
+        : await readTickets(ctx, deps.linear, linearListFilter(where), (t) =>
+            stateTypeAllowed(t.state?.type, where)
+          )
+      const worktrees = (await deps.listWorktrees(ctx.repo)).filter((w) => !w.isArchived)
       // Without GitLab every ownership fact is unknown, so the gate rules block (fail closed).
       const api = await gitlabFor(ctx).catch((error: unknown) => {
         warnings.push(`No GitLab project for ${ctx.repo.name}: ${messageOf(error)}`)

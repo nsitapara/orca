@@ -1,5 +1,8 @@
 import { z } from 'zod'
+import { durationTextSchema } from './duration'
+import { idsFromProblems } from './ids-from'
 import type {
+  IdsFrom,
   ItemKind,
   LinearTicketWhere,
   MergeRequestWhere,
@@ -60,7 +63,24 @@ export const pipelineWhereSchema: z.ZodType<PipelineWhere> = z
     path: ['marker_jobs']
   })
 
+export const idsFromSchema: z.ZodType<IdsFrom> = z
+  .strictObject({
+    run: z.string().min(1),
+    field: z
+      .string()
+      .regex(/^[A-Za-z_][A-Za-z0-9_]*$/, 'expected a key name: letters, digits and _')
+      .optional(),
+    env: z.record(z.string(), z.string()).optional(),
+    timeout: durationTextSchema.optional()
+  })
+  .superRefine((spec, ctx) => {
+    for (const problem of idsFromProblems(spec)) {
+      ctx.addIssue({ code: 'custom', path: [problem.key], message: problem.message })
+    }
+  })
+
 export const linearTicketWhereSchema: z.ZodType<LinearTicketWhere> = z.strictObject({
+  ids_from: idsFromSchema.optional(),
   assignee: peopleRefSchema.optional(),
   state_type: z.array(z.string().min(1)).optional(),
   team: z.string().min(1).optional(),

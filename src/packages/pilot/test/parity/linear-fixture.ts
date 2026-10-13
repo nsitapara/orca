@@ -15,8 +15,20 @@ function resultOf(f: ParityFixture, argv: string[]): unknown {
   return (JSON.parse(stdoutOf(read)) as { result: unknown }).result
 }
 
+// The workspace a read by identifier alone resolves in: Linear looks across the signed-in workspaces, and a case's world
+// has the one its Pilot-side reads name. None when the case holds no such read for the ticket.
+function workspaceOf(f: ParityFixture, id: string): string | undefined {
+  const named = new Set(
+    f.reads
+      .filter((r) => r.argv.slice(0, 5).join(' ') === `orca linear issue ${id} --workspace`)
+      .map((r) => r.argv[5])
+  )
+  return named.size === 1 ? [...named][0] : undefined
+}
+
 // Pilot's Linear connector over a case's reads (`orca linear list …` and `orca linear issue <ID> --workspace <id> …`,
-// which the old sweep's own `orca linear issue <ID>` state read never collides with). A dry run writes nothing.
+// which the old sweep's own `orca linear issue <ID>` state read never collides with). A read by identifier alone
+// (where.ids_from) is the case's read in its workspace, else that state read. A dry run writes nothing.
 export function fixtureLinear(f: ParityFixture): LinearConnector {
   const refuse = (): Promise<never> =>
     Promise.reject(new Error('parity: a dry run never writes to Linear'))
@@ -35,7 +47,8 @@ export function fixtureLinear(f: ParityFixture): LinearConnector {
         '--json'
       ]) as LinearIssueListResult,
     issue: async (id, workspaceId) => {
-      const flag = workspaceId ? ['--workspace', workspaceId] : []
+      const workspace = workspaceId ?? workspaceOf(f, id)
+      const flag = workspace ? ['--workspace', workspace] : []
       const answer = resultOf(f, ['orca', 'linear', 'issue', id, ...flag, '--json'])
       return (answer as { issue: Awaited<ReturnType<LinearConnector['issue']>> }).issue
     },

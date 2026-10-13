@@ -1,14 +1,5 @@
 import { spawnSync } from 'node:child_process'
-import {
-  chmodSync,
-  cpSync,
-  mkdirSync,
-  mkdtempSync,
-  readFileSync,
-  readdirSync,
-  realpathSync,
-  writeFileSync
-} from 'node:fs'
+import { cpSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from 'node:fs'
 import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
@@ -18,11 +9,13 @@ import { renderShellEnv } from '../../src/shared/run/shell-template'
 import { decideStep, runEnd, type EndedStep } from '../../src/shared/run/step-plan'
 import { loadFixture } from './fixture'
 import {
+  answerIds,
   answerScripts,
   JOB_13,
   PARITY_13_PIPELINES,
   PARITY_13_STARTS,
   seed13,
+  shimmedState,
   VERDICTS_13
 } from './jobs/job-13'
 import { withLinearTickets } from './linear-fixture'
@@ -112,15 +105,22 @@ describe('13 · Fix red hourly e2e on dev: the definitions (old job: orca automa
         setup: 'run'
       }
     })
-    // No assignee clause: Linear's `assigned` filter (the signed-in user's tickets) lists them, not the whole org.
+    // Only the tickets this job recorded as open (tickets.json, through list-fix-tickets), read by identifier: no listing,
+    // so the assignee clause says what Linear's `assigned` filter did (mine), and no match or field script is needed.
     expect(starts.definition.items?.where).toEqual({
+      ids_from: {
+        run: 'python3 /Users/nishsitapara/.agents/skills/dev-e2e-fix/pilot_mode.py list-fix-tickets',
+        field: 'identifier'
+      },
+      assignee: { people: ['nish'] },
       team: 'WEB',
       state_type: ['triage', 'backlog', 'unstarted', 'started'],
       has_branch: true
     })
     expect(starts.definition.items).toMatchObject({
       kind: 'linear_ticket',
-      match: ['{ticket.dev_e2e} == true']
+      match: [],
+      customFields: []
     })
     expect(starts.definition.checks.map((c) => c.kind)).toEqual(['quota', 'script'])
     // record_start first, as the old start() recorded the session before anything else: neither step is `always`, so
@@ -164,33 +164,7 @@ describe('13 · Fix red hourly e2e on dev: the definitions (old job: orca automa
   // The YAML's own command, through /bin/sh with its env rendered as the engine renders it, in a Pilot step's env.
   // A python3 shim points gate's state root at a temp folder, so nothing under the real checkout is touched.
   function recordStart(ticket: string, tickets: Record<string, unknown>) {
-    const root = realpathSync(mkdtempSync(join(tmpdir(), 'parity-13-start-')))
-    const state = join(root, 'agent-loops')
-    mkdirSync(join(state, 'dev-e2e'), { recursive: true })
-    writeFileSync(join(state, 'dev-e2e', 'tickets.json'), JSON.stringify(tickets))
-    const bin = join(root, 'bin')
-    mkdirSync(bin)
-    const real = spawnSync('/bin/sh', ['-c', 'command -v python3'], {
-      encoding: 'utf8'
-    }).stdout.trim()
-    writeFileSync(
-      join(root, 'shim.py'),
-      [
-        'import os, runpy, sys',
-        'from pathlib import Path',
-        'script = sys.argv[1]',
-        'sys.argv = sys.argv[1:]',
-        'sys.path.insert(0, str(Path(script).resolve().parent))',
-        'import sweep',
-        "sweep.gate.STATE_ROOT = Path(os.environ['PARITY_STATE_ROOT'])",
-        "runpy.run_path(script, run_name='__main__')"
-      ].join('\n')
-    )
-    writeFileSync(
-      join(bin, 'python3'),
-      `#!/bin/sh\nexec "${real}" "${join(root, 'shim.py')}" "$@"\n`
-    )
-    chmodSync(join(bin, 'python3'), 0o755)
+    const { root, state, bin } = shimmedState(tickets)
     const step = starts.definition.steps[0]
     const wt = join(root, 'wt', 'web-1-fix')
     const env = renderShellEnv(step.env, { 'ticket.id': ticket, 'worktree.path': wt })
@@ -242,15 +216,16 @@ describe('13 · Fix red hourly e2e on dev: the definitions (old job: orca automa
   })
 
   it('every script is the skill’s own pilot_mode.py, with no Pilot placeholder in a command', () => {
+    const idsFrom = starts.definition.items?.where.ids_from as { run: string }
     const commands = [
-      ...(starts.definition.items?.customFields ?? []).map((f) => f.script),
+      idsFrom.run,
       ...starts.definition.checks.flatMap((c) => (c.kind === 'script' ? [c.run] : [])),
       ...starts.definition.steps.flatMap((s) => (s.agent === 'shell' ? [s.run ?? ''] : []))
     ]
     expect(commands).toHaveLength(3)
     for (const command of commands) {
       expect(command).toMatch(
-        /^python3 \/Users\/nishsitapara\/\.agents\/skills\/dev-e2e-fix\/pilot_mode\.py (field-fix-ticket|check-worktree|started "\$TICKET" "\$WT")$/
+        /^python3 \/Users\/nishsitapara\/\.agents\/skills\/dev-e2e-fix\/pilot_mode\.py (list-fix-tickets|check-worktree|started "\$TICKET" "\$WT")$/
       )
       expect(command).not.toContain('{')
     }
@@ -299,6 +274,7 @@ async function decideAll(name: string, old: OldDecision[]): Promise<Fresh[]> {
     fixture,
     seed: seed13,
     runScript: answerScripts(old, fixture),
+    runIds: answerIds(fixture),
     tickDeps: withLinearTickets
   })
   return [...first, ...second]
@@ -393,13 +369,34 @@ describeParity(
       })
     })
 
-    it("a ticket 13 didn't open is out of scope, and a canceled one is not listed", async () => {
+    it("a ticket 13 didn't open is never read, and a canceled one is not listed", async () => {
       const other = await decideAll('tickets-not-opened-by-13', [])
-      expect(other.find((d) => d.key === 'linear:WEB-50')).toMatchObject({
-        verdict: 'out_of_scope'
-      })
+      expect(other.filter((d) => d.key.startsWith('linear:'))).toEqual([])
       const canceled = await decideAll('ticket-canceled', [])
       expect(canceled.filter((d) => d.key.startsWith('linear:'))).toEqual([])
+    })
+
+    // where.ids_from: list-fix-tickets names the tickets, and the source reads each by identifier. A case with its
+    // `orca linear list` read taken out still decides the same, so Pilot never lists Linear for 13.
+    it.each(cases)('%s: decides the same without any Linear listing', async (name) => {
+      const old = runOldPlan(JOB_13.job, join(CASES, name))
+      const fixture = loadFixture(join(CASES, name))
+      const unlisted = {
+        ...fixture,
+        reads: fixture.reads.filter((r) => r.argv.slice(0, 3).join(' ') !== 'orca linear list')
+      }
+      const verdicts = async (f: typeof fixture) =>
+        (
+          await dryTick({
+            ...starts,
+            fixture: f,
+            seed: seed13,
+            runScript: answerScripts(old, f),
+            runIds: answerIds(f),
+            tickDeps: withLinearTickets
+          })
+        ).map((d) => [d.key, d.verdict, d.reason])
+      expect(await verdicts(unlisted)).toEqual(await verdicts(fixture))
     })
   }
 )

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
+import { parseAutomationYaml } from './parse'
 import type { ItemKind } from './types'
-import { WHERE_SCHEMAS, worktreeWhereSchema } from './where'
+import { WHERE_SCHEMAS, linearTicketWhereSchema, worktreeWhereSchema } from './where'
 
 describe('WHERE_SCHEMAS', () => {
   const valid: [ItemKind, Record<string, unknown>][] = [
@@ -65,5 +66,79 @@ describe('worktreeWhereSchema commits clause', () => {
     ['the old exclude key', { commits: { exclude: 'Agent-Loop:' } }, false]
   ])('%s', (_name, where, ok) => {
     expect(worktreeWhereSchema.safeParse(where).success).toBe(ok)
+  })
+})
+
+describe('linear_ticket where.ids_from', () => {
+  const file = (where: string, kind = 'linear_ticket') =>
+    `name: n\nrepo: r\nschedule: manual\nitems:\n  kind: ${kind}\n  where:\n${where}steps:\n  - { agent: claude, prompt: x }\n`
+  const errorsOf = (yaml: string): string[] => {
+    const result = parseAutomationYaml(yaml, '/a/n.yaml')
+    return result.ok ? [] : result.errors.map((e) => e.replace('/a/n.yaml: ', ''))
+  }
+
+  it('accepts a command with a field, env values and a timeout, and keeps them as written', () => {
+    const where = {
+      ids_from: {
+        run: "python3 '/a b/pilot_mode.py' list-fix-tickets",
+        field: 'identifier',
+        env: { LOOP: 'dev-e2e' },
+        timeout: '30s'
+      },
+      team: 'WEB'
+    }
+    expect(linearTicketWhereSchema.safeParse(where)).toMatchObject({ success: true, data: where })
+    expect(linearTicketWhereSchema.safeParse({ ids_from: { run: 'list-ids' } }).success).toBe(true)
+  })
+
+  it.each([
+    [
+      'a Pilot placeholder in run',
+      '    ids_from: { run: "tool {ticket.id}" }\n',
+      "items.where.ids_from.run: ids_from runs before there is any item, so it can't contain {placeholders}"
+    ],
+    [
+      'shell syntax in run',
+      '    ids_from: { run: "tool | head -1" }\n',
+      'items.where.ids_from.run: "|" is shell syntax; ids_from runs its command without a shell'
+    ],
+    [
+      'an expansion in run',
+      '    ids_from: { run: "tool $HOME" }\n',
+      'items.where.ids_from.run: "$" is never allowed'
+    ],
+    [
+      'a reserved env name',
+      '    ids_from: { run: tool, env: { LD_PRELOAD: x } }\n',
+      'items.where.ids_from.env: LD_PRELOAD is reserved'
+    ],
+    [
+      'a placeholder in an env value',
+      '    ids_from: { run: tool, env: { ID: "{ticket.id}" } }\n',
+      "items.where.ids_from.env: ID's value is plain text here: ids_from runs before there is any item"
+    ],
+    [
+      'a field that is not a key name',
+      '    ids_from: { run: tool, field: "issue.identifier" }\n',
+      'items.where.ids_from.field: expected a key name'
+    ],
+    [
+      'a bad timeout',
+      '    ids_from: { run: tool, timeout: soon }\n',
+      'items.where.ids_from.timeout: expected a duration like 30s, 10m, 12h or 2d'
+    ],
+    [
+      'an unknown key',
+      '    ids_from: { run: tool, shell: true }\n',
+      'items.where.ids_from: unknown key "shell"'
+    ]
+  ])('refuses %s', (_name, where, error) => {
+    expect(errorsOf(file(where)).join('\n')).toContain(error)
+  })
+
+  it('is a linear_ticket clause only, for now', () => {
+    expect(errorsOf(file('    ids_from: { run: tool }\n', 'merge_request'))).toContain(
+      'items.where: unknown key "ids_from"'
+    )
   })
 })

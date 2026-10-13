@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import type { ScriptRunner } from '../../src/main/fields/script-runner'
+import type { IdsRunner } from '../../src/main/sources/ids-from'
 import { runTick, type TickDeps } from '../../src/main/scheduler/tick-runner'
 import { PilotStore } from '../../src/main/store/store'
 import type { ItemDecision } from '../../src/shared/api-types'
@@ -46,6 +47,7 @@ export async function dryTick(input: {
   fixture: ParityFixture
   seed?: (store: PilotStore, fixture: ParityFixture) => void
   runScript?: ScriptRunner
+  runIds?: IdsRunner
   // Swaps parts of the tick's deps (13's Linear tickets).
   tickDeps?: (deps: TickDeps, fixture: ParityFixture) => TickDeps
 }): Promise<ItemDecision[]> {
@@ -55,7 +57,10 @@ export async function dryTick(input: {
     const result = await runTick(
       input.definition,
       input.people,
-      swapDeps(input, fixtureTickDeps(input.fixture, store, { runScript: input.runScript })),
+      swapDeps(
+        input,
+        fixtureTickDeps(input.fixture, store, { runScript: input.runScript, runIds: input.runIds })
+      ),
       { dryRun: true }
     )
     if (result.error) {
