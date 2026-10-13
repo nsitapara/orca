@@ -68,3 +68,60 @@ describe('preparation leases', () => {
     store.close()
   })
 })
+
+// M5: the lease is a liveness hint. It has expired only once it has lapsed AND the claiming step no longer runs; a
+// long worker whose step Pilot still sees running keeps its claim.
+describe('a lapsed lease', () => {
+  function claimed(stepStatus: 'running' | 'done' | null) {
+    const store = setup()
+    if (stepStatus) {
+      store.runs.create({
+        id: 'worker-1',
+        automationId: 'prepare',
+        tickId: null,
+        itemKey: 'item',
+        itemLabel: 'Decision',
+        worktreePath: '/wt',
+        startedAt: 100
+      })
+      store.runs.createStep({
+        runId: 'worker-1',
+        idx: 0,
+        name: 'prepare',
+        agent: 'claude',
+        skill: 'prepare-inbox-item-context',
+        startedAt: 100,
+        status: stepStatus
+      })
+    }
+    store.inboxPreparations.claim('item', 1, 'worker-1', 0, 100)
+    return { store, queue: store.inboxPreparations, later: 101 + PREPARATION_LEASE_MS }
+  }
+  const mine = { revision: 1, attempt: 1, runId: 'worker-1', stepIdx: 0 }
+
+  it('holds while the claiming step still runs', () => {
+    const { store, queue, later } = claimed('running')
+    expect(queue.requireClaim('item', mine, later).preparation.state).toBe('generating')
+    expect(queue.progress('item', mine, 'Still drafting', later).preparation?.leaseUntil).toBe(
+      later + PREPARATION_LEASE_MS
+    )
+    queue.recoverExpired(later * 2)
+    expect(store.inbox.get('item')?.preparation?.state).toBe('generating')
+    expect(queue.listEligible(later * 2)).toEqual([])
+    expect(() => queue.claim('item', 1, 'worker-2', 0, later * 2)).toThrow('stale')
+    expect(queue.claim('item', 1, 'worker-1', 0, later * 2).preparation?.attempt).toBe(1)
+    store.close()
+  })
+
+  it.each(['done', null] as const)('expires once the claiming step is %s', (status) => {
+    const { store, queue, later } = claimed(status)
+    expect(() => queue.requireClaim('item', mine, later)).toThrow('stale')
+    expect(queue.listEligible(later)).toHaveLength(1)
+    queue.recoverExpired(later)
+    expect(store.inbox.get('item')?.preparation).toMatchObject({
+      state: 'queued',
+      error: 'Preparation lease expired'
+    })
+    store.close()
+  })
+})

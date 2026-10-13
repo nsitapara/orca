@@ -86,35 +86,47 @@ describe('preparation worker launch and cancellation', () => {
     store.close()
   })
 
-  it.each(['answered', 'expired'] as const)(
-    'stops a %s worker before allowing recovery',
-    async (ending) => {
-      const { store, req, deps } = setup()
-      await launchAgentStep(store, req, deps)
-      expect(store.inbox.get('item')?.preparation).toMatchObject({
-        state: 'generating',
-        runId: 'worker',
-        attempt: 1
-      })
-      let at = 20
-      if (ending === 'answered') {
-        store.inbox.update('item', { status: 'answered' }, at)
-      } else {
-        at += PREPARATION_LEASE_MS
-      }
-      const closeTerminal = vi.fn(async () => {})
-      await stopCancelledPreparations({
-        store,
-        now: () => at,
-        definitionFor: () => definition,
-        closeTerminal,
-        log: () => {}
-      })
-      expect(closeTerminal).toHaveBeenCalledWith('terminal')
-      expect(store.runs.get('worker')?.status).toBe('cancelled')
-      store.close()
-    }
-  )
+  it('stops an answered worker before allowing recovery', async () => {
+    const { store, req, deps } = setup()
+    await launchAgentStep(store, req, deps)
+    expect(store.inbox.get('item')?.preparation).toMatchObject({
+      state: 'generating',
+      runId: 'worker',
+      attempt: 1
+    })
+    store.inbox.update('item', { status: 'answered' }, 20)
+    const closeTerminal = vi.fn(async () => {})
+    await stopCancelledPreparations({
+      store,
+      now: () => 20,
+      definitionFor: () => definition,
+      closeTerminal,
+      log: () => {}
+    })
+    expect(closeTerminal).toHaveBeenCalledWith('terminal')
+    expect(store.runs.get('worker')?.status).toBe('cancelled')
+    store.close()
+  })
+
+  // M5: a long worker outlives its lease while its step runs; only the step's end (its timeout included) frees it.
+  it('keeps a worker past its lease while its step runs', async () => {
+    const { store, req, deps } = setup()
+    await launchAgentStep(store, req, deps)
+    const at = 20 + PREPARATION_LEASE_MS
+    const closeTerminal = vi.fn(async () => {})
+    await stopCancelledPreparations({
+      store,
+      now: () => at,
+      definitionFor: () => definition,
+      closeTerminal,
+      log: () => {}
+    })
+    expect(closeTerminal).not.toHaveBeenCalled()
+    expect(store.runs.get('worker')?.status).toBe('running')
+    store.inboxPreparations.recoverExpired(at)
+    expect(store.inbox.get('item')?.preparation).toMatchObject({ state: 'generating', attempt: 1 })
+    store.close()
+  })
 
   it('blocks automatic recovery when a launched terminal cannot be tracked', async () => {
     const { store, req, deps } = setup()

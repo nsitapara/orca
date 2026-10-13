@@ -14,6 +14,23 @@ export class InboxPreparationStore {
     private readonly inbox: InboxStore
   ) {}
 
+  // Is the claiming step (starting or running) still alive?
+  private stepAlive(runId: string | null, stepIdx: number | null): boolean {
+    if (runId === null || stepIdx === null) {
+      return false
+    }
+    const row = this.db
+      .prepare('SELECT status FROM steps WHERE run_id = ? AND idx = ?')
+      .get(runId, stepIdx) as { status: string } | undefined
+    return row?.status === 'starting' || row?.status === 'running'
+  }
+
+  // A generating attempt's claim holds while its lease runs or while its claiming step is alive: the lease has expired
+  // only once it has lapsed AND that step no longer runs (its timeout ends a worker that hangs).
+  holds(p: InboxPreparation, at: number): boolean {
+    return (p.leaseUntil ?? 0) > at || this.stepAlive(p.runId, p.stepIdx)
+  }
+
   write(id: string, preparation: InboxPreparation): void {
     this.db
       .prepare('UPDATE inbox_items SET preparation_json = ?, updated_at = ? WHERE id = ?')
@@ -26,7 +43,7 @@ export class InboxPreparationStore {
       if (!p || item.answer || p.attempt >= p.maxAttempts) {
         return false
       }
-      return p.state === 'queued' || (p.state === 'generating' && (p.leaseUntil ?? 0) <= now)
+      return p.state === 'queued' || (p.state === 'generating' && !this.holds(p, now))
     })
   }
 
@@ -40,13 +57,13 @@ export class InboxPreparationStore {
       p.state === 'generating' &&
       p.runId === runId &&
       p.stepIdx === stepIdx &&
-      (p.leaseUntil ?? 0) > at
+      this.holds(p, at)
     ) {
       return item
     }
     if (
       p.attempt >= p.maxAttempts ||
-      (p.state !== 'queued' && !(p.state === 'generating' && (p.leaseUntil ?? 0) <= at))
+      (p.state !== 'queued' && !(p.state === 'generating' && !this.holds(p, at)))
     ) {
       throw new Error(PREPARATION_STALE)
     }
@@ -82,7 +99,7 @@ export class InboxPreparationStore {
       p.attempt !== claim.attempt ||
       p.runId !== claim.runId ||
       p.stepIdx !== claim.stepIdx ||
-      (p.leaseUntil ?? 0) <= at
+      !this.holds(p, at)
     ) {
       throw new Error(PREPARATION_STALE)
     }
@@ -140,7 +157,7 @@ export class InboxPreparationStore {
   recoverExpired(now: number): void {
     for (const item of this.inbox.list({ status: ['open'] })) {
       const p = item.preparation
-      if (p?.state !== 'generating' || (p.leaseUntil ?? 0) > now) {
+      if (p?.state !== 'generating' || this.holds(p, now)) {
         continue
       }
       const state = p.attempt < p.maxAttempts ? 'queued' : 'blocked'

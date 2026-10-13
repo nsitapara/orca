@@ -56,7 +56,7 @@ export function preparationStopReason(store: PilotStore, run: RunRow, at: number
   if (p.state === 'ready') {
     return null
   }
-  if (p.state !== 'generating' || (p.leaseUntil ?? 0) <= at) {
+  if (p.state !== 'generating' || !store.inboxPreparations.holds(p, at)) {
     return 'Preparation claim ended or expired'
   }
   return null
