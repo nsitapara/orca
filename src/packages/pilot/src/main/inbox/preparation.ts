@@ -1,9 +1,10 @@
+import { requeuedPreparation } from '../../shared/preparation'
 import type { PreparationClaim } from '../store/store-inbox-preparations'
 import { cardOf, inboxDigest } from './card'
 import { loadDetails } from './details-bundle'
 import { validatePreparationAction } from './preparation-action-evidence'
 import { validatePreparationEvidence } from './details-preparation'
-import { inboxEvent, type InboxDeps } from './inbox-service'
+import { getInboxItem, inboxEvent, type InboxDeps } from './inbox-service'
 
 export function completePreparation(
   deps: InboxDeps,
@@ -58,6 +59,24 @@ export function completePreparation(
       { reason: 'context_ready', attempt: claim.attempt },
       at
     )
+    return deps.store.inbox.get(id)
+  })
+}
+
+export const RETRY_NOT_BLOCKED = 'Only a blocked preparation can be retried'
+
+// A person's Retry on a blocked card: its preparation goes back in the queue with a new revision (so no claim on the
+// old one counts) and fresh attempts. The caller check (a person, never an agent) is the RPC's.
+export function retryPreparation(deps: InboxDeps, id: string) {
+  return deps.store.transaction(() => {
+    const item = getInboxItem(deps, id)
+    const p = item.preparation
+    if (item.status !== 'open' || p?.state !== 'blocked') {
+      throw new Error(RETRY_NOT_BLOCKED)
+    }
+    const at = deps.now()
+    deps.store.inboxPreparations.write(id, requeuedPreparation(p, at))
+    inboxEvent(deps.store, item, 'item_updated', { reason: 'preparation_retry' }, at)
     return deps.store.inbox.get(id)
   })
 }

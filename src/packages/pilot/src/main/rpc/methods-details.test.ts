@@ -606,3 +606,60 @@ describe('managed preparation RPC scope and completion', () => {
     expect(store.inbox.get(id)).toMatchObject({ status: 'answered', details: null })
   })
 })
+
+// M2: a person retries a blocked preparation from Pilot's window or a paired device; nothing else may requeue it.
+describe('pilot.inbox.prepareRetry', () => {
+  const PAIRED: RpcCallerIdentity = { kind: 'paired-device', deviceId: 'phone' }
+  function managed(state: 'blocked' | 'queued' | 'generating' | 'ready' | 'cancelled' | null) {
+    const s = detailsSetup()
+    const id = addInboxItem(s.deps, {
+      automationId: 'ci',
+      itemKey: 'mr:1',
+      type: 'bug',
+      title: 'Proposed fix',
+      ...(state
+        ? { preparation: { key: 'k', context: 'Pinned', requirements: ['context' as const] } }
+        : {})
+    }).id!
+    const prep = s.store.inbox.get(id)?.preparation
+    if (prep && state && state !== 'queued') {
+      s.store.inboxPreparations.write(id, { ...prep, state, attempt: 3, error: 'No screenshot' })
+    }
+    return { ...s, id }
+  }
+
+  it.each([
+    ['the desktop', DESKTOP],
+    ['a paired device', PAIRED]
+  ] as const)('lets %s put a blocked card back in the queue, attempts reset', (_who, caller) => {
+    const { callAs, store, id } = managed('blocked')
+    expect(callAs(caller, 'pilot.inbox.prepareRetry', { id })).toMatchObject({
+      id,
+      preparation: { state: 'queued', revision: 2, attempt: 0, error: null }
+    })
+    expect(store.inboxPreparations.listEligible(200).map((item) => item.id)).toEqual([id])
+  })
+
+  it.each([
+    ['the local CLI (any agent)', CLI],
+    ['an unknown caller', undefined]
+  ] as const)('refuses %s', (_who, caller) => {
+    const { callAs, store, id } = managed('blocked')
+    expect(() => callAs(caller, 'pilot.inbox.prepareRetry', { id })).toThrow(
+      "Retry preparation from Pilot's window or a paired device"
+    )
+    expect(store.inbox.get(id)?.preparation).toMatchObject({ state: 'blocked', revision: 1 })
+  })
+
+  it.each(['queued', 'generating', 'ready', 'cancelled', null] as const)(
+    'refuses a card whose preparation is %s',
+    (state) => {
+      const { callAs, store, id } = managed(state)
+      const before = store.inbox.get(id)?.preparation ?? null
+      expect(() => callAs(DESKTOP, 'pilot.inbox.prepareRetry', { id })).toThrow(
+        'Only a blocked preparation can be retried'
+      )
+      expect(store.inbox.get(id)?.preparation ?? null).toEqual(before)
+    }
+  )
+})
