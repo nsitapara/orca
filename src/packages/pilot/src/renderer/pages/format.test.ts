@@ -38,7 +38,7 @@ describe('renderer formatting', () => {
         dryRun: false,
         status: 'ok',
         error: null,
-        counts: { started: 1, skipped: 3, notdue: 2 }
+        counts: { started: 1, skipped: 3, notdue: 2, out_of_scope: 15 }
       })
     ).toBe('6 checked · 1 started · 3 skipped · 2 not due')
     expect(
