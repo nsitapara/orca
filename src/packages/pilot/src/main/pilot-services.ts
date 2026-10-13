@@ -14,6 +14,7 @@ import { startRunEntry } from './actions/start-run-entry'
 import { buildActionCatalog } from './actions/catalog'
 import type { ActionCatalog } from './actions/types'
 import { definitionIo, liveDefinitions } from './definitions/live'
+import { handOverRunEnd, type HandOverDeps } from './handover/hand-over'
 import { buildInboxDeps } from './inbox/inbox-service'
 import type { LoadedDefinitions } from './definitions/loader'
 import { mergeRepoProblems, type RepoProblem } from './definitions/repo-problems'
@@ -128,12 +129,16 @@ function openPilot(
     ...runtimeLauncherDeps(runtime, fieldDeps, now, store.runs),
     modeText: modeTextFor(readMode)
   }
+  const definitionFor = (id: string) =>
+    definitions.current().definitions.find((d) => d.id === id) ?? null
+  // A stage's run end hands over to the next stage; its run: now reaches the scheduler once made (below).
+  const handover: HandOverDeps = { store, now, definitionFor, log }
   // The one run engine of this process: its per-run lock and its set of runs being opened live in it.
   const wired = wireRunEngine({
     runtime,
     store,
     now,
-    definitionFor: (id) => definitions.current().definitions.find((d) => d.id === id) ?? null,
+    definitionFor,
     startAgentStep: agentStepStarter((req) => launchAgentStep(store, req, launcherDeps)),
     workspace: launcherDeps.workspace,
     engineEnv,
@@ -156,8 +161,11 @@ function openPilot(
     },
     probe: runtimeStepProbe(runtime, relist),
     log,
-    // An answer run's outputs reach the cards it was sent for (G6).
-    onRunEnd: (run) => answerRunEnded(store, run),
+    // A stage's run hands its outputs to the next stage (job.feeds); an answer run's reach its cards (G6).
+    onRunEnd: (run, end) => {
+      handOverRunEnd(handover, run, end)
+      answerRunEnded(store, run)
+    },
     // {run.answer}: the free text that started an ask-first or answer run.
     runAnswer: (run) => runAnswerOf(store, run)
   })
@@ -253,6 +261,7 @@ function openPilot(
     newPass: () => createPassFetchCache(`pass-${now()}`, glabApiForRepo),
     log
   })
+  handover.trigger = (id, cause) => scheduler.trigger(id, cause)
   opened.push(() => scheduler.stop())
   // The attach hooks decide (pilotSchedulerEnabled); a caller that doesn't say gets no scheduler.
   if (schedulerOn) {

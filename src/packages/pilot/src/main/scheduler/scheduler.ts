@@ -1,3 +1,4 @@
+import type { TickTrigger } from '../../shared/api-types'
 import type { AutomationDefinition } from '../../shared/definition/types'
 import { nextTickAfter } from '../../shared/schedule/cron'
 import type { LoadedDefinitions } from '../definitions/loader'
@@ -34,6 +35,10 @@ export const MAX_CONCURRENT_TICKS = 4
 // The first pass waits at most this long for the runtime to list the repos, then ticks anyway, so a
 // misspelled repo still shows up as a failed tick.
 export const REPO_WAIT_MS = 5 * 60_000
+// A feed's run: now ticks its receiving stage at most this often a minute; past it the ids wait for its schedule. The
+// loader already refuses feeds that go round in a cycle: this bounds a burst of sender runs ending together.
+export const MAX_TRIGGERS_PER_MINUTE = 4
+const MINUTE_MS = 60_000
 
 // The next tick depends only on the cron, the timezone and where the walk starts, so it is computed
 // once and kept until the automation ticks or a reload changes its schedule. (A yearly cron walks ~0.5 s.)
@@ -65,6 +70,9 @@ export class PilotScheduler {
   private waitLogged = false
   private times: LoopTimes = { loopStartedAt: null, lastLoopFinishedAt: null }
   private readonly startedAt: number
+  // When each stage was last triggered (within the minute), and the trigger that came while its tick ran.
+  private readonly triggeredAt = new Map<string, number[]>()
+  private readonly retrigger = new Map<string, TickTrigger>()
 
   constructor(
     private readonly deps: SchedulerDeps,
@@ -247,6 +255,58 @@ export class PilotScheduler {
     }
   }
 
+  // Why a trigger can't tick the stage now, or null when it can. A stage that is off, invalid or missing never is.
+  private triggerRefusal(id: string): string | null {
+    const loaded = this.deps.definitions()
+    const def = loaded.definitions.find((d) => d.id === id)
+    if (!def) {
+      return 'no such automation'
+    }
+    if (loaded.displayOnly?.includes(id)) {
+      return "its file isn't valid"
+    }
+    if (!def.enabled) {
+      return 'it is turned off'
+    }
+    const recent = (this.triggeredAt.get(id) ?? []).filter((at) => this.deps.now() - at < MINUTE_MS)
+    this.triggeredAt.set(id, recent)
+    if (recent.length >= MAX_TRIGGERS_PER_MINUTE) {
+      return `it was triggered ${recent.length} times in the last minute`
+    }
+    return null
+  }
+
+  // A feed's run: now (main/handover): tick the receiving stage at once, as one of its own real ticks, so its enabled
+  // switch, checks, once_per, limits and quota apply unchanged. Only where the scheduler runs. A stage whose tick is
+  // running gets one more tick after it ends (the latest trigger's), however many came meanwhile. A refusal is
+  // logged; the handed-over ids stay pending for the stage's next tick.
+  trigger(id: string, cause: TickTrigger): void {
+    if (this.timers.length === 0 || this.stopped) {
+      return
+    }
+    const refusal = this.triggerRefusal(id)
+    if (refusal) {
+      this.deps.log(
+        `[pilot] ${id}: not triggered by ${cause.automationId} run ${cause.runId}: ${refusal}; its handed-over ids wait`
+      )
+      return
+    }
+    if (this.running.has(id)) {
+      this.retrigger.set(id, cause)
+      return
+    }
+    this.triggeredAt.get(id)?.push(this.deps.now())
+    this.deps.log(`[pilot] ${id}: triggered by ${cause.automationId} run ${cause.runId}`)
+    this.tickNow(id, { dryRun: false, trigger: cause }).then(
+      (result) => {
+        if (result.status === 'failed') {
+          this.deps.log(`[pilot] ${id} triggered tick failed: ${result.error}`)
+        }
+      },
+      (error: unknown) => this.deps.log(`[pilot] ${id} triggered tick failed: ${messageOf(error)}`)
+    )
+  }
+
   // The only way a manual automation runs. Nothing awaits between the busy check and the set, so two
   // calls can never both start a tick of the same automation.
   async tickNow(id: string, opts: TickOptions): Promise<TickNowResult> {
@@ -274,6 +334,11 @@ export class PilotScheduler {
       return result
     } finally {
       this.running.delete(id)
+      const again = this.retrigger.get(id)
+      if (again) {
+        this.retrigger.delete(id)
+        this.trigger(id, again)
+      }
     }
   }
 }

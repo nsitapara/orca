@@ -1,4 +1,4 @@
-import type { HandledRow, ItemDecision } from '../../shared/api-types'
+import type { HandledRow, HandoverRow, ItemDecision } from '../../shared/api-types'
 import type { AutomationDefinition, CheckDef } from '../../shared/definition/types'
 import { idsFromSchema } from '../../shared/definition/where'
 import type { PeopleDirectory } from '../../shared/people'
@@ -19,7 +19,7 @@ import { addBuiltinFields, addCustomFields, type FieldEngineDeps } from '../fiel
 import { resolveScriptCommand, type ScriptRunner } from '../fields/script-runner'
 import { mapLimit } from '../map-limit'
 import type { PassFetchCache } from '../sources/fetch-cache'
-import { readIdsFrom, runIdsCommand, type IdsRunner } from '../sources/ids-from'
+import { MAX_IDS, readIdsFrom, runIdsCommand, type IdsRunner } from '../sources/ids-from'
 import { itemSource } from '../sources/registry'
 import { runOnceItem } from '../sources/run-once'
 import type { Item, RepoFacts, SourceContext } from '../sources/types'
@@ -64,7 +64,9 @@ export type DecideDeps = {
   // Runs where.ids_from's command; absent, the real process (runIdsCommand).
   runIds?: IdsRunner
 }
-export type DecideOutcome = { decisions: ItemDecision[]; warnings: string[] }
+// `fed`: the pending handover rows the tick read (where.ids_from: { feed: true }); the runner consumes them.
+export type DecideOutcome = { decisions: ItemDecision[]; warnings: string[]; fed: HandoverRow[] }
+type TickIds = { ids: string[]; fed: HandoverRow[]; warnings: string[] }
 type ScriptCheck = Extract<CheckDef, { kind: 'script' }>
 
 const SCRIPT_CHECK_CONCURRENCY = 4
@@ -217,20 +219,41 @@ export function worktreeTakenSinceDecide(
   return taken ? path : null
 }
 
-// where.ids_from, when the automation has one: the ids its source reads instead of listing. A failure throws, so
-// the tick is recorded failed with the reason.
+// The fed ids first (oldest first), then the command's, each once whatever its case (a Linear id reads the same either
+// way, and one item twice would break the tick). Past MAX_IDS the rest wait: a fed id never falls off, since the feed
+// is read at most MAX_IDS rows at a time and comes first.
+function mergeIds(fed: HandoverRow[], listed: readonly string[]): TickIds {
+  const ids = new Map<string, string>()
+  for (const id of [...fed.map((h) => h.itemId), ...listed]) {
+    const key = id.toLowerCase()
+    if (!ids.has(key)) {
+      ids.set(key, id)
+    }
+  }
+  const all = [...ids.values()]
+  if (all.length <= MAX_IDS) {
+    return { ids: all, fed, warnings: [] }
+  }
+  const late = `ids_from: ${all.length - MAX_IDS} id(s) past the ${MAX_IDS}-id limit wait for a later tick`
+  return { ids: all.slice(0, MAX_IDS), fed, warnings: [late] }
+}
+
+// where.ids_from, when the automation has one: the ids its source reads instead of listing. `feed: true` reads the
+// receiver's pending handovers; `run` runs its command, whose failure throws, so the tick is recorded failed with the
+// reason and its fed ids stay pending.
 async function idsForTick(
   def: AutomationDefinition,
   repo: RepoFacts,
   deps: DecideDeps
-): Promise<string[] | null> {
+): Promise<TickIds | null> {
   const raw = def.items?.where.ids_from
   if (raw === undefined) {
     return null
   }
   const spec = idsFromSchema.parse(raw)
+  const fed = spec.feed ? deps.store.handovers.pending(def.id, MAX_IDS) : []
   if (spec.run === undefined) {
-    return []
+    return mergeIds(fed, [])
   }
   const opts = {
     automationId: def.id,
@@ -238,7 +261,8 @@ async function idsForTick(
     repoPath: repo.path,
     engineEnv: deps.fields.engineEnv
   }
-  return readIdsFrom({ ...spec, run: spec.run }, opts, deps.runIds ?? runIdsCommand)
+  const listed = await readIdsFrom({ ...spec, run: spec.run }, opts, deps.runIds ?? runIdsCommand)
+  return mergeIds(fed, listed)
 }
 
 // One automation's decision (spec §6): repo → items → built-in fields → scope → custom fields →
@@ -254,7 +278,14 @@ export async function decideTickItems(
   const now = deps.now()
   const repo = await deps.resolveRepo(def.repo)
   const ids = await idsForTick(def, repo, deps)
-  const ctx: SourceContext = { repo, people, fetch: pass, now, automationId: def.id, ids }
+  const ctx: SourceContext = {
+    repo,
+    people,
+    fetch: pass,
+    now,
+    automationId: def.id,
+    ids: ids?.ids ?? null
+  }
   const listed = await deps.sources.list(def, ctx)
   const tickFields = runFields({ automationId: def.id, at: now, timezone: def.timezone, tickId })
   const withTick = listed.items.map((item) => ({
@@ -298,5 +329,14 @@ export async function decideTickItems(
     ...input,
     scriptChecks: await scriptChecks(input, repo, deps.fields.runScript, deps.fields.engineEnv)
   })
-  return { decisions, warnings: [...listed.warnings, ...custom.warnings, ...activity.warnings] }
+  return {
+    decisions,
+    warnings: [
+      ...(ids?.warnings ?? []),
+      ...listed.warnings,
+      ...custom.warnings,
+      ...activity.warnings
+    ],
+    fed: ids?.fed ?? []
+  }
 }

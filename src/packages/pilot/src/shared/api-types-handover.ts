@@ -26,3 +26,14 @@ export type TickTrigger = {
   stage: number | null
   ids: string[]
 }
+// What a tick of a stage says about handovers (TickResult.handover): the handed-over ids it read, and for each feed
+// that passes ids or runs now, what its runs hand on (`starts`: the runs this tick started, or would start in a dry
+// run). A dry run hands nothing over and triggers nothing.
+export type FeedPreview = {
+  to: string
+  output: string | null
+  run: 'now' | 'next_schedule'
+  when: 'success' | 'always'
+  starts: number
+}
+export type TickHandover = { read: string[]; feeds: FeedPreview[] }

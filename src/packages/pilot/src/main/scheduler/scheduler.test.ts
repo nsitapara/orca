@@ -5,8 +5,14 @@ import { nextTickAfter } from '../../shared/schedule/cron'
 import type * as Cron from '../../shared/schedule/cron'
 import type { LoadedDefinitions } from '../definitions/loader'
 import type { PassFetchCache } from '../sources/fetch-cache'
-import { MAX_CONCURRENT_TICKS, PilotScheduler, REPO_WAIT_MS, type SchedulerDeps } from './scheduler'
-import type { TickResult } from './tick-runner'
+import {
+  MAX_CONCURRENT_TICKS,
+  MAX_TRIGGERS_PER_MINUTE,
+  PilotScheduler,
+  REPO_WAIT_MS,
+  type SchedulerDeps
+} from './scheduler'
+import type { TickOptions, TickResult } from './tick-runner'
 
 vi.mock('../../shared/schedule/cron', async (importOriginal) => {
   const actual = await importOriginal<typeof Cron>()
@@ -371,5 +377,116 @@ describe('PilotScheduler', () => {
     expect(d.ran).toEqual(['ci'])
     expect(d.problems).toEqual([`ci: repo "r" isn't added to Pilot`])
     expect(d.logs).toEqual(['[pilot] waiting for Orca to list r before the first tick'])
+  })
+})
+
+describe('PilotScheduler.trigger: a feed’s run: now ticks the receiving stage', () => {
+  const NOW = Date.UTC(2026, 9, 13, 18, 5)
+  const CAUSE = { automationId: 'dev-e2e-fix', runId: 'run-1', stage: 1, ids: ['WEB-2123'] }
+  // Triggered ticks run in the background: let them settle.
+  const settle = () => new Promise((resolve) => setTimeout(resolve, 0))
+
+  function started(defs: ReturnType<typeof def>[], now = () => NOW) {
+    const d = deps(defs, NOW, null)
+    d.now = now
+    const options: TickOptions[] = []
+    d.runTick = vi.fn(async (x, opts) => {
+      d.ran.push(x.id)
+      options.push(opts)
+      return OK
+    })
+    const s = new PilotScheduler(d)
+    s.start()
+    return { d, s, options }
+  }
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('ticks an enabled stage at once, as a real tick that carries the run that asked', async () => {
+    for (const schedule of ['6,36 * * * *', 'manual']) {
+      const { d, s, options } = started([def('start', schedule)])
+      s.trigger('start', CAUSE)
+      await settle()
+      expect(d.ran).toEqual(['start'])
+      expect(options).toEqual([{ dryRun: false, trigger: CAUSE }])
+      s.stop()
+    }
+  })
+
+  it('never ticks a disabled stage, one shown from its last valid version, or an unknown one; its ids wait', async () => {
+    const { d, s } = started([def('off', '6,36 * * * *', false), def('broken', 'manual')])
+    d.definitions = () => ({
+      ...loadedOf([def('off', '6,36 * * * *', false), def('broken', 'manual')]),
+      displayOnly: ['broken']
+    })
+    for (const id of ['off', 'broken', 'gone']) {
+      s.trigger(id, CAUSE)
+    }
+    await settle()
+    expect(d.ran).toEqual([])
+    expect(d.logs.filter((l) => l.includes('not triggered'))).toEqual([
+      expect.stringContaining(
+        '[pilot] off: not triggered by dev-e2e-fix run run-1: it is turned off; its handed-over ids wait'
+      ),
+      expect.stringContaining(
+        "broken: not triggered by dev-e2e-fix run run-1: its file isn't valid"
+      ),
+      expect.stringContaining('gone: not triggered by dev-e2e-fix run run-1: no such automation')
+    ])
+    s.stop()
+  })
+
+  it('ticks once more after a tick of the stage that was running ends, however many triggers came meanwhile', async () => {
+    const { d, s, options } = started([def('start', 'manual')])
+    let release: () => void = () => {}
+    d.runTick = vi.fn((x, opts) => {
+      d.ran.push(x.id)
+      options.push(opts)
+      if (d.ran.length > 1) {
+        return Promise.resolve(OK)
+      }
+      return new Promise<TickResult>((resolve) => (release = () => resolve(OK)))
+    })
+    const scheduled = s.tickNow('start', { dryRun: false })
+    s.trigger('start', CAUSE)
+    s.trigger('start', { ...CAUSE, runId: 'run-2' })
+    expect(d.ran).toEqual(['start'])
+    release()
+    await scheduled
+    await settle()
+    expect(d.ran).toEqual(['start', 'start'])
+    expect(options[1]).toEqual({ dryRun: false, trigger: { ...CAUSE, runId: 'run-2' } })
+    s.stop()
+  })
+
+  it(`ticks a stage at most ${MAX_TRIGGERS_PER_MINUTE} times a minute from triggers; past that its ids wait for its schedule`, async () => {
+    let now = NOW
+    const { d, s } = started([def('start', 'manual')], () => now)
+    for (let i = 0; i <= MAX_TRIGGERS_PER_MINUTE; i++) {
+      s.trigger('start', { ...CAUSE, runId: `run-${i}` })
+      await settle()
+    }
+    expect(d.ran).toHaveLength(MAX_TRIGGERS_PER_MINUTE)
+    expect(d.logs.at(-1)).toContain(
+      `start: not triggered by dev-e2e-fix run run-${MAX_TRIGGERS_PER_MINUTE}: it was triggered ${MAX_TRIGGERS_PER_MINUTE} times in the last minute`
+    )
+    now += 60_001
+    s.trigger('start', CAUSE)
+    await settle()
+    expect(d.ran).toHaveLength(MAX_TRIGGERS_PER_MINUTE + 1)
+    s.stop()
+  })
+
+  it('triggers nothing in a process whose scheduler never started, or after it stops', async () => {
+    const d = deps([def('start', 'manual')], NOW, null)
+    const s = new PilotScheduler(d)
+    s.trigger('start', CAUSE)
+    s.start()
+    s.stop()
+    s.trigger('start', CAUSE)
+    await settle()
+    expect(d.ran).toEqual([])
   })
 })
