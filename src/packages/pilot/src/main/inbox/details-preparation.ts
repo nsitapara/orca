@@ -7,6 +7,7 @@ import type {
   DetailsBundle,
   DetailsSnapshot,
   DiffBlock,
+  DiffFile,
   ScreenPair
 } from '../../shared/details'
 import { DetailsRefused, readCapped } from './details-read'
@@ -23,6 +24,8 @@ function recorded(
     files.some((file) => file.ref === ref && file.bytes > 0 && (!hash || file.sha256 === hash))
   )
 }
+
+type PatchStats = NonNullable<ArtifactFile['diff']>
 
 function changesHash(lines: string[]): string {
   return createHash('sha256').update(JSON.stringify(lines)).digest('hex')
@@ -51,6 +54,32 @@ export function patchStats(text: string): ArtifactFile['diff'] {
   }
 }
 
+function shownChanges(file: DiffFile): string {
+  return changesHash(
+    file.hunks.flatMap((hunk) => hunk.filter((row) => row[2] !== ' ').map((row) => row[2] + row[3]))
+  )
+}
+
+// The diff shown against the hashed patch. details.py may trim a big one: a file past its row cap keeps its counts
+// with no hunks (`omitted`), and the files past its file cap are only counted (`more_files`). Every shown file is a
+// distinct file of the patch with its counts, its hunks are the patch's unless omitted, and more_files is the rest.
+function shownMatchesPatch(block: DiffBlock, stats: PatchStats): boolean {
+  const paths = block.files.map((file) => file.path)
+  if (new Set(paths).size !== paths.length) {
+    return false
+  }
+  if (stats.length !== block.files.length + (block.more_files ?? 0)) {
+    return false
+  }
+  return block.files.every((file) => {
+    const stat = stats.find((s) => s.path === file.path)
+    if (!stat || stat.added !== file.added || stat.removed !== file.removed) {
+      return false
+    }
+    return file.omitted ? file.hunks.length === 0 : stat.changesSha256 === shownChanges(file)
+  })
+}
+
 function validDiff(block: DiffBlock, files: ArtifactFile[]): boolean {
   const patch = files.find((file) => file.ref === block.patch)
   const stats = patch?.diff
@@ -61,21 +90,7 @@ function validDiff(block: DiffBlock, files: ArtifactFile[]): boolean {
     /^[a-f0-9]{64}$/.test(block.patch_sha256 ?? '') &&
     recorded(files, block.patch, block.patch_sha256) &&
     stats?.length &&
-    stats.length === block.files.length &&
-    block.files.every((file) =>
-      stats.some(
-        (stat) =>
-          stat.path === file.path &&
-          stat.added === file.added &&
-          stat.removed === file.removed &&
-          stat.changesSha256 ===
-            changesHash(
-              file.hunks.flatMap((hunk) =>
-                hunk.filter((row) => row[2] !== ' ').map((row) => row[2] + row[3])
-              )
-            )
-      )
-    )
+    shownMatchesPatch(block, stats)
   )
 }
 
