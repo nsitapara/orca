@@ -1,4 +1,5 @@
 import type { BrowserWindow } from 'electron'
+import { logStartupMilestone } from '../../../../../main/startup/startup-diagnostics'
 import { pilotStartup } from './pilot-startup'
 
 // Why: upstream makes the macOS status item on the tick after ready-to-show, as the window is
@@ -7,9 +8,16 @@ import { pilotStartup } from './pilot-startup'
 // launch of 2026-10-13. Pilot makes it once the launch has settled.
 export const TRAY_SETTLE_MS = 10_000
 
-// Hook target: src/main/startup/main-window-controller.ts (pilot-hook: tray-after-launch). Wraps
-// upstream's once-only tray creator, and ends the startup phases this window settles.
-export function deferTrayPastLaunch(window: BrowserWindow, createTray: () => void): () => void {
+// Upstream's createSystemTrayDeferred: a once-only creator that checks quit, window and setting.
+type TrayCreatorFactory = (window: BrowserWindow, onCreated: () => void) => () => void
+
+// Hook target: src/main/startup/main-window-controller.ts (pilot-hook: tray-after-launch). Builds
+// upstream's creator with its 'tray-created' milestone, and ends the startup phases this window settles.
+export function deferTrayPastLaunch(
+  window: BrowserWindow,
+  createTrayCreator: TrayCreatorFactory
+): () => void {
+  const createTray = createTrayCreator(window, () => logStartupMilestone('tray-created'))
   const startup = pilotStartup()
   if (startup) {
     startup.end('launch')
@@ -35,6 +43,12 @@ export function deferTrayPastLaunch(window: BrowserWindow, createTray: () => voi
     }
     scheduled = true
     startup?.begin('tray')
-    setTimeout(makeTray, TRAY_SETTLE_MS).unref()
+    const timer = setTimeout(makeTray, TRAY_SETTLE_MS)
+    timer.unref()
+    // A closed window gets no tray (upstream's creator would refuse it); a reopened one schedules its own.
+    window.once('closed', () => {
+      clearTimeout(timer)
+      startup?.end('tray')
+    })
   }
 }

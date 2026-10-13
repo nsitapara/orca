@@ -34,7 +34,7 @@ Every change Pilot makes to an upstream file is listed here (D24). Each one is a
 
 Which hook was added for the startup hang, and why:
 
-- `tray-after-launch`: on 2026-10-13 the packaged app hung for good in `-[NSStatusItem setMenu:]`, which upstream calls on the tick after ready-to-show (stablyai/orca#17045). Pilot makes the menu-bar item 10s later. The same call ends the startup phases the window settles (`src/main/startup/`).
+- `tray-after-launch`: on 2026-10-13 the packaged app hung for good in `-[NSStatusItem setMenu:]`, which upstream calls on the tick after ready-to-show (stablyai/orca#17045). The hook is the import and one line, `const createTray = deferTrayPastLaunch(window, createSystemTrayDeferred)`. Pilot builds upstream's creator with its `tray-created` milestone, runs it 10s later on macOS (cleared if the window closes first), and ends the startup phases the window settles (`src/main/startup/`).
 
 ## After an upstream sync
 
