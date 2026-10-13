@@ -52,6 +52,7 @@ export type EngineWiringInput = {
   // Wired by Tasks 24c (answer runs' outputs) and 25 ({run.answer}); see RunEngineDeps.
   onRunEnd?: RunEngineDeps['onRunEnd']
   runAnswer?: RunEngineDeps['runAnswer']
+  handover?: RunEngineDeps['handover']
 }
 export type WiredEngine = {
   engine: RunEngine
@@ -85,7 +86,8 @@ export function wireRunEngine(input: EngineWiringInput): WiredEngine {
     workspace: input.workspace,
     log,
     onRunEnd: input.onRunEnd,
-    runAnswer: input.runAnswer
+    runAnswer: input.runAnswer,
+    handover: input.handover
   })
   // Runs whose startRun is still going (B8: making the workspace): the sweep never closes their pending step.
   const opening = new Set<string>()

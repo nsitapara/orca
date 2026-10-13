@@ -1,8 +1,10 @@
 import type { FieldValue, RunRow, StepRow, TickTrigger } from '../../shared/api-types'
 import type { AutomationDefinition, FeedDef } from '../../shared/definition/types'
 import type { RunEnd } from '../../shared/run/step-plan'
+import type { HandoverWrite, RunEndHandover } from '../run/run-close'
 import { MAX_IDS, usableId } from '../sources/ids-from'
 import type { PilotStore } from '../store/store'
+import type { NewHandover } from '../store/store-handovers'
 
 export type HandOverDeps = {
   store: PilotStore
@@ -52,12 +54,16 @@ export function runOutput(steps: readonly StepRow[], name: string): FieldValue |
   return reported[0]?.outputs[name]
 }
 
-function handOverFeed(
+type Plan = HandoverWrite & { rows: NewHandover[] }
+
+// What one feed hands over and asks for. A feed with pass that found no id triggers nothing.
+function planFeed(
   deps: HandOverDeps,
   def: AutomationDefinition & { job: NonNullable<AutomationDefinition['job']> },
   run: RunRow,
   feed: FeedDef,
-  steps: () => StepRow[]
+  steps: () => StepRow[],
+  plan: Plan
 ): void {
   let ids: string[] = []
   if (feed.pass !== null) {
@@ -72,7 +78,7 @@ function handOverFeed(
     if (ids.length === 0) {
       return
     }
-    deps.store.handovers.add({
+    plan.rows.push({
       senderId: def.id,
       senderRunId: run.id,
       receiverId: feed.to,
@@ -81,21 +87,24 @@ function handOverFeed(
     })
   }
   if (feed.run === 'now') {
-    deps.trigger?.(feed.to, { automationId: def.id, runId: run.id, stage: def.job.stage, ids })
+    plan.triggers.push({
+      to: feed.to,
+      cause: { automationId: def.id, runId: run.id, stage: def.job.stage, ids }
+    })
   }
 }
 
-// A stage's run ended (closeRun's onRunEnd): each feed whose `when` holds hands the receiving stage the ids in its
-// passed output, durably and once per (run, receiver, id), then asks for the receiver's tick when it runs now. A feed
-// with pass that found no id triggers nothing. Never throws: a failure is logged, and the run's end stands.
-export function handOverRunEnd(deps: HandOverDeps, run: RunRow, end: RunEnd): void {
+// What a stage's run hands over at its end: each feed whose `when` holds, with pass or run: now. A planning failure
+// (a definition or step read) is logged and hands nothing over; the run's end stands.
+function plan(deps: HandOverDeps, run: RunRow, end: RunEnd): Plan {
+  const planned: Plan = { rows: [], triggers: [], note: null }
   try {
     if (!HANDS_OVER.has(run.trigger)) {
-      return
+      return planned
     }
     const def = deps.definitionFor(run.automationId)
     if (!def?.job) {
-      return
+      return planned
     }
     const staged = { ...def, job: def.job }
     let steps: StepRow[] | null = null
@@ -105,10 +114,45 @@ export function handOverRunEnd(deps: HandOverDeps, run: RunRow, end: RunEnd): vo
     }
     for (const feed of def.job.feeds) {
       if ((feed.pass !== null || feed.run === 'now') && feedFires(feed, end)) {
-        handOverFeed(deps, staged, run, feed, stepsOnce)
+        planFeed(deps, staged, run, feed, stepsOnce, planned)
       }
     }
   } catch (error) {
     deps.log(`[pilot] run ${run.id}: couldn't hand over to the next stage: ${messageOf(error)}`)
+    return { rows: [], triggers: [], note: null }
   }
+  return planned
+}
+
+// closeRun's handover (run-close.ts): `write` inside the transaction that ends the run writes each id durably, once
+// per (run, receiver, id), and throws when the store does, so the run's end rolls back with it; `after` asks for the
+// receivers' ticks (run: now) once that committed.
+export function runEndHandover(deps: HandOverDeps): RunEndHandover {
+  return {
+    write(run, end) {
+      const planned = plan(deps, run, end)
+      for (const row of planned.rows) {
+        deps.store.handovers.add(row)
+      }
+      return { note: planned.note, triggers: planned.triggers }
+    },
+    after(written) {
+      for (const { to, cause } of written.triggers) {
+        try {
+          deps.trigger?.(to, cause)
+        } catch (error) {
+          deps.log(
+            `[pilot] run ${cause.runId}: couldn't trigger ${to}: ${messageOf(error)}; its ids stay pending`
+          )
+        }
+      }
+    }
+  }
+}
+
+// The handover of a run that already ended, outside closeRun (tests, parity): written in its own transaction, then
+// its triggers.
+export function handOverRunEnd(deps: HandOverDeps, run: RunRow, end: RunEnd): void {
+  const handover = runEndHandover(deps)
+  handover.after(deps.store.transaction(() => handover.write(run, end)))
 }

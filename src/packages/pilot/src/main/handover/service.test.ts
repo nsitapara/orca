@@ -48,7 +48,9 @@ describe('handoverService: what pilot-services wires', () => {
       startedAt: AT
     })
     store.advance.mergeStepOutputs('run-1', 0, { ticket: 'WEB-1' })
-    service.runEnded(run, { status: 'done', outcome: 'Done' })
+    service.runEnd.after(
+      store.transaction(() => service.runEnd.write(run, { status: 'done', outcome: 'Done' }))
+    )
     expect(triggered.map(([id]) => id)).toEqual(['start'])
     store.handovers.add({
       senderId: 'x',
