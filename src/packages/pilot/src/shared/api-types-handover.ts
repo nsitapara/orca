@@ -43,6 +43,11 @@ export type FeedPreview = {
 export type TickHandover = { read: string[]; feeds: FeedPreview[] }
 // Activity's facts about a tick of a stage: the run whose feed (run: now) triggered it (null: its schedule or a person),
 // and the handed-over ids it read. Absent from older builds.
-export type TickHandoverFacts = { trigger?: TickTrigger | null; handedOver?: HandoverRow[] }
+// `notes`: what happened to the stage after the tick and before the next one (a handover the scheduler pass expired).
+export type TickHandoverFacts = {
+  trigger?: TickTrigger | null
+  handedOver?: HandoverRow[]
+  notes?: { at: number; text: string }[]
+}
 // pilot.automations.get: each stage this one passes ids to, with the rows of its most recent handover there.
 export type StageHandovers = { handovers?: { to: string; rows: HandoverRow[] }[] }

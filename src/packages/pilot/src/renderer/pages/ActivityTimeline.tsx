@@ -37,6 +37,11 @@ function TickNode({
           {line}
         </div>
       ))}
+      {(tick.notes ?? []).map((note) => (
+        <div key={`${note.at}-${note.text}`} className="text-xs text-muted-foreground">
+          {`${new Date(note.at).toLocaleString()} · ${note.text}`}
+        </div>
+      ))}
       {(tick.warnings ?? []).map((w) => (
         <div key={w} className="text-xs text-muted-foreground">
           {w}

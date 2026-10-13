@@ -13,6 +13,7 @@ export type NewEvent = {
 
 export type EventFilter = {
   runId?: string
+  automationId?: string
   kinds?: readonly string[]
   since?: number
   limit?: number
@@ -74,6 +75,10 @@ export class EventStore {
     if (filter.runId !== undefined) {
       where.push('run_id = ?')
       values.push(filter.runId)
+    }
+    if (filter.automationId !== undefined) {
+      where.push('automation_id = ?')
+      values.push(filter.automationId)
     }
     if (filter.kinds !== undefined) {
       where.push('kind IN (SELECT value FROM json_each(?))')

@@ -101,20 +101,32 @@ export class HandoverStore {
 
   // The scheduler pass's housekeeping: rows pending longer than <expiryMs> expire with no tick (their receiver is off
   // or gone), and settled rows (consumed or expired) older than <retentionMs> are deleted.
+  // Returns the rows it expired (for the receivers' Activity) and how many it pruned. Run it in a transaction.
   housekeep(
     now: number,
     expiryMs: number,
     retentionMs: number
-  ): { expired: number; pruned: number } {
-    const expired = this.db
-      .prepare(
-        "UPDATE handovers SET state = 'expired', consumed_at = ?, reason = ? WHERE state = 'pending' AND created_at < ?"
-      )
-      .run(now, EXPIRED_AFTER, now - expiryMs)
+  ): { expired: HandoverRow[]; pruned: number } {
+    const stale = this.db
+      .prepare("SELECT * FROM handovers WHERE state = 'pending' AND created_at < ? ORDER BY id")
+      .all(now - expiryMs)
+      .map((r) => toHandover(r as never))
+    const expire = this.db.prepare(
+      "UPDATE handovers SET state = 'expired', consumed_at = ?, reason = ? WHERE id = ?"
+    )
+    for (const h of stale) {
+      expire.run(now, EXPIRED_AFTER, h.id)
+    }
     const pruned = this.db
       .prepare("DELETE FROM handovers WHERE state != 'pending' AND consumed_at < ?")
       .run(now - retentionMs)
-    return { expired: Number(expired.changes), pruned: Number(pruned.changes) }
+    const expired = stale.map((h) => ({
+      ...h,
+      state: 'expired' as const,
+      consumedAt: now,
+      reason: EXPIRED_AFTER
+    }))
+    return { expired, pruned: Number(pruned.changes) }
   }
 
   // The rows a tick read, each with how it decided the item. A row already consumed keeps its first record.

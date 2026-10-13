@@ -143,6 +143,17 @@ describe('ActivityTimeline', () => {
     ).toBeTruthy()
   })
 
+  it('shows what happened to the stage after the tick, such as a handover the scheduler pass expired', () => {
+    const notes = [
+      {
+        at: tick.startedAt + 60_000,
+        text: 'Handover of WEB-2123 from stage 1 expired after 7 days'
+      }
+    ]
+    render(<ActivityTimeline ticks={[{ ...tick, notes }]} checkNames={[]} />)
+    expect(screen.getByText(/Handover of WEB-2123 from stage 1 expired after 7 days/)).toBeTruthy()
+  })
+
   it('offers no check table for a tick whose every item was out of scope', () => {
     const outside = tick.items.map((i) => ({ ...i, verdict: 'out_of_scope' as const }))
     render(

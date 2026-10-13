@@ -72,6 +72,7 @@ export function formatActivity(ticks: ActivityTick[]): string {
     .flatMap((t) => [
       formatTickHeader(t),
       ...handoverActivityLines(t).map((line) => `  ${line}`),
+      ...(t.notes ?? []).map((note) => `  ${formatTime(note.at)} · ${note.text}`),
       ...t.items.map((i) => `  ${i.verdict}  ${i.label}  ${i.reason}`),
       ...t.runs.map((r) => `  run ${r.id} · ${[r.status, r.outcome].filter(Boolean).join(' · ')}`)
     ])

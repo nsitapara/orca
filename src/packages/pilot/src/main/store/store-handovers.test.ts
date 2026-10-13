@@ -167,7 +167,11 @@ describe('HandoverStore: ids one stage hands the next, kept until a tick of the 
     store.handovers.consume(4, now - 5 * DAY, [
       { rowId: a2.id, verdict: 'started', reason: 'Started', runId: 'y' }
     ])
-    expect(store.handovers.housekeep(now, 7 * DAY, 30 * DAY)).toEqual({ expired: 1, pruned: 1 })
+    const done = store.handovers.housekeep(now, 7 * DAY, 30 * DAY)
+    expect([done.expired.map((h) => [h.itemId, h.state, h.reason]), done.pruned]).toEqual([
+      [['B-1', 'expired', 'expired after 7 days']],
+      1
+    ])
     const all = [
       ...store.handovers.latest('dev-e2e-fix', 'dev-e2e-fix-start'),
       ...store.handovers.consumedBy([4]).get(4)!
