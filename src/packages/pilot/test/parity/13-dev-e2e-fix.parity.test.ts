@@ -106,13 +106,12 @@ describe('13 · Fix red hourly e2e on dev: the definitions (old job: orca automa
       }
     })
     // Only the tickets this job recorded as open (tickets.json, through list-fix-tickets), read by identifier: no listing,
-    // so the assignee clause says what Linear's `assigned` filter did (mine), and no match or field script is needed.
+    // no match or field script. No assignee clause: like the Orca sweep, a recorded open ticket starts whoever has it.
     expect(starts.definition.items?.where).toEqual({
       ids_from: {
         run: 'python3 /Users/nishsitapara/.agents/skills/dev-e2e-fix/pilot_mode.py list-fix-tickets',
         field: 'identifier'
       },
-      assignee: { people: ['nish'] },
       team: 'WEB',
       state_type: ['triage', 'backlog', 'unstarted', 'started'],
       has_branch: true
