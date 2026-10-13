@@ -2,6 +2,7 @@ import type { AutomationDefinition } from '../../shared/definition/types'
 import type { InboxItemRow, InboxListRow, InboxStatus } from '../../shared/api-types'
 import type { AnswerState, InboxListPayload, RunLine } from '../../shared/inbox-types'
 import type { PeopleDirectory } from '../../shared/people'
+import { needsEvidence } from '../../shared/evidence'
 import { preparationRef, requeuedPreparation } from '../../shared/preparation'
 import type { ActionCatalog } from '../actions/types'
 import type { PilotStore } from '../store/store'
@@ -145,7 +146,11 @@ function answerStatesOf(deps: InboxDeps, items: InboxItemRow[]): Record<string, 
 // A card as the list carries it (Ruling 2): its preparation as a light ref, its Details without the manifest.
 function listRow(item: InboxItemRow): InboxListRow {
   const { preparation, details, ...rest } = item
-  const row: InboxListRow = { ...rest, details: details ? withoutManifest(details) : null }
+  const row: InboxListRow = {
+    ...rest,
+    details: details ? withoutManifest(details) : null,
+    needsEvidence: !preparation && needsEvidence(item)
+  }
   if (preparation !== undefined) {
     row.preparation = preparation ? preparationRef(preparation) : null
   }

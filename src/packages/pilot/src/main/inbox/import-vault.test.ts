@@ -6,7 +6,10 @@ import { parseAutomationYaml } from '../../shared/definition/parse'
 import { parsePeopleYaml } from '../../shared/people'
 import { routeOf } from '../answers/queue-view'
 import { PilotStore } from '../store/store'
+import { NEEDS_EVIDENCE } from '../../shared/evidence'
+import { saveAnswer } from '../answers/save'
 import { applyVaultImport, SENT_BEFORE_PILOT } from './import-apply'
+import { listInbox } from './inbox-service'
 import { addInboxItem } from './inbox-add'
 import { splitCommand } from './split-command'
 import { copyBundle, detailsFixture, rewriteBundle } from './__fixtures__/details-fixture'
@@ -607,5 +610,30 @@ describe('the ask date of an imported card', () => {
     const id = vaultItemId(NOTE, KEY)
     expect(a.store.inbox.get(id)?.createdAt).not.toBe(b.store.inbox.get(id)?.createdAt)
     expect(a.store.inbox.get(id)?.digest).toBe(b.store.inbox.get(id)?.digest)
+  })
+})
+
+// R-P5: an imported push (or Post, or drafted) card comes in as it was, unprepared, the same with or without its
+// asking session. It shows Needs evidence, and nothing runs from it until a person prepares it.
+describe('an imported card whose decision needs evidence', () => {
+  it.each<[string, Partial<VaultRow>]>([
+    ['with its asking session (a run)', {}],
+    ['without one (job-wide)', { session: '', resume: '', worktree: null }]
+  ])('imports %s as a card that needs evidence and runs nothing', (_name, over) => {
+    const { store, deps } = open()
+    const result = applyVaultImport(
+      deps,
+      planVaultImport([row({ ...PUSH_ROW, ...over })], ctx()),
+      1_000
+    )
+    expect(result).toMatchObject({ imported: 1 })
+    const item = store.inbox.get(vaultItemId(NOTE, KEY))!
+    expect(item).toMatchObject({ action: 'push', source: 'import' })
+    expect(item.preparation ?? null).toBeNull()
+    expect(listInbox(deps, {}).items).toMatchObject([{ id: item.id, needsEvidence: true }])
+    const origin = { callerKind: 'desktop' as const, catalog }
+    expect(() =>
+      saveAnswer(deps, { id: item.id, digest: item.digest, text: 'Approve' }, origin)
+    ).toThrow(NEEDS_EVIDENCE)
   })
 })

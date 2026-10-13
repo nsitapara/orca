@@ -116,7 +116,8 @@ export function InboxCard({
   selected,
   now,
   onSave,
-  onRetryPreparation
+  onRetryPreparation,
+  onPrepareEvidence
 }: {
   item: InboxListRow
   automationName: string
@@ -133,6 +134,8 @@ export function InboxCard({
   onSave: (answer: Answer) => Promise<string | null>
   // Retry on a blocked preparation: null once requeued, else why not.
   onRetryPreparation: () => Promise<string | null>
+  // Prepare evidence on a never-prepared push, Post or drafted card: null once queued, else why not.
+  onPrepareEvidence: () => Promise<string | null>
 }): React.JSX.Element {
   const [unsaved, setUnsaved] = useState(false)
   // Set while the card is open: when it is answered from here the next line takes focus (not on page load).
@@ -159,7 +162,11 @@ export function InboxCard({
           <h3 className="min-w-0 flex-1 truncate text-sm font-semibold">{item.title}</h3>
           <span className={statusPillClass(status)}>{status}</span>
         </div>
-        <PreparationProgress item={item} onRetry={onRetryPreparation} />
+        <PreparationProgress
+          item={item}
+          onRetry={onRetryPreparation}
+          onPrepareEvidence={onPrepareEvidence}
+        />
         <AnsweredLine
           item={item}
           answerState={answerState}
@@ -178,7 +185,11 @@ export function InboxCard({
         drafted={item.details?.drafted === true}
         status={status}
       />
-      <PreparationProgress item={item} onRetry={onRetryPreparation} />
+      <PreparationProgress
+        item={item}
+        onRetry={onRetryPreparation}
+        onPrepareEvidence={onPrepareEvidence}
+      />
       <h3 className="text-[15px] font-semibold">{item.title}</h3>
       {item.context ? <p className="text-sm text-muted-foreground">{item.context}</p> : null}
       {item.suggested ? (

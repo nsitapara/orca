@@ -28,14 +28,41 @@ describe('PreparationProgress', () => {
     pilotRpc.mockReset()
   })
 
+  it('says a never-prepared push needs evidence and offers Prepare evidence', async () => {
+    const onPrepareEvidence = vi.fn(async () => null)
+    const item = { id: 'c1', needsEvidence: true } as unknown as InboxListRow
+    render(
+      <PreparationProgress
+        item={item}
+        onRetry={async () => null}
+        onPrepareEvidence={onPrepareEvidence}
+      />
+    )
+    expect(screen.getByText(/Needs evidence/)).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Prepare evidence' }))
+    await waitFor(() => expect(onPrepareEvidence).toHaveBeenCalledTimes(1))
+  })
+
   it('offers Retry on a blocked card, and only there', async () => {
     const onRetry = vi.fn(async () => null)
-    render(<PreparationProgress item={row('blocked')} onRetry={onRetry} />)
+    render(
+      <PreparationProgress
+        item={row('blocked')}
+        onRetry={onRetry}
+        onPrepareEvidence={async () => null}
+      />
+    )
     expect(screen.getByText('After shot missing')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Retry preparation' }))
     await waitFor(() => expect(onRetry).toHaveBeenCalledTimes(1))
     cleanup()
-    render(<PreparationProgress item={row('generating')} onRetry={onRetry} />)
+    render(
+      <PreparationProgress
+        item={row('generating')}
+        onRetry={onRetry}
+        onPrepareEvidence={async () => null}
+      />
+    )
     expect(screen.queryByRole('button', { name: 'Retry preparation' })).toBeNull()
   })
 
@@ -44,6 +71,7 @@ describe('PreparationProgress', () => {
       <PreparationProgress
         item={row('blocked')}
         onRetry={async () => 'Only a blocked preparation can be retried'}
+        onPrepareEvidence={async () => null}
       />
     )
     fireEvent.click(screen.getByRole('button', { name: 'Retry preparation' }))
@@ -52,7 +80,13 @@ describe('PreparationProgress', () => {
 
   it('loads the full request only when asked (the list carries a light ref)', async () => {
     pilotRpc.mockResolvedValue({ id: 'c1', preparation: full('queued') })
-    render(<PreparationProgress item={row('queued')} onRetry={async () => null} />)
+    render(
+      <PreparationProgress
+        item={row('queued')}
+        onRetry={async () => null}
+        onPrepareEvidence={async () => null}
+      />
+    )
     expect(pilotRpc).not.toHaveBeenCalled()
     fireEvent.click(screen.getByRole('button', { name: 'Show the request' }))
     expect(await screen.findByText(/Rerun the pinned checks/)).toBeTruthy()

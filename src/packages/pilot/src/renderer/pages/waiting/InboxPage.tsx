@@ -45,8 +45,17 @@ export function InboxPage(): React.JSX.Element {
   const [selected, setSelected] = useState<string | null>(null)
   const [listOpen, toggleList] = useListOpen()
   const [rootRef, width] = useElementWidth()
-  const { inbox, queue, error, loadedAt, save, retryPreparation, applyNow, reload } =
-    useWaiting(viewer)
+  const {
+    inbox,
+    queue,
+    error,
+    loadedAt,
+    save,
+    retryPreparation,
+    prepareEvidence,
+    applyNow,
+    reload
+  } = useWaiting(viewer)
   // Save errors are kept here, by card id: a card remounts as a new version on every reload.
   const [errors, setErrors] = useState<Record<string, string>>({})
   const people = inbox?.people ?? []
@@ -98,6 +107,7 @@ export function InboxPage(): React.JSX.Element {
         return failed
       }}
       onRetryPreparation={() => retryPreparation(i)}
+      onPrepareEvidence={() => prepareEvidence(i)}
     />
   )
   const sectionOf = (s: Section) => (

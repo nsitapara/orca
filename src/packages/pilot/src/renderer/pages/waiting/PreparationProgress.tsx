@@ -56,16 +56,48 @@ function RequestView({ id }: { id: string }): React.JSX.Element {
   )
 }
 
+// R-P5: a push, Post or drafted card that was never prepared (imported, or from an older build) runs nothing until a
+// person queues it for job 14.
+function NeedsEvidence({
+  onPrepare
+}: {
+  onPrepare: () => Promise<string | null>
+}): React.JSX.Element {
+  const [error, setError] = useState<string | null>(null)
+  return (
+    <div role="status" className="flex flex-col gap-1 text-sm text-muted-foreground">
+      <p>
+        Needs evidence: this was never prepared, so nothing runs from it until job 14 prepares and
+        verifies it.
+      </p>
+      <button
+        type="button"
+        onClick={() => void onPrepare().then(setError)}
+        className="w-fit rounded border px-2 py-0.5 text-xs text-foreground hover:bg-muted"
+      >
+        Prepare evidence
+      </button>
+      {error ? <p className="text-destructive">{error}</p> : null}
+    </div>
+  )
+}
+
 export function PreparationProgress({
   item,
-  onRetry
+  onRetry,
+  onPrepareEvidence
 }: {
   item: InboxListRow
   // A person's Retry on a blocked card (pilot.inbox.prepareRetry): null once requeued, else why not.
   onRetry: () => Promise<string | null>
+  // A person's Prepare evidence on a never-prepared card (pilot.inbox.prepareEvidence): null once queued.
+  onPrepareEvidence: () => Promise<string | null>
 }): React.JSX.Element | null {
   const [retryError, setRetryError] = useState<string | null>(null)
   const preparation = item.preparation
+  if (item.needsEvidence) {
+    return <NeedsEvidence onPrepare={onPrepareEvidence} />
+  }
   if (!preparation) {
     return null
   }

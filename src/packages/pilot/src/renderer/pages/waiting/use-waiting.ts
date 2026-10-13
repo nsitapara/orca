@@ -85,6 +85,21 @@ export function useWaiting(person: string | null) {
     [reload]
   )
 
+  // R-P5: a person's Prepare evidence on a never-prepared push, Post or drafted card.
+  const prepareEvidence = useCallback(
+    async (item: InboxListRow) => {
+      try {
+        await pilotRpc('pilot.inbox.prepareEvidence', { id: item.id })
+        await reload()
+        return null
+      } catch (e) {
+        await reload()
+        return errorText(e)
+      }
+    },
+    [reload]
+  )
+
   const applyNow = useCallback(async () => {
     try {
       await pilotRpc('pilot.answers.applyNow', {}, { timeoutMs: APPLY_TIMEOUT_MS })
@@ -95,5 +110,15 @@ export function useWaiting(person: string | null) {
     }
   }, [reload])
 
-  return { inbox, queue, error, loadedAt, reload, save, retryPreparation, applyNow }
+  return {
+    inbox,
+    queue,
+    error,
+    loadedAt,
+    reload,
+    save,
+    retryPreparation,
+    prepareEvidence,
+    applyNow
+  }
 }

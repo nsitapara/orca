@@ -131,3 +131,15 @@ describe('countdown', () => {
     expect(countdown(ms)).toBe(text)
   })
 })
+
+// R-P5: a card that needs evidence offers no button that would run it; Prepare evidence sits above the answers.
+describe('a card that needs evidence', () => {
+  it.each(['push', 'postReview', 'bugDrafted'])(
+    'offers only an answer with notes and Skip: %s',
+    (name) => {
+      const buttons = buttonsFor({ ...CARDS[name], needsEvidence: true } as never)
+      expect(buttons.map((b) => b.role)).toEqual(['notes', 'skip'])
+      expect(buttons.some((b) => /approve|post|push/i.test(b.label))).toBe(false)
+    }
+  )
+})
