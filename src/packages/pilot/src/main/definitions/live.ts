@@ -35,9 +35,12 @@ function report(loaded: LoadedDefinitions, log: (message: string) => void): void
   if (loaded.peopleError) {
     log(`[pilot] people: ${loaded.peopleError}`)
   }
-  for (const file of loaded.errors) {
-    for (const error of file.errors) {
-      log(`[pilot] ${error}`)
+  for (const file of [
+    ...loaded.errors.map((e) => e.errors),
+    ...(loaded.warnings ?? []).map((w) => w.warnings)
+  ]) {
+    for (const line of file) {
+      log(`[pilot] ${line}`)
     }
   }
 }

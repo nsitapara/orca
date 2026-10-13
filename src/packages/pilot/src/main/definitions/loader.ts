@@ -1,6 +1,6 @@
 import { existsSync, lstatSync, readdirSync, readFileSync, watch, type FSWatcher } from 'node:fs'
 import { dirname, join } from 'node:path'
-import { jobProblems } from '../../shared/definition/jobs'
+import { jobProblems, jobWarnings } from '../../shared/definition/jobs'
 import { idFromFile } from '../../shared/definition/normalize'
 import { parseAutomationYaml } from '../../shared/definition/parse'
 import type { AutomationDefinition, PeopleRef } from '../../shared/definition/types'
@@ -16,6 +16,8 @@ export type LoadedDefinitions = {
   missingDirs: string[]
   // Ids whose file turned invalid: shown from their last valid version, never ticked (fail closed).
   displayOnly?: string[]
+  // Notices about valid files that change nothing they do (a feeds arrow that can't be drawn).
+  warnings?: { file: string; warnings: string[] }[]
 }
 
 // Where the loader keeps each automation's last valid version: the store's definitions tables.
@@ -258,13 +260,18 @@ export function loadDefinitions(
     const ids = files.map(idFromFile)
     remember('forget removed automations', undefined, () => memory.forgetAllBut(ids))
   }
+  const warnings = [...jobWarnings(definitions)].flatMap(([id, list]) => {
+    const file = definitions.find((d) => d.id === id)?.file
+    return file ? [{ file, warnings: list.map((w) => `${file}: ${w}`) }] : []
+  })
   return {
     definitions,
     errors,
     people,
     peopleError,
     missingDirs: dirs.filter((d) => !existsSync(d)),
-    displayOnly
+    displayOnly,
+    warnings
   }
 }
 

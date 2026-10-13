@@ -54,6 +54,7 @@ export function listAutomations(ctx: PilotContext): AutomationListPayload {
   return {
     automations: loaded.definitions.map((d) => summarize(ctx, d, displayOnly.has(d.id))),
     errors: loaded.errors,
+    warnings: loaded.warnings ?? [],
     peopleError: loaded.peopleError,
     missingDirs: loaded.missingDirs
   }
