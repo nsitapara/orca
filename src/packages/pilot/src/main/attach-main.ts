@@ -7,6 +7,7 @@ import { pilotBinDir } from './engine-env'
 import { claudeQuotaReader } from './fields/claude-quota'
 import { codexQuotaReader } from './fields/codex-quota'
 import { startPilotServices, type PilotServices } from './pilot-services'
+import { beginPilotStartup } from './startup/pilot-startup'
 
 // Hook target: src/main/startup/main-process-ready-runtime.ts (pilot-hook: main). Runs once in desktop
 // and serve mode, before the RPC server and dispatcher are built.
@@ -39,27 +40,35 @@ export function attachPilotMain(runtime: OrcaRuntimeService): void {
   if (typeof app.setName === 'function') {
     app.setName(pilotAppName())
   }
+  const kind = hostKind()
+  // Trace markers for each startup phase, and a watchdog thread that reports one stuck for 30s.
+  const startup = beginPilotStartup(kind, app.isPackaged)
   // Only the packaged desktop app ticks unless PILOT_SCHEDULER says otherwise (pilotSchedulerEnabled).
   // A Pilot failure (e.g. its store won't open) must never stop Orca from starting.
   let services: PilotServices
   try {
-    services = startPilotServices(runtime, 'main', {
-      quotas: { claude: claudeQuotaReader(), codex: codexQuotaReader() },
-      engineEnv: {
-        binDir: pilotBinDir({
-          packaged: app.isPackaged,
-          resourcesPath: process.resourcesPath,
-          appPath: app.getAppPath()
-        }),
-        dataDir: getAppEnvironment().getPath('userData')
-      },
-      schedulerEnabled: pilotSchedulerEnabled(hostKind())
-    })
+    services = startup.run('services', () =>
+      startPilotServices(runtime, 'main', {
+        quotas: { claude: claudeQuotaReader(), codex: codexQuotaReader() },
+        engineEnv: {
+          binDir: pilotBinDir({
+            packaged: app.isPackaged,
+            resourcesPath: process.resourcesPath,
+            appPath: app.getAppPath()
+          }),
+          dataDir: getAppEnvironment().getPath('userData')
+        },
+        schedulerEnabled: pilotSchedulerEnabled(kind)
+      })
+    )
   } catch (error) {
     console.error(
       `[pilot] couldn't start: ${error instanceof Error ? error.message : String(error)}`
     )
     return
+  } finally {
+    // Ended when the main window is created (pilot-hook: tray-after-launch); serve has no such phase.
+    startup.begin('launch')
   }
   getAppEnvironment().onWillQuit(() => services.stop())
 }
