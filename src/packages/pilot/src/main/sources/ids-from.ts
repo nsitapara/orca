@@ -41,6 +41,11 @@ export const NO_IDS_EXIT = 3
 const DEFAULT_TIMEOUT_MS = 60_000
 const ID = /^[\x21-\x7e]{1,200}$/
 
+// An id a source may read: printable ASCII without spaces, at most 200 characters (ids_from's and a handover's rule).
+export function usableId(id: string): boolean {
+  return ID.test(id)
+}
+
 // Inherited names that change how a shell, the dynamic loader or an interpreter starts; the YAML can't set them
 // either (envNameProblem), so a value Pilot's own process carries never reaches the command.
 const DROPPED = new Set([

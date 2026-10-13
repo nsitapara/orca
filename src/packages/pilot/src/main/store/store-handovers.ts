@@ -67,12 +67,20 @@ export class HandoverStore {
   }
 
   // The rows a tick read, each with how it decided the item. A row already consumed keeps its first record.
+  // All or none: a tick's ids are consumed together.
   consume(tickId: number, at: number, results: readonly HandoverResult[]): void {
     const update = this.db.prepare(
       "UPDATE handovers SET state = 'consumed', consumed_at = ?, tick_id = ?, verdict = ?, reason = ?, run_id = ? WHERE id = ? AND state = 'pending'"
     )
-    for (const r of results) {
-      update.run(at, tickId, r.verdict, r.reason, r.runId, r.rowId)
+    this.db.exec('BEGIN IMMEDIATE')
+    try {
+      for (const r of results) {
+        update.run(at, tickId, r.verdict, r.reason, r.runId, r.rowId)
+      }
+      this.db.exec('COMMIT')
+    } catch (error) {
+      this.db.exec('ROLLBACK')
+      throw error
     }
   }
 

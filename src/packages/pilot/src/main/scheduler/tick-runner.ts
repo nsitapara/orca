@@ -1,4 +1,11 @@
-import type { ItemDecision, TickResult, Verdict } from '../../shared/api-types'
+import type {
+  HandoverRow,
+  ItemDecision,
+  TickResult,
+  TickTrigger,
+  Verdict
+} from '../../shared/api-types'
+import { consumeFed, handoverOf } from '../handover/tick-handover'
 import type { AutomationDefinition } from '../../shared/definition/types'
 import type { PeopleDirectory } from '../../shared/people'
 import { usesHandled, workspacePathOf } from '../../shared/tick/decide'
@@ -42,8 +49,9 @@ export type TickDeps = DecideDeps & {
   // Asks first: the card an `asked` decision leaves, and the run it holds (Task 25).
   ask: AskDeps
 }
-// `pass` is the scheduler pass's fetch cache, shared by every automation that ticks in that pass.
-export type TickOptions = { dryRun: boolean; pass?: PassFetchCache }
+// `pass` is the scheduler pass's fetch cache, shared by every automation that ticks in that pass. `trigger`: the run
+// whose feed (run: now) asked for this tick, recorded on it for Activity.
+export type TickOptions = { dryRun: boolean; pass?: PassFetchCache; trigger?: TickTrigger }
 
 const pad = (v: number) => String(v).padStart(2, '0')
 
@@ -244,10 +252,15 @@ export async function runTick(
   const tickId = deps.store.startTick(def.id, opts.dryRun, deps.now())
   let decisions: ItemDecision[]
   let warnings: string[]
+  let fed: HandoverRow[]
   try {
+    if (opts.trigger && !opts.dryRun) {
+      deps.store.handovers.setTickTrigger(tickId, opts.trigger)
+    }
     const outcome = await decide(def, people, deps, opts, tickId)
     decisions = outcome.decisions
     warnings = outcome.warnings
+    fed = outcome.fed
   } catch (error) {
     const message = errorMessage(error)
     finishFailed(tickId, message, {}, deps)
@@ -269,8 +282,19 @@ export async function runTick(
       await startRuns(def, decisions, tickId, deps, runIds, unlaunched)
     }
     deps.store.recordDecisions(tickId, decisions, runIds)
+    if (!opts.dryRun && fed.length > 0) {
+      consumeFed(deps.store, fed, decisions, runIds, tickId, deps.now())
+    }
     deps.store.finishTick(tickId, 'ok', null, countVerdicts(decisions), deps.now(), warnings)
-    return { tickId, status: 'ok', error: null, decisions, warnings }
+    const handover = handoverOf(def, fed, decisions)
+    return {
+      tickId,
+      status: 'ok',
+      error: null,
+      decisions,
+      warnings,
+      ...(handover ? { handover } : {})
+    }
   } catch (error) {
     const message = errorMessage(error)
     if (unlaunched.current) {
