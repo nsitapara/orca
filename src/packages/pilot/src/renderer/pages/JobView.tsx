@@ -10,7 +10,7 @@ import { JobActivityTimeline } from './ActivityTimeline'
 import { errorText } from './format'
 import { JobControls } from './JobControls'
 import { JobStageFlow, type StageCardData } from './JobStageFlow'
-import { flowEdges, mergeJobActivity } from './job-flow'
+import { flowEdges, latestFrom, mergeJobActivity } from './job-flow'
 
 type StageData = StageCardData & { ticks: ActivityTick[] }
 const ACTIVITY = 'activity'
@@ -159,7 +159,12 @@ export function JobView({
         <JobControls job={job} onDone={() => void refresh()} />
       </div>
       {error ? <p className="text-sm text-destructive">{error}</p> : null}
-      <JobStageFlow stages={stages} edges={flowEdges(job)} now={now} onOpenStage={onOpenStage} />
+      <JobStageFlow
+        stages={stages}
+        edges={flowEdges(job, latestFrom(stages.map((s) => s.detail)))}
+        now={now}
+        onOpenStage={onOpenStage}
+      />
       <Tabs stages={stages} tab={tab} onTab={setTab} />
       <TabBody stages={stages} tab={tab} />
     </div>

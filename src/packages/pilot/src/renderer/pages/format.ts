@@ -1,4 +1,5 @@
 import { money } from '../../shared/money'
+import { relativeTime } from '../../shared/relative-time'
 import type {
   RunStatus,
   StepStatus,
@@ -26,6 +27,8 @@ const COUNT_ORDER: [Verdict, string][] = [
   ['baselined', 'baselined']
 ]
 
+export { relativeTime }
+
 export function verdictLabel(v: Verdict): string {
   return VERDICT[v]
 }
@@ -33,22 +36,6 @@ export function verdictLabel(v: Verdict): string {
 // What Activity lists: an out-of-scope item was never checked, so it is left out (the CLI's dry run still prints it).
 export function checkedItems(items: readonly TickItemRow[]): TickItemRow[] {
   return items.filter((i) => i.verdict !== 'out_of_scope')
-}
-
-export function relativeTime(ms: number, now: number): string {
-  const delta = now - ms
-  const abs = Math.abs(delta)
-  let text = `${Math.round(abs / 3_600_000)} h`
-  if (abs < 60_000) {
-    return 'just now'
-  }
-  if (abs < 3_600_000) {
-    text = `${Math.round(abs / 60_000)} min`
-  }
-  if (delta < 0) {
-    return `in ${text}`
-  }
-  return `${text} ago`
 }
 
 export function tickLine(t: TickRow): string {

@@ -1,4 +1,5 @@
 import type { ActivityTick, PilotStatus, TickOutcome } from '../shared/api-types'
+import { handoverActivityLines, handoverPreviewLines } from '../shared/handover-text'
 
 export function formatPilotStatus(s: PilotStatus): string {
   const missing = new Set(s.missingDirs)
@@ -24,7 +25,8 @@ export function formatPilotStatus(s: PilotStatus): string {
   ].join('\n')
 }
 
-export function formatDecisions(result: TickOutcome, id = 'this automation'): string {
+// `dry`: a dry run's output, so what a stage hands on is worded as what would happen.
+export function formatDecisions(result: TickOutcome, id = 'this automation', dry = false): string {
   if (result.status === 'busy') {
     return `Tick already running for ${id}`
   }
@@ -34,14 +36,17 @@ export function formatDecisions(result: TickOutcome, id = 'this automation'): st
   if (result.status === 'failed') {
     return `Tick ${result.tickId} · failed: ${result.error}`
   }
+  const handover = result.handover
+    ? handoverPreviewLines(result.handover, dry).map((line) => `  ${line}`)
+    : []
   if (result.decisions.length === 0) {
-    return `Tick ${result.tickId} · ok\n  No items.`
+    return [`Tick ${result.tickId} · ok`, '  No items.', ...handover].join('\n')
   }
   const width = Math.max(...result.decisions.map((d) => d.label.length))
   const rows = result.decisions.map(
     (d) => `  ${d.verdict.padEnd(9)} ${d.label.padEnd(width)}  ${d.reason}`
   )
-  return [`Tick ${result.tickId} · ok`, ...rows].join('\n')
+  return [`Tick ${result.tickId} · ok`, ...rows, ...handover].join('\n')
 }
 
 const pad2 = (n: number): string => String(n).padStart(2, '0')
@@ -66,6 +71,7 @@ export function formatActivity(ticks: ActivityTick[]): string {
   return ticks
     .flatMap((t) => [
       formatTickHeader(t),
+      ...handoverActivityLines(t).map((line) => `  ${line}`),
       ...t.items.map((i) => `  ${i.verdict}  ${i.label}  ${i.reason}`),
       ...t.runs.map((r) => `  run ${r.id} · ${[r.status, r.outcome].filter(Boolean).join(' · ')}`)
     ])

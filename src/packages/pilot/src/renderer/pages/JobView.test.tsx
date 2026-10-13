@@ -5,7 +5,8 @@ import type {
   ActivityTick,
   AutomationDetailPayload,
   AutomationListPayload,
-  AutomationSummary
+  AutomationSummary,
+  HandoverRow
 } from '../../shared/api-types'
 import { detail, summary } from './fixtures'
 
@@ -151,6 +152,40 @@ describe('JobView: a job of several automations on one page', () => {
     expect(arrow.textContent).toContain('the tickets it opens')
   })
 
+  it('shows the most recent handover on the arrow, and how its receiving tick went', async () => {
+    const handedAt = Date.now() - 5 * 60_000
+    serve([STAGE_1, STAGE_2], {
+      'pilot.automations.get': ({ id }) => {
+        const s = [STAGE_1, STAGE_2].find((x) => x.id === id)!
+        const rows: HandoverRow[] = [
+          {
+            id: 1,
+            senderId: 'dev-e2e-fix',
+            senderRunId: 'run-1',
+            receiverId: 'dev-e2e-fix-start',
+            itemId: 'WEB-2123',
+            createdAt: handedAt,
+            state: 'consumed',
+            consumedAt: handedAt,
+            tickId: 8,
+            verdict: 'started',
+            reason: 'Started',
+            runId: 'r9'
+          }
+        ]
+        return {
+          ...detail,
+          summary: s,
+          yaml: YAML[s.id],
+          checkNames: [],
+          handovers: id === 'dev-e2e-fix' ? [{ to: 'dev-e2e-fix-start', rows }] : []
+        } satisfies AutomationDetailPayload
+      }
+    })
+    render(<JobView jobId="13" onBack={() => {}} onOpenStage={() => {}} />)
+    expect(await screen.findByText('Last: WEB-2123 started · 5 min ago')).toBeTruthy()
+  })
+
   it('draws no arrow between stages that feed nothing', async () => {
     serve([{ ...STAGE_1, job: { ...STAGE_1.job!, feeds: [] } }, STAGE_2])
     render(<JobView jobId="13" onBack={() => {}} onOpenStage={() => {}} />)
@@ -185,13 +220,35 @@ describe('JobView: a job of several automations on one page', () => {
         tickId: id === 'dev-e2e-fix' ? 21 : 22,
         status: 'ok',
         error: null,
-        decisions: []
+        decisions: [],
+        handover:
+          id === 'dev-e2e-fix'
+            ? {
+                read: [],
+                feeds: [
+                  {
+                    to: 'dev-e2e-fix-start',
+                    output: 'ticket',
+                    run: 'now',
+                    when: 'success',
+                    starts: 1
+                  }
+                ]
+              }
+            : { read: ['WEB-2123'], feeds: [] }
       })
     })
     render(<JobView jobId="13" onBack={() => {}} onOpenStage={() => {}} />)
     fireEvent.click(await screen.findByRole('button', { name: 'Dry run all' }))
     expect(await screen.findByText('Stage 2: Tick 22 · ok')).toBeTruthy()
     expect(screen.getByText('Stage 1: Tick 21 · ok')).toBeTruthy()
+    // What would be handed over: dry runs write no handover and trigger nothing.
+    expect(
+      screen.getByText(
+        'Stage 1: 1 run would hand stage 2 its ticket output if it succeeds; stage 2 then ticks at once'
+      )
+    ).toBeTruthy()
+    expect(screen.getByText('Stage 2: Reads 1 handed-over id: WEB-2123')).toBeTruthy()
     expect(calls('pilot.automations.dryRun').map((c) => c[1])).toEqual([
       { id: 'dev-e2e-fix' },
       { id: 'dev-e2e-fix-start' }

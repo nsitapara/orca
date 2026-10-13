@@ -112,6 +112,30 @@ describe('Pilot API handlers', () => {
     expect(activity(ctx, 'ci', 1)).toHaveLength(1)
   })
 
+  it('says what triggered each tick and which handed-over ids it read; a tick with neither says so', () => {
+    const { ctx, store } = context()
+    const plain = store.startTick('ci', false, 1)
+    const fed = store.startTick('ci', false, 2)
+    const trigger = { automationId: 'dev-e2e-fix', runId: 'run-1', stage: 1, ids: ['WEB-2123'] }
+    store.handovers.setTickTrigger(fed, trigger)
+    store.handovers.add({
+      senderId: 'dev-e2e-fix',
+      senderRunId: 'run-1',
+      receiverId: 'ci',
+      itemIds: ['WEB-2123'],
+      at: 1
+    })
+    const [row] = store.handovers.pending('ci', 10)
+    store.handovers.consume(fed, 3, [
+      { rowId: row.id, verdict: 'started', reason: 'Started', runId: 'r9' }
+    ])
+    const ticks = activity(ctx, 'ci', 10)
+    expect(ticks.map((t) => [t.id, t.trigger, t.handedOver?.map((h) => h.itemId)])).toEqual([
+      [fed, trigger, ['WEB-2123']],
+      [plain, null, []]
+    ])
+  })
+
   it('returns no activity for an unknown id', () => {
     expect(activity(context().ctx, 'nope', 10)).toEqual([])
   })
@@ -147,5 +171,33 @@ describe('Pilot API handlers', () => {
     expect(getAutomation(context().ctx, 'ci').steps.map((s) => [s.name, s.agent])).toEqual([
       ['step1', 'claude']
     ])
+  })
+
+  it("returns a stage's most recent handover to each stage it passes ids to", () => {
+    const dir = mkdtempSync(join(tmpdir(), 'pilot-rpc-job-'))
+    writeFileSync(
+      join(dir, 'open.yaml'),
+      'name: Open\nrepo: r\nschedule: manual\njob: { id: "13", name: J, stage: 1, label: Open, feeds: [{ to: start, pass: { id: ticket }, run: now }] }\nsteps: [ { name: ticket, agent: shell, run: ./t.sh, outputs: [ticket] } ]\n'
+    )
+    writeFileSync(
+      join(dir, 'start.yaml'),
+      'name: Start\nrepo: r\nschedule: manual\njob: { id: "13", stage: 2, label: Start }\nitems: { kind: linear_ticket, where: { ids_from: { feed: true } } }\nsteps: [ { agent: claude, prompt: x } ]\n'
+    )
+    const { ctx, store } = context()
+    const loaded = loadDefinitions([dir])
+    expect(loaded.errors).toEqual([])
+    const job = { ...ctx, loaded: () => loaded }
+    expect(getAutomation(job, 'open').handovers).toEqual([{ to: 'start', rows: [] }])
+    store.handovers.add({
+      senderId: 'open',
+      senderRunId: 'run-1',
+      receiverId: 'start',
+      itemIds: ['WEB-1'],
+      at: 5
+    })
+    expect(getAutomation(job, 'open').handovers).toEqual([
+      { to: 'start', rows: [expect.objectContaining({ itemId: 'WEB-1', state: 'pending' })] }
+    ])
+    expect(getAutomation(job, 'start').handovers).toEqual([])
   })
 })

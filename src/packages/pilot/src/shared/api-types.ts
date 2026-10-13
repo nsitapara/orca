@@ -1,5 +1,5 @@
 import type { JobDef, StepDef } from './definition/types'
-import type { TickHandover } from './api-types-handover'
+import type { StageHandovers, TickHandover, TickHandoverFacts } from './api-types-handover'
 import type { InboxItemSummary } from './inbox-types'
 import type { DetailsRef } from './details'
 import type { InboxPreparation, PreparationRef } from './preparation'
@@ -287,7 +287,6 @@ export type TickResult = {
   // Source truncation, field scripts that failed: the tick still decided. Logged, not stored.
   // runTick always sets it; optional so existing TickOutcome literals (UI and CLI fixtures) stay valid.
   warnings?: string[]
-  // A stage of a multi-stage job only: the handed-over ids it read and what its runs hand on.
   handover?: TickHandover
 }
 
@@ -321,11 +320,10 @@ export type AutomationListPayload = {
   peopleError: string | null
   missingDirs: string[]
 }
-export type ActivityTick = TickRow & {
-  items: TickItemRow[]
-  runs: (RunRow & { steps: StepRow[]; inbox: InboxItemSummary[] })[]
-}
-export type AutomationDetailPayload = {
+type ActivityRun = RunRow & { steps: StepRow[]; inbox: InboxItemSummary[] }
+export type ActivityTick = TickRow &
+  TickHandoverFacts & { items: TickItemRow[]; runs: ActivityRun[] }
+export type AutomationDetailPayload = StageHandovers & {
   summary: AutomationSummary
   yaml: string
   checkNames: string[]
