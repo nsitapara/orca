@@ -51,11 +51,7 @@ describe('loadDetails', () => {
       draftedBase: expect.stringMatching(/^7cc153d/),
       draftedOption: null,
       summary: ['drafted fix', 'diff +1 −1', 'before / after', '1 screenshot'],
-      subject: '',
-      artifacts: expect.objectContaining({
-        files: expect.any(Array),
-        tags: ['drafted fix', 'diff +1 −1', 'before / after', '1 screenshot']
-      })
+      subject: ''
     })
     expect(snapshot.texts).toEqual({})
     expect(snapshot.bundle.blocks.map((b) => b.type)).toEqual([
@@ -290,6 +286,27 @@ describe('readDetailsImage', () => {
     const file = arrange(f)
     const message = refusal(() => readDetailsImage(f.root, snapshot, file))
     expect(message.startsWith('Details bundle refused: ')).toBe(true)
+  })
+
+  // Ruling 3 for a plain card: images are read live and not hashed, so one swapped on disk after the add shows the new
+  // image, and the card's ref (its digest's input) stays the same. A prepared bundle hashes them (R-P3).
+  it("shows a plain bundle's image as it is now, and its ref never hashes images", () => {
+    const f = fixture()
+    const snapshot = loadDetails(f.root, f.bundle)
+    expect(snapshot.ref.artifacts).toBeUndefined()
+    const swapped = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10, 1, 2, 3])
+    writeFileSync(join(f.dir, 'F2-before.png'), swapped)
+    expect(readDetailsImage(f.root, snapshot, 'F2-before.png').base64).toBe(
+      swapped.toString('base64')
+    )
+    expect(loadDetails(f.root, f.bundle).ref).toEqual(snapshot.ref)
+  })
+
+  it('takes a plain bundle whose image bytes are not a known format, as before', () => {
+    const f = fixture()
+    writeFileSync(join(f.dir, 'F2-before.png'), 'not a png yet')
+    expect(loadDetails(f.root, f.bundle).ref.blocks).toBe(8)
+    expect(() => loadDetails(f.root, f.bundle, { prepared: true })).toThrow(DetailsRefused)
   })
 
   it('refuses with no Automations folder', () => {

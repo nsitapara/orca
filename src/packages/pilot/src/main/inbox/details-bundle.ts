@@ -1,17 +1,7 @@
-import { createHash } from 'node:crypto'
-import {
-  closeSync,
-  constants,
-  fstatSync,
-  openSync,
-  readSync,
-  realpathSync,
-  statSync
-} from 'node:fs'
+import { realpathSync, statSync } from 'node:fs'
 import { dirname, extname, isAbsolute, relative, resolve, sep } from 'node:path'
 import {
   DETAILS_LIMITS,
-  DETAILS_REFUSED,
   IMAGE_TYPES,
   imageRefs,
   type ArtifactFile,
@@ -20,24 +10,14 @@ import {
   type DetailsSnapshot
 } from '../../shared/details'
 import { subjectOf, summaryOf } from '../../shared/details-summary'
-import { generatedArtifacts, patchStats, validImageBytes } from './details-preparation'
+import { artifactOf, generatedArtifacts } from './details-preparation'
+import { DetailsRefused, readCapped, sha256 } from './details-read'
 import { isPromptControl } from './card'
 import { BLOCK_TYPES, BundleSchema, firstIssue, ReviewFileSchema } from './details-schema'
 
-// Every refusal fails closed: nothing of the bundle is kept, and the message says why.
-export class DetailsRefused extends Error {
-  readonly reason: string
-  constructor(reason: string) {
-    super(`${DETAILS_REFUSED}: ${reason}`)
-    this.name = 'DetailsRefused'
-    this.reason = reason
-  }
-}
+export { DetailsRefused }
 
 type RefKind = ArtifactFile['role']
-
-const sha256 = (data: string | Buffer): string => createHash('sha256').update(data).digest('hex')
-const NOFOLLOW = constants.O_NOFOLLOW ?? 0
 
 function realRoot(root: string | null): string {
   if (root === null) {
@@ -67,41 +47,6 @@ function realInside(root: string, path: string, label: string): string {
     throw new DetailsRefused(`${label} is outside the Automations folder`)
   }
   return real
-}
-
-// A regular file's bytes through one descriptor, opened without following a last symlink, checked with
-// fstat before anything is read, and never more than it said. Accepted race: O_NOFOLLOW covers only the
-// last path part, so a parent folder swapped for a symlink between realInside's check and this open could
-// lead outside the root. That needs write access to the vault already, and reaches only a file of the
-// same name (a .json bundle or review, or an image), still capped and type-checked here.
-function readCapped(real: string, max: number, label: string): Buffer {
-  let fd: number
-  try {
-    fd = openSync(real, constants.O_RDONLY | NOFOLLOW)
-  } catch {
-    throw new DetailsRefused(`${label} can't be opened`)
-  }
-  try {
-    const stat = fstatSync(fd)
-    if (!stat.isFile()) {
-      throw new DetailsRefused(`${label} is not a file`)
-    }
-    if (stat.size > max) {
-      throw new DetailsRefused(`${label} is over ${max} bytes`)
-    }
-    const buffer = Buffer.alloc(stat.size)
-    let read = 0
-    while (read < stat.size) {
-      const n = readSync(fd, buffer, read, stat.size - read, read)
-      if (n === 0) {
-        break
-      }
-      read += n
-    }
-    return buffer.subarray(0, read)
-  } finally {
-    closeSync(fd)
-  }
 }
 
 function hasExtension(paths: string[], allowed: (ext: string) => boolean): boolean {
@@ -246,9 +191,14 @@ function checkPromptSafe(path: string): void {
 }
 
 // A card's bundle, read from an absolute path inside the Automations folder and checked whole: its shape,
-// and every file it names. Review files are inlined (their text is part of what Approve binds to); the
-// patch, image and check bytes are hashed into the artifact manifest inside the root.
-export function loadDetails(root: string | null, bundlePath: string): DetailsSnapshot {
+// and every file it names. Review files are inlined (their text is part of what Approve binds to). A plain
+// card's patch and images are only checked to exist inside the root (ruling 3). A prepared bundle (a
+// preparation's completion, R-P3) also hashes the patch, image and check bytes into its artifact manifest.
+export function loadDetails(
+  root: string | null,
+  bundlePath: string,
+  opts: { prepared?: boolean } = {}
+): DetailsSnapshot {
   const top = realRoot(root)
   if (!isAbsolute(bundlePath) || bundlePath.includes('\0')) {
     throw new DetailsRefused(`${bundlePath} is not an absolute path`)
@@ -269,24 +219,24 @@ export function loadDetails(root: string | null, bundlePath: string): DetailsSna
     if (kind === 'review') {
       texts.push([ref, readReview(file, ref)])
     }
-    const cap =
-      kind === 'patch' || kind === 'check' ? DETAILS_LIMITS.bundleBytes : DETAILS_LIMITS.imageBytes
-    const asset = readCapped(file, cap, `${kind} ref ${ref}`)
-    const image = kind === 'before' || kind === 'after' || kind === 'screenshot'
-    if (image && !validImageBytes(asset, extname(file).toLowerCase())) {
-      throw new DetailsRefused(`${kind} ref ${ref} does not contain a supported image`)
+    if (opts.prepared) {
+      files.push(artifactOf(file, kind, ref))
     }
-    files.push({
-      ref,
-      role: kind,
-      sha256: sha256(asset),
-      bytes: asset.length,
-      ...(kind === 'patch' ? { diff: patchStats(asset.toString('utf8')) } : {})
-    })
   }
   const textsByRef = Object.fromEntries(texts)
   const draft = draftOf(bundle)
-  const summary = summaryOf(bundle, textsByRef, draft.drafted, files)
+  const summary = summaryOf(bundle, textsByRef, draft.drafted, opts.prepared ? files : undefined)
+  const artifacts = opts.prepared
+    ? {
+        artifacts: {
+          files,
+          ...(bundle.provenance ? { provenance: bundle.provenance } : {}),
+          expected: [],
+          generated: generatedArtifacts(bundle, files, textsByRef),
+          tags: summary
+        }
+      }
+    : {}
   return {
     ref: {
       path: real,
@@ -295,13 +245,7 @@ export function loadDetails(root: string | null, bundlePath: string): DetailsSna
       blocks: bundle.blocks.length,
       ...draft,
       summary,
-      artifacts: {
-        files,
-        ...(bundle.provenance ? { provenance: bundle.provenance } : {}),
-        expected: [],
-        generated: generatedArtifacts(bundle, files, textsByRef),
-        tags: summary
-      },
+      ...artifacts,
       subject: subjectOf(bundle) ?? ''
     },
     bundle,

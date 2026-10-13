@@ -1,5 +1,7 @@
 import { createHash } from 'node:crypto'
+import { extname } from 'node:path'
 import { parsePatch } from 'diff'
+import { DETAILS_LIMITS } from '../../shared/details'
 import type {
   ArtifactFile,
   DetailsBundle,
@@ -7,6 +9,7 @@ import type {
   DiffBlock,
   ScreenPair
 } from '../../shared/details'
+import { DetailsRefused, readCapped } from './details-read'
 import { ReviewFileSchema } from './details-schema'
 import type { PreparationRequirement } from '../../shared/preparation'
 
@@ -214,5 +217,23 @@ function validReview(text: string | undefined, ref: string, files: ArtifactFile[
     )
   } catch {
     return false
+  }
+}
+
+// One file a prepared bundle names, read and hashed for its artifact manifest (an image must hold image bytes).
+export function artifactOf(file: string, kind: ArtifactFile['role'], ref: string): ArtifactFile {
+  const cap =
+    kind === 'patch' || kind === 'check' ? DETAILS_LIMITS.bundleBytes : DETAILS_LIMITS.imageBytes
+  const asset = readCapped(file, cap, `${kind} ref ${ref}`)
+  const image = kind === 'before' || kind === 'after' || kind === 'screenshot'
+  if (image && !validImageBytes(asset, extname(file).toLowerCase())) {
+    throw new DetailsRefused(`${kind} ref ${ref} does not contain a supported image`)
+  }
+  return {
+    ref,
+    role: kind,
+    sha256: createHash('sha256').update(asset).digest('hex'),
+    bytes: asset.length,
+    ...(kind === 'patch' ? { diff: patchStats(asset.toString('utf8')) } : {})
   }
 }

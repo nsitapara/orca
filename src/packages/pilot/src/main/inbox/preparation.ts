@@ -12,7 +12,7 @@ export function completePreparation(
   bundlePath: string
 ) {
   deps.store.inboxPreparations.requireClaim(id, claim, deps.now())
-  const snapshot = loadDetails(deps.detailsRoot ?? null, bundlePath)
+  const snapshot = loadDetails(deps.detailsRoot ?? null, bundlePath, { prepared: true })
   return deps.store.transaction(() => {
     const at = deps.now()
     const item = deps.store.inboxPreparations.requireClaim(id, claim, at)

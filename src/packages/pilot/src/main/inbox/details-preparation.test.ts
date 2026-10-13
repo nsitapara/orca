@@ -39,7 +39,7 @@ function prepared() {
 describe('preparation evidence', () => {
   it('records artifact roles, content hashes, run provenance and tags from verified files', () => {
     const f = prepared()
-    const snapshot = loadDetails(f.root, f.bundle)
+    const snapshot = loadDetails(f.root, f.bundle, { prepared: true })
     expect(validatePreparationEvidence(snapshot, ['context', 'diff', 'screens', 'checks'])).toEqual(
       []
     )
@@ -94,11 +94,18 @@ describe('preparation evidence', () => {
         }
       })
       if (kind === 'missing slot') {
-        expect(validatePreparationEvidence(loadDetails(f.root, f.bundle), ['context'])).toEqual([])
+        expect(
+          validatePreparationEvidence(loadDetails(f.root, f.bundle, { prepared: true }), [
+            'context'
+          ])
+        ).toEqual([])
       }
       expect(
-        validatePreparationEvidence(loadDetails(f.root, f.bundle), ['diff', 'screens', 'checks'])
-          .length
+        validatePreparationEvidence(loadDetails(f.root, f.bundle, { prepared: true }), [
+          'diff',
+          'screens',
+          'checks'
+        ]).length
       ).toBeGreaterThan(0)
     }
   )
@@ -134,20 +141,20 @@ describe('preparation evidence', () => {
           })
         )
       }
-      expect(validatePreparationEvidence(loadDetails(f.root, f.bundle), ['context'])).not.toEqual(
-        []
-      )
+      expect(
+        validatePreparationEvidence(loadDetails(f.root, f.bundle, { prepared: true }), ['context'])
+      ).not.toEqual([])
     }
   )
 
   it('requires the exact validated review comments and rejects a narrative-only substitute', () => {
     const f = prepared()
-    const narrative = loadDetails(f.root, f.bundle)
+    const narrative = loadDetails(f.root, f.bundle, { prepared: true })
     expect(validatePreparationEvidence(narrative, ['review'])).not.toEqual([])
     rewriteBundle(f.bundle, (bundle) =>
       bundle.blocks.push({ type: 'review', file: 'sample-review.json' })
     )
-    const snapshot = loadDetails(f.root, f.bundle)
+    const snapshot = loadDetails(f.root, f.bundle, { prepared: true })
     expect(validatePreparationEvidence(snapshot, ['review'])).toEqual([])
     snapshot.texts['sample-review.json'] = '{}'
     expect(validatePreparationEvidence(snapshot, ['review'])).not.toEqual([])
@@ -160,7 +167,7 @@ describe('preparation evidence', () => {
       diff.patch_kind = 'committed'
       diff.head = '8'.repeat(40)
     })
-    const snapshot = loadDetails(f.root, f.bundle)
+    const snapshot = loadDetails(f.root, f.bundle, { prepared: true })
     expect(validatePreparationEvidence(snapshot, ['diff', 'checks'])).toEqual([])
     expect(snapshot.ref.drafted).toBe(false)
     expect(snapshot.ref.summary).not.toContain('drafted fix')
@@ -168,7 +175,7 @@ describe('preparation evidence', () => {
 
   it('refuses images changed after validation while retaining legacy snapshot compatibility', () => {
     const f = prepared()
-    const snapshot = loadDetails(f.root, f.bundle)
+    const snapshot = loadDetails(f.root, f.bundle, { prepared: true })
     writeFileSync(join(f.dir, 'F2-before.png'), 'different bytes')
     expect(() => readDetailsImage(f.root, snapshot, 'F2-before.png')).toThrow(
       'changed after context was prepared'
