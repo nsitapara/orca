@@ -222,8 +222,11 @@ function addInboxItemUnlocked(
   const digest = inboxDigest(card)
   const at = deps.now()
   const mine = deps.store.inbox.list({ automationId: origin.automationId })
+  // A waiting prepared card is the same decision again (its key, or a plain re-add of it, which never downgrades it).
+  // Once it has closed, a repeat is a new card.
   const managed = mine.find(
     (i) =>
+      WAITING.includes(i.status) &&
       i.itemKey === origin.itemKey &&
       i.worktreePath === origin.worktreePath &&
       ((params.preparation && i.preparation?.input.key === params.preparation.key) ||

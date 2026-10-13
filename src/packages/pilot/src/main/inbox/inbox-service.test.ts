@@ -677,6 +677,27 @@ describe('managed inbox intake', () => {
   })
 })
 
+// M1: the key (and a plain card's identity) matches waiting cards only: a repeat after the old card closed is a new card.
+it.each(['prepared', 'plain'] as const)(
+  'asks a %s question again as a new card once the old one has closed',
+  (kind) => {
+    const { deps, store } = setup()
+    const request =
+      kind === 'prepared'
+        ? {
+            ...QUESTION,
+            preparation: { key: 'q', context: 'Pinned', requirements: ['context' as const] }
+          }
+        : QUESTION
+    const first = addInboxItem(deps, request).id!
+    resolveInboxItem(deps, first, 'done: answered elsewhere')
+    const again = addInboxItem(deps, request)
+    expect(again).toMatchObject({ existing: false, refused: null })
+    expect(again.id).not.toBe(first)
+    expect(store.inbox.get(again.id!)?.status).toBe('open')
+  }
+)
+
 it('uses the stable decision key rather than a repeated display title for managed items', () => {
   const { deps, store } = setup()
   for (const key of ['first-decision', 'second-decision']) {
