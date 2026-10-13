@@ -77,6 +77,8 @@ export type ArtifactFile = {
   diff?: {
     path: string
     oldPath: string | null
+    // Its rows as details.py counts them (context and changes), for the row cap a trimmed diff is judged by.
+    rows: number
     added: number
     removed: number
     hunksSha256: string
