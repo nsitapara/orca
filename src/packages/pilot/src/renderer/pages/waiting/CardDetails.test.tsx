@@ -63,7 +63,7 @@ describe('CardDetails', () => {
     fireEvent.click(screen.getByText('Details'))
     expect(await screen.findByText(/The card changed; review it again/)).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
-    expect(await screen.findByText('What Approve does')).toBeTruthy()
+    expect(await screen.findByRole('heading', { name: 'What Approve does' })).toBeTruthy()
     expect(pilotRpc).toHaveBeenCalledTimes(2)
     expect(screen.queryByRole('button', { name: 'Retry' })).toBeNull()
   })

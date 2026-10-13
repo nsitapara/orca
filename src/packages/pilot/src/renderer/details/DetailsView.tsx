@@ -1,8 +1,12 @@
 import type { DetailsBlock, DetailsSnapshot } from '../../shared/details'
-import { CodeBlock, DiffBlock, FactsBlock, MissingBlock, TextBlock, ThreadBlock } from './blocks'
+import { CodeBlock, FactsBlock, MissingBlock, TextBlock, ThreadBlock } from './blocks'
+import { DiffBlock } from './diff-block'
 import { DetailsStyle } from './details-css'
 import { ScreensBlockView, ShotsBlockView } from './media'
 import { ReviewBlock, type PartSwitches } from './ReviewBlock'
+import { SectionBar } from './SectionBar'
+import { useOffSections } from './section-filter'
+import { sectionKey, sectionsOf } from './sections'
 
 export type { PartSwitches }
 
@@ -50,6 +54,9 @@ export function DetailsView({
   loadImage: (file: string) => Promise<string>
   parts: PartSwitches | null
 }): React.JSX.Element {
+  const off = useOffSections()
+  const sections = sectionsOf(snapshot.bundle, snapshot.texts)
+  const shown = snapshot.bundle.blocks.filter((b) => !off.has(sectionKey(b)))
   return (
     <div className="glr dt min-w-0">
       <DetailsStyle />
@@ -62,7 +69,11 @@ export function DetailsView({
             : ''}
         </p>
       ) : null}
-      {snapshot.bundle.blocks.map((block, i) => (
+      <SectionBar sections={sections} off={off} />
+      {shown.length === 0 && sections.length > 0 ? (
+        <p className="dt-missing">No sections switched on. Pick one above.</p>
+      ) : null}
+      {shown.map((block, i) => (
         <BlockView key={i} block={block} snapshot={snapshot} loadImage={loadImage} parts={parts} />
       ))}
     </div>

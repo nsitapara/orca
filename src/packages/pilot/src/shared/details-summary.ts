@@ -52,7 +52,7 @@ function shotsChip(blocks: DetailsBlock[]): string | null {
   return shots === 0 ? null : plural(shots, 'screenshot', 'screenshots')
 }
 
-function partsIn(text: string | undefined): number {
+export function partsIn(text: string | undefined): number {
   if (!text) {
     return 0
   }

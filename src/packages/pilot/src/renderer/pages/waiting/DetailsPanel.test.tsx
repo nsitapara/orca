@@ -7,6 +7,7 @@ import type { DetailsRef } from '../../../shared/details'
 const pilotRpc = vi.fn()
 vi.mock('../../api', () => ({ pilotRpc: (...args: unknown[]) => pilotRpc(...args) }))
 
+import { resetSectionFilter } from '../../details/section-filter'
 import { InboxPage } from './InboxPage'
 
 const REF: DetailsRef = {
@@ -101,10 +102,10 @@ describe('the Details panel', () => {
       ['drafted fix', 'diff +1 −1', 'before / after'].map((c) => within(bar).getByText(c))
     ).toHaveLength(3)
     expect(within(bar).getByText('Show')).toBeTruthy()
-    const panel = bar.parentElement!
+    const panel = bar.closest('[data-slot="collapsible"]')!
     expect(panel.className).toContain('border')
     fireEvent.click(bar)
-    expect(await screen.findByText('What Approve does')).toBeTruthy()
+    expect(await screen.findByRole('heading', { name: 'What Approve does' })).toBeTruthy()
     expect(within(bar).getByText('Hide')).toBeTruthy()
     expect(bar.getAttribute('aria-expanded')).toBe('true')
   })
@@ -144,5 +145,21 @@ describe('the Details panel', () => {
     render(<InboxPage />)
     await screen.findByRole('heading', { name: 'Card x1' })
     expect(screen.queryByRole('button', { name: /all details/ })).toBeNull()
+  })
+
+  it('has All and None on the bar, which switch every section of the card on or off', async () => {
+    window.localStorage.clear()
+    resetSectionFilter()
+    serve([card('s1', { details: REF })])
+    render(<InboxPage />)
+    const bar = await screen.findByRole('button', { name: /^Details/ })
+    expect(screen.queryByRole('button', { name: 'None' })).toBeNull()
+    fireEvent.click(bar)
+    await screen.findByRole('heading', { name: 'What Approve does' })
+    fireEvent.click(screen.getByRole('button', { name: 'None' }))
+    expect(screen.getByText('No sections switched on. Pick one above.')).toBeTruthy()
+    expect(screen.queryByRole('heading', { name: 'What Approve does' })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'All' }))
+    expect(screen.getByRole('heading', { name: 'What Approve does' })).toBeTruthy()
   })
 })

@@ -448,7 +448,7 @@ describe('Details on a card', () => {
     serveDetails(() => [withDetails])
     render(<InboxPage />)
     fireEvent.click(await screen.findByRole('button', { name: /^Details/ }))
-    expect(await screen.findByText('What Approve does')).toBeTruthy()
+    expect(await screen.findByRole('heading', { name: 'What Approve does' })).toBeTruthy()
     expect(detailCalls().map((c) => c[1])).toEqual([{ id: 'in_a', digest: 'da1' }])
   })
 
@@ -458,12 +458,12 @@ describe('Details on a card', () => {
     serveDetails(() => [{ ...withDetails }])
     render(<InboxPage />)
     fireEvent.click(await screen.findByRole('button', { name: /^Details/ }))
-    await screen.findByText('What Approve does')
+    await screen.findByRole('heading', { name: 'What Approve does' })
     const lists = () => pilotRpc.mock.calls.filter((c) => c[0] === 'pilot.inbox.list').length
     const before = lists()
     await vi.advanceTimersByTimeAsync(10_500)
     expect(lists()).toBeGreaterThan(before)
-    expect(screen.getByText('What Approve does')).toBeTruthy()
+    expect(screen.getByRole('heading', { name: 'What Approve does' })).toBeTruthy()
     expect(detailCalls()).toHaveLength(1)
   })
 
@@ -475,12 +475,12 @@ describe('Details on a card', () => {
     ])
     render(<InboxPage />)
     fireEvent.click(await screen.findByRole('button', { name: /^Details/ }))
-    await screen.findByText('What Approve does')
+    await screen.findByRole('heading', { name: 'What Approve does' })
     version = 2
     await vi.advanceTimersByTimeAsync(10_500)
     await waitFor(() => expect(detailCalls()).toHaveLength(2))
     expect(detailCalls()[1][1]).toEqual({ id: 'in_c', digest: 'dc2' })
-    expect(await screen.findByText('What Approve does')).toBeTruthy()
+    expect(await screen.findByRole('heading', { name: 'What Approve does' })).toBeTruthy()
   })
 
   it('says why when the card changed before its details loaded', async () => {
