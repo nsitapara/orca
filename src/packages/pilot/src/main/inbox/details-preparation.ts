@@ -74,6 +74,7 @@ export function patchStats(text: string): ArtifactFile['diff'] {
       return {
         path,
         oldPath: file.oldFileName === '/dev/null' || from === path ? null : from,
+        rows: rows.length,
         added: rows.filter((row) => row[2] === '+').length,
         removed: rows.filter((row) => row[2] === '-').length,
         hunksSha256: hunksHash(hunks)
@@ -84,31 +85,34 @@ export function patchStats(text: string): ArtifactFile['diff'] {
   }
 }
 
-// The diff shown against the hashed patch, exactly. details.py may trim a big one: a file past its row cap keeps its
-// counts with no hunks (`omitted`), and the files past its file cap are only counted (`more_files`). Every shown file
-// is a distinct file of the patch with its rename and counts, its hunks are the patch's row for row unless omitted,
-// and the shown files plus more_files are the patch's files, no more and no fewer.
+// The diff shown against the hashed patch, exactly, trimmed only as details.py trims (its caps are DETAILS_LIMITS'):
+// the shown files are the patch's first files in order, more_files the rest, and a dropped file only past the file
+// cap; a file is omitted (counts, no hunks) only when its rows would take the rows shown so far past the row cap.
+// Every shown file has its rename and counts, and its hunks are the patch's row for row.
 function shownMatchesPatch(block: DiffBlock, stats: PatchStats): boolean {
-  const paths = block.files.map((file) => file.path)
-  if (
-    new Set(paths).size !== paths.length ||
-    new Set(stats.map((s) => s.path)).size !== stats.length
-  ) {
+  const dropped = block.more_files ?? 0
+  if (stats.length !== block.files.length + dropped) {
     return false
   }
-  if (stats.length !== block.files.length + (block.more_files ?? 0)) {
+  if (dropped > 0 && block.files.length !== DETAILS_LIMITS.diffFiles) {
     return false
   }
-  return block.files.every((file) => {
-    const stat = stats.find((s) => s.path === file.path)
+  let shownRows = 0
+  return block.files.every((file, n) => {
+    const stat = stats[n]
     const renamedFrom = file.old_path && file.old_path !== file.path ? file.old_path : null
-    if (!stat || stat.oldPath !== renamedFrom) {
+    if (stat.path !== file.path || stat.oldPath !== renamedFrom) {
       return false
     }
     if (stat.added !== file.added || stat.removed !== file.removed) {
       return false
     }
-    return file.omitted ? file.hunks.length === 0 : stat.hunksSha256 === hunksHash(file.hunks)
+    const fits = shownRows + stat.rows <= DETAILS_LIMITS.diffRows
+    if (file.omitted) {
+      return !fits && file.hunks.length === 0
+    }
+    shownRows += stat.rows
+    return stat.hunksSha256 === hunksHash(file.hunks)
   })
 }
 

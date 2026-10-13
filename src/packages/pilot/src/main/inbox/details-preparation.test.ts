@@ -46,37 +46,28 @@ function prepared() {
   return fixture
 }
 
-// details.py trims a big diff: past its row cap a file keeps its counts but loses its hunks (`omitted`), and past its
-// file cap the rest are dropped and counted in `more_files`. The patch file still holds every file.
-const TRIMMED_PATCH = [
-  'diff --git a/a.ts b/a.ts',
-  '--- a/a.ts',
-  '+++ b/a.ts',
-  '@@ -1,2 +1,3 @@',
-  ' keep',
-  '-old',
-  '+new',
-  '+more',
-  'diff --git a/b.ts b/b.ts',
-  '--- a/b.ts',
-  '+++ b/b.ts',
-  '@@ -1,1 +1,2 @@',
-  ' one',
-  '+two',
-  'diff --git a/c.ts b/c.ts',
-  '--- a/c.ts',
-  '+++ b/c.ts',
-  '@@ -1,2 +1,1 @@',
-  ' x',
-  '-y',
-  ''
-].join('\n')
+// details.py trims a big diff: past its row cap (4,000 rows shown so far) a file keeps its counts but loses its hunks
+// (`omitted`), and past its file cap (60) the rest are dropped and counted in `more_files`. The patch has them all.
+// This patch: f0 (1 row), f1 (4,001 rows: past the cap, omitted), f2..f59 (1 row each), and f60 (dropped).
+const newFile = (name: string, rows: number) => [
+  `diff --git a/${name} b/${name}`,
+  'new file mode 100644',
+  '--- /dev/null',
+  `+++ b/${name}`,
+  `@@ -0,0 +1,${rows} @@`,
+  ...Array.from({ length: rows }, (_, n) => `+line ${n}`)
+]
+const NAMES = Array.from({ length: 61 }, (_, n) => `f${n}.ts`)
+const TRIMMED_PATCH = [...NAMES.flatMap((name, n) => newFile(name, n === 1 ? 4001 : 1)), ''].join(
+  '\n'
+)
 type ShownFile = {
   path: string
   added: number
   removed: number
   hunks: unknown[]
   omitted?: boolean
+  old_path?: string
 }
 function trimmed(change: (diff: { files: ShownFile[]; more_files?: number }) => void = () => {}) {
   const f = prepared()
@@ -89,22 +80,12 @@ function trimmed(change: (diff: { files: ShownFile[]; more_files?: number }) => 
       ...check,
       patch_sha256: patch
     }))
-    diff.files = [
-      {
-        path: 'a.ts',
-        added: 2,
-        removed: 1,
-        hunks: [
-          [
-            [1, 1, ' ', 'keep'],
-            [2, null, '-', 'old'],
-            [null, 2, '+', 'new'],
-            [null, 3, '+', 'more']
-          ]
-        ]
-      },
-      { path: 'b.ts', added: 1, removed: 0, hunks: [], omitted: true }
-    ]
+    diff.files = NAMES.slice(0, 60).map((path, n): ShownFile => {
+      if (n === 1) {
+        return { path, added: 4001, removed: 0, hunks: [], omitted: true }
+      }
+      return { path, added: 1, removed: 0, hunks: [[[null, 1, '+', 'line 0']]] }
+    })
     diff.more_files = 1
     change(diff as never)
   })
@@ -133,21 +114,33 @@ describe('a trimmed diff (details.py past its row or file cap)', () => {
     [
       'a shown file the patch does not have',
       (diff) =>
-        void diff.files.push({ path: 'd.ts', added: 1, removed: 0, hunks: [], omitted: true })
+        void (diff.files[5] = { path: 'd.ts', added: 1, removed: 0, hunks: [], omitted: true })
     ],
-    ['a file shown twice', (diff) => void diff.files.push({ ...diff.files[1] })],
+    ['a file shown twice', (diff) => void (diff.files[3] = { ...diff.files[2] })],
     ['a shown file with no hunks', (diff) => void (diff.files[0].hunks = [])],
     [
-      'a mismatched hunk on a shown file (its context)',
+      'a mismatched hunk on a shown file (its text)',
       (diff) => void ((diff.files[0].hunks as unknown[][][])[0][0][3] = 'not the patch')
     ],
     [
       'a mismatched hunk on a shown file (its line numbers)',
-      (diff) => void ((diff.files[0].hunks as unknown[][][])[0][0][0] = 7)
+      (diff) => void ((diff.files[0].hunks as unknown[][][])[0][0][1] = 7)
+    ],
+    ['a shown rename the patch does not make', (diff) => void (diff.files[0].old_path = 'x.ts')],
+    [
+      'a small file omitted inside the row cap',
+      (diff) => void (diff.files[2] = { ...diff.files[2], hunks: [], omitted: true })
     ],
     [
-      'a shown rename the patch does not make',
-      (diff) => void ((diff.files[0] as { old_path?: string }).old_path = 'elsewhere.ts')
+      'files dropped before the file cap',
+      (diff) => {
+        diff.files.pop()
+        diff.more_files = 2
+      }
+    ],
+    [
+      'shown files out of the patch order',
+      (diff) => void ([diff.files[2], diff.files[3]] = [diff.files[3], diff.files[2]])
     ]
   ])('refuses %s', (_name, change) => {
     const f = trimmed(change)
