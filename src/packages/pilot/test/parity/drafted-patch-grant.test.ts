@@ -46,7 +46,9 @@ describe.skipIf(!existsSync(skillsDir()))(
 // apply.md's gate reads the grant out of `pilot inbox show --id <id> --json`, which prints the runtime's
 // envelope ({id, ok, result: <the card>, _meta}): the key paths it names must be the ones that output has.
 const GATE_KEYS = ['result.details.draftApproved', 'result.details.sha256']
-const DOCS: [string, string][] = [...FILES, ['item-details', 'modes/candidate.md']]
+// candidate.md is left out: it reads no grant at all (its own contract is checked below), so the key-path check would
+// check nothing there.
+const DOCS: [string, string][] = FILES
 
 function keyPaths(text: string): string[] {
   return [...text.matchAll(/`(result\.details\.[A-Za-z0-9]+)`/g)].map((m) => m[1])
@@ -113,6 +115,24 @@ describe.skipIf(!existsSync(skillsDir()))(
       for (const key of GATE_KEYS) {
         expect(at(shown, key)).toBeDefined()
       }
+    })
+  }
+)
+
+// Candidate mode drafts for job 14's worker and never touches a card: no grant to read, nothing to apply or attach.
+describe.skipIf(!existsSync(skillsDir()))(
+  'item-details candidate mode returns a candidate only',
+  () => {
+    it('never attaches, completes, adds a card, runs an action, commits or pushes', () => {
+      const text = readFileSync(join(skillsDir(), 'item-details', 'modes', 'candidate.md'), 'utf8')
+      expect(text).toContain(
+        'This mode returns a candidate; it never attaches Details or clears an answer.'
+      )
+      expect(text).toContain(
+        'Do not run `extend-card`, `set-details`, `context.py complete`, `pilot inbox add`, or action commands.'
+      )
+      expect(text).toContain('Never commit or push.')
+      expect(text).not.toMatch(/draftApproved/)
     })
   }
 )
