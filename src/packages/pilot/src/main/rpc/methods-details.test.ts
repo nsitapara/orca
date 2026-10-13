@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -5,6 +6,8 @@ import { describe, expect, it } from 'vitest'
 import type { RpcCallerIdentity } from '../../../../../main/runtime/rpc/rpc-caller-identity'
 import { loadDefinitions } from '../definitions/loader'
 import { copyBundle, detailsFixture, rewriteBundle } from '../inbox/__fixtures__/details-fixture'
+import { completePreparation } from '../inbox/preparation'
+import { ReviewFileSchema } from '../inbox/details-schema'
 import { loadDetails } from '../inbox/details-bundle'
 import { addInboxItem } from '../inbox/inbox-add'
 import type { PilotHost } from '../pilot-services'
@@ -27,10 +30,10 @@ function detailsSetup() {
   const f = detailsFixture()
   const dir = mkdtempSync(join(tmpdir(), 'pilot-details-rpc-'))
   writeFileSync(join(dir, 'people.yaml'), 'people:\n  - { id: nish, name: Nish, gitlab: nish8 }\n')
-  for (const id of ['ci', 'qa']) {
+  for (const id of ['ci', 'qa', 'prepare']) {
     writeFileSync(
       join(dir, `${id}.yaml`),
-      `name: ${id}\nrepo: r\nschedule: manual\nitems: { kind: merge_request }\nsteps: [ { agent: claude, prompt: x } ]\ninbox: nish\n`
+      `name: ${id}\nrepo: r\nschedule: manual\nitems: { kind: ${id === 'prepare' ? 'inbox_preparation' : 'merge_request'} }\nsteps: [ { agent: claude, prompt: x } ]\ninbox: nish\n`
     )
   }
   const loaded = loadDefinitions([dir])
@@ -410,5 +413,196 @@ describe("a card's own answer run re-attaches its Details", () => {
     store.runs.update('ans-1', { status: 'done', finishedAt: 300 })
     answerRunEnded(store, store.runs.get('ans-1')!)
     expect(store.inbox.get(id)).toEqual(reasked)
+  })
+})
+
+describe('managed preparation RPC scope and completion', () => {
+  it('refuses a valid review preview that differs from the exact review the action will post', () => {
+    const { store, deps, f } = detailsSetup()
+    const reviewPath = join(f.dir, 'sample-review.json')
+    const original = readFileSync(reviewPath, 'utf8')
+    const review = ReviewFileSchema.parse(JSON.parse(original))
+    const digest = createHash('sha256').update(original).digest('hex')
+    const id = addInboxItem(deps, {
+      automationId: 'ci',
+      itemKey: 'mr:1',
+      type: 'action',
+      title: 'Post review',
+      action: 'post_review',
+      actionArgs: { argv: [String(review.iid), reviewPath, digest] },
+      parts: Object.fromEntries(review.parts.map((part) => [part.id, part.title])),
+      preparation: {
+        key: 'post',
+        context: 'Review the exact comments',
+        requirements: ['context', 'review']
+      }
+    }).id!
+    store.inboxPreparations.claim(id, 1, 'worker', 0, 100)
+    rewriteBundle(f.bundle, (bundle) => {
+      bundle.provenance = {
+        originatingRunId: null,
+        preparingRunId: 'worker',
+        itemId: id,
+        attempt: 1
+      }
+      bundle.blocks = [
+        { type: 'text', body: 'Exact comments for review' },
+        { type: 'review', file: 'sample-review.json' }
+      ]
+    })
+    const differentReview = {
+      ...review,
+      head_sha: 'f'.repeat(40),
+      parts: review.parts.map((part) => ({ ...part, comment: 'Different comment' }))
+    }
+    writeFileSync(reviewPath, JSON.stringify(differentReview))
+    expect(() =>
+      completePreparation(
+        deps,
+        id,
+        { runId: 'worker', stepIdx: 0, revision: 1, attempt: 1 },
+        f.bundle
+      )
+    ).toThrow('review')
+    expect(store.inbox.get(id)?.preparation?.state).toBe('generating')
+    writeFileSync(reviewPath, original)
+    expect(
+      completePreparation(
+        deps,
+        id,
+        { runId: 'worker', stepIdx: 0, revision: 1, attempt: 1 },
+        f.bundle
+      )?.preparation?.state
+    ).toBe('ready')
+  })
+
+  it('lets a scoped worker from another automation complete but rejects ordinary workers and late results', () => {
+    const { store, deps, f, callAs } = detailsSetup()
+    const id = addInboxItem(deps, {
+      automationId: 'ci',
+      itemKey: 'mr:1',
+      type: 'question',
+      title: 'Decision',
+      preparation: {
+        key: 'decision',
+        context: 'Investigate the pinned issue',
+        requirements: ['context']
+      }
+    }).id!
+    withRuns(store)
+    store.runs.create({
+      id: 'worker',
+      automationId: 'prepare',
+      tickId: null,
+      itemKey: id,
+      itemLabel: 'Decision',
+      worktreePath: '/wt',
+      startedAt: 1
+    })
+    store.runs.createStep({
+      runId: 'worker',
+      idx: 0,
+      name: 'prepare',
+      agent: 'claude',
+      skill: null,
+      mode: null,
+      startedAt: 1,
+      status: 'running'
+    })
+    store.inboxPreparations.claim(id, 1, 'worker', 0, Date.now())
+    const params = { id, revision: 1, attempt: 1, runId: 'worker', stepIdx: 0 }
+    expect(() =>
+      callAs(CLI, 'pilot.inbox.prepareProgress', { ...params, runId: 'run-1', message: 'Bypass' })
+    ).toThrow('no grant')
+    expect(() =>
+      callAs(DESKTOP, 'pilot.inbox.prepareProgress', { ...params, message: 'Bypass' })
+    ).toThrow('active Pilot worker')
+    expect(callAs(CLI, 'pilot.inbox.prepareClaim', params)).toMatchObject({
+      automationId: 'ci',
+      preparation: { attempt: 1 }
+    })
+    rewriteBundle(f.bundle, (bundle) => {
+      bundle.provenance = {
+        originatingRunId: null,
+        preparingRunId: 'worker',
+        itemId: id,
+        attempt: 1
+      }
+      bundle.blocks = [{ type: 'text', body: 'Investigated context' }]
+    })
+    expect(
+      callAs(CLI, 'pilot.inbox.prepareComplete', { ...params, bundlePath: f.bundle })
+    ).toMatchObject({
+      preparation: { state: 'ready' },
+      details: { artifacts: { expected: ['context'] } }
+    })
+    expect(() =>
+      callAs(CLI, 'pilot.inbox.prepareComplete', { ...params, bundlePath: f.bundle })
+    ).toThrow('stale')
+  })
+  it('keeps required evidence pending after validation fails and refuses completion after an early answer', () => {
+    const { store, deps, f, callAs } = detailsSetup()
+    const id = addInboxItem(deps, {
+      automationId: 'ci',
+      itemKey: 'mr:1',
+      type: 'question',
+      title: 'Decision',
+      preparation: {
+        key: 'decision',
+        context: 'Investigate pinned issue',
+        requirements: ['context', 'screens']
+      }
+    }).id!
+    store.runs.create({
+      id: 'worker',
+      automationId: 'prepare',
+      tickId: null,
+      itemKey: id,
+      itemLabel: 'Decision',
+      worktreePath: '/wt',
+      startedAt: 1
+    })
+    store.runs.createStep({
+      runId: 'worker',
+      idx: 0,
+      name: 'prepare',
+      agent: 'claude',
+      skill: null,
+      mode: null,
+      startedAt: 1,
+      status: 'running'
+    })
+    store.inboxPreparations.claim(id, 1, 'worker', 0, Date.now())
+    const params = {
+      id,
+      revision: 1,
+      attempt: 1,
+      runId: 'worker',
+      stepIdx: 0,
+      bundlePath: f.bundle
+    }
+    rewriteBundle(f.bundle, (bundle) => {
+      bundle.provenance = {
+        originatingRunId: null,
+        preparingRunId: 'worker',
+        itemId: id,
+        attempt: 1
+      }
+      bundle.blocks = [{ type: 'text', body: 'Evidence gathered' }]
+    })
+    expect(() => callAs(CLI, 'pilot.inbox.prepareComplete', params)).toThrow('Required screens')
+    expect(store.inbox.get(id)).toMatchObject({
+      details: null,
+      preparation: { state: 'generating' }
+    })
+    const item = store.inbox.get(id)!
+    store.inbox.saveAnswer(
+      id,
+      { digest: item.digest, text: 'Skip', option: null, via: 'page' },
+      'nish',
+      Date.now()
+    )
+    expect(() => callAs(CLI, 'pilot.inbox.prepareComplete', params)).toThrow('stale')
+    expect(store.inbox.get(id)).toMatchObject({ status: 'answered', details: null })
   })
 })

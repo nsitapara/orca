@@ -23,7 +23,8 @@ const PREFIX: Record<ItemKind, string> = {
   merge_request: 'mr',
   worktree: 'worktree',
   pipeline: 'pipeline',
-  linear_ticket: 'ticket'
+  linear_ticket: 'ticket',
+  inbox_preparation: 'preparation'
 }
 const ITEM_CONCURRENCY = 4
 

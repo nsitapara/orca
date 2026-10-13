@@ -1,6 +1,7 @@
 import type { StepDef } from './definition/types'
 import type { InboxItemSummary } from './inbox-types'
 import type { DetailsRef } from './details'
+import type { InboxPreparation } from './preparation'
 
 export type PilotStatus = {
   version: string
@@ -165,6 +166,7 @@ export type InboxAnswer = {
 export type InboxReply = { text: string; by: 'pilot' | 'agent' }
 
 export type InboxItemRow = {
+  preparation?: InboxPreparation | null
   id: string
   automationId: string
   runId: string | null

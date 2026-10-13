@@ -1,4 +1,5 @@
 import type { HandlerGroup } from '../../../../cli/handler-group-manifest'
+import { PREPARATION_COMMAND_KEYS } from './preparation'
 import { ANSWERS_COMMAND_KEYS } from './answers-specs'
 
 export const PILOT_HANDLER_GROUPS: readonly HandlerGroup[] = [
@@ -36,7 +37,14 @@ export const PILOT_HANDLER_GROUPS: readonly HandlerGroup[] = [
   },
   {
     name: 'pilot-inbox',
-    keys: ['inbox add', 'inbox list', 'inbox show', 'inbox set-details', 'inbox answer'],
+    keys: [
+      ...PREPARATION_COMMAND_KEYS,
+      'inbox add',
+      'inbox list',
+      'inbox show',
+      'inbox set-details',
+      'inbox answer'
+    ],
     load: async () => (await import('./handlers-inbox.js')).INBOX_HANDLERS
   },
   {

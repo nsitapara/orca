@@ -441,3 +441,51 @@ describe('pilot inbox answer', () => {
     }
   )
 })
+
+describe('managed preparation CLI', () => {
+  it('reads self-contained intake JSON and sends the frozen requirements', async () => {
+    insideStep()
+    const file = join(mkdtempSync(join(tmpdir(), 'pilot-preparation-cli-')), 'request.json')
+    const preparation = {
+      key: 'decision',
+      context: 'Reproduce the pinned bug',
+      requirements: ['context', 'diff'],
+      maxAttempts: 2
+    }
+    writeFileSync(file, JSON.stringify(preparation))
+    const { context, call } = contextFor([...CARD, '--preparation-file', file], ADDED)
+    vi.spyOn(console, 'log').mockImplementation(() => {})
+    await INBOX_HANDLERS['inbox add'](context)
+    expect(call).toHaveBeenCalledWith('pilot.inbox.add', expect.objectContaining({ preparation }))
+  })
+  it('sends revision, attempt, retry and the active run binding for a failed attempt', async () => {
+    insideStep()
+    const { context, call } = contextFor(
+      [
+        'inbox',
+        'prepare-fail',
+        '--id',
+        'q1',
+        '--revision',
+        '1',
+        '--attempt',
+        '2',
+        '--error',
+        'Missing screenshot',
+        '--retry'
+      ],
+      SHOWN
+    )
+    vi.spyOn(console, 'log').mockImplementation(() => {})
+    await INBOX_HANDLERS['inbox prepare-fail'](context)
+    expect(call).toHaveBeenCalledWith('pilot.inbox.prepareFail', {
+      id: 'q1',
+      revision: 1,
+      attempt: 2,
+      runId: 'run-1',
+      stepIdx: 2,
+      error: 'Missing screenshot',
+      retry: true
+    })
+  })
+})

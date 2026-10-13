@@ -133,8 +133,8 @@ export class InboxStore {
       .prepare(
         `INSERT INTO inbox_items (id, automation_id, run_id, step_idx, item_key, worktree_path, person, type, title,
           context, options_json, suggested, details_md, action, action_args_json, digest, created_at, updated_at,
-          outcome, replies_json, parts_json, switch_json, source, vault_ref, details_ref_json, details_snapshot_json)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+          outcome, replies_json, parts_json, switch_json, source, vault_ref, details_ref_json, details_snapshot_json, preparation_json)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       )
       .run(
         item.id,
@@ -162,7 +162,8 @@ export class InboxStore {
         item.source,
         item.vaultRef,
         jsonOrNull(item.details),
-        jsonOrNull(snapshot)
+        jsonOrNull(snapshot),
+        jsonOrNull(item.preparation)
       )
   }
 
@@ -248,6 +249,10 @@ export class InboxStore {
   update(id: string, patch: InboxPatch, at: number): void {
     const keys = (Object.keys(patch) as (keyof InboxPatch)[]).filter((k) => patch[k] !== undefined)
     const sets = [...keys.map((k) => `${PATCH_COLUMNS[k]} = ?`), 'updated_at = ?']
+    if (patch.status && patch.status !== 'open') {
+      sets.push(`preparation_json = CASE WHEN json_extract(preparation_json, '$.state') IN ('queued', 'generating', 'blocked')
+        THEN json_set(preparation_json, '$.state', 'cancelled', '$.leaseUntil', NULL, '$.progress', 'Item answered or closed') ELSE preparation_json END`)
+    }
     this.db
       .prepare(`UPDATE inbox_items SET ${sets.join(', ')} WHERE id = ?`)
       .run(...(keys.map((k) => encodePatch(k, patch[k])) as never[]), at, id)
@@ -257,7 +262,9 @@ export class InboxStore {
   saveAnswer(id: string, answer: InboxAnswer, by: string, at: number): AnswerSave {
     const r = this.db
       .prepare(
-        `UPDATE inbox_items SET status = 'answered', answer_json = ?, answered_at = ?, answered_by = ?, updated_at = ?
+        `UPDATE inbox_items SET status = 'answered', answer_json = ?, answered_at = ?, answered_by = ?, updated_at = ?,
+         preparation_json = CASE WHEN json_extract(preparation_json, '$.state') IN ('queued', 'generating', 'blocked')
+           THEN json_set(preparation_json, '$.state', 'cancelled', '$.leaseUntil', NULL, '$.progress', 'Answered before context was ready') ELSE preparation_json END
          WHERE id = ? AND status = 'open' AND digest = ?`
       )
       .run(JSON.stringify(answer), at, by, at, id, answer.digest)
@@ -276,8 +283,11 @@ export class InboxStore {
 
   setStatus(id: string, status: InboxStatus, at: number): boolean {
     const r = this.db
-      .prepare('UPDATE inbox_items SET status = ?, updated_at = ? WHERE id = ?')
-      .run(status, at, id)
+      .prepare(`UPDATE inbox_items SET status = ?, updated_at = ?,
+        preparation_json = CASE WHEN ? != 'open' AND json_extract(preparation_json, '$.state') IN ('queued', 'generating', 'blocked')
+          THEN json_set(preparation_json, '$.state', 'cancelled', '$.leaseUntil', NULL, '$.progress', 'Item closed') ELSE preparation_json END
+        WHERE id = ?`)
+      .run(status, at, status, id)
     return Number(r.changes) > 0
   }
 

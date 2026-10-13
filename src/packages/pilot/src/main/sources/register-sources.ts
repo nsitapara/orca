@@ -4,6 +4,7 @@ import type { OrcaRuntimeService } from '../../../../../main/runtime/orca-runtim
 import type { PilotStore } from '../store/store'
 import { runtimeLinearConnector } from '../linear-connector/linear-connector'
 import { linearTicketSource } from './linear-tickets'
+import { inboxPreparationSource } from './inbox-preparations'
 import { registerItemSource } from './registry'
 import { runtimeWorktreeRecords } from './worktree-records'
 import { worktreeSource } from './worktrees'
@@ -14,6 +15,7 @@ export type PilotSourceDeps = { runtime: OrcaRuntimeService; store: PilotStore }
 // definitions load (openPilot). GitLab-only sources are built into registry.ts.
 export function registerPilotSources(deps: PilotSourceDeps): void {
   const listWorktrees = runtimeWorktreeRecords(deps.runtime)
+  registerItemSource(inboxPreparationSource(deps.store, listWorktrees))
   registerItemSource(
     worktreeSource({
       listWorktrees,

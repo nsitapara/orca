@@ -96,7 +96,7 @@ describe('06 · Address reviewer feedback: the definition', () => {
     expect(modeText('feedback')).toContain(
       `apply them as \`~/.agents/skills/${SKILL}/modes/answers.md\``
     )
-    expect(modeText('feedback')).toContain('pilot inbox add')
+    expect(modeText('feedback')).toContain('context.py enqueue --request <json>')
     expect(modeText('answers')).toContain('item_status=stale')
   })
 })

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import type { InboxItemRow } from '../../../shared/api-types'
 import { groupItems, type Section } from '../../../shared/inbox-groups'
-import { waitingCount } from './answer-text'
+import { waitingCount, preparingCount, preparationBlockedCount } from './answer-text'
 import { CardList } from './CardList'
 import { FilterBadges } from './FilterBadges'
 import { setAllDetailsOpen, useAllDetailsOpen } from './details-open'
@@ -111,6 +111,8 @@ export function InboxPage(): React.JSX.Element {
         listOpen={listOpen}
         onToggleList={toggleList}
         waiting={waitingCount(items)}
+        preparing={preparingCount(items)}
+        blocked={preparationBlockedCount(items)}
         people={people}
         viewer={viewer}
         onViewer={setViewer}

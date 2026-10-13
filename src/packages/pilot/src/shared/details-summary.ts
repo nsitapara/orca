@@ -1,4 +1,4 @@
-import type { DetailsBlock, DetailsBundle } from './details'
+import type { ArtifactFile, DetailsBlock, DetailsBundle } from './details'
 
 const MAX_CHIPS = 4
 const MAX_LABEL = 40
@@ -11,7 +11,7 @@ function plural(n: number, one: string, many: string): string {
   return n === 1 ? `${n} ${one}` : `${n} ${many}`
 }
 
-function diffChip(blocks: DetailsBlock[]): string | null {
+function diffChip(blocks: DetailsBlock[], artifacts?: ArtifactFile[]): string | null {
   let found = false
   let added = 0
   let removed = 0
@@ -19,7 +19,8 @@ function diffChip(blocks: DetailsBlock[]): string | null {
     if (b.type !== 'diff') {
       continue
     }
-    for (const f of b.files) {
+    const actual = artifacts?.find((artifact) => artifact.ref === b.patch)?.diff
+    for (const f of actual ?? b.files) {
       found = true
       added += f.added ?? 0
       removed += f.removed ?? 0
@@ -32,7 +33,7 @@ function screensChip(blocks: DetailsBlock[]): string | null {
   let pairs = 0
   for (const b of blocks) {
     if (b.type === 'screens') {
-      pairs += b.pairs.length
+      pairs += b.pairs.filter((pair) => pair.before && pair.after).length
     }
   }
   if (pairs === 0) {
@@ -45,7 +46,7 @@ function shotsChip(blocks: DetailsBlock[]): string | null {
   let shots = 0
   for (const b of blocks) {
     if (b.type === 'shots') {
-      shots += b.shots.length
+      shots += b.shots.filter((shot) => shot.file).length
     }
   }
   return shots === 0 ? null : plural(shots, 'screenshot', 'screenshots')
@@ -91,12 +92,13 @@ function factsChip(blocks: DetailsBlock[]): string | null {
 export function summaryOf(
   bundle: DetailsBundle,
   texts: Record<string, string>,
-  drafted: boolean
+  drafted: boolean,
+  artifacts?: ArtifactFile[]
 ): string[] {
   const blocks = bundle.blocks
   const chips = [
     drafted ? 'drafted fix' : null,
-    diffChip(blocks),
+    diffChip(blocks, artifacts),
     screensChip(blocks),
     shotsChip(blocks),
     findingsChip(blocks, texts),

@@ -161,6 +161,12 @@ export function inboxDigest(card: InboxCard): string {
       Object.entries(card.details.inlined).sort()
     ])
   }
+  if (card.details?.artifacts) {
+    fields.push([
+      'artifacts',
+      card.details.artifacts.files.map((file) => [file.ref, file.role, file.sha256])
+    ])
+  }
   return createHash('sha256').update(JSON.stringify(fields)).digest('hex')
 }
 

@@ -1,12 +1,22 @@
 import type { InboxItemRow } from '../../../shared/api-types'
 import type { AnswerState } from '../../../shared/inbox-types'
 
-export type StatusPill = 'waiting' | 'answered' | 'applying' | 'failed' | 'done' | 'unsaved'
+export type StatusPill =
+  | 'waiting'
+  | 'answered'
+  | 'applying'
+  | 'failed'
+  | 'done'
+  | 'unsaved'
+  | 'Context queued'
+  | 'Generating context'
+  | 'Ready for decision'
+  | 'Preparation blocked'
 
 // Where a card stands, for its pill. A pick not yet saved is "unsaved". An answered card is "applying" only
 // when the server says its answer is locked (it may be being carried out), "failed" when its row failed.
 export function statusOf(
-  item: Pick<InboxItemRow, 'status'>,
+  item: Pick<InboxItemRow, 'status' | 'preparation'>,
   answerState: AnswerState | null,
   unsaved: boolean
 ): StatusPill {
@@ -14,7 +24,19 @@ export function statusOf(
     return 'unsaved'
   }
   if (item.status === 'open') {
-    return 'waiting'
+    switch (item.preparation?.state) {
+      case 'queued':
+        return 'Context queued'
+      case 'generating':
+        return 'Generating context'
+      case 'ready':
+        return 'Ready for decision'
+      case 'blocked':
+        return 'Preparation blocked'
+      case 'cancelled':
+      case undefined:
+        return 'waiting'
+    }
   }
   if (item.status === 'done') {
     return 'done'
@@ -32,6 +54,10 @@ const ACCENT = 'bg-[var(--ib-accent-soft)] text-[var(--ib-accent)]'
 
 const PILL_COLOURS: Record<StatusPill, string> = {
   waiting: WARN,
+  'Context queued': ACCENT,
+  'Generating context': ACCENT,
+  'Ready for decision': WARN,
+  'Preparation blocked': WARN,
   answered: ACCENT,
   applying: `${ACCENT} animate-pulse`,
   failed: 'bg-[var(--ib-bad-soft)] text-[var(--ib-bad)]',

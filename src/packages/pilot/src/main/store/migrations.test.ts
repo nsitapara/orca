@@ -240,19 +240,27 @@ describe('migrate', () => {
       "INSERT INTO inbox_items (id, automation_id, person, type, title, digest, created_at, updated_at) VALUES ('i1', 'a', 'p', 'question', 't', 'd', 1, 1)"
     )
     migrate(db)
-    expect(PILOT_SCHEMA_VERSION).toBe(5)
-    expect(db.pragma('user_version', { simple: true })).toBe(5)
+    expect(PILOT_SCHEMA_VERSION).toBe(6)
+    expect(db.pragma('user_version', { simple: true })).toBe(6)
     expect(
-      firstRow(db, 'SELECT id, details_ref_json, details_snapshot_json FROM inbox_items')
-    ).toEqual({ id: 'i1', details_ref_json: null, details_snapshot_json: null })
+      firstRow(
+        db,
+        'SELECT id, details_ref_json, details_snapshot_json, preparation_json FROM inbox_items'
+      )
+    ).toEqual({
+      id: 'i1',
+      details_ref_json: null,
+      details_snapshot_json: null,
+      preparation_json: null
+    })
   })
 
-  it('leaves a database a newer process moved to v6 at v6', () => {
+  it('leaves a database migrated by a newer process unchanged', () => {
     const db = openDb()
     migrate(db)
-    db.pragma('user_version = 6')
+    db.pragma(`user_version = ${PILOT_SCHEMA_VERSION + 1}`)
     migrate(db)
-    expect(db.pragma('user_version', { simple: true })).toBe(6)
+    expect(db.pragma('user_version', { simple: true })).toBe(PILOT_SCHEMA_VERSION + 1)
   })
 
   it('does nothing to a database that is already current', () => {

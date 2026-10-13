@@ -37,6 +37,9 @@ function asksForDraft(item: InboxItemRow, answer: InboxAnswer): boolean {
 // now, still answered, and asking for the draft as drafted. apply.md applies a Pilot card's patch only
 // when `pilot inbox show` says so.
 export function draftApproved(item: InboxItemRow): boolean {
+  if (item.preparation && item.preparation.state !== 'ready') {
+    return false
+  }
   const answer = item.answer
   if (!item.details?.drafted || !answer || item.status !== 'answered') {
     return false

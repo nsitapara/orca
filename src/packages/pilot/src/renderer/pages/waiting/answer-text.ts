@@ -185,7 +185,28 @@ export function worktreeName(path: string | null): string {
 
 // What counts as waiting on you: open cards, never the defaults the agents took.
 export function waitingCount(items: InboxItemRow[]): number {
-  return items.filter((i) => i.status === 'open' && i.type !== 'default').length
+  return items.filter(
+    (i) =>
+      i.status === 'open' &&
+      i.type !== 'default' &&
+      (!i.preparation || i.preparation.state === 'ready')
+  ).length
+}
+
+export function preparingCount(items: InboxItemRow[]): number {
+  return items.filter(
+    (item) =>
+      item.status === 'open' &&
+      item.type !== 'default' &&
+      (item.preparation?.state === 'queued' || item.preparation?.state === 'generating')
+  ).length
+}
+
+export function preparationBlockedCount(items: InboxItemRow[]): number {
+  return items.filter(
+    (item) =>
+      item.status === 'open' && item.type !== 'default' && item.preparation?.state === 'blocked'
+  ).length
 }
 
 const DAY_MS = 86_400_000

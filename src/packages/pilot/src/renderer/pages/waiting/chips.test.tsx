@@ -9,6 +9,7 @@ vi.mock('../../api', () => ({ pilotRpc: (...args: unknown[]) => pilotRpc(...args
 
 import { InboxPage } from './InboxPage'
 import { INBOX_CSS } from './inbox-style'
+import { queuedPreparation } from '../../../shared/preparation'
 import { statusOf, statusPillClass } from './chips'
 
 describe('chip colours (the console’s: answers.html)', () => {
@@ -112,6 +113,41 @@ describe('colours on the page', () => {
   afterEach(() => {
     cleanup()
     pilotRpc.mockReset()
+  })
+
+  it('shows preparation progress separately from waiting and offers an early answer without approval', async () => {
+    const preparation = queuedPreparation(
+      {
+        key: 'finding',
+        context: 'Investigate the decision',
+        requirements: ['context', 'diff', 'screens']
+      },
+      1
+    )
+    const items = [card({ preparation })]
+    pilotRpc.mockImplementation(async (method: string) => {
+      if (method === 'pilot.inbox.list') {
+        return {
+          items,
+          runLines: {},
+          answerStates: {},
+          people: [{ id: 'nish', name: 'Nish' }],
+          groups: [],
+          automations: [{ id: 'a', name: 'Review' }]
+        }
+      }
+      return { entries: [] }
+    })
+    render(<InboxPage />)
+    expect(await screen.findByText('1 preparing context')).toBeTruthy()
+    expect(screen.getByText('0 waiting')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Answer before context is ready…' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Fix it' })).toBeNull()
+    expect(
+      screen.getByText(
+        'Needed for your decision: decision context, code diff, before / after screenshots.'
+      )
+    ).toBeTruthy()
   })
 
   it('has no waiting pill and no kind chip, and highlights a question’s first option', async () => {

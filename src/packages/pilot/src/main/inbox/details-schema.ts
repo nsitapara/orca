@@ -49,8 +49,19 @@ const Diff = z
     base: maybeText,
     head: maybeText,
     patch: Ref.nullish(),
+    patch_kind: z.enum(['draft', 'committed']).optional(),
     patch_sha256: maybeText,
-    checks: list(text).optional()
+    checks: list(text).optional(),
+    check_records: list(
+      z.looseObject({
+        command: text.min(1),
+        exit_code: z.number().int(),
+        output: Ref,
+        output_sha256: text.regex(/^[a-f0-9]{64}$/),
+        base: text.min(1),
+        patch_sha256: text.regex(/^[a-f0-9]{64}$/)
+      })
+    ).optional()
   })
   .refine(
     (block) =>
@@ -112,6 +123,14 @@ export const BundleSchema: z.ZodType<DetailsBundle> = z
       .regex(/^[\w.-]+$/, 'the item id must be letters, digits, . _ or -'),
     built: maybeText,
     by: maybeText,
+    provenance: z
+      .object({
+        originatingRunId: text.nullable(),
+        preparingRunId: text.min(1),
+        itemId: text.min(1),
+        attempt: z.number().int().positive()
+      })
+      .optional(),
     blocks: list(
       z.discriminatedUnion('type', [
         Facts,

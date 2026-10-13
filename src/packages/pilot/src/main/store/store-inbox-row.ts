@@ -1,3 +1,4 @@
+import { InboxPreparationSchema } from '../../shared/preparation'
 import type {
   InboxAnswer,
   InboxItemRow,
@@ -11,6 +12,7 @@ import { detailsRefOf } from './store-inbox-details'
 // Every column a card row reads, without its Details snapshot: lists and gets stay light, and the
 // snapshot is read only by id (pilot.inbox.details).
 export const INBOX_ROW_COLUMNS = [
+  'preparation_json',
   'id',
   'automation_id',
   'run_id',
@@ -53,6 +55,9 @@ function parsedOrNull(text: unknown): unknown {
 // A card row as stored (INBOX_ROW_COLUMNS) → InboxItemRow.
 export function toItem(r: Record<string, unknown>): InboxItemRow {
   return {
+    ...(r.preparation_json
+      ? { preparation: InboxPreparationSchema.parse(parsedOrNull(r.preparation_json)) }
+      : {}),
     id: String(r.id),
     automationId: String(r.automation_id),
     runId: (r.run_id as string | null) ?? null,

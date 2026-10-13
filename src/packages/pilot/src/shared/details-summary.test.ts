@@ -35,6 +35,8 @@ describe('summaryOf', () => {
   })
 
   it.each([
+    ['incomplete pair', bundle({ type: 'screens', pairs: [{ before: 'b.png' }] }), []],
+    ['empty screenshot', bundle({ type: 'shots', shots: [{}] }), []],
     ['one pair', bundle({ type: 'screens', pairs: [pair] }), ['before / after']],
     ['several pairs', bundle({ type: 'screens', pairs: [pair, pair, pair] }), ['3 before / after']],
     ['one shot', bundle({ type: 'shots', shots: [{ file: '1.png' }] }), ['1 screenshot']],

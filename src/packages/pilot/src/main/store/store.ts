@@ -15,6 +15,7 @@ import { TimelineStore } from './store-timeline'
 import { RunStore } from './store-runs'
 import { UsageStore } from './store-usage'
 import { SpendStore } from './store-spend'
+import { InboxPreparationStore } from './store-inbox-preparations'
 import { InboxStore } from './store-inbox'
 import { QueueStore } from './store-queue'
 import { ActionRunStore } from './store-actions'
@@ -56,6 +57,7 @@ export class PilotStore {
   readonly runs: RunStore
   readonly usage: UsageStore
   readonly spend: SpendStore
+  readonly inboxPreparations: InboxPreparationStore
   readonly inbox: InboxStore
   readonly timeline: TimelineStore
   readonly queue: QueueStore
@@ -71,6 +73,7 @@ export class PilotStore {
   private constructor(private readonly db: Database) {
     this.runs = new RunStore(db)
     this.inbox = new InboxStore(db)
+    this.inboxPreparations = new InboxPreparationStore(db, this.inbox)
     this.timeline = new TimelineStore(db, this.inbox)
     this.queue = new QueueStore(db)
     this.events = new EventStore(db)

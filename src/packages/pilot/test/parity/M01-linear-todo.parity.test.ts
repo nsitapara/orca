@@ -55,8 +55,11 @@ describe('M01 · Start my Todo Linear tickets: the definition (old job: orca aut
     })
   })
 
-  it('has no answers block: the kickoff session asks nothing the dispatcher would route', () => {
-    expect(definition.answers ?? null).toBeNull()
+  it('routes prepared kickoff decisions to a fresh answer worker after the original session ends', () => {
+    expect(definition.answers).toEqual({
+      resume: 'never',
+      else: { agent: 'claude', skill: 'ticket-kickoff', mode: 'answers' }
+    })
   })
 
   it('loads through the loader on a copy', () => {

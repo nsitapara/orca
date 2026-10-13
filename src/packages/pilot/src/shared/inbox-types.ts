@@ -1,3 +1,4 @@
+import type { PreparationInput } from './preparation'
 import type { HoldReason, InboxItemRow, InboxStatus, InboxType, QueueState } from './api-types'
 
 // Inbox (contract §9-§10): the payloads of the inbox RPCs. Row types (InboxItemRow,
@@ -7,6 +8,7 @@ import type { HoldReason, InboxItemRow, InboxStatus, InboxType, QueueState } fro
 // Inside a run, runId and stepIdx come from the step's env; outside one, automationId and itemKey say
 // whose card it is. `options` are the raw "<label> — <meaning>" strings (the server parses them).
 export type InboxAddParams = {
+  preparation?: PreparationInput
   // The terminal the command ran in (ORCA_TERMINAL_HANDLE): the step starting or running on it is the
   // card's run step; runId/stepIdx below are only the fallback (ruling 8d).
   terminal?: string

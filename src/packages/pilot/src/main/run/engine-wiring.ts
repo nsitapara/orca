@@ -23,6 +23,7 @@ import { STALE_START_MS, sweepStaleStarts } from './stale-starts'
 import { stepStarterFor } from './step-starters'
 import { pollRunningSteps, type StepProbe } from './watcher'
 import type { WorkspaceDeps } from './workspace'
+import { stopCancelledPreparations } from './preparation-worker'
 
 // A step whose definition was never loaded in this process times out this long after it was found missing.
 export const MISSING_DEFINITION_TIMEOUT_MS = 60 * 60_000
@@ -132,6 +133,19 @@ export function wireRunEngine(input: EngineWiringInput): WiredEngine {
     shell,
     definitionFor: input.definitionFor,
     async poll() {
+      await stopCancelledPreparations({
+        store,
+        now,
+        log,
+        definitionFor: input.definitionFor,
+        closeTerminal: async (handle) => {
+          const closed = await input.runtime.closeTerminal(handle)
+          if (closed.ptyStopVerdict) {
+            throw new Error(`Couldn't stop preparation terminal: ${closed.ptyStopVerdict}`)
+          }
+        }
+      })
+      store.transaction(() => store.inboxPreparations.recoverExpired(now()))
       sweepStaleStarts(store, now, log, STALE_START_MS, (runId) => opening.has(runId))
       sweepOrphanShellSteps(store, shell.isLive, now, log)
       await pollRunningSteps(store, input.probe, input.cost ?? claudeTranscriptCost, now, {

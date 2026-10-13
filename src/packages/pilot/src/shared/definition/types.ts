@@ -1,4 +1,9 @@
-export type ItemKind = 'merge_request' | 'worktree' | 'pipeline' | 'linear_ticket'
+export type ItemKind =
+  | 'merge_request'
+  | 'worktree'
+  | 'pipeline'
+  | 'linear_ticket'
+  | 'inbox_preparation'
 export type PeopleSet = { people?: string[]; group?: string }
 // `not` leaves out the people it names; everyone else (people.yaml or not) is in.
 export type PeopleRef = 'anyone' | PeopleSet | { not: PeopleSet }
