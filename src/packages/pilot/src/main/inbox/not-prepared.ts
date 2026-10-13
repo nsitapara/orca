@@ -4,7 +4,7 @@ import { PREPARATION_REFUSED, PreparationInputSchema } from '../../shared/prepar
 import { answerLocked } from './answer-lock'
 import { inboxEvent, syncRunWaiting, type InboxDeps } from './inbox-service'
 
-export const NOT_PREPARED_SHAPE =
+export const NOT_PREPARED_NOTICE_ONLY =
   'A "Not prepared" card is a flagged notice: no action, parts, switch, Details bundle or preparation request'
 
 // A preparation request's own shape and size, checked before anything else about the card. Its refusal starts
@@ -30,7 +30,7 @@ export function checkNotPrepared(params: InboxAddParams): void {
   const carries = [action, actionArgs, preparation, detailsBundlePath].some((x) => x !== undefined)
   const extras = Object.keys(parts ?? {}).length > 0 || (switchWords ?? []).length > 0
   if (type !== 'flagged' || carries || extras) {
-    throw new Error(NOT_PREPARED_SHAPE)
+    throw new Error(NOT_PREPARED_NOTICE_ONLY)
   }
 }
 
