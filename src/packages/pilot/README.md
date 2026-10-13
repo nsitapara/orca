@@ -187,13 +187,29 @@ A card carries its Details as markdown (`--details-file`) or as a structured **D
 
 - **Folder rule:** a bundle and its files (review JSON, images) must sit inside the Automations folder, `PILOT_VAULT_AUTOMATIONS`, else `~/Documents/WebPortal/Agent Work/Automations`. The skills' `vault.AUTOMATIONS` must be the same folder, or every bundle is refused (the card is still offered, without it).
 - **Limits:** a bundle is at most 2 MB, a review file 1 MB, an image 8 MB, and a bundle at most 40 blocks. An unknown block type is refused.
-- **What joins the digest:** the bundle's bytes and the review files it inlines. Images and the patch do not: images are read live, and the patch is bound through its `patch_sha256` inside the bundle and checked when an approval applies it. So an image swapped on disk after the card was added shows the new image.
+- **What joins the digest:** the bundle's bytes and the review files it inlines. On a plain card, images and the patch do not: images are read live, and the patch is bound through its `patch_sha256` inside the bundle and checked when an approval applies it. So an image swapped on disk after the card was added shows the new image. A prepared bundle also hashes its patch, images and check logs into an artifact manifest that joins the digest, and a changed image is refused (R-P3).
 - **Commands:**
   - `pilot inbox add --details-bundle <file>` sends the absolute path; Pilot's main process reads and checks the file itself.
   - `pilot inbox show --id <id>` prints one card, with its Details.
   - `pilot inbox set-details --id <id> --bundle <file> [--head <sha>]` replaces a waiting card's bundle. An answer it had is cleared, with Pilot's reply asking again. While an answer run other than the caller is still applying that answer, it is refused (`its answer is being applied; Details not attached`). That answer run itself may re-attach it (a re-draft), which clears the answer the same way.
 - **Who may attach a bundle** (`add --details-bundle` and `set-details` ask the same rule): the desktop, or the local CLI inside a Pilot run's step of the card's own automation. An unbound CLI and a paired device are refused. Only a desktop Approve applies a drafted patch.
-- **Drafting:** 03 and 04 end each run with two `always` steps that draft a bundle for their open code cards (03: `--cap 8`, 90 minutes; 04: `--cap 3`, 60 minutes). There is no idle-night drain: an undrafted card comes round on the branch's next run.
+- **Drafting:** job 14 (`14 · Prepare inbox item context`) drafts and verifies prepared cards, through item-details' `candidate` mode (R-P2). 03 and 04 no longer draft at the end of their runs.
+
+### Context preparation
+
+- **Opt-in (D1):** only a card whose decision needs evidence is prepared: a code change to approve (04's `bug` and `left_for_you` findings, 03's `left_for_you`), 05's push card, 09's Post card, or a card that asks for evidence. Its producer passes `--preparation-file` (`pilot_bridge.add_item(..., preparation=…)`, or `context.py enqueue`). Every other card (questions, defaults, flagged items, answer-run follow-ups) is a plain card, answerable at once.
+- **A prepared card** starts **Context queued**. Job 14 claims it, generates and verifies its evidence, and completes it as **Ready for your decision**. Until then Approve, a drafted-option pick and its action are refused; any other answer stops preparation. A blocked card has **Retry preparation** (`pilot.inbox.prepareRetry`: the desktop or a paired device only), which requeues it with a new revision.
+- **Evidence:** a diff must match its hashed patch exactly. A diff that `details.py` trimmed (an `omitted` file, `more_files`) passes when every shown file, omitted count and `more_files` matches the patch, and its Details say plainly what only the patch file has.
+- **The lease** is a liveness hint: a claim has expired only once its 10-minute lease lapsed and its claiming step no longer runs.
+- **A refused request** (validation, size, …) never loses the card: the bridge posts it as a plain card, with the reply `Not prepared: <reason>` (D2).
+- **A refreshed action** (new pinned args) and an undone early answer put a prepared card's preparation back in the queue with a new revision.
+- **The list** carries a light preparation ref (state, attempt, progress, error, needs); the request comes with `pilot inbox show` and the manifest with the Details.
+
+Rulings:
+- **R-P1.** Preparation has its own scoped write path: the `pilot.inbox.prepare*` RPCs (claim, progress, complete, fail), for a `local-cli` caller bound to a live run of an `inbox_preparation` automation whose item key is the card's id, at the matching revision, holding the claim. It is the one exception to "a run-bound caller may change only its own automation's cards". `set-details` refuses prepared cards from every caller. (`prepareRetry` is a person's, not the worker's.)
+- **R-P2.** Drafting and evidence moved out of 03 and 04 into job 14 plus item-details' `candidate` mode. This replaces plan Ruling 5.
+- **R-P3.** Images and patches are hashed in prepared bundles, and a changed image is refused. This replaces plan Ruling 3 for prepared bundles; plain bundles keep Ruling 3.
+- **R-P4.** Preparation is opt-in (D1), and a refused request falls back to a plain card (D2, which restores Ruling 8).
 - **Go-live:** the check's "Card details" line (read-only) counts waiting cards (open or answered), those with a bundle, and imported cards still pointing at a vault bundle.
 
 ## The worktree panel
@@ -250,7 +266,7 @@ The order, behaviour changes and follow-ups come from the build (`go-live-notes.
 2. Import the open vault cards: the Inbox shows an "Import" notice while there are vault cards to bring in or Details to add (applying needs Pilot's own window). After you rebuild Pilot, use the Import notice again: it fills Details into the open, unanswered imported cards, and the go-live check's "Card details" line shows what is left. From now on answer only in Pilot (Inbox): the old answers page is read-only on the Pilot backend.
 3. Import each job's old state before enabling it: `pilot automations import-state --id <id>` (preview), then `--apply`. 03 and 04 need their `seen.json` first. 08 must be imported before Pilot first writes its own `usage.json` (the hand-over above). 12's sent answers come in as dispatched.
 4. Connect Linear in Pilot (Settings) before enabling 13 and M01. Pilot can't read Orca's Linear credential (see the Known gaps).
-5. Enable the YAMLs one at a time: `pilot automations enable --id <id>`. Keep Orca's copies disabled.
+5. Enable the YAMLs one at a time: `pilot automations enable --id <id>`. Keep Orca's copies disabled. Enable job 14 (`prepare-inbox-item-context`) together with, or before, the first job that creates prepared cards (03, 04, 05, 09): until it runs, their prepared cards stay **Context queued** and can't be approved. Plain cards never wait for it.
 6. Retire `apply.py` (job 12) only once Pilot is dispatching answers. Write `<STATE_ROOT>/apply/retired` last. Nothing writes it for you.
 
 **Not checkable in a dry run** (watch the first real run):
