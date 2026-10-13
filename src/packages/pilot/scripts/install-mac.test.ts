@@ -40,24 +40,72 @@ const AUTOMATIONS = JSON.stringify({
 describe('quitPilot', () => {
   it('does nothing when Pilot is not running', async () => {
     const { deps, calls } = makeDeps(() => ({ code: 1 }))
-    await install.quitPilot(deps)
+    expect(await install.quitPilot(deps)).toBe(false)
     expect(calls.map((c) => c.cmd)).toEqual(['pgrep'])
   })
 
+  // A running Pilot: main pid 100 with helper children 201 and 202; a detached daemon (parent 1) is not listed.
+  function running(
+    opts: { mainGoneAfter?: number; helperAliveChecks?: number; dbHeldChecks?: number } = {}
+  ) {
+    const n = { main: 0, helper: 0, db: 0 }
+    const stub = makeDeps((c) => {
+      if (c.cmd === 'pgrep' && c.args[0] === '-P') {
+        return { stdout: '201\n202\n' }
+      }
+      if (c.cmd === 'pgrep') {
+        return ++n.main <= (opts.mainGoneAfter ?? 3) ? { stdout: '100\n' } : { code: 1 }
+      }
+      if (c.cmd === 'ps') {
+        return { code: ++n.helper <= (opts.helperAliveChecks ?? 0) ? 0 : 1 }
+      }
+      if (c.cmd === 'lsof') {
+        return { stdout: ++n.db <= (opts.dbHeldChecks ?? 0) ? '100\n' : '' }
+      }
+      return undefined
+    })
+    return { ...stub, n }
+  }
+
   it('quits by bundle id and waits for the main process to exit', async () => {
-    let checks = 0
-    const { deps, calls } = makeDeps((c) =>
-      c.cmd === 'pgrep' ? { code: ++checks < 4 ? 0 : 1 } : undefined
-    )
-    await install.quitPilot(deps)
+    const { deps, calls } = running()
+    expect(await install.quitPilot(deps)).toBe(true)
     expect(calls.find((c) => c.cmd === 'osascript')?.args[1]).toContain('dev.nsitapara.pilot')
-    expect(checks).toBe(4)
+  })
+
+  it("waits for the old main pid's helpers, found before the quit, never for the detached daemon", async () => {
+    const { deps, calls, n } = running({ helperAliveChecks: 5 })
+    await install.quitPilot(deps)
+    const psPids = calls.filter((c) => c.cmd === 'ps').map((c) => c.args[1])
+    expect(new Set(psPids)).toEqual(new Set(['201', '202']))
+    expect(n.helper).toBeGreaterThan(5)
+    const order = calls.map((c) => (c.cmd === 'pgrep' && c.args[0] === '-P' ? 'children' : c.cmd))
+    expect(order.indexOf('children')).toBeLessThan(order.indexOf('osascript'))
+    expect(calls.some((c) => c.cmd === 'pgrep' && c.args.join(' ').includes('Helper'))).toBe(false)
+  })
+
+  it('waits until no process holds the automations database, -wal or -shm', async () => {
+    const { deps, calls, n } = running({ dbHeldChecks: 4 })
+    await install.quitPilot(deps)
+    expect(n.db).toBe(5)
+    const files = calls.find((c) => c.cmd === 'lsof')?.args.slice(1)
+    expect(files).toEqual([
+      '/h/Library/Application Support/Pilot/pilot-automations.db',
+      '/h/Library/Application Support/Pilot/pilot-automations.db-wal',
+      '/h/Library/Application Support/Pilot/pilot-automations.db-shm'
+    ])
   })
 
   it('fails after the timeout and never force-kills', async () => {
-    const { deps, calls } = makeDeps()
-    await expect(install.quitPilot(deps, 2000)).rejects.toThrow(/still running after 2s/)
-    expect(calls.some((c) => c.cmd === 'kill' || c.cmd === 'pkill')).toBe(false)
+    for (const opts of [
+      { mainGoneAfter: 1e9 },
+      { helperAliveChecks: 1e9 },
+      { dbHeldChecks: 1e9 }
+    ]) {
+      const { deps, calls } = running(opts)
+      await expect(install.quitPilot(deps, 2000)).rejects.toThrow(/after 2s/)
+      expect(calls.some((c) => c.cmd === 'kill' || c.cmd === 'pkill')).toBe(false)
+    }
   })
 })
 
@@ -128,6 +176,24 @@ describe('markNoIndex', () => {
   })
 })
 
+describe('stuckReport', () => {
+  it('prints the last startup-stuck event and the recovery steps without killing anything', () => {
+    const trace = '{"e":"boot"}\n{"e":"startup stuck in tray"}\n{"e":"x"}\n'
+    const { deps, calls } = makeDeps((c) =>
+      c.cmd === 'tail' ? { stdout: trace } : c.cmd === 'pgrep' ? { stdout: '777\n' } : undefined
+    )
+    const text = install.stuckReport(deps)
+    expect(calls.find((c) => c.cmd === 'tail')?.args).toEqual([
+      '-n',
+      '50',
+      '/h/Library/Application Support/Pilot/logs/main.trace.ndjson'
+    ])
+    expect(text).toContain('startup stuck in tray')
+    expect(text).toMatch(/sample 777 2[\s\S]*kill -9 777[\s\S]*--no-install/)
+    expect(calls.some((c) => c.cmd === 'kill')).toBe(false)
+  })
+})
+
 describe('installPilot', () => {
   const opts = { source: 'dist/mac-arm64/Pilot.app', repo: '/repo', parentEnv: {} }
   const respond: Responder = (c) => {
@@ -149,6 +215,34 @@ describe('installPilot', () => {
     expect(text).toContain('Build commit: abc1234')
     expect(text).toContain('Installed at: /Applications/Pilot.app')
     expect(text).toContain('Enabled automations (2): a, c')
+  })
+
+  it('pauses 8s before open after a quit, and appends the stuck report when the CLI never answers', async () => {
+    let up = true
+    const sleeps: number[] = []
+    const stub = makeDeps((c) => {
+      if (c.cmd === 'pgrep' && c.args[0] !== '-P') {
+        return up ? { stdout: '100\n' } : { code: up ? 0 : 1 }
+      }
+      if (c.cmd === 'osascript') {
+        up = false
+      }
+      if (c.cmd === 'tail') {
+        return { stdout: '{"e":"startup stuck in tray"}\n' }
+      }
+      return c.cmd === 'env' && c.args.includes('list-yaml') ? { code: 1 } : undefined
+    })
+    const sleep = stub.deps.sleep
+    stub.deps.sleep = async (ms: number) => {
+      sleeps.push(ms)
+      await sleep(ms)
+    }
+    await expect(install.installPilot({ ...opts, deps: stub.deps })).rejects.toThrow(
+      /Pilot didn't start[\s\S]*startup stuck in tray[\s\S]*kill -9/
+    )
+    const names = stub.calls.map((c) => c.cmd)
+    expect(sleeps).toContain(8000)
+    expect(names.indexOf('env')).toBeGreaterThan(names.indexOf('ditto'))
   })
 
   it('--no-launch installs but never opens the app', async () => {
