@@ -11,6 +11,8 @@ type Bridged = {
   label: string
   usage: string
   except?: true
+  // Approve runs it with no agent in between: a run may offer it only as a prepared card (needsEvidence).
+  needsEvidence?: true
 }
 
 // Today's catalog scripts (~/.agents/skills/worktree-gate/actions), run as they are. Their args object is
@@ -22,7 +24,8 @@ const BRIDGED: Bridged[] = [
     script: 'push',
     power: 'push',
     label: 'Push a branch to origin at a pinned commit',
-    usage: 'push { "argv": [<worktree path>, <branch>, <commit>, <origin commit>] }'
+    usage: 'push { "argv": [<worktree path>, <branch>, <commit>, <origin commit>] }',
+    needsEvidence: true
   },
   {
     name: 'mark_ready',
@@ -37,7 +40,8 @@ const BRIDGED: Bridged[] = [
     power: 'post',
     label: 'Post a prepared review on an MR',
     usage: 'post_review { "argv": [<iid>, <review file>, <sha256>] }',
-    except: true
+    except: true,
+    needsEvidence: true
   }
 ]
 
@@ -57,6 +61,7 @@ function bridged(spec: Bridged, act: ActBridge): ActionEntry {
     power: spec.power,
     label: spec.label,
     usage: spec.usage,
+    ...(spec.needsEvidence ? { needsEvidence: true } : {}),
     checkArgs: (args) => (argvOf(args) ? null : usage),
     describe: async (args) => {
       const argv = argvOf(args)

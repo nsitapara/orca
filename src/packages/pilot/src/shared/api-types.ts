@@ -167,6 +167,8 @@ export type InboxReply = { text: string; by: 'pilot' | 'agent' }
 
 export type InboxItemRow = {
   preparation?: InboxPreparation | null
+  // A "Not prepared" notice (D2): the preparation key of the card it stands in for.
+  notPreparedKey?: string | null
   id: string
   automationId: string
   runId: string | null

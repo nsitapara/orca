@@ -24,6 +24,10 @@ export function routeFor(
   catalog: CatalogLookup,
   answer: { text: string; option: number | null; callerKind?: InboxAnswer['callerKind'] }
 ): Route {
+  // A "Not prepared" notice (D2) has nothing to run or hand an agent: any answer closes it.
+  if (item.notPreparedKey) {
+    return { kind: 'tick', outcome: 'skipped' }
+  }
   const route = routeAnswer({
     type: item.type,
     action: item.action,

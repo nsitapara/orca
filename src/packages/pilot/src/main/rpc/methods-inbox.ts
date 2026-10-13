@@ -1,4 +1,4 @@
-import { PreparationInputSchema } from '../../shared/preparation'
+import type { PreparationInput } from '../../shared/preparation'
 import { z } from 'zod'
 import { defineMethod } from '../../../../../main/runtime/rpc/core'
 import type { InboxAddParams } from '../../shared/inbox-types'
@@ -32,7 +32,12 @@ export const InboxAdd = z
     stepIdx: z.number().int().nonnegative().optional(),
     automationId: z.string().min(1).optional(),
     itemKey: z.string().min(1).optional(),
-    preparation: PreparationInputSchema.optional(),
+    // Checked by addInboxItem, so its refusal carries PREPARATION_REFUSED (the bridge's D2 fallback reads it).
+    preparation: z.custom<PreparationInput>((v) => typeof v === 'object' && v !== null).optional(),
+    notPrepared: z
+      .object({ key: z.string().trim().min(1).max(500), reason: z.string().min(1).max(2000) })
+      .strict()
+      .optional(),
     type: z.enum(TYPES),
     title: z.string().min(1).max(500),
     context: text(8000).optional(),

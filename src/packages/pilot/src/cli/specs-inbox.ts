@@ -8,10 +8,12 @@ export const INBOX_COMMAND_SPECS: CommandSpec[] = [
     path: ['inbox', 'add'],
     summary: 'Add a card to the Inbox: a question, a flag, or a proposed action',
     usage:
-      'pilot inbox add --type <question|flagged|default|action|bug|left_for_you> --title <text> [--context <text>] [--suggested <text>] [--option "<label> — <meaning>"]... [--details-file <path> | --details-bundle <path>] [--action <name> --args-json <json object>] [--part <id>=<label>]... [--switch <on> --switch <off>] [--worktree <path>] [--automation <id> --item <key>] [--json]',
+      'pilot inbox add --type <question|flagged|default|action|bug|left_for_you> --title <text> [--context <text>] [--suggested <text>] [--option "<label> — <meaning>"]... [--details-file <path> | --details-bundle <path>] [--action <name> --args-json <json object>] [--preparation-file <path> | --not-prepared-key <key> --not-prepared-reason <text>] [--part <id>=<label>]... [--switch <on> --switch <off>] [--worktree <path>] [--automation <id> --item <key>] [--json]',
     allowedFlags: [
       ...GLOBAL_FLAGS,
       'preparation-file',
+      'not-prepared-key',
+      'not-prepared-reason',
       'type',
       'title',
       'context',

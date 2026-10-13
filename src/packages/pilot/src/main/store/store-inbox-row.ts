@@ -13,6 +13,7 @@ import { detailsRefOf } from './store-inbox-details'
 // snapshot is read only by id (pilot.inbox.details).
 export const INBOX_ROW_COLUMNS = [
   'preparation_json',
+  'not_prepared_key',
   'id',
   'automation_id',
   'run_id',
@@ -58,6 +59,7 @@ export function toItem(r: Record<string, unknown>): InboxItemRow {
     ...(r.preparation_json
       ? { preparation: InboxPreparationSchema.parse(parsedOrNull(r.preparation_json)) }
       : {}),
+    ...(r.not_prepared_key ? { notPreparedKey: String(r.not_prepared_key) } : {}),
     id: String(r.id),
     automationId: String(r.automation_id),
     runId: (r.run_id as string | null) ?? null,

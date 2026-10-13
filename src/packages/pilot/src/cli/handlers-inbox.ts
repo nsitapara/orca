@@ -1,4 +1,8 @@
-import { PreparationInputSchema } from '../shared/preparation'
+import {
+  PREPARATION_REFUSED,
+  PreparationInputSchema,
+  type PreparationInput
+} from '../shared/preparation'
 import { PREPARATION_HANDLERS } from './preparation'
 import { resolve } from 'node:path'
 import type { CommandHandler } from '../../../../cli/dispatch'
@@ -79,6 +83,30 @@ function detailsFlags(flags: Flags): Pick<InboxAddParams, 'detailsMd' | 'details
   return {}
 }
 
+// The request file: unreadable, too big, not JSON or not a request is a refusal of the request itself (D2's prefix).
+function preparationFlag(file: string | undefined): PreparationInput | undefined {
+  if (file === undefined) {
+    return undefined
+  }
+  try {
+    return PreparationInputSchema.parse(
+      JSON.parse(readTextFile(file, 'preparation-file', 128 * 1024))
+    )
+  } catch (error) {
+    const said = error instanceof Error ? error.message : String(error)
+    throw invalid(`${PREPARATION_REFUSED}: ${said.replace(/\s+/g, ' ').slice(0, 1000)}`)
+  }
+}
+
+function notPreparedFlags(flags: Flags): InboxAddParams['notPrepared'] {
+  const key = getOptionalStringFlag(flags, 'not-prepared-key')
+  const reason = getOptionalStringFlag(flags, 'not-prepared-reason')
+  if ((key === undefined) !== (reason === undefined)) {
+    throw invalid('--not-prepared-key and --not-prepared-reason go together')
+  }
+  return key === undefined || reason === undefined ? undefined : { key, reason }
+}
+
 function addParams(flags: Flags): InboxAddParams {
   const type = getRequiredStringFlag(flags, 'type')
   if (!isInboxType(type)) {
@@ -90,12 +118,8 @@ function addParams(flags: Flags): InboxAddParams {
     throw invalid('--action and --args-json go together')
   }
   const details = detailsFlags(flags)
-  const preparationFile = getOptionalStringFlag(flags, 'preparation-file')
-  const preparation = preparationFile
-    ? PreparationInputSchema.parse(
-        JSON.parse(readTextFile(preparationFile, 'preparation-file', 128 * 1024))
-      )
-    : undefined
+  const preparation = preparationFlag(getOptionalStringFlag(flags, 'preparation-file'))
+  const notPrepared = notPreparedFlags(flags)
   const target = orInvalid(() =>
     inboxTarget(process.env, {
       automation: getOptionalStringFlag(flags, 'automation'),
@@ -108,6 +132,7 @@ function addParams(flags: Flags): InboxAddParams {
   return {
     ...target,
     ...given('preparation', preparation),
+    ...given('notPrepared', notPrepared),
     type,
     title: getRequiredStringFlag(flags, 'title'),
     ...given('context', getOptionalStringFlag(flags, 'context')),

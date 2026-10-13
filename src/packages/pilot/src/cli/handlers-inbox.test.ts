@@ -443,6 +443,34 @@ describe('pilot inbox answer', () => {
 })
 
 describe('managed preparation CLI', () => {
+  it.each([
+    ['not JSON', '{'],
+    ['not a request', JSON.stringify({ key: 'k', context: 'c', requirements: [] })]
+  ])(
+    'refuses a request file that is %s as a refused preparation request (D2)',
+    async (_n, text) => {
+      insideStep()
+      const file = join(mkdtempSync(join(tmpdir(), 'pilot-preparation-cli-')), 'request.json')
+      writeFileSync(file, text)
+      const { context, call } = contextFor([...CARD, '--preparation-file', file], ADDED)
+      await expect(INBOX_HANDLERS['inbox add'](context)).rejects.toThrow(
+        /^Preparation request refused: /
+      )
+      expect(call).not.toHaveBeenCalled()
+    }
+  )
+
+  it('sends a "Not prepared" notice with its key and reason', async () => {
+    insideStep()
+    const argv = ['inbox', 'add', '--type', 'flagged', '--title', 'Push?']
+    const { context, call } = contextFor(
+      [...argv, '--not-prepared-key', 'ci:k', '--not-prepared-reason', 'too big'],
+      ADDED
+    )
+    vi.spyOn(console, 'log').mockImplementation(() => {})
+    await INBOX_HANDLERS['inbox add'](context)
+    expect(call.mock.calls[0][1]).toMatchObject({ notPrepared: { key: 'ci:k', reason: 'too big' } })
+  })
   it('asks for no preparation unless given a --preparation-file (D1)', async () => {
     insideStep()
     const { context, call } = contextFor(CARD, ADDED)
