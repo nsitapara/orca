@@ -33,6 +33,20 @@ export const TICK_RETENTION_MS = 30 * DAY
 // No tick runs this long: one still 'running' after an hour was cut off by a quit or a crash.
 export const STUCK_TICK_MS = 60 * 60_000
 export const INTERRUPTED = 'interrupted'
+// How long opening the store waits on a lock another process holds (an old Pilot still quitting).
+export const STORE_BUSY_TIMEOUT_MS = 5_000
+
+// Pilot's startup logs this, and the trace marks the services phase failed with it.
+function storeOpenError(path: string, busyTimeoutMs: number, error: unknown): Error {
+  const message = error instanceof Error ? error.message : String(error)
+  if (/database is locked|SQLITE_BUSY/i.test(message)) {
+    return new Error(
+      `${path} stayed locked for ${busyTimeoutMs / 1000}s; another process holds it (${message})`,
+      { cause: error }
+    )
+  }
+  return new Error(`${path} couldn't be opened: ${message}`, { cause: error })
+}
 
 function toTick(r: Record<string, unknown>): TickRow {
   return {
@@ -92,18 +106,23 @@ export class PilotStore {
     this.handovers = new HandoverStore(db)
   }
 
-  static open(path: string): PilotStore {
-    const db = new Database(path)
+  static open(path: string, options: { busyTimeoutMs?: number } = {}): PilotStore {
+    const busyTimeoutMs = options.busyTimeoutMs ?? STORE_BUSY_TIMEOUT_MS
+    let db: Database
     try {
-      // busy_timeout first: switching to WAL needs a lock another connection may briefly hold.
-      db.pragma('busy_timeout = 5000')
+      // The connection's busy timeout covers every statement, the first PRAGMA and the migration too.
+      db = new Database(path, { timeout: busyTimeoutMs })
+    } catch (error) {
+      throw storeOpenError(path, busyTimeoutMs, error)
+    }
+    try {
       db.pragma('journal_mode = WAL')
       db.pragma('synchronous = NORMAL')
       db.pragma('foreign_keys = ON')
       migrate(db)
     } catch (error) {
       db.close()
-      throw error
+      throw storeOpenError(path, busyTimeoutMs, error)
     }
     return new PilotStore(db)
   }
