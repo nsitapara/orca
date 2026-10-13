@@ -55,33 +55,33 @@ function nameRule(jobId: string, members: readonly Staged[], problems: JobProble
   }
 }
 
-function feedsRule(
+// Why a feeds target can't be drawn, or null when it can: it is loaded and a stage of the same job.
+function unreachable(
   defs: readonly AutomationDefinition[],
   from: Staged,
-  problems: JobProblems
-): void {
-  for (const target of from.job.feeds) {
-    const to = defs.find((d) => d.id === target)
-    if (!to) {
-      add(problems, from.id, `job.feeds: no automation "${target}"`)
-    } else if (to.job === null) {
-      add(problems, from.id, `job.feeds: ${target} is in no job, not job ${from.job.id}`)
-    } else if (to.job.id !== from.job.id) {
-      add(problems, from.id, `job.feeds: ${target} is in job ${to.job.id}, not job ${from.job.id}`)
-      add(
-        problems,
-        to.id,
-        `job.feeds: ${from.id} feeds it from job ${from.job.id}; it is in job ${to.job.id}`
-      )
-    }
+  target: string
+): string | null {
+  const to = defs.find((d) => d.id === target)
+  if (!to) {
+    return `no automation "${target}"`
   }
+  if (to.job === null) {
+    return `${target} is in no job`
+  }
+  if (to.job.id !== from.job.id) {
+    return `${target} is in job ${to.job.id}, not job ${from.job.id}`
+  }
+  return null
 }
 
-// Every cycle the feeds edges make, each once, starting at its member that comes first in <defs>.
+// Every cycle the same-job feeds edges make, each once, starting at its member that comes first in <defs>.
 function cycles(defs: readonly Staged[]): string[][] {
   const order = new Map(defs.map((d, i) => [d.id, i]))
+  const jobOf = new Map(defs.map((d) => [d.id, d.job.id]))
   const next = (id: string): string[] =>
-    (defs.find((d) => d.id === id)?.job.feeds ?? []).filter((t) => order.has(t))
+    (defs.find((d) => d.id === id)?.job.feeds ?? []).filter(
+      (t) => order.has(t) && jobOf.get(t) === jobOf.get(id)
+    )
   const found = new Map<string, string[]>()
   const walk = (id: string, path: string[]): void => {
     const at = path.indexOf(id)
@@ -99,7 +99,7 @@ function cycles(defs: readonly Staged[]): string[][] {
 }
 
 // The rules a job's stages must keep across their files (the loader marks each involved definition invalid):
-// a stage number once per job, feeds only to an automation of the same job, no cycle, and one name.
+// a stage number once per job, one name, and no cycle in its feeds.
 export function jobProblems(defs: readonly AutomationDefinition[]): JobProblems {
   const problems: JobProblems = new Map()
   const stagedDefs = staged(defs)
@@ -107,11 +107,25 @@ export function jobProblems(defs: readonly AutomationDefinition[]): JobProblems 
     stageRule(jobId, members, problems)
     nameRule(jobId, members, problems)
   }
-  stagedDefs.forEach((d) => feedsRule(defs, d, problems))
   for (const loop of cycles(stagedDefs)) {
     const jobId = stagedDefs.find((d) => d.id === loop[0])?.job.id
     const message = `job ${jobId}: feeds go round in a cycle: ${[...loop, loop[0]].join(' → ')}`
     loop.forEach((id) => add(problems, id, message))
   }
   return problems
+}
+
+// feeds is display only, so a target that is missing (renamed), in no job or in another job only loses its arrow:
+// a warning on the stage that names it, never a reason to stop that stage.
+export function jobWarnings(defs: readonly AutomationDefinition[]): JobProblems {
+  const warnings: JobProblems = new Map()
+  for (const from of staged(defs)) {
+    for (const target of from.job.feeds) {
+      const why = unreachable(defs, from, target)
+      if (why) {
+        add(warnings, from.id, `job.feeds: ${why}; its arrow isn't drawn`)
+      }
+    }
+  }
+  return warnings
 }

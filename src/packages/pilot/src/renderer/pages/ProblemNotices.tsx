@@ -23,6 +23,9 @@ export function ProblemNotices({
   for (const e of payload?.errors ?? []) {
     lines.push({ key: e.file, text: fileProblem(e.file, e.errors), bad: true })
   }
+  for (const w of payload?.warnings ?? []) {
+    lines.push({ key: `warn:${w.file}`, text: fileProblem(w.file, w.warnings), bad: false })
+  }
   if (payload?.peopleError) {
     lines.push({ key: 'people', text: `People: ${payload.peopleError}`, bad: false })
   }

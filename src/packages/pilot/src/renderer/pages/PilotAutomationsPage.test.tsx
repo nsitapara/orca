@@ -156,6 +156,23 @@ describe('PilotAutomationsPage', () => {
     expect(screen.getByRole('button', { name: /Fix failed CI/ })).toBeTruthy()
   })
 
+  it('shows a warning, such as a feeds arrow it cannot draw, without marking the file bad', async () => {
+    serve({
+      ...list,
+      warnings: [
+        {
+          file: '/a/one.yaml',
+          warnings: [`/a/one.yaml: job.feeds: no automation "c"; its arrow isn't drawn`]
+        }
+      ]
+    })
+    render(<PilotAutomationsPage />)
+    const note = await screen.findByText(
+      `/a/one.yaml: job.feeds: no automation "c"; its arrow isn't drawn`
+    )
+    expect(note.className).not.toContain('text-destructive')
+  })
+
   it('says so when there are no automations', async () => {
     serve({ ...list, automations: [] })
     render(<PilotAutomationsPage />)

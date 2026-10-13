@@ -313,6 +313,8 @@ export type AutomationSummary = {
 export type AutomationListPayload = {
   automations: AutomationSummary[]
   errors: { file: string; errors: string[] }[]
+  // Valid files with a notice that changes nothing they do (a feeds arrow that can't be drawn).
+  warnings?: { file: string; warnings: string[] }[]
   peopleError: string | null
   missingDirs: string[]
 }

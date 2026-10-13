@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { testDefinition } from './__fixtures__/definition'
-import { jobProblems } from './jobs'
+import { jobProblems, jobWarnings } from './jobs'
 import { parseAutomationYaml } from './parse'
 import type { AutomationDefinition, JobDef } from './types'
 
@@ -95,24 +95,6 @@ describe('jobProblems: rules across every loaded definition', () => {
       }
     ],
     [
-      'feeds naming no automation',
-      [stage('dev-e2e-fix', { stage: 1, name: 'N', feeds: ['dev-e2e-fix-strat'] }), STARTS],
-      { 'dev-e2e-fix': 'job.feeds: no automation "dev-e2e-fix-strat"' }
-    ],
-    [
-      'feeds naming another job',
-      [PIPELINES, stage('dev-e2e-fix-start', { stage: 2, id: '14', name: 'Other' })],
-      {
-        'dev-e2e-fix': 'job.feeds: dev-e2e-fix-start is in job 14, not job 13',
-        'dev-e2e-fix-start': 'job.feeds: dev-e2e-fix feeds it from job 13; it is in job 14'
-      }
-    ],
-    [
-      'feeds naming an automation with no job',
-      [PIPELINES, testDefinition({ id: 'dev-e2e-fix-start' })],
-      { 'dev-e2e-fix': 'job.feeds: dev-e2e-fix-start is in no job, not job 13' }
-    ],
-    [
       'a cycle',
       [PIPELINES, stage('dev-e2e-fix-start', { stage: 2, feeds: ['dev-e2e-fix'] })],
       {
@@ -159,5 +141,37 @@ describe('jobProblems: rules across every loaded definition', () => {
         stage('dev-e2e-fix-start', { stage: 2, name: 'Fix red hourly e2e on dev' })
       ])
     ).toEqual(new Map())
+  })
+})
+
+describe('jobWarnings: a feeds arrow that cannot be drawn warns, and never freezes a stage', () => {
+  it.each([
+    [
+      'feeds naming no automation (a renamed target)',
+      [stage('dev-e2e-fix', { stage: 1, name: 'N', feeds: ['dev-e2e-fix-strat'] }), STARTS],
+      { 'dev-e2e-fix': `job.feeds: no automation "dev-e2e-fix-strat"; its arrow isn't drawn` }
+    ],
+    [
+      'feeds naming another job',
+      [PIPELINES, stage('dev-e2e-fix-start', { stage: 1, id: '14', name: 'Other' })],
+      {
+        'dev-e2e-fix': `job.feeds: dev-e2e-fix-start is in job 14, not job 13; its arrow isn't drawn`
+      }
+    ],
+    [
+      'feeds naming an automation with no job',
+      [PIPELINES, testDefinition({ id: 'dev-e2e-fix-start' })],
+      { 'dev-e2e-fix': `job.feeds: dev-e2e-fix-start is in no job; its arrow isn't drawn` }
+    ]
+  ])('%s', (_name, defs, warnings) => {
+    expect(jobProblems(defs)).toEqual(new Map())
+    const found = jobWarnings(defs)
+    expect(Object.fromEntries([...found].map(([id, list]) => [id, list.join('\n')]))).toEqual(
+      warnings
+    )
+  })
+
+  it('says nothing about feeds that reach a stage of the same job', () => {
+    expect(jobWarnings([PIPELINES, STARTS])).toEqual(new Map())
   })
 })

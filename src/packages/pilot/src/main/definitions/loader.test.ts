@@ -393,11 +393,29 @@ describe('jobs of several automations', () => {
   })
 
   it('refuses an involved definition that never loaded validly, and leaves the rest alone', () => {
-    const d = dir({ 'a.yaml': VALID + STAGE_1.replace('feeds: b', 'feeds: c'), 'z.yaml': VALID })
+    const d = dir({ 'a.yaml': VALID + STAGE_1, 'b.yaml': VALID + stageOf(1), 'z.yaml': VALID })
     const loaded = loadDefinitions([d], memory())
     expect(loaded.definitions.map((x) => x.id)).toEqual(['z'])
-    expect(loaded.errors).toEqual([
-      { file: join(d, 'a.yaml'), errors: [`${join(d, 'a.yaml')}: job.feeds: no automation "c"`] }
+    expect(loaded.errors.map((e) => e.errors)).toEqual([
+      [`${join(d, 'a.yaml')}: job 13: stage 1 is set by both a and b`],
+      [`${join(d, 'b.yaml')}: job 13: stage 1 is set by both a and b`]
+    ])
+  })
+
+  it('loads a stage whose feeds target is missing, and warns that its arrow is not drawn', () => {
+    const d = dir({
+      'a.yaml': VALID + STAGE_1.replace('feeds: b', 'feeds: c'),
+      'b.yaml': VALID + stageOf(2)
+    })
+    const loaded = loadDefinitions([d], memory())
+    expect(loaded.definitions.map((x) => x.id)).toEqual(['a', 'b'])
+    expect(loaded.displayOnly).toEqual([])
+    expect(loaded.errors).toEqual([])
+    expect(loaded.warnings).toEqual([
+      {
+        file: join(d, 'a.yaml'),
+        warnings: [`${join(d, 'a.yaml')}: job.feeds: no automation "c"; its arrow isn't drawn`]
+      }
     ])
   })
 })
