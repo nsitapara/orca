@@ -39,14 +39,19 @@ const job = (over: Partial<JobDef> & { stage: number }): JobDef => ({
   name: null,
   label: `stage ${over.stage}`,
   feeds: [],
-  handsOver: null,
   ...over
 })
 
 const PIPELINES = summary('dev-e2e-fix', {
   name: '13 · Fix red hourly e2e on dev',
   itemKind: 'Pipelines',
-  job: job({ stage: 1, name: 'Fix red hourly e2e on dev', feeds: ['dev-e2e-fix-start'] }),
+  job: job({
+    stage: 1,
+    name: 'Fix red hourly e2e on dev',
+    feeds: [
+      { to: 'dev-e2e-fix-start', pass: null, run: 'next_schedule', when: 'success', caption: null }
+    ]
+  }),
   lastTick: tick('dev-e2e-fix', 100)
 })
 const STARTS = summary('dev-e2e-fix-start', {

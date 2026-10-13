@@ -27,8 +27,15 @@ const STAGE_1: AutomationSummary = {
     name: 'Fix red hourly e2e on dev',
     stage: 1,
     label: 'Open or update the ticket',
-    feeds: ['dev-e2e-fix-start'],
-    handsOver: 'the tickets it opens'
+    feeds: [
+      {
+        to: 'dev-e2e-fix-start',
+        pass: null,
+        run: 'next_schedule',
+        when: 'success',
+        caption: 'the tickets it opens'
+      }
+    ]
   }
 }
 const STAGE_2: AutomationSummary = {
@@ -43,8 +50,7 @@ const STAGE_2: AutomationSummary = {
     name: null,
     stage: 2,
     label: 'Start a fix session per ticket',
-    feeds: [],
-    handsOver: null
+    feeds: []
   }
 }
 const YAML: Record<string, string> = {
@@ -146,7 +152,7 @@ describe('JobView: a job of several automations on one page', () => {
   })
 
   it('draws no arrow between stages that feed nothing', async () => {
-    serve([{ ...STAGE_1, job: { ...STAGE_1.job!, feeds: [], handsOver: null } }, STAGE_2])
+    serve([{ ...STAGE_1, job: { ...STAGE_1.job!, feeds: [] } }, STAGE_2])
     render(<JobView jobId="13" onBack={() => {}} onOpenStage={() => {}} />)
     await screen.findByText('Stage 2 · Linear tickets')
     expect(screen.queryByRole('img', { name: /hands stage/ })).toBeNull()

@@ -16,6 +16,7 @@ export function testStep(over: Partial<StepDef> = {}): StepDef {
     when: null,
     always: false,
     timeoutMs: null,
+    outputs: [],
     ...over
   }
 }

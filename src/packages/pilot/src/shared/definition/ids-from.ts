@@ -1,6 +1,6 @@
 import { splitArgv } from '../run/argv'
 import { envNameProblem, runPlaceholders } from '../run/shell-template'
-import type { IdsFrom } from './types'
+import type { IdsCommandSpec } from './types'
 
 export type IdsFromProblem = { key: 'run' | 'env'; message: string }
 
@@ -8,7 +8,7 @@ const NO_ITEM = 'ids_from runs before there is any item'
 
 // What a loaded file can still get wrong in where.ids_from, beyond its shape: the shell-step rules (no Pilot
 // placeholders, no reserved env names) plus argv only, since the command runs without a shell.
-export function idsFromProblems(spec: Pick<IdsFrom, 'run' | 'env'>): IdsFromProblem[] {
+export function idsFromProblems(spec: Pick<IdsCommandSpec, 'run' | 'env'>): IdsFromProblem[] {
   const problems: IdsFromProblem[] = []
   if (runPlaceholders(spec.run).length > 0) {
     problems.push({ key: 'run', message: `${NO_ITEM}, so it can't contain {placeholders}` })

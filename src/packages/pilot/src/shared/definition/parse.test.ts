@@ -71,7 +71,8 @@ const CI_05_DEFINITION = {
       exitCodes: { ok: [0], skip: [] },
       when: null,
       always: false,
-      timeoutMs: null
+      timeoutMs: null,
+      outputs: []
     }
   ],
   answers: null,
@@ -218,7 +219,8 @@ describe('parseAutomationYaml', () => {
             exitCodes: { ok: [0], skip: [] },
             when: null,
             always: false,
-            timeoutMs: 1_800_000
+            timeoutMs: 1_800_000,
+            outputs: []
           },
           {
             name: 'fix',
@@ -234,7 +236,8 @@ describe('parseAutomationYaml', () => {
             exitCodes: { ok: [0], skip: [] },
             when: '{steps.review.changed} == true',
             always: false,
-            timeoutMs: null
+            timeoutMs: null,
+            outputs: []
           },
           {
             name: 'cleanup',
@@ -250,7 +253,8 @@ describe('parseAutomationYaml', () => {
             exitCodes: { ok: [0], skip: [3] },
             when: null,
             always: true,
-            timeoutMs: null
+            timeoutMs: null,
+            outputs: []
           }
         ],
         answers: {

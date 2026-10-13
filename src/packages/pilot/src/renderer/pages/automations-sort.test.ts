@@ -63,7 +63,7 @@ describe('sortEntries by name', () => {
   it('sorts a job by its code and keeps its stages in stage order', () => {
     const job = (id: string, stage: number): AutomationSummary =>
       mk(`${id}-s${stage}`, {
-        job: { id, name: 'J', stage, label: 'l', feeds: [], handsOver: null }
+        job: { id, name: 'J', stage, label: 'l', feeds: [] }
       })
     const list = [job('13', 2), mk('14 · z'), job('13', 1), mk('01 · a')]
     for (const direction of ['asc', 'desc'] as const) {

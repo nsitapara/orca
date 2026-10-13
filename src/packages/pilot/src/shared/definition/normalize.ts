@@ -1,9 +1,10 @@
-import type { RawAutomation, RawCheck, RawStep } from './schema'
+import type { RawAutomation, RawCheck, RawJob, RawStep } from './schema'
 import type {
   AgentKind,
   AnswersDef,
   AutomationDefinition,
   CheckDef,
+  FeedDef,
   ItemsDef,
   JobDef,
   StepDef,
@@ -108,7 +109,8 @@ function normalizeStep(s: RawStep, name: string): StepDef {
     exitCodes: { ok: s.exit_codes?.ok ?? [0], skip: s.exit_codes?.skip ?? [] },
     when: s.when ?? null,
     always: s.always ?? false,
-    timeoutMs: s.timeout ?? null
+    timeoutMs: s.timeout ?? null,
+    outputs: s.outputs ?? []
   }
 }
 
@@ -207,18 +209,40 @@ export function normalize(
   }
 }
 
+// job.feeds as connections. A name (the old shape, alone or in the list) is an arrow only, captioned by hands_over.
+export function feedsOf(job: RawJob): FeedDef[] {
+  const raw = job.feeds ?? []
+  const entries = typeof raw === 'string' ? [raw] : raw
+  return entries.map((entry) => {
+    if (typeof entry === 'string') {
+      return {
+        to: entry,
+        pass: null,
+        run: 'next_schedule',
+        when: 'success',
+        caption: job.hands_over ?? null
+      }
+    }
+    return {
+      to: entry.to,
+      pass: entry.pass ? { id: entry.pass.id } : null,
+      run: entry.run ?? 'next_schedule',
+      when: entry.when ?? 'success',
+      caption: entry.caption ?? null
+    }
+  })
+}
+
 function normalizeJob(raw: RawAutomation): JobDef | null {
   const job = raw.job
   if (!job) {
     return null
   }
-  const feeds = job.feeds ?? []
   return {
     id: job.id,
     name: job.name ?? null,
     stage: job.stage,
     label: job.label,
-    feeds: typeof feeds === 'string' ? [feeds] : feeds,
-    handsOver: job.hands_over ?? null
+    feeds: feedsOf(job)
   }
 }

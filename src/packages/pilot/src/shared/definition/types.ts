@@ -34,13 +34,17 @@ export type PipelineWhere = {
   source?: string
   marker_jobs?: string[]
 }
-// where.ids_from: a command (plain words, no shell) printing the ids the source reads instead of listing.
+// where.ids_from: the ids the source reads instead of listing. `run` is a command (plain words, no shell) printing them;
+// `feed: true` adds the ids an earlier stage of the job handed over (job.feeds … pass). With both, their union.
 export type IdsFrom = {
-  run: string
+  feed?: boolean
+  run?: string
   field?: string
   env?: Record<string, string>
   timeout?: string
 }
+// ids_from's command half, once it has one.
+export type IdsCommandSpec = IdsFrom & { run: string }
 export type LinearTicketWhere = {
   ids_from?: IdsFrom
   assignee?: PeopleRef
@@ -119,11 +123,27 @@ export type StepDef = {
   when: string | null
   always: boolean
   timeoutMs: number | null
+  // The outputs it declares (outputs: [ticket]): a job.feeds pass may hand on only these.
+  outputs: string[]
 }
 
 export type AnswersDef = {
   resume: 'asking_session' | 'never'
   else: { agent: AgentKind; skill: string | null; mode: string | null } | null
+}
+
+export type FeedRun = 'now' | 'next_schedule'
+export type FeedWhen = 'success' | 'always'
+// One connection of job.feeds, to another stage of the same job. `pass` hands that stage item ids from this run's
+// outputs (pass.id names the output); `run: now` ticks it as soon as this run ends, `next_schedule` leaves the ids for
+// its own schedule. `when`: on a successful run only (done or needs you), or on any end. A connection without pass
+// and without run: now is the arrow on the job's page only (the old `feeds: <name>`).
+export type FeedDef = {
+  to: string
+  pass: { id: string } | null
+  run: FeedRun
+  when: FeedWhen
+  caption: string | null
 }
 
 // job: (schema.ts). A stage of a job of several automations; null: the automation is a job of its own.
@@ -133,9 +153,8 @@ export type JobDef = {
   name: string | null
   stage: number
   label: string
-  // Automation ids this stage hands work to, and the arrow's caption: display only.
-  feeds: string[]
-  handsOver: string | null
+  // The stages it hands work to, each with its arrow's caption.
+  feeds: FeedDef[]
 }
 
 export type AutomationDefinition = {
