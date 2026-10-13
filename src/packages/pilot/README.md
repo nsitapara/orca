@@ -201,7 +201,8 @@ A card carries its Details as markdown (`--details-file`) or as a structured **D
 - **A prepared card** starts **Context queued**. Job 14 claims it, generates and verifies its evidence, and completes it as **Ready for your decision**. Until then Approve, a drafted-option pick and its action are refused; any other answer stops preparation. A blocked card has **Retry preparation** (`pilot.inbox.prepareRetry`: the desktop or a paired device only), which requeues it with a new revision.
 - **Evidence:** a diff must match its hashed patch exactly. A diff that `details.py` trimmed (an `omitted` file, `more_files`) passes when every shown file, omitted count and `more_files` matches the patch, and its Details say plainly what only the patch file has.
 - **The lease** is a liveness hint: a claim has expired only once its 10-minute lease lapsed and its claiming step no longer runs, and always 3 hours after it was claimed (`PREPARATION_HOLD_MAX_MS`).
-- **A refused request** (validation, size, …) never loses the card: the bridge posts it as a plain card, with the reply `Not prepared: <reason>` (D2).
+- **A refused request** (its shape or size: `Preparation request refused: …`) never loses the card and never offers its action: the bridge leaves a flagged **Not prepared** notice (`--not-prepared-key`, `--not-prepared-reason`) with no action, parts, switch or bundle. Pilot writes its reply `Not prepared: <reason>`, any answer closes it and runs nothing, and the run's prepared card for the same key retires it (D2). A refused seed bundle only drops the bundle. A run can't offer `push` or `post_review` (the catalog's `needsEvidence`) without a preparation request.
+- **A prepared push** binds its evidence to its range: a committed diff from the pinned origin commit (argv[3]) to the pinned commit (argv[2]).
 - **A refreshed action** (new pinned args) and an undone early answer put a prepared card's preparation back in the queue with a new revision.
 - **The list** carries a light preparation ref (state, attempt, progress, error, needs); the request comes with `pilot inbox show` and the manifest with the Details.
 
@@ -209,7 +210,7 @@ Rulings:
 - **R-P1.** Preparation has its own scoped write path: the `pilot.inbox.prepare*` RPCs (claim, progress, complete, fail), for a `local-cli` caller bound to a live run of an `inbox_preparation` automation whose item key is the card's id, at the matching revision, holding the claim. It is the one exception to "a run-bound caller may change only its own automation's cards". `set-details` refuses prepared cards from every caller. (`prepareRetry` is a person's, not the worker's.)
 - **R-P2.** Drafting and evidence moved out of 03 and 04 into job 14 plus item-details' `candidate` mode. This replaces plan Ruling 5.
 - **R-P3.** Images and patches are hashed in prepared bundles, and a changed image is refused. This replaces plan Ruling 3 for prepared bundles; plain bundles keep Ruling 3.
-- **R-P4.** Preparation is opt-in (D1), and a refused request falls back to a plain card (D2, which restores Ruling 8).
+- **R-P4.** Preparation is opt-in (D1), and a refused request never loses the card (D2, after Ruling 8): it becomes a flagged "Not prepared" notice that runs nothing, never a plain action card.
 - **Go-live:** the check's "Card details" line (read-only) counts waiting cards (open or answered), those with a bundle, and imported cards still pointing at a vault bundle.
 
 ## The worktree panel
