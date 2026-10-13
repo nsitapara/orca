@@ -63,7 +63,7 @@ describe('planUpdate', () => {
 
   it('builds the app last when asked', () => {
     const steps = plan({ push: false, build: true })
-    expect(steps.at(-1)?.title).toBe('Build Pilot.app')
+    expect(steps.at(-1)?.title).toBe('Build and install Pilot.app')
   })
 })
 

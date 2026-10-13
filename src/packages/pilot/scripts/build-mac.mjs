@@ -3,6 +3,7 @@
 import { join } from 'node:path'
 import { readdirSync } from 'node:fs'
 import { run, runInherit } from './run.mjs'
+import { installPilot, markNoIndex } from './install-mac.mjs'
 
 const PILOT_BUNDLE_ID = 'dev.nsitapara.pilot'
 
@@ -64,6 +65,7 @@ function plistValue(plist, key) {
   return r.code === 0 ? r.stdout.trim() : null
 }
 
+// Returns the verified app path.
 function verifyIdentities() {
   const appDir = readdirSync('dist')
     .filter((d) => d.startsWith('mac'))
@@ -95,7 +97,24 @@ function verifyIdentities() {
     process.exit(1)
   }
   console.log(`\nIdentity check passed for ${appDir}`)
+  return appDir
 }
 
-verifyIdentities()
-console.log('\nBuilt. The app is under dist/mac*/Pilot.app. Copy it to /Applications to install.')
+const appDir = verifyIdentities()
+markNoIndex('dist')
+const argv = process.argv.slice(2)
+if (argv.includes('--no-install')) {
+  console.log(`\nBuilt ${appDir}. Not installed (--no-install).`)
+} else {
+  try {
+    const text = await installPilot({
+      source: appDir,
+      repo: process.cwd(),
+      launch: !argv.includes('--no-launch')
+    })
+    console.log(`\n${text}`)
+  } catch (error) {
+    console.error(`\n${error.message}`)
+    process.exit(1)
+  }
+}
