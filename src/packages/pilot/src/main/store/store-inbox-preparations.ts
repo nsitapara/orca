@@ -1,7 +1,7 @@
 import type Database from '../../../../../main/sqlite/sync-database'
 import type { InboxItemRow } from '../../shared/api-types'
 import type { InboxPreparation } from '../../shared/preparation'
-import { PREPARATION_LEASE_MS } from '../../shared/preparation'
+import { PREPARATION_HOLD_MAX_MS, PREPARATION_LEASE_MS } from '../../shared/preparation'
 import type { InboxStore } from './store-inbox'
 
 export type PreparationClaim = { runId: string; stepIdx: number; revision: number; attempt: number }
@@ -26,9 +26,14 @@ export class InboxPreparationStore {
   }
 
   // A generating attempt's claim holds while its lease runs or while its claiming step is alive: the lease has expired
-  // only once it has lapsed AND that step no longer runs (its timeout ends a worker that hangs).
+  // only once it has lapsed AND that step no longer runs. Past claimedAt + PREPARATION_HOLD_MAX_MS nothing holds it,
+  // even a step that still reports running. An attempt claimed before claimedAt was recorded holds by its lease alone.
   holds(p: InboxPreparation, at: number): boolean {
-    return (p.leaseUntil ?? 0) > at || this.stepAlive(p.runId, p.stepIdx)
+    const claimedAt = p.claimedAt ?? null
+    if (claimedAt !== null && at >= claimedAt + PREPARATION_HOLD_MAX_MS) {
+      return false
+    }
+    return (p.leaseUntil ?? 0) > at || (claimedAt !== null && this.stepAlive(p.runId, p.stepIdx))
   }
 
   write(id: string, preparation: InboxPreparation): void {
@@ -74,6 +79,7 @@ export class InboxPreparationStore {
       runId,
       stepIdx,
       leaseUntil: at + PREPARATION_LEASE_MS,
+      claimedAt: at,
       progress: 'Generating context',
       error: null,
       updatedAt: at
