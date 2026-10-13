@@ -1,5 +1,6 @@
 import { dirname, resolve } from 'node:path'
 import { runProcess } from '@orca/process-host'
+import { z } from 'zod'
 import { durationMs } from '../../shared/definition/duration'
 import { idsFromProblems } from '../../shared/definition/ids-from'
 import type { IdsFrom } from '../../shared/definition/types'
@@ -100,15 +101,20 @@ function lastLine(text: string): string {
   return text.trim().split('\n').at(-1)?.trim() ?? ''
 }
 
+// What stdout may be: the list itself, or an envelope (pilotcli's) whose data is the list. Only data is read.
+const IdsOutput = z.union([
+  z.array(z.unknown()),
+  z.looseObject({ data: z.array(z.unknown()) }).transform((envelope) => envelope.data)
+])
+// An object entry: its keys, one of which is the id.
+const IdsEntry = z.record(z.string(), z.unknown())
+
 function listIn(parsed: unknown): unknown[] {
-  if (Array.isArray(parsed)) {
-    return parsed
+  const list = IdsOutput.safeParse(parsed)
+  if (!list.success) {
+    throw new Error('ids_from: expected a JSON list, or an envelope whose data is a list')
   }
-  const data = typeof parsed === 'object' && parsed !== null ? Reflect.get(parsed, 'data') : null
-  if (Array.isArray(data)) {
-    return data
-  }
-  throw new Error('ids_from: expected a JSON list, or an envelope whose data is a list')
+  return list.data
 }
 
 function idOf(entry: unknown, field: string | undefined, n: number): string {
@@ -120,10 +126,8 @@ function idOf(entry: unknown, field: string | undefined, n: number): string {
     }
     return entry
   }
-  const value =
-    typeof entry === 'object' && entry !== null && !Array.isArray(entry)
-      ? Reflect.get(entry, field)
-      : undefined
+  const object = Array.isArray(entry) ? null : IdsEntry.safeParse(entry)
+  const value = object?.success ? object.data[field] : undefined
   if (typeof value === 'string' || (typeof value === 'number' && Number.isInteger(value))) {
     return String(value)
   }

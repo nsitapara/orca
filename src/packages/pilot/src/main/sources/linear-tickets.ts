@@ -128,7 +128,8 @@ function notFound(error: unknown): boolean {
   return (
     typeof error === 'object' &&
     error !== null &&
-    Reflect.get(error, 'code') === 'linear_issue_not_found'
+    'code' in error &&
+    error.code === 'linear_issue_not_found'
   )
 }
 
