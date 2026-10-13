@@ -54,6 +54,11 @@ export function preparationRef(p: InboxPreparation): PreparationRef {
   }
 }
 
+// Every refusal of a preparation request itself (its shape, its size) starts with this, so the bridge can tell it
+// from any other refusal and fall back to a "Not prepared" card (D2) only then.
+export const PREPARATION_REFUSED = 'Preparation request refused'
+export const notPreparedReply = (reason: string): string => `Not prepared: ${reason}`
+
 export const PREPARATION_LEASE_MS = 10 * 60_000
 export const PREPARATION_NOT_READY =
   'Context is still being prepared; generated changes cannot be approved yet'

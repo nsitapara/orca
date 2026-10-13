@@ -16,6 +16,9 @@ import type {
 // whose card it is. `options` are the raw "<label> — <meaning>" strings (the server parses them).
 export type InboxAddParams = {
   preparation?: PreparationInput
+  // D2: a flagged notice for a card whose preparation request Pilot refused: no action, nothing runs from it, and
+  // the prepared card for the same key retires it.
+  notPrepared?: { key: string; reason: string }
   // The terminal the command ran in (ORCA_TERMINAL_HANDLE): the step starting or running on it is the
   // card's run step; runId/stepIdx below are only the fallback (ruling 8d).
   terminal?: string

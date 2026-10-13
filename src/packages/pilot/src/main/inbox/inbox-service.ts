@@ -18,6 +18,8 @@ export type InboxDeps = {
   // action's schema (the problem, else null), is refused.
   knownAction?(name: string): boolean
   actionArgsProblem?(name: string, args: Record<string, unknown>): string | null
+  // An action a run may offer only as a prepared card (its catalog entry's needsEvidence).
+  actionNeedsEvidence?(name: string): boolean
   // Called after a card closes (Task 25 cancels an ask-first run whose card closed without starting it).
   onResolved?(item: InboxItemRow): void
   // The Automations folder a card's Details bundle must live in (env.ts pilotDetailsRoot); null or
@@ -44,6 +46,7 @@ export function buildInboxDeps(src: {
     people: src.people,
     knownAction: (name) => actions.get(name) !== null,
     actionArgsProblem: (name, args) => actions.get(name)?.checkArgs(args) ?? null,
+    actionNeedsEvidence: (name) => actions.get(name)?.needsEvidence === true,
     detailsRoot: src.detailsRoot ?? null,
     ...(onResolved ? { onResolved } : {})
   }

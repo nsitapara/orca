@@ -233,25 +233,26 @@ describe('migrate', () => {
     expect(db.pragma('user_version', { simple: true })).toBe(4)
   })
 
-  it('moves a v4 database to v5: a card gains its Details ref and snapshot, none on existing rows', () => {
+  it('moves a v4 database to the current schema: a card gains its Details, preparation and notice columns, all empty', () => {
     const db = openDb()
     migrate(db, 4)
     db.exec(
       "INSERT INTO inbox_items (id, automation_id, person, type, title, digest, created_at, updated_at) VALUES ('i1', 'a', 'p', 'question', 't', 'd', 1, 1)"
     )
     migrate(db)
-    expect(PILOT_SCHEMA_VERSION).toBe(6)
-    expect(db.pragma('user_version', { simple: true })).toBe(6)
+    expect(PILOT_SCHEMA_VERSION).toBe(7)
+    expect(db.pragma('user_version', { simple: true })).toBe(7)
     expect(
       firstRow(
         db,
-        'SELECT id, details_ref_json, details_snapshot_json, preparation_json FROM inbox_items'
+        'SELECT id, details_ref_json, details_snapshot_json, preparation_json, not_prepared_key FROM inbox_items'
       )
     ).toEqual({
       id: 'i1',
       details_ref_json: null,
       details_snapshot_json: null,
-      preparation_json: null
+      preparation_json: null,
+      not_prepared_key: null
     })
   })
 

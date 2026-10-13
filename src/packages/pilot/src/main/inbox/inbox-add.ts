@@ -1,4 +1,4 @@
-import { PreparationInputSchema, queuedPreparation } from '../../shared/preparation'
+import { notPreparedReply, queuedPreparation } from '../../shared/preparation'
 import { randomUUID } from 'node:crypto'
 import type { InboxItemRow, ItemFields } from '../../shared/api-types'
 import type { DetailsSnapshot } from '../../shared/details'
@@ -10,6 +10,12 @@ import { loadDetails } from './details-bundle'
 import { ANSWER_LOCKED, answerLocked } from './answer-lock'
 import { inboxEvent, syncRunWaiting, WAITING, type InboxDeps } from './inbox-service'
 import { resolveInboxPerson } from './person'
+import {
+  checkNotPrepared,
+  checkPreparationRequest,
+  refuseUnpreparedEvidence,
+  retireNotPrepared
+} from './not-prepared'
 import { fieldsForRun, latestFieldsFor } from './run-fields'
 
 export const SKIPPED_BEFORE =
@@ -195,9 +201,8 @@ function addInboxItemUnlocked(
     callerRunId?: string | null
   } = {}
 ): InboxAddResult {
-  if (params.preparation) {
-    PreparationInputSchema.parse(params.preparation)
-  }
+  checkPreparationRequest(params)
+  checkNotPrepared(params)
   const origin = originOf(deps, params)
   const def = deps.definitions().find((d) => d.id === origin.automationId)
   if (!def) {
@@ -219,6 +224,7 @@ function addInboxItemUnlocked(
   if (argsProblem) {
     throw new Error(argsProblem)
   }
+  refuseUnpreparedEvidence(deps, params, origin.runId, card.action)
   const digest = inboxDigest(card)
   const at = deps.now()
   const mine = deps.store.inbox.list({ automationId: origin.automationId })
@@ -233,6 +239,9 @@ function addInboxItemUnlocked(
         (!params.preparation && i.preparation && sameCard(i, card, origin)))
   )
   if (managed) {
+    if (params.preparation && !opts.dryRun) {
+      retireNotPrepared(deps, mine, params.preparation.key, managed.id, at)
+    }
     return { id: managed.id, existing: true, refused: null }
   }
   const open = params.preparation
@@ -258,6 +267,7 @@ function addInboxItemUnlocked(
   }
   const item: NewInboxItem = {
     ...(params.preparation ? { preparation: queuedPreparation(params.preparation, at) } : {}),
+    ...(params.notPrepared ? { notPreparedKey: params.notPrepared.key } : {}),
     id: (deps.newId ?? newItemId)(),
     automationId: origin.automationId,
     runId: origin.runId,
@@ -267,13 +277,18 @@ function addInboxItemUnlocked(
     person,
     ...card,
     digest,
-    replies: [],
+    replies: params.notPrepared
+      ? [{ text: notPreparedReply(params.notPrepared.reason), by: 'pilot' as const }]
+      : [],
     outcome: null,
     createdAt: at,
     source: opts.source ?? 'engine',
     vaultRef: opts.vaultRef ?? null
   }
   deps.store.inbox.add(item, loaded)
+  if (params.preparation) {
+    retireNotPrepared(deps, mine, params.preparation.key, item.id, at)
+  }
   inboxEvent(
     deps.store,
     item,

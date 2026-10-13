@@ -24,6 +24,15 @@ describe('buildActionCatalog', () => {
     expect(act.run).toHaveBeenCalledWith(script, ['a'], { dryRun: false, runId: 'r' })
   })
 
+  // Approve runs these with no agent in between, so a run may offer them only as prepared cards.
+  it.each([
+    ['push', true],
+    ['post_review', true],
+    ['mark_ready', false]
+  ])('%s needs prepared evidence: %s', (name, needs) => {
+    expect(buildActionCatalog({ act, linear: null }).get(name)?.needsEvidence === true).toBe(needs)
+  })
+
   it('fails an act.py entry whose args are not { argv: string[] }', async () => {
     const entry = buildActionCatalog({ act, linear: null }).get('push')!
     expect(await entry.run({ argv: 'a' }, { dryRun: false, runId: null })).toMatchObject({

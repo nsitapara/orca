@@ -133,8 +133,8 @@ export class InboxStore {
       .prepare(
         `INSERT INTO inbox_items (id, automation_id, run_id, step_idx, item_key, worktree_path, person, type, title,
           context, options_json, suggested, details_md, action, action_args_json, digest, created_at, updated_at,
-          outcome, replies_json, parts_json, switch_json, source, vault_ref, details_ref_json, details_snapshot_json, preparation_json)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+          outcome, replies_json, parts_json, switch_json, source, vault_ref, details_ref_json, details_snapshot_json, preparation_json, not_prepared_key)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       )
       .run(
         item.id,
@@ -163,7 +163,8 @@ export class InboxStore {
         item.vaultRef,
         jsonOrNull(item.details),
         jsonOrNull(snapshot),
-        jsonOrNull(item.preparation)
+        jsonOrNull(item.preparation),
+        item.notPreparedKey ?? null
       )
   }
 
