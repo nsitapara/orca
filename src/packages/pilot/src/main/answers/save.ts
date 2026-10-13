@@ -1,5 +1,5 @@
 import { APPROVE, answerWord } from '../../shared/answers/route'
-import { PREPARATION_NOT_READY } from '../../shared/preparation'
+import { PREPARATION_NOT_READY, requeuedPreparation } from '../../shared/preparation'
 import type { InboxAnswer, InboxItemRow } from '../../shared/api-types'
 import type { InboxAnswerParams } from '../../shared/inbox-types'
 import { oneLine } from '../inbox/card'
@@ -73,18 +73,8 @@ function clearAnswer(deps: InboxDeps, item: InboxItemRow, at: number): InboxItem
   deps.store.transaction(() => {
     deps.store.queue.removePending(item.id)
     deps.store.inbox.update(item.id, patch, at)
-    const preparation = item.preparation
-    if (preparation?.state === 'cancelled') {
-      deps.store.inboxPreparations.write(item.id, {
-        ...preparation,
-        state: 'queued',
-        revision: preparation.revision + 1,
-        attempt: 0,
-        leaseUntil: null,
-        progress: 'Context queued',
-        error: null,
-        updatedAt: at
-      })
+    if (item.preparation?.state === 'cancelled') {
+      deps.store.inboxPreparations.write(item.id, requeuedPreparation(item.preparation, at))
     }
   })
   inboxEvent(deps.store, item, 'answer_cleared', {}, at)
