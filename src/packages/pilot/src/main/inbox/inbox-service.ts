@@ -1,8 +1,8 @@
 import type { AutomationDefinition } from '../../shared/definition/types'
-import type { InboxItemRow, InboxStatus } from '../../shared/api-types'
+import type { InboxItemRow, InboxListRow, InboxStatus } from '../../shared/api-types'
 import type { AnswerState, InboxListPayload, RunLine } from '../../shared/inbox-types'
 import type { PeopleDirectory } from '../../shared/people'
-import { requeuedPreparation } from '../../shared/preparation'
+import { preparationRef, requeuedPreparation } from '../../shared/preparation'
 import type { ActionCatalog } from '../actions/types'
 import type { PilotStore } from '../store/store'
 import { answerLocked, lockedBy, ownsLiveAnswer } from './answer-lock'
@@ -142,6 +142,21 @@ function answerStatesOf(deps: InboxDeps, items: InboxItemRow[]): Record<string, 
   return states
 }
 
+// A card as the list carries it (Ruling 2): its preparation as a light ref, its Details without the manifest.
+function listRow(item: InboxItemRow): InboxListRow {
+  const { preparation, details, ...rest } = item
+  const row: InboxListRow = { ...rest, details: details ? withoutManifest(details) : null }
+  if (preparation !== undefined) {
+    row.preparation = preparation ? preparationRef(preparation) : null
+  }
+  return row
+}
+
+function withoutManifest(details: NonNullable<InboxItemRow['details']>) {
+  const { artifacts: _manifest, ...ref } = details
+  return ref
+}
+
 export function listInbox(
   deps: InboxDeps,
   filter: { person?: string; statuses?: readonly InboxStatus[] },
@@ -160,7 +175,7 @@ export function listInbox(
     return label ? { ...i, itemLabel: label } : i
   })
   return {
-    items,
+    items: items.map(listRow),
     runLines: runLinesOf(items, runLineOf),
     answerStates: answerStatesOf(deps, items),
     people: people.people.map((p) => ({ id: p.id, name: p.name })),

@@ -1,5 +1,8 @@
+import { useState } from 'react'
+import type { InboxItemRow, InboxListRow } from '../../../shared/api-types'
 import type { PreparationRequirement } from '../../../shared/preparation'
-import type { InboxItemRow } from '../../../shared/api-types'
+import { pilotRpc } from '../../api'
+import { errorText } from '../format'
 
 const ARTIFACT_LABELS: Record<PreparationRequirement, string> = {
   context: 'decision context',
@@ -9,7 +12,59 @@ const ARTIFACT_LABELS: Record<PreparationRequirement, string> = {
   review: 'exact review comments'
 }
 
-export function PreparationProgress({ item }: { item: InboxItemRow }): React.JSX.Element | null {
+// The request a job saved for its card, as readable text: pretty JSON when it is JSON.
+function requestText(context: string): string {
+  try {
+    return JSON.stringify(JSON.parse(context), null, 2)
+  } catch {
+    return context
+  }
+}
+
+// The list carries a light ref (Ruling 2); the full request is read only when asked (pilot.inbox.get).
+function RequestView({ id }: { id: string }): React.JSX.Element {
+  const [open, setOpen] = useState(false)
+  const [text, setText] = useState<string | null>(null)
+  const toggle = async (): Promise<void> => {
+    setOpen(!open)
+    if (open || text !== null) {
+      return
+    }
+    try {
+      const item = await pilotRpc<InboxItemRow>('pilot.inbox.get', { id })
+      setText(requestText(item.preparation?.input.context ?? ''))
+    } catch (e) {
+      setText(errorText(e))
+    }
+  }
+  return (
+    <div className="grid gap-1">
+      <button
+        type="button"
+        aria-expanded={open}
+        onClick={() => void toggle()}
+        className="w-fit text-xs text-[var(--ib-accent)] hover:underline"
+      >
+        {open ? 'Hide the request' : 'Show the request'}
+      </button>
+      {open ? (
+        <pre className="max-h-64 overflow-auto whitespace-pre-wrap text-xs">
+          {text ?? 'Loading…'}
+        </pre>
+      ) : null}
+    </div>
+  )
+}
+
+export function PreparationProgress({
+  item,
+  onRetry
+}: {
+  item: InboxListRow
+  // A person's Retry on a blocked card (pilot.inbox.prepareRetry): null once requeued, else why not.
+  onRetry: () => Promise<string | null>
+}): React.JSX.Element | null {
+  const [retryError, setRetryError] = useState<string | null>(null)
   const preparation = item.preparation
   if (!preparation) {
     return null
@@ -24,6 +79,9 @@ export function PreparationProgress({ item }: { item: InboxItemRow }): React.JSX
   if (preparation.state === 'ready') {
     return null
   }
+  const retry = async (): Promise<void> => {
+    setRetryError(await onRetry())
+  }
   return (
     <div role="status" className="flex flex-col gap-1 text-sm text-muted-foreground">
       {preparation.progress ? <p>{preparation.progress}</p> : null}
@@ -32,6 +90,17 @@ export function PreparationProgress({ item }: { item: InboxItemRow }): React.JSX
         {preparation.input.requirements.map((kind) => ARTIFACT_LABELS[kind]).join(', ')}.
       </p>
       {preparation.error ? <p className="text-destructive">{preparation.error}</p> : null}
+      {preparation.state === 'blocked' ? (
+        <button
+          type="button"
+          onClick={() => void retry()}
+          className="w-fit rounded border px-2 py-0.5 text-xs text-foreground hover:bg-muted"
+        >
+          Retry preparation
+        </button>
+      ) : null}
+      {retryError ? <p className="text-destructive">{retryError}</p> : null}
+      <RequestView id={item.id} />
       <p>
         You can answer now to stop preparation. Generated changes can be approved once their context
         is ready.

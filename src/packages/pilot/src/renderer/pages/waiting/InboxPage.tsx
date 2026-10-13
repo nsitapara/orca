@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
-import type { InboxItemRow } from '../../../shared/api-types'
+import type { InboxListRow } from '../../../shared/api-types'
 import { groupItems, type Section } from '../../../shared/inbox-groups'
 import { waitingCount, preparingCount, preparationBlockedCount } from './answer-text'
 import { CardList } from './CardList'
@@ -45,7 +45,8 @@ export function InboxPage(): React.JSX.Element {
   const [selected, setSelected] = useState<string | null>(null)
   const [listOpen, toggleList] = useListOpen()
   const [rootRef, width] = useElementWidth()
-  const { inbox, queue, error, loadedAt, save, applyNow, reload } = useWaiting(viewer)
+  const { inbox, queue, error, loadedAt, save, retryPreparation, applyNow, reload } =
+    useWaiting(viewer)
   // Save errors are kept here, by card id: a card remounts as a new version on every reload.
   const [errors, setErrors] = useState<Record<string, string>>({})
   const people = inbox?.people ?? []
@@ -77,11 +78,11 @@ export function InboxPage(): React.JSX.Element {
   const wide = width === null || width >= WIDE_PX
   const showList = wide && listOpen
   const viewerName = people.find((p) => p.id === viewer)?.name.split(' ')[0] ?? 'you'
-  const select = (item: InboxItemRow) => {
+  const select = (item: InboxListRow) => {
     setSelected(item.id)
     document.getElementById(`card-${item.id}`)?.scrollIntoView?.({ block: 'start' })
   }
-  const cardOf = (i: InboxItemRow) => (
+  const cardOf = (i: InboxListRow) => (
     <InboxCard
       key={`${i.id}@${i.version}`}
       item={i}
@@ -96,6 +97,7 @@ export function InboxPage(): React.JSX.Element {
         setErrors((now) => withError(now, i.id, failed))
         return failed
       }}
+      onRetryPreparation={() => retryPreparation(i)}
     />
   )
   const sectionOf = (s: Section) => (

@@ -1,7 +1,7 @@
 import type { StepDef } from './definition/types'
 import type { InboxItemSummary } from './inbox-types'
 import type { DetailsRef } from './details'
-import type { InboxPreparation } from './preparation'
+import type { InboxPreparation, PreparationRef } from './preparation'
 
 export type PilotStatus = {
   version: string
@@ -203,6 +203,11 @@ export type InboxItemRow = {
   vaultRef: string | null
   // Only on the inbox list: what the card's item is called (its run's or tick's label, or the Details MR row).
   itemLabel?: string
+}
+// A card as the Inbox list carries it (Ruling 2): a light preparation ref, and Details without the artifact manifest.
+// The full card is pilot.inbox.get (`pilot inbox show`); the manifest comes with pilot.inbox.details.
+export type InboxListRow = Omit<InboxItemRow, 'preparation'> & {
+  preparation?: PreparationRef | null
 }
 export type QueueState = 'not_ready' | 'ready' | 'held' | 'dispatched' | 'failed'
 export type HoldReason =

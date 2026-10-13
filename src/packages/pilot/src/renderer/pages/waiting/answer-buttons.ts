@@ -1,4 +1,4 @@
-import type { InboxItemRow } from '../../../shared/api-types'
+import type { InboxListRow } from '../../../shared/api-types'
 import type { AnswerState } from '../../../shared/inbox-types'
 import { actionButton } from '../../../shared/answer-actions'
 import { type Choice, choicesFor } from './answer-text'
@@ -17,7 +17,7 @@ export type AnswerButton = {
 
 type Words = { label: string; doing: string }
 
-function agentFix(item: InboxItemRow): Words {
+function agentFix(item: InboxListRow): Words {
   if (item.details?.drafted) {
     return { label: 'Apply fix', doing: 'Applying fix…' }
   }
@@ -25,7 +25,7 @@ function agentFix(item: InboxItemRow): Words {
 }
 
 // What Approve is called on this card, and what the card says while it runs.
-export function approveWords(item: InboxItemRow): Words {
+export function approveWords(item: InboxListRow): Words {
   if (item.action === 'start_run') {
     return { label: 'Approve', doing: 'Starting…' }
   }
@@ -48,7 +48,7 @@ function roleOf(choice: Choice): ButtonRole {
   return choice.label === 'Approve' ? 'primary' : 'option'
 }
 
-function labelOf(item: InboxItemRow, choice: Choice, role: ButtonRole): string {
+function labelOf(item: InboxListRow, choice: Choice, role: ButtonRole): string {
   if (role === 'primary') {
     return approveWords(item).label
   }
@@ -57,7 +57,7 @@ function labelOf(item: InboxItemRow, choice: Choice, role: ButtonRole): string {
 
 // One button per choice of the old radio list (choicesFor), so each saves exactly the answer that choice
 // always saved: the same option index and words, through composeAnswer.
-export function buttonsFor(item: InboxItemRow): AnswerButton[] {
+export function buttonsFor(item: InboxListRow): AnswerButton[] {
   if (
     item.preparation &&
     item.preparation.state !== 'ready' &&
@@ -105,7 +105,7 @@ export function buttonsFor(item: InboxItemRow): AnswerButton[] {
 }
 
 // What a saved answer will do, and the words for while it is being applied.
-export function answeredLine(item: InboxItemRow): Words {
+export function answeredLine(item: InboxListRow): Words {
   const text = (item.answer?.text ?? '').trim()
   const lower = text.toLowerCase()
   if (lower === 'skip') {

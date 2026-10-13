@@ -1,4 +1,4 @@
-import type { InboxItemRow, InboxListPayload, InboxOption } from '../shared/api-types'
+import type { InboxItemRow, InboxListPayload, InboxListRow, InboxOption } from '../shared/api-types'
 import type { DetailsRef } from '../shared/details'
 
 function optionLine(option: InboxOption, n: number): string {
@@ -8,7 +8,7 @@ function optionLine(option: InboxOption, n: number): string {
   return `    ${n}. ${option.label}`
 }
 
-function whose(item: InboxItemRow): string {
+function whose(item: InboxListRow): string {
   const parts = [item.automationId, item.itemKey].filter((p): p is string => Boolean(p))
   if (parts.length === 0) {
     return ''

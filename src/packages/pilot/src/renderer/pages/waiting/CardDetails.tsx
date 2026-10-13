@@ -1,7 +1,7 @@
 import { ChevronRight } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
-import type { InboxItemRow } from '../../../shared/api-types'
+import type { InboxListRow } from '../../../shared/api-types'
 import type { DetailsSnapshot } from '../../../shared/details'
 import { pilotRpc } from '../../api'
 import { DetailsStyle } from '../../details/details-css'
@@ -35,7 +35,7 @@ function whyOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
 }
 
-function useSnapshot(item: InboxItemRow, open: boolean): Snapshot {
+function useSnapshot(item: InboxListRow, open: boolean): Snapshot {
   const { id, digest } = item
   const wanted = item.details !== null && open
   const key = `${id}@${digest}`
@@ -89,7 +89,7 @@ function BundleBody({
   retry,
   parts
 }: {
-  item: InboxItemRow
+  item: InboxListRow
   loaded: Loaded | null
   retry: () => void
   parts: PartSwitches | null
@@ -124,7 +124,7 @@ function Body({
   retry,
   parts
 }: {
-  item: InboxItemRow
+  item: InboxListRow
   loaded: Loaded | null
   retry: () => void
   parts: PartSwitches | null
@@ -141,7 +141,7 @@ function Body({
 }
 
 // The labels beside "Details" on the bar (the ref's derived summary); a markdown-only card has none.
-function SummaryChips({ item }: { item: InboxItemRow }): React.JSX.Element[] {
+function SummaryChips({ item }: { item: InboxListRow }): React.JSX.Element[] {
   return (item.details?.summary ?? []).map((label) => (
     <span
       key={label}
@@ -188,7 +188,7 @@ export function CardDetails({
   item,
   parts
 }: {
-  item: InboxItemRow
+  item: InboxListRow
   parts: PartSwitches | null
 }): React.JSX.Element | null {
   const open = useDetailsOpen(item.id)

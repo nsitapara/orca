@@ -698,6 +698,49 @@ it.each(['prepared', 'plain'] as const)(
   }
 )
 
+// M6 (Ruling 2): the list carries a light ref. A prepared card lists its state, attempt, progress, error and needs,
+// never its request context (up to 64 KB) or its artifact manifest; those come with `pilot inbox show` and Details.
+it('lists a prepared card with a light preparation ref and no manifest', () => {
+  const { deps, store } = setup()
+  const context = 'x'.repeat(60_000)
+  const id = addInboxItem(deps, {
+    ...QUESTION,
+    preparation: { key: 'k', context, requirements: ['context', 'diff'] }
+  }).id!
+  const manifest = {
+    files: [{ ref: 'F2.patch', role: 'patch' as const, sha256: '1'.repeat(64), bytes: 9 }],
+    expected: ['context'],
+    generated: ['context'],
+    tags: []
+  }
+  const details = {
+    path: '/b.json',
+    sha256: '0'.repeat(64),
+    inlined: {},
+    blocks: 1,
+    drafted: false,
+    draftedBase: null,
+    summary: [],
+    artifacts: manifest
+  }
+  store.inbox.edit(id, { details, digest: 'd'.repeat(64) }, 100)
+  const [row] = listInbox(deps, {}).items
+  expect(row.preparation).toEqual({
+    state: 'queued',
+    revision: 1,
+    attempt: 0,
+    maxAttempts: 3,
+    progress: 'Context queued',
+    error: null,
+    updatedAt: 100,
+    input: { requirements: ['context', 'diff'] }
+  })
+  expect(JSON.stringify(row)).not.toContain('xxxxxxxx')
+  expect(row.details).not.toHaveProperty('artifacts')
+  expect(store.inbox.get(id)?.preparation?.input.context).toBe(context)
+  expect(store.inbox.get(id)?.details?.artifacts).toEqual(manifest)
+})
+
 it('uses the stable decision key rather than a repeated display title for managed items', () => {
   const { deps, store } = setup()
   for (const key of ['first-decision', 'second-decision']) {

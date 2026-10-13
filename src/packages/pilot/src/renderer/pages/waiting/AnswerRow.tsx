@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Textarea } from '@/components/ui/textarea'
 import { cn } from '@/lib/utils'
-import type { InboxItemRow } from '../../../shared/api-types'
+import type { InboxListRow } from '../../../shared/api-types'
 import { type AnswerButton, buttonsFor } from './answer-buttons'
 import { type Choice, composeAnswer } from './answer-text'
 import type { Answer } from './answer-types'
@@ -18,7 +18,7 @@ function Parts({
   off,
   onToggle
 }: {
-  item: InboxItemRow
+  item: InboxListRow
   off: string[]
   onToggle: (id: string) => void
 }): React.JSX.Element {
@@ -65,7 +65,7 @@ export function AnswerRow({
   onSave,
   onPick
 }: {
-  item: InboxItemRow
+  item: InboxListRow
   off: string[]
   onToggle: (id: string) => void
   onSave: (answer: Answer) => Promise<string | null>

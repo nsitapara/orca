@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import type { InboxItemRow } from '../../../shared/api-types'
+import type { InboxListRow } from '../../../shared/api-types'
 import type { AnswerState } from '../../../shared/inbox-types'
 import { answeredLine, countdown, type Phase, phaseOf } from './answer-buttons'
 
@@ -19,7 +19,7 @@ function useNow(active: boolean): number {
 // What a saved answer says on the card, in one line. Only the server's `locked` says it is being carried out;
 // until then it can be undone (or, once failed, changed).
 function lineText(
-  item: InboxItemRow,
+  item: InboxListRow,
   state: AnswerState | null,
   phase: Phase,
   now: number
@@ -59,7 +59,7 @@ export function AnsweredLine({
   focusUndo,
   onUndo
 }: {
-  item: InboxItemRow
+  item: InboxListRow
   answerState: AnswerState | null
   // This click has just answered the card: move focus to the button so the countdown is announced.
   focusUndo: boolean

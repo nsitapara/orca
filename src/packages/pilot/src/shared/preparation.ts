@@ -33,6 +33,27 @@ export const InboxPreparationSchema = z.object({
 })
 export type InboxPreparation = z.infer<typeof InboxPreparationSchema>
 
+// What the Inbox list carries of a card's preparation (Ruling 2's light ref): where it stands and what it needs
+// (`input.requirements`, the short needs summary). The request's context, up to 64 KB, comes with `pilot inbox show`
+// (pilot.inbox.get) when a card asks for it. A full InboxPreparation is one of these too.
+export type PreparationRef = Pick<
+  InboxPreparation,
+  'state' | 'revision' | 'attempt' | 'maxAttempts' | 'progress' | 'error' | 'updatedAt'
+> & { input: Pick<PreparationInput, 'requirements'> }
+
+export function preparationRef(p: InboxPreparation): PreparationRef {
+  return {
+    state: p.state,
+    revision: p.revision,
+    attempt: p.attempt,
+    maxAttempts: p.maxAttempts,
+    progress: p.progress,
+    error: p.error,
+    updatedAt: p.updatedAt,
+    input: { requirements: [...p.input.requirements] }
+  }
+}
+
 export const PREPARATION_LEASE_MS = 10 * 60_000
 export const PREPARATION_NOT_READY =
   'Context is still being prepared; generated changes cannot be approved yet'

@@ -1,4 +1,4 @@
-import type { InboxItemRow, InboxType } from './api-types'
+import type { InboxListRow, InboxType } from './api-types'
 
 // The console's KIND_ORDER (worktree-gate/assets/answers.html).
 export const KIND_ORDER: InboxType[] = [
@@ -19,10 +19,10 @@ export type InboxGroup = {
   // Section order: worktrees, MRs, pipelines, tickets, jobs, then Clean up.
   rank: number
 }
-export type GroupableItem = Pick<InboxItemRow, 'itemKey' | 'worktreePath' | 'automationId'> & {
+export type GroupableItem = Pick<InboxListRow, 'itemKey' | 'worktreePath' | 'automationId'> & {
   itemLabel?: string
 }
-export type Section = { group: InboxGroup; items: InboxItemRow[] }
+export type Section = { group: InboxGroup; items: InboxListRow[] }
 
 const RANK = { worktree: 0, mr: 1, pipeline: 2, ticket: 3, job: 4, cleanup: 5 } as const
 const CLEAN_UP = new Set(['docker-prune', 'close-idle-sessions'])
@@ -119,7 +119,7 @@ function kindRank(type: InboxType): number {
   return at === -1 ? KIND_ORDER.length : at
 }
 
-function byCard(a: InboxItemRow, b: InboxItemRow): number {
+function byCard(a: InboxListRow, b: InboxListRow): number {
   return (
     kindRank(a.type) - kindRank(b.type) || a.createdAt - b.createdAt || a.id.localeCompare(b.id)
   )
@@ -134,7 +134,7 @@ function bySection(a: Section, b: Section): number {
 
 // Every card in exactly one section, sections in order, cards in the console's order inside each.
 export function groupItems(
-  items: InboxItemRow[],
+  items: InboxListRow[],
   automations: { id: string; name: string }[]
 ): Section[] {
   const mrWorktrees = new Map<string, string>()
