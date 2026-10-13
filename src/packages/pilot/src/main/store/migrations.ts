@@ -1,6 +1,6 @@
 import type Database from '../../../../../main/sqlite/sync-database'
 
-export const PILOT_SCHEMA_VERSION = 8
+export const PILOT_SCHEMA_VERSION = 9
 
 const V1 = `
 CREATE TABLE ticks (id INTEGER PRIMARY KEY AUTOINCREMENT, automation_id TEXT NOT NULL, started_at INTEGER NOT NULL,
@@ -108,8 +108,22 @@ const V7 = `ALTER TABLE inbox_items ADD COLUMN not_prepared_key TEXT;`
 // A tick's warnings (an id its source couldn't read, a capped listing), so Activity shows them.
 const V8 = `ALTER TABLE ticks ADD COLUMN warnings_json TEXT NOT NULL DEFAULT '[]';`
 
+// Multi-stage jobs: the ids a stage's run hands the next stage (job.feeds … pass), pending until a tick of that
+// stage reads them, once per (sender run, receiver, id); and what triggered a tick (a feed's run: now).
+const V9 = `
+CREATE TABLE handovers (id INTEGER PRIMARY KEY AUTOINCREMENT, sender_id TEXT NOT NULL, sender_run_id TEXT NOT NULL,
+  receiver_id TEXT NOT NULL, item_id TEXT NOT NULL, created_at INTEGER NOT NULL,
+  state TEXT NOT NULL DEFAULT 'pending', -- pending|consumed
+  consumed_at INTEGER, tick_id INTEGER, verdict TEXT, reason TEXT, run_id TEXT,
+  UNIQUE (sender_run_id, receiver_id, item_id));
+CREATE INDEX handovers_pending ON handovers (receiver_id, state, id);
+CREATE INDEX handovers_sender ON handovers (sender_id, receiver_id, id);
+CREATE INDEX handovers_tick ON handovers (tick_id);
+ALTER TABLE ticks ADD COLUMN trigger_json TEXT;
+`
+
 // MIGRATIONS[n - 1] takes a database from version n - 1 to n.
-const MIGRATIONS: readonly string[] = [V1, V2, V3, V4, V5, V6, V7, V8]
+const MIGRATIONS: readonly string[] = [V1, V2, V3, V4, V5, V6, V7, V8, V9]
 
 // Same pattern as Orca's orchestration.db (migrate.ts): user_version + one transaction, all or nothing.
 // `target` lets tests build a database at an older version.
