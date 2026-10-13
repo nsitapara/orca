@@ -2,7 +2,11 @@
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { AutomationListPayload, PilotStatus } from '../../shared/api-types'
-import { setPilotAutomationsView, setPilotOpenAutomation } from './automations-view'
+import {
+  setPilotAutomationsView,
+  setPilotOpenAutomation,
+  setPilotOpenJob
+} from './automations-view'
 import { detail, summary } from './fixtures'
 
 const pilotRpc = vi.fn()
@@ -59,7 +63,40 @@ describe('PilotAutomationsPage', () => {
     cleanup()
     pilotRpc.mockReset()
     setPilotOpenAutomation(null)
+    setPilotOpenJob(null)
     setPilotAutomationsView('automations')
+  })
+
+  it('opens a job of several automations as one page; a stage opens from it and Back returns to it', async () => {
+    const stage = (id: string, n: number) => ({
+      ...summary,
+      id,
+      name: `13 · stage ${n}`,
+      job: {
+        id: '13',
+        name: n === 1 ? 'Fix red hourly e2e on dev' : null,
+        stage: n,
+        label: `Stage label ${n}`,
+        feeds: [],
+        handsOver: null
+      }
+    })
+    serve({ ...list, automations: [summary, stage('one', 1), stage('two', 2)] })
+    render(<PilotAutomationsPage />)
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Job 13 · Fix red hourly e2e on dev, 2 stages' })
+    )
+    expect(
+      await screen.findByRole('heading', { name: '13 · Fix red hourly e2e on dev' })
+    ).toBeTruthy()
+    fireEvent.click(await screen.findByRole('button', { name: 'Stage label 2' }))
+    expect(await screen.findByRole('button', { name: 'Run now' })).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Automations' }))
+    expect(
+      await screen.findByRole('heading', { name: '13 · Fix red hourly e2e on dev' })
+    ).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Automations' }))
+    expect(await screen.findByRole('button', { name: /Fix failed CI/ })).toBeTruthy()
   })
 
   it('lists the YAML automations only, and opens one full page', async () => {

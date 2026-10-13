@@ -5,6 +5,8 @@ export type PilotAutomationsView = 'automations' | 'inbox'
 
 let current: PilotAutomationsView = 'automations'
 let openId: string | null = null
+// A job of several automations, by its job.id. An automation opened from the job's page goes back to it.
+let openJobId: string | null = null
 const listeners = new Set<() => void>()
 
 function notify(): void {
@@ -24,6 +26,7 @@ export function setPilotAutomationsView(next: PilotAutomationsView): void {
   }
   current = next
   openId = null
+  openJobId = null
   notify()
 }
 
@@ -36,6 +39,18 @@ export function setPilotOpenAutomation(id: string | null): void {
     return
   }
   openId = id
+  notify()
+}
+
+export function pilotOpenJob(): string | null {
+  return openJobId
+}
+
+export function setPilotOpenJob(id: string | null): void {
+  if (id === openJobId) {
+    return
+  }
+  openJobId = id
   notify()
 }
 
@@ -52,4 +67,8 @@ export function usePilotAutomationsView(): PilotAutomationsView {
 
 export function usePilotOpenAutomation(): string | null {
   return useSyncExternalStore(subscribePilotAutomationsView, pilotOpenAutomation)
+}
+
+export function usePilotOpenJob(): string | null {
+  return useSyncExternalStore(subscribePilotAutomationsView, pilotOpenJob)
 }

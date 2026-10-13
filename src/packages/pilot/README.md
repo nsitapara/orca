@@ -179,6 +179,23 @@ A shell step's `run:` is plain shell. It takes no `{placeholders}`; validation r
 - **Never** use an env value in `$(( ))`, `(( ))`, `let`, `declare -i`, an array subscript, `[[ -eq ]]`, `eval`, or `sh -c "…$NAME…"`. The shell evaluates those as code. Quote it as `"$NAME"`, or validate it first.
 - **Never** put an item value in an env name that another program executes: `NODE_OPTIONS`, `GIT_SSH_COMMAND`, `GIT_CONFIG_*`, `PERL5OPT`, `JAVA_TOOL_OPTIONS`, `SHELL`, `EDITOR`, `PAGER`. Validation doesn't block these.
 
+### A job of several automations (`job:`)
+
+A job ported as several automations, such as 13's ticket step and its fix sessions, shows as one job. Each automation is a **stage** of it. ("Step" already means the steps inside an automation.)
+
+    job:
+      id: "13"                            # the stages of one job share it (quoted text)
+      name: Fix red hourly e2e on dev     # the job's name; at least one stage sets it
+      stage: 1                            # whole number from 1, its place in the job
+      label: Open or update the ticket    # the stage's short label
+      feeds: dev-e2e-fix-start            # optional: the automation(s) it hands work to (one or a list)
+      hands_over: the tickets it opens    # optional, only with feeds: the arrow's caption
+
+- **Rules across files:** a stage number is used once per job. Each `feeds` target exists and is in the same job. Feeds never form a cycle. The stages that set `name` agree. A broken rule marks every automation it involves invalid, the way a broken file is: its last valid version is shown and never ticked, and the error names the rule. `pilot automations validate --file` checks one file, so a rule across files shows in the list's errors and in `reload`.
+- **Display only:** `feeds` and `hands_over` draw the arrows on the job's page. Each stage still ticks on its own schedule.
+- **The list** shows the job as one row (its id and name, an "N stages" chip, on when any stage is, the newest tick of any stage), with its stages indented under it in stage order. Click a stage for its own page, or the job for the job's page. That page shows the stages as cards joined by their `feeds` arrows, one Activity timeline with each tick tagged by its stage, and each stage's YAML. "Dry run all" dry-runs every stage in order. "Turn on" (it asks first) and "Turn off" set every stage through the same call, and the same caller rules, as one automation.
+- An automation without `job:` is a job of its own, as before. The card's one-line description is the first line of the file's opening comment.
+
 ### Item ids from a command (`where.ids_from`)
 
 A source can read only the ids a command names, instead of listing everything and dropping what isn't its own. `linear_ticket` takes it (13-start reads the tickets job 13 opened).

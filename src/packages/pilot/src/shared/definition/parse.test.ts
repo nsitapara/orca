@@ -76,7 +76,8 @@ const CI_05_DEFINITION = {
   ],
   answers: null,
   powers: ['commit', 'push'],
-  inbox: '{mr.author}'
+  inbox: '{mr.author}',
+  job: null
 }
 
 const EVERY_KEY = `
@@ -257,7 +258,8 @@ describe('parseAutomationYaml', () => {
           else: { agent: 'claude', skill: 'review-branch', mode: 'answers' }
         },
         powers: ['commit', 'push'],
-        inbox: 'nish'
+        inbox: 'nish',
+        job: null
       }
     })
   })

@@ -4,7 +4,7 @@ import type { TickOutcome } from '../../shared/api-types'
 import { pilotRpc } from '../api'
 import { errorText, outcomeLine } from './format'
 
-const LONG_CALL_MS = 180_000
+export const LONG_CALL_MS = 180_000
 type Phase = 'idle' | 'confirm' | 'running'
 
 // Dry run is safe; Run now starts real agents, so it takes an explicit inline Confirm.

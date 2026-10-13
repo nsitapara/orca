@@ -126,6 +126,18 @@ export type AnswersDef = {
   else: { agent: AgentKind; skill: string | null; mode: string | null } | null
 }
 
+// job: (schema.ts). A stage of a job of several automations; null: the automation is a job of its own.
+export type JobDef = {
+  id: string
+  // The job's display name; at least one stage sets it, and all that do agree (jobs.ts).
+  name: string | null
+  stage: number
+  label: string
+  // Automation ids this stage hands work to, and the arrow's caption: display only.
+  feeds: string[]
+  handsOver: string | null
+}
+
 export type AutomationDefinition = {
   id: string
   file: string
@@ -154,6 +166,7 @@ export type AutomationDefinition = {
   answers: AnswersDef | null
   powers: Power[]
   inbox: string
+  job: JobDef | null
 }
 
 export type ParseResult =

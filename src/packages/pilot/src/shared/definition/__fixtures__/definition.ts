@@ -43,6 +43,7 @@ export function testDefinition(over: Partial<AutomationDefinition> = {}): Automa
     answers: null,
     powers: [],
     inbox: '{mr.author}',
+    job: null,
     ...over
   }
 }

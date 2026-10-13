@@ -250,6 +250,25 @@ describe('13 · Fix red hourly e2e on dev: the definitions (old job: orca automa
     const loaded = loadDefinitions([copy])
     expect(loaded.errors).toEqual([])
     expect(loaded.definitions.map((d) => d.id).sort()).toEqual(['dev-e2e-fix', 'dev-e2e-fix-start'])
+    // One job of two stages: stage 1 hands stage 2 the tickets it opens (display only; the cron still links them).
+    expect(Object.fromEntries(loaded.definitions.map((d) => [d.id, d.job]))).toEqual({
+      'dev-e2e-fix': {
+        id: '13',
+        name: 'Fix red hourly e2e on dev',
+        stage: 1,
+        label: 'Open or update the ticket',
+        feeds: ['dev-e2e-fix-start'],
+        handsOver: 'the tickets it opens'
+      },
+      'dev-e2e-fix-start': {
+        id: '13',
+        name: null,
+        stage: 2,
+        label: 'Start a fix session per ticket',
+        feeds: [],
+        handsOver: null
+      }
+    })
     expect(linearHandleOf('nish')).toBe('nish')
   })
 })

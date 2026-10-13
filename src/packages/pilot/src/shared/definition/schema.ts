@@ -133,6 +133,17 @@ const answers = z.strictObject({
     .optional()
 })
 
+// One stage of a job ported as several automations (13: open the ticket, then start its fix). `feeds` and
+// `hands_over` only draw the arrows on the job's page; the loader checks the rules that span files (jobs.ts).
+const job = z.strictObject({
+  id: z.string({ error: 'expected the job id as text, quoted like "13"' }).min(1),
+  name: z.string().min(1).optional(),
+  stage: z.number().int().min(1, 'expected a whole number from 1'),
+  label: z.string().min(1),
+  feeds: z.union([z.string().min(1), z.array(z.string().min(1)).min(1)]).optional(),
+  hands_over: z.string().min(1).optional()
+})
+
 export const automationSchema = z.strictObject({
   name: z.string().min(1),
   repo: z.string().min(1),
@@ -165,7 +176,8 @@ export const automationSchema = z.strictObject({
   steps: z.array(step).min(1),
   answers: answers.optional(),
   powers: z.array(z.enum(POWERS)).optional(),
-  inbox: z.string().optional()
+  inbox: z.string().optional(),
+  job: job.optional()
 })
 
 export type RawAutomation = z.infer<typeof automationSchema>

@@ -17,7 +17,8 @@ export const summary: AutomationSummary = {
   powers: [],
   inbox: '{mr.author}',
   nextTickAt: null,
-  lastTick: null
+  lastTick: null,
+  job: null
 }
 
 export const detail: AutomationDetailPayload = {
