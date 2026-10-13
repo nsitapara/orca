@@ -40,7 +40,8 @@ export const detail: AutomationDetailPayload = {
       exitCodes: { ok: [0], skip: [] },
       when: null,
       always: false,
-      timeoutMs: null
+      timeoutMs: null,
+      outputs: []
     } satisfies StepDef
   ]
 }

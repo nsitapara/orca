@@ -91,6 +91,15 @@ describe('linear_ticket where.ids_from', () => {
     expect(linearTicketWhereSchema.safeParse({ ids_from: { run: 'list-ids' } }).success).toBe(true)
   })
 
+  it('accepts the ids an earlier stage hands over (feed: true), alone or with a command as its fallback', () => {
+    for (const ids_from of [{ feed: true }, { feed: true, run: 'list-ids', field: 'identifier' }]) {
+      expect(linearTicketWhereSchema.safeParse({ ids_from })).toMatchObject({
+        success: true,
+        data: { ids_from }
+      })
+    }
+  })
+
   it.each([
     [
       'a Pilot placeholder in run',
@@ -131,6 +140,22 @@ describe('linear_ticket where.ids_from', () => {
       'an unknown key',
       '    ids_from: { run: tool, shell: true }\n',
       'items.where.ids_from: unknown key "shell"'
+    ],
+    [
+      'neither a command nor a feed',
+      '    ids_from: { field: identifier }\n',
+      'items.where.ids_from: needs run: (a command printing ids), feed: true (the ids an earlier stage hands over), or both'
+    ],
+    ['feed: false', '    ids_from: { feed: false, run: tool }\n', 'items.where.ids_from.feed'],
+    [
+      'a field for a feed alone',
+      '    ids_from: { feed: true, field: identifier }\n',
+      "items.where.ids_from.field: only with run: (it reads the command's output)"
+    ],
+    [
+      'a feed in an automation that is no stage of a job',
+      '    ids_from: { feed: true }\n',
+      'items.where.ids_from.feed: only a stage of a job (job:) is fed ids'
     ]
   ])('refuses %s', (_name, where, error) => {
     expect(errorsOf(file(where)).join('\n')).toContain(error)

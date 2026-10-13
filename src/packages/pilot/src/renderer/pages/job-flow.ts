@@ -4,16 +4,16 @@ import type { JobGroup } from '../../shared/job-stages'
 export type FlowEdge = { from: number; to: number; caption: string | null }
 export type JobActivityEntry = { tick: ActivityTick; stage: number; checkNames: string[] }
 
-// The job page's arrows: each stage's feeds, by stage number, captioned with its hands_over. Display only.
+// The job page's arrows: each stage's feeds connections, by stage number, each with its caption.
 export function flowEdges(job: JobGroup): FlowEdge[] {
   const stageOf = new Map(job.stages.map((s) => [s.id, s.job?.stage ?? 0]))
   return job.stages.flatMap((s) =>
-    (s.job?.feeds ?? []).flatMap((target) => {
-      const to = stageOf.get(target)
+    (s.job?.feeds ?? []).flatMap((feed) => {
+      const to = stageOf.get(feed.to)
       if (to === undefined || !s.job) {
         return []
       }
-      return [{ from: s.job.stage, to, caption: s.job.handsOver }]
+      return [{ from: s.job.stage, to, caption: feed.caption }]
     })
   )
 }

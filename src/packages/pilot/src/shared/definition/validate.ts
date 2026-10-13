@@ -1,7 +1,8 @@
+import { z } from 'zod'
 import { isValidTimeZone, parseCron } from '../schedule/cron'
 import { RUN_PLACEHOLDER_ADVICE, envNameProblem, runPlaceholders } from '../run/shell-template'
 import { PLACEHOLDER } from '../template'
-import { stepNames } from './normalize'
+import { feedsOf, stepNames } from './normalize'
 import type { RawAutomation, RawStep } from './schema'
 
 export function scheduleErrors(raw: RawAutomation): string[] {
@@ -91,13 +92,19 @@ function shellStepErrors(s: RawStep, n: number): string[] {
   return errors
 }
 
+function outputErrors(s: RawStep, n: number): string[] {
+  const outputs = s.outputs ?? []
+  const twice = [...new Set(outputs.filter((name, i) => outputs.indexOf(name) !== i))]
+  return twice.map((name) => `step ${n}: outputs: "${name}" is listed twice`)
+}
+
 export function stepErrors(raw: RawAutomation): string[] {
   const names = stepNames(raw.steps)
   const errors = raw.steps.flatMap((s, i) => {
     if (s.agent === 'shell') {
-      return shellStepErrors(s, i + 1)
+      return [...shellStepErrors(s, i + 1), ...outputErrors(s, i + 1)]
     }
-    return agentStepErrors(raw.steps, names, i)
+    return [...agentStepErrors(raw.steps, names, i), ...outputErrors(s, i + 1)]
   })
   const repeated = [...new Set(names.filter((name, i) => names.indexOf(name) !== i))]
   return [...errors, ...repeated.map((name) => `steps: more than one step is named "${name}"`)]
@@ -195,11 +202,58 @@ export function fieldNameErrors(raw: RawAutomation): string[] {
     )
 }
 
-export function jobErrors(raw: RawAutomation): string[] {
-  if (raw.job?.hands_over !== undefined && raw.job.feeds === undefined) {
+function captionErrors(job: NonNullable<RawAutomation['job']>): string[] {
+  if (job.hands_over === undefined) {
+    return []
+  }
+  if (job.feeds === undefined) {
     return ['job.hands_over: only with job.feeds (it captions the arrow to the stage it feeds)']
   }
+  const named = typeof job.feeds === 'string' || job.feeds.some((f) => typeof f === 'string')
+  if (!named) {
+    return [
+      'job.hands_over: it captions only feeds given by name; give each connection its own caption:'
+    ]
+  }
   return []
+}
+
+// A pass hands on an output: one of the outputs the steps declare (outputs: [ticket]).
+function passErrors(raw: RawAutomation, job: NonNullable<RawAutomation['job']>): string[] {
+  const declared = new Set(raw.steps.flatMap((s) => s.outputs ?? []))
+  return feedsOf(job).flatMap((feed, i) => {
+    if (feed.pass === null || declared.has(feed.pass.id)) {
+      return []
+    }
+    const name = feed.pass.id
+    return [
+      `job.feeds[${i}].pass.id: no step declares the output "${name}"; add outputs: [${name}] to the step that writes it`
+    ]
+  })
+}
+
+function feedsTwice(job: NonNullable<RawAutomation['job']>): string[] {
+  const targets = feedsOf(job).map((f) => f.to)
+  const twice = [...new Set(targets.filter((to, i) => targets.indexOf(to) !== i))]
+  return twice.map((to) => `job.feeds: ${to} is listed more than once`)
+}
+
+// items.where.ids_from.feed, read off the raw where (parse.ts checks its shape with the kind's schema).
+const FedWhere = z.looseObject({ ids_from: z.looseObject({ feed: z.literal(true) }) })
+
+function readsFeed(raw: RawAutomation): boolean {
+  return FedWhere.safeParse(raw.items?.where).success
+}
+
+export function jobErrors(raw: RawAutomation): string[] {
+  const fedAlone =
+    readsFeed(raw) && !raw.job
+      ? ['items.where.ids_from.feed: only a stage of a job (job:) is fed ids']
+      : []
+  if (!raw.job) {
+    return fedAlone
+  }
+  return [...captionErrors(raw.job), ...feedsTwice(raw.job), ...passErrors(raw, raw.job)]
 }
 
 // Everything a file that fits the schema can still get wrong, in the order it is reported.

@@ -3,7 +3,7 @@ import { runProcess } from '@orca/process-host'
 import { z } from 'zod'
 import { durationMs } from '../../shared/definition/duration'
 import { idsFromProblems } from '../../shared/definition/ids-from'
-import type { IdsFrom } from '../../shared/definition/types'
+import type { IdsCommandSpec } from '../../shared/definition/types'
 import { splitArgv } from '../../shared/run/argv'
 import { engineChildEnv, type EngineEnv } from '../engine-env'
 
@@ -158,7 +158,7 @@ export function idsFromOutput(stdout: string, field: string | undefined): string
   return [...ids]
 }
 
-function commandOf(spec: IdsFrom, o: IdsFromOptions): IdsCommand {
+function commandOf(spec: IdsCommandSpec, o: IdsFromOptions): IdsCommand {
   const problem = idsFromProblems(spec)[0]
   if (problem) {
     throw new Error(`ids_from: ${problem.message}`)
@@ -185,7 +185,7 @@ function commandOf(spec: IdsFrom, o: IdsFromOptions): IdsCommand {
 
 // One run of where.ids_from (contract: 0 = the ids, 3 = none, anything else fails the tick). Throws with the reason.
 export async function readIdsFrom(
-  spec: IdsFrom,
+  spec: IdsCommandSpec,
   o: IdsFromOptions,
   run: IdsRunner
 ): Promise<string[]> {

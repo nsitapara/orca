@@ -63,9 +63,13 @@ export const pipelineWhereSchema: z.ZodType<PipelineWhere> = z
     path: ['marker_jobs']
   })
 
+const COMMAND_ONLY = ['field', 'env', 'timeout'] as const
+
+// run: a command printing the ids; feed: true, the ids an earlier stage of the job hands over (job.feeds … pass).
 export const idsFromSchema: z.ZodType<IdsFrom> = z
   .strictObject({
-    run: z.string().min(1),
+    feed: z.literal(true, { error: 'expected true (leave feed out for no feed)' }).optional(),
+    run: z.string().min(1).optional(),
     field: z
       .string()
       .regex(/^[A-Za-z_][A-Za-z0-9_]*$/, 'expected a key name: letters, digits and _')
@@ -74,7 +78,25 @@ export const idsFromSchema: z.ZodType<IdsFrom> = z
     timeout: durationTextSchema.optional()
   })
   .superRefine((spec, ctx) => {
-    for (const problem of idsFromProblems(spec)) {
+    if (spec.run === undefined && spec.feed === undefined) {
+      ctx.addIssue({
+        code: 'custom',
+        path: [],
+        message:
+          'needs run: (a command printing ids), feed: true (the ids an earlier stage hands over), or both'
+      })
+    }
+    if (spec.run === undefined) {
+      for (const key of COMMAND_ONLY.filter((k) => spec[k] !== undefined)) {
+        ctx.addIssue({
+          code: 'custom',
+          path: [key],
+          message: "only with run: (it reads the command's output)"
+        })
+      }
+      return
+    }
+    for (const problem of idsFromProblems({ run: spec.run, env: spec.env })) {
       ctx.addIssue({ code: 'custom', path: [problem.key], message: problem.message })
     }
   })

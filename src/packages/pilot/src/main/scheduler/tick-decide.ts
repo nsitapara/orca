@@ -229,13 +229,16 @@ async function idsForTick(
     return null
   }
   const spec = idsFromSchema.parse(raw)
+  if (spec.run === undefined) {
+    return []
+  }
   const opts = {
     automationId: def.id,
     file: def.file,
     repoPath: repo.path,
     engineEnv: deps.fields.engineEnv
   }
-  return readIdsFrom(spec, opts, deps.runIds ?? runIdsCommand)
+  return readIdsFrom({ ...spec, run: spec.run }, opts, deps.runIds ?? runIdsCommand)
 }
 
 // One automation's decision (spec §6): repo → items → built-in fields → scope → custom fields →

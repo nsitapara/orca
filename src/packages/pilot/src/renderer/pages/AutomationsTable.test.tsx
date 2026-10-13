@@ -29,8 +29,15 @@ const STAGE_1: AutomationSummary = {
     name: 'Fix red hourly e2e on dev',
     stage: 1,
     label: 'Open or update the ticket',
-    feeds: ['dev-e2e-fix-start'],
-    handsOver: 'the tickets it opens'
+    feeds: [
+      {
+        to: 'dev-e2e-fix-start',
+        pass: null,
+        run: 'next_schedule',
+        when: 'success',
+        caption: 'the tickets it opens'
+      }
+    ]
   }
 }
 const STAGE_2: AutomationSummary = {
@@ -46,8 +53,7 @@ const STAGE_2: AutomationSummary = {
     name: null,
     stage: 2,
     label: 'Start a fix session per ticket',
-    feeds: [],
-    handsOver: null
+    feeds: []
   }
 }
 const SOLO: AutomationSummary = { ...summary, id: 'docker-prune', name: '07 · Clean Docker' }

@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { OUTPUT_KEY } from '../run/outputs'
 import { durationSchema } from './duration'
 import type { AgentKind, ItemKind, Power } from './types'
 
@@ -89,6 +90,10 @@ const workspace = z.union(
   { error: 'expected item_worktree, main_checkout or { new_worktree: { base, name } }' }
 )
 
+const outputName = z
+  .string()
+  .regex(OUTPUT_KEY, 'expected an output name: letters, digits and _, not starting with a digit')
+
 const stepSession = z.union(
   [z.enum(['new', 'per_worktree']), z.strictObject({ continue: z.string().min(1) })],
   { error: 'expected new, per_worktree or { continue: <step name> }' }
@@ -119,7 +124,9 @@ const step = z.strictObject({
     .optional(),
   when: z.string().min(1).optional(),
   always: z.boolean().optional(),
-  timeout: durationSchema.optional()
+  timeout: durationSchema.optional(),
+  // The key=value outputs it reports; a job.feeds pass may hand on only a declared one.
+  outputs: z.array(outputName).optional()
 })
 
 const answers = z.strictObject({
@@ -133,14 +140,35 @@ const answers = z.strictObject({
     .optional()
 })
 
-// One stage of a job ported as several automations (13: open the ticket, then start its fix). `feeds` and
-// `hands_over` only draw the arrows on the job's page; the loader checks the rules that span files (jobs.ts).
+// A connection to another stage (types.ts FeedDef): pass this run's output as its item ids, tick it now or on its
+// schedule, on success or always. A plain name is the old shape: the arrow on the job's page only.
+const feedConnection = z.strictObject({
+  to: z.string().min(1),
+  pass: z
+    .strictObject({
+      id: z
+        .string({
+          error: 'expected the output to hand over as item ids, like pass: { id: ticket }'
+        })
+        .pipe(outputName)
+    })
+    .optional(),
+  run: z.enum(['now', 'next_schedule']).optional(),
+  when: z.enum(['success', 'always']).optional(),
+  caption: z.string().min(1).optional()
+})
+const feedEntry = z.union([z.string().min(1), feedConnection], {
+  error: 'expected a stage name, or { to, pass, run, when, caption }'
+})
+
+// One stage of a job ported as several automations (13: open the ticket, then start its fix). `hands_over` captions
+// the feeds given by name; the loader checks the rules that span files (jobs.ts).
 const job = z.strictObject({
   id: z.string({ error: 'expected the job id as text, quoted like "13"' }).min(1),
   name: z.string().min(1).optional(),
   stage: z.number().int().min(1, 'expected a whole number from 1'),
   label: z.string().min(1),
-  feeds: z.union([z.string().min(1), z.array(z.string().min(1)).min(1)]).optional(),
+  feeds: z.union([z.string().min(1), z.array(feedEntry).min(1)]).optional(),
   hands_over: z.string().min(1).optional()
 })
 
@@ -183,3 +211,4 @@ export const automationSchema = z.strictObject({
 export type RawAutomation = z.infer<typeof automationSchema>
 export type RawStep = RawAutomation['steps'][number]
 export type RawCheck = NonNullable<RawAutomation['checks']>[number]
+export type RawJob = NonNullable<RawAutomation['job']>

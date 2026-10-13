@@ -256,16 +256,22 @@ describe('13 · Fix red hourly e2e on dev: the definitions (old job: orca automa
         name: 'Fix red hourly e2e on dev',
         stage: 1,
         label: 'Open or update the ticket',
-        feeds: ['dev-e2e-fix-start'],
-        handsOver: 'the tickets it opens'
+        feeds: [
+          {
+            to: 'dev-e2e-fix-start',
+            pass: null,
+            run: 'next_schedule',
+            when: 'success',
+            caption: 'the tickets it opens'
+          }
+        ]
       },
       'dev-e2e-fix-start': {
         id: '13',
         name: null,
         stage: 2,
         label: 'Start a fix session per ticket',
-        feeds: [],
-        handsOver: null
+        feeds: []
       }
     })
     expect(linearHandleOf('nish')).toBe('nish')

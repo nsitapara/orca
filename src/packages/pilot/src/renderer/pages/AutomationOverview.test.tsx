@@ -20,6 +20,7 @@ const step = (over: Partial<StepDef>): StepDef => ({
   when: null,
   always: false,
   timeoutMs: null,
+  outputs: [],
   ...over
 })
 

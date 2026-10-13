@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { ActivityTick, AutomationSummary } from '../../shared/api-types'
-import type { JobDef } from '../../shared/definition/types'
+import type { FeedDef, JobDef } from '../../shared/definition/types'
 import type { JobGroup } from '../../shared/job-stages'
 import { summary } from './fixtures'
 import { flowEdges, mergeJobActivity, yamlDescription } from './job-flow'
@@ -9,9 +9,16 @@ function stage(id: string, job: Partial<JobDef> & { stage: number }): Automation
   return {
     ...summary,
     id,
-    job: { id: '13', name: null, label: id, feeds: [], handsOver: null, ...job }
+    job: { id: '13', name: null, label: id, feeds: [], ...job }
   }
 }
+const arrow = (to: string, caption: string | null = null): FeedDef => ({
+  to,
+  pass: null,
+  run: 'next_schedule',
+  when: 'success',
+  caption
+})
 const group = (...stages: AutomationSummary[]): JobGroup => ({
   kind: 'job',
   id: '13',
@@ -20,21 +27,21 @@ const group = (...stages: AutomationSummary[]): JobGroup => ({
 })
 
 describe('flowEdges: the arrows the job page draws, from feeds', () => {
-  it('turns each feeds entry into an edge between stage numbers, with its caption', () => {
+  it('turns each feeds connection into an edge between stage numbers, with its own caption', () => {
     const job = group(
-      stage('a', { stage: 1, feeds: ['b', 'c'], handsOver: 'the tickets it opens' }),
+      stage('a', { stage: 1, feeds: [arrow('b', 'the tickets it opens'), arrow('c')] }),
       stage('b', { stage: 2 }),
       stage('c', { stage: 3 })
     )
     expect(flowEdges(job)).toEqual([
       { from: 1, to: 2, caption: 'the tickets it opens' },
-      { from: 1, to: 3, caption: 'the tickets it opens' }
+      { from: 1, to: 3, caption: null }
     ])
   })
 
   it('draws nothing for stages that feed nothing, or a target that is not loaded', () => {
     expect(flowEdges(group(stage('a', { stage: 1 }), stage('b', { stage: 2 })))).toEqual([])
-    expect(flowEdges(group(stage('a', { stage: 1, feeds: ['gone'] })))).toEqual([])
+    expect(flowEdges(group(stage('a', { stage: 1, feeds: [arrow('gone')] })))).toEqual([])
   })
 })
 
