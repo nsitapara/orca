@@ -1,6 +1,7 @@
 import { Fragment } from 'react'
 import { ArrowRight } from 'lucide-react'
 import type { AutomationDetailPayload, AutomationSummary } from '../../shared/api-types'
+import { lastHandoverText } from '../../shared/handover-text'
 import { scheduleText } from './AutomationsTable'
 import { lastTickText } from './format'
 import { yamlDescription, type FlowEdge } from './job-flow'
@@ -73,17 +74,18 @@ function StageCard({
   )
 }
 
-function Arrow({ edge }: { edge: FlowEdge }): React.JSX.Element {
+// The arrow, its caption, and the most recent handover along it with how its receiving tick went.
+function Arrow({ edge, now }: { edge: FlowEdge; now: number }): React.JSX.Element {
+  const last = lastHandoverText(edge.last, now)
   return (
-    <div
-      role="img"
-      aria-label={edgeName(edge)}
-      className="flex flex-col items-center justify-center gap-1 px-1 text-muted-foreground"
-    >
-      <ArrowRight className="size-5" aria-hidden="true" />
-      {edge.caption ? (
-        <span className="max-w-[7rem] text-center text-[11px]">{edge.caption}</span>
-      ) : null}
+    <div className="flex flex-col items-center justify-center gap-1 px-1 text-muted-foreground">
+      <div role="img" aria-label={edgeName(edge)} className="flex flex-col items-center gap-1">
+        <ArrowRight className="size-5" aria-hidden="true" />
+        {edge.caption ? (
+          <span className="max-w-[7rem] text-center text-[11px]">{edge.caption}</span>
+        ) : null}
+      </div>
+      {last ? <span className="max-w-[9rem] text-center text-[11px]">{last}</span> : null}
     </div>
   )
 }
@@ -119,7 +121,7 @@ export function JobStageFlow({
           return (
             <Fragment key={stage.summary.id}>
               <StageCard stage={stage} now={now} onOpen={onOpenStage} />
-              {edge ? <Arrow edge={edge} /> : null}
+              {edge ? <Arrow edge={edge} now={now} /> : null}
             </Fragment>
           )
         })}
@@ -131,7 +133,9 @@ export function JobStageFlow({
           aria-label={edgeName(e)}
           className="text-xs text-muted-foreground"
         >
-          {`Stage ${e.from} → stage ${e.to}${e.caption ? ` · ${e.caption}` : ''}`}
+          {[`Stage ${e.from} → stage ${e.to}`, e.caption, lastHandoverText(e.last, now)]
+            .filter(Boolean)
+            .join(' · ')}
         </p>
       ))}
     </div>

@@ -130,6 +130,19 @@ describe('ActivityTimeline', () => {
     expect(screen.getByText("WEB-2123 isn't readable in Linear; skipped")).toBeTruthy()
   })
 
+  it('says which run of an earlier stage triggered the tick and what it handed over', () => {
+    const trigger = {
+      automationId: 'dev-e2e-fix',
+      runId: 'dev-e2e-fix-r1',
+      stage: 1,
+      ids: ['WEB-2123']
+    }
+    render(<ActivityTimeline ticks={[{ ...tick, trigger, handedOver: [] }]} checkNames={[]} />)
+    expect(
+      screen.getByText('Triggered by stage 1 run dev-e2e-fix-r1, handed over WEB-2123')
+    ).toBeTruthy()
+  })
+
   it('offers no check table for a tick whose every item was out of scope', () => {
     const outside = tick.items.map((i) => ({ ...i, verdict: 'out_of_scope' as const }))
     render(

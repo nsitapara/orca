@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import type { TickOutcome } from '../../shared/api-types'
+import { handoverPreviewLines } from '../../shared/handover-text'
 import type { JobGroup } from '../../shared/job-stages'
 import { pilotRpc } from '../api'
 import { stagesText } from './AutomationsTable'
@@ -17,17 +18,31 @@ function onOff(enabled: boolean): string {
   return enabled ? 'on' : 'off'
 }
 
-// Dry run each stage, in stage order. Dry runs only: nothing starts.
+// What a stage's dry run says it would read and hand on, the receiving stage named by its number.
+function handoverLines(job: JobGroup, result: TickOutcome, stage: string): string[] {
+  if (!('handover' in result) || !result.handover) {
+    return []
+  }
+  const nameOf = (id: string): string => {
+    const to = job.stages.find((s) => s.id === id)
+    return to ? stageName(to.job?.stage).toLowerCase() : id
+  }
+  return handoverPreviewLines(result.handover, true, nameOf).map((line) => `${stage}: ${line}`)
+}
+
+// Dry run each stage, in stage order. Dry runs only: nothing starts, nothing is handed over, nothing is triggered;
+// each stage says what it would read and hand on.
 async function dryRunAll(job: JobGroup): Promise<string[]> {
   const lines: string[] = []
   for (const s of job.stages) {
+    const stage = stageName(s.job?.stage)
     try {
       const result = await pilotRpc<TickOutcome>(
         'pilot.automations.dryRun',
         { id: s.id },
         { timeoutMs: LONG_CALL_MS }
       )
-      lines.push(`${stageName(s.job?.stage)}: ${outcomeLine(result, s.id)}`)
+      lines.push(`${stage}: ${outcomeLine(result, s.id)}`, ...handoverLines(job, result, stage))
     } catch (e) {
       lines.push(`${stageName(s.job?.stage)}: ${errorText(e)}`)
     }

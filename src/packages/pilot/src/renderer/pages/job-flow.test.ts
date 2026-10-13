@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { ActivityTick, AutomationSummary } from '../../shared/api-types'
+import type { ActivityTick, AutomationSummary, HandoverRow } from '../../shared/api-types'
 import type { FeedDef, JobDef } from '../../shared/definition/types'
 import type { JobGroup } from '../../shared/job-stages'
 import { summary } from './fixtures'
@@ -34,9 +34,16 @@ describe('flowEdges: the arrows the job page draws, from feeds', () => {
       stage('c', { stage: 3 })
     )
     expect(flowEdges(job)).toEqual([
-      { from: 1, to: 2, caption: 'the tickets it opens' },
-      { from: 1, to: 3, caption: null }
+      { from: 1, to: 2, caption: 'the tickets it opens', last: [] },
+      { from: 1, to: 3, caption: null, last: [] }
     ])
+  })
+
+  it('carries the most recent handover along each edge', () => {
+    const job = group(stage('a', { stage: 1, feeds: [arrow('b')] }), stage('b', { stage: 2 }))
+    const rows = [{ itemId: 'WEB-1' } as HandoverRow]
+    const latest = (from: string, to: string) => (from === 'a' && to === 'b' ? rows : [])
+    expect(flowEdges(job, latest)).toEqual([{ from: 1, to: 2, caption: null, last: rows }])
   })
 
   it('draws nothing for stages that feed nothing, or a target that is not loaded', () => {

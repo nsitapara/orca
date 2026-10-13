@@ -26,7 +26,7 @@ export type TickTrigger = {
   stage: number | null
   ids: string[]
 }
-// What a tick of a stage says about handovers (TickResult.handover): the handed-over ids it read, and for each feed
+// TickResult.handover, for a stage of a multi-stage job only: the handed-over ids it read, and for each feed
 // that passes ids or runs now, what its runs hand on (`starts`: the runs this tick started, or would start in a dry
 // run). A dry run hands nothing over and triggers nothing.
 export type FeedPreview = {
@@ -37,3 +37,8 @@ export type FeedPreview = {
   starts: number
 }
 export type TickHandover = { read: string[]; feeds: FeedPreview[] }
+// Activity's facts about a tick of a stage: the run whose feed (run: now) triggered it (null: its schedule or a person),
+// and the handed-over ids it read. Absent from older builds.
+export type TickHandoverFacts = { trigger?: TickTrigger | null; handedOver?: HandoverRow[] }
+// pilot.automations.get: each stage this one passes ids to, with the rows of its most recent handover there.
+export type StageHandovers = { handovers?: { to: string; rows: HandoverRow[] }[] }

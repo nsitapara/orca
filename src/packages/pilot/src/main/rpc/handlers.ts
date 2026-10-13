@@ -70,23 +70,31 @@ function findDefinition(ctx: PilotContext, id: string): AutomationDefinition {
 
 export function getAutomation(ctx: PilotContext, id: string): AutomationDetailPayload {
   const def = findDefinition(ctx, id)
+  const passing = (def.job?.feeds ?? []).filter((f) => f.pass !== null)
   return {
     summary: summarize(ctx, def),
     yaml: readFileSync(def.file, 'utf8'),
     checkNames: def.checks.map(checkName),
-    steps: def.steps
+    steps: def.steps,
+    handovers: passing.map((f) => ({ to: f.to, rows: ctx.store.handovers.latest(def.id, f.to) }))
   }
 }
 
 // Newest first. An id with no ticks (or no such automation) gives an empty list. Each run carries its steps and
-// what it asked (open and answered inbox items), for Activity and the Agent Console.
+// what it asked (open and answered inbox items), for Activity and the Agent Console; each tick, what triggered it and
+// the handed-over ids it read.
 export function activity(ctx: PilotContext, id: string, limit: number): ActivityTick[] {
   const ticks = ctx.store
     .listTicks(id, limit)
     .map((tick) => ({ tick, runs: ctx.store.runs.forTick(tick.id) }))
   const asked = ctx.store.timeline.inboxForRuns(ticks.flatMap((t) => t.runs.map((r) => r.id)))
+  const tickIds = ticks.map((t) => t.tick.id)
+  const triggers = ctx.store.handovers.tickTriggers(tickIds)
+  const handedOver = ctx.store.handovers.consumedBy(tickIds)
   return ticks.map(({ tick, runs }) => ({
     ...tick,
+    trigger: triggers.get(tick.id) ?? null,
+    handedOver: handedOver.get(tick.id) ?? [],
     items: ctx.store.tickItems(tick.id),
     runs: runs.map((run) => ({
       ...run,

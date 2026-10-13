@@ -47,7 +47,7 @@ export const PILOT_HANDLERS: Record<string, CommandHandler> = {
       { id },
       { timeoutMs: LONG_CALL_TIMEOUT_MS }
     )
-    printResult(response, json, (outcome) => formatDecisions(outcome, id))
+    printResult(response, json, (outcome) => formatDecisions(outcome, id, true))
   },
   // Says where it is called from: Pilot refuses a tick from an agent in a run.
   'automations tick': async ({ flags, client, json }) => {

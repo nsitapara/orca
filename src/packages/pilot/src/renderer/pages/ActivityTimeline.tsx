@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Badge } from '@/components/ui/badge'
 import type { ActivityTick } from '../../shared/api-types'
+import { handoverActivityLines } from '../../shared/handover-text'
 import { RunCard } from '../timeline/RunCard'
 import { CheckTable } from './CheckTable'
 import { checkedItems, tickLine } from './format'
@@ -31,6 +32,11 @@ function TickNode({
         )}
       </div>
       <div className="text-sm">{tickLine(tick)}</div>
+      {handoverActivityLines(tick).map((line) => (
+        <div key={line} className="text-xs">
+          {line}
+        </div>
+      ))}
       {(tick.warnings ?? []).map((w) => (
         <div key={w} className="text-xs text-muted-foreground">
           {w}

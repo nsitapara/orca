@@ -117,6 +117,30 @@ describe('formatDecisions', () => {
     )
   })
 
+  it('adds what a stage reads and hands on, worded as what would happen in a dry run', () => {
+    const handover = {
+      read: [],
+      feeds: [
+        {
+          to: 'dev-e2e-fix-start',
+          output: 'ticket',
+          run: 'now' as const,
+          when: 'success' as const,
+          starts: 1
+        }
+      ]
+    }
+    const outcome = { tickId: 6, status: 'ok' as const, error: null, decisions: [], handover }
+    expect(formatDecisions(outcome, 'dev-e2e-fix', true).split('\n')).toEqual([
+      'Tick 6 · ok',
+      '  No items.',
+      '  1 run would hand dev-e2e-fix-start its ticket output if it succeeds; dev-e2e-fix-start then ticks at once'
+    ])
+    expect(formatDecisions(outcome, 'dev-e2e-fix').split('\n').at(-1)).toBe(
+      '  1 run hands dev-e2e-fix-start its ticket output if it succeeds; dev-e2e-fix-start then ticks at once'
+    )
+  })
+
   it('says so when a tick found no items', () => {
     expect(formatDecisions({ tickId: 5, status: 'ok', error: null, decisions: [] })).toBe(
       'Tick 5 · ok\n  No items.'
@@ -166,6 +190,21 @@ describe('formatActivity', () => {
 
   it('says so when there is no activity', () => {
     expect(formatActivity([])).toBe('No activity yet.')
+  })
+
+  it('says what triggered a tick and the handed-over ids it read', () => {
+    const trigger = { automationId: 'dev-e2e-fix', runId: 'r1', stage: 1, ids: ['WEB-2123'] }
+    const tick: ActivityTick = {
+      ...base,
+      id: 9,
+      startedAt: 1_700_000_200_000,
+      dryRun: false,
+      status: 'ok',
+      trigger,
+      handedOver: []
+    }
+    const lines = formatActivity([tick]).split('\n')
+    expect(lines.slice(1)).toEqual(['  Triggered by stage 1 run r1, handed over WEB-2123'])
   })
 
   it('lists ticks as given (newest first) with items and runs', () => {
