@@ -96,8 +96,12 @@ describe('06 · Address reviewer feedback: the definition', () => {
     expect(modeText('feedback')).toContain(
       `apply them as \`~/.agents/skills/${SKILL}/modes/answers.md\``
     )
-    // D1: its default, flagged and question items are plain cards, answerable at once.
-    expect(modeText('feedback')).toContain('pilot inbox add --type <default|flagged|question>')
+    // D1: its default, flagged and question items are plain cards, answerable at once, posted with inbox-card.
+    expect(modeText('feedback')).toContain(
+      'python3 ~/.agents/skills/inbox-card/scripts/card.py post --kind <default|flagged|question>'
+    )
+    expect(modeText('feedback')).toContain('as a plain card')
+    expect(modeText('feedback')).not.toContain('--evidence')
     expect(modeText('feedback')).not.toContain('context.py enqueue')
     expect(modeText('answers')).toContain('item_status=stale')
   })
