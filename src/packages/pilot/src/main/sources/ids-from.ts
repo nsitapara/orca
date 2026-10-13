@@ -143,20 +143,19 @@ export function idsFromOutput(stdout: string, field: string | undefined): string
   } catch {
     throw new Error("ids_from: its output isn't JSON")
   }
-  const ids: string[] = []
+  // A Set keeps first positions in insertion order; the first id past the limit ends the read.
+  const ids = new Set<string>()
   for (const [i, entry] of listIn(parsed).entries()) {
     const id = idOf(entry, field, i + 1)
     if (!ID.test(id)) {
       throw new Error(`ids_from: item ${i + 1} is not a usable id: ${JSON.stringify(id)}`)
     }
-    if (!ids.includes(id)) {
-      ids.push(id)
+    ids.add(id)
+    if (ids.size > MAX_IDS) {
+      throw new Error(`ids_from: more than ${MAX_IDS} ids`)
     }
   }
-  if (ids.length > MAX_IDS) {
-    throw new Error(`ids_from: more than ${MAX_IDS} ids`)
-  }
-  return ids
+  return [...ids]
 }
 
 function commandOf(spec: IdsFrom, o: IdsFromOptions): IdsCommand {

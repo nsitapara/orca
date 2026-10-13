@@ -84,6 +84,13 @@ describe('idsFromOutput: the ids in what the command printed', () => {
     expect(() => idsFromOutput(stdout, field)).toThrow(error)
   })
 
+  it('stops at the first id past the limit, reading nothing after it', () => {
+    const past = [...Array.from({ length: MAX_IDS + 1 }, (_, i) => `WEB-${i}`), 42]
+    expect(() => idsFromOutput(JSON.stringify(past), undefined)).toThrow(`more than ${MAX_IDS} ids`)
+    const repeats = [...Array.from({ length: MAX_IDS }, (_, i) => `WEB-${i}`), 'WEB-0', 'WEB-1']
+    expect(idsFromOutput(JSON.stringify(repeats), undefined)).toHaveLength(MAX_IDS)
+  })
+
   it(`refuses more than ${MAX_IDS} ids`, () => {
     const many = JSON.stringify(Array.from({ length: MAX_IDS + 1 }, (_, i) => `WEB-${i}`))
     expect(() => idsFromOutput(many, undefined)).toThrow(`more than ${MAX_IDS} ids`)
