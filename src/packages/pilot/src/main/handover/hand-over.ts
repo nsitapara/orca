@@ -49,9 +49,25 @@ export function idsInOutput(value: FieldValue | undefined): { ids: string[]; ref
   return { ids, refused: words.filter((w) => !usableId(w)) }
 }
 
-// The output as the run reported it: the value of the last step (by index) that reported it.
-export function runOutput(steps: readonly StepRow[], name: string): FieldValue | undefined {
-  const reported = steps.filter((s) => Object.hasOwn(s.outputs, name)).sort((a, b) => b.idx - a.idx)
+// The output as the run reported it: the value of the last step (by index) that declares it in outputs: and reported
+// it. Another step's key of the same name is never read; an agent step's only when the feed says trust: agent.
+export function runOutput(
+  steps: readonly StepRow[],
+  name: string,
+  def: AutomationDefinition,
+  trust: FeedDef['trust']
+): FieldValue | undefined {
+  const declares = (idx: number): boolean => {
+    const step = def.steps[idx]
+    return (
+      step !== undefined &&
+      step.outputs.includes(name) &&
+      (step.agent === 'shell' || trust === 'agent')
+    )
+  }
+  const reported = steps
+    .filter((s) => declares(s.idx) && Object.hasOwn(s.outputs, name))
+    .sort((a, b) => b.idx - a.idx)
   return reported[0]?.outputs[name]
 }
 
@@ -90,7 +106,7 @@ function planFeed(
 ): void {
   let ids: string[] = []
   if (feed.pass !== null) {
-    const read = idsInOutput(runOutput(steps(), feed.pass.id))
+    const read = idsInOutput(runOutput(steps(), feed.pass.id, def, feed.trust))
     const screened = screen(deps, feed.to, [...read.ids, ...read.refused])
     if (screened.note) {
       plan.refused.push(screened.note)

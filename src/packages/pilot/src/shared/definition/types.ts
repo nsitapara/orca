@@ -137,13 +137,15 @@ export type FeedWhen = 'success' | 'always'
 // One connection of job.feeds, to another stage of the same job. `pass` hands that stage item ids from this run's
 // outputs (pass.id names the output); `run: now` ticks it as soon as this run ends, `next_schedule` leaves the ids for
 // its own schedule. `when`: on a successful run only (done or needs you), or on any end. A connection without pass
-// and without run: now is the arrow on the job's page only (the old `feeds: <name>`).
+// and without run: now is the arrow on the job's page only (the old `feeds: <name>`). `trust`: whose declared outputs
+// pass may read: shell steps only (the default), or agent steps too (trust: agent).
 export type FeedDef = {
   to: string
   pass: { id: string } | null
   run: FeedRun
   when: FeedWhen
   caption: string | null
+  trust: 'shell' | 'agent'
 }
 
 // job: (schema.ts). A stage of a job of several automations; null: the automation is a job of its own.

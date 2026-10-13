@@ -32,7 +32,8 @@ describe('the job: block', () => {
           pass: null,
           run: 'next_schedule',
           when: 'success',
-          caption: 'the tickets it opens'
+          caption: 'the tickets it opens',
+          trust: 'shell'
         }
       ]
     })
@@ -57,11 +58,33 @@ describe('the job: block', () => {
         pass: { id: 'ticket' },
         run: 'now',
         when: 'always',
-        caption: 'the tickets it opens'
+        caption: 'the tickets it opens',
+        trust: 'shell'
       },
-      { to: 'other', pass: null, run: 'next_schedule', when: 'success', caption: null }
+      {
+        to: 'other',
+        pass: null,
+        run: 'next_schedule',
+        when: 'success',
+        caption: null,
+        trust: 'shell'
+      }
     ])
     expect(result.ok && result.definition.steps[0].outputs).toEqual(['ticket'])
+  })
+
+  it('passes an agent step’s output on only with trust: agent', () => {
+    const agentBase =
+      'name: n\nrepo: r\nschedule: manual\nsteps:\n  - { name: review, agent: claude, prompt: x, outputs: [ticket] }\n'
+    const job = (trust: string) =>
+      `  id: "13"\n  stage: 1\n  label: x\n  feeds: [{ to: b, pass: { id: ticket }${trust} }]\n`
+    expect(errorsOf(job(''), agentBase)).toContain(
+      'job.feeds[0].pass.id: "ticket" is declared by agent step 1 (review); pass an agent\'s output on only with trust: agent'
+    )
+    const trusted = parsed(job(', trust: agent'), agentBase)
+    expect(trusted.ok && trusted.definition.job?.feeds[0].trust).toBe('agent')
+    const shell = parsed(job(''), SHELL_BASE)
+    expect(shell.ok && shell.definition.job?.feeds[0].trust).toBe('shell')
   })
 
   it('leaves an automation without the block a job of its own, and a step without outputs: declaring none', () => {
@@ -145,11 +168,11 @@ function stage(id: string, job: Partial<JobDef> & { stage: number }): Automation
 }
 // A connection as the old shape (a name) reads: an arrow only.
 function arrow(to: string, caption: string | null = null): FeedDef {
-  return { to, pass: null, run: 'next_schedule', when: 'success', caption }
+  return { to, pass: null, run: 'next_schedule', when: 'success', caption, trust: 'shell' }
 }
 // A connection that hands the ticket output on and ticks the receiver at once.
 function handover(to: string): FeedDef {
-  return { to, pass: { id: 'ticket' }, run: 'now', when: 'success', caption: null }
+  return { to, pass: { id: 'ticket' }, run: 'now', when: 'success', caption: null, trust: 'shell' }
 }
 const PIPELINES = stage('dev-e2e-fix', {
   stage: 1,

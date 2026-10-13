@@ -218,8 +218,10 @@ A job ported as several automations, such as 13's ticket step and its fix sessio
         ids_from: { feed: true, run: "python3 /abs/pilot_mode.py list-fix-tickets", field: identifier }
 
 - **The old shape** still loads: `feeds: <name>` (or a list of names) with `hands_over: <caption>` is an arrow only, with no handover. `hands_over` captions only feeds given by name; a connection has its own `caption`.
-- **An output's value** may name several ids, separated by commas or spaces. A step that reports outputs declares them with `outputs:`. When two steps report the passed output, the later step's value wins.
-- **`ids_from: { feed: true }`** reads the ids earlier stages handed over. Only `linear_ticket` stages take it for now (`ids_from` is a `linear_ticket` clause). With `run:` too, the stage reads both, fed ids first, each once. The command is the fallback for ids that never came through a feed (opened before the stage existed, or while it was off).
+- **An output's value** may name several ids, separated by commas or spaces. `pass` reads the output only from a step that declares it in `outputs:`; the same key reported by any other step is ignored. When two declaring steps report it, the later one wins.
+- **Agent steps:** an agent writes its own outputs, so `pass` reads an output an agent step declares only when the connection says `trust: agent`. Without it the loader refuses the pass.
+- **`ids_from: { feed: true }`** reads the ids earlier stages handed over. Only `linear_ticket` stages take it for now (`ids_from` is a `linear_ticket` clause). With `run:` too, a fed id is read only when the command lists it as well: the feed makes the stage faster, never wider. A fed id the command doesn't list is dropped ("not in the stage's own list"). The command also picks up ids that never came through a feed (opened before the stage existed, or while it was off).
+- **Trust note:** a stage with `feed: true` and no `run:` trusts what it is handed, checked only by the id format (WEB-123, at most 40 characters, 25 a run) and its source's own `where:` filters (team, state). Give it its own `run:` list when only some items should ever reach it.
 
 **Guarantees.**
 - **Durable:** when a sending run ends and `when` holds, each id is written to the store's `handovers` table, once per (sending run, receiving stage, id). A pending id survives a restart.

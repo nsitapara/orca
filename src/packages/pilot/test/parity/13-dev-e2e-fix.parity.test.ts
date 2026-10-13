@@ -47,7 +47,8 @@ function stage1Feed(): FeedDef {
     pass: null,
     run: 'next_schedule',
     when: 'success',
-    caption: 'the tickets it opens'
+    caption: 'the tickets it opens',
+    trust: 'shell'
   }
   if (adopted) {
     return { ...feed, pass: { id: 'ticket' }, run: 'now' }

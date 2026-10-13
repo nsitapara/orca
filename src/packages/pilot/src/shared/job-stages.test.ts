@@ -49,7 +49,14 @@ const PIPELINES = summary('dev-e2e-fix', {
     stage: 1,
     name: 'Fix red hourly e2e on dev',
     feeds: [
-      { to: 'dev-e2e-fix-start', pass: null, run: 'next_schedule', when: 'success', caption: null }
+      {
+        to: 'dev-e2e-fix-start',
+        pass: null,
+        run: 'next_schedule',
+        when: 'success',
+        caption: null,
+        trust: 'shell'
+      }
     ]
   }),
   lastTick: tick('dev-e2e-fix', 100)

@@ -155,7 +155,13 @@ const feedConnection = z.strictObject({
     .optional(),
   run: z.enum(['now', 'next_schedule']).optional(),
   when: z.enum(['success', 'always']).optional(),
-  caption: z.string().min(1).optional()
+  caption: z.string().min(1).optional(),
+  // pass reads shell steps' outputs only; an agent step's output, which the agent writes, needs this said.
+  trust: z
+    .literal('agent', {
+      error: "expected agent (leave trust out to pass shell steps' outputs only)"
+    })
+    .optional()
 })
 const feedEntry = z.union([z.string().min(1), feedConnection], {
   error: 'expected a stage name, or { to, pass, run, when, caption }'

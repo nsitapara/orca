@@ -17,7 +17,8 @@ const arrow = (to: string, caption: string | null = null): FeedDef => ({
   pass: null,
   run: 'next_schedule',
   when: 'success',
-  caption
+  caption,
+  trust: 'shell'
 })
 const group = (...stages: AutomationSummary[]): JobGroup => ({
   kind: 'job',
