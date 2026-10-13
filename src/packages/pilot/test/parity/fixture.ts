@@ -10,6 +10,7 @@ import { registrySources } from '../../src/main/scheduler/tick-decide'
 import type { TickDeps } from '../../src/main/scheduler/tick-runner'
 import { createPassFetchCache, type PassFetchCache } from '../../src/main/sources/fetch-cache'
 import type { GlabApi } from '../../src/main/sources/gitlab-api'
+import type { IdsRunner } from '../../src/main/sources/ids-from'
 import type { PilotStore } from '../../src/main/store/store'
 import { fixtureBusyReads, fixtureQuota } from './fixture-activity'
 import { fixtureRead, miss, orcaResult, stdoutOf, type ParityFixture } from './fixture-core'
@@ -182,14 +183,15 @@ export function fixtureGitOperation(f: ParityFixture): (path: string) => Promise
 }
 
 // TickDeps for a dry run on a fixture. Every outside read comes from the fixture; nothing launches, and
-// a script never runs (a job whose checks or fields use scripts overrides `fields.runScript`). Tasks 19c
+// a script never runs (a job whose checks or fields use scripts overrides `fields.runScript`, and one whose source
+// takes its ids from a command passes `runIds`). Tasks 19c
 // (`activity`) and 25 (`ask`) add a fixture-backed value here when they add the TickDeps member. A dry
 // run takes `{ dryRun: true, pass: fixturePass(f) }`; one given no pass makes its own over `gitlab`, which is the
 // fixture's too, so no parity tick ever reaches the real GitLab.
 export function fixtureTickDeps(
   f: ParityFixture,
   store: PilotStore,
-  o: { runScript?: ScriptRunner } = {}
+  o: { runScript?: ScriptRunner; runIds?: IdsRunner } = {}
 ): TickDeps {
   const now = () => f.now
   return {
@@ -216,6 +218,10 @@ export function fixtureTickDeps(
       engineEnv: { binDir: '', dataDir: '/tmp/pilot-parity' },
       now
     },
+    // where.ids_from never runs a real command here; a job whose YAML has one answers it (13: jobs/job-13.ts).
+    runIds:
+      o.runIds ??
+      ((cmd) => Promise.reject(miss(f, `ids_from ${[cmd.program, ...cmd.args].join(' ')}`))),
     activity: {
       terminals: () => listBusyTerminals(fixtureRuntime(f)),
       reads: () => fixtureBusyReads(f),

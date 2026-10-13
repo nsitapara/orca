@@ -179,6 +179,18 @@ A shell step's `run:` is plain shell. It takes no `{placeholders}`; validation r
 - **Never** use an env value in `$(( ))`, `(( ))`, `let`, `declare -i`, an array subscript, `[[ -eq ]]`, `eval`, or `sh -c "…$NAME…"`. The shell evaluates those as code. Quote it as `"$NAME"`, or validate it first.
 - **Never** put an item value in an env name that another program executes: `NODE_OPTIONS`, `GIT_SSH_COMMAND`, `GIT_CONFIG_*`, `PERL5OPT`, `JAVA_TOOL_OPTIONS`, `SHELL`, `EDITOR`, `PAGER`. Validation doesn't block these.
 
+### Item ids from a command (`where.ids_from`)
+
+A source can read only the ids a command names, instead of listing everything and dropping what isn't its own. `linear_ticket` takes it (13-start reads the tickets job 13 opened).
+
+    where:
+      ids_from: { run: "python3 /abs/pilot_mode.py list-fix-tickets", field: identifier }   # also: env:, timeout: (60s)
+
+- **The command** runs once per tick, before any item exists, in the repo's main checkout. It is plain words run without a shell (quotes keep spaces; `|`, `;`, `>`, `*`, `~`, `$`, backticks and `{placeholders}` are refused). `env:` values are fixed text, under the shell steps' reserved names. Inherited loader and interpreter variables (`LD_*`, `DYLD_*`, `BASH_ENV`, `NODE_OPTIONS`, `PYTHONPATH`, …) are dropped. Stdout and stderr are capped at 256 KiB each.
+- **Stdout** is a JSON list, or a pilotcli envelope `{v, command, outcome, reason, data, meta}` whose `data` is the list. With `field:`, each entry is an object and the id is that key; without it, each entry is the id. At most 200 ids; repeats count once.
+- **Exit codes:** 0 reads the ids; 3 means no ids (nothing is read); any other exit, a timeout or the cap fails the tick with the command's last line.
+- **The source** then reads each id on its own (Linear: by identifier, read only). An id Linear doesn't know is skipped with a warning. The where block's other clauses still apply. Without a listing, there is no implicit "assigned to me", so say `assignee:` when that matters.
+
 ## Inbox and Details bundles
 
 The sidebar's **Inbox** item sits under Automations, with a count of the cards waiting on you. Clicking **Automations** leaves it, and the Inbox sub-view persists after you leave the page; the highlight always matches what is shown.

@@ -11,6 +11,7 @@ import type { FieldEngineDeps } from '../fields/engine'
 import type { ScriptRequest, ScriptResult } from '../fields/script-runner'
 import type { WorktreeInfo } from '../fields/worktree-facts'
 import { createPassFetchCache } from '../sources/fetch-cache'
+import type { IdsCommand, IdsRunner } from '../sources/ids-from'
 import type { RepoFacts, SourceContext } from '../sources/types'
 import { PilotStore } from '../store/store'
 import {
@@ -44,7 +45,11 @@ const ok = (stdout: string): ScriptResult => ({ code: 0, stdout, stderr: '', tim
 
 function setup(
   def: AutomationDefinition,
-  over: { sources?: Partial<SourceAccess>; fields?: Partial<FieldEngineDeps> } = {}
+  over: {
+    sources?: Partial<SourceAccess>
+    fields?: Partial<FieldEngineDeps>
+    runIds?: IdsRunner
+  } = {}
 ) {
   const store = PilotStore.open(':memory:')
   const sources: SourceAccess = {
@@ -61,7 +66,8 @@ function setup(
     now: () => NOW,
     resolveRepo: async () => repo,
     sources,
-    fields: fakeFieldDeps({ listWorktrees: async () => worktrees, ...over.fields })
+    fields: fakeFieldDeps({ listWorktrees: async () => worktrees, ...over.fields }),
+    ...(over.runIds ? { runIds: over.runIds } : {})
   }
   const pass = createPassFetchCache('pass-1', unusedGitlab)
   return { store, deps, decide: () => decideTickItems(def, EMPTY_PEOPLE, deps, pass, 7) }
@@ -274,6 +280,83 @@ describe('decideTickItems', () => {
       }
     })
     await expect(decide()).rejects.toThrow('glab: 502 Bad Gateway')
+  })
+})
+
+describe('decideTickItems: where.ids_from', () => {
+  const tickets = (where: Record<string, unknown>) =>
+    testDefinition({
+      id: 'starts',
+      file: '/autos/starts.yaml',
+      items: { kind: 'linear_ticket', where, match: [], customFields: [] }
+    })
+  const listing = () => {
+    const seen: (readonly string[] | null | undefined)[] = []
+    const list: SourceAccess['list'] = async (_def, ctx) => {
+      seen.push(ctx.ids)
+      return { items: [], warnings: [] }
+    }
+    return { seen, list }
+  }
+  const answering = (code: number, stdout: string) => {
+    const calls: IdsCommand[] = []
+    const run: IdsRunner = async (cmd) => {
+      calls.push(cmd)
+      return {
+        code,
+        stdout,
+        stderr: code === 0 || code === 3 ? '' : 'Traceback\nOSError: boom',
+        timedOut: false,
+        truncated: false
+      }
+    }
+    return { calls, run }
+  }
+  const IDS_FROM = { run: 'python3 /s/pilot_mode.py list-fix-tickets', field: 'identifier' }
+
+  it('runs the command once, in the main checkout, and hands the source its ids instead of a listing', async () => {
+    const { seen, list } = listing()
+    const ids = answering(0, '{"v":1,"data":[{"identifier":"WEB-2"},{"identifier":"WEB-1"}]}')
+    const { decide } = setup(tickets({ ids_from: IDS_FROM, team: 'WEB' }), {
+      sources: { list },
+      runIds: ids.run
+    })
+    await decide()
+    expect(seen).toEqual([['WEB-2', 'WEB-1']])
+    expect(ids.calls).toHaveLength(1)
+    expect(ids.calls[0]).toMatchObject({
+      program: 'python3',
+      args: ['/s/pilot_mode.py', 'list-fix-tickets'],
+      cwd: '/repo'
+    })
+    expect(ids.calls[0].env).toMatchObject({ PILOT_AUTOMATION_ID: 'starts' })
+  })
+
+  it('hands an empty set on exit 3, and no ids at all to a source without ids_from', async () => {
+    const empty = listing()
+    await setup(tickets({ ids_from: IDS_FROM }), {
+      sources: { list: empty.list },
+      runIds: answering(3, '').run
+    }).decide()
+    expect(empty.seen).toEqual([[]])
+    const plain = listing()
+    const never = answering(0, '[]')
+    await setup(tickets({ team: 'WEB' }), {
+      sources: { list: plain.list },
+      runIds: never.run
+    }).decide()
+    expect(plain.seen).toEqual([null])
+    expect(never.calls).toEqual([])
+  })
+
+  it('fails the tick, listing nothing, when the command fails', async () => {
+    const { seen, list } = listing()
+    const { decide } = setup(tickets({ ids_from: IDS_FROM }), {
+      sources: { list },
+      runIds: answering(1, '').run
+    })
+    await expect(decide()).rejects.toThrow('ids_from exited 1: OSError: boom')
+    expect(seen).toEqual([])
   })
 })
 

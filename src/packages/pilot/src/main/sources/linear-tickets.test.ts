@@ -289,6 +289,93 @@ describe('linearTicketSource: who and what is blocked', () => {
   })
 })
 
+describe('linearTicketSource: the ids where.ids_from gave', () => {
+  const START = {
+    team: 'WEB',
+    state_type: ['triage', 'backlog', 'unstarted', 'started'],
+    has_branch: true
+  }
+  // WEB-1 urgent, WEB-2 high and older than WEB-3, WEB-4 done.
+  const TICKETS = [
+    detail(listed('WEB-3', 'started', 2), '2026-10-05T00:00:00Z', 'web-3-fix'),
+    detail(listed('WEB-4', 'completed', 1), '2026-10-01T00:00:00Z', 'web-4-fix'),
+    detail(listed('WEB-1', 'started', 1), '2026-10-09T00:00:00Z', 'web-1-fix'),
+    detail(listed('WEB-2', 'started', 2), '2026-09-01T00:00:00Z', 'web-2-fix')
+  ]
+  const byId = () => {
+    const linear = {
+      listIssues: vi.fn(async () => ({ issues: [], meta })),
+      issue: vi.fn(async (id: string) => {
+        const found = TICKETS.find((t) => t.identifier === id)
+        if (!found) {
+          throw Object.assign(new Error(`Linear issue ${id} was not found.`), {
+            code: 'linear_issue_not_found'
+          })
+        }
+        return found
+      })
+    }
+    return linear as typeof linear & LinearConnector
+  }
+
+  it('reads only those tickets, by identifier and GET only, never the listing; open ones in the usual order', async () => {
+    const linear = byId()
+    const { items, warnings } = await source(linear).list(
+      context({ ids: ['WEB-3', 'WEB-4', 'WEB-1', 'WEB-2'] }),
+      START
+    )
+    expect(linear.listIssues).not.toHaveBeenCalled()
+    expect(linear.issue.mock.calls).toEqual([['WEB-3'], ['WEB-4'], ['WEB-1'], ['WEB-2']])
+    // WEB-4 is done, a state the where block leaves out: not listed, as a listing's closed tickets aren't
+    expect(items.map((i) => i.key)).toEqual(['linear:WEB-1', 'linear:WEB-2', 'linear:WEB-3'])
+    expect(warnings).toEqual([])
+    expect(items[0].fields).toMatchObject({
+      'ticket.id': 'WEB-1',
+      'ticket.branch': 'web-1-fix',
+      'ticket.workspace': null
+    })
+  })
+
+  it('reads nothing for an empty set', async () => {
+    const linear = byId()
+    expect((await source(linear).list(context({ ids: [] }), START)).items).toEqual([])
+    expect(linear.listIssues).not.toHaveBeenCalled()
+    expect(linear.issue).not.toHaveBeenCalled()
+  })
+
+  it("skips an id Linear doesn't know, with a warning, and checks the rest", async () => {
+    const { items, warnings } = await source(byId()).list(
+      context({ ids: ['WEB-9', 'WEB-1'] }),
+      START
+    )
+    expect(items.map((i) => i.key)).toEqual(['linear:WEB-1'])
+    expect(warnings).toEqual(["WEB-9: Linear has no such ticket; it isn't checked"])
+  })
+
+  it('fails the list on any other read failure, and on an id that is no Linear identifier', async () => {
+    const down = byId()
+    down.issue.mockRejectedValue(new Error('linear_timeout'))
+    await expect(source(down).list(context({ ids: ['WEB-1'] }), START)).rejects.toThrow(
+      'linear_timeout'
+    )
+    const linear = byId()
+    await expect(source(linear).list(context({ ids: ['WEB-1', 'web 1'] }), START)).rejects.toThrow(
+      `ids_from gave "web 1", which isn't a Linear identifier (like WEB-123)`
+    )
+    expect(linear.issue).not.toHaveBeenCalled()
+  })
+
+  it('still scopes what it read by the where block: an assignee clause no longer means an org-wide listing', async () => {
+    const src = source(byId())
+    const where = { ...START, assignee: { people: ['emil'] } }
+    const { items } = await src.list(context({ ids: ['WEB-1'] }), where)
+    const verdict = src.scope(items[0], where, PEOPLE)
+    expect(verdict.ok ? null : verdict.reason).toBe(
+      'Assignee is Nish Sitapara; this automation looks at Emil Elgaard'
+    )
+  })
+})
+
 describe('findTicketWorktree (sweep.py find_worktree)', () => {
   it('the ticket link wins, a same-branch worktree still matches, archived ones never', () => {
     const live = WORKTREES.filter((w) => !w.isArchived)

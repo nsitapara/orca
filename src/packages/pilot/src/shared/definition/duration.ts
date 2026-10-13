@@ -12,7 +12,9 @@ export function durationMs(text: string): number | null {
   return Number(match[1]) * UNIT_MS[match[2]]
 }
 
-export const durationSchema = z
+// The text form, kept as written: a where block is parsed again by its source, so it holds no transform.
+export const durationTextSchema = z
   .string()
   .regex(DURATION, 'expected a duration like 30s, 10m, 12h or 2d')
-  .transform((text) => durationMs(text) ?? 0)
+
+export const durationSchema = durationTextSchema.transform((text) => durationMs(text) ?? 0)

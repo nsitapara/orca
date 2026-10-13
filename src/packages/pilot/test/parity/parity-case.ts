@@ -2,6 +2,7 @@ import { existsSync } from 'node:fs'
 import { describe, expect } from 'vitest'
 import { runTick, type TickDeps } from '../../src/main/scheduler/tick-runner'
 import type { ScriptRunner } from '../../src/main/fields/script-runner'
+import type { IdsRunner } from '../../src/main/sources/ids-from'
 import { PilotStore } from '../../src/main/store/store'
 import type { AutomationDefinition } from '../../src/shared/definition/types'
 import type { PeopleDirectory } from '../../src/shared/people'
@@ -29,6 +30,8 @@ export type ParityJob = {
   // The old side's own answers, for a script the new side can only run against the case (13's worktree check): a decision
   // word `script_check` (key, reason: '' = passed) is no verdict, only the answer this returns for that key.
   runScriptFor?(old: OldDecision[], fixture: ParityFixture): ScriptRunner
+  // Answers where.ids_from on the case's own state (13's list-fix-tickets, run for real on the case's tickets.json).
+  runIdsFor?(fixture: ParityFixture): IdsRunner
   // Swaps parts of the tick's deps: 13's Linear tickets, which the case's reads supply (test/parity/linear-fixture.ts).
   tickDeps?(deps: TickDeps, fixture: ParityFixture): TickDeps
   // One old sweep, two automations (13): each job compares the old decisions whose key it lists.
@@ -89,7 +92,10 @@ export async function parityReport(
       withJobDeps(
         job,
         fixture,
-        fixtureTickDeps(fixture, store, { runScript: scripts(job, old, fixture) })
+        fixtureTickDeps(fixture, store, {
+          runScript: scripts(job, old, fixture),
+          runIds: job.runIdsFor?.(fixture)
+        })
       ),
       {
         dryRun: true,

@@ -34,7 +34,15 @@ export type PipelineWhere = {
   source?: string
   marker_jobs?: string[]
 }
+// where.ids_from: a command (plain words, no shell) printing the ids the source reads instead of listing.
+export type IdsFrom = {
+  run: string
+  field?: string
+  env?: Record<string, string>
+  timeout?: string
+}
 export type LinearTicketWhere = {
+  ids_from?: IdsFrom
   assignee?: PeopleRef
   state_type?: string[]
   team?: string
