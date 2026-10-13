@@ -3,11 +3,13 @@ import type {
   ActivityTick,
   AutomationDetailPayload,
   AutomationListPayload,
-  AutomationSummary
+  AutomationSummary,
+  TickRow
 } from '../../shared/api-types'
 import { parseAutomationYaml } from '../../shared/definition/parse'
 import type { AutomationDefinition, ItemKind, ParseResult } from '../../shared/definition/types'
 import { checkName } from '../../shared/tick/checks'
+import { HANDOVER_EXPIRED_EVENT } from '../handover/housekeep'
 import type { PilotContext } from '../pilot-services'
 
 const ITEM_KIND: Record<ItemKind, string> = {
@@ -93,6 +95,12 @@ export function activity(ctx: PilotContext, id: string, limit: number): Activity
   const handedOver = ctx.store.handovers.consumedBy(tickIds)
   const definitions = ctx.loaded().definitions
   const stageOf = (id: string) => definitions.find((d) => d.id === id)?.job?.stage ?? null
+  const notes = notesByTick(
+    ctx,
+    id,
+    ticks.map((t) => t.tick),
+    limit
+  )
   return ticks.map(({ tick, runs }) => ({
     ...tick,
     trigger: triggers.get(tick.id) ?? null,
@@ -100,6 +108,7 @@ export function activity(ctx: PilotContext, id: string, limit: number): Activity
       ...h,
       senderStage: stageOf(h.senderId)
     })),
+    notes: notes.get(tick.id) ?? [],
     items: ctx.store.tickItems(tick.id),
     runs: runs.map((run) => ({
       ...run,
@@ -107,6 +116,29 @@ export function activity(ctx: PilotContext, id: string, limit: number): Activity
       inbox: asked.filter((i) => i.runId === run.id)
     }))
   }))
+}
+
+// Each expiry the scheduler pass recorded on this stage, under the newest tick that started before it (ticks newest
+// first). One older than every tick shown belongs to a tick past the list, unless the list holds every tick.
+function notesByTick(
+  ctx: PilotContext,
+  id: string,
+  ticks: readonly TickRow[],
+  limit: number
+): Map<number, { at: number; text: string }[]> {
+  const found = new Map<number, { at: number; text: string }[]>()
+  const oldest = ticks.at(-1)
+  if (!oldest) {
+    return found
+  }
+  const since = ticks.length < limit ? 0 : oldest.startedAt
+  const events = ctx.store.events.list({ kinds: [HANDOVER_EXPIRED_EVENT], automationId: id, since })
+  for (const e of events) {
+    const tick = ticks.find((t) => t.startedAt <= e.at) ?? oldest
+    const text = typeof e.payload.text === 'string' ? e.payload.text : e.kind
+    found.set(tick.id, [...(found.get(tick.id) ?? []), { at: e.at, text }])
+  }
+  return found
 }
 
 // Parse only. `file` is a label for error messages and the source of the id; it is never opened.

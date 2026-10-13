@@ -207,6 +207,23 @@ describe('formatActivity', () => {
     expect(lines.slice(1)).toEqual(['  Triggered by stage 1 run r1, handed over WEB-2123'])
   })
 
+  it('prints what happened to the stage after a tick', () => {
+    const tick: ActivityTick = {
+      ...base,
+      id: 9,
+      startedAt: 1_700_000_200_000,
+      dryRun: false,
+      status: 'ok',
+      notes: [
+        { at: 1_700_000_300_000, text: 'Handover of WEB-1 from stage 1 expired after 7 days' }
+      ]
+    }
+    const lines = formatActivity([tick]).split('\n')
+    expect(lines[1]).toMatch(
+      /^  \d{4}-\d\d-\d\d \d\d:\d\d · Handover of WEB-1 from stage 1 expired after 7 days$/
+    )
+  })
+
   it('lists ticks as given (newest first) with items and runs', () => {
     const ticks: ActivityTick[] = [
       {

@@ -11,7 +11,8 @@ export type HandoverService = {
 }
 
 export function handoverService(deps: HandOverDeps): HandoverService {
-  const keeper = handoverHousekeeper(deps.store, deps.now, deps.log)
+  const stageOf = (id: string) => deps.definitionFor(id)?.job?.stage ?? null
+  const keeper = handoverHousekeeper(deps.store, deps.now, deps.log, stageOf)
   return {
     deps,
     runEnd: runEndHandover(deps),

@@ -138,6 +138,33 @@ describe('Pilot API handlers', () => {
     expect(ticks[0].handedOver?.[0].senderStage).toBeNull()
   })
 
+  it('shows a handover the scheduler pass expired under the tick it came after', () => {
+    const { ctx, store } = context()
+    const older = store.startTick('ci', false, 100)
+    const newer = store.startTick('ci', false, 300)
+    const note = (at: number, text: string) =>
+      store.events.add({
+        at,
+        kind: 'handover_expired',
+        automationId: 'ci',
+        itemKey: 'WEB-1',
+        payload: { text }
+      })
+    note(200, 'Handover of WEB-1 from stage 1 expired after 7 days')
+    note(400, 'Handover of WEB-2 from stage 1 expired after 7 days')
+    store.events.add({
+      at: 250,
+      kind: 'handover_expired',
+      automationId: 'other',
+      payload: { text: 'not ours' }
+    })
+    const ticks = activity(ctx, 'ci', 10)
+    expect(ticks.map((t) => [t.id, t.notes])).toEqual([
+      [newer, [{ at: 400, text: 'Handover of WEB-2 from stage 1 expired after 7 days' }]],
+      [older, [{ at: 200, text: 'Handover of WEB-1 from stage 1 expired after 7 days' }]]
+    ])
+  })
+
   it('returns no activity for an unknown id', () => {
     expect(activity(context().ctx, 'nope', 10)).toEqual([])
   })

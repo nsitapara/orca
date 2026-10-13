@@ -51,4 +51,36 @@ describe('handoverHousekeeper: the scheduler pass expires and prunes handovers, 
     expect(keeper.passIfDue()).toEqual({ expired: 0, pruned: 0 })
     expect(logs).toEqual([])
   })
+
+  it('records an Activity event on the receiving stage for each id it expires, naming the sender’s stage', () => {
+    const store = PilotStore.open(':memory:')
+    const now = 100 * 86_400_000
+    const keeper = handoverHousekeeper(
+      store,
+      () => now,
+      () => {},
+      (id) => (id === 'open' ? 1 : null)
+    )
+    store.handovers.add({
+      senderId: 'open',
+      senderRunId: 'r1',
+      receiverId: 'start',
+      itemIds: ['WEB-2123'],
+      at: now - HANDOVER_EXPIRY_MS - 1
+    })
+    store.handovers.add({
+      senderId: 'gone',
+      senderRunId: 'r2',
+      receiverId: 'start',
+      itemIds: ['WEB-9'],
+      at: now - HANDOVER_EXPIRY_MS - 1
+    })
+    keeper.passIfDue()
+    const events = store.events.list({ kinds: ['handover_expired'], automationId: 'start' })
+    expect(events.map((e) => [e.at, e.itemKey, e.payload.text])).toEqual([
+      [now, 'WEB-2123', 'Handover of WEB-2123 from stage 1 expired after 7 days'],
+      [now, 'WEB-9', 'Handover of WEB-9 from gone expired after 7 days']
+    ])
+    expect(store.events.list({ kinds: ['handover_expired'], automationId: 'open' })).toEqual([])
+  })
 })
