@@ -43,13 +43,30 @@ export function shortPath(path: string): string {
   return `…/${tail}`
 }
 
+// What a capped diff (details.py) left out: a drafted one still has it in its patch; any other is on the MR.
+function omittedText(file: DiffFile, inPatch: boolean): string {
+  if (inPatch) {
+    return `${file.path}: diff too large to show here (in the patch)`
+  }
+  return `${file.path}: diff not shown here, too large; see the MR`
+}
+
+function moreFilesText(count: number, inPatch: boolean): string {
+  if (inPatch) {
+    return `${count} more files not shown (in the patch)`
+  }
+  return `${count} more files not shown here; see the MR`
+}
+
 function FileView({
   file,
   open,
+  inPatch,
   onToggle
 }: {
   file: DiffFile
   open: boolean
+  inPatch: boolean
   onToggle: () => void
 }): React.JSX.Element {
   const renamed = file.old_path && file.old_path !== file.path
@@ -82,9 +99,7 @@ function FileView({
             </Fragment>
           ))}
           {file.omitted ? (
-            <p className="dt-missing glr-omitted">
-              {file.path}: diff not shown here, too large; see the MR
-            </p>
+            <p className="dt-missing glr-omitted">{omittedText(file, inPatch)}</p>
           ) : null}
         </>
       ) : null}
@@ -126,6 +141,7 @@ export function DiffBlock({ block }: { block: DiffBlockData }): React.JSX.Elemen
   const files = block.files ?? []
   const [open, setOpen] = useState<boolean[]>(() => files.map(startsOpen))
   const anyClosed = open.some((o) => !o)
+  const inPatch = Boolean(block.patch)
   const set = (i: number, value: boolean) =>
     setOpen((now) => now.map((o, n) => (n === i ? value : o)))
   return (
@@ -140,10 +156,16 @@ export function DiffBlock({ block }: { block: DiffBlockData }): React.JSX.Elemen
         </button>
       ) : null}
       {files.map((file, i) => (
-        <FileView key={i} file={file} open={open[i] ?? true} onToggle={() => set(i, !open[i])} />
+        <FileView
+          key={i}
+          file={file}
+          open={open[i] ?? true}
+          inPatch={inPatch}
+          onToggle={() => set(i, !open[i])}
+        />
       ))}
       {block.more_files ? (
-        <p className="dt-missing">{block.more_files} more files not shown here; see the MR</p>
+        <p className="dt-missing">{moreFilesText(block.more_files, inPatch)}</p>
       ) : null}
       {(block.checks ?? []).length ? <Checks checks={block.checks ?? []} /> : null}
     </Section>

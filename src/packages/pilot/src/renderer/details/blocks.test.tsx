@@ -59,6 +59,21 @@ describe('blocks', () => {
     ])
   })
 
+  it('says a trimmed drafted diff keeps what it left out in its patch', () => {
+    const trimmed: DiffData = {
+      type: 'diff',
+      patch: 'F2.patch',
+      more_files: 3,
+      files: [{ path: 'big.ts', hunks: [], omitted: true }]
+    }
+    const { container } = render(<DiffBlock block={trimmed} />)
+    const lines = [...container.querySelectorAll('.dt-missing')].map((n) => n.textContent)
+    expect(lines).toEqual([
+      'big.ts: diff too large to show here (in the patch)',
+      '3 more files not shown (in the patch)'
+    ])
+  })
+
   it('puts one gap row between two hunks of a file', () => {
     const two: DiffData = {
       type: 'diff',

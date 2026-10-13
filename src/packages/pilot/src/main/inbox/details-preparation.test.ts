@@ -36,6 +36,102 @@ function prepared() {
   return fixture
 }
 
+// details.py trims a big diff: past its row cap a file keeps its counts but loses its hunks (`omitted`), and past its
+// file cap the rest are dropped and counted in `more_files`. The patch file still holds every file.
+const TRIMMED_PATCH = [
+  'diff --git a/a.ts b/a.ts',
+  '--- a/a.ts',
+  '+++ b/a.ts',
+  '@@ -1,2 +1,3 @@',
+  ' keep',
+  '-old',
+  '+new',
+  '+more',
+  'diff --git a/b.ts b/b.ts',
+  '--- a/b.ts',
+  '+++ b/b.ts',
+  '@@ -1,1 +1,2 @@',
+  ' one',
+  '+two',
+  'diff --git a/c.ts b/c.ts',
+  '--- a/c.ts',
+  '+++ b/c.ts',
+  '@@ -1,2 +1,1 @@',
+  ' x',
+  '-y',
+  ''
+].join('\n')
+type ShownFile = {
+  path: string
+  added: number
+  removed: number
+  hunks: unknown[]
+  omitted?: boolean
+}
+function trimmed(change: (diff: { files: ShownFile[]; more_files?: number }) => void = () => {}) {
+  const f = prepared()
+  writeFileSync(join(f.dir, 'F2.patch'), TRIMMED_PATCH)
+  const patch = hash(TRIMMED_PATCH)
+  rewriteBundle(f.bundle, (bundle) => {
+    const diff = bundle.blocks.find((block) => block.type === 'diff')!
+    diff.patch_sha256 = patch
+    diff.check_records = (diff.check_records as { patch_sha256: string }[]).map((check) => ({
+      ...check,
+      patch_sha256: patch
+    }))
+    diff.files = [
+      {
+        path: 'a.ts',
+        added: 2,
+        removed: 1,
+        hunks: [
+          [
+            [1, 1, ' ', 'keep'],
+            [2, null, '-', 'old'],
+            [null, 2, '+', 'new'],
+            [null, 3, '+', 'more']
+          ]
+        ]
+      },
+      { path: 'b.ts', added: 1, removed: 0, hunks: [], omitted: true }
+    ]
+    diff.more_files = 1
+    change(diff as never)
+  })
+  return f
+}
+
+describe('a trimmed diff (details.py past its row or file cap)', () => {
+  it('passes when its shown files, omitted counts and more_files all match the hashed patch', () => {
+    const f = trimmed()
+    expect(
+      validatePreparationEvidence(loadDetails(f.root, f.bundle, { prepared: true }), [
+        'context',
+        'diff',
+        'checks'
+      ])
+    ).toEqual([])
+  })
+
+  it.each<[string, (diff: { files: ShownFile[]; more_files?: number }) => void]>([
+    ['an omitted file whose count lies', (diff) => void (diff.files[1].added = 5)],
+    ['a more_files that lies', (diff) => void (diff.more_files = 2)],
+    ['no more_files for a dropped file', (diff) => void delete diff.more_files],
+    [
+      'a shown file the patch does not have',
+      (diff) =>
+        void diff.files.push({ path: 'd.ts', added: 1, removed: 0, hunks: [], omitted: true })
+    ],
+    ['a file shown twice', (diff) => void diff.files.push({ ...diff.files[1] })],
+    ["a shown hunk that is not the patch's", (diff) => void (diff.files[0].hunks = [])]
+  ])('refuses %s', (_name, change) => {
+    const f = trimmed(change)
+    expect(
+      validatePreparationEvidence(loadDetails(f.root, f.bundle, { prepared: true }), ['diff'])
+    ).not.toEqual([])
+  })
+})
+
 describe('preparation evidence', () => {
   it('records artifact roles, content hashes, run provenance and tags from verified files', () => {
     const f = prepared()
