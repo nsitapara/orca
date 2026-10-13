@@ -52,3 +52,19 @@ export function queuedPreparation(input: PreparationInput, at: number): InboxPre
     updatedAt: at
   }
 }
+
+// Back in the queue for a fresh attempt (an undone early answer, refreshed action args, a person's Retry): a new
+// revision voids every claim on the old one, and the attempts start over. The old worker's run stays named, so a new
+// one never starts beside it while it still runs.
+export function requeuedPreparation(p: InboxPreparation, at: number): InboxPreparation {
+  return {
+    ...p,
+    state: 'queued',
+    revision: p.revision + 1,
+    attempt: 0,
+    leaseUntil: null,
+    progress: 'Context queued',
+    error: null,
+    updatedAt: at
+  }
+}

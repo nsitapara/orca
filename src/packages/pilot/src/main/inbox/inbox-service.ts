@@ -2,6 +2,7 @@ import type { AutomationDefinition } from '../../shared/definition/types'
 import type { InboxItemRow, InboxStatus } from '../../shared/api-types'
 import type { AnswerState, InboxListPayload, RunLine } from '../../shared/inbox-types'
 import type { PeopleDirectory } from '../../shared/people'
+import { requeuedPreparation } from '../../shared/preparation'
 import type { ActionCatalog } from '../actions/types'
 import type { PilotStore } from '../store/store'
 import { answerLocked, lockedBy, ownsLiveAnswer } from './answer-lock'
@@ -271,7 +272,8 @@ export function reaskInboxItem(deps: InboxDeps, id: string, reply: string): Inbo
 }
 
 // A stale approved action whose script pins it again (act.py refresh): the same card, a new version
-// pinned to the new state, waiting on its person again (apply.py _ask_again).
+// pinned to the new state, waiting on its person again (apply.py _ask_again). A prepared card whose args or
+// digest changed goes back in the preparation queue: its evidence was for the old version.
 export function reviseInboxItem(
   deps: InboxDeps,
   id: string,
@@ -282,12 +284,25 @@ export function reviseInboxItem(
   const card = { ...cardOf(item), actionArgs: change.actionArgs, context: oneLine(change.context) }
   const digest = inboxDigest(card)
   const reopened = { status: 'open' as const, answer: null, answeredAt: null, answeredBy: null }
+  const preparation =
+    item.preparation && digest !== item.digest ? requeuedPreparation(item.preparation, at) : null
   deps.store.transaction(() => {
     deps.store.inbox.edit(id, { context: card.context, actionArgs: card.actionArgs, digest }, at)
     deps.store.inbox.update(id, reopened, at)
+    if (preparation) {
+      deps.store.inboxPreparations.write(id, preparation)
+    }
   })
   deps.store.queue.removePending(id)
   inboxEvent(deps.store, item, 'item_updated', { version: item.version + 1, reason: 'refresh' }, at)
   syncRunWaiting(deps.store, item.runId, at)
-  return { ...item, ...card, digest, version: item.version + 1, ...reopened, updatedAt: at }
+  const revised = {
+    ...item,
+    ...card,
+    digest,
+    version: item.version + 1,
+    ...reopened,
+    updatedAt: at
+  }
+  return preparation ? { ...revised, preparation } : revised
 }
