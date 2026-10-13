@@ -1,7 +1,6 @@
 import { Fragment } from 'react'
 import type {
   CodeBlock as CodeBlockData,
-  DiffBlock as DiffBlockData,
   DiffRow,
   FactsBlock as FactsBlockData,
   MissingBlock as MissingBlockData,
@@ -12,7 +11,7 @@ import { Inline, Markdown, SafeLink } from './markdown'
 
 const ROW_CLASS: Record<string, string> = { '+': 'add', '-': 'del' }
 
-function Scroll({ children }: { children: React.ReactNode }): React.JSX.Element {
+export function Scroll({ children }: { children: React.ReactNode }): React.JSX.Element {
   return <div className="glr-scroll">{children}</div>
 }
 
@@ -50,7 +49,7 @@ export function DiffTable({
   )
 }
 
-function Gap(): React.JSX.Element {
+export function Gap(): React.JSX.Element {
   return (
     <Scroll>
       <table className="glr-diff">
@@ -114,42 +113,6 @@ export function FactsBlock({ block }: { block: FactsBlockData }): React.JSX.Elem
           </Fragment>
         ))}
       </dl>
-    </Section>
-  )
-}
-
-export function DiffBlock({ block }: { block: DiffBlockData }): React.JSX.Element {
-  return (
-    <Section title={block.title} cls="dt-diff">
-      {(block.files ?? []).map((file, i) => {
-        const renamed = file.old_path && file.old_path !== file.path
-        const title = renamed ? `${file.old_path} → ${file.path}` : file.path
-        return (
-          <FileHeader key={i} title={title} count={`+${file.added ?? 0} −${file.removed ?? 0}`}>
-            {(file.hunks ?? []).map((hunk, n) => (
-              <Fragment key={n}>
-                {n ? <Gap /> : null}
-                <DiffTable rows={hunk} />
-              </Fragment>
-            ))}
-            {file.omitted ? (
-              <p className="dt-missing glr-omitted">
-                {file.path}: diff not shown here, too large; see the MR
-              </p>
-            ) : null}
-          </FileHeader>
-        )
-      })}
-      {block.more_files ? (
-        <p className="dt-missing">{block.more_files} more files not shown here; see the MR</p>
-      ) : null}
-      {(block.checks ?? []).length ? (
-        <ul className="dt-checks">
-          {(block.checks ?? []).map((check, i) => (
-            <li key={i}>{check}</li>
-          ))}
-        </ul>
-      ) : null}
     </Section>
   )
 }

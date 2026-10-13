@@ -8,7 +8,8 @@ import type {
   DetailsBundle,
   DiffBlock as DiffData
 } from '../../shared/details'
-import { CodeBlock, DiffBlock, FactsBlock, TextBlock, ThreadBlock } from './blocks'
+import { CodeBlock, FactsBlock, TextBlock, ThreadBlock } from './blocks'
+import { DiffBlock } from './diff-block'
 
 afterEach(cleanup)
 
