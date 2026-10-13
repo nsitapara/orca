@@ -207,9 +207,10 @@ describe('JobView: a job of several automations on one page', () => {
     ])
   })
 
-  it('Turn off pauses the enabled stages, and a refusal stops it there and says why', async () => {
-    const refusal =
-      "An agent in a Pilot run can't tick, enable or pause an automation; Nish does that in Pilot"
+  const REFUSAL =
+    "An agent in a Pilot run can't tick, enable or pause an automation; Nish does that in Pilot"
+
+  it('Turn off asks every enabled stage, and says which were refused and what state the job is in', async () => {
     serve(
       [
         { ...STAGE_1, enabled: true },
@@ -217,13 +218,68 @@ describe('JobView: a job of several automations on one page', () => {
       ],
       {
         'pilot.automations.setEnabled': () => {
-          throw new Error(refusal)
+          throw new Error(REFUSAL)
         }
       }
     )
     render(<JobView jobId="13" onBack={() => {}} onOpenStage={() => {}} />)
     fireEvent.click(await screen.findByRole('button', { name: 'Turn off' }))
-    expect(await screen.findByText(`Stage 1: ${refusal}`)).toBeTruthy()
+    expect(await screen.findByText(`Stage 1: refused: ${REFUSAL}`)).toBeTruthy()
+    expect(screen.getByText(`Stage 2: refused: ${REFUSAL}`)).toBeTruthy()
+    expect(screen.getByText('Job 13 is on.')).toBeTruthy()
+    expect(calls('pilot.automations.setEnabled').map((c) => c[1])).toEqual([
+      { id: 'dev-e2e-fix', enabled: false },
+      { id: 'dev-e2e-fix-start', enabled: false }
+    ])
+  })
+
+  it('a partial Turn on says which stages changed and which were refused, and rolls nothing back', async () => {
+    serve([STAGE_1, STAGE_2], {
+      'pilot.automations.setEnabled': (p) => {
+        if (p.id === 'dev-e2e-fix-start') {
+          throw new Error(REFUSAL)
+        }
+        return p
+      }
+    })
+    render(<JobView jobId="13" onBack={() => {}} onOpenStage={() => {}} />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Turn on' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm' }))
+    expect(await screen.findByText('Stage 1: turned on')).toBeTruthy()
+    expect(screen.getByText(`Stage 2: refused: ${REFUSAL}`)).toBeTruthy()
+    expect(screen.getByText('Job 13 is partly on: stage 1 on, stage 2 off.')).toBeTruthy()
+    expect(calls('pilot.automations.setEnabled').map((c) => c[1])).toEqual([
+      { id: 'dev-e2e-fix', enabled: true },
+      { id: 'dev-e2e-fix-start', enabled: true }
+    ])
+  })
+
+  it.each([
+    ['every stage off', false, false, ['Turn on']],
+    ['every stage on', true, true, ['Turn off']],
+    ['one stage on', true, false, ['Turn on', 'Turn off']]
+  ])(
+    'offers Turn on while a stage is off and Turn off while one is on: %s',
+    async (_n, one, two, offered) => {
+      serve([
+        { ...STAGE_1, enabled: one },
+        { ...STAGE_2, enabled: two }
+      ])
+      render(<JobView jobId="13" onBack={() => {}} onOpenStage={() => {}} />)
+      await screen.findByRole('button', { name: 'Dry run all' })
+      const toggles = screen
+        .getAllByRole('button')
+        .map((b) => b.textContent)
+        .filter((t) => t === 'Turn on' || t === 'Turn off')
+      expect(toggles).toEqual(offered)
+    }
+  )
+
+  it('Turn off in a partly-on job pauses only the stages that are on', async () => {
+    serve([{ ...STAGE_1, enabled: true }, STAGE_2], { 'pilot.automations.setEnabled': (p) => p })
+    render(<JobView jobId="13" onBack={() => {}} onOpenStage={() => {}} />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Turn off' }))
+    expect(await screen.findByText('Stage 1: turned off')).toBeTruthy()
     expect(calls('pilot.automations.setEnabled').map((c) => c[1])).toEqual([
       { id: 'dev-e2e-fix', enabled: false }
     ])

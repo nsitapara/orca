@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import type { TickOutcome } from '../../shared/api-types'
-import { jobEnabled, type JobGroup } from '../../shared/job-stages'
+import type { JobGroup } from '../../shared/job-stages'
 import { pilotRpc } from '../api'
+import { stagesText } from './AutomationsTable'
 import { errorText, outcomeLine } from './format'
 import { LONG_CALL_MS } from './RunControls'
 
@@ -10,6 +11,10 @@ type Phase = 'idle' | 'confirm' | 'running'
 
 function stageName(n: number | undefined): string {
   return `Stage ${n ?? '?'}`
+}
+
+function onOff(enabled: boolean): string {
+  return enabled ? 'on' : 'off'
 }
 
 // Dry run each stage, in stage order. Dry runs only: nothing starts.
@@ -30,20 +35,96 @@ async function dryRunAll(job: JobGroup): Promise<string[]> {
   return lines
 }
 
-// Each stage not yet in the wanted state, through the one-automation call, so Pilot applies the same caller rules
-// (an agent in a run is refused). The first refusal stops the rest and is what the page says.
+// What the job is after a toggle: on, off, or which stages are which.
+export function jobStateLine(job: JobGroup, enabled: ReadonlyMap<string, boolean>): string {
+  const on = job.stages.filter((s) => enabled.get(s.id))
+  if (on.length === job.stages.length) {
+    return `Job ${job.id} is on.`
+  }
+  if (on.length === 0) {
+    return `Job ${job.id} is off.`
+  }
+  const each = job.stages.map((s) => `stage ${s.job?.stage} ${onOff(enabled.get(s.id) === true)}`)
+  return `Job ${job.id} is partly on: ${each.join(', ')}.`
+}
+
+// Every stage not yet in the wanted state, through the one-automation call, so Pilot applies the same caller rules
+// (an agent in a run is refused). Each stage is tried; nothing is rolled back. The lines say which stages changed,
+// which were refused and why, then what state the job is in.
 async function setAll(job: JobGroup, enabled: boolean): Promise<string[]> {
+  const now = new Map(job.stages.map((s) => [s.id, s.enabled]))
+  const lines: string[] = []
   for (const s of job.stages.filter((x) => x.enabled !== enabled)) {
     try {
       await pilotRpc('pilot.automations.setEnabled', { id: s.id, enabled })
+      now.set(s.id, enabled)
+      lines.push(`${stageName(s.job?.stage)}: turned ${onOff(enabled)}`)
     } catch (e) {
-      return [`${stageName(s.job?.stage)}: ${errorText(e)}`]
+      lines.push(`${stageName(s.job?.stage)}: refused: ${errorText(e)}`)
     }
   }
-  return []
+  return [...lines, jobStateLine(job, now)]
 }
 
-// The job page's buttons. Turning the job on asks first, as Run now does: its stages then tick on their schedules.
+function ConfirmBar({
+  count,
+  onConfirm,
+  onCancel
+}: {
+  count: number
+  onConfirm: () => void
+  onCancel: () => void
+}): React.JSX.Element {
+  return (
+    <>
+      <span className="text-sm">{`Turn on ${stagesText(count)}? They tick on their schedules.`}</span>
+      <Button size="sm" onClick={onConfirm}>
+        Confirm
+      </Button>
+      <Button variant="ghost" size="sm" onClick={onCancel}>
+        Cancel
+      </Button>
+    </>
+  )
+}
+
+// Turn on while any stage is off, Turn off while any is on: a partly-on job offers both.
+function ButtonBar({
+  job,
+  busy,
+  onDryRun,
+  onTurnOn,
+  onTurnOff
+}: {
+  job: JobGroup
+  busy: boolean
+  onDryRun: () => void
+  onTurnOn: () => void
+  onTurnOff: () => void
+}): React.JSX.Element {
+  const anyOff = job.stages.some((s) => !s.enabled)
+  const anyOn = job.stages.some((s) => s.enabled)
+  return (
+    <>
+      {busy ? <span className="text-sm text-muted-foreground">Running…</span> : null}
+      <Button variant="outline" size="sm" disabled={busy} onClick={onDryRun}>
+        Dry run all
+      </Button>
+      {anyOff ? (
+        <Button variant="secondary" size="sm" disabled={busy} onClick={onTurnOn}>
+          Turn on
+        </Button>
+      ) : null}
+      {anyOn ? (
+        <Button variant="secondary" size="sm" disabled={busy} onClick={onTurnOff}>
+          Turn off
+        </Button>
+      ) : null}
+    </>
+  )
+}
+
+// The job page's buttons. Turning stages on asks first, as Run now does: they then tick on their schedules.
 export function JobControls({
   job,
   onDone
@@ -60,7 +141,6 @@ export function JobControls({
       mounted.current = false
     }
   }, [])
-  const on = jobEnabled(job)
 
   const run = async (work: () => Promise<string[]>): Promise<void> => {
     setPhase('running')
@@ -73,45 +153,26 @@ export function JobControls({
     setPhase('idle')
     onDone()
   }
-  const toggle = (): void => {
-    if (on) {
-      void run(() => setAll(job, false))
-      return
-    }
-    setPhase('confirm')
-  }
 
-  const busy = phase === 'running'
+  const bar =
+    phase === 'confirm' ? (
+      <ConfirmBar
+        count={job.stages.filter((s) => !s.enabled).length}
+        onConfirm={() => void run(() => setAll(job, true))}
+        onCancel={() => setPhase('idle')}
+      />
+    ) : (
+      <ButtonBar
+        job={job}
+        busy={phase === 'running'}
+        onDryRun={() => void run(() => dryRunAll(job))}
+        onTurnOn={() => setPhase('confirm')}
+        onTurnOff={() => void run(() => setAll(job, false))}
+      />
+    )
   return (
     <div className="flex flex-col items-end gap-1">
-      <div className="flex items-center gap-2">
-        {phase === 'confirm' ? (
-          <>
-            <span className="text-sm">{`Turn on all ${job.stages.length} stages? They tick on their schedules.`}</span>
-            <Button size="sm" onClick={() => void run(() => setAll(job, true))}>
-              Confirm
-            </Button>
-            <Button variant="ghost" size="sm" onClick={() => setPhase('idle')}>
-              Cancel
-            </Button>
-          </>
-        ) : (
-          <>
-            {busy ? <span className="text-sm text-muted-foreground">Running…</span> : null}
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={busy}
-              onClick={() => void run(() => dryRunAll(job))}
-            >
-              Dry run all
-            </Button>
-            <Button variant="secondary" size="sm" disabled={busy} onClick={toggle}>
-              {on ? 'Turn off' : 'Turn on'}
-            </Button>
-          </>
-        )}
-      </div>
+      <div className="flex items-center gap-2">{bar}</div>
       {lines.map((line) => (
         <p key={line} className="text-sm text-muted-foreground">
           {line}
