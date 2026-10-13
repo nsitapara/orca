@@ -17,7 +17,7 @@ describe('07 · Clean Docker when disk is 80% full, as a run-once shell step', (
       name: '07 · Clean Docker when disk is 80% full',
       schedule: '0 7 * * *',
       timezone: 'America/Los_Angeles',
-      enabled: false,
+      enabled: true, // live since go-live stage A (2026-10-13)
       missedRunGraceMs: 12 * 3_600_000,
       items: null,
       checks: [],
