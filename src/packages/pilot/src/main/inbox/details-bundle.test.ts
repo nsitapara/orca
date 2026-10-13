@@ -302,6 +302,21 @@ describe('readDetailsImage', () => {
     expect(loadDetails(f.root, f.bundle).ref).toEqual(snapshot.ref)
   })
 
+  it('never reads a plain bundle as a prepared one, whatever provenance it claims', () => {
+    const f = fixture()
+    rewrite(f, (b) => {
+      b.provenance = { originatingRunId: 'o', preparingRunId: 'w', itemId: 'in_1', attempt: 1 }
+    })
+    const snapshot = loadDetails(f.root, f.bundle)
+    expect(snapshot.ref.artifacts).toBeUndefined()
+    expect(loadDetails(f.root, f.bundle, { prepared: true }).ref.artifacts?.provenance).toEqual({
+      originatingRunId: 'o',
+      preparingRunId: 'w',
+      itemId: 'in_1',
+      attempt: 1
+    })
+  })
+
   it('takes a plain bundle whose image bytes are not a known format, as before', () => {
     const f = fixture()
     writeFileSync(join(f.dir, 'F2-before.png'), 'not a png yet')
