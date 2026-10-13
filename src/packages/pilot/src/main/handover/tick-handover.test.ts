@@ -8,6 +8,7 @@ import type { SourceAccess } from '../scheduler/tick-decide'
 import { makeRunId, runTick, type TickDeps } from '../scheduler/tick-runner'
 import type { IdsRunner } from '../sources/ids-from'
 import { PilotStore } from '../store/store'
+import { handOverRunEnd } from './hand-over'
 import { HANDOVER_EXPIRY_MS, settles } from './tick-handover'
 
 const people = EMPTY_PEOPLE
@@ -375,4 +376,41 @@ describe('runTick: what a fed stage leaves pending', () => {
       ['WEB-1', 'consumed', 'All checks pass']
     ])
   })
+
+  it.each([
+    ['failed', true],
+    ['timed_out', true],
+    ['done', false],
+    ['cancelled', false]
+  ] as const)(
+    'a run started for a fed id that ends %s puts it back to pending: %s',
+    async (status, reopened) => {
+      let now = NOW
+      const d = handed(['WEB-1'])
+      const clock = { ...d, now: () => now }
+      const first = await runTick(FED, people, clock, { dryRun: false })
+      const run = d.store.runs.forTick(first.tickId)[0]
+      expect(pendingIds(d)).toEqual([])
+      d.store.runs.update(run.id, { status })
+      const ended = { ...run, status }
+      handOverRunEnd(
+        { store: d.store, now: () => now, definitionFor: () => FED, log: () => {} },
+        ended,
+        { status, outcome: status }
+      )
+      d.store.setHandledStatus('starts', run.id, reopened ? 'failed' : 'done', now)
+      expect(pendingIds(d)).toEqual(reopened ? ['WEB-1'] : [])
+      if (!reopened) {
+        return
+      }
+      // retry_after_failure (25m) keeps it pending; past the wait the next tick starts it again.
+      now += 60_000
+      await runTick(FED, people, clock, { dryRun: false })
+      expect(pendingIds(d)).toEqual(['WEB-1'])
+      now += 25 * 60_000
+      await runTick(FED, people, clock, { dryRun: false })
+      expect(pendingIds(d)).toEqual([])
+      expect(d.launched).toEqual(['linear:WEB-1', 'linear:WEB-1'])
+    }
+  )
 })

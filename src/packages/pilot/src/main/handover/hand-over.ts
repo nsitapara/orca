@@ -164,12 +164,16 @@ function plan(deps: HandOverDeps, run: RunRow, end: RunEnd): Plan {
   return { ...planned, note: planned.refused.length > 0 ? planned.refused.join('; ') : null }
 }
 
-// closeRun's handover (run-close.ts): `write` inside the transaction that ends the run writes each id durably, once
-// per (run, receiver, id), and throws when the store does, so the run's end rolls back with it; `after` asks for the
-// receivers' ticks (run: now) once that committed.
+// closeRun's handover (run-close.ts): `write` inside the transaction that ends the run puts a failed run's fed ids
+// back to pending and writes each id it hands over durably, once per (run, receiver, id); it throws when the store
+// does, so the run's end rolls back with it. `after` asks for the receivers' ticks (run: now) once that committed.
 export function runEndHandover(deps: HandOverDeps): RunEndHandover {
   return {
     write(run, end) {
+      // A run started for a handed-over id that failed: the id is pending again, for retry_after_failure.
+      if (end.status === 'failed' || end.status === 'timed_out') {
+        deps.store.handovers.reopen(run.id)
+      }
       const planned = plan(deps, run, end)
       for (const row of planned.rows) {
         deps.store.handovers.add(row)
