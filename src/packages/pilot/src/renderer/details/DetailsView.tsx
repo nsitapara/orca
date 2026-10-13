@@ -25,7 +25,12 @@ function BlockView({
     case 'facts':
       return <FactsBlock block={block} />
     case 'diff':
-      return <DiffBlock block={block} />
+      return (
+        <DiffBlock
+          block={block}
+          patchStats={snapshot.ref.artifacts?.files.find((f) => f.ref === block.patch)?.diff}
+        />
+      )
     case 'screens':
       return <ScreensBlockView block={block} loadImage={loadImage} />
     case 'shots':

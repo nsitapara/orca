@@ -51,11 +51,29 @@ function omittedText(file: DiffFile, inPatch: boolean): string {
   return `${file.path}: diff not shown here, too large; see the MR`
 }
 
-function moreFilesText(count: number, inPatch: boolean): string {
-  if (inPatch) {
-    return `${count} more files not shown (in the patch)`
+type PatchFileStats = { path: string; added: number; removed: number }
+
+const counted = (n: number, one: string): string => `${n} ${one}${n === 1 ? '' : 's'}`
+
+// What a trimmed drafted diff leaves out, said plainly before its files, so an approval of it is an informed one:
+// the omitted and dropped files, and their +/- lines (from the patch's own stats, when Pilot read them).
+export function trimmedText(block: DiffBlockData, stats?: PatchFileStats[]): string | null {
+  const files = block.files ?? []
+  const omitted = files.filter((file) => file.omitted)
+  const dropped = block.more_files ?? 0
+  if (omitted.length === 0 && dropped === 0) {
+    return null
   }
-  return `${count} more files not shown here; see the MR`
+  const shown = new Set(files.filter((file) => !file.omitted).map((file) => file.path))
+  const hidden = stats
+    ? stats.filter((stat) => !shown.has(stat.path))
+    : omitted.map((file) => ({ added: file.added ?? 0, removed: file.removed ?? 0 }))
+  const lines = hidden.reduce((n, stat) => n + stat.added + stat.removed, 0)
+  const what = counted(omitted.length + dropped, 'file')
+  if (stats || dropped === 0) {
+    return `${what} / ${counted(lines, 'line')} not shown — only the patch file has them`
+  }
+  return `${what} not shown — only the patch file has them`
 }
 
 function FileView({
@@ -137,15 +155,24 @@ function Checks({ checks }: { checks: string[] }): React.JSX.Element {
   )
 }
 
-export function DiffBlock({ block }: { block: DiffBlockData }): React.JSX.Element {
+export function DiffBlock({
+  block,
+  patchStats
+}: {
+  block: DiffBlockData
+  // The patch's own per-file stats (the prepared bundle's artifact manifest), when Pilot read them.
+  patchStats?: PatchFileStats[]
+}): React.JSX.Element {
   const files = block.files ?? []
   const [open, setOpen] = useState<boolean[]>(() => files.map(startsOpen))
   const anyClosed = open.some((o) => !o)
   const inPatch = Boolean(block.patch)
+  const trimmed = inPatch ? trimmedText(block, patchStats) : null
   const set = (i: number, value: boolean) =>
     setOpen((now) => now.map((o, n) => (n === i ? value : o)))
   return (
     <Section title={block.title} cls="dt-diff">
+      {trimmed ? <p className="dt-missing font-semibold">{trimmed}</p> : null}
       {files.length > 1 ? (
         <button
           type="button"
@@ -164,8 +191,8 @@ export function DiffBlock({ block }: { block: DiffBlockData }): React.JSX.Elemen
           onToggle={() => set(i, !open[i])}
         />
       ))}
-      {block.more_files ? (
-        <p className="dt-missing">{moreFilesText(block.more_files, inPatch)}</p>
+      {block.more_files && !inPatch ? (
+        <p className="dt-missing">{block.more_files} more files not shown here; see the MR</p>
       ) : null}
       {(block.checks ?? []).length ? <Checks checks={block.checks ?? []} /> : null}
     </Section>
