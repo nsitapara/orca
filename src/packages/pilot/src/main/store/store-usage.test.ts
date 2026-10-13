@@ -43,8 +43,8 @@ function setup(): { store: PilotStore; file: string } {
 }
 
 describe('UsageStore', () => {
-  it('is schema 8', () => {
-    expect(setup().store.schemaVersion()).toBe(8)
+  it('is schema 9', () => {
+    expect(setup().store.schemaVersion()).toBe(9)
   })
 
   it('lists agent steps that ended and were never measured', () => {

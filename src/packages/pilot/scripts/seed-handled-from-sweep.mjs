@@ -30,9 +30,9 @@ Without --apply it is a dry run: it prints the counts and writes nothing.
 // below against the new schema, then raise this. V2 added status (DEFAULT 'started') and failed_at
 // (NULL), which the insert leaves to their defaults: a seeded key is an attempt the sweep made.
 // V3 added steps.launch_args_json only; handled is unchanged. V4 added step usage and V5 inbox_items'
-// Details columns; V6 adds inbox preparation metadata, V7 a "Not prepared" notice's key and V8 a tick's warnings. All
-// leave handled unchanged.
-export const SEED_SCHEMA_VERSION = 8
+// Details columns; V6 adds inbox preparation metadata, V7 a "Not prepared" notice's key, V8 a tick's warnings and V9
+// the handovers table and a tick's trigger. All leave handled unchanged.
+export const SEED_SCHEMA_VERSION = 9
 const HANDLED_COLUMNS = ['automation_id', 'once_key', 'run_id', 'at', 'status', 'failed_at']
 const BUSY_TIMEOUT_MS = 5000
 const MIGRATIONS_FILE = fileURLToPath(new URL('../src/main/store/migrations.ts', import.meta.url))

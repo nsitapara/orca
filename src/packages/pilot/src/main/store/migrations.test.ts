@@ -74,6 +74,7 @@ describe('migrate', () => {
       'events',
       'field_cache',
       'handled',
+      'handovers',
       'inbox_items',
       'queue',
       'runs',
@@ -240,8 +241,8 @@ describe('migrate', () => {
       "INSERT INTO inbox_items (id, automation_id, person, type, title, digest, created_at, updated_at) VALUES ('i1', 'a', 'p', 'question', 't', 'd', 1, 1)"
     )
     migrate(db)
-    expect(PILOT_SCHEMA_VERSION).toBe(8)
-    expect(db.pragma('user_version', { simple: true })).toBe(8)
+    expect(PILOT_SCHEMA_VERSION).toBe(9)
+    expect(db.pragma('user_version', { simple: true })).toBe(9)
     expect(
       firstRow(
         db,
@@ -267,6 +268,53 @@ describe('migrate', () => {
       automation_id: 'dev-e2e-fix-start',
       warnings_json: '[]'
     })
+  })
+
+  it('moves a v8 database to v9: a handovers table, and each tick gains its trigger, none on the ticks it has', () => {
+    const db = openDb()
+    migrate(db, 8)
+    db.exec(
+      "INSERT INTO ticks (automation_id, started_at, status) VALUES ('dev-e2e-fix-start', 1, 'ok')"
+    )
+    migrate(db)
+    expect(firstRow(db, 'SELECT automation_id, trigger_json FROM ticks')).toEqual({
+      automation_id: 'dev-e2e-fix-start',
+      trigger_json: null
+    })
+    expect(columnsOf(db, 'handovers')).toEqual([
+      'id',
+      'sender_id',
+      'sender_run_id',
+      'receiver_id',
+      'item_id',
+      'created_at',
+      'state',
+      'consumed_at',
+      'tick_id',
+      'verdict',
+      'reason',
+      'run_id'
+    ])
+  })
+
+  it('keeps one handover per (sender run, receiver, id)', () => {
+    const db = openDb()
+    migrate(db)
+    const put = db.prepare(
+      'INSERT OR IGNORE INTO handovers (sender_id, sender_run_id, receiver_id, item_id, created_at) VALUES (?, ?, ?, ?, ?)'
+    )
+    put.run('a', 'run-1', 'b', 'WEB-1', 1)
+    put.run('a', 'run-1', 'b', 'WEB-1', 2)
+    put.run('a', 'run-2', 'b', 'WEB-1', 3)
+    expect(
+      db
+        .prepare('SELECT sender_run_id, state FROM handovers ORDER BY id')
+        .all()
+        .map((r) => ({ ...r }))
+    ).toEqual([
+      { sender_run_id: 'run-1', state: 'pending' },
+      { sender_run_id: 'run-2', state: 'pending' }
+    ])
   })
 
   it('leaves a database migrated by a newer process unchanged', () => {
