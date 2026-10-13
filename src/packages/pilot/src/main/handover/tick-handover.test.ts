@@ -1,10 +1,13 @@
 import { describe, expect, it } from 'vitest'
+import type { ItemDecision, Verdict } from '../../shared/api-types'
 import { testDefinition, testStep } from '../../shared/definition/__fixtures__/definition'
+import type { HandledState } from '../../shared/tick/decide'
 import { EMPTY_PEOPLE } from '../../shared/people'
 import { fakeFieldDeps, testItem } from '../fields/__fixtures__/field-deps'
 import type { SourceAccess } from '../scheduler/tick-decide'
 import { makeRunId, runTick, type TickDeps } from '../scheduler/tick-runner'
 import { PilotStore } from '../store/store'
+import { HANDOVER_EXPIRY_MS, settles } from './tick-handover'
 
 const people = EMPTY_PEOPLE
 const repoItem = testItem({ kind: 'repo', key: 'repo:web-platform', label: 'web-platform' })
@@ -93,7 +96,7 @@ describe('runTick: a stage fed ids by an earlier stage (job.feeds … pass)', ()
       senderRunId: 'run-1',
       receiverId: 'starts',
       itemIds: ['WEB-1', 'WEB-2', 'WEB-404', 'WEB-3'],
-      at: 1
+      at: d.now()
     })
     return d
   }
@@ -106,7 +109,7 @@ describe('runTick: a stage fed ids by an earlier stage (job.feeds … pass)', ()
       ['WEB-2', 'started'],
       ['WEB-3', 'over_limit']
     ])
-    expect(d.store.handovers.pending('starts', 10).map((h) => h.itemId)).toEqual(['WEB-3'])
+    expect(d.store.handovers.pending('starts', 10, 0).map((h) => h.itemId)).toEqual(['WEB-3'])
     const consumed = d.store.handovers.consumedBy([result.tickId]).get(result.tickId) ?? []
     expect(consumed.map((h) => [h.itemId, h.verdict, h.runId, h.reason])).toEqual([
       ['WEB-1', 'started', makeRunId('starts', d.now(), 1, result.tickId), expect.any(String)],
@@ -120,7 +123,7 @@ describe('runTick: a stage fed ids by an earlier stage (job.feeds … pass)', ()
     const d = fedDeps()
     const result = await runTick(STAGE_2, people, d, { dryRun: true })
     expect(result.handover?.read).toEqual(['WEB-1', 'WEB-2', 'WEB-404', 'WEB-3'])
-    expect(d.store.handovers.pending('starts', 10)).toHaveLength(4)
+    expect(d.store.handovers.pending('starts', 10, 0)).toHaveLength(4)
     expect(d.launched).toEqual([])
   })
 
@@ -133,7 +136,7 @@ describe('runTick: a stage fed ids by an earlier stage (job.feeds … pass)', ()
     })
     const result = await runTick(STAGE_2, people, d, { dryRun: false })
     expect(result.status).toBe('failed')
-    expect(d.store.handovers.pending('starts', 10)).toHaveLength(4)
+    expect(d.store.handovers.pending('starts', 10, 0)).toHaveLength(4)
   })
 
   it('records what triggered it, from the run that handed the ids over', async () => {
@@ -159,5 +162,149 @@ describe('runTick: a stage fed ids by an earlier stage (job.feeds … pass)', ()
     const solo = testDefinition({ id: 'solo', items: null, workspace: { kind: 'main_checkout' } })
     const result = await runTick(solo, people, deps(), { dryRun: true })
     expect(result.handover).toBeUndefined()
+  })
+})
+
+describe('settles: a fed id is consumed only when its tick started a run or the item definitely needs nothing', () => {
+  const RETRY = 25 * 60_000
+  const decision = (verdict: Verdict): ItemDecision => ({
+    key: 'linear:WEB-1',
+    label: 'WEB-1',
+    verdict,
+    reason: 'r',
+    checks: [],
+    onceKey: 'WEB-1',
+    fields: {}
+  })
+  const handled = (state: HandledState) => new Map([['WEB-1', state]])
+  const DONE: HandledState = { status: 'done', failedAt: null }
+  const FAILED: HandledState = { status: 'failed', failedAt: 1 }
+  it.each([
+    ['a run started', decision('started'), new Map(), RETRY, true],
+    ['a run held for an ask-first card', decision('asked'), new Map(), RETRY, true],
+    ['out of scope', decision('out_of_scope'), new Map(), RETRY, true],
+    ['baselined (recorded as handled)', decision('baselined'), new Map(), RETRY, true],
+    ['already handled (once_per)', decision('notdue'), handled(DONE), RETRY, true],
+    [
+      'handled by a failed run, with no retry_after_failure',
+      decision('notdue'),
+      handled(FAILED),
+      null,
+      true
+    ],
+    ['gone from its source (closed, or not found)', undefined, new Map(), RETRY, true],
+    ['waiting out retry_after_failure', decision('notdue'), handled(FAILED), RETRY, false],
+    ['not due by its scope, never handled', decision('notdue'), new Map(), RETRY, false],
+    ['skipped by a check, quota or a busy worktree', decision('skipped'), new Map(), RETRY, false],
+    ['over the limit', decision('over_limit'), new Map(), RETRY, false]
+  ] as [string, ItemDecision | undefined, Map<string, HandledState>, number | null, boolean][])(
+    '%s → %s',
+    (_name, d, states, retry, settled) => {
+      expect(settles(d, states, retry)).toBe(settled)
+    }
+  )
+})
+
+describe('runTick: what a fed stage leaves pending', () => {
+  const NOW = Date.UTC(2026, 9, 13, 18, 6)
+  const FED = testDefinition({
+    id: 'starts',
+    file: '/a/starts.yaml',
+    oncePer: '{ticket.id}',
+    retryAfterFailureMs: 25 * 60_000,
+    workspace: { kind: 'main_checkout' },
+    items: {
+      kind: 'linear_ticket',
+      where: { ids_from: { feed: true } },
+      match: [],
+      customFields: []
+    },
+    job: { id: '13', name: null, stage: 2, label: 'Start fixes', feeds: [] }
+  })
+  const linear: SourceAccess = {
+    list: async (_def, ctx) => ({
+      items: (ctx.ids ?? []).map((id) =>
+        testItem({
+          kind: 'linear_ticket',
+          key: `linear:${id}`,
+          label: id,
+          fields: { 'ticket.id': id }
+        })
+      ),
+      warnings: []
+    }),
+    scope: () => null
+  }
+  function handed(ids: string[], at = NOW - 60_000) {
+    const d = deps({ sources: linear, now: () => NOW })
+    d.store.handovers.add({
+      senderId: 'pipelines',
+      senderRunId: 'run-1',
+      receiverId: 'starts',
+      itemIds: ids,
+      at
+    })
+    return d
+  }
+  const pendingIds = (d: ReturnType<typeof handed>) =>
+    d.store.handovers.pending('starts', 10, 0).map((h) => h.itemId)
+
+  it('consumes an already handled ticket, and keeps one waiting out retry_after_failure', async () => {
+    const d = handed(['WEB-1', 'WEB-2'])
+    d.store.markHandled('starts', 'WEB-1', 'old-1', 1)
+    d.store.setHandledStatus('starts', 'old-1', 'done', 1)
+    d.store.markHandled('starts', 'WEB-2', 'old-2', 1)
+    d.store.setHandledStatus('starts', 'old-2', 'failed', NOW - 60_000)
+    const result = await runTick(FED, people, d, { dryRun: false })
+    expect(result.decisions.map((x) => [x.label, x.verdict])).toEqual([
+      ['WEB-1', 'notdue'],
+      ['WEB-2', 'notdue']
+    ])
+    expect(pendingIds(d)).toEqual(['WEB-2'])
+  })
+
+  it('keeps a ticket its checks skipped, then consumes it on the tick that starts its run', async () => {
+    const d = handed(['WEB-1'])
+    const checked = { ...FED, checks: [{ kind: 'worktree_exists' as const }] }
+    await runTick(checked, people, d, { dryRun: false })
+    expect(pendingIds(d)).toEqual(['WEB-1'])
+    await runTick(FED, people, d, { dryRun: false })
+    expect(pendingIds(d)).toEqual([])
+    expect(d.launched).toEqual(['linear:WEB-1'])
+  })
+
+  it('consumes a ticket out of scope', async () => {
+    const d = handed(['WEB-1'])
+    const outside = { ...FED, items: { ...FED.items!, match: ["{ticket.id} == 'WEB-9'"] } }
+    const result = await runTick(outside, people, d, { dryRun: false })
+    expect(result.decisions.map((x) => x.verdict)).toEqual(['out_of_scope'])
+    expect(pendingIds(d)).toEqual([])
+  })
+
+  it('expires a handover pending 7 days on the next real tick, without reading it; a dry run leaves it be', async () => {
+    const d = handed(['WEB-1'], NOW - HANDOVER_EXPIRY_MS - 1)
+    d.store.handovers.add({
+      senderId: 'pipelines',
+      senderRunId: 'run-2',
+      receiverId: 'starts',
+      itemIds: ['WEB-2'],
+      at: NOW - 60_000
+    })
+    const dry = await runTick(FED, people, d, { dryRun: true })
+    expect(dry.handover?.read).toEqual(['WEB-2'])
+    expect(pendingIds(d)).toEqual(['WEB-1', 'WEB-2'])
+    const real = await runTick(FED, people, d, { dryRun: false })
+    expect(real.handover?.read).toEqual(['WEB-2'])
+    expect(d.launched).toEqual(['linear:WEB-2'])
+    expect(pendingIds(d)).toEqual([])
+    expect(d.store.handovers.consumedBy([real.tickId]).get(real.tickId)).toEqual([
+      expect.objectContaining({
+        itemId: 'WEB-1',
+        state: 'expired',
+        tickId: real.tickId,
+        consumedAt: NOW
+      }),
+      expect.objectContaining({ itemId: 'WEB-2', state: 'consumed', verdict: 'started' })
+    ])
   })
 })

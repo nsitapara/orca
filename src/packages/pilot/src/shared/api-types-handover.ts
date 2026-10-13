@@ -2,7 +2,8 @@ import type { Verdict } from './api-types'
 
 // Multi-stage jobs (job.feeds … pass): an id one stage's run handed the next stage, pending until a tick of that stage
 // reads it, then consumed with how that tick decided its item.
-export type HandoverState = 'pending' | 'consumed'
+// pending until a tick of the receiver settles it: consumed, or expired after 7 days pending (kept, then pruned).
+export type HandoverState = 'pending' | 'consumed' | 'expired'
 export type HandoverRow = {
   id: number
   senderId: string
@@ -11,6 +12,7 @@ export type HandoverRow = {
   itemId: string
   createdAt: number
   state: HandoverState
+  // When it stopped pending: consumed, or expired.
   consumedAt: number | null
   // The receiving tick that read it, its verdict on the item (null: the source returned no such item), the reason,
   // and the run it started.
@@ -18,6 +20,8 @@ export type HandoverRow = {
   verdict: Verdict | null
   reason: string | null
   runId: string | null
+  // The sender's stage number, filled for Activity from the loaded definitions (null: no longer a stage).
+  senderStage?: number | null
 }
 // What a feed's run: now records on the tick it starts: the sender's run and the ids it handed over.
 export type TickTrigger = {

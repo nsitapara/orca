@@ -134,6 +134,8 @@ describe('Pilot API handlers', () => {
       [fed, trigger, ['WEB-2123']],
       [plain, null, []]
     ])
+    // The sender is no loaded stage here, so it has no stage number.
+    expect(ticks[0].handedOver?.[0].senderStage).toBeNull()
   })
 
   it('returns no activity for an unknown id', () => {

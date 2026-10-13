@@ -251,7 +251,7 @@ async function idsForTick(
     return null
   }
   const spec = idsFromSchema.parse(raw)
-  const fed = spec.feed ? deps.store.handovers.pending(def.id, MAX_IDS) : []
+  const fed = spec.feed ? deps.store.handovers.fresh(def.id, MAX_IDS, deps.now()) : []
   if (spec.run === undefined) {
     return mergeIds(fed, [])
   }

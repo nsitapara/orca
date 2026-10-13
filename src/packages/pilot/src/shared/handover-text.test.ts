@@ -55,6 +55,22 @@ describe('handoverActivityLines: what Activity says about a tick of a fed stage'
       },
       ['Read handed-over ids: WEB-2123']
     ],
+    [
+      'a tick that expired a handover pending 7 days',
+      {
+        trigger: null,
+        handedOver: [
+          row({ state: 'expired', verdict: null, senderStage: 1 }),
+          row({ id: 2, itemId: 'WEB-9' })
+        ]
+      },
+      ['Read handed-over ids: WEB-9', 'Handover of WEB-2123 from stage 1 expired after 7 days']
+    ],
+    [
+      'an expired handover from a sender that is no stage any more',
+      { trigger: null, handedOver: [row({ state: 'expired', verdict: null })] },
+      ['Handover of WEB-2123 from dev-e2e-fix expired after 7 days']
+    ],
     ['a tick that read none', { trigger: null, handedOver: [] }, []],
     ['a tick from before handovers existed', {}, []]
   ])('%s', (_name, tick, lines) => {
@@ -121,7 +137,12 @@ describe('lastHandoverText: the job page arrow’s most recent handover and how 
       ],
       'Last: WEB-2123 waiting, WEB-9 not read · 1 min ago'
     ],
-    ['one skipped', [row({ verdict: 'skipped' })], 'Last: WEB-2123 skipped · 5 min ago']
+    ['one skipped', [row({ verdict: 'skipped' })], 'Last: WEB-2123 skipped · 5 min ago'],
+    [
+      'one expired',
+      [row({ state: 'expired', verdict: null })],
+      'Last: WEB-2123 expired · 5 min ago'
+    ]
   ])('%s', (_name, rows, text) => {
     expect(lastHandoverText(rows, NOW)).toBe(text)
   })

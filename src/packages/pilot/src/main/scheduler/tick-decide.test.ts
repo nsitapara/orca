@@ -361,14 +361,14 @@ describe('decideTickItems: where.ids_from', () => {
       senderRunId: 'r1',
       receiverId: 'starts',
       itemIds: ['WEB-2', 'web-1'],
-      at: 1
+      at: NOW
     })
     store.handovers.add({
       senderId: 'pipelines',
       senderRunId: 'r1',
       receiverId: 'other',
       itemIds: ['X-9'],
-      at: 1
+      at: NOW
     })
     const out = await decide()
     expect(seen).toEqual([['WEB-2', 'web-1', 'WEB-3']])
@@ -389,7 +389,7 @@ describe('decideTickItems: where.ids_from', () => {
       senderRunId: 'r1',
       receiverId: 'starts',
       itemIds: ['WEB-7'],
-      at: 1
+      at: NOW
     })
     await decide()
     expect(seen).toEqual([[], ['WEB-7']])

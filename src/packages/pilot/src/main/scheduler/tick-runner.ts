@@ -5,7 +5,7 @@ import type {
   TickTrigger,
   Verdict
 } from '../../shared/api-types'
-import { consumeFed, handoverOf } from '../handover/tick-handover'
+import { consumeFed, expireStale, handoverOf } from '../handover/tick-handover'
 import type { AutomationDefinition } from '../../shared/definition/types'
 import type { PeopleDirectory } from '../../shared/people'
 import { usesHandled, workspacePathOf } from '../../shared/tick/decide'
@@ -254,8 +254,11 @@ export async function runTick(
   let warnings: string[]
   let fed: HandoverRow[]
   try {
-    if (opts.trigger && !opts.dryRun) {
-      deps.store.handovers.setTickTrigger(tickId, opts.trigger)
+    if (!opts.dryRun) {
+      if (opts.trigger) {
+        deps.store.handovers.setTickTrigger(tickId, opts.trigger)
+      }
+      expireStale(deps.store, def, tickId, deps.now())
     }
     const outcome = await decide(def, people, deps, opts, tickId)
     decisions = outcome.decisions
@@ -283,7 +286,7 @@ export async function runTick(
     }
     deps.store.recordDecisions(tickId, decisions, runIds)
     if (!opts.dryRun && fed.length > 0) {
-      consumeFed(deps.store, fed, decisions, runIds, tickId, deps.now())
+      consumeFed(deps.store, def, fed, decisions, runIds, tickId, deps.now())
     }
     deps.store.finishTick(tickId, 'ok', null, countVerdicts(decisions), deps.now(), warnings)
     const handover = handoverOf(def, fed, decisions)

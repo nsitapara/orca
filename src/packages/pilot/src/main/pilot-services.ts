@@ -14,7 +14,7 @@ import { startRunEntry } from './actions/start-run-entry'
 import { buildActionCatalog } from './actions/catalog'
 import type { ActionCatalog } from './actions/types'
 import { definitionIo, liveDefinitions } from './definitions/live'
-import { handOverRunEnd, type HandOverDeps } from './handover/hand-over'
+import { handoverService } from './handover/service'
 import { buildInboxDeps } from './inbox/inbox-service'
 import type { LoadedDefinitions } from './definitions/loader'
 import { mergeRepoProblems, type RepoProblem } from './definitions/repo-problems'
@@ -132,7 +132,7 @@ function openPilot(
   const definitionFor = (id: string) =>
     definitions.current().definitions.find((d) => d.id === id) ?? null
   // A stage's run end hands over to the next stage; its run: now reaches the scheduler once made (below).
-  const handover: HandOverDeps = { store, now, definitionFor, log }
+  const handover = handoverService({ store, now, definitionFor, log })
   // The one run engine of this process: its per-run lock and its set of runs being opened live in it.
   const wired = wireRunEngine({
     runtime,
@@ -163,7 +163,7 @@ function openPilot(
     log,
     // A stage's run hands its outputs to the next stage (job.feeds); an answer run's reach its cards (G6).
     onRunEnd: (run, end) => {
-      handOverRunEnd(handover, run, end)
+      handover.runEnded(run, end)
       answerRunEnded(store, run)
     },
     // {run.answer}: the free text that started an ask-first or answer run.
@@ -254,6 +254,7 @@ function openPilot(
       await softly('usage report', () => usageReports.refreshIfDue(), log)
       await softly('answers', () => dispatcher?.pass(), log)
       await softly('vault export', () => exporter?.pass(), log)
+      await softly('handovers', () => handover.housekeep(), log)
     },
     reposListed: (repos) => reposListed(runtime, repos),
     repoProblem: (def, message) =>
@@ -261,7 +262,7 @@ function openPilot(
     newPass: () => createPassFetchCache(`pass-${now()}`, glabApiForRepo),
     log
   })
-  handover.trigger = (id, cause) => scheduler.trigger(id, cause)
+  handover.deps.trigger = (id, cause) => scheduler.trigger(id, cause)
   opened.push(() => scheduler.stop())
   // The attach hooks decide (pilotSchedulerEnabled); a caller that doesn't say gets no scheduler.
   if (schedulerOn) {
