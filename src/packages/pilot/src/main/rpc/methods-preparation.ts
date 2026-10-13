@@ -3,7 +3,7 @@ import { defineMethod } from '../../../../../main/runtime/rpc/core'
 import type { RpcCallerIdentity } from '../../../../../main/runtime/rpc/rpc-caller-identity'
 import type { PilotContext } from '../pilot-services'
 import { fieldsForRun } from '../inbox/run-fields'
-import { completePreparation } from '../inbox/preparation'
+import { completePreparation, retryPreparation } from '../inbox/preparation'
 import { runBinding, type CallBinding } from './run-binding'
 import { inboxDeps } from './methods-inbox'
 
@@ -45,8 +45,24 @@ export function preparationBinding(
   return bound
 }
 
+export const RETRY_BY_PERSON = "Retry preparation from Pilot's window or a paired device"
+
 export function buildPreparationMethods(ctx: () => PilotContext) {
   return [
+    // A person's Retry on a blocked card (the Inbox's button): the desktop or a paired device, never the local CLI,
+    // where any agent runs. It only requeues; the worker job still claims it under R-P1's scope.
+    defineMethod({
+      name: 'pilot.inbox.prepareRetry',
+      permission: 'workspace',
+      params: z.object({ id: z.string().min(1) }),
+      handler: (p, rpc) => {
+        const kind = rpc.caller?.kind
+        if (kind !== 'desktop' && kind !== 'paired-device') {
+          throw new Error(RETRY_BY_PERSON)
+        }
+        return retryPreparation(inboxDeps(ctx()), p.id)
+      }
+    }),
     defineMethod({
       name: 'pilot.inbox.prepareClaim',
       permission: 'workspace',
