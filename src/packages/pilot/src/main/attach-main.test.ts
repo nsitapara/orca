@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { OrcaRuntimeService } from '../../../../main/runtime/orca-runtime'
 import { setAppEnvironment, type AppEnvironment } from '../../../../shared/app-environment'
+import { setActiveSink } from '../../../../main/observability/tracer'
 
 const m = vi.hoisted(() => ({
   start: vi.fn(),
@@ -9,6 +10,7 @@ const m = vi.hoisted(() => ({
   codexQuota: vi.fn(),
   onWillQuit: vi.fn()
 }))
+const dog = vi.hoisted(() => ({ begin: vi.fn(), end: vi.fn(), stop: vi.fn() }))
 const host = vi.hoisted(() => ({
   app: { isPackaged: false, setName: () => {}, getAppPath: () => '/repo' },
   state: { isServeMode: false }
@@ -18,6 +20,7 @@ vi.mock('../../../../main/startup/main-process-state', () => ({ mainProcessState
 vi.mock('./pilot-services', () => ({ startPilotServices: m.start }))
 vi.mock('./fields/claude-quota', () => ({ claudeQuotaReader: () => m.quota }))
 vi.mock('./fields/codex-quota', () => ({ codexQuotaReader: () => m.codexQuota }))
+vi.mock('./startup/startup-watchdog', () => ({ startStartupWatchdog: () => dog }))
 
 import { attachPilotMain } from './attach-main'
 
@@ -25,7 +28,7 @@ const runtime = {} as OrcaRuntimeService
 
 describe('attachPilotMain', () => {
   beforeEach(() => {
-    for (const fn of Object.values(m)) {
+    for (const fn of [...Object.values(m), ...Object.values(dog)]) {
       fn.mockReset()
     }
     host.app.isPackaged = true
@@ -41,6 +44,7 @@ describe('attachPilotMain', () => {
     } as unknown as AppEnvironment)
   })
   afterEach(() => {
+    setActiveSink(null)
     delete (process as { resourcesPath?: string }).resourcesPath
     vi.unstubAllEnvs()
     vi.restoreAllMocks()
@@ -104,4 +108,43 @@ describe('attachPilotMain', () => {
     expect(m.start).toHaveBeenCalledTimes(1)
     expect(process.env.ORCA_CLI_INSTALL_PATH).toBe('/usr/local/bin/pilot')
   })
+
+  // The startup watchdog (packaged only) watches services, then launch until the main window opens.
+  it.each([
+    ['packaged desktop', true, false, false, ['services', 'launch'], 'end'],
+    [
+      'packaged desktop whose store stays locked',
+      true,
+      false,
+      true,
+      ['services', 'launch'],
+      'failed'
+    ],
+    ['packaged serve', true, true, false, ['services'], 'end'],
+    ['dev', false, false, false, [], 'end']
+  ])(
+    '%s: the watchdog watches %j and the services phase is traced as %s',
+    (_name, packaged, serve, fails, watched, servicesEvent) => {
+      host.app.isPackaged = packaged
+      host.state.isServeMode = serve
+      vi.spyOn(console, 'error').mockImplementation(() => {})
+      const records: unknown[] = []
+      setActiveSink({ push: (record) => records.push(record), flush: () => {}, close: () => {} })
+      if (fails) {
+        m.start.mockImplementation(() => {
+          throw new Error('database is locked')
+        })
+      } else {
+        m.start.mockReturnValue({ stop: m.stop, context: {} })
+      }
+      attachPilotMain(runtime)
+      expect(dog.begin.mock.calls.map(([phase]) => phase)).toEqual(watched)
+      expect(records).toContainEqual(
+        expect.objectContaining({
+          name: 'pilot.startup',
+          attributes: expect.objectContaining({ event: servicesEvent, phase: 'services' })
+        })
+      )
+    }
+  )
 })
