@@ -12,6 +12,7 @@ import { describe, expect, it } from 'vitest'
 import { parseAutomationYaml } from '../../shared/definition/parse'
 import { parsePeopleYaml } from '../../shared/people'
 import { addInboxItem } from '../inbox/inbox-add'
+import { addReady } from '../inbox/__fixtures__/prepared'
 import { PilotStore } from '../store/store'
 import { VaultExporter } from './export'
 import { jobFolderFor } from './job-folder'
@@ -153,7 +154,7 @@ describe('VaultExporter: branch notes', () => {
   it("keeps a read-only block of the branch's cards that vault.py can't parse as items", () => {
     const { folder, exporter, inbox } = setup()
     writeFileSync(join(folder, 'web-1493-a.md'), '# web-1493-a\nmy own notes\n')
-    addInboxItem(inbox, {
+    addReady(inbox, {
       runId: 'run-1',
       type: 'action',
       title: "Push !1561's 2 commits to origin?",

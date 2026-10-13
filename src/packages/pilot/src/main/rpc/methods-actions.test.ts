@@ -54,7 +54,7 @@ function setup(powers = '') {
     })
   }
   const push = {
-    name: 'push',
+    name: 'publish',
     power: 'push',
     label: 'Push',
     usage: 'push …',
@@ -64,7 +64,7 @@ function setup(powers = '') {
       .fn()
       .mockResolvedValue({ outcome: 'done', detail: 'pushed', link: null, log: null, onYou: false })
   } as ActionEntry
-  const actions = { entries: () => [push], get: (n: string) => (n === 'push' ? push : null) }
+  const actions = { entries: () => [push], get: (n: string) => (n === 'publish' ? push : null) }
   const host: PilotHost = {
     processKind: 'main',
     dirs: [dir],
@@ -93,12 +93,12 @@ function setup(powers = '') {
   return { store, push, find, call }
 }
 
-const PUSH = { action: 'push', args: { argv: ['a'] } }
+const PUSH = { action: 'publish', args: { argv: ['a'] } }
 
 describe('action RPC', () => {
   it.each([
-    [{ action: 'push', args: { argv: ['a'] } }, true],
-    [{ action: 'push', args: ['a'] }, false],
+    [{ action: 'publish', args: { argv: ['a'] } }, true],
+    [{ action: 'publish', args: ['a'] }, false],
     [{ action: '', args: {} }, false],
     [{ action: 'linear_comment', args: { issue: 'WEB-1', body: 'x'.repeat(64 * 1024) } }, false]
   ])('checks run params %#', (params, ok) => {
@@ -108,7 +108,7 @@ describe('action RPC', () => {
 
   it('lists the catalog', () => {
     expect(setup().call('pilot.action.list', null)).toEqual([
-      { name: 'push', power: 'push', label: 'Push', usage: 'push …' }
+      { name: 'publish', power: 'push', label: 'Push', usage: 'push …' }
     ])
   })
 
@@ -163,7 +163,7 @@ describe('action RPC', () => {
     expect(await call('pilot.action.run', { ...PUSH, ...extra }, ctx)).toMatchObject(expected)
     expect(push.run).toHaveBeenCalledTimes(runs)
     const status = runs ? 'done' : 'refused'
-    expect(store.actions.get(1)).toMatchObject({ action: 'push', status })
+    expect(store.actions.get(1)).toMatchObject({ action: 'publish', status })
   })
 
   it('lists the catalog for any caller', () => {
@@ -194,7 +194,11 @@ describe('action RPC', () => {
       detail: expect.stringContaining(message)
     })
     expect(push.run).not.toHaveBeenCalled()
-    expect(store.actions.get(1)).toMatchObject({ action: 'push', status: 'refused', runId: null })
+    expect(store.actions.get(1)).toMatchObject({
+      action: 'publish',
+      status: 'refused',
+      runId: null
+    })
   })
 
   it("runs an action the env step's run has the power for", async () => {
@@ -207,7 +211,7 @@ describe('action RPC', () => {
 })
 
 describe('action cards filed through pilot.inbox.add', () => {
-  const CARD = { type: 'action', title: 'Push?', action: 'push', actionArgs: { argv: ['a'] } }
+  const CARD = { type: 'action', title: 'Push?', action: 'publish', actionArgs: { argv: ['a'] } }
 
   it('files one the filing run has the power for', () => {
     const { call } = setup('push')
@@ -220,7 +224,7 @@ describe('action cards filed through pilot.inbox.add', () => {
     [
       "the run's automation lacks the power",
       { ...CARD, runId: 'run-1', stepIdx: 0 },
-      '"Fix CI" doesn\'t have the push power, so it can\'t propose push'
+      '"Fix CI" doesn\'t have the push power, so it can\'t propose publish'
     ],
     [
       'a job-wide card from an automation without it',

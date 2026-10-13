@@ -37,8 +37,7 @@ function setup() {
     now: () => 100,
     definitions: () => [def.ok ? def.definition : (null as never)],
     people: () => (people.ok ? people.directory : (null as never)),
-    newId: () => `in_${String(++n).padStart(16, '0')}`,
-    actionNeedsEvidence: (name) => name === 'push' || name === 'post_review'
+    newId: () => `in_${String(++n).padStart(16, '0')}`
   }
   return { store, deps }
 }
@@ -74,15 +73,16 @@ describe('an evidence-needing action from a run', () => {
     expect(store.inbox.list()).toEqual([])
   })
 
-  it('is taken with one, and outside a run (an imported card) as before', () => {
+  // R-P5: whoever adds it and however bound; an imported card is the one exception (it comes in as Needs evidence).
+  it('is taken with one, refused outside a run without one, and imported as it is', () => {
     const { deps } = setup()
     expect(addInboxItem(deps, { ...PUSH, preparation: PREPARATION })).toMatchObject({
       existing: false
     })
     const { runId: _run, ...card } = PUSH
-    expect(addInboxItem(deps, { ...card, automationId: 'ci', itemKey: 'mr:1' })).toMatchObject({
-      existing: false
-    })
+    const named = { ...card, automationId: 'ci', itemKey: 'mr:2' }
+    expect(() => addInboxItem(deps, named)).toThrow('push needs prepared evidence')
+    expect(addInboxItem(deps, named, { source: 'import' })).toMatchObject({ existing: false })
   })
 })
 

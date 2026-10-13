@@ -1,4 +1,6 @@
 import type { AutomationDefinition } from '../../shared/definition/types'
+import { EVIDENCE_ACTIONS } from '../../shared/evidence'
+import type { InboxAddResult } from '../../shared/inbox-types'
 import { addInboxItem } from '../inbox/inbox-add'
 import type { InboxDeps } from '../inbox/inbox-service'
 import { resolveInboxPerson } from '../inbox/person'
@@ -119,17 +121,28 @@ async function askFirst(
     const detail = `Would ask ${person ?? 'its person'} first: ${why}`
     return refused(deps, rowOf(req), args, { outcome: 'asked', detail, inboxItemId: null })
   }
+  // R-P5: push and post_review are only ever offered prepared, never as a card Pilot asks about itself.
+  if (EVIDENCE_ACTIONS.has(entry.name)) {
+    const detail = `${entry.name} needs prepared evidence: ${why}, and it is only ever offered as a prepared card`
+    return refused(deps, rowOf(req), args, actionFailed(detail))
+  }
   const what = await entry.describe(args)
-  const added = addInboxItem(deps.inbox, {
-    runId: req.runId,
-    ...(req.stepIdx !== null && req.stepIdx !== undefined ? { stepIdx: req.stepIdx } : {}),
-    type: 'action',
-    title: `${what}?`,
-    context: `Run ${req.runId} tried to ${what.charAt(0).toLowerCase()}${what.slice(1)}, but ${why}, so it waits for you.`,
-    options: [`Approve — ${what.toLowerCase()} now`, 'Skip — leave it'],
-    action: entry.name,
-    actionArgs: args
-  })
+  let added: InboxAddResult
+  try {
+    added = addInboxItem(deps.inbox, {
+      runId: req.runId,
+      ...(req.stepIdx !== null && req.stepIdx !== undefined ? { stepIdx: req.stepIdx } : {}),
+      type: 'action',
+      title: `${what}?`,
+      context: `Run ${req.runId} tried to ${what.charAt(0).toLowerCase()}${what.slice(1)}, but ${why}, so it waits for you.`,
+      options: [`Approve — ${what.toLowerCase()} now`, 'Skip — leave it'],
+      action: entry.name,
+      actionArgs: args
+    })
+  } catch (error) {
+    // attemptAction never throws: a card Pilot can't file is a recorded refusal, and nothing runs.
+    return refused(deps, rowOf(req), args, actionFailed(`Couldn't ask first: ${String(error)}`))
+  }
   const person = added.id ? (deps.store.inbox.get(added.id)?.person ?? 'its person') : null
   const detail = person
     ? `Asked ${person} first: ${why}`

@@ -6,7 +6,7 @@ import { parseAutomationYaml } from '../../shared/definition/parse'
 import type { InboxAddParams } from '../../shared/inbox-types'
 import { parsePeopleYaml } from '../../shared/people'
 import type { ActionEntry } from '../actions/types'
-import { addInboxItem } from '../inbox/inbox-add'
+import { addReady } from '../inbox/__fixtures__/prepared'
 import { resolveInboxItem, type InboxDeps } from '../inbox/inbox-service'
 import type { MrBlock } from '../inbox/mr-state'
 import { PilotStore } from '../store/store'
@@ -139,7 +139,7 @@ function setup(over: Over = {}) {
   }
   // Approvals come from the desktop app; a paired device answers questions.
   const answer = (params: InboxAddParams, text: string) => {
-    const { id } = addInboxItem(inbox, params)
+    const { id } = addReady(inbox, params)
     const callerKind = params.type === 'action' ? 'desktop' : 'paired-device'
     saveAnswer(
       inbox,
@@ -247,7 +247,7 @@ describe('AnswerDispatcher', () => {
 
   it('re-asks an approval a paired device gave, running nothing', async () => {
     const { store, push, inbox, dispatcher, settle } = setup()
-    const { id } = addInboxItem(inbox, ACTION)
+    const { id } = addReady(inbox, ACTION)
     // Saved before the desktop-only rule, or imported: the stored caller isn't the desktop.
     store.inbox.update(
       id!,

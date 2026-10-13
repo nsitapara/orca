@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { ActBridge } from './act-bridge'
+import { EVIDENCE_ACTIONS } from '../../shared/evidence'
 import { buildActionCatalog } from './catalog'
 import type { ActionEntry } from './types'
 
@@ -24,13 +25,13 @@ describe('buildActionCatalog', () => {
     expect(act.run).toHaveBeenCalledWith(script, ['a'], { dryRun: false, runId: 'r' })
   })
 
-  // Approve runs these with no agent in between, so a run may offer them only as prepared cards.
-  it.each([
-    ['push', true],
-    ['post_review', true],
-    ['mark_ready', false]
-  ])('%s needs prepared evidence: %s', (name, needs) => {
-    expect(buildActionCatalog({ act, linear: null }).get(name)?.needsEvidence === true).toBe(needs)
+  // R-P5's evidence-needing actions (shared/evidence.ts) are the catalog's own push and post_review.
+  it('names real catalog entries as the evidence-needing actions', () => {
+    const catalog = buildActionCatalog({ act, linear: null })
+    expect([...EVIDENCE_ACTIONS].map((name) => catalog.get(name)?.name)).toEqual([
+      'push',
+      'post_review'
+    ])
   })
 
   it('fails an act.py entry whose args are not { argv: string[] }', async () => {

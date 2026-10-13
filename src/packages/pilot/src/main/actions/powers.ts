@@ -1,4 +1,4 @@
-import { PREPARATION_NOT_READY } from '../../shared/preparation'
+import { evidenceGate } from '../../shared/evidence'
 import { createHash } from 'node:crypto'
 import type { InboxItemRow } from '../../shared/api-types'
 import type { AutomationDefinition } from '../../shared/definition/types'
@@ -146,8 +146,9 @@ export function cardToRun(
   if (!card) {
     return { problem: `No inbox item ${id}` }
   }
-  if (card.preparation && card.preparation.state !== 'ready') {
-    return { problem: PREPARATION_NOT_READY }
+  const gate = evidenceGate(card)
+  if (gate) {
+    return { problem: gate }
   }
   if (card.action !== entry.name) {
     return { problem: `Card ${id} is for ${card.action ?? 'no action'}, not ${entry.name}` }

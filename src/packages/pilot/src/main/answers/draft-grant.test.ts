@@ -37,6 +37,8 @@ function card(c: Card): InboxItemRow {
     digest: DIGEST,
     status: c.status ?? 'answered',
     answer,
+    // R-P5: a drafted change is granted only on a prepared card whose preparation is ready.
+    preparation: { state: 'ready' },
     details: {
       path: PATH,
       sha256: SHA,

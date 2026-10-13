@@ -6,6 +6,7 @@ import type { RpcCallerIdentity } from '../../../../../main/runtime/rpc/rpc-call
 import type { InboxListPayload } from '../../shared/inbox-types'
 import { detailsFixture } from '../inbox/__fixtures__/details-fixture'
 import { addInboxItem } from '../inbox/inbox-add'
+import { markReady } from '../inbox/__fixtures__/prepared'
 import { loadDefinitions } from '../definitions/loader'
 import type { PilotHost } from '../pilot-services'
 import { PilotStore } from '../store/store'
@@ -367,6 +368,7 @@ describe('pilot inbox show says whether the current answer grants a drafted patc
     const { id } = addInboxItem(deps, { runId: 'run-1', type: 'bug', title: 'Null check' })
     const digest = store.inbox.get(id!)!.digest
     store.inbox.edit(id!, { details: REF, digest }, 6)
+    markReady(store, id!) // R-P5: the drafted change was prepared and is ready
     const given = stale ? 'f'.repeat(64) : digest
     const answer = { option: null, text, digest: given, via: 'page' as const, callerKind }
     store.inbox.update(id!, { status: 'answered', answer }, 7)

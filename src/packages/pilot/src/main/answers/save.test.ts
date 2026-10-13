@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { parseAutomationYaml } from '../../shared/definition/parse'
 import { parsePeopleYaml } from '../../shared/people'
-import { addInboxItem } from '../inbox/inbox-add'
+import { addReady, markReady } from '../inbox/__fixtures__/prepared'
 import { resolveInboxItem, type InboxDeps } from '../inbox/inbox-service'
 import { PilotStore } from '../store/store'
 import { routeOf } from './queue-view'
@@ -61,7 +61,7 @@ function setup(
     people: () => (people.ok ? people.directory : (null as never)),
     newId: () => 'in_0000000000000001'
   }
-  addInboxItem(deps, { runId: 'run-1', ...card } as never)
+  addReady(deps, { runId: 'run-1', ...card } as never)
   const item = store.inbox.get('in_0000000000000001')!
   return { store, deps, digest: item.digest, advance: (ms: number) => (clock += ms) }
 }
@@ -291,6 +291,7 @@ describe('a drafted change', () => {
         draftedBase: 'c'.repeat(40)
       }
       store.inbox.edit('in_0000000000000001', { details: ref, digest }, 1_000)
+      markReady(store, 'in_0000000000000001') // R-P5: a drafted change is approved on a prepared, ready card
       const params = { id: 'in_0000000000000001', text: 'approve', digest }
       expect(() => saveAnswer(deps, params, PHONE)).toThrow(reask)
       expect(store.inbox.get('in_0000000000000001')).toMatchObject({ status: 'open', answer: null })

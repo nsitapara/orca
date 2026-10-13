@@ -118,6 +118,8 @@ describe('answersLine', () => {
           draftedBase: 'e'.repeat(40),
           draftedOption: 'Bake it'
         },
+        // R-P5: only a prepared card whose preparation is ready can grant its drafted patch.
+        preparation: { state: 'ready' },
         answer: { option, text, digest: 'd', via: 'page', ...(callerKind ? { callerKind } : {}) }
       }) as unknown as InboxItemRow
 
