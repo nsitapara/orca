@@ -45,9 +45,9 @@ function BlockView({
       return <MissingBlock block={block} />
     case 'review':
       return <ReviewBlock block={block} texts={snapshot.texts} parts={parts} />
-    default:
-      return null
   }
+  // A block type this build doesn't know (the bundle check refuses one) shows nothing.
+  return null
 }
 
 export function DetailsView({

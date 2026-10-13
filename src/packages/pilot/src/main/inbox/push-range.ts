@@ -1,5 +1,5 @@
-import { execFile } from 'node:child_process'
 import { createHash } from 'node:crypto'
+import { runProcess } from '@orca/process-host'
 import { realpathSync } from 'node:fs'
 import { isAbsolute } from 'node:path'
 import type { InboxItemRow } from '../../shared/api-types'
@@ -64,32 +64,39 @@ function realOrNull(path: string | null): string | null {
   }
 }
 
-// The sha256 of the canonical diff of <base>..<head> in <worktree> (an argv array, no shell), read without
-// blocking the event loop. Past the timeout or the size cap git is killed and nothing is hashed.
-export function committedRangeSha256(
+// The sha256 of the canonical diff of <base>..<head> in <worktree>, read without blocking the event loop through the
+// process host (an argv array, never a shell). Past the timeout or the size cap git is killed and nothing is hashed.
+export async function committedRangeSha256(
   worktree: string,
   base: string,
   head: string,
   limits: RangeLimits = {}
 ): Promise<string> {
   if (!OBJECT_ID.test(base) || !OBJECT_ID.test(head)) {
-    return Promise.reject(new Error('a pushed range is two full commit ids'))
+    throw new Error('a pushed range is two full commit ids')
   }
-  return new Promise((resolve, reject) => {
-    const options = {
-      env: gitEnv(),
-      timeout: limits.timeoutMs ?? GIT_TIMEOUT_MS,
-      maxBuffer: limits.maxBytes ?? GIT_MAX_BYTES,
-      encoding: 'buffer' as const
-    }
-    execFile('git', PUSH_DIFF_ARGS(worktree, base, head), options, (error, stdout) => {
-      if (error) {
-        reject(error)
-        return
-      }
-      resolve(createHash('sha256').update(stdout).digest('hex'))
-    })
+  const timeoutMs = limits.timeoutMs ?? GIT_TIMEOUT_MS
+  const maxBytes = limits.maxBytes ?? GIT_MAX_BYTES
+  const result = await runProcess({
+    program: 'git',
+    args: PUSH_DIFF_ARGS(worktree, base, head),
+    env: gitEnv(),
+    timeoutMs,
+    maxOutputBytes: maxBytes,
+    killOnOutputLimit: true,
+    captureStdoutAsBytes: true
   })
+  if (result.timedOut) {
+    throw new Error(`git diff-tree timed out after ${timeoutMs} ms`)
+  }
+  if (result.outputTruncated) {
+    throw new Error(`the pushed range's diff is over ${maxBytes} bytes`)
+  }
+  if (result.code !== 0 || !result.stdoutBytes) {
+    const said = result.stderr.trim().split('\n').pop()
+    throw new Error(`git diff-tree failed: ${said || (result.signal ?? result.code)}`)
+  }
+  return createHash('sha256').update(result.stdoutBytes).digest('hex')
 }
 
 // A prepared push binds its patch to what git shows for its pinned range (R-P5): the catalog's push argv is
