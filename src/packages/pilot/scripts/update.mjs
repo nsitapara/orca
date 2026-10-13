@@ -107,7 +107,7 @@ export function planUpdate({ push, build, hookTests }) {
   }
   if (build) {
     steps.push({
-      title: 'Build Pilot.app',
+      title: 'Build and install Pilot.app',
       cmd: 'node',
       args: ['src/packages/pilot/scripts/build-mac.mjs']
     })
@@ -158,7 +158,7 @@ const HELP = `Usage: node src/packages/pilot/scripts/update.mjs [--dry-run] [--p
   Takes upstream Orca: fast-forwards main, merges main into pilot, installs, checks hooks, typechecks,
   runs Pilot's tests and the upstream tests next to each hook in HOOKS.md.
   --push   also push main and pilot to origin (off by default)
-  --build  also build Pilot.app at the end
+  --build  also build Pilot.app at the end and install it into /Applications (build-mac.mjs: quits, replaces and relaunches Pilot)
   --dry-run  print the steps without running them`
 
 export async function runUpdate(argv) {
