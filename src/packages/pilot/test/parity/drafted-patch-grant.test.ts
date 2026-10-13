@@ -46,7 +46,7 @@ describe.skipIf(!existsSync(skillsDir()))(
 // apply.md's gate reads the grant out of `pilot inbox show --id <id> --json`, which prints the runtime's
 // envelope ({id, ok, result: <the card>, _meta}): the key paths it names must be the ones that output has.
 const GATE_KEYS = ['result.details.draftApproved', 'result.details.sha256']
-const DOCS: [string, string][] = [...FILES, ['item-details', 'modes/draft.md']]
+const DOCS: [string, string][] = [...FILES, ['item-details', 'modes/candidate.md']]
 
 function keyPaths(text: string): string[] {
   return [...text.matchAll(/`(result\.details\.[A-Za-z0-9]+)`/g)].map((m) => m[1])

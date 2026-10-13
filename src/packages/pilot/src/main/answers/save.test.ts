@@ -405,6 +405,13 @@ describe('answers while context is preparing', () => {
       )
     ).toThrow('stale')
   })
+  // D1: preparation is opt-in. A card added without a request is plain and takes Approve at once, as before.
+  it.each(['Approve', 'yes', 'ok', 'do it'])('a plain card takes %s at once', (text) => {
+    const { deps, store, digest } = setup({ type: 'bug', title: 'Proposed fix' })
+    const id = 'in_0000000000000001'
+    expect(store.inbox.get(id)?.preparation ?? null).toBeNull()
+    expect(saveAnswer(deps, { id, digest, text })).toMatchObject({ status: 'answered' })
+  })
   it.each(['Approve', 'yes', 'ok', 'do it'])('refuses %s before the evidence exists', (text) => {
     const { deps, store, digest } = setup(card)
     expect(() => saveAnswer(deps, { id: 'in_0000000000000001', digest, text })).toThrow(

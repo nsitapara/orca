@@ -111,7 +111,7 @@ describe.skipIf(!existsSync(SKILL))(
       expect(step('fix').prompt).toContain('{steps.report.handoff}')
     })
 
-    it('lets the night finish while the independent preparation job handles queued questions', () => {
+    it('lets the night finish while the independent preparation job prepares its code cards', () => {
       const preparation = loadPortedAutomation('prepare-inbox-item-context').definition
       expect(load().steps.some((s) => s.skill === 'item-details')).toBe(false)
       expect(preparation.items).toMatchObject({ kind: 'inbox_preparation' })
@@ -192,7 +192,8 @@ describe.skipIf(!existsSync(SKILL))(
       const fix = readFileSync(join(SKILL, 'modes', 'fix.md'), 'utf8')
       expect(fix).toContain("the report's findings are cards in Pilot's inbox")
       expect(fix).toContain("pilot inbox tick --id <the handoff's cards[<finding id>]>")
-      expect(fix).toContain('context.py enqueue --request <json>')
+      expect(fix).toContain('pilot inbox add --type <default|flagged|question>')
+      expect(fix).not.toContain('context.py enqueue')
       expect(fix).toContain('write no `- [ ]` line')
     })
 

@@ -443,6 +443,13 @@ describe('pilot inbox answer', () => {
 })
 
 describe('managed preparation CLI', () => {
+  it('asks for no preparation unless given a --preparation-file (D1)', async () => {
+    insideStep()
+    const { context, call } = contextFor(CARD, ADDED)
+    vi.spyOn(console, 'log').mockImplementation(() => {})
+    await INBOX_HANDLERS['inbox add'](context)
+    expect(call.mock.calls[0][1]).not.toHaveProperty('preparation')
+  })
   it('reads self-contained intake JSON and sends the frozen requirements', async () => {
     insideStep()
     const file = join(mkdtempSync(join(tmpdir(), 'pilot-preparation-cli-')), 'request.json')
