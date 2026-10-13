@@ -53,6 +53,15 @@ export function DetailsView({
   return (
     <div className="glr dt min-w-0">
       <DetailsStyle />
+      {snapshot.ref.artifacts?.provenance ? (
+        <p className="mb-2 text-xs text-muted-foreground">
+          Prepared by run {snapshot.ref.artifacts.provenance.preparingRunId} · attempt{' '}
+          {snapshot.ref.artifacts.provenance.attempt}
+          {snapshot.ref.artifacts.provenance.originatingRunId
+            ? ` · originating run ${snapshot.ref.artifacts.provenance.originatingRunId}`
+            : ''}
+        </p>
+      ) : null}
       {snapshot.bundle.blocks.map((block, i) => (
         <BlockView key={i} block={block} snapshot={snapshot} loadImage={loadImage} parts={parts} />
       ))}

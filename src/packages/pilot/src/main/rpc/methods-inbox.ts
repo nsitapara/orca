@@ -1,3 +1,4 @@
+import { PreparationInputSchema } from '../../shared/preparation'
 import { z } from 'zod'
 import { defineMethod } from '../../../../../main/runtime/rpc/core'
 import type { InboxAddParams } from '../../shared/inbox-types'
@@ -31,6 +32,7 @@ export const InboxAdd = z
     stepIdx: z.number().int().nonnegative().optional(),
     automationId: z.string().min(1).optional(),
     itemKey: z.string().min(1).optional(),
+    preparation: PreparationInputSchema.optional(),
     type: z.enum(TYPES),
     title: z.string().min(1).max(500),
     context: text(8000).optional(),

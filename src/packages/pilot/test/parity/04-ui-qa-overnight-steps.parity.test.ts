@@ -287,8 +287,8 @@ describeParity(PARITY_04, '04 · a night run ends as close_out would have counte
     expect(ran.includes('test')).toBe(n.stack === 'done')
     expect(ran.includes('fix')).toBe(reported && Boolean(n.bug) && expected.outcome === 'complete')
     expect(ran.includes('flag_failed')).toBe(!reported) // report flags every other ending itself: never twice
-    // Drafting follows only a complete report (never start_failed, stack_failed, …), and the draft step only a pick.
-    expect(ran.includes('drafts')).toBe(reported && expected.outcome === 'complete')
+    // The report queues context work for a separate run; no preparation step holds the night open.
+    expect(ran.includes('drafts')).toBe(false)
     expect(ran.includes('draft')).toBe(false)
     // A cleanup step that broke never masks what the night counted as.
     if (status === 'done' && n.teardown === 'failed') {
@@ -296,24 +296,16 @@ describeParity(PARITY_04, '04 · a night run ends as close_out would have counte
     }
   })
 
-  it('a draft step that fails or times out leaves the night as it counted', () => {
+  it('a separate context failure or timeout does not hold the completed night open', () => {
     const complete = NIGHTS.findIndex((n) => n.name === 'a complete session with nothing to fix')
+    const night = simulate(def!, play(NIGHTS[complete], old[complete]))
+    const preparation = loadPortedAutomation('prepare-inbox-item-context').definition
     for (const broken of ['failed', 'timed_out'] as const) {
-      const drafting = (step: StepDef, fields: ItemFields): Ended => {
-        if (step.name === 'drafts') {
-          return { status: 'done', outputs: { draft: 'yes', cards: 'in_0000000000000001' } }
-        }
-        if (step.name === 'draft') {
-          return { status: broken, outputs: {} }
-        }
-        return play(NIGHTS[complete], old[complete])(step, fields)
-      }
-      const { ran, status, outcome } = simulate(def!, drafting)
-      expect(ran.slice(-2)).toEqual(['drafts', 'draft'])
-      expect(status).toBe('done')
-      expect(outcome).toBe(
-        `Done; cleanup step draft ${broken === 'failed' ? 'failed' : 'timed out'}`
-      )
+      const context = simulate(preparation, () => ({ status: broken, outputs: {} }))
+      expect(context.ran).toEqual(['prepare'])
+      expect(context.status).toBe(broken)
+      expect(night.status).toBe('done')
+      expect(night.ran.at(-1)).toBe('verdict')
     }
   })
 

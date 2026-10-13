@@ -211,7 +211,7 @@ describe('definition validation', () => {
     [
       'an unknown item kind',
       `${BASE}items: { kind: issue }\n${STEP}`,
-      'items.kind: Invalid option: expected one of "merge_request"|"worktree"|"pipeline"|"linear_ticket"'
+      'items.kind: Invalid option: expected one of "merge_request"|"worktree"|"pipeline"|"linear_ticket"|"inbox_preparation"'
     ],
     [
       'a session that is none of the three',

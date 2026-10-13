@@ -73,7 +73,8 @@ export const WHERE_SCHEMAS: Record<ItemKind, z.ZodType> = {
   merge_request: mergeRequestWhereSchema,
   worktree: worktreeWhereSchema,
   pipeline: pipelineWhereSchema,
-  linear_ticket: linearTicketWhereSchema
+  linear_ticket: linearTicketWhereSchema,
+  inbox_preparation: z.strictObject({})
 }
 
 // Every where clause that names people; the loader checks their ids against people.yaml.

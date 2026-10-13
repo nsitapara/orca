@@ -101,6 +101,20 @@ async function startRuns(
     if (decision.verdict !== 'started') {
       continue
     }
+    if (
+      def.items?.kind === 'inbox_preparation' &&
+      !deps.store.inboxPreparations
+        .listEligible(deps.now())
+        .some(
+          (item) =>
+            item.id === decision.key &&
+            item.preparation?.revision === decision.fields['preparation.revision']
+        )
+    ) {
+      decision.verdict = 'notdue'
+      decision.reason = 'Context request was answered, claimed, or closed before launch'
+      continue
+    }
     const worktreePath = recordedWorktree(def, decision.fields)
     const busy = worktreeTakenSinceDecide(deps.store, def, worktreePath, decision.fields)
     if (busy !== null) {

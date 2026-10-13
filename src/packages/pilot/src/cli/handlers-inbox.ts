@@ -1,3 +1,5 @@
+import { PreparationInputSchema } from '../shared/preparation'
+import { PREPARATION_HANDLERS } from './preparation'
 import { resolve } from 'node:path'
 import type { CommandHandler } from '../../../../cli/dispatch'
 import {
@@ -88,6 +90,12 @@ function addParams(flags: Flags): InboxAddParams {
     throw invalid('--action and --args-json go together')
   }
   const details = detailsFlags(flags)
+  const preparationFile = getOptionalStringFlag(flags, 'preparation-file')
+  const preparation = preparationFile
+    ? PreparationInputSchema.parse(
+        JSON.parse(readTextFile(preparationFile, 'preparation-file', 128 * 1024))
+      )
+    : undefined
   const target = orInvalid(() =>
     inboxTarget(process.env, {
       automation: getOptionalStringFlag(flags, 'automation'),
@@ -99,6 +107,7 @@ function addParams(flags: Flags): InboxAddParams {
   const switchWords = orInvalid(() => parseSwitchWords(getRepeatedStringFlag(flags, 'switch')))
   return {
     ...target,
+    ...given('preparation', preparation),
     type,
     title: getRequiredStringFlag(flags, 'title'),
     ...given('context', getOptionalStringFlag(flags, 'context')),
@@ -138,6 +147,7 @@ function answerParams(flags: Flags): InboxAnswerParams {
 }
 
 export const INBOX_HANDLERS: Record<string, CommandHandler> = {
+  ...PREPARATION_HANDLERS,
   'inbox add': async ({ flags, client, json }) => {
     const response = await client.call<InboxAddResult>('pilot.inbox.add', addParams(flags))
     const { id, refused } = response.result

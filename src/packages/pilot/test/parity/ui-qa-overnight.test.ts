@@ -84,7 +84,7 @@ describe.skipIf(!existsSync(SKILL))(
       ])
     })
 
-    it('runs the stack, the QA session, teardown and report whatever happened, then the verdict, the fixer and the drafting steps', () => {
+    it('runs the stack, the QA session, teardown and report whatever happened, then the verdict and the fixer', () => {
       expect(load().steps.map((s) => [s.name, s.agent, s.mode, s.always])).toEqual([
         ['stack', 'shell', null, false],
         ['test', 'codex', 'run', true],
@@ -92,9 +92,7 @@ describe.skipIf(!existsSync(SKILL))(
         ['report', 'shell', null, true],
         ['flag_failed', 'shell', null, true],
         ['verdict', 'shell', null, false],
-        ['fix', 'claude', 'fix', true],
-        ['drafts', 'shell', null, true],
-        ['draft', 'claude', 'draft', true]
+        ['fix', 'claude', 'fix', true]
       ])
       expect(step('test')).toMatchObject({
         skill: 'ui-qa',
@@ -113,28 +111,18 @@ describe.skipIf(!existsSync(SKILL))(
       expect(step('fix').prompt).toContain('{steps.report.handoff}')
     })
 
-    // The night's close-out (or the fixer's fix-done) handed the open code cards to an item-details tab; in Pilot the
-    // run's own two `always` steps do it after a complete report: 3 cards and 60 minutes, inside the night (ruling 5).
-    it('hands its open code cards to item-details after a complete report, up to 3, and never fails the run for it', () => {
-      expect(step('drafts')).toMatchObject({
-        agent: 'shell',
-        always: true,
-        when: "{steps.report.outcome} == 'complete'",
-        env: {},
-        run: 'python3 /Users/nishsitapara/.agents/skills/item-details/scripts/drafts.py pilot-select --skill ui-qa --cap 3',
-        timeoutMs: 2 * MINUTE
+    it('lets the night finish while the independent preparation job handles queued questions', () => {
+      const preparation = loadPortedAutomation('prepare-inbox-item-context').definition
+      expect(load().steps.some((s) => s.skill === 'item-details')).toBe(false)
+      expect(preparation.items).toMatchObject({ kind: 'inbox_preparation' })
+      expect(preparation.workspace).toEqual({ kind: 'item_worktree' })
+      expect(preparation.steps).toHaveLength(1)
+      expect(preparation.steps[0]).toMatchObject({
+        skill: 'prepare-inbox-item-context',
+        mode: 'worker',
+        always: false
       })
-      expect(step('draft')).toMatchObject({
-        agent: 'claude',
-        skill: 'item-details',
-        mode: 'draft',
-        always: true,
-        when: "{steps.drafts.draft} == 'yes'",
-        timeoutMs: 60 * MINUTE
-      })
-      expect(step('draft').prompt.trim()).toBe(
-        'Draft Pilot cards {steps.drafts.cards} on {worktree.branch} at {steps.drafts.head}. Their bundles go beside {steps.drafts.note}.'
-      )
+      expect(preparation.powers).toEqual([])
     })
 
     it('passes values to shell steps only through env, and the stack tests the once_per head', () => {
@@ -204,7 +192,7 @@ describe.skipIf(!existsSync(SKILL))(
       const fix = readFileSync(join(SKILL, 'modes', 'fix.md'), 'utf8')
       expect(fix).toContain("the report's findings are cards in Pilot's inbox")
       expect(fix).toContain("pilot inbox tick --id <the handoff's cards[<finding id>]>")
-      expect(fix).toContain('pilot inbox add --type <default|flagged|question>')
+      expect(fix).toContain('context.py enqueue --request <json>')
       expect(fix).toContain('write no `- [ ]` line')
     })
 

@@ -18,7 +18,8 @@ const KIND_NAMES: Record<ItemKind, string> = {
   merge_request: 'merge requests',
   worktree: 'worktree items',
   pipeline: 'pipelines',
-  linear_ticket: 'Linear tickets'
+  linear_ticket: 'Linear tickets',
+  inbox_preparation: 'inbox context requests'
 }
 
 export function itemSource(kind: ItemKind): ItemSource {

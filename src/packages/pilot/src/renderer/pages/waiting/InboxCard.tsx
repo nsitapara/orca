@@ -4,6 +4,7 @@ import { cn } from '@/lib/utils'
 import type { InboxItemRow, InboxReply } from '../../../shared/api-types'
 import type { AnswerState, RunLine } from '../../../shared/inbox-types'
 import type { PartSwitches } from '../../details/ReviewBlock'
+import { PreparationProgress } from './PreparationProgress'
 import { AnsweredLine } from './AnsweredLine'
 import { AnswerRow } from './AnswerRow'
 import type { Answer } from './answer-types'
@@ -155,6 +156,7 @@ export function InboxCard({
           <h3 className="min-w-0 flex-1 truncate text-sm font-semibold">{item.title}</h3>
           <span className={statusPillClass(status)}>{status}</span>
         </div>
+        <PreparationProgress item={item} />
         <AnsweredLine
           item={item}
           answerState={answerState}
@@ -173,6 +175,7 @@ export function InboxCard({
         drafted={item.details?.drafted === true}
         status={status}
       />
+      <PreparationProgress item={item} />
       <h3 className="text-[15px] font-semibold">{item.title}</h3>
       {item.context ? <p className="text-sm text-muted-foreground">{item.context}</p> : null}
       {item.suggested ? (

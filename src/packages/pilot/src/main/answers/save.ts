@@ -1,3 +1,5 @@
+import { APPROVE, answerWord } from '../../shared/answers/route'
+import { PREPARATION_NOT_READY } from '../../shared/preparation'
 import type { InboxAnswer, InboxItemRow } from '../../shared/api-types'
 import type { InboxAnswerParams } from '../../shared/inbox-types'
 import { oneLine } from '../inbox/card'
@@ -71,10 +73,23 @@ function clearAnswer(deps: InboxDeps, item: InboxItemRow, at: number): InboxItem
   deps.store.transaction(() => {
     deps.store.queue.removePending(item.id)
     deps.store.inbox.update(item.id, patch, at)
+    const preparation = item.preparation
+    if (preparation?.state === 'cancelled') {
+      deps.store.inboxPreparations.write(item.id, {
+        ...preparation,
+        state: 'queued',
+        revision: preparation.revision + 1,
+        attempt: 0,
+        leaseUntil: null,
+        progress: 'Context queued',
+        error: null,
+        updatedAt: at
+      })
+    }
   })
   inboxEvent(deps.store, item, 'answer_cleared', {}, at)
   syncRunWaiting(deps.store, item.runId, at)
-  return { ...item, ...patch, updatedAt: at }
+  return deps.store.inbox.get(item.id) ?? { ...item, ...patch, updatedAt: at }
 }
 
 // The digest check is this function's; `InboxStore.update` writes the answer (a re-answer replaces an earlier
@@ -119,6 +134,13 @@ export function saveAnswer(
   if (!text) {
     return clearAnswer(deps, item, at)
   }
+  if (
+    item.preparation &&
+    item.preparation.state !== 'ready' &&
+    (route.kind === 'script' || APPROVE.has(answerWord(text)) || option !== null)
+  ) {
+    throw new Error(PREPARATION_NOT_READY)
+  }
   const answer: InboxAnswer = { option, text, digest: item.digest, via, callerKind }
   // `by` is recorded for display only; nothing may use it to authorize anything (the caller kind does).
   const patch = {
@@ -130,9 +152,10 @@ export function saveAnswer(
   deps.store.transaction(() => {
     deps.store.queue.removePending(item.id)
     deps.store.inbox.update(item.id, patch, at)
+    deps.store.inboxPreparations.cancel(item.id, at)
     deps.store.queue.enqueue(item.id, at + SETTLE_MS, at)
   })
   inboxEvent(deps.store, item, 'answer_saved', { text, via, option: answer.option }, at)
   syncRunWaiting(deps.store, item.runId, at)
-  return { ...item, ...patch, updatedAt: at }
+  return deps.store.inbox.get(item.id) ?? { ...item, ...patch, updatedAt: at }
 }

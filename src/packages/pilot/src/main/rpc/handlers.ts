@@ -14,7 +14,8 @@ const ITEM_KIND: Record<ItemKind, string> = {
   merge_request: 'Merge requests',
   worktree: 'Worktrees',
   pipeline: 'Pipelines',
-  linear_ticket: 'Linear tickets'
+  linear_ticket: 'Linear tickets',
+  inbox_preparation: 'Inbox context requests'
 }
 
 function itemKindLabel(def: AutomationDefinition): string {

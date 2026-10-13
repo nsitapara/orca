@@ -58,6 +58,40 @@ function labelOf(item: InboxItemRow, choice: Choice, role: ButtonRole): string {
 // One button per choice of the old radio list (choicesFor), so each saves exactly the answer that choice
 // always saved: the same option index and words, through composeAnswer.
 export function buttonsFor(item: InboxItemRow): AnswerButton[] {
+  if (
+    item.preparation &&
+    item.preparation.state !== 'ready' &&
+    item.preparation.state !== 'cancelled'
+  ) {
+    return [
+      {
+        choice: {
+          label: 'Answer early',
+          meaning: 'Stop context preparation and send your answer',
+          notes: 'required',
+          option: null,
+          text: (notes) => notes.trim()
+        },
+        label: 'Answer before context is ready…',
+        hint: 'Stops preparation; does not approve an unseen change',
+        role: 'notes',
+        recommended: false
+      },
+      {
+        choice: {
+          label: 'Skip',
+          meaning: 'Skip this item and stop preparation',
+          notes: 'none',
+          option: null,
+          text: () => 'skip'
+        },
+        label: 'Skip',
+        hint: 'Skip this item and stop preparation',
+        role: 'skip',
+        recommended: false
+      }
+    ]
+  }
   return choicesFor(item).map((choice) => {
     const role = roleOf(choice)
     return {

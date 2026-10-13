@@ -14,11 +14,13 @@ import {
   DETAILS_REFUSED,
   IMAGE_TYPES,
   imageRefs,
+  type ArtifactFile,
   type DetailsBundle,
   type DetailsRef,
   type DetailsSnapshot
 } from '../../shared/details'
 import { subjectOf, summaryOf } from '../../shared/details-summary'
+import { generatedArtifacts, patchStats, validImageBytes } from './details-preparation'
 import { isPromptControl } from './card'
 import { BLOCK_TYPES, BundleSchema, firstIssue, ReviewFileSchema } from './details-schema'
 
@@ -32,7 +34,7 @@ export class DetailsRefused extends Error {
   }
 }
 
-type RefKind = 'patch' | 'review' | 'screens' | 'shots'
+type RefKind = ArtifactFile['role']
 
 const sha256 = (data: string | Buffer): string => createHash('sha256').update(data).digest('hex')
 const NOFOLLOW = constants.O_NOFOLLOW ?? 0
@@ -143,14 +145,20 @@ function bundleRefs(bundle: DetailsBundle): { kind: RefKind; ref: string }[] {
   for (const block of bundle.blocks) {
     if (block.type === 'diff') {
       refs.push({ kind: 'patch', ref: block.patch })
+      refs.push(
+        ...(block.check_records ?? []).map((check) => ({
+          kind: 'check' as const,
+          ref: check.output
+        }))
+      )
     } else if (block.type === 'review') {
       refs.push({ kind: 'review', ref: block.file })
     } else if (block.type === 'screens') {
       for (const pair of block.pairs) {
-        refs.push({ kind: 'screens', ref: pair.before }, { kind: 'screens', ref: pair.after })
+        refs.push({ kind: 'before', ref: pair.before }, { kind: 'after', ref: pair.after })
       }
     } else if (block.type === 'shots') {
-      refs.push(...block.shots.map((s) => ({ kind: 'shots' as const, ref: s.file })))
+      refs.push(...block.shots.map((s) => ({ kind: 'screenshot' as const, ref: s.file })))
     }
   }
   return refs.filter((r): r is { kind: RefKind; ref: string } => Boolean(r.ref))
@@ -161,7 +169,7 @@ function bundleRefs(bundle: DetailsBundle): { kind: RefKind; ref: string }[] {
 function refFile(root: string, dir: string, kind: RefKind, ref: string): string {
   const label = `${kind} ref "${ref}"`
   const real = realInside(root, isAbsolute(ref) ? ref : resolve(dir, ref), label)
-  const images = kind === 'screens' || kind === 'shots'
+  const images = kind === 'before' || kind === 'after' || kind === 'screenshot'
   if (images && !hasExtension([ref, real], isImage)) {
     throw new DetailsRefused(`${label} is not an image (${Object.keys(IMAGE_TYPES).join(', ')})`)
   }
@@ -208,7 +216,9 @@ function draftOf(
   bundle: DetailsBundle
 ): Pick<DetailsRef, 'drafted' | 'draftedBase' | 'draftedOption'> {
   const blocks = bundle.blocks
-  const drafted = blocks.find((b) => b.type === 'diff' && Boolean(b.patch))
+  const drafted = blocks.find(
+    (b) => b.type === 'diff' && b.patch_kind !== 'committed' && Boolean(b.patch)
+  )
   const verdict = blocks.find((b) => b.type === 'missing' && b.slot === 'diff')
   const base = drafted && 'base' in drafted ? drafted.base : null
   const judged = verdict && 'base' in verdict ? verdict.base : null
@@ -237,7 +247,7 @@ function checkPromptSafe(path: string): void {
 
 // A card's bundle, read from an absolute path inside the Automations folder and checked whole: its shape,
 // and every file it names. Review files are inlined (their text is part of what Approve binds to); the
-// patch and the images are only checked to exist inside the root (ruling 3).
+// patch, image and check bytes are hashed into the artifact manifest inside the root.
 export function loadDetails(root: string | null, bundlePath: string): DetailsSnapshot {
   const top = realRoot(root)
   if (!isAbsolute(bundlePath) || bundlePath.includes('\0')) {
@@ -253,14 +263,30 @@ export function loadDetails(root: string | null, bundlePath: string): DetailsSna
   const bytes = readCapped(real, DETAILS_LIMITS.bundleBytes, label)
   const bundle = parseBundle(bytes, label)
   const texts: [string, string][] = []
+  const files: ArtifactFile[] = []
   for (const { kind, ref } of bundleRefs(bundle)) {
     const file = refFile(top, dirname(real), kind, ref)
     if (kind === 'review') {
       texts.push([ref, readReview(file, ref)])
     }
+    const cap =
+      kind === 'patch' || kind === 'check' ? DETAILS_LIMITS.bundleBytes : DETAILS_LIMITS.imageBytes
+    const asset = readCapped(file, cap, `${kind} ref ${ref}`)
+    const image = kind === 'before' || kind === 'after' || kind === 'screenshot'
+    if (image && !validImageBytes(asset, extname(file).toLowerCase())) {
+      throw new DetailsRefused(`${kind} ref ${ref} does not contain a supported image`)
+    }
+    files.push({
+      ref,
+      role: kind,
+      sha256: sha256(asset),
+      bytes: asset.length,
+      ...(kind === 'patch' ? { diff: patchStats(asset.toString('utf8')) } : {})
+    })
   }
   const textsByRef = Object.fromEntries(texts)
   const draft = draftOf(bundle)
+  const summary = summaryOf(bundle, textsByRef, draft.drafted, files)
   return {
     ref: {
       path: real,
@@ -268,7 +294,14 @@ export function loadDetails(root: string | null, bundlePath: string): DetailsSna
       inlined: Object.fromEntries(texts.map(([ref, text]) => [ref, sha256(text)])),
       blocks: bundle.blocks.length,
       ...draft,
-      summary: summaryOf(bundle, textsByRef, draft.drafted),
+      summary,
+      artifacts: {
+        files,
+        ...(bundle.provenance ? { provenance: bundle.provenance } : {}),
+        expected: [],
+        generated: generatedArtifacts(bundle, files, textsByRef),
+        tags: summary
+      },
       subject: subjectOf(bundle) ?? ''
     },
     bundle,
@@ -294,6 +327,10 @@ export function readDetailsImage(
     throw new DetailsRefused(`${label} is not an image`)
   }
   const bytes = readCapped(real, DETAILS_LIMITS.imageBytes, label)
+  const recorded = snapshot.ref.artifacts?.files.find((asset) => asset.ref === file)
+  if (snapshot.ref.artifacts && (!recorded || recorded.sha256 !== sha256(bytes))) {
+    throw new DetailsRefused(`${label} changed after context was prepared`)
+  }
   return {
     mime: IMAGE_TYPES[extname(real).toLowerCase()],
     base64: bytes.toString('base64'),

@@ -38,6 +38,9 @@ function attach(
   opts: SetDetailsOptions
 ): { item: InboxItemRow; result: SetDetailsResult } {
   const item = waitingItem(deps, id)
+  if (item.preparation) {
+    throw new Error('Managed context must be attached with prepare-complete')
+  }
   if (opts.onlyWithoutDetails && item.details !== null) {
     throw new Error(HAS_DETAILS_SINCE)
   }

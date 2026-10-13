@@ -49,8 +49,38 @@ export type DiffBlock = Titled & {
   head?: string | null
   // A drafted change: the patch file Approve applies, pinned by its SHA-256.
   patch?: string | null
+  patch_kind?: 'draft' | 'committed'
   patch_sha256?: string | null
   checks?: string[]
+  check_records?: CheckRecord[]
+}
+export type CheckRecord = {
+  command: string
+  exit_code: number
+  output: string
+  output_sha256: string
+  base: string
+  patch_sha256: string
+}
+export type ArtifactProvenance = {
+  originatingRunId: string | null
+  preparingRunId: string
+  itemId: string
+  attempt: number
+}
+export type ArtifactFile = {
+  ref: string
+  role: 'patch' | 'review' | 'before' | 'after' | 'screenshot' | 'check'
+  sha256: string
+  bytes: number
+  diff?: { path: string; added: number; removed: number; changesSha256: string }[]
+}
+export type ArtifactManifest = {
+  provenance?: ArtifactProvenance
+  files: ArtifactFile[]
+  expected: string[]
+  generated: string[]
+  tags: string[]
 }
 export type ScreenPair = {
   before?: string | null
@@ -100,6 +130,7 @@ export type DetailsBundle = {
   built?: string | null
   by?: string | null
   blocks: DetailsBlock[]
+  provenance?: ArtifactProvenance
 }
 
 // A review file (review-requests/preview.py): the comments as GitLab will show them.
@@ -143,6 +174,7 @@ export type DetailsRef = {
   summary?: string[]
   // What the card is about, from the facts block's MR row ('' when it names none). Derived like `summary`.
   subject?: string
+  artifacts?: ArtifactManifest
 }
 // The whole of it, read once through pilot.inbox.details: the bundle, and each inlined review file's text
 // by the ref the bundle names it with.

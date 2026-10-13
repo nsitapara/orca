@@ -6,7 +6,8 @@ export const ITEM_KINDS = [
   'merge_request',
   'worktree',
   'pipeline',
-  'linear_ticket'
+  'linear_ticket',
+  'inbox_preparation'
 ] as const satisfies readonly ItemKind[]
 export const AGENTS = ['claude', 'codex'] as const satisfies readonly AgentKind[]
 export const POWERS = [

@@ -14,6 +14,7 @@ import { isStartTimeout, type SessionClaimTable } from './session-claims'
 import { sessionHome } from './session-home'
 import { rememberWorktreeSession, worktreeSessionToResume } from './worktree-session'
 import type { Workspace } from './workspace'
+import { blockUntrackedPreparation, claimPreparationWorker } from './preparation-worker'
 
 export type AgentStepRequest = {
   runId: string
@@ -235,6 +236,7 @@ export async function launchAgentStep(
     const opts: PilotAgentLaunchOptions = launchOptions(req, agent, session, modeText)
     const home =
       session.kind === 'resume' ? await sessionHome(store, req, session.sessionId, deps) : null
+    claimPreparationWorker(store, req, deps.now())
     if (home && deps.sessionTerminals) {
       // A failure here fails the step: a second process on the same session would be worse.
       await deps.sessionTerminals.send(home.handle, opts.prompt)
@@ -264,5 +266,12 @@ export async function launchAgentStep(
     throw new Error(reason)
   }
   rememberWorktreeSession(store, req, agent, sessionId, deps.now())
-  return recordRunning(store, runId, idx, terminal, launchArgs, deps.now)
+  try {
+    return recordRunning(store, runId, idx, terminal, launchArgs, deps.now)
+  } catch (error) {
+    if (error instanceof UnrecordedLaunchError) {
+      blockUntrackedPreparation(store, req, error.message, deps.now())
+    }
+    throw error
+  }
 }

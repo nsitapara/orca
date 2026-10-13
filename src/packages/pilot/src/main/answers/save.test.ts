@@ -362,3 +362,54 @@ describe('an answer that may be being carried out', () => {
     expect(s.store.queue.forInboxItem(ID)).toHaveLength(0)
   })
 })
+
+describe('answers while context is preparing', () => {
+  const card = {
+    type: 'bug',
+    title: 'Proposed fix',
+    preparation: {
+      key: 'bug:1',
+      context: 'Investigate pinned failure',
+      requirements: ['context', 'diff']
+    }
+  }
+  it('atomically cancels preparation for an early freeform answer and refuses a late worker', () => {
+    const { deps, store, digest } = setup(card)
+    const id = 'in_0000000000000001'
+    store.inboxPreparations.claim(id, 1, 'worker', 0, 1000)
+    const result = saveAnswer(deps, { id, digest, text: 'I already fixed this elsewhere' })
+    expect(result).toMatchObject({ status: 'answered', preparation: { state: 'cancelled' } })
+    expect(() =>
+      store.inboxPreparations.progress(
+        id,
+        { runId: 'worker', stepIdx: 0, revision: 1, attempt: 1 },
+        'Finishing',
+        1001
+      )
+    ).toThrow('stale')
+  })
+  it('requeues preparation when an early answer is undone without reviving the old claim', () => {
+    const { deps, store, digest } = setup(card)
+    const id = 'in_0000000000000001'
+    store.inboxPreparations.claim(id, 1, 'worker', 0, 1000)
+    saveAnswer(deps, { id, digest, text: 'I already fixed this elsewhere' })
+    const reopened = saveAnswer(deps, { id, digest, text: '' })
+    expect(reopened.preparation).toMatchObject({ state: 'queued', revision: 2 })
+    expect(store.inboxPreparations.listEligible(1001).map((item) => item.id)).toContain(id)
+    expect(() =>
+      store.inboxPreparations.progress(
+        id,
+        { runId: 'worker', stepIdx: 0, revision: 1, attempt: 1 },
+        'Late progress',
+        1001
+      )
+    ).toThrow('stale')
+  })
+  it.each(['Approve', 'yes', 'ok', 'do it'])('refuses %s before the evidence exists', (text) => {
+    const { deps, store, digest } = setup(card)
+    expect(() => saveAnswer(deps, { id: 'in_0000000000000001', digest, text })).toThrow(
+      'Context is still being prepared'
+    )
+    expect(store.inbox.get('in_0000000000000001')?.status).toBe('open')
+  })
+})

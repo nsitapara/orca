@@ -635,3 +635,49 @@ describe('listInbox answerStates', () => {
     expect(calls.filter((c) => /FROM runs/.test(c)).length).toBeLessThanOrEqual(2)
   })
 })
+
+describe('managed inbox intake', () => {
+  it('preserves the first immutable decision, including a saved early answer, across changed re-submissions', () => {
+    const { deps, store } = setup()
+    const preparation = {
+      key: 'ci:dependency',
+      context: 'Reproduce the image dependency failure using the pinned job log.',
+      requirements: ['context'] as const
+    }
+    const request = {
+      ...QUESTION,
+      preparation: { ...preparation, requirements: [...preparation.requirements] }
+    }
+    const first = addInboxItem(deps, request)
+    const item = store.inbox.get(first.id!)!
+    store.inbox.saveAnswer(
+      item.id,
+      { text: 'Leave this to me', option: null, digest: item.digest, via: 'page' },
+      'nish',
+      101
+    )
+    expect(
+      addInboxItem(deps, { ...request, title: 'Changed title', context: 'new facts' })
+    ).toEqual({ id: item.id, existing: true, refused: null })
+    expect(store.inbox.get(item.id)).toMatchObject({
+      title: QUESTION.title,
+      status: 'answered',
+      preparation: { state: 'cancelled' },
+      answer: { text: 'Leave this to me' }
+    })
+    expect(store.inbox.list()).toHaveLength(1)
+    expect(store.inboxPreparations.listEligible(102)).toEqual([])
+    expect(() => store.inboxPreparations.claim(item.id, 1, 'worker', 0, 102)).toThrow('stale')
+  })
+})
+
+it('uses the stable decision key rather than a repeated display title for managed items', () => {
+  const { deps, store } = setup()
+  for (const key of ['first-decision', 'second-decision']) {
+    addInboxItem(deps, {
+      ...QUESTION,
+      preparation: { key, context: 'Self-contained context', requirements: ['context'] }
+    })
+  }
+  expect(store.inbox.list()).toHaveLength(2)
+})

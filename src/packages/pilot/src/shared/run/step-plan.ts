@@ -6,7 +6,7 @@ import { evalExpr, exprPlaceholders, parseExpr } from '../expr'
 export type EndedStep = { name: string; status: StepStatus; always: boolean; error: string | null }
 export type StepVerdict = { run: true } | { run: false; reason: string }
 export type RunEnd = {
-  status: Extract<RunStatus, 'done' | 'failed' | 'timed_out' | 'needs_you'>
+  status: Extract<RunStatus, 'done' | 'failed' | 'timed_out' | 'needs_you' | 'cancelled'>
   outcome: string
 }
 

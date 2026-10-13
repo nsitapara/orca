@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import { PilotStore } from '../src/main/store/store'
+import { PILOT_SCHEMA_VERSION } from '../src/main/store/migrations'
 // @ts-expect-error -- .mjs script without type declarations
 import { seedHandled } from './seed-handled-from-sweep.mjs'
 
@@ -116,16 +117,19 @@ describe.skipIf(sqlite === undefined)('seedHandled', () => {
   it.each([
     {
       name: 'the database is at another schema version',
-      arrange: (p: Paths) => withDb(p.dbFile, 'PRAGMA user_version = 6'),
-      reason: 'the database is at schema 6'
+      arrange: (p: Paths) => withDb(p.dbFile, `PRAGMA user_version = ${PILOT_SCHEMA_VERSION + 1}`),
+      reason: `the database is at schema ${PILOT_SCHEMA_VERSION + 1}`
     },
     {
       name: "Pilot's migrations moved past the script",
       arrange: (p: Paths) => {
         p.migrationsFile = join(p.dir, 'migrations.ts')
-        writeFileSync(p.migrationsFile, 'export const PILOT_SCHEMA_VERSION = 6\n')
+        writeFileSync(
+          p.migrationsFile,
+          `export const PILOT_SCHEMA_VERSION = ${PILOT_SCHEMA_VERSION + 1}\n`
+        )
       },
-      reason: "Pilot's migrations are at schema 6"
+      reason: `Pilot's migrations are at schema ${PILOT_SCHEMA_VERSION + 1}`
     },
     {
       name: 'handled has other columns',

@@ -35,6 +35,8 @@ export function InboxHeader({
   listOpen,
   onToggleList,
   waiting,
+  preparing = 0,
+  blocked = 0,
   people,
   viewer,
   onViewer,
@@ -46,6 +48,8 @@ export function InboxHeader({
   listOpen: boolean
   onToggleList: () => void
   waiting: number
+  preparing?: number
+  blocked?: number
   people: { id: string; name: string }[]
   viewer: string | null
   onViewer: (id: string) => void
@@ -74,6 +78,12 @@ export function InboxHeader({
         <span className="rounded-full bg-muted px-2 font-mono text-xs font-semibold leading-5 text-muted-foreground">
           {waiting} waiting
         </span>
+        {preparing > 0 ? (
+          <span className="text-xs text-muted-foreground">{preparing} preparing context</span>
+        ) : null}
+        {blocked > 0 ? (
+          <span className="text-xs text-muted-foreground">{blocked} preparation blocked</span>
+        ) : null}
       </div>
       {canExpand ? (
         <button

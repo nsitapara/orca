@@ -72,7 +72,7 @@ describe('03 · Review and fix branch code: the definition (old job: orca automa
     ])
   })
 
-  it('runs begin, the six round steps, complete, publish, the drafting steps and a failure flag, each round in its agent’s worktree session', () => {
+  it('runs begin, the six round steps, complete, publish and a failure flag, each round in its agent’s worktree session', () => {
     expect(definition.steps.map((s) => [s.name, s.agent, s.mode, s.always])).toEqual([
       ['begin', 'shell', null, false],
       ['r1_claude', 'claude', 'pass', false],
@@ -83,8 +83,6 @@ describe('03 · Review and fix branch code: the definition (old job: orca automa
       ['r3_codex', 'codex', 'review', false],
       ['complete', 'shell', null, false],
       ['publish', 'shell', null, false],
-      ['drafts', 'shell', null, true],
-      ['draft', 'claude', 'draft', true],
       ['flag_failed', 'shell', null, true]
     ])
     for (const s of definition.steps.filter((x) => /^r\d_/.test(x.name))) {
@@ -116,30 +114,23 @@ describe('03 · Review and fix branch code: the definition (old job: orca automa
     }
   })
 
-  // The sweep's cycle handed its open code cards to an item-details tab in the main checkout; in Pilot the run's own
-  // two `always` steps do it, so drafting is attributed to the run and never fails the cycle (ruling 5).
-  it('hands its open code cards to item-details after a completed cycle, up to 8, and never fails the run for it', () => {
-    expect(step('drafts')).toMatchObject({
-      agent: 'shell',
-      always: true,
-      when: "{steps.complete.status} == 'done'",
-      env: {},
-      run: 'python3 /Users/nishsitapara/.agents/skills/item-details/scripts/drafts.py pilot-select --skill review-cycles --cap 8',
-      timeoutMs: 2 * 60_000
-    })
-    expect(step('draft')).toMatchObject({
-      agent: 'claude',
-      skill: 'item-details',
-      mode: 'draft',
-      always: true,
-      when: "{steps.drafts.draft} == 'yes'",
-      timeoutMs: 90 * 60_000
-    })
-    expect(step('draft').prompt.trim()).toBe(
-      'Draft Pilot cards {steps.drafts.cards} on {worktree.branch} at {steps.drafts.head}. Their bundles go beside {steps.drafts.note}.'
+  it('leaves evidence preparation to an independent item queue with no publication powers', () => {
+    const preparation = loadPortedAutomation('prepare-inbox-item-context').definition
+    expect(definition.steps.some((s) => s.skill === 'item-details')).toBe(false)
+    expect(preparation.items).toMatchObject({ kind: 'inbox_preparation' })
+    expect(preparation.oncePer).toBe(
+      '{preparation.item_id}:{preparation.revision}:{preparation.attempt}'
     )
-    const mode = readFileSync(join(SKILL, '..', 'item-details', 'modes', 'draft.md'), 'utf8')
-    expect(mode.startsWith('---\noutputs: [outcome]\n---\n')).toBe(true)
+    expect(preparation.powers).toEqual([])
+    expect(preparation.steps).toHaveLength(1)
+    expect(preparation.steps[0]).toMatchObject({
+      name: 'prepare',
+      agent: 'claude',
+      skill: 'prepare-inbox-item-context',
+      mode: 'worker'
+    })
+    expect(preparation.steps[0].prompt).toContain('{preparation.item_id}')
+    expect(preparation.steps[0].prompt).toContain('{preparation.revision}')
   })
 
   // The sweep flagged a cycle that failed to start. One a review block stopped (an approved MR) stayed unflagged, and the

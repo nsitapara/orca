@@ -1,3 +1,4 @@
+import { PreparationInputSchema, queuedPreparation } from '../../shared/preparation'
 import { randomUUID } from 'node:crypto'
 import type { InboxItemRow, ItemFields } from '../../shared/api-types'
 import type { DetailsSnapshot } from '../../shared/details'
@@ -180,7 +181,7 @@ function updateOpen(
   return { id: open.id, existing: true, refused: null }
 }
 
-export function addInboxItem(
+function addInboxItemUnlocked(
   deps: InboxDeps,
   params: InboxAddParams,
   opts: {
@@ -194,6 +195,9 @@ export function addInboxItem(
     callerRunId?: string | null
   } = {}
 ): InboxAddResult {
+  if (params.preparation) {
+    PreparationInputSchema.parse(params.preparation)
+  }
   const origin = originOf(deps, params)
   const def = deps.definitions().find((d) => d.id === origin.automationId)
   if (!def) {
@@ -218,7 +222,19 @@ export function addInboxItem(
   const digest = inboxDigest(card)
   const at = deps.now()
   const mine = deps.store.inbox.list({ automationId: origin.automationId })
-  const open = mine.find((i) => WAITING.includes(i.status) && sameCard(i, card, origin))
+  const managed = mine.find(
+    (i) =>
+      i.itemKey === origin.itemKey &&
+      i.worktreePath === origin.worktreePath &&
+      ((params.preparation && i.preparation?.input.key === params.preparation.key) ||
+        (!params.preparation && i.preparation && sameCard(i, card, origin)))
+  )
+  if (managed) {
+    return { id: managed.id, existing: true, refused: null }
+  }
+  const open = params.preparation
+    ? undefined
+    : mine.find((i) => WAITING.includes(i.status) && sameCard(i, card, origin))
   if (open && opts.noMerge) {
     return { id: null, existing: true, refused: SAME_CARD_OPEN }
   }
@@ -238,6 +254,7 @@ export function addInboxItem(
     return { id: null, existing: false, refused: null }
   }
   const item: NewInboxItem = {
+    ...(params.preparation ? { preparation: queuedPreparation(params.preparation, at) } : {}),
     id: (deps.newId ?? newItemId)(),
     automationId: origin.automationId,
     runId: origin.runId,
@@ -263,4 +280,12 @@ export function addInboxItem(
   )
   syncRunWaiting(deps.store, item.runId, at)
   return { id: item.id, existing: false, refused: null }
+}
+
+export function addInboxItem(...args: Parameters<typeof addInboxItemUnlocked>): InboxAddResult {
+  const [deps, params] = args
+  if (params.preparation) {
+    return deps.store.transaction(() => addInboxItemUnlocked(...args))
+  }
+  return addInboxItemUnlocked(...args)
 }

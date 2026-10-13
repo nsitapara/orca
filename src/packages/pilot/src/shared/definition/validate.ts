@@ -198,6 +198,12 @@ export function fieldNameErrors(raw: RawAutomation): string[] {
 // Everything a file that fits the schema can still get wrong, in the order it is reported.
 export function definitionErrors(raw: RawAutomation): string[] {
   return [
+    ...(raw.items?.kind === 'inbox_preparation' &&
+    (raw.steps.length !== 1 || raw.steps[0].agent === 'shell' || raw.start === 'ask_first')
+      ? [
+          'inbox_preparation needs one agent step and automatic start; its worker delegates material generation'
+        ]
+      : []),
     ...scheduleErrors(raw),
     ...stepErrors(raw),
     ...quotaErrors(raw),

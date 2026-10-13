@@ -1,7 +1,9 @@
+import { PREPARATION_COMMAND_SPECS } from './preparation'
 import type { CommandSpec } from '../../../../cli/args'
 import { GLOBAL_FLAGS } from '../../../../cli/args'
 
 export const INBOX_COMMAND_SPECS: CommandSpec[] = [
+  ...PREPARATION_COMMAND_SPECS,
   {
     path: ['inbox', 'add'],
     summary: 'Add a card to the Inbox: a question, a flag, or a proposed action',
@@ -9,6 +11,7 @@ export const INBOX_COMMAND_SPECS: CommandSpec[] = [
       'pilot inbox add --type <question|flagged|default|action|bug|left_for_you> --title <text> [--context <text>] [--suggested <text>] [--option "<label> — <meaning>"]... [--details-file <path> | --details-bundle <path>] [--action <name> --args-json <json object>] [--part <id>=<label>]... [--switch <on> --switch <off>] [--worktree <path>] [--automation <id> --item <key>] [--json]',
     allowedFlags: [
       ...GLOBAL_FLAGS,
+      'preparation-file',
       'type',
       'title',
       'context',

@@ -12,5 +12,6 @@ describe('registerPilotSources', () => {
     })
     expect(itemSource('worktree').kind).toBe('worktree')
     expect(itemSource('linear_ticket').kind).toBe('linear_ticket')
+    expect(itemSource('inbox_preparation').kind).toBe('inbox_preparation')
   })
 })
