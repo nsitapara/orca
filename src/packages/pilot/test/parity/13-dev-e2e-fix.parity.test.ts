@@ -4,6 +4,11 @@ import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { loadDefinitions } from '../../src/main/definitions/loader'
+import { handOverRunEnd } from '../../src/main/handover/hand-over'
+import { PilotStore } from '../../src/main/store/store'
+import type { RunRow, TickTrigger } from '../../src/shared/api-types'
+import { readsFed } from '../../src/shared/definition/jobs'
+import type { FeedDef } from '../../src/shared/definition/types'
 import { outputsFromFile } from '../../src/shared/run/outputs'
 import { renderShellEnv } from '../../src/shared/run/shell-template'
 import { decideStep, runEnd, type EndedStep } from '../../src/shared/run/step-plan'
@@ -28,6 +33,36 @@ const SKILL = join(homedir(), '.agents', 'skills', 'dev-e2e-fix')
 const pipelines = loadPortedAutomation(JOB_13.pipelines)
 const starts = loadPortedAutomation(JOB_13.starts)
 const HOUR = 3_600_000
+const LIST_FIX_TICKETS =
+  'python3 /Users/nishsitapara/.agents/skills/dev-e2e-fix/pilot_mode.py list-fix-tickets'
+// 13 adopts the stage handover with the Pilot build that reads job.feeds connections. Until the controller applies
+// yaml-pending.patch to ~/.agents/automations, the live files keep the old shape: an arrow only, and stage 2 reads
+// list-fix-tickets alone. Run against the patched files with PARITY_AUTOMATIONS_DIR=<a patched copy>.
+const adopted = readsFed(starts.definition)
+
+// Stage 1's feed to stage 2: the ticket output handed over and stage 2 ticked at once, or (before) the arrow only.
+function stage1Feed(): FeedDef {
+  const feed: FeedDef = {
+    to: 'dev-e2e-fix-start',
+    pass: null,
+    run: 'next_schedule',
+    when: 'success',
+    caption: 'the tickets it opens'
+  }
+  if (adopted) {
+    return { ...feed, pass: { id: 'ticket' }, run: 'now' }
+  }
+  return feed
+}
+
+// Stage 2's ids: what stage 1 hands over (once adopted) and list-fix-tickets, as its fallback.
+function stage2IdsFrom(): Record<string, unknown> {
+  const idsFrom = { run: LIST_FIX_TICKETS, field: 'identifier' }
+  if (adopted) {
+    return { feed: true, ...idsFrom }
+  }
+  return idsFrom
+}
 
 function modeOutputs(): string[] {
   const text = readFileSync(join(SKILL, 'modes', 'answers.md'), 'utf8')
@@ -62,7 +97,8 @@ describe('13 · Fix red hourly e2e on dev: the definitions (old job: orca automa
     expect(step).toMatchObject({
       name: 'ticket',
       agent: 'shell',
-      env: { PIPELINE_ID: '{pipeline.id}' }
+      env: { PIPELINE_ID: '{pipeline.id}' },
+      outputs: adopted ? ['ticket'] : []
     })
     expect(step).toMatchObject({
       run: 'python3 /Users/nishsitapara/.agents/skills/dev-e2e-fix/pilot_mode.py ticket "$PIPELINE_ID"'
@@ -108,10 +144,7 @@ describe('13 · Fix red hourly e2e on dev: the definitions (old job: orca automa
     // Only the tickets this job recorded as open (tickets.json, through list-fix-tickets), read by identifier: no listing,
     // no match or field script. No assignee clause: like the Orca sweep, a recorded open ticket starts whoever has it.
     expect(starts.definition.items?.where).toEqual({
-      ids_from: {
-        run: 'python3 /Users/nishsitapara/.agents/skills/dev-e2e-fix/pilot_mode.py list-fix-tickets',
-        field: 'identifier'
-      },
+      ids_from: stage2IdsFrom(),
       team: 'WEB',
       state_type: ['triage', 'backlog', 'unstarted', 'started'],
       has_branch: true
@@ -214,6 +247,88 @@ describe('13 · Fix red hourly e2e on dev: the definitions (old job: orca automa
     expect(r.outputs).toEqual({})
   })
 
+  // The contract across the two languages: pilot_mode's report() writes the ticket output, Pilot's reader parses it,
+  // and stage 1's feed hands each ticket to stage 2 and ticks it at once.
+  it.runIf(adopted)(
+    "stage 1's ticket output, as pilot_mode writes it, is handed to stage 2, which ticks at once",
+    () => {
+      const root = mkdtempSync(join(tmpdir(), 'parity-13-handover-'))
+      const outputFile = join(root, 'outputs')
+      writeFileSync(outputFile, '')
+      const wrote = spawnSync(
+        'python3',
+        ['-c', "import pilot_mode; pilot_mode.report(['WEB-2123', 'WEB-9'])"],
+        {
+          cwd: SKILL,
+          encoding: 'utf8',
+          env: {
+            PATH: process.env.PATH ?? '',
+            HOME: homedir(),
+            PILOT_OUTPUT_FILE: outputFile,
+            PYTHONDONTWRITEBYTECODE: '1'
+          }
+        }
+      )
+      expect(wrote.stderr).toBe('')
+      const outputs = outputsFromFile(readFileSync(outputFile, 'utf8')).outputs
+      expect(outputs).toEqual({ tickets: 'WEB-2123,WEB-9', ticket: 'WEB-2123,WEB-9' })
+      const store = PilotStore.open(':memory:')
+      const run: RunRow = {
+        id: 'dev-e2e-fix-202610131805-t1-1',
+        automationId: 'dev-e2e-fix',
+        tickId: 1,
+        itemKey: 'pipeline:77',
+        itemLabel: '#77',
+        worktreePath: '/repo',
+        status: 'done',
+        outcome: 'Done',
+        startedAt: 1,
+        finishedAt: 2,
+        costUsd: null,
+        tokens: null,
+        worktreeId: null,
+        trigger: 'schedule',
+        parentRunId: null,
+        imported: false
+      }
+      store.runs.create(run)
+      store.runs.createStep({
+        runId: run.id,
+        idx: 0,
+        name: 'ticket',
+        agent: 'shell',
+        skill: null,
+        startedAt: 1
+      })
+      store.advance.mergeStepOutputs(run.id, 0, outputs)
+      const triggered: [string, TickTrigger][] = []
+      const defs = [pipelines.definition, starts.definition]
+      handOverRunEnd(
+        {
+          store,
+          now: () => 3,
+          definitionFor: (id) => defs.find((d) => d.id === id) ?? null,
+          trigger: (id, cause) => triggered.push([id, cause]),
+          log: (m) => {
+            throw new Error(m)
+          }
+        },
+        run,
+        { status: 'done', outcome: 'Done' }
+      )
+      expect(store.handovers.pending('dev-e2e-fix-start', 10).map((h) => h.itemId)).toEqual([
+        'WEB-2123',
+        'WEB-9'
+      ])
+      expect(triggered).toEqual([
+        [
+          'dev-e2e-fix-start',
+          { automationId: 'dev-e2e-fix', runId: run.id, stage: 1, ids: ['WEB-2123', 'WEB-9'] }
+        ]
+      ])
+    }
+  )
+
   it('every script is the skill’s own pilot_mode.py, with no Pilot placeholder in a command', () => {
     const idsFrom = starts.definition.items?.where.ids_from as { run: string }
     const commands = [
@@ -256,15 +371,7 @@ describe('13 · Fix red hourly e2e on dev: the definitions (old job: orca automa
         name: 'Fix red hourly e2e on dev',
         stage: 1,
         label: 'Open or update the ticket',
-        feeds: [
-          {
-            to: 'dev-e2e-fix-start',
-            pass: null,
-            run: 'next_schedule',
-            when: 'success',
-            caption: 'the tickets it opens'
-          }
-        ]
+        feeds: [stage1Feed()]
       },
       'dev-e2e-fix-start': {
         id: '13',
