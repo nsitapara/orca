@@ -60,15 +60,33 @@ describe('handoverActivityLines: what Activity says about a tick of a fed stage'
       {
         trigger: null,
         handedOver: [
-          row({ state: 'expired', verdict: null, senderStage: 1 }),
+          row({ state: 'expired', verdict: null, senderStage: 1, reason: 'expired after 7 days' }),
           row({ id: 2, itemId: 'WEB-9' })
         ]
       },
       ['Read handed-over ids: WEB-9', 'Handover of WEB-2123 from stage 1 expired after 7 days']
     ],
     [
+      'a handover dropped by its receiver, with why',
+      {
+        trigger: null,
+        handedOver: [
+          row({
+            state: 'expired',
+            verdict: null,
+            senderStage: 1,
+            reason: 'dropped: not found by its source'
+          })
+        ]
+      },
+      ['Handover of WEB-2123 from stage 1 dropped: not found by its source']
+    ],
+    [
       'an expired handover from a sender that is no stage any more',
-      { trigger: null, handedOver: [row({ state: 'expired', verdict: null })] },
+      {
+        trigger: null,
+        handedOver: [row({ state: 'expired', verdict: null, reason: 'expired after 7 days' })]
+      },
       ['Handover of WEB-2123 from dev-e2e-fix expired after 7 days']
     ],
     ['a tick that read none', { trigger: null, handedOver: [] }, []],

@@ -1,6 +1,7 @@
 import type { FieldValue, RunRow, StepRow, TickTrigger } from '../../shared/api-types'
 import type { AutomationDefinition, FeedDef } from '../../shared/definition/types'
 import type { RunEnd } from '../../shared/run/step-plan'
+import { fedIdProblem, MAX_FED_IDS_PER_RUN } from '../../shared/definition/item-ids'
 import type { HandoverWrite, RunEndHandover } from '../run/run-close'
 import { MAX_IDS, usableId } from '../sources/ids-from'
 import type { PilotStore } from '../store/store'
@@ -54,7 +55,29 @@ export function runOutput(steps: readonly StepRow[], name: string): FieldValue |
   return reported[0]?.outputs[name]
 }
 
-type Plan = HandoverWrite & { rows: NewHandover[] }
+type Plan = HandoverWrite & { rows: NewHandover[]; refused: string[] }
+
+// The ids the receiving stage can read, and why each other one is refused: its item kind's id format (WEB-123 for
+// Linear tickets) and at most MAX_FED_IDS_PER_RUN ids a run.
+function screen(deps: HandOverDeps, to: string, words: readonly string[]) {
+  const kind = deps.definitionFor(to)?.items?.kind ?? null
+  const ok: string[] = []
+  const refused = new Map<string, string[]>()
+  const refuse = (id: string, why: string) => refused.set(why, [...(refused.get(why) ?? []), id])
+  for (const id of words) {
+    const problem = fedIdProblem(kind, id)
+    if (problem) {
+      refuse(id, problem)
+    } else if (ok.length >= MAX_FED_IDS_PER_RUN) {
+      refuse(id, `past ${MAX_FED_IDS_PER_RUN} ids in one run`)
+    } else {
+      ok.push(id)
+    }
+  }
+  const quoted = (ids: string[]) => ids.map((id) => JSON.stringify(id)).join(', ')
+  const why = [...refused].map(([reason, ids]) => `${quoted(ids)} (${reason})`)
+  return { ok, note: why.length > 0 ? `handover to ${to} refused ${why.join(', ')}` : null }
+}
 
 // What one feed hands over and asks for. A feed with pass that found no id triggers nothing.
 function planFeed(
@@ -67,14 +90,12 @@ function planFeed(
 ): void {
   let ids: string[] = []
   if (feed.pass !== null) {
-    const output = feed.pass.id
-    const read = idsInOutput(runOutput(steps(), output))
-    for (const word of read.refused) {
-      deps.log(
-        `[pilot] run ${run.id}: ${output}: ${JSON.stringify(word)} is not an id; not handed over`
-      )
+    const read = idsInOutput(runOutput(steps(), feed.pass.id))
+    const screened = screen(deps, feed.to, [...read.ids, ...read.refused])
+    if (screened.note) {
+      plan.refused.push(screened.note)
     }
-    ids = read.ids
+    ids = screened.ok
     if (ids.length === 0) {
       return
     }
@@ -97,7 +118,7 @@ function planFeed(
 // What a stage's run hands over at its end: each feed whose `when` holds, with pass or run: now. A planning failure
 // (a definition or step read) is logged and hands nothing over; the run's end stands.
 function plan(deps: HandOverDeps, run: RunRow, end: RunEnd): Plan {
-  const planned: Plan = { rows: [], triggers: [], note: null }
+  const planned: Plan = { rows: [], triggers: [], note: null, refused: [] }
   try {
     if (!HANDS_OVER.has(run.trigger)) {
       return planned
@@ -119,9 +140,12 @@ function plan(deps: HandOverDeps, run: RunRow, end: RunEnd): Plan {
     }
   } catch (error) {
     deps.log(`[pilot] run ${run.id}: couldn't hand over to the next stage: ${messageOf(error)}`)
-    return { rows: [], triggers: [], note: null }
+    return { rows: [], triggers: [], note: null, refused: [] }
   }
-  return planned
+  for (const note of planned.refused) {
+    deps.log(`[pilot] run ${run.id}: ${note}`)
+  }
+  return { ...planned, note: planned.refused.length > 0 ? planned.refused.join('; ') : null }
 }
 
 // closeRun's handover (run-close.ts): `write` inside the transaction that ends the run writes each id durably, once

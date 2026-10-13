@@ -307,4 +307,37 @@ describe('runTick: what a fed stage leaves pending', () => {
       expect.objectContaining({ itemId: 'WEB-2', state: 'consumed', verdict: 'started' })
     ])
   })
+
+  it('drops a fed id its source can’t read, with the reason, and never fails the tick; the rest still run', async () => {
+    const d = handed(['WEB-1'])
+    d.store.handovers.add({
+      senderId: 'pipelines',
+      senderRunId: 'run-x',
+      receiverId: 'starts',
+      itemIds: ['web 9', 'WEB-404'],
+      at: NOW - 60_000
+    })
+    const missing: SourceAccess = {
+      list: async (def, ctx) => {
+        const listed = await linear.list(def, ctx)
+        expect(ctx.ids).toEqual(['WEB-1', 'WEB-404'])
+        return {
+          ...listed,
+          items: listed.items.filter((i) => i.label !== 'WEB-404'),
+          missing: ['WEB-404']
+        }
+      },
+      scope: () => null
+    }
+    const result = await runTick(FED, people, { ...d, sources: missing }, { dryRun: false })
+    expect(result.status).toBe('ok')
+    expect(d.launched).toEqual(['linear:WEB-1'])
+    expect(pendingIds(d)).toEqual([])
+    const settled = d.store.handovers.consumedBy([result.tickId]).get(result.tickId) ?? []
+    expect(settled.map((h) => [h.itemId, h.state, h.reason])).toEqual([
+      ['WEB-1', 'consumed', 'All checks pass'],
+      ['web 9', 'expired', 'dropped: not a Linear id like WEB-123'],
+      ['WEB-404', 'expired', 'dropped: not found by its source']
+    ])
+  })
 })

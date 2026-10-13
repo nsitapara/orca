@@ -21,10 +21,19 @@ describe('handoverService: what pilot-services wires', () => {
       },
       steps: [testStep({ name: 'ticket', agent: 'shell', run: './t.sh', outputs: ['ticket'] })]
     })
+    const receiver = testDefinition({
+      id: 'start',
+      items: {
+        kind: 'linear_ticket',
+        where: { ids_from: { feed: true } },
+        match: [],
+        customFields: []
+      }
+    })
     const service = handoverService({
       store,
       now: () => AT,
-      definitionFor: (id) => (id === 'open' ? sender : null),
+      definitionFor: (id) => [sender, receiver].find((d) => d.id === id) ?? null,
       log: () => {}
     })
     const triggered: [string, TickTrigger][] = []

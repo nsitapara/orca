@@ -1,11 +1,5 @@
-import type {
-  HandoverRow,
-  ItemDecision,
-  TickResult,
-  TickTrigger,
-  Verdict
-} from '../../shared/api-types'
-import { consumeFed, expireStale, handoverOf } from '../handover/tick-handover'
+import type { ItemDecision, TickResult, TickTrigger, Verdict } from '../../shared/api-types'
+import { expireStale, handoverOf, settleFed } from '../handover/tick-handover'
 import type { AutomationDefinition } from '../../shared/definition/types'
 import type { PeopleDirectory } from '../../shared/people'
 import { usesHandled, workspacePathOf } from '../../shared/tick/decide'
@@ -16,7 +10,8 @@ import {
   decideTickItems,
   worktreeTakenSinceDecide,
   type DecideDeps,
-  type DecideOutcome
+  type DecideOutcome,
+  type FedOutcome
 } from './tick-decide'
 
 export type { TickResult }
@@ -252,7 +247,7 @@ export async function runTick(
   const tickId = deps.store.startTick(def.id, opts.dryRun, deps.now())
   let decisions: ItemDecision[]
   let warnings: string[]
-  let fed: HandoverRow[]
+  let feeding: FedOutcome
   try {
     if (!opts.dryRun) {
       if (opts.trigger) {
@@ -263,7 +258,7 @@ export async function runTick(
     const outcome = await decide(def, people, deps, opts, tickId)
     decisions = outcome.decisions
     warnings = outcome.warnings
-    fed = outcome.fed
+    feeding = outcome
   } catch (error) {
     const message = errorMessage(error)
     finishFailed(tickId, message, {}, deps)
@@ -285,11 +280,11 @@ export async function runTick(
       await startRuns(def, decisions, tickId, deps, runIds, unlaunched)
     }
     deps.store.recordDecisions(tickId, decisions, runIds)
-    if (!opts.dryRun && fed.length > 0) {
-      consumeFed(deps.store, def, fed, decisions, runIds, tickId, deps.now())
+    if (!opts.dryRun) {
+      settleFed(deps.store, def, feeding, decisions, runIds, tickId, deps.now())
     }
     deps.store.finishTick(tickId, 'ok', null, countVerdicts(decisions), deps.now(), warnings)
-    const handover = handoverOf(def, fed, decisions)
+    const handover = handoverOf(def, feeding.fed, decisions)
     return {
       tickId,
       status: 'ok',

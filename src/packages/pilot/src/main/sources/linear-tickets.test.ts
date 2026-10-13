@@ -374,6 +374,11 @@ describe('linearTicketSource: the ids where.ids_from gave', () => {
     }
   )
 
+  it('names the ids Linear has no such ticket for, so a fed one is dropped rather than kept', async () => {
+    const listed = await source(byId(MISS)).list(context({ ids: ['WEB-9', 'WEB-1'] }), START)
+    expect(listed.missing).toEqual(['WEB-9'])
+  })
+
   it('fails the list on any other read failure, and on an id that is no Linear identifier', async () => {
     const down = byId()
     down.issue.mockRejectedValue(new Error('linear_timeout'))

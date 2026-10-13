@@ -52,9 +52,19 @@ export function handoverActivityLines(tick: {
     lines.push(`Read handed-over ids: ${read.join(', ')}`)
   }
   for (const h of rows.filter((r) => r.state === 'expired')) {
-    lines.push(`Handover of ${h.itemId} from ${senderName(h)} expired after 7 days`)
+    lines.push(
+      `Handover of ${h.itemId} from ${senderName(h)} ${h.reason ?? 'expired after 7 days'}`
+    )
   }
   return lines
+}
+
+// An expired row was either dropped (its id unreadable, not found, not in the stage's list) or waited 7 days.
+function expiredWord(h: HandoverRow): string {
+  if (h.reason?.startsWith('dropped')) {
+    return 'dropped'
+  }
+  return 'expired'
 }
 
 function senderName(h: HandoverRow): string {
@@ -135,7 +145,7 @@ export function lastHandoverText(rows: readonly HandoverRow[], now: number): str
       return `${h.itemId} waiting`
     }
     if (h.state === 'expired') {
-      return `${h.itemId} expired`
+      return `${h.itemId} ${expiredWord(h)}`
     }
     return `${h.itemId} ${h.verdict ? OUTCOME[h.verdict] : 'not read'}`
   })

@@ -351,7 +351,7 @@ describe('decideTickItems: where.ids_from', () => {
 
   it('hands the source the pending handed-over ids first, then the command’s, each once, and names the rows it read', async () => {
     const { seen, list } = listing()
-    const ids = answering(0, '{"v":1,"data":[{"identifier":"WEB-1"},{"identifier":"WEB-3"}]}')
+    const ids = answering(0, '{"v":1,"data":[{"identifier":"web-1"},{"identifier":"WEB-3"}]}')
     const { store, decide } = setup(tickets({ ids_from: { feed: true, ...IDS_FROM } }), {
       sources: { list },
       runIds: ids.run
@@ -360,7 +360,7 @@ describe('decideTickItems: where.ids_from', () => {
       senderId: 'pipelines',
       senderRunId: 'r1',
       receiverId: 'starts',
-      itemIds: ['WEB-2', 'web-1'],
+      itemIds: ['WEB-2', 'WEB-1'],
       at: NOW
     })
     store.handovers.add({
@@ -371,8 +371,8 @@ describe('decideTickItems: where.ids_from', () => {
       at: NOW
     })
     const out = await decide()
-    expect(seen).toEqual([['WEB-2', 'web-1', 'WEB-3']])
-    expect(out.fed.map((h) => h.itemId)).toEqual(['WEB-2', 'web-1'])
+    expect(seen).toEqual([['WEB-2', 'WEB-1', 'WEB-3']])
+    expect(out.fed.map((h) => h.itemId)).toEqual(['WEB-2', 'WEB-1'])
     expect(ids.calls).toHaveLength(1)
   })
 
