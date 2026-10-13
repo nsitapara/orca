@@ -163,11 +163,7 @@ export function openMainWindow(options: { revealOnDidFinishLoad?: boolean } = {}
   })
   recordCrashBreadcrumb('main_window_created')
   logStartupMilestone('window-created')
-  // pilot-hook: tray-after-launch
-  const createTray = deferTrayPastLaunch(
-    window,
-    createSystemTrayDeferred(window, () => logStartupMilestone('tray-created'))
-  )
+  const createTray = deferTrayPastLaunch(window, createSystemTrayDeferred) // pilot-hook: tray-after-launch
   window.once('ready-to-show', () => {
     logStartupMilestone('ready-to-show')
     setImmediate(createTray)
