@@ -6,6 +6,7 @@ import { EMPTY_PEOPLE } from '../../shared/people'
 import { fakeFieldDeps, testItem } from '../fields/__fixtures__/field-deps'
 import type { SourceAccess } from '../scheduler/tick-decide'
 import { makeRunId, runTick, type TickDeps } from '../scheduler/tick-runner'
+import type { IdsRunner } from '../sources/ids-from'
 import { PilotStore } from '../store/store'
 import { HANDOVER_EXPIRY_MS, settles } from './tick-handover'
 
@@ -69,7 +70,16 @@ describe('runTick: a stage fed ids by an earlier stage (job.feeds … pass)', ()
       name: 'N',
       stage: 1,
       label: 'Open the ticket',
-      feeds: [{ to: 'starts', pass: { id: 'ticket' }, run: 'now', when: 'success', caption: null }]
+      feeds: [
+        {
+          to: 'starts',
+          pass: { id: 'ticket' },
+          run: 'now',
+          when: 'success',
+          caption: null,
+          trust: 'shell'
+        }
+      ]
     }
   })
   // A Linear source that reads each id it is handed; WEB-404 doesn't exist.
@@ -338,6 +348,31 @@ describe('runTick: what a fed stage leaves pending', () => {
       ['WEB-1', 'consumed', 'All checks pass'],
       ['web 9', 'expired', 'dropped: not a Linear id like WEB-123'],
       ['WEB-404', 'expired', 'dropped: not found by its source']
+    ])
+  })
+
+  it('never starts a handed-over ticket its own list-fix-tickets doesn’t name: it is dropped, the listed one runs', async () => {
+    const d = handed(['WEB-9999', 'WEB-1'])
+    const listing = {
+      ...FED,
+      items: {
+        ...FED.items!,
+        where: { ids_from: { feed: true, run: 'list-fix-tickets', field: 'identifier' } }
+      }
+    }
+    const runIds: IdsRunner = async () => ({
+      code: 0,
+      stdout: '[{"identifier":"WEB-1"}]',
+      stderr: '',
+      timedOut: false,
+      truncated: false
+    })
+    const result = await runTick(listing, people, { ...d, runIds }, { dryRun: false })
+    expect(d.launched).toEqual(['linear:WEB-1'])
+    const settled = d.store.handovers.consumedBy([result.tickId]).get(result.tickId) ?? []
+    expect(settled.map((h) => [h.itemId, h.state, h.reason])).toEqual([
+      ['WEB-9999', 'expired', "dropped: not in the stage's own list"],
+      ['WEB-1', 'consumed', 'All checks pass']
     ])
   })
 })

@@ -349,7 +349,7 @@ describe('decideTickItems: where.ids_from', () => {
     expect(never.calls).toEqual([])
   })
 
-  it('hands the source the pending handed-over ids first, then the command’s, each once, and names the rows it read', async () => {
+  it('reads a fed id only when the stage’s own command lists it too, and drops the rest as not in its list', async () => {
     const { seen, list } = listing()
     const ids = answering(0, '{"v":1,"data":[{"identifier":"web-1"},{"identifier":"WEB-3"}]}')
     const { store, decide } = setup(tickets({ ids_from: { feed: true, ...IDS_FROM } }), {
@@ -371,8 +371,11 @@ describe('decideTickItems: where.ids_from', () => {
       at: NOW
     })
     const out = await decide()
-    expect(seen).toEqual([['WEB-2', 'WEB-1', 'WEB-3']])
-    expect(out.fed.map((h) => h.itemId)).toEqual(['WEB-2', 'WEB-1'])
+    expect(seen).toEqual([['WEB-1', 'WEB-3']])
+    expect(out.fed.map((h) => h.itemId)).toEqual(['WEB-1'])
+    expect(out.dropped.map((d) => [d.row.itemId, d.reason])).toEqual([
+      ['WEB-2', "dropped: not in the stage's own list"]
+    ])
     expect(ids.calls).toHaveLength(1)
   })
 

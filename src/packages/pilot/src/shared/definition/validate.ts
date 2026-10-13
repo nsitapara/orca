@@ -218,17 +218,28 @@ function captionErrors(job: NonNullable<RawAutomation['job']>): string[] {
   return []
 }
 
-// A pass hands on an output: one of the outputs the steps declare (outputs: [ticket]).
+// A pass hands on an output one of the steps declares (outputs: [ticket]), from a shell step unless the feed trusts
+// agents (trust: agent): an agent writes its own outputs.
 function passErrors(raw: RawAutomation, job: NonNullable<RawAutomation['job']>): string[] {
-  const declared = new Set(raw.steps.flatMap((s) => s.outputs ?? []))
+  const names = stepNames(raw.steps)
   return feedsOf(job).flatMap((feed, i) => {
-    if (feed.pass === null || declared.has(feed.pass.id)) {
+    if (feed.pass === null) {
       return []
     }
     const name = feed.pass.id
-    return [
-      `job.feeds[${i}].pass.id: no step declares the output "${name}"; add outputs: [${name}] to the step that writes it`
-    ]
+    const declaring = raw.steps.flatMap((s, n) => ((s.outputs ?? []).includes(name) ? [n] : []))
+    if (declaring.length === 0) {
+      return [
+        `job.feeds[${i}].pass.id: no step declares the output "${name}"; add outputs: [${name}] to the step that writes it`
+      ]
+    }
+    const agent = declaring.find((n) => raw.steps[n].agent !== 'shell')
+    if (agent !== undefined && feed.trust !== 'agent') {
+      return [
+        `job.feeds[${i}].pass.id: "${name}" is declared by agent step ${agent + 1} (${names[agent]}); pass an agent's output on only with trust: agent`
+      ]
+    }
+    return []
   })
 }
 

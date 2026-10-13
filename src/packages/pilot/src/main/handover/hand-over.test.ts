@@ -18,6 +18,7 @@ function feed(over: Partial<FeedDef> = {}): FeedDef {
     run: 'now',
     when: 'success',
     caption: null,
+    trust: 'shell',
     ...over
   }
 }
@@ -124,10 +125,50 @@ describe('handOverRunEnd: a stage run that ends hands its output to the next sta
     ])
   })
 
-  it('reads the output from the last step that reported it', () => {
-    const s = setup(sender([feed()]), [{ ticket: 'WEB-1' }, { other: 1 }, { ticket: 'WEB-2' }])
+  it('reads the output from the last declaring step that reported it', () => {
+    const declaring = testStep({
+      name: 'ticket',
+      agent: 'shell',
+      run: './t.sh',
+      outputs: ['ticket']
+    })
+    const def = {
+      ...sender([feed()]),
+      steps: [
+        declaring,
+        testStep({ name: 'x', agent: 'shell', run: './x.sh' }),
+        { ...declaring, name: 'again' }
+      ]
+    }
+    const s = setup(def, [{ ticket: 'WEB-1' }, { other: 1 }, { ticket: 'WEB-2' }])
     handOverRunEnd(s.deps, s.run, DONE)
     expect(s.pending()).toEqual([[s.run.id, 'WEB-2']])
+  })
+
+  it('reads the passed output only from a step that declares it: another step’s key is ignored', () => {
+    const def = {
+      ...sender([feed()]),
+      steps: [
+        testStep({ name: 'probe', agent: 'shell', run: './probe.sh' }),
+        testStep({ name: 'ticket', agent: 'shell', run: './t.sh', outputs: ['ticket'] }),
+        testStep({ name: 'late', agent: 'shell', run: './late.sh' })
+      ]
+    }
+    const s = setup(def, [{ ticket: 'WEB-666' }, { ticket: 'WEB-1' }, { ticket: 'WEB-777' }])
+    handOverRunEnd(s.deps, s.run, DONE)
+    expect(s.pending()).toEqual([[s.run.id, 'WEB-1']])
+  })
+
+  it('reads an agent step’s output only when the feed says trust: agent', () => {
+    const agentStep = testStep({ name: 'review', agent: 'claude', outputs: ['ticket'] })
+    const plain = setup({ ...sender([feed()]), steps: [agentStep] }, [{ ticket: 'WEB-1' }])
+    handOverRunEnd(plain.deps, plain.run, DONE)
+    expect(plain.pending()).toEqual([])
+    const trusted = setup({ ...sender([feed({ trust: 'agent' })]), steps: [agentStep] }, [
+      { ticket: 'WEB-1' }
+    ])
+    handOverRunEnd(trusted.deps, trusted.run, DONE)
+    expect(trusted.pending()).toEqual([[trusted.run.id, 'WEB-1']])
   })
 
   it('leaves the ids for the receiver’s schedule with run: next_schedule', () => {

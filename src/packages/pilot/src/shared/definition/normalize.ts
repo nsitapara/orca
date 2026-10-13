@@ -220,7 +220,8 @@ export function feedsOf(job: RawJob): FeedDef[] {
         pass: null,
         run: 'next_schedule',
         when: 'success',
-        caption: job.hands_over ?? null
+        caption: job.hands_over ?? null,
+        trust: 'shell'
       }
     }
     return {
@@ -228,7 +229,8 @@ export function feedsOf(job: RawJob): FeedDef[] {
       pass: entry.pass ? { id: entry.pass.id } : null,
       run: entry.run ?? 'next_schedule',
       when: entry.when ?? 'success',
-      caption: entry.caption ?? null
+      caption: entry.caption ?? null,
+      trust: entry.trust ?? 'shell'
     }
   })
 }

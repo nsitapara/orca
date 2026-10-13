@@ -35,7 +35,8 @@ const STAGE_1: AutomationSummary = {
         pass: null,
         run: 'next_schedule',
         when: 'success',
-        caption: 'the tickets it opens'
+        caption: 'the tickets it opens',
+        trust: 'shell'
       }
     ]
   }

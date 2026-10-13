@@ -45,7 +45,7 @@ function mergeIds(
 
 // where.ids_from, when the automation has one: the ids its source reads instead of listing. `feed: true` reads the
 // receiver's pending handovers; `run` runs its command, whose failure throws, so the tick is recorded failed with the
-// reason and its fed ids stay pending.
+// reason and its fed ids stay pending. With both, the fed ids are intersected with the command's list.
 export async function idsForTick(
   def: AutomationDefinition,
   repo: RepoFacts,
@@ -74,5 +74,11 @@ export async function idsForTick(
     engineEnv: deps.fields.engineEnv
   }
   const listed = await readIdsFrom({ ...spec, run: spec.run }, opts, deps.runIds ?? runIdsCommand)
-  return mergeIds(fed, listed, dropped)
+  // With its own command, a feed speeds a stage up but never adds an item: a fed id it doesn't list is dropped.
+  const own = new Set(listed.map((id) => id.toLowerCase()))
+  const notListed = fed
+    .filter((row) => !own.has(row.itemId.toLowerCase()))
+    .map((row) => ({ row, reason: "dropped: not in the stage's own list" }))
+  const kept = fed.filter((row) => own.has(row.itemId.toLowerCase()))
+  return mergeIds(kept, listed, [...dropped, ...notListed])
 }

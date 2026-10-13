@@ -17,7 +17,16 @@ describe('handoverService: what pilot-services wires', () => {
         name: 'N',
         stage: 1,
         label: 'Open',
-        feeds: [{ to: 'start', pass: { id: 'ticket' }, run: 'now', when: 'success', caption: null }]
+        feeds: [
+          {
+            to: 'start',
+            pass: { id: 'ticket' },
+            run: 'now',
+            when: 'success',
+            caption: null,
+            trust: 'shell'
+          }
+        ]
       },
       steps: [testStep({ name: 'ticket', agent: 'shell', run: './t.sh', outputs: ['ticket'] })]
     })
