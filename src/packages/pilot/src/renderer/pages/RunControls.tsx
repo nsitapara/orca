@@ -47,43 +47,65 @@ export function RunControls({ id, onDone }: { id: string; onDone: () => void }):
     onDone()
   }
 
-  const busy = phase === 'running'
+  const bar =
+    phase === 'confirm' ? (
+      <RunConfirmBar
+        onConfirm={() => void run('pilot.automations.tickNow')}
+        onCancel={() => setPhase('idle')}
+      />
+    ) : (
+      <RunButtons
+        busy={phase === 'running'}
+        onDryRun={() => void run('pilot.automations.dryRun')}
+        onRunNow={() => setPhase('confirm')}
+      />
+    )
   return (
     <div className="flex flex-col items-end gap-1">
-      <div className="flex items-center gap-2">
-        {phase === 'confirm' ? (
-          <>
-            <span className="text-sm">Start agents for items that pass the checks?</span>
-            <Button size="sm" onClick={() => void run('pilot.automations.tickNow')}>
-              Confirm
-            </Button>
-            <Button variant="ghost" size="sm" onClick={() => setPhase('idle')}>
-              Cancel
-            </Button>
-          </>
-        ) : (
-          <>
-            {busy ? <span className="text-sm text-muted-foreground">Running…</span> : null}
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={busy}
-              onClick={() => void run('pilot.automations.dryRun')}
-            >
-              Dry run
-            </Button>
-            <Button
-              variant="secondary"
-              size="sm"
-              disabled={busy}
-              onClick={() => setPhase('confirm')}
-            >
-              Run now
-            </Button>
-          </>
-        )}
-      </div>
+      <div className="flex items-center gap-2">{bar}</div>
       {message ? <p className="text-sm text-muted-foreground">{message}</p> : null}
     </div>
+  )
+}
+
+function RunConfirmBar({
+  onConfirm,
+  onCancel
+}: {
+  onConfirm: () => void
+  onCancel: () => void
+}): React.JSX.Element {
+  return (
+    <>
+      <span className="text-sm">Start agents for items that pass the checks?</span>
+      <Button size="sm" onClick={onConfirm}>
+        Confirm
+      </Button>
+      <Button variant="ghost" size="sm" onClick={onCancel}>
+        Cancel
+      </Button>
+    </>
+  )
+}
+
+function RunButtons({
+  busy,
+  onDryRun,
+  onRunNow
+}: {
+  busy: boolean
+  onDryRun: () => void
+  onRunNow: () => void
+}): React.JSX.Element {
+  return (
+    <>
+      {busy ? <span className="text-sm text-muted-foreground">Running…</span> : null}
+      <Button variant="outline" size="sm" disabled={busy} onClick={onDryRun}>
+        Dry run
+      </Button>
+      <Button variant="secondary" size="sm" disabled={busy} onClick={onRunNow}>
+        Run now
+      </Button>
+    </>
   )
 }
