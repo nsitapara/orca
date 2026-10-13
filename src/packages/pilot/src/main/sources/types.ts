@@ -35,6 +35,10 @@ export type ItemSource = {
   kind: ItemKind
   // The kind's schema from shared/definition/where.ts: the same object parse.ts checks files with.
   whereSchema: z.ZodType
-  list(ctx: SourceContext, where: unknown): Promise<{ items: Item[]; warnings: string[] }>
+  // `missing`: ids (ctx.ids) the source has no such item for, so a handed-over one is dropped, not kept.
+  list(
+    ctx: SourceContext,
+    where: unknown
+  ): Promise<{ items: Item[]; warnings: string[]; missing?: string[] }>
   scope(item: Item, where: unknown, people: PeopleDirectory | null): ScopeResult
 }

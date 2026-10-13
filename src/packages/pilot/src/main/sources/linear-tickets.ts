@@ -146,7 +146,8 @@ async function readTicketsByIds(
   linear: LinearConnector,
   ids: readonly string[],
   where: LinearTicketWhere,
-  warnings: string[]
+  warnings: string[],
+  missing: string[]
 ): Promise<Ticket[]> {
   const bad = ids.find((id) => !LINEAR_IDENTIFIER.test(id))
   if (bad !== undefined) {
@@ -158,6 +159,7 @@ async function readTicketsByIds(
     } catch (error) {
       if (notFound(error)) {
         warnings.push(`${id} isn't readable in Linear; skipped`)
+        missing.push(id)
         return null
       }
       throw error
@@ -229,9 +231,10 @@ export function linearTicketSource(deps: LinearTicketSourceDeps): ItemSource {
     async list(ctx, rawWhere) {
       const where = linearTicketWhereSchema.parse(rawWhere ?? {})
       const warnings: string[] = []
+      const missing: string[] = []
       // Like M01's unstarted(): only tickets of a wanted state get a details read.
       const tickets = ctx.ids
-        ? await readTicketsByIds(ctx, deps.linear, ctx.ids, where, warnings)
+        ? await readTicketsByIds(ctx, deps.linear, ctx.ids, where, warnings, missing)
         : await readTickets(ctx, deps.linear, linearListFilter(where), (t) =>
             stateTypeAllowed(t.state?.type, where)
           )
@@ -242,7 +245,7 @@ export function linearTicketSource(deps: LinearTicketSourceDeps): ItemSource {
         return null
       })
       const items = await mapLimit(tickets, POOL, (t) => ticketItem(ctx, deps, api, t, worktrees))
-      return { items, warnings }
+      return { items, warnings, missing }
     },
     scope(item, rawWhere, people) {
       const where = linearTicketWhereSchema.parse(rawWhere ?? {})

@@ -13,13 +13,15 @@ export type NewHandover = {
   itemIds: readonly string[]
   at: number
 }
-// How the receiving tick decided one row's item.
+// How the receiving tick settled one row: consumed with its item's verdict and run, or expired (dropped) with why.
 export type HandoverResult = {
   rowId: number
   verdict: Verdict | null
   reason: string
   runId: string | null
+  state?: 'consumed' | 'expired'
 }
+export const EXPIRED_AFTER = 'expired after 7 days'
 
 function toHandover(r: Record<string, unknown>): HandoverRow {
   return {
@@ -80,9 +82,9 @@ export class HandoverStore {
   expire(receiverId: string, before: number, tickId: number, at: number): number {
     const result = this.db
       .prepare(
-        "UPDATE handovers SET state = 'expired', consumed_at = ?, tick_id = ? WHERE receiver_id = ? AND state = 'pending' AND created_at < ?"
+        "UPDATE handovers SET state = 'expired', consumed_at = ?, tick_id = ?, reason = ? WHERE receiver_id = ? AND state = 'pending' AND created_at < ?"
       )
-      .run(at, tickId, receiverId, before)
+      .run(at, tickId, EXPIRED_AFTER, receiverId, before)
     return Number(result.changes)
   }
 
@@ -95,9 +97,9 @@ export class HandoverStore {
   ): { expired: number; pruned: number } {
     const expired = this.db
       .prepare(
-        "UPDATE handovers SET state = 'expired', consumed_at = ? WHERE state = 'pending' AND created_at < ?"
+        "UPDATE handovers SET state = 'expired', consumed_at = ?, reason = ? WHERE state = 'pending' AND created_at < ?"
       )
-      .run(now, now - expiryMs)
+      .run(now, EXPIRED_AFTER, now - expiryMs)
     const pruned = this.db
       .prepare("DELETE FROM handovers WHERE state != 'pending' AND consumed_at < ?")
       .run(now - retentionMs)
@@ -108,12 +110,12 @@ export class HandoverStore {
   // All or none: a tick's ids are consumed together.
   consume(tickId: number, at: number, results: readonly HandoverResult[]): void {
     const update = this.db.prepare(
-      "UPDATE handovers SET state = 'consumed', consumed_at = ?, tick_id = ?, verdict = ?, reason = ?, run_id = ? WHERE id = ? AND state = 'pending'"
+      "UPDATE handovers SET state = ?, consumed_at = ?, tick_id = ?, verdict = ?, reason = ?, run_id = ? WHERE id = ? AND state = 'pending'"
     )
     this.db.exec('BEGIN IMMEDIATE')
     try {
       for (const r of results) {
-        update.run(at, tickId, r.verdict, r.reason, r.runId, r.rowId)
+        update.run(r.state ?? 'consumed', at, tickId, r.verdict, r.reason, r.runId, r.rowId)
       }
       this.db.exec('COMMIT')
     } catch (error) {

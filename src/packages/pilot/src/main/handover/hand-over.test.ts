@@ -4,7 +4,8 @@ import { testDefinition, testStep } from '../../shared/definition/__fixtures__/d
 import type { AutomationDefinition, FeedDef } from '../../shared/definition/types'
 import type { RunEnd } from '../../shared/run/step-plan'
 import { PilotStore } from '../store/store'
-import { handOverRunEnd, idsInOutput } from './hand-over'
+import { handOverRunEnd, idsInOutput, runEndHandover } from './hand-over'
+import { MAX_FED_IDS_PER_RUN } from '../../shared/definition/item-ids'
 
 const AT = Date.UTC(2026, 9, 13, 18, 5)
 const DONE: RunEnd = { status: 'done', outcome: 'Done' }
@@ -20,6 +21,17 @@ function feed(over: Partial<FeedDef> = {}): FeedDef {
     ...over
   }
 }
+// The stage the feeds hand to: Linear tickets, so a handed id must look like WEB-123.
+const RECEIVER = testDefinition({
+  id: 'dev-e2e-fix-start',
+  items: {
+    kind: 'linear_ticket',
+    where: { ids_from: { feed: true } },
+    match: [],
+    customFields: []
+  },
+  job: { id: '13', name: null, stage: 2, label: 'Start fixes', feeds: [] }
+})
 function sender(feeds: FeedDef[]): AutomationDefinition {
   return testDefinition({
     id: 'dev-e2e-fix',
@@ -66,7 +78,7 @@ function setup(def: AutomationDefinition, outputs: ItemFields[], trigger: RunTri
   const deps = {
     store,
     now: () => AT,
-    definitionFor: (id: string) => (id === def.id ? def : null),
+    definitionFor: (id: string) => [def, RECEIVER].find((d) => d.id === id) ?? null,
     trigger: (id: string, cause: TickTrigger) => triggered.push([id, cause]),
     log: (m: string) => logs.push(m)
   }
@@ -157,7 +169,33 @@ describe('handOverRunEnd: a stage run that ends hands its output to the next sta
     const s = setup(sender([feed()]), [{ ticket: true }])
     handOverRunEnd(s.deps, s.run, DONE)
     expect(s.pending()).toEqual([])
-    expect(s.logs.join('\n')).toContain('ticket: "true" is not an id; not handed over')
+    expect(s.logs.join('\n')).toContain(
+      'handover to dev-e2e-fix-start refused "true" (not a Linear id like WEB-123)'
+    )
+  })
+
+  it('refuses an id the receiving stage can’t read (not a Linear id) and ids past the per-run cap: logged, noted, never written', () => {
+    const many = Array.from({ length: MAX_FED_IDS_PER_RUN + 1 }, (_, i) => `WEB-${i + 1}`)
+    const s = setup(sender([feed()]), [{ ticket: ['web-1', 'none', ...many].join(',') }])
+    const handover = runEndHandover(s.deps)
+    const written = s.store.transaction(() => handover.write(s.run, DONE))
+    expect(s.pending()).toEqual(many.slice(0, MAX_FED_IDS_PER_RUN).map((id) => [s.run.id, id]))
+    expect(written.note).toBe(
+      `handover to dev-e2e-fix-start refused "web-1", "none" (not a Linear id like WEB-123), "WEB-${MAX_FED_IDS_PER_RUN + 1}" (past ${MAX_FED_IDS_PER_RUN} ids in one run)`
+    )
+    expect(s.logs.join('\n')).toContain(`run ${s.run.id}: ${written.note}`)
+    expect(written.triggers[0].cause.ids).toHaveLength(MAX_FED_IDS_PER_RUN)
+  })
+
+  it('refuses every id when the receiving stage is not loaded, and triggers nothing', () => {
+    const s = setup(sender([feed({ to: 'gone' })]), [{ ticket: 'WEB-1' }])
+    const handover = runEndHandover(s.deps)
+    const written = s.store.transaction(() => handover.write(s.run, DONE))
+    expect(s.store.handovers.pending('gone', 10)).toEqual([])
+    expect(written).toEqual({
+      note: 'handover to gone refused "WEB-1" (its stage is not loaded)',
+      triggers: []
+    })
   })
 
   it('ticks the receiver of a run: now feed without pass, with no ids', () => {

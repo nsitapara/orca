@@ -3,8 +3,9 @@ import { activeFeed, readsFed } from '../../shared/definition/jobs'
 import type { AutomationDefinition } from '../../shared/definition/types'
 import type { HandledState } from '../../shared/tick/decide'
 import { handledStates } from '../scheduler/tick-decide'
+import type { FedOutcome } from '../scheduler/tick-decide'
 import type { PilotStore } from '../store/store'
-import { HANDOVER_EXPIRY_MS } from '../store/store-handovers'
+import { HANDOVER_EXPIRY_MS, type HandoverResult } from '../store/store-handovers'
 
 export { HANDOVER_EXPIRY_MS }
 export const NOT_READ = 'Not read: its source returned no such item (closed, or not found)'
@@ -40,33 +41,44 @@ export function settles(
   return state.status !== 'failed' || retryAfterFailureMs === null || state.failedAt === null
 }
 
-// Each fed row the tick settles is consumed with its item's verdict and the run it started; an id the source returned
-// nothing for is consumed as not read. The rest stay pending for the next tick (triggered or scheduled).
-export function consumeFed(
+export const NOT_FOUND = 'dropped: not found by its source'
+
+// How a real tick settles the fed rows it saw. Consumed: the ones `settles` says, with the item's verdict and the run
+// it started. Expired with why: ids the source can't read (dropped before the read) or found no item for. The rest
+// stay pending for the next tick (triggered or scheduled).
+export function settleFed(
   store: PilotStore,
   def: AutomationDefinition,
-  fed: readonly HandoverRow[],
+  outcome: FedOutcome,
   decisions: readonly ItemDecision[],
   runIds: ReadonlyMap<string, string>,
   tickId: number,
   at: number
 ): void {
+  if (outcome.fed.length === 0 && outcome.dropped.length === 0) {
+    return
+  }
   const handled = handledStates(store.handledRows(def.id))
-  const results = fed.flatMap((row) => {
+  const missing = new Set(outcome.missing.map((id) => id.toLowerCase()))
+  const dropped: HandoverResult[] = outcome.dropped.map(({ row, reason }) => ({
+    rowId: row.id,
+    verdict: null,
+    reason,
+    runId: null,
+    state: 'expired'
+  }))
+  const results = outcome.fed.flatMap((row): HandoverResult[] => {
     const d = decisionFor(decisions, row.itemId)
+    if (!d && missing.has(row.itemId.toLowerCase())) {
+      return [{ rowId: row.id, verdict: null, reason: NOT_FOUND, runId: null, state: 'expired' }]
+    }
     if (!settles(d, handled, def.retryAfterFailureMs)) {
       return []
     }
-    return [
-      {
-        rowId: row.id,
-        verdict: d?.verdict ?? null,
-        reason: d?.reason ?? NOT_READ,
-        runId: d ? (runIds.get(d.key) ?? null) : null
-      }
-    ]
+    const runId = d ? (runIds.get(d.key) ?? null) : null
+    return [{ rowId: row.id, verdict: d?.verdict ?? null, reason: d?.reason ?? NOT_READ, runId }]
   })
-  store.handovers.consume(tickId, at, results)
+  store.handovers.consume(tickId, at, [...results, ...dropped])
 }
 
 // A real tick of a fed stage first expires its handovers pending longer than 7 days, so Activity shows them on it.
