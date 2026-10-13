@@ -3,7 +3,7 @@ import { defineMethod } from '../../../../../main/runtime/rpc/core'
 import type { RpcCallerIdentity } from '../../../../../main/runtime/rpc/rpc-caller-identity'
 import type { PilotContext } from '../pilot-services'
 import { fieldsForRun } from '../inbox/run-fields'
-import { completePreparation, retryPreparation } from '../inbox/preparation'
+import { completePreparation, prepareEvidence, retryPreparation } from '../inbox/preparation'
 import { runBinding, type CallBinding } from './run-binding'
 import { inboxDeps } from './methods-inbox'
 
@@ -46,9 +46,26 @@ export function preparationBinding(
 }
 
 export const RETRY_BY_PERSON = "Retry preparation from Pilot's window or a paired device"
+export const EVIDENCE_BY_PERSON = "Prepare evidence from Pilot's window or a paired device"
+
+const byPerson = (caller: RpcCallerIdentity | undefined): boolean =>
+  caller?.kind === 'desktop' || caller?.kind === 'paired-device'
 
 export function buildPreparationMethods(ctx: () => PilotContext) {
   return [
+    // A person's Prepare evidence on an imported or legacy push, Post or drafted card (R-P5): it queues the card for
+    // job 14 with a request built from the card. The desktop or a paired device only, never the local CLI.
+    defineMethod({
+      name: 'pilot.inbox.prepareEvidence',
+      permission: 'workspace',
+      params: z.object({ id: z.string().min(1) }),
+      handler: (p, rpc) => {
+        if (!byPerson(rpc.caller)) {
+          throw new Error(EVIDENCE_BY_PERSON)
+        }
+        return prepareEvidence(inboxDeps(ctx()), p.id)
+      }
+    }),
     // A person's Retry on a blocked card (the Inbox's button): the desktop or a paired device, never the local CLI,
     // where any agent runs. It only requeues; the worker job still claims it under R-P1's scope.
     defineMethod({

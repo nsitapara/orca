@@ -1,4 +1,11 @@
-import { requeuedPreparation } from '../../shared/preparation'
+import type { InboxItemRow } from '../../shared/api-types'
+import { needsEvidence } from '../../shared/evidence'
+import {
+  PreparationInputSchema,
+  queuedPreparation,
+  requeuedPreparation,
+  type PreparationInput
+} from '../../shared/preparation'
 import type { PreparationClaim } from '../store/store-inbox-preparations'
 import { cardOf, inboxDigest } from './card'
 import { loadDetails } from './details-bundle'
@@ -77,6 +84,50 @@ export function retryPreparation(deps: InboxDeps, id: string) {
     const at = deps.now()
     deps.store.inboxPreparations.write(id, requeuedPreparation(p, at))
     inboxEvent(deps.store, item, 'item_updated', { reason: 'preparation_retry' }, at)
+    return deps.store.inbox.get(id)
+  })
+}
+
+export const NOT_PREPARABLE =
+  'Only an open card that needs evidence and was never prepared can be prepared'
+
+// The preparation request for a card that needs evidence but was never prepared (an imported or legacy push, Post
+// or drafted card), built from the card itself in the intake's shape (pilot_bridge.preparation_request).
+export function evidenceRequest(card: InboxItemRow): PreparationInput {
+  const requirements: PreparationInput['requirements'] =
+    card.action === 'post_review' ? ['context', 'review'] : ['context', 'diff', 'checks']
+  const request = {
+    version: 1,
+    ask: card.title,
+    kind: card.type,
+    context: card.context,
+    recommendation: card.suggested,
+    options: card.options.map((o) => (o.meaning ? `${o.label} — ${o.meaning}` : o.label)),
+    action: card.action ? { name: card.action, args: card.actionArgs } : null,
+    target: { worktree: card.worktreePath },
+    sources: card.details ? [{ role: 'initial_details', path: card.details.path }] : [],
+    recovery:
+      'Rebuild the evidence this decision needs from the card itself: its title, context, pinned action and args, and Details.',
+    origin: { runId: card.runId, step: card.stepIdx }
+  }
+  return PreparationInputSchema.parse({
+    key: `evidence:${card.id}`,
+    context: JSON.stringify(request),
+    requirements
+  })
+}
+
+// A person's Prepare evidence (R-P5): the card is queued for job 14 with its own request. The caller check (the
+// desktop or a paired device, never an agent) is the RPC's.
+export function prepareEvidence(deps: InboxDeps, id: string) {
+  return deps.store.transaction(() => {
+    const card = getInboxItem(deps, id)
+    if (card.status !== 'open' || card.preparation || !needsEvidence(card)) {
+      throw new Error(NOT_PREPARABLE)
+    }
+    const at = deps.now()
+    deps.store.inboxPreparations.write(id, queuedPreparation(evidenceRequest(card), at))
+    inboxEvent(deps.store, card, 'item_updated', { reason: 'evidence_requested' }, at)
     return deps.store.inbox.get(id)
   })
 }

@@ -17,7 +17,7 @@ import { buildPilotMethods } from '../rpc/methods'
 import { PilotStore } from '../store/store'
 import type { NewInboxItem } from '../store/store-inbox'
 import { addInboxItem } from './inbox-add'
-import { buildInboxDeps } from './inbox-service'
+import { buildInboxDeps, listInbox } from './inbox-service'
 
 // R-P5: an evidence-needing decision (push, post_review, applying a drafted change) runs only from a prepared card
 // whose preparation is ready. The rule reads the card, never who added it or how the caller is bound.
@@ -267,5 +267,100 @@ describe('R-P5 for a run-bound add', () => {
         actionArgs: { argv: ARGV }
       })
     ).toThrow('push needs prepared evidence')
+  })
+})
+
+// R-P5 for cards an older build stored (and imports): they show Needs evidence, and a person's Prepare evidence
+// queues them for job 14 with a request built from the card, through the intake shape.
+describe('a legacy evidence-needing card', () => {
+  it('lists as needing evidence; a prepared or plain question card does not', () => {
+    const { store, inbox } = setup()
+    legacy(store, {})
+    const [row] = listInbox(inbox, {}).items
+    expect(row).toMatchObject({ needsEvidence: true })
+    store.inbox.update(row.id, { status: 'done' }, 2)
+    legacy(store, {
+      id: 'in_legacy00000002',
+      type: 'question',
+      action: null,
+      actionArgs: null
+    } as never)
+    expect(listInbox(inbox, {}).items).toMatchObject([{ needsEvidence: false }])
+  })
+
+  it.each<[string, Partial<NewInboxItem>, string[]]>([
+    ['a push', {}, ['context', 'diff', 'checks']],
+    [
+      'a Post',
+      { action: 'post_review', actionArgs: { argv: ['1579', 'r.json', 'ab'] } },
+      ['context', 'review']
+    ],
+    [
+      'a drafted change',
+      { type: 'bug', action: null, actionArgs: null, details: DRAFTED },
+      ['context', 'diff', 'checks']
+    ]
+  ])('is queued for job 14 by a person: %s', (_what, over, requirements) => {
+    const { store, callAs } = setup()
+    const card = legacy(store, over)
+    const prepared = callAs({ kind: 'desktop' }, 'pilot.inbox.prepareEvidence', {
+      id: card.id
+    }) as InboxItemRow
+    expect(prepared.preparation).toMatchObject({
+      state: 'queued',
+      revision: 1,
+      attempt: 0,
+      input: { requirements }
+    })
+    const request = JSON.parse(prepared.preparation!.input.context) as Record<string, unknown>
+    expect(request).toMatchObject({
+      version: 1,
+      ask: card.title,
+      kind: card.type,
+      context: card.context
+    })
+    expect(request.action).toEqual(
+      card.action ? { name: card.action, args: card.actionArgs } : null
+    )
+    expect(store.inboxPreparations.listEligible(200).map((item) => item.id)).toEqual([card.id])
+  })
+
+  it('names the bundle it already has as the request source', () => {
+    const { store, callAs } = setup()
+    const card = legacy(store, { type: 'bug', action: null, actionArgs: null, details: DRAFTED })
+    const prepared = callAs(
+      { kind: 'paired-device', deviceId: 'p' },
+      'pilot.inbox.prepareEvidence',
+      { id: card.id }
+    ) as InboxItemRow
+    expect(JSON.parse(prepared.preparation!.input.context)).toMatchObject({
+      sources: [{ role: 'initial_details', path: DRAFTED.path }]
+    })
+  })
+
+  it.each<[string, RpcCallerIdentity | undefined]>([
+    ['the local CLI', { kind: 'local-cli' }],
+    ['an unknown caller', undefined]
+  ])('refuses Prepare evidence from %s', (_who, caller) => {
+    const { store, callAs } = setup()
+    const card = legacy(store, {})
+    expect(() => callAs(caller, 'pilot.inbox.prepareEvidence', { id: card.id })).toThrow(
+      "Prepare evidence from Pilot's window or a paired device"
+    )
+    expect(store.inbox.get(card.id)?.preparation ?? null).toBeNull()
+  })
+
+  it.each<[string, Partial<NewInboxItem>]>([
+    [
+      'already prepared',
+      { preparation: queuedPreparation({ key: 'k', context: 'c', requirements: ['context'] }, 1) }
+    ],
+    ['a card that needs no evidence', { type: 'question', action: null, actionArgs: null }]
+  ])('refuses a card %s', (_what, over) => {
+    const { store, callAs } = setup()
+    const card = legacy(store, over)
+    expect(() =>
+      callAs({ kind: 'desktop' }, 'pilot.inbox.prepareEvidence', { id: card.id })
+    ).toThrow('Only an open card that needs evidence and was never prepared can be prepared')
   })
 })
