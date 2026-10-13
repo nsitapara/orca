@@ -417,7 +417,7 @@ describe("a card's own answer run re-attaches its Details", () => {
 })
 
 describe('managed preparation RPC scope and completion', () => {
-  it('refuses a valid review preview that differs from the exact review the action will post', () => {
+  it('refuses a valid review preview that differs from the exact review the action will post', async () => {
     const { store, deps, f } = detailsSetup()
     const reviewPath = join(f.dir, 'sample-review.json')
     const original = readFileSync(reviewPath, 'utf8')
@@ -456,27 +456,29 @@ describe('managed preparation RPC scope and completion', () => {
       parts: review.parts.map((part) => ({ ...part, comment: 'Different comment' }))
     }
     writeFileSync(reviewPath, JSON.stringify(differentReview))
-    expect(() =>
+    await expect(
       completePreparation(
         deps,
         id,
         { runId: 'worker', stepIdx: 0, revision: 1, attempt: 1 },
         f.bundle
       )
-    ).toThrow('review')
+    ).rejects.toThrow('review')
     expect(store.inbox.get(id)?.preparation?.state).toBe('generating')
     writeFileSync(reviewPath, original)
     expect(
-      completePreparation(
-        deps,
-        id,
-        { runId: 'worker', stepIdx: 0, revision: 1, attempt: 1 },
-        f.bundle
+      (
+        await completePreparation(
+          deps,
+          id,
+          { runId: 'worker', stepIdx: 0, revision: 1, attempt: 1 },
+          f.bundle
+        )
       )?.preparation?.state
     ).toBe('ready')
   })
 
-  it('lets a scoped worker from another automation complete but rejects ordinary workers and late results', () => {
+  it('lets a scoped worker from another automation complete but rejects ordinary workers and late results', async () => {
     const { store, deps, f, callAs } = detailsSetup()
     const id = addInboxItem(deps, {
       automationId: 'ci',
@@ -531,16 +533,16 @@ describe('managed preparation RPC scope and completion', () => {
       bundle.blocks = [{ type: 'text', body: 'Investigated context' }]
     })
     expect(
-      callAs(CLI, 'pilot.inbox.prepareComplete', { ...params, bundlePath: f.bundle })
+      await callAs(CLI, 'pilot.inbox.prepareComplete', { ...params, bundlePath: f.bundle })
     ).toMatchObject({
       preparation: { state: 'ready' },
       details: { artifacts: { expected: ['context'] } }
     })
-    expect(() =>
+    await expect(
       callAs(CLI, 'pilot.inbox.prepareComplete', { ...params, bundlePath: f.bundle })
-    ).toThrow('stale')
+    ).rejects.toThrow('stale')
   })
-  it('keeps required evidence pending after validation fails and refuses completion after an early answer', () => {
+  it('keeps required evidence pending after validation fails and refuses completion after an early answer', async () => {
     const { store, deps, f, callAs } = detailsSetup()
     const id = addInboxItem(deps, {
       automationId: 'ci',
@@ -590,7 +592,9 @@ describe('managed preparation RPC scope and completion', () => {
       }
       bundle.blocks = [{ type: 'text', body: 'Evidence gathered' }]
     })
-    expect(() => callAs(CLI, 'pilot.inbox.prepareComplete', params)).toThrow('Required screens')
+    await expect(callAs(CLI, 'pilot.inbox.prepareComplete', params)).rejects.toThrow(
+      'Required screens'
+    )
     expect(store.inbox.get(id)).toMatchObject({
       details: null,
       preparation: { state: 'generating' }
@@ -602,7 +606,7 @@ describe('managed preparation RPC scope and completion', () => {
       'nish',
       Date.now()
     )
-    expect(() => callAs(CLI, 'pilot.inbox.prepareComplete', params)).toThrow('stale')
+    await expect(callAs(CLI, 'pilot.inbox.prepareComplete', params)).rejects.toThrow('stale')
     expect(store.inbox.get(id)).toMatchObject({ status: 'answered', details: null })
   })
 })
