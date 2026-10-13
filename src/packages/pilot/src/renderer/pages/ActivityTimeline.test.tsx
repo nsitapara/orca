@@ -120,6 +120,16 @@ describe('ActivityTimeline', () => {
     expect(screen.queryByText('Not in scope')).toBeNull()
   })
 
+  it("shows the tick's warnings, such as a ticket Linear couldn't read", () => {
+    render(
+      <ActivityTimeline
+        ticks={[{ ...tick, warnings: ["WEB-2123 isn't readable in Linear; skipped"] }]}
+        checkNames={[]}
+      />
+    )
+    expect(screen.getByText("WEB-2123 isn't readable in Linear; skipped")).toBeTruthy()
+  })
+
   it('offers no check table for a tick whose every item was out of scope', () => {
     const outside = tick.items.map((i) => ({ ...i, verdict: 'out_of_scope' as const }))
     render(

@@ -42,7 +42,8 @@ function toTick(r: Record<string, unknown>): TickRow {
     dryRun: Number(r.dry_run) === 1,
     status: r.status as TickRow['status'],
     error: (r.error as string | null) ?? null,
-    counts: JSON.parse(String(r.counts_json))
+    counts: JSON.parse(String(r.counts_json)),
+    warnings: JSON.parse(String(r.warnings_json ?? '[]'))
   }
 }
 
@@ -155,13 +156,14 @@ export class PilotStore {
     status: 'ok' | 'failed',
     error: string | null,
     counts: Partial<Record<Verdict, number>>,
-    at: number
+    at: number,
+    warnings: readonly string[] = []
   ): void {
     this.db
       .prepare(
-        'UPDATE ticks SET status = ?, error = ?, counts_json = ?, finished_at = ? WHERE id = ?'
+        'UPDATE ticks SET status = ?, error = ?, counts_json = ?, finished_at = ?, warnings_json = ? WHERE id = ?'
       )
-      .run(status, error, JSON.stringify(counts), at, tickId)
+      .run(status, error, JSON.stringify(counts), at, JSON.stringify(warnings), tickId)
   }
 
   recordDecisions(tickId: number, decisions: ItemDecision[], runIds: Map<string, string>): void {

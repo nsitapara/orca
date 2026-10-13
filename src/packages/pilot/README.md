@@ -206,7 +206,7 @@ A source can read only the ids a command names, instead of listing everything an
 - **The command** runs once per tick, before any item exists, in the repo's main checkout. It is plain words run without a shell (quotes keep spaces; `|`, `;`, `>`, `*`, `~`, `$`, backticks and `{placeholders}` are refused). `env:` values are fixed text, under the shell steps' reserved names. Inherited loader and interpreter variables (`LD_*`, `DYLD_*`, `BASH_ENV`, `NODE_OPTIONS`, `PYTHONPATH`, …) are dropped. Stdout and stderr are capped at 256 KiB each.
 - **Stdout** is a JSON list, or a pilotcli envelope `{v, command, outcome, reason, data, meta}` whose `data` is the list. With `field:`, each entry is an object and the id is that key; without it, each entry is the id. At most 200 ids; repeats count once.
 - **Exit codes:** 0 reads the ids; 3 means no ids (nothing is read); any other exit, a timeout or the cap fails the tick with the command's last line.
-- **The source** then reads each id on its own (Linear: by identifier, read only). An id Linear doesn't know is skipped with a warning. The where block's other clauses still apply. Without a listing, there is no implicit "assigned to me", so say `assignee:` when that matters.
+- **The source** then reads each id on its own (Linear: by identifier, read only). An id Linear can't find (its "Entity not found") is skipped, and the tick says so in Activity ("WEB-2123 isn't readable in Linear; skipped"); any other failed read fails the tick. The where block's other clauses still apply. Without a listing, there is no implicit "assigned to me", so say `assignee:` when that matters.
 
 ## Inbox and Details bundles
 

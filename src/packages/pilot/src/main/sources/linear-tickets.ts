@@ -124,13 +124,18 @@ async function readTickets(
   return tickets.sort((a, b) => compareTickets(a.issue, b.issue))
 }
 
+// A read of an identifier Linear doesn't have. Linear says "Entity not found: Issue - Could not find referenced Issue."
+// (upstream's isLinearLookupMiss reads the same words), which the issue client classifies as linear_network_error, so
+// the code alone can't tell; linear_issue_not_found is when no signed-in workspace had it.
 function notFound(error: unknown): boolean {
-  return (
-    typeof error === 'object' &&
-    error !== null &&
-    'code' in error &&
-    error.code === 'linear_issue_not_found'
-  )
+  if (typeof error !== 'object' || error === null) {
+    return false
+  }
+  if ('code' in error && error.code === 'linear_issue_not_found') {
+    return true
+  }
+  const message = error instanceof Error ? error.message : ''
+  return message.includes('Entity not found:') && message.includes('Could not find referenced')
 }
 
 // where.ids_from: each id read by identifier (Linear resolves it across the signed-in workspaces), no listing. A
@@ -152,7 +157,7 @@ async function readTicketsByIds(
       return await ctx.fetch.memo(`linear:issue::${id}`, () => linear.issue(id))
     } catch (error) {
       if (notFound(error)) {
-        warnings.push(`${id}: Linear has no such ticket; it isn't checked`)
+        warnings.push(`${id} isn't readable in Linear; skipped`)
         return null
       }
       throw error

@@ -31,6 +31,11 @@ function TickNode({
         )}
       </div>
       <div className="text-sm">{tickLine(tick)}</div>
+      {(tick.warnings ?? []).map((w) => (
+        <div key={w} className="text-xs text-muted-foreground">
+          {w}
+        </div>
+      ))}
       {checked.length ? (
         <button type="button" className="mt-1 text-xs underline" onClick={() => setOpen(!open)}>
           {open ? 'Hide checks' : `Why: ${checked.length} items checked`}

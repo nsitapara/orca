@@ -3,6 +3,11 @@ import type {
   LinearIssueListResult,
   LinearIssueSummary
 } from '../../../../../shared/linear/agent-access'
+import {
+  classifyLinearError,
+  linearError,
+  linearMessage
+} from '../../../../../main/linear/issue-context-errors'
 import type { LinearConnector } from '../linear-connector/linear-connector'
 import { PEOPLE, fakeGlab, sourceContext } from './__fixtures__/source-context'
 import { findTicketWorktree, linearTicketSource } from './linear-tickets'
@@ -302,16 +307,24 @@ describe('linearTicketSource: the ids where.ids_from gave', () => {
     detail(listed('WEB-1', 'started', 1), '2026-10-09T00:00:00Z', 'web-1-fix'),
     detail(listed('WEB-2', 'started', 2), '2026-09-01T00:00:00Z', 'web-2-fix')
   ]
+  // What Pilot's Linear read throws, wrapped as the issue client wraps a failed read (issue-context-client.ts).
+  const linearThrows = (text: string) => {
+    const raw = new Error(text)
+    return linearError(classifyLinearError(raw), linearMessage(raw))
+  }
+  // A workspace's read of an identifier it doesn't have: Linear's own words, which classify as a network error.
+  const MISS = () => linearThrows('Entity not found: Issue - Could not find referenced Issue.')
+  // No signed-in workspace had it and none failed (resolveIssue).
+  const NONE_HAD_IT = (id: string) =>
+    linearError('linear_issue_not_found', `Linear issue ${id} was not found.`)
   const refuse = (): Promise<never> => Promise.reject(new Error('a source never writes'))
-  const byId = () =>
+  const byId = (miss: (id: string) => Error = MISS) =>
     ({
       listIssues: vi.fn(async () => ({ issues: [], meta })),
       issue: vi.fn(async (id: string) => {
         const found = TICKETS.find((t) => t.identifier === id)
         if (!found) {
-          throw Object.assign(new Error(`Linear issue ${id} was not found.`), {
-            code: 'linear_issue_not_found'
-          })
+          throw miss(id)
         }
         return found
       }),
@@ -346,20 +359,31 @@ describe('linearTicketSource: the ids where.ids_from gave', () => {
     expect(linear.issue).not.toHaveBeenCalled()
   })
 
-  it("skips an id Linear doesn't know, with a warning, and checks the rest", async () => {
-    const { items, warnings } = await source(byId()).list(
-      context({ ids: ['WEB-9', 'WEB-1'] }),
-      START
-    )
-    expect(items.map((i) => i.key)).toEqual(['linear:WEB-1'])
-    expect(warnings).toEqual(["WEB-9: Linear has no such ticket; it isn't checked"])
-  })
+  it.each([
+    ["Linear's Entity not found", MISS],
+    ['no workspace having it', NONE_HAD_IT]
+  ])(
+    "skips an id Linear doesn't know (%s), with a warning, and checks the rest",
+    async (_n, miss) => {
+      const { items, warnings } = await source(byId(miss)).list(
+        context({ ids: ['WEB-9', 'WEB-1'] }),
+        START
+      )
+      expect(items.map((i) => i.key)).toEqual(['linear:WEB-1'])
+      expect(warnings).toEqual(["WEB-9 isn't readable in Linear; skipped"])
+    }
+  )
 
   it('fails the list on any other read failure, and on an id that is no Linear identifier', async () => {
     const down = byId()
     down.issue.mockRejectedValue(new Error('linear_timeout'))
     await expect(source(down).list(context({ ids: ['WEB-1'] }), START)).rejects.toThrow(
       'linear_timeout'
+    )
+    const offline = byId()
+    offline.issue.mockRejectedValue(linearThrows('fetch failed'))
+    await expect(source(offline).list(context({ ids: ['WEB-1'] }), START)).rejects.toThrow(
+      'fetch failed'
     )
     const linear = byId()
     await expect(source(linear).list(context({ ids: ['WEB-1', 'web 1'] }), START)).rejects.toThrow(

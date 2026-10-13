@@ -709,9 +709,10 @@ describe('runTick v2', () => {
         list: async () => ({ items: [], warnings: ['GitLab listed 100 of 120 MRs'] })
       }
     })
-    expect((await runTick(def, people, d, { dryRun: true })).warnings).toEqual([
-      'GitLab listed 100 of 120 MRs'
-    ])
+    const result = await runTick(def, people, d, { dryRun: true })
+    expect(result.warnings).toEqual(['GitLab listed 100 of 120 MRs'])
+    // and on the tick itself, so Activity shows them
+    expect(d.store.listTicks(def.id, 1)[0].warnings).toEqual(['GitLab listed 100 of 120 MRs'])
   })
 
   it('reads through the pass it is given', async () => {

@@ -1,6 +1,6 @@
 import type Database from '../../../../../main/sqlite/sync-database'
 
-export const PILOT_SCHEMA_VERSION = 7
+export const PILOT_SCHEMA_VERSION = 8
 
 const V1 = `
 CREATE TABLE ticks (id INTEGER PRIMARY KEY AUTOINCREMENT, automation_id TEXT NOT NULL, started_at INTEGER NOT NULL,
@@ -105,8 +105,11 @@ const V6 = `ALTER TABLE inbox_items ADD COLUMN preparation_json TEXT;`
 // A "Not prepared" notice's preparation key (D2), so the prepared card retires it.
 const V7 = `ALTER TABLE inbox_items ADD COLUMN not_prepared_key TEXT;`
 
+// A tick's warnings (an id its source couldn't read, a capped listing), so Activity shows them.
+const V8 = `ALTER TABLE ticks ADD COLUMN warnings_json TEXT NOT NULL DEFAULT '[]';`
+
 // MIGRATIONS[n - 1] takes a database from version n - 1 to n.
-const MIGRATIONS: readonly string[] = [V1, V2, V3, V4, V5, V6, V7]
+const MIGRATIONS: readonly string[] = [V1, V2, V3, V4, V5, V6, V7, V8]
 
 // Same pattern as Orca's orchestration.db (migrate.ts): user_version + one transaction, all or nothing.
 // `target` lets tests build a database at an older version.
