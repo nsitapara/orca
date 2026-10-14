@@ -178,6 +178,11 @@ Every job is a YAML automation in `~/.agents/automations/` (one file per automat
 A shell step's `run:` is plain shell. It takes no `{placeholders}`; validation rejects them.
 - **Values in:** `env: { NAME: "{mr.title}" }`. The script reads `"$NAME"`. Pilot fills the text in; the shell never parses it.
 - **Values out:** append `key=value` lines to `$PILOT_OUTPUT_FILE`. The last line per key wins. Declare the keys a later stage relies on with `outputs: [key]` (Multi-stage jobs, below). A value that reads as JSON (`true`, `3`, `null`) becomes that value. Stdout is never read for outputs, so what a child process prints can't forge one, and neither can `pilot run output`: Pilot refuses run-channel writes to a shell step. `pilot run output` works only from an agent step's own terminal (`PILOT_RUN_ID`/`PILOT_STEP_IDX` only choose among the steps running there). Names are letters, digits and `_`; a value is at most 4096 characters. A bad line is a warning, not a failure.
+- **Results:** when a shell step's whole stdout (trimmed) is one pilotcli envelope (`v: 1`, `command`, `outcome`), Pilot keeps it as the step's result, `{command, outcome, reason, data, meta}` (`steps.result_json`).
+  - `data` over 256 KB is dropped (`data_omitted: "too large (N KB)"`).
+  - A result marked `meta.text` keeps only `{command, outcome, reason}` (`data_omitted: "may contain comment or ticket text"`), and none of the step's stdout is kept: `output_tail` holds stderr only, and an error never quotes stdout.
+  - No stdout is kept from a capture cut at 1 MiB that doesn't read as one envelope either.
+  - With an envelope, a step's error uses its `reason`, never the JSON line.
 - **Reserved env names:** `PATH`, `IFS`, `HOME`, `ENV`, `BASH_ENV`, `SHELLOPTS`, `BASHOPTS`, `PS4`, `CDPATH`, `GLOBIGNORE`, `AGENT_RUN`, and anything starting `PILOT_`, `ORCA_`, `LD_` or `DYLD_`.
 - **Never** use an env value in `$(( ))`, `(( ))`, `let`, `declare -i`, an array subscript, `[[ -eq ]]`, `eval`, or `sh -c "…$NAME…"`. The shell evaluates those as code. Quote it as `"$NAME"`, or validate it first.
 - **Never** put an item value in an env name that another program executes: `NODE_OPTIONS`, `GIT_SSH_COMMAND`, `GIT_CONFIG_*`, `PERL5OPT`, `JAVA_TOOL_OPTIONS`, `SHELL`, `EDITOR`, `PAGER`. Validation doesn't block these.

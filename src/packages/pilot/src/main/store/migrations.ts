@@ -1,6 +1,6 @@
 import type Database from '../../../../../main/sqlite/sync-database'
 
-export const PILOT_SCHEMA_VERSION = 11
+export const PILOT_SCHEMA_VERSION = 12
 
 const V1 = `
 CREATE TABLE ticks (id INTEGER PRIMARY KEY AUTOINCREMENT, automation_id TEXT NOT NULL, started_at INTEGER NOT NULL,
@@ -151,8 +151,11 @@ DELETE FROM ticks WHERE dry_run = 1;
 ALTER TABLE ticks DROP COLUMN dry_run;
 `
 
+// A shell step's pilotcli result (shared/run/step-result.ts): the envelope its whole stdout was, as JSON, or NULL.
+const V12 = `ALTER TABLE steps ADD COLUMN result_json TEXT;`
+
 // MIGRATIONS[n - 1] takes a database from version n - 1 to n.
-const MIGRATIONS: readonly string[] = [V1, V2, V3, V4, V5, V6, V7, V8, V9, V10, V11]
+const MIGRATIONS: readonly string[] = [V1, V2, V3, V4, V5, V6, V7, V8, V9, V10, V11, V12]
 
 // Same pattern as Orca's orchestration.db (migrate.ts): user_version + one transaction, all or nothing.
 // `target` lets tests build a database at an older version.

@@ -17,6 +17,7 @@ import {
   type ShellRunner,
   type ShellSpec
 } from './shell-step'
+import { STDOUT_NOT_KEPT } from './shell-ending'
 
 const MIN = 60_000
 
@@ -37,6 +38,18 @@ const result = (over: Partial<ShellResult> = {}): ShellResult => ({
   timedOut: false,
   ...over
 })
+
+// What pilotcli prints with --format json: one envelope on stdout.
+const pilotcliOut = (over: Record<string, unknown> = {}) =>
+  JSON.stringify({
+    v: 1,
+    command: 'skills get-context',
+    outcome: 'ok',
+    reason: '3 threads waiting',
+    data: { threads: [{ id: 7, body: 'Please rename this' }] },
+    meta: {},
+    ...over
+  })
 
 function setup(
   opts: {
@@ -89,6 +102,90 @@ function setup(
 }
 
 describe('makeShellSteps', () => {
+  it.each([
+    [
+      'an envelope: kept whole, and its output_tail as today',
+      result({ stdout: `${pilotcliOut()}\n` }),
+      {
+        result: {
+          command: 'skills get-context',
+          outcome: 'ok',
+          reason: '3 threads waiting',
+          data: { threads: [{ id: 7, body: 'Please rename this' }] },
+          meta: {}
+        },
+        outputTail: `${pilotcliOut()}\n`,
+        error: null
+      }
+    ],
+    [
+      'plain text: no result',
+      result({ stdout: 'pruned 3 images\n' }),
+      { result: null, outputTail: 'pruned 3 images\n', error: null }
+    ],
+    [
+      'a failed envelope with no stderr: its reason, never its JSON',
+      result({
+        code: 1,
+        stdout: pilotcliOut({ outcome: 'failed', reason: 'GitLab answered 502' })
+      }),
+      { error: 'Exited 1: GitLab answered 502' }
+    ]
+  ] as const)('stores the step’s pilotcli result: %s', async (_n, outcome, expected) => {
+    const { store, steps, req } = setup({ run: async () => outcome })
+    await steps.start(req(shellDef('./context.sh')))
+    await steps.settled()
+    expect(store.runs.steps('run-1')[0]).toMatchObject(expected)
+  })
+
+  it.each([
+    [
+      'it succeeds',
+      'ok',
+      result({ code: 0, stdout: pilotcliOut({ meta: { text: true } }), stderr: 'fetched 3\n' }),
+      'done',
+      null
+    ],
+    [
+      'it fails with nothing on stderr',
+      'failed',
+      result({ code: 1, stdout: pilotcliOut({ meta: { text: true }, outcome: 'failed' }) }),
+      'failed',
+      'Exited 1: 3 threads waiting'
+    ]
+  ] as const)(
+    'keeps no stdout of a result marked meta.text when %s',
+    async (_n, said, ran, status, error) => {
+      const { store, steps, req } = setup({ run: async () => ran })
+      await steps.start(req(shellDef('./context.sh')))
+      await steps.settled()
+      const row = store.runs.steps('run-1')[0]
+      expect(row).toMatchObject({ status, error })
+      expect(row.result).toEqual({
+        command: 'skills get-context',
+        outcome: said,
+        reason: '3 threads waiting',
+        data_omitted: 'may contain comment or ticket text'
+      })
+      expect(row.outputTail).toContain(STDOUT_NOT_KEPT)
+      expect(`${row.outputTail} ${row.error}`).not.toContain('Please rename')
+    }
+  )
+
+  it("keeps no stdout from a capture cut at 1 MiB that isn't one envelope", async () => {
+    const cut = 'body":"Please rename this"}]},"meta":{"text":true}}'
+    const { store, steps, req } = setup({
+      run: async () => result({ code: 1, stdout: cut, truncated: true })
+    })
+    await steps.start(req(shellDef('./context.sh')))
+    await steps.settled()
+    expect(store.runs.steps('run-1')[0]).toMatchObject({
+      result: null,
+      outputTail: STDOUT_NOT_KEPT,
+      error: 'Exited 1'
+    })
+  })
+
   it.each([
     ['exit 0', result({ code: 0 }), 'done', null],
     [
@@ -337,6 +434,13 @@ describe('sweepOrphanShellSteps', () => {
 })
 
 describe('runShell (a real /bin/sh)', () => {
+  it('says when the capture was cut at 1 MiB', async () => {
+    const run = (command: string) =>
+      runShell({ command, cwd: tmpdir(), env: { PATH: '/usr/bin:/bin' }, timeoutMs: 30_000 })
+    expect((await run('printf small')).truncated).toBe(false)
+    expect((await run("head -c 1100000 /dev/zero | tr '\\0' x")).truncated).toBe(true)
+  })
+
   it('runs in the folder with the env given, and reports its outputs and exit code', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'pilot-sh-'))
     const outputs = join(dir, 'outputs')

@@ -5,7 +5,8 @@ import type {
   RunTrigger,
   StepKind,
   StepRow,
-  StepStatus
+  StepStatus,
+  StoredResult
 } from '../../shared/api-types'
 import { envOfRow } from './env-row'
 
@@ -39,6 +40,7 @@ export type StepPatch = Partial<{
   outputTail: string | null
   sessionPinned: boolean
   launchArgs: string[] | null
+  result: StoredResult | null
 }>
 
 export const RUN_COLUMNS: Record<keyof RunPatch, string> = {
@@ -69,7 +71,8 @@ export const STEP_COLUMNS: Record<keyof StepPatch, string> = {
   exitCode: 'exit_code',
   outputTail: 'output_tail',
   sessionPinned: 'session_pinned',
-  launchArgs: 'launch_args_json'
+  launchArgs: 'launch_args_json',
+  result: 'result_json'
 }
 
 // Values go in as they are, except outputs (JSON text) and the pinned flag (0/1), whose columns are
@@ -81,6 +84,9 @@ export function encodeStep(patch: StepPatch): Record<string, unknown> {
   }
   if ('launchArgs' in patch) {
     encoded.launchArgs = patch.launchArgs ? JSON.stringify(patch.launchArgs) : null
+  }
+  if ('result' in patch) {
+    encoded.result = patch.result ? JSON.stringify(patch.result) : null
   }
   if ('sessionPinned' in patch) {
     encoded.sessionPinned = patch.sessionPinned ? 1 : 0
@@ -147,6 +153,7 @@ export function toStep(r: Record<string, unknown>): StepRow {
     exitCode: (r.exit_code as number | null) ?? null,
     outputTail: (r.output_tail as string | null) ?? null,
     sessionPinned: Number(r.session_pinned) === 1,
-    launchArgs: r.launch_args_json ? (JSON.parse(String(r.launch_args_json)) as string[]) : null
+    launchArgs: r.launch_args_json ? (JSON.parse(String(r.launch_args_json)) as string[]) : null,
+    result: r.result_json ? (JSON.parse(String(r.result_json)) as StoredResult) : null
   }
 }

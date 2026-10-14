@@ -10,10 +10,8 @@ import {
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { runProcess } from '@orca/process-host'
-import type { StepStatus } from '../../shared/api-types'
-import type { StepDef } from '../../shared/definition/types'
-import { formatDuration } from '../../shared/run/format-duration'
 import { outputsFromFile } from '../../shared/run/outputs'
+import { readStepResult } from '../../shared/run/step-result'
 import {
   RUN_PLACEHOLDER_ADVICE,
   renderShellEnv,
@@ -24,23 +22,16 @@ import { resolveScriptCommand } from '../fields/script-runner'
 import type { PilotStore } from '../store/store'
 export { ORPHAN_SHELL_OUTCOME, sweepOrphanShellSteps } from './shell-sweep'
 import type { StepStarter, StepStartRequest } from './advance'
-import { lastLine } from '../last-line'
+import { outputTail, shellEnding, type ShellResult } from './shell-ending'
+export type { ShellResult } from './shell-ending'
 
 export const SHELL_CAPTURE_BYTES = 1024 * 1024
-export const OUTPUT_TAIL_CHARS = 8192
 
 export type ShellSpec = {
   command: string
   cwd: string
   env: NodeJS.ProcessEnv
   timeoutMs: number | null
-}
-export type ShellResult = {
-  code: number | null
-  signal: string | null
-  stdout: string
-  stderr: string
-  timedOut: boolean
 }
 export type ShellRunner = (spec: ShellSpec) => Promise<ShellResult>
 
@@ -65,7 +56,8 @@ export const runShell: ShellRunner = async (spec) => {
     signal: result.signal,
     stdout: result.stdout,
     stderr: result.stderr,
-    timedOut: result.timedOut
+    timedOut: result.timedOut,
+    truncated: result.outputTruncated === true
   }
 }
 
@@ -106,35 +98,6 @@ export type ShellSteps = {
 
 function messageOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
-}
-
-export function outputTail(stdout: string, stderr: string): string {
-  const both = stderr.trim() ? `${stdout}\n--- stderr ---\n${stderr}` : stdout
-  return both.length > OUTPUT_TAIL_CHARS ? both.slice(-OUTPUT_TAIL_CHARS) : both
-}
-
-// exit_codes.ok → done, exit_codes.skip → skipped (the run goes on), anything else → failed with the
-// last line it printed (stderr first). A timeout is timed_out whatever the code.
-export function shellEnding(
-  step: Pick<StepDef, 'exitCodes'>,
-  result: ShellResult,
-  timeoutMs: number | null
-): { status: StepStatus; error: string | null } {
-  if (result.timedOut) {
-    return { status: 'timed_out', error: `Timed out after ${formatDuration(timeoutMs ?? 0)}` }
-  }
-  const last = lastLine(result.stderr) || lastLine(result.stdout)
-  const said = last ? `: ${last}` : ''
-  if (result.code === null) {
-    return { status: 'failed', error: `Stopped by ${result.signal ?? 'a signal'}${said}` }
-  }
-  if (step.exitCodes.ok.includes(result.code)) {
-    return { status: 'done', error: null }
-  }
-  if (step.exitCodes.skip.includes(result.code)) {
-    return { status: 'skipped', error: `Exited ${result.code} (skip)${said}` }
-  }
-  return { status: 'failed', error: `Exited ${result.code}${said}` }
 }
 
 // The tail of the outputs file, at most SHELL_CAPTURE_BYTES (the last line per key wins, so the tail is
@@ -186,12 +149,14 @@ export function makeShellSteps(deps: ShellStepDeps): ShellSteps {
     if (Object.keys(outputs).length > 0) {
       deps.store.advance.mergeStepOutputs(req.run.id, req.idx, outputs)
     }
-    const ending = shellEnding(step, result, timeoutMs)
+    const read = readStepResult(result.stdout)
+    const ending = shellEnding(step, result, timeoutMs, read)
     deps.store.runs.updateStep(req.run.id, req.idx, {
       status: ending.status,
       finishedAt: deps.now(),
       exitCode: result.code,
-      outputTail: outputTail(result.stdout, result.stderr),
+      outputTail: outputTail(result, read),
+      result: read.stored,
       ...(ending.error ? { error: ending.error } : {})
     })
   }
