@@ -34,6 +34,8 @@ export type ShellWiring = {
   workspaceOf(req: StepStartRequest): Promise<{ path: string }>
   // The §8 step env (Task 8c's pilotStepEnv).
   envOf(req: StepStartRequest): Record<string, string>
+  // An env run's variables (pilotcli's data.env).
+  runEnvOf?(req: StepStartRequest): Record<string, string>
   run?: ShellRunner
 }
 export type EngineWiringInput = {
@@ -76,6 +78,7 @@ export function wireRunEngine(input: EngineWiringInput): WiredEngine {
     log,
     workspaceOf: input.shell.workspaceOf,
     envOf: input.shell.envOf,
+    runEnvOf: input.shell.runEnvOf,
     engineEnv: input.engineEnv,
     run: input.shell.run,
     timeoutOf: (req) => stepTimeoutMs(req.definition, req.idx),

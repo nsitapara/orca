@@ -140,6 +140,23 @@ const source = worktreeSource({
   pathExists: () => true
 })
 
+describe('worktreeSource, an env folder', () => {
+  it.each([
+    ['is not an item', true, []],
+    ['is an item', false, ['wt:repo1::/wt/web-1']]
+  ])('a branch worktree at a path whose envFolder is %s', async (_n, isEnv, keys) => {
+    const one = worktreeSource({
+      listWorktrees: async () => [rec('web-1')],
+      git: fakeGit({ '/wt/web-1': { head: 'c1' } }),
+      markers: () => new Map(),
+      pathExists: () => true,
+      envFolder: () => isEnv
+    })
+    const { items } = await one.list(sourceContext({}, gitlab), {})
+    expect(items.map((i) => i.key)).toEqual(keys)
+  })
+})
+
 describe('worktreeSource', () => {
   it('03: own commits since the marker, first sights and rewrites baselined, teammates out', async () => {
     const where = {

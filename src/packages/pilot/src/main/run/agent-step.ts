@@ -107,7 +107,8 @@ function launchOptions(
       powers: definition.powers
     },
     args: step.args,
-    session
+    session,
+    runEnv: req.workspace.env
   })
 }
 

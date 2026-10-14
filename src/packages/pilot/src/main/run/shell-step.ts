@@ -75,6 +75,8 @@ export type ShellStepDeps = {
   workspaceOf(req: StepStartRequest): Promise<{ path: string }>
   // The §8 step env (Task 8c's pilotStepEnv); engineChildEnv puts Pilot's bin and data folder around it.
   envOf(req: StepStartRequest): Record<string, string>
+  // An env run's variables (pilotcli's data.env): under Pilot's engine and step env, over the base env.
+  runEnvOf?(req: StepStartRequest): Record<string, string>
   engineEnv: EngineEnv
   timeoutOf(req: StepStartRequest): number | null
   onEnded(runId: string): void
@@ -249,6 +251,7 @@ export function makeShellSteps(deps: ShellStepDeps): ShellSteps {
         cwd,
         env: {
           ...base,
+          ...deps.runEnvOf?.(req),
           ...engineChildEnv(deps.engineEnv, deps.envOf(req), base),
           ...stepEnv.env,
           PILOT_OUTPUT_FILE: outputFile

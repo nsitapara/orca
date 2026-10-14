@@ -21,7 +21,8 @@ export function registerPilotSources(deps: PilotSourceDeps): void {
       listWorktrees,
       git: gitExecFileAsync,
       markers: (automationId) => deps.store.markers.progressMarkers(automationId),
-      pathExists: existsSync
+      pathExists: existsSync,
+      envFolder: (path) => deps.store.runs.envs.isThrowawayFolder(path)
     })
   )
   registerItemSource(

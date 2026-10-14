@@ -18,7 +18,9 @@ function recordedWorkspace(req: StepStartRequest): Workspace {
     path: run.worktreePath,
     worktreeId: run.worktreeId,
     selector,
-    created: false
+    created: false,
+    env: run.env?.vars ?? {},
+    disposable: run.env?.mode === 'throwaway'
   }
 }
 
