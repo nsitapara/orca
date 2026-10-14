@@ -5,13 +5,14 @@ import type { ActionCatalog } from '../actions/types'
 import type { QuotaReaders } from '../fields/quota'
 import { resolveRepoPath } from '../fields/runtime-facts'
 import type { WorktreeFactDeps } from '../fields/worktree-facts'
-import type { InboxDeps } from '../inbox/inbox-service'
+import { reaskInboxItem, type InboxDeps } from '../inbox/inbox-service'
 import { InboxRetirer } from '../inbox/retire'
 import { openAgentTerminal, runtimeSessionTerminals } from '../run/launch'
 import { glabApiForRepo } from '../sources/gitlab-api'
 import type { PilotStore } from '../store/store'
+import type { AnswerEnvHooks } from './answer-env'
 import { currentAnswer } from './answer-run'
-import { AnswerDispatcher } from './dispatcher'
+import { AnswerDispatcher, answersUnfollowed } from './dispatcher'
 import { gitInFlight, passActivity } from './holds'
 import { sessionPromptSender, sessionTerminalProbe } from './session-probe'
 
@@ -27,7 +28,25 @@ export type AnswerWiring = {
   quotas: QuotaReaders
   // The field engine's facts: git read with optional locks off, the terminal's draft, its liveness.
   facts: WorktreeFactDeps
+  // The env service's preparer and run close (envs/service.ts answerHooks): an env automation's answers run in its env.
+  envs?: Pick<AnswerEnvHooks, 'preparer' | 'close'>
   log(message: string): void
+}
+
+// The env path's hand-back (as the dispatcher's own): each card still answered goes back to its person.
+function answerEnvHooks(w: AnswerWiring): AnswerEnvHooks | undefined {
+  const envs = w.envs
+  if (!envs) {
+    return undefined
+  }
+  const handBack = (ids: string[], why: string): void => {
+    for (const id of ids) {
+      if (w.store.inbox.get(id)?.status === 'answered') {
+        reaskInboxItem(w.inbox, id, answersUnfollowed(why))
+      }
+    }
+  }
+  return { ...envs, handBack }
 }
 
 // The scheduler's answers pass (contract §10): Task 20b's retirer first, then the dispatcher, wired
@@ -66,7 +85,8 @@ export function wireAnswerDispatcher(w: AnswerWiring): AnswerDispatcher {
       open: (req) => openAgentTerminal(runtime, req),
       send: sessionPromptSender({ terminals, draft }),
       mainCheckout: repoPath,
-      current: (item) => currentAnswer(store, item)
+      current: (item) => currentAnswer(store, item),
+      envs: answerEnvHooks(w)
     },
     log
   })

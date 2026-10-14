@@ -237,6 +237,7 @@ function openPilot(
         actions,
         quotas,
         facts: fieldDeps,
+        envs: envs.answerHooks,
         log
       })
     : null

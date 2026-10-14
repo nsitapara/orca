@@ -44,15 +44,11 @@ export function createTeardowns(deps: TeardownDeps): Teardowns {
   const { store } = deps
   const inflight = new Map<string, Promise<void>>()
 
-  // A throwaway's own step tabs close before its folder goes. A tab someone typed into, or one that can't be read or
+  // A throwaway's own step tabs close before its folder goes: only tabs the run opened itself, never one it borrowed (an
+  // answer run's resumed asking tab belongs to the run that asked). A tab someone typed into, or one that can't be read or
   // stopped, keeps the folder until the next try; the reason says why.
   async function closeTabs(run: RunRow): Promise<string | null> {
-    const handles = [
-      ...new Set(
-        store.runs.steps(run.id).flatMap((s) => (s.terminalHandle ? [s.terminalHandle] : []))
-      )
-    ]
-    for (const handle of handles) {
+    for (const handle of store.runs.ownTerminals(run.id)) {
       try {
         if (!(await deps.tabs.isOpen(handle))) {
           continue

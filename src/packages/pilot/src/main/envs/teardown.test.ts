@@ -109,6 +109,41 @@ describe('teardown at run end', () => {
     expect(t.env()).toMatchObject({ state: 'removed', removedAt: 1000 })
   })
 
+  // r1 is an answer run that typed its answers into the asking run's tab t2 (a resumed session): t2 is borrowed, never its
+  // own, so its teardown leaves it open whatever env the answer run got.
+  it.each([
+    ['in place: no tab closes', 'in_place', []],
+    ['a throwaway: only its own tab closes', 'throwaway', ['t1']]
+  ] as const)(
+    'an answer run that resumed the asking session: %s',
+    async (_name, mode, closedTabs) => {
+      const t = setup(mode, [OK])
+      t.store.runs.create({
+        id: 'asking',
+        automationId: 'ci',
+        tickId: null,
+        itemKey: 'mr:1',
+        itemLabel: '!1',
+        worktreePath: '/wt/a',
+        startedAt: 0
+      })
+      t.store.runs.createStep({
+        runId: 'asking',
+        idx: 0,
+        name: 'fix',
+        agent: 'claude',
+        skill: null,
+        startedAt: 0
+      })
+      t.store.runs.updateStep('asking', 0, { status: 'done', terminalHandle: 't2', finishedAt: 1 })
+      t.store.runs.update('asking', { status: 'needs_you', finishedAt: 1 })
+      t.teardowns.start(t.store.runs.get('r1')!)
+      await t.teardowns.settled()
+      expect(t.closed).toEqual(closedTabs)
+      expect(t.env()).toMatchObject({ state: 'removed' })
+    }
+  )
+
   it('stops a create still in flight first, then deletes', async () => {
     const t = setup('throwaway', [OK])
     t.teardowns.start(t.store.runs.get('r1')!)

@@ -2,18 +2,19 @@ import { mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 import type { OrcaRuntimeService } from '../../../../../main/runtime/orca-runtime'
 import type { RunRow } from '../../shared/api-types'
+import type { RunEnd } from '../../shared/run/step-plan'
 import type { AutomationDefinition } from '../../shared/definition/types'
 import { envRunKey } from '../../shared/run/env-args'
 import type { EngineEnv } from '../engine-env'
 import { resolveRepoPath } from '../fields/runtime-facts'
 import { closeSessionTerminal } from '../run/launch'
-import { closeRun } from '../run/run-close'
+import { closeRun, type CloseOptions } from '../run/run-close'
 import { terminalOpen } from '../run/session-tabs'
 import type { PilotStore } from '../store/store'
 import { ownProcessIdentity, writerGone } from '../store/store-actions'
 import { stopOrphanCreate } from './orphan-create'
 import { pilotcliRunner, type Pilotcli } from './pilotcli'
-import { createPreparations, type Preparations } from './prepare'
+import { createPreparations, type EnvPreparer, type Preparations } from './prepare'
 import { recoverPreparing } from './recover'
 import { resolveEnvPath } from './resolve-path'
 import { sweepEnvs } from './sweep'
@@ -35,6 +36,12 @@ export type EnvServiceDeps = {
 }
 export type EnvService = {
   preparations: Preparations
+  // An env automation's answer runs (main/answers/answer-env.ts): this process's preparer, and a close like any run's (its
+  // answers hook, then its env's teardown).
+  answerHooks: {
+    preparer: EnvPreparer
+    close(run: RunRow, end: RunEnd, opts?: CloseOptions): void
+  }
   // The run engine's onRunEnd (M4 §8, the run ends however it ends): the rest of the run's end, then its env's teardown,
   // which first stops a create still in flight.
   runEnded(run: RunRow): void
@@ -103,8 +110,11 @@ export function createEnvService(deps: EnvServiceDeps): EnvService {
     }
   }
   const closing = { store: deps.store, now: deps.now, log: deps.log, onRunEnd: runEnded }
+  const close = (run: RunRow, end: RunEnd, opts?: CloseOptions): void =>
+    closeRun(closing, run, end, opts)
   return {
     preparations,
+    answerHooks: { preparer: preparations, close },
     runEnded,
     housekeep: () => teardowns.housekeep(),
     async startup() {
@@ -115,7 +125,7 @@ export function createEnvService(deps: EnvServiceDeps): EnvService {
         preparerGone: (p) => p === undefined || writerGone(p.pid, p.identity),
         stopOrphanCreate: stopCreateOf,
         // Closed like any run: its answers hook, then its env's teardown.
-        close: (run, end, opts) => closeRun(closing, run, end, opts),
+        close,
         log: deps.log
       })
       const report = await sweepEnvs({

@@ -181,6 +181,19 @@ export class RunStore {
       .map((r) => toStep(r as never))
   }
 
+  // The terminals only this run's steps recorded: the tabs it opened for itself. A tab another run's step recorded too is
+  // never this run's alone (an answer run that typed into the asking run's tab records that tab, borrowed).
+  ownTerminals(runId: string): string[] {
+    return this.db
+      .prepare(
+        `SELECT s.terminal_handle AS handle FROM steps s WHERE s.run_id = ? AND s.terminal_handle IS NOT NULL
+           AND NOT EXISTS (SELECT 1 FROM steps o WHERE o.terminal_handle = s.terminal_handle AND o.run_id != s.run_id)
+           GROUP BY s.terminal_handle ORDER BY MIN(s.idx)`
+      )
+      .all(runId)
+      .map((r) => String((r as { handle: string }).handle))
+  }
+
   runningSteps(): StepRow[] {
     return this.db
       .prepare("SELECT * FROM steps WHERE status IN ('starting', 'running')")

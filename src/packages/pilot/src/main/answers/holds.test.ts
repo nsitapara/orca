@@ -1,13 +1,8 @@
 import { describe, expect, it, vi } from 'vitest'
+import { FREE_HOLDS } from './__fixtures__/holds'
 import { gitInFlight, hold, passActivity, quotaHold, worktreeHold, type HoldDeps } from './holds'
 
 const h = (holdReason: string, holdDetail: string) => ({ holdReason, holdDetail })
-const FREE: HoldDeps = {
-  exists: () => true,
-  inFlight: async () => null,
-  activity: async () => null,
-  runsIn: () => []
-}
 
 describe('hold', () => {
   it('keeps a code and plain words, as the two queue fields', () => {
@@ -60,11 +55,11 @@ describe('worktreeHold', () => {
       h('worktree_busy', 'its terminals could not be read: runtime not ready')
     ]
   ])('%s', async (_name, change, expected) => {
-    expect(await worktreeHold('/wt', { ...FREE, ...change })).toEqual(expected)
+    expect(await worktreeHold('/wt', { ...FREE_HOLDS, ...change })).toEqual(expected)
   })
 
   it('never holds a job-wide card', async () => {
-    expect(await worktreeHold(null, { ...FREE, exists: () => false })).toBeNull()
+    expect(await worktreeHold(null, { ...FREE_HOLDS, exists: () => false })).toBeNull()
   })
 })
 
@@ -127,7 +122,7 @@ describe('passActivity', () => {
   it("fails closed: a terminal list that can't be read is passed on as a throw (a hold)", async () => {
     const rt = runtime('')
     rt.listTerminals.mockRejectedValueOnce(new Error('runtime not ready'))
-    const holds = { ...FREE, activity: passActivity(rt as never) }
+    const holds = { ...FREE_HOLDS, activity: passActivity(rt as never) }
     expect(await worktreeHold('/wt', holds)).toEqual(
       h('worktree_busy', 'its terminals could not be read: runtime not ready')
     )

@@ -19,12 +19,32 @@ export function agentOf(target: SessionTarget): AgentKind {
   return target.kind === 'new' ? target.agent : target.asking.agent
 }
 
+// What the answers step records: who runs it, and in which skill and mode (none when the asking session goes on).
+export function answersStepOf(target: SessionTarget): {
+  agent: AgentKind
+  skill: string | null
+  mode: string | null
+} {
+  if (target.kind === 'new') {
+    return { agent: target.agent, skill: target.skill, mode: target.mode }
+  }
+  return { agent: target.asking.agent, skill: target.asking.skill, mode: null }
+}
+
 export function askingRunOf(group: AgentGroup, target: SessionTarget): string | null {
   return target.kind === 'new' ? group.answers[0].item.runId : target.asking.runId
 }
 
 function messageOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
+}
+
+// A throwaway's cards (sessions.ts) carry their context into the fresh session.
+function carriedCards(target: SessionTarget, group: AgentGroup): { id: string; context: string }[] {
+  if (target.kind !== 'new' || target.fresh !== 'throwaway') {
+    return []
+  }
+  return group.answers.map((a) => ({ id: a.item.id, context: a.item.context }))
 }
 
 type Mode = { skill: string | null; mode: string }
@@ -67,7 +87,7 @@ async function start(
   }
   const prompt =
     target.kind === 'new'
-      ? newSessionPrompt(group.def, run, mode, line)
+      ? newSessionPrompt(group.def, run, mode, line, carriedCards(target, group))
       : withModePointer(mode, line)
   const session: AgentSessionMode =
     target.kind === 'fork' ? { kind: 'fork', sessionId: target.sessionId } : { kind: 'new' }
@@ -84,7 +104,9 @@ async function start(
     prompt,
     title: `${group.def.name} · answers`,
     args,
-    session
+    session,
+    // An env answer run's variables (M4 §8, every step of a run gets them); none for any other.
+    runEnv: deps.store.runs.get(run.id)?.env?.vars
   })
   return {
     handle: opened.terminalHandle,

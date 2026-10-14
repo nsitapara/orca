@@ -147,3 +147,33 @@ describe('chooseSession (apply.py start_agent)', () => {
     })
   })
 })
+
+describe('a card from a throwaway run, decided at answer time', () => {
+  it.each([
+    [
+      'throwaway: a fresh session carrying the card',
+      'throwaway',
+      { kind: 'new', fresh: 'throwaway' }
+    ],
+    ['in place: its own free tab, as before', 'in_place', { kind: 'resume' }],
+    ['kept: its own free tab, as before', 'kept', { kind: 'resume' }]
+  ] as const)('%s', async (_name, mode, expected) => {
+    const { store, items } = setup()
+    store.runs.envs.begin('run-1', '/wt', {})
+    const folder = mode === 'throwaway' ? '/agents/agents-run-1' : '/wt'
+    store.runs.envs.ready('run-1', {
+      mode,
+      reason: '',
+      path: folder,
+      home: '/wt',
+      worktreeId: 'id',
+      sha: null,
+      envFile: null,
+      vars: {},
+      stack: null
+    })
+    expect(
+      await chooseSession(definition(), items, store, probe('free', FRESH), NOW)
+    ).toMatchObject(expected)
+  })
+})

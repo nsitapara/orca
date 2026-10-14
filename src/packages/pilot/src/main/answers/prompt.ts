@@ -96,18 +96,28 @@ export function withModePointer(
   return `Apply these answers as ${modeFile(mode.skill, mode.mode)} says. ${line}`
 }
 
-// A new session knows nothing yet: the wrapped preamble (contract §7) and the skill's answers mode file.
+// A new session knows nothing yet: the wrapped preamble (contract §7) and the skill's answers mode file. `cards`: what
+// the cards of a throwaway run said (sessions.ts), one line each, since the session that asked went with its folder.
 export function newSessionPrompt(
   def: Pick<AutomationDefinition, 'name'>,
   run: { id: string; label: string },
   target: { skill: string | null; mode: string },
-  line: string
+  line: string,
+  cards: { id: string; context: string }[] = []
 ): string {
   const lines = [`Started by the Pilot automation "${def.name}" (run ${run.id}) for ${run.label}.`]
   if (target.skill) {
     lines.push(
       `Use the ${target.skill} skill in its ${target.mode} mode (${modeFile(target.skill, target.mode)}).`
     )
+  }
+  const said = cards.filter((c) => c.context.trim() !== '')
+  if (said.length > 0) {
+    lines.push(
+      '',
+      'The run that asked worked in a throwaway checkout, now removed. What its cards said:'
+    )
+    lines.push(...said.map((c) => `[${c.id}] ${oneLine(c.context).slice(0, 1500)}`))
   }
   lines.push('', line)
   return lines.join('\n')

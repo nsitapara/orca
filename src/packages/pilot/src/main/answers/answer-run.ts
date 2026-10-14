@@ -3,7 +3,8 @@ import type { AgentKind, AutomationDefinition } from '../../shared/definition/ty
 import type { QuotaReading } from '../fields/quota'
 import type { AgentTerminalRequest, AgentTerminalResult } from '../run/launch'
 import type { PilotStore } from '../store/store'
-import { agentOf, askingRunOf, launchAnswerRun } from './answer-start'
+import { prepareAnswerRun, type AnswerEnvHooks } from './answer-env'
+import { agentOf, answersStepOf, askingRunOf, launchAnswerRun } from './answer-start'
 import { hold, quotaHold, type Hold } from './holds'
 import { answersText, type AgentAnswer } from './prompt'
 import { chooseSession, type SessionProbe, type SessionTarget } from './sessions'
@@ -31,6 +32,8 @@ export type AgentDispatchDeps = {
   fileExists?(path: string): boolean
   // One line when a configured answers mode file is missing (default: console.warn).
   warn?(message: string): void
+  // An env automation's answers run in its env (answer-env.ts); absent, they run in the worktree as before.
+  envs?: AnswerEnvHooks
 }
 export type AgentGroup = {
   def: AutomationDefinition
@@ -44,6 +47,8 @@ export type AgentDispatch =
       runId: string
       route: 'resume' | 'fork' | 'new'
       sessionId: string | null
+      // Called once the dispatcher marked the rows sent: an env answer run's env is begun then (answer-env.ts).
+      afterSent?: () => void
     }
   | { kind: 'held'; hold: Hold }
   // Every card moved on while the dispatch awaited (ticked, cleared, answered again, retired).
@@ -91,12 +96,15 @@ export function currentAnswer(store: PilotStore, item: InboxItemRow): InboxItemR
   return store.queue.forInboxItem(item.id).some((r) => QUEUED.includes(r.state)) ? now : null
 }
 
+// inEnv: its env decides where it works, so it claims no worktree yet (begin's claimHome does, Ruling P10) and its step 0
+// waits pending until the env is ready.
 function createAnswerRun(
   deps: AgentDispatchDeps,
   group: AgentGroup,
   target: SessionTarget,
   path: string,
-  at: number
+  at: number,
+  inEnv = false
 ): AnswerRun {
   const first = group.answers[0].item
   const parentRunId = askingRunOf(group, target)
@@ -112,7 +120,7 @@ function createAnswerRun(
     tickId: null,
     itemKey: run.itemKey,
     itemLabel: run.label,
-    worktreePath: path,
+    worktreePath: inEnv ? null : path,
     startedAt: at,
     trigger: 'answer',
     parentRunId
@@ -121,11 +129,10 @@ function createAnswerRun(
     runId: run.id,
     idx: 0,
     name: 'answers',
-    agent: agentOf(target),
-    skill: target.kind === 'new' ? target.skill : target.asking.skill,
+    ...answersStepOf(target),
     startedAt: at,
     kind: 'agent',
-    mode: target.kind === 'new' ? target.mode : null
+    status: inEnv ? 'pending' : 'starting'
   })
   // What {run.answer} is in this run (G7): Task 25's runAnswer reads it back.
   deps.store.events.add({
@@ -197,6 +204,10 @@ export async function dispatchToAgent(
     return { kind: 'held', hold: hold('claimed', 'another automation is applying answers there') }
   }
   const still = { ...group, answers }
+  if (group.def.workspace.kind === 'env' && deps.envs) {
+    const run = createAnswerRun(deps, still, target, path, now, true)
+    return prepareAnswerRun(deps, deps.envs, still, target, run, path)
+  }
   const run = createAnswerRun(deps, still, target, path, now)
   return launchAnswerRun(deps, still, target, run, path)
 }

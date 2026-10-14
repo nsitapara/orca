@@ -1,11 +1,31 @@
 import type { InboxItemRow, QueueRow } from '../../shared/api-types'
+import { inboxEvent } from '../inbox/inbox-service'
 import type { MrBlock } from '../inbox/mr-state'
 import { retireTarget } from '../inbox/retire'
 import type { PilotStore } from '../store/store'
+import { MAX_ATTEMPTS } from './answer-run-end'
 import { hold, type Hold } from './holds'
 
 export type Entry = { row: QueueRow; item: InboxItemRow }
 export type Group = { automationId: string; worktreePath: string | null; entries: Entry[] }
+// An approved action that isn't ready yet (act.py not_yet) is checked again this often, not every pass.
+export const WAITS_RECHECK_MS = 5 * 60_000
+
+// These rows go back to the queue, held, sent to no run: a retry counts a try (failed at the limit), a not-yet is looked
+// at again after WAITS_RECHECK_MS. The card's timeline says so when the reason changed. The dispatcher holds rows it read
+// this pass; an env answer run whose env never came holds the rows it was sent (answer-env.ts).
+export function holdRows(store: PilotStore, entries: Entry[], held: Hold, at: number): void {
+  for (const { row, item } of entries) {
+    const attempts = held.holdReason === 'retry' ? row.attempts + 1 : row.attempts
+    const state = attempts >= MAX_ATTEMPTS ? 'failed' : 'held'
+    const recheck = held.holdReason === 'waits' ? { readyAt: at + WAITS_RECHECK_MS } : {}
+    store.queue.update(row.id, { state, ...held, attempts, dispatchedRunId: null, ...recheck }, at)
+    if (row.holdReason !== held.holdReason || row.holdDetail !== held.holdDetail) {
+      const payload = { reason: held.holdReason, detail: held.holdDetail }
+      inboxEvent(store, item, 'answer_held', payload, at)
+    }
+  }
+}
 
 const UNREAD_MR = "MR state unknown: it hasn't been read yet"
 

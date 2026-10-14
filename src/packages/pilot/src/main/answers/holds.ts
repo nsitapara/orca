@@ -1,5 +1,5 @@
 import type { HoldReason } from '../../shared/api-types'
-import type { AgentKind } from '../../shared/definition/types'
+import type { AgentKind, AutomationDefinition } from '../../shared/definition/types'
 import type { QuotaReading } from '../fields/quota'
 import {
   listBusyTerminals,
@@ -19,6 +19,7 @@ export function hold(code: HoldCode, words: string): Hold {
 }
 
 export type WorktreeActivity = Awaited<ReturnType<typeof worktreeBusy>>
+const NO_WORKTREE = hold('no_worktree', 'no worktree for this branch')
 
 export type HoldDeps = {
   exists(path: string): boolean
@@ -39,7 +40,7 @@ export async function worktreeHold(path: string | null, deps: HoldDeps): Promise
     return null
   }
   if (!deps.exists(path)) {
-    return hold('no_worktree', 'no worktree for this branch')
+    return NO_WORKTREE
   }
   const running = deps.runsIn(path)[0]
   if (running) {
@@ -62,6 +63,22 @@ export async function worktreeHold(path: string | null, deps: HoldDeps): Promise
   } catch (error) {
     return hold('worktree_busy', `its terminals could not be read: ${messageOf(error)}`)
   }
+}
+
+// An env automation's answers never wait for a busy worktree (M4 §8): Pilot passes --throwaway when its own run holds it,
+// and pilotcli makes a throwaway when Nish is busy. Only a worktree that is gone holds them.
+export async function answersHold(
+  def: AutomationDefinition,
+  path: string | null,
+  deps: HoldDeps
+): Promise<Hold | null> {
+  if (def.workspace.kind !== 'env') {
+    return worktreeHold(path, deps)
+  }
+  if (path !== null && !deps.exists(path)) {
+    return NO_WORKTREE
+  }
+  return null
 }
 
 // gate.py in_flight over Task 5a's git facts (both read with optional locks off): uncommitted or

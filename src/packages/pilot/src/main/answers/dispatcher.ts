@@ -9,17 +9,15 @@ import {
 } from '../inbox/inbox-service'
 import type { MrBlock } from '../inbox/mr-state'
 import { dispatchToAgent, type AgentDispatchDeps } from './answer-run'
-import { MAX_ATTEMPTS } from './answer-run-end'
 import { applyScript } from './apply-script'
-import { dueGroups, lockEntries, mrHold, type Entry, type Group } from './dispatch-groups'
-import { hold, worktreeHold, type Hold, type HoldDeps } from './holds'
+import { dueGroups, holdRows, lockEntries, mrHold, type Entry, type Group } from './dispatch-groups'
+import { answersHold, hold, type Hold, type HoldDeps } from './holds'
 import type { AgentAnswer } from './prompt'
 import { routeOf } from './queue-view'
 
 export type { DispatchReport }
 export { answerRunEnded, ANSWER_RUN_STOPPED, MAX_ATTEMPTS } from './answer-run-end'
-// An approved action that isn't ready yet (act.py not_yet) is checked again this often, not every pass.
-export const WAITS_RECHECK_MS = 5 * 60_000
+export { WAITS_RECHECK_MS } from './dispatch-groups'
 
 export type DispatcherDeps = {
   inbox: InboxDeps
@@ -129,28 +127,9 @@ export class AnswerDispatcher {
 
   private holdRows(entries: Entry[], held: Hold, report: DispatchReport): void {
     const { store, now } = this.deps.inbox
-    const at = now()
-    for (const entry of entries) {
-      const current = this.fresh(entry)
-      if (!current) {
-        continue
-      }
-      const { row, item } = current
-      const attempts = held.holdReason === 'retry' ? row.attempts + 1 : row.attempts
-      const state = attempts >= MAX_ATTEMPTS ? 'failed' : 'held'
-      const recheck = held.holdReason === 'waits' ? { readyAt: at + WAITS_RECHECK_MS } : {}
-      store.queue.update(row.id, { state, ...held, attempts, ...recheck }, at)
-      if (row.holdReason !== held.holdReason || row.holdDetail !== held.holdDetail) {
-        inboxEvent(
-          store,
-          item,
-          'answer_held',
-          { reason: held.holdReason, detail: held.holdDetail },
-          at
-        )
-      }
-      report.held += 1
-    }
+    const current = entries.flatMap((entry) => this.fresh(entry) ?? [])
+    holdRows(store, current, held, now())
+    report.held += current.length
   }
 
   private markSent(
@@ -232,7 +211,7 @@ export class AnswerDispatcher {
       this.holdRows(group.entries, mr.hold, report)
       return
     }
-    const held = await worktreeHold(group.worktreePath, holds)
+    const held = await answersHold(def, group.worktreePath, holds)
     if (held) {
       this.holdRows(mr.open, held, report)
       return
@@ -279,6 +258,8 @@ export class AnswerDispatcher {
     if (sent.kind === 'dispatched') {
       this.markSent(entries, sent.route, sent.runId, sent.sessionId)
       report.agents += 1
+      // An env answer run's env is begun only once its rows read sent, so its end always finds them (answer-env.ts).
+      sent.afterSent?.()
     }
   }
 

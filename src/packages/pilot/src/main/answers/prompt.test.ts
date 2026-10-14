@@ -246,6 +246,24 @@ describe('answersText', () => {
 })
 
 describe('newSessionPrompt', () => {
+  it("a fresh session for a throwaway's cards carries what each card said", () => {
+    const text = newSessionPrompt(
+      { name: '05 · Fix CI' },
+      { id: 'a1', label: '!1' },
+      { skill: 'fix-gitlab-ci', mode: 'answers' },
+      'LINE',
+      [
+        { id: 'in_1', context: 'Tests failed in api/x.py\nsecond line' },
+        { id: 'in_2', context: '' }
+      ]
+    )
+    expect(text).toContain(
+      'The run that asked worked in a throwaway checkout, now removed. What its cards said:'
+    )
+    expect(text).toContain('[in_1] Tests failed in api/x.py second line')
+    expect(text).not.toContain('[in_2]')
+  })
+
   it('names the automation, the answer run, the skill and its answers mode', () => {
     const def = { name: 'Fix failed CI on my MRs' } as never
     expect(

@@ -1,6 +1,7 @@
 import type { OrcaRuntimeService } from '../../../../../main/runtime/orca-runtime'
 import { getAgentResumeArgv } from '../../../../../shared/agent-resume-argv'
 import type { RunRow, SessionResumeResult, StepRow } from '../../shared/api-types'
+import { checkoutRemoved } from '../../shared/api-types-env'
 import { isSessionId } from '../../shared/session-id'
 import type { WorktreeFactDeps } from '../fields/worktree-facts'
 import type { PilotStore } from '../store/store'
@@ -35,6 +36,8 @@ export function resumeCommand(agent: string, sessionId: string): string | null {
 let resumeCalls = 0
 const DEAD_START = "A previous start of this session didn't come up; try again"
 const OPENING = 'Session is opening… try again in a moment'
+export const CHECKOUT_REMOVED =
+  "This run worked in a throwaway checkout, removed when it ended: its session can't be reopened"
 
 // The session's tab when it is still live; else its session reopened in a new tab in the run's
 // worktree. Opening only creates a terminal: it writes no step row (so no launchArgs to record).
@@ -80,6 +83,10 @@ export async function resumeStepSession(
       claims?.release(sessionId, by)
       await deps.focus(live.handle)
       return { action: 'focused', handle: live.handle }
+    }
+    // A throwaway is disposable (M4 §8): its folder went with the run, so its session can't be reopened there.
+    if (checkoutRemoved(run)) {
+      throw new Error(CHECKOUT_REMOVED)
     }
     if (!run.worktreePath) {
       throw new Error(`Run ${run.id} has no worktree to resume in`)
