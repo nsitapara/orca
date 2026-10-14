@@ -252,3 +252,24 @@ describe('installPilot', () => {
     expect(calls.some((c) => c.cmd === 'env')).toBe(false)
   })
 })
+
+describe('MAIN_PROCESS_PATTERN', () => {
+  const daemon =
+    '/Applications/Pilot.app/Contents/Frameworks/Pilot Helper.app/Contents/MacOS/Pilot Helper ' +
+    '/Applications/Pilot.app/Contents/Resources/app.asar.unpacked/out/main/daemon-entry.js ' +
+    '--socket /tmp/pilot.sock /Applications/Pilot.app/Contents/MacOS/Pilot'
+  const cases: [string, string, boolean][] = [
+    ['installed main', '/Applications/Pilot.app/Contents/MacOS/Pilot', true],
+    ['installed main with args', '/Applications/Pilot.app/Contents/MacOS/Pilot --flag', true],
+    ['dist main', '/r/dist/mac-arm64/Pilot.app/Contents/MacOS/Pilot', true],
+    ['terminal daemon with main path as a later argument', daemon, false],
+    [
+      'helper process',
+      '/Applications/Pilot.app/Contents/Frameworks/Pilot Helper.app/Contents/MacOS/Pilot Helper',
+      false
+    ]
+  ]
+  it.each(cases)('%s', (_name, commandLine, expected) => {
+    expect(new RegExp(install.MAIN_PROCESS_PATTERN).test(commandLine)).toBe(expected)
+  })
+})

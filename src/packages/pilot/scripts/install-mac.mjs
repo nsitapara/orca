@@ -10,8 +10,9 @@ export const INSTALL_PATH = '/Applications/Pilot.app'
 export const LSREGISTER =
   '/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister'
 // A running Pilot's main process, installed or still in dist/. Helper processes live under Frameworks/.
+// Anchored to argv[0]: the detached terminal daemon carries the main binary path as a later argument.
 export const MAIN_PROCESS_PATTERN =
-  '(^|/)(Applications|dist/mac[^/ ]*)/Pilot\\.app/Contents/MacOS/Pilot( |$)'
+  '^[^ ]*/(Applications|dist/mac[^/ ]*)/Pilot\\.app/Contents/MacOS/Pilot( |$)'
 export const EXIT_TIMEOUT_MS = 30_000
 export const CLI_TIMEOUT_MS = 60_000
 const POLL_MS = 500
