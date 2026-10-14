@@ -166,4 +166,35 @@ describe('recoverPreparing', () => {
     expect(store.runs.get('r1')).toMatchObject({ status: 'cancelled', outcome: 'Cancelled' })
     expect(store.runs.steps('r1')[0].status).toBe('pending')
   })
+
+  // One recovery's failure never stops the others, and step 0 fails only once its run is closed: a close that throws
+  // leaves the run running with step 0 pending, for the stale-start sweep (STALE_PENDING_MS).
+  it('a recovery that throws is logged and the next one still runs; a failed close leaves step 0 pending', async () => {
+    const store = setup('running')
+    store.runs.create({
+      id: 'r2',
+      automationId: 'ci',
+      tickId: null,
+      itemKey: 'mr:2',
+      itemLabel: '!2',
+      worktreePath: '/wt/b',
+      startedAt: 2
+    })
+    store.runs.envs.begin('r2', '/wt/b', { args: [], preparer: { pid: 4243, identity: null } })
+    const logs: string[] = []
+    const t = deps(store, {
+      close: (run) => {
+        if (run.id === 'r1') {
+          throw new Error('store busy')
+        }
+        store.runs.update(run.id, { status: 'failed', outcome: RECOVERED_OUTCOME, finishedAt: 100 })
+      },
+      log: (m) => void logs.push(m)
+    })
+    await expect(recoverPreparing(t.recover)).resolves.toBe(1)
+    expect(store.runs.get('r1')?.status).toBe('running')
+    expect(store.runs.steps('r1')[0].status).toBe('pending')
+    expect(store.runs.get('r2')?.status).toBe('failed')
+    expect(logs).toContain("[pilot] run r1: couldn't recover its workspace: store busy")
+  })
 })
