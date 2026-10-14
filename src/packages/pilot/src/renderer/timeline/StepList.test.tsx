@@ -142,6 +142,10 @@ describe('StepList', () => {
     )
     expect(screen.getByText('pilotcli skills get-context · ok: 2 failed jobs')).toBeTruthy()
     expect(screen.getByText('Data').closest('details')?.hasAttribute('open')).toBe(false)
+    expect(screen.queryByText(/"pipeline_id": 2934/)).toBeNull()
+    const details = screen.getByText('Data').closest('details') as HTMLDetailsElement
+    details.open = true
+    fireEvent(details, new Event('toggle'))
     expect(screen.getByText(/"pipeline_id": 2934/).tagName).toBe('PRE')
   })
 

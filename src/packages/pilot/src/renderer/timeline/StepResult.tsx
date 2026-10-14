@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import type { StoredResult } from '../../shared/api-types'
 
 function headline(result: StoredResult): string {
@@ -5,16 +6,20 @@ function headline(result: StoredResult): string {
   return `pilotcli ${result.command} · ${result.outcome}${said}`
 }
 
+// The data is stringified only while its fold is open: up to 256 KB a step would otherwise be pretty-printed on every render.
 function DataView({ result }: { result: StoredResult }): React.JSX.Element {
+  const [open, setOpen] = useState(false)
   if (result.data_omitted !== undefined) {
     return <div>{`Data not kept: ${result.data_omitted}`}</div>
   }
   return (
-    <details>
+    <details onToggle={(e) => setOpen(e.currentTarget.open)}>
       <summary className="cursor-pointer">Data</summary>
-      <pre className="mt-1 max-h-80 overflow-auto whitespace-pre-wrap break-all rounded bg-muted p-2 font-mono text-[11px]">
-        {JSON.stringify(result.data ?? null, null, 2)}
-      </pre>
+      {open ? (
+        <pre className="mt-1 max-h-80 overflow-auto whitespace-pre-wrap break-all rounded bg-muted p-2 font-mono text-[11px]">
+          {JSON.stringify(result.data ?? null, null, 2)}
+        </pre>
+      ) : null}
     </details>
   )
 }
