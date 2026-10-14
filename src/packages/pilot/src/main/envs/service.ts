@@ -7,13 +7,16 @@ import { envRunKey } from '../../shared/run/env-args'
 import type { EngineEnv } from '../engine-env'
 import { resolveRepoPath } from '../fields/runtime-facts'
 import { closeSessionTerminal } from '../run/launch'
+import { closeRun } from '../run/run-close'
 import { terminalOpen } from '../run/session-tabs'
 import type { PilotStore } from '../store/store'
-import { ownProcessIdentity } from '../store/store-actions'
+import { ownProcessIdentity, writerGone } from '../store/store-actions'
 import { stopOrphanCreate } from './orphan-create'
 import { pilotcliRunner, type Pilotcli } from './pilotcli'
 import { createPreparations, type Preparations } from './prepare'
+import { recoverPreparing } from './recover'
 import { resolveEnvPath } from './resolve-path'
+import { sweepEnvs } from './sweep'
 import { createTeardowns } from './teardown'
 
 export type EnvServiceDeps = {
@@ -37,6 +40,8 @@ export type EnvService = {
   runEnded(run: RunRow): void
   // The scheduler's poll: the deletes now due (a retry, a not_yet, a run that ended outside closeRun). Never awaits one.
   housekeep(): void
+  // Only the process that runs the scheduler, at its start: recover what a stopped Pilot left, then the sweep.
+  startup(): Promise<void>
   stop(): void
 }
 
@@ -65,12 +70,13 @@ export function createEnvService(deps: EnvServiceDeps): EnvService {
     preparer: () => ({ pid: process.pid, identity: ownProcessIdentity() }),
     log: deps.log
   })
+  const stopCreateOf = (runId: string): Promise<void> => stopOrphanCreate(pidFileOf(runId), runId)
   const teardowns = createTeardowns({
     store: deps.store,
     now: deps.now,
     pilotcli,
     preparations,
-    stopOrphanCreate: (runId) => stopOrphanCreate(pidFileOf(runId), runId),
+    stopOrphanCreate: stopCreateOf,
     tabs: {
       isOpen: (handle) => terminalOpen(runtime, handle),
       draft: (handle) => deps.terminalDraft(handle),
@@ -87,18 +93,44 @@ export function createEnvService(deps: EnvServiceDeps): EnvService {
     },
     log: deps.log
   })
+  const runEnded = (run: RunRow): void => {
+    try {
+      deps.onRunEnd?.(run)
+    } finally {
+      if (run.env && run.env.removedAt === null) {
+        teardowns.start(run)
+      }
+    }
+  }
+  const closing = { store: deps.store, now: deps.now, log: deps.log, onRunEnd: runEnded }
   return {
     preparations,
-    runEnded: (run) => {
-      try {
-        deps.onRunEnd?.(run)
-      } finally {
-        if (run.env && run.env.removedAt === null) {
-          teardowns.start(run)
-        }
-      }
-    },
+    runEnded,
     housekeep: () => teardowns.housekeep(),
+    async startup() {
+      await recoverPreparing({
+        store: deps.store,
+        now: deps.now,
+        isPreparing: preparations.isPreparing,
+        preparerGone: (p) => p === undefined || writerGone(p.pid, p.identity),
+        stopOrphanCreate: stopCreateOf,
+        // Closed like any run: its answers hook, then its env's teardown.
+        close: (run, end, opts) => closeRun(closing, run, end, opts),
+        log: deps.log
+      })
+      const report = await sweepEnvs({
+        store: deps.store,
+        pilotcli,
+        teardown: (run) => teardowns.start(run),
+        isPreparing: preparations.isPreparing,
+        now: deps.now,
+        log: deps.log
+      })
+      const { deleted, removed, skipped } = report
+      deps.log(
+        `[pilot] env sweep: ${deleted.length} deleted, ${removed.length} already gone, ${skipped} left alone`
+      )
+    },
     stop: () => preparations.stopAll()
   }
 }

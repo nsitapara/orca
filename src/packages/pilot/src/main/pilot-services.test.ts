@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -6,6 +6,7 @@ import type { OrcaRuntimeService } from '../../../../main/runtime/orca-runtime'
 import { setAppEnvironment, type AppEnvironment } from '../../../../shared/app-environment'
 import type { PilotStatus } from '../shared/api-types'
 import type * as Live from './definitions/live'
+import { fakePilotcli, type FakePilotcli } from './envs/__fixtures__/fake-pilotcli'
 import { STALE_START_OUTCOME } from './run/stale-starts'
 import { PilotStore } from './store/store'
 
@@ -33,6 +34,8 @@ const runtime = {} as OrcaRuntimeService
 let userData = ''
 let dir = ''
 let logs: string[] = []
+let pilotcli: FakePilotcli
+const SWEPT = '[pilot] env sweep: 0 deleted, 0 already gone, 0 left alone'
 
 beforeEach(() => {
   registry.length = 0
@@ -46,6 +49,11 @@ beforeEach(() => {
   writeFileSync(join(dir, 'people.yaml'), 'people: [\n')
   setAppEnvironment({ getPath: () => userData } as unknown as AppEnvironment)
   vi.stubEnv('PILOT_AUTOMATION_DIRS', dir)
+  // Never the real pilotcli: the scheduler's start sweeps envs (main/envs/sweep.ts) with this one, which lists none.
+  pilotcli = fakePilotcli()
+  pilotcli.answer('env-list', { json: { outcome: 'ok', reason: '', data: [] } })
+  vi.stubEnv('PILOT_PILOTCLI', pilotcli.bin)
+  vi.stubEnv('FAKE_PILOTCLI_DIR', pilotcli.dir)
   logs = []
   vi.spyOn(console, 'log').mockImplementation((m: string) => void logs.push(m))
 })
@@ -53,6 +61,7 @@ beforeEach(() => {
 afterEach(() => {
   vi.unstubAllEnvs()
   vi.restoreAllMocks()
+  rmSync(pilotcli.dir, { recursive: true, force: true })
 })
 
 describe('startPilotServices', () => {
@@ -65,8 +74,10 @@ describe('startPilotServices', () => {
     services.stop()
   })
 
-  it('opens the store in userData, loads the folders, and runs the scheduler when asked', () => {
+  it('opens the store in userData, loads the folders, and runs the scheduler when asked', async () => {
     const services = startPilotServices(runtime, 'main', { schedulerEnabled: true })
+    await vi.waitFor(() => expect(logs).toContain(SWEPT))
+    expect(pilotcli.calls()).toEqual(['env list --format json'])
     expect(existsSync(join(userData, 'pilot-automations.db'))).toBe(true)
     expect(services.context.loaded().definitions.map((d) => d.id)).toEqual(['ci'])
     expect(logs).toContain('[pilot] scheduler started: first check in 60s, then every 15s')
@@ -85,7 +96,7 @@ describe('startPilotServices', () => {
     expect(() => services.context.store.lastRealTick('ci')).toThrow()
   })
 
-  it('leaves the scheduler off unless asked, and sweeps stale starts only when it starts', () => {
+  it('leaves the scheduler off unless asked, and sweeps stale starts and envs only when it starts', async () => {
     const seed = PilotStore.open(join(userData, 'pilot-automations.db'))
     seed.runs.create({
       id: 'run-1',
@@ -110,11 +121,13 @@ describe('startPilotServices', () => {
     expect(logs.some((m) => m.startsWith('[pilot] scheduler started'))).toBe(false)
     expect(off.context.store.runs.get('run-1')?.status).toBe('running')
     off.stop()
+    expect(pilotcli.calls()).toEqual([])
     const on = startPilotServices(runtime, 'orcad', { schedulerEnabled: true })
     expect(on.context.store.runs.get('run-1')).toMatchObject({
       status: 'failed',
       outcome: STALE_START_OUTCOME
     })
+    await vi.waitFor(() => expect(logs).toContain(SWEPT))
     on.stop()
   })
 

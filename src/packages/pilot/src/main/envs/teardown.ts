@@ -8,7 +8,8 @@ import type { Preparations } from './prepare'
 
 export const DELETE_TIMEOUT_MS = 10 * 60_000
 const AT_ONCE = 2
-const LIVE: ReadonlySet<RunRow['status']> = new Set(['running', 'asking'])
+// A run with these statuses is still going: its env is never torn down (nor swept, main/envs/sweep.ts).
+export const LIVE: ReadonlySet<RunRow['status']> = new Set(['running', 'asking'])
 
 export type TabDeps = {
   isOpen(handle: string): Promise<boolean>

@@ -266,6 +266,7 @@ function openPilot(
   opened.push(() => scheduler.stop())
   // The attach hooks decide (pilotSchedulerEnabled); a caller that doesn't say gets no scheduler.
   if (schedulerOn) {
+    void softly('envs at start', () => envs.startup(), log)
     sweepStaleStarts(store, now, log)
     scheduler.start()
   } else {

@@ -1,0 +1,96 @@
+import type { RunRow } from '../../shared/api-types'
+import { ENV_LIST_ARGS } from '../../shared/run/env-args'
+import { worktreePathKey } from '../fields/agent-activity'
+import type { PilotStore } from '../store/store'
+import { parseEnvRows, type EnvListRow } from './env-result'
+import type { Pilotcli } from './pilotcli'
+import { LIVE } from './teardown'
+
+export const LIST_TIMEOUT_MS = 60_000
+export type SweepReport = { deleted: string[]; removed: string[]; skipped: number }
+export type SweepDeps = {
+  store: PilotStore
+  pilotcli: Pilotcli
+  teardown(run: RunRow): void
+  // A create this process is running for the run (Preparations.isPreparing).
+  isPreparing(runId: string): boolean
+  now(): number
+  log(message: string): void
+}
+
+function messageOf(error: unknown): string {
+  return error instanceof Error ? error.message : String(error)
+}
+
+function sameFolder(row: EnvListRow, run: RunRow): boolean {
+  const recorded = run.env?.path ?? null
+  return recorded === null || row.path === null || worktreePathKey(row.path) === recorded
+}
+
+// May the sweep delete this row's env (M4 §4, Contract answers 4)? Only for one of this Pilot's own runs, matched by `run`
+// exactly as create was given it, that has ended, isn't still being made here, isn't stuck, and lives where Pilot recorded.
+function deletable(row: EnvListRow, run: RunRow, deps: SweepDeps): boolean {
+  if (LIVE.has(run.status) || run.env?.state === 'stuck' || !sameFolder(row, run)) {
+    return false
+  }
+  return !(row.status === 'creating' && deps.isPreparing(run.id))
+}
+
+// An ended run's env pilotcli no longer lists is gone already. One still preparing is its preparation's (or recovery's).
+function goneUnlisted(run: RunRow, listed: ReadonlySet<string>): boolean {
+  const env = run.env
+  if (!env || env.removedAt !== null || env.state === 'preparing') {
+    return false
+  }
+  return !LIVE.has(run.status) && !listed.has(run.id)
+}
+
+// env list's rows, or null (logged) when it failed or answered anything but a list: then nothing is touched.
+async function listEnvs(deps: SweepDeps): Promise<EnvListRow[] | null> {
+  try {
+    const reply = await deps.pilotcli({ args: ENV_LIST_ARGS, timeoutMs: LIST_TIMEOUT_MS })
+    if (reply.outcome !== 'ok') {
+      throw new Error(reply.reason || `env list answered ${reply.outcome}`)
+    }
+    return parseEnvRows(reply.data)
+  } catch (error) {
+    deps.log(`[pilot] env sweep skipped: ${messageOf(error)}`)
+    return null
+  }
+}
+
+// At startup, after recovery (M4 §8, Pilot starts): env delete for every env pilotcli lists whose run is one of this
+// Pilot's that has ended. Orphans (run "") and runs Pilot doesn't know are Nish's to delete. An ended run's env that
+// pilotcli no longer lists is recorded removed.
+export async function sweepEnvs(deps: SweepDeps): Promise<SweepReport> {
+  const report: SweepReport = { deleted: [], removed: [], skipped: 0 }
+  const rows = await listEnvs(deps)
+  if (rows === null) {
+    return report
+  }
+  const runs = deps.store.runs.envs.withEnvs()
+  const byId = new Map(runs.map((run) => [run.id, run]))
+  const listed = new Set<string>()
+  for (const row of rows) {
+    const run = row.run === '' || row.orphan ? undefined : byId.get(row.run)
+    if (!run) {
+      report.skipped += 1
+      continue
+    }
+    listed.add(run.id)
+    if (!deletable(row, run, deps)) {
+      report.skipped += 1
+      continue
+    }
+    if (run.env && run.env.removedAt !== null) {
+      deps.store.runs.envs.reopen(run.id)
+    }
+    deps.teardown(deps.store.runs.get(run.id) ?? run)
+    report.deleted.push(run.id)
+  }
+  for (const run of runs.filter((r) => goneUnlisted(r, listed))) {
+    deps.store.runs.envs.removed(run.id, deps.now())
+    report.removed.push(run.id)
+  }
+  return report
+}
