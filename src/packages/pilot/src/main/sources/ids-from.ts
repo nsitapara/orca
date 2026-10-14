@@ -6,6 +6,7 @@ import { idsFromProblems } from '../../shared/definition/ids-from'
 import type { IdsCommandSpec } from '../../shared/definition/types'
 import { splitArgv } from '../../shared/run/argv'
 import { engineChildEnv, type EngineEnv } from '../engine-env'
+import { lastLine } from '../last-line'
 
 export type IdsCommand = {
   program: string
@@ -100,10 +101,6 @@ export const runIdsCommand: IdsRunner = async (cmd) => {
     timedOut: out.timedOut,
     truncated: out.outputTruncated === true
   }
-}
-
-function lastLine(text: string): string {
-  return text.trim().split('\n').at(-1)?.trim() ?? ''
 }
 
 // What stdout may be: the list itself, or an envelope (pilotcli's) whose data is the list. Only data is read.
