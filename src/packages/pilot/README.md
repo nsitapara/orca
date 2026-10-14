@@ -259,6 +259,57 @@ A source can read only the ids a command names, instead of listing everything an
 - **Exit codes:** 0 reads the ids; 3 means no ids (nothing is read); any other exit, a timeout or the cap fails the tick with the command's last line.
 - **The source** then reads each id on its own (Linear: by identifier, read only). An id Linear can't find (its "Entity not found") is skipped, and the tick says so in Activity ("WEB-2123 isn't readable in Linear; skipped"); a handed-over one is dropped. Any other failed read of one id skips that id this tick, with a warning (a handed-over one stays pending): only a failed listing fails the tick. The where block's other clauses still apply. Without a listing, there is no implicit "assigned to me", so say `assignee:` when that matters.
 
+### Job environments (`workspace: { env }`)
+
+A job that changes code on Nish's work, or needs a stack, says what it needs. pilotcli decides where it runs and makes that place (pilotcli milestone 4, §8). Pilot calls pilotcli around the run.
+
+    workspace:
+      env:
+        worktree: "{worktree.path}"     # or: branch + at, or: new_branch + from (+ keep)
+        writes: true
+        stack: when_backend             # never (default) | backend | full | when_backend | "{field}" holding one
+
+- **One subject:**
+  - `worktree` (optionally `at: <commit>`);
+  - `branch` + `at` (a teammate's branch, read-only);
+  - `new_branch` + `from` (+ `keep: true` for a new worktree kept beside the others).
+
+  Values are templates of the item's own fields and `run.*`: `{worktree.path}`, `{mr.branch}`, `{mr.head_sha}`, `{ticket.branch}`, `{preparation.head}`, `{run.id}`. A field the item kind doesn't carry is a load error, and so is a step's output.
+- **Any mode for any subject.** pilotcli decides: an existing worktree means in place, or a throwaway at its HEAD; with none, `kept` with `keep`, else a throwaway.
+  - Pilot assumes nothing from the subject.
+  - It fails a run only when it asked for `--throwaway` and got in place.
+  - It defers a run whose folder another Pilot run holds.
+- **Flags:** YAML uses `_` (`new_branch`, `when_backend`); Pilot passes `--new-branch`, `--stack when-backend`.
+- **A stack from a field:** `stack: "{mr.stack}"` reads one field when the run starts, a custom one included (`items.fields: { stack: { script: ./stack.sh } }`). At load, a literal must be one of the four, and a placeholder exactly one `{field}` the item kind can have. At run start the value must be a stack (`when-backend` is fine too); otherwise the run fails before `create` with "stack resolved to '<value>', expected never|backend|full|when_backend". The dry run shows the resolved stack, or that error.
+- **Preparing workspace,** a run phase before step 1. It never holds up the tick, and it doesn't count toward step timeouts.
+  1. Pilot takes its claim on the item's worktree. If another Pilot run holds it, Pilot passes `--throwaway "<that job> is already working in it (Pilot run …)"`: Orca can't see Pilot's terminals.
+  2. Pilot runs `pilotcli env create --run <run id> …` in its own process group, then reads its envelope (exit codes as backup).
+  3. `ok`: Pilot's own runtime rescans the repo and finds the folder (60 s at most).
+     - `not_yet`: the run is **Deferred**. Its `once_per` key is freed, `retry_after_failure` doesn't apply, and handed-over ids stay pending.
+     - `failed` or `invalid`: the run fails with pilotcli's reason.
+- **During the run:**
+  - Every step runs in the env's folder, with its variables (`data.env`). Pilot's own `PILOT_*` and a step's `env:` win over them. A variable named like Pilot's own (`PILOT_*`, `ORCA_*`, `PATH`, …) fails the run.
+  - `{worktree.path}` stays the item's worktree. The folder is `{env.path}`; also `{env.mode}`, `{env.reason}`, `{env.file}`, `{env.stack}`.
+  - In place, Pilot keeps its claim until the run ends. A throwaway frees the worktree for other runs.
+- **The run ends, however it ends:**
+  1. A throwaway's own step tabs close. A tab with text typed in it stays, and the delete waits.
+  2. `pilotcli env delete <run>` runs, with `--keep-folder` for a kept worktree.
+  3. `ok`, a repeat delete included, is removed. `not_yet` (its create still runs): Pilot stops that create and tries again in 15 s. `invalid`: stuck, shown on the run card, left for Nish. Anything else is retried after 1, 2, 4 … minutes (at most hourly), and the run card says so.
+- **At start,** the process that runs the scheduler:
+  - stops a create a crashed Pilot left running (its pid file, only if `ps` still shows that very create);
+  - then runs `pilotcli env list` and deletes **only** envs whose `run` (exactly as Pilot gave it to create) is one of its own runs that has ended. It skips a `creating` row of a run it still prepares.
+
+  Orphans and runs it doesn't know are Nish's to delete.
+- **Sessions, Resume, answers:**
+  - In place and kept work as before.
+  - A throwaway is disposable: Resume says its checkout was removed, and no per-worktree session is kept.
+  - A throwaway's card is answered in a fresh session that carries what the card said.
+  - An approved answer runs in the job's same env with `writes: true`. A busy worktree means `--throwaway`, not a hold.
+- **Dry run:** `pilot automations dry-run` and "Dry run all" call `env create … --dry-run true`, which makes nothing, and say "would run in place" or "would run in a throwaway: <reason>".
+- **Where it shows:** each run card (Activity, the job page, the worktree panel) says where it worked, its stack and URLs, and a delete that hasn't succeeded.
+- **Finding pilotcli:** `PILOT_PILOTCLI`, else `~/.local/bin/pilotcli`, else PATH. pilotcli gets no `ORCA_*`/`PILOT_*` and not Pilot's launcher folder, so its checks see real Orca.
+- **Switching a job:** one at a time, after both Pilot and pilotcli are installed with env support, each checked first with `pilot automations dry-run`. Job 05's switch waits in `yaml-pending.patch`.
+
 ## Inbox and Details bundles
 
 The sidebar's **Inbox** item sits under Automations, with a count of the cards waiting on you. Clicking **Automations** leaves it, and the Inbox sub-view persists after you leave the page; the highlight always matches what is shown.
@@ -447,6 +498,8 @@ These need a phone, a second Mac and an iPad on Tailscale. Open Pilot (`dist/mac
   - A paired device can't approve actions. `pilot.inbox.tick` and `reply` act on any card id (as the old vault did); they could be scoped to the caller's automation.
   - A `mr: mine` check on 05 would close the "teammate's newer MR from my branch" edge, which the old sweep also left open.
   - Engine internals: the per-session claim is in-process only (main and orcad share it only if configured to); the vault exporter writes `Runs.md` without `vault.py`'s lock; terminal lists are cached for each answers pass.
+- **14's env waits on `head`.** `{preparation.head}` is empty until 14's producers send `head` in their preparation request (only a push card Pilot queues itself has one), so 14 doesn't switch before they do.
+- **A quit during env create** stops it at once, but its `env delete` runs at the next start.
 
 ## Running upstream tests
 

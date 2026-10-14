@@ -1,5 +1,7 @@
 import { useState } from 'react'
 import type { InboxItemSummary, RunRow, StepRow } from '../../shared/api-types'
+import { checkoutRemoved, homeOf } from '../../shared/api-types-env'
+import { envCleanupLine, envStackLine, envWhereLine, runStatusWord } from '../../shared/env-text'
 import { money } from '../../shared/money'
 import { clockTime, runStatusLabel } from '../pages/format'
 import { StepList } from './StepList'
@@ -14,6 +16,17 @@ function stepsLabel(n: number): string {
   return `${n} steps`
 }
 
+// Where an env run worked, its stack, and a delete that hasn't succeeded.
+function envLines(run: RunRow): string[] {
+  const env = run.env
+  if (!env) {
+    return []
+  }
+  const ended = run.status !== 'running' && run.status !== 'asking'
+  const lines = [envWhereLine(env), envStackLine(env), envCleanupLine(env, ended)]
+  return lines.filter((line): line is string => line !== null)
+}
+
 // One run on a timeline: when, status, cost, what it was about, its outcome, what it asked, and its steps.
 export function RunCard({ run, title }: { run: RunWithDetail; title: string }): React.JSX.Element {
   const [open, setOpen] = useState(false)
@@ -24,12 +37,17 @@ export function RunCard({ run, title }: { run: RunWithDetail; title: string }): 
       <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
         <span>{clockTime(run.startedAt)}</span>
         <span className="rounded bg-muted px-1.5 text-foreground">
-          {runStatusLabel(run.status)}
+          {runStatusWord(run, runStatusLabel)}
         </span>
         {run.costUsd !== null ? <span>{money(run.costUsd)}</span> : null}
       </div>
       <div className="text-sm">{title}</div>
       {run.outcome ? <div className="text-xs text-muted-foreground">{run.outcome}</div> : null}
+      {envLines(run).map((line) => (
+        <div key={line} className="text-xs text-muted-foreground">
+          {line}
+        </div>
+      ))}
       {run.inbox.map((item) => (
         <WaitingRow key={item.id} item={item} />
       ))}
@@ -38,7 +56,14 @@ export function RunCard({ run, title }: { run: RunWithDetail; title: string }): 
           {toggle}
         </button>
       ) : null}
-      {open ? <StepList runId={run.id} worktreePath={run.worktreePath} steps={run.steps} /> : null}
+      {open ? (
+        <StepList
+          runId={run.id}
+          worktreePath={homeOf(run)}
+          checkoutRemoved={checkoutRemoved(run)}
+          steps={run.steps}
+        />
+      ) : null}
     </li>
   )
 }

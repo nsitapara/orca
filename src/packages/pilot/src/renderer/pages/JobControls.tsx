@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import type { TickOutcome } from '../../shared/api-types'
+import { workspacePreviewLines } from '../../shared/env-text'
 import { handoverPreviewLines } from '../../shared/handover-text'
 import type { JobGroup } from '../../shared/job-stages'
 import { pilotRpc } from '../api'
@@ -42,7 +43,11 @@ async function dryRunAll(job: JobGroup): Promise<string[]> {
         { id: s.id },
         { timeoutMs: LONG_CALL_MS }
       )
-      lines.push(`${stage}: ${outcomeLine(result, s.id)}`, ...handoverLines(job, result, stage))
+      lines.push(
+        `${stage}: ${outcomeLine(result, s.id)}`,
+        ...handoverLines(job, result, stage),
+        ...workspacePreviewLines(result).map((line) => `${stage}: ${line}`)
+      )
     } catch (e) {
       lines.push(`${stageName(s.job?.stage)}: ${errorText(e)}`)
     }

@@ -188,6 +188,33 @@ describe('formatActivity', () => {
     steps: []
   }
 
+  it('adds where an env run worked to its run line', () => {
+    const env = {
+      state: 'ready' as const,
+      mode: 'throwaway' as const,
+      reason: 'uncommitted changes',
+      path: null,
+      sha: null,
+      envFile: null,
+      vars: {},
+      stack: null,
+      removedAt: null,
+      deleteError: null,
+      deleteAttempts: 0
+    }
+    const tick: ActivityTick = {
+      ...base,
+      id: 9,
+      startedAt: 1_700_000_200_000,
+      dryRun: false,
+      status: 'ok',
+      runs: [{ ...run, status: 'done', outcome: null, inbox: [], env }]
+    }
+    expect(formatActivity([tick]).split('\n')).toContain(
+      '  run r1 · done · Worked in a throwaway: uncommitted changes'
+    )
+  })
+
   it('says so when there is no activity', () => {
     expect(formatActivity([])).toBe('No activity yet.')
   })

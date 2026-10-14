@@ -75,4 +75,10 @@ describe('StepList', () => {
     await screen.findByText('nope')
     expect(refreshWorktreeTimeline).not.toHaveBeenCalled()
   })
+
+  it('a removed checkout shows a note in place of Resume', () => {
+    render(<StepList runId="r1" checkoutRemoved steps={timelineRun().steps} />)
+    expect(screen.getByText('Checkout removed')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: /resume/i })).toBeNull()
+  })
 })

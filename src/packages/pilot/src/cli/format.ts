@@ -1,4 +1,5 @@
 import type { ActivityTick, PilotStatus, TickOutcome } from '../shared/api-types'
+import { envWhereLine } from '../shared/env-text'
 import { handoverActivityLines, handoverPreviewLines } from '../shared/handover-text'
 
 export function formatPilotStatus(s: PilotStatus): string {
@@ -74,7 +75,10 @@ export function formatActivity(ticks: ActivityTick[]): string {
       ...handoverActivityLines(t).map((line) => `  ${line}`),
       ...(t.notes ?? []).map((note) => `  ${formatTime(note.at)} · ${note.text}`),
       ...t.items.map((i) => `  ${i.verdict}  ${i.label}  ${i.reason}`),
-      ...t.runs.map((r) => `  run ${r.id} · ${[r.status, r.outcome].filter(Boolean).join(' · ')}`)
+      ...t.runs.map(
+        (r) =>
+          `  run ${r.id} · ${[r.status, r.outcome, r.env ? envWhereLine(r.env) : null].filter(Boolean).join(' · ')}`
+      )
     ])
     .join('\n')
 }
