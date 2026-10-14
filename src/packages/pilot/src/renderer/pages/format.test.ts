@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   errorText,
+  itemUrl,
   outcomeLine,
   relativeTime,
   runStatusLabel,
@@ -31,6 +32,23 @@ describe('renderer formatting', () => {
       ['started', 'asked', 'baselined', 'skipped'].map((v) => verdictLabel(v as never, true))
     ).toEqual(['Would start', 'Would ask first', 'Would baseline', 'Skipped'])
   })
+
+  it.each([
+    [{ 'ticket.url': 'https://linear.app/h/issue/WEB-1' }, 'https://linear.app/h/issue/WEB-1'],
+    [
+      { 'mr.web_url': 'https://gitlab.com/h/w/-/merge_requests/2' },
+      'https://gitlab.com/h/w/-/merge_requests/2'
+    ],
+    [
+      { 'pipeline.web_url': 'https://gitlab.com/h/w/-/pipelines/3' },
+      'https://gitlab.com/h/w/-/pipelines/3'
+    ],
+    [{ 'mr.web_url': null }, null],
+    [{ 'ticket.url': 'javascript:alert(1)' }, null],
+    [{}, null]
+  ])('itemUrl(%j): the page an item is about, web links only', (fields, url) =>
+    expect(itemUrl(fields)).toBe(url)
+  )
 
   it('summarizes a tick', () => {
     expect(

@@ -123,6 +123,9 @@ describe('AutomationView', () => {
     expect(await screen.findByText('1 checked · 1 would start')).toBeTruthy()
     expect(screen.getByText('Nothing was started or saved.')).toBeTruthy()
     expect(screen.getByText('Would start')).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'WEB-2152' }).getAttribute('href')).toBe(
+      'https://linear.app/herasight/issue/WEB-2152'
+    )
     // Nothing was stored, so Activity isn't reloaded.
     expect(calls('pilot.automations.activity')).toHaveLength(before)
     fireEvent.click(screen.getByRole('button', { name: 'Close' }))
