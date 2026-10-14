@@ -46,6 +46,9 @@ export type ItemDecision = {
   checks: CheckOutcome[]
   onceKey: string
   fields: ItemFields
+  // A dry run of an env automation: where a real run would work (main/envs/preview.ts). Not stored apart; its words are
+  // in reason.
+  workspace?: string
 }
 
 // An item source's verdict on one item's where clauses (contract §3), before once_per and checks.
