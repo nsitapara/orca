@@ -204,8 +204,12 @@ async function sendToIdleAgent(
   }
 }
 
-// Pilot's own idle tab. A process the close couldn't stop would make the resume a second one.
-async function closeSessionTerminal(runtime: OrcaRuntimeService, handle: string): Promise<void> {
+// Pilot's own idle tab, or a throwaway's before env delete (main/envs/service.ts). A process the close couldn't stop
+// would make the resume a second one.
+export async function closeSessionTerminal(
+  runtime: OrcaRuntimeService,
+  handle: string
+): Promise<void> {
   const closed = await runtime.closeTerminal(handle)
   if (closed.ptyStopVerdict) {
     throw new Error(`Couldn't close terminal ${handle}: its process is ${closed.ptyStopVerdict}`)

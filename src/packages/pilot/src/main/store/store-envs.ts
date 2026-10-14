@@ -67,16 +67,12 @@ export class EnvStore {
     return Number(changed.changes) > 0
   }
 
-  // Create ended with no env to use. removedAt: nothing was made (invalid), so no delete follows.
-  settle(
-    runId: string,
-    state: 'deferred' | 'failed',
-    reason: string,
-    removedAt: number | null
-  ): void {
+  // Create ended with no env to use (deferred, failed, refused or stopped). env delete still follows at the run's end,
+  // whatever create made (Ruling P12): with nothing made it answers ok, removed: [].
+  settle(runId: string, state: 'deferred' | 'failed', reason: string): void {
     this.db
-      .prepare('UPDATE runs SET env_state = ?, env_reason = ?, env_removed_at = ? WHERE id = ?')
-      .run(state, reason, removedAt, runId)
+      .prepare('UPDATE runs SET env_state = ?, env_reason = ? WHERE id = ?')
+      .run(state, reason, runId)
   }
 
   // Records the delete in env_removed_at. A deferred env (not_yet, nothing ran) stays deferred: its outcome is kept.

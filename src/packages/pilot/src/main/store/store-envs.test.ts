@@ -115,7 +115,7 @@ describe('EnvStore', () => {
       store.runs.envs.ready('r1', READY)
     }
     if (state === 'deferred' || state === 'failed') {
-      store.runs.envs.settle('r1', state, 'why', null)
+      store.runs.envs.settle('r1', state, 'why')
     }
     store.runs.update('r1', { status, finishedAt: 2 })
     expect(store.runs.envs.dueForTeardown(10).length > 0).toBe(due)
@@ -142,19 +142,20 @@ describe('EnvStore', () => {
     expect(store.runs.envs.dueForTeardown(Number.MAX_SAFE_INTEGER)).toEqual([])
   })
 
-  it('removed: not due any more; settle with removedAt (nothing made) is never due', () => {
+  it('a failed create is still due for delete (P12); removed, it is not, until the sweep reopens it', () => {
     const store = setup()
     store.runs.update('r1', { status: 'done', finishedAt: 2 })
-    store.runs.envs.settle('r1', 'failed', 'bad flags', 3)
-    expect(store.runs.envs.dueForTeardown(10)).toEqual([])
-    store.runs.envs.reopen('r1')
+    store.runs.envs.settle('r1', 'failed', 'bad flags')
     expect(store.runs.envs.dueForTeardown(10).map((r) => r.id)).toEqual(['r1'])
     store.runs.envs.removed('r1', 11)
+    expect(store.runs.envs.dueForTeardown(Number.MAX_SAFE_INTEGER)).toEqual([])
     expect(store.runs.get('r1')?.env).toMatchObject({
       state: 'removed',
       removedAt: 11,
       deleteError: null
     })
+    store.runs.envs.reopen('r1')
+    expect(store.runs.get('r1')?.env?.removedAt).toBeNull()
   })
 
   it('knows the throwaway folders it works in now, however the path is spelled', () => {
@@ -174,7 +175,7 @@ describe('EnvStore', () => {
 
   it('a deferred env that is then marked removed still reads as deferred, with removedAt set', () => {
     const store = setup()
-    store.runs.envs.settle('r1', 'deferred', 'not yet', null)
+    store.runs.envs.settle('r1', 'deferred', 'not yet')
     store.runs.update('r1', { status: 'done', finishedAt: 2 })
     store.runs.envs.removed('r1', 12)
     expect(store.runs.get('r1')?.env).toMatchObject({

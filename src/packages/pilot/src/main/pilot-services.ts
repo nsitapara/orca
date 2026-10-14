@@ -140,7 +140,10 @@ function openPilot(
     log,
     definitionFor,
     engineEnv,
-    dataDir: host.dataDir
+    dataDir: host.dataDir,
+    terminalDraft: (h) => fieldDeps.terminalDraft(h),
+    // The rest of a run's end, before its env is removed: an answer run's outputs reach its cards (G6).
+    onRunEnd: (run) => answerRunEnded(store, run)
   })
   opened.push(() => envs.stop())
   // A stage's run end hands over to the next stage; its run: now reaches the scheduler once made (below).
@@ -158,8 +161,9 @@ function openPilot(
     envs: envs.preparations,
     probe: runtimeStepProbe(runtime, relist),
     log,
-    // A stage's run hands its outputs to the next stage (job.feeds); an answer run's reach its cards (G6).
-    onRunEnd: (run) => answerRunEnded(store, run),
+    // An answer run's outputs reach its cards (G6), then the run's env is removed (envs.runEnded, above).
+    onRunEnd: (run) => envs.runEnded(run),
+    // A stage's run hands its outputs to the next stage (job.feeds).
     handover: handover.runEnd,
     // {run.answer}: the free text that started an ask-first or answer run.
     runAnswer: (run) => runAnswerOf(store, run)
@@ -250,6 +254,7 @@ function openPilot(
       await softly('answers', () => dispatcher?.pass(), log)
       await softly('vault export', () => exporter?.pass(), log)
       await softly('handovers', () => handover.housekeep(), log)
+      await softly('envs', () => envs.housekeep(), log)
     },
     reposListed: (repos) => reposListed(runtime, repos),
     repoProblem: (def, message) =>
