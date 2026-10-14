@@ -241,8 +241,8 @@ describe('migrate', () => {
       "INSERT INTO inbox_items (id, automation_id, person, type, title, digest, created_at, updated_at) VALUES ('i1', 'a', 'p', 'question', 't', 'd', 1, 1)"
     )
     migrate(db)
-    expect(PILOT_SCHEMA_VERSION).toBe(9)
-    expect(db.pragma('user_version', { simple: true })).toBe(9)
+    expect(PILOT_SCHEMA_VERSION).toBe(10)
+    expect(db.pragma('user_version', { simple: true })).toBe(10)
     expect(
       firstRow(
         db,
@@ -315,6 +315,35 @@ describe('migrate', () => {
       { sender_run_id: 'run-1', state: 'pending' },
       { sender_run_id: 'run-2', state: 'pending' }
     ])
+  })
+
+  it('V10 adds the env columns to runs, empty on the runs a V9 database already had', () => {
+    const db = openDb()
+    migrate(db, 9)
+    db.exec(
+      "INSERT INTO runs (id, automation_id, item_key, item_label, status, started_at) VALUES ('r1', 'a', 'k', 'l', 'done', 1)"
+    )
+    migrate(db)
+    expect(columnsOf(db, 'runs')).toEqual(
+      expect.arrayContaining([
+        'home_path',
+        'env_state',
+        'env_mode',
+        'env_reason',
+        'env_path',
+        'env_json',
+        'env_removed_at',
+        'env_delete_error',
+        'env_delete_attempts',
+        'env_retry_at',
+        'home_hold_step'
+      ])
+    )
+    expect(firstRow(db, 'SELECT home_path, env_state, env_delete_attempts FROM runs')).toEqual({
+      home_path: null,
+      env_state: null,
+      env_delete_attempts: 0
+    })
   })
 
   it('leaves a database migrated by a newer process unchanged', () => {

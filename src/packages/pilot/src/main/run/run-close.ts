@@ -1,4 +1,5 @@
 import type { HandledStatus, RunRow, TickTrigger } from '../../shared/api-types'
+import { homeOf } from '../../shared/api-types-env'
 import type { EndedStep, RunEnd } from '../../shared/run/step-plan'
 import type { PilotStore } from '../store/store'
 import { broke } from './advance-fields'
@@ -43,7 +44,7 @@ export function addRunEvent(
     kind,
     automationId: run.automationId,
     runId: run.id,
-    worktreePath: run.worktreePath,
+    worktreePath: homeOf(run),
     itemKey: run.itemKey,
     payload
   })

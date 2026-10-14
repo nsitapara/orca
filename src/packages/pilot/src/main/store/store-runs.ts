@@ -10,6 +10,7 @@ import {
   type RunPatch,
   type StepPatch
 } from './run-rows'
+import { EnvStore } from './store-envs'
 
 export type { RunPatch, StepPatch }
 export type NewRun = Pick<
@@ -35,7 +36,12 @@ export type NewStep = {
 }
 
 export class RunStore {
-  constructor(private readonly db: Database) {}
+  // The env columns of these runs (V10).
+  readonly envs: EnvStore
+
+  constructor(private readonly db: Database) {
+    this.envs = new EnvStore(db)
+  }
 
   create(run: NewRun): void {
     this.db
@@ -154,10 +160,12 @@ export class RunStore {
   forWorktree(paths: readonly string[], since: number): RunRow[] {
     return this.db
       .prepare(
-        `SELECT * FROM runs WHERE worktree_path IN (SELECT value FROM json_each(?))
+        `SELECT * FROM runs
+           WHERE (home_path IN (SELECT value FROM json_each(?))
+             OR (home_path IS NULL AND worktree_path IN (SELECT value FROM json_each(?))))
            AND (started_at >= ? OR status IN ('running', 'asking')) ORDER BY started_at DESC, id`
       )
-      .all(JSON.stringify(paths), since)
+      .all(JSON.stringify(paths), JSON.stringify(paths), since)
       .map((r) => toRun(r as never))
   }
 

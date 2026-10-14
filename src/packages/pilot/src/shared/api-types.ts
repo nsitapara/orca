@@ -1,5 +1,6 @@
 import type { JobDef, StepDef } from './definition/types'
 import type { StageHandovers, TickHandover, TickHandoverFacts } from './api-types-handover'
+import type { RunEnv } from './api-types-env'
 import type { InboxItemSummary } from './inbox-types'
 import type { DetailsRef } from './details'
 import type { InboxPreparation, PreparationRef } from './preparation'
@@ -102,6 +103,9 @@ export type RunRow = {
   trigger: RunTrigger
   parentRunId: string | null
   imported: boolean
+  // Env runs only (workspace: { env }): the item's worktree, and what pilotcli made. Null: not an env run.
+  homePath?: string | null
+  env?: RunEnv | null
 }
 export type StepStatus =
   | 'pending'
@@ -254,30 +258,7 @@ export type EventRow = {
   kind: string
   payload: Record<string, unknown>
 }
-export type ActionPhase = 'check' | 'ready' | 'do' | 'refresh'
-// act.py's outcome words are first-class statuses (R-4); 'refused' is an attempt the engine turned away.
-export type ActionRunStatus =
-  | 'running'
-  | 'done'
-  | 'failed'
-  | 'stale'
-  | 'needs_agent'
-  | 'not_yet'
-  | 'refused'
-export type ActionRunRow = {
-  id: number
-  inboxItemId: string | null
-  runId: string | null
-  action: string
-  args: Record<string, unknown>
-  digest: string
-  phase: ActionPhase
-  status: ActionRunStatus
-  output: string | null
-  dryRun: boolean
-  startedAt: number
-  finishedAt: number | null
-}
+export type { ActionPhase, ActionRunRow, ActionRunStatus } from './api-types-actions'
 
 export type TickResult = {
   tickId: number

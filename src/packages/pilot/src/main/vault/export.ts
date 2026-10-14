@@ -6,6 +6,7 @@ import {
   renameSync,
   writeFileSync
 } from 'node:fs'
+import { homeOf } from '../../shared/api-types-env'
 import { basename, dirname, join, relative, sep } from 'node:path'
 import type { InboxItemRow, RunRow } from '../../shared/api-types'
 import type { AutomationDefinition } from '../../shared/definition/types'
@@ -103,7 +104,7 @@ export class VaultExporter {
       at,
       automationId: run.automationId,
       runId: run.id,
-      worktreePath: run.worktreePath,
+      worktreePath: homeOf(run),
       itemKey: run.itemKey,
       kind: 'vault_export',
       payload: { path }

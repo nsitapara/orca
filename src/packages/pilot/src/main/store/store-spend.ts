@@ -117,7 +117,7 @@ export class SpendStore {
   reportBuckets(): ReportBucketRow[] {
     return this.db
       .prepare(
-        `SELECT r.automation_id, r.item_label, r.worktree_path, s.agent, s.session_id,
+        `SELECT r.automation_id, r.item_label, COALESCE(r.home_path, r.worktree_path) AS worktree_path, s.agent, s.session_id,
            s.started_at AS step_started_at, u.day, u.model, u.requests, u.input, u.cache_read,
            u.cache_write, u.output, u.cost_usd
          ${FROM} WHERE s.session_id IS NOT NULL ORDER BY u.day, s.started_at, u.model`
@@ -140,7 +140,7 @@ export class SpendStore {
   sessionlessSteps(): SessionlessStep[] {
     return this.db
       .prepare(
-        `SELECT r.automation_id, s.agent, s.started_at, r.worktree_path, r.item_label
+        `SELECT r.automation_id, s.agent, s.started_at, COALESCE(r.home_path, r.worktree_path) AS worktree_path, r.item_label
          FROM steps s JOIN runs r ON r.id = s.run_id
          WHERE s.kind = 'agent' AND s.usage_measured_at IS NOT NULL AND s.tokens IS NULL
            AND s.terminal_handle IS NOT NULL

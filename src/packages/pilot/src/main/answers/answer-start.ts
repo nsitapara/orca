@@ -1,4 +1,5 @@
 import { existsSync } from 'node:fs'
+import { homeOf } from '../../shared/api-types-env'
 import { homedir } from 'node:os'
 import { PromptNotSentError } from '../run/agent-step'
 import type { AgentSessionMode } from '../run/launch'
@@ -129,7 +130,8 @@ function event(
   kind: string,
   error: string
 ) {
-  const path = deps.store.runs.get(run.id)?.worktreePath ?? group.worktreePath
+  const stored = deps.store.runs.get(run.id)
+  const path = (stored ? homeOf(stored) : null) ?? group.worktreePath
   deps.store.events.add({
     at: deps.now(),
     automationId: group.def.id,
