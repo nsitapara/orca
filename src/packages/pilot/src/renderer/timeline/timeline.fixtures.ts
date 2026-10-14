@@ -33,6 +33,7 @@ export function stepRow(over: Partial<StepRow> = {}): StepRow {
     outputTail: null,
     sessionPinned: true,
     launchArgs: null,
+    result: null,
     ...over
   }
 }

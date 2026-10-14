@@ -241,8 +241,8 @@ describe('migrate', () => {
       "INSERT INTO inbox_items (id, automation_id, person, type, title, digest, created_at, updated_at) VALUES ('i1', 'a', 'p', 'question', 't', 'd', 1, 1)"
     )
     migrate(db)
-    expect(PILOT_SCHEMA_VERSION).toBe(11)
-    expect(db.pragma('user_version', { simple: true })).toBe(11)
+    expect(PILOT_SCHEMA_VERSION).toBe(12)
+    expect(db.pragma('user_version', { simple: true })).toBe(12)
     expect(
       firstRow(
         db,
@@ -368,6 +368,20 @@ describe('migrate', () => {
         .map((r) => r.tick_id)
     ).toEqual([1])
     expect(columnsOf(db, 'ticks')).not.toContain('dry_run')
+  })
+
+  it('V12 adds result_json to steps, empty (NULL) on the steps a V11 database already had', () => {
+    const db = openDb()
+    migrate(db, 11)
+    db.exec(
+      "INSERT INTO runs (id, automation_id, item_key, item_label, status, started_at) VALUES ('r1', 'a', 'k', 'l', 'done', 1)"
+    )
+    db.exec(
+      "INSERT INTO steps (run_id, idx, name, agent, status) VALUES ('r1', 0, 'context', 'shell', 'done')"
+    )
+    migrate(db)
+    expect(db.pragma('user_version', { simple: true })).toBe(12)
+    expect(firstRow(db, 'SELECT result_json FROM steps')).toEqual({ result_json: null })
   })
 
   it('leaves a database migrated by a newer process unchanged', () => {

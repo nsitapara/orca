@@ -1,6 +1,7 @@
 import type { JobDef, StepDef } from './definition/types'
 import type { StageHandovers, TickHandover, TickHandoverFacts } from './api-types-handover'
 import type { RunEnv } from './api-types-env'
+import type { StoredResult } from './api-types-result'
 import type { InboxItemSummary } from './inbox-types'
 import type { DetailsRef } from './details'
 import type { InboxPreparation, PreparationRef } from './preparation'
@@ -146,6 +147,8 @@ export type StepRow = {
   // The args the step's agent process runs under (its own launch, or the process it was sent into);
   // null when not known. Session flags (--session-id, --resume) are not included.
   launchArgs: string[] | null
+  // A shell step's pilotcli result: the one envelope its whole stdout was, or null.
+  result: StoredResult | null
 }
 // The run holding a once_per key settles it: done, or failed (retry_after_failure waits from failedAt).
 export type HandledStatus = 'started' | 'done' | 'failed'
@@ -261,6 +264,7 @@ export type EventRow = {
   payload: Record<string, unknown>
 }
 export type { ActionPhase, ActionRunRow, ActionRunStatus } from './api-types-actions'
+export type { StoredResult } from './api-types-result'
 
 export type TickResult = {
   // null: a dry run, which stores nothing.

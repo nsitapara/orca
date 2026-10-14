@@ -33,7 +33,8 @@ Without --apply it is a dry run: it prints the counts and writes nothing.
 // Details columns; V6 adds inbox preparation metadata, V7 a "Not prepared" notice's key, V8 a tick's warnings and V9
 // the handovers table and a tick's trigger. All leave handled unchanged. V10 adds runs' env columns; handled is unchanged.
 // V11 deletes the stored dry-run ticks and drops ticks.dry_run; handled is unchanged.
-export const SEED_SCHEMA_VERSION = 11
+// V12 adds steps.result_json; handled is unchanged.
+export const SEED_SCHEMA_VERSION = 12
 const HANDLED_COLUMNS = ['automation_id', 'once_key', 'run_id', 'at', 'status', 'failed_at']
 const BUSY_TIMEOUT_MS = 5000
 const MIGRATIONS_FILE = fileURLToPath(new URL('../src/main/store/migrations.ts', import.meta.url))
