@@ -9,6 +9,8 @@ export type ActionResult = {
   log: string | null
   // not_yet only: what it waits for lasts until someone acts (an open thread, a failed pipeline).
   onYou: boolean
+  // stale only: re-ask the card with the detail instead of closing it (a push pilotcli skipped, spec E).
+  keepOpen?: true
   // What a later step needs from the effect (linear_create: identifier, branchName).
   data?: Record<string, string>
 }

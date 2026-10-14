@@ -13,17 +13,10 @@ type Bridged = {
   except?: true
 }
 
-// Today's catalog scripts (~/.agents/skills/worktree-gate/actions), run as they are. Their args object is
+// act.py's catalog scripts (~/.agents/skills/worktree-gate/actions), run as they are. Their args object is
 // `{ "argv": [...] }`, act.py's positional arguments, which pin the state the action was proposed against;
-// the scripts refuse with `stale` when it moved.
+// the scripts refuse with `stale` when it moved. push is pilotcli's (push-branch.ts), not act.py's.
 const BRIDGED: Bridged[] = [
-  {
-    name: 'push',
-    script: 'push',
-    power: 'push',
-    label: 'Push a branch to origin at a pinned commit',
-    usage: 'push { "argv": [<worktree path>, <branch>, <commit>, <origin commit>] }'
-  },
   {
     name: 'mark_ready',
     script: 'mark-ready',
@@ -87,10 +80,12 @@ function bridged(spec: Bridged, act: ActBridge): ActionEntry {
 
 export function buildActionCatalog(deps: {
   act: ActBridge
+  push: ActionEntry
   linear: LinearWriter | null
   extra?: ActionEntry[]
 }): ActionCatalog {
   const all = [
+    deps.push,
     ...BRIDGED.map((s) => bridged(s, deps.act)),
     ...linearEntries(deps.linear),
     ...(deps.extra ?? [])

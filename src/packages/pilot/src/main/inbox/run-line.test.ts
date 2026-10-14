@@ -2,13 +2,17 @@ import { describe, expect, it, vi } from 'vitest'
 import type { InboxItemRow } from '../../shared/api-types'
 import { actBridge, type ProcessRun } from '../actions/act-bridge'
 import { buildActionCatalog } from '../actions/catalog'
+import { pushBranchEntry } from '../actions/push-branch'
+import type { Pilotcli } from '../envs/pilotcli'
 import { approvedArgs } from '../actions/powers'
 import { cardRunLine, shellWord } from './run-line'
 
 const DONE = { code: 0, stdout: '{"outcome":"done"}', stderr: '', timedOut: false }
 const PRINTABLE_ASCII = /^[\x20-\x7e]*$/
+const HEAD = '9c1e2f04'.padEnd(40, 'a')
+const BASE = '1a2b3c4d'.padEnd(40, 'b')
 
-// The real catalog over a real act bridge whose process runner only records what it would spawn.
+// The real catalog over a real act bridge and the real push entry, whose runners only record what they would spawn.
 function catalog() {
   const spawned: { program: string; args: string[] }[] = []
   const run: ProcessRun = vi.fn(async (spec) => {
@@ -16,7 +20,17 @@ function catalog() {
     return DONE
   })
   const act = actBridge({ actPy: '/skills/worktree-gate/act.py', python: 'python3', run, env: {} })
-  return { catalog: buildActionCatalog({ act, linear: null }), spawned }
+  const pilotcli: Pilotcli = vi.fn(async (call) => {
+    spawned.push({ program: '/bin/pilotcli', args: [...call.args] })
+    return {
+      outcome: 'ok' as const,
+      reason: '',
+      data: { from: BASE, to: HEAD, commits: 1 },
+      code: 0
+    }
+  })
+  const push = pushBranchEntry({ pilotcli, binary: () => '/bin/pilotcli' })
+  return { catalog: buildActionCatalog({ act, push, linear: null }), spawned }
 }
 
 function card(over: Partial<InboxItemRow>): InboxItemRow {
@@ -36,7 +50,7 @@ function card(over: Partial<InboxItemRow>): InboxItemRow {
     detailsMd: null,
     details: null,
     action: 'push',
-    actionArgs: { argv: ['/wt/web-1493', 'web-1493-a', 'abc123', 'def456'] },
+    actionArgs: { argv: ['/wt/web-1493', 'web-1493-a', HEAD, BASE] },
     parts: {},
     switchWords: [],
     digest: 'd1',
@@ -62,7 +76,7 @@ describe("an action card's Run line", () => {
     const line = cardRunLine(c, item)
     expect(line).toEqual({
       digest: 'd1',
-      text: 'python3 /skills/worktree-gate/act.py push run /wt/web-1493 web-1493-a abc123 def456'
+      text: `/bin/pilotcli git push-branch web-1493-a --expect-head=${HEAD} --expect-sha=${BASE} --dir=/wt/web-1493 --dry-run=false --format=json`
     })
     const entry = c.get('push')!
     await entry.run(item.actionArgs!, { dryRun: false, runId: 'run-1' })
@@ -112,7 +126,10 @@ describe("an action card's Run line", () => {
     ['an empty word', '', "''"]
   ])('shows %s visibly, never raw', (_name, branch, shown) => {
     const { catalog: c } = catalog()
-    const text = cardRunLine(c, card({ actionArgs: { argv: ['/wt', branch, 'abc', 'def'] } }))!.text
+    const text = cardRunLine(
+      c,
+      card({ action: 'mark_ready', actionArgs: { argv: [branch, 'abc'] } })
+    )!.text
     expect(text).toContain(` ${shown} `)
     expect(text).toMatch(PRINTABLE_ASCII)
   })

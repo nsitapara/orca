@@ -33,7 +33,7 @@ export const PUSH_DIFF_ARGS = (worktree: string, base: string, head: string): st
   head
 ]
 // A commit is a full object id (SHA-1 or SHA-256), never a ref name or anything git could read as an option.
-const OBJECT_ID = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/
+export const OBJECT_ID = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/
 export type RangeLimits = { timeoutMs?: number; maxBytes?: number }
 const GIT_TIMEOUT_MS = 30_000
 const GIT_MAX_BYTES = 64 * 1024 * 1024

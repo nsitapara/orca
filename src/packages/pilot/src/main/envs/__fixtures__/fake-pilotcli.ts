@@ -5,7 +5,7 @@ import { join } from 'node:path'
 // Tests only: a stand-in for pilotcli; no test ever runs the real one. A call appends its argv to calls.log, the
 // ORCA_*/PILOT_* names it sees to env.log and its PATH to path.log. When <verb>.sleep exists, it writes its pid to
 // <verb>.pid and sleeps that many seconds. Then it prints <verb>.json (stdout) and <verb>.stderr, and exits <verb>.code
-// (default 0). <verb> is its first two words: env-create, env-delete, env-list.
+// (default 0). <verb> is its first two words: env-create, env-delete, env-list, git-push-branch.
 const SCRIPT = `#!/bin/sh
 d="$FAKE_PILOTCLI_DIR"
 v="$1-$2"
@@ -22,7 +22,7 @@ export type FakePilotcli = {
   bin: string
   dir: string
   env: NodeJS.ProcessEnv
-  answer(verb: 'env-create' | 'env-delete' | 'env-list', reply: FakeReply): void
+  answer(verb: 'env-create' | 'env-delete' | 'env-list' | 'git-push-branch', reply: FakeReply): void
   calls(): string[]
   read(name: string): string
 }
