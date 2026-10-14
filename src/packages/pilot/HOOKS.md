@@ -31,6 +31,7 @@ Every change Pilot makes to an upstream file is listed here (D24). Each one is a
 | sidebar-automations-active | src/renderer/src/components/sidebar/SidebarNav.tsx                            | PilotWaiting.useAutomationsActive(                     | Automations isn't highlighted while Inbox shows                                                                                                                                           |
 | sidebar-automations-open   | src/renderer/src/components/sidebar/SidebarNav.tsx                            | PilotWaiting.useOpenAutomationsPage(                   | clicking Automations leaves Inbox                                                                                                                                                         |
 | tray-after-launch          | src/main/startup/main-window-controller.ts                                    | deferTrayPastLaunch(                                   | macOS can deadlock the main thread for good when the status item is made as the window is revealed (stablyai/orca#17045): make it 10s later; end the window's startup phases              |
+| vitest-orcad-sidecar-sweep | config/vitest.config.ts                                                       | pilot-hook: vitest-orcad-sidecar-sweep                 | stop the `--serve` browser host upstream's serve-parity test orphans when it SIGKILLs orcad; it holds a port on every interface and blocks Orca's updater                                 |
 
 Which hook was added for the startup hang, and why:
 
@@ -43,6 +44,10 @@ Run the guard, then the upstream tests next to every hooked file (R10). Those ar
     node src/packages/pilot/scripts/hook-guard.mjs
     HOOK_DIRS=$(node --input-type=module -e "import {readFileSync} from 'node:fs'; import {dirname} from 'node:path'; import {parseHooksTable} from './src/packages/pilot/scripts/hook-guard.mjs'; const rows = parseHooksTable(readFileSync('src/packages/pilot/HOOKS.md', 'utf8')); console.log([...new Set(rows.map((r) => dirname(r.file)).filter((d) => d.startsWith('src/') && d !== 'src/renderer/src'))].join(' '))")
     ORCA_CLI_INSTALL_PATH=$(mktemp -u)/orca ORCA_BROWSER_EXECUTABLE= pnpm exec vitest run --config config/vitest.config.ts $HOOK_DIRS src/cli/handler-group-manifest.test.ts
+
+Which hook was added for orphaned browser hosts, and why:
+
+- `vitest-orcad-sidecar-sweep`: upstream's `orcad-serve-parity.integration.test.ts` (it runs when `out/orcad` is built) starts orcad, which starts `/Applications/Orca.app --serve` as its browser host, then SIGKILLs orcad. The host outlives it, listens on every interface and blocks Orca's updater ("Close the other Orca instances"). The hook is one `globalSetup` line; `test/orcad-sidecar-sweep.ts` runs before and after each run and stops only `--serve` processes on an `orcad-browser-*` profile whose parent is gone and whose environment has `ORCA_VITEST_RUNTIME`, then removes their `/tmp` profiles.
 
 Which hooks were added for the YAML engine, and why:
 

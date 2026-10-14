@@ -30,6 +30,7 @@ const testOptions = {
   server: { deps: { inline: ['zod'] } },
   // Node's storage globals and V8 retention checks require the existing child flags.
   execArgv: ['--no-experimental-webstorage', '--expose-gc'],
+  globalSetup: [resolve('src/packages/pilot/test/orcad-sidecar-sweep.ts')], // pilot-hook: vitest-orcad-sidecar-sweep
   setupFiles: [
     resolve('config/scripts/vitest-real-agent-home-write-guard.ts'),
     resolve('config/scripts/vitest-bun-node-builtins.ts'),
