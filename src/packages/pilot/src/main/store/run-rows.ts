@@ -20,6 +20,10 @@ export type RunPatch = Partial<{
 }>
 export type StepPatch = Partial<{
   status: StepStatus
+  // An env answer run's step 0 learns its agent, skill and mode once its folder decides the route (answers/answer-env.ts).
+  agent: string
+  skill: string | null
+  mode: string | null
   terminalHandle: string
   paneKey: string
   sessionId: string
@@ -48,6 +52,9 @@ export const RUN_COLUMNS: Record<keyof RunPatch, string> = {
 }
 export const STEP_COLUMNS: Record<keyof StepPatch, string> = {
   status: 'status',
+  agent: 'agent',
+  skill: 'skill',
+  mode: 'mode',
   terminalHandle: 'terminal_handle',
   paneKey: 'pane_key',
   sessionId: 'session_id',

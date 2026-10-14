@@ -43,7 +43,8 @@ export type SessionProbe = {
 export type SessionTarget =
   | { kind: 'resume'; asking: AskingSession; handle: string; paneKey: string | null }
   | { kind: 'fork'; asking: AskingSession; sessionId: string }
-  | { kind: 'new'; agent: AgentKind; skill: string | null; mode: string }
+  // fresh: a card from a throwaway run, whose session went with its folder; the new session gets the cards' context.
+  | { kind: 'new'; agent: AgentKind; skill: string | null; mode: string; fresh?: 'throwaway' }
 
 function isAgent(agent: string): agent is AgentKind {
   return agent === 'claude' || agent === 'codex'
@@ -95,7 +96,10 @@ export function answersModeOf(
   }
 }
 
-function newSession(def: AutomationDefinition, asking: AskingSession | null): SessionTarget {
+export function newSession(
+  def: AutomationDefinition,
+  asking: AskingSession | null
+): Extract<SessionTarget, { kind: 'new' }> {
   const other = def.answers?.else ?? null
   return {
     kind: 'new',
@@ -115,6 +119,10 @@ export async function chooseSession(
   now: number
 ): Promise<SessionTarget | { kind: 'hold'; hold: Hold }> {
   const asking = def.answers?.resume === 'never' ? null : askingSession(store, items)
+  // Decided at answer time (M4 §8): a card from a throwaway run gets a fresh session carrying the card's context.
+  if (asking && store.runs.get(asking.runId)?.env?.mode === 'throwaway') {
+    return { ...newSession(def, asking), fresh: 'throwaway' }
+  }
   // Only a session id is resumed or forked (it becomes argv); anything else starts a new session.
   if (!asking?.sessionId || !isSessionId(asking.sessionId)) {
     return newSession(def, asking)

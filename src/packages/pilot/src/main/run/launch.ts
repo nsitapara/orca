@@ -46,6 +46,8 @@ export type AgentTerminalRequest = {
   title: string
   args: readonly string[]
   session: AgentSessionMode
+  // An env run's variables (pilotcli's data.env); Pilot's own step env wins over them.
+  runEnv?: Record<string, string>
 }
 // sessionId: the id the terminal runs under when Pilot knows it (a pinned new Claude session, a resumed
 // one); null for a fork and for a new Codex session, whose ids are learned from the agent's hooks.
@@ -88,7 +90,8 @@ export async function openAgentTerminal(
       powers: req.powers
     },
     args: req.args,
-    session
+    session,
+    runEnv: req.runEnv
   })
   const selector = req.worktree.id ? `id:${req.worktree.id}` : `path:${req.worktree.path}`
   const terminal = await runtime.launchAgentTerminal(selector, opts)

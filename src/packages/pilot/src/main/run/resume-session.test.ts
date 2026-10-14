@@ -1,8 +1,14 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { RunRow, StepRow } from '../../shared/api-types'
+import type { EnvMode, RunEnv } from '../../shared/api-types-env'
 import type { SessionTerminalState } from './agent-step'
 import { judgeClaim, SessionClaims } from './session-claims'
-import { resumeCommand, resumeStepSession, type ResumeDeps } from './resume-session'
+import {
+  CHECKOUT_REMOVED,
+  resumeCommand,
+  resumeStepSession,
+  type ResumeDeps
+} from './resume-session'
 
 const run = { id: 'r1', itemLabel: '!1 web-1', worktreePath: '/wt/a' } as RunRow
 const step = (over: Partial<StepRow>): StepRow =>
@@ -150,6 +156,60 @@ describe('resumeStepSession', () => {
     await expect(
       resumeStepSession(deps(s, opts as Opts), { runId: 'r1', stepIdx: 0 })
     ).rejects.toThrow(message)
+  })
+})
+
+// M4 §8: a throwaway is disposable. Ruling P11: refused only once its run ended (its folder went with it).
+describe("Resume of an env run's step", () => {
+  const env = (mode: EnvMode, removedAt: number | null): RunEnv => ({
+    state: removedAt === null ? 'ready' : 'removed',
+    mode,
+    reason: '',
+    path: '/agents/agents-r1',
+    sha: null,
+    envFile: null,
+    vars: {},
+    stack: null,
+    removedAt,
+    deleteError: null,
+    deleteAttempts: 0
+  })
+  it.each([
+    [
+      'an ended throwaway with no live tab: its checkout is gone',
+      'throwaway',
+      'done',
+      9,
+      'gone',
+      CHECKOUT_REMOVED
+    ],
+    [
+      'an ended throwaway whose tab is still live: focused, as before',
+      'throwaway',
+      'done',
+      9,
+      'free',
+      'focused'
+    ],
+    [
+      'a running throwaway with no live tab: reopened in its folder',
+      'throwaway',
+      'running',
+      null,
+      'gone',
+      'opened'
+    ],
+    ['in place with no live tab: reopened in its worktree', 'in_place', 'done', 9, 'gone', 'opened']
+  ] as const)('%s', async (_name, mode, status, removedAt, state, expected) => {
+    const r = { ...run, status, env: env(mode, removedAt) } as RunRow
+    const d = deps(step({}), { r, state })
+    const call = resumeStepSession(d, { runId: 'r1', stepIdx: 0 })
+    if (expected === CHECKOUT_REMOVED) {
+      await expect(call).rejects.toThrow(CHECKOUT_REMOVED)
+      expect(d.open).not.toHaveBeenCalled()
+    } else {
+      expect((await call).action).toBe(expected)
+    }
   })
 })
 

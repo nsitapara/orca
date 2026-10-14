@@ -31,3 +31,12 @@ export function homeOf(run: {
 }): string | null {
   return run.homePath ?? run.worktreePath
 }
+
+// A throwaway's folder goes when its run ends (M4 §8, Ruling P11): an ended throwaway run's sessions can't be reopened. A
+// running one still works in its folder. Resume (main/run/resume-session.ts) and the run card both read this.
+export function checkoutRemoved(run: { status: string; env?: RunEnv | null }): boolean {
+  if (run.env?.mode !== 'throwaway') {
+    return false
+  }
+  return run.env.removedAt !== null || (run.status !== 'running' && run.status !== 'asking')
+}

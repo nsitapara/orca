@@ -11,6 +11,7 @@ import { resolveInboxItem, type InboxDeps } from '../inbox/inbox-service'
 import type { MrBlock } from '../inbox/mr-state'
 import { PilotStore } from '../store/store'
 import { UnrecordedLaunchError } from '../scheduler/tick-runner'
+import { FREE_HOLDS } from './__fixtures__/holds'
 import { currentAnswer } from './answer-run'
 import {
   AnswerDispatcher,
@@ -29,12 +30,6 @@ const def = parseAutomationYaml(
 const people = parsePeopleYaml('people:\n  - { id: nish, name: Nish }\n')
 if (!def.ok || !people.ok) {
   throw new Error('setup')
-}
-const FREE: HoldDeps = {
-  exists: () => true,
-  inFlight: async () => null,
-  activity: async () => null,
-  runsIn: () => []
 }
 const QUESTION: InboxAddParams = {
   runId: 'run-1',
@@ -112,7 +107,7 @@ function setup(over: Over = {}) {
         sessionId: '00000000-0000-4000-8000-000000000002'
       }))
   )
-  const holds = { ...FREE, ...over.holds }
+  const holds = { ...FREE_HOLDS, ...over.holds }
   const deps: DispatcherDeps = {
     inbox,
     attempt: { store, now: () => clock, catalog, definitions: inbox.definitions, inbox },
