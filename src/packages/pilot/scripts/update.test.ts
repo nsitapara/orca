@@ -87,10 +87,11 @@ describe('hookTestTargets', () => {
     ])
   })
 
-  it('skips config files and lists each target once', () => {
+  it('skips config files, and code outside src/, and lists each target once', () => {
     expect(
       hookTestTargets([
         { file: 'config/tsconfig.node.json' },
+        { file: 'config/vitest.config.ts' },
         { file: 'src/renderer/src/assets/main.css' },
         { file: 'src/main/startup/a.ts' },
         { file: 'src/main/startup/b.ts' },
