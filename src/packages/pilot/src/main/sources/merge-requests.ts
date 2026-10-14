@@ -30,14 +30,6 @@ type GitLabMRDetail = GitLabMR & {
 
 const POOL = 3
 
-export function shortBranch(branch: string): string {
-  const ticket = /^web-\d+/.exec(branch)
-  if (ticket) {
-    return ticket[0]
-  }
-  return branch.length > 28 ? `${branch.slice(0, 27)}…` : branch
-}
-
 function short(sha: string | null): string | null {
   return sha ? sha.slice(0, 8) : null
 }
@@ -124,7 +116,7 @@ function asItem(mr: GitLabMR, fields: ItemFields): Item {
   return {
     kind: 'merge_request',
     key: `mr:${mr.iid}`,
-    label: `!${mr.iid} ${shortBranch(mr.source_branch)}`,
+    label: `!${mr.iid} ${mr.source_branch}`,
     fields,
     worktreeHint: { branch: mr.source_branch },
     sortKeys: { waitingSince: null, priority: null }
@@ -174,7 +166,10 @@ async function toItem(
   if (!mergeRequestListScope(item, where, people).ok) {
     return item
   }
-  return asItem(mr, { ...item.fields, ...(await detailedFields(ctx, api, mr, warnings)) })
+  return asItem(mr, {
+    ...item.fields,
+    ...(await detailedFields(ctx, api, mr, warnings))
+  })
 }
 
 // merge_request items (contract §3): the open MRs of the repo's GitLab project, read through the
