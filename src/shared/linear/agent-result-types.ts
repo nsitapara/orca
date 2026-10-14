@@ -284,6 +284,12 @@ export type LinearCommentAddResult = {
   meta: { workspaceId: string; bodyChars: number; writeId: string; deduplicated: boolean }
 }
 
+export type LinearCommentEditResult = {
+  comment: { id: string; url: string | null; parentId: string | null }
+  issue: LinearWriteIssueRef
+  meta: { workspaceId: string; bodyChars: number }
+}
+
 export type LinearAttachResult = {
   attachment: { id: string; title: string; url: string }
   issue: LinearWriteIssueRef

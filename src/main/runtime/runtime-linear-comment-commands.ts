@@ -3,13 +3,16 @@ import {
   LINEAR_WRITE_BODY_CAP,
   addLinearIssueCommentForAgent,
   createLinearIssueAttachment,
+  updateLinearIssueCommentForAgent,
   LinearWriteFailure,
   linearError
 } from './runtime-linear-command-dependencies'
 import type {
   LinearCurrentIssueContextHints,
   LinearAttachResult,
-  LinearCommentAddResult
+  LinearCommentAddResult,
+  LinearCommentEditRequest,
+  LinearCommentEditResult
 } from './runtime-linear-command-dependencies'
 import { RuntimeLinearCreateCommands } from './runtime-linear-create-commands'
 
@@ -80,6 +83,39 @@ export class RuntimeLinearCommentCommands extends RuntimeLinearCreateCommands {
         return this.linearCommentResult(comment, target, params.body.length, writeId, true)
       }
       throw error
+    }
+  }
+
+  async linearIssueEditComment(params: LinearCommentEditRequest): Promise<LinearCommentEditResult> {
+    if (params.body.length > LINEAR_WRITE_BODY_CAP) {
+      throw linearError('linear_body_too_large', 'Linear comment body is too large.')
+    }
+    const target = await this.resolveLinearAgentWriteTarget(params)
+    const existing = await this.resolveLinearIssueComment(
+      target.issue.id,
+      params.commentId,
+      target.workspaceId
+    )
+    const comment = await this.runLinearAgentWrite(
+      (signal) =>
+        updateLinearIssueCommentForAgent(existing.id, params.body, target.workspaceId, { signal }),
+      (cause) =>
+        linearError(
+          'linear_write_unconfirmed',
+          'Linear may have applied the comment edit, but Orca could not confirm it.',
+          {
+            nextSteps: [
+              `Run \`orca linear issue ${target.issue.identifier} --comments --workspace ${target.workspaceId} --json\` and check comment ${existing.id} before retrying.`
+            ],
+            ...(cause ? { cause } : {})
+          }
+        )
+    )
+    await this.notifyLinearLinkedIssueUpdated(target.workspaceId, target.issue.identifier)
+    return {
+      comment: { id: comment.id, url: comment.url, parentId: comment.parentId },
+      issue: this.linearWriteIssueRef(target.issue),
+      meta: { workspaceId: target.workspaceId, bodyChars: params.body.length }
     }
   }
 

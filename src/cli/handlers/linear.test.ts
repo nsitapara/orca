@@ -439,6 +439,29 @@ describe('orca linear CLI handlers', () => {
     )
   })
 
+  it('maps comment edits to the edit RPC and reports the edited comment', async () => {
+    queueFixtures(callMock, okFixture('req_comment_edit', commentEditResult()))
+
+    await main(
+      ['linear', 'comment', 'edit', 'ENG-123', '--comment', 'comment-id', '--body', 'Updated'],
+      '/tmp/repo'
+    )
+
+    expect(callMock).toHaveBeenCalledWith(
+      'linear.issueEditComment',
+      {
+        input: 'ENG-123',
+        current: false,
+        workspaceId: undefined,
+        commentId: 'comment-id',
+        body: 'Updated',
+        context: { remote: false, cwd: '/tmp/repo' }
+      },
+      { timeoutMs: 75_000 }
+    )
+    expect(vi.mocked(console.log).mock.calls[0][0]).toBe('Edited comment comment-id on ENG-123.')
+  })
+
   it('rejects malformed write ids before dispatch', async () => {
     await main(
       [
@@ -658,6 +681,14 @@ function commentAddResult(): unknown {
       writeId: '123e4567-e89b-12d3-a456-426614174000',
       deduplicated: false
     }
+  }
+}
+
+function commentEditResult(): unknown {
+  return {
+    comment: { id: 'comment-id', url: null, parentId: null },
+    issue: { id: 'issue-id', identifier: 'ENG-123', url: 'https://linear.app/acme/issue/ENG-123' },
+    meta: { workspaceId: 'workspace-1', bodyChars: 7 }
   }
 }
 

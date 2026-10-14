@@ -46,5 +46,8 @@ function isLinearBodyWriteCommand(commandPath: string[]): boolean {
   if (commandPath[0] !== 'linear') {
     return false
   }
-  return (commandPath[1] === 'comment' && commandPath[2] === 'add') || commandPath[1] === 'create'
+  return (
+    (commandPath[1] === 'comment' && (commandPath[2] === 'add' || commandPath[2] === 'edit')) ||
+    commandPath[1] === 'create'
+  )
 }

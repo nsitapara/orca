@@ -104,6 +104,33 @@ export async function addIssueCommentForAgent(
   })
 }
 
+export async function updateIssueCommentForAgent(
+  commentId: string,
+  body: string,
+  workspaceId: string,
+  options: { signal?: AbortSignal } = {}
+): Promise<LinearCommentWriteRecord> {
+  const entry = getClients(workspaceId)[0]
+  if (!entry) {
+    throw new LinearWriteFailure('failed', 'Not connected to Linear')
+  }
+
+  return runLinearWrite(entry, options.signal, async (client) => {
+    const result = await client.updateComment(commentId, { body })
+    if (!result.success) {
+      throw new LinearWriteFailure('failed', 'Failed to update comment')
+    }
+    // Why: Linear re-renders the stored markdown, so the read-back body need not equal the sent one.
+    const record = await confirmLinearWrite('Comment was updated but could not be retrieved', () =>
+      readCommentWriteRecord(client, commentId)
+    )
+    if (!record) {
+      throw new LinearWriteFailure('unconfirmed', 'Comment was updated but could not be retrieved')
+    }
+    return record
+  })
+}
+
 export async function createIssueAttachment(
   issueId: string,
   input: { id: string; title: string; url: string },

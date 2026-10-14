@@ -1,6 +1,7 @@
 import type { RpcResponse } from '../runtime/rpc/core'
 import type { RpcDispatcher } from '../runtime/rpc/dispatcher'
 import { getRemoteLinearWriteHelp } from './ssh-remote-linear-write-help'
+import { dispatchRemoteLinearCommentEdit } from './ssh-remote-linear-comment-edit'
 import { dispatchRemoteLinearRelationWrite } from './ssh-remote-linear-relation-write'
 import { dispatchRemoteLinearSaveIssue } from './ssh-remote-linear-save-issue'
 import {
@@ -211,6 +212,9 @@ export async function tryDispatchRemoteLinearWriteCli(
       replyTo: optionalString(parsed.flags, 'reply-to'),
       writeId: optionalWriteId(parsed.flags)
     })
+  }
+  if (isRemoteCommand(parsed, 'linear', 'comment', 'edit')) {
+    return await dispatchRemoteLinearCommentEdit(dispatcher, parsed, env, stdin)
   }
   if (isRemoteCommand(parsed, 'linear', 'attach')) {
     validateLinearRemoteArgs(parsed, LINEAR_ATTACH_FLAGS, ['linear', 'attach'], 1, 'id')
