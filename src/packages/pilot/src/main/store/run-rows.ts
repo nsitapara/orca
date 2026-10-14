@@ -7,6 +7,7 @@ import type {
   StepRow,
   StepStatus
 } from '../../shared/api-types'
+import { envOfRow } from './env-row'
 
 export type RunPatch = Partial<{
   status: RunStatus
@@ -108,7 +109,9 @@ export function toRun(r: Record<string, unknown>): RunRow {
     worktreeId: (r.worktree_id as string | null) ?? null,
     trigger: r.trigger as RunTrigger,
     parentRunId: (r.parent_run_id as string | null) ?? null,
-    imported: Number(r.imported) === 1
+    imported: Number(r.imported) === 1,
+    homePath: (r.home_path as string | null) ?? null,
+    env: envOfRow(r)
   }
 }
 

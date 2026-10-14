@@ -1,6 +1,6 @@
 import type Database from '../../../../../main/sqlite/sync-database'
 
-export const PILOT_SCHEMA_VERSION = 9
+export const PILOT_SCHEMA_VERSION = 10
 
 const V1 = `
 CREATE TABLE ticks (id INTEGER PRIMARY KEY AUTOINCREMENT, automation_id TEXT NOT NULL, started_at INTEGER NOT NULL,
@@ -122,8 +122,29 @@ CREATE INDEX handovers_tick ON handovers (tick_id);
 ALTER TABLE ticks ADD COLUMN trigger_json TEXT;
 `
 
+// Job environments (pilotcli env, workspace: { env }). home_path is the item's worktree: cards, answers, the timeline and the
+// worktree panel read it. worktree_path stays where the run works (its cwd and its claim). env_path is the folder pilotcli
+// made, normalized (worktreePathKey). env_json holds the create command, who prepares it and pilotcli's result.
+// env_removed_at is set once env delete succeeded, or when nothing was made.
+const V10 = `
+ALTER TABLE runs ADD COLUMN home_path TEXT;
+ALTER TABLE runs ADD COLUMN env_state TEXT;
+ALTER TABLE runs ADD COLUMN env_mode TEXT;
+ALTER TABLE runs ADD COLUMN env_reason TEXT;
+ALTER TABLE runs ADD COLUMN env_path TEXT;
+ALTER TABLE runs ADD COLUMN env_json TEXT;
+ALTER TABLE runs ADD COLUMN env_removed_at INTEGER;
+ALTER TABLE runs ADD COLUMN env_delete_error TEXT;
+ALTER TABLE runs ADD COLUMN env_delete_attempts INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE runs ADD COLUMN env_retry_at INTEGER;
+-- hold_home (Task 11): the step whose claim on home_path this run holds; it counts only while that step runs.
+ALTER TABLE runs ADD COLUMN home_hold_step INTEGER;
+CREATE INDEX runs_env_open ON runs (env_state) WHERE env_state IS NOT NULL AND env_removed_at IS NULL;
+CREATE INDEX runs_by_home ON runs (home_path);
+`
+
 // MIGRATIONS[n - 1] takes a database from version n - 1 to n.
-const MIGRATIONS: readonly string[] = [V1, V2, V3, V4, V5, V6, V7, V8, V9]
+const MIGRATIONS: readonly string[] = [V1, V2, V3, V4, V5, V6, V7, V8, V9, V10]
 
 // Same pattern as Orca's orchestration.db (migrate.ts): user_version + one transaction, all or nothing.
 // `target` lets tests build a database at an older version.

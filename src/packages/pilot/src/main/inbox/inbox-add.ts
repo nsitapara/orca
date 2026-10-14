@@ -1,4 +1,5 @@
 import { notPreparedReply, queuedPreparation } from '../../shared/preparation'
+import { homeOf } from '../../shared/api-types-env'
 import { randomUUID } from 'node:crypto'
 import type { InboxItemRow, ItemFields } from '../../shared/api-types'
 import type { DetailsSnapshot } from '../../shared/details'
@@ -69,7 +70,7 @@ function originOf(deps: InboxDeps, params: InboxAddParams): Origin {
       runId: run.id,
       stepIdx: params.stepIdx ?? null,
       itemKey: run.itemKey,
-      worktreePath: run.worktreePath,
+      worktreePath: homeOf(run),
       fields: fieldsForRun(deps.store, run.id)
     }
   }
