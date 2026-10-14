@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import type { StepRow } from '../../shared/api-types'
 import { stepRow, timelineRun } from './timeline.fixtures'
 
 const pilotRpc = vi.fn()
@@ -110,4 +111,55 @@ describe('StepList', () => {
       expect(screen.getByText(error).className).toContain(colour)
     }
   )
+
+  const shellStep = (result: StepRow['result']) =>
+    stepRow({
+      name: 'context',
+      agent: 'shell',
+      kind: 'shell',
+      mode: null,
+      costUsd: null,
+      sessionId: null,
+      outputs: {},
+      exitCode: 0,
+      result
+    })
+
+  it("shows a step's pilotcli result: command, outcome and reason, and its data as JSON, folded", () => {
+    render(
+      <StepList
+        runId="r1"
+        steps={[
+          shellStep({
+            command: 'skills get-context',
+            outcome: 'ok',
+            reason: '2 failed jobs',
+            data: { pipeline_id: 2934 },
+            meta: {}
+          })
+        ]}
+      />
+    )
+    expect(screen.getByText('pilotcli skills get-context · ok: 2 failed jobs')).toBeTruthy()
+    expect(screen.getByText('Data').closest('details')?.hasAttribute('open')).toBe(false)
+    expect(screen.getByText(/"pipeline_id": 2934/).tagName).toBe('PRE')
+  })
+
+  it('says why a result’s data was not kept, with no viewer', () => {
+    render(
+      <StepList
+        runId="r1"
+        steps={[
+          shellStep({
+            command: 'skills get-context',
+            outcome: 'ok',
+            reason: '3 threads waiting',
+            data_omitted: 'may contain comment or ticket text'
+          })
+        ]}
+      />
+    )
+    expect(screen.getByText('Data not kept: may contain comment or ticket text')).toBeTruthy()
+    expect(screen.queryByText('Data')).toBeNull()
+  })
 })

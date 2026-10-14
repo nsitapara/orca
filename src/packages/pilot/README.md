@@ -183,6 +183,7 @@ A shell step's `run:` is plain shell. It takes no `{placeholders}`; validation r
   - A result marked `meta.text` keeps only `{command, outcome, reason}` (`data_omitted: "may contain comment or ticket text"`), and none of the step's stdout is kept: `output_tail` holds stderr only, and an error never quotes stdout.
   - No stdout is kept from a capture cut at 1 MiB that doesn't read as one envelope either.
   - With an envelope, a step's error uses its `reason`, never the JSON line.
+  - The run page shows each result's command, outcome and reason, and its data as JSON, folded until opened. The vault export (`Runs.md`) never includes data.
 - **Exit codes:** `exit_codes: { ok, skip, stop }`, `ok: [0]` by default; a code may be in one list only.
   - `ok` → done. `skip` → skipped, and the run goes on.
   - `stop` → stopped: the run ends there as done, with the outcome "Nothing to do: <reason>" (the envelope's reason, else the step's last line). Every later non-`always` step is skipped; `always` steps still run and read `{steps.<name>.status}` as `stopped`. The `once_per` key is settled done.

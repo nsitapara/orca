@@ -5,6 +5,7 @@ import { money } from '../../shared/money'
 import { pilotRpc } from '../api'
 import { errorText, stepStatusLabel } from '../pages/format'
 import { refreshWorktreeTimeline } from '../sidebar/timeline-feed'
+import { StepResultView } from './StepResult'
 
 const AGENT_LABEL: Record<string, string> = { claude: 'Claude', codex: 'Codex', shell: 'Shell' }
 const RESUMED: Record<SessionResumeResult['action'], string> = {
@@ -124,6 +125,7 @@ export function StepList({
               ) : null}
             </div>
             {outputs ? <div className="text-muted-foreground">{`Outputs: ${outputs}`}</div> : null}
+            {step.result ? <StepResultView result={step.result} /> : null}
             {step.error ? <div className={errorClass(step)}>{step.error}</div> : null}
           </li>
         )

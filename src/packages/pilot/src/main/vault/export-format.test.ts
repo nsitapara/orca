@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { InboxItemRow, RunRow } from '../../shared/api-types'
+import type { InboxItemRow, RunRow, StepRow } from '../../shared/api-types'
 import {
   insertRunsLine,
   itemsBlock,
@@ -17,6 +17,28 @@ describe('stamp', () => {
 })
 
 describe('runSummary', () => {
+  it("writes a stopped run's outcome, never a step's result data", () => {
+    const run = {
+      id: 'r-2',
+      itemLabel: '!1606',
+      status: 'done',
+      outcome: 'Nothing to do: pipeline 2934 is green'
+    } as RunRow
+    const step = {
+      outputs: {},
+      result: {
+        command: 'skills get-context',
+        outcome: 'skip',
+        reason: 'pipeline 2934 is green',
+        data: { body: 'Please rename this' },
+        meta: {}
+      }
+    } as StepRow
+    expect(runSummary(run, [step])).toBe(
+      '!1606 · done: Nothing to do: pipeline 2934 is green · run r-2'
+    )
+  })
+
   // The runs line is one checklist line: an item label with a newline must not start another.
   it('keeps the whole line on one line, item label and all', () => {
     const run = {
