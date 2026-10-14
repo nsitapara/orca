@@ -65,6 +65,7 @@ import {
   printLinearSearchWarnings
 } from '../linear-format'
 import { runLinearListIssues } from './linear-list-issues'
+import { linearCommentEditHandler } from './linear-comment-edit'
 import { linearRelationWriteHandler } from './linear-relation-write'
 import { runLinearSaveIssue } from './linear-save-issue'
 
@@ -226,6 +227,7 @@ export const LINEAR_HANDLERS: Record<string, CommandHandler> = {
     })
     printResult(response, json, formatLinearCommentAdd)
   },
+  'linear comment edit': linearCommentEditHandler,
   'linear attach': async ({ flags, client, cwd, json }) => {
     const request: LinearAttachRequest = {
       ...buildWriteTargetRequest(flags, cwd, client.isRemote),

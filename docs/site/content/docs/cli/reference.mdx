@@ -324,6 +324,7 @@ orca linear estimate set --current --to 3 --json
 orca linear due-date set --current --to 2026-08-01 --json
 orca linear label add --current --label backend --json
 orca linear comment add --current --body "Investigating regression" --json
+orca linear comment edit --current --comment <commentId> --body "Root cause found" --json
 orca linear attach --current --url https://example.com/repro --title "Repro" --json
 orca linear create --title "Flaky login test" --team ENG --priority high --json
 ```

@@ -13,6 +13,7 @@ import type {
   LinearTeamStatesResult,
   LinearStatusSetResult,
   LinearCommentAddResult,
+  LinearCommentEditResult,
   LinearAttachResult,
   LinearCreateResult,
   LinearSaveIssueResult
@@ -26,6 +27,7 @@ import {
 import {
   isLinearAttachResult,
   isLinearCommentAddResult,
+  isLinearCommentEditResult,
   isLinearCreateResult,
   isLinearSaveIssueResult,
   isLinearIssueContextResult,
@@ -102,6 +104,9 @@ export function formatRemoteLinearCli(result: unknown): { stdout: string; stderr
   }
   if (isLinearRelationWriteResult(result)) {
     return { stdout: `${formatLinearRelationWrite(result)}\n`, stderr: '' }
+  }
+  if (isLinearCommentEditResult(result)) {
+    return { stdout: `${formatLinearCommentEdit(result)}\n`, stderr: '' }
   }
   if (isLinearCommentAddResult(result)) {
     return { stdout: `${formatLinearCommentAdd(result)}\n`, stderr: '' }
@@ -235,6 +240,10 @@ function formatLinearRelationWrite(result: LinearIssueRelationWriteResult): stri
 function formatLinearCommentAdd(result: LinearCommentAddResult): string {
   const suffix = result.meta.deduplicated ? ' (already posted)' : ''
   return `Added comment ${result.comment.id} to ${result.issue.identifier}${suffix}.`
+}
+
+function formatLinearCommentEdit(result: LinearCommentEditResult): string {
+  return `Edited comment ${result.comment.id} on ${result.issue.identifier}.`
 }
 
 function formatLinearAttach(result: LinearAttachResult): string {

@@ -54,6 +54,7 @@ describe('Linear agent access RPC methods', () => {
       linearProjectListForAgents: vi.fn().mockResolvedValue({ ok: true }),
       linearIssueUpdateTask: vi.fn().mockResolvedValue({ ok: true }),
       linearIssueAddComment: vi.fn().mockResolvedValue({ ok: true }),
+      linearIssueEditComment: vi.fn().mockResolvedValue({ ok: true }),
       linearIssueAttachLink: vi.fn().mockResolvedValue({ ok: true }),
       linearSaveIssue: vi.fn().mockResolvedValue({ ok: true }),
       linearIssueCreate: vi.fn().mockResolvedValue({ ok: true })
@@ -120,6 +121,14 @@ describe('Linear agent access RPC methods', () => {
         workspaceId: 'workspace-1'
       })
     )
+    const commentEditResponse = await dispatcher.dispatch(
+      makeRequest('linear.issueEditComment', {
+        input: 'ENG-1',
+        commentId: 'comment-1',
+        body: 'Edited',
+        workspaceId: 'workspace-1'
+      })
+    )
     const attachResponse = await dispatcher.dispatch(
       makeRequest('linear.issueAttachLink', {
         input: 'ENG-1',
@@ -162,6 +171,7 @@ describe('Linear agent access RPC methods', () => {
     expect(taskUpdateResponse.ok).toBe(true)
     expect(relationResponse.ok).toBe(true)
     expect(commentResponse.ok).toBe(true)
+    expect(commentEditResponse.ok).toBe(true)
     expect(attachResponse.ok).toBe(true)
     expect(createResponse.ok).toBe(true)
     expect(saveResponse.ok).toBe(true)
@@ -212,6 +222,12 @@ describe('Linear agent access RPC methods', () => {
       body: 'Done',
       replyTo: 'comment-1',
       writeId: '11111111-1111-4111-8111-111111111111',
+      workspaceId: 'workspace-1'
+    })
+    expect(runtime.linearIssueEditComment).toHaveBeenCalledWith({
+      input: 'ENG-1',
+      commentId: 'comment-1',
+      body: 'Edited',
       workspaceId: 'workspace-1'
     })
     expect(runtime.linearIssueAttachLink).toHaveBeenCalledWith({

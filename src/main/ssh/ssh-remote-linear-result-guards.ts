@@ -1,6 +1,7 @@
 import type {
   LinearAttachResult,
   LinearCommentAddResult,
+  LinearCommentEditResult,
   LinearCreateResult,
   LinearSaveIssueResult,
   LinearIssueContextResult,
@@ -138,6 +139,19 @@ export function isLinearCommentAddResult(result: unknown): result is LinearComme
     isRecord(result.meta) &&
     typeof result.comment.id === 'string' &&
     typeof result.meta.bodyChars === 'number'
+  )
+}
+
+// Why: an add result has the same comment/issue/bodyChars shape; only its writeId tells them apart.
+export function isLinearCommentEditResult(result: unknown): result is LinearCommentEditResult {
+  return (
+    isRecord(result) &&
+    isRecord(result.comment) &&
+    isRecord(result.issue) &&
+    isRecord(result.meta) &&
+    typeof result.comment.id === 'string' &&
+    typeof result.meta.bodyChars === 'number' &&
+    result.meta.writeId === undefined
   )
 }
 
