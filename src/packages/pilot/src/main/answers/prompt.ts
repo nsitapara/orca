@@ -96,14 +96,21 @@ export function withModePointer(
   return `Apply these answers as ${modeFile(mode.skill, mode.mode)} says. ${line}`
 }
 
-// A new session knows nothing yet: the wrapped preamble (contract §7) and the skill's answers mode file. `cards`: what
-// the cards of a throwaway run said (sessions.ts), one line each, since the session that asked went with its folder.
+// What a fresh session is told when the session that asked can't take the answers (sessions.ts `fresh`): what each card
+// said, and whether the asking run's checkout is gone (shared checkoutRemoved) or only elsewhere.
+export type CarriedCards = { removed: boolean; cards: { id: string; context: string }[] }
+const CARDS_REMOVED =
+  'The run that asked worked in a throwaway checkout, now removed. What its cards said:'
+const CARDS_ELSEWHERE = 'The asking session worked in another checkout. What its cards said:'
+
+// A new session knows nothing yet: the wrapped preamble (contract §7) and the skill's answers mode file, then the carried
+// cards, one line each, quoted as titles and answers are.
 export function newSessionPrompt(
   def: Pick<AutomationDefinition, 'name'>,
   run: { id: string; label: string },
   target: { skill: string | null; mode: string },
   line: string,
-  cards: { id: string; context: string }[] = []
+  carried: CarriedCards | null = null
 ): string {
   const lines = [`Started by the Pilot automation "${def.name}" (run ${run.id}) for ${run.label}.`]
   if (target.skill) {
@@ -111,13 +118,10 @@ export function newSessionPrompt(
       `Use the ${target.skill} skill in its ${target.mode} mode (${modeFile(target.skill, target.mode)}).`
     )
   }
-  const said = cards.filter((c) => c.context.trim() !== '')
+  const said = (carried?.cards ?? []).filter((c) => c.context.trim() !== '')
   if (said.length > 0) {
-    lines.push(
-      '',
-      'The run that asked worked in a throwaway checkout, now removed. What its cards said:'
-    )
-    lines.push(...said.map((c) => `[${c.id}] ${oneLine(c.context).slice(0, 1500)}`))
+    lines.push('', carried?.removed ? CARDS_REMOVED : CARDS_ELSEWHERE)
+    lines.push(...said.map((c) => `[${c.id}] ${quoted(oneLine(c.context).slice(0, 1500))}`))
   }
   lines.push('', line)
   return lines.join('\n')

@@ -62,8 +62,8 @@ function requeue(store: PilotStore, runId: string, held: Hold, at: number): void
 }
 
 // The route once the folder is known. The asking session lives under its own run's folder (its transcript too): in that
-// very folder the chosen route stands; anywhere else (a throwaway, another worktree) the answers go to a fresh session.
-// Decided by the folder, never by the mode (Contract answers 3).
+// very folder the chosen route stands; anywhere else (a throwaway, another worktree) the answers go to a fresh session,
+// which gets what the cards said. Decided by the folder, never by the mode (Contract answers 3).
 function routeIn(
   store: PilotStore,
   run: RunRow,
@@ -78,7 +78,7 @@ function routeIn(
   if (here !== null && there !== null && worktreePathKey(here) === worktreePathKey(there)) {
     return target
   }
-  return newSession(def, target.asking)
+  return { ...newSession(def, target.asking), fresh: 'elsewhere' }
 }
 
 // What became of the launch, for the rows marked sent: the route it took, or back to the queue, or back to their person.

@@ -246,22 +246,45 @@ describe('answersText', () => {
 })
 
 describe('newSessionPrompt', () => {
-  it("a fresh session for a throwaway's cards carries what each card said", () => {
-    const text = newSessionPrompt(
+  const carrying = (removed: boolean, cards: { id: string; context: string }[]) =>
+    newSessionPrompt(
       { name: '05 · Fix CI' },
       { id: 'a1', label: '!1' },
       { skill: 'fix-gitlab-ci', mode: 'answers' },
       'LINE',
-      [
-        { id: 'in_1', context: 'Tests failed in api/x.py\nsecond line' },
-        { id: 'in_2', context: '' }
-      ]
+      { removed, cards }
     )
-    expect(text).toContain(
+
+  it.each([
+    [
+      'the asking checkout is gone',
+      true,
       'The run that asked worked in a throwaway checkout, now removed. What its cards said:'
-    )
-    expect(text).toContain('[in_1] Tests failed in api/x.py second line')
+    ],
+    [
+      'the asking checkout is still there',
+      false,
+      'The asking session worked in another checkout. What its cards said:'
+    ]
+  ])('a fresh session carries what each card said: %s', (_name, removed, intro) => {
+    const text = carrying(removed, [
+      { id: 'in_1', context: 'Tests failed in api/x.py\nsecond line' },
+      { id: 'in_2', context: '' }
+    ])
+    expect(text).toContain(intro)
+    expect(text).toContain('[in_1] "Tests failed in api/x.py second line"')
     expect(text).not.toContain('[in_2]')
+  })
+
+  // As titles and answers (quoted): no control character in a card's words reaches the prompt as itself.
+  it.each([
+    ['ESC', '\u001b', '\\u001b'],
+    ['DEL', '\u007f', '\\u007f'],
+    ['CSI (C1)', '\u009b', '\\u009b']
+  ])("escapes %s in a card's context", (_name, control, escaped) => {
+    const text = carrying(true, [{ id: 'in_1', context: `red${control}[31m "quoted"` }])
+    expect(text).toContain(`[in_1] "red${escaped}[31m \\"quoted\\""`)
+    expect(text).not.toContain(control)
   })
 
   it('names the automation, the answer run, the skill and its answers mode', () => {
