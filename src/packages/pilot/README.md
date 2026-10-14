@@ -300,7 +300,7 @@ A job that changes code on Nish's work, or needs a stack, says what it needs. pi
         run: pilotcli git update-branch "$HOME_WT" --to "$TO" --merge ${PILOT_HOME_BUSY:+--busy "$PILOT_HOME_BUSY"}
         exit_codes: { ok: [0], skip: [3] }
 
-  The same line as a plain call: `pilotcli git update-branch "{worktree.path}" --merge --to <sha> --busy "$PILOT_HOME_BUSY"`.
+  pilotcli checks Nish's own sessions in the Orca app itself, whatever env the step gives it; `PILOT_HOME_BUSY` covers Pilot's runs.
 - **The run ends, however it ends:**
   1. A throwaway's own step tabs close. A tab with text typed in it stays, and the delete waits.
   2. `pilotcli env delete <run>` runs, with `--keep-folder` for a kept worktree.
