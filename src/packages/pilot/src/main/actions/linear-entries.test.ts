@@ -166,6 +166,19 @@ describe('Linear entries', () => {
     expect(entry(writer(), name).checkArgs(args)).toMatch(new RegExp(`^usage: ${name} `))
   })
 
+  it("refuses a write_id that isn't a v4 uuid before Linear sees it", async () => {
+    // Linear takes only a v4 uuid as a new entity's id; a v5 one came back as "id must be a UUID".
+    const w = writer()
+    const v5 = '296a9b53-05fb-55b0-aefa-00823f3f47e0'
+    expect(
+      await entry(w, 'linear_create').run({ team: 'WEB', title: 't', write_id: v5 }, RUN)
+    ).toMatchObject({
+      outcome: 'failed',
+      detail: expect.stringContaining('write_id: must be a v4 uuid')
+    })
+    expect(w.createIssue).not.toHaveBeenCalled()
+  })
+
   it("fails with Linear's message when the write fails", async () => {
     const w = writer()
     w.setState.mockRejectedValue(new Error('linear_invalid_state'))

@@ -18,7 +18,8 @@ export function writeIdFor(key: string): string {
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-4${hex.slice(13, 16)}-${variant}${hex.slice(17, 20)}-${hex.slice(20, 32)}`
 }
 
-const writeId = z.uuid().optional()
+// Only a v4 uuid: Linear refuses any other version as a new entity's id ("id must be a UUID").
+const writeId = z.uuidv4({ error: 'must be a v4 uuid' }).optional()
 const workspace = z.string().min(1).optional()
 const createArgs = z.strictObject({
   title: z.string().min(1),
