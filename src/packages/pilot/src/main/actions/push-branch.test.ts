@@ -97,8 +97,8 @@ describe('the push action (pilotcli git push-branch)', () => {
     ],
     [
       'uncommitted changes',
-      reply('not_yet', 'uncommitted changes in /wt/web-1'),
-      { outcome: 'not_yet', detail: 'uncommitted changes in /wt/web-1', onYou: true }
+      reply('not_yet', 'uncommitted changes'),
+      { outcome: 'not_yet', detail: 'uncommitted changes (web-1 in /wt/web-1)', onYou: true }
     ],
     [
       'a base branch',
