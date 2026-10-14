@@ -95,21 +95,21 @@ export function createPreparations(deps: PrepareDeps): Preparations {
   // failed or invalid (§8): the run fails with the reason. The env stays due for env delete at the run's end whatever
   // create made (Ruling P12): with nothing made, delete answers ok, removed: [].
   function failed(plan: Planned, hooks: PreparedHooks, reason: string): void {
-    deps.runs.envs.settle(plan.runId, 'failed', reason, null)
+    deps.runs.envs.settle(plan.runId, 'failed', reason)
     hooks.end({ status: 'failed', outcome: `Couldn't prepare its workspace: ${reason}` }, {})
   }
 
   // Nothing ran: the once_per key is freed and handed-over ids are pending again (release), and retry_after_failure
   // doesn't apply.
   function deferred(plan: Planned, hooks: PreparedHooks, reason: string): void {
-    deps.runs.envs.settle(plan.runId, 'deferred', reason, null)
+    deps.runs.envs.settle(plan.runId, 'deferred', reason)
     hooks.end({ status: 'cancelled', outcome: `Deferred: ${reason}` }, { release: true })
   }
 
   // Stopped, or the run ended, once create may have made something (Ruling P2): never left preparing, so the run's
   // teardown deletes it now rather than at the next start. No hook runs: whatever ended the run closed it.
   function stopped(plan: Planned): void {
-    deps.runs.envs.settle(plan.runId, 'failed', STOPPED, null)
+    deps.runs.envs.settle(plan.runId, 'failed', STOPPED)
   }
 
   async function afterCreate(
