@@ -21,9 +21,9 @@ export class TimelineStore {
     private readonly inbox: InboxStore
   ) {}
 
-  // Each automation's newest finished real tick, and only the items it recorded for this worktree. A tick still
-  // running is skipped (its items aren't all in), and so is a dry run (it never moves anything). The path is
-  // compared in worktreePathKey form, the form recordDecisions writes.
+  // Each automation's newest finished tick, and only the items it recorded for this worktree. A tick still running
+  // is skipped (its items aren't all in). The path is compared in worktreePathKey form, the form recordDecisions
+  // writes.
   nextFor(worktreePath: string): NextRow[] {
     return this.db
       .prepare(
@@ -31,7 +31,7 @@ export class TimelineStore {
          FROM tick_items i JOIN ticks t ON t.id = i.tick_id
          WHERE i.worktree_path = ? AND i.verdict <> 'out_of_scope'
            AND t.id = (SELECT MAX(t2.id) FROM ticks t2
-                       WHERE t2.automation_id = t.automation_id AND t2.dry_run = 0 AND t2.status <> 'running')
+                       WHERE t2.automation_id = t.automation_id AND t2.status <> 'running')
          ORDER BY t.automation_id, i.rowid`
       )
       .all(worktreePathKey(worktreePath))

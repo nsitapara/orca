@@ -241,8 +241,8 @@ describe('migrate', () => {
       "INSERT INTO inbox_items (id, automation_id, person, type, title, digest, created_at, updated_at) VALUES ('i1', 'a', 'p', 'question', 't', 'd', 1, 1)"
     )
     migrate(db)
-    expect(PILOT_SCHEMA_VERSION).toBe(10)
-    expect(db.pragma('user_version', { simple: true })).toBe(10)
+    expect(PILOT_SCHEMA_VERSION).toBe(11)
+    expect(db.pragma('user_version', { simple: true })).toBe(11)
     expect(
       firstRow(
         db,
@@ -344,6 +344,30 @@ describe('migrate', () => {
       env_state: null,
       env_delete_attempts: 0
     })
+  })
+
+  it('V11 deletes the dry-run ticks a V10 database stored, with their items, and drops the column', () => {
+    const db = openDb()
+    migrate(db, 10)
+    db.exec(`
+      INSERT INTO ticks (id, automation_id, started_at, dry_run, status) VALUES (1, 'a', 1, 0, 'ok'), (2, 'a', 2, 1, 'ok');
+      INSERT INTO tick_items (tick_id, item_key, label, verdict, reason, checks_json, fields_json)
+        VALUES (1, 'k', 'l', 'started', 'r', '[]', '{}'), (2, 'k', 'l', 'started', 'r', '[]', '{}');
+    `)
+    migrate(db)
+    expect(
+      db
+        .prepare('SELECT id FROM ticks')
+        .all()
+        .map((r) => r.id)
+    ).toEqual([1])
+    expect(
+      db
+        .prepare('SELECT tick_id FROM tick_items')
+        .all()
+        .map((r) => r.tick_id)
+    ).toEqual([1])
+    expect(columnsOf(db, 'ticks')).not.toContain('dry_run')
   })
 
   it('leaves a database migrated by a newer process unchanged', () => {
