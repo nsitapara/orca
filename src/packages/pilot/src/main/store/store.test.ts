@@ -308,18 +308,6 @@ describe('PilotStore', () => {
     expect(store.tickItems(tick)).toEqual([])
   })
 
-  it('skips the dry runs stored before dry runs stopped being stored (scheduler timing, Activity)', () => {
-    const path = join(mkdtempSync(join(tmpdir(), 'pilot-store-')), 'pilot-automations.db')
-    const store = PilotStore.open(path)
-    expect(store.lastTick('a')).toBeNull()
-    const real = store.startTick('a', 100)
-    const dry = store.startTick('a', 200)
-    store.startTick('b', 300)
-    new Database(path).prepare('UPDATE ticks SET dry_run = 1 WHERE id = ?').run(dry)
-    expect(store.lastTick('a')?.id).toBe(real)
-    expect(store.listTicks('a', 10).map((t) => t.id)).toEqual([real])
-  })
-
   it('unmarks only the once_per key a given run holds', () => {
     const store = freshStore()
     store.markHandled('a', 'k:1', 'run-1', 1)

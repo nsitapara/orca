@@ -131,8 +131,7 @@ export class PilotStore {
   }
 
   // Run when Pilot starts. Each automation's newest tick is kept at any age, so the list still shows its last tick
-  // and the scheduler still knows when it last ran. Dry runs are no longer stored; the ones stored before are
-  // grouped apart so one can't stand in for the newest real tick.
+  // and the scheduler still knows when it last ran.
   // Deleting a tick deletes its items (ON DELETE CASCADE); its runs and steps stay.
   housekeep(now: number): { interrupted: number; pruned: number } {
     const interrupted = this.db
@@ -142,7 +141,7 @@ export class PilotStore {
       .run(INTERRUPTED, now, now - STUCK_TICK_MS)
     const pruned = this.db
       .prepare(
-        'DELETE FROM ticks WHERE started_at < ? AND id NOT IN (SELECT MAX(id) FROM ticks GROUP BY automation_id, dry_run)'
+        'DELETE FROM ticks WHERE started_at < ? AND id NOT IN (SELECT MAX(id) FROM ticks GROUP BY automation_id)'
       )
       .run(now - TICK_RETENTION_MS)
     return { interrupted: Number(interrupted.changes), pruned: Number(pruned.changes) }
@@ -214,13 +213,10 @@ export class PilotStore {
     }
   }
 
-  // Also the scheduler's timing basis. Dry runs stored before they stopped being stored (dry_run = 1) are skipped
-  // here and in listTicks.
+  // Also the scheduler's timing basis.
   lastTick(automationId: string): TickRow | null {
     const r = this.db
-      .prepare(
-        'SELECT * FROM ticks WHERE automation_id = ? AND dry_run = 0 ORDER BY started_at DESC LIMIT 1'
-      )
+      .prepare('SELECT * FROM ticks WHERE automation_id = ? ORDER BY started_at DESC LIMIT 1')
       .get(automationId)
     if (!r) {
       return null
@@ -230,9 +226,7 @@ export class PilotStore {
 
   listTicks(automationId: string, limit: number): TickRow[] {
     return this.db
-      .prepare(
-        'SELECT * FROM ticks WHERE automation_id = ? AND dry_run = 0 ORDER BY started_at DESC LIMIT ?'
-      )
+      .prepare('SELECT * FROM ticks WHERE automation_id = ? ORDER BY started_at DESC LIMIT ?')
       .all(automationId, limit)
       .map((r) => toTick(r as never))
   }

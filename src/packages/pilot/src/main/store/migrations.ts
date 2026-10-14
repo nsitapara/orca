@@ -1,6 +1,6 @@
 import type Database from '../../../../../main/sqlite/sync-database'
 
-export const PILOT_SCHEMA_VERSION = 10
+export const PILOT_SCHEMA_VERSION = 11
 
 const V1 = `
 CREATE TABLE ticks (id INTEGER PRIMARY KEY AUTOINCREMENT, automation_id TEXT NOT NULL, started_at INTEGER NOT NULL,
@@ -143,8 +143,16 @@ CREATE INDEX runs_env_open ON runs (env_state) WHERE env_state IS NOT NULL AND e
 CREATE INDEX runs_by_home ON runs (home_path);
 `
 
+// A dry run is stored nowhere (it returns its decisions): the dry-run ticks stored before go, with their items, and so
+// does the column that told them apart.
+const V11 = `
+DELETE FROM tick_items WHERE tick_id IN (SELECT id FROM ticks WHERE dry_run = 1);
+DELETE FROM ticks WHERE dry_run = 1;
+ALTER TABLE ticks DROP COLUMN dry_run;
+`
+
 // MIGRATIONS[n - 1] takes a database from version n - 1 to n.
-const MIGRATIONS: readonly string[] = [V1, V2, V3, V4, V5, V6, V7, V8, V9, V10]
+const MIGRATIONS: readonly string[] = [V1, V2, V3, V4, V5, V6, V7, V8, V9, V10, V11]
 
 // Same pattern as Orca's orchestration.db (migrate.ts): user_version + one transaction, all or nothing.
 // `target` lets tests build a database at an older version.
