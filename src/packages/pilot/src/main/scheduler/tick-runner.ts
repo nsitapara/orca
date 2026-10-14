@@ -5,15 +5,10 @@ import type { AutomationDefinition } from '../../shared/definition/types'
 import type { PeopleDirectory } from '../../shared/people'
 import { usesHandled, workspacePathOf } from '../../shared/tick/decide'
 import { askDecisions, type AskDeps } from '../run/ask-first'
-import { createPassFetchCache, type PassFetchCache } from '../sources/fetch-cache'
-import { glabApiForRepo, type GlabApi } from '../sources/gitlab-api'
-import {
-  decideTickItems,
-  worktreeTakenSinceDecide,
-  type DecideDeps,
-  type DecideOutcome,
-  type FedOutcome
-} from './tick-decide'
+import type { PassFetchCache } from '../sources/fetch-cache'
+import type { GlabApi } from '../sources/gitlab-api'
+import { worktreeTakenSinceDecide, type DecideDeps, type FedOutcome } from './tick-decide'
+import { decide, dryRunTick } from './tick-dry-run'
 
 export type { TickResult }
 export type LaunchRequest = {
@@ -229,61 +224,6 @@ function finishFailed(
     deps.store.finishTick(tickId, 'failed', message, counts, deps.now(), warnings)
   } catch (error) {
     console.error(`pilot: couldn't finish tick ${tickId}: ${errorMessage(error)}`)
-  }
-}
-
-// A dry run has no tick row: it decides with run.tick 0, which no stored tick has, as a new tick's id would be.
-const DRY_RUN_TICK = 0
-
-async function decide(
-  def: AutomationDefinition,
-  people: PeopleDirectory,
-  deps: TickDeps,
-  opts: TickOptions,
-  tickId: number
-): Promise<DecideOutcome> {
-  const label = tickId === DRY_RUN_TICK ? `dry-run-${def.id}` : `tick-${tickId}`
-  const pass = opts.pass ?? createPassFetchCache(label, deps.gitlab ?? glabApiForRepo)
-  return decideTickItems(def, people, deps, pass, tickId)
-}
-
-// What a tick would do, stored nowhere: no tick row, no seen or handled marks, no runs, no cards, no handover.
-// The caller shows the decisions it returns (tickId null).
-async function dryRunTick(
-  def: AutomationDefinition,
-  people: PeopleDirectory,
-  deps: TickDeps,
-  opts: TickOptions
-): Promise<TickResult> {
-  let outcome: DecideOutcome
-  try {
-    outcome = await decide(def, people, deps, opts, DRY_RUN_TICK)
-  } catch (error) {
-    return {
-      tickId: null,
-      status: 'failed',
-      error: errorMessage(error),
-      decisions: [],
-      warnings: []
-    }
-  }
-  const { decisions, warnings } = outcome
-  for (const warning of warnings) {
-    console.warn(`[pilot] ${def.id} (dry run): ${warning}`)
-  }
-  try {
-    await deps.previewEnvs?.(def, decisions)
-  } catch (error) {
-    return { tickId: null, status: 'failed', error: errorMessage(error), decisions, warnings }
-  }
-  const handover = handoverOf(def, outcome.fed, decisions)
-  return {
-    tickId: null,
-    status: 'ok',
-    error: null,
-    decisions,
-    warnings,
-    ...(handover ? { handover } : {})
   }
 }
 
