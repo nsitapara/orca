@@ -43,8 +43,15 @@ export type SessionProbe = {
 export type SessionTarget =
   | { kind: 'resume'; asking: AskingSession; handle: string; paneKey: string | null }
   | { kind: 'fork'; asking: AskingSession; sessionId: string }
-  // fresh: a card from a throwaway run, whose session went with its folder; the new session gets the cards' context.
-  | { kind: 'new'; agent: AgentKind; skill: string | null; mode: string; fresh?: 'throwaway' }
+  // fresh: the asking session can't take these answers, so the new session gets what the cards said. 'throwaway': a card
+  // from a throwaway run, decided here; 'elsewhere': the answer run's env put it in another folder (answer-env.ts).
+  | {
+      kind: 'new'
+      agent: AgentKind
+      skill: string | null
+      mode: string
+      fresh?: 'throwaway' | 'elsewhere'
+    }
 
 function isAgent(agent: string): agent is AgentKind {
   return agent === 'claude' || agent === 'codex'

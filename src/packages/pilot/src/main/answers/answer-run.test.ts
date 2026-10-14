@@ -169,6 +169,44 @@ describe('dispatchToAgent', () => {
     expect(store.runs.steps(RUN_ID)[0]).toMatchObject({ mode: 'answers', launchArgs: [] })
   })
 
+  // A card from a throwaway run gets a fresh session (sessions.ts): what the cards said reaches its prompt, and it says the
+  // checkout is gone only once the asking run ended (checkoutRemoved).
+  it.each([
+    [
+      'its run ended: the checkout is gone',
+      'needs_you',
+      'The run that asked worked in a throwaway checkout, now removed. What its cards said:'
+    ],
+    [
+      'its run still works there: another checkout',
+      'running',
+      'The asking session worked in another checkout. What its cards said:'
+    ]
+  ] as const)("opens a throwaway's cards in a fresh session: %s", async (_name, status, intro) => {
+    const { store, deps, group } = setup('free')
+    store.runs.envs.begin('run-1', '/wt', {})
+    store.runs.envs.ready('run-1', {
+      mode: 'throwaway',
+      reason: '',
+      path: '/agents/agents-run-1',
+      home: '/wt',
+      worktreeId: 'id',
+      sha: null,
+      envFile: null,
+      vars: {},
+      stack: null
+    })
+    store.runs.update('run-1', { status })
+    const answer = group.answers[0]
+    const card = { ...answer, item: { ...answer.item, context: 'CI is red on api/x.py' } }
+    expect(await dispatchToAgent(deps, { ...group, answers: [card] })).toMatchObject({
+      route: 'new'
+    })
+    const prompt = vi.mocked(deps.open).mock.calls[0][0].prompt
+    expect(prompt).toContain(intro)
+    expect(prompt).toContain('[in_a] "CI is red on api/x.py"')
+  })
+
   it.each<[string, Partial<AgentDispatchDeps>, { holdReason: string; holdDetail: string }]>([
     [
       'quota',

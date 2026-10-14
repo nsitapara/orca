@@ -1,5 +1,5 @@
 import { existsSync } from 'node:fs'
-import { homeOf } from '../../shared/api-types-env'
+import { checkoutRemoved, homeOf } from '../../shared/api-types-env'
 import { homedir } from 'node:os'
 import { PromptNotSentError } from '../run/agent-step'
 import type { AgentSessionMode } from '../run/launch'
@@ -7,7 +7,13 @@ import { UnrecordedLaunchError } from '../scheduler/tick-runner'
 import type { AgentKind } from '../../shared/definition/types'
 import type { AgentDispatch, AgentDispatchDeps, AgentGroup, AnswerRun } from './answer-run'
 import { hold } from './holds'
-import { answersLine, modeFile, newSessionPrompt, withModePointer } from './prompt'
+import {
+  answersLine,
+  modeFile,
+  newSessionPrompt,
+  withModePointer,
+  type CarriedCards
+} from './prompt'
 import { DraftInProgressError } from './session-probe'
 import { answersModeOf, type SessionTarget } from './sessions'
 
@@ -39,12 +45,21 @@ function messageOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
 }
 
-// A throwaway's cards (sessions.ts) carry their context into the fresh session.
-function carriedCards(target: SessionTarget, group: AgentGroup): { id: string; context: string }[] {
-  if (target.kind !== 'new' || target.fresh !== 'throwaway') {
-    return []
+// A fresh session (sessions.ts, answer-env.ts) gets what the cards said, and whether the asking run's checkout is gone.
+function carriedCards(
+  deps: AgentDispatchDeps,
+  target: SessionTarget,
+  group: AgentGroup
+): CarriedCards | null {
+  if (target.kind !== 'new' || !target.fresh) {
+    return null
   }
-  return group.answers.map((a) => ({ id: a.item.id, context: a.item.context }))
+  const askingId = askingRunOf(group, target)
+  const asking = askingId ? deps.store.runs.get(askingId) : null
+  return {
+    removed: asking !== null && checkoutRemoved(asking),
+    cards: group.answers.map((a) => ({ id: a.item.id, context: a.item.context }))
+  }
 }
 
 type Mode = { skill: string | null; mode: string }
@@ -87,7 +102,7 @@ async function start(
   }
   const prompt =
     target.kind === 'new'
-      ? newSessionPrompt(group.def, run, mode, line, carriedCards(target, group))
+      ? newSessionPrompt(group.def, run, mode, line, carriedCards(deps, target, group))
       : withModePointer(mode, line)
   const session: AgentSessionMode =
     target.kind === 'fork' ? { kind: 'fork', sessionId: target.sessionId } : { kind: 'new' }

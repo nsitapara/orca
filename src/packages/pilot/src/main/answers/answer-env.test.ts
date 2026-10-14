@@ -278,6 +278,12 @@ describe('an answer run in an env', () => {
         runEnv: VARS
       })
       expect(t.deps.send).not.toHaveBeenCalled()
+      // Away from the asking session (whose checkout is still there): the fresh session gets what each card said.
+      const prompt = vi.mocked(t.deps.open).mock.calls[0][0].prompt
+      expect(prompt).toContain(
+        'The asking session worked in another checkout. What its cards said:'
+      )
+      expect(prompt).toContain('[in_a] "CI is green on the fix"')
       // Step 0 says what launched: the fresh session's answers mode, not the asking session it was planned on.
       expect(t.store.runs.steps(sent.runId)[0]).toMatchObject({
         status: 'running',
