@@ -119,6 +119,11 @@ export async function applyScript(
   // A card attempt never asks; were it to, nothing ran.
   const result = attempted.outcome === 'asked' ? actionFailed(attempted.detail) : attempted
   const parts = Object.keys(item.parts).length > 0
+  // A push pilotcli skipped (spec E): the card stays open with why it wasn't pushed.
+  if (result.keepOpen && !parts) {
+    reaskInboxItem(deps.inbox, item.id, result.detail)
+    return { kind: 'reasked' }
+  }
   if (result.outcome === 'not_yet' && !parts) {
     return { kind: 'waits', reason: result.detail + (result.onYou ? ' (waits on you)' : '') }
   }

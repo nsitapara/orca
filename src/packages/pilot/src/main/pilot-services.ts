@@ -6,12 +6,10 @@ import { ALL_RPC_METHODS } from '../../../../main/runtime/rpc/methods/index'
 import { getAppEnvironment } from '../../../../shared/app-environment'
 import type { PilotStatus, SessionResumeResult, UsageReportResult } from '../shared/api-types'
 import type { AgentKind } from '../shared/definition/types'
-import { actBridge } from './actions/act-bridge'
 import { answerRunEnded } from './answers/answer-run-end'
 import type { AnswerDispatcher } from './answers/dispatcher'
 import { wireAnswerDispatcher } from './answers/wiring'
-import { startRunEntry } from './actions/start-run-entry'
-import { buildActionCatalog } from './actions/catalog'
+import { pilotActionCatalog } from './actions/wiring'
 import type { ActionCatalog } from './actions/types'
 import { definitionIo, liveDefinitions } from './definitions/live'
 import { createEnvService } from './envs/service'
@@ -168,20 +166,17 @@ function openPilot(
     // {run.answer}: the free text that started an ask-first or answer run.
     runAnswer: (run) => runAnswerOf(store, run)
   })
-  // Built once; nothing runs until an action is attempted. start_run reaches the engine lazily.
-  const actions = buildActionCatalog({
-    act: actBridge({ engineEnv }),
+  const actions = pilotActionCatalog({
+    engineEnv,
     linear: createLinearWriter(runtime),
-    extra: [
-      startRunEntry({
-        store,
-        now,
-        definitions: () => definitions.current().definitions,
-        start: (req) => wired.engine.startRun(req),
-        schedulerOn: () => schedulerOn,
-        displayOnly: () => definitions.current().displayOnly ?? []
-      })
-    ]
+    startRun: {
+      store,
+      now,
+      definitions: () => definitions.current().definitions,
+      start: (req) => wired.engine.startRun(req),
+      schedulerOn: () => schedulerOn,
+      displayOnly: () => definitions.current().displayOnly ?? []
+    }
   })
   // The tick's asks and the answers pass share it: a card closed without starting its run (Skip, stale,
   // obsolete) cancels that run.

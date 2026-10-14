@@ -237,6 +237,25 @@ describe('applyScript', () => {
     expect(item()).toMatchObject({ status: 'stale', outcome: 'stale: head moved to ffff0000' })
   })
 
+  // Spec E: a push pilotcli skipped (a pin moved, not a fast-forward, not mine) leaves its card open with why.
+  it('re-asks a stale action that keeps its card open, with why, and never refreshes it', async () => {
+    const { deps, entry, item, approve } = setup({
+      ...DONE,
+      outcome: 'stale',
+      detail: 'not pushed: stale: HEAD is now 7f00aa1',
+      link: null,
+      keepOpen: true
+    })
+    approve()
+    expect(await applyScript(deps, item(), [])).toEqual({ kind: 'reasked' })
+    expect(entry.refresh).not.toHaveBeenCalled()
+    expect(item()).toMatchObject({ status: 'open', answer: null, outcome: null })
+    expect(item().replies.at(-1)).toEqual({
+      text: 'not pushed: stale: HEAD is now 7f00aa1',
+      by: 'pilot'
+    })
+  })
+
   it('hands an action that needs judgement to the agent', async () => {
     const { deps, item, approve } = setup({
       ...DONE,

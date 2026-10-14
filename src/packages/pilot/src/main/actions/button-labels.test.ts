@@ -6,7 +6,7 @@ describe('the answer buttons', () => {
   it('has a name for every action the catalog can run (start_run is the ask-first card’s own)', () => {
     const act = { run: vi.fn(), describe: vi.fn(), refresh: vi.fn(), command: vi.fn() }
     const linear = {} as never
-    const names = buildActionCatalog({ act, linear } as never)
+    const names = buildActionCatalog({ act, push: { name: 'push' }, linear } as never)
       .entries()
       .map((e) => e.name)
       .filter((n) => n !== 'start_run')
