@@ -111,6 +111,15 @@ describe('runTick', () => {
     ])
   })
 
+  it.each([
+    ['the schedule', 'schedule', false],
+    ['Run now', 'manual', true]
+  ])('stores the runs a tick by %s starts with trigger %s', async (_by, trigger, byHand) => {
+    const d = deps()
+    const result = await runTick(def, people, d, { dryRun: false, byHand })
+    expect(d.store.runs.forTick(result.tickId).map((r) => r.trigger)).toEqual([trigger, trigger])
+  })
+
   it('gives runs of two ticks in the same minute different ids', async () => {
     const d = deps({ launch: async () => ({ terminalHandle: 't', paneKey: 'p' }) })
     const first = await runTick(def, people, d, { dryRun: false })
