@@ -47,6 +47,21 @@ const FAILED_RUN: ReadonlySet<string> = new Set(['failed', 'timed_out'])
 // How a real tick settles the fed rows it saw. Consumed: the ones `settles` says, with the item's verdict and the run
 // it started. Expired with why: ids the source can't read (dropped before the read) or found no item for. The rest
 // stay pending for the next tick (triggered or scheduled).
+// The run a settled id belongs to: the one this tick started or asked for, else the run holding its once_per key.
+function runOf(
+  d: ItemDecision | undefined,
+  runIds: ReadonlyMap<string, string>,
+  holders: ReadonlyMap<string, string | null>
+): string | null {
+  if (!d) {
+    return null
+  }
+  if (d.verdict === 'started' || d.verdict === 'asked') {
+    return runIds.get(d.key) ?? null
+  }
+  return holders.get(d.onceKey) ?? null
+}
+
 export function settleFed(
   store: PilotStore,
   def: AutomationDefinition,
@@ -59,7 +74,10 @@ export function settleFed(
   if (outcome.fed.length === 0 && outcome.dropped.length === 0) {
     return
   }
-  const handled = handledStates(store.handledRows(def.id))
+  const rows = store.handledRows(def.id)
+  const handled = handledStates(rows)
+  // The run that holds each once_per key: an already-handled id is consumed with it, so that run failing re-pends it.
+  const holders = new Map(rows.map((r) => [r.onceKey, r.runId]))
   const missing = new Set(outcome.missing.map((id) => id.toLowerCase()))
   const skipped = new Set(outcome.skipped.map((id) => id.toLowerCase()))
   const dropped: HandoverResult[] = outcome.dropped.map(({ row, reason }) => ({
@@ -80,9 +98,14 @@ export function settleFed(
     if (!settles(d, handled, def.retryAfterFailureMs)) {
       return []
     }
-    const runId = d ? (runIds.get(d.key) ?? null) : null
-    // The run started for it already failed (its launch, or the engine while opening it): the id stays pending.
-    if (runId !== null && FAILED_RUN.has(store.runs.get(runId)?.status ?? 'running')) {
+    const startedHere = d?.verdict === 'started' || d?.verdict === 'asked'
+    const runId = runOf(d, runIds, holders)
+    // Started (or asked) here, the id is consumed only with a run that exists and hasn't already failed: a card that
+    // failed to record, a launch never made, or one that failed at once leaves it pending.
+    if (
+      startedHere &&
+      (runId === null || FAILED_RUN.has(store.runs.get(runId)?.status ?? 'running'))
+    ) {
       return []
     }
     return [{ rowId: row.id, verdict: d?.verdict ?? null, reason: d?.reason ?? NOT_READ, runId }]
