@@ -13,6 +13,8 @@ export const LSREGISTER =
 // Anchored to argv[0]: the detached terminal daemon carries the main binary path as a later argument.
 export const MAIN_PROCESS_PATTERN =
   '^[^ ]*/(Applications|dist/mac[^/ ]*)/Pilot\\.app/Contents/MacOS/Pilot( |$)'
+// The terminal daemon's entry script, in its command line.
+export const DAEMON_ENTRY = '/out/main/daemon-entry.js'
 export const EXIT_TIMEOUT_MS = 30_000
 export const CLI_TIMEOUT_MS = 60_000
 const POLL_MS = 500
@@ -61,11 +63,18 @@ export function mainPids(deps) {
   return pids(deps.run('pgrep', ['-f', MAIN_PROCESS_PATTERN]))
 }
 
-// Why: helpers whose parent is the old main pid die with it. The terminal daemon is spawned detached
-// (parent 1) and survives quits on purpose, so it is never in this list. Read it before the quit:
-// afterwards the orphans have parent 1 too.
+// Why: helpers whose parent is the old main pid die with it. The terminal daemon survives quits on
+// purpose, so it is left out by its entry script: while the main that spawned it runs, the daemon is
+// still its child. Read the list before the quit: afterwards the orphans have parent 1 too.
 export function helperPids(deps, mainPid) {
-  return pids(deps.run('pgrep', ['-P', mainPid]))
+  const r = deps.run('pgrep', ['-lf', '-P', mainPid])
+  if (r.code !== 0) {
+    return []
+  }
+  return r.stdout
+    .split('\n')
+    .filter((line) => line.trim() !== '' && !line.includes(DAEMON_ENTRY))
+    .map((line) => line.trim().split(/\s+/)[0])
 }
 
 export function dbFiles(home) {

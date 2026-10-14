@@ -37,6 +37,17 @@ const AUTOMATIONS = JSON.stringify({
   }
 })
 
+const isChildList = (c: Call) => c.cmd === 'pgrep' && c.args.includes('-P')
+
+const HELPER =
+  '/Applications/Pilot.app/Contents/Frameworks/Pilot Helper.app/Contents/MacOS/Pilot Helper'
+const CHILDREN = [
+  `201 ${HELPER} --type=gpu-process`,
+  `202 ${HELPER} --type=utility`,
+  `203 ${HELPER} /Applications/Pilot.app/Contents/Resources/app.asar.unpacked/out/main/daemon-entry.js --socket /s`,
+  ''
+].join('\n')
+
 describe('quitPilot', () => {
   it('does nothing when Pilot is not running', async () => {
     const { deps, calls } = makeDeps(() => ({ code: 1 }))
@@ -44,14 +55,14 @@ describe('quitPilot', () => {
     expect(calls.map((c) => c.cmd)).toEqual(['pgrep'])
   })
 
-  // A running Pilot: main pid 100 with helper children 201 and 202; a detached daemon (parent 1) is not listed.
+  // A running Pilot: main pid 100 with helper children 201 and 202, and the terminal daemon 203 it spawned.
   function running(
     opts: { mainGoneAfter?: number; helperAliveChecks?: number; dbHeldChecks?: number } = {}
   ) {
     const n = { main: 0, helper: 0, db: 0 }
     const stub = makeDeps((c) => {
-      if (c.cmd === 'pgrep' && c.args[0] === '-P') {
-        return { stdout: '201\n202\n' }
+      if (isChildList(c)) {
+        return { stdout: CHILDREN }
       }
       if (c.cmd === 'pgrep') {
         return ++n.main <= (opts.mainGoneAfter ?? 3) ? { stdout: '100\n' } : { code: 1 }
@@ -73,13 +84,13 @@ describe('quitPilot', () => {
     expect(calls.find((c) => c.cmd === 'osascript')?.args[1]).toContain('dev.nsitapara.pilot')
   })
 
-  it("waits for the old main pid's helpers, found before the quit, never for the detached daemon", async () => {
+  it("waits for the old main pid's helpers, found before the quit, never for the terminal daemon", async () => {
     const { deps, calls, n } = running({ helperAliveChecks: 5 })
     await install.quitPilot(deps)
     const psPids = calls.filter((c) => c.cmd === 'ps').map((c) => c.args[1])
     expect(new Set(psPids)).toEqual(new Set(['201', '202']))
     expect(n.helper).toBeGreaterThan(5)
-    const order = calls.map((c) => (c.cmd === 'pgrep' && c.args[0] === '-P' ? 'children' : c.cmd))
+    const order = calls.map((c) => (isChildList(c) ? 'children' : c.cmd))
     expect(order.indexOf('children')).toBeLessThan(order.indexOf('osascript'))
     expect(calls.some((c) => c.cmd === 'pgrep' && c.args.join(' ').includes('Helper'))).toBe(false)
   })
@@ -221,7 +232,7 @@ describe('installPilot', () => {
     let up = true
     const sleeps: number[] = []
     const stub = makeDeps((c) => {
-      if (c.cmd === 'pgrep' && c.args[0] !== '-P') {
+      if (c.cmd === 'pgrep' && !isChildList(c)) {
         return up ? { stdout: '100\n' } : { code: up ? 0 : 1 }
       }
       if (c.cmd === 'osascript') {
