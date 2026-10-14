@@ -57,6 +57,7 @@ export const runShell: ShellRunner = async (spec) => {
     stdout: result.stdout,
     stderr: result.stderr,
     timedOut: result.timedOut,
+    // Stdout or stderr passed 1 MiB (runProcess sets outputTruncated for either).
     truncated: result.outputTruncated === true
   }
 }

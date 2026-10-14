@@ -207,7 +207,13 @@ describe('settles: a fed id is consumed only when its tick started a run or the 
     ['gone from its source (closed, or not found)', undefined, new Map(), RETRY, true],
     ['waiting out retry_after_failure', decision('notdue'), handled(FAILED), RETRY, false],
     ['not due by its scope, never handled', decision('notdue'), new Map(), RETRY, false],
-    ['skipped by a check, quota or a busy worktree', decision('skipped'), new Map(), RETRY, false],
+    [
+      "skipped by a check, a field script's not due, quota or a busy worktree",
+      decision('skipped'),
+      new Map(),
+      RETRY,
+      false
+    ],
     ['over the limit', decision('over_limit'), new Map(), RETRY, false]
   ] as [string, ItemDecision | undefined, Map<string, HandledState>, number | null, boolean][])(
     '%s → %s',

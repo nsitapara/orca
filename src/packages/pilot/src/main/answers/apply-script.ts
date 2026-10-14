@@ -120,7 +120,7 @@ export async function applyScript(
   const result = attempted.outcome === 'asked' ? actionFailed(attempted.detail) : attempted
   const parts = Object.keys(item.parts).length > 0
   // A push pilotcli skipped (spec E): the card stays open with why it wasn't pushed.
-  if (result.keepOpen && !parts) {
+  if (result.outcome === 'stale' && result.keepOpen && !parts) {
     reaskInboxItem(deps.inbox, item.id, result.detail)
     return { kind: 'reasked' }
   }

@@ -256,6 +256,13 @@ describe('applyScript', () => {
     })
   })
 
+  it('closes a done action that carries keepOpen, since only a stale result keeps its card open', async () => {
+    const { deps, item, approve } = setup({ ...DONE, keepOpen: true })
+    approve()
+    expect(await applyScript(deps, item(), [])).not.toEqual({ kind: 'reasked' })
+    expect(item().status).not.toBe('open')
+  })
+
   it('hands an action that needs judgement to the agent', async () => {
     const { deps, item, approve } = setup({
       ...DONE,

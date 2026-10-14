@@ -76,7 +76,7 @@ export const STEP_COLUMNS: Record<keyof StepPatch, string> = {
 }
 
 // Values go in as they are, except outputs (JSON text) and the pinned flag (0/1), whose columns are
-// NOT NULL, and the launch args (JSON text, or NULL).
+// NOT NULL, and the launch args and the result (JSON text, or NULL).
 export function encodeStep(patch: StepPatch): Record<string, unknown> {
   const encoded: Record<string, unknown> = { ...patch }
   if ('outputs' in patch) {
