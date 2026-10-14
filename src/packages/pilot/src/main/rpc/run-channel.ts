@@ -7,6 +7,7 @@ import type {
   RunRow,
   StepRow
 } from '../../shared/api-types'
+import { homeOf } from '../../shared/api-types-env'
 import type { PilotContext } from '../pilot-services'
 import { readMode } from '../run/modes'
 
@@ -171,7 +172,7 @@ export function recordRunOutput(
     at: now(),
     automationId: run.automationId,
     runId: run.id,
-    worktreePath: run.worktreePath,
+    worktreePath: homeOf(run),
     itemKey: run.itemKey,
     kind: 'step_output',
     payload: { step: step.name, outputs: p.outputs }
@@ -190,7 +191,7 @@ export function recordRunEvent(
     at: now(),
     automationId: run.automationId,
     runId: run.id,
-    worktreePath: run.worktreePath,
+    worktreePath: homeOf(run),
     itemKey: run.itemKey,
     kind: p.kind,
     payload: p.payload ?? {}

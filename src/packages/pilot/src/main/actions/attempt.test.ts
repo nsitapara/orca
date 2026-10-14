@@ -108,6 +108,25 @@ describe('attemptAction', () => {
     expect(store.events.list({ runId: 'run-1', kinds: ['action_run'] })).toHaveLength(1)
   })
 
+  it("records an env run's action against its home, not the throwaway it works in", async () => {
+    const { store, deps } = setup(['commit', 'push'])
+    store.runs.envs.begin('run-1', '/wt', {})
+    store.runs.envs.ready('run-1', {
+      mode: 'throwaway',
+      reason: '',
+      path: '/agents/agents-run-1',
+      home: '/wt',
+      worktreeId: 'id',
+      sha: null,
+      envFile: null,
+      vars: {},
+      stack: null
+    })
+    await attemptAction(deps, REQ)
+    const events = store.events.list({ runId: 'run-1', kinds: ['action_run'] })
+    expect(events.map((e) => e.worktreePath)).toEqual(['/wt'])
+  })
+
   it("asks the run's person instead when the power is missing, runs nothing, and records the ask", async () => {
     const { store, push, deps } = setup()
     const result = await attemptAction(deps, REQ)

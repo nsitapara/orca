@@ -113,11 +113,12 @@ export class SpendStore {
     return { costUsd: Number(r.cost), tokens: Number(r.tokens), runs: Number(r.runs) }
   }
 
-  // Every bucket of a step that had a session, in usage.py's row order: day, start, model.
+  // Every bucket of a step that had a session, in usage.py's row order: day, start, model. worktree_path is where the session
+  // ran (usage.json's cwd): an env run's folder, not its home.
   reportBuckets(): ReportBucketRow[] {
     return this.db
       .prepare(
-        `SELECT r.automation_id, r.item_label, COALESCE(r.home_path, r.worktree_path) AS worktree_path, s.agent, s.session_id,
+        `SELECT r.automation_id, r.item_label, r.worktree_path, s.agent, s.session_id,
            s.started_at AS step_started_at, u.day, u.model, u.requests, u.input, u.cache_read,
            u.cache_write, u.output, u.cost_usd
          ${FROM} WHERE s.session_id IS NOT NULL ORDER BY u.day, s.started_at, u.model`
@@ -136,11 +137,11 @@ export class SpendStore {
     return Number(r.n)
   }
 
-  // usage.py's gaps: an agent tab opened, but no session (or no transcript) was ever found for it.
+  // usage.py's gaps: an agent tab opened, but no session (or no transcript) was ever found for it. Where it ran, as above.
   sessionlessSteps(): SessionlessStep[] {
     return this.db
       .prepare(
-        `SELECT r.automation_id, s.agent, s.started_at, COALESCE(r.home_path, r.worktree_path) AS worktree_path, r.item_label
+        `SELECT r.automation_id, s.agent, s.started_at, r.worktree_path, r.item_label
          FROM steps s JOIN runs r ON r.id = s.run_id
          WHERE s.kind = 'agent' AND s.usage_measured_at IS NOT NULL AND s.tokens IS NULL
            AND s.terminal_handle IS NOT NULL

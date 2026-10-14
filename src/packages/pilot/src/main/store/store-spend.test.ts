@@ -164,6 +164,54 @@ describe('report queries', () => {
   })
 })
 
+// usage.json's cwd is where a session ran: an env run's folder, not its home (usage.py names the worktree after the cwd).
+describe('report queries for an env run', () => {
+  it.each([
+    [
+      'its measured buckets',
+      (store: PilotStore) => {
+        store.runs.updateStep('r1', 0, { sessionId: 's-r1-0' })
+        return store.spend.reportBuckets().map((b) => b.worktreePath)
+      }
+    ],
+    [
+      'its steps with no session',
+      (store: PilotStore) => {
+        store.runs.createStep({
+          runId: 'r1',
+          idx: 2,
+          name: 's2',
+          agent: 'codex',
+          skill: null,
+          startedAt: 5
+        })
+        store.runs.updateStep('r1', 2, {
+          status: 'failed',
+          terminalHandle: 'term_9',
+          finishedAt: 6
+        })
+        store.usage.saveStepUsage('r1', 2, [], false, 7)
+        return store.spend.sessionlessSteps().map((s) => s.worktreePath)
+      }
+    ]
+  ])('%s say where it ran: its throwaway folder', (_name, read) => {
+    const store = setup()
+    store.runs.envs.begin('r1', '/wt', {})
+    store.runs.envs.ready('r1', {
+      mode: 'throwaway',
+      reason: '',
+      path: '/agents/agents-r1',
+      home: '/wt',
+      worktreeId: 'id',
+      sha: null,
+      envFile: null,
+      vars: {},
+      stack: null
+    })
+    expect(read(store)).toEqual(['/agents/agents-r1'])
+  })
+})
+
 describe('SpendStore.totals by group', () => {
   it("--by mr totals only the MR runs, so the total equals the rows' sum", () => {
     const store = setup()
