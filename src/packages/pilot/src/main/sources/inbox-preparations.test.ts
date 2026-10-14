@@ -5,7 +5,7 @@ import { PilotStore } from '../store/store'
 import { sourceContext } from './__fixtures__/source-context'
 import { inboxPreparationSource } from './inbox-preparations'
 
-function setup() {
+function setup(head?: string) {
   const store = PilotStore.open(':memory:')
   store.definitions.saveValid(
     testDefinition({ id: 'origin' }),
@@ -33,7 +33,12 @@ function setup() {
     source: 'engine',
     vaultRef: null,
     preparation: queuedPreparation(
-      { key: 'decision', context: 'Investigate saved evidence', requirements: ['context'] },
+      {
+        key: 'decision',
+        context: 'Investigate saved evidence',
+        requirements: ['context'],
+        ...(head ? { head } : {})
+      },
       1
     )
   })
@@ -63,6 +68,16 @@ describe('inbox preparation source', () => {
     ).toEqual([])
     store.inbox.update('item', { status: 'answered' }, 2)
     expect((await source.list(sourceContext(), {})).items).toEqual([])
+    store.close()
+  })
+
+  it.each([
+    ['the head its producer sent', '9c1e2f0', '9c1e2f0'],
+    ['no head', undefined, null]
+  ])('lists preparation.head: %s', async (_name, head, expected) => {
+    const { store, source } = setup(head)
+    const { items } = await source.list(sourceContext(), {})
+    expect(items[0].fields['preparation.head']).toBe(expected)
     store.close()
   })
 

@@ -49,6 +49,7 @@ export function inboxPreparationSource(
             'preparation.origin_automation': item.automationId,
             'preparation.origin_run': item.runId,
             'preparation.error': p.error,
+            'preparation.head': p.input.head ?? null,
             'worktree.path': item.worktreePath ?? ctx.repo.path
           },
           worktreeHint: { path: item.worktreePath ?? ctx.repo.path },

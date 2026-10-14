@@ -1,3 +1,4 @@
+import { normalizeEnvWorkspace } from './env-workspace'
 import type { RawAutomation, RawCheck, RawJob, RawStep } from './schema'
 import type {
   AgentKind,
@@ -121,6 +122,9 @@ function normalizeWorkspace(raw: RawAutomation): WorkspaceDef {
   }
   if (workspace === 'main_checkout') {
     return { kind: 'main_checkout' }
+  }
+  if ('env' in workspace) {
+    return normalizeEnvWorkspace(workspace.env)
   }
   const created = workspace.new_worktree
   return {

@@ -2,6 +2,7 @@ import { z } from 'zod'
 import { isValidTimeZone, parseCron } from '../schedule/cron'
 import { RUN_PLACEHOLDER_ADVICE, envNameProblem, runPlaceholders } from '../run/shell-template'
 import { PLACEHOLDER } from '../template'
+import { envWorkspaceErrors } from './env-workspace'
 import { feedsOf, stepNames } from './normalize'
 import type { RawAutomation, RawStep } from './schema'
 
@@ -281,6 +282,7 @@ export function definitionErrors(raw: RawAutomation): string[] {
     ...quotaErrors(raw),
     ...oncePerErrors(raw),
     ...combinationErrors(raw),
+    ...envWorkspaceErrors(raw),
     ...windowErrors(raw),
     ...fieldNameErrors(raw),
     ...jobErrors(raw)

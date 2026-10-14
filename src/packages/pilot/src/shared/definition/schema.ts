@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import { OUTPUT_KEY } from '../run/outputs'
 import { durationSchema } from './duration'
+import { envWorkspaceSchema } from './env-workspace'
 import type { AgentKind, ItemKind, Power } from './types'
 
 export const ITEM_KINDS = [
@@ -85,9 +86,13 @@ const workspace = z.union(
         // `run` runs the repo's worktree setup after creating it, the way `orca worktree create --setup run` does.
         setup: z.enum(['run', 'skip']).optional()
       })
-    })
+    }),
+    envWorkspaceSchema
   ],
-  { error: 'expected item_worktree, main_checkout or { new_worktree: { base, name } }' }
+  {
+    error:
+      'expected item_worktree, main_checkout, { new_worktree: { base, name } } or { env: { … } }'
+  }
 )
 
 const outputName = z
