@@ -88,14 +88,7 @@ const REVIEW = {
   approved_by: 'none'
 }
 const UNRESOLVED = {
-  notes: [
-    {
-      author: { username: 'shivan2418' },
-      resolvable: true,
-      resolved: false,
-      system: false
-    }
-  ]
+  notes: [{ author: { username: 'shivan2418' }, resolvable: true, resolved: false, system: false }]
 }
 
 describe('mergeRequestSource', () => {
@@ -234,18 +227,12 @@ describe('mergeRequestSource', () => {
   it.each([
     [
       'the list',
-      {
-        list: {
-          'merge_requests?state=opened&author_username=nish8': new Error('glab: 401')
-        }
-      }
+      { list: { 'merge_requests?state=opened&author_username=nish8': new Error('glab: 401') } }
     ],
     [
       "an MR's details",
       {
-        list: {
-          'merge_requests?state=opened&author_username=nish8': [listed(1561, 'nish8', 'b')]
-        },
+        list: { 'merge_requests?state=opened&author_username=nish8': [listed(1561, 'nish8', 'b')] },
         details: { 1561: new Error('glab: 401') }
       }
     ]
