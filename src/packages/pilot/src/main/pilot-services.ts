@@ -211,7 +211,8 @@ function openPilot(
     },
     activity: runtimeActivity(runtime, fieldDeps.terminalAlive),
     launch: (req) => wired.engine.startRun(req),
-    ask: { store, now, inbox }
+    ask: { store, now, inbox },
+    previewEnvs: (def, decisions) => envs.preview(def, decisions)
   }
   const repoProblems = new Map<string, RepoProblem>()
   const withRepoProblems = (loaded: LoadedDefinitions): LoadedDefinitions =>

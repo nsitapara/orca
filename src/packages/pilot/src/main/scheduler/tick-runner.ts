@@ -44,6 +44,8 @@ export type TickDeps = DecideDeps & {
   launch(req: LaunchRequest): Promise<unknown>
   // Asks first: the card an `asked` decision leaves, and the run it holds (Task 25).
   ask: AskDeps
+  // A dry run of an env automation: where each started item would work (main/envs/preview.ts).
+  previewEnvs?(def: AutomationDefinition, decisions: ItemDecision[]): Promise<void>
 }
 // `pass` is the scheduler pass's fetch cache, shared by every automation that ticks in that pass. `trigger`: the run
 // whose feed (run: now) asked for this tick, recorded on it for Activity.
@@ -281,6 +283,9 @@ export async function runTick(
         runIdFor: (n) => `${makeRunId(def.id, at, n, tickId)}-ask`
       })
       await startRuns(def, decisions, tickId, deps, runIds, unlaunched)
+    }
+    if (opts.dryRun && deps.previewEnvs) {
+      await deps.previewEnvs(def, decisions)
     }
     deps.store.recordDecisions(tickId, decisions, runIds)
     if (!opts.dryRun) {

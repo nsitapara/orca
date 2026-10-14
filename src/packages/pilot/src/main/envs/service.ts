@@ -1,7 +1,7 @@
 import { mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 import type { OrcaRuntimeService } from '../../../../../main/runtime/orca-runtime'
-import type { RunRow } from '../../shared/api-types'
+import type { ItemDecision, RunRow } from '../../shared/api-types'
 import type { RunEnd } from '../../shared/run/step-plan'
 import type { AutomationDefinition } from '../../shared/definition/types'
 import { envRunKey } from '../../shared/run/env-args'
@@ -14,6 +14,7 @@ import type { PilotStore } from '../store/store'
 import { ownProcessIdentity, writerGone } from '../store/store-actions'
 import { stopOrphanCreate } from './orphan-create'
 import { pilotcliRunner, type Pilotcli } from './pilotcli'
+import { previewEnvs } from './preview'
 import { createPreparations, type EnvPreparer, type Preparations } from './prepare'
 import { recoverPreparing } from './recover'
 import { resolveEnvPath } from './resolve-path'
@@ -47,6 +48,8 @@ export type EnvService = {
   runEnded(run: RunRow): void
   // The scheduler's poll: the deletes now due (a retry, a not_yet, a run that ended outside closeRun). Never awaits one.
   housekeep(): void
+  // A dry run's workspace preview (main/envs/preview.ts): asks `env create --dry-run true`, makes nothing.
+  preview(def: AutomationDefinition, decisions: ItemDecision[]): Promise<void>
   // Only the process that runs the scheduler, at its start: recover what a stopped Pilot left, then the sweep.
   startup(): Promise<void>
   stop(): void
@@ -117,6 +120,12 @@ export function createEnvService(deps: EnvServiceDeps): EnvService {
     answerHooks: { preparer: preparations, close },
     runEnded,
     housekeep: () => teardowns.housekeep(),
+    preview: (def, decisions) =>
+      previewEnvs(
+        { runs: deps.store.runs, pilotcli, nameOf: nameOf(deps.definitionFor), now: deps.now },
+        def,
+        decisions
+      ),
     async startup() {
       await recoverPreparing({
         store: deps.store,
