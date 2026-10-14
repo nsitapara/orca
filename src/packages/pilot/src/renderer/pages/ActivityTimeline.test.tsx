@@ -12,7 +12,6 @@ const tick: ActivityTick = {
   automationId: 'ci',
   startedAt: Date.UTC(2026, 9, 10, 19, 10),
   finishedAt: Date.UTC(2026, 9, 10, 19, 10, 9),
-  dryRun: false,
   status: 'ok',
   error: null,
   counts: { started: 1, skipped: 1 },
@@ -175,7 +174,7 @@ describe('ActivityTimeline', () => {
     expect(screen.queryByRole('button', { name: /why/i })).toBeNull()
   })
 
-  it('marks dry runs, shows run outcome and cost, and the empty state', () => {
+  it('shows each tick by number, run outcome and cost, and the empty state', () => {
     const failedRun = {
       ...tick.runs[0],
       id: 'ci-2',
@@ -185,13 +184,13 @@ describe('ActivityTimeline', () => {
     render(
       <ActivityTimeline
         ticks={[
-          { ...tick, id: 8, dryRun: true },
+          { ...tick, id: 8 },
           { ...tick, id: 6, runs: [failedRun] }
         ]}
         checkNames={[]}
       />
     )
-    expect(screen.getByText('Dry run')).toBeTruthy()
+    expect(screen.getByText('Tick 8')).toBeTruthy()
     expect(screen.getByText('Run ci-1 · !1561 web-1493')).toBeTruthy()
     expect(screen.getByText('Running')).toBeTruthy()
     expect(screen.getAllByText('$0.84')).toHaveLength(2)

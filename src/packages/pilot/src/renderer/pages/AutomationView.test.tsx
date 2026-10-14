@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { TickOutcome } from '../../shared/api-types'
 import { detail, failedRunTick } from './fixtures'
@@ -76,7 +76,7 @@ describe('AutomationView', () => {
     expect(calls('pilot.automations.tickNow')).toHaveLength(0)
   })
 
-  it('Dry run needs no confirm, disables both buttons while running, then reports', async () => {
+  it('Dry run needs no confirm, disables both buttons while running, then shows what would happen', async () => {
     let finish: (v: TickOutcome) => void = () => {}
     pilotRpc.mockImplementation((method: string) => {
       if (method === 'pilot.automations.get') {
@@ -104,9 +104,29 @@ describe('AutomationView', () => {
       { timeoutMs: 180_000 }
     ])
     const before = calls('pilot.automations.activity').length
-    finish({ tickId: 5, status: 'failed', error: 'repo not found', decisions: [] })
-    expect(await screen.findByText('Tick 5 · failed: repo not found')).toBeTruthy()
-    await waitFor(() => expect(calls('pilot.automations.activity').length).toBeGreaterThan(before))
+    finish({
+      tickId: null,
+      status: 'ok',
+      error: null,
+      decisions: [
+        {
+          key: 'linear:WEB-2152',
+          label: 'WEB-2152',
+          verdict: 'started',
+          reason: 'All checks pass',
+          checks: [],
+          onceKey: 'WEB-2152',
+          fields: { 'ticket.url': 'https://linear.app/herasight/issue/WEB-2152' }
+        }
+      ]
+    })
+    expect(await screen.findByText('1 checked · 1 would start')).toBeTruthy()
+    expect(screen.getByText('Nothing was started or saved.')).toBeTruthy()
+    expect(screen.getByText('Would start')).toBeTruthy()
+    // Nothing was stored, so Activity isn't reloaded.
+    expect(calls('pilot.automations.activity')).toHaveLength(before)
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }))
+    expect(screen.queryByText('1 checked · 1 would start')).toBeNull()
   })
 
   it.each([

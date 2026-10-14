@@ -25,7 +25,7 @@ function setup(
   displayOnly: string[] = []
 ) {
   const store = PilotStore.open(join(mkdtempSync(join(tmpdir(), 'pilot-start-run-')), 'db.sqlite'))
-  const tickId = store.startTick('rev', false, 1)
+  const tickId = store.startTick('rev', 1)
   store.recordDecisions(
     tickId,
     [

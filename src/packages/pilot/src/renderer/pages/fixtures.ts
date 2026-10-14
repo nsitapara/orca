@@ -51,7 +51,6 @@ export const failedRunTick: ActivityTick = {
   automationId: 'fix-ci',
   startedAt: Date.UTC(2026, 9, 10, 19, 10),
   finishedAt: Date.UTC(2026, 9, 10, 19, 11),
-  dryRun: false,
   status: 'ok',
   error: null,
   counts: { started: 1 },

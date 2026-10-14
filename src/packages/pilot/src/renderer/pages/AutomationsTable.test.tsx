@@ -11,7 +11,6 @@ const tick = (automationId: string, minutesAgo: number, counts: TickRow['counts'
   automationId,
   startedAt: NOW - minutesAgo * 60_000,
   finishedAt: NOW - minutesAgo * 60_000 + 1000,
-  dryRun: true,
   status: 'ok',
   error: null,
   counts
@@ -99,10 +98,10 @@ describe('AutomationsTable: a job of several automations', () => {
     expect(job.getByText('Pipelines → Linear tickets')).toBeTruthy()
     // combined: on because stage 2 is; the newest tick is stage 2's
     expect(job.getByText('Enabled')).toBeTruthy()
-    expect(job.getByText('2 min ago · dry run · 0 checked')).toBeTruthy()
+    expect(job.getByText('2 min ago · 0 checked')).toBeTruthy()
     const first = within(rows[2])
     expect(first.getByText('5,35 * * * *')).toBeTruthy()
-    expect(first.getByText('3 min ago · dry run · 1 checked · 1 not due')).toBeTruthy()
+    expect(first.getByText('3 min ago · 1 checked · 1 not due')).toBeTruthy()
     expect(first.getByText('Paused')).toBeTruthy()
     expect(within(rows[3]).getByText('Linear tickets')).toBeTruthy()
   })

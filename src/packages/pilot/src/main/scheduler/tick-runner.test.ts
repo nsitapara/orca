@@ -224,7 +224,7 @@ describe('runTick', () => {
     d.launch = async (req) => {
       d.launched.push(req.decision.key)
       // Another automation's tick starts an agent in the second item's worktree meanwhile.
-      const otherTick = d.store.startTick('other', false, d.now())
+      const otherTick = d.store.startTick('other', d.now())
       d.store.runs.create({
         id: 'other-run',
         automationId: 'other',
@@ -251,7 +251,7 @@ describe('runTick', () => {
   })
 
   const otherRunAt = (d: ReturnType<typeof deps>, path: string) => {
-    const tick = d.store.startTick('other', false, d.now())
+    const tick = d.store.startTick('other', d.now())
     d.store.runs.create({
       id: `other-${path}`,
       automationId: 'other',
@@ -367,16 +367,22 @@ describe('runTick', () => {
     ])
   })
 
-  it('changes nothing in a dry run except the recorded dry-run tick', async () => {
+  it('stores nothing in a dry run, whether it decides or fails: no tick, no runs, no keys', async () => {
     const d = deps()
     const result = await runTick(def, people, d, { dryRun: true })
+    expect(result).toMatchObject({ tickId: null, status: 'ok' })
     expect(result.decisions.map((x) => x.verdict)).toEqual(['started', 'started'])
     expect(d.launched).toEqual([])
     expect(d.store.handledKeys('fix-failed-ci').size).toBe(0)
     expect(d.store.seenKeys('fix-failed-ci').size).toBe(0)
-    expect(d.store.lastTick('fix-failed-ci')).toMatchObject({ dryRun: true, status: 'ok' })
-    expect(d.store.runs.forTick(result.tickId)).toEqual([])
-    expect(d.store.tickItems(result.tickId).map((i) => i.runId)).toEqual([null, null])
+    expect(d.store.lastTick('fix-failed-ci')).toBeNull()
+    const failing = deps({ sources: failingSources(new Error('glab: 502 Bad Gateway')) })
+    expect(await runTick(def, people, failing, { dryRun: true })).toMatchObject({
+      tickId: null,
+      status: 'failed',
+      error: 'glab: 502 Bad Gateway'
+    })
+    expect(failing.store.lastTick('fix-failed-ci')).toBeNull()
   })
 })
 
@@ -593,7 +599,7 @@ describe('runTick with start: ask_first (Task 25)', () => {
     const d = deps()
     const result = await runTick(askDef, people, d, { dryRun: true })
     expect(result.decisions.map((x) => x.verdict)).toEqual(['asked', 'asked'])
-    expect(d.store.runs.forTick(result.tickId)).toEqual([])
+    expect(result.tickId).toBeNull()
     expect(d.store.inbox.list({})).toEqual([])
   })
 })
@@ -709,7 +715,7 @@ describe('runTick v2', () => {
         list: async () => ({ items: [], warnings: ['GitLab listed 100 of 120 MRs'] })
       }
     })
-    const result = await runTick(def, people, d, { dryRun: true })
+    const result = await runTick(def, people, d, { dryRun: false })
     expect(result.warnings).toEqual(['GitLab listed 100 of 120 MRs'])
     // and on the tick itself, so Activity shows them
     expect(d.store.listTicks(def.id, 1)[0].warnings).toEqual(['GitLab listed 100 of 120 MRs'])
@@ -733,7 +739,7 @@ describe('runTick v2', () => {
     expect((seen as SourceContext | null)?.fetch).toBe(pass)
   })
 
-  it('makes a pass of its own, named for the tick, when it is given none', async () => {
+  it('makes a pass of its own, named for the tick or the dry run, when it is given none', async () => {
     let seen: SourceContext | null = null
     const d = deps({
       sources: {
@@ -744,7 +750,9 @@ describe('runTick v2', () => {
         scope: () => null
       }
     })
-    const result = await runTick(def, people, d, { dryRun: true })
+    const result = await runTick(def, people, d, { dryRun: false })
     expect((seen as SourceContext | null)?.fetch.passId).toBe(`tick-${result.tickId}`)
+    await runTick(def, people, d, { dryRun: true })
+    expect((seen as SourceContext | null)?.fetch.passId).toBe('dry-run-fix-failed-ci')
   })
 })

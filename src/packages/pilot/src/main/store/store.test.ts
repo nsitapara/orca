@@ -75,7 +75,7 @@ describe('PilotStore', () => {
 
   it('records a tick with its item decisions', () => {
     const store = freshStore()
-    const tick = store.startTick('fix-failed-ci', false, 1000)
+    const tick = store.startTick('fix-failed-ci', 1000)
     store.recordDecisions(
       tick,
       [decision('!1561', 'started'), decision('!1574', 'skipped')],
@@ -87,11 +87,10 @@ describe('PilotStore', () => {
     expect(store.lastTick('fix-failed-ci')).toMatchObject({
       id: tick,
       status: 'ok',
-      dryRun: false,
       counts: { started: 1, skipped: 1 },
       warnings: ["WEB-9 isn't readable in Linear; skipped"]
     })
-    const quiet = store.startTick('fix-failed-ci', true, 3000)
+    const quiet = store.startTick('fix-failed-ci', 3000)
     store.finishTick(quiet, 'ok', null, {}, 3001)
     expect(store.listTicks('fix-failed-ci', 1)[0].warnings).toEqual([])
     expect(store.tickItems(tick).map((i) => [i.itemKey, i.verdict, i.runId])).toEqual([
@@ -245,7 +244,7 @@ describe('PilotStore', () => {
   it('removes ticks older than 30 days with their items, keeping runs and each newest tick', () => {
     const store = freshStore()
     const now = TICK_RETENTION_MS + 1_000
-    const old = store.startTick('a', false, 1)
+    const old = store.startTick('a', 1)
     store.recordDecisions(old, [decision('!1', 'started')], new Map([['!1', 'run-old']]))
     store.finishTick(old, 'ok', null, {}, 2)
     store.runs.create({
@@ -257,25 +256,25 @@ describe('PilotStore', () => {
       worktreePath: null,
       startedAt: 1
     })
-    const newer = store.startTick('a', false, 500)
+    const newer = store.startTick('a', 500)
     store.finishTick(newer, 'ok', null, {}, 501)
-    const recent = store.startTick('a', false, now - 1)
+    const recent = store.startTick('a', now - 1)
     store.finishTick(recent, 'ok', null, {}, now)
-    const lonely = store.startTick('b', false, 1)
+    const lonely = store.startTick('b', 1)
     store.finishTick(lonely, 'ok', null, {}, 2)
     expect(store.housekeep(now)).toEqual({ interrupted: 0, pruned: 2 })
     expect(store.listTicks('a', 10).map((t) => t.id)).toEqual([recent])
     expect(store.tickItems(old)).toEqual([])
     expect(store.runs.get('run-old')?.tickId).toBe(old)
     // An automation that hasn't ticked in 30 days keeps its last tick.
-    expect(store.lastRealTick('b')?.id).toBe(lonely)
+    expect(store.lastTick('b')?.id).toBe(lonely)
   })
 
   it('closes a tick still running after an hour as interrupted, and leaves a younger one', () => {
     const store = freshStore()
     const now = 10 * STUCK_TICK_MS
-    const stuck = store.startTick('a', false, now - STUCK_TICK_MS - 1)
-    const young = store.startTick('b', false, now - 1_000)
+    const stuck = store.startTick('a', now - STUCK_TICK_MS - 1)
+    const young = store.startTick('b', now - 1_000)
     expect(store.housekeep(now)).toEqual({ interrupted: 1, pruned: 0 })
     expect(store.lastTick('a')).toMatchObject({
       id: stuck,
@@ -304,21 +303,21 @@ describe('PilotStore', () => {
     expect(() => store.markHandled('a', 'k:1', 'run-2', 2)).not.toThrow()
     expect(store.handledKeys('a')).toEqual(new Set(['k:1']))
     expect(() => store.unmarkHandled('a', 'missing')).not.toThrow()
-    const tick = store.startTick('a', true, 1)
+    const tick = store.startTick('a', 1)
     expect(() => store.recordDecisions(tick, [], new Map())).not.toThrow()
     expect(store.tickItems(tick)).toEqual([])
   })
 
-  it('finds the last real tick, ignoring dry runs (scheduler timing)', () => {
-    const store = freshStore()
-    expect(store.lastRealTick('a')).toBeNull()
-    store.startTick('a', true, 50)
-    expect(store.lastRealTick('a')).toBeNull()
-    store.startTick('a', false, 100)
-    store.startTick('a', true, 200)
-    store.startTick('b', false, 300)
-    expect(store.lastRealTick('a')).toMatchObject({ startedAt: 100, dryRun: false })
-    expect(store.lastTick('a')).toMatchObject({ startedAt: 200, dryRun: true })
+  it('skips the dry runs stored before dry runs stopped being stored (scheduler timing, Activity)', () => {
+    const path = join(mkdtempSync(join(tmpdir(), 'pilot-store-')), 'pilot-automations.db')
+    const store = PilotStore.open(path)
+    expect(store.lastTick('a')).toBeNull()
+    const real = store.startTick('a', 100)
+    const dry = store.startTick('a', 200)
+    store.startTick('b', 300)
+    new Database(path).prepare('UPDATE ticks SET dry_run = 1 WHERE id = ?').run(dry)
+    expect(store.lastTick('a')?.id).toBe(real)
+    expect(store.listTicks('a', 10).map((t) => t.id)).toEqual([real])
   })
 
   it('unmarks only the once_per key a given run holds', () => {
@@ -426,7 +425,7 @@ describe('PilotStore', () => {
 
   it('records decisions atomically and in insertion order', () => {
     const store = freshStore()
-    const tick = store.startTick('a', false, 1)
+    const tick = store.startTick('a', 1)
     expect(() =>
       store.recordDecisions(tick, [decision('!2', 'started'), decision('!2', 'skipped')], new Map())
     ).toThrow()

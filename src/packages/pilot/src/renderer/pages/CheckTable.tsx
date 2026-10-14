@@ -1,6 +1,12 @@
-import type { TickItemRow } from '../../shared/api-types'
+import type { ItemDecision } from '../../shared/api-types'
 import { verdictLabel } from './format'
 import { CHECKS_WIDTHS_KEY, useColumnWidths, type ColumnSpec } from './use-column-widths'
+
+// One checked item: a stored tick's item or a dry run's decision.
+export type CheckRow = Pick<
+  ItemDecision,
+  'key' | 'label' | 'verdict' | 'reason' | 'checks' | 'fields'
+>
 
 const ITEM: ColumnSpec = { id: 'Item', label: 'Item', defaultWidth: 200, minWidth: 100 }
 const RESULT: ColumnSpec = { id: 'Result', label: 'Result', defaultWidth: 260, minWidth: 140 }
@@ -9,7 +15,7 @@ function checkColumn(name: string): ColumnSpec {
   return { id: `check:${name}`, label: name, defaultWidth: 150, minWidth: 80 }
 }
 
-function CheckCell({ item, name }: { item: TickItemRow; name: string }): React.JSX.Element {
+function CheckCell({ item, name }: { item: CheckRow; name: string }): React.JSX.Element {
   const c = item.checks.find((x) => x.check === name)
   if (!c) {
     return <td className="break-words px-3 py-2 text-muted-foreground">—</td>
@@ -43,12 +49,15 @@ function HeaderCell({
   )
 }
 
+// `dryRun`: the verdicts are what a tick would do.
 export function CheckTable({
   items,
-  checkNames
+  checkNames,
+  dryRun = false
 }: {
-  items: TickItemRow[]
+  items: CheckRow[]
   checkNames: string[]
+  dryRun?: boolean
 }): React.JSX.Element {
   const specs = [ITEM, ...checkNames.map(checkColumn), RESULT]
   const columns = useColumnWidths(CHECKS_WIDTHS_KEY)
@@ -70,7 +79,7 @@ export function CheckTable({
         </thead>
         <tbody>
           {items.map((item) => (
-            <tr key={item.itemKey} className="border-t border-border/50 align-top">
+            <tr key={item.key} className="border-t border-border/50 align-top">
               <td className="truncate px-3 py-2 font-medium" title={item.label}>
                 {item.label}
               </td>
@@ -78,7 +87,7 @@ export function CheckTable({
                 <CheckCell key={name} item={item} name={name} />
               ))}
               <td className="px-3 py-2">
-                <div>{verdictLabel(item.verdict)}</div>
+                <div>{verdictLabel(item.verdict, dryRun)}</div>
                 <div className="break-words text-xs text-muted-foreground">{item.reason}</div>
               </td>
             </tr>

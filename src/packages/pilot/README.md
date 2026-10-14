@@ -58,7 +58,7 @@ How one of the old sweeps that real Orca schedules (`~/.agents/skills/<name>-swe
 
      The output lists the automations, with any definition or people errors. `pilot automations status` should show no folder marked "(missing)". A reload re-scans the folder but doesn't start watching it, so later edits need another reload, until Pilot restarts with the folder already in place.
 3. **Dry-run beside the old sweep.**
-   - Run `pilot automations dry-run --id <id>`. It checks every item and records a dry tick in Activity. Nothing starts.
+   - Run `pilot automations dry-run --id <id>`. It checks every item and prints what a tick would do with each. Nothing starts and nothing is stored.
    - Compare each item with the old sweep's latest tick in its `sweep.log`:
      - old **due** ↔ **started**;
      - old **skip** ↔ **skipped**, **not due** or **not in scope**, with the same reason in substance.
@@ -399,7 +399,7 @@ The console (`~/.agents/skills/agent-console`) reads `pilot automations list-yam
 - the vault job with the same name, else
 - its id.
 
-It reads each automation's `activity`. A job whose automation is switched on takes its schedule and Run by hand from Pilot: Preview runs `dry-run`, and Run now runs `tick`. Keep `ActivityTick`, `RunRow` and `StepRow` field names stable: add fields, never rename one.
+It reads each automation's `activity`. A job whose automation is switched on takes its schedule and Run by hand from Pilot: Preview runs `dry-run`, and Run now runs `tick`. Keep `ActivityTick`, `RunRow` and `StepRow` field names stable: add fields, never rename one. (`dryRun` was dropped on 2026-10-14: dry runs are no longer stored, so Activity holds real ticks only.)
 
 ## Going live
 

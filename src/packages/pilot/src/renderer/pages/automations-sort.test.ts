@@ -17,7 +17,6 @@ const tick = (at: number): TickRow => ({
   automationId: 'x',
   startedAt: at,
   finishedAt: at,
-  dryRun: false,
   status: 'ok',
   error: null,
   counts: {}

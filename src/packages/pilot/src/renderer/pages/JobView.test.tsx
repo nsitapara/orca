@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type {
   ActivityTick,
@@ -70,7 +70,6 @@ function tick(
     automationId,
     startedAt: Date.UTC(2026, 9, 13, 17, minute),
     finishedAt: Date.UTC(2026, 9, 13, 17, minute, 5),
-    dryRun: true,
     status: 'ok',
     error: null,
     counts: {},
@@ -215,10 +214,10 @@ describe('JobView: a job of several automations on one page', () => {
     expect(screen.getByText(/Each open ticket gets one Claude session\.\s+name: two/)).toBeTruthy()
   })
 
-  it('Dry run all dry-runs each stage in stage order, and never ticks for real', async () => {
+  it('Dry run all dry-runs each stage in stage order, shows each, and never ticks for real', async () => {
     serve([STAGE_2, STAGE_1], {
       'pilot.automations.dryRun': ({ id }) => ({
-        tickId: id === 'dev-e2e-fix' ? 21 : 22,
+        tickId: null,
         status: 'ok',
         error: null,
         decisions: [],
@@ -241,15 +240,20 @@ describe('JobView: a job of several automations on one page', () => {
     })
     render(<JobView jobId="13" onBack={() => {}} onOpenStage={() => {}} />)
     fireEvent.click(await screen.findByRole('button', { name: 'Dry run all' }))
-    expect(await screen.findByText('Stage 2: Tick 22 · ok')).toBeTruthy()
-    expect(screen.getByText('Stage 1: Tick 21 · ok')).toBeTruthy()
+    const panels = (await screen.findAllByText('Nothing was started or saved.')).map(
+      (el) => el.closest('section') as HTMLElement
+    )
+    expect(panels.map((p) => within(p).getByText(/^Stage \d$/).textContent)).toEqual([
+      'Stage 1',
+      'Stage 2'
+    ])
     // What would be handed over: dry runs write no handover and trigger nothing.
     expect(
-      screen.getByText(
-        'Stage 1: 1 run would hand stage 2 its ticket output if it succeeds; stage 2 then ticks at once'
+      within(panels[0]).getByText(
+        '1 run would hand stage 2 its ticket output if it succeeds; stage 2 then ticks at once'
       )
     ).toBeTruthy()
-    expect(screen.getByText('Stage 2: Reads 1 handed-over id: WEB-2123')).toBeTruthy()
+    expect(within(panels[1]).getByText('Reads 1 handed-over id: WEB-2123')).toBeTruthy()
     expect(calls('pilot.automations.dryRun').map((c) => c[1])).toEqual([
       { id: 'dev-e2e-fix' },
       { id: 'dev-e2e-fix-start' }

@@ -186,7 +186,7 @@ describe('retiring a "Not prepared" notice', () => {
     const { deps, store } = setup()
     const id = addInboxItem(deps, NOT_PREPARED).id!
     // The automation's last real tick showed the item's worktree, so an add from outside a run may name it.
-    const tickId = store.startTick('ci', false, 1)
+    const tickId = store.startTick('ci', 1)
     const decision = {
       key: 'mr:1',
       label: '!1',

@@ -59,7 +59,6 @@ function tick(id: number, automationId: string, startedAt: number): ActivityTick
     automationId,
     startedAt,
     finishedAt: startedAt + 1,
-    dryRun: true,
     status: 'ok',
     error: null,
     counts: {},

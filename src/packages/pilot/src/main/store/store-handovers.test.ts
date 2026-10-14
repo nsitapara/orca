@@ -141,8 +141,8 @@ describe('HandoverStore: ids one stage hands the next, kept until a tick of the 
 
   it('keeps what triggered a tick, read back by tick id', () => {
     const store = open()
-    const tickId = store.startTick('dev-e2e-fix-start', false, 1)
-    const other = store.startTick('dev-e2e-fix-start', false, 2)
+    const tickId = store.startTick('dev-e2e-fix-start', 1)
+    const other = store.startTick('dev-e2e-fix-start', 2)
     const trigger = { automationId: 'dev-e2e-fix', runId: 'r1', stage: 1, ids: ['WEB-2123'] }
     store.handovers.setTickTrigger(tickId, trigger)
     expect(store.handovers.tickTriggers([tickId, other])).toEqual(new Map([[tickId, trigger]]))

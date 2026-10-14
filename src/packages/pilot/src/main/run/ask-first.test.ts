@@ -271,7 +271,7 @@ describe('runAnswerOf ({run.answer}, G7)', () => {
 describe('approving an ask-first card (Group 22)', () => {
   function approvable() {
     const s = setup()
-    const tickId = s.store.startTick('rev', false, 1)
+    const tickId = s.store.startTick('rev', 1)
     s.ask('cd00c0fd', tickId)
     const start = vi.fn().mockResolvedValue(undefined)
     s.store.recordDecisions(tickId, [decision('cd00c0fd')], new Map())

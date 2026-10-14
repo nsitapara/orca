@@ -7,8 +7,17 @@ import { errorText, outcomeLine } from './format'
 export const LONG_CALL_MS = 180_000
 type Phase = 'idle' | 'confirm' | 'running'
 
-// Dry run is safe; Run now starts real agents, so it takes an explicit inline Confirm.
-export function RunControls({ id, onDone }: { id: string; onDone: () => void }): React.JSX.Element {
+// Dry run is safe; Run now starts real agents, so it takes an explicit inline Confirm. A dry run's answer goes to
+// onDryRun for the page to show (it is stored nowhere); a real tick's outcome is the line under the buttons.
+export function RunControls({
+  id,
+  onDone,
+  onDryRun
+}: {
+  id: string
+  onDone: () => void
+  onDryRun: (outcome: TickOutcome) => void
+}): React.JSX.Element {
   const [phase, setPhase] = useState<Phase>('idle')
   const [message, setMessage] = useState<string | null>(null)
   const inFlight = useRef(false)
@@ -31,7 +40,9 @@ export function RunControls({ id, onDone }: { id: string; onDone: () => void }):
     setMessage(null)
     try {
       const result = await pilotRpc<TickOutcome>(method, { id }, { timeoutMs: LONG_CALL_MS })
-      if (mounted.current) {
+      if (mounted.current && method === 'pilot.automations.dryRun') {
+        onDryRun(result)
+      } else if (mounted.current) {
         setMessage(outcomeLine(result, id))
       }
     } catch (e) {
@@ -44,7 +55,10 @@ export function RunControls({ id, onDone }: { id: string; onDone: () => void }):
       return
     }
     setPhase('idle')
-    onDone()
+    // A dry run changed nothing to reload.
+    if (method === 'pilot.automations.tickNow') {
+      onDone()
+    }
   }
 
   const bar =

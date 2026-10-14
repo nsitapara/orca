@@ -27,7 +27,7 @@ export function latestFieldsFor(
   automationId: string,
   itemKey: string
 ): ItemFields {
-  const tick = store.lastRealTick(automationId)
+  const tick = store.lastTick(automationId)
   if (!tick) {
     return {}
   }

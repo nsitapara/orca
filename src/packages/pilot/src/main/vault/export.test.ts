@@ -41,7 +41,7 @@ function setup(dirName = 'Automations', name?: string) {
   const folder = join(dir, '05 · Fix failed CI on my MRs')
   mkdirSync(folder, { recursive: true })
   const store = PilotStore.open(join(root, 'db.sqlite'))
-  const tickId = store.startTick('ci', false, 1)
+  const tickId = store.startTick('ci', 1)
   store.recordDecisions(
     tickId,
     [

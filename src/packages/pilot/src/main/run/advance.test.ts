@@ -393,7 +393,7 @@ describe('createRunEngine', () => {
 
   it("renders a later step's item fields before its tick has recorded them, and from the tick after a restart", async () => {
     const { store, deps, engine, started } = setup()
-    const tickId = store.startTick('review', false, 400)
+    const tickId = store.startTick('review', 400)
     store.runs.create({
       id: 'run-t',
       automationId: 'review',

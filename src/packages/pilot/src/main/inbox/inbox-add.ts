@@ -46,7 +46,7 @@ function stringField(fields: ItemFields, name: string): string | null {
 
 // The worktrees an automation has shown: those of the items in its newest real tick.
 function knownWorktrees(deps: InboxDeps, automationId: string): Set<string> {
-  const tick = deps.store.lastRealTick(automationId)
+  const tick = deps.store.lastTick(automationId)
   const paths = tick ? deps.store.tickItems(tick.id).map((i) => i.fields['worktree.path']) : []
   return new Set(paths.filter((p): p is string => typeof p === 'string' && p !== ''))
 }
