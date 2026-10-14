@@ -154,6 +154,21 @@ describe('decideTick: scope, once_per and baseline', () => {
     ])
   })
 
+  it("lets a field script's not-due reason win over items.match on its null field", () => {
+    const def = testDefinition({
+      items: {
+        kind: 'merge_request',
+        where: {},
+        match: ["{mr.stack} != 'frontend'"],
+        customFields: []
+      }
+    })
+    const notDue = new Map([['mr:1', 'pipeline still running']])
+    expect(verdicts(input(def, [item(1, { 'mr.stack': null })], { notDue }))).toEqual([
+      ['mr:1', 'skipped', 'pipeline still running']
+    ])
+  })
+
   it.each([
     ['a seen item whose source says first sight (history rewritten)', true, true, 'baselined'],
     ['an unseen item whose source says not first sight (recent work)', false, false, 'started']
