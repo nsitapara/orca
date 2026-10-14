@@ -353,7 +353,7 @@ describe('runTick: what a fed stage leaves pending', () => {
     ])
   })
 
-  it('never starts a handed-over ticket its own list-fix-tickets doesn’t name: it is dropped, the listed one runs', async () => {
+  it('never starts a handed-over ticket its own list-fix-tickets doesn’t name yet: it waits, pending, the listed one runs', async () => {
     const d = handed(['WEB-9999', 'WEB-1'])
     const listing = {
       ...FED,
@@ -373,9 +373,12 @@ describe('runTick: what a fed stage leaves pending', () => {
     expect(d.launched).toEqual(['linear:WEB-1'])
     const settled = d.store.handovers.consumedBy([result.tickId]).get(result.tickId) ?? []
     expect(settled.map((h) => [h.itemId, h.state, h.reason])).toEqual([
-      ['WEB-9999', 'expired', "dropped: not in the stage's own list"],
       ['WEB-1', 'consumed', 'All checks pass']
     ])
+    expect(pendingIds(d)).toEqual(['WEB-9999'])
+    expect(result.warnings).toContain(
+      "WEB-9999 was handed over but isn't in the stage's own list yet; it waits (at most 7 days)"
+    )
   })
 
   it.each([
@@ -445,4 +448,22 @@ describe('runTick: what a fed stage leaves pending', () => {
       expect(d.store.handovers.consumedBy([result.tickId]).get(result.tickId)).toBeUndefined()
     }
   )
+
+  it('keeps a fed id pending, never consumed, when its source couldn’t read it this tick', async () => {
+    const d = handed(['WEB-1', 'WEB-2'])
+    const flaky: SourceAccess = {
+      list: async (def, ctx) => {
+        const listed = await linear.list(def, ctx)
+        return {
+          ...listed,
+          items: listed.items.filter((i) => i.label !== 'WEB-2'),
+          skipped: ['WEB-2']
+        }
+      },
+      scope: () => null
+    }
+    const result = await runTick(FED, people, { ...d, sources: flaky }, { dryRun: false })
+    expect(result.status).toBe('ok')
+    expect(pendingIds(d)).toEqual(['WEB-2'])
+  })
 })

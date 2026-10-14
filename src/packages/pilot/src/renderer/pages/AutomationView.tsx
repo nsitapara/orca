@@ -93,7 +93,7 @@ export function AutomationView({
         ))}
       </div>
       {tab === 'activity' ? (
-        <ActivityTimeline ticks={ticks} checkNames={detail.checkNames} />
+        <ActivityTimeline ticks={ticks} checkNames={detail.checkNames} notes={detail.notes ?? []} />
       ) : (
         <AutomationOverview detail={detail} />
       )}

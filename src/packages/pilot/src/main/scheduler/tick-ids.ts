@@ -12,6 +12,7 @@ export type FedOutcome = {
   fed: HandoverRow[]
   dropped: { row: HandoverRow; reason: string }[]
   missing: string[]
+  skipped: string[]
 }
 export type TickIds = {
   ids: string[]
@@ -74,11 +75,16 @@ export async function idsForTick(
     engineEnv: deps.fields.engineEnv
   }
   const listed = await readIdsFrom({ ...spec, run: spec.run }, opts, deps.runIds ?? runIdsCommand)
-  // With its own command, a feed speeds a stage up but never adds an item: a fed id it doesn't list is dropped.
+  // With its own command, a feed speeds a stage up but never adds an item: a fed id it doesn't list (yet: the list can
+  // lag) isn't read, and waits pending until it is listed or expires.
   const own = new Set(listed.map((id) => id.toLowerCase()))
-  const notListed = fed
-    .filter((row) => !own.has(row.itemId.toLowerCase()))
-    .map((row) => ({ row, reason: "dropped: not in the stage's own list" }))
   const kept = fed.filter((row) => own.has(row.itemId.toLowerCase()))
-  return mergeIds(kept, listed, [...dropped, ...notListed])
+  const waiting = fed
+    .filter((row) => !own.has(row.itemId.toLowerCase()))
+    .map(
+      (row) =>
+        `${row.itemId} was handed over but isn't in the stage's own list yet; it waits (at most 7 days)`
+    )
+  const merged = mergeIds(kept, listed, dropped)
+  return { ...merged, warnings: [...waiting, ...merged.warnings] }
 }

@@ -20,6 +20,13 @@ export type Item = {
   sortKeys: { waitingSince: number | null; priority: number | null }
 }
 
+export type SourceListing = {
+  items: Item[]
+  warnings: string[]
+  missing?: string[]
+  skipped?: string[]
+}
+
 export type SourceContext = {
   repo: RepoFacts
   people: PeopleDirectory | null
@@ -35,10 +42,8 @@ export type ItemSource = {
   kind: ItemKind
   // The kind's schema from shared/definition/where.ts: the same object parse.ts checks files with.
   whereSchema: z.ZodType
-  // `missing`: ids (ctx.ids) the source has no such item for, so a handed-over one is dropped, not kept.
-  list(
-    ctx: SourceContext,
-    where: unknown
-  ): Promise<{ items: Item[]; warnings: string[]; missing?: string[] }>
+  // `missing`: ids (ctx.ids) the source has no such item for, so a handed-over one is dropped, not kept. `skipped`:
+  // ids it couldn't read this time (a failed read of that one id), so a handed-over one waits for the next tick.
+  list(ctx: SourceContext, where: unknown): Promise<SourceListing>
   scope(item: Item, where: unknown, people: PeopleDirectory | null): ScopeResult
 }

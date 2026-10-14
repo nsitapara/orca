@@ -154,6 +154,15 @@ describe('ActivityTimeline', () => {
     expect(screen.getByText(/Handover of WEB-2123 from stage 1 expired after 7 days/)).toBeTruthy()
   })
 
+  it('shows a stage’s notes from before any tick as entries of their own, even with no tick yet', () => {
+    const notes = [
+      { at: tick.startedAt, text: 'Handover of WEB-9 from stage 1 expired after 7 days' }
+    ]
+    render(<ActivityTimeline ticks={[]} checkNames={[]} notes={notes} />)
+    expect(screen.getByText(/Handover of WEB-9 from stage 1 expired after 7 days/)).toBeTruthy()
+    expect(screen.queryByText('No ticks yet.')).toBeNull()
+  })
+
   it('offers no check table for a tick whose every item was out of scope', () => {
     const outside = tick.items.map((i) => ({ ...i, verdict: 'out_of_scope' as const }))
     render(

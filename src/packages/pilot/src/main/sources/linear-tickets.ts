@@ -139,7 +139,8 @@ function notFound(error: unknown): boolean {
 }
 
 // where.ids_from: each id read by identifier (Linear resolves it across the signed-in workspaces), no listing. A
-// ticket Linear doesn't know is skipped with a warning; any other failed read fails the tick, as a listing's does.
+// ticket Linear doesn't know is skipped with a warning (missing), and so is one whose read failed otherwise (skipped,
+// tried again next tick): only a failed listing fails the tick.
 // Like the listing, only a ticket in a wanted state is kept.
 async function readTicketsByIds(
   ctx: SourceContext,
@@ -147,7 +148,8 @@ async function readTicketsByIds(
   ids: readonly string[],
   where: LinearTicketWhere,
   warnings: string[],
-  missing: string[]
+  missing: string[],
+  skipped: string[]
 ): Promise<Ticket[]> {
   const bad = ids.find((id) => !LINEAR_IDENTIFIER.test(id))
   if (bad !== undefined) {
@@ -162,7 +164,10 @@ async function readTicketsByIds(
         missing.push(id)
         return null
       }
-      throw error
+      // One id's read failing never fails the tick: that id is skipped this time (a handed-over one stays pending).
+      warnings.push(`${id} couldn't be read from Linear (${messageOf(error)}); skipped this tick`)
+      skipped.push(id)
+      return null
     }
   })
   return read
@@ -232,9 +237,10 @@ export function linearTicketSource(deps: LinearTicketSourceDeps): ItemSource {
       const where = linearTicketWhereSchema.parse(rawWhere ?? {})
       const warnings: string[] = []
       const missing: string[] = []
+      const skipped: string[] = []
       // Like M01's unstarted(): only tickets of a wanted state get a details read.
       const tickets = ctx.ids
-        ? await readTicketsByIds(ctx, deps.linear, ctx.ids, where, warnings, missing)
+        ? await readTicketsByIds(ctx, deps.linear, ctx.ids, where, warnings, missing, skipped)
         : await readTickets(ctx, deps.linear, linearListFilter(where), (t) =>
             stateTypeAllowed(t.state?.type, where)
           )
@@ -245,7 +251,7 @@ export function linearTicketSource(deps: LinearTicketSourceDeps): ItemSource {
         return null
       })
       const items = await mapLimit(tickets, POOL, (t) => ticketItem(ctx, deps, api, t, worktrees))
-      return { items, warnings, missing }
+      return { items, warnings, missing, skipped }
     },
     scope(item, rawWhere, people) {
       const where = linearTicketWhereSchema.parse(rawWhere ?? {})

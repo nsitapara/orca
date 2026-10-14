@@ -379,17 +379,24 @@ describe('linearTicketSource: the ids where.ids_from gave', () => {
     expect(listed.missing).toEqual(['WEB-9'])
   })
 
-  it('fails the list on any other read failure, and on an id that is no Linear identifier', async () => {
-    const down = byId()
-    down.issue.mockRejectedValue(new Error('linear_timeout'))
-    await expect(source(down).list(context({ ids: ['WEB-1'] }), START)).rejects.toThrow(
-      'linear_timeout'
-    )
-    const offline = byId()
-    offline.issue.mockRejectedValue(linearThrows('fetch failed'))
-    await expect(source(offline).list(context({ ids: ['WEB-1'] }), START)).rejects.toThrow(
-      'fetch failed'
-    )
+  it('skips an id it fails to read for any other reason, with a warning, and reads the rest; never fails the list', async () => {
+    for (const thrown of [new Error('linear_timeout'), linearThrows('fetch failed')]) {
+      const flaky = byId()
+      flaky.issue.mockImplementation(async (id: string) => {
+        if (id === 'WEB-9') {
+          throw thrown
+        }
+        return byId().issue(id)
+      })
+      const listed = await source(flaky).list(context({ ids: ['WEB-9', 'WEB-1'] }), START)
+      expect(listed.items.map((i) => i.key)).toEqual(['linear:WEB-1'])
+      expect(listed.skipped).toEqual(['WEB-9'])
+      expect(listed.missing).toEqual([])
+      expect(listed.warnings.join('\n')).toContain("WEB-9 couldn't be read from Linear")
+    }
+  })
+
+  it('fails the list on an id that is no Linear identifier (its own command printed it)', async () => {
     const linear = byId()
     await expect(source(linear).list(context({ ids: ['WEB-1', 'web 1'] }), START)).rejects.toThrow(
       `ids_from gave "web 1", which isn't a Linear identifier (like WEB-123)`
