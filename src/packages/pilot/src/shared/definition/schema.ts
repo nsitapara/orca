@@ -124,7 +124,8 @@ const step = z.strictObject({
   exit_codes: z
     .strictObject({
       ok: z.array(z.number().int()).optional(),
-      skip: z.array(z.number().int()).optional()
+      skip: z.array(z.number().int()).optional(),
+      stop: z.array(z.number().int()).optional()
     })
     .optional(),
   when: z.string().min(1).optional(),

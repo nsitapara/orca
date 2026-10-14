@@ -40,8 +40,9 @@ function saidLast(result: ShellResult, read: ResultRead): string {
   return lastLine(result.stderr) || read.reason || stdout
 }
 
-// exit_codes.ok → done, exit_codes.skip → skipped (the run goes on), anything else → failed with what it said last. A
-// timeout is timed_out whatever the code.
+// exit_codes.ok → done, skip → skipped (the run goes on), stop → stopped (the run ends: nothing to do; the reason is the
+// envelope's, else what it said last), anything else → failed with what it said last. A timeout is timed_out whatever
+// the code.
 export function shellEnding(
   step: Pick<StepDef, 'exitCodes'>,
   result: ShellResult,
@@ -61,6 +62,9 @@ export function shellEnding(
   }
   if (step.exitCodes.skip.includes(result.code)) {
     return { status: 'skipped', error: `Exited ${result.code} (skip)${said}` }
+  }
+  if (step.exitCodes.stop.includes(result.code)) {
+    return { status: 'stopped', error: read.reason || last || `Exited ${result.code}` }
   }
   return { status: 'failed', error: `Exited ${result.code}${said}` }
 }

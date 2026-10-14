@@ -183,6 +183,10 @@ A shell step's `run:` is plain shell. It takes no `{placeholders}`; validation r
   - A result marked `meta.text` keeps only `{command, outcome, reason}` (`data_omitted: "may contain comment or ticket text"`), and none of the step's stdout is kept: `output_tail` holds stderr only, and an error never quotes stdout.
   - No stdout is kept from a capture cut at 1 MiB that doesn't read as one envelope either.
   - With an envelope, a step's error uses its `reason`, never the JSON line.
+- **Exit codes:** `exit_codes: { ok, skip, stop }`, `ok: [0]` by default; a code may be in one list only.
+  - `ok` → done. `skip` → skipped, and the run goes on.
+  - `stop` → stopped: the run ends there as done, with the outcome "Nothing to do: <reason>" (the envelope's reason, else the step's last line). Every later non-`always` step is skipped; `always` steps still run and read `{steps.<name>.status}` as `stopped`. The `once_per` key is settled done.
+  - Only a non-`always` step can stop the run, as only one can fail it.
 - **Reserved env names:** `PATH`, `IFS`, `HOME`, `ENV`, `BASH_ENV`, `SHELLOPTS`, `BASHOPTS`, `PS4`, `CDPATH`, `GLOBIGNORE`, `AGENT_RUN`, and anything starting `PILOT_`, `ORCA_`, `LD_` or `DYLD_`.
 - **Never** use an env value in `$(( ))`, `(( ))`, `let`, `declare -i`, an array subscript, `[[ -eq ]]`, `eval`, or `sh -c "…$NAME…"`. The shell evaluates those as code. Quote it as `"$NAME"`, or validate it first.
 - **Never** put an item value in an env name that another program executes: `NODE_OPTIONS`, `GIT_SSH_COMMAND`, `GIT_CONFIG_*`, `PERL5OPT`, `JAVA_TOOL_OPTIONS`, `SHELL`, `EDITOR`, `PAGER`. Validation doesn't block these.

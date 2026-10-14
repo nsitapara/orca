@@ -250,6 +250,29 @@ describe('createRunEngine', () => {
     expect(handledOf(db)).toEqual({ status: 'done', failed_at: null })
   })
 
+  it('after a step stopped the run skips the rest but the always step, ends it done with Nothing to do, and settles its key done', async () => {
+    const { store, engine, started, end, db } = setup()
+    await startRun(engine)
+    store.runs.updateStep('run-1', 0, {
+      status: 'stopped',
+      error: 'pipeline 2934 is green',
+      finishedAt: 1000
+    })
+    await engine.advance('run-1')
+    expect(store.runs.steps('run-1')[1]).toMatchObject({
+      status: 'skipped',
+      error: 'Step review had nothing to do'
+    })
+    expect(started.map((s) => s.idx)).toEqual([0, 2])
+    end(2, 'done')
+    await engine.advance('run-1')
+    expect(store.runs.get('run-1')).toMatchObject({
+      status: 'done',
+      outcome: 'Nothing to do: pipeline 2934 is green'
+    })
+    expect(handledOf(db)).toEqual({ status: 'done', failed_at: null })
+  })
+
   it('after a failed step skips the rest but the always step, and fails the run naming the step', async () => {
     const { store, engine, started, end, db } = setup()
     await startRun(engine)

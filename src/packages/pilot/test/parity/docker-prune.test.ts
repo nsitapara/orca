@@ -38,7 +38,7 @@ describe('07 · Clean Docker when disk is 80% full, as a run-once shell step', (
     const header = /^# Exit: (.*)$/m.exec(readFileSync(PRUNE, 'utf8'))?.[1] ?? ''
     expect(header).toContain('3 = over threshold but Docker is not running')
     expect(header).toContain('2 = bad arguments')
-    expect(definition.steps[0].exitCodes).toEqual({ ok: [0], skip: [3] })
+    expect(definition.steps[0].exitCodes).toEqual({ ok: [0], skip: [3], stop: [] })
   })
 
   it.each([

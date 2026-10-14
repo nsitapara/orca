@@ -31,6 +31,13 @@ function stepFacts(step: StepRow): string {
   return parts.join(' · ')
 }
 
+function errorClass(step: StepRow): string {
+  if (step.status === 'failed' || step.status === 'timed_out') {
+    return 'text-destructive'
+  }
+  return 'text-muted-foreground'
+}
+
 function outputsText(step: StepRow): string | null {
   const entries = Object.entries(step.outputs)
   if (entries.length === 0) {
@@ -117,7 +124,7 @@ export function StepList({
               ) : null}
             </div>
             {outputs ? <div className="text-muted-foreground">{`Outputs: ${outputs}`}</div> : null}
-            {step.error ? <div className="text-destructive">{step.error}</div> : null}
+            {step.error ? <div className={errorClass(step)}>{step.error}</div> : null}
           </li>
         )
       })}

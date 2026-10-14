@@ -94,6 +94,16 @@ describe('definition validation', () => {
       'step 1: exit code 3 is both ok and skip'
     ],
     [
+      'a stop code that is also ok',
+      `${BASE}steps:\n  - { agent: shell, run: ./x.sh, exit_codes: { stop: [0] } }\n`,
+      'step 1: exit code 0 is both ok and stop'
+    ],
+    [
+      'a stop code that is also skip',
+      `${BASE}steps:\n  - { agent: shell, run: ./x.sh, exit_codes: { skip: [3], stop: [3] } }\n`,
+      'step 1: exit code 3 is both skip and stop'
+    ],
+    [
       'a session that continues a later step',
       `${BASE}steps:\n  - { name: a, agent: claude, prompt: x, session: { continue: b } }\n  - { name: b, agent: claude, prompt: y }\n`,
       'step 1: session.continue: "b" isn\'t an earlier step'
@@ -160,6 +170,17 @@ describe('definition validation', () => {
     ]
   ])('rejects %s', (_label, yaml, message) => {
     expect(errorsOf(yaml)).toEqual([message])
+  })
+
+  it('normalizes exit_codes with stop beside ok and skip, and stop [] by default', () => {
+    const parsed = parseAutomationYaml(
+      `${BASE}steps:\n  - { name: context, agent: shell, run: ./x.sh, exit_codes: { skip: [4], stop: [3] } }\n  - { name: tidy, agent: shell, run: ./y.sh }\n`,
+      '/a/n.yaml'
+    )
+    expect(parsed.ok && parsed.definition.steps.map((s) => s.exitCodes)).toEqual([
+      { ok: [0], skip: [4], stop: [3] },
+      { ok: [0], skip: [], stop: [] }
+    ])
   })
 
   it.each([

@@ -14,7 +14,15 @@ function broke(step: EndedStep): boolean {
   return step.status === 'failed' || step.status === 'timed_out'
 }
 
+// A step that holds back every later non-`always` step: it broke, or it stopped the run (nothing to do).
+function holdsBack(step: EndedStep): boolean {
+  return broke(step) || step.status === 'stopped'
+}
+
 function brokenReason(step: EndedStep): string {
+  if (step.status === 'stopped') {
+    return `Step ${step.name} had nothing to do`
+  }
   if (step.status === 'timed_out') {
     return `Step ${step.name} timed out`
   }
@@ -33,8 +41,8 @@ function falseWhen(when: string, missing: string[]): StepVerdict {
   return { run: false, reason: `when: ${when} is false (no value for ${names})` }
 }
 
-// Two gates, both must pass. (a) An earlier non-`always` step that failed or timed out skips every
-// later non-`always` step; skipped steps count as success. (b) `when`, when set, must be true.
+// Two gates, both must pass. (a) An earlier non-`always` step that failed, timed out or stopped the run
+// skips every later non-`always` step; skipped steps count as success. (b) `when`, when set, must be true.
 // `always` lifts gate (a) only.
 export function decideStep(
   step: Pick<StepDef, 'when' | 'always'>,
@@ -42,7 +50,7 @@ export function decideStep(
   fields: ItemFields
 ): StepVerdict {
   if (!step.always) {
-    const broken = earlier.find((s) => !s.always && broke(s))
+    const broken = earlier.find((s) => !s.always && holdsBack(s))
     if (broken) {
       return { run: false, reason: brokenReason(broken) }
     }
@@ -85,8 +93,22 @@ function cleanupVerb(step: EndedStep): string {
   return 'failed'
 }
 
-// failed > timed_out > needs_you > done. Only non-`always` steps decide failed/timed_out: a cleanup
-// step that broke is named in a done run's outcome. A plain done run keeps the outcome "Done".
+function nothingToDo(step: EndedStep): string {
+  if (step.error) {
+    return `Nothing to do: ${step.error}`
+  }
+  return 'Nothing to do'
+}
+
+function cleanupNote(step: EndedStep | undefined): string {
+  if (!step) {
+    return ''
+  }
+  return `; cleanup step ${step.name} ${cleanupVerb(step)}`
+}
+
+// failed > timed_out > needs_you > stopped ("Nothing to do: <reason>") > done. Only non-`always` steps decide failed,
+// timed_out or stopped: a cleanup step that broke is named in a done run's outcome. A plain done run keeps "Done".
 export function runEnd(steps: EndedStep[], openInboxItems: number): RunEnd {
   const main = steps.filter((s) => !s.always)
   const failed = main.find((s) => s.status === 'failed')
@@ -104,8 +126,12 @@ export function runEnd(steps: EndedStep[], openInboxItems: number): RunEnd {
     }
   }
   const cleanup = steps.find((s) => s.always && broke(s))
+  const stopped = main.find((s) => s.status === 'stopped')
+  if (stopped) {
+    return { status: 'done', outcome: `${nothingToDo(stopped)}${cleanupNote(cleanup)}` }
+  }
   if (cleanup) {
-    return { status: 'done', outcome: `Done; cleanup step ${cleanup.name} ${cleanupVerb(cleanup)}` }
+    return { status: 'done', outcome: `Done${cleanupNote(cleanup)}` }
   }
   if (steps.length > 0 && steps.every((s) => s.status === 'skipped')) {
     return { status: 'done', outcome: 'Done: every step was skipped' }
