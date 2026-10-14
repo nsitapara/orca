@@ -26,7 +26,7 @@ describe('05 · Fix failed CI v2: the definition', () => {
     expect(definition).toMatchObject({
       name: '05 · Fix failed CI on my MRs',
       schedule: '10 * * * *',
-      enabled: false,
+      enabled: true, // live since go-live stage B (2026-10-14)
       missedRunGraceMs: 12 * 3_600_000,
       oncePer: '{mr.iid}:{mr.pipeline}',
       limits: { perTick: 3 },

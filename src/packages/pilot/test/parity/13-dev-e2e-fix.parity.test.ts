@@ -81,7 +81,7 @@ describe('13 · Fix red hourly e2e on dev: the definitions (old job: orca automa
       name: '13 · Fix red hourly e2e on dev',
       schedule: '5,35 * * * *',
       timezone: 'America/Los_Angeles',
-      enabled: false,
+      enabled: true, // live since go-live stage B (2026-10-14)
       missedRunGraceMs: 12 * HOUR,
       firstSeen: 'process',
       oncePer: '{pipeline.id}',
@@ -129,7 +129,7 @@ describe('13 · Fix red hourly e2e on dev: the definitions (old job: orca automa
     expect(starts.definition).toMatchObject({
       name: '13 · Start fix sessions for red e2e tickets',
       schedule: '6,36 * * * *',
-      enabled: false,
+      enabled: true, // live since go-live stage B (2026-10-14)
       oncePer: '{ticket.id}',
       retryAfterFailureMs: 25 * 60_000,
       powers: ['commit', 'push', 'update_ticket'],
