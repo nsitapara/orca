@@ -1,6 +1,6 @@
 import { accessSync, constants, statSync } from 'node:fs'
 import { homedir } from 'node:os'
-import { join } from 'node:path'
+import { isAbsolute, join } from 'node:path'
 import { runProcess } from '@orca/process-host'
 import { readReply, type PilotcliReply } from './envelope'
 
@@ -35,6 +35,7 @@ function isExecutable(path: string): boolean {
 
 // Where pilotcli is: PILOT_PILOTCLI when set (used as given), else ~/.local/bin/pilotcli, else the first on PATH. Read
 // at each call, so installing it later needs no restart. Packaged Pilot's PATH is hydrated from the login shell.
+// PATH entries that aren't absolute are skipped.
 export function pilotcliPath(
   env: NodeJS.ProcessEnv = process.env,
   home: string = homedir(),
@@ -48,7 +49,7 @@ export function pilotcliPath(
   if (executable(local)) {
     return local
   }
-  for (const dir of (env.PATH ?? '').split(':').filter(Boolean)) {
+  for (const dir of (env.PATH ?? '').split(':').filter((dir) => isAbsolute(dir))) {
     const candidate = join(dir, 'pilotcli')
     if (executable(candidate)) {
       return candidate
@@ -78,7 +79,7 @@ export function pilotcliRunner(opts: {
   baseEnv?: NodeJS.ProcessEnv
 }): Pilotcli {
   return async (call) => {
-    const binary = (opts.binary ?? (() => pilotcliPath()))()
+    const binary = (opts.binary ?? (() => pilotcliPath(opts.baseEnv ?? process.env)))()
     if (!binary) {
       return { outcome: 'failed', reason: PILOTCLI_MISSING, data: null, code: null }
     }

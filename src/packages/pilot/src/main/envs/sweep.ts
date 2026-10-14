@@ -59,16 +59,24 @@ async function listEnvs(deps: SweepDeps): Promise<EnvListRow[] | null> {
   }
 }
 
+// An env this sweep may record removed: its own teardown may have recorded it removed while env list ran; keep that.
+function stillUnremoved(store: PilotStore, runId: string): boolean {
+  const env = store.runs.get(runId)?.env
+  return env !== null && env !== undefined && env.removedAt === null
+}
+
 // At startup, after recovery (M4 §8, Pilot starts): env delete for every env pilotcli lists whose run is one of this
 // Pilot's that has ended. Orphans (run "") and runs Pilot doesn't know are Nish's to delete. An ended run's env that
-// pilotcli no longer lists is recorded removed.
+// pilotcli no longer lists is recorded removed. Runs are read before the list, so a run that ends while it runs is left
+// to its own teardown.
 export async function sweepEnvs(deps: SweepDeps): Promise<SweepReport> {
   const report: SweepReport = { deleted: [], removed: [], skipped: 0 }
+  // Read before env list: a run that ends while the list runs is still live here, so its own teardown deletes its env.
+  const runs = deps.store.runs.envs.withEnvs()
   const rows = await listEnvs(deps)
   if (rows === null) {
     return report
   }
-  const runs = deps.store.runs.envs.withEnvs()
   const byId = new Map(runs.map((run) => [run.id, run]))
   const listed = new Set<string>()
   for (const row of rows) {
@@ -89,6 +97,9 @@ export async function sweepEnvs(deps: SweepDeps): Promise<SweepReport> {
     report.deleted.push(run.id)
   }
   for (const run of runs.filter((r) => goneUnlisted(r, listed))) {
+    if (!stillUnremoved(deps.store, run.id)) {
+      continue
+    }
     deps.store.runs.envs.removed(run.id, deps.now())
     report.removed.push(run.id)
   }

@@ -38,7 +38,13 @@ const result = (over: Partial<ShellResult> = {}): ShellResult => ({
   ...over
 })
 
-function setup(opts: { run?: ShellRunner; workspace?: () => Promise<{ path: string }> } = {}) {
+function setup(
+  opts: {
+    run?: ShellRunner
+    workspace?: () => Promise<{ path: string }>
+    releaseHome?: () => void
+  } = {}
+) {
   const store = PilotStore.open(join(mkdtempSync(join(tmpdir(), 'pilot-shell-')), 'db.sqlite'))
   store.runs.create({
     id: 'run-1',
@@ -67,7 +73,8 @@ function setup(opts: { run?: ShellRunner; workspace?: () => Promise<{ path: stri
         calls.push(spec)
         return result()
       }),
-    baseEnv: { PATH: '/usr/bin' }
+    baseEnv: { PATH: '/usr/bin' },
+    releaseHome: opts.releaseHome
   })
   const req = (
     def: AutomationDefinition,
@@ -256,6 +263,34 @@ describe('makeShellSteps', () => {
       error: 'No worktree for web-platform'
     })
   })
+})
+
+describe('makeShellSteps, letting go of its home', () => {
+  it.each([
+    ['after its process ended', async () => result({ code: 0 }), 'done'],
+    [
+      "when its process couldn't start",
+      () => {
+        throw new Error('spawn failed')
+      },
+      'failed'
+    ]
+  ] as const)(
+    'ends the step and logs it when letting go of its home throws %s',
+    async (_n, run, status) => {
+      const { store, steps, logs, req } = setup({
+        run: run as ShellRunner,
+        releaseHome: () => {
+          throw new Error('store closed')
+        }
+      })
+      await steps.start(req(shellDef('./merge-back.sh'))).catch(() => {})
+      await steps.settled()
+      expect(store.runs.steps('run-1')[0].status).toBe(status)
+      expect(steps.isLive('run-1', 0)).toBe(false)
+      expect(logs).toContain("[pilot] run run-1: couldn't release its home: store closed")
+    }
+  )
 })
 
 describe('sweepOrphanShellSteps', () => {

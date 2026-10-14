@@ -1,7 +1,7 @@
 import { existsSync, mkdtempSync, readFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { fakePilotcli } from './__fixtures__/fake-pilotcli'
 import { PILOTCLI_MISSING, pilotcliPath, pilotcliRunner } from './pilotcli'
 
@@ -96,6 +96,28 @@ describe('pilotcliRunner reaches real Orca, never Pilot', () => {
   })
 })
 
+describe('pilotcliRunner finds pilotcli', () => {
+  // The app's own env names a pilotcli that doesn't exist, so a lookup that ignores baseEnv fails here and can never
+  // reach a real ~/.local/bin/pilotcli.
+  it('in the env it was given, not the app’s own', async () => {
+    vi.stubEnv('PILOT_PILOTCLI', '/nonexistent/pilotcli')
+    try {
+      const fake = fakePilotcli()
+      fake.answer('env-create', { json: envelope('ok'), code: 0 })
+      const run = pilotcliRunner({
+        pilotBinDir: '/Applications/Pilot.app/Contents/Resources/bin',
+        baseEnv: { ...fake.env, PILOT_PILOTCLI: fake.bin }
+      })
+      await expect(run({ args: CREATE, timeoutMs: 10_000 })).resolves.toMatchObject({
+        outcome: 'ok'
+      })
+      expect(fake.calls()).toHaveLength(1)
+    } finally {
+      vi.unstubAllEnvs()
+    }
+  })
+})
+
 describe('pilotcliRunner, its process group', () => {
   it('writes the pid file naming pilotcli itself, and an abort stops the whole group', async () => {
     const fake = fakePilotcli()
@@ -118,6 +140,8 @@ describe('pilotcliRunner, its process group', () => {
     await call
     expect(Date.now() - started).toBeLessThan(5000)
     expect(() => process.kill(pid, 0)).toThrow()
+    // pilotcli leads its process group (sh wrote $$, then exec'd it): nothing it started is left.
+    expect(() => process.kill(-pid, 0)).toThrow()
   })
 })
 
@@ -137,6 +161,12 @@ describe('pilotcliPath', () => {
       '/Users/n/.local/bin/pilotcli'
     ],
     ['then PATH', { PATH: '/usr/bin:/opt/bin' }, ['/opt/bin/pilotcli'], '/opt/bin/pilotcli'],
+    [
+      'skips a PATH entry that is not absolute',
+      { PATH: 'bin:./tools:/opt/bin' },
+      ['bin/pilotcli', 'tools/pilotcli', '/opt/bin/pilotcli'],
+      '/opt/bin/pilotcli'
+    ],
     ['nowhere', { PATH: '/usr/bin' }, [], null]
   ])('%s', (_name, env, found, expected) => {
     expect(pilotcliPath(env, '/Users/n', executable(found))).toBe(expected)

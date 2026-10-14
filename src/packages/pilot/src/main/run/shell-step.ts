@@ -204,6 +204,15 @@ export function makeShellSteps(deps: ShellStepDeps): ShellSteps {
     })
   }
 
+  // Never throws: a failed release is logged, and the claim lapses once the step stops running (store-runs.ts).
+  function releaseHome(req: StepStartRequest): void {
+    try {
+      deps.releaseHome?.(req)
+    } catch (error) {
+      deps.log(`[pilot] run ${req.run.id}: couldn't release its home: ${messageOf(error)}`)
+    }
+  }
+
   // Writes the step's row (or takes over the `pending` one the engine wrote for step 0), resolves the
   // workspace, starts the process and returns; the process's end writes the result and calls onEnded.
   // Throws (row failed) when the step can't start. A command with an unfilled placeholder throws before
@@ -278,24 +287,24 @@ export function makeShellSteps(deps: ShellStepDeps): ShellSteps {
           )
         )
         .finally(() => {
-          deps.releaseHome?.(req)
           try {
             rmSync(outputDir, { recursive: true, force: true })
           } catch (error) {
             deps.log(`[pilot] couldn't remove ${outputDir}: ${messageOf(error)}`)
           }
           live.delete(key)
+          releaseHome(req)
           inflight.delete(job)
           deps.onEnded(req.run.id)
         })
     } catch (error) {
-      deps.releaseHome?.(req)
       try {
         rmSync(outputDir, { recursive: true, force: true })
       } catch (removeError) {
         deps.log(`[pilot] couldn't remove ${outputDir}: ${messageOf(removeError)}`)
       }
       live.delete(key)
+      releaseHome(req)
       fail(req, error)
       throw error
     }

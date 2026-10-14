@@ -169,6 +169,36 @@ describe('the startup sweep', () => {
 
   it.each([
     [
+      'a run that ends while env list runs is left to its own teardown',
+      'running' as const,
+      (store: PilotStore) => store.runs.update('ci-1', { status: 'done', finishedAt: 5 }),
+      null
+    ],
+    [
+      'a run its own teardown recorded removed while env list ran keeps that record',
+      'done' as const,
+      (store: PilotStore) => store.runs.envs.removed('ci-1', 5),
+      5
+    ]
+  ])('%s', async (_name, status, meanwhile, removedAt) => {
+    const store = storeWith([{ id: 'ci-1', status }])
+    const report = await sweepEnvs({
+      store,
+      pilotcli: async () => {
+        meanwhile(store)
+        return list([])
+      },
+      teardown: () => {},
+      isPreparing: () => false,
+      now: () => 10,
+      log: () => {}
+    })
+    expect(report.removed).toEqual([])
+    expect(store.runs.get('ci-1')?.env?.removedAt).toBe(removedAt)
+  })
+
+  it.each([
+    [
       'env list failed',
       { outcome: 'failed', reason: 'boom', data: null, code: 1 } as PilotcliReply
     ],
