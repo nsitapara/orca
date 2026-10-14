@@ -166,10 +166,7 @@ async function toItem(
   if (!mergeRequestListScope(item, where, people).ok) {
     return item
   }
-  return asItem(mr, {
-    ...item.fields,
-    ...(await detailedFields(ctx, api, mr, warnings))
-  })
+  return asItem(mr, { ...item.fields, ...(await detailedFields(ctx, api, mr, warnings)) })
 }
 
 // merge_request items (contract §3): the open MRs of the repo's GitLab project, read through the
