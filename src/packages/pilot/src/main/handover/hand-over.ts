@@ -6,6 +6,7 @@ import type { HandoverWrite, RunEndHandover } from '../run/run-close'
 import { MAX_IDS, usableId } from '../sources/ids-from'
 import type { PilotStore } from '../store/store'
 import type { NewHandover } from '../store/store-handovers'
+import { repend } from './repend'
 
 export type HandOverDeps = {
   store: PilotStore
@@ -172,7 +173,7 @@ export function runEndHandover(deps: HandOverDeps): RunEndHandover {
     write(run, end) {
       // A run started for a handed-over id that failed: the id is pending again, for retry_after_failure.
       if (end.status === 'failed' || end.status === 'timed_out') {
-        deps.store.handovers.reopen(run.id)
+        repend(deps.store, run.id)
       }
       const planned = plan(deps, run, end)
       for (const row of planned.rows) {

@@ -1,5 +1,6 @@
 import type { RunRow, StepRow } from '../../shared/api-types'
 import type { PilotStore } from '../store/store'
+import { repend } from '../handover/repend'
 
 export const STALE_START_MS = 2 * 60_000
 export const STALE_START_OUTCOME = "Couldn't start: the app stopped before the agent launched"
@@ -38,6 +39,7 @@ function closeStaleStart(store: PilotStore, step: StepRow, at: number, outcome: 
   }
   if (failRun) {
     store.runs.update(step.runId, { status: 'failed', outcome, finishedAt: at })
+    repend(store, step.runId)
   }
   store.runs.updateStep(step.runId, step.idx, { status: 'failed', error: outcome, finishedAt: at })
   return failRun
@@ -58,6 +60,7 @@ function findStale(store: PilotStore, at: number, olderThanMs: number): Stale {
 function closeStepless(store: PilotStore, run: RunRow, at: number): void {
   store.unmarkHandledForRun(run.automationId, run.id)
   store.runs.update(run.id, { status: 'failed', outcome: STALE_START_OUTCOME, finishedAt: at })
+  repend(store, run.id)
 }
 
 // A step is 'starting' with no terminal only while launchAgentTerminal is in flight, 'pending' only while

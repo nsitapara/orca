@@ -5,10 +5,11 @@ import type { HandledState } from '../../shared/tick/decide'
 import { EMPTY_PEOPLE } from '../../shared/people'
 import { fakeFieldDeps, testItem } from '../fields/__fixtures__/field-deps'
 import type { SourceAccess } from '../scheduler/tick-decide'
-import { makeRunId, runTick, type TickDeps } from '../scheduler/tick-runner'
+import { makeRunId, runTick, UnrecordedLaunchError, type TickDeps } from '../scheduler/tick-runner'
 import type { IdsRunner } from '../sources/ids-from'
 import { PilotStore } from '../store/store'
 import { handOverRunEnd } from './hand-over'
+import { repend } from './repend'
 import { HANDOVER_EXPIRY_MS, settles } from './tick-handover'
 
 const people = EMPTY_PEOPLE
@@ -411,6 +412,37 @@ describe('runTick: what a fed stage leaves pending', () => {
       await runTick(FED, people, clock, { dryRun: false })
       expect(pendingIds(d)).toEqual([])
       expect(d.launched).toEqual(['linear:WEB-1', 'linear:WEB-1'])
+    }
+  )
+
+  it.each([
+    ['its launch threw (the run is released)', new Error('no terminal'), false],
+    [
+      'an agent runs untracked (the key stays held)',
+      new UnrecordedLaunchError('t9', 'untracked agent'),
+      false
+    ],
+    ['the engine closed it failed while opening it', null, true]
+  ] as const)(
+    'keeps a fed id pending when the run started for it failed at launch: %s',
+    async (_name, thrown, closes) => {
+      const d = handed(['WEB-1'])
+      const launch: TickDeps['launch'] = async (req) => {
+        if (thrown) {
+          throw thrown
+        }
+        if (closes) {
+          d.store.runs.update(req.runId, {
+            status: 'failed',
+            outcome: 'The automation starts is no longer loaded'
+          })
+          repend(d.store, req.runId)
+        }
+      }
+      const result = await runTick(FED, people, { ...d, launch }, { dryRun: false })
+      expect(result.decisions.map((x) => x.verdict)).toEqual(['started'])
+      expect(pendingIds(d)).toEqual(['WEB-1'])
+      expect(d.store.handovers.consumedBy([result.tickId]).get(result.tickId)).toBeUndefined()
     }
   )
 })
