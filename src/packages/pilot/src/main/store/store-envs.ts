@@ -85,10 +85,15 @@ export class EnvStore {
       .run(at, runId)
   }
 
-  // The sweep found pilotcli still has it although Pilot recorded it removed: delete it again.
+  // The sweep found pilotcli still has it although Pilot recorded it removed: due for delete again at once, back in the
+  // state it had (ready once made, else failed; deferred stays deferred), its backoff starting over.
   reopen(runId: string): void {
     this.db
-      .prepare('UPDATE runs SET env_removed_at = NULL, env_retry_at = NULL WHERE id = ?')
+      .prepare(
+        `UPDATE runs SET env_state = CASE env_state WHEN 'removed'
+             THEN CASE WHEN env_mode IS NULL THEN 'failed' ELSE 'ready' END ELSE env_state END,
+           env_removed_at = NULL, env_retry_at = NULL, env_delete_error = NULL, env_delete_attempts = 0 WHERE id = ?`
+      )
       .run(runId)
   }
 
@@ -135,11 +140,15 @@ export class EnvStore {
       .map((r) => toRun(r as never))
   }
 
-  // Every run whose env is still preparing, ended or not: at startup, the ones a stopped Pilot left.
-  preparing(): RunRow[] {
+  // At startup, the preparations a stopped Pilot may have left (main/envs/recover.ts): every env still preparing, ended or
+  // not, and every run still running whose create was stopped with `stopped` (an app quit) although nothing closed the run.
+  leftPreparing(stopped: string): RunRow[] {
     return this.db
-      .prepare("SELECT * FROM runs WHERE env_state = 'preparing' ORDER BY started_at, id")
-      .all()
+      .prepare(
+        `SELECT * FROM runs WHERE env_state = 'preparing'
+           OR (status = 'running' AND env_state = 'failed' AND env_reason = ?) ORDER BY started_at, id`
+      )
+      .all(stopped)
       .map((r) => toRun(r as never))
   }
 

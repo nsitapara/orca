@@ -154,8 +154,26 @@ describe('EnvStore', () => {
       removedAt: 11,
       deleteError: null
     })
+  })
+
+  // The sweep found pilotcli still has it: due again at once, in the state it had before it was removed, its backoff
+  // starting over.
+  it.each([
+    ['a failed create', false, 'failed'],
+    ['a ready env', true, 'ready']
+  ] as const)('%s reopened is due for delete again', (_name, made, state) => {
+    const store = setup()
+    if (made) {
+      store.runs.envs.ready('r1', READY)
+    } else {
+      store.runs.envs.settle('r1', 'failed', 'bad flags')
+    }
+    store.runs.update('r1', { status: 'done', finishedAt: 2 })
+    store.runs.envs.deleteFailed('r1', 'busy', 10)
+    store.runs.envs.removed('r1', 11)
     store.runs.envs.reopen('r1')
-    expect(store.runs.get('r1')?.env?.removedAt).toBeNull()
+    expect(store.runs.get('r1')?.env).toMatchObject({ state, removedAt: null, deleteAttempts: 0 })
+    expect(store.runs.envs.dueForTeardown(12).map((r) => r.id)).toEqual(['r1'])
   })
 
   it('knows the throwaway folders it works in now, however the path is spelled', () => {
