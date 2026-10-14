@@ -35,7 +35,8 @@ describeParity(PARITY_05, '05 · Fix failed CI: Pilot decides each MR as ci-fix-
     await expectParity(PARITY_05, join(CASES, name))
   })
 
-  // !105 is dirty, so both sides skip it whatever its git-operation markers say: a case lacking one
+  // !105 is dirty: the sweep skips it, and the env's busy check replaces that gate (pilotcli M4 §8), so Pilot
+  // starts it. Both verdicts agree under the table, whatever its git-operation markers say: a case lacking one
   // of them agrees on every verdict, and only the missed read fails it.
   it('fails a case when the new side reads what the fixture lacks, though every verdict agrees', async () => {
     const marker = ['git', '-C', '/tmp/parity-05/wt-105', 'rev-parse', '--git-path', 'MERGE_HEAD']
@@ -86,55 +87,67 @@ describeParity(PARITY_05, "05 · Fix failed CI v2: the sweep's state, imported",
     const neu = await decide(IMPORTED)
     expect(neu.filter((d) => d.verdict === 'started').map((d) => d.key)).toEqual([
       'mr:1561',
-      'mr:1605',
-      'mr:1606'
+      'mr:1574',
+      'mr:1592'
     ])
     expect(neu.find((d) => d.key === 'mr:1607')?.verdict).toBe('over_limit')
     const skipped = neu.filter((d) => d.verdict === 'skipped').map((d) => [d.key, failedCheck(d)])
-    expect(skipped).toEqual([
-      ['mr:1574', 'Clean'],
-      ['mr:1592', 'No open session'],
-      ['mr:1601', 'Worktree'],
-      ['mr:1603', 'Clean'],
-      ['mr:1604', 'Clean']
+    expect(skipped).toEqual([['mr:1601', 'Worktree']])
+    // The sweep skipped 1574 (dirty), 1592 (tab open), 1603 and 1604 (dirty, mid-rebase); the env's busy check
+    // replaces those gates (pilotcli M4 §8), so 1574 and 1592 start and the rest wait for the limit.
+    expect(neu.filter((d) => d.verdict === 'over_limit').map((d) => d.key)).toEqual([
+      'mr:1603',
+      'mr:1604',
+      'mr:1605',
+      'mr:1606',
+      'mr:1607'
     ])
   })
 
-  // The ruling for 05: skip reasons, not only verdicts (no worktree vs uncommitted vs tab still open), on every case.
+  // The ruling for 05: skip reasons, not only verdicts, on every case. The sweep's skips for a dirty worktree, a
+  // git operation or an open tab are gone: the env's busy check replaces those gates (pilotcli M4 §8), so such an
+  // MR is never skipped and no check names them.
   it.each(cases)(
     "%s: each MR is skipped for the check that names the sweep's reason",
     async (name) => {
       const byReason: [RegExp, string][] = [
         [/^no Orca worktree$/, 'Worktree'],
-        [/^previous CI-fix session still open$/, 'No open session'],
-        [/^(uncommitted changes|\S+ present); retry next round$/, 'Clean'],
         [/^claude .*(weekly|session)/, 'Quota']
       ]
       const neu = await decide(name.replace(/\.json$/, ''))
       const old = runOldPlan('05', join(CASES, name)).filter(
         (d) => d.decision === 'skip' || d.decision === 'quota'
       )
+      const busy =
+        /^(uncommitted changes|\S+ present); retry next round$|^previous CI-fix session still open$/
       for (const d of old) {
+        const fresh = neu.find((n) => n.key === d.key)
+        if (busy.test(d.reason)) {
+          // Never skipped for the sweep's reason: started, over the limit, or (quota-out) held by the quota check.
+          const held = fresh?.verdict === 'skipped'
+          expect([d.key, d.reason, held ? failedCheck(fresh) : fresh?.verdict]).toEqual([
+            d.key,
+            d.reason,
+            held ? 'Quota' : expect.stringMatching(/^(started|over_limit)$/)
+          ])
+          continue
+        }
         const expected = byReason.find(([re]) => re.test(d.reason))?.[1]
-        expect([d.key, d.reason, failedCheck(neu.find((n) => n.key === d.key))]).toEqual([
-          d.key,
-          d.reason,
-          expected
-        ])
+        expect([d.key, d.reason, failedCheck(fresh)]).toEqual([d.key, d.reason, expected])
       }
     }
   )
 
-  // M1 put "clean" before "session"; the sweep tests the open tab first, so a dirty worktree with its tab open
-  // is skipped for the tab.
-  it('skips an MR with an open tab and a dirty worktree for the open tab, as the sweep does', async () => {
+  // The sweep tested the open tab first, then the dirty worktree. The env's busy check replaces both gates
+  // (pilotcli M4 §8): the MR is started, in a throwaway when something is working there.
+  it('starts an MR with an open tab and a dirty worktree, where the sweep skipped it for the open tab', async () => {
     const old = runOldPlan('05', caseFile(JOB_05.job, 'tab-and-dirty'))
     expect(old).toMatchObject([
       { key: 'mr:1610', decision: 'skip', reason: 'previous CI-fix session still open' }
     ])
     const neu = await decide('tab-and-dirty')
     expect(neu.map((d) => [d.key, d.verdict, failedCheck(d)])).toEqual([
-      ['mr:1610', 'skipped', 'No open session']
+      ['mr:1610', 'started', null]
     ])
   })
 
@@ -142,7 +155,7 @@ describeParity(PARITY_05, "05 · Fix failed CI v2: the sweep's state, imported",
     const neu = await decide('quota-out')
     expect(neu.map((d) => [d.key, d.verdict, failedCheck(d)])).toEqual([
       ['mr:1561', 'skipped', 'Quota'],
-      ['mr:1574', 'skipped', 'Clean']
+      ['mr:1574', 'skipped', 'Quota']
     ])
   })
 })
