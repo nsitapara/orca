@@ -43,9 +43,25 @@ describe('agentStepStarter', () => {
         path: '/repo/wt',
         worktreeId: 'wt-1',
         selector: 'id:wt-1',
-        created: false
+        created: false,
+        env: {},
+        disposable: false
       }
     })
+  })
+
+  it.each([
+    ['throwaway', true],
+    ['in_place', false]
+  ])('hands an %s env run its variables, disposable %s', async (mode, disposable) => {
+    const launch = vi.fn(async () => ({ terminalHandle: 't', paneKey: 'p' }))
+    const env = { mode, vars: { A: 'b' } } as unknown as RunRow['env']
+    await agentStepStarter(launch)(req(1, { env }))
+    expect(launch).toHaveBeenCalledWith(
+      expect.objectContaining({
+        workspace: expect.objectContaining({ path: '/repo/wt', env: { A: 'b' }, disposable })
+      })
+    )
   })
 
   it('selects the workspace by path when the run has no worktree id', async () => {

@@ -156,7 +156,29 @@ describe('pilotStepEnv', () => {
   })
 })
 
+const STEP_ENV = {
+  runId: 'r-1',
+  automationId: 'fix-ci',
+  itemKey: 'mr:1561',
+  stepName: 'fix',
+  stepIdx: 0,
+  powers: ['commit']
+}
+
 describe('terminalLaunchOptions', () => {
+  it("puts the env's variables under Pilot's step env", () => {
+    const opts = terminalLaunchOptions({
+      agent: 'claude',
+      prompt: 'p',
+      title: 't',
+      env: STEP_ENV,
+      args: [],
+      session: { kind: 'fresh', sessionId: null },
+      runEnv: { API_URL: 'http://a', PILOT_RUN_ID: 'forged' }
+    })
+    expect(opts.pilot.env).toMatchObject({ API_URL: 'http://a', PILOT_RUN_ID: STEP_ENV.runId })
+  })
+
   it("combines the step env, the session's argv then the step args, the title and the prompt", () => {
     expect(
       terminalLaunchOptions({

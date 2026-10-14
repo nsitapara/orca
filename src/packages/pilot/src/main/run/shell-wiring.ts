@@ -10,6 +10,7 @@ export function pilotShellWiring(): ShellWiring {
       }
       return { path: req.run.worktreePath }
     },
+    runEnvOf: (req) => req.run.env?.vars ?? {},
     envOf: (req) =>
       pilotStepEnv({
         runId: req.run.id,

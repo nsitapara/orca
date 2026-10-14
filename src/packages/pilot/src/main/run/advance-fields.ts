@@ -55,17 +55,36 @@ function runFailed(ended: EndedStep[]): boolean {
   return ended.some((s) => !s.always && broke(s.status))
 }
 
-// The run's own workspace wins over the item's: a new_worktree workspace exists only once startRun
-// resolved it and recorded it on the run.
+// An env run's facts as templates read them: {env.mode}, {env.path} (the folder it works in), … (README: Job environments).
+function envFields(run: RunRow): ItemFields {
+  const env = run.env
+  if (!env) {
+    return {}
+  }
+  return {
+    'env.mode': env.mode,
+    'env.reason': env.reason,
+    'env.path': env.path,
+    'env.sha': env.sha,
+    'env.file': env.envFile,
+    'env.stack': env.stack?.kind ?? null
+  }
+}
+
+// The run's own workspace wins over the item's (a new_worktree exists only once startRun made it). For an env run,
+// {worktree.path} stays the item's worktree, its home (job 05's flag step flags Nish's worktree with it); the folder the
+// steps work in is {env.path}. The id is the run's only when it works in its home (in place, kept).
 function workspaceFields(run: RunRow): ItemFields {
   const fields: ItemFields = {}
-  if (run.worktreePath) {
-    fields['worktree.path'] = run.worktreePath
+  const home = run.homePath ?? run.worktreePath
+  if (home) {
+    fields['worktree.path'] = home
   }
-  if (run.worktreeId) {
+  const inHome = !run.homePath || run.homePath === run.worktreePath
+  if (run.worktreeId && inHome) {
     fields['worktree.id'] = run.worktreeId
   }
-  return fields
+  return { ...fields, ...envFields(run) }
 }
 
 // run.* as a template reads it, dated by the run's start in the automation's timezone.

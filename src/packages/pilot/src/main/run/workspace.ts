@@ -13,6 +13,9 @@ export type Workspace = {
   worktreeId: string | null
   selector: string
   created: boolean
+  // An env run's variables (pilotcli's data.env), and whether its folder goes when the run ends (a throwaway).
+  env?: Record<string, string>
+  disposable?: boolean
 }
 export type NewWorktreeRequest = {
   repoPath: string

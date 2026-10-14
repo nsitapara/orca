@@ -17,6 +17,8 @@ export type WorktreeSourceDeps = {
   git: GitRunner
   markers(automationId: string): ReadonlyMap<string, string>
   pathExists(path: string): boolean
+  // A folder one of Pilot's own throwaways works in (store.runs.envs.isThrowawayFolder): never Nish's work.
+  envFolder?(path: string): boolean
 }
 
 const POOL = 3
@@ -136,8 +138,8 @@ export function worktreeSource(deps: WorktreeSourceDeps): ItemSource {
     async list(ctx, rawWhere) {
       const where = worktreeWhereSchema.parse(rawWhere ?? {})
       const warnings: string[] = []
-      const records = (await deps.listWorktrees(ctx.repo)).filter((w) =>
-        eligibleWorktree(w, deps.pathExists)
+      const records = (await deps.listWorktrees(ctx.repo)).filter(
+        (w) => eligibleWorktree(w, deps.pathExists) && !deps.envFolder?.(w.path)
       )
       // Without GitLab every ownership fact is unknown, so the gate rules block (fail closed).
       const api = await gitlabFor(ctx).catch((error: unknown) => {

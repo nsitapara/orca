@@ -18,6 +18,10 @@ export function rememberWorktreeSession(
   sessionId: string | null,
   at: number
 ): void {
+  // A throwaway is disposable (M4 §8): its sessions are never resumed.
+  if (req.workspace.disposable) {
+    return
+  }
   if (req.definition.steps[req.stepIdx].session.kind !== 'per_worktree' || sessionId === null) {
     return
   }
@@ -46,6 +50,8 @@ export function rememberLearnedSession(
     !isSessionId(sessionId) ||
     !run?.worktreePath ||
     !def ||
+    // A throwaway is disposable (M4 §8): its sessions are never resumed.
+    run.env?.mode === 'throwaway' ||
     stepDef?.session.kind !== 'per_worktree'
   ) {
     return
@@ -66,6 +72,10 @@ export async function worktreeSessionToResume(
   deps: AgentStepDeps
 ): Promise<string | null> {
   const { definition, workspace } = req
+  // A throwaway is disposable (M4 §8): its sessions are never resumed.
+  if (workspace.disposable) {
+    return null
+  }
   const stored = store.sessions.get(definition.id, workspace.path, agent)
   if (!stored) {
     return null

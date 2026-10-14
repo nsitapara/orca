@@ -131,12 +131,17 @@ export function terminalLaunchOptions(input: {
   env: StepEnvInput
   args: readonly string[]
   session: SessionPlan
+  runEnv?: Record<string, string>
 }): PilotAgentLaunchOptions {
   return {
     agent: input.agent,
     prompt: input.prompt,
     title: input.title,
-    pilot: { env: pilotStepEnv(input.env), argv: agentArgv(input.agent, input.session, input.args) }
+    pilot: {
+      // The env's variables first: Pilot's own step env always wins (parseEnvResult refuses PILOT_*/ORCA_* anyway).
+      env: { ...input.runEnv, ...pilotStepEnv(input.env) },
+      argv: agentArgv(input.agent, input.session, input.args)
+    }
   }
 }
 
