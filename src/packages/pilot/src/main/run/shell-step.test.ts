@@ -17,7 +17,7 @@ import {
   type ShellRunner,
   type ShellSpec
 } from './shell-step'
-import { STDOUT_NOT_KEPT } from './shell-ending'
+import { STDOUT_CUT_NOT_KEPT, STDOUT_NOT_KEPT } from './shell-ending'
 
 const MIN = 60_000
 
@@ -204,7 +204,7 @@ describe('makeShellSteps', () => {
     await steps.settled()
     expect(store.runs.steps('run-1')[0]).toMatchObject({
       result: null,
-      outputTail: STDOUT_NOT_KEPT,
+      outputTail: STDOUT_CUT_NOT_KEPT,
       error: 'Exited 1'
     })
   })

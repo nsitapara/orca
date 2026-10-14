@@ -6,6 +6,8 @@ import { lastLine } from '../last-line'
 
 export const OUTPUT_TAIL_CHARS = 8192
 export const STDOUT_NOT_KEPT = '(stdout not kept: it may hold comment or ticket text)'
+export const STDOUT_CUT_NOT_KEPT =
+  "(stdout not kept: it passed 1 MiB and was cut, so Pilot can't check it for comment or ticket text)"
 
 export type ShellResult = {
   code: number | null
@@ -13,7 +15,7 @@ export type ShellResult = {
   stdout: string
   stderr: string
   timedOut: boolean
-  // The capture passed 1 MiB and kept only its tail (runProcess's outputTruncated).
+  // Stdout or stderr passed 1 MiB and the capture kept only its tail (runProcess's outputTruncated).
   truncated?: boolean
 }
 
@@ -26,9 +28,14 @@ export function keepsStdout(result: ShellResult, read: ResultRead): boolean {
   return read.stored !== null || result.truncated !== true
 }
 
+// Why stdout isn't kept: a result marked meta.text says so; anything else here is a capture that was cut.
+function stdoutNote(read: ResultRead): string {
+  return read.text ? STDOUT_NOT_KEPT : STDOUT_CUT_NOT_KEPT
+}
+
 // The last 8 KB of what the step printed, stderr after stdout; stdout Pilot may not keep is replaced by a note.
 export function outputTail(result: ShellResult, read: ResultRead): string {
-  const stdout = keepsStdout(result, read) ? result.stdout : STDOUT_NOT_KEPT
+  const stdout = keepsStdout(result, read) ? result.stdout : stdoutNote(read)
   const both = result.stderr.trim() ? `${stdout}\n--- stderr ---\n${result.stderr}` : stdout
   return both.length > OUTPUT_TAIL_CHARS ? both.slice(-OUTPUT_TAIL_CHARS) : both
 }
