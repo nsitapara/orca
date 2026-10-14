@@ -147,4 +147,55 @@ describe('stepFields', () => {
       ).text
     ).toBe('Fix 2 findings (done)')
   })
+
+  it("adds a stored result's outcome, reason and data (compact JSON) over outputs of those names, and never lifts data's fields", () => {
+    const withResult: StepResult[] = [
+      {
+        name: 'context',
+        status: 'done',
+        exitCode: 0,
+        outputs: { outcome: 'ok', remote: 'abc', result: 'from the outputs file' },
+        result: {
+          command: 'skills get-context',
+          outcome: 'ok',
+          reason: '2 failed jobs',
+          data: { pipeline_id: 2934, kinds: ['lint'] },
+          meta: {}
+        }
+      },
+      { name: 'fix', status: 'pending', exitCode: null, outputs: {} }
+    ]
+    const fields = stepFields(withResult, 1)
+    expect(fields).toMatchObject({
+      'steps.context.outcome': 'ok',
+      'steps.context.reason': '2 failed jobs',
+      'steps.context.result': '{"pipeline_id":2934,"kinds":["lint"]}',
+      'steps.context.remote': 'abc',
+      'previous.result': '{"pipeline_id":2934,"kinds":["lint"]}'
+    })
+    expect(fields).not.toHaveProperty('steps.context.pipeline_id')
+  })
+
+  it.each([
+    [
+      'meta.text',
+      {
+        command: 'c',
+        outcome: 'ok',
+        reason: 'r',
+        data_omitted: 'may contain comment or ticket text'
+      }
+    ],
+    [
+      'too large',
+      { command: 'c', outcome: 'ok', reason: 'r', meta: {}, data_omitted: 'too large (300 KB)' }
+    ]
+  ])('reads a result whose data was not kept (%s) as missing', (_n, result) => {
+    const fields = stepFields(
+      [{ name: 'context', status: 'done', exitCode: 0, outputs: {}, result }],
+      1
+    )
+    expect(fields['steps.context.result']).toBeNull()
+    expect(fields['steps.context.reason']).toBe('r')
+  })
 })

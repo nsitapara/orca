@@ -187,6 +187,10 @@ A shell step's `run:` is plain shell. It takes no `{placeholders}`; validation r
   - `ok` → done. `skip` → skipped, and the run goes on.
   - `stop` → stopped: the run ends there as done, with the outcome "Nothing to do: <reason>" (the envelope's reason, else the step's last line). Every later non-`always` step is skipped; `always` steps still run and read `{steps.<name>.status}` as `stopped`. The `once_per` key is settled done.
   - Only a non-`always` step can stop the run, as only one can fail it.
+- **Results in later steps:** `{steps.<name>.result}` is the result's `data` as compact JSON; `{steps.<name>.outcome}` and `{steps.<name>.reason}` are strings; `previous.*` reads the step just before. They win over outputs of the same name; `{steps.<name>.status}` stays Pilot's own.
+  - A result whose data wasn't kept (`data_omitted`) reads as missing.
+  - A prompt or `env:` value that would render a `result` over 32 KB fails its step: "steps.<name>.result is N KB, over the 32 KB cap". It is never cut.
+  - `run:` still takes no placeholders: pass a result through `env:`. Pilot never lifts fields out of `data`; single values come from `$PILOT_OUTPUT_FILE`.
 - **Reserved env names:** `PATH`, `IFS`, `HOME`, `ENV`, `BASH_ENV`, `SHELLOPTS`, `BASHOPTS`, `PS4`, `CDPATH`, `GLOBIGNORE`, `AGENT_RUN`, and anything starting `PILOT_`, `ORCA_`, `LD_` or `DYLD_`.
 - **Never** use an env value in `$(( ))`, `(( ))`, `let`, `declare -i`, an array subscript, `[[ -eq ]]`, `eval`, or `sh -c "…$NAME…"`. The shell evaluates those as code. Quote it as `"$NAME"`, or validate it first.
 - **Never** put an item value in an env name that another program executes: `NODE_OPTIONS`, `GIT_SSH_COMMAND`, `GIT_CONFIG_*`, `PERL5OPT`, `JAVA_TOOL_OPTIONS`, `SHELL`, `EDITOR`, `PAGER`. Validation doesn't block these.
