@@ -149,6 +149,47 @@ describe('decideTickItems', () => {
     })
   })
 
+  it("skips an item a field script says isn't due (exit 3), with its last line, before its script checks", async () => {
+    const def = testDefinition({
+      id: 'a',
+      file: '/auto/a.yaml',
+      items: {
+        kind: 'merge_request',
+        where: {},
+        match: [],
+        customFields: [{ name: 'stack', script: './stack.sh', cache: 'per_head', timeoutMs: 1000 }]
+      },
+      checks: [{ kind: 'script', run: './check.sh', timeoutMs: 5000 }]
+    })
+    const notYet: ScriptResult = {
+      code: 3,
+      stdout: 'pipeline still running\n',
+      stderr: '',
+      timedOut: false
+    }
+    const runScript = vi.fn(async (req: ScriptRequest) => {
+      if (req.env.PILOT_FIELD === 'mr.stack' && req.env.PILOT_ITEM_KEY === 'mr:1') {
+        return notYet
+      }
+      return ok('backend')
+    })
+    const { decide } = setup(def, {
+      sources: {
+        list: async () => ({ items: [mr(1, 'b1'), mr(2, 'b2')], warnings: [] }),
+        scope: () => null
+      },
+      fields: { runScript }
+    })
+    const out = await decide()
+    expect(summary(out)).toEqual([
+      ['mr:1', 'skipped', 'pipeline still running'],
+      ['mr:2', 'started', 'All checks pass']
+    ])
+    expect(out.warnings).toEqual([])
+    const checks = runScript.mock.calls.filter(([r]) => r.env.PILOT_FIELD === undefined)
+    expect(checks.map(([r]) => r.env.PILOT_ITEM_KEY)).toEqual(['mr:2'])
+  })
+
   it("skips an item whose worktree has another automation's run", async () => {
     const def = testDefinition({ id: 'a' })
     const { store, decide } = setup(def, { sources: { scope: () => null } })

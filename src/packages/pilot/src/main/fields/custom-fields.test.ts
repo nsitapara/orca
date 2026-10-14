@@ -56,6 +56,57 @@ describe('parseFieldOutput', () => {
 })
 
 describe('addCustomFields', () => {
+  it.each<[string, ScriptResult, string]>([
+    [
+      'its last line, stdout first',
+      { code: 3, stdout: 'checking\npipeline still running\n', stderr: 'warn\n', timedOut: false },
+      'pipeline still running'
+    ],
+    [
+      'stderr when stdout is empty',
+      { code: 3, stdout: '', stderr: 'no backend change yet\n', timedOut: false },
+      'no backend change yet'
+    ],
+    [
+      'a plain reason when it said nothing',
+      { code: 3, stdout: '', stderr: '', timedOut: false },
+      "Field mr.failed_specs isn't due now (exit 3)"
+    ]
+  ])(
+    'exit 3 marks the item not due now, with %s: no warning, no value, nothing cached',
+    async (_n, res, reason) => {
+      const { deps, runScript } = depsWith(() => res)
+      const item = testItem({ key: 'mr:1', label: '!1', fields: { 'mr.head_sha': 'abc' } })
+      const out = await addCustomFields(def, [item], opts('p1'), deps)
+      expect(out.notDue).toEqual(new Map([['mr:1', reason]]))
+      expect(out.warnings).toEqual([])
+      expect(out.items[0].fields['mr.failed_specs']).toBeNull()
+      await addCustomFields(def, [item], opts('p2'), deps)
+      expect(runScript).toHaveBeenCalledTimes(2)
+    }
+  )
+
+  it("runs no later field script for an item that isn't due", async () => {
+    const two = testDefinition({
+      ...def,
+      items: {
+        kind: 'merge_request',
+        where: {},
+        match: [],
+        customFields: [{ ...field, name: 'stack' }, field]
+      }
+    })
+    const { deps, runScript } = depsWith(() => ({
+      code: 3,
+      stdout: 'not yet\n',
+      stderr: '',
+      timedOut: false
+    }))
+    const out = await addCustomFields(two, [testItem({ key: 'mr:1' })], opts(), deps)
+    expect(runScript).toHaveBeenCalledTimes(1)
+    expect(out.notDue.get('mr:1')).toBe('not yet')
+  })
+
   it('runs the script in the main checkout with the item on stdin, and names the field by kind', async () => {
     const { deps, runScript } = depsWith(() => ok('2'))
     const item = testItem({
