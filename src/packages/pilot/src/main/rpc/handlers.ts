@@ -171,5 +171,5 @@ export async function dryRun(ctx: PilotContext, id: string) {
 
 export async function tickNow(ctx: PilotContext, id: string) {
   findDefinition(ctx, id)
-  return ctx.scheduler.tickNow(id, { dryRun: false })
+  return ctx.scheduler.tickNow(id, { dryRun: false, byHand: true })
 }

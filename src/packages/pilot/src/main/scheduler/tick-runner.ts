@@ -43,8 +43,14 @@ export type TickDeps = DecideDeps & {
   previewEnvs?(def: AutomationDefinition, decisions: ItemDecision[]): Promise<void>
 }
 // `pass` is the scheduler pass's fetch cache, shared by every automation that ticks in that pass. `trigger`: the run
-// whose feed (run: now) asked for this tick, recorded on it for Activity.
-export type TickOptions = { dryRun: boolean; pass?: PassFetchCache; trigger?: TickTrigger }
+// whose feed (run: now) asked for this tick, recorded on it for Activity. `byHand`: a Run now, whose runs are stored
+// with trigger `manual`.
+export type TickOptions = {
+  dryRun: boolean
+  pass?: PassFetchCache
+  trigger?: TickTrigger
+  byHand?: boolean
+}
 
 const pad = (v: number) => String(v).padStart(2, '0')
 
@@ -94,7 +100,8 @@ async function startRuns(
   tickId: number,
   deps: TickDeps,
   runIds: Map<string, string>,
-  unlaunched: { current: Unlaunched | null }
+  unlaunched: { current: Unlaunched | null },
+  byHand: boolean
 ): Promise<void> {
   const at = deps.now()
   let n = 0
@@ -132,7 +139,8 @@ async function startRuns(
       itemKey: decision.key,
       itemLabel: decision.label,
       worktreePath,
-      startedAt: at
+      startedAt: at,
+      ...(byHand ? { trigger: 'manual' as const } : {})
     })
     runIds.set(decision.key, runId)
     unlaunched.current = { runId, onceKey: decision.onceKey }
@@ -279,7 +287,7 @@ export async function runTick(
       tickId,
       runIdFor: (n) => `${makeRunId(def.id, at, n, tickId)}-ask`
     })
-    await startRuns(def, decisions, tickId, deps, runIds, unlaunched)
+    await startRuns(def, decisions, tickId, deps, runIds, unlaunched, opts.byHand === true)
     deps.store.recordDecisions(tickId, decisions, runIds)
     settleFed(deps.store, def, feeding, decisions, runIds, tickId, deps.now())
     deps.store.finishTick(tickId, 'ok', null, countVerdicts(decisions), deps.now(), warnings)

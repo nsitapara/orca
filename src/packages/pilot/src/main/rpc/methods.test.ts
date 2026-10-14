@@ -211,7 +211,7 @@ describe('Pilot RPC methods', () => {
     })
     expect(calls).toEqual([
       ['ci', { dryRun: true }],
-      ['ci', { dryRun: false }]
+      ['ci', { dryRun: false, byHand: true }]
     ])
     await expect(
       find('pilot.automations.tickNow').handler({ id: 'nope' }, DESKTOP)
@@ -279,7 +279,7 @@ describe('who may tick, enable or pause an automation', () => {
       find('pilot.automations.tickNow').handler({ id: 'ci', ...binding }, { caller })
     if (allowed) {
       expect(await call()).toEqual({ status: 'busy' })
-      expect(ticks).toEqual([['ci', { dryRun: false }]])
+      expect(ticks).toEqual([['ci', { dryRun: false, byHand: true }]])
     } else {
       await expect(Promise.resolve().then(call)).rejects.toThrow(
         caller ? AGENT_IN_RUN : NO_CALLER_CHANGE
