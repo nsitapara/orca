@@ -5,7 +5,7 @@ const open = () => PilotStore.open(':memory:')
 const SENT = { senderId: 'dev-e2e-fix', receiverId: 'dev-e2e-fix-start', at: 100 }
 
 describe('HandoverStore: ids one stage hands the next, kept until a tick of the receiver reads them', () => {
-  it('writes each id once per (sender run, receiver, id), and says which ids were new', () => {
+  it('writes each id once per (sender run, receiver, id), and says which ids it wrote or refreshed', () => {
     const store = open()
     expect(
       store.handovers.add({ ...SENT, senderRunId: 'r1', itemIds: ['WEB-1', 'WEB-2'] })
@@ -13,20 +13,48 @@ describe('HandoverStore: ids one stage hands the next, kept until a tick of the 
     expect(
       store.handovers.add({ ...SENT, senderRunId: 'r1', itemIds: ['WEB-2', 'WEB-3'] })
     ).toEqual(['WEB-3'])
-    expect(store.handovers.add({ ...SENT, senderRunId: 'r2', itemIds: ['WEB-1'] })).toEqual([
-      'WEB-1'
+    expect(
+      store.handovers.pending('dev-e2e-fix-start', 10).map((h) => [h.senderRunId, h.itemId])
+    ).toEqual([
+      ['r1', 'WEB-1'],
+      ['r1', 'WEB-2'],
+      ['r1', 'WEB-3']
     ])
+    expect(store.handovers.pending('another-stage', 10)).toEqual([])
+  })
+
+  it('keeps one pending row per (receiver, id): a later run’s handover refreshes it, keeping when it was first handed over', () => {
+    const store = open()
+    store.handovers.add({ ...SENT, at: 100, senderRunId: 'r1', itemIds: ['WEB-1', 'WEB-2'] })
+    for (let n = 2; n <= 300; n++) {
+      expect(
+        store.handovers.add({ ...SENT, at: 100 * n, senderRunId: `r${n}`, itemIds: ['WEB-1'] })
+      ).toEqual(['WEB-1'])
+    }
     expect(
       store.handovers
         .pending('dev-e2e-fix-start', 10)
-        .map((h) => [h.senderRunId, h.itemId, h.state])
+        .map((h) => [h.itemId, h.senderRunId, h.createdAt])
     ).toEqual([
-      ['r1', 'WEB-1', 'pending'],
-      ['r1', 'WEB-2', 'pending'],
-      ['r1', 'WEB-3', 'pending'],
-      ['r2', 'WEB-1', 'pending']
+      ['WEB-2', 'r1', 100],
+      ['WEB-1', 'r300', 100]
     ])
-    expect(store.handovers.pending('another-stage', 10)).toEqual([])
+    expect(store.handovers.latest('dev-e2e-fix', 'dev-e2e-fix-start').map((h) => h.itemId)).toEqual(
+      ['WEB-1']
+    )
+  })
+
+  it('adds a new row for an id handed over again after it was consumed', () => {
+    const store = open()
+    store.handovers.add({ ...SENT, senderRunId: 'r1', itemIds: ['WEB-1'] })
+    const [row] = store.handovers.pending('dev-e2e-fix-start', 10)
+    store.handovers.consume(1, 200, [
+      { rowId: row.id, verdict: 'started', reason: 'Started', runId: 'x' }
+    ])
+    store.handovers.add({ ...SENT, at: 300, senderRunId: 'r2', itemIds: ['WEB-1'] })
+    expect(
+      store.handovers.pending('dev-e2e-fix-start', 10).map((h) => [h.senderRunId, h.createdAt])
+    ).toEqual([['r2', 300]])
   })
 
   it('reads at most <limit> pending rows, oldest first', () => {

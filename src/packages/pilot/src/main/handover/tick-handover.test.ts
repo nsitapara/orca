@@ -10,7 +10,7 @@ import type { IdsRunner } from '../sources/ids-from'
 import { PilotStore } from '../store/store'
 import { handOverRunEnd } from './hand-over'
 import { repend } from './repend'
-import { HANDOVER_EXPIRY_MS, settles } from './tick-handover'
+import { HANDOVER_EXPIRY_MS, settleFed, settles } from './tick-handover'
 
 const people = EMPTY_PEOPLE
 const repoItem = testItem({ kind: 'repo', key: 'repo:web-platform', label: 'web-platform' })
@@ -465,5 +465,52 @@ describe('runTick: what a fed stage leaves pending', () => {
     const result = await runTick(FED, people, { ...d, sources: flaky }, { dryRun: false })
     expect(result.status).toBe('ok')
     expect(pendingIds(d)).toEqual(['WEB-2'])
+  })
+
+  describe('settleFed: consuming as started or asked needs the run it started', () => {
+    function oneFed(d: ReturnType<typeof handed>) {
+      const [row] = d.store.handovers.pending('starts', 10, 0)
+      return { fed: [row], dropped: [], missing: [], skipped: [] }
+    }
+    const decision = (verdict: 'started' | 'asked' | 'notdue') => ({
+      key: 'linear:WEB-1',
+      label: 'WEB-1',
+      verdict,
+      reason: verdict,
+      checks: [],
+      onceKey: 'WEB-1',
+      fields: {}
+    })
+
+    it.each(['started', 'asked'] as const)(
+      'keeps the id pending when the %s decision has no run (a card that failed to record, a launch never made)',
+      (verdict) => {
+        const d = handed(['WEB-1'])
+        settleFed(d.store, FED, oneFed(d), [decision(verdict)], new Map(), 9, NOW)
+        expect(pendingIds(d)).toEqual(['WEB-1'])
+      }
+    )
+
+    it('consumes an already-handled id with the run that holds its key, so that run failing puts it back', () => {
+      const d = handed(['WEB-1'])
+      d.store.runs.create({
+        id: 'held',
+        automationId: 'starts',
+        tickId: 1,
+        itemKey: 'linear:WEB-1',
+        itemLabel: 'WEB-1',
+        worktreePath: null,
+        startedAt: NOW
+      })
+      d.store.markHandled('starts', 'WEB-1', 'held', NOW)
+      settleFed(d.store, FED, oneFed(d), [decision('notdue')], new Map(), 9, NOW)
+      expect(pendingIds(d)).toEqual([])
+      expect(d.store.handovers.consumedBy([9]).get(9)?.[0]).toMatchObject({
+        itemId: 'WEB-1',
+        runId: 'held'
+      })
+      repend(d.store, 'held')
+      expect(pendingIds(d)).toEqual(['WEB-1'])
+    })
   })
 })

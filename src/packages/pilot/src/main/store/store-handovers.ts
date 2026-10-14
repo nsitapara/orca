@@ -49,16 +49,34 @@ export class HandoverStore {
   constructor(private readonly db: Database) {}
 
   // Idempotent per (sender run, receiver, id): a repeat adds nothing. Returns the ids this call wrote.
+  // A receiver has at most one pending row per id: handing over an id that already waits refreshes that row (the
+  // latest sender run, moved to the back of the read order) and keeps when it was first handed over, so an id handed
+  // over every 30 minutes still expires 7 days after the first. Run it in a transaction (closeRun's).
   add(h: NewHandover): string[] {
     const insert = this.db.prepare(
       'INSERT OR IGNORE INTO handovers (sender_id, sender_run_id, receiver_id, item_id, created_at) VALUES (?, ?, ?, ?, ?)'
     )
+    const sameRun = this.db.prepare(
+      'SELECT 1 FROM handovers WHERE sender_run_id = ? AND receiver_id = ? AND item_id = ?'
+    )
+    const waiting = this.db.prepare(
+      "SELECT MIN(created_at) AS first FROM handovers WHERE receiver_id = ? AND item_id = ? AND state = 'pending'"
+    )
+    const unwait = this.db.prepare(
+      "DELETE FROM handovers WHERE receiver_id = ? AND item_id = ? AND state = 'pending'"
+    )
     const written: string[] = []
     for (const id of h.itemIds) {
-      const result = insert.run(h.senderId, h.senderRunId, h.receiverId, id, h.at)
-      if (Number(result.changes) > 0) {
-        written.push(id)
+      if (sameRun.get(h.senderRunId, h.receiverId, id)) {
+        continue
       }
+      const first =
+        (waiting.get(h.receiverId, id) as { first: number | null } | undefined)?.first ?? null
+      if (first !== null) {
+        unwait.run(h.receiverId, id)
+      }
+      insert.run(h.senderId, h.senderRunId, h.receiverId, id, first ?? h.at)
+      written.push(id)
     }
     return written
   }
