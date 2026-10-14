@@ -95,6 +95,13 @@ export function retryPreparation(deps: InboxDeps, id: string) {
 export const NOT_PREPARABLE =
   'Only an open card that needs evidence and was never prepared can be prepared'
 
+// A push card pins the commit it pushes: argv is [worktree, branch, head, base] (README, "A prepared push").
+function pinnedHead(card: InboxItemRow): string | undefined {
+  const argv = card.action === 'push' ? card.actionArgs?.argv : undefined
+  const head = Array.isArray(argv) ? argv[2] : undefined
+  return typeof head === 'string' && /^[0-9a-f]{7,40}$/.test(head) ? head : undefined
+}
+
 // The preparation request for a card that needs evidence but was never prepared (an imported or legacy push, Post
 // or drafted card), built from the card itself in the intake's shape (pilot_bridge.preparation_request).
 export function evidenceRequest(card: InboxItemRow): PreparationInput {
@@ -114,10 +121,12 @@ export function evidenceRequest(card: InboxItemRow): PreparationInput {
       'Rebuild the evidence this decision needs from the card itself: its title, context, pinned action and args, and Details.',
     origin: { runId: card.runId, step: card.stepIdx }
   }
+  const head = pinnedHead(card)
   return PreparationInputSchema.parse({
     key: `evidence:${card.id}`,
     context: JSON.stringify(request),
-    requirements
+    requirements,
+    ...(head ? { head } : {})
   })
 }
 

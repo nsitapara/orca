@@ -176,6 +176,11 @@ export async function resolveWorkspace(
   if (ws.kind === 'main_checkout') {
     return mainCheckout(repoPath, deps)
   }
+  if (ws.kind === 'env') {
+    throw new Error(
+      'An env workspace is prepared by the run engine (main/envs), never resolved here'
+    )
+  }
   return newWorktree(req, ws, repoPath, deps)
 }
 

@@ -91,6 +91,21 @@ export type CheckDef =
   | { kind: 'field'; expr: string; reason: string }
   | { kind: 'script'; run: string; timeoutMs: number }
 
+export type EnvStack = 'never' | 'backend' | 'full' | 'when_backend'
+// workspace: { env } (pilotcli M4 §8): one subject, its values templates rendered when the run starts.
+export type EnvSubject =
+  | { kind: 'worktree'; worktree: string; at: string | null }
+  | { kind: 'branch'; branch: string; at: string }
+  | { kind: 'new_branch'; newBranch: string; from: string; keep: boolean }
+// A literal stack, or the one item field that holds it (stack: "{mr.stack}"), read when the run starts.
+export type EnvStackSpec = EnvStack | { field: string }
+export type EnvWorkspaceDef = {
+  kind: 'env'
+  subject: EnvSubject
+  writes: boolean
+  stack: EnvStackSpec
+}
+
 export type WorkspaceDef =
   | { kind: 'item_worktree' }
   | { kind: 'main_checkout' }
@@ -101,6 +116,7 @@ export type WorkspaceDef =
       reuseExisting: boolean
       setup: 'run' | 'skip'
     }
+  | EnvWorkspaceDef
 
 export type StepSession =
   | { kind: 'new' }

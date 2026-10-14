@@ -76,7 +76,9 @@ export function exprErrors(raw: RawAutomation): string[] {
     }
   }
   const worktreeName =
-    typeof raw.workspace === 'object' ? raw.workspace.new_worktree.name : undefined
+    typeof raw.workspace === 'object' && 'new_worktree' in raw.workspace
+      ? raw.workspace.new_worktree.name
+      : undefined
   const beforeRun: [string, string | undefined][] = [
     ['once_per', raw.once_per],
     ['inbox', raw.inbox],

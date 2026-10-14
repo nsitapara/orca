@@ -12,7 +12,13 @@ export const PreparationInputSchema = z
       .array(z.enum(['context', 'diff', 'screens', 'checks', 'review']))
       .min(1)
       .max(5),
-    maxAttempts: z.number().int().min(1).max(5).optional()
+    maxAttempts: z.number().int().min(1).max(5).optional(),
+    // The commit the card was made at: 14's env reads it as {preparation.head} (`at:`). Producers send it; Pilot sets it
+    // only for a push card it queues itself (evidenceRequest), from the head that card pins.
+    head: z
+      .string()
+      .regex(/^[0-9a-f]{7,40}$/, 'expected a commit sha')
+      .optional()
   })
   .strict()
 
