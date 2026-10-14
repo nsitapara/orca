@@ -22,6 +22,8 @@ export type NewWorktreeRequest = {
   name: string
   base: string
   comment: string
+  // A ticket's worktree is labelled as Linear shows it ("WEB-2152 <title>"); null keeps Orca's label.
+  displayName: string | null
   linkedLinearIssue: string | null
   linkedGitLabMR: number | null
   setup: 'run' | 'skip'
@@ -134,12 +136,15 @@ function createRequest(
   name: string
 ): NewWorktreeRequest {
   const iid = req.fields['mr.iid']
+  const ticket = text(req.fields, 'ticket.id')
+  const title = text(req.fields, 'ticket.title')
   return {
     repoPath,
     name,
     base: ws.base,
     comment: `Created by the Pilot automation "${req.definition.name}" (run ${req.runId})`,
-    linkedLinearIssue: text(req.fields, 'ticket.id'),
+    displayName: ticket && title ? `${ticket} ${title}` : null,
+    linkedLinearIssue: ticket,
     linkedGitLabMR: typeof iid === 'number' ? iid : null,
     setup: ws.setup,
     noParent: true
@@ -224,6 +229,11 @@ export function runtimeWorkspaceDeps(
         activate: false,
         telemetrySource: 'unknown',
         comment: req.comment,
+        // Generated: Orca sanitizes the external title. Without a label, the sidebar shows the
+        // linked issue's bare title in place of a branch-named worktree's.
+        ...(req.displayName
+          ? { displayName: req.displayName, displayNameKind: 'generated' as const }
+          : {}),
         ...(req.linkedLinearIssue ? { linkedLinearIssue: req.linkedLinearIssue } : {}),
         ...(req.linkedGitLabMR !== null ? { linkedGitLabMR: req.linkedGitLabMR } : {})
       })

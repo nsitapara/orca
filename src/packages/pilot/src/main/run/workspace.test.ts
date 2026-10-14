@@ -106,6 +106,7 @@ describe('resolveWorkspace', () => {
     const ws = await resolveWorkspace(
       request(newWorktree('fix-{ticket.id}-{run.date}', false, 'run'), {
         'ticket.id': 'WEB-2118',
+        'ticket.title': 'Remove the manual memo',
         'mr.iid': 1561
       }),
       deps
@@ -123,6 +124,7 @@ describe('resolveWorkspace', () => {
         name: 'fix-WEB-2118-20261011',
         base: 'origin/dev',
         comment: 'Created by the Pilot automation "Remove manual memo" (run m04-1)',
+        displayName: 'WEB-2118 Remove the manual memo',
         linkedLinearIssue: 'WEB-2118',
         linkedGitLabMR: 1561,
         setup: 'run',
@@ -138,7 +140,8 @@ describe('resolveWorkspace', () => {
     const deps = depsWith()
     const ws = await resolveWorkspace(request(newWorktree('memo-{run.date}', reuse), {}), deps)
     expect(ws.created).toBe(created)
-    expect(deps.created.length).toBe(created ? 1 : 0)
+    // No ticket: Orca labels the worktree with its name, as before.
+    expect(deps.created).toEqual(created ? [expect.objectContaining({ displayName: null })] : [])
   })
 
   it("never reuses the main checkout, even when the name is its branch's", async () => {
@@ -276,6 +279,7 @@ describe('runtimeWorkspaceDeps', () => {
           name: 'x',
           base: 'origin/dev',
           comment: 'c',
+          displayName: 'WEB-1 Fix it',
           linkedLinearIssue: 'WEB-1',
           linkedGitLabMR: 7,
           setup,
@@ -291,6 +295,8 @@ describe('runtimeWorkspaceDeps', () => {
         activate: false,
         telemetrySource: 'unknown',
         comment: 'c',
+        displayName: 'WEB-1 Fix it',
+        displayNameKind: 'generated',
         linkedLinearIssue: 'WEB-1',
         linkedGitLabMR: 7
       })
