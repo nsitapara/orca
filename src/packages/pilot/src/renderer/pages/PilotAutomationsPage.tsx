@@ -24,7 +24,7 @@ export default function PilotAutomationsPage(): React.JSX.Element {
   if (open) {
     return (
       <main className="relative flex h-full flex-col gap-4 overflow-y-auto bg-background px-5 pb-10 pt-6">
-        <AutomationView id={open} onBack={() => setPilotOpenAutomation(null)} />
+        <AutomationView key={open} id={open} onBack={() => setPilotOpenAutomation(null)} />
       </main>
     )
   }
@@ -32,6 +32,7 @@ export default function PilotAutomationsPage(): React.JSX.Element {
     return (
       <main className="relative flex h-full flex-col gap-4 overflow-y-auto bg-background px-5 pb-10 pt-6">
         <JobView
+          key={job}
           jobId={job}
           onBack={() => setPilotOpenJob(null)}
           onOpenStage={setPilotOpenAutomation}

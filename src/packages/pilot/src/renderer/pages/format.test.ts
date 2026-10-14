@@ -26,6 +26,10 @@ describe('renderer formatting', () => {
         verdictLabel(v as never)
       )
     ).toEqual(['Started', 'Skipped', 'Not due', 'Not in scope', 'Next tick', 'Baselined'])
+    // A dry run's verdicts are what a tick would do.
+    expect(
+      ['started', 'asked', 'baselined', 'skipped'].map((v) => verdictLabel(v as never, true))
+    ).toEqual(['Would start', 'Would ask first', 'Would baseline', 'Skipped'])
   })
 
   it('summarizes a tick', () => {
@@ -35,7 +39,6 @@ describe('renderer formatting', () => {
         automationId: 'a',
         startedAt: 0,
         finishedAt: 1,
-        dryRun: false,
         status: 'ok',
         error: null,
         counts: { started: 1, skipped: 3, notdue: 2, out_of_scope: 15 }
@@ -47,7 +50,6 @@ describe('renderer formatting', () => {
         automationId: 'a',
         startedAt: 0,
         finishedAt: 1,
-        dryRun: false,
         status: 'failed',
         error: 'glab: 502',
         counts: {}
@@ -62,6 +64,7 @@ describe('call results and errors', () => {
     [{ status: 'busy' as const }, 'Tick already running'],
     [{ status: 'unknown' as const }, 'No automation fix-ci'],
     [ok, 'Tick 4 · ok'],
+    [{ ...ok, tickId: null }, 'Dry run · ok'],
     [{ ...ok, status: 'failed' as const, error: 'glab: 502' }, 'Tick 4 · failed: glab: 502']
   ])('outcomeLine(%j)', (outcome, text) => expect(outcomeLine(outcome, 'fix-ci')).toBe(text))
 

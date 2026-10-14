@@ -7,8 +7,9 @@ import type {
 import { findJob, type JobGroup } from '../../shared/job-stages'
 import { pilotRpc } from '../api'
 import { JobActivityTimeline } from './ActivityTimeline'
+import { DryRunPanel } from './DryRunPanel'
 import { errorText } from './format'
-import { JobControls } from './JobControls'
+import { JobControls, stageNamer, type StageDryRun } from './JobControls'
 import { JobStageFlow, type StageCardData } from './JobStageFlow'
 import { flowEdges, latestFrom, mergeJobActivity } from './job-flow'
 
@@ -100,6 +101,7 @@ export function JobView({
   const [stages, setStages] = useState<StageData[]>([])
   const [loaded, setLoaded] = useState(false)
   const [tab, setTab] = useState(ACTIVITY)
+  const [dryRuns, setDryRuns] = useState<StageDryRun[]>([])
   const [error, setError] = useState<string | null>(null)
   const [now, setNow] = useState(() => Date.now())
   const mounted = useRef(true)
@@ -161,9 +163,20 @@ export function JobView({
       <div className="flex flex-wrap items-start gap-2">
         <h2 className="text-lg font-semibold">{`${job.id} · ${job.name}`}</h2>
         <span className="flex-1" />
-        <JobControls job={job} onDone={() => void refresh()} />
+        <JobControls job={job} onDone={() => void refresh()} onDryRun={setDryRuns} />
       </div>
       {error ? <p className="text-sm text-destructive">{error}</p> : null}
+      {dryRuns.map((d) => (
+        <DryRunPanel
+          key={d.id}
+          id={d.id}
+          outcome={d.outcome}
+          checkNames={stages.find((s) => s.summary.id === d.id)?.detail?.checkNames ?? []}
+          tag={d.stage}
+          nameOf={stageNamer(job)}
+          onClose={() => setDryRuns((all) => all.filter((x) => x.id !== d.id))}
+        />
+      ))}
       <JobStageFlow
         stages={stages}
         edges={flowEdges(job, latestFrom(stages.map((s) => s.detail)))}

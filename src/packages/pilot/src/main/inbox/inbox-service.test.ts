@@ -39,7 +39,7 @@ const QUESTION: InboxAddParams = {
 
 function setup(author = 'nish8') {
   const store = PilotStore.open(join(mkdtempSync(join(tmpdir(), 'pilot-inbox-')), 'db.sqlite'))
-  const tickId = store.startTick('ci', false, 1)
+  const tickId = store.startTick('ci', 1)
   const decision = {
     key: 'mr:1561',
     label: '!1561 web-1493',
@@ -119,7 +119,7 @@ describe('addInboxItem', () => {
       '"/wt/elsewhere" is not a worktree of ci'
     )
     store.recordDecisions(
-      store.startTick('ci', false, 5),
+      store.startTick('ci', 5),
       [
         {
           key: 'mr:1561',

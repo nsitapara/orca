@@ -1,9 +1,9 @@
 import { money } from '../../shared/money'
 import { relativeTime } from '../../shared/relative-time'
 import type {
+  ItemDecision,
   RunStatus,
   StepStatus,
-  TickItemRow,
   TickOutcome,
   TickRow,
   Verdict
@@ -18,6 +18,12 @@ const VERDICT: Record<Verdict, string> = {
   baselined: 'Baselined',
   asked: 'Asked first'
 }
+// A dry run did none of these: they're what a tick would do.
+const DRY_VERDICT: Partial<Record<Verdict, string>> = {
+  started: 'Would start',
+  asked: 'Would ask first',
+  baselined: 'Would baseline'
+}
 const COUNT_ORDER: [Verdict, string][] = [
   ['started', 'started'],
   ['asked', 'asked first'],
@@ -26,16 +32,33 @@ const COUNT_ORDER: [Verdict, string][] = [
   ['over_limit', 'next tick'],
   ['baselined', 'baselined']
 ]
+const DRY_COUNT: Partial<Record<Verdict, string>> = {
+  started: 'would start',
+  asked: 'would ask first',
+  baselined: 'would baseline'
+}
 
 export { relativeTime }
 
-export function verdictLabel(v: Verdict): string {
-  return VERDICT[v]
+// `dry`: a dry run's verdict, worded as what a tick would do.
+export function verdictLabel(v: Verdict, dry = false): string {
+  return (dry ? DRY_VERDICT[v] : undefined) ?? VERDICT[v]
 }
 
-// What Activity lists: an out-of-scope item was never checked, so it is left out (the CLI's dry run still prints it).
-export function checkedItems(items: readonly TickItemRow[]): TickItemRow[] {
+// What Activity and a dry run list: an out-of-scope item was never checked, so it is left out (the CLI's dry run
+// still prints it).
+export function checkedItems<T extends { verdict: Verdict }>(items: readonly T[]): T[] {
   return items.filter((i) => i.verdict !== 'out_of_scope')
+}
+
+function countsLine(counts: Partial<Record<Verdict, number>>, dry: boolean): string {
+  const checked = Object.entries(counts)
+    .filter(([v]) => v !== 'out_of_scope')
+    .reduce((a, [, n]) => a + (n ?? 0), 0)
+  const parts = COUNT_ORDER.filter(([v]) => counts[v]).map(
+    ([v, label]) => `${counts[v]} ${(dry ? DRY_COUNT[v] : undefined) ?? label}`
+  )
+  return [`${checked} checked`, ...parts].join(' · ')
 }
 
 export function tickLine(t: TickRow): string {
@@ -45,16 +68,19 @@ export function tickLine(t: TickRow): string {
   if (t.status === 'running') {
     return 'Running…'
   }
-  const checked = Object.entries(t.counts)
-    .filter(([v]) => v !== 'out_of_scope')
-    .reduce((a, [, n]) => a + (n ?? 0), 0)
-  const parts = COUNT_ORDER.filter(([v]) => t.counts[v]).map(
-    ([v, label]) => `${t.counts[v]} ${label}`
-  )
-  return [`${checked} checked`, ...parts].join(' · ')
+  return countsLine(t.counts, false)
 }
 
-// The same wording as the CLI's dry-run / tick output.
+// A dry run's summary, worded as what a tick would do.
+export function dryRunLine(decisions: readonly ItemDecision[]): string {
+  const counts: Partial<Record<Verdict, number>> = {}
+  for (const d of decisions) {
+    counts[d.verdict] = (counts[d.verdict] ?? 0) + 1
+  }
+  return countsLine(counts, true)
+}
+
+// The same wording as the CLI's dry-run / tick output. A dry run has no tick (tickId null).
 export function outcomeLine(result: TickOutcome, id: string): string {
   if (result.status === 'busy') {
     return 'Tick already running'
@@ -62,10 +88,11 @@ export function outcomeLine(result: TickOutcome, id: string): string {
   if (result.status === 'unknown') {
     return `No automation ${id}`
   }
+  const name = result.tickId === null ? 'Dry run' : `Tick ${result.tickId}`
   if (result.status === 'failed') {
-    return `Tick ${result.tickId} · failed: ${result.error}`
+    return `${name} · failed: ${result.error}`
   }
-  return `Tick ${result.tickId} · ok`
+  return `${name} · ok`
 }
 
 export function errorText(e: unknown): string {
@@ -73,8 +100,7 @@ export function errorText(e: unknown): string {
 }
 
 export function lastTickText(t: TickRow, now: number): string {
-  const kind = t.dryRun ? 'dry run · ' : ''
-  return `${relativeTime(t.startedAt, now)} · ${kind}${tickLine(t)}`
+  return `${relativeTime(t.startedAt, now)} · ${tickLine(t)}`
 }
 
 // A time in the automation's own timezone; falls back to local time for an unknown zone.

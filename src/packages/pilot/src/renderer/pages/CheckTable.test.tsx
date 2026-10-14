@@ -1,19 +1,16 @@
 // @vitest-environment happy-dom
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { TickItemRow } from '../../shared/api-types'
-import { CheckTable } from './CheckTable'
+import { CheckTable, type CheckRow } from './CheckTable'
 import { CHECKS_WIDTHS_KEY } from './use-column-widths'
 
-const item: TickItemRow = {
-  tickId: 1,
-  itemKey: '!1',
+const item: CheckRow = {
+  key: '!1',
   label: '!1 a-very-long-branch-label-that-should-not-wrap',
   verdict: 'started',
   reason: 'All checks pass',
   checks: [{ check: 'Clean', ok: true, reason: 'ok' }],
-  fields: {},
-  runId: null
+  fields: {}
 }
 
 const handle = (name: string) => screen.getByRole('separator', { name: `Resize ${name} column` })

@@ -54,7 +54,6 @@ function toTick(r: Record<string, unknown>): TickRow {
     automationId: String(r.automation_id),
     startedAt: Number(r.started_at),
     finishedAt: (r.finished_at as number | null) ?? null,
-    dryRun: Number(r.dry_run) === 1,
     status: r.status as TickRow['status'],
     error: (r.error as string | null) ?? null,
     counts: JSON.parse(String(r.counts_json)),
@@ -131,8 +130,9 @@ export class PilotStore {
     this.db.close()
   }
 
-  // Run when Pilot starts. Each automation's newest tick of each kind (real, dry run) is kept at any
-  // age, so the list still shows its last tick and the scheduler still knows when it last ran.
+  // Run when Pilot starts. Each automation's newest tick is kept at any age, so the list still shows its last tick
+  // and the scheduler still knows when it last ran. Dry runs are no longer stored; the ones stored before are
+  // grouped apart so one can't stand in for the newest real tick.
   // Deleting a tick deletes its items (ON DELETE CASCADE); its runs and steps stay.
   housekeep(now: number): { interrupted: number; pruned: number } {
     const interrupted = this.db
@@ -166,10 +166,10 @@ export class PilotStore {
     }
   }
 
-  startTick(automationId: string, dryRun: boolean, at: number): number {
+  startTick(automationId: string, at: number): number {
     const r = this.db
-      .prepare('INSERT INTO ticks (automation_id, started_at, dry_run, status) VALUES (?, ?, ?, ?)')
-      .run(automationId, at, dryRun ? 1 : 0, 'running')
+      .prepare('INSERT INTO ticks (automation_id, started_at, status) VALUES (?, ?, ?)')
+      .run(automationId, at, 'running')
     return Number(r.lastInsertRowid)
   }
 
@@ -214,18 +214,9 @@ export class PilotStore {
     }
   }
 
+  // Also the scheduler's timing basis. Dry runs stored before they stopped being stored (dry_run = 1) are skipped
+  // here and in listTicks.
   lastTick(automationId: string): TickRow | null {
-    const r = this.db
-      .prepare('SELECT * FROM ticks WHERE automation_id = ? ORDER BY started_at DESC LIMIT 1')
-      .get(automationId)
-    if (!r) {
-      return null
-    }
-    return toTick(r as never)
-  }
-
-  // The scheduler's timing basis: a manual dry run must never push back the next real tick.
-  lastRealTick(automationId: string): TickRow | null {
     const r = this.db
       .prepare(
         'SELECT * FROM ticks WHERE automation_id = ? AND dry_run = 0 ORDER BY started_at DESC LIMIT 1'
@@ -239,7 +230,9 @@ export class PilotStore {
 
   listTicks(automationId: string, limit: number): TickRow[] {
     return this.db
-      .prepare('SELECT * FROM ticks WHERE automation_id = ? ORDER BY started_at DESC LIMIT ?')
+      .prepare(
+        'SELECT * FROM ticks WHERE automation_id = ? AND dry_run = 0 ORDER BY started_at DESC LIMIT ?'
+      )
       .all(automationId, limit)
       .map((r) => toTick(r as never))
   }

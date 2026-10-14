@@ -26,6 +26,11 @@ export function formatPilotStatus(s: PilotStatus): string {
   ].join('\n')
 }
 
+// A dry run has no tick (tickId null): it's named as what it is.
+function outcomeName(tickId: number | null): string {
+  return tickId === null ? 'Dry run' : `Tick ${tickId}`
+}
+
 // `dry`: a dry run's output, so what a stage hands on is worded as what would happen.
 export function formatDecisions(result: TickOutcome, id = 'this automation', dry = false): string {
   if (result.status === 'busy') {
@@ -35,19 +40,19 @@ export function formatDecisions(result: TickOutcome, id = 'this automation', dry
     return `No automation ${id}`
   }
   if (result.status === 'failed') {
-    return `Tick ${result.tickId} · failed: ${result.error}`
+    return `${outcomeName(result.tickId)} · failed: ${result.error}`
   }
   const handover = result.handover
     ? handoverPreviewLines(result.handover, dry).map((line) => `  ${line}`)
     : []
   if (result.decisions.length === 0) {
-    return [`Tick ${result.tickId} · ok`, '  No items.', ...handover].join('\n')
+    return [`${outcomeName(result.tickId)} · ok`, '  No items.', ...handover].join('\n')
   }
   const width = Math.max(...result.decisions.map((d) => d.label.length))
   const rows = result.decisions.map(
     (d) => `  ${d.verdict.padEnd(9)} ${d.label.padEnd(width)}  ${d.reason}`
   )
-  return [`Tick ${result.tickId} · ok`, ...rows, ...handover].join('\n')
+  return [`${outcomeName(result.tickId)} · ok`, ...rows, ...handover].join('\n')
 }
 
 const pad2 = (n: number): string => String(n).padStart(2, '0')
@@ -59,9 +64,8 @@ function formatTime(ms: number): string {
 }
 
 function formatTickHeader(t: ActivityTick): string {
-  const dry = t.dryRun ? ' · dry run' : ''
   const status = t.status === 'failed' ? `failed: ${t.error ?? 'unknown error'}` : t.status
-  return `${formatTime(t.startedAt)} · tick ${t.id}${dry} · ${status}`
+  return `${formatTime(t.startedAt)} · tick ${t.id} · ${status}`
 }
 
 // Ticks arrive newest first; runs show how each started item went (a launch failure is on the run).

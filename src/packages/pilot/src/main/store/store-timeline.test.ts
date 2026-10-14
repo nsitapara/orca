@@ -26,9 +26,9 @@ function tick(
   store: PilotStore,
   automationId: string,
   decisions: ItemDecision[],
-  opts: { dry?: boolean; running?: boolean } = {}
+  opts: { running?: boolean } = {}
 ): number {
-  const id = store.startTick(automationId, opts.dry ?? false, 1)
+  const id = store.startTick(automationId, 1)
   store.recordDecisions(id, decisions, new Map())
   if (!opts.running) {
     store.finishTick(id, 'ok', null, {}, 2)
@@ -60,12 +60,14 @@ function inbox(
 
 describe('TimelineStore.nextFor', () => {
   it("reads each automation's newest finished real tick, only this worktree's items, never out of scope", () => {
-    const { store } = setup()
+    const { store, raw } = setup()
     tick(store, 'fix-ci', [
       decision('mr:1', 'skipped', '/wt/a'),
       decision('mr:2', 'started', '/wt/b')
     ])
-    tick(store, 'fix-ci', [decision('mr:1', 'started', '/wt/a')], { dry: true })
+    // A dry run stored before dry runs stopped being stored.
+    const dry = tick(store, 'fix-ci', [decision('mr:1', 'started', '/wt/a')])
+    raw.prepare('UPDATE ticks SET dry_run = 1 WHERE id = ?').run(dry)
     tick(store, 'fix-ci', [], { running: true })
     tick(store, 'review', [
       decision('mr:1', 'notdue', '/wt/a'),

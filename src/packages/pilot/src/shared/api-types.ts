@@ -61,7 +61,6 @@ export type TickRow = {
   automationId: string
   startedAt: number
   finishedAt: number | null
-  dryRun: boolean
   status: 'running' | 'ok' | 'failed'
   error: string | null
   counts: Partial<Record<Verdict, number>>
@@ -264,7 +263,8 @@ export type EventRow = {
 export type { ActionPhase, ActionRunRow, ActionRunStatus } from './api-types-actions'
 
 export type TickResult = {
-  tickId: number
+  // null: a dry run, which stores nothing.
+  tickId: number | null
   status: 'ok' | 'failed'
   error: string | null
   decisions: ItemDecision[]
@@ -291,7 +291,7 @@ export type AutomationSummary = {
   inbox: string
   // From the scheduler's cache; null for `schedule: manual` and for a disabled automation.
   nextTickAt: number | null
-  // The newest tick of either kind; its dryRun says which.
+  // The newest tick (dry runs aren't ticks: they're stored nowhere).
   lastTick: TickRow | null
   // Its stage of a job of several automations (job: block); null: a job of its own.
   job: JobDef | null

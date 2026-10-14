@@ -66,7 +66,7 @@ function setup() {
   insert.run('i2', null, '/wt/a', 'shivan', 'Which base?', 'open', 2)
   insert.run('i3', 'r-done', '/wt/a', 'nish', 'Old one', 'answered', 3)
   insert.run('i4', 'r-done', '/wt/a', 'shivan', 'Not yours', 'open', 4)
-  const t = store.startTick('fix-ci', false, NOON - 600_000)
+  const t = store.startTick('fix-ci', NOON - 600_000)
   store.recordDecisions(
     t,
     [

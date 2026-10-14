@@ -18,18 +18,14 @@ function TickNode({
   tag?: string
 }): React.JSX.Element {
   const [open, setOpen] = useState(false)
-  const checked = checkedItems(tick.items)
+  const checked = checkedItems(tick.items).map((i) => ({ ...i, key: i.itemKey }))
   return (
     <li className="relative border-l border-border pb-4 pl-5">
       <span className="absolute -left-[5px] top-1.5 size-2.5 rounded-full border border-border bg-background" />
       <div className="flex items-center gap-2 text-xs text-muted-foreground">
         <span>{new Date(tick.startedAt).toLocaleString()}</span>
         {tag ? <Badge variant="outline">{tag}</Badge> : null}
-        {tick.dryRun ? (
-          <Badge variant="secondary">Dry run</Badge>
-        ) : (
-          <span>{`Tick ${tick.id}`}</span>
-        )}
+        <span>{`Tick ${tick.id}`}</span>
       </div>
       <div className="text-sm">{tickLine(tick)}</div>
       {handoverActivityLines(tick).map((line) => (

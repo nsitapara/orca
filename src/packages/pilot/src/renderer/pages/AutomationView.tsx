@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { ActivityTick, AutomationDetailPayload } from '../../shared/api-types'
+import type { ActivityTick, AutomationDetailPayload, TickOutcome } from '../../shared/api-types'
 import { pilotRpc } from '../api'
 import { AutomationOverview } from './AutomationOverview'
 import { ActivityTimeline } from './ActivityTimeline'
+import { DryRunPanel } from './DryRunPanel'
 import { errorText } from './format'
 import { RunControls } from './RunControls'
 
@@ -22,6 +23,7 @@ export function AutomationView({
   const [detail, setDetail] = useState<AutomationDetailPayload | null>(null)
   const [ticks, setTicks] = useState<ActivityTick[]>([])
   const [tab, setTab] = useState<Tab>('activity')
+  const [dryRun, setDryRun] = useState<TickOutcome | null>(null)
   const [error, setError] = useState<string | null>(null)
   const mounted = useRef(true)
   const refresh = useCallback(async () => {
@@ -75,9 +77,17 @@ export function AutomationView({
       <div className="flex flex-wrap items-start gap-2">
         <h2 className="text-lg font-semibold">{detail.summary.name}</h2>
         <span className="flex-1" />
-        <RunControls id={id} onDone={() => void refresh()} />
+        <RunControls id={id} onDone={() => void refresh()} onDryRun={setDryRun} />
       </div>
       {error ? <p className="text-sm text-destructive">{error}</p> : null}
+      {dryRun ? (
+        <DryRunPanel
+          id={id}
+          outcome={dryRun}
+          checkNames={detail.checkNames}
+          onClose={() => setDryRun(null)}
+        />
+      ) : null}
       <div className="flex gap-4 border-b border-border/50 text-sm">
         {TABS.map((t) => (
           <button

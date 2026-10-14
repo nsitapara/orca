@@ -216,7 +216,7 @@ describeParity(PARITY_06, '06 · Address reviewer feedback: parity with mr-feedb
     let earlier = 0
     const seed = (store: PilotStore, f: ParityFixture) => {
       seed06(store, f)
-      earlier = store.startTick(JOB_06.automationId, false, f.now - 3_600_000)
+      earlier = store.startTick(JOB_06.automationId, f.now - 3_600_000)
       store.markHandled(
         JOB_06.automationId,
         `1711:${earlier}`,

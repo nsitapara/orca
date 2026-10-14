@@ -50,12 +50,12 @@ function setup() {
 }
 
 describe('runTick with an env preview', () => {
-  it('a dry run previews once and records the preview in the item reason', async () => {
-    const { deps, store, previewed } = setup()
+  it('a dry run previews once and says the preview in the item reason', async () => {
+    const { deps, previewed } = setup()
     const result = await runTick(def, EMPTY_PEOPLE, deps, { dryRun: true })
     expect(previewed).toHaveLength(1)
     expect(previewed[0].map((d) => d.key)).toEqual(['mr:1'])
-    expect(store.tickItems(result.tickId)[0].reason).toContain('would run in place · stack never')
+    expect(result.decisions[0].reason).toContain('would run in place · stack never')
   })
 
   it('a real tick never previews', async () => {

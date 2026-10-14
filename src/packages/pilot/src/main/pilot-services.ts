@@ -248,7 +248,7 @@ function openPilot(
     now,
     definitions: definitions.current,
     runTick: (def, opts) => runTick(def, definitions.current().people, tickDeps, opts),
-    lastTickAt: (id) => store.lastRealTick(id)?.startedAt ?? null,
+    lastTickAt: (id) => store.lastTick(id)?.startedAt ?? null,
     poll: async () => {
       await wired.poll()
       await softly('usage', () => measureFinishedSteps(store, readUsage, now, log), log)

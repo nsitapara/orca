@@ -1,12 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import type { TickOutcome } from '../../shared/api-types'
-import { workspacePreviewLines } from '../../shared/env-text'
-import { handoverPreviewLines } from '../../shared/handover-text'
 import type { JobGroup } from '../../shared/job-stages'
 import { pilotRpc } from '../api'
 import { stagesText } from './AutomationsTable'
-import { errorText, outcomeLine } from './format'
+import { errorText } from './format'
 import { LONG_CALL_MS } from './RunControls'
 
 type Phase = 'idle' | 'confirm' | 'running'
@@ -19,40 +17,34 @@ function onOff(enabled: boolean): string {
   return enabled ? 'on' : 'off'
 }
 
-// What a stage's dry run says it would read and hand on, the receiving stage named by its number.
-function handoverLines(job: JobGroup, result: TickOutcome, stage: string): string[] {
-  if (!('handover' in result) || !result.handover) {
-    return []
-  }
-  const nameOf = (id: string): string => {
+// A receiving stage named by its number, as a stage's dry run says what it would hand on.
+export function stageNamer(job: JobGroup): (automationId: string) => string {
+  return (id) => {
     const to = job.stages.find((s) => s.id === id)
     return to ? stageName(to.job?.stage).toLowerCase() : id
   }
-  return handoverPreviewLines(result.handover, true, nameOf).map((line) => `${stage}: ${line}`)
 }
 
-// Dry run each stage, in stage order. Dry runs only: nothing starts, nothing is handed over, nothing is triggered;
-// each stage says what it would read and hand on.
-async function dryRunAll(job: JobGroup): Promise<string[]> {
-  const lines: string[] = []
+export type StageDryRun = { id: string; stage: string; outcome: TickOutcome }
+
+// Dry run each stage, in stage order. Dry runs only: nothing starts, nothing is handed over, nothing is triggered,
+// nothing is stored. A call that throws is that stage's failed outcome.
+async function dryRunAll(job: JobGroup): Promise<StageDryRun[]> {
+  const results: StageDryRun[] = []
   for (const s of job.stages) {
-    const stage = stageName(s.job?.stage)
+    let outcome: TickOutcome
     try {
-      const result = await pilotRpc<TickOutcome>(
+      outcome = await pilotRpc<TickOutcome>(
         'pilot.automations.dryRun',
         { id: s.id },
         { timeoutMs: LONG_CALL_MS }
       )
-      lines.push(
-        `${stage}: ${outcomeLine(result, s.id)}`,
-        ...handoverLines(job, result, stage),
-        ...workspacePreviewLines(result).map((line) => `${stage}: ${line}`)
-      )
     } catch (e) {
-      lines.push(`${stageName(s.job?.stage)}: ${errorText(e)}`)
+      outcome = { tickId: null, status: 'failed', error: errorText(e), decisions: [] }
     }
+    results.push({ id: s.id, stage: stageName(s.job?.stage), outcome })
   }
-  return lines
+  return results
 }
 
 // What the job is after a toggle: on, off, or which stages are which.
@@ -144,13 +136,16 @@ function ButtonBar({
   )
 }
 
-// The job page's buttons. Turning stages on asks first, as Run now does: they then tick on their schedules.
+// The job page's buttons. Turning stages on asks first, as Run now does: they then tick on their schedules. Dry run
+// all's answers go to onDryRun for the page to show.
 export function JobControls({
   job,
-  onDone
+  onDone,
+  onDryRun
 }: {
   job: JobGroup
   onDone: () => void
+  onDryRun: (results: StageDryRun[]) => void
 }): React.JSX.Element {
   const [phase, setPhase] = useState<Phase>('idle')
   const [lines, setLines] = useState<string[]>([])
@@ -174,6 +169,17 @@ export function JobControls({
     onDone()
   }
 
+  const dryRun = async (): Promise<void> => {
+    setPhase('running')
+    setLines([])
+    const results = await dryRunAll(job)
+    if (!mounted.current) {
+      return
+    }
+    onDryRun(results)
+    setPhase('idle')
+  }
+
   const bar =
     phase === 'confirm' ? (
       <ConfirmBar
@@ -185,7 +191,7 @@ export function JobControls({
       <ButtonBar
         job={job}
         busy={phase === 'running'}
-        onDryRun={() => void run(() => dryRunAll(job))}
+        onDryRun={() => void dryRun()}
         onTurnOn={() => setPhase('confirm')}
         onTurnOff={() => void run(() => setAll(job, false))}
       />

@@ -93,7 +93,7 @@ describe('startPilotServices', () => {
     expect(status.peopleError).toContain('people.yaml')
     services.stop()
     expect(() => services.stop()).not.toThrow()
-    expect(() => services.context.store.lastRealTick('ci')).toThrow()
+    expect(() => services.context.store.lastTick('ci')).toThrow()
   })
 
   it('leaves the scheduler off unless asked, and sweeps stale starts and envs only when it starts', async () => {
@@ -159,7 +159,7 @@ describe('startPilotServices', () => {
 
   it('closes interrupted ticks and prunes old ones when Pilot starts', () => {
     const seed = PilotStore.open(join(userData, 'pilot-automations.db'))
-    const stuck = seed.startTick('ci', false, 0)
+    const stuck = seed.startTick('ci', 0)
     seed.close()
     const services = startPilotServices(runtime, 'main')
     expect(services.context.store.lastTick('ci')).toMatchObject({ id: stuck, status: 'failed' })

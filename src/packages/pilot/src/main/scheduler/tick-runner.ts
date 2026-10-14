@@ -232,6 +232,9 @@ function finishFailed(
   }
 }
 
+// A dry run has no tick row: it decides with run.tick 0, which no stored tick has, as a new tick's id would be.
+const DRY_RUN_TICK = 0
+
 async function decide(
   def: AutomationDefinition,
   people: PeopleDirectory,
@@ -239,27 +242,82 @@ async function decide(
   opts: TickOptions,
   tickId: number
 ): Promise<DecideOutcome> {
-  const pass = opts.pass ?? createPassFetchCache(`tick-${tickId}`, deps.gitlab ?? glabApiForRepo)
+  const label = tickId === DRY_RUN_TICK ? `dry-run-${def.id}` : `tick-${tickId}`
+  const pass = opts.pass ?? createPassFetchCache(label, deps.gitlab ?? glabApiForRepo)
   return decideTickItems(def, people, deps, pass, tickId)
 }
 
+// What a tick would do, stored nowhere: no tick row, no seen or handled marks, no runs, no cards, no handover.
+// The caller shows the decisions it returns (tickId null).
+async function dryRunTick(
+  def: AutomationDefinition,
+  people: PeopleDirectory,
+  deps: TickDeps,
+  opts: TickOptions
+): Promise<TickResult> {
+  let outcome: DecideOutcome
+  try {
+    outcome = await decide(def, people, deps, opts, DRY_RUN_TICK)
+  } catch (error) {
+    return {
+      tickId: null,
+      status: 'failed',
+      error: errorMessage(error),
+      decisions: [],
+      warnings: []
+    }
+  }
+  const { decisions, warnings } = outcome
+  for (const warning of warnings) {
+    console.warn(`[pilot] ${def.id} (dry run): ${warning}`)
+  }
+  try {
+    await deps.previewEnvs?.(def, decisions)
+  } catch (error) {
+    return { tickId: null, status: 'failed', error: errorMessage(error), decisions, warnings }
+  }
+  const handover = handoverOf(def, outcome.fed, decisions)
+  return {
+    tickId: null,
+    status: 'ok',
+    error: null,
+    decisions,
+    warnings,
+    ...(handover ? { handover } : {})
+  }
+}
+
+// A real tick always has its row's id; only a dry run's is null.
+export async function runTick(
+  def: AutomationDefinition,
+  people: PeopleDirectory,
+  deps: TickDeps,
+  opts: TickOptions & { dryRun: false }
+): Promise<TickResult & { tickId: number }>
+export async function runTick(
+  def: AutomationDefinition,
+  people: PeopleDirectory,
+  deps: TickDeps,
+  opts: TickOptions
+): Promise<TickResult>
 export async function runTick(
   def: AutomationDefinition,
   people: PeopleDirectory,
   deps: TickDeps,
   opts: TickOptions
 ): Promise<TickResult> {
-  const tickId = deps.store.startTick(def.id, opts.dryRun, deps.now())
+  if (opts.dryRun) {
+    return dryRunTick(def, people, deps, opts)
+  }
+  const tickId = deps.store.startTick(def.id, deps.now())
   let decisions: ItemDecision[]
   let warnings: string[]
   let feeding: FedOutcome
   try {
-    if (!opts.dryRun) {
-      if (opts.trigger) {
-        deps.store.handovers.setTickTrigger(tickId, opts.trigger)
-      }
-      expireStale(deps.store, def, tickId, deps.now())
+    if (opts.trigger) {
+      deps.store.handovers.setTickTrigger(tickId, opts.trigger)
     }
+    expireStale(deps.store, def, tickId, deps.now())
     const outcome = await decide(def, people, deps, opts, tickId)
     decisions = outcome.decisions
     warnings = outcome.warnings
@@ -275,22 +333,15 @@ export async function runTick(
   const runIds = new Map<string, string>()
   const unlaunched: { current: Unlaunched | null } = { current: null }
   try {
-    if (!opts.dryRun) {
-      markDecisions(def, decisions, deps)
-      const at = deps.now()
-      askDecisions(deps.ask, def, decisions, runIds, {
-        tickId,
-        runIdFor: (n) => `${makeRunId(def.id, at, n, tickId)}-ask`
-      })
-      await startRuns(def, decisions, tickId, deps, runIds, unlaunched)
-    }
-    if (opts.dryRun && deps.previewEnvs) {
-      await deps.previewEnvs(def, decisions)
-    }
+    markDecisions(def, decisions, deps)
+    const at = deps.now()
+    askDecisions(deps.ask, def, decisions, runIds, {
+      tickId,
+      runIdFor: (n) => `${makeRunId(def.id, at, n, tickId)}-ask`
+    })
+    await startRuns(def, decisions, tickId, deps, runIds, unlaunched)
     deps.store.recordDecisions(tickId, decisions, runIds)
-    if (!opts.dryRun) {
-      settleFed(deps.store, def, feeding, decisions, runIds, tickId, deps.now())
-    }
+    settleFed(deps.store, def, feeding, decisions, runIds, tickId, deps.now())
     deps.store.finishTick(tickId, 'ok', null, countVerdicts(decisions), deps.now(), warnings)
     const handover = handoverOf(def, feeding.fed, decisions)
     return {

@@ -156,7 +156,7 @@ describe('AdvanceStore', () => {
 
   it('tickItemFields returns the fields a tick recorded for the item, or null', () => {
     const { store } = setup()
-    const tickId = store.startTick('a', false, 1)
+    const tickId = store.startTick('a', 1)
     store.recordDecisions(
       tickId,
       [

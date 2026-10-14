@@ -50,7 +50,7 @@ describe('Pilot API handlers', () => {
 
   it('lists automations with their last tick and file errors', () => {
     const { ctx, store } = context()
-    const tick = store.startTick('ci', false, 1)
+    const tick = store.startTick('ci', 1)
     store.finishTick(tick, 'ok', null, { started: 1 }, 2)
     const payload = listAutomations(ctx)
     expect(payload.automations.map((a) => [a.id, a.agent, a.itemKind, a.lastTick?.counts])).toEqual(
@@ -67,13 +67,6 @@ describe('Pilot API handlers', () => {
     expect(listAutomations(held).automations[0].nextTickAt).toBeNull()
   })
 
-  it('shows the newest tick as the last tick, saying whether it was a dry run', () => {
-    const { ctx, store } = context()
-    store.finishTick(store.startTick('ci', false, 1), 'ok', null, {}, 2)
-    store.finishTick(store.startTick('ci', true, 5), 'ok', null, {}, 6)
-    expect(listAutomations(ctx).automations[0].lastTick).toMatchObject({ dryRun: true })
-  })
-
   it('returns a definition with its YAML text and check names', () => {
     const { ctx } = context()
     expect(getAutomation(ctx, 'ci')).toMatchObject({ yaml: YAML, checkNames: ['Clean'] })
@@ -82,9 +75,9 @@ describe('Pilot API handlers', () => {
 
   it('returns ticks with their items and runs, newest first', () => {
     const { ctx, store } = context()
-    const t1 = store.startTick('ci', false, 1)
+    const t1 = store.startTick('ci', 1)
     store.finishTick(t1, 'ok', null, {}, 1)
-    const t2 = store.startTick('ci', true, 2)
+    const t2 = store.startTick('ci', 2)
     store.finishTick(t2, 'ok', null, {}, 2)
     store.runs.create({
       id: 'r1',
@@ -104,18 +97,15 @@ describe('Pilot API handlers', () => {
       startedAt: 1
     })
     const ticks = activity(ctx, 'ci', 10)
-    expect(ticks.map((t) => [t.id, t.dryRun])).toEqual([
-      [t2, true],
-      [t1, false]
-    ])
+    expect(ticks.map((t) => t.id)).toEqual([t2, t1])
     expect(ticks[1].runs.map((r) => [r.id, r.steps.map((s) => s.name)])).toEqual([['r1', ['s']]])
     expect(activity(ctx, 'ci', 1)).toHaveLength(1)
   })
 
   it('says what triggered each tick and which handed-over ids it read; a tick with neither says so', () => {
     const { ctx, store } = context()
-    const plain = store.startTick('ci', false, 1)
-    const fed = store.startTick('ci', false, 2)
+    const plain = store.startTick('ci', 1)
+    const fed = store.startTick('ci', 2)
     const trigger = { automationId: 'dev-e2e-fix', runId: 'run-1', stage: 1, ids: ['WEB-2123'] }
     store.handovers.setTickTrigger(fed, trigger)
     store.handovers.add({
@@ -140,8 +130,8 @@ describe('Pilot API handlers', () => {
 
   it('shows a handover the scheduler pass expired under the tick it came after', () => {
     const { ctx, store } = context()
-    const older = store.startTick('ci', false, 100)
-    const newer = store.startTick('ci', false, 300)
+    const older = store.startTick('ci', 100)
+    const newer = store.startTick('ci', 300)
     const note = (at: number, text: string) =>
       store.events.add({
         at,
@@ -178,7 +168,7 @@ describe('Pilot API handlers', () => {
     note(50)
     expect(activity(ctx, 'ci', 10)).toEqual([])
     expect(getAutomation(ctx, 'ci').notes).toEqual([{ at: 50, text: 'note 50' }])
-    store.startTick('ci', false, 100)
+    store.startTick('ci', 100)
     note(150)
     expect(getAutomation(ctx, 'ci').notes).toEqual([{ at: 50, text: 'note 50' }])
     expect(activity(ctx, 'ci', 10)[0].notes).toEqual([{ at: 150, text: 'note 150' }])
@@ -195,7 +185,7 @@ describe('Pilot API handlers', () => {
   })
   it('lists what each run asked under it in Activity', () => {
     const { ctx, store, dir } = context()
-    const t1 = store.startTick('ci', false, 1)
+    const t1 = store.startTick('ci', 1)
     store.finishTick(t1, 'ok', null, {}, 1)
     store.runs.create({
       id: 'r1',

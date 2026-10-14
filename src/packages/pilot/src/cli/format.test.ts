@@ -130,9 +130,9 @@ describe('formatDecisions', () => {
         }
       ]
     }
-    const outcome = { tickId: 6, status: 'ok' as const, error: null, decisions: [], handover }
+    const outcome = { tickId: null, status: 'ok' as const, error: null, decisions: [], handover }
     expect(formatDecisions(outcome, 'dev-e2e-fix', true).split('\n')).toEqual([
-      'Tick 6 · ok',
+      'Dry run · ok',
       '  No items.',
       '  1 run would hand dev-e2e-fix-start its ticket output if it succeeds; dev-e2e-fix-start then ticks at once'
     ])
@@ -147,10 +147,13 @@ describe('formatDecisions', () => {
     )
   })
 
-  it('prints the error of a failed tick', () => {
-    expect(
-      formatDecisions({ tickId: 4, status: 'failed', error: 'glab: 502', decisions: [] })
-    ).toBe('Tick 4 · failed: glab: 502')
+  it.each([
+    [4, 'Tick 4 · failed: glab: 502'],
+    [null, 'Dry run · failed: glab: 502']
+  ])('prints the error of a failed tick or dry run (tick %s)', (tickId, text) => {
+    expect(formatDecisions({ tickId, status: 'failed', error: 'glab: 502', decisions: [] })).toBe(
+      text
+    )
   })
 
   it.each([
@@ -206,7 +209,6 @@ describe('formatActivity', () => {
       ...base,
       id: 9,
       startedAt: 1_700_000_200_000,
-      dryRun: false,
       status: 'ok',
       runs: [{ ...run, status: 'done', outcome: null, inbox: [], env }]
     }
@@ -225,7 +227,6 @@ describe('formatActivity', () => {
       ...base,
       id: 9,
       startedAt: 1_700_000_200_000,
-      dryRun: false,
       status: 'ok',
       trigger,
       handedOver: []
@@ -239,7 +240,6 @@ describe('formatActivity', () => {
       ...base,
       id: 9,
       startedAt: 1_700_000_200_000,
-      dryRun: false,
       status: 'ok',
       notes: [
         { at: 1_700_000_300_000, text: 'Handover of WEB-1 from stage 1 expired after 7 days' }
@@ -257,7 +257,6 @@ describe('formatActivity', () => {
         ...base,
         id: 8,
         startedAt: 1_700_000_100_000,
-        dryRun: true,
         status: 'ok',
         items: [
           {
@@ -276,7 +275,6 @@ describe('formatActivity', () => {
         ...base,
         id: 7,
         startedAt: 1_700_000_000_000,
-        dryRun: false,
         status: 'failed',
         error: 'glab: 502',
         items: [
@@ -295,7 +293,7 @@ describe('formatActivity', () => {
       }
     ]
     const lines = formatActivity(ticks).split('\n')
-    expect(lines[0]).toMatch(/^\d{4}-\d\d-\d\d \d\d:\d\d · tick 8 · dry run · ok$/)
+    expect(lines[0]).toMatch(/^\d{4}-\d\d-\d\d \d\d:\d\d · tick 8 · ok$/)
     expect(lines.slice(1, 2)).toEqual(['  skipped  !1 x  dirty'])
     expect(lines[2]).toMatch(/ · tick 7 · failed: glab: 502$/)
     expect(lines.slice(3)).toEqual([
