@@ -273,6 +273,15 @@ A source can read only the ids a command names, instead of listing everything an
 - **Exit codes:** 0 reads the ids; 3 means no ids (nothing is read); any other exit, a timeout or the cap fails the tick with the command's last line.
 - **The source** then reads each id on its own (Linear: by identifier, read only). An id Linear can't find (its "Entity not found") is skipped, and the tick says so in Activity ("WEB-2123 isn't readable in Linear; skipped"); a handed-over one is dropped. Any other failed read of one id skips that id this tick, with a warning (a handed-over one stays pending): only a failed listing fails the tick. The where block's other clauses still apply. Without a listing, there is no implicit "assigned to me", so say `assignee:` when that matters.
 
+### Field scripts (`items.fields`)
+
+A custom field runs its script once per tick (`cache: per_tick`) or per commit (`per_head`), with the item on stdin; its stdout is the value.
+- **Exit 3** means the item isn't due now. It is skipped this tick, with the script's last line as the reason (stdout first, as for `check: { run }`).
+  - No run starts, nothing is marked failed, its `once_per` key is untouched, and a handed-over id stays pending.
+  - The item's later field scripts and its script checks don't run. The cache never stores a skip.
+  - Scope, `once_per` and `first_seen` come first: an item already handled still reads "Already handled".
+- **Any other non-zero exit**, a timeout, or a script that can't start gives the field null and a warning.
+
 ### Job environments (`workspace: { env }`)
 
 A job that changes code on Nish's work, or needs a stack, says what it needs. pilotcli decides where it runs and makes that place (pilotcli milestone 4, §8). Pilot calls pilotcli around the run.
@@ -294,7 +303,7 @@ A job that changes code on Nish's work, or needs a stack, says what it needs. pi
   - It fails a run only when it asked for `--throwaway` and got in place.
   - It defers a run whose folder another Pilot run holds.
 - **Flags:** YAML uses `_` (`new_branch`, `when_backend`); Pilot passes `--new-branch`, `--stack when-backend`.
-- **A stack from a field:** `stack: "{mr.stack}"` reads one field when the run starts, a custom one included (`items.fields: { stack: { script: ./stack.sh } }`). At load, a literal must be one of the four, and a placeholder exactly one `{field}` the item kind can have. At run start the value must be a stack (`when-backend` is fine too); otherwise the run fails before `create` with "stack resolved to '<value>', expected never|backend|full|when_backend". The dry run shows the resolved stack, or that error.
+- **A stack from a field:** `stack: "{mr.stack}"` reads one field when the run starts, a custom one included (`items.fields: { stack: { script: ./stack.sh } }`). Its script may exit 3 to skip the item this tick (Field scripts, above). At load, a literal must be one of the four, and a placeholder exactly one `{field}` the item kind can have. At run start the value must be a stack (`when-backend` is fine too); otherwise the run fails before `create` with "stack resolved to '<value>', expected never|backend|full|when_backend". The dry run shows the resolved stack, or that error.
 - **Preparing workspace,** a run phase before step 1. It never holds up the tick, and it doesn't count toward step timeouts.
   1. Pilot takes its claim on the item's worktree. If another Pilot run holds it, Pilot passes `--throwaway "<that job> is already working in it (Pilot run …)"`: Orca can't see Pilot's terminals.
   2. Pilot runs `pilotcli env create --run <run id> …` in its own process group, then reads its envelope (exit codes as backup).

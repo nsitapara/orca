@@ -24,6 +24,9 @@ export type DecideInput = {
   activeRuns: number
   busyWorktrees: ReadonlySet<string>
   scriptChecks: ScriptCheckResults
+  // Items a field script said aren't due now (exit 3): item key → its reason. Skipped this tick, after scope, once_per
+  // and first_seen; a fed id stays pending (main/handover/tick-handover.ts settles).
+  notDue?: ReadonlyMap<string, string>
 }
 type Gate = { verdict: Verdict; reason: string }
 type Candidate = {
@@ -85,7 +88,7 @@ export function firstSight(
   return typeof own === 'boolean' ? own : !seenKeys.has(item.key)
 }
 
-// Spec §6 before the checks: scope (the source's scope() and items.match), once_per, first_seen.
+// Spec §6 before the checks: scope (the source's scope() and items.match), once_per, first_seen, then a field script's not due.
 // Run-once automations skip scope and first_seen, and once_per unless they set one (once per local
 // day with "{run.date}"). Exported so the tick runner runs script checks only for items that reach
 // the checks.
@@ -108,6 +111,10 @@ export function preCheckGate(
   }
   if (def.firstSeen === 'baseline' && firstSight(item, input.seenKeys)) {
     return { verdict: 'baselined', reason: 'First time seen: recorded, not acted on' }
+  }
+  const notDue = input.notDue?.get(item.key)
+  if (notDue !== undefined) {
+    return { verdict: 'skipped', reason: notDue }
   }
   return null
 }

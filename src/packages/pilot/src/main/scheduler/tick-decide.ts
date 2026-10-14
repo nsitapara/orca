@@ -270,7 +270,8 @@ export async function decideTickItems(
     handled: handledStates(deps.store.handledRows(def.id)),
     seenKeys: new Set(seenAt.keys()),
     activeRuns: deps.store.runs.runningCount(def.id),
-    busyWorktrees: busyWorktrees(deps.store, repo)
+    busyWorktrees: busyWorktrees(deps.store, repo),
+    notDue: custom.notDue
   }
   const decisions = decideTick({
     ...input,

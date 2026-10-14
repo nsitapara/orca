@@ -132,6 +132,28 @@ describe('decideTick: scope, once_per and baseline', () => {
     ])
   })
 
+  it('skips an item a field script said is not due, after scope, once_per and first_seen', () => {
+    const def = testDefinition({ oncePer: '{mr.iid}', firstSeen: 'baseline' })
+    const notDue = new Map([
+      ['mr:1', 'pipeline still running'],
+      ['mr:2', 'not yet'],
+      ['mr:3', 'not yet']
+    ])
+    const out = verdicts(
+      input(def, [item(1), item(2), item(3), item(4)], {
+        notDue,
+        handled: new Map([['2', { status: 'done', failedAt: null }]]),
+        seenKeys: new Set(['mr:1', 'mr:2', 'mr:4'])
+      })
+    )
+    expect(out).toEqual([
+      ['mr:1', 'skipped', 'pipeline still running'],
+      ['mr:2', 'notdue', 'Already handled 2'],
+      ['mr:3', 'baselined', 'First time seen: recorded, not acted on'],
+      ['mr:4', 'started', 'All checks pass']
+    ])
+  })
+
   it.each([
     ['a seen item whose source says first sight (history rewritten)', true, true, 'baselined'],
     ['an unseen item whose source says not first sight (recent work)', false, false, 'started']

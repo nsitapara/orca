@@ -18,7 +18,10 @@ export type CustomFieldDeps = {
   now(): number
 }
 type CustomField = NonNullable<AutomationDefinition['items']>['customFields'][number]
-type FieldRun = { value: FieldValue; ok: boolean; warning: string | null }
+type FieldRun = { value: FieldValue; ok: boolean; warning: string | null; notDue: string | null }
+
+// A field script's exit for "this item isn't due now": skipped this tick (README: Field scripts).
+export const NOT_DUE_EXIT = 3
 
 const PREFIX: Record<ItemKind, string> = {
   merge_request: 'mr',
@@ -73,7 +76,8 @@ async function runField(
   const failed = (warning: string): FieldRun => ({
     value: null,
     ok: false,
-    warning: `Field ${name} for ${item.label} ${warning}`
+    warning: `Field ${name} for ${item.label} ${warning}`,
+    notDue: null
   })
   let result
   try {
@@ -94,11 +98,21 @@ async function runField(
   if (result.timedOut) {
     return failed(`timed out after ${Math.round(field.timeoutMs / 1000)}s`)
   }
+  if (result.code === NOT_DUE_EXIT) {
+    // As check: { run } reads a verdict: stdout's last line first.
+    const said = lastLine(result.stdout) || lastLine(result.stderr)
+    return {
+      value: null,
+      ok: false,
+      warning: null,
+      notDue: said || `Field ${name} isn't due now (exit 3)`
+    }
+  }
   if (result.code !== 0) {
     const why = lastLine(result.stderr) || lastLine(result.stdout)
     return failed(why ? `exited ${result.code}: ${why}` : `exited ${result.code}`)
   }
-  return { value: parseFieldOutput(result.stdout), ok: true, warning: null }
+  return { value: parseFieldOutput(result.stdout), ok: true, warning: null, notDue: null }
 }
 
 function cached(
@@ -119,7 +133,7 @@ async function fieldsFor(
   repoPath: string,
   pass: PassFetchCache,
   deps: CustomFieldDeps
-): Promise<{ item: Item; warnings: string[] }> {
+): Promise<{ item: Item; warnings: string[]; notDue: string | null }> {
   const fields: ItemFields = { ...item.fields }
   const warnings: string[] = []
   for (const field of def.items?.customFields ?? []) {
@@ -132,6 +146,10 @@ async function fieldsFor(
     }
     const run = await runField(def, field, name, { ...item, fields }, repoPath, deps)
     fields[name] = run.value
+    if (run.notDue !== null) {
+      // Skipped this tick: its later field scripts don't run, and the cache keeps nothing (run.ok is false).
+      return { item: { ...item, fields }, warnings, notDue: run.notDue }
+    }
     if (run.warning) {
       warnings.push(run.warning)
     }
@@ -141,25 +159,32 @@ async function fieldsFor(
       } catch {}
     }
   }
-  return { item: { ...item, fields }, warnings }
+  return { item: { ...item, fields }, warnings, notDue: null }
 }
 
-// Custom field scripts (spec §5), only for items the source kept in scope.
+// Custom field scripts (spec §5), only for items the source kept in scope. notDue: the items a script said aren't due now
+// (exit 3), by key, with its reason.
 export async function addCustomFields(
   def: AutomationDefinition,
   items: Item[],
   opts: { inScope(item: Item): boolean; repoPath: string; pass: PassFetchCache },
   deps: CustomFieldDeps
-): Promise<{ items: Item[]; warnings: string[] }> {
+): Promise<{ items: Item[]; warnings: string[]; notDue: Map<string, string> }> {
+  const notDue = new Map<string, string>()
   const kind = def.items?.kind
   if (!kind || def.items?.customFields.length === 0) {
-    return { items, warnings: [] }
+    return { items, warnings: [], notDue }
   }
   const results = await mapLimit(items, ITEM_CONCURRENCY, async (item) => {
     if (!opts.inScope(item)) {
-      return { item, warnings: [] }
+      return { item, warnings: [], notDue: null }
     }
     return fieldsFor(def, kind, item, opts.repoPath, opts.pass, deps)
   })
-  return { items: results.map((r) => r.item), warnings: results.flatMap((r) => r.warnings) }
+  for (const r of results) {
+    if (r.notDue !== null) {
+      notDue.set(r.item.key, r.notDue)
+    }
+  }
+  return { items: results.map((r) => r.item), warnings: results.flatMap((r) => r.warnings), notDue }
 }
