@@ -6,7 +6,7 @@ import {
   recordRunEvent,
   recordRunOutput,
   resolveChannelRun,
-  resolveChannelStep
+  resolveOutputStep
 } from './run-channel'
 
 export const MAX_OUTPUTS_PER_CALL = 50
@@ -47,7 +47,7 @@ export function buildChannelMethods(ctx: () => PilotContext) {
       params: RunOutput,
       handler: (p) => {
         const c = ctx()
-        return recordRunOutput(c, { ...resolveChannelStep(c, p), outputs: p.outputs })
+        return recordRunOutput(c, { ...resolveOutputStep(c, p), outputs: p.outputs })
       }
     }),
     defineMethod({

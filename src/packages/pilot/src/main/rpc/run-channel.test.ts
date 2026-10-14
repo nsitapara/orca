@@ -10,6 +10,7 @@ import {
   recordRunOutput,
   resolveChannelRun,
   resolveChannelStep,
+  resolveOutputStep,
   type ModeOutputsReader
 } from './run-channel'
 
@@ -236,4 +237,61 @@ describe('resolveChannelStep / resolveChannelRun', () => {
       expect(() => resolveChannelStep(ctx, target)).toThrow("Not inside a Pilot run's step")
     }
   )
+})
+
+describe('resolveOutputStep: who may write a step’s outputs through the run channel', () => {
+  // run-1: step 0 an agent step running on term-A, step 1 a shell step running (no terminal) that declares `ticket`.
+  function withShellStep() {
+    const s = setup()
+    s.store.runs.updateStep('run-1', 0, { status: 'running', terminalHandle: 'term-A' })
+    s.store.runs.createStep({
+      runId: 'run-1',
+      idx: 1,
+      name: 'ticket',
+      agent: 'shell',
+      skill: null,
+      kind: 'shell',
+      startedAt: 2
+    })
+    s.store.runs.updateStep('run-1', 1, { status: 'running' })
+    // What its $PILOT_OUTPUT_FILE gave, as shell-step.ts merges it when the process ends.
+    s.store.advance.mergeStepOutputs('run-1', 1, { ticket: 'WEB-1' })
+    return s
+  }
+
+  it('refuses a write the env names for a shell step, and leaves its file outputs as they are', () => {
+    const { ctx, store } = withShellStep()
+    for (const target of [
+      { runId: 'run-1', stepIdx: 1 },
+      { terminal: 'term-Z', runId: 'run-1', stepIdx: 1 }
+    ]) {
+      expect(() => resolveOutputStep(ctx, target)).toThrow(
+        "pilot run output works only from an agent step's own terminal"
+      )
+    }
+    expect(() =>
+      recordRunOutput(
+        ctx,
+        { runId: 'run-1', stepIdx: 1, outputs: { ticket: 'WEB-9999' } },
+        declares(null)
+      )
+    ).toThrow('Step ticket is a shell step: its outputs come only from its $PILOT_OUTPUT_FILE')
+    expect(store.runs.steps('run-1')[1].outputs).toEqual({ ticket: 'WEB-1' })
+  })
+
+  it('refuses a write the env names for an agent step from no bound terminal', () => {
+    const { ctx } = withShellStep()
+    expect(() => resolveOutputStep(ctx, { runId: 'run-1', stepIdx: 0 })).toThrow(
+      "pilot run output works only from an agent step's own terminal"
+    )
+  })
+
+  it('accepts a write from the agent step’s own terminal, the env choosing among the steps bound there', () => {
+    const { ctx } = withShellStep()
+    expect(resolveOutputStep(ctx, { terminal: 'term-A' })).toEqual({ runId: 'run-1', stepIdx: 0 })
+    expect(resolveOutputStep(ctx, { terminal: 'term-A', runId: 'run-1', stepIdx: 0 })).toEqual({
+      runId: 'run-1',
+      stepIdx: 0
+    })
+  })
 })

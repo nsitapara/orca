@@ -66,6 +66,27 @@ export function resolveChannelStep(
   return resolveStep(ctx, t)
 }
 
+const OUTPUT_NOT_BOUND =
+  "pilot run output works only from an agent step's own terminal: no agent step of a Pilot run is running on this terminal"
+
+// pilot.run.output's step: only an agent step, and only one running on the caller's own terminal (the env's
+// PILOT_RUN_ID / PILOT_STEP_IDX choose among the steps bound there, never stand in for one). A shell step's outputs
+// come only from its $PILOT_OUTPUT_FILE, which Pilot reads when its process ends, so nothing can merge outputs into a
+// shell step a later stage trusts (job.feeds … pass).
+export function resolveOutputStep(
+  ctx: PilotContext,
+  t: RunChannelTarget
+): { runId: string; stepIdx: number } {
+  const bound = (t.terminal ? ctx.store.runs.stepsOnTerminal(t.terminal) : []).filter(
+    (s) => s.kind !== 'shell'
+  )
+  const chosen = bound.find((s) => s.runId === t.runId && s.idx === t.stepIdx) ?? bound[0]
+  if (!chosen) {
+    throw new Error(OUTPUT_NOT_BOUND)
+  }
+  return { runId: chosen.runId, stepIdx: chosen.idx }
+}
+
 // The run alone (events need no step). Without a bound terminal the env's run must still be open.
 export function resolveChannelRun(ctx: PilotContext, t: RunChannelTarget): string {
   const bound = t.terminal ? ctx.store.runs.stepsOnTerminal(t.terminal) : []
@@ -135,6 +156,11 @@ export function recordRunOutput(
   const step = ctx.store.runs.steps(run.id).find((s) => s.idx === p.stepIdx)
   if (!step) {
     throw new Error(`Run ${run.id} has no step ${p.stepIdx}`)
+  }
+  if (step.kind === 'shell') {
+    throw new Error(
+      `Step ${step.name} is a shell step: its outputs come only from its $PILOT_OUTPUT_FILE`
+    )
   }
   const declared = declaredOutputs(run, step, read)
   if (declared !== null) {
