@@ -203,4 +203,27 @@ describe('EnvStore', () => {
     })
     expect(store.runs.envs.dueForTeardown(Number.MAX_SAFE_INTEGER)).toEqual([])
   })
+
+  it('a hold_home claim counts only while its step runs, released or not', () => {
+    const store = setup()
+    store.runs.envs.ready('r1', READY)
+    store.runs.createStep({
+      runId: 'r1',
+      idx: 2,
+      name: 'merge_back',
+      agent: 'shell',
+      skill: null,
+      startedAt: 5,
+      kind: 'shell',
+      status: 'running'
+    })
+    expect(store.runs.runningInWorktree('/wt/a')).toEqual([])
+    store.runs.envs.holdHome('r1', 2)
+    expect(store.runs.runningInWorktree('/wt/a').map((r) => r.id)).toEqual(['r1'])
+    expect([...store.runs.runningWorktreePaths()]).toContain('/wt/a')
+    // The step ends without a release (a crash's orphan sweep): the claim lapses with it.
+    store.runs.updateStep('r1', 2, { status: 'failed', finishedAt: 6 })
+    expect(store.runs.runningInWorktree('/wt/a')).toEqual([])
+    expect([...store.runs.runningWorktreePaths()]).not.toContain('/wt/a')
+  })
 })

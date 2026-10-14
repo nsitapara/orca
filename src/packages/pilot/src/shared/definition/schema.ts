@@ -131,7 +131,9 @@ const step = z.strictObject({
   always: z.boolean().optional(),
   timeout: durationSchema.optional(),
   // The key=value outputs it reports; a job.feeds pass may hand on only a declared one.
-  outputs: z.array(outputName).optional()
+  outputs: z.array(outputName).optional(),
+  // A merge-back shell step of an env run: Pilot claims the run's home for this step, or sets PILOT_HOME_BUSY.
+  hold_home: z.boolean().optional()
 })
 
 const answers = z.strictObject({

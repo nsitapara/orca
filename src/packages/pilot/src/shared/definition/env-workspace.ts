@@ -173,3 +173,18 @@ export function normalizeEnvWorkspace(env: RawEnvWorkspace): EnvWorkspaceDef {
     stack: stackSpecOf(env.stack)
   }
 }
+
+// hold_home claims an env run's home for one shell step (its merge back). Other workspaces hold their worktree for the
+// whole run (item_worktree, new_worktree) or share it by design (main_checkout).
+export function holdHomeErrors(raw: RawAutomation): string[] {
+  if (rawEnvOf(raw)) {
+    return []
+  }
+  return raw.steps.flatMap((s, i) =>
+    s.hold_home
+      ? [
+          `step ${i + 1}: hold_home: only with workspace: { env } (other workspaces hold their worktree for the whole run)`
+        ]
+      : []
+  )
+}

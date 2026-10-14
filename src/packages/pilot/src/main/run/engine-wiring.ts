@@ -22,6 +22,7 @@ import {
 } from './shell-step'
 import { STALE_START_MS, sweepStaleStarts } from './stale-starts'
 import { stepStarterFor } from './step-starters'
+import { holdHomeForStep } from '../envs/home-hold'
 import { pollRunningSteps, type StepProbe } from './watcher'
 import type { WorkspaceDeps } from './workspace'
 import { stopCancelledPreparations } from './preparation-worker'
@@ -82,6 +83,11 @@ export function wireRunEngine(input: EngineWiringInput): WiredEngine {
     engineEnv: input.engineEnv,
     run: input.shell.run,
     timeoutOf: (req) => stepTimeoutMs(req.definition, req.idx),
+    holdHome: (req) =>
+      req.definition.steps[req.idx].holdHome
+        ? holdHomeForStep(store.runs, req.run, req.idx, (id) => input.definitionFor(id)?.name ?? id)
+        : null,
+    releaseHome: (req) => store.runs.envs.releaseHome(req.run.id, req.idx),
     onEnded: (runId) => void advance(runId)
   })
   const inner = createRunEngine({

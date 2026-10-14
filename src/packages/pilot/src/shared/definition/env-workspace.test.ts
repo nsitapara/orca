@@ -211,3 +211,37 @@ describe('workspace: { env } reads', () => {
     expect(workspaceOf(`${BASE}${yaml}`)).toEqual(expected)
   })
 })
+
+describe('hold_home', () => {
+  const HEAD = 'name: n\nrepo: r\nschedule: manual\nitems: { kind: merge_request }\n'
+  const ENV = ws('worktree: "{worktree.path}", writes: true')
+  it.each([
+    [
+      'a shell step of an env run',
+      `${HEAD}${ENV}steps:\n  - { name: merge_back, agent: shell, run: ./merge-back.sh, hold_home: true }\n`,
+      []
+    ],
+    [
+      'an agent step',
+      `${HEAD}${ENV}steps:\n  - { agent: claude, prompt: x, hold_home: true }\n`,
+      ['step 1: only shell steps use hold_home:']
+    ],
+    [
+      'a step of an item_worktree run',
+      `${HEAD}steps:\n  - { agent: shell, run: ./merge-back.sh, hold_home: true }\n`,
+      [
+        'step 1: hold_home: only with workspace: { env } (other workspaces hold their worktree for the whole run)'
+      ]
+    ]
+  ])('%s', (_name, yaml, errors) => {
+    expect(errorsOf(yaml)).toEqual(errors)
+  })
+
+  it('reads it onto the step', () => {
+    const parsed = parseAutomationYaml(
+      `${HEAD}${ENV}steps:\n  - { agent: shell, run: ./m.sh, hold_home: true }\n  - { agent: shell, run: ./n.sh }\n`,
+      '/a/n.yaml'
+    )
+    expect(parsed.ok && parsed.definition.steps.map((s) => s.holdHome)).toEqual([true, false])
+  })
+})

@@ -72,7 +72,8 @@ const CI_05_DEFINITION = {
       when: null,
       always: false,
       timeoutMs: null,
-      outputs: []
+      outputs: [],
+      holdHome: false
     }
   ],
   answers: null,
@@ -220,7 +221,8 @@ describe('parseAutomationYaml', () => {
             when: null,
             always: false,
             timeoutMs: 1_800_000,
-            outputs: []
+            outputs: [],
+            holdHome: false
           },
           {
             name: 'fix',
@@ -237,7 +239,8 @@ describe('parseAutomationYaml', () => {
             when: '{steps.review.changed} == true',
             always: false,
             timeoutMs: null,
-            outputs: []
+            outputs: [],
+            holdHome: false
           },
           {
             name: 'cleanup',
@@ -254,7 +257,8 @@ describe('parseAutomationYaml', () => {
             when: null,
             always: true,
             timeoutMs: null,
-            outputs: []
+            outputs: [],
+            holdHome: false
           }
         ],
         answers: {

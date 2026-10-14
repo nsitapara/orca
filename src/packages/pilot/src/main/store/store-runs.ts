@@ -293,25 +293,32 @@ export class RunStore {
     return Number((row as { n: number } | undefined)?.n ?? 0)
   }
 
-  // Worktrees with a running run of any automation: one agent per worktree across automations (§6).
+  // Worktrees with a running run of any automation: one agent per worktree across automations (§6). A run's home
+  // counts too while one of its hold_home steps runs.
   runningWorktreePaths(): Set<string> {
     return new Set(
       this.db
         .prepare(
-          "SELECT DISTINCT worktree_path FROM runs WHERE status = 'running' AND worktree_path IS NOT NULL"
+          `SELECT worktree_path AS path FROM runs WHERE status = 'running' AND worktree_path IS NOT NULL
+           UNION SELECT r.home_path FROM runs r JOIN steps s ON s.run_id = r.id AND s.idx = r.home_hold_step
+             WHERE r.status = 'running' AND r.home_path IS NOT NULL AND s.status IN ('starting', 'running')`
         )
         .all()
-        .map((r) => String((r as { worktree_path: string }).worktree_path))
+        .map((r) => String((r as { path: string }).path))
     )
   }
 
-  // One agent per worktree across automations (contract §6): every running run there, of any automation.
+  // One agent per worktree across automations (contract §6): every running run there, of any automation, a hold_home
+  // step's run included.
   runningInWorktree(worktreePath: string): RunRow[] {
     return this.db
       .prepare(
-        "SELECT * FROM runs WHERE worktree_path = ? AND status = 'running' ORDER BY started_at, id"
+        `SELECT * FROM runs r WHERE r.status = 'running' AND (r.worktree_path = ?
+           OR (r.home_path = ? AND EXISTS (SELECT 1 FROM steps s WHERE s.run_id = r.id AND s.idx = r.home_hold_step
+             AND s.status IN ('starting', 'running'))))
+         ORDER BY r.started_at, r.id`
       )
-      .all(worktreePath)
+      .all(worktreePath, worktreePath)
       .map((r) => toRun(r as never))
   }
 }

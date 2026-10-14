@@ -141,6 +141,9 @@ export type StepDef = {
   timeoutMs: number | null
   // The outputs it declares (outputs: [ticket]): a job.feeds pass may hand on only these.
   outputs: string[]
+  // hold_home: Pilot's claim on an env run's home for this shell step. Optional so hand-built StepDefs stay valid;
+  // normalize always sets it.
+  holdHome?: boolean
 }
 
 export type AnswersDef = {
