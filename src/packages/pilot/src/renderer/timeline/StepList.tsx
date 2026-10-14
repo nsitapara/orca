@@ -89,10 +89,12 @@ function ResumeButton({
 export function StepList({
   runId,
   worktreePath = null,
+  checkoutRemoved = false,
   steps
 }: {
   runId: string
   worktreePath?: string | null
+  checkoutRemoved?: boolean
   steps: StepRow[]
 }): React.JSX.Element {
   if (steps.length === 0) {
@@ -107,8 +109,11 @@ export function StepList({
             <div className="flex flex-wrap items-center gap-2">
               <span className="font-medium">{`${step.idx + 1}. ${step.name}`}</span>
               <span className="text-muted-foreground">{stepFacts(step)}</span>
-              {canResume(step) ? (
+              {canResume(step) && !checkoutRemoved ? (
                 <ResumeButton runId={runId} worktreePath={worktreePath} step={step} />
+              ) : null}
+              {canResume(step) && checkoutRemoved ? (
+                <span className="text-xs text-muted-foreground">Checkout removed</span>
               ) : null}
             </div>
             {outputs ? <div className="text-muted-foreground">{`Outputs: ${outputs}`}</div> : null}
