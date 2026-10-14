@@ -24,6 +24,7 @@ import { runOnceItem } from '../sources/run-once'
 import type { Item, RepoFacts, SourceContext, SourceListing } from '../sources/types'
 import type { PilotStore } from '../store/store'
 import { idsForTick, type FedOutcome } from './tick-ids'
+import { lastLine } from '../last-line'
 
 export type SourceAccess = {
   list(def: AutomationDefinition, ctx: SourceContext): Promise<SourceListing>
@@ -70,10 +71,6 @@ const HELD: HandledState = { status: 'started', failedAt: null }
 
 function messageOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
-}
-
-function lastLine(text: string): string {
-  return text.trim().split('\n').at(-1)?.trim() ?? ''
 }
 
 // retry_after_failure's input. Only a run settles a key (setHandledStatus), so a key no run holds

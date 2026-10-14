@@ -6,6 +6,7 @@ import type { PassFetchCache } from '../sources/fetch-cache'
 import type { Item } from '../sources/types'
 import type { FieldCacheStore } from '../store/store-fields'
 import { resolveScriptCommand, type ScriptRunner } from './script-runner'
+import { lastLine } from '../last-line'
 
 // Backed by the field_cache table (store.fields, Task 1c): one row per (automation, field, item); a
 // row stored under another cache key reads null.
@@ -30,10 +31,6 @@ const ITEM_CONCURRENCY = 4
 
 function messageOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
-}
-
-function lastLine(text: string): string {
-  return text.trim().split('\n').at(-1)?.trim() ?? ''
 }
 
 // JSON when stdout parses to a string, number, boolean or null; otherwise the trimmed text.

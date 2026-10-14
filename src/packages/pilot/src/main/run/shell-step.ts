@@ -24,6 +24,7 @@ import { resolveScriptCommand } from '../fields/script-runner'
 import type { PilotStore } from '../store/store'
 export { ORPHAN_SHELL_OUTCOME, sweepOrphanShellSteps } from './shell-sweep'
 import type { StepStarter, StepStartRequest } from './advance'
+import { lastLine } from '../last-line'
 
 export const SHELL_CAPTURE_BYTES = 1024 * 1024
 export const OUTPUT_TAIL_CHARS = 8192
@@ -92,14 +93,6 @@ function messageOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
 }
 
-function lastLine(text: string): string | null {
-  const lines = text
-    .split('\n')
-    .map((l) => l.trim())
-    .filter((l) => l !== '')
-  return lines.at(-1) ?? null
-}
-
 export function outputTail(stdout: string, stderr: string): string {
   const both = stderr.trim() ? `${stdout}\n--- stderr ---\n${stderr}` : stdout
   return both.length > OUTPUT_TAIL_CHARS ? both.slice(-OUTPUT_TAIL_CHARS) : both
@@ -115,7 +108,7 @@ export function shellEnding(
   if (result.timedOut) {
     return { status: 'timed_out', error: `Timed out after ${formatDuration(timeoutMs ?? 0)}` }
   }
-  const last = lastLine(result.stderr) ?? lastLine(result.stdout)
+  const last = lastLine(result.stderr) || lastLine(result.stdout)
   const said = last ? `: ${last}` : ''
   if (result.code === null) {
     return { status: 'failed', error: `Stopped by ${result.signal ?? 'a signal'}${said}` }
