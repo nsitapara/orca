@@ -66,7 +66,7 @@ export function processIdentity(pid: number): string | null {
 
 // Read once, a failed read included, so a failing ps isn't run again on every start.
 let ownIdentity: string | null | undefined
-function ownProcessIdentity(): string | null {
+export function ownProcessIdentity(): string | null {
   if (ownIdentity === undefined) {
     ownIdentity = processIdentity(process.pid)
   }

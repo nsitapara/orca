@@ -14,6 +14,7 @@ import { startRunEntry } from './actions/start-run-entry'
 import { buildActionCatalog } from './actions/catalog'
 import type { ActionCatalog } from './actions/types'
 import { definitionIo, liveDefinitions } from './definitions/live'
+import { createEnvService } from './envs/service'
 import { handoverService } from './handover/service'
 import { buildInboxDeps } from './inbox/inbox-service'
 import type { LoadedDefinitions } from './definitions/loader'
@@ -32,7 +33,7 @@ import { runtimeFieldDeps } from './fields/runtime-field-deps'
 import { runShellScript } from './fields/script-runner'
 import { launchAgentStep } from './run/agent-step'
 import { wireRunEngine } from './run/engine-wiring'
-import { pilotStepEnv } from './run/step-launch-plan'
+import { pilotShellWiring } from './run/shell-wiring'
 import { cancelUnstartedRun, runAnswerOf } from './run/ask-first'
 import { runtimeLauncherDeps } from './run/launch'
 import { resumeStepSession, runtimeResumeDeps } from './run/resume-session'
@@ -131,6 +132,17 @@ function openPilot(
   }
   const definitionFor = (id: string) =>
     definitions.current().definitions.find((d) => d.id === id) ?? null
+  // Job environments (pilotcli env): prepared off the tick, removed when runs end (main/envs).
+  const envs = createEnvService({
+    runtime,
+    store,
+    now,
+    log,
+    definitionFor,
+    engineEnv,
+    dataDir: host.dataDir
+  })
+  opened.push(() => envs.stop())
   // A stage's run end hands over to the next stage; its run: now reaches the scheduler once made (below).
   const handover = handoverService({ store, now, definitionFor, log })
   // The one run engine of this process: its per-run lock and its set of runs being opened live in it.
@@ -142,23 +154,8 @@ function openPilot(
     startAgentStep: agentStepStarter((req) => launchAgentStep(store, req, launcherDeps)),
     workspace: launcherDeps.workspace,
     engineEnv,
-    shell: {
-      workspaceOf: async (req) => {
-        if (!req.run.worktreePath) {
-          throw new Error(`Run ${req.run.id} has no workspace`)
-        }
-        return { path: req.run.worktreePath }
-      },
-      envOf: (req) =>
-        pilotStepEnv({
-          runId: req.run.id,
-          stepName: req.definition.steps[req.idx].name,
-          stepIdx: req.idx,
-          automationId: req.run.automationId,
-          itemKey: req.run.itemKey,
-          powers: req.definition.powers
-        })
-    },
+    shell: pilotShellWiring(),
+    envs: envs.preparations,
     probe: runtimeStepProbe(runtime, relist),
     log,
     // A stage's run hands its outputs to the next stage (job.feeds); an answer run's reach its cards (G6).

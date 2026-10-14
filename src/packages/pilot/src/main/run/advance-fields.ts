@@ -1,7 +1,8 @@
 import type { ItemFields, RunRow, StepRow } from '../../shared/api-types'
-import type { AutomationDefinition } from '../../shared/definition/types'
+import type { AutomationDefinition, StepDef } from '../../shared/definition/types'
 import type { EndedStep, RunEnd } from '../../shared/run/step-plan'
 import { runFields, stepFields } from '../../shared/template'
+import type { AdvancedStep } from '../store/store-advance'
 
 // What a step's templates and `when` read (contract §4), assembled by the run engine.
 export type StepInput = {
@@ -14,6 +15,25 @@ export type StepInput = {
   idx: number
   // {run.answer}: the answer text for runs an answer starts, else null (R-2).
   answer: string | null
+}
+
+// A step's row as the run engine writes it (pending, skipped or failed).
+export function rowFor(runId: string, idx: number, step: StepDef, at: number): AdvancedStep {
+  return {
+    runId,
+    idx,
+    name: step.name,
+    agent: step.agent,
+    skill: step.skill,
+    mode: step.mode,
+    whenExpr: step.when,
+    at
+  }
+}
+
+// The first step index without a row.
+export function nextIdx(rows: StepRow[]): number {
+  return rows.reduce((max, r) => Math.max(max, r.idx + 1), 0)
 }
 
 export function broke(status: StepRow['status'] | RunEnd['status']): boolean {
