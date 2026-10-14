@@ -1,3 +1,4 @@
+import { homeOf } from '../../shared/api-types-env'
 import type { AutomationDefinition } from '../../shared/definition/types'
 import { EVIDENCE_ACTIONS } from '../../shared/evidence'
 import type { InboxAddResult } from '../../shared/inbox-types'
@@ -164,7 +165,7 @@ function record(
     at,
     automationId: run?.automationId ?? null,
     runId: row.runId,
-    worktreePath: run?.worktreePath ?? null,
+    worktreePath: run ? homeOf(run) : null,
     itemKey: run?.itemKey ?? null,
     kind: 'action_run',
     payload: {

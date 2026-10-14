@@ -149,6 +149,34 @@ describe('recordRunEvent', () => {
   })
 })
 
+// An env run works in its env's folder (worktreePath) but belongs to its home: its events go where addRunEvent puts them.
+describe("an env run's channel events", () => {
+  it.each([
+    [
+      'a step output',
+      (ctx: PilotContext) =>
+        recordRunOutput(ctx, { runId: 'run-1', stepIdx: 0, outputs: { a: 1 } }, declares(null))
+    ],
+    ['a run event', (ctx: PilotContext) => recordRunEvent(ctx, { runId: 'run-1', kind: 'pushed' })]
+  ])("%s is recorded against the run's home, not the throwaway it works in", (_name, record) => {
+    const { ctx, store, events } = setup()
+    store.runs.envs.begin('run-1', '/wt', {})
+    store.runs.envs.ready('run-1', {
+      mode: 'throwaway',
+      reason: '',
+      path: '/agents/agents-run-1',
+      home: '/wt',
+      worktreeId: 'id',
+      sha: null,
+      envFile: null,
+      vars: {},
+      stack: null
+    })
+    record(ctx)
+    expect(events().map((e) => (e as { worktree_path: string }).worktree_path)).toEqual(['/wt'])
+  })
+})
+
 // Ruling 8d: the terminal a command runs in names its step; env is only the fallback.
 describe('resolveChannelStep / resolveChannelRun', () => {
   function withSentStep() {
