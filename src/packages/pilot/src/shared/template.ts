@@ -1,4 +1,4 @@
-import type { ItemFields, StepRow } from './api-types'
+import type { ItemFields, StepRow, StoredResult } from './api-types'
 
 // Global flag: use with match()/replace(), never .test()/.exec() (lastIndex is stateful).
 export const PLACEHOLDER = /\{([a-z_][\w]*(?:\.[\w]+)+|[a-z_][\w]*)\}/gi
@@ -73,14 +73,30 @@ export function runFields(r: {
   return fields
 }
 
-export type StepResult = Pick<StepRow, 'name' | 'status' | 'exitCode' | 'outputs'>
+export type StepResult = Pick<StepRow, 'name' | 'status' | 'exitCode' | 'outputs'> &
+  Partial<Pick<StepRow, 'result'>>
 
-// steps.<name>.<output|exit_code|status> for every step before `current`, and previous.* for the one
-// just before it. A step's own status and exit code win over an output of the same name.
+// A stored pilotcli result's outcome, reason and data (compact JSON; null, so missing, when data wasn't kept).
+function resultFields(stored: StoredResult | null | undefined): ItemFields {
+  if (!stored) {
+    return {}
+  }
+  const result = stored.data_omitted === undefined ? JSON.stringify(stored.data ?? null) : null
+  return { outcome: stored.outcome, reason: stored.reason, result }
+}
+
+// steps.<name>.<output|outcome|reason|result|exit_code|status> for every step before `current`, and previous.* for the
+// one just before it. A step's own status and exit code win over everything; a stored result's outcome, reason and
+// result win over outputs of the same name. Fields inside data are never lifted out.
 export function stepFields(steps: StepResult[], current: number): ItemFields {
   const fields: ItemFields = {}
   steps.slice(0, current).forEach((step, i) => {
-    const own: ItemFields = { ...step.outputs, exit_code: step.exitCode, status: step.status }
+    const own: ItemFields = {
+      ...step.outputs,
+      ...resultFields(step.result),
+      exit_code: step.exitCode,
+      status: step.status
+    }
     for (const [key, value] of Object.entries(own)) {
       fields[`steps.${step.name}.${key}`] = value
       if (i === current - 1) {

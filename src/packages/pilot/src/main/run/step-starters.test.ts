@@ -95,3 +95,69 @@ describe('stepStarterFor', () => {
     expect(calls).toEqual([which])
   })
 })
+
+describe('the 32 KB cap on a rendered result', () => {
+  const capped = parseAutomationYaml(
+    'name: Fix CI\nrepo: web-platform\nschedule: manual\nsteps:\n' +
+      '  - { name: context, agent: shell, run: ./context.sh }\n' +
+      '  - { name: fix, agent: claude, prompt: "Fix it. The context: {steps.context.result}" }\n' +
+      '  - { name: push, agent: shell, run: ./push.sh, env: { CTX: "{previous.result}" } }\n' +
+      '  - { name: tell, agent: claude, prompt: Say what changed }\n',
+    '/a/fix-ci.yaml'
+  )
+  if (!capped.ok) {
+    throw new Error(capped.errors.join('\n'))
+  }
+  // Compact JSON of a string, `bytes` long.
+  const json = (bytes: number) => `"${'x'.repeat(bytes - 2)}"`
+  const starter = () => {
+    const calls: string[] = []
+    const start = stepStarterFor({
+      agent: async () => void calls.push('agent'),
+      shell: async () => void calls.push('shell')
+    })
+    return { calls, start }
+  }
+  const at = (idx: number, fields: Record<string, string>): StepStartRequest => ({
+    ...req(idx),
+    definition: capped.definition,
+    fields
+  })
+
+  it.each([
+    [
+      'a prompt',
+      1,
+      { 'steps.context.result': json(40 * 1024) },
+      'steps.context.result is 40 KB, over the 32 KB cap'
+    ],
+    [
+      'an env: value',
+      2,
+      { 'previous.result': json(33 * 1024) },
+      'previous.result is 33 KB, over the 32 KB cap'
+    ],
+    [
+      'multi-byte text, counted in bytes',
+      1,
+      { 'steps.context.result': `"${'é'.repeat(17 * 1024)}"` },
+      'steps.context.result is 35 KB, over the 32 KB cap'
+    ]
+  ])(
+    'fails a step whose %s renders a result over the cap, starting nothing',
+    async (_n, idx, fields, error) => {
+      const { calls, start } = starter()
+      await expect(start(at(idx, fields))).rejects.toThrow(error)
+      expect(calls).toEqual([])
+    }
+  )
+
+  it.each([
+    ['exactly 32 KB', 1, { 'steps.context.result': json(32 * 1024) }],
+    ['a large result the step never renders', 3, { 'steps.context.result': json(40 * 1024) }]
+  ])('starts a step with %s', async (_n, idx, fields) => {
+    const { calls, start } = starter()
+    await start(at(idx, fields))
+    expect(calls).toHaveLength(1)
+  })
+})
