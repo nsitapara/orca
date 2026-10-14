@@ -27,11 +27,13 @@ export const R10_FOLDERS = [
 ]
 const CODE_FILE = /\.tsx?$/
 
-// The vitest filters for every hooked upstream file in HOOKS.md (rows from parseHooksTable).
+// The vitest filters for every hooked upstream file in HOOKS.md (rows from parseHooksTable). Only code under src/
+// has upstream tests next to it (HOOKS.md, After an upstream sync); a hooked config file such as
+// config/vitest.config.ts has none.
 export function hookTestTargets(rows) {
   const targets = new Set()
   for (const { file } of rows) {
-    if (!CODE_FILE.test(file)) {
+    if (!file.startsWith('src/') || !CODE_FILE.test(file)) {
       continue
     }
     const folder = R10_FOLDERS.find((f) => file.startsWith(`${f}/`))
