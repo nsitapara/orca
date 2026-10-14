@@ -2,12 +2,16 @@ import type { ItemFields, RunRow, StepRow } from '../../shared/api-types'
 import type { AutomationDefinition, StepDef } from '../../shared/definition/types'
 import { decideStep, runEnd, type RunEnd } from '../../shared/run/step-plan'
 import { usesHandled } from '../../shared/tick/decide'
+import type { EnvPreparer } from '../envs/prepare'
 import { UnrecordedLaunchError, type LaunchRequest } from '../scheduler/tick-runner'
 import type { PilotStore } from '../store/store'
-import { stepKindOf, type AdvancedStep } from '../store/store-advance'
-import { endedSteps, runFieldsOf, stepInputFields } from './advance-fields'
+import { stepKindOf } from '../store/store-advance'
+import { envHooks, type OpeningWalk } from './advance-env'
+import { endedSteps, nextIdx, rowFor, runFieldsOf, stepInputFields } from './advance-fields'
 import { addRunEvent, closeRun, type CloseOptions, type RunEndHandover } from './run-close'
 import { resolveWorkspace, type WorkspaceDeps } from './workspace'
+
+export { ANSWER_STEP_TIMEOUT_MS, runStepTimeoutMs, stepTimeoutMs } from './step-timeouts'
 
 export type StepStartRequest = {
   run: RunRow
@@ -35,11 +39,14 @@ export type RunEngineDeps = {
   // The answer text for {run.answer}: set for runs an answer starts, '' for a plain Approve, null
   // for any other run (Task 25 wires it).
   runAnswer?(run: RunRow): string | null
+  // Env workspaces (main/envs): records the run as preparing and makes its env off the tick.
+  envs?: EnvPreparer
 }
 export type RunEngine = {
   // The tick runner's launch. Writes step 0 as pending, resolves and records the workspace, then
   // starts the steps. Throws when no step could start, so the tick runner releases the item's
-  // once_per key (or keeps it for an UnrecordedLaunchError).
+  // once_per key (or keeps it for an UnrecordedLaunchError). An env workspace is made off the tick:
+  // startRun returns once it is under way, and the run's env hooks start or end it (advance-env.ts).
   startRun(req: LaunchRequest): Promise<void>
   // After a step ended: skip or start the next steps, or end the run. Never throws.
   advance(runId: string): Promise<void>
@@ -49,47 +56,8 @@ export type RunEngine = {
 
 const OPEN_STEP: ReadonlySet<StepRow['status']> = new Set(['pending', 'starting', 'running'])
 
-// Contract §7: the step's own timeout, else limits.timeout, else none.
-export function stepTimeoutMs(def: AutomationDefinition, idx: number): number | null {
-  return def.steps[idx]?.timeoutMs ?? def.limits.timeoutMs ?? null
-}
-
-// An answers session (Task 24b) with no limits.timeout: past this its tab is closed, so a stuck one
-// can't hold its worktree's answers for ever.
-export const ANSWER_STEP_TIMEOUT_MS = 60 * 60_000
-
-// Task 9c ruling: an answer run's one step isn't a definition step, so it never takes the timeout of
-// the step at its index: limits.timeout, else ANSWER_STEP_TIMEOUT_MS.
-export function runStepTimeoutMs(
-  def: AutomationDefinition,
-  run: Pick<RunRow, 'trigger'>,
-  idx: number
-): number | null {
-  if (run.trigger === 'answer') {
-    return def.limits.timeoutMs ?? ANSWER_STEP_TIMEOUT_MS
-  }
-  return stepTimeoutMs(def, idx)
-}
-
 function messageOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
-}
-
-function rowFor(runId: string, idx: number, step: StepDef, at: number): AdvancedStep {
-  return {
-    runId,
-    idx,
-    name: step.name,
-    agent: step.agent,
-    skill: step.skill,
-    mode: step.mode,
-    whenExpr: step.when,
-    at
-  }
-}
-
-function nextIdx(rows: StepRow[]): number {
-  return rows.reduce((max, r) => Math.max(max, r.idx + 1), 0)
 }
 
 export function createRunEngine(deps: RunEngineDeps): RunEngine {
@@ -271,6 +239,45 @@ export function createRunEngine(deps: RunEngineDeps): RunEngine {
     store.runs.updateStep(runId, 0, { status: 'failed', error, finishedAt: deps.now() })
   }
 
+  // Not `opening`: proceed() has a parameter of that name.
+  const walker: OpeningWalk = { walk: walkOpened, locked, close }
+
+  // The workspace is recorded on the run before any step starts; an env one is made off the tick (true: return now).
+  // An env that can't even be asked for (a subject field with no value, a stack field that names no stack) fails the
+  // run through its normal end, so retry_after_failure spaces the retries (Ruling P1); nothing is claimed or made.
+  async function placeRun(run: RunRow, req: LaunchRequest, fields: ItemFields): Promise<boolean> {
+    const ws = req.definition.workspace
+    if (ws.kind !== 'env') {
+      const workspace = await resolveWorkspace(
+        { definition: req.definition, runId: run.id, label: req.decision.label, fields },
+        deps.workspace
+      )
+      store.runs.update(run.id, { worktreePath: workspace.path, worktreeId: workspace.worktreeId })
+      return false
+    }
+    const hooks = envHooks(deps, walker, run.id)
+    try {
+      if (!deps.envs) {
+        throw new Error("This process can't make env workspaces")
+      }
+      const prepare = { run, env: ws, repo: req.definition.repo, label: req.decision.label, fields }
+      deps.envs.begin(prepare, hooks)
+    } catch (error) {
+      hooks.end({ status: 'failed', outcome: messageOf(error) }, {})
+    }
+    return true
+  }
+
+  async function walkOpened(runId: string): Promise<void> {
+    try {
+      await proceed(runId, true)
+    } catch (error) {
+      settleUnstarted(runId, messageOf(error))
+      throw error
+    }
+    settleUnstarted(runId)
+  }
+
   // Step 0 is written as pending first, so the stale-start sweep and the Agent Console see the run
   // while a slow new_worktree is being made (B8). The workspace is recorded on the run before any
   // step starts. The run must already be running: a new worktree's claim only sees running runs.
@@ -298,22 +305,14 @@ export function createRunEngine(deps: RunEngineDeps): RunEngine {
     items.set(run.id, { fields: req.decision.fields, onceKey: req.decision.onceKey })
     const fields: ItemFields = { ...req.decision.fields, ...runFieldsOf(run, req.definition) }
     try {
-      const workspace = await resolveWorkspace(
-        { definition: req.definition, runId: run.id, label: req.decision.label, fields },
-        deps.workspace
-      )
-      store.runs.update(run.id, { worktreePath: workspace.path, worktreeId: workspace.worktreeId })
+      if (await placeRun(run, req, fields)) {
+        return
+      }
     } catch (error) {
       store.advance.ensureFailedStep(rowFor(run.id, 0, first, deps.now()), messageOf(error))
       throw error
     }
-    try {
-      await proceed(run.id, true)
-    } catch (error) {
-      settleUnstarted(run.id, messageOf(error))
-      throw error
-    }
-    settleUnstarted(run.id)
+    await walkOpened(run.id)
   }
 
   // One walk per run at a time. A call that arrives meanwhile is replayed once the walk ends, unless

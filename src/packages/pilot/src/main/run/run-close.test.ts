@@ -103,4 +103,26 @@ describe('closeRun: a run’s end and its handover commit together', () => {
     expect(store.runs.get('run-1')?.status).toBe('done')
     expect(logs.join('\n')).toContain('scheduler gone')
   })
+
+  // A deferred env: nothing ran, so the item is free for the next tick and the next stage gets nothing.
+  it('release: nothing is handed on, and the once_per key is freed', () => {
+    const { store, run, deps } = setup()
+    const written: string[] = []
+    const handover: RunEndHandover = {
+      write: () => {
+        written.push('write')
+        return { note: null, triggers: [] }
+      },
+      after: () => {}
+    }
+    closeRun(
+      { ...deps, handover },
+      run,
+      { status: 'cancelled', outcome: 'Deferred: cap' },
+      { release: true }
+    )
+    expect(store.runs.get('run-1')).toMatchObject({ status: 'cancelled', outcome: 'Deferred: cap' })
+    expect(written).toEqual([])
+    expect(store.handledRows('open')).toEqual([])
+  })
 })

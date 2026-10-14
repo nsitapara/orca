@@ -97,9 +97,17 @@ function subjectArgs(subject: EnvSubject): string[] {
   return ['--new-branch', subject.newBranch, '--from', subject.from, ...keep]
 }
 
-// `env` is resolved (resolveEnv). `throwaway`: the reason another Pilot run holds the worktree (§8). pilotcli takes it with a
-// plain --worktree only; for any other subject Pilot holds nothing beforehand, and the check after create (Task 4) defers a
-// run whose folder another run holds.
+// A plain --worktree, the one subject Pilot holds before create and may pass --throwaway for. With --at, or any other
+// subject, Pilot holds nothing beforehand, and the check after create (main/envs/prepare.ts) defers a run whose folder
+// another run holds.
+export function holdsWorktree(
+  subject: EnvSubject
+): subject is Extract<EnvSubject, { kind: 'worktree' }> & { at: null } {
+  return subject.kind === 'worktree' && subject.at === null
+}
+
+// `env` is resolved (resolveEnv). `throwaway`: the reason another Pilot run holds the worktree (§8); pilotcli takes it
+// only for a subject Pilot holds (holdsWorktree).
 export function envCreateArgs(a: {
   runId: string
   env: ResolvedEnvWorkspace
@@ -112,7 +120,7 @@ export function envCreateArgs(a: {
     args.push('--writes')
   }
   args.push('--stack', STACK_FLAG[a.env.stack])
-  if (a.throwaway !== null && subject.kind === 'worktree' && subject.at === null) {
+  if (a.throwaway !== null && holdsWorktree(subject)) {
     args.push('--throwaway', a.throwaway)
   }
   if (a.dryRun) {

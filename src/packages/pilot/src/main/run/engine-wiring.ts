@@ -1,6 +1,7 @@
 import type { OrcaRuntimeService } from '../../../../../main/runtime/orca-runtime'
 import type { AutomationDefinition } from '../../shared/definition/types'
 import type { EngineEnv } from '../engine-env'
+import type { EnvPreparer } from '../envs/prepare'
 import type { PilotStore } from '../store/store'
 import {
   createRunEngine,
@@ -53,6 +54,8 @@ export type EngineWiringInput = {
   onRunEnd?: RunEngineDeps['onRunEnd']
   runAnswer?: RunEngineDeps['runAnswer']
   handover?: RunEngineDeps['handover']
+  // Env workspaces (main/envs): made off the tick; the sweep never closes the pending step of a run being prepared.
+  envs?: EnvPreparer
 }
 export type WiredEngine = {
   engine: RunEngine
@@ -87,7 +90,8 @@ export function wireRunEngine(input: EngineWiringInput): WiredEngine {
     log,
     onRunEnd: input.onRunEnd,
     runAnswer: input.runAnswer,
-    handover: input.handover
+    handover: input.handover,
+    envs: input.envs
   })
   // Runs whose startRun is still going (B8: making the workspace): the sweep never closes their pending step.
   const opening = new Set<string>()
@@ -148,7 +152,9 @@ export function wireRunEngine(input: EngineWiringInput): WiredEngine {
         }
       })
       store.transaction(() => store.inboxPreparations.recoverExpired(now()))
-      sweepStaleStarts(store, now, log, STALE_START_MS, (runId) => opening.has(runId))
+      const stillOpening = (runId: string) =>
+        opening.has(runId) || (input.envs?.isPreparing(runId) ?? false)
+      sweepStaleStarts(store, now, log, STALE_START_MS, stillOpening)
       sweepOrphanShellSteps(store, shell.isLive, now, log)
       await pollRunningSteps(store, input.probe, input.cost ?? claudeTranscriptCost, now, {
         timeoutOf,

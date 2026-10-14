@@ -1,6 +1,7 @@
 import type { HandledStatus, RunRow, TickTrigger } from '../../shared/api-types'
 import { homeOf } from '../../shared/api-types-env'
 import type { EndedStep, RunEnd } from '../../shared/run/step-plan'
+import { repend } from '../handover/repend'
 import type { PilotStore } from '../store/store'
 import { broke } from './advance-fields'
 
@@ -25,6 +26,9 @@ export type CloseOptions = {
   ended?: EndedStep[]
   // The once_per key's settled status, when it isn't the end status's (an orphaned agent's run).
   handled?: HandledStatus
+  // Nothing ran (a deferred env; a first step that couldn't start once its env was made): the once_per key is freed, the
+  // handed-over ids it took are pending again, and nothing is handed on.
+  release?: boolean
 }
 
 function messageOf(error: unknown): string {
@@ -50,10 +54,10 @@ export function addRunEvent(
   })
 }
 
-// Ends a run: its status, outcome and end time, cost and tokens summed over its steps, its once_per
-// key (a failed or timed-out run's key is failed, for retry_after_failure; any other is done) and its handover, in one
-// transaction; then the handover's triggers, an `always_step_failed` event per broken `always` step (H3: never on the
-// run itself), then onRunEnd.
+// Ends a run: its status, outcome and end time, cost and tokens summed over its steps, its once_per key (a failed or
+// timed-out run's key is failed, for retry_after_failure; a released run's is freed; any other is done) and its
+// handover, in one transaction; then the handover's triggers, an `always_step_failed` event per broken `always` step
+// (H3: never on the run itself), then onRunEnd.
 export function closeRun(
   deps: RunCloseDeps,
   run: RunRow,
@@ -67,7 +71,7 @@ export function closeRun(
   // One transaction: the run's end, its once_per key and what it hands over. A failed write rolls all three back and
   // throws, so the run stays running and the next advance closes it again.
   const written = store.transaction(() => {
-    const handed = deps.handover?.write(run, end) ?? null
+    const handed = opts.release ? null : (deps.handover?.write(run, end) ?? null)
     store.runs.update(run.id, {
       status: end.status,
       outcome: handed?.note ? `${end.outcome}; ${handed.note}` : end.outcome,
@@ -75,12 +79,17 @@ export function closeRun(
       costUsd: spent.costUsd,
       tokens: spent.tokens
     })
-    store.setHandledStatus(
-      run.automationId,
-      run.id,
-      opts.handled ?? (failed ? 'failed' : 'done'),
-      at
-    )
+    if (opts.release) {
+      repend(store, run.id)
+      store.unmarkHandledForRun(run.automationId, run.id)
+    } else {
+      store.setHandledStatus(
+        run.automationId,
+        run.id,
+        opts.handled ?? (failed ? 'failed' : 'done'),
+        at
+      )
+    }
     return handed
   })
   if (written && deps.handover) {

@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 import { parseAutomationYaml } from '../../shared/definition/parse'
+import type { EnvPreparer } from '../envs/prepare'
 import { PilotStore } from '../store/store'
 import type { StepStartRequest } from './advance'
 import { wireRunEngine } from './engine-wiring'
@@ -38,7 +39,7 @@ function definitionOf(yaml: string) {
 
 type Seen = { id: string; transcriptPath: string | null } | null
 
-function setup(yaml = YAML, startMs = 11 * MIN, seen: Seen = null) {
+function setup(yaml = YAML, startMs = 11 * MIN, seen: Seen = null, envs?: EnvPreparer) {
   const clock = { now: startMs }
   const removed = { on: false }
   const store = PilotStore.open(join(mkdtempSync(join(tmpdir(), 'pilot-wiring-')), 'db.sqlite'))
@@ -79,7 +80,8 @@ function setup(yaml = YAML, startMs = 11 * MIN, seen: Seen = null) {
     },
     probe: { status: async () => 'working' as const, session: () => seen },
     cost: async () => ({ costUsd: null, tokens: 0 }),
-    log: () => {}
+    log: () => {},
+    envs
   })
   store.runs.create({
     id: 'run-1',
@@ -339,6 +341,43 @@ describe('wireRunEngine', () => {
     await opening
     expect(store.runs.steps('slow')[0].status).toBe('running')
     expect(store.runs.get('slow')).toMatchObject({ status: 'running', worktreePath: '/repo' })
+  })
+
+  // An env run's step 0 stays pending while pilotcli env create runs (up to 45 minutes, past STALE_PENDING_MS): the
+  // sweep leaves it to its preparation, and closes it only once nothing in this process prepares it.
+  it.each([
+    ['being prepared: left running', true, { status: 'running', outcome: null }],
+    [
+      'prepared by nothing here: closed',
+      false,
+      { status: 'failed', outcome: STALE_PENDING_OUTCOME }
+    ]
+  ])('a run whose env is %s', async (_name, preparing, expected) => {
+    const t = setup(YAML, 11 * MIN, null, {
+      begin: () => {},
+      isPreparing: (id) => preparing && id === 'r-old'
+    })
+    const startedAt = t.clock.now - STALE_PENDING_MS - 1
+    t.store.runs.create({
+      id: 'r-old',
+      automationId: 'test-uis',
+      tickId: null,
+      itemKey: 'mr:1',
+      itemLabel: '!1',
+      worktreePath: null,
+      startedAt
+    })
+    t.store.runs.createStep({
+      runId: 'r-old',
+      idx: 0,
+      name: 'test',
+      agent: 'codex',
+      skill: null,
+      status: 'pending',
+      startedAt
+    })
+    await t.wired.poll()
+    expect(t.store.runs.get('r-old')).toMatchObject(expected)
   })
 
   // A Codex CLI can't take a session id, so a per_worktree Codex step's id is only learned from its hooks:
