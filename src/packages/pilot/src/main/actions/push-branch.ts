@@ -100,7 +100,7 @@ function failedPush(reason: string, data: PushData): ActionResult {
 
 // pilotcli's reply as the catalog's result (spec E): ok is done; "already published" is done too (a retry after a
 // push that landed); any other skip re-asks the card with why it wasn't pushed; not_yet (uncommitted changes, a merge
-// in progress) waits on Nish; invalid and failed fail with pilotcli's reason.
+// in progress) waits on Nish, and its detail names the branch and worktree to clean up; invalid and failed fail with pilotcli's reason.
 export function pushResult(push: PinnedPush, reply: PilotcliReply): ActionResult {
   const data = (reply.data ?? {}) as PushData
   if (reply.outcome === 'ok') {
@@ -110,7 +110,13 @@ export function pushResult(push: PinnedPush, reply: PilotcliReply): ActionResult
     return skipped(push, reply.reason)
   }
   if (reply.outcome === 'not_yet') {
-    return { outcome: 'not_yet', detail: reply.reason, link: null, log: null, onYou: true }
+    return {
+      outcome: 'not_yet',
+      detail: `${reply.reason} (${push.branch} in ${push.worktree})`,
+      link: null,
+      log: null,
+      onYou: true
+    }
   }
   if (reply.outcome === 'invalid') {
     return actionFailed(`pilotcli refused the push: ${reply.reason}`)
