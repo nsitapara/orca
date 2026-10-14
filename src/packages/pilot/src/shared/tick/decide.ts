@@ -89,6 +89,8 @@ export function firstSight(
 }
 
 // Spec §6 before the checks: scope (the source's scope() and items.match), once_per, first_seen, then a field script's not due.
+// A not-due item skips items.match: its script stopped the later field scripts, so a match on one of their fields would
+// fail on a null and hide the script's reason (and consume a handed-over id). Scope, handled and baselined still win.
 // Run-once automations skip scope and first_seen, and once_per unless they set one (once per local
 // day with "{run.date}"). Exported so the tick runner runs script checks only for items that reach
 // the checks.
@@ -101,7 +103,9 @@ export function preCheckGate(
   if (def.items === null) {
     return usesHandled(def) ? handledGate(input, onceKey) : null
   }
-  const scoped = input.scope.get(item.key) ?? matchGate(def, item)
+  // A not-due item's field may be null (its script stopped the later ones), so items.match would misread it as out of scope.
+  const notDue = input.notDue?.get(item.key)
+  const scoped = input.scope.get(item.key) ?? (notDue === undefined ? matchGate(def, item) : null)
   if (scoped) {
     return scoped
   }
@@ -112,7 +116,6 @@ export function preCheckGate(
   if (def.firstSeen === 'baseline' && firstSight(item, input.seenKeys)) {
     return { verdict: 'baselined', reason: 'First time seen: recorded, not acted on' }
   }
-  const notDue = input.notDue?.get(item.key)
   if (notDue !== undefined) {
     return { verdict: 'skipped', reason: notDue }
   }
