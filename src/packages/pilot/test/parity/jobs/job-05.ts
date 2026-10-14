@@ -31,6 +31,31 @@ export const VERDICTS_05: VerdictTable = {
     quota: ['skipped'],
     absent: ['notdue']
   },
+  // The sweep skipped an MR whose worktree was dirty, mid-operation or had its tab open; the env's busy check
+  // replaces those gates (pilotcli M4 §8): the item starts in a throwaway, waits for the limit its start now uses, or is held by the quota check (which runs for every MR).
+  rows: [
+    {
+      word: 'skip',
+      reason:
+        /^(uncommitted changes|\S+ present); retry next round$|^previous CI-fix session still open$/,
+      verdicts: ['started', 'over_limit', 'skipped']
+    }
+  ],
+  // Those started MRs take the per-tick slots that the sweep gave to later due MRs.
+  known: [
+    {
+      key: 'mr:1605',
+      word: 'due',
+      verdict: 'over_limit',
+      why: 'MRs the sweep skipped for a busy worktree now start, and take the three slots of the tick'
+    },
+    {
+      key: 'mr:1606',
+      word: 'due',
+      verdict: 'over_limit',
+      why: 'MRs the sweep skipped for a busy worktree now start, and take the three slots of the tick'
+    }
+  ],
   whenOldMissing: ['out_of_scope']
 }
 

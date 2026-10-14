@@ -30,15 +30,19 @@ describe('05 · Fix failed CI v2: the definition', () => {
       missedRunGraceMs: 12 * 3_600_000,
       oncePer: '{mr.iid}:{mr.pipeline}',
       limits: { perTick: 3 },
-      workspace: { kind: 'item_worktree' },
       powers: ['commit', 'push'],
       inbox: '{mr.author}'
+    })
+    // A busy or dirty worktree is no gate: the env's busy check puts the run in a throwaway (pilotcli M4 §8).
+    expect(definition.workspace).toEqual({
+      kind: 'env',
+      subject: { kind: 'worktree', worktree: '{worktree.path}', at: null },
+      writes: true,
+      stack: 'when_backend'
     })
     expect(definition.items).toMatchObject({ kind: 'merge_request' })
     expect(definition.checks).toEqual([
       { kind: 'worktree_exists' },
-      { kind: 'session_none_open', scope: 'automation' },
-      { kind: 'worktree_clean' },
       { kind: 'quota', agent: 'claude', weekly: 90, session: 95 }
     ])
   })
@@ -47,22 +51,42 @@ describe('05 · Fix failed CI v2: the definition', () => {
     expect(definition.steps.map((s) => [s.name, s.agent, s.always, s.when])).toEqual([
       ['flag', 'shell', true, null],
       ['fix', 'claude', false, null],
+      ['merge_back', 'shell', false, "{env.mode} == 'throwaway'"],
       ['flag_failed', 'shell', true, '{run.failed} == true']
     ])
     expect(definition.steps[0].run).toContain(
       '--gitlab-mr "!$IID" --comment "fixing failed CI !$IID (auto)"'
     )
     expect(definition.steps[0].run).toContain('|| echo')
-    expect(definition.steps[2].run).toContain('--unread')
+    expect(definition.steps[3].run).toContain('--unread')
     expect(definition.steps[1]).toMatchObject({
       skill: 'fix-gitlab-ci',
       mode: 'fix',
       promptStyle: 'wrapped'
     })
+    for (const placeholder of ['{env.path}', '{env.mode}', '{worktree.path}']) {
+      expect(definition.steps[1].prompt).toContain(placeholder)
+    }
+  })
+
+  it("merges a throwaway's commits back into the worktree while holding its home", () => {
+    const mergeBack = definition.steps[2]
+    expect(mergeBack).toMatchObject({
+      name: 'merge_back',
+      agent: 'shell',
+      when: "{env.mode} == 'throwaway'",
+      holdHome: true,
+      exitCodes: { ok: [0], skip: [3] },
+      timeoutMs: 5 * 60_000
+    })
+    expect(mergeBack.run).toContain('pilotcli git update-branch')
+    expect(mergeBack.run).toContain(
+      '--merge --to "$(git rev-parse HEAD)" --busy "$PILOT_HOME_BUSY"'
+    )
   })
 
   it('still fixes when the flag hangs to its timeout, and flags a failed or timed-out fix', () => {
-    const [flag, fix, flagFailed] = definition.steps
+    const [flag, fix, , flagFailed] = definition.steps
     const timedOut = [
       { name: 'flag', status: 'timed_out' as const, always: flag.always, error: null }
     ]
