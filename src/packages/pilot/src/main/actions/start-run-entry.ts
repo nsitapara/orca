@@ -4,6 +4,7 @@ import { SCHEDULER_OFF } from '../scheduler/scheduler'
 import { UnrecordedLaunchError, type LaunchRequest } from '../scheduler/tick-runner'
 import type { PilotStore } from '../store/store'
 import { actionDone, actionFailed, type ActionEntry } from './types'
+import { repend } from '../handover/repend'
 
 function messageOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
@@ -100,6 +101,7 @@ export function startRunEntry(deps: {
           outcome: `Couldn't start: ${messageOf(error)}`,
           finishedAt: deps.now()
         })
+        repend(deps.store, run.id)
         // Nothing started, so the item's key is freed and its head can be offered again; an agent left
         // running untracked keeps it, so no tick starts a second one beside it.
         if (!(error instanceof UnrecordedLaunchError)) {

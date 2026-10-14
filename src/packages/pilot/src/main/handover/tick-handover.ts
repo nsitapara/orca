@@ -42,6 +42,7 @@ export function settles(
 }
 
 export const NOT_FOUND = 'dropped: not found by its source'
+const FAILED_RUN: ReadonlySet<string> = new Set(['failed', 'timed_out'])
 
 // How a real tick settles the fed rows it saw. Consumed: the ones `settles` says, with the item's verdict and the run
 // it started. Expired with why: ids the source can't read (dropped before the read) or found no item for. The rest
@@ -76,6 +77,10 @@ export function settleFed(
       return []
     }
     const runId = d ? (runIds.get(d.key) ?? null) : null
+    // The run started for it already failed (its launch, or the engine while opening it): the id stays pending.
+    if (runId !== null && FAILED_RUN.has(store.runs.get(runId)?.status ?? 'running')) {
+      return []
+    }
     return [{ rowId: row.id, verdict: d?.verdict ?? null, reason: d?.reason ?? NOT_READ, runId }]
   })
   store.handovers.consume(tickId, at, [...results, ...dropped])

@@ -174,6 +174,24 @@ describe('start_run', () => {
     expect(handled?.runId ?? null).toBe(runId)
   })
 
+  it('puts a handed-over id this run took back to pending when it can’t start', async () => {
+    const { store, entry } = setup(vi.fn().mockRejectedValue(new Error('no worktree')))
+    store.handovers.add({
+      senderId: 'open',
+      senderRunId: 'r0',
+      receiverId: 'rev',
+      itemIds: ['1588'],
+      at: 1
+    })
+    const [row] = store.handovers.pending('rev', 10)
+    store.handovers.consume(1, 2, [
+      { rowId: row.id, verdict: 'asked', reason: 'Asks first', runId: 'rev-1-ask' }
+    ])
+    await entry.run(ARGS, { dryRun: false, runId: 'rev-1-ask' })
+    expect(store.runs.get('rev-1-ask')?.status).toBe('failed')
+    expect(store.handovers.pending('rev', 10).map((h) => h.itemId)).toEqual(['1588'])
+  })
+
   it("starts nothing for a card that belongs to a different run (an agent's card naming another's run)", async () => {
     const { store, start, entry } = setup()
     expect(await entry.run(ARGS, { dryRun: false, runId: 'agent-1' })).toMatchObject({

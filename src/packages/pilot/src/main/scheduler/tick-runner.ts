@@ -1,4 +1,5 @@
 import type { ItemDecision, TickResult, TickTrigger, Verdict } from '../../shared/api-types'
+import { repend } from '../handover/repend'
 import { expireStale, handoverOf, settleFed } from '../handover/tick-handover'
 import type { AutomationDefinition } from '../../shared/definition/types'
 import type { PeopleDirectory } from '../../shared/people'
@@ -166,6 +167,7 @@ function releaseUnlaunched(
   const outcome = `Couldn't start: ${message}`
   try {
     deps.store.runs.update(u.runId, { status: 'failed', outcome, finishedAt: deps.now() })
+    repend(deps.store, u.runId)
   } catch {}
   if (!usesHandled(def)) {
     return
@@ -187,6 +189,7 @@ function keepOrphanHandled(
   const at = deps.now()
   try {
     deps.store.runs.update(u.runId, { status: 'failed', outcome: message, finishedAt: at })
+    repend(deps.store, u.runId)
   } catch {}
   if (!usesHandled(def)) {
     return

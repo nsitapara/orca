@@ -261,4 +261,39 @@ describe('sweepStaleStarts', () => {
     expect(store.runs.get('slow')?.status).toBe('running')
     expect(store.handledKeys('a')).toEqual(new Set(['slow:1']))
   })
+
+  it('puts the handed-over ids a stale run took back to pending, whether it had a step or not', () => {
+    const store = newStore()
+    const now = 10 * MIN
+    startRun(store, 'stuck', now - 3 * MIN)
+    store.runs.create({
+      id: 'stepless',
+      automationId: 'a',
+      tickId: null,
+      itemKey: 's',
+      itemLabel: 's',
+      worktreePath: '/wt',
+      startedAt: now - 20 * MIN
+    })
+    store.handovers.add({
+      senderId: 'open',
+      senderRunId: 'r0',
+      receiverId: 'a',
+      itemIds: ['WEB-1', 'WEB-2'],
+      at: now - 5 * MIN
+    })
+    const [one, two] = store.handovers.pending('a', 10)
+    store.handovers.consume(1, now - 3 * MIN, [
+      { rowId: one.id, verdict: 'started', reason: 'Started', runId: 'stuck' },
+      { rowId: two.id, verdict: 'started', reason: 'Started', runId: 'stepless' }
+    ])
+    sweepStaleStarts(
+      store,
+      () => now,
+      () => {}
+    )
+    expect(store.runs.get('stuck')?.status).toBe('failed')
+    expect(store.runs.get('stepless')?.status).toBe('failed')
+    expect(store.handovers.pending('a', 10).map((h) => h.itemId)).toEqual(['WEB-1', 'WEB-2'])
+  })
 })
