@@ -21,15 +21,12 @@ import type { PassFetchCache } from '../sources/fetch-cache'
 import type { IdsRunner } from '../sources/ids-from'
 import { itemSource } from '../sources/registry'
 import { runOnceItem } from '../sources/run-once'
-import type { Item, RepoFacts, SourceContext } from '../sources/types'
+import type { Item, RepoFacts, SourceContext, SourceListing } from '../sources/types'
 import type { PilotStore } from '../store/store'
 import { idsForTick, type FedOutcome } from './tick-ids'
 
 export type SourceAccess = {
-  list(
-    def: AutomationDefinition,
-    ctx: SourceContext
-  ): Promise<{ items: Item[]; warnings: string[]; missing?: string[] }>
+  list(def: AutomationDefinition, ctx: SourceContext): Promise<SourceListing>
   scope(def: AutomationDefinition, item: Item, people: PeopleDirectory): ScopeGate | null
 }
 
@@ -292,6 +289,7 @@ export async function decideTickItems(
     ],
     fed: ids?.fed ?? [],
     dropped: ids?.dropped ?? [],
-    missing: listed.missing ?? []
+    missing: listed.missing ?? [],
+    skipped: listed.skipped ?? []
   }
 }

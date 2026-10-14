@@ -4,6 +4,7 @@ import type {
   AutomationDetailPayload,
   AutomationListPayload,
   AutomationSummary,
+  EventRow,
   TickRow
 } from '../../shared/api-types'
 import { parseAutomationYaml } from '../../shared/definition/parse'
@@ -78,7 +79,8 @@ export function getAutomation(ctx: PilotContext, id: string): AutomationDetailPa
     yaml: readFileSync(def.file, 'utf8'),
     checkNames: def.checks.map(checkName),
     steps: def.steps,
-    handovers: passing.map((f) => ({ to: f.to, rows: ctx.store.handovers.latest(def.id, f.to) }))
+    handovers: passing.map((f) => ({ to: f.to, rows: ctx.store.handovers.latest(def.id, f.to) })),
+    notes: earlyNotes(ctx, def.id)
   }
 }
 
@@ -119,7 +121,7 @@ export function activity(ctx: PilotContext, id: string, limit: number): Activity
 }
 
 // Each expiry the scheduler pass recorded on this stage, under the newest tick that started before it (ticks newest
-// first). One older than every tick shown belongs to a tick past the list, unless the list holds every tick.
+// first).
 function notesByTick(
   ctx: PilotContext,
   id: string,
@@ -134,11 +136,27 @@ function notesByTick(
   const since = ticks.length < limit ? 0 : oldest.startedAt
   const events = ctx.store.events.list({ kinds: [HANDOVER_EXPIRED_EVENT], automationId: id, since })
   for (const e of events) {
-    const tick = ticks.find((t) => t.startedAt <= e.at) ?? oldest
-    const text = typeof e.payload.text === 'string' ? e.payload.text : e.kind
-    found.set(tick.id, [...(found.get(tick.id) ?? []), { at: e.at, text }])
+    // One from before every tick shown either belongs to an older tick or comes before the first (earlyNotes).
+    const tick = ticks.find((t) => t.startedAt <= e.at)
+    if (tick) {
+      found.set(tick.id, [...(found.get(tick.id) ?? []), noteOf(e)])
+    }
   }
   return found
+}
+
+function noteOf(e: EventRow): { at: number; text: string } {
+  return { at: e.at, text: typeof e.payload.text === 'string' ? e.payload.text : e.kind }
+}
+
+// A stage's notes from before its first tick (or all of them, if it never ticked): no tick to sit under, so Activity
+// shows them as entries of their own.
+function earlyNotes(ctx: PilotContext, id: string): { at: number; text: string }[] {
+  const first = ctx.store.handovers.firstTickAt(id)
+  return ctx.store.events
+    .list({ kinds: [HANDOVER_EXPIRED_EVENT], automationId: id })
+    .filter((e) => first === null || e.at < first)
+    .map(noteOf)
 }
 
 // Parse only. `file` is a label for error messages and the source of the id; it is never opened.

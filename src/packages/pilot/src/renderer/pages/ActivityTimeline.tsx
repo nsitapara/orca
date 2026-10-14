@@ -62,15 +62,34 @@ function TickNode({
   )
 }
 
-// Ticks arrive newest first from pilot.automations.activity.
+type Note = { at: number; text: string; tag?: string }
+const NO_NOTES: Note[] = []
+
+// A note with no tick to sit under (a handover expired before the stage's first tick): an entry of its own.
+function NoteNode({ note }: { note: Note }): React.JSX.Element {
+  return (
+    <li className="relative border-l border-border pb-4 pl-5">
+      <span className="absolute -left-[5px] top-1.5 size-2.5 rounded-full border border-border bg-background" />
+      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+        <span>{new Date(note.at).toLocaleString()}</span>
+        {note.tag ? <Badge variant="outline">{note.tag}</Badge> : null}
+      </div>
+      <div className="text-sm">{note.text}</div>
+    </li>
+  )
+}
+
+// Ticks arrive newest first from pilot.automations.activity; `notes` (newest first) come before the first tick.
 export function ActivityTimeline({
   ticks,
-  checkNames
+  checkNames,
+  notes = NO_NOTES
 }: {
   ticks: ActivityTick[]
   checkNames: string[]
+  notes?: Note[]
 }): React.JSX.Element {
-  if (!ticks.length) {
+  if (!ticks.length && !notes.length) {
     return <p className="text-sm text-muted-foreground">No ticks yet.</p>
   }
   return (
@@ -78,17 +97,22 @@ export function ActivityTimeline({
       {ticks.map((t) => (
         <TickNode key={t.id} tick={t} checkNames={checkNames} />
       ))}
+      {notes.map((n) => (
+        <NoteNode key={`${n.at}-${n.text}`} note={n} />
+      ))}
     </ol>
   )
 }
 
 // A job's page: every stage's ticks in one timeline (mergeJobActivity), each tagged with its stage.
 export function JobActivityTimeline({
-  entries
+  entries,
+  notes = NO_NOTES
 }: {
   entries: JobActivityEntry[]
+  notes?: Note[]
 }): React.JSX.Element {
-  if (!entries.length) {
+  if (!entries.length && !notes.length) {
     return <p className="text-sm text-muted-foreground">No ticks yet.</p>
   }
   return (
@@ -100,6 +124,9 @@ export function JobActivityTimeline({
           checkNames={e.checkNames}
           tag={`Stage ${e.stage}`}
         />
+      ))}
+      {notes.map((n) => (
+        <NoteNode key={`${n.tag}-${n.at}-${n.text}`} note={n} />
       ))}
     </ol>
   )

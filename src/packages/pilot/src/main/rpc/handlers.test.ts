@@ -165,6 +165,25 @@ describe('Pilot API handlers', () => {
     ])
   })
 
+  it('gives a stage’s expiry notes from before its first tick with its definition, as standalone entries', () => {
+    const { ctx, store } = context()
+    const note = (at: number) =>
+      store.events.add({
+        at,
+        kind: 'handover_expired',
+        automationId: 'ci',
+        itemKey: 'WEB-1',
+        payload: { text: `note ${at}` }
+      })
+    note(50)
+    expect(activity(ctx, 'ci', 10)).toEqual([])
+    expect(getAutomation(ctx, 'ci').notes).toEqual([{ at: 50, text: 'note 50' }])
+    store.startTick('ci', false, 100)
+    note(150)
+    expect(getAutomation(ctx, 'ci').notes).toEqual([{ at: 50, text: 'note 50' }])
+    expect(activity(ctx, 'ci', 10)[0].notes).toEqual([{ at: 150, text: 'note 150' }])
+  })
+
   it('returns no activity for an unknown id', () => {
     expect(activity(context().ctx, 'nope', 10)).toEqual([])
   })

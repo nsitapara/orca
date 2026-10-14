@@ -61,6 +61,7 @@ export function settleFed(
   }
   const handled = handledStates(store.handledRows(def.id))
   const missing = new Set(outcome.missing.map((id) => id.toLowerCase()))
+  const skipped = new Set(outcome.skipped.map((id) => id.toLowerCase()))
   const dropped: HandoverResult[] = outcome.dropped.map(({ row, reason }) => ({
     rowId: row.id,
     verdict: null,
@@ -70,6 +71,9 @@ export function settleFed(
   }))
   const results = outcome.fed.flatMap((row): HandoverResult[] => {
     const d = decisionFor(decisions, row.itemId)
+    if (!d && skipped.has(row.itemId.toLowerCase())) {
+      return []
+    }
     if (!d && missing.has(row.itemId.toLowerCase())) {
       return [{ rowId: row.id, verdict: null, reason: NOT_FOUND, runId: null, state: 'expired' }]
     }

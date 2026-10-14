@@ -77,7 +77,12 @@ function TabBody({ stages, tab }: { stages: StageData[]; tab: string }): React.J
       ticks: s.ticks
     }))
   )
-  return <JobActivityTimeline entries={entries} />
+  const notes = stages
+    .flatMap((s) =>
+      (s.detail?.notes ?? []).map((n) => ({ ...n, tag: `Stage ${s.summary.job?.stage ?? 0}` }))
+    )
+    .sort((a, b) => b.at - a.at)
+  return <JobActivityTimeline entries={entries} notes={notes} />
 }
 
 // A job of several automations (their job: blocks share its id): the stages as a flow, one merged Activity, and

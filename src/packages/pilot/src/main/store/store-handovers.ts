@@ -178,6 +178,14 @@ export class HandoverStore {
     return found
   }
 
+  // When the automation first ticked (of the ticks kept), or null: notes before it have no tick to sit under.
+  firstTickAt(automationId: string): number | null {
+    const row = this.db
+      .prepare('SELECT MIN(started_at) AS at FROM ticks WHERE automation_id = ?')
+      .get(automationId) as { at: number | null } | undefined
+    return row?.at ?? null
+  }
+
   setTickTrigger(tickId: number, trigger: TickTrigger): void {
     this.db
       .prepare('UPDATE ticks SET trigger_json = ? WHERE id = ?')

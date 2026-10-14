@@ -49,5 +49,9 @@ export type TickHandoverFacts = {
   handedOver?: HandoverRow[]
   notes?: { at: number; text: string }[]
 }
-// pilot.automations.get: each stage this one passes ids to, with the rows of its most recent handover there.
-export type StageHandovers = { handovers?: { to: string; rows: HandoverRow[] }[] }
+// pilot.automations.get: each stage this one passes ids to, with the rows of its most recent handover there; and the
+// stage's notes from before its first tick (a handover the scheduler pass expired), which Activity shows on their own.
+export type StageHandovers = {
+  handovers?: { to: string; rows: HandoverRow[] }[]
+  notes?: { at: number; text: string }[]
+}
