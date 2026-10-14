@@ -133,7 +133,7 @@ export type StepDef = {
   args: string[]
   session: StepSession
   run: string | null
-  exitCodes: { ok: number[]; skip: number[] }
+  exitCodes: { ok: number[]; skip: number[]; stop: number[] }
   // Shell steps: NAME -> template, rendered as plain text and exported to the command.
   env: Record<string, string>
   when: string | null

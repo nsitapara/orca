@@ -37,7 +37,7 @@ export const detail: AutomationDetailPayload = {
       session: { kind: 'new' },
       env: {},
       run: null,
-      exitCodes: { ok: [0], skip: [] },
+      exitCodes: { ok: [0], skip: [], stop: [] },
       when: null,
       always: false,
       timeoutMs: null,

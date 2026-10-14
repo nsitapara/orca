@@ -21,8 +21,12 @@ import { STDOUT_NOT_KEPT } from './shell-ending'
 
 const MIN = 60_000
 
-function shellDef(run: string, env: Record<string, string> = {}): AutomationDefinition {
-  const yaml = `name: Clean Docker\nrepo: web-platform\nschedule: manual\nsteps:\n  - name: prune\n    agent: shell\n    run: ${JSON.stringify(run)}\n    env: ${JSON.stringify(env)}\n    exit_codes: { ok: [0], skip: [3] }\n`
+function shellDef(
+  run: string,
+  env: Record<string, string> = {},
+  exitCodes = '{ ok: [0], skip: [3] }'
+): AutomationDefinition {
+  const yaml = `name: Clean Docker\nrepo: web-platform\nschedule: manual\nsteps:\n  - name: prune\n    agent: shell\n    run: ${JSON.stringify(run)}\n    env: ${JSON.stringify(env)}\n    exit_codes: ${exitCodes}\n`
   const parsed = parseAutomationYaml(yaml, '/a/clean-docker.yaml')
   if (!parsed.ok) {
     throw new Error(parsed.errors.join('\n'))
@@ -102,6 +106,25 @@ function setup(
 }
 
 describe('makeShellSteps', () => {
+  it.each([
+    [
+      'the envelope reason, over stderr',
+      result({
+        code: 3,
+        stdout: pilotcliOut({ outcome: 'skip', reason: 'pipeline 2934 is green' }),
+        stderr: 'fetching\n'
+      }),
+      'pipeline 2934 is green'
+    ],
+    ['else its last line', result({ code: 3, stdout: 'nothing to fix\n' }), 'nothing to fix'],
+    ['else its exit code', result({ code: 3 }), 'Exited 3']
+  ] as const)('a stop code stops the step with %s', async (_n, outcome, error) => {
+    const { store, steps, req } = setup({ run: async () => outcome })
+    await steps.start(req(shellDef('./context.sh', {}, '{ ok: [0], stop: [3] }')))
+    await steps.settled()
+    expect(store.runs.steps('run-1')[0]).toMatchObject({ status: 'stopped', exitCode: 3, error })
+  })
+
   it.each([
     [
       'an envelope: kept whole, and its output_tail as today',

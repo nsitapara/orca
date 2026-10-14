@@ -117,6 +117,7 @@ export type StepStatus =
   | 'done'
   | 'failed'
   | 'skipped'
+  | 'stopped'
   | 'timed_out'
 export type StepKind = 'agent' | 'shell'
 export type StepRow = {

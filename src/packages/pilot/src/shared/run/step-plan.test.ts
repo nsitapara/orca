@@ -100,6 +100,27 @@ describe('decideStep', () => {
       [ended('a', 'done')],
       { 'run.failed': false },
       { run: false, reason: 'when: {run.failed} == true is false' }
+    ],
+    [
+      'skips after an earlier step stopped the run',
+      step(),
+      [ended('context', 'stopped', { error: 'pipeline 2934 is green' })],
+      {},
+      { run: false, reason: 'Step context had nothing to do' }
+    ],
+    [
+      'runs an always step after a stop',
+      step({ always: true }),
+      [ended('context', 'stopped')],
+      {},
+      { run: true }
+    ],
+    [
+      'is not held back by a stop in an always step',
+      step(),
+      [ended('a', 'done'), ended('c', 'stopped', { always: true })],
+      {},
+      { run: true }
     ]
   ] as [string, ReturnType<typeof step>, EndedStep[], ItemFields, unknown][])(
     '%s',
@@ -154,6 +175,37 @@ describe('runEnd', () => {
       [ended('a', 'skipped'), ended('b', 'skipped')],
       0,
       { status: 'done', outcome: 'Done: every step was skipped' }
+    ],
+    [
+      'done with Nothing to do and the reason when a step stopped the run',
+      [
+        ended('context', 'stopped', { error: 'pipeline 2934 is green' }),
+        ended('fix', 'skipped'),
+        ended('cleanup', 'done', { always: true })
+      ],
+      0,
+      { status: 'done', outcome: 'Nothing to do: pipeline 2934 is green' }
+    ],
+    [
+      'Nothing to do, naming a cleanup step that failed',
+      [
+        ended('context', 'stopped', { error: 'green' }),
+        ended('cleanup', 'failed', { always: true })
+      ],
+      0,
+      { status: 'done', outcome: 'Nothing to do: green; cleanup step cleanup failed' }
+    ],
+    [
+      'needs_you ahead of a stop',
+      [ended('a', 'done'), ended('context', 'stopped', { error: 'green' })],
+      1,
+      { status: 'needs_you', outcome: 'Inbox: 1 open item' }
+    ],
+    [
+      'a stop in an always step changes nothing',
+      [ended('a', 'done'), ended('c', 'stopped', { always: true, error: 'x' })],
+      0,
+      { status: 'done', outcome: 'Done' }
     ]
   ] as [string, EndedStep[], number, unknown][])('%s', (_name, steps, open, expected) => {
     expect(runEnd(steps, open)).toEqual(expected)

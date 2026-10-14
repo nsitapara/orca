@@ -107,7 +107,11 @@ function normalizeStep(s: RawStep, name: string): StepDef {
     session: normalizeSession(s.session),
     run: s.run ?? null,
     env: s.env ?? {},
-    exitCodes: { ok: s.exit_codes?.ok ?? [0], skip: s.exit_codes?.skip ?? [] },
+    exitCodes: {
+      ok: s.exit_codes?.ok ?? [0],
+      skip: s.exit_codes?.skip ?? [],
+      stop: s.exit_codes?.stop ?? []
+    },
     when: s.when ?? null,
     always: s.always ?? false,
     timeoutMs: s.timeout ?? null,

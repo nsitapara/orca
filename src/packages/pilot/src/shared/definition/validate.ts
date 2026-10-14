@@ -66,6 +66,24 @@ function agentStepErrors(steps: RawStep[], names: string[], i: number): string[]
   return [...errors, ...sessionErrors(steps, names, i)]
 }
 
+// A code means one thing: ok, skip (the step is skipped, the run goes on) or stop (the run ends: nothing to do).
+function exitCodeErrors(s: RawStep, n: number): string[] {
+  const ok = s.exit_codes?.ok ?? [0]
+  const skip = s.exit_codes?.skip ?? []
+  const errors = ok
+    .filter((code) => skip.includes(code))
+    .map((code) => `step ${n}: exit code ${code} is both ok and skip`)
+  for (const code of s.exit_codes?.stop ?? []) {
+    if (ok.includes(code)) {
+      errors.push(`step ${n}: exit code ${code} is both ok and stop`)
+    }
+    if (skip.includes(code)) {
+      errors.push(`step ${n}: exit code ${code} is both skip and stop`)
+    }
+  }
+  return errors
+}
+
 function shellStepErrors(s: RawStep, n: number): string[] {
   const errors: string[] = []
   const agentKeys = AGENT_ONLY.filter((k) => s[k] !== undefined)
@@ -84,12 +102,7 @@ function shellStepErrors(s: RawStep, n: number): string[] {
       errors.push(`step ${n}: env: ${problem}`)
     }
   }
-  const skip = new Set(s.exit_codes?.skip ?? [])
-  for (const code of s.exit_codes?.ok ?? [0]) {
-    if (skip.has(code)) {
-      errors.push(`step ${n}: exit code ${code} is both ok and skip`)
-    }
-  }
+  errors.push(...exitCodeErrors(s, n))
   return errors
 }
 

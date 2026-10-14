@@ -145,6 +145,7 @@ const STEP_STATUS: Record<StepStatus, string> = {
   done: 'Done',
   failed: 'Failed',
   skipped: 'Skipped',
+  stopped: 'Stopped',
   timed_out: 'Timed out'
 }
 
