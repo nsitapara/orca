@@ -39,7 +39,7 @@ describe('09 · Prepare reviews requested of me: the definition', () => {
     expect(definition).toMatchObject({
       name: '09 · Prepare reviews requested of me',
       schedule: '30 * * * *',
-      enabled: false,
+      enabled: true, // live since go-live stage B (2026-10-14)
       missedRunGraceMs: 12 * 3_600_000,
       oncePer: '{mr.iid}:{mr.head8}',
       start: 'ask_first',
