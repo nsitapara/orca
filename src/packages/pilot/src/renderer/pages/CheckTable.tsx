@@ -1,5 +1,5 @@
 import type { ItemDecision } from '../../shared/api-types'
-import { verdictLabel } from './format'
+import { itemUrl, verdictLabel } from './format'
 import { CHECKS_WIDTHS_KEY, useColumnWidths, type ColumnSpec } from './use-column-widths'
 
 // One checked item: a stored tick's item or a dry run's decision.
@@ -24,6 +24,27 @@ function CheckCell({ item, name }: { item: CheckRow; name: string }): React.JSX.
     return <td className="break-words px-3 py-2 text-emerald-600">✓</td>
   }
   return <td className="break-words px-3 py-2 text-orange-600">{`✗ ${c.reason}`}</td>
+}
+
+// The item's name, linked to its ticket, MR or pipeline when its source gives the page.
+function ItemCell({ item }: { item: CheckRow }): React.JSX.Element {
+  const url = itemUrl(item.fields)
+  return (
+    <td className="truncate px-3 py-2 font-medium" title={url ?? item.label}>
+      {url ? (
+        <a
+          href={url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="underline underline-offset-2 hover:text-foreground"
+        >
+          {item.label}
+        </a>
+      ) : (
+        item.label
+      )}
+    </td>
+  )
 }
 
 function HeaderCell({
@@ -80,9 +101,7 @@ export function CheckTable({
         <tbody>
           {items.map((item) => (
             <tr key={item.key} className="border-t border-border/50 align-top">
-              <td className="truncate px-3 py-2 font-medium" title={item.label}>
-                {item.label}
-              </td>
+              <ItemCell item={item} />
               {checkNames.map((name) => (
                 <CheckCell key={name} item={item} name={name} />
               ))}

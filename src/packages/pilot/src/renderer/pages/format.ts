@@ -2,6 +2,7 @@ import { money } from '../../shared/money'
 import { relativeTime } from '../../shared/relative-time'
 import type {
   ItemDecision,
+  ItemFields,
   RunStatus,
   StepStatus,
   TickOutcome,
@@ -49,6 +50,17 @@ export function verdictLabel(v: Verdict, dry = false): string {
 // still prints it).
 export function checkedItems<T extends { verdict: Verdict }>(items: readonly T[]): T[] {
   return items.filter((i) => i.verdict !== 'out_of_scope')
+}
+
+// The page an item is about (its Linear ticket, MR or pipeline); null when its source gives none.
+export function itemUrl(fields: ItemFields): string | null {
+  for (const name of ['ticket.url', 'mr.web_url', 'pipeline.web_url']) {
+    const url = fields[name]
+    if (typeof url === 'string' && /^https?:\/\//i.test(url)) {
+      return url
+    }
+  }
+  return null
 }
 
 function countsLine(counts: Partial<Record<Verdict, number>>, dry: boolean): string {
