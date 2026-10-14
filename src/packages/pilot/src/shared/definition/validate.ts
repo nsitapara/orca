@@ -2,7 +2,7 @@ import { z } from 'zod'
 import { isValidTimeZone, parseCron } from '../schedule/cron'
 import { RUN_PLACEHOLDER_ADVICE, envNameProblem, runPlaceholders } from '../run/shell-template'
 import { PLACEHOLDER } from '../template'
-import { envWorkspaceErrors } from './env-workspace'
+import { envWorkspaceErrors, holdHomeErrors } from './env-workspace'
 import { feedsOf, stepNames } from './normalize'
 import type { RawAutomation, RawStep } from './schema'
 
@@ -22,7 +22,7 @@ export function scheduleErrors(raw: RawAutomation): string[] {
 }
 
 const AGENT_ONLY = ['skill', 'mode', 'prompt', 'prompt_style', 'args', 'session'] as const
-const SHELL_ONLY = ['run', 'env', 'exit_codes'] as const
+const SHELL_ONLY = ['run', 'env', 'exit_codes', 'hold_home'] as const
 
 function keyNames(keys: readonly string[]): string {
   return keys.map((k) => `${k}:`).join(', ')
@@ -283,6 +283,7 @@ export function definitionErrors(raw: RawAutomation): string[] {
     ...oncePerErrors(raw),
     ...combinationErrors(raw),
     ...envWorkspaceErrors(raw),
+    ...holdHomeErrors(raw),
     ...windowErrors(raw),
     ...fieldNameErrors(raw),
     ...jobErrors(raw)

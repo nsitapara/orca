@@ -85,6 +85,18 @@ export class EnvStore {
       .run(at, runId)
   }
 
+  // hold_home: the step whose claim on home_path this run holds. The claim queries (store-runs.ts) count it only while
+  // that step is starting or running, so a step that ends any way, a crash included, lets go.
+  holdHome(runId: string, idx: number): void {
+    this.db.prepare('UPDATE runs SET home_hold_step = ? WHERE id = ?').run(idx, runId)
+  }
+
+  releaseHome(runId: string, idx: number): void {
+    this.db
+      .prepare('UPDATE runs SET home_hold_step = NULL WHERE id = ? AND home_hold_step = ?')
+      .run(runId, idx)
+  }
+
   // The sweep found pilotcli still has it although Pilot recorded it removed: due for delete again at once, back in the
   // state it had (ready once made, else failed; deferred stays deferred), its backoff starting over.
   reopen(runId: string): void {

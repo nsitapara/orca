@@ -291,6 +291,16 @@ A job that changes code on Nish's work, or needs a stack, says what it needs. pi
   - Every step runs in the env's folder, with its variables (`data.env`). Pilot's own `PILOT_*` and a step's `env:` win over them. A variable named like Pilot's own (`PILOT_*`, `ORCA_*`, `PATH`, …) fails the run.
   - `{worktree.path}` stays the item's worktree. The folder is `{env.path}`; also `{env.mode}`, `{env.reason}`, `{env.file}`, `{env.stack}`.
   - In place, Pilot keeps its claim until the run ends. A throwaway frees the worktree for other runs.
+- **Merge back (`hold_home: true`, shell steps of env runs only).** Before the step, Pilot claims the run's home (the item's worktree) for that step alone. If another Pilot run holds it, the step gets `PILOT_HOME_BUSY="<that job> is working in <home> (Pilot run …)"`, and its script passes it on, so pilotcli skips (exit 3) with that reason. The claim ends with the step, however it ends. Placeholders don't work in `run:`, so pass them through `env:`:
+
+      - name: merge_back
+        agent: shell
+        hold_home: true
+        env: { HOME_WT: "{worktree.path}", TO: "{steps.push.commit}" }
+        run: pilotcli git update-branch "$HOME_WT" --to "$TO" --merge ${PILOT_HOME_BUSY:+--busy "$PILOT_HOME_BUSY"}
+        exit_codes: { ok: [0], skip: [3] }
+
+  The same line as a plain call: `pilotcli git update-branch "{worktree.path}" --merge --to <sha> --busy "$PILOT_HOME_BUSY"`.
 - **The run ends, however it ends:**
   1. A throwaway's own step tabs close. A tab with text typed in it stays, and the delete waits.
   2. `pilotcli env delete <run>` runs, with `--keep-folder` for a kept worktree.

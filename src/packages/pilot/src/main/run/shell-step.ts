@@ -69,6 +69,14 @@ export const runShell: ShellRunner = async (spec) => {
   }
 }
 
+// PILOT_HOME_BUSY is set only when another run holds the home (hold_home); never inherited.
+function withHomeBusy(env: NodeJS.ProcessEnv, busy: string | null): NodeJS.ProcessEnv {
+  const kept = Object.fromEntries(
+    Object.entries(env).filter(([name]) => name !== 'PILOT_HOME_BUSY')
+  )
+  return busy === null ? kept : { ...kept, PILOT_HOME_BUSY: busy }
+}
+
 export type ShellStepDeps = {
   store: PilotStore
   now(): number
@@ -84,6 +92,11 @@ export type ShellStepDeps = {
   run?: ShellRunner
   // The env every command starts from; process.env (PATH already hydrated from the login shell).
   baseEnv?: NodeJS.ProcessEnv
+  // hold_home: takes Pilot's claim on the run's home for this step, or returns the reason another run holds it
+  // (PILOT_HOME_BUSY). Called with no await before the step reads running, so two steps can't both take it.
+  holdHome?(req: StepStartRequest): string | null
+  // Lets go of that claim when the step ends, however it ends (it also lapses once the step stops running).
+  releaseHome?(req: StepStartRequest): void
 }
 export type ShellSteps = {
   start: StepStarter
@@ -243,21 +256,18 @@ export function makeShellSteps(deps: ShellStepDeps): ShellSteps {
     live.add(key)
     let job: Promise<void>
     try {
+      const homeBusy = deps.holdHome?.(req) ?? null
       deps.store.runs.updateStep(req.run.id, req.idx, { status: 'running' })
       const timeoutMs = deps.timeoutOf(req)
       const base = deps.baseEnv ?? process.env
-      job = run({
-        command,
-        cwd,
-        env: {
-          ...base,
-          ...deps.runEnvOf?.(req),
-          ...engineChildEnv(deps.engineEnv, deps.envOf(req), base),
-          ...stepEnv.env,
-          PILOT_OUTPUT_FILE: outputFile
-        },
-        timeoutMs
-      })
+      const env = {
+        ...base,
+        ...deps.runEnvOf?.(req),
+        ...engineChildEnv(deps.engineEnv, deps.envOf(req), base),
+        ...stepEnv.env,
+        PILOT_OUTPUT_FILE: outputFile
+      }
+      job = run({ command, cwd, env: withHomeBusy(env, homeBusy), timeoutMs })
         .then(
           (result) => finish(req, result, timeoutMs, outputFile),
           (error: unknown) => fail(req, error)
@@ -268,6 +278,7 @@ export function makeShellSteps(deps: ShellStepDeps): ShellSteps {
           )
         )
         .finally(() => {
+          deps.releaseHome?.(req)
           try {
             rmSync(outputDir, { recursive: true, force: true })
           } catch (error) {
@@ -278,6 +289,7 @@ export function makeShellSteps(deps: ShellStepDeps): ShellSteps {
           deps.onEnded(req.run.id)
         })
     } catch (error) {
+      deps.releaseHome?.(req)
       try {
         rmSync(outputDir, { recursive: true, force: true })
       } catch (removeError) {
