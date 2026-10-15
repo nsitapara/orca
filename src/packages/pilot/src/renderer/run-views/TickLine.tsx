@@ -42,6 +42,17 @@ export function NoteLine({ note }: { note: Note }): React.JSX.Element {
   )
 }
 
+function checksToggleText(open: boolean, count: number): string {
+  if (open) {
+    return 'Hide checks'
+  }
+  return `Why: ${count} items checked`
+}
+
+function checkNamesFor(summary: AutomationSummary | undefined): string[] {
+  return summary ? checkNamesOf(summary.chain) : []
+}
+
 // One tick on Activity: when, whose, what it decided, what triggered it, why (its checked items), and the runs it
 // started that have finished (live ones sit in Running now or Waiting on you).
 export function TickLine({
@@ -87,11 +98,11 @@ export function TickLine({
       ))}
       {checked.length ? (
         <button type="button" className="mt-1 text-xs underline" onClick={() => setOpen(!open)}>
-          {open ? 'Hide checks' : `Why: ${checked.length} items checked`}
+          {checksToggleText(open, checked.length)}
         </button>
       ) : null}
       {open && checked.length ? (
-        <CheckTable items={checked} checkNames={summary ? checkNamesOf(summary.chain) : []} />
+        <CheckTable items={checked} checkNames={checkNamesFor(summary)} />
       ) : null}
       {tick.runs.length > 0 ? (
         <ol className="mt-2">

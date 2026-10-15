@@ -43,6 +43,7 @@ const detail: RunDetail = {
   tickItem: null,
   trigger: null,
   handovers: [],
+  receivedFrom: [],
   answerRuns: []
 }
 

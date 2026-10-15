@@ -36,7 +36,8 @@ describe('groupActivity', () => {
         tick(2, NOW - 2 * HOUR, [testRun({ id: 'a' }), testRun({ id: 'done' })]),
         tick(1, NOW - 30 * HOUR)
       ],
-      loose: [listed({ id: 'answer', startedAt: NOW - HOUR, status: 'done' })]
+      loose: [listed({ id: 'answer', startedAt: NOW - HOUR, status: 'done' })],
+      reach: null
     }
     const g = groupActivity(p, NOW)
     expect(g.running.map((r) => r.id)).toEqual(['a'])
@@ -73,7 +74,8 @@ describe('run picking', () => {
           testRun({ id: 'old', status: 'done', startedAt: 10, steps: [stepAt(0, 'fix', 'done')] })
         ])
       ],
-      loose: []
+      loose: [],
+      reach: null
     }
     const runs = runCandidates(p)
     expect(runs.map((r) => r.id)).toEqual(['waiting', 'running', 'old'])

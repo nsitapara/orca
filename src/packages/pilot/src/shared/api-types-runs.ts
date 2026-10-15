@@ -17,7 +17,13 @@ export type ActivityRun = RunRow & { steps: StepRow[]; inbox: InboxItemSummary[]
 // item link ({} when its tick was pruned or it had none).
 export type ListedRun = ActivityRun & { fields: ItemFields }
 // pilot.activity.list: live runs of any age, ticks (newest first), and the runs no tick started.
-export type ActivityPayload = { live: ListedRun[]; ticks: ActivityTick[]; loose: ListedRun[] }
+// `reach`: when the page of ticks was full, the moment the list was cut back to (it shows nothing older); else null.
+export type ActivityPayload = {
+  live: ListedRun[]
+  ticks: ActivityTick[]
+  loose: ListedRun[]
+  reach: number | null
+}
 // pilot.runs.get: one run and everything its panel shows. paintRun(detail.chain, detail) paints all of it.
 export type RunDetail = {
   run: ListedRun
@@ -27,5 +33,7 @@ export type RunDetail = {
   tickItem: TickItemRow | null
   trigger: TickTrigger | null
   handovers: HandoverRow[]
+  // The handovers whose tick started this run (a stage-2 run): the run on the other side.
+  receivedFrom: HandoverRow[]
   answerRuns: RunRow[]
 }

@@ -56,6 +56,18 @@ describe('stripOf', () => {
       ['step:0', 'not_reached']
     ])
   })
+
+  it("opens a chip at the part that's pressing, not the first", () => {
+    const run = testRun({
+      automationId: 'review',
+      status: 'failed',
+      outcome: "Couldn't start",
+      finishedAt: 2
+    })
+    const pre = stripOf(paintRun(chain, { run }).parts).find((c) => c.key === 'pre')
+    expect(pre).toMatchObject({ state: 'failed', part: 'workspace' })
+    expect(stripOf(chain).find((c) => c.key === 'pre')?.part).toBe('starts')
+  })
 })
 
 describe('liveStrip', () => {
@@ -82,6 +94,17 @@ describe('liveStrip', () => {
     })
     expect(lit.find((c) => c.key === 'ask')).toMatchObject({ state: 'asking', runIds: ['c'] })
     expect(lit.find((c) => c.key === 'pre')).toMatchObject({ state: null, runIds: [] })
+  })
+
+  it('lights no step chip for a live run older than a YAML change', () => {
+    const old = testRun({
+      id: 'old',
+      automationId: 'review',
+      trigger: 'ask_first',
+      steps: [stepAt(0, 'renamed_step', 'running')]
+    })
+    const lit = liveStrip(chain, [old])
+    expect(lit.find((c) => c.key === 'step:0')).toMatchObject({ state: null, runIds: [] })
   })
 
   it('adds an answers chip while an answer run is live, and never lights a step for it', () => {

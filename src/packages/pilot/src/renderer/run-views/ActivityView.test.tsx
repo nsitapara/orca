@@ -48,7 +48,8 @@ const payload: ActivityPayload = {
       ]
     }
   ],
-  loose: []
+  loose: [],
+  reach: null
 }
 
 function serve(): void {
@@ -108,7 +109,8 @@ describe('ActivityView', () => {
         : {
             live: [listed({ id: 'x', automationId: 'removed', itemLabel: 'Gone job run' })],
             ticks: [],
-            loose: []
+            loose: [],
+            reach: null
           }
     )
     render(<ActivityView automationIds={null} since={0} limit={100} />)
@@ -130,5 +132,25 @@ describe('ActivityView', () => {
     })
     render(<ActivityView automationIds={null} since={0} limit={100} />)
     expect(await screen.findByText('pushed web-1')).toBeTruthy()
+  })
+
+  it('says how far back the list reaches only when the page was cut', async () => {
+    const cutAt = new Date(2026, 9, 14, 15, 30).getTime()
+    pilotRpc.mockImplementation(async (method: string) => {
+      if (method === 'pilot.automations.list') {
+        return { automations: [summary], errors: [], peopleError: null, missingDirs: [] }
+      }
+      return { ...payload, reach: cutAt }
+    })
+    const { unmount } = render(<ActivityView automationIds={null} since={0} limit={300} />)
+    const line = await screen.findByText(/^Showing back to /)
+    expect(line.textContent).toBe(
+      `Showing back to ${new Date(cutAt).toLocaleString(undefined, { weekday: 'short', hour: 'numeric', minute: '2-digit' })}`
+    )
+    unmount()
+    serve()
+    render(<ActivityView automationIds={null} since={0} limit={300} />)
+    await screen.findByRole('region', { name: 'Running now' })
+    expect(screen.queryByText(/^Showing back to /)).toBeNull()
   })
 })

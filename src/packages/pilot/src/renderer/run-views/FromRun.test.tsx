@@ -43,6 +43,28 @@ describe('FromRun', () => {
     expect(openRunPanel()).toEqual({ runId: 'r1', part: 'step:0' })
   })
 
+  it("opens a card an answer run asked at the answer run's step", async () => {
+    pilotRpc.mockResolvedValue({
+      automations: [summary],
+      errors: [],
+      peopleError: null,
+      missingDirs: []
+    })
+    const run = testRun({
+      id: 'r2',
+      automationId: 'fix-ci',
+      tickId: null,
+      trigger: 'answer',
+      parentRunId: 'r1',
+      status: 'needs_you',
+      steps: [stepAt(0, 'answers', 'done')],
+      inbox: [testCard({ automationId: 'fix-ci', runId: 'r2', stepIdx: 0 })]
+    })
+    render(<FromRun item={{ automationId: 'fix-ci', stepIdx: 0 }} run={run} />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Open run' }))
+    expect(openRunPanel()).toEqual({ runId: 'r2', part: 'answer:0' })
+  })
+
   it('shows nothing for a card whose run is gone', () => {
     pilotRpc.mockResolvedValue({
       automations: [summary],
