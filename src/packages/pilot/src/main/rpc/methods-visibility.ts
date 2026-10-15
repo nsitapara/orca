@@ -2,6 +2,7 @@ import { z } from 'zod'
 import { defineMethod } from '../../../../../main/runtime/rpc/core'
 import type { RpcCallerIdentity } from '../../../../../main/runtime/rpc/rpc-caller-identity'
 import type { PilotContext } from '../pilot-services'
+import { acknowledgeRuns, doneForYou } from '../transcript/done-for-you'
 import { LogReader } from '../transcript/log-file'
 import { RunEffectsReader } from '../transcript/run-effects'
 import { stepLog, stepLogEntry, type StepLogDeps } from '../transcript/step-log'
@@ -17,10 +18,11 @@ const EntryRef = StepRef.extend({ id: z.string().min(1) })
 const RunIds = z.object({ runIds: z.array(z.string().min(1)).max(MAX_EFFECT_RUNS) })
 
 // A transcript can hold ticket and comment text: only Nish, at Pilot's window or a paired device, reads it.
-function requirePerson(caller: RpcCallerIdentity | undefined): void {
+function requirePerson(caller: RpcCallerIdentity | undefined): RpcCallerIdentity['kind'] {
   if (caller?.kind !== 'desktop' && caller?.kind !== 'paired-device') {
     throw new Error(LOG_BY_PERSON)
   }
+  return caller.kind
 }
 
 // One reader of transcripts per process, made on first use (Pilot's context isn't there before it starts).
@@ -68,6 +70,18 @@ export function buildVisibilityMethods(
       permission: 'workspace',
       params: RunIds,
       handler: (p) => readers().effects.forRuns(p.runIds)
+    }),
+    defineMethod({
+      name: 'pilot.runs.doneForYou',
+      permission: 'workspace',
+      params: z.object({ person: z.string().min(1).optional() }),
+      handler: (p) => doneForYou(ctx(), readers().effects, p.person ?? null, Date.now())
+    }),
+    defineMethod({
+      name: 'pilot.runs.acknowledge',
+      permission: 'workspace',
+      params: RunIds,
+      handler: (p, rpc) => acknowledgeRuns(ctx(), p.runIds, requirePerson(rpc.caller), Date.now())
     })
   ]
 }

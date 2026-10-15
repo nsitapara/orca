@@ -1,5 +1,8 @@
 import type Database from '../../../../../main/sqlite/sync-database'
+import type { RunRow } from '../../shared/api-types'
+import { toRun } from './run-rows'
 
+const ENDED = "('done', 'needs_you', 'failed', 'timed_out', 'cancelled')"
 const LINEAR_ISSUE = /^https:\/\/linear\.app\/[^/]+\/issue\//
 
 // Reads for Run visibility (spec §2, §3) that no other store owns.
@@ -21,6 +24,29 @@ export class VisibilityStore {
       }
     }
     return []
+  }
+
+  // Ended runs since `since` that Nish hasn't acknowledged, newest first: Done for you's candidates (spec §3).
+  unacknowledged(automationIds: readonly string[] | null, since: number, limit: number): RunRow[] {
+    const only = automationIds
+      ? ` AND automation_id IN (${automationIds.map(() => '?').join(', ') || 'NULL'})`
+      : ''
+    return this.db
+      .prepare(
+        `SELECT * FROM runs WHERE acknowledged_at IS NULL AND status IN ${ENDED}
+         AND COALESCE(finished_at, started_at) >= ?${only}
+         ORDER BY COALESCE(finished_at, started_at) DESC LIMIT ?`
+      )
+      .all(since, ...(automationIds ?? []), limit)
+      .map((r) => toRun(r as Record<string, unknown>))
+  }
+
+  // Got it: the runs it acknowledged now (one already acknowledged, or unknown, isn't counted).
+  acknowledge(runIds: readonly string[], at: number): string[] {
+    const set = this.db.prepare(
+      'UPDATE runs SET acknowledged_at = ? WHERE id = ? AND acknowledged_at IS NULL'
+    )
+    return runIds.filter((id) => Number(set.run(at, id).changes) > 0)
   }
 }
 
