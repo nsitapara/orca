@@ -152,6 +152,20 @@ describe('HandoverStore: ids one stage hands the next, kept until a tick of the 
     expect(store.handovers.sentBy('none')).toEqual([])
   })
 
+  it('lists the rows whose tick started a run, in order', () => {
+    const store = open()
+    store.handovers.add({ ...SENT, senderRunId: 'r1', itemIds: ['WEB-1', 'WEB-2'] })
+    const [a, b] = store.handovers.sentBy('r1')
+    store.handovers.consume(7, 200, [
+      { rowId: a.id, verdict: 'started', reason: '', runId: 'r9' },
+      { rowId: b.id, verdict: 'started', reason: '', runId: 'r10' }
+    ])
+    expect(store.handovers.startedBy('r9').map((h) => [h.senderRunId, h.itemId])).toEqual([
+      ['r1', 'WEB-1']
+    ])
+    expect(store.handovers.startedBy('none')).toEqual([])
+  })
+
   it('keeps what triggered a tick, read back by tick id', () => {
     const store = open()
     const tickId = store.startTick('dev-e2e-fix-start', 1)

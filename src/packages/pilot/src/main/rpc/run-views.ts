@@ -41,11 +41,14 @@ export function activityList(ctx: PilotContext, p: ActivityListParams): Activity
   const ids = p.automationIds ?? null
   const ticks = ctx.store.activity.ticks(ids, p.since ?? 0, p.limit, p.skipQuiet)
   const oldest = ticks.at(-1)
-  const floor = p.since ?? (ticks.length < p.limit || !oldest ? 0 : oldest.startedAt)
+  const cut = ticks.length === p.limit && oldest !== undefined
+  const floor = Math.max(p.since ?? 0, cut ? oldest.startedAt : 0)
   return {
     live: listed(ctx, ctx.store.activity.live(ids)),
     ticks: activityTicks(ctx, ticks, floor),
-    loose: listed(ctx, ctx.store.activity.unticked(ids, floor, p.limit))
+    loose: listed(ctx, ctx.store.activity.unticked(ids, floor, p.limit)),
+    // The page of ticks was full: the list was cut back to here.
+    reach: cut ? floor : null
   }
 }
 
@@ -75,6 +78,7 @@ export function runDetail(ctx: PilotContext, runId: string): RunDetail {
     tickItem,
     trigger,
     handovers: ctx.store.handovers.sentBy(row.id),
+    receivedFrom: ctx.store.handovers.startedBy(row.id),
     answerRuns: ctx.store.activity.children(row.id)
   }
 }

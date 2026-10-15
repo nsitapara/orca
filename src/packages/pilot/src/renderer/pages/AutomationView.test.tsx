@@ -16,8 +16,8 @@ vi.mock('../api', () => ({ pilotRpc: (...args: unknown[]) => pilotRpc(...args) }
 import { AutomationView } from './AutomationView'
 import { setPilotAutomationTab } from './automations-view'
 
-const ACTIVITY: ActivityPayload = { live: [], ticks: [failedRunTick], loose: [] }
-const EMPTY: ActivityPayload = { live: [], ticks: [], loose: [] }
+const ACTIVITY: ActivityPayload = { live: [], ticks: [failedRunTick], loose: [], reach: null }
+const EMPTY: ActivityPayload = { live: [], ticks: [], loose: [], reach: null }
 const RUN: RunDetail = {
   run: { ...failedRunTick.runs[0], fields: {} },
   automationName: summary.name,
@@ -25,6 +25,7 @@ const RUN: RunDetail = {
   tickItem: null,
   trigger: null,
   handovers: [],
+  receivedFrom: [],
   answerRuns: []
 }
 

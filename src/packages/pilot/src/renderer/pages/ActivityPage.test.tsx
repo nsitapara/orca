@@ -14,7 +14,7 @@ function serveEmpty(): void {
   pilotRpc.mockImplementation(async (method: string) =>
     method === 'pilot.automations.list'
       ? { automations: [summary], errors: [], peopleError: null, missingDirs: [] }
-      : { live: [], ticks: [], loose: [] }
+      : { live: [], ticks: [], loose: [], reach: null }
   )
 }
 
@@ -32,12 +32,12 @@ describe('ActivityPage', () => {
     pilotRpc.mockImplementation(async (method: string) =>
       method === 'pilot.automations.list'
         ? { automations: [summary], errors: [], peopleError: null, missingDirs: [] }
-        : { live: [], ticks: [], loose: [] }
+        : { live: [], ticks: [], loose: [], reach: null }
     )
     showActivity(['fix-ci'])
     render(<ActivityPage />)
     await waitFor(() =>
-      expect(activityCalls()[0]).toMatchObject({ automationIds: ['fix-ci'], limit: 100 })
+      expect(activityCalls()[0]).toMatchObject({ automationIds: ['fix-ci'], limit: 300 })
     )
     expect(typeof activityCalls()[0].since).toBe('number')
     fireEvent.click(await screen.findByRole('button', { name: 'Fix failed CI' }))
