@@ -1,4 +1,4 @@
-import type { JobDef, StepDef } from './definition/types'
+import type { JobDef } from './definition/types'
 import type { StageHandovers, TickHandover, TickHandoverFacts } from './api-types-handover'
 import type { RunEnv } from './api-types-env'
 import type { StoredResult } from './api-types-result'
@@ -320,7 +320,6 @@ export type AutomationDetailPayload = StageHandovers & {
   summary: AutomationSummary
   yaml: string
   checkNames: string[]
-  steps: StepDef[]
 }
 
 // The agent ↔ engine channel (pilot run output | event). Step outputs are template fields
