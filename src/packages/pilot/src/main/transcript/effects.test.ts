@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { ActionRunRow } from '../../shared/api-types-actions'
 import type { ParsedEntry } from './claude-log'
+import { linkEffects } from './effect-links'
 import { actionEffects, stepEffects } from './effects'
 
 function entry(over: Partial<ParsedEntry> & { id: string }): ParsedEntry {
@@ -17,6 +18,7 @@ function entry(over: Partial<ParsedEntry> & { id: string }): ParsedEntry {
     command: null,
     git: null,
     ids: [],
+    branch: null,
     ...over
   } as ParsedEntry
 }
@@ -51,7 +53,8 @@ describe('stepEffects', () => {
           result: null,
           command: null,
           git: null,
-          ids: []
+          ids: [],
+          branch: null
         }
       ],
       1
@@ -100,6 +103,29 @@ describe('stepEffects fixes', () => {
       0
     )
     expect(one.map((e) => [e.kind, e.target, e.count])).toEqual([['pushed', 'web-1', 1]])
+  })
+
+  it.each([
+    ['git push', 'web-9', null, 'web-9'],
+    ['pilotcli git push-branch "$CURRENT"', 'web-9', null, 'web-9'],
+    ['git push', 'HEAD', null, null],
+    ['git push', '', null, null],
+    ['git push', 'web-9', 'web-1', 'web-1'],
+    ['git push origin web-2', 'web-9', null, 'web-2']
+  ])(
+    "takes a push's branch from %s, else its record's gitBranch %j (gitOperation %j)",
+    (command, branch, pushed, target) => {
+      const git = pushed ? { push: { branch: pushed } } : null
+      const effects = stepEffects([entry({ id: 'a', command, branch, git })], 0)
+      expect(effects.map((e) => e.target)).toEqual([target])
+    }
+  )
+
+  it("links a push to its record's branch's tree", () => {
+    const effects = stepEffects([entry({ id: 'a', command: 'git push', branch: 'web-9' })], 0)
+    expect(linkEffects(effects, { gitlab: 'https://gitlab.com/g/p', linear: null })[0].url).toBe(
+      'https://gitlab.com/g/p/-/tree/web-9'
+    )
   })
 
   it('does not take WEB-70 for WEB-7', () => {
@@ -158,6 +184,27 @@ describe('actionEffects', () => {
         at: 6
       },
       { kind: 'action', target: 'push', url: null, count: 1, stepIdx: null, at: 5 }
+    ])
+  })
+
+  it('leaves out start_run, and says only which ticket linear_attach linked', () => {
+    const attach = JSON.stringify({
+      detail: 'attached Some title to WEB-3',
+      link: 'https://x.test/a'
+    })
+    expect(
+      actionEffects([
+        row({ action: 'start_run', output: JSON.stringify({ detail: 'started run x' }) }),
+        row({
+          action: 'linear_attach',
+          args: { issue: 'WEB-3', title: 'Some title' },
+          output: attach
+        }),
+        row({ action: 'linear_attach', args: { issue: 'issue-uuid' }, output: attach })
+      ]).map((e) => [e.target, e.url])
+    ).toEqual([
+      ['attached a link to WEB-3', 'https://x.test/a'],
+      ['attached a link', 'https://x.test/a']
     ])
   })
 

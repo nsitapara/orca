@@ -4,6 +4,9 @@ import type { GitOperation, ParsedEntry } from './claude-log'
 import { commandEffects, type CommandEffect } from './effects-commands'
 
 const MR_URL = /\/-\/merge_requests\/(\d+)/
+const TICKET = /^[A-Z][A-Z0-9]{1,9}-\d+$/
+// Pilot's own actions (start_run starts another run) change nothing outside Pilot.
+const INTERNAL_ACTIONS = new Set(['start_run'])
 const PR_KIND: Record<string, EffectKind | undefined> = {
   created: 'mr_opened',
   edited: 'mr_updated',
@@ -37,6 +40,9 @@ function perEntry(list: readonly CommandEffect[]): CommandEffect[] {
 }
 
 function guessTarget(kind: EffectKind, e: Extract<ParsedEntry, { kind: 'tool' }>): string | null {
+  if (kind === 'pushed') {
+    return e.branch && e.branch !== 'HEAD' ? e.branch : null
+  }
   if (kind === 'mr_opened') {
     const n = e.links.map((l) => MR_URL.exec(l)?.[1]).find((m) => m !== undefined)
     return n === undefined ? null : `!${n}`
@@ -99,15 +105,27 @@ function resultOf(output: string | null): { detail?: unknown; link?: unknown } {
   }
 }
 
-// The run's own catalog actions that did their work (phase do, status done), as act.py described them.
+// What a done action did, in words that carry no title or text: act.py's detail, except linear_attach's (its title).
+function actionTarget(r: ActionRunRow, detail: unknown): string {
+  if (r.action === 'linear_attach') {
+    const issue = r.args.issue
+    return typeof issue === 'string' && TICKET.test(issue)
+      ? `attached a link to ${issue}`
+      : 'attached a link'
+  }
+  return typeof detail === 'string' && detail ? detail : r.action
+}
+
+// The run's own catalog actions that did their work outside Pilot (phase do, status done), as act.py described them.
 export function actionEffects(rows: readonly ActionRunRow[]): Effect[] {
   return rows
     .filter((r) => r.phase === 'do' && r.status === 'done' && !r.dryRun)
+    .filter((r) => !INTERNAL_ACTIONS.has(r.action))
     .map((r) => {
       const result = resultOf(r.output)
       return {
         kind: 'action' as const,
-        target: typeof result.detail === 'string' && result.detail ? result.detail : r.action,
+        target: actionTarget(r, result.detail),
         url:
           typeof result.link === 'string' && /^https?:\/\//.test(result.link) ? result.link : null,
         count: 1,
