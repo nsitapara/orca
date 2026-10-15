@@ -125,7 +125,7 @@ describe('PilotAutomationsPage', () => {
     expect(screen.getByRole('heading', { name: 'Automations' })).toBeTruthy()
     expect(screen.queryByText('YAML automations')).toBeNull()
     fireEvent.click(await screen.findByRole('button', { name: /Fix failed CI/ }))
-    expect(await screen.findByText('No ticks with anything to do yet.')).toBeTruthy()
+    expect(await screen.findByRole('tab', { name: 'How it runs', selected: true })).toBeTruthy()
   })
 
   it('shows no Inbox tab; the sub-view renders it', async () => {
@@ -143,12 +143,12 @@ describe('PilotAutomationsPage', () => {
     serve(list)
     render(<PilotAutomationsPage />)
     fireEvent.click(await screen.findByRole('button', { name: /Fix failed CI/ }))
-    expect(await screen.findByText('No ticks with anything to do yet.')).toBeTruthy()
+    expect(await screen.findByRole('tab', { name: 'How it runs', selected: true })).toBeTruthy()
     act(() => setPilotAutomationsView('inbox'))
     await screen.findByRole('heading', { name: 'Inbox' })
     act(() => setPilotAutomationsView('automations'))
     expect(await screen.findByRole('button', { name: /Fix failed CI/ })).toBeTruthy()
-    expect(screen.queryByText('No ticks with anything to do yet.')).toBeNull()
+    expect(screen.queryByRole('tab', { name: 'How it runs' })).toBeNull()
   })
 
   it("never loads Orca's own Automations page", async () => {
