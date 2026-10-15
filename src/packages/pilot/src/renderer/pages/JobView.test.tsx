@@ -373,12 +373,14 @@ describe('JobView: a job of several automations on one page', () => {
     ])
   })
 
-  it('opens a stage’s own page from its card, and says when no automation has the job', async () => {
+  it('opens a stage’s own page from its card or a tick’s stage tag, and says when no automation has the job', async () => {
     serve([STAGE_1, STAGE_2])
     const onOpenStage = vi.fn()
     render(<JobView jobId="13" onBack={() => {}} onOpenStage={onOpenStage} />)
     fireEvent.click(await screen.findByRole('button', { name: 'Start a fix session per ticket' }))
     expect(onOpenStage).toHaveBeenCalledWith('dev-e2e-fix-start')
+    fireEvent.click((await screen.findAllByRole('button', { name: 'Open stage 1' }))[0])
+    expect(onOpenStage).toHaveBeenLastCalledWith('dev-e2e-fix')
     cleanup()
     render(<JobView jobId="99" onBack={() => {}} onOpenStage={() => {}} />)
     expect(await screen.findByText('No automation is part of job 99.')).toBeTruthy()

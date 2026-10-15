@@ -38,12 +38,12 @@ const list: AutomationListPayload = {
 }
 
 function serve(payload: AutomationListPayload): void {
-  pilotRpc.mockImplementation(async (method: string) => {
+  pilotRpc.mockImplementation(async (method: string, params?: { id: string }) => {
     if (method === 'pilot.automations.list') {
       return payload
     }
     if (method === 'pilot.automations.get') {
-      return detail
+      return { ...detail, summary: payload.automations.find((a) => a.id === params?.id) ?? summary }
     }
     if (method === 'pilot.automations.activity') {
       return []
@@ -67,7 +67,7 @@ describe('PilotAutomationsPage', () => {
     setPilotAutomationsView('automations')
   })
 
-  it('opens a job of several automations as one page; a stage opens from it and Back returns to it', async () => {
+  it('opens a job of several automations as one page; a stage opens from it, and its crumbs lead to the job and the list', async () => {
     const stage = (id: string, n: number) => ({
       ...summary,
       id,
@@ -90,11 +90,15 @@ describe('PilotAutomationsPage', () => {
       await screen.findByRole('heading', { name: '13 · Fix red hourly e2e on dev' })
     ).toBeTruthy()
     fireEvent.click(await screen.findByRole('button', { name: 'Stage label 2' }))
-    expect(await screen.findByRole('button', { name: 'Run now' })).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: 'Automations' }))
+    expect(
+      await screen.findByRole('heading', { name: 'Stage 2 of 2 · Stage label 2' })
+    ).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: '13 · Fix red hourly e2e on dev' }))
     expect(
       await screen.findByRole('heading', { name: '13 · Fix red hourly e2e on dev' })
     ).toBeTruthy()
+    fireEvent.click(await screen.findByRole('button', { name: 'Stage label 2' }))
+    await screen.findByRole('heading', { name: 'Stage 2 of 2 · Stage label 2' })
     fireEvent.click(screen.getByRole('button', { name: 'Automations' }))
     expect(await screen.findByRole('button', { name: /Fix failed CI/ })).toBeTruthy()
   })

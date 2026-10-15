@@ -5,7 +5,7 @@ export type PilotAutomationsView = 'automations' | 'inbox'
 
 let current: PilotAutomationsView = 'automations'
 let openId: string | null = null
-// A job of several automations, by its job.id. An automation opened from the job's page goes back to it.
+// A job of several automations, by its job.id. A stage opened from the job's page keeps it set underneath.
 let openJobId: string | null = null
 const listeners = new Set<() => void>()
 
@@ -50,6 +50,26 @@ export function setPilotOpenJob(id: string | null): void {
   if (id === openJobId) {
     return
   }
+  openJobId = id
+  notify()
+}
+
+// The breadcrumbs: the list, or a job's page, from whichever page is open (a stage opened from its job keeps the job
+// open underneath, so closing the stage alone would land on the job).
+export function showPilotAutomationsList(): void {
+  if (openId === null && openJobId === null) {
+    return
+  }
+  openId = null
+  openJobId = null
+  notify()
+}
+
+export function showPilotJob(id: string): void {
+  if (openId === null && openJobId === id) {
+    return
+  }
+  openId = null
   openJobId = id
   notify()
 }

@@ -2,6 +2,8 @@ import { AutomationView } from './AutomationView'
 import {
   setPilotOpenAutomation,
   setPilotOpenJob,
+  showPilotAutomationsList,
+  showPilotJob,
   usePilotAutomationsView,
   usePilotOpenAutomation,
   usePilotOpenJob
@@ -24,7 +26,12 @@ export default function PilotAutomationsPage(): React.JSX.Element {
   if (open) {
     return (
       <main className="relative flex h-full flex-col gap-4 overflow-y-auto bg-background px-5 pb-10 pt-6">
-        <AutomationView key={open} id={open} onBack={() => setPilotOpenAutomation(null)} />
+        <AutomationView
+          key={open}
+          id={open}
+          onBack={showPilotAutomationsList}
+          onOpenJob={showPilotJob}
+        />
       </main>
     )
   }

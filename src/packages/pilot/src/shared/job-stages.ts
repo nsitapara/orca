@@ -42,6 +42,11 @@ export function listEntries(automations: readonly AutomationSummary[]): ListEntr
   return entries
 }
 
+// "13 · Fix red hourly e2e on dev": the job's heading, and its crumb on a stage's page.
+export function jobTitle(job: JobGroup): string {
+  return `${job.id} · ${job.name}`
+}
+
 export function findJob(automations: readonly AutomationSummary[], id: string): JobGroup | null {
   const members = automations.filter((a) => a.job?.id === id)
   return members.length ? group(id, members) : null

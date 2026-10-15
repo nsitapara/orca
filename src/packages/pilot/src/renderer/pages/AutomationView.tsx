@@ -1,5 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { ActivityTick, AutomationDetailPayload, TickOutcome } from '../../shared/api-types'
+import type {
+  ActivityTick,
+  AutomationDetailPayload,
+  AutomationListPayload,
+  TickOutcome
+} from '../../shared/api-types'
+import { findJob, jobTitle, type JobGroup } from '../../shared/job-stages'
 import { pilotRpc } from '../api'
 import { AutomationOverview } from './AutomationOverview'
 import { ActivityTimeline } from './ActivityTimeline'
@@ -14,14 +20,72 @@ const TABS: { id: Tab; label: string }[] = [
   { id: 'activity', label: 'Activity' }
 ]
 
+// A stage's page is named by its stage ("Stage 2 of 2 · Start a fix session per ticket"): its file's own name is
+// usually the job's.
+function heading(detail: AutomationDetailPayload, job: JobGroup | null): string {
+  const own = detail.summary.job
+  if (!own) {
+    return detail.summary.name
+  }
+  const of = job ? ` of ${job.stages.length}` : ''
+  return `Stage ${own.stage}${of} · ${own.label}`
+}
+
+function crumbName(detail: AutomationDetailPayload): string {
+  const own = detail.summary.job
+  return own ? `Stage ${own.stage} · ${own.label}` : detail.summary.name
+}
+
+// Automations › (a stage's job ›) this page. Each crumb goes where it says, wherever the page was opened from.
+function Crumbs({
+  detail,
+  job,
+  onBack,
+  onOpenJob
+}: {
+  detail: AutomationDetailPayload | null
+  job: JobGroup | null
+  onBack: () => void
+  onOpenJob: (jobId: string) => void
+}): React.JSX.Element {
+  return (
+    <div className="flex items-center gap-2 text-sm">
+      <button type="button" className="text-left text-muted-foreground" onClick={onBack}>
+        Automations
+      </button>
+      {job ? (
+        <>
+          <span className="text-muted-foreground">›</span>
+          <button
+            type="button"
+            className="text-left text-muted-foreground"
+            onClick={() => onOpenJob(job.id)}
+          >
+            {jobTitle(job)}
+          </button>
+        </>
+      ) : null}
+      {detail ? (
+        <>
+          <span className="text-muted-foreground">›</span>
+          <span>{crumbName(detail)}</span>
+        </>
+      ) : null}
+    </div>
+  )
+}
+
 export function AutomationView({
   id,
-  onBack
+  onBack,
+  onOpenJob
 }: {
   id: string
   onBack: () => void
+  onOpenJob: (jobId: string) => void
 }): React.JSX.Element {
   const [detail, setDetail] = useState<AutomationDetailPayload | null>(null)
+  const [job, setJob] = useState<JobGroup | null>(null)
   const [ticks, setTicks] = useState<ActivityTick[]>([])
   const [tab, setTab] = useState<Tab>('activity')
   const [hideQuiet, setHideQuiet] = useHideQuiet()
@@ -36,10 +100,19 @@ export function AutomationView({
         limit: 30,
         skipQuiet: hideQuiet
       })
+      // A stage's job, for its crumb and how many stages it has.
+      const jobId = d.summary.job?.id
+      const j = jobId
+        ? findJob(
+            (await pilotRpc<AutomationListPayload>('pilot.automations.list')).automations,
+            jobId
+          )
+        : null
       if (!mounted.current) {
         return
       }
       setDetail(d)
+      setJob(j)
       setTicks(t)
       setError(null)
     } catch (e) {
@@ -58,15 +131,11 @@ export function AutomationView({
     }
   }, [refresh])
 
-  const back = (
-    <button type="button" className="text-left text-sm text-muted-foreground" onClick={onBack}>
-      Automations
-    </button>
-  )
+  const crumbs = <Crumbs detail={detail} job={job} onBack={onBack} onOpenJob={onOpenJob} />
   if (!detail) {
     return (
       <div className="flex flex-col gap-3">
-        {back}
+        {crumbs}
         <p className={error ? 'text-sm text-destructive' : 'text-sm text-muted-foreground'}>
           {error ?? 'Loading…'}
         </p>
@@ -75,13 +144,9 @@ export function AutomationView({
   }
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex items-center gap-2 text-sm">
-        {back}
-        <span className="text-muted-foreground">›</span>
-        <span>{detail.summary.name}</span>
-      </div>
+      {crumbs}
       <div className="flex flex-wrap items-start gap-2">
-        <h2 className="text-lg font-semibold">{detail.summary.name}</h2>
+        <h2 className="text-lg font-semibold">{heading(detail, job)}</h2>
         <span className="flex-1" />
         <RunControls id={id} onDone={() => void refresh()} onDryRun={setDryRun} />
       </div>

@@ -7,15 +7,35 @@ import { CheckTable } from './CheckTable'
 import { checkedItems, tickLine } from './format'
 import type { JobActivityEntry } from './job-flow'
 
-// `tag`: on a job's page, the stage the tick belongs to.
+// A tick's stage on a job's page; with `onOpen`, it opens that stage's own page.
+function StageTag({ tag, onOpen }: { tag: string; onOpen?: () => void }): React.JSX.Element {
+  const badge = <Badge variant="outline">{tag}</Badge>
+  if (!onOpen) {
+    return badge
+  }
+  return (
+    <button
+      type="button"
+      aria-label={`Open ${tag.toLowerCase()}`}
+      onClick={onOpen}
+      className="rounded-md hover:bg-accent"
+    >
+      {badge}
+    </button>
+  )
+}
+
+// `tag`: on a job's page, the stage the tick belongs to; `onTag` opens that stage.
 function TickNode({
   tick,
   checkNames,
-  tag
+  tag,
+  onTag
 }: {
   tick: ActivityTick
   checkNames: string[]
   tag?: string
+  onTag?: () => void
 }): React.JSX.Element {
   const [open, setOpen] = useState(false)
   const checked = checkedItems(tick.items).map((i) => ({ ...i, key: i.itemKey }))
@@ -24,7 +44,7 @@ function TickNode({
       <span className="absolute -left-[5px] top-1.5 size-2.5 rounded-full border border-border bg-background" />
       <div className="flex items-center gap-2 text-xs text-muted-foreground">
         <span>{new Date(tick.startedAt).toLocaleString()}</span>
-        {tag ? <Badge variant="outline">{tag}</Badge> : null}
+        {tag ? <StageTag tag={tag} onOpen={onTag} /> : null}
         <span>{`Tick ${tick.id}`}</span>
       </div>
       <div className="text-sm">{tickLine(tick)}</div>
@@ -104,15 +124,18 @@ export function ActivityTimeline({
   )
 }
 
-// A job's page: every stage's ticks in one timeline (mergeJobActivity), each tagged with its stage.
+// A job's page: every stage's ticks in one timeline (mergeJobActivity), each tagged with its stage; the tag opens the
+// stage's own page.
 export function JobActivityTimeline({
   entries,
   notes = NO_NOTES,
-  empty = NO_TICKS
+  empty = NO_TICKS,
+  onOpenStage
 }: {
   entries: JobActivityEntry[]
   notes?: Note[]
   empty?: string
+  onOpenStage?: (id: string) => void
 }): React.JSX.Element {
   if (!entries.length && !notes.length) {
     return <p className="text-sm text-muted-foreground">{empty}</p>
@@ -125,6 +148,7 @@ export function JobActivityTimeline({
           tick={e.tick}
           checkNames={e.checkNames}
           tag={`Stage ${e.stage}`}
+          onTag={onOpenStage ? () => onOpenStage(e.tick.automationId) : undefined}
         />
       ))}
       {notes.map((n) => (
