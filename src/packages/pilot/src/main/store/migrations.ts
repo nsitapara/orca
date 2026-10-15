@@ -165,6 +165,8 @@ UPDATE runs SET status = 'done',
 UPDATE runs SET acknowledged_at = COALESCE(finished_at, started_at)
   WHERE status NOT IN ('asking', 'running') AND NOT EXISTS (
     SELECT 1 FROM inbox_items i WHERE i.run_id = runs.id AND i.status = 'open' AND i.type = 'default');
+-- Done for you's poll (VisibilityStore.unacknowledged) reads only the runs nobody acknowledged, newest first.
+CREATE INDEX runs_unacknowledged ON runs (COALESCE(finished_at, started_at)) WHERE acknowledged_at IS NULL;
 `
 
 // MIGRATIONS[n - 1] takes a database from version n - 1 to n.

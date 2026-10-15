@@ -1,11 +1,16 @@
-import { describe, expect, it } from 'vitest'
+import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { describe, expect, it, vi } from 'vitest'
 import { testDefinition } from '../../shared/definition/__fixtures__/definition'
 import type { Effect } from '../../shared/visibility-types'
 import { loadDefinitions } from '../definitions/loader'
 import type { NewInboxItem } from '../store/store-inbox'
 import { PilotStore } from '../store/store'
 import { acknowledgeRuns, doneForYou } from './done-for-you'
-import type { RunEffectsReader } from './run-effects'
+import { LogReader } from './log-file'
+import { RunEffectsReader } from './run-effects'
+import { lines, result, T0, use as toolUse } from './__fixtures__/transcript'
 
 const NOW = 10 * 24 * 3600_000
 
@@ -188,6 +193,48 @@ describe('doneForYou routing and paging', () => {
           : []
     } as unknown as RunEffectsReader
     expect((await doneForYou(ctx, effects, 'nish', NOW)).map((d) => d.run.id)).toContain('busy')
+  })
+})
+
+describe('doneForYou reading effects', () => {
+  it('reads the recent Linear URLs at most once for a whole poll of many runs', async () => {
+    const { store, ctx, run } = setup()
+    const root = mkdtempSync(join(tmpdir(), 'pilot-done-'))
+    mkdirSync(join(root, 'proj'))
+    writeFileSync(
+      join(root, 'proj', 'sess-1.jsonl'),
+      lines(
+        toolUse(1, 't1', 'Bash', { command: 'orca linear comment add WEB-5' }),
+        result(2, 't1', 'ok')
+      )
+    )
+    for (let i = 0; i < 30; i += 1) {
+      run(`quiet-${i}`, 'mine', NOW - 100 - i)
+    }
+    for (const id of ['ticket-a', 'ticket-b']) {
+      run(id, 'mine', NOW - 50)
+      store.runs.createStep({
+        runId: id,
+        idx: 0,
+        name: 'fix',
+        agent: 'claude',
+        skill: 'x',
+        startedAt: T0,
+        sessionId: 'sess-1'
+      })
+      store.runs.updateStep(id, 0, { finishedAt: T0 + 30_000, status: 'done' })
+    }
+    const recent = vi.spyOn(store.visibility, 'recentLinearUrls')
+    const reader = new RunEffectsReader({
+      store,
+      reader: new LogReader(root),
+      claudeProjects: root,
+      remoteOf: async () => null
+    })
+    const ids = (await doneForYou(ctx, reader, 'nish', NOW)).map((d) => d.run.id)
+    expect(ids).toContain('ticket-a')
+    expect(ids).toContain('ticket-b')
+    expect(recent.mock.calls.length).toBeLessThanOrEqual(1)
   })
 })
 

@@ -424,5 +424,11 @@ describe('migrate', () => {
       { id: 'held', status: 'done', outcome: 'Done', acknowledged_at: null },
       { id: 'live', status: 'running', outcome: null, acknowledged_at: null }
     ])
+    const plan = db
+      .prepare(
+        "EXPLAIN QUERY PLAN SELECT * FROM runs WHERE acknowledged_at IS NULL AND status IN ('done') AND COALESCE(finished_at, started_at) >= ? ORDER BY COALESCE(finished_at, started_at) DESC LIMIT 10"
+      )
+      .all(0) as { detail: string }[]
+    expect(plan.map((p) => p.detail).join(' ')).toContain('runs_unacknowledged')
   })
 })
