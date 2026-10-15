@@ -39,7 +39,7 @@ describe('DoneForYou', () => {
     expect(screen.getByRole('heading', { name: 'Done for you · 2' })).toBeTruthy()
     expect(screen.getByText('pushed web-1')).toBeTruthy()
     expect(screen.getByText('card d1')).toBeTruthy()
-    fireEvent.click(screen.getAllByRole('button', { name: 'Got it' })[1])
+    fireEvent.click(screen.getByRole('button', { name: 'Got it: WEB-2' }))
     await waitFor(() => expect(onAcknowledge).toHaveBeenCalledWith(['2']))
     fireEvent.click(screen.getByRole('button', { name: 'Got all' }))
     await waitFor(() => expect(onAcknowledge).toHaveBeenCalledWith(['1', '2']))
@@ -60,7 +60,24 @@ describe('DoneForYou', () => {
         onAcknowledge={async () => 'Pilot is busy'}
       />
     )
-    fireEvent.click(screen.getByRole('button', { name: 'Got it' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Got it: WEB-1' }))
     expect(await screen.findByText('Pilot is busy')).toBeTruthy()
+  })
+
+  it('acknowledges once while a click is in flight, and drops its error when the list changes', async () => {
+    pilotRpc.mockResolvedValue([])
+    let finish: (v: string | null) => void = () => {}
+    const onAcknowledge = vi.fn(() => new Promise<string | null>((res) => (finish = res)))
+    const { rerender } = render(
+      <DoneForYou runs={[done('1')]} cardFor={() => null} onAcknowledge={onAcknowledge} />
+    )
+    const button = screen.getByRole('button', { name: 'Got it: WEB-1' })
+    fireEvent.click(button)
+    fireEvent.click(button)
+    expect(onAcknowledge).toHaveBeenCalledTimes(1)
+    finish('Pilot is busy')
+    expect(await screen.findByText('Pilot is busy')).toBeTruthy()
+    rerender(<DoneForYou runs={[done('3')]} cardFor={() => null} onAcknowledge={onAcknowledge} />)
+    expect(screen.queryByText('Pilot is busy')).toBeNull()
   })
 })

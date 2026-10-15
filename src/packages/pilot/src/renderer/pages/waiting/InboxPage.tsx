@@ -92,7 +92,10 @@ export function InboxPage(): React.JSX.Element {
   const names = useMemo(() => new Map(automations.map((a) => [a.id, a.name])), [automations])
   const openItems = items.filter((i) => i.type !== 'default')
   // Defaults show under their run in Done for you; only the rest (no run, or a run already seen) fold at the end.
-  const underRuns = new Set(done.runs.flatMap((d) => d.defaults.map((c) => c.id)))
+  const itemIds = new Set(items.map((i) => i.id))
+  const underRuns = new Set(
+    done.runs.flatMap((d) => d.defaults.map((c) => c.id)).filter((id) => itemIds.has(id))
+  )
   const defaults = items.filter((i) => i.type === 'default' && !underRuns.has(i.id))
   const sections = groupItems(openItems, automations)
   // A selected group with no card left (its last one was answered) counts as All.
@@ -201,7 +204,9 @@ export function InboxPage(): React.JSX.Element {
           ) : (
             <p className="text-sm text-muted-foreground">Nothing waiting on {viewerName} here.</p>
           )}
-          {done.error ? <p className="text-sm text-destructive">{done.error}</p> : null}
+          {done.error ? (
+            <p className="text-sm text-destructive">{`Done for you couldn't load: ${done.error}`}</p>
+          ) : null}
           <DoneForYou
             runs={done.runs}
             cardFor={cardFor}

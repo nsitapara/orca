@@ -15,12 +15,22 @@ export function DoneForYou({
   onAcknowledge: (runIds: string[]) => Promise<string | null>
 }): React.JSX.Element | null {
   const { byId } = useAutomationsFeed()
-  const [error, setError] = useState<string | null>(null)
+  // An acknowledge error is kept with the list it came from, so it goes when the list changes.
+  const [failure, setFailure] = useState<{ key: string; text: string } | null>(null)
+  const [busy, setBusy] = useState(false)
   if (runs.length === 0) {
     return null
   }
+  const listKey = runs.map((d) => d.run.id).join(',')
+  const error = failure?.key === listKey ? failure.text : null
   const acknowledge = async (ids: string[]): Promise<void> => {
-    setError(await onAcknowledge(ids))
+    if (busy) {
+      return
+    }
+    setBusy(true)
+    const failed = await onAcknowledge(ids)
+    setFailure(failed ? { key: listKey, text: failed } : null)
+    setBusy(false)
   }
   return (
     <section
@@ -35,6 +45,7 @@ export function DoneForYou({
         <span className="flex-1" />
         <button
           type="button"
+          disabled={busy}
           className="text-xs underline"
           onClick={() => void acknowledge(runs.map((d) => d.run.id))}
         >
@@ -56,6 +67,8 @@ export function DoneForYou({
             ))}
             <button
               type="button"
+              disabled={busy}
+              aria-label={`Got it: ${d.run.itemLabel}`}
               className="self-start text-xs underline"
               onClick={() => void acknowledge([d.run.id])}
             >
