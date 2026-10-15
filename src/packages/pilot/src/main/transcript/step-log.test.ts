@@ -1,7 +1,7 @@
-import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { PilotStore } from '../store/store'
 import { LogReader } from './log-file'
 import {
@@ -10,7 +10,8 @@ import {
   NO_TRANSCRIPT,
   NOT_AN_AGENT,
   stepLog,
-  stepLogEntry
+  stepLogEntry,
+  TRANSCRIPT_CHANGED
 } from './step-log'
 import { lines, result, say, T0, use as toolUse } from './__fixtures__/transcript'
 
@@ -65,7 +66,7 @@ function setup(text: string) {
     startedAt: T0,
     sessionId: 'nope'
   })
-  return { store, deps: { store, reader: new LogReader(root), claudeProjects: root } }
+  return { store, file, deps: { store, reader: new LogReader(root), claudeProjects: root } }
 }
 
 const TEXT = lines(
@@ -99,6 +100,14 @@ describe('stepLog', () => {
     })
   })
 
+  it('gives the no-transcript reason, not a filesystem path, when the file is gone', async () => {
+    const { deps, file } = setup(TEXT)
+    deps.store.runs.updateStep('r1', 1, { transcriptPath: file })
+    rmSync(file)
+    const log = await stepLog(deps, 'r1', 1)
+    expect(log.reason).toBe(NO_TRANSCRIPT)
+  })
+
   it('throws for a step that does not exist', async () => {
     const { deps } = setup(TEXT)
     await expect(stepLog(deps, 'r1', 9)).rejects.toThrow('No step 9 in run "r1"')
@@ -130,5 +139,12 @@ describe('stepLogEntry', () => {
     await expect(stepLogEntry(deps, 'r1', 1, 't2')).rejects.toThrow(
       'No log entry "t2" in this step'
     )
+  })
+
+  it('says the transcript changed when a span no longer holds the record', async () => {
+    const { deps } = setup(TEXT)
+    await stepLog(deps, 'r1', 1)
+    vi.spyOn(deps.reader, 'span').mockResolvedValue('not json')
+    await expect(stepLogEntry(deps, 'r1', 1, 't1')).rejects.toThrow(TRANSCRIPT_CHANGED)
   })
 })
