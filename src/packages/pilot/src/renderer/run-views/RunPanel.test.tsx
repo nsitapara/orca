@@ -165,6 +165,17 @@ describe('the run panel', () => {
     expect(screen.queryByText(/Couldn't remove it yet/)).toBeNull()
   })
 
+  it("asks once for a finished run's effects when it opens", async () => {
+    pilotRpc.mockImplementation(async (method: string) =>
+      method === 'pilot.runs.get' ? detail : {}
+    )
+    openRun('r1')
+    render(<RunPanelHost />)
+    await screen.findAllByText('!1561 web-1')
+    await act(async () => {})
+    expect(pilotRpc.mock.calls.filter((c) => c[0] === 'pilot.runs.effects')).toHaveLength(1)
+  })
+
   it('shows what the run changed outside Pilot, linked', async () => {
     pilotRpc.mockImplementation(async (method: string) => {
       if (method === 'pilot.runs.effects') {

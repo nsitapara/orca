@@ -1,4 +1,4 @@
-import { useEffect, useSyncExternalStore } from 'react'
+import { useEffect, useRef, useSyncExternalStore } from 'react'
 import type { Effect, RunEffects } from '../../shared/visibility-types'
 import { pilotRpc } from '../api'
 
@@ -81,19 +81,27 @@ export function requestEffects(runId: string): void {
   }
 }
 
-// A run's effects (null until first loaded): asked for when the row mounts, and every 10 s while the run is live.
-// `enabled` false: the caller already has them (Done for you), so nothing is asked.
+// A run's effects (null until first loaded): asked for when the row mounts, every 10 s while the run is live, and once
+// more when it ends. `enabled` false: the caller already has them (Done for you), so nothing is asked.
 export function useRunEffects(
   runId: string,
   live: boolean,
   enabled = true
 ): readonly Effect[] | null {
   const effects = useSyncExternalStore(subscribe, () => cache.get(runId) ?? null)
+  const wasLive = useRef(live)
   useEffect(() => {
     if (enabled) {
       requestEffects(runId)
     }
   }, [runId, enabled])
+  useEffect(() => {
+    const ended = wasLive.current && !live
+    wasLive.current = live
+    if (enabled && ended) {
+      requestEffects(runId)
+    }
+  }, [runId, live, enabled])
   useEffect(() => {
     if (!enabled || !live) {
       return undefined

@@ -80,4 +80,17 @@ describe('DoneForYou', () => {
     rerender(<DoneForYou runs={[done('3')]} cardFor={() => null} onAcknowledge={onAcknowledge} />)
     expect(screen.queryByText('Pilot is busy')).toBeNull()
   })
+
+  it('takes clicks again after an acknowledge that throws, and says why', async () => {
+    pilotRpc.mockResolvedValue([])
+    const onAcknowledge = vi.fn(async (): Promise<string | null> => {
+      throw new Error('rpc down')
+    })
+    render(<DoneForYou runs={[done('1')]} cardFor={() => null} onAcknowledge={onAcknowledge} />)
+    const button = screen.getByRole('button', { name: 'Got it: WEB-1' })
+    fireEvent.click(button)
+    expect(await screen.findByText('rpc down')).toBeTruthy()
+    fireEvent.click(button)
+    expect(onAcknowledge).toHaveBeenCalledTimes(2)
+  })
 })

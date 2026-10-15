@@ -2,6 +2,7 @@ import { useState } from 'react'
 import type { DoneRun } from '../../../shared/visibility-types'
 import { ActivityRunRow } from '../../run-views/ActivityRunRow'
 import { useAutomationsFeed } from '../../run-views/automations-feed'
+import { errorText } from '../format'
 
 // Done for you (Run visibility spec §3): finished runs that changed something outside Pilot or took a default, until
 // Got it. A run's open defaults sit under it as their own cards, so Keep and Override work as anywhere.
@@ -28,9 +29,14 @@ export function DoneForYou({
       return
     }
     setBusy(true)
-    const failed = await onAcknowledge(ids)
-    setFailure(failed ? { key: listKey, text: failed } : null)
-    setBusy(false)
+    try {
+      const failed = await onAcknowledge(ids)
+      setFailure(failed ? { key: listKey, text: failed } : null)
+    } catch (e) {
+      setFailure({ key: listKey, text: errorText(e) })
+    } finally {
+      setBusy(false)
+    }
   }
   return (
     <section

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { StepRow } from '../../shared/api-types'
+import { safeHref } from '../../shared/safe-href'
 import type { LogEntry, LogEntryDetail, LogStatus } from '../../shared/visibility-types'
 import { pilotRpc } from '../api'
 import { clockTime, errorText } from '../pages/format'
@@ -24,6 +25,19 @@ export function linkLabel(url: string): string {
     }
   }
   return 'link'
+}
+
+// One of a log line's links: clickable only when it is http(s), else its name as plain text.
+function EntryLink({ url }: { url: string }): React.JSX.Element {
+  const href = safeHref(url)
+  if (!href) {
+    return <span>{linkLabel(url)}</span>
+  }
+  return (
+    <a href={href} target="_blank" rel="noopener noreferrer" className="underline">
+      {linkLabel(url)}
+    </a>
+  )
 }
 
 function isLive(step: StepRow): boolean {
@@ -135,15 +149,7 @@ function Row({
       {tool && tool.links.length > 0 ? (
         <span className="ml-6 flex flex-wrap gap-2">
           {tool.links.map((link) => (
-            <a
-              key={link}
-              href={link}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="underline"
-            >
-              {linkLabel(link)}
-            </a>
+            <EntryLink key={link} url={link} />
           ))}
         </span>
       ) : null}

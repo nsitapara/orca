@@ -5,6 +5,16 @@ import { errorText } from '../format'
 
 export const DONE_POLL_MS = 10_000
 
+// A well-formed row: an object whose run has a string id, with effects and defaults lists.
+function isDoneRun(value: unknown): value is DoneRun {
+  if (!value || typeof value !== 'object') {
+    return false
+  }
+  const { run, effects, defaults } = value as Partial<Record<keyof DoneRun, unknown>>
+  const id = run && typeof run === 'object' ? (run as { id?: unknown }).id : undefined
+  return typeof id === 'string' && Array.isArray(effects) && Array.isArray(defaults)
+}
+
 // Done for you (Run visibility spec §3): the person's finished runs that changed something, read every 10 s; Got it
 // acknowledges them and reads the list again.
 export function useDoneForYou(person: string | null): {
@@ -15,15 +25,20 @@ export function useDoneForYou(person: string | null): {
   const [runs, setRuns] = useState<DoneRun[]>([])
   const [error, setError] = useState<string | null>(null)
   const mounted = useRef(true)
+  // Each read's number: only the newest read's answer is shown, so a slow older poll can't undo a newer one.
+  const latest = useRef(0)
   const reload = useCallback(async () => {
+    latest.current += 1
+    const asked = latest.current
+    const current = (): boolean => mounted.current && asked === latest.current
     try {
-      const got = await pilotRpc<DoneRun[]>('pilot.runs.doneForYou', person ? { person } : {})
-      if (mounted.current) {
-        setRuns(Array.isArray(got) ? got : [])
+      const got = await pilotRpc<unknown>('pilot.runs.doneForYou', person ? { person } : {})
+      if (current()) {
+        setRuns(Array.isArray(got) ? got.filter(isDoneRun) : [])
         setError(null)
       }
     } catch (e) {
-      if (mounted.current) {
+      if (current()) {
         setError(errorText(e))
       }
     }

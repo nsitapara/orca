@@ -80,6 +80,14 @@ describe('StepLog', () => {
     expect(pilotRpc).toHaveBeenCalledWith('pilot.runs.log', { runId: 'r1', stepIdx: 1 })
   })
 
+  it("shows a link that isn't http(s) as plain text", async () => {
+    const tool = { ...LOG.entries[0], links: ['javascript:alert(1)'] }
+    serve({ ...LOG, entries: [tool] })
+    render(<StepLog runId="r1" step={testStepRow({ idx: 1, status: 'done' })} />)
+    expect(await screen.findByText('link')).toBeTruthy()
+    expect(screen.queryByRole('link')).toBeNull()
+  })
+
   it('opens an entry to its full input and output, saying what was cut', async () => {
     serve()
     render(<StepLog runId="r1" step={testStepRow({ idx: 1, status: 'done' })} />)
