@@ -9,6 +9,7 @@ import { pilotRpc } from '../api'
 import { showAutomationsPage, showInboxCard, showPilotAutomation } from '../pages/automations-view'
 import { errorText, itemUrl, runStatusLabel } from '../pages/format'
 import { openWorktree, worktreeIdForPath } from '../pages/waiting/WorktreeLink'
+import { envLines } from './env-lines'
 import { RunRail } from './RunRail'
 import { closeRunPanel, openRun } from './run-panel-state'
 
@@ -96,6 +97,11 @@ function Header({ detail }: { detail: RunDetail }): React.JSX.Element {
         {run.tickId !== null ? <Fact name="Tick">{`Tick ${run.tickId}`}</Fact> : null}
         {run.outcome ? <Fact name="Outcome">{run.outcome}</Fact> : null}
       </dl>
+      {envLines(run).map((line) => (
+        <div key={line} className="text-xs text-muted-foreground">
+          {line}
+        </div>
+      ))}
       <div className="flex flex-wrap gap-3 text-xs">
         <button
           type="button"

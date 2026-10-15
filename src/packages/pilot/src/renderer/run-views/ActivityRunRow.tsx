@@ -6,6 +6,7 @@ import { paintRun } from '../../shared/run-views/paint'
 import { foldStrip, stripOf } from '../../shared/run-views/strip'
 import { clockTime, itemUrl, runStatusLabel } from '../pages/format'
 import { jobCode } from './activity-groups'
+import { envCleanup } from './env-lines'
 import { RunStrip } from './RunStrip'
 import { openRun } from './run-panel-state'
 
@@ -26,6 +27,7 @@ export function ActivityRunRow({
 }): React.JSX.Element {
   const url = itemUrl(fields)
   const home = homeOf(run)
+  const cleanup = envCleanup(run)
   const items = summary ? foldStrip(stripOf(paintRun(summary.chain, { run }).parts)) : []
   return (
     <li className="flex flex-col gap-1 border-t border-border/50 py-2">
@@ -61,6 +63,7 @@ export function ActivityRunRow({
         </button>
       </div>
       {run.outcome ? <div className="text-xs text-muted-foreground">{run.outcome}</div> : null}
+      {cleanup ? <div className="text-xs text-muted-foreground">{cleanup}</div> : null}
       {items.length > 0 ? (
         <RunStrip
           items={items}

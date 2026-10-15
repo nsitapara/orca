@@ -146,4 +146,23 @@ describe('WorktreeTimelinePanel', () => {
     )
     expect(openRunPanel()).toEqual({ runId: 'r2', part: null })
   })
+
+  it("shows a finished run's cleanup that hasn't finished, in its row", () => {
+    const env = {
+      state: 'ready',
+      mode: 'throwaway',
+      reason: null,
+      path: '/tmp/t',
+      sha: null,
+      envFile: null,
+      vars: {},
+      stack: null,
+      removedAt: null,
+      deleteError: 'docker said no',
+      deleteAttempts: 2
+    } as const
+    feed = { error: null, data: worktreeTimeline({ earlier: [timelineRun({ env, inbox: [] })] }) }
+    render(<WorktreeTimelinePanel />)
+    expect(screen.getByText("Couldn't remove it yet (2 tries): docker said no")).toBeTruthy()
+  })
 })
