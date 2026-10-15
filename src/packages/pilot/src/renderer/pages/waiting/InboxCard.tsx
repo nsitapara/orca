@@ -1,9 +1,10 @@
 import { useRef, useState } from 'react'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { cn } from '@/lib/utils'
-import type { InboxListRow, InboxReply } from '../../../shared/api-types'
+import type { ActivityRun, InboxListRow, InboxReply } from '../../../shared/api-types'
 import type { AnswerState, RunLine } from '../../../shared/inbox-types'
 import type { PartSwitches } from '../../details/ReviewBlock'
+import { FromRun } from '../../run-views/FromRun'
 import { PreparationProgress } from './PreparationProgress'
 import { AnsweredLine } from './AnsweredLine'
 import { AnswerRow } from './AnswerRow'
@@ -110,6 +111,7 @@ function Eyebrow({
 export function InboxCard({
   item,
   automationName,
+  run,
   runLine,
   answerState,
   error,
@@ -121,6 +123,8 @@ export function InboxCard({
 }: {
   item: InboxListRow
   automationName: string
+  // The run the card came from (InboxListPayload.runs), for its "From run" line; null when it has none.
+  run: ActivityRun | null
   // An action card's Run line (InboxListPayload.runLines); null on any other card.
   runLine: RunLine | null
   // The server's lock and queue row for an answered card (InboxListPayload.answerStates).
@@ -185,6 +189,7 @@ export function InboxCard({
         drafted={item.details?.drafted === true}
         status={status}
       />
+      <FromRun item={item} run={run} />
       <PreparationProgress
         item={item}
         onRetry={onRetryPreparation}

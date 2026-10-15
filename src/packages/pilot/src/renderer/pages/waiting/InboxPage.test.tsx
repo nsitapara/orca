@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -10,6 +10,10 @@ import type { InboxListPayload, QueueEntry } from '../../../shared/inbox-types'
 const pilotRpc = vi.fn()
 vi.mock('../../api', () => ({ pilotRpc: (...args: unknown[]) => pilotRpc(...args) }))
 
+import { stepAt, testCard, testRun } from '../../../shared/run-views/__fixtures__/runs'
+import { resetAutomationsFeed } from '../../run-views/automations-feed'
+import { pendingInboxCard, setPilotAutomationsView, showInboxCard } from '../automations-view'
+import { summary } from '../fixtures'
 import { InboxPage } from './InboxPage'
 
 function card(over: Partial<InboxItemRow>): InboxItemRow {
@@ -127,7 +131,64 @@ function serve(list = LIST, queue: QueueEntry[] = [HELD]) {
 describe('InboxPage', () => {
   afterEach(() => {
     cleanup()
+    resetAutomationsFeed()
     pilotRpc.mockReset()
+  })
+
+  it('picks the card the run panel named, once the list has it, and forgets it', async () => {
+    serve()
+    showInboxCard('in_q')
+    render(<InboxPage />)
+    await screen.findByRole('heading', { name: 'Install LibreOffice in the job?' })
+    await waitFor(() =>
+      expect(document.getElementById('card-in_q')?.hasAttribute('data-selected')).toBe(true)
+    )
+    expect(pendingInboxCard()).toBeNull()
+    setPilotAutomationsView('automations')
+  })
+
+  it('picks a card the run panel names while the Inbox is already open', async () => {
+    serve()
+    render(<InboxPage />)
+    await screen.findByRole('heading', { name: 'Install LibreOffice in the job?' })
+    act(() => showInboxCard('in_q'))
+    await waitFor(() =>
+      expect(document.getElementById('card-in_q')?.hasAttribute('data-selected')).toBe(true)
+    )
+    expect(pendingInboxCard()).toBeNull()
+    setPilotAutomationsView('automations')
+  })
+
+  it('shows on each card the run it came from', async () => {
+    const run = testRun({
+      id: 'r',
+      automationId: 'ci',
+      itemLabel: '!1561',
+      status: 'needs_you',
+      steps: [stepAt(0, 'fix', 'done')],
+      inbox: [testCard({ id: 'in_q', automationId: 'ci', runId: 'r', stepIdx: 0 })]
+    })
+    pilotRpc.mockImplementation(async (method: string) => {
+      if (method === 'pilot.inbox.list') {
+        return { ...LIST, runs: { r: run } }
+      }
+      if (method === 'pilot.queue.list') {
+        return { entries: [] }
+      }
+      if (method === 'pilot.automations.list') {
+        return {
+          automations: [{ ...summary, id: 'ci' }],
+          errors: [],
+          peopleError: null,
+          missingDirs: []
+        }
+      }
+      return { status: 'answered' }
+    })
+    render(<InboxPage />)
+    const card = await screen.findByRole('heading', { name: 'Install LibreOffice in the job?' })
+    const article = card.closest('article') as HTMLElement
+    expect(await within(article).findByText('!1561 · step 1 of 1 asked')).toBeTruthy()
   })
 
   it('shows the cards waiting, folds the defaults, and lists what saved answers set off', async () => {

@@ -78,7 +78,6 @@ export function getAutomation(ctx: PilotContext, id: string): AutomationDetailPa
     summary: summarize(ctx, def, withDetail(ctx.store, ctx.store.activity.live([def.id]))),
     yaml: readFileSync(def.file, 'utf8'),
     checkNames: def.checks.map(checkName),
-    steps: def.steps,
     handovers: passing.map((f) => ({ to: f.to, rows: ctx.store.handovers.latest(def.id, f.to) })),
     notes: earlyNotes(ctx, def.id)
   }

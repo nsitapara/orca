@@ -1,0 +1,196 @@
+import { useEffect, useState } from 'react'
+import { X } from 'lucide-react'
+import type { RunDetail } from '../../shared/api-types'
+import { homeOf } from '../../shared/api-types-env'
+import { runStatusWord } from '../../shared/env-text'
+import { money } from '../../shared/money'
+import { paintRun } from '../../shared/run-views/paint'
+import { pilotRpc } from '../api'
+import { showAutomationsPage, showInboxCard, showPilotAutomation } from '../pages/automations-view'
+import { errorText, itemUrl, runStatusLabel } from '../pages/format'
+import { openWorktree, worktreeIdForPath } from '../pages/waiting/WorktreeLink'
+import { envLines } from './env-lines'
+import { RunRail } from './RunRail'
+import { closeRunPanel, openRun } from './run-panel-state'
+
+export const RUN_PANEL_POLL_MS = 10_000
+
+// A link that leaves the panel: the page it opens shows without the panel over it.
+function leave(go: () => void): () => void {
+  return () => {
+    closeRunPanel()
+    go()
+  }
+}
+
+function Fact({ name, children }: { name: string; children: React.ReactNode }): React.JSX.Element {
+  return (
+    <div className="contents">
+      <dt className="text-muted-foreground">{name}</dt>
+      <dd className="min-w-0 break-words">{children}</dd>
+    </div>
+  )
+}
+
+function Worktree({ path }: { path: string }): React.JSX.Element {
+  const id = worktreeIdForPath(path)
+  const name = path.replace(/\/+$/, '').split('/').pop() || path
+  if (!id) {
+    return <span title={path}>{name}</span>
+  }
+  return (
+    <button
+      type="button"
+      title={path}
+      className="underline"
+      onClick={leave(() => openWorktree(id))}
+    >
+      {name}
+    </button>
+  )
+}
+
+function Header({ detail }: { detail: RunDetail }): React.JSX.Element {
+  const { run } = detail
+  const url = itemUrl(run.fields)
+  const home = homeOf(run)
+  const parent = run.parentRunId
+  return (
+    <header className="flex flex-col gap-2">
+      <nav
+        aria-label="Crumbs"
+        className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground"
+      >
+        <button type="button" onClick={leave(showAutomationsPage)}>
+          Automations
+        </button>
+        <span>›</span>
+        <button type="button" onClick={leave(() => showPilotAutomation(run.automationId, 'how'))}>
+          {detail.automationName}
+        </button>
+        <span>›</span>
+        <span className="text-foreground">{`Run ${run.id}`}</span>
+      </nav>
+      <h3 className="text-sm font-semibold">
+        {url ? (
+          <a
+            href={url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="underline-offset-2 hover:underline"
+          >
+            {run.itemLabel}
+          </a>
+        ) : (
+          run.itemLabel
+        )}
+      </h3>
+      <dl className="grid grid-cols-[5.5rem_minmax(0,1fr)] gap-y-0.5 text-xs">
+        <Fact name="State">{runStatusWord(run, runStatusLabel)}</Fact>
+        {home ? (
+          <Fact name="Worktree">
+            <Worktree path={home} />
+          </Fact>
+        ) : null}
+        <Fact name="Started">{new Date(run.startedAt).toLocaleString()}</Fact>
+        {run.costUsd !== null ? <Fact name="Spent">{money(run.costUsd)}</Fact> : null}
+        {run.tickId !== null ? <Fact name="Tick">{`Tick ${run.tickId}`}</Fact> : null}
+        {run.outcome ? <Fact name="Outcome">{run.outcome}</Fact> : null}
+      </dl>
+      {envLines(run).map((line) => (
+        <div key={line} className="text-xs text-muted-foreground">
+          {line}
+        </div>
+      ))}
+      <div className="flex flex-wrap gap-3 text-xs">
+        <button
+          type="button"
+          className="underline"
+          onClick={leave(() => showPilotAutomation(run.automationId, 'how'))}
+        >
+          How it runs
+        </button>
+        <button
+          type="button"
+          className="underline"
+          onClick={leave(() => showPilotAutomation(run.automationId, 'activity'))}
+        >
+          Activity
+        </button>
+        {parent ? (
+          <button type="button" className="underline" onClick={() => openRun(parent)}>
+            {`Answers run ${parent}`}
+          </button>
+        ) : null}
+      </div>
+    </header>
+  )
+}
+
+// One run's rail and its links (spec §2 Run panel), polled while it is open so a running run moves along.
+export function RunPanel({
+  runId,
+  part,
+  onClose
+}: {
+  runId: string
+  part: string | null
+  onClose: () => void
+}): React.JSX.Element {
+  const [detail, setDetail] = useState<RunDetail | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  useEffect(() => {
+    let alive = true
+    const load = (): void => {
+      pilotRpc<RunDetail>('pilot.runs.get', { runId }).then(
+        (d) => {
+          if (alive) {
+            setDetail(d)
+            setError(null)
+          }
+        },
+        (e: unknown) => {
+          if (alive) {
+            setError(errorText(e))
+          }
+        }
+      )
+    }
+    load()
+    const timer = setInterval(load, RUN_PANEL_POLL_MS)
+    return () => {
+      alive = false
+      clearInterval(timer)
+    }
+  }, [runId])
+  const painted = detail ? paintRun(detail.chain, detail) : null
+  return (
+    <div className="flex flex-col gap-4 p-4">
+      <div className="flex justify-end">
+        <button
+          type="button"
+          aria-label="Close run"
+          className="rounded p-1 hover:bg-accent"
+          onClick={onClose}
+        >
+          <X className="size-4" aria-hidden="true" />
+        </button>
+      </div>
+      {error ? <p className="text-sm text-destructive">{error}</p> : null}
+      {detail && painted ? (
+        <>
+          <Header detail={detail} />
+          <RunRail
+            parts={painted.parts}
+            run={detail.run}
+            highlight={part}
+            drifted={painted.drifted}
+            onOpenRun={(id) => openRun(id)}
+            onOpenCard={(id) => leave(() => showInboxCard(id))()}
+          />
+        </>
+      ) : null}
+      {!detail && !error ? <p className="text-sm text-muted-foreground">Loading…</p> : null}
+    </div>
+  )
+}

@@ -58,8 +58,7 @@ describe('formatAutomationDetail', () => {
     const detail: AutomationDetailPayload = {
       summary: fix,
       yaml: 'name: Fix failed CI on my MRs\n',
-      checkNames: ['Worktree', 'Clean'],
-      steps: []
+      checkNames: ['Worktree', 'Clean']
     }
     expect(formatAutomationDetail(detail)).toBe(
       [

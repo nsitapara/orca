@@ -10,9 +10,11 @@ import {
 } from './automations-view'
 import { JobView } from './JobView'
 import { PilotAutomationsSection } from './PilotAutomationsSection'
+import { RunPanelHost } from '../run-views/RunPanelHost'
+import { ActivityPage } from './ActivityPage'
 import { InboxPage } from './waiting/InboxPage'
 
-export default function PilotAutomationsPage(): React.JSX.Element {
+function PageBody(): React.JSX.Element {
   const open = usePilotOpenAutomation()
   const job = usePilotOpenJob()
   const view = usePilotAutomationsView()
@@ -20,6 +22,13 @@ export default function PilotAutomationsPage(): React.JSX.Element {
     return (
       <main className="relative flex h-full flex-col overflow-y-auto scrollbar-sleek bg-background px-5 pb-10">
         <InboxPage />
+      </main>
+    )
+  }
+  if (view === 'activity') {
+    return (
+      <main className="relative flex h-full flex-col gap-4 overflow-y-auto bg-background px-5 pb-10 pt-6">
+        <ActivityPage />
       </main>
     )
   }
@@ -51,5 +60,14 @@ export default function PilotAutomationsPage(): React.JSX.Element {
     <main className="relative flex h-full flex-col overflow-y-auto bg-background">
       <PilotAutomationsSection onOpen={setPilotOpenAutomation} onOpenJob={setPilotOpenJob} />
     </main>
+  )
+}
+
+export default function PilotAutomationsPage(): React.JSX.Element {
+  return (
+    <div className="relative h-full">
+      <PageBody />
+      <RunPanelHost />
+    </div>
   )
 }

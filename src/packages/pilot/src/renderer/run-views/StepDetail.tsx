@@ -5,7 +5,7 @@ import { money } from '../../shared/money'
 import { pilotRpc } from '../api'
 import { errorText, stepStatusLabel } from '../pages/format'
 import { refreshWorktreeTimeline } from '../sidebar/timeline-feed'
-import { StepResultView } from './StepResult'
+import { StepResultView } from '../timeline/StepResult'
 
 const AGENT_LABEL: Record<string, string> = { claude: 'Claude', codex: 'Codex', shell: 'Shell' }
 const RESUMED: Record<SessionResumeResult['action'], string> = {
@@ -94,42 +94,34 @@ function ResumeButton({
   )
 }
 
-export function StepList({
+// What one step stored (spec §2 Rail: a step row's expansion): who ran it and how it ended, its outputs, its pilotcli
+// result (a meta.text result shows only its outcome and reason), its error, and Resume for an agent's session.
+export function StepDetail({
   runId,
   worktreePath = null,
   checkoutRemoved = false,
-  steps
+  step
 }: {
   runId: string
   worktreePath?: string | null
   checkoutRemoved?: boolean
-  steps: StepRow[]
+  step: StepRow
 }): React.JSX.Element {
-  if (steps.length === 0) {
-    return <p className="text-xs text-muted-foreground">No steps started.</p>
-  }
+  const outputs = outputsText(step)
   return (
-    <ol className="mt-1 space-y-1 text-xs">
-      {steps.map((step) => {
-        const outputs = outputsText(step)
-        return (
-          <li key={step.idx}>
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="font-medium">{`${step.idx + 1}. ${step.name}`}</span>
-              <span className="text-muted-foreground">{stepFacts(step)}</span>
-              {canResume(step) && !checkoutRemoved ? (
-                <ResumeButton runId={runId} worktreePath={worktreePath} step={step} />
-              ) : null}
-              {canResume(step) && checkoutRemoved ? (
-                <span className="text-xs text-muted-foreground">Checkout removed</span>
-              ) : null}
-            </div>
-            {outputs ? <div className="text-muted-foreground">{`Outputs: ${outputs}`}</div> : null}
-            {step.result ? <StepResultView result={step.result} /> : null}
-            {step.error ? <div className={errorClass(step)}>{step.error}</div> : null}
-          </li>
-        )
-      })}
-    </ol>
+    <div className="mt-1 flex flex-col gap-0.5 text-xs">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-muted-foreground">{stepFacts(step)}</span>
+        {canResume(step) && !checkoutRemoved ? (
+          <ResumeButton runId={runId} worktreePath={worktreePath} step={step} />
+        ) : null}
+        {canResume(step) && checkoutRemoved ? (
+          <span className="text-muted-foreground">Checkout removed</span>
+        ) : null}
+      </div>
+      {outputs ? <div className="text-muted-foreground">{`Outputs: ${outputs}`}</div> : null}
+      {step.result ? <StepResultView result={step.result} /> : null}
+      {step.error ? <div className={errorClass(step)}>{step.error}</div> : null}
+    </div>
   )
 }

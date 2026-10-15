@@ -4,7 +4,6 @@ import type {
   AutomationSummary
 } from '../../shared/api-types'
 import { testDefinition, testStep } from '../../shared/definition/__fixtures__/definition'
-import type { StepDef } from '../../shared/definition/types'
 import { chainOf } from '../../shared/run-views/chain'
 
 const fixCi = testDefinition({
@@ -35,26 +34,7 @@ export const summary: AutomationSummary = {
 export const detail: AutomationDetailPayload = {
   summary,
   yaml: 'name: Fix failed CI\nschedule: manual\n',
-  checkNames: ['Clean'],
-  steps: [
-    {
-      name: 'fix',
-      agent: 'claude',
-      skill: 'fix-gitlab-ci',
-      mode: 'fix',
-      prompt: 'Fix it.',
-      promptStyle: 'wrapped',
-      args: [],
-      session: { kind: 'new' },
-      env: {},
-      run: null,
-      exitCodes: { ok: [0], skip: [], stop: [] },
-      when: null,
-      always: false,
-      timeoutMs: null,
-      outputs: []
-    } satisfies StepDef
-  ]
+  checkNames: ['Clean']
 }
 
 export const failedRunTick: ActivityTick = {

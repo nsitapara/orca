@@ -123,6 +123,7 @@ describe('the chain of every live automation', () => {
         '↳card_context:script',
         'Asks you:you',
         'Workspace:pilot',
+        'still_due:script',
         'prepare:agent',
         'Answers:you'
       ]
@@ -159,9 +160,13 @@ describe('the chain of every live automation', () => {
         'Picks:pilot',
         'Gates:pilot',
         'Workspace:pilot',
+        'context:script',
         'flag:script',
+        'catch_up:script',
         'fix:agent',
+        'push:script',
         'merge_back:script',
+        'card:script',
         'flag_failed:script',
         'Answers:you'
       ]
