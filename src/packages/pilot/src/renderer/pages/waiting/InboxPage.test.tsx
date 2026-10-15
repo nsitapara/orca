@@ -124,6 +124,9 @@ function serve(list = LIST, queue: QueueEntry[] = [HELD]) {
     if (method === 'pilot.queue.list') {
       return { entries: queue }
     }
+    if (method === 'pilot.runs.doneForYou') {
+      return []
+    }
     return { status: 'answered' }
   })
 }
@@ -198,10 +201,47 @@ describe('InboxPage', () => {
       await screen.findByRole('heading', { name: "Push !1561's 2 commits to origin?" })
     ).toBeTruthy()
     expect(screen.getByRole('heading', { name: 'Install LibreOffice in the job?' })).toBeTruthy()
-    expect(screen.getByText('Defaults the agents took · 1')).toBeTruthy()
+    expect(screen.getByText('Defaults without a run · 1')).toBeTruthy()
     expect(screen.getByText('Up next from your answers · 1')).toBeTruthy()
     expect(screen.getByText(/someone is typing in Claude · review/)).toBeTruthy()
     expect(screen.getByRole('button', { name: 'All · 2' })).toBeTruthy()
+  })
+
+  it("shows a run's default under it in Done for you, and Got it acknowledges the run", async () => {
+    const def = LIST.items.find((i) => i.type === 'default')!
+    pilotRpc.mockImplementation(async (method: string, params: unknown) => {
+      if (method === 'pilot.inbox.list') {
+        return LIST
+      }
+      if (method === 'pilot.runs.doneForYou') {
+        return [
+          {
+            run: {
+              ...testRun({ id: def.runId!, itemLabel: 'WEB-2176', status: 'done' }),
+              fields: {}
+            },
+            effects: [],
+            defaults: [testCard({ id: def.id, type: 'default' })]
+          }
+        ]
+      }
+      if (method === 'pilot.runs.acknowledge') {
+        return {
+          acknowledged: (params as { runIds: string[] }).runIds,
+          kept: [def.id],
+          notKept: []
+        }
+      }
+      return method === 'pilot.queue.list' ? { entries: [] } : []
+    })
+    render(<InboxPage />)
+    const section = await screen.findByRole('region', { name: 'Done for you' })
+    expect(within(section).getByRole('heading', { name: def.title })).toBeTruthy()
+    expect(screen.queryByText(/Defaults without a run/)).toBeNull()
+    fireEvent.click(within(section).getByRole('button', { name: 'Got it' }))
+    await waitFor(() =>
+      expect(pilotRpc).toHaveBeenCalledWith('pilot.runs.acknowledge', { runIds: [def.runId] })
+    )
   })
 
   it("shows Pilot's Run line in its own Pilot block on an action card, and none on a question", async () => {

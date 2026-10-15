@@ -301,7 +301,7 @@ describe('one click sends what the old radio + Save sent', () => {
       []
     )
     render(<InboxPage />)
-    fireEvent.click(await screen.findByText(/Defaults the agents took/))
+    fireEvent.click(await screen.findByText(/Defaults without a run/))
     fireEvent.click(await screen.findByRole('button', { name: 'Revert' }))
     await waitFor(() =>
       expect(pilotRpc).toHaveBeenCalledWith(
