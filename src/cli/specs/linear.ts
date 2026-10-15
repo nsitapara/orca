@@ -212,22 +212,6 @@ export const LINEAR_COMMAND_SPECS: CommandSpec[] = [
     notes: ['Use --body-file - to read multiline comment bodies from stdin.']
   },
   {
-    path: ['linear', 'comment', 'edit'],
-    summary: 'Edit a comment on a Linear issue',
-    usage:
-      'orca linear comment edit [<id>] [--current] --comment <commentId> (--body <text> | --body-file <path|->) [--workspace <id>] [--json]',
-    allowedFlags: [...GLOBAL_FLAGS, 'current', 'comment', 'body', 'body-file', 'workspace', 'id'],
-    positionalArgs: ['id'],
-    examples: [
-      'orca linear comment edit ENG-123 --comment <commentId> --body "Fixed in the linked MR."',
-      'orca linear comment edit --current --comment <commentId> --body-file - --json'
-    ],
-    notes: [
-      'Replaces the whole comment body. The comment must be on the given issue; Linear only lets you edit comments you wrote.',
-      'Use --body-file - to read multiline comment bodies from stdin.'
-    ]
-  },
-  {
     path: ['linear', 'attach'],
     summary: 'Attach a link to a Linear issue',
     usage:

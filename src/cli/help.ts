@@ -145,9 +145,6 @@ function formatCommandFlagHelp(flag: string, commandPath: string[]): string {
   if (command.startsWith('linear ') && flag === 'to') {
     return '--to <state>          Exact Linear workflow state name'
   }
-  if (command === 'linear comment edit' && flag === 'comment') {
-    return '--comment <id>        Comment id to edit'
-  }
   if (command === 'linear comment add' && flag === 'reply-to') {
     return '--reply-to <id>       Comment id to reply to'
   }

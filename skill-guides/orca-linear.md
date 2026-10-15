@@ -110,14 +110,6 @@ Use stdin for multiline comments:
 ORCA linear comment add --current --body-file - --json
 ```
 
-To correct a comment you already posted, edit it instead of posting another. Take the comment id from the `comment add` result or from `ORCA linear issue <id> --comments --json`:
-
-```bash
-ORCA linear comment edit --current --comment <commentId> --body-file - --json
-```
-
-The new body replaces the whole comment. The comment must be on that issue, and Linear only lets you edit comments you wrote.
-
 ## Status Etiquette
 
 Before any status move, read the current issue state and use the state `name` and `type`.
@@ -164,7 +156,6 @@ If the retry or the read-back also fails, stop and report the uncertainty to the
 ## Errors
 
 - `linear_issue_required`: pass an issue id or `--current`.
-- `linear_invalid_comment`: the comment is not on this issue; list its comment ids with `ORCA linear issue <id> --comments --json`.
 - `linear_invalid_state`: inspect `error.data.states`; choose only a deterministic valid state.
 - `linear_write_unconfirmed`: follow the payload rules above — retry once when `error.data.writeId` is present, otherwise read back first.
 - `linear_invalid_workspace`: rerun with the workspace id returned by search or issue context.

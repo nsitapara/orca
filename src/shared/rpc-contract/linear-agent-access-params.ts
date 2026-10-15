@@ -97,11 +97,6 @@ export const LinearIssueAddComment = LinearWriteTarget.extend({
   writeId: OptionalString
 })
 
-export const LinearIssueEditComment = LinearWriteTarget.extend({
-  commentId: requiredString('Missing comment id'),
-  body: requiredString('Missing comment body')
-})
-
 export const LinearIssueRelationWrite = LinearWriteTarget.extend({
   relatedInput: requiredString('Missing related issue'),
   relationship: z.enum(['blocks', 'blockedBy', 'relatedTo', 'duplicateOf']),

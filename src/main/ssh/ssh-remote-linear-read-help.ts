@@ -69,7 +69,6 @@ Commands:
   label set          Replace labels on a Linear issue
   status set         Set a Linear issue status
   comment add        Add a comment to a Linear issue
-  comment edit       Edit a comment on a Linear issue
   attach             Attach a link to a Linear issue
   create             Create a Linear issue
 
