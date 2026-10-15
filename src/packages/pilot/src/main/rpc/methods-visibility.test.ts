@@ -84,4 +84,11 @@ describe('visibility methods', () => {
       )
     ).toEqual({ r1: [] })
   })
+
+  it('pilot.runs.acknowledge refuses the local CLI', async () => {
+    const find = setup()
+    await expect(async () =>
+      find('pilot.runs.acknowledge').handler({ runIds: ['r1'] }, { caller: { kind: 'local-cli' } })
+    ).rejects.toThrow(LOG_BY_PERSON)
+  })
 })

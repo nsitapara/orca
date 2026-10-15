@@ -71,3 +71,40 @@ describe('VisibilityStore.recentLinearUrls', () => {
     store.close()
   })
 })
+
+describe('VisibilityStore acknowledgements', () => {
+  it('lists ended runs nobody acknowledged since a time, newest first, and acknowledges them', () => {
+    const store = PilotStore.open(':memory:')
+    const add = (
+      id: string,
+      automationId: string,
+      status: 'done' | 'running' | 'failed',
+      finishedAt: number | null
+    ) => {
+      store.runs.create({
+        id,
+        automationId,
+        tickId: null,
+        itemKey: id,
+        itemLabel: id,
+        worktreePath: null,
+        startedAt: 1,
+        status
+      })
+      if (finishedAt !== null) {
+        store.runs.update(id, { finishedAt })
+      }
+    }
+    add('old', 'a', 'done', 5)
+    add('one', 'a', 'done', 20)
+    add('two', 'b', 'failed', 30)
+    add('live', 'a', 'running', null)
+    expect(store.visibility.unacknowledged(null, 10, 50).map((r) => r.id)).toEqual(['two', 'one'])
+    expect(store.visibility.unacknowledged(['a'], 10, 50).map((r) => r.id)).toEqual(['one'])
+    expect(store.visibility.acknowledge(['one', 'nope'], 99)).toEqual(['one'])
+    expect(store.visibility.acknowledge(['one'], 100)).toEqual([])
+    expect(store.runs.get('one')?.acknowledgedAt).toBe(99)
+    expect(store.visibility.unacknowledged(null, 10, 50).map((r) => r.id)).toEqual(['two'])
+    store.close()
+  })
+})
