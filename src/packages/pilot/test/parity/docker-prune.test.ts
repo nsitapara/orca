@@ -30,8 +30,16 @@ describe('07 · Clean Docker when disk is 80% full: an env sweep, then the prune
     expect(definition.steps).toMatchObject([
       { name: 'sweep_envs', agent: 'shell', always: true, run: SWEEP, timeoutMs: 300_000 },
       {
+        name: 'stacks',
+        agent: 'shell',
+        always: false,
+        run: 'pilotcli env list stack_up=true',
+        when: null
+      },
+      {
         name: 'prune',
         always: false,
+        when: '{steps.stacks.count} == 0',
         agent: 'shell',
         run: OLD_PRECHECK.replace(/; exit 1$/, ''),
         timeoutMs: 600_000
@@ -43,11 +51,12 @@ describe('07 · Clean Docker when disk is 80% full: an env sweep, then the prune
     const header = /^# Exit: (.*)$/m.exec(readFileSync(PRUNE, 'utf8'))?.[1] ?? ''
     expect(header).toContain('3 = over threshold but Docker is not running')
     expect(header).toContain('2 = bad arguments')
-    expect(definition.steps[1].exitCodes).toEqual({ ok: [0], skip: [3], stop: [] })
+    expect(definition.steps[2].exitCodes).toEqual({ ok: [0], skip: [3], stop: [] })
   })
 
   it('a sweep that fails or times out never skips the prune, and the run still ends on the prune', () => {
-    const [sweep, prune] = definition.steps
+    const [sweep, , prune] = definition.steps
+    const clear = { 'steps.stacks.count': 0 }
     for (const status of ['failed', 'timed_out'] as const) {
       const swept: EndedStep = {
         name: sweep.name,
@@ -55,7 +64,7 @@ describe('07 · Clean Docker when disk is 80% full: an env sweep, then the prune
         always: sweep.always,
         error: 'env list failed'
       }
-      expect(decideStep(prune, [swept], {})).toEqual({ run: true })
+      expect(decideStep(prune, [swept], clear)).toEqual({ run: true })
       const pruned: EndedStep = {
         name: prune.name,
         status: 'done',
@@ -66,6 +75,18 @@ describe('07 · Clean Docker when disk is 80% full: an env sweep, then the prune
       const prunedBadly: EndedStep = { ...pruned, status: 'failed', error: 'exit 2' }
       expect(runEnd([swept, prunedBadly], 0).status).toBe('failed')
     }
+  })
+
+  it('holds the prune while any agents-* stack is up (pilotcli env list stack_up=true counts them)', () => {
+    const [, stacks, prune] = definition.steps
+    const counted: EndedStep[] = [{ name: stacks.name, status: 'done', always: false, error: null }]
+    expect(decideStep(prune, counted, { 'steps.stacks.count': 0 })).toEqual({ run: true })
+    expect(decideStep(prune, counted, { 'steps.stacks.count': 1 })).toMatchObject({ run: false })
+    // env list failing fails the step, which holds the prune back too: no prune without knowing.
+    const failed: EndedStep[] = [
+      { name: stacks.name, status: 'failed', always: false, error: 'docker' }
+    ]
+    expect(decideStep(prune, failed, {})).toMatchObject({ run: false })
   })
 
   it.each([
