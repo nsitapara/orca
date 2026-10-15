@@ -83,7 +83,9 @@ describe('Pilot RPC methods', () => {
       'pilot.automations.validate',
       'pilot.automations.setEnabled',
       'pilot.run.output',
-      'pilot.run.event'
+      'pilot.run.event',
+      'pilot.activity.list',
+      'pilot.runs.get'
     ]
     for (const n of names) {
       expect(find(n)).toMatchObject({
