@@ -177,6 +177,14 @@ export class HandoverStore {
       .map((r) => toHandover(r as never))
   }
 
+  // What one run handed over, to every stage, in the order it handed it: the run panel's Hands over row.
+  sentBy(runId: string): HandoverRow[] {
+    return this.db
+      .prepare('SELECT * FROM handovers WHERE sender_run_id = ? ORDER BY id')
+      .all(runId)
+      .map((r) => toHandover(r as never))
+  }
+
   // The rows each of these ticks settled (consumed or expired), oldest first.
   consumedBy(tickIds: readonly number[]): Map<number, HandoverRow[]> {
     const found = new Map<number, HandoverRow[]>()
