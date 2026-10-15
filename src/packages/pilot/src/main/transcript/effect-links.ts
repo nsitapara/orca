@@ -46,7 +46,7 @@ function urlOf(e: Effect, bases: LinkBases): string | null {
   if (!target) {
     return null
   }
-  if (TICKET.test(target)) {
+  if (e.kind.startsWith('ticket_') && TICKET.test(target)) {
     return bases.linear ? `${bases.linear}/issue/${target}` : null
   }
   return bases.gitlab ? gitlabUrl(e, target, bases.gitlab) : null

@@ -22,17 +22,18 @@ function gitEffects(git: GitOperation | null): CommandEffect[] {
   return out
 }
 
-// One entry's effects, one per kind: gitOperation and the command often say the same push, the one naming its target
-// wins.
+// One entry's effects, once per kind and target; a push the command left unnamed is the one gitOperation names.
 function perEntry(list: readonly CommandEffect[]): CommandEffect[] {
-  const byKind = new Map<EffectKind, CommandEffect>()
-  for (const c of list) {
-    const had = byKind.get(c.kind)
-    if (!had || (!had.target && c.target)) {
-      byKind.set(c.kind, c)
+  const named = new Set(list.filter((c) => c.target).map((c) => c.kind))
+  const seen = new Set<string>()
+  return list.filter((c) => {
+    const key = `${c.kind}\u0000${c.target ?? ''}`
+    if ((!c.target && named.has(c.kind)) || seen.has(key)) {
+      return false
     }
-  }
-  return [...byKind.values()]
+    seen.add(key)
+    return true
+  })
 }
 
 function guessTarget(kind: EffectKind, e: Extract<ParsedEntry, { kind: 'tool' }>): string | null {
@@ -50,7 +51,9 @@ function urlFrom(target: string | null, links: readonly string[]): string | null
   if (target.startsWith('!')) {
     return links.find((l) => MR_URL.exec(l)?.[1] === target.slice(1)) ?? null
   }
-  return links.find((l) => l.includes(`/issue/${target}`)) ?? null
+  return (
+    links.find((l) => l.includes(`/issue/${target}/`) || l.endsWith(`/issue/${target}`)) ?? null
+  )
 }
 
 // The same effect done again in a step counts up instead of repeating; the first one's time and link are kept.
@@ -105,7 +108,8 @@ export function actionEffects(rows: readonly ActionRunRow[]): Effect[] {
       return {
         kind: 'action' as const,
         target: typeof result.detail === 'string' && result.detail ? result.detail : r.action,
-        url: typeof result.link === 'string' ? result.link : null,
+        url:
+          typeof result.link === 'string' && /^https?:\/\//.test(result.link) ? result.link : null,
         count: 1,
         stepIdx: null,
         at: r.finishedAt ?? r.startedAt

@@ -85,6 +85,39 @@ describe('stepEffects', () => {
   })
 })
 
+describe('stepEffects fixes', () => {
+  it('counts same-kind effects with different targets in one command, and merges gitOperation with the command', () => {
+    const two = stepEffects(
+      [entry({ id: 'a', command: 'git push origin a && git push origin b' })],
+      0
+    )
+    expect(two.map((e) => [e.kind, e.target])).toEqual([
+      ['pushed', 'a'],
+      ['pushed', 'b']
+    ])
+    const one = stepEffects(
+      [entry({ id: 'a', command: 'git push origin web-1', git: { push: { branch: 'web-1' } } })],
+      0
+    )
+    expect(one.map((e) => [e.kind, e.target, e.count])).toEqual([['pushed', 'web-1', 1]])
+  })
+
+  it('does not take WEB-70 for WEB-7', () => {
+    const effects = stepEffects(
+      [
+        entry({
+          id: 'a',
+          command: 'orca linear create --json',
+          ids: ['WEB-7'],
+          links: ['https://linear.app/a/issue/WEB-70/x']
+        })
+      ],
+      0
+    )
+    expect(effects[0].url).toBeNull()
+  })
+})
+
 describe('actionEffects', () => {
   const row = (over: Partial<ActionRunRow>): ActionRunRow => ({
     id: 1,
@@ -126,5 +159,10 @@ describe('actionEffects', () => {
       },
       { kind: 'action', target: 'push', url: null, count: 1, stepIdx: null, at: 5 }
     ])
+  })
+
+  it('keeps only http(s) links', () => {
+    const out = JSON.stringify({ detail: 'x', link: 'javascript:alert(1)' })
+    expect(actionEffects([row({ output: out })])[0].url).toBeNull()
   })
 })
