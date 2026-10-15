@@ -77,6 +77,8 @@ def old_decisions(sweep, gate):
         patch(sweep.vault, "add_run_line", lambda *a, **k: None)
         patch(sweep, "excerpts_for", lambda jobs: {})  # job traces: only the ticket's text
         patch(sweep, "merged_between", lambda green, red: [])  # a git fetch and log: only the ticket's text
+        patch(sweep, "find_fix", lambda *a, **k: None)  # open MRs that may already fix the red: GitLab reads the cases predate
+        patch(pilot_mode, "in_flight", gate.in_flight)  # pilotcli's idle rule, answered from the case's git reads as start() is
 
         quiet = lambda line: None  # noqa: E731
         recorded = load(sweep.LOOP, "tickets.json")
