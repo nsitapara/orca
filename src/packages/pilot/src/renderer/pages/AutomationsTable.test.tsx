@@ -2,7 +2,16 @@
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { AutomationListPayload, AutomationSummary, TickRow } from '../../shared/api-types'
+import { stepAt, testRun } from '../../shared/run-views/__fixtures__/runs'
+import { closeRunPanel, openRunPanel } from '../run-views/run-panel-state'
 import { AutomationsTable } from './AutomationsTable'
+import {
+  pilotAutomationTab,
+  pilotAutomationsView,
+  pilotOpenAutomation,
+  showAutomationsPage,
+  takeActivityFilter
+} from './automations-view'
 import { summary } from './fixtures'
 
 const NOW = Date.UTC(2026, 9, 13, 18, 0)
@@ -86,24 +95,27 @@ describe('AutomationsTable: a job of several automations', () => {
     renderTable([SOLO, STAGE_2, STAGE_1])
     const rows = screen
       .getAllByRole('button')
-      .filter((r) => !r.closest('[role="row"]') && r.getAttribute('aria-expanded') === null)
+      .filter((r) => !r.closest('[role="row"], ul') && r.getAttribute('aria-expanded') === null)
     expect(rows.map((r) => r.getAttribute('aria-label') ?? r.textContent)).toEqual([
       expect.stringContaining('07 · Clean Docker'),
       'Job 13 · Fix red hourly e2e on dev, 2 stages',
       'Stage 1 Open or update the ticket',
       'Stage 2 Start a fix session per ticket'
     ])
-    const job = within(rows[1].parentElement?.parentElement as HTMLElement)
+    const job = within(rows[1].closest('div[class*="cursor-pointer"]') as HTMLElement)
     expect(job.getByText('2 stages')).toBeTruthy()
-    expect(job.getByText('Pipelines → Linear tickets')).toBeTruthy()
     // combined: on because stage 2 is; the newest tick is stage 2's
     expect(job.getByText('Enabled')).toBeTruthy()
     expect(job.getByText('2 min ago · 0 checked')).toBeTruthy()
-    const first = within(rows[2])
+    const first = within(rows[2].closest('div[class*="cursor-pointer"]') as HTMLElement)
     expect(first.getByText('5,35 * * * *')).toBeTruthy()
     expect(first.getByText('3 min ago · 1 checked · 1 not due')).toBeTruthy()
     expect(first.getByText('Paused')).toBeTruthy()
-    expect(within(rows[3]).getByText('Linear tickets')).toBeTruthy()
+    expect(
+      within(rows[3].closest('div[class*="cursor-pointer"]') as HTMLElement).getByText(
+        '6,36 * * * *'
+      )
+    ).toBeTruthy()
   })
 
   it('opens the job page from the job row, and a stage’s own page from its row', () => {
@@ -177,7 +189,7 @@ describe('AutomationsTable: folding a job', () => {
 
   it('opens the job from the row’s other cells too', () => {
     const { onOpenJob } = renderTable([STAGE_1, STAGE_2])
-    fireEvent.click(screen.getByText('Pipelines → Linear tickets'))
+    fireEvent.click(screen.getAllByText('2 min ago · 0 checked')[0])
     expect(onOpenJob).toHaveBeenCalledWith('13')
   })
 })
@@ -188,7 +200,7 @@ describe('AutomationsTable: sorting', () => {
   const rowNames = (): string[] =>
     screen
       .getAllByRole('button')
-      .filter((b) => !b.closest('[role="row"]') && b.getAttribute('aria-expanded') === null)
+      .filter((b) => !b.closest('[role="row"], ul') && b.getAttribute('aria-expanded') === null)
       .map((b) => b.getAttribute('aria-label') ?? b.textContent ?? '')
 
   it('defaults to natural code order and toggles with aria-sort, remembering the choice', () => {
@@ -216,5 +228,54 @@ describe('AutomationsTable: sorting', () => {
       'Stage 1 Open or update the ticket',
       'Stage 2 Start a fix session per ticket'
     ])
+  })
+})
+
+const running = (id: string, automationId: string) =>
+  testRun({ id, automationId, steps: [stepAt(0, 'fix', 'running')] })
+
+describe('AutomationsTable: the Runs strip', () => {
+  beforeEach(() => localStorage.clear())
+  afterEach(() => {
+    cleanup()
+    closeRunPanel()
+    showAutomationsPage()
+  })
+
+  it("shows each automation's runs as a strip: what it looks at, then each step", () => {
+    renderTable([SOLO])
+    const strip = screen.getByRole('list', { name: '07 · Clean Docker runs' })
+    expect(
+      within(strip)
+        .getAllByRole('button')
+        .map((b) => b.getAttribute('aria-label'))
+    ).toEqual(['Pilot · MRs · 1 gate', 'Agent · Claude · fix-gitlab-ci'])
+  })
+
+  it('opens the one run a lit chip is lit for, Activity when it is lit for several, and How it runs when it is not', () => {
+    const first = renderTable([{ ...SOLO, live: [running('a', 'docker-prune')] }])
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Agent · Claude · fix-gitlab-ci · Running' })
+    )
+    expect(openRunPanel()).toEqual({ runId: 'a', part: 'step:0' })
+    expect(first.onOpen).not.toHaveBeenCalled()
+    cleanup()
+    renderTable([{ ...SOLO, live: [running('a', 'docker-prune'), running('b', 'docker-prune')] }])
+    const lit = screen.getByRole('button', { name: 'Agent · Claude · fix-gitlab-ci · Running' })
+    expect(lit.textContent).toContain('2')
+    fireEvent.click(lit)
+    expect([pilotAutomationsView(), takeActivityFilter()]).toEqual(['activity', ['docker-prune']])
+    fireEvent.click(screen.getByRole('button', { name: 'Pilot · MRs · 1 gate' }))
+    expect([pilotOpenAutomation(), pilotAutomationTab()]).toEqual(['docker-prune', 'how'])
+  })
+
+  it("shows a job row's running stage, then +1 stage", () => {
+    renderTable([STAGE_1, { ...STAGE_2, live: [running('r', 'dev-e2e-fix-start')] }])
+    // stage 1 shares the job's title in this fixture, so the job row's strip is the first
+    const [strip] = screen.getAllByRole('list', { name: '13 · Fix red hourly e2e on dev runs' })
+    expect(
+      within(strip).getByRole('button', { name: 'Agent · Claude · fix-gitlab-ci · Running' })
+    ).toBeTruthy()
+    expect(within(strip).getByText('+1 stage')).toBeTruthy()
   })
 })
