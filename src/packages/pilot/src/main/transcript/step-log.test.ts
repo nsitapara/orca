@@ -1,9 +1,9 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 import { PilotStore } from '../store/store'
-import { LogReader } from './log-file'
+import { LogReader, NOT_UNDER_ROOT } from './log-file'
 import {
   CODEX_NOT_READ,
   MAX_DETAIL_CHARS,
@@ -100,12 +100,15 @@ describe('stepLog', () => {
     })
   })
 
-  it('gives the no-transcript reason, not a filesystem path, when the file is gone', async () => {
-    const { deps, file } = setup(TEXT)
-    deps.store.runs.updateStep('r1', 1, { transcriptPath: file })
-    rmSync(file)
+  it.each([
+    ['a failed read', new Error('ENOENT: no such file, open /secret/path'), NO_TRANSCRIPT],
+    ['a path outside the root', new Error(NOT_UNDER_ROOT), NOT_UNDER_ROOT]
+  ])('gives a reason without a path for %s', async (_name, error, reason) => {
+    const { deps } = setup(TEXT)
+    vi.spyOn(deps.reader, 'read').mockRejectedValueOnce(error)
     const log = await stepLog(deps, 'r1', 1)
-    expect(log.reason).toBe(NO_TRANSCRIPT)
+    expect(log).toEqual({ source: 'none', reason, entries: [], truncatedBefore: 0, later: 0 })
+    expect(log.reason).not.toContain('/secret')
   })
 
   it('throws for a step that does not exist', async () => {
