@@ -3,8 +3,10 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import type { InboxListRow } from '../../../shared/api-types'
 import { groupItems, type Section } from '../../../shared/inbox-groups'
 import { waitingCount, preparingCount, preparationBlockedCount } from './answer-text'
-import { clearPendingInboxCard, usePendingInboxCard } from '../automations-view'
+import { useAutomationsFeed } from '../../run-views/automations-feed'
+import { clearPendingInboxCard, showActivity, usePendingInboxCard } from '../automations-view'
 import { CardList } from './CardList'
+import { DoneForYou } from './DoneForYou'
 import { FilterBadges } from './FilterBadges'
 import { setAllDetailsOpen, useAllDetailsOpen } from './details-open'
 import { ALL, InboxHeader } from './InboxHeader'
@@ -14,6 +16,7 @@ import { InboxStyle } from './inbox-style'
 import { UpNextPanel } from './UpNextPanel'
 import { WorktreeName } from './WorktreeLink'
 import { useElementWidth } from './use-element-width'
+import { useDoneForYou } from './use-done-for-you'
 import { useListOpen } from './use-list-open'
 import { useWaiting } from './use-waiting'
 
@@ -57,6 +60,12 @@ export function InboxPage(): React.JSX.Element {
     applyNow,
     reload
   } = useWaiting(viewer)
+  const done = useDoneForYou(viewer)
+  const { list: summaries } = useAutomationsFeed()
+  const running = summaries.reduce(
+    (n, a) => n + a.live.filter((r) => r.status === 'running').length,
+    0
+  )
   // A card the run panel's "asks you" link named: picked and scrolled to once the list has it, then forgotten.
   const pending = usePendingInboxCard()
   useEffect(() => {
@@ -82,7 +91,9 @@ export function InboxPage(): React.JSX.Element {
   const automations = useMemo(() => inbox?.automations ?? [], [inbox])
   const names = useMemo(() => new Map(automations.map((a) => [a.id, a.name])), [automations])
   const openItems = items.filter((i) => i.type !== 'default')
-  const defaults = items.filter((i) => i.type === 'default')
+  // Defaults show under their run in Done for you; only the rest (no run, or a run already seen) fold at the end.
+  const underRuns = new Set(done.runs.flatMap((d) => d.defaults.map((c) => c.id)))
+  const defaults = items.filter((i) => i.type === 'default' && !underRuns.has(i.id))
   const sections = groupItems(openItems, automations)
   // A selected group with no card left (its last one was answered) counts as All.
   const activeGroup = sections.some((s) => s.group.key === group) ? group : ALL
@@ -124,6 +135,10 @@ export function InboxPage(): React.JSX.Element {
       onPrepareEvidence={() => prepareEvidence(i)}
     />
   )
+  const cardFor = (id: string) => {
+    const item = items.find((i) => i.id === id)
+    return item ? cardOf(item) : null
+  }
   const sectionOf = (s: Section) => (
     <section key={s.group.key} aria-label={s.group.label} className="flex min-w-0 flex-col gap-3">
       <SectionHeading section={s} />
@@ -147,6 +162,15 @@ export function InboxPage(): React.JSX.Element {
         allOpen={allOpen}
         onToggleAll={() => setAllDetailsOpen(detailIds, !allOpen)}
       />
+      {running > 0 ? (
+        <button
+          type="button"
+          className="self-start text-sm underline"
+          onClick={() => showActivity(null)}
+        >
+          {`${running} running →`}
+        </button>
+      ) : null}
       {error ? <p className="text-sm text-destructive">{error}</p> : null}
       <ImportNotice onImported={() => void reload()} />
       {showList ? null : (
@@ -177,10 +201,20 @@ export function InboxPage(): React.JSX.Element {
           ) : (
             <p className="text-sm text-muted-foreground">Nothing waiting on {viewerName} here.</p>
           )}
+          {done.error ? <p className="text-sm text-destructive">{done.error}</p> : null}
+          <DoneForYou
+            runs={done.runs}
+            cardFor={cardFor}
+            onAcknowledge={async (ids) => {
+              const failed = await done.acknowledge(ids)
+              await reload()
+              return failed
+            }}
+          />
           {defaultCount ? (
             <Collapsible className="rounded-lg border border-border/50 px-3 py-2">
               <CollapsibleTrigger className="flex w-full items-center gap-2 text-sm font-semibold">
-                <span>Defaults the agents took · {defaultCount}</span>
+                <span>Defaults without a run · {defaultCount}</span>
                 <span className="text-xs font-normal text-muted-foreground">
                   never counted as waiting
                 </span>

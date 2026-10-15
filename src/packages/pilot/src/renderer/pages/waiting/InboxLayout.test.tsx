@@ -333,13 +333,13 @@ describe('fix round 1', () => {
     })
     render(<InboxPage />)
     await screen.findByRole('heading', { name: 'F1 Fixture' })
-    fireEvent.click(screen.getByText(/Defaults the agents took/))
+    fireEvent.click(screen.getByText(/Defaults without a run/))
     expect(screen.getByRole('heading', { name: 'Default in job' })).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'web-2099-carrier · 1' }))
     expect(screen.getByRole('heading', { name: 'Default in worktree' })).toBeTruthy()
     expect(screen.queryByRole('heading', { name: 'Default in job' })).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: '!1579 · 1' }))
-    expect(screen.queryByText(/Defaults the agents took/)).toBeNull()
+    expect(screen.queryByText(/Defaults without a run/)).toBeNull()
   })
 
   it('nests the headings: sections h2 above the card titles h3', async () => {
