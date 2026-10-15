@@ -14,6 +14,8 @@ export type ParsedEntry = LogEntry & {
   command: string | null
   git: GitOperation | null
   ids: string[]
+  // The record's gitBranch: where a push that names no branch went.
+  branch: string | null
 }
 export type LogState = { offset: number; entries: ParsedEntry[]; open: Map<string, ParsedEntry> }
 
@@ -33,6 +35,7 @@ type Rec = {
   timestamp?: string
   uuid?: string
   cwd?: string
+  gitBranch?: unknown
   message?: { content?: unknown }
   toolUseResult?: unknown
 }
@@ -47,6 +50,7 @@ const KEPT_LINK = /\/-\/(?:merge_requests|pipelines|jobs)\/\d+|linear\.app\/[^/]
 const IDENTIFIER = /"identifier"\s*:\s*"([A-Z][A-Z0-9]{1,9}-\d+)"/g
 const ISSUE_URL = /linear\.app\/[^/]+\/issue\/([A-Z][A-Z0-9]{1,9}-\d+)/
 const NO_EXTRA: Extra = { interrupted: false, git: null, patch: null }
+const WEB_LINK = /^https?:\/\//
 
 export function emptyLog(): LogState {
   return { offset: 0, entries: [], open: new Map() }
@@ -90,8 +94,14 @@ export function toolTitle(
   return name
 }
 
-function partText(part: unknown): string {
-  const p = part as Block
+function isBlock(value: unknown): value is Block {
+  return Boolean(value) && typeof value === 'object'
+}
+
+function partText(p: unknown): string {
+  if (!isBlock(p)) {
+    return ''
+  }
   if (p.type === 'text' && typeof p.text === 'string') {
     return p.text
   }
@@ -110,12 +120,13 @@ export function resultText(content: unknown): string {
 }
 
 function hunkLines(hunk: unknown): unknown[] {
-  const lines = (hunk as { lines?: unknown }).lines
+  const lines = hunk && typeof hunk === 'object' ? (hunk as { lines?: unknown }).lines : null
   return Array.isArray(lines) ? lines : []
 }
 
+// A Write that created its file has no hunks: no patch, so its summary is the result's text.
 function patchOf(hunks: unknown): Patch | null {
-  if (!Array.isArray(hunks)) {
+  if (!Array.isArray(hunks) || hunks.length === 0) {
     return null
   }
   const lines = hunks.flatMap(hunkLines).filter((l): l is string => typeof l === 'string')
@@ -165,7 +176,8 @@ function linksOf(text: string, git: GitOperation | null): string[] {
     .map((l) => l.replace(/[.,;:]+$/, ''))
     .filter((l) => KEPT_LINK.test(l))
   const pr = git?.pr?.url
-  return [...new Set(pr ? [pr, ...found] : found)].slice(0, MAX_LINKS)
+  const kept = typeof pr === 'string' && WEB_LINK.test(pr) ? [pr, ...found] : found
+  return [...new Set(kept)].slice(0, MAX_LINKS)
 }
 
 function idsOf(text: string, links: readonly string[]): string[] {
@@ -192,13 +204,16 @@ function toolEntry(b: Block, rec: Rec, at: number, span: Span): ParsedEntry {
     result: null,
     command: name === 'Bash' && typeof input.command === 'string' ? input.command : null,
     git: null,
-    ids: []
+    ids: [],
+    branch: typeof rec.gitBranch === 'string' && rec.gitBranch ? rec.gitBranch : null
   }
 }
 
 function addAssistant(state: LogState, rec: Rec, content: unknown[], at: number, span: Span): void {
-  content.forEach((raw, i) => {
-    const b = raw as Block
+  content.forEach((b, i) => {
+    if (!isBlock(b)) {
+      return
+    }
     if (b.type === 'tool_use' && typeof b.id === 'string') {
       const entry = toolEntry(b, rec, at, span)
       state.entries.push(entry)
@@ -215,14 +230,15 @@ function addAssistant(state: LogState, rec: Rec, content: unknown[], at: number,
         result: null,
         command: null,
         git: null,
-        ids: []
+        ids: [],
+        branch: null
       })
     }
   })
 }
 
 function addResults(state: LogState, rec: Rec, content: unknown[], span: Span): void {
-  const results = content.map((b) => b as Block).filter((b) => b.type === 'tool_result')
+  const results = content.filter(isBlock).filter((b) => b.type === 'tool_result')
   // toolUseResult describes a record's one result; a record with several can't say which it belongs to.
   const extra = results.length === 1 ? extraOf(rec.toolUseResult) : NO_EXTRA
   for (const b of results) {
@@ -274,10 +290,14 @@ export function feed(state: LogState, chunk: Buffer): void {
   let start = 0
   let nl = chunk.indexOf(0x0a, start)
   while (nl >= 0) {
-    applyLine(state, chunk.subarray(start, nl).toString('utf8'), {
-      offset: state.offset + start,
-      length: nl - start
-    })
+    try {
+      applyLine(state, chunk.subarray(start, nl).toString('utf8'), {
+        offset: state.offset + start,
+        length: nl - start
+      })
+    } catch {
+      // A record of a shape the parser doesn't know is skipped, so the offset still moves past it.
+    }
     start = nl + 1
     nl = chunk.indexOf(0x0a, start)
   }

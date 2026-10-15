@@ -12,7 +12,9 @@ const PREFIXES = new Set(['rtk', 'proxy', 'env', 'command', 'time', 'nohup'])
 const ASSIGNMENT = /^[A-Za-z_][A-Za-z0-9_]*=/
 const REDIRECT = /^\d*[<>]/
 const HELP = new Set(['--help', '-h'])
-const PUSH_SKIP = new Set(['--dry-run', '-n'])
+const PUSH_SKIP = new Set(['--dry-run', '-n', '--delete', '-d'])
+const SHA = /^[0-9a-f]{7,40}$/i
+const GROUPING = /^[({]+|[)}]+$/g
 const TICKET = /^[A-Z][A-Z0-9]{1,9}-\d+$/
 const MR = /^!?(\d+)$/
 const WRITE_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE'])
@@ -50,7 +52,14 @@ const MR_VALUE_FLAGS = new Set([
   '--repo',
   '--milestone'
 ])
-const PILOTCLI_VALUE_FLAGS = new Set(['--format', '--field', '--input'])
+const PILOTCLI_VALUE_FLAGS = new Set([
+  '--format',
+  '--field',
+  '--input',
+  '--expect-sha',
+  '--expect-head',
+  '--dir'
+])
 const SEPARATORS = new Set(['\n', ';', '|', '&'])
 
 // The end word of a heredoc opened on this line, ignoring << inside quotes and herestrings (<<<).
@@ -119,6 +128,11 @@ export function segments(command: string): string[][] {
       word += q.text
       has = true
       i = q.end
+    } else if (c === '#' && !has) {
+      // An unquoted # that starts a word comments out the rest of the line.
+      while (i + 1 < command.length && command[i + 1] !== '\n') {
+        i += 1
+      }
     } else if (c === '\\' && command[i + 1] === '\n') {
       i += 1
     } else if (c === '\\' && i + 1 < command.length) {
@@ -138,8 +152,9 @@ export function segments(command: string): string[][] {
   return out
 }
 
-// The command's own words: leading wrappers (rtk, env, VAR=value) and redirections dropped, the tool by its base name.
-function commandWords(words: readonly string[]): string[] {
+// The command's own words: brackets, wrappers (rtk, env, VAR=value) and redirections dropped, the tool by base name.
+function commandWords(raw: readonly string[]): string[] {
+  const words = raw.map((w) => w.replace(GROUPING, '')).filter(Boolean)
   let i = 0
   while (i < words.length && (PREFIXES.has(words[i]) || ASSIGNMENT.test(words[i]))) {
     i += 1
@@ -202,10 +217,19 @@ function gitEffect(w: readonly string[]): CommandEffect[] {
   return [{ kind: 'pushed', target: branchOf(plainArgs(args, GIT_PUSH_VALUE_FLAGS)[1]) }]
 }
 
+// push-branch's branch: a SHA it is told to expect, or a shell expansion, names no branch.
+function pushBranchEffect(plain: readonly string[], w: readonly string[]): CommandEffect[] {
+  if (w.some((x) => x === '--dry-run' || x.startsWith('--dry-run='))) {
+    return []
+  }
+  const branch = branchOf(plain[0])
+  return [{ kind: 'pushed', target: branch && !SHA.test(branch) ? branch : null }]
+}
+
 function pilotcliEffect(w: readonly string[]): CommandEffect[] {
   const plain = plainArgs(w.slice(3), PILOTCLI_VALUE_FLAGS).filter((a) => !a.includes('='))
   if (w[1] === 'git' && w[2] === 'push-branch') {
-    return [{ kind: 'pushed', target: plain[0] ?? null }]
+    return pushBranchEffect(plain, w)
   }
   if (w[1] === 'gitlab' && w[2] === 'reply-thread') {
     return [{ kind: 'mr_commented', target: mrOf(plain) }]
@@ -242,7 +266,7 @@ function apiPath(w: readonly string[]): string | null {
 function glabEffect(w: readonly string[]): CommandEffect[] {
   if (w[1] === 'api') {
     const method = apiMethod(w)
-    const path = apiPath(w)
+    const path = apiPath(w)?.split('?')[0] ?? null
     if (path === 'graphql') {
       return w.some((x) => MUTATION.test(x)) ? [{ kind: 'gitlab_write', target: path }] : []
     }

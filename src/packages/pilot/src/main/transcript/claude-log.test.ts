@@ -11,7 +11,7 @@ function parse(text: string): LogState {
 // The log line each entry shows, without what the reader keeps for itself.
 function shown(state: LogState): unknown[] {
   return state.entries.map(
-    ({ use: _u, result: _r, command: _c, git: _g, ids: _i, ...entry }) => entry
+    ({ use: _u, result: _r, command: _c, git: _g, ids: _i, branch: _b, ...entry }) => entry
   )
 }
 
@@ -138,6 +138,70 @@ describe('feed', () => {
       )
     )
     expect(shown(state)).toMatchObject([{ title: 'Edit a.ts', summary: '+2 −1' }])
+  })
+
+  it("summarises a Write that created its file by the result's text, not +0 −0", () => {
+    const state = parse(
+      lines(
+        use(1, 'w1', 'Write', { file_path: '/wt/web-1/n.ts', content: 'x' }),
+        result(2, 'w1', 'File created', { tur: { type: 'create', structuredPatch: [] } })
+      )
+    )
+    expect(shown(state)).toMatchObject([{ title: 'Write n.ts', summary: 'File created' }])
+  })
+
+  it("keeps the record's gitBranch on a tool entry, and drops a pr.url that isn't http(s)", () => {
+    const state = parse(
+      lines(
+        use(1, 'p1', 'Bash', { command: 'git push' }, { gitBranch: 'web-9' }),
+        result(2, 'p1', 'ok', {
+          tur: {
+            gitOperation: { pr: { number: 3, url: 'javascript:alert(1)', action: 'created' } }
+          }
+        })
+      )
+    )
+    expect(state.entries[0]).toMatchObject({ branch: 'web-9', links: [] })
+  })
+
+  it('skips null blocks, result parts and patch hunks without throwing, and a re-feed adds nothing twice', () => {
+    const text = lines(
+      {
+        type: 'assistant',
+        timestamp: at(1),
+        uuid: 'n1',
+        message: { content: [null, { type: 'text', text: 'ok' }] }
+      },
+      use(2, 't1', 'Bash', { command: 'ls' }),
+      {
+        type: 'user',
+        timestamp: at(3),
+        message: { content: [null, { type: 'tool_result', tool_use_id: 't1', content: [null] }] }
+      },
+      use(4, 'e1', 'Edit', { file_path: '/wt/web-1/a.ts' }),
+      result(5, 'e1', 'ok', { tur: { structuredPatch: [null, { lines: ['+a'] }] } }),
+      use(6, 't2', 'Bash', { command: 'pwd' }),
+      result(7, 't2', '/wt')
+    )
+    const half = Buffer.byteLength(
+      lines(
+        ...text
+          .split('\n')
+          .slice(0, 4)
+          .map((l) => JSON.parse(l))
+      )
+    )
+    const state = emptyLog()
+    expect(() => feed(state, Buffer.from(text).subarray(0, half))).not.toThrow()
+    feed(state, Buffer.from(text).subarray(state.offset))
+    expect(
+      shown(state).map((e) => [(e as { id: string }).id, (e as { summary?: unknown }).summary])
+    ).toEqual([
+      ['n1:1', undefined],
+      ['t1', null],
+      ['e1', '+1 −0'],
+      ['t2', '/wt']
+    ])
   })
 })
 

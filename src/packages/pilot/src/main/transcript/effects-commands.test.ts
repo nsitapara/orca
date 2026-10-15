@@ -59,7 +59,27 @@ describe('commandEffects', () => {
     ["glab api graphql -f query='mutation { x }'", [{ kind: 'gitlab_write', target: 'graphql' }]],
     ['cat <<< "foo"\ngit push origin web-1', [{ kind: 'pushed', target: 'web-1' }]],
     ['echo "a <<EOF"\ngit push origin web-1', [{ kind: 'pushed', target: 'web-1' }]],
-    ['FOO=1 env BAR=2 git push origin web-5', [{ kind: 'pushed', target: 'web-5' }]]
+    ['FOO=1 env BAR=2 git push origin web-5', [{ kind: 'pushed', target: 'web-5' }]],
+    ['pilotcli git push-branch "$CURRENT"', [{ kind: 'pushed', target: null }]],
+    ['pilotcli git push-branch $(git branch --show-current)', [{ kind: 'pushed', target: null }]],
+    ['pilotcli git push-branch --expect-sha abc123 web-4', [{ kind: 'pushed', target: 'web-4' }]],
+    [
+      'pilotcli git push-branch --expect-head web-1 --dir /wt/x web-4',
+      [{ kind: 'pushed', target: 'web-4' }]
+    ],
+    ['pilotcli git push-branch --dry-run true web-4', []],
+    ['pilotcli git push-branch --dry-run=true web-4', []],
+    ['pilotcli git push-branch 1c9e04aa3f', [{ kind: 'pushed', target: null }]],
+    ['(cd x && git push origin b)', [{ kind: 'pushed', target: 'b' }]],
+    ['{ git push origin web-6; }', [{ kind: 'pushed', target: 'web-6' }]],
+    ['# done; git push', []],
+    ['echo ok # git push origin x\ngit push origin web-7', [{ kind: 'pushed', target: 'web-7' }]],
+    ['git push origin --delete web-1', []],
+    ['git push -d origin web-1', []],
+    [
+      'glab api -X PUT "projects/1/merge_requests/2?state_event=close"',
+      [{ kind: 'gitlab_write', target: 'projects/1/merge_requests/2' }]
+    ]
   ])('%s', (command, effects) => {
     expect(commandEffects(command)).toEqual(effects)
   })
