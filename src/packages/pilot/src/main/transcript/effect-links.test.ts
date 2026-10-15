@@ -71,3 +71,12 @@ describe('linkEffects', () => {
     ).toBeNull()
   })
 })
+
+describe('linkEffects for a ticket-like branch', () => {
+  it('links a pushed branch named like a ticket to its GitLab tree', () => {
+    const bases = { gitlab: 'https://gitlab.com/g/p', linear: 'https://linear.app/acme' }
+    expect(linkEffects([effect('pushed', 'WEB-12')], bases)[0].url).toBe(
+      'https://gitlab.com/g/p/-/tree/WEB-12'
+    )
+  })
+})
