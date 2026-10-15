@@ -131,6 +131,19 @@ export function clearPendingInboxCard(): void {
   pendingCard = null
 }
 
+export function pendingActivityFilter(): string[] | null {
+  return pendingFilter
+}
+
+// Hooks for a page that is already mounted when showInboxCard / showActivity fire: notify() re-renders them.
+export function usePendingInboxCard(): string | null {
+  return useSyncExternalStore(subscribePilotAutomationsView, pendingInboxCard)
+}
+
+export function usePendingActivityFilter(): string[] | null {
+  return useSyncExternalStore(subscribePilotAutomationsView, pendingActivityFilter)
+}
+
 export function showActivity(ids: string[] | null): void {
   current = 'activity'
   openId = null

@@ -42,4 +42,17 @@ describe('RunStrip', () => {
     render(<RunStrip items={foldStrip(many)} label="Strip" onChip={() => {}} />)
     expect(screen.getByText('+4')).toBeTruthy()
   })
+
+  it('keeps a chip click from reaching the row under it', () => {
+    const onChip = vi.fn()
+    const rowClick = vi.fn()
+    render(
+      <div onClick={rowClick}>
+        <RunStrip items={foldStrip([chip({})])} label="Strip" onChip={onChip} />
+      </div>
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Pilot · MRs · 1 gate · Done' }))
+    expect(onChip).toHaveBeenCalledTimes(1)
+    expect(rowClick).not.toHaveBeenCalled()
+  })
 })
