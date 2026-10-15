@@ -1,7 +1,8 @@
 // @vitest-environment happy-dom
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import type { RunDetail } from '../../shared/api-types'
+import type { RunDetail, RunStatus } from '../../shared/api-types'
+import type { RunEnv } from '../../shared/api-types-env'
 import { testDefinition, testStep } from '../../shared/definition/__fixtures__/definition'
 import { stepAt, testCard, testRun } from '../../shared/run-views/__fixtures__/runs'
 import { chainOf } from '../../shared/run-views/chain'
@@ -85,5 +86,79 @@ describe('the run panel', () => {
     expect(await screen.findByRole('complementary', { name: 'Run' })).toBeTruthy()
     fireEvent.keyDown(document, { key: 'Escape' })
     expect(openRunPanel()).toBeNull()
+  })
+
+  const env = (over: Partial<RunEnv>): RunEnv => ({
+    state: 'ready',
+    mode: 'throwaway',
+    reason: 'uncommitted changes',
+    path: '/tmp/t',
+    sha: null,
+    envFile: null,
+    vars: {},
+    stack: null,
+    removedAt: null,
+    deleteError: null,
+    deleteAttempts: 0,
+    ...over
+  })
+
+  it.each([
+    [
+      'a throwaway with a stack and a failing delete',
+      'done' as RunStatus,
+      env({
+        stack: {
+          kind: 'backend',
+          project: 'agents-r1',
+          urls: { api: 'http://localhost:8123' },
+          log: null
+        },
+        deleteError: 'docker said no',
+        deleteAttempts: 2
+      }),
+      [
+        'Worked in a throwaway: uncommitted changes',
+        'backend stack agents-r1 · api http://localhost:8123',
+        "Couldn't remove it yet (2 tries): docker said no"
+      ]
+    ],
+    [
+      'a preparing run',
+      'running' as RunStatus,
+      env({ state: 'preparing', mode: null, reason: null }),
+      ['Preparing its workspace']
+    ],
+    [
+      'a deferred run',
+      'cancelled' as RunStatus,
+      env({ state: 'deferred', mode: null, reason: 'busy' }),
+      ['Deferred: busy']
+    ],
+    [
+      'an ended run whose delete pilotcli refused',
+      'done' as RunStatus,
+      env({ state: 'stuck', deleteError: 'dirty' }),
+      ['pilotcli refused to remove it (dirty); remove it by hand']
+    ]
+  ])('says where the run worked: %s', async (_name, status, runEnv, texts) => {
+    pilotRpc.mockResolvedValue({ ...detail, run: { ...detail.run, status, env: runEnv } })
+    openRun('r1')
+    render(<RunPanelHost />)
+    for (const text of texts) {
+      expect((await screen.findAllByText(text)).length).toBeGreaterThan(0)
+    }
+  })
+
+  it('shows no cleanup line while the run still goes', async () => {
+    const runEnv = env({ deleteError: 'docker said no', deleteAttempts: 1 })
+    pilotRpc.mockResolvedValue({
+      ...detail,
+      run: { ...detail.run, status: 'running', env: runEnv }
+    })
+    openRun('r1')
+    render(<RunPanelHost />)
+    await screen.findAllByText('Worked in a throwaway: uncommitted changes')
+    expect(screen.queryByText(/Couldn't remove it yet/)).toBeNull()
   })
 })

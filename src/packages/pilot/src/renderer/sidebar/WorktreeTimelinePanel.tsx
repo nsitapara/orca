@@ -11,6 +11,7 @@ import { paintRun } from '../../shared/run-views/paint'
 import { foldStrip, stripOf } from '../../shared/run-views/strip'
 import { clockTime, runStatusLabel, spentLabel, verdictLabel } from '../pages/format'
 import { useAutomationsFeed } from '../run-views/automations-feed'
+import { envCleanup } from '../run-views/env-lines'
 import { openRunFromSidebar } from '../run-views/run-panel-state'
 import { RunStrip } from '../run-views/RunStrip'
 import { WaitingRow } from '../timeline/WaitingRow'
@@ -62,6 +63,7 @@ function PanelRun({
   run: TimelineRun
   summary: AutomationSummary | undefined
 }): React.JSX.Element {
+  const cleanup = envCleanup(run)
   const items = summary ? foldStrip(stripOf(paintRun(summary.chain, { run }).parts), 4) : []
   return (
     <li className="relative border-l border-border pb-3 pl-4">
@@ -80,6 +82,7 @@ function PanelRun({
       </button>
       <div className="text-sm">{run.automationName}</div>
       {run.outcome ? <div className="text-xs text-muted-foreground">{run.outcome}</div> : null}
+      {cleanup ? <div className="text-xs text-muted-foreground">{cleanup}</div> : null}
       {run.inbox.map((item) => (
         <WaitingRow key={item.id} item={item} />
       ))}
