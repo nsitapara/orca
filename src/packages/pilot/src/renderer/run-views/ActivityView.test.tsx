@@ -10,6 +10,7 @@ vi.mock('../api', () => ({ pilotRpc: (...args: unknown[]) => pilotRpc(...args) }
 
 import { ActivityView } from './ActivityView'
 import { resetAutomationsFeed } from './automations-feed'
+import { resetEffectsFeed } from './effects-feed'
 import { closeRunPanel, openRunPanel } from './run-panel-state'
 
 const listed = (over: Partial<ListedRun>): ListedRun => ({
@@ -66,6 +67,7 @@ describe('ActivityView', () => {
   afterEach(() => {
     cleanup()
     resetAutomationsFeed()
+    resetEffectsFeed()
     closeRunPanel()
     pilotRpc.mockReset()
     localStorage.clear()
@@ -112,5 +114,21 @@ describe('ActivityView', () => {
     render(<ActivityView automationIds={null} since={0} limit={100} />)
     expect(await screen.findByText('Gone job run')).toBeTruthy()
     expect(screen.queryByRole('list', { name: 'Run x' })).toBeNull()
+  })
+
+  it('shows what a run changed on its row', async () => {
+    pilotRpc.mockImplementation(async (method: string) => {
+      if (method === 'pilot.automations.list') {
+        return { automations: [summary], errors: [], peopleError: null, missingDirs: [] }
+      }
+      if (method === 'pilot.runs.effects') {
+        return {
+          'run-a': [{ kind: 'pushed', target: 'web-1', url: null, count: 1, stepIdx: 0, at: 1 }]
+        }
+      }
+      return payload
+    })
+    render(<ActivityView automationIds={null} since={0} limit={100} />)
+    expect(await screen.findByText('pushed web-1')).toBeTruthy()
   })
 })

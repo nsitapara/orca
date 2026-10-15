@@ -9,11 +9,14 @@ import { pilotRpc } from '../api'
 import { showAutomationsPage, showInboxCard, showPilotAutomation } from '../pages/automations-view'
 import { errorText, itemUrl, runStatusLabel } from '../pages/format'
 import { openWorktree, worktreeIdForPath } from '../pages/waiting/WorktreeLink'
+import { useRunEffects } from './effects-feed'
+import { WhatItChanged } from './EffectsLine'
 import { envLines } from './env-lines'
 import { RunRail } from './RunRail'
 import { closeRunPanel, openRun } from './run-panel-state'
 
 export const RUN_PANEL_POLL_MS = 10_000
+const LIVE: ReadonlySet<string> = new Set(['running', 'asking'])
 
 // A link that leaves the panel: the page it opens shows without the panel over it.
 function leave(go: () => void): () => void {
@@ -163,6 +166,7 @@ export function RunPanel({
       clearInterval(timer)
     }
   }, [runId])
+  const effects = useRunEffects(runId, detail === null || LIVE.has(detail.run.status))
   const painted = detail ? paintRun(detail.chain, detail) : null
   return (
     <div className="flex flex-col gap-4 p-4">
@@ -180,6 +184,7 @@ export function RunPanel({
       {detail && painted ? (
         <>
           <Header detail={detail} />
+          <WhatItChanged effects={effects} />
           <RunRail
             parts={painted.parts}
             run={detail.run}

@@ -18,6 +18,7 @@ import {
 const pilotRpc = vi.fn()
 vi.mock('../api', () => ({ pilotRpc: (...args: unknown[]) => pilotRpc(...args) }))
 
+import { resetEffectsFeed } from './effects-feed'
 import { RunPanelHost } from './RunPanelHost'
 import { closeRunPanel, openRun, openRunPanel } from './run-panel-state'
 
@@ -51,6 +52,7 @@ describe('the run panel', () => {
     closeRunPanel()
     clearPendingInboxCard()
     showAutomationsPage()
+    resetEffectsFeed()
     pilotRpc.mockReset()
   })
 
@@ -160,5 +162,31 @@ describe('the run panel', () => {
     render(<RunPanelHost />)
     await screen.findAllByText('Worked in a throwaway: uncommitted changes')
     expect(screen.queryByText(/Couldn't remove it yet/)).toBeNull()
+  })
+
+  it('shows what the run changed outside Pilot, linked', async () => {
+    pilotRpc.mockImplementation(async (method: string) => {
+      if (method === 'pilot.runs.effects') {
+        return {
+          r1: [
+            {
+              kind: 'mr_opened',
+              target: '!9',
+              url: 'https://gitlab.example/mr/9',
+              count: 1,
+              stepIdx: 0,
+              at: 1
+            }
+          ]
+        }
+      }
+      return method === 'pilot.runs.get' ? detail : null
+    })
+    openRun('r1')
+    render(<RunPanelHost />)
+    expect(await screen.findByRole('heading', { name: 'What it changed' })).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'opened !9 ↗' }).getAttribute('href')).toBe(
+      'https://gitlab.example/mr/9'
+    )
   })
 })
