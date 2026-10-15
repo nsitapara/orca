@@ -1,21 +1,46 @@
 // @vitest-environment happy-dom
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import type { AutomationSummary, TickOutcome } from '../../shared/api-types'
+import type {
+  ActivityPayload,
+  AutomationSummary,
+  RunDetail,
+  TickOutcome
+} from '../../shared/api-types'
+import { resetAutomationsFeed } from '../run-views/automations-feed'
 import { detail, failedRunTick, summary } from './fixtures'
 
 const pilotRpc = vi.fn()
 vi.mock('../api', () => ({ pilotRpc: (...args: unknown[]) => pilotRpc(...args) }))
 
 import { AutomationView } from './AutomationView'
+import { setPilotAutomationTab } from './automations-view'
+
+const ACTIVITY: ActivityPayload = { live: [], ticks: [failedRunTick], loose: [] }
+const EMPTY: ActivityPayload = { live: [], ticks: [], loose: [] }
+const RUN: RunDetail = {
+  run: { ...failedRunTick.runs[0], fields: {} },
+  automationName: summary.name,
+  chain: summary.chain,
+  tickItem: null,
+  trigger: null,
+  handovers: [],
+  answerRuns: []
+}
 
 function serve(outcome: TickOutcome = { status: 'busy' }): void {
   pilotRpc.mockImplementation(async (method: string) => {
     if (method === 'pilot.automations.get') {
       return detail
     }
-    if (method === 'pilot.automations.activity') {
-      return [failedRunTick]
+    if (method === 'pilot.activity.list') {
+      return ACTIVITY
+    }
+    if (method === 'pilot.runs.get') {
+      return RUN
+    }
+    if (method === 'pilot.automations.list') {
+      return { automations: [summary], errors: [], peopleError: null, missingDirs: [] }
     }
     return outcome
   })
@@ -28,55 +53,59 @@ describe('AutomationView', () => {
     cleanup()
     pilotRpc.mockReset()
     localStorage.clear()
+    resetAutomationsFeed()
+    setPilotAutomationTab('how')
   })
 
-  it('shows a failed launch on the run, and the Overview tab shows the definition', async () => {
+  it('opens on How it runs: the facts, the chain, and the newest run painted on it', async () => {
     serve()
-    render(<AutomationView id="fix-ci" onBack={() => {}} onOpenJob={() => {}} />)
-    expect(await screen.findByText(/Couldn't start: no such repo/)).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: 'Overview' }))
-    expect(screen.getByText(/schedule: manual/)).toBeTruthy()
-  })
-
-  it("shows the Overview's steps", async () => {
-    pilotRpc.mockImplementation(async (method: string) =>
-      method === 'pilot.automations.get' ? detail : []
+    const { container } = render(
+      <AutomationView id="fix-ci" onBack={() => {}} onOpenJob={() => {}} />
     )
-    render(<AutomationView id="fix-ci" onBack={() => {}} onOpenJob={() => {}} />)
-    fireEvent.click(await screen.findByRole('button', { name: 'Overview' }))
-    expect(await screen.findByText('1. fix')).toBeTruthy()
-  })
-
-  it('shows the empty state when there are no ticks', async () => {
-    pilotRpc.mockImplementation(async (method: string) =>
-      method === 'pilot.automations.get' ? detail : []
-    )
-    render(<AutomationView id="fix-ci" onBack={() => {}} onOpenJob={() => {}} />)
-    expect(await screen.findByText('No ticks with anything to do yet.')).toBeTruthy()
-    fireEvent.click(screen.getByRole('switch', { name: 'Hide ticks with nothing to do' }))
-    expect(await screen.findByText('No ticks yet.')).toBeTruthy()
-  })
-
-  it('asks only for the ticks with something to do until the switch is turned off, and remembers that', async () => {
-    serve()
-    render(<AutomationView id="fix-ci" onBack={() => {}} onOpenJob={() => {}} />)
-    const hide = await screen.findByRole('switch', { name: 'Hide ticks with nothing to do' })
-    expect(hide.getAttribute('aria-checked')).toBe('true')
-    expect(calls('pilot.automations.activity').map((c) => c[1])).toEqual([
-      { id: 'fix-ci', limit: 30, skipQuiet: true }
-    ])
-    fireEvent.click(hide)
+    expect(await screen.findByRole('tab', { name: 'How it runs', selected: true })).toBeTruthy()
+    expect(screen.getByText('Run by hand (America/Los_Angeles)')).toBeTruthy()
+    const picker = (await screen.findByRole('combobox', { name: 'Run' })) as HTMLSelectElement
+    await waitFor(() => expect(picker.value).toBe('fix-ci-3'))
     await waitFor(() =>
-      expect(calls('pilot.automations.activity').at(-1)?.[1]).toEqual({
-        id: 'fix-ci',
-        limit: 30,
-        skipQuiet: false
-      })
+      expect(container.querySelector('[data-part="workspace"]')?.getAttribute('data-state')).toBe(
+        'failed'
+      )
     )
-    cleanup()
+  })
+
+  it('shows the bare chain when No run is picked', async () => {
+    serve()
+    const { container } = render(
+      <AutomationView id="fix-ci" onBack={() => {}} onOpenJob={() => {}} />
+    )
+    fireEvent.change(await screen.findByRole('combobox', { name: 'Run' }), {
+      target: { value: '' }
+    })
+    await waitFor(() =>
+      expect(
+        container.querySelector('[data-part="workspace"]')?.getAttribute('data-state')
+      ).toBeNull()
+    )
+  })
+
+  it('shows its Activity, asking only for this automation and only ticks with something to do', async () => {
+    serve()
     render(<AutomationView id="fix-ci" onBack={() => {}} onOpenJob={() => {}} />)
-    const shown = await screen.findByRole('switch', { name: 'Hide ticks with nothing to do' })
-    expect(shown.getAttribute('aria-checked')).toBe('false')
+    fireEvent.click(await screen.findByRole('tab', { name: 'Activity' }))
+    expect(await screen.findByText(/Couldn't start: no such repo/)).toBeTruthy()
+    expect(calls('pilot.activity.list').at(-1)?.[1]).toEqual({
+      automationIds: ['fix-ci'],
+      since: undefined,
+      limit: 30,
+      skipQuiet: true
+    })
+  })
+
+  it('shows its YAML', async () => {
+    serve()
+    render(<AutomationView id="fix-ci" onBack={() => {}} onOpenJob={() => {}} />)
+    fireEvent.click(await screen.findByRole('tab', { name: 'YAML' }))
+    expect(screen.getByText(/schedule: manual/)).toBeTruthy()
   })
 
   it("names a stage's page by its stage, and its crumbs lead to the job's page and to the list", async () => {
@@ -105,7 +134,7 @@ describe('AutomationView', () => {
           missingDirs: []
         }
       }
-      return []
+      return EMPTY
     })
     const onBack = vi.fn()
     const onOpenJob = vi.fn()
@@ -148,8 +177,8 @@ describe('AutomationView', () => {
       if (method === 'pilot.automations.get') {
         return Promise.resolve(detail)
       }
-      if (method === 'pilot.automations.activity') {
-        return Promise.resolve([])
+      if (method === 'pilot.activity.list') {
+        return Promise.resolve(EMPTY)
       }
       return new Promise<TickOutcome>((resolve) => {
         finish = resolve
@@ -169,7 +198,7 @@ describe('AutomationView', () => {
       { id: 'fix-ci' },
       { timeoutMs: 180_000 }
     ])
-    const before = calls('pilot.automations.activity').length
+    const before = calls('pilot.activity.list').length
     finish({
       tickId: null,
       status: 'ok',
@@ -193,7 +222,7 @@ describe('AutomationView', () => {
       'https://linear.app/herasight/issue/WEB-2152'
     )
     // Nothing was stored, so Activity isn't reloaded.
-    expect(calls('pilot.automations.activity')).toHaveLength(before)
+    expect(calls('pilot.activity.list')).toHaveLength(before)
     fireEvent.click(screen.getByRole('button', { name: 'Close' }))
     expect(screen.queryByText('1 checked · 1 would start')).toBeNull()
   })
@@ -213,8 +242,8 @@ describe('AutomationView', () => {
       if (method === 'pilot.automations.get') {
         return detail
       }
-      if (method === 'pilot.automations.activity') {
-        return []
+      if (method === 'pilot.activity.list') {
+        return EMPTY
       }
       throw new Error("Pilot isn't running: store won't open")
     })
@@ -243,8 +272,8 @@ describe('AutomationView', () => {
       if (method === 'pilot.automations.get') {
         return Promise.resolve(detail)
       }
-      if (method === 'pilot.automations.activity') {
-        return Promise.resolve([])
+      if (method === 'pilot.activity.list') {
+        return Promise.resolve(EMPTY)
       }
       return new Promise<TickOutcome>((resolve) => {
         finish = resolve
@@ -255,9 +284,9 @@ describe('AutomationView', () => {
     )
     fireEvent.click(await screen.findByRole('button', { name: 'Dry run' }))
     unmount()
-    const before = calls('pilot.automations.activity').length
+    const before = calls('pilot.activity.list').length
     finish({ status: 'busy' })
     await new Promise((r) => setTimeout(r, 0))
-    expect(calls('pilot.automations.activity')).toHaveLength(before)
+    expect(calls('pilot.activity.list')).toHaveLength(before)
   })
 })
