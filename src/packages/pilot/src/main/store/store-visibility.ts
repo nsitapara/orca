@@ -27,7 +27,12 @@ export class VisibilityStore {
   }
 
   // Ended runs since `since` that Nish hasn't acknowledged, newest first: Done for you's candidates (spec §3).
-  unacknowledged(automationIds: readonly string[] | null, since: number, limit: number): RunRow[] {
+  unacknowledged(
+    automationIds: readonly string[] | null,
+    since: number,
+    limit: number,
+    offset = 0
+  ): RunRow[] {
     const only = automationIds
       ? ` AND automation_id IN (${automationIds.map(() => '?').join(', ') || 'NULL'})`
       : ''
@@ -35,16 +40,16 @@ export class VisibilityStore {
       .prepare(
         `SELECT * FROM runs WHERE acknowledged_at IS NULL AND status IN ${ENDED}
          AND COALESCE(finished_at, started_at) >= ?${only}
-         ORDER BY COALESCE(finished_at, started_at) DESC LIMIT ?`
+         ORDER BY COALESCE(finished_at, started_at) DESC LIMIT ? OFFSET ?`
       )
-      .all(since, ...(automationIds ?? []), limit)
+      .all(since, ...(automationIds ?? []), limit, offset)
       .map((r) => toRun(r as Record<string, unknown>))
   }
 
-  // Got it: the runs it acknowledged now (one already acknowledged, or unknown, isn't counted).
+  // Got it: the ended runs it acknowledged now (one already acknowledged, still running or unknown isn't counted).
   acknowledge(runIds: readonly string[], at: number): string[] {
     const set = this.db.prepare(
-      'UPDATE runs SET acknowledged_at = ? WHERE id = ? AND acknowledged_at IS NULL'
+      `UPDATE runs SET acknowledged_at = ? WHERE id = ? AND acknowledged_at IS NULL AND status IN ${ENDED}`
     )
     return runIds.filter((id) => Number(set.run(at, id).changes) > 0)
   }

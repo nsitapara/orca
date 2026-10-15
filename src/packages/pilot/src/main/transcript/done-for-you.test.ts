@@ -37,9 +37,18 @@ function setup() {
   const store = PilotStore.open(':memory:')
   const loaded = {
     ...loadDefinitions([]),
+    people: {
+      people: [
+        { id: 'nish', name: 'Nish', gitlab: 'nish-gl' },
+        { id: 'emil', name: 'Emil' }
+      ],
+      groups: [{ id: 'team', name: 'Team', members: ['nish', 'emil'] }]
+    },
     definitions: [
       testDefinition({ id: 'mine', inbox: 'nish' }),
-      testDefinition({ id: 'theirs', inbox: 'emil' })
+      testDefinition({ id: 'theirs', inbox: 'emil' }),
+      testDefinition({ id: 'tpl', inbox: '{mr.author}' }),
+      testDefinition({ id: 'grp', inbox: 'team' })
     ]
   }
   const ctx = {
@@ -83,7 +92,7 @@ function setup() {
   const effects = {
     forRun: async (id: string) => (id === 'changed' || id === 'other' ? [pushed] : [])
   } as unknown as RunEffectsReader
-  return { store, ctx: ctx as never, effects, pushed }
+  return { store, ctx: ctx as never, effects, pushed, run }
 }
 
 describe('doneForYou', () => {
@@ -98,7 +107,121 @@ describe('doneForYou', () => {
   })
 })
 
+function tickRun(store: PilotStore, id: string, automationId: string, author: string) {
+  const tick = store.startTick(automationId, NOW - 6000)
+  store.recordDecisions(
+    tick,
+    [
+      {
+        key: id,
+        label: id,
+        verdict: 'started',
+        reason: '',
+        checks: [],
+        onceKey: id,
+        fields: { 'mr.author': author }
+      }
+    ],
+    new Map([[id, id]])
+  )
+  store.runs.create({
+    id,
+    automationId,
+    tickId: tick,
+    itemKey: id,
+    itemLabel: id,
+    worktreePath: null,
+    startedAt: NOW - 5000,
+    status: 'done'
+  })
+  store.runs.update(id, { finishedAt: NOW - 1500 })
+}
+
+describe('doneForYou routing and paging', () => {
+  it("routes a template inbox by the run's own fields, and a group to its members", async () => {
+    const { store, ctx, run } = setup()
+    const everything = {
+      forRun: async () => [{ kind: 'pushed', target: 't', url: null, count: 1, stepIdx: 0, at: 1 }]
+    } as unknown as RunEffectsReader
+    tickRun(store, 'by-handle', 'tpl', 'nish-gl')
+    tickRun(store, 'by-id', 'tpl', 'nish')
+    tickRun(store, 'by-other', 'tpl', 'emil')
+    run('grouped', 'grp', NOW - 1200)
+    const ids = (await doneForYou(ctx, everything, 'nish', NOW)).map((d) => d.run.id)
+    expect(ids).toContain('by-handle')
+    expect(ids).toContain('by-id')
+    expect(ids).toContain('grouped')
+    expect(ids).not.toContain('by-other')
+    expect(ids).not.toContain('other')
+  })
+
+  it('pages past quiet runs to a run with effects', async () => {
+    const { store, ctx } = setup()
+    store.runs.create({
+      id: 'busy',
+      automationId: 'mine',
+      tickId: null,
+      itemKey: 'b',
+      itemLabel: 'b',
+      worktreePath: null,
+      startedAt: 1,
+      status: 'done'
+    })
+    store.runs.update('busy', { finishedAt: NOW - 9000 })
+    for (let i = 0; i < 120; i += 1) {
+      store.runs.create({
+        id: `q${i}`,
+        automationId: 'mine',
+        tickId: null,
+        itemKey: 'q',
+        itemLabel: 'q',
+        worktreePath: null,
+        startedAt: 1,
+        status: 'done'
+      })
+      store.runs.update(`q${i}`, { finishedAt: NOW - 8000 + i })
+    }
+    const effects = {
+      forRun: async (id: string) =>
+        id === 'busy'
+          ? [{ kind: 'pushed', target: 't', url: null, count: 1, stepIdx: 0, at: 1 }]
+          : []
+    } as unknown as RunEffectsReader
+    expect((await doneForYou(ctx, effects, 'nish', NOW)).map((d) => d.run.id)).toContain('busy')
+  })
+})
+
 describe('acknowledgeRuns', () => {
+  it('keeps a duplicated id once, and not the defaults of a run acknowledged earlier or still running', () => {
+    const { store, ctx, run } = setup()
+    expect(acknowledgeRuns(ctx, ['defaulted', 'defaulted'], 'desktop', NOW)).toEqual({
+      acknowledged: ['defaulted'],
+      kept: ['d1'],
+      notKept: []
+    })
+    run('early', 'mine', NOW - 900)
+    store.inbox.add(card('d3', 'early', 'default'))
+    store.visibility.acknowledge(['early'], NOW - 5)
+    store.runs.create({
+      id: 'live',
+      automationId: 'mine',
+      tickId: null,
+      itemKey: 'l',
+      itemLabel: 'l',
+      worktreePath: null,
+      startedAt: 1,
+      status: 'running'
+    })
+    store.inbox.add(card('d4', 'live', 'default'))
+    expect(acknowledgeRuns(ctx, ['early', 'live'], 'desktop', NOW)).toEqual({
+      acknowledged: [],
+      kept: [],
+      notKept: []
+    })
+    expect(store.inbox.get('d3')).toMatchObject({ status: 'open' })
+    expect(store.inbox.get('d4')).toMatchObject({ status: 'open' })
+  })
+
   it('acknowledges the runs and keeps their open defaults, reporting a card it could not keep', () => {
     const { store, ctx } = setup()
     store.inbox.add(card('d2', 'defaulted', 'default'))

@@ -101,6 +101,7 @@ describe('VisibilityStore acknowledgements', () => {
     add('live', 'a', 'running', null)
     expect(store.visibility.unacknowledged(null, 10, 50).map((r) => r.id)).toEqual(['two', 'one'])
     expect(store.visibility.unacknowledged(['a'], 10, 50).map((r) => r.id)).toEqual(['one'])
+    expect(store.visibility.acknowledge(['live'], 98)).toEqual([])
     expect(store.visibility.acknowledge(['one', 'nope'], 99)).toEqual(['one'])
     expect(store.visibility.acknowledge(['one'], 100)).toEqual([])
     expect(store.runs.get('one')?.acknowledgedAt).toBe(99)
