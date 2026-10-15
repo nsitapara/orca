@@ -21,6 +21,23 @@ function Heading({ children }: { children: string }): React.JSX.Element {
   )
 }
 
+function tagHandler(onTag: Tags['onTag'], automationId: string): (() => void) | undefined {
+  if (!onTag) {
+    return undefined
+  }
+  return () => onTag(automationId)
+}
+
+// The list was cut: nothing older than this is shown.
+function reachText(reach: number): string {
+  const at = new Date(reach).toLocaleString(undefined, {
+    weekday: 'short',
+    hour: 'numeric',
+    minute: '2-digit'
+  })
+  return `Showing back to ${at}`
+}
+
 function RunSection({
   title,
   runs,
@@ -56,11 +73,13 @@ function Body({
   tags,
   onTag,
   notes,
+  reach,
   empty
 }: {
   groups: ActivityGroups
   byId: Map<string, AutomationSummary>
   notes: Note[]
+  reach: number | null
   empty: string
 } & Tags): React.JSX.Element {
   if (!groups.running.length && !groups.waiting.length && !groups.days.length && !notes.length) {
@@ -81,7 +100,7 @@ function Body({
                   tick={e.tick}
                   byId={byId}
                   tag={tags?.[e.tick.automationId]}
-                  onTag={onTag ? () => onTag(e.tick.automationId) : undefined}
+                  onTag={tagHandler(onTag, e.tick.automationId)}
                 />
               ) : (
                 <ActivityRunRow
@@ -102,6 +121,9 @@ function Body({
           ))}
         </ol>
       ) : null}
+      {typeof reach !== 'number' ? null : (
+        <p className="mt-3 text-xs text-muted-foreground">{reachText(reach)}</p>
+      )}
     </>
   )
 }
@@ -170,6 +192,7 @@ export function ActivityView({
           tags={tags}
           onTag={onTag}
           notes={notes}
+          reach={loaded.payload.reach}
           empty={emptyActivityText(hideQuiet)}
         />
       ) : null}

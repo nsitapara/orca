@@ -43,8 +43,15 @@ function mergedState(parts: readonly ChainPart[]): PartState | null {
   return PRESSING.find((s) => states.includes(s)) ?? null
 }
 
+// The part the chip opens the panel at: the one with the most pressing state, else the first.
+function pressingPart(parts: readonly ChainPart[]): string {
+  const state = mergedState(parts)
+  const worst = parts.find((p) => isPainted(p) && p.state === state)
+  return (worst ?? parts[0])?.key ?? 'starts'
+}
+
 function chip(key: string, label: string, who: Who, parts: readonly ChainPart[]): StripChip {
-  return { key, label, who, state: mergedState(parts), runIds: [], part: parts[0]?.key ?? 'starts' }
+  return { key, label, who, state: mergedState(parts), runIds: [], part: pressingPart(parts) }
 }
 
 // "MRs · 2 gates": what it looks at and how many checks it makes.
@@ -85,8 +92,13 @@ export function stripOf(parts: readonly ChainPart[]): StripChip[] {
 export function liveStrip(chain: readonly ChainPart[], live: readonly ActivityRun[]): StripChip[] {
   const chips = stripOf(chain)
   for (const run of live) {
-    for (const lit of stripOf(paintRun(chain, { run }).parts)) {
+    const painted = paintRun(chain, { run })
+    for (const lit of stripOf(painted.parts)) {
       if (!lit.state || !LIT.includes(lit.state)) {
+        continue
+      }
+      // A run older than a YAML change: its step N isn't the chain's step N, so no step chip is lit for it.
+      if (painted.drifted && lit.key.startsWith('step:')) {
         continue
       }
       const target = chips.find((c) => c.key === lit.key)

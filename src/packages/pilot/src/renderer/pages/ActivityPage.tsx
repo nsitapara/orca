@@ -11,6 +11,9 @@ import {
 } from './automations-view'
 
 // Every run across automations for the last week (spec §3, Activity), with a chip per automation to narrow it.
+// Mirrors MAX_RUNS_LIMIT in main/rpc/methods-runs.ts: the most ticks one request may ask for.
+const MAX_RUNS_LIMIT = 300
+
 export function ActivityPage(): React.JSX.Element {
   const { list } = useAutomationsFeed()
   const pending = usePendingActivityFilter()
@@ -57,7 +60,11 @@ export function ActivityPage(): React.JSX.Element {
           </button>
         ))}
       </div>
-      <ActivityView automationIds={chosen.length > 0 ? chosen : null} since={since} limit={100} />
+      <ActivityView
+        automationIds={chosen.length > 0 ? chosen : null}
+        since={since}
+        limit={MAX_RUNS_LIMIT}
+      />
     </div>
   )
 }

@@ -7,9 +7,18 @@ import { openRun } from './run-panel-state'
 
 type Asked = Pick<InboxListRow, 'automationId' | 'stepIdx'>
 
-// The part a card waits on: its step, or the ask before any step.
-export function askingPart(item: Pick<InboxListRow, 'stepIdx'>): string {
-  return item.stepIdx === null ? 'ask' : `step:${item.stepIdx}`
+// The part a card waits on: its step (an answer run's steps are keyed answer:N), or the ask before any step.
+export function askingPart(
+  item: Pick<InboxListRow, 'stepIdx'>,
+  run: Pick<ActivityRun, 'trigger'>
+): string {
+  if (item.stepIdx === null) {
+    return 'ask'
+  }
+  if (run.trigger === 'answer') {
+    return `answer:${item.stepIdx}`
+  }
+  return `step:${item.stepIdx}`
 }
 
 export function askedWhere(
@@ -49,7 +58,11 @@ export function FromRun({
         onChip={(chip) => openRun(run.id, chip.part)}
       />
       <span>{askedWhere(item, run, steps)}</span>
-      <button type="button" className="underline" onClick={() => openRun(run.id, askingPart(item))}>
+      <button
+        type="button"
+        className="underline"
+        onClick={() => openRun(run.id, askingPart(item, run))}
+      >
         Open run
       </button>
     </div>

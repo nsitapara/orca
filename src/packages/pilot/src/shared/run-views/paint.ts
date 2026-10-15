@@ -12,9 +12,8 @@ import type {
 import { homeOf, type EnvState } from '../api-types-env'
 import type { ActivityRun } from '../api-types-runs'
 import { envWhereLine } from '../env-text'
-import type { AgentKind } from '../definition/types'
-import { agentWord } from './chain-text'
-import { chainPart, type ChainPart } from './chain'
+import type { ChainPart } from './chain'
+import { hasDrifted, storedStepPart } from './stored-steps'
 
 export type PartState =
   | 'done'
@@ -42,10 +41,13 @@ export type PaintInput = {
   trigger?: TickTrigger | null
   handovers?: readonly HandoverRow[]
   answerRuns?: readonly RunRow[]
+  // The handovers whose tick started this run: the run on the other side of a stage-2 run.
+  receivedFrom?: readonly HandoverRow[]
 }
 // drifted: a stored step doesn't match the YAML at its index, so the steps shown are the run's own (spec §1).
 export type PaintedRun = { parts: PaintedPart[]; drifted: boolean }
 
+const FIELD_VALUE_MAX = 24
 const LIVE: readonly RunStatus[] = ['running', 'asking']
 const STEP_STATE: Record<StepStatus, PartState> = {
   pending: 'not_reached',
@@ -117,7 +119,12 @@ function fieldValue(p: ChainPart, item: TickItemRow | null): string | null {
   if (!item || !key || !Object.hasOwn(item.fields, key)) {
     return null
   }
-  return `${p.name} = ${String(item.fields[key])}`
+  const value = String(item.fields[key])
+  // A field can hold a line of card text (09's card_context): only a short, one-line value shows.
+  if (value.length > FIELD_VALUE_MAX || value.includes('\n')) {
+    return null
+  }
+  return `${p.name} = ${value}`
 }
 
 function paintChecks(p: ChainPart, item: TickItemRow | null): PaintedPart {
@@ -173,7 +180,8 @@ function paintBefore(p: ChainPart, input: PaintInput): PaintedPart {
     return painted(p, 'none')
   }
   if (p.kind === 'starts') {
-    return painted(p, 'done', startedBy(run, input.trigger ?? null))
+    const from = input.receivedFrom?.[0]?.senderRunId ?? null
+    return painted(p, 'done', startedBy(run, input.trigger ?? null), { linkRunId: from })
   }
   if (p.kind === 'field') {
     return painted(p, 'done', fieldValue(p, input.tickItem ?? null))
@@ -233,38 +241,6 @@ function paintAfter(p: ChainPart, input: PaintInput): PaintedPart {
   return paintHandover(p, input)
 }
 
-function agentRunsText(agent: AgentKind, skill: string | null): string {
-  if (skill) {
-    return `${agentWord(agent)} · ${skill}`
-  }
-  return agentWord(agent)
-}
-
-// A stored step as a part of its own: a run older than a YAML change, or an answer run's step.
-function storedStepPart(s: StepRow, prefix: 'step' | 'answer'): ChainPart {
-  const agent = s.agent === 'claude' || s.agent === 'codex' ? s.agent : null
-  const runs = agent ? agentRunsText(agent, s.skill) : ''
-  return chainPart({
-    key: `${prefix}:${s.idx}`,
-    kind: 'step',
-    group: prefix === 'answer' ? 'asks' : 'steps',
-    who: agent ? 'agent' : 'script',
-    name: s.name,
-    short: agent ? `${agentWord(agent)} · ${s.skill ?? s.name}` : s.name,
-    runs,
-    agent,
-    skill: s.skill,
-    when: s.whenExpr,
-    stepIdx: s.idx
-  })
-}
-
-function hasDrifted(chain: readonly ChainPart[], steps: readonly StepRow[]): boolean {
-  return steps.some(
-    (s) => chain.find((p) => p.kind === 'step' && p.stepIdx === s.idx)?.name !== s.name
-  )
-}
-
 // An answer run (trigger answer, no tick): nothing before any step applies; its own steps sit under Answers, which
 // links the run it answers.
 function answerRunParts(chain: readonly ChainPart[], input: PaintInput): PaintedPart[] {
@@ -286,10 +262,13 @@ export function paintRun(chain: readonly ChainPart[], input: PaintInput): Painte
   if (run.trigger === 'answer') {
     return { parts: answerRunParts(chain, input), drifted: false }
   }
-  const drifted = hasDrifted(chain, run.steps)
-  const steps = drifted
-    ? run.steps.map((s) => storedStepPart(s, 'step'))
-    : chain.filter((p) => p.kind === 'step')
+  // An import run's step is Pilot's own `imported`, never the YAML's: its stored steps show and nothing has drifted.
+  const imported = run.trigger === 'import'
+  const drifted = !imported && hasDrifted(chain, run.steps)
+  const steps =
+    drifted || imported
+      ? run.steps.map((s) => storedStepPart(s, 'step'))
+      : chain.filter((p) => p.kind === 'step')
   return {
     parts: [
       ...chain.filter((p) => p.group === 'before').map((p) => paintBefore(p, input)),

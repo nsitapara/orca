@@ -128,7 +128,7 @@ function serve(
     if (method === 'pilot.activity.list') {
       const ids = (params as { automationIds?: string[] }).automationIds ?? Object.keys(TICKS)
       const ticks = ids.flatMap((id) => TICKS[id] ?? []).sort((a, b) => b.startedAt - a.startedAt)
-      return { live: [], ticks, loose: [] }
+      return { live: [], ticks, loose: [], reach: null }
     }
     throw new Error(`unexpected ${method}`)
   })
