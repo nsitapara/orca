@@ -35,6 +35,13 @@ export const STUCK_TICK_MS = 60 * 60_000
 export const INTERRUPTED = 'interrupted'
 // How long opening the store waits on a lock another process holds (an old Pilot still quitting).
 export const STORE_BUSY_TIMEOUT_MS = 5_000
+// A tick that finished with nothing to do: it didn't fail, warned of nothing, started no run, wasn't triggered and read
+// or expired no handover, and every item it checked was not due (or out of scope). Activity can leave these out.
+const QUIET_TICK = `(ticks.status = 'ok' AND ticks.warnings_json = '[]' AND ticks.trigger_json IS NULL
+  AND NOT EXISTS (SELECT 1 FROM runs WHERE runs.tick_id = ticks.id)
+  AND NOT EXISTS (SELECT 1 FROM handovers WHERE handovers.tick_id = ticks.id)
+  AND NOT EXISTS (SELECT 1 FROM json_each(ticks.counts_json)
+    WHERE json_each.key NOT IN ('notdue', 'out_of_scope') AND json_each.value > 0))`
 
 // Pilot's startup logs this, and the trace marks the services phase failed with it.
 function storeOpenError(path: string, busyTimeoutMs: number, error: unknown): Error {
@@ -224,9 +231,13 @@ export class PilotStore {
     return toTick(r as never)
   }
 
-  listTicks(automationId: string, limit: number): TickRow[] {
+  // `skipQuiet`: leave out each tick that finished with nothing to do (QUIET_TICK); `limit` counts only those kept.
+  listTicks(automationId: string, limit: number, skipQuiet = false): TickRow[] {
+    const quiet = skipQuiet ? `AND NOT ${QUIET_TICK}` : ''
     return this.db
-      .prepare('SELECT * FROM ticks WHERE automation_id = ? ORDER BY started_at DESC LIMIT ?')
+      .prepare(
+        `SELECT * FROM ticks WHERE automation_id = ? ${quiet} ORDER BY started_at DESC LIMIT ?`
+      )
       .all(automationId, limit)
       .map((r) => toTick(r as never))
   }
