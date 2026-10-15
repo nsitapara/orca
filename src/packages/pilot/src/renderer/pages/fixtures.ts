@@ -3,7 +3,16 @@ import type {
   AutomationDetailPayload,
   AutomationSummary
 } from '../../shared/api-types'
+import { testDefinition, testStep } from '../../shared/definition/__fixtures__/definition'
 import type { StepDef } from '../../shared/definition/types'
+import { chainOf } from '../../shared/run-views/chain'
+
+const fixCi = testDefinition({
+  id: 'fix-ci',
+  name: 'Fix failed CI',
+  checks: [{ kind: 'worktree_clean' }],
+  steps: [testStep({ name: 'fix', skill: 'fix-gitlab-ci', mode: 'fix', prompt: 'Fix it.' })]
+})
 
 export const summary: AutomationSummary = {
   id: 'fix-ci',
@@ -18,7 +27,9 @@ export const summary: AutomationSummary = {
   inbox: '{mr.author}',
   nextTickAt: null,
   lastTick: null,
-  job: null
+  job: null,
+  chain: chainOf(fixCi, [fixCi]),
+  live: []
 }
 
 export const detail: AutomationDetailPayload = {

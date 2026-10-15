@@ -283,4 +283,33 @@ describe('Pilot API handlers', () => {
     ])
     expect(getAutomation(job, 'start').handovers).toEqual([])
   })
+
+  it('gives each automation its chain and its live runs with their steps', () => {
+    const { ctx, store } = context()
+    const run = (id: string, status: 'running' | 'done') =>
+      store.runs.create({
+        id,
+        automationId: 'ci',
+        tickId: null,
+        itemKey: id,
+        itemLabel: id,
+        worktreePath: null,
+        startedAt: 1,
+        status
+      })
+    run('live', 'running')
+    run('finished', 'done')
+    store.runs.createStep({
+      runId: 'live',
+      idx: 0,
+      name: 'step1',
+      agent: 'claude',
+      skill: null,
+      startedAt: 1
+    })
+    const [ci] = listAutomations(ctx).automations
+    expect(ci.chain.map((p) => p.key)).toEqual(['starts', 'picks', 'gates', 'workspace', 'step:0'])
+    expect(ci.live.map((r) => [r.id, r.steps.length])).toEqual([['live', 1]])
+    expect(getAutomation(ctx, 'ci').summary.live.map((r) => r.id)).toEqual(['live'])
+  })
 })

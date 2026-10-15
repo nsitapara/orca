@@ -3,6 +3,7 @@ import type { StageHandovers, TickHandover, TickHandoverFacts } from './api-type
 import type { RunEnv } from './api-types-env'
 import type { StoredResult } from './api-types-result'
 import type { ActivityRun } from './api-types-runs'
+import type { ChainPart } from './run-views/chain'
 import type { DetailsRef } from './details'
 import type { InboxPreparation, PreparationRef } from './preparation'
 
@@ -300,6 +301,10 @@ export type AutomationSummary = {
   lastTick: TickRow | null
   // Its stage of a job of several automations (job: block); null: a job of its own.
   job: JobDef | null
+  // Its parts in run order (chainOf), for the list's strip and the rail.
+  chain: ChainPart[]
+  // Its runs still going or waiting on a person, with their steps: the list's lit chips.
+  live: ActivityRun[]
 }
 export type AutomationListPayload = {
   automations: AutomationSummary[]
