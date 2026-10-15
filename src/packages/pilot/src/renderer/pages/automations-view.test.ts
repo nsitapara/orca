@@ -63,14 +63,15 @@ describe('automations view', () => {
     setPilotAutomationsView('automations')
   })
 
-  it('wakes a mounted Inbox on each new card, and a mounted Activity on each new filter', () => {
+  it('wakes a mounted Inbox on each card, even the one it already took, and Activity likewise', () => {
     setPilotAutomationsView('inbox')
     const card = renderHook(() => usePendingInboxCard())
     act(() => showInboxCard('c1'))
     expect(card.result.current).toBe('c1')
     act(() => clearPendingInboxCard())
-    act(() => showInboxCard('c2'))
-    expect(card.result.current).toBe('c2')
+    expect(card.result.current).toBeNull()
+    act(() => showInboxCard('c1'))
+    expect(card.result.current).toBe('c1')
     card.unmount()
 
     setPilotAutomationsView('activity')
@@ -79,6 +80,12 @@ describe('automations view', () => {
     expect(filter.result.current).toEqual(['a'])
     act(() => showActivity(['b']))
     expect(filter.result.current).toEqual(['b'])
+    act(() => {
+      takeActivityFilter()
+    })
+    expect(filter.result.current).toBeNull()
+    act(() => showActivity(['a']))
+    expect(filter.result.current).toEqual(['a'])
     filter.unmount()
   })
 })
