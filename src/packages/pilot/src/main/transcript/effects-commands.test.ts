@@ -43,6 +43,22 @@ describe('commandEffects', () => {
       [{ kind: 'ticket_updated', target: 'WEB-9' }]
     ],
     ['orca linear issue WEB-9 --json', []],
+    [
+      'glab api -X POST \\\n  projects/1/jobs/5/retry',
+      [{ kind: 'gitlab_write', target: 'projects/1/jobs/5/retry' }]
+    ],
+    ['git push -u \\\n  origin web-1', [{ kind: 'pushed', target: 'web-1' }]],
+    ['glab mr update --title "Fix login bug" --ready', [{ kind: 'mr_updated', target: null }]],
+    ['glab mr note -m 5 12', [{ kind: 'mr_commented', target: '!12' }]],
+    ['pilotcli git push-branch --format text web-3', [{ kind: 'pushed', target: 'web-3' }]],
+    ['git push -o ci.skip origin web-1', [{ kind: 'pushed', target: 'web-1' }]],
+    ['git push origin "$BRANCH"', [{ kind: 'pushed', target: null }]],
+    ['git push origin $(git branch --show-current)', [{ kind: 'pushed', target: null }]],
+    ['git push origin web-1 > /tmp/push.log', [{ kind: 'pushed', target: 'web-1' }]],
+    ["glab api graphql -f query='{ currentUser { id } }'", []],
+    ["glab api graphql -f query='mutation { x }'", [{ kind: 'gitlab_write', target: 'graphql' }]],
+    ['cat <<< "foo"\ngit push origin web-1', [{ kind: 'pushed', target: 'web-1' }]],
+    ['echo "a <<EOF"\ngit push origin web-1', [{ kind: 'pushed', target: 'web-1' }]],
     ['FOO=1 env BAR=2 git push origin web-5', [{ kind: 'pushed', target: 'web-5' }]]
   ])('%s', (command, effects) => {
     expect(commandEffects(command)).toEqual(effects)
