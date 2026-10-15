@@ -7,6 +7,7 @@ import {
   setPilotOpenAutomation,
   setPilotOpenJob
 } from './automations-view'
+import { resetAutomationsFeed } from '../run-views/automations-feed'
 import { detail, summary } from './fixtures'
 
 const pilotRpc = vi.fn()
@@ -51,6 +52,9 @@ function serve(payload: AutomationListPayload): void {
     if (method === 'pilot.inbox.list') {
       return { items: [], people: [], groups: [], automations: [] }
     }
+    if (method === 'pilot.activity.list') {
+      return { live: [], ticks: [], loose: [] }
+    }
     if (method === 'pilot.queue.list') {
       return { entries: [] }
     }
@@ -61,10 +65,22 @@ function serve(payload: AutomationListPayload): void {
 describe('PilotAutomationsPage', () => {
   afterEach(() => {
     cleanup()
+    resetAutomationsFeed()
     pilotRpc.mockReset()
     setPilotOpenAutomation(null)
     setPilotOpenJob(null)
     setPilotAutomationsView('automations')
+  })
+
+  it('opens Activity across automations from the list header, and goes back from its crumb', async () => {
+    serve(list)
+    render(<PilotAutomationsPage />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Activity' }))
+    expect(await screen.findByRole('heading', { name: 'Activity' })).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Automations' }))
+    expect(
+      await screen.findByText('Each automation is a YAML file in an automation folder.')
+    ).toBeTruthy()
   })
 
   it('opens a job of several automations as one page; a stage opens from it, and its crumbs lead to the job and the list', async () => {

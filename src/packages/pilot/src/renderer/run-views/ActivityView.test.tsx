@@ -1,0 +1,116 @@
+// @vitest-environment happy-dom
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import type { ActivityPayload, ListedRun } from '../../shared/api-types'
+import { stepAt, testCard, testRun } from '../../shared/run-views/__fixtures__/runs'
+import { summary } from '../pages/fixtures'
+
+const pilotRpc = vi.fn()
+vi.mock('../api', () => ({ pilotRpc: (...args: unknown[]) => pilotRpc(...args) }))
+
+import { ActivityView } from './ActivityView'
+import { resetAutomationsFeed } from './automations-feed'
+import { closeRunPanel, openRunPanel } from './run-panel-state'
+
+const listed = (over: Partial<ListedRun>): ListedRun => ({
+  ...testRun({ automationId: 'fix-ci', ...over }),
+  fields: {}
+})
+const payload: ActivityPayload = {
+  live: [
+    listed({ id: 'run-a', itemLabel: '!1561 web-1', steps: [stepAt(0, 'fix', 'running')] }),
+    listed({
+      id: 'run-b',
+      itemLabel: '!1477 web-2',
+      status: 'needs_you',
+      steps: [stepAt(0, 'fix', 'done')],
+      inbox: [testCard({ id: 'c1', automationId: 'fix-ci', runId: 'run-b', stepIdx: 0 })]
+    })
+  ],
+  ticks: [
+    {
+      id: 9,
+      automationId: 'fix-ci',
+      startedAt: Date.now() - 1_000,
+      finishedAt: Date.now(),
+      status: 'ok',
+      error: null,
+      counts: { started: 1 },
+      items: [],
+      runs: [
+        testRun({
+          id: 'fix-ci-3',
+          automationId: 'fix-ci',
+          status: 'failed',
+          outcome: "Couldn't start: no such repo"
+        })
+      ]
+    }
+  ],
+  loose: []
+}
+
+function serve(): void {
+  pilotRpc.mockImplementation(async (method: string) => {
+    if (method === 'pilot.automations.list') {
+      return { automations: [summary], errors: [], peopleError: null, missingDirs: [] }
+    }
+    return payload
+  })
+}
+
+const activityCalls = () =>
+  pilotRpc.mock.calls.filter((c) => c[0] === 'pilot.activity.list').map((c) => c[1])
+
+describe('ActivityView', () => {
+  afterEach(() => {
+    cleanup()
+    resetAutomationsFeed()
+    closeRunPanel()
+    pilotRpc.mockReset()
+    localStorage.clear()
+  })
+
+  it("lists running runs, runs waiting on you and today's ticks, each run with its strip that opens it", async () => {
+    serve()
+    render(<ActivityView automationIds={null} since={0} limit={100} />)
+    const running = await screen.findByRole('region', { name: 'Running now' })
+    expect(within(running).getByText('!1561 web-1')).toBeTruthy()
+    expect(
+      within(screen.getByRole('region', { name: 'Waiting on you' })).getByText('!1477 web-2')
+    ).toBeTruthy()
+    const today = screen.getByRole('region', { name: 'Earlier today' })
+    expect(within(today).getByText("Couldn't start: no such repo")).toBeTruthy()
+    fireEvent.click(
+      await within(running).findByRole('button', { name: /Claude · fix-gitlab-ci · Running/ })
+    )
+    expect(openRunPanel()).toEqual({ runId: 'run-a', part: 'step:0' })
+  })
+
+  it('asks for the named automations, and only ticks with something to do until the switch is turned off', async () => {
+    serve()
+    render(<ActivityView automationIds={['fix-ci']} since={null} limit={30} />)
+    await waitFor(() =>
+      expect(activityCalls()).toEqual([
+        { automationIds: ['fix-ci'], since: undefined, limit: 30, skipQuiet: true }
+      ])
+    )
+    fireEvent.click(screen.getByRole('switch', { name: 'Hide ticks with nothing to do' }))
+    await waitFor(() => expect(activityCalls().at(-1)).toMatchObject({ skipQuiet: false }))
+  })
+
+  it("shows a run of an automation that isn't loaded, without a strip", async () => {
+    pilotRpc.mockImplementation(async (method: string) =>
+      method === 'pilot.automations.list'
+        ? { automations: [], errors: [], peopleError: null, missingDirs: [] }
+        : {
+            live: [listed({ id: 'x', automationId: 'removed', itemLabel: 'Gone job run' })],
+            ticks: [],
+            loose: []
+          }
+    )
+    render(<ActivityView automationIds={null} since={0} limit={100} />)
+    expect(await screen.findByText('Gone job run')).toBeTruthy()
+    expect(screen.queryByRole('list', { name: 'Run x' })).toBeNull()
+  })
+})

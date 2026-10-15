@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import type { AutomationListPayload, PilotStatus } from '../../shared/api-types'
 import { pilotRpc } from '../api'
 import { AutomationsTable } from './AutomationsTable'
+import { setPilotAutomationsView } from './automations-view'
 import { errorText } from './format'
 import { ProblemNotices } from './ProblemNotices'
 
@@ -55,11 +56,20 @@ export function PilotAutomationsSection({
   const loading = !payload && !error
   return (
     <section className="flex flex-col gap-3 px-5 pb-6 pt-4">
-      <div>
-        <h2 className="text-sm font-semibold leading-6">Automations</h2>
-        <p className="text-xs text-muted-foreground">
-          Each automation is a YAML file in an automation folder.
-        </p>
+      <div className="flex items-start gap-2">
+        <div className="flex-1">
+          <h2 className="text-sm font-semibold leading-6">Automations</h2>
+          <p className="text-xs text-muted-foreground">
+            Each automation is a YAML file in an automation folder.
+          </p>
+        </div>
+        <button
+          type="button"
+          className="text-sm underline"
+          onClick={() => setPilotAutomationsView('activity')}
+        >
+          Activity
+        </button>
       </div>
       {error ? <p className="text-sm text-destructive">{error}</p> : null}
       <ProblemNotices payload={payload} startError={startError} />
