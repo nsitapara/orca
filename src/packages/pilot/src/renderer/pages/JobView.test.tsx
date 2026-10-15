@@ -136,6 +136,7 @@ describe('JobView: a job of several automations on one page', () => {
   afterEach(() => {
     cleanup()
     pilotRpc.mockReset()
+    localStorage.clear()
   })
 
   it('shows each stage as a card, joined by the arrow its feeds draw, with the hands_over caption', async () => {
@@ -205,6 +206,25 @@ describe('JobView: a job of several automations on one page', () => {
     ])
     expect(screen.queryByText('WEB-50')).toBeNull()
     expect(screen.getAllByText('0 checked')).toHaveLength(2)
+  })
+
+  it('asks every stage for only its ticks with something to do, until the switch is turned off', async () => {
+    serve([STAGE_1, STAGE_2])
+    render(<JobView jobId="13" onBack={() => {}} onOpenStage={() => {}} />)
+    const hide = await screen.findByRole('switch', { name: 'Hide ticks with nothing to do' })
+    await waitFor(() => expect(calls('pilot.automations.activity')).toHaveLength(2))
+    expect(calls('pilot.automations.activity').map((c) => c[1])).toEqual([
+      { id: 'dev-e2e-fix', limit: 30, skipQuiet: true },
+      { id: 'dev-e2e-fix-start', limit: 30, skipQuiet: true }
+    ])
+    fireEvent.click(hide)
+    await waitFor(() => expect(calls('pilot.automations.activity')).toHaveLength(4))
+    expect(calls('pilot.automations.activity').map((c) => c[1].skipQuiet)).toEqual([
+      true,
+      true,
+      false,
+      false
+    ])
   })
 
   it('shows each stage’s YAML in its own tab', async () => {

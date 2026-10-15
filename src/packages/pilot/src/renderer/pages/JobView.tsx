@@ -12,11 +12,12 @@ import { errorText } from './format'
 import { JobControls, stageNamer, type StageDryRun } from './JobControls'
 import { JobStageFlow, type StageCardData } from './JobStageFlow'
 import { flowEdges, latestFrom, mergeJobActivity } from './job-flow'
+import { emptyActivityText, QuietTicksSwitch, useHideQuiet } from './QuietTicksSwitch'
 
 type StageData = StageCardData & { ticks: ActivityTick[] }
 const ACTIVITY = 'activity'
 
-async function stageData(job: JobGroup): Promise<StageData[]> {
+async function stageData(job: JobGroup, skipQuiet: boolean): Promise<StageData[]> {
   return Promise.all(
     job.stages.map(async (summary) => {
       const detail = await pilotRpc<AutomationDetailPayload>('pilot.automations.get', {
@@ -24,7 +25,8 @@ async function stageData(job: JobGroup): Promise<StageData[]> {
       })
       const ticks = await pilotRpc<ActivityTick[]>('pilot.automations.activity', {
         id: summary.id,
-        limit: 30
+        limit: 30,
+        skipQuiet
       })
       return { summary, detail, ticks }
     })
@@ -34,11 +36,15 @@ async function stageData(job: JobGroup): Promise<StageData[]> {
 function Tabs({
   stages,
   tab,
-  onTab
+  onTab,
+  hideQuiet,
+  onHideQuiet
 }: {
   stages: StageData[]
   tab: string
   onTab: (tab: string) => void
+  hideQuiet: boolean
+  onHideQuiet: (hide: boolean) => void
 }): React.JSX.Element {
   const tabs = [
     { id: ACTIVITY, label: 'Activity' },
@@ -58,11 +64,20 @@ function Tabs({
           {t.label}
         </button>
       ))}
+      {tab === ACTIVITY ? <QuietTicksSwitch hide={hideQuiet} onChange={onHideQuiet} /> : null}
     </div>
   )
 }
 
-function TabBody({ stages, tab }: { stages: StageData[]; tab: string }): React.JSX.Element {
+function TabBody({
+  stages,
+  tab,
+  hideQuiet
+}: {
+  stages: StageData[]
+  tab: string
+  hideQuiet: boolean
+}): React.JSX.Element {
   const shown = stages.find((s) => s.summary.id === tab)
   if (shown?.detail) {
     return (
@@ -83,7 +98,9 @@ function TabBody({ stages, tab }: { stages: StageData[]; tab: string }): React.J
       (s.detail?.notes ?? []).map((n) => ({ ...n, tag: `Stage ${s.summary.job?.stage ?? 0}` }))
     )
     .sort((a, b) => b.at - a.at)
-  return <JobActivityTimeline entries={entries} notes={notes} />
+  return (
+    <JobActivityTimeline entries={entries} notes={notes} empty={emptyActivityText(hideQuiet)} />
+  )
 }
 
 // A job of several automations (their job: blocks share its id): the stages as a flow, one merged Activity, and
@@ -101,6 +118,7 @@ export function JobView({
   const [stages, setStages] = useState<StageData[]>([])
   const [loaded, setLoaded] = useState(false)
   const [tab, setTab] = useState(ACTIVITY)
+  const [hideQuiet, setHideQuiet] = useHideQuiet()
   const [dryRuns, setDryRuns] = useState<StageDryRun[]>([])
   const [error, setError] = useState<string | null>(null)
   const [now, setNow] = useState(() => Date.now())
@@ -109,7 +127,7 @@ export function JobView({
     try {
       const list = await pilotRpc<AutomationListPayload>('pilot.automations.list')
       const found = findJob(list.automations, jobId)
-      const data = found ? await stageData(found) : []
+      const data = found ? await stageData(found, hideQuiet) : []
       if (!mounted.current) {
         return
       }
@@ -125,7 +143,7 @@ export function JobView({
     if (mounted.current) {
       setLoaded(true)
     }
-  }, [jobId])
+  }, [jobId, hideQuiet])
   useEffect(() => {
     mounted.current = true
     void refresh()
@@ -183,8 +201,14 @@ export function JobView({
         now={now}
         onOpenStage={onOpenStage}
       />
-      <Tabs stages={stages} tab={tab} onTab={setTab} />
-      <TabBody stages={stages} tab={tab} />
+      <Tabs
+        stages={stages}
+        tab={tab}
+        onTab={setTab}
+        hideQuiet={hideQuiet}
+        onHideQuiet={setHideQuiet}
+      />
+      <TabBody stages={stages} tab={tab} hideQuiet={hideQuiet} />
     </div>
   )
 }
