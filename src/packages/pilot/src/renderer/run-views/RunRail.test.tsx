@@ -6,7 +6,7 @@ import { stepAt, testCard, testRun, testStepRow } from '../../shared/run-views/_
 import { chainOf } from '../../shared/run-views/chain'
 import { paintRun } from '../../shared/run-views/paint'
 
-vi.mock('../api', () => ({ pilotRpc: vi.fn() }))
+vi.mock('../api', () => ({ pilotRpc: vi.fn().mockResolvedValue(null) }))
 
 import { RunRail } from './RunRail'
 

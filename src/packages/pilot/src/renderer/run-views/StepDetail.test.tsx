@@ -2,6 +2,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { StepRow } from '../../shared/api-types'
+import { testStepRow } from '../../shared/run-views/__fixtures__/runs'
 import { stepRow, timelineRun } from '../timeline/timeline.fixtures'
 
 const pilotRpc = vi.fn()
@@ -10,6 +11,12 @@ vi.mock('../api', () => ({ pilotRpc: (...args: unknown[]) => pilotRpc(...args) }
 const refreshWorktreeTimeline = vi.fn()
 vi.mock('../sidebar/timeline-feed', () => ({
   refreshWorktreeTimeline: (...args: unknown[]) => refreshWorktreeTimeline(...args)
+}))
+
+// The log has its own RPC and test (StepLog.test.tsx); here it must not meet these tests' call counts.
+vi.mock('./StepLog', async (importActual) => ({
+  ...(await importActual<Record<string, unknown>>()),
+  StepLog: () => null
 }))
 
 import { StepDetail } from './StepDetail'
@@ -183,5 +190,20 @@ describe('StepDetail', () => {
     )
     expect(screen.getByText('Data not kept: may contain comment or ticket text')).toBeTruthy()
     expect(screen.queryByText('Data')).toBeNull()
+  })
+
+  it("shows a shell step's kept output", () => {
+    render(
+      <StepDetail
+        runId="r1"
+        step={testStepRow({
+          agent: 'shell',
+          kind: 'shell',
+          sessionId: null,
+          outputTail: 'pushed\n--- stderr ---\nwarn'
+        })}
+      />
+    )
+    expect(screen.getByLabelText('Output').textContent).toBe('pushed\n--- stderr ---\nwarn')
   })
 })
