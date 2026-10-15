@@ -110,6 +110,8 @@ export type RunRow = {
   // Env runs only (workspace: { env }): the item's worktree, and what pilotcli made. Null: not an env run.
   homePath?: string | null
   env?: RunEnv | null
+  // When Nish acknowledged it in Done for you (Run visibility); null or absent: not yet.
+  acknowledgedAt?: number | null
 }
 export type StepStatus =
   | 'pending'

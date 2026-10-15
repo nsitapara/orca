@@ -12,6 +12,7 @@ import {
   replyToInboxItem,
   resolveInboxItem,
   reviseInboxItem,
+  syncRunWaiting,
   type InboxDeps
 } from './inbox-service'
 
@@ -808,5 +809,24 @@ describe('reviseInboxItem on a prepared card', () => {
     const row = store.inbox.get(id)!
     reviseInboxItem(deps, id, { actionArgs: row.actionArgs ?? {}, context: row.context ?? '' })
     expect(store.inbox.get(id)?.preparation).toMatchObject({ state: 'ready', revision: 1 })
+  })
+})
+
+describe('syncRunWaiting', () => {
+  it('moves a needs_you run whose last open cards are defaults back to done, with a plain Done outcome', () => {
+    const { store, deps } = setup()
+    addInboxItem(deps, { runId: 'run-1', type: 'default', title: 'Keep x? → yes', context: 'c' })
+    store.runs.update('run-1', {
+      status: 'needs_you',
+      outcome: 'Inbox: 2 open items',
+      finishedAt: 5
+    })
+    syncRunWaiting(store, 'run-1', 9)
+    expect(store.runs.get('run-1')).toMatchObject({
+      status: 'done',
+      outcome: 'Done',
+      finishedAt: 5
+    })
+    store.close()
   })
 })

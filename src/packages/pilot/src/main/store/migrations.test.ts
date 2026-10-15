@@ -241,8 +241,8 @@ describe('migrate', () => {
       "INSERT INTO inbox_items (id, automation_id, person, type, title, digest, created_at, updated_at) VALUES ('i1', 'a', 'p', 'question', 't', 'd', 1, 1)"
     )
     migrate(db)
-    expect(PILOT_SCHEMA_VERSION).toBe(12)
-    expect(db.pragma('user_version', { simple: true })).toBe(12)
+    expect(PILOT_SCHEMA_VERSION).toBe(13)
+    expect(db.pragma('user_version', { simple: true })).toBe(13)
     expect(
       firstRow(
         db,
@@ -380,7 +380,7 @@ describe('migrate', () => {
       "INSERT INTO steps (run_id, idx, name, agent, status) VALUES ('r1', 0, 'context', 'shell', 'done')"
     )
     migrate(db)
-    expect(db.pragma('user_version', { simple: true })).toBe(12)
+    expect(db.pragma('user_version', { simple: true })).toBe(13)
     expect(firstRow(db, 'SELECT result_json FROM steps')).toEqual({ result_json: null })
   })
 
@@ -397,5 +397,32 @@ describe('migrate', () => {
     migrate(db)
     expect(() => migrate(db)).not.toThrow()
     expect(db.pragma('user_version', { simple: true })).toBe(PILOT_SCHEMA_VERSION)
+  })
+
+  it('V13 adds runs.acknowledged_at, acknowledging ended runs without open defaults, and frees runs held only by defaults', () => {
+    const db = openDb()
+    migrate(db, 12)
+    const run = db.prepare(
+      "INSERT INTO runs (id, automation_id, item_key, item_label, status, outcome, started_at, finished_at) VALUES (?, 'a', 'k', 'k', ?, ?, 1, ?)"
+    )
+    run.run('done', 'done', 'Done', 10)
+    run.run('live', 'running', null, null)
+    run.run('held', 'needs_you', 'Inbox: 1 open item', null)
+    run.run('asks', 'needs_you', 'Inbox: 1 open item', 20)
+    const card = db.prepare(
+      "INSERT INTO inbox_items (id, automation_id, run_id, person, type, title, digest, created_at, updated_at) VALUES (?, 'a', ?, 'nish', ?, 't', 'd', 1, 1)"
+    )
+    card.run('c1', 'held', 'default')
+    card.run('c2', 'asks', 'question')
+    migrate(db)
+    const rows = db
+      .prepare('SELECT id, status, outcome, acknowledged_at FROM runs ORDER BY id')
+      .all()
+    expect(rows.map((r: Record<string, unknown>) => ({ ...r }))).toEqual([
+      { id: 'asks', status: 'needs_you', outcome: 'Inbox: 1 open item', acknowledged_at: 20 },
+      { id: 'done', status: 'done', outcome: 'Done', acknowledged_at: 10 },
+      { id: 'held', status: 'done', outcome: 'Done', acknowledged_at: null },
+      { id: 'live', status: 'running', outcome: null, acknowledged_at: null }
+    ])
   })
 })

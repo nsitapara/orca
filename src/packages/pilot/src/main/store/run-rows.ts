@@ -18,6 +18,7 @@ export type RunPatch = Partial<{
   tokens: number | null
   worktreePath: string | null
   worktreeId: string | null
+  acknowledgedAt: number | null
 }>
 export type StepPatch = Partial<{
   status: StepStatus
@@ -50,7 +51,8 @@ export const RUN_COLUMNS: Record<keyof RunPatch, string> = {
   costUsd: 'cost_usd',
   tokens: 'tokens',
   worktreePath: 'worktree_path',
-  worktreeId: 'worktree_id'
+  worktreeId: 'worktree_id',
+  acknowledgedAt: 'acknowledged_at'
 }
 export const STEP_COLUMNS: Record<keyof StepPatch, string> = {
   status: 'status',
@@ -124,7 +126,8 @@ export function toRun(r: Record<string, unknown>): RunRow {
     parentRunId: (r.parent_run_id as string | null) ?? null,
     imported: Number(r.imported) === 1,
     homePath: (r.home_path as string | null) ?? null,
-    env: envOfRow(r)
+    env: envOfRow(r),
+    acknowledgedAt: (r.acknowledged_at as number | null) ?? null
   }
 }
 

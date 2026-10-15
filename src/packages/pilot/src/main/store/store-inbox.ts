@@ -292,10 +292,12 @@ export class InboxStore {
     return Number(r.changes) > 0
   }
 
-  // A run that leaves open items ends needs_you (contract §7).
+  // A run that leaves open items ends needs_you (contract §7); a default the agent took never holds it.
   openCountForRun(runId: string): number {
     const row = this.db
-      .prepare("SELECT COUNT(*) AS n FROM inbox_items WHERE run_id = ? AND status = 'open'")
+      .prepare(
+        "SELECT COUNT(*) AS n FROM inbox_items WHERE run_id = ? AND status = 'open' AND type != 'default'"
+      )
       .get(runId)
     return Number((row as { n: number } | undefined)?.n ?? 0)
   }
