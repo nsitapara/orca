@@ -63,10 +63,22 @@ function Detail({
   const [detail, setDetail] = useState<LogEntryDetail | null>(null)
   const [error, setError] = useState<string | null>(null)
   useEffect(() => {
-    pilotRpc<LogEntryDetail>('pilot.runs.logEntry', { runId, stepIdx, id }).then(
-      setDetail,
-      (e: unknown) => setError(errorText(e))
+    let alive = true
+    Promise.resolve(pilotRpc<LogEntryDetail>('pilot.runs.logEntry', { runId, stepIdx, id })).then(
+      (got) => {
+        if (alive && typeof got?.output === 'string') {
+          setDetail(got)
+        }
+      },
+      (e: unknown) => {
+        if (alive) {
+          setError(errorText(e))
+        }
+      }
     )
+    return () => {
+      alive = false
+    }
   }, [runId, stepIdx, id])
   if (error) {
     return <p className="text-destructive">{error}</p>
@@ -86,7 +98,12 @@ function Mark({ entry }: { entry: LogEntry }): React.JSX.Element {
   if (entry.kind === 'text') {
     return <span aria-hidden="true">●</span>
   }
-  return <span aria-label={entry.status}>{MARK[entry.status]}</span>
+  return (
+    <>
+      <span aria-hidden="true">{MARK[entry.status]}</span>
+      <span className="sr-only">{entry.status}</span>
+    </>
+  )
 }
 
 function Row({
@@ -143,7 +160,7 @@ function Row({
 // input and output.
 export function StepLog({ runId, step }: { runId: string; step: StepRow }): React.JSX.Element {
   const { log, error } = useStepLog(runId, step.idx, isLive(step))
-  if (error) {
+  if (!log && error) {
     return <p className="text-destructive">{error}</p>
   }
   if (!log) {
@@ -165,6 +182,7 @@ export function StepLog({ runId, step }: { runId: string; step: StepRow }): Reac
       {log.entries.length === 0 ? (
         <p className="text-muted-foreground">Nothing in the log yet.</p>
       ) : null}
+      {error ? <p className="text-destructive">{error}</p> : null}
       {log.later > 0 ? (
         <p className="text-muted-foreground">{`${log.later} later entries from a resumed session aren't this run's`}</p>
       ) : null}

@@ -20,10 +20,12 @@ export function useStepLog(
   useEffect(() => {
     let alive = true
     const load = (): void => {
-      pilotRpc<StepLog>('pilot.runs.log', { runId, stepIdx }).then(
+      Promise.resolve(pilotRpc<StepLog>('pilot.runs.log', { runId, stepIdx })).then(
         (got) => {
           if (alive) {
-            setLog(isStepLog(got) ? got : null)
+            if (isStepLog(got)) {
+              setLog(got)
+            }
             setError(null)
           }
         },
