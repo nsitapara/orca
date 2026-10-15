@@ -3,6 +3,8 @@ import type { Effect, RunEffects } from '../../shared/visibility-types'
 import { pilotRpc } from '../api'
 
 export const EFFECTS_REFRESH_MS = 10_000
+export const EFFECTS_RETRY_MS = 5_000
+export const MAX_CACHED_RUNS = 2000
 const BATCH = 300
 
 let cache: ReadonlyMap<string, readonly Effect[]> = new Map()
@@ -25,20 +27,39 @@ function subscribe(listener: () => void): () => void {
 
 function listOf(got: unknown, id: string): readonly Effect[] {
   const list = got && typeof got === 'object' ? (got as RunEffects)[id] : undefined
-  return Array.isArray(list) ? list : []
+  return Array.isArray(list) ? list.filter(isEffect) : []
 }
 
-async function fetchChunk(ids: string[]): Promise<void> {
+// A well-formed effect: an object with a string kind and a numeric count.
+function isEffect(e: unknown): e is Effect {
+  if (!e || typeof e !== 'object') {
+    return false
+  }
+  const { kind, count } = e as { kind?: unknown; count?: unknown }
+  return typeof kind === 'string' && typeof count === 'number'
+}
+
+// Asks for one chunk; a failed read is tried once more after 5 s.
+async function fetchChunk(ids: string[], canRetry = true): Promise<void> {
   try {
     const got = await pilotRpc<RunEffects>('pilot.runs.effects', { runIds: ids })
     const next = new Map(cache)
     for (const id of ids) {
+      next.delete(id)
       next.set(id, listOf(got, id))
+    }
+    for (const old of next.keys()) {
+      if (next.size <= MAX_CACHED_RUNS) {
+        break
+      }
+      next.delete(old)
     }
     cache = next
     notify()
   } catch {
-    // Left unknown: the row asks again when it remounts or, while live, on its next refresh.
+    if (canRetry) {
+      setTimeout(() => void fetchChunk(ids, false), EFFECTS_RETRY_MS)
+    }
   }
 }
 
@@ -69,11 +90,12 @@ export function useRunEffects(
 ): readonly Effect[] | null {
   const effects = useSyncExternalStore(subscribe, () => cache.get(runId) ?? null)
   useEffect(() => {
-    if (!enabled) {
-      return undefined
+    if (enabled) {
+      requestEffects(runId)
     }
-    requestEffects(runId)
-    if (!live) {
+  }, [runId, enabled])
+  useEffect(() => {
+    if (!enabled || !live) {
       return undefined
     }
     const timer = setInterval(() => requestEffects(runId), EFFECTS_REFRESH_MS)

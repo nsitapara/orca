@@ -6,7 +6,12 @@ import type { Effect } from '../../shared/visibility-types'
 const pilotRpc = vi.fn()
 vi.mock('../api', () => ({ pilotRpc: (...args: unknown[]) => pilotRpc(...args) }))
 
-import { EFFECTS_REFRESH_MS, resetEffectsFeed, useRunEffects } from './effects-feed'
+import {
+  EFFECTS_REFRESH_MS,
+  EFFECTS_RETRY_MS,
+  resetEffectsFeed,
+  useRunEffects
+} from './effects-feed'
 
 const PUSHED: Effect = { kind: 'pushed', target: 'web-1', url: null, count: 1, stepIdx: 0, at: 1 }
 
@@ -36,6 +41,35 @@ describe('useRunEffects', () => {
     expect(screen.getByTestId('b').textContent).toBe('0')
     expect(pilotRpc).toHaveBeenCalledTimes(1)
     expect(pilotRpc).toHaveBeenCalledWith('pilot.runs.effects', { runIds: ['a', 'b'] })
+  })
+
+  it('keeps only well-formed effects', async () => {
+    pilotRpc.mockResolvedValue({ a: [PUSHED, null, { kind: 1 }] })
+    render(<Probe id="a" />)
+    await act(async () => {})
+    expect(screen.getByTestId('a').textContent).toBe('1')
+  })
+
+  it('asks once more after 5 s when a read fails', async () => {
+    vi.useFakeTimers()
+    pilotRpc.mockRejectedValueOnce(new Error('down')).mockResolvedValue({ a: [PUSHED] })
+    render(<Probe id="a" />)
+    await act(async () => {})
+    expect(screen.getByTestId('a').textContent).toBe('none')
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(EFFECTS_RETRY_MS)
+    })
+    expect(screen.getByTestId('a').textContent).toBe('1')
+    expect(pilotRpc).toHaveBeenCalledTimes(2)
+  })
+
+  it('does not ask again when a run goes from live to finished', async () => {
+    pilotRpc.mockResolvedValue({})
+    const { rerender } = render(<Probe id="a" live />)
+    await act(async () => {})
+    rerender(<Probe id="a" live={false} />)
+    await act(async () => {})
+    expect(pilotRpc).toHaveBeenCalledTimes(1)
   })
 
   it('asks again every 10 s for a live run, and not for a finished one', async () => {

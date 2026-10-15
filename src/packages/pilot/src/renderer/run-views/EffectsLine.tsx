@@ -1,20 +1,35 @@
+import { useId } from 'react'
 import { effectText } from '../../shared/effect-text'
 import type { Effect } from '../../shared/visibility-types'
 
 export const EFFECTS_SHOWN = 4
 
 function keyOf(e: Effect, i: number): string {
-  return `${e.kind}:${e.target ?? i}:${e.stepIdx ?? 'run'}`
+  return `${e.kind}:${e.target ?? ''}:${e.stepIdx ?? 'run'}:${i}`
+}
+
+// Only http and https links are clickable; the url came out of a transcript.
+function safeHref(url: string | null): string | null {
+  if (!url) {
+    return null
+  }
+  try {
+    const { protocol } = new URL(url)
+    return protocol === 'http:' || protocol === 'https:' ? url : null
+  } catch {
+    return null
+  }
 }
 
 function EffectLink({ effect }: { effect: Effect }): React.JSX.Element {
   const text = effectText(effect)
-  if (!effect.url) {
+  const href = safeHref(effect.url)
+  if (!href) {
     return <span>{text}</span>
   }
   return (
     <a
-      href={effect.url}
+      href={href}
       target="_blank"
       rel="noopener noreferrer"
       className="underline-offset-2 hover:underline"
@@ -35,7 +50,11 @@ export function EffectsLine({
   }
   const more = effects.length - EFFECTS_SHOWN
   return (
-    <div aria-label="Effects" className="flex flex-wrap gap-x-2 text-xs text-muted-foreground">
+    <div
+      role="group"
+      aria-label="Effects"
+      className="flex flex-wrap gap-x-2 text-xs text-muted-foreground"
+    >
       {effects.slice(0, EFFECTS_SHOWN).map((e, i) => (
         <EffectLink key={keyOf(e, i)} effect={e} />
       ))}
@@ -50,12 +69,16 @@ export function WhatItChanged({
 }: {
   effects: readonly Effect[] | null
 }): React.JSX.Element | null {
+  const headingId = useId()
   if (!effects || effects.length === 0) {
     return null
   }
   return (
-    <section aria-label="What it changed" className="flex flex-col gap-1">
-      <h3 className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+    <section aria-labelledby={headingId} className="flex flex-col gap-1">
+      <h3
+        id={headingId}
+        className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground"
+      >
         What it changed
       </h3>
       <ul className="flex flex-col gap-0.5 text-sm">

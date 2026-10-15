@@ -41,8 +41,14 @@ describe('EffectsLine and WhatItChanged', () => {
     expect(screen.queryByText('marked !9 ready')).toBeNull()
   })
 
+  it('renders an effect whose link is not http(s) as plain text', () => {
+    render(<EffectsLine effects={[effect({ url: 'javascript:alert(1)' })]} />)
+    expect(screen.getByText('pushed web-1')).toBeTruthy()
+    expect(screen.queryByRole('link')).toBeNull()
+  })
+
   it("lists every effect with the step it came from in the run panel, and shows nothing when there's none", () => {
-    const { container } = render(
+    render(
       <WhatItChanged
         effects={[
           effect({ stepIdx: 1 }),
@@ -56,6 +62,5 @@ describe('EffectsLine and WhatItChanged', () => {
     cleanup()
     const empty = render(<WhatItChanged effects={[]} />)
     expect(empty.container.textContent).toBe('')
-    expect(container).toBeTruthy()
   })
 })
