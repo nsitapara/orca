@@ -91,6 +91,10 @@ describe('06 · Address reviewer feedback: the definition', () => {
     const step = (name: string) => definition.steps.find((s) => s.name === name)!
     expect(step('context').run).toBe('pilotcli skills get-context address-mr-feedback "$IID"')
     expect(step('context').exitCodes).toEqual({ ok: [0], skip: [], stop: [3] })
+    expect(step('catch_up').run).toBe(
+      'pilotcli git update-branch . --to "origin/$BRANCH" --format text'
+    )
+    expect(step('catch_up').exitCodes).toEqual({ ok: [0], skip: [3], stop: [] })
     expect(step('flag').env).toEqual({ WT: '{worktree.path}', IID: '{mr.iid}' })
     expect(step('flag').run).toContain(
       '--worktree "path:$WT" --gitlab-mr "!$IID" --comment "addressing MR feedback !$IID (auto)"'

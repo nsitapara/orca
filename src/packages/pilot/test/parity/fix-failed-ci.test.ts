@@ -100,8 +100,8 @@ describe('05 · Fix failed CI v2: the definition', () => {
 
   it('catches up with origin before the fix; no fast-forward is a skip the agent turns into a question', () => {
     const catchUp = definition.steps[2]
-    expect(catchUp.run).toContain('pilotcli git update-branch . --to "origin/$BRANCH"')
-    expect(catchUp.run).toContain('git merge --ff-only -q "origin/$BRANCH"')
+    // In place or a throwaway's detached HEAD alike (pilotcli 6cc75c3).
+    expect(catchUp.run).toBe('pilotcli git update-branch . --to "origin/$BRANCH" --format text')
     expect(catchUp.exitCodes).toEqual({ ok: [0], skip: [3], stop: [] })
   })
 
