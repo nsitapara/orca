@@ -516,7 +516,8 @@ describe('listInbox itemLabel', () => {
       return prepare(sql)
     }
     listInbox(deps, {})
-    expect(calls.filter((c) => /FROM runs/.test(c))).toHaveLength(1)
+    // cardRuns reads each distinct run by id for the list's runs; the label read is the one that is not by id.
+    expect(calls.filter((c) => /FROM runs/.test(c) && !/WHERE id = \?/.test(c))).toHaveLength(1)
     expect(calls.filter((c) => /FROM tick_items/.test(c))).toHaveLength(1)
   })
 })

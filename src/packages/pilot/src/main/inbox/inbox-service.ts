@@ -7,6 +7,7 @@ import { preparationRef, requeuedPreparation } from '../../shared/preparation'
 import type { ActionCatalog } from '../actions/types'
 import type { PilotStore } from '../store/store'
 import { answerLocked, lockedBy, ownsLiveAnswer } from './answer-lock'
+import { cardRuns } from './card-runs'
 import { cardOf, inboxDigest, oneLine } from './card'
 
 export type InboxDeps = {
@@ -183,6 +184,7 @@ export function listInbox(
     items: items.map(listRow),
     runLines: runLinesOf(items, runLineOf),
     answerStates: answerStatesOf(deps, items),
+    runs: cardRuns(deps.store, items),
     people: people.people.map((p) => ({ id: p.id, name: p.name })),
     groups: people.groups.map((g) => ({ id: g.id, name: g.name, members: [...g.members] })),
     automations: deps.definitions().map((d) => ({ id: d.id, name: d.name }))
