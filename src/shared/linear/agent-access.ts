@@ -22,7 +22,6 @@ export const LINEAR_ERROR_CODES = [
   'linear_invalid_assignee',
   'linear_invalid_label',
   'linear_invalid_parent',
-  'linear_invalid_comment',
   'linear_invalid_project',
   'linear_team_required',
   'linear_invalid_url',
@@ -70,7 +69,6 @@ export type {
   LinearAttachResult,
   LinearCollectionMeta,
   LinearCommentAddResult,
-  LinearCommentEditResult,
   LinearCreateResult,
   LinearIssueAttachment,
   LinearIssueChildNode,
@@ -145,11 +143,6 @@ export type LinearCommentAddRequest = LinearWriteTargetRequest & {
   body: string
   replyTo?: string
   writeId?: string
-}
-
-export type LinearCommentEditRequest = LinearWriteTargetRequest & {
-  commentId: string
-  body: string
 }
 
 export type LinearAttachRequest = LinearWriteTargetRequest & {

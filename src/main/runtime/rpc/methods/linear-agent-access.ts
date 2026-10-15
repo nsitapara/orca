@@ -8,7 +8,6 @@ import {
   LinearIssueAddComment,
   LinearIssueAttachLink,
   LinearIssueCreate,
-  LinearIssueEditComment,
   LinearIssueList,
   LinearIssueRelationWrite,
   LinearIssueSetState,
@@ -120,12 +119,6 @@ export const LINEAR_AGENT_ACCESS_METHODS = [
     params: LinearIssueAddComment,
     handler: async (params, { runtime }) =>
       runtime.linearIssueAddComment({ ...params, writeId: parseLinearWriteId(params.writeId) })
-  }),
-  defineMethod({
-    name: 'linear.issueEditComment',
-    permission: 'workspace',
-    params: LinearIssueEditComment,
-    handler: async (params, { runtime }) => runtime.linearIssueEditComment(params)
   }),
   defineMethod({
     name: 'linear.issueAttachLink',

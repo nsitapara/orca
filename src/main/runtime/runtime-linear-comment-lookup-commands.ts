@@ -1,7 +1,5 @@
 import {
   isLinearAuthError,
-  isLinearUuid,
-  getLinearCommentByUuidForAgent,
   getLinearIssueCommentThreadRoot,
   LinearWriteFailure,
   LinearAgentAccessError,
@@ -36,27 +34,6 @@ export class RuntimeLinearCommentLookupCommands extends RuntimeLinearWriteResult
       }
       throw this.mapLinearReadFailure(error)
     }
-  }
-
-  public async resolveLinearIssueComment(
-    issueId: string,
-    commentId: string,
-    workspaceId: string
-  ): Promise<NonNullable<Awaited<ReturnType<typeof getLinearCommentByUuidForAgent>>>> {
-    let comment: Awaited<ReturnType<typeof getLinearCommentByUuidForAgent>> = null
-    if (isLinearUuid(commentId)) {
-      try {
-        comment = await getLinearCommentByUuidForAgent(commentId, workspaceId)
-      } catch (error) {
-        throw this.mapLinearReadFailure(error)
-      }
-    }
-    if (!comment || comment.issue.id !== issueId) {
-      throw linearError('linear_invalid_comment', 'The comment is not on this issue.', {
-        nextSteps: ['Run `orca linear issue <id> --comments --json` to list valid comment ids.']
-      })
-    }
-    return comment
   }
 
   public async runLinearAgentWrite<T>(
