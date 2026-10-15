@@ -28,6 +28,8 @@ const PRESSING: readonly PartState[] = [
   'none'
 ]
 const LIT: readonly PartState[] = ['running', 'asking']
+// The chips a folded strip keeps in view, each with its neighbours.
+const FOCUS: readonly PartState[] = ['running', 'asking', 'failed']
 
 function plural(n: number, word: string): string {
   return n === 1 ? `1 ${word}` : `${n} ${word}s`
@@ -100,14 +102,12 @@ export function liveStrip(chain: readonly ChainPart[], live: readonly ActivityRu
 }
 
 function keptIndexes(chips: readonly StripChip[], max: number): Set<number> {
-  const lit = chips.flatMap((c, i) =>
-    c.state && ['running', 'asking', 'failed'].includes(c.state) ? [i] : []
-  )
+  const lit = chips.flatMap((c, i) => (c.state && FOCUS.includes(c.state) ? [i] : []))
   if (lit.length === 0) {
     return new Set(Array.from({ length: max - 1 }, (_, i) => i))
   }
-  const first = lit[0]
-  return new Set([0, first - 1, ...lit, first + 1].filter((i) => i >= 0 && i < chips.length))
+  const kept = [0, ...lit.flatMap((i) => [i - 1, i, i + 1])]
+  return new Set(kept.filter((i) => i >= 0 && i < chips.length))
 }
 
 function more(at: number, count: number): StripItem {
