@@ -53,7 +53,7 @@ function serve(payload: AutomationListPayload): void {
       return { items: [], people: [], groups: [], automations: [] }
     }
     if (method === 'pilot.activity.list') {
-      return { live: [], ticks: [], loose: [] }
+      return { live: [], ticks: [], loose: [], reach: null }
     }
     if (method === 'pilot.queue.list') {
       return { entries: [] }

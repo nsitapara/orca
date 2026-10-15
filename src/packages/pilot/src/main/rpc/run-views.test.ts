@@ -114,6 +114,36 @@ describe('activityList', () => {
     expect(activityList(ctx, { automationIds: ['two'], limit: 50, skipQuiet: false }).live).toEqual(
       []
     )
+    expect(all.reach).toBeNull()
+    store.close()
+  })
+
+  it('stops loose runs at the oldest shown tick when the tick page is full, and says how far back it reaches', () => {
+    const { ctx, store } = context()
+    const loose = (id: string, startedAt: number): void =>
+      store.runs.create({
+        id,
+        automationId: 'one',
+        tickId: null,
+        itemKey: id,
+        itemLabel: id,
+        worktreePath: null,
+        startedAt,
+        trigger: 'import',
+        status: 'done'
+      })
+    for (const at of [300, 400]) {
+      store.finishTick(store.startTick('one', at), 'ok', null, { started: 0 }, at + 1)
+    }
+    loose('older', 100)
+    loose('newer', 350)
+
+    const cut = activityList(ctx, { since: 50, limit: 2, skipQuiet: false })
+    expect(cut.reach).toBe(300)
+    expect(cut.loose.map((r) => r.id)).toEqual(['newer'])
+    const whole = activityList(ctx, { since: 50, limit: 3, skipQuiet: false })
+    expect(whole.reach).toBeNull()
+    expect(whole.loose.map((r) => r.id).sort()).toEqual(['newer', 'older'])
     store.close()
   })
 })
@@ -169,7 +199,36 @@ describe('runDetail', () => {
     expect(d.run.steps.map((s) => s.name)).toEqual(['ticket'])
     expect(d.handovers.map((h) => h.itemId)).toEqual(['WEB-1'])
     expect(d.answerRuns.map((r) => r.id)).toEqual(['r2'])
+    expect(d.receivedFrom).toEqual([])
     expect(() => runDetail(ctx, 'nope')).toThrow('No run "nope"')
+    store.close()
+  })
+
+  it('returns the handovers that started a stage-2 run, so its panel can link back to the sender', () => {
+    const { ctx, store } = context()
+    store.handovers.add({
+      senderId: 'one',
+      senderRunId: 'r1',
+      receiverId: 'two',
+      itemIds: ['WEB-1'],
+      at: 3
+    })
+    const tick = store.startTick('two', 5)
+    store.runs.create({
+      id: 'r9',
+      automationId: 'two',
+      tickId: tick,
+      itemKey: 'WEB-1',
+      itemLabel: 'WEB-1',
+      worktreePath: null,
+      startedAt: 5,
+      status: 'done'
+    })
+    const [row] = store.handovers.sentBy('r1')
+    store.handovers.consume(tick, 6, [
+      { rowId: row.id, verdict: 'started', reason: '', runId: 'r9' }
+    ])
+    expect(runDetail(ctx, 'r9').receivedFrom.map((h) => h.senderRunId)).toEqual(['r1'])
     store.close()
   })
 
