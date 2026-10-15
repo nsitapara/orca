@@ -13,6 +13,7 @@ import { runBinding } from './run-binding'
 import { buildAnswerMethods } from './methods-answers'
 import { buildSpendMethods } from './methods-spend'
 import { buildRunMethods } from './methods-runs'
+import { buildVisibilityMethods } from './methods-visibility'
 import { buildTimelineMethods } from './methods-timeline'
 import { buildChannelMethods } from './methods-channel'
 import { buildPreparationMethods } from './methods-preparation'
@@ -192,6 +193,7 @@ export function buildPilotMethods(host: PilotHost) {
     ...buildSpendMethods(ctx),
     ...buildTimelineMethods(ctx),
     ...buildRunMethods(ctx),
+    ...buildVisibilityMethods(ctx),
     ...buildImportMethods(host),
     ...buildLinearMethods()
   ].map((m) => Object.assign(m, { pilot: true }))
