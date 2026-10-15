@@ -6,6 +6,7 @@ import { pilotRpc } from '../api'
 import { errorText, stepStatusLabel } from '../pages/format'
 import { refreshWorktreeTimeline } from '../sidebar/timeline-feed'
 import { StepResultView } from '../timeline/StepResult'
+import { ShellOutput, StepLog } from './StepLog'
 
 const AGENT_LABEL: Record<string, string> = { claude: 'Claude', codex: 'Codex', shell: 'Shell' }
 const RESUMED: Record<SessionResumeResult['action'], string> = {
@@ -122,6 +123,8 @@ export function StepDetail({
       {outputs ? <div className="text-muted-foreground">{`Outputs: ${outputs}`}</div> : null}
       {step.result ? <StepResultView result={step.result} /> : null}
       {step.error ? <div className={errorClass(step)}>{step.error}</div> : null}
+      {step.kind === 'shell' && step.outputTail ? <ShellOutput text={step.outputTail} /> : null}
+      {step.kind === 'agent' ? <StepLog runId={runId} step={step} /> : null}
     </div>
   )
 }
