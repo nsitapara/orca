@@ -2,7 +2,12 @@ import type { EffectKind } from '../../shared/visibility-types'
 
 export type CommandEffect = { kind: EffectKind; target: string | null }
 
-const HEREDOC = /<<-?\s*(['"]?)([A-Za-z_][A-Za-z0-9_]*)\1/
+const HEREDOC = /^<<-?\s*(['"]?)([A-Za-z_][A-Za-z0-9_]*)\1/
+const HEREDOC_OPERATOR = /(?<!<)<<(?!<)/
+const QUOTED_SPAN = /'[^']*'|"(?:[^"\\]|\\.)*"/g
+const BARE_REDIRECT = /^\d*[<>]+$/
+const EXPANSION = /[$`(]/
+const MUTATION = /^query=\s*mutation\b/
 const PREFIXES = new Set(['rtk', 'proxy', 'env', 'command', 'time', 'nohup'])
 const ASSIGNMENT = /^[A-Za-z_][A-Za-z0-9_]*=/
 const REDIRECT = /^\d*[<>]/
@@ -23,7 +28,36 @@ const VALUE_FLAGS = new Set([
   '--repo',
   ...FIELD_FLAGS
 ])
+const GIT_PUSH_VALUE_FLAGS = new Set(['-o', '--push-option', '--repo', '--receive-pack', '--exec'])
+const MR_VALUE_FLAGS = new Set([
+  '-m',
+  '--message',
+  '-t',
+  '--title',
+  '-d',
+  '--description',
+  '-l',
+  '--label',
+  '--unlabel',
+  '-a',
+  '--assignee',
+  '--reviewer',
+  '-b',
+  '--target-branch',
+  '-s',
+  '--source-branch',
+  '-R',
+  '--repo',
+  '--milestone'
+])
+const PILOTCLI_VALUE_FLAGS = new Set(['--format', '--field', '--input'])
 const SEPARATORS = new Set(['\n', ';', '|', '&'])
+
+// The end word of a heredoc opened on this line, ignoring << inside quotes and herestrings (<<<).
+function heredocEnd(line: string): string | null {
+  const at = line.replace(QUOTED_SPAN, (m) => ' '.repeat(m.length)).search(HEREDOC_OPERATOR)
+  return at < 0 ? null : (HEREDOC.exec(line.slice(at))?.[2] ?? null)
+}
 
 // Removes each heredoc's body (the lines up to its end word), so text piped into a command is never read as commands.
 export function dropHeredocs(command: string): string {
@@ -37,7 +71,7 @@ export function dropHeredocs(command: string): string {
       continue
     }
     out.push(line)
-    end = HEREDOC.exec(line)?.[2] ?? null
+    end = heredocEnd(line)
   }
   return out.join('\n')
 }
@@ -85,6 +119,8 @@ export function segments(command: string): string[][] {
       word += q.text
       has = true
       i = q.end
+    } else if (c === '\\' && command[i + 1] === '\n') {
+      i += 1
     } else if (c === '\\' && i + 1 < command.length) {
       word += command[i + 1]
       has = true
@@ -108,15 +144,37 @@ function commandWords(words: readonly string[]): string[] {
   while (i < words.length && (PREFIXES.has(words[i]) || ASSIGNMENT.test(words[i]))) {
     i += 1
   }
-  const rest = words.slice(i).filter((w) => !REDIRECT.test(w))
+  const rest: string[] = []
+  let afterRedirect = false
+  for (const w of words.slice(i)) {
+    if (afterRedirect) {
+      afterRedirect = false
+    } else if (REDIRECT.test(w)) {
+      afterRedirect = BARE_REDIRECT.test(w)
+    } else {
+      rest.push(w)
+    }
+  }
   if (rest.length > 0) {
     rest[0] = rest[0].split('/').pop() ?? rest[0]
   }
   return rest
 }
 
-function plainArgs(words: readonly string[]): string[] {
-  return words.filter((w) => !w.startsWith('-'))
+// The words that are neither flags nor the values of the given value flags.
+function plainArgs(
+  words: readonly string[],
+  valueFlags: ReadonlySet<string> = new Set()
+): string[] {
+  const out: string[] = []
+  for (let i = 0; i < words.length; i++) {
+    if (!words[i].startsWith('-')) {
+      out.push(words[i])
+    } else if (valueFlags.has(words[i])) {
+      i += 1
+    }
+  }
+  return out
 }
 
 function mrOf(words: readonly string[]): string | null {
@@ -125,7 +183,7 @@ function mrOf(words: readonly string[]): string | null {
 }
 
 function branchOf(ref: string | undefined): string | null {
-  if (!ref) {
+  if (!ref || EXPANSION.test(ref)) {
     return null
   }
   const name = (ref.replace(/^\+/, '').split(':').pop() ?? '').replace(/^refs\/heads\//, '')
@@ -141,11 +199,11 @@ function gitEffect(w: readonly string[]): CommandEffect[] {
   if (w[i] !== 'push' || args.some((a) => PUSH_SKIP.has(a))) {
     return []
   }
-  return [{ kind: 'pushed', target: branchOf(plainArgs(args)[1]) }]
+  return [{ kind: 'pushed', target: branchOf(plainArgs(args, GIT_PUSH_VALUE_FLAGS)[1]) }]
 }
 
 function pilotcliEffect(w: readonly string[]): CommandEffect[] {
-  const plain = plainArgs(w.slice(3)).filter((a) => !a.includes('='))
+  const plain = plainArgs(w.slice(3), PILOTCLI_VALUE_FLAGS).filter((a) => !a.includes('='))
   if (w[1] === 'git' && w[2] === 'push-branch') {
     return [{ kind: 'pushed', target: plain[0] ?? null }]
   }
@@ -184,17 +242,21 @@ function apiPath(w: readonly string[]): string | null {
 function glabEffect(w: readonly string[]): CommandEffect[] {
   if (w[1] === 'api') {
     const method = apiMethod(w)
-    return method && WRITE_METHODS.has(method) ? [{ kind: 'gitlab_write', target: apiPath(w) }] : []
+    const path = apiPath(w)
+    if (path === 'graphql') {
+      return w.some((x) => MUTATION.test(x)) ? [{ kind: 'gitlab_write', target: path }] : []
+    }
+    return method && WRITE_METHODS.has(method) ? [{ kind: 'gitlab_write', target: path }] : []
   }
   if (w[1] !== 'mr') {
     return []
   }
-  const plain = plainArgs(w.slice(3))
+  const plain = plainArgs(w.slice(3), MR_VALUE_FLAGS)
   if (w[2] === 'create') {
     return [{ kind: 'mr_opened', target: null }]
   }
   if (w[2] === 'update' || w[2] === 'merge') {
-    return [{ kind: 'mr_updated', target: mrOf(plain) ?? plain[0] ?? null }]
+    return [{ kind: 'mr_updated', target: mrOf(plain) }]
   }
   return w[2] === 'note' ? [{ kind: 'mr_commented', target: mrOf(plain) }] : []
 }
