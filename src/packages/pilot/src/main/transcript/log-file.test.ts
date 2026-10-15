@@ -1,4 +1,11 @@
-import { appendFileSync, mkdirSync, mkdtempSync, symlinkSync, writeFileSync } from 'node:fs'
+import {
+  appendFileSync,
+  mkdirSync,
+  mkdtempSync,
+  statSync,
+  symlinkSync,
+  writeFileSync
+} from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
@@ -55,5 +62,25 @@ describe('LogReader', () => {
     const state = await reader.read(file)
     const tool = state.entries[0]
     expect(JSON.parse(await reader.span(file, tool.use))).toMatchObject({ uuid: 'u-t1' })
+  })
+
+  it('feeds the same bytes once when two reads of one file overlap', async () => {
+    const first = lines(use(1, 't1', 'Bash', { command: 'ls' }))
+    const { root, file } = rootWith(first)
+    const reader = new LogReader(root)
+    await reader.read(file)
+    appendFileSync(file, lines(use(2, 't2', 'Bash', { command: 'pwd' })))
+    const [a, b] = await Promise.all([reader.read(file), reader.read(file)])
+    expect(a).toBe(b)
+    expect(a.entries.map((e) => e.id)).toEqual(['t1', 't2'])
+    expect(a.offset).toBe(statSync(file).size)
+  })
+
+  it('starts over when the file was rewritten to the same size with other content', async () => {
+    const { root, file } = rootWith(lines(use(1, 't1', 'Bash', { command: 'ls' })))
+    const reader = new LogReader(root)
+    await reader.read(file)
+    writeFileSync(file, lines(use(1, 't2', 'Bash', { command: 'ls' })))
+    expect((await reader.read(file)).entries.map((e) => e.id)).toEqual(['t2'])
   })
 })

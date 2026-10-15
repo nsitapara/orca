@@ -2,12 +2,13 @@ import type { LogEntry, LogEntryDetail, StepLog } from '../../shared/visibility-
 import type { PilotStore } from '../store/store'
 import { findClaudeTranscript } from '../usage/claude'
 import { inWindow, resultText, type ParsedEntry } from './claude-log'
-import type { LogReader } from './log-file'
+import { NOT_UNDER_ROOT, type LogReader } from './log-file'
 
 export const MAX_LOG_ENTRIES = 2000
 export const MAX_DETAIL_CHARS = 256 * 1024
 export const CODEX_NOT_READ = "Codex logs aren't read yet: Resume opens the session"
 export const NOT_AN_AGENT = 'Only agent steps have a log'
+export const TRANSCRIPT_CHANGED = 'The transcript changed since the log was read; reload it'
 export const NO_TRANSCRIPT = 'No transcript was found for this session'
 
 export type StepLogDeps = { store: PilotStore; reader: LogReader; claudeProjects: string }
@@ -69,7 +70,9 @@ export async function stepLog(deps: StepLogDeps, runId: string, stepIdx: number)
   try {
     state = await deps.reader.read(where.path)
   } catch (error) {
-    return none(error instanceof Error ? error.message : String(error))
+    return none(
+      error instanceof Error && error.message === NOT_UNDER_ROOT ? NOT_UNDER_ROOT : NO_TRANSCRIPT
+    )
   }
   const { inside, later } = inWindow(state.entries, where.from, where.to)
   const kept = inside.slice(-MAX_LOG_ENTRIES)
@@ -117,19 +120,39 @@ export async function stepLogEntry(
   if ('reason' in where) {
     throw new Error(where.reason)
   }
-  const state = await deps.reader.read(where.path)
+  const state = await deps.reader.read(where.path).catch((error: unknown) => {
+    throw new Error(
+      error instanceof Error && error.message === NOT_UNDER_ROOT
+        ? NOT_UNDER_ROOT
+        : TRANSCRIPT_CHANGED
+    )
+  })
   const entry = inWindow(state.entries, where.from, where.to).inside.find((e) => e.id === id)
   if (!entry) {
     throw new Error(`No log entry "${id}" in this step`)
   }
-  const used = blocks(await deps.reader.span(where.path, entry.use))
+  try {
+    return await detailOf(deps, where.path, entry, id)
+  } catch {
+    throw new Error(TRANSCRIPT_CHANGED)
+  }
+}
+
+// The entry's input and output, cut to their tails.
+async function detailOf(
+  deps: StepLogDeps,
+  path: string,
+  entry: ParsedEntry,
+  id: string
+): Promise<LogEntryDetail> {
+  const used = blocks(await deps.reader.span(path, entry.use))
   if (entry.kind === 'text') {
     const index = Number(id.split(':').pop())
     const out = tail(used[index]?.text ?? '')
     return { input: '', output: out.text, inputCut: 0, outputCut: out.cut }
   }
   const input = tail(inputOf(used.find((b) => b.type === 'tool_use' && b.id === id)))
-  const results = entry.result ? blocks(await deps.reader.span(where.path, entry.result)) : []
+  const results = entry.result ? blocks(await deps.reader.span(path, entry.result)) : []
   const output = tail(resultText(results.find((b) => b.tool_use_id === id)?.content))
   return { input: input.text, output: output.text, inputCut: input.cut, outputCut: output.cut }
 }
