@@ -3,6 +3,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import type { InboxListRow } from '../../../shared/api-types'
 import { groupItems, type Section } from '../../../shared/inbox-groups'
 import { waitingCount, preparingCount, preparationBlockedCount } from './answer-text'
+import { clearPendingInboxCard, usePendingInboxCard } from '../automations-view'
 import { CardList } from './CardList'
 import { FilterBadges } from './FilterBadges'
 import { setAllDetailsOpen, useAllDetailsOpen } from './details-open'
@@ -56,6 +57,18 @@ export function InboxPage(): React.JSX.Element {
     applyNow,
     reload
   } = useWaiting(viewer)
+  // A card the run panel's "asks you" link named: picked and scrolled to once the list has it, then forgotten.
+  const pending = usePendingInboxCard()
+  useEffect(() => {
+    if (!pending || !inbox) {
+      return
+    }
+    clearPendingInboxCard()
+    if (inbox.items.some((i) => i.id === pending)) {
+      setSelected(pending)
+      document.getElementById(`card-${pending}`)?.scrollIntoView?.({ block: 'start' })
+    }
+  }, [pending, inbox])
   // Save errors are kept here, by card id: a card remounts as a new version on every reload.
   const [errors, setErrors] = useState<Record<string, string>>({})
   const people = inbox?.people ?? []
@@ -96,6 +109,7 @@ export function InboxPage(): React.JSX.Element {
       key={`${i.id}@${i.version}`}
       item={i}
       automationName={names.get(i.automationId) ?? i.automationId}
+      run={i.runId ? (inbox?.runs?.[i.runId] ?? null) : null}
       runLine={inbox?.runLines[i.id] ?? null}
       answerState={inbox?.answerStates?.[i.id] ?? null}
       error={errors[i.id] ?? null}
