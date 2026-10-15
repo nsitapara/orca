@@ -20,9 +20,13 @@ import {
   type SortState
 } from './automations-sort'
 import { lastTickText } from './format'
+import { foldStrip, liveStrip, type StripChip, type StripItem } from '../../shared/run-views/strip'
+import { RunStrip } from '../run-views/RunStrip'
+import { openRun } from '../run-views/run-panel-state'
+import { showActivity, showPilotAutomation } from './automations-view'
 
 const COLS =
-  'grid grid-cols-[minmax(14rem,2fr)_minmax(8rem,1fr)_minmax(8rem,1fr)_minmax(12rem,1.5fr)_6rem] gap-3'
+  'grid grid-cols-[minmax(14rem,2fr)_minmax(16rem,2.5fr)_minmax(8rem,1fr)_minmax(12rem,1.5fr)_6rem] gap-3'
 const ROW = 'min-h-11 w-full border-t border-border/50 px-3 py-3 text-left text-sm hover:bg-accent'
 const STAGE_ROW = 'min-h-9 w-full bg-muted/30 py-2 pl-10 pr-3 text-left text-sm hover:bg-accent'
 
@@ -34,10 +38,44 @@ export function stagesText(count: number): string {
   return count === 1 ? '1 stage' : `${count} stages`
 }
 
-// What the job's stages look at, in stage order: "Pipelines → Linear tickets".
-export function jobLooksAt(job: JobGroup): string {
-  const kinds = job.stages.map((s) => s.itemKind)
-  return kinds.filter((k, i) => i === 0 || k !== kinds[i - 1]).join(' → ')
+// A chip on the list (spec §2 Strip): the one live run it is lit for, Activity filtered to this automation when it is lit
+// for several, else its How it runs.
+export function openChip(a: AutomationSummary, chip: StripChip): void {
+  if (chip.runIds.length === 1) {
+    openRun(chip.runIds[0], chip.part)
+    return
+  }
+  if (chip.runIds.length > 1) {
+    showActivity([a.id])
+    return
+  }
+  showPilotAutomation(a.id, 'how')
+}
+
+function RunsCell({ a }: { a: AutomationSummary }): React.JSX.Element {
+  return (
+    <RunStrip
+      items={foldStrip(liveStrip(a.chain, a.live))}
+      label={`${a.name} runs`}
+      onChip={(chip) => openChip(a, chip)}
+    />
+  )
+}
+
+function JobRunsCell({ job }: { job: JobGroup }): React.JSX.Element {
+  const stage = job.stages.find((s) => s.live.length > 0) ?? job.stages[0]
+  const rest = job.stages.length - 1
+  const extra: StripItem[] =
+    rest > 0
+      ? [{ kind: 'more', key: 'stages', count: rest, unit: rest === 1 ? 'stage' : 'stages' }]
+      : []
+  return (
+    <RunStrip
+      items={[...foldStrip(liveStrip(stage.chain, stage.live)), ...extra]}
+      label={`${jobTitle(job)} runs`}
+      onChip={(chip) => openChip(stage, chip)}
+    />
+  )
 }
 
 export function StatusBadge({ enabled }: { enabled: boolean }): React.JSX.Element {
@@ -58,15 +96,17 @@ function Row({
   onOpen: (id: string) => void
 }): React.JSX.Element {
   return (
-    <button type="button" onClick={() => onOpen(a.id)} className={`${COLS} ${ROW}`}>
-      <span className="truncate font-medium">{a.name}</span>
-      <span className="truncate text-muted-foreground">{a.itemKind}</span>
+    <div onClick={() => onOpen(a.id)} className={`${COLS} ${ROW} cursor-pointer`}>
+      <button type="button" className="truncate text-left font-medium">
+        {a.name}
+      </button>
+      <RunsCell a={a} />
       <span className="truncate text-muted-foreground">{scheduleText(a)}</span>
       <span className="truncate text-muted-foreground">{lastText(a, now)}</span>
       <span>
         <StatusBadge enabled={a.enabled} />
       </span>
-    </button>
+    </div>
   )
 }
 
@@ -81,23 +121,22 @@ function StageRow({
 }): React.JSX.Element {
   const label = a.job?.label ?? a.name
   return (
-    <button
-      type="button"
-      aria-label={`Stage ${a.job?.stage ?? ''} ${label}`}
-      onClick={() => onOpen(a.id)}
-      className={`${COLS} ${STAGE_ROW}`}
-    >
-      <span className="flex min-w-0 items-baseline gap-3">
+    <div onClick={() => onOpen(a.id)} className={`${COLS} ${STAGE_ROW} cursor-pointer`}>
+      <button
+        type="button"
+        aria-label={`Stage ${a.job?.stage ?? ''} ${label}`}
+        className="flex min-w-0 items-baseline gap-3 text-left"
+      >
         <span className="font-mono text-xs text-muted-foreground">{a.job?.stage}</span>
         <span className="truncate">{label}</span>
-      </span>
-      <span className="truncate text-muted-foreground">{a.itemKind}</span>
+      </button>
+      <RunsCell a={a} />
       <span className="truncate text-muted-foreground">{scheduleText(a)}</span>
       <span className="truncate text-muted-foreground">{lastText(a, now)}</span>
       <span>
         <StatusBadge enabled={a.enabled} />
       </span>
-    </button>
+    </div>
   )
 }
 
@@ -149,7 +188,7 @@ function JobRows({
             </Badge>
           </button>
         </span>
-        <span className="truncate text-muted-foreground">{jobLooksAt(job)}</span>
+        <JobRunsCell job={job} />
         <span />
         <span className="truncate text-muted-foreground">
           {lastText({ lastTick: jobLastTick(job) }, now)}
@@ -167,7 +206,7 @@ function JobRows({
 
 const HEADERS: [SortColumn, string][] = [
   ['name', 'Name'],
-  ['looksAt', 'Looks at'],
+  ['looksAt', 'Runs'],
   ['schedule', 'Schedule'],
   ['lastTick', 'Last tick'],
   ['status', 'Status']

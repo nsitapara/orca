@@ -1,7 +1,19 @@
 import { useState } from 'react'
-import type { TimelineNext, TimelineRun, WorktreeTimeline } from '../../shared/api-types'
-import { clockTime, spentLabel, verdictLabel } from '../pages/format'
-import { RunCard } from '../timeline/RunCard'
+import type {
+  AutomationSummary,
+  TimelineNext,
+  TimelineRun,
+  WorktreeTimeline
+} from '../../shared/api-types'
+import { runStatusWord } from '../../shared/env-text'
+import { money } from '../../shared/money'
+import { paintRun } from '../../shared/run-views/paint'
+import { foldStrip, stripOf } from '../../shared/run-views/strip'
+import { clockTime, runStatusLabel, spentLabel, verdictLabel } from '../pages/format'
+import { useAutomationsFeed } from '../run-views/automations-feed'
+import { envCleanup } from '../run-views/env-lines'
+import { openRunFromSidebar } from '../run-views/run-panel-state'
+import { RunStrip } from '../run-views/RunStrip'
 import { WaitingRow } from '../timeline/WaitingRow'
 import { useActiveWorktreePath } from './active-worktree'
 import { useWorktreeTimeline } from './timeline-feed'
@@ -44,14 +56,56 @@ function NextRow({ n }: { n: TimelineNext }): React.JSX.Element {
   )
 }
 
+function PanelRun({
+  run,
+  summary
+}: {
+  run: TimelineRun
+  summary: AutomationSummary | undefined
+}): React.JSX.Element {
+  const cleanup = envCleanup(run)
+  const items = summary ? foldStrip(stripOf(paintRun(summary.chain, { run }).parts), 4) : []
+  return (
+    <li className="relative border-l border-border pb-3 pl-4">
+      <span className="absolute -left-[5px] top-1.5 size-2.5 rounded-full border border-border bg-background" />
+      <button
+        type="button"
+        aria-label={`Open ${run.itemLabel} · ${run.automationName}`}
+        onClick={() => openRunFromSidebar(run.id)}
+        className="flex flex-wrap items-center gap-2 text-left text-xs text-muted-foreground"
+      >
+        <span>{clockTime(run.startedAt)}</span>
+        <span className="rounded bg-muted px-1.5 text-foreground">
+          {runStatusWord(run, runStatusLabel)}
+        </span>
+        {run.costUsd !== null ? <span>{money(run.costUsd)}</span> : null}
+      </button>
+      <div className="text-sm">{run.automationName}</div>
+      {run.outcome ? <div className="text-xs text-muted-foreground">{run.outcome}</div> : null}
+      {cleanup ? <div className="text-xs text-muted-foreground">{cleanup}</div> : null}
+      {run.inbox.map((item) => (
+        <WaitingRow key={item.id} item={item} />
+      ))}
+      {items.length > 0 ? (
+        <RunStrip
+          items={items}
+          label={`Run ${run.id}`}
+          onChip={(chip) => openRunFromSidebar(run.id, chip.part)}
+        />
+      ) : null}
+    </li>
+  )
+}
+
 function Runs({ runs, empty }: { runs: TimelineRun[]; empty: string }): React.JSX.Element {
+  const { byId } = useAutomationsFeed()
   if (runs.length === 0) {
     return <p className="text-xs text-muted-foreground">{empty}</p>
   }
   return (
     <ol className="ml-1">
       {runs.map((run) => (
-        <RunCard key={run.id} run={run} title={run.automationName} />
+        <PanelRun key={run.id} run={run} summary={byId.get(run.automationId)} />
       ))}
     </ol>
   )

@@ -1,34 +1,24 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type {
-  ActivityTick,
-  AutomationDetailPayload,
-  AutomationListPayload
-} from '../../shared/api-types'
+import type { AutomationDetailPayload, AutomationListPayload } from '../../shared/api-types'
 import { findJob, jobTitle, type JobGroup } from '../../shared/job-stages'
 import { pilotRpc } from '../api'
-import { JobActivityTimeline } from './ActivityTimeline'
+import { ActivityView } from '../run-views/ActivityView'
 import { DryRunPanel } from './DryRunPanel'
 import { errorText } from './format'
 import { JobControls, stageNamer, type StageDryRun } from './JobControls'
-import { JobStageFlow, type StageCardData } from './JobStageFlow'
-import { flowEdges, latestFrom, mergeJobActivity } from './job-flow'
-import { emptyActivityText, QuietTicksSwitch, useHideQuiet } from './QuietTicksSwitch'
+import { JobRails, type StageCardData } from './JobRails'
+import { flowEdges, latestFrom } from './job-flow'
 
-type StageData = StageCardData & { ticks: ActivityTick[] }
+const HOW = 'how'
 const ACTIVITY = 'activity'
 
-async function stageData(job: JobGroup, skipQuiet: boolean): Promise<StageData[]> {
+async function stageData(job: JobGroup): Promise<StageCardData[]> {
   return Promise.all(
     job.stages.map(async (summary) => {
       const detail = await pilotRpc<AutomationDetailPayload>('pilot.automations.get', {
         id: summary.id
       })
-      const ticks = await pilotRpc<ActivityTick[]>('pilot.automations.activity', {
-        id: summary.id,
-        limit: 30,
-        skipQuiet
-      })
-      return { summary, detail, ticks }
+      return { summary, detail }
     })
   )
 }
@@ -36,26 +26,25 @@ async function stageData(job: JobGroup, skipQuiet: boolean): Promise<StageData[]
 function Tabs({
   stages,
   tab,
-  onTab,
-  hideQuiet,
-  onHideQuiet
+  onTab
 }: {
-  stages: StageData[]
+  stages: StageCardData[]
   tab: string
   onTab: (tab: string) => void
-  hideQuiet: boolean
-  onHideQuiet: (hide: boolean) => void
 }): React.JSX.Element {
   const tabs = [
+    { id: HOW, label: 'How it runs' },
     { id: ACTIVITY, label: 'Activity' },
     ...stages.map((s) => ({ id: s.summary.id, label: `Stage ${s.summary.job?.stage} YAML` }))
   ]
   return (
-    <div className="flex gap-4 border-b border-border/50 text-sm">
+    <div role="tablist" className="flex gap-4 border-b border-border/50 text-sm">
       {tabs.map((t) => (
         <button
           key={t.id}
           type="button"
+          role="tab"
+          aria-selected={tab === t.id}
           onClick={() => onTab(t.id)}
           className={
             tab === t.id ? 'border-b-2 border-foreground pb-1' : 'pb-1 text-muted-foreground'
@@ -64,54 +53,21 @@ function Tabs({
           {t.label}
         </button>
       ))}
-      {tab === ACTIVITY ? <QuietTicksSwitch hide={hideQuiet} onChange={onHideQuiet} /> : null}
     </div>
   )
 }
 
-function TabBody({
-  stages,
-  tab,
-  hideQuiet,
-  onOpenStage
-}: {
-  stages: StageData[]
-  tab: string
-  hideQuiet: boolean
-  onOpenStage: (id: string) => void
-}): React.JSX.Element {
-  const shown = stages.find((s) => s.summary.id === tab)
-  if (shown?.detail) {
-    return (
-      <pre className="overflow-auto rounded-md border border-border/50 bg-muted/20 p-3 text-xs">
-        {shown.detail.yaml}
-      </pre>
-    )
-  }
-  const entries = mergeJobActivity(
-    stages.map((s) => ({
-      stage: s.summary.job?.stage ?? 0,
-      checkNames: s.detail?.checkNames ?? [],
-      ticks: s.ticks
-    }))
-  )
-  const notes = stages
+// Each stage's notes from before its first tick, tagged with its stage, newest first.
+function stageNotes(stages: StageCardData[]) {
+  return stages
     .flatMap((s) =>
       (s.detail?.notes ?? []).map((n) => ({ ...n, tag: `Stage ${s.summary.job?.stage ?? 0}` }))
     )
     .sort((a, b) => b.at - a.at)
-  return (
-    <JobActivityTimeline
-      entries={entries}
-      notes={notes}
-      empty={emptyActivityText(hideQuiet)}
-      onOpenStage={onOpenStage}
-    />
-  )
 }
 
-// A job of several automations (their job: blocks share its id): the stages as a flow, one merged Activity, and
-// buttons that act on every stage.
+// A job of several automations (their job: blocks share its id): the stages as stacked rails, one Activity, a YAML
+// tab per stage, and buttons that act on every stage.
 export function JobView({
   jobId,
   onBack,
@@ -122,10 +78,9 @@ export function JobView({
   onOpenStage: (id: string) => void
 }): React.JSX.Element {
   const [job, setJob] = useState<JobGroup | null>(null)
-  const [stages, setStages] = useState<StageData[]>([])
+  const [stages, setStages] = useState<StageCardData[]>([])
   const [loaded, setLoaded] = useState(false)
-  const [tab, setTab] = useState(ACTIVITY)
-  const [hideQuiet, setHideQuiet] = useHideQuiet()
+  const [tab, setTab] = useState(HOW)
   const [dryRuns, setDryRuns] = useState<StageDryRun[]>([])
   const [error, setError] = useState<string | null>(null)
   const [now, setNow] = useState(() => Date.now())
@@ -134,7 +89,7 @@ export function JobView({
     try {
       const list = await pilotRpc<AutomationListPayload>('pilot.automations.list')
       const found = findJob(list.automations, jobId)
-      const data = found ? await stageData(found, hideQuiet) : []
+      const data = found ? await stageData(found) : []
       if (!mounted.current) {
         return
       }
@@ -150,7 +105,7 @@ export function JobView({
     if (mounted.current) {
       setLoaded(true)
     }
-  }, [jobId, hideQuiet])
+  }, [jobId])
   useEffect(() => {
     mounted.current = true
     void refresh()
@@ -182,6 +137,7 @@ export function JobView({
       </div>
     )
   }
+  const yamlStage = stages.find((s) => s.summary.id === tab)
   return (
     <div className="flex flex-col gap-4">
       {crumbs}
@@ -202,20 +158,32 @@ export function JobView({
           onClose={() => setDryRuns((all) => all.filter((x) => x.id !== d.id))}
         />
       ))}
-      <JobStageFlow
-        stages={stages}
-        edges={flowEdges(job, latestFrom(stages.map((s) => s.detail)))}
-        now={now}
-        onOpenStage={onOpenStage}
-      />
-      <Tabs
-        stages={stages}
-        tab={tab}
-        onTab={setTab}
-        hideQuiet={hideQuiet}
-        onHideQuiet={setHideQuiet}
-      />
-      <TabBody stages={stages} tab={tab} hideQuiet={hideQuiet} onOpenStage={onOpenStage} />
+      <Tabs stages={stages} tab={tab} onTab={setTab} />
+      {tab === HOW ? (
+        <JobRails
+          stages={stages}
+          edges={flowEdges(job, latestFrom(stages.map((s) => s.detail)))}
+          now={now}
+          onOpenStage={onOpenStage}
+        />
+      ) : null}
+      {tab === ACTIVITY ? (
+        <ActivityView
+          automationIds={stages.map((s) => s.summary.id)}
+          since={null}
+          limit={60}
+          tags={Object.fromEntries(
+            stages.map((s) => [s.summary.id, `Stage ${s.summary.job?.stage ?? 0}`])
+          )}
+          onTag={onOpenStage}
+          notes={stageNotes(stages)}
+        />
+      ) : null}
+      {yamlStage ? (
+        <pre className="overflow-auto rounded-md border border-border/50 bg-muted/20 p-3 text-xs">
+          {yamlStage.detail?.yaml}
+        </pre>
+      ) : null}
     </div>
   )
 }

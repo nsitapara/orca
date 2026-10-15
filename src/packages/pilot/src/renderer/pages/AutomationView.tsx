@@ -1,23 +1,26 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type {
-  ActivityTick,
   AutomationDetailPayload,
   AutomationListPayload,
   TickOutcome
 } from '../../shared/api-types'
 import { findJob, jobTitle, type JobGroup } from '../../shared/job-stages'
 import { pilotRpc } from '../api'
-import { AutomationOverview } from './AutomationOverview'
-import { ActivityTimeline } from './ActivityTimeline'
+import { ActivityView } from '../run-views/ActivityView'
+import {
+  setPilotAutomationTab,
+  usePilotAutomationTab,
+  type AutomationTab
+} from './automations-view'
 import { DryRunPanel } from './DryRunPanel'
 import { errorText } from './format'
-import { emptyActivityText, QuietTicksSwitch, useHideQuiet } from './QuietTicksSwitch'
+import { HowItRuns } from './HowItRuns'
 import { RunControls } from './RunControls'
 
-type Tab = 'overview' | 'activity'
-const TABS: { id: Tab; label: string }[] = [
-  { id: 'overview', label: 'Overview' },
-  { id: 'activity', label: 'Activity' }
+const TABS: { id: AutomationTab; label: string }[] = [
+  { id: 'how', label: 'How it runs' },
+  { id: 'activity', label: 'Activity' },
+  { id: 'yaml', label: 'YAML' }
 ]
 
 // A stage's page is named by its stage ("Stage 2 of 2 · Start a fix session per ticket"): its file's own name is
@@ -86,20 +89,13 @@ export function AutomationView({
 }): React.JSX.Element {
   const [detail, setDetail] = useState<AutomationDetailPayload | null>(null)
   const [job, setJob] = useState<JobGroup | null>(null)
-  const [ticks, setTicks] = useState<ActivityTick[]>([])
-  const [tab, setTab] = useState<Tab>('activity')
-  const [hideQuiet, setHideQuiet] = useHideQuiet()
+  const tab = usePilotAutomationTab()
   const [dryRun, setDryRun] = useState<TickOutcome | null>(null)
   const [error, setError] = useState<string | null>(null)
   const mounted = useRef(true)
   const refresh = useCallback(async () => {
     try {
       const d = await pilotRpc<AutomationDetailPayload>('pilot.automations.get', { id })
-      const t = await pilotRpc<ActivityTick[]>('pilot.automations.activity', {
-        id,
-        limit: 30,
-        skipQuiet: hideQuiet
-      })
       // A stage's job, for its crumb and how many stages it has.
       const jobId = d.summary.job?.id
       const j = jobId
@@ -113,14 +109,13 @@ export function AutomationView({
       }
       setDetail(d)
       setJob(j)
-      setTicks(t)
       setError(null)
     } catch (e) {
       if (mounted.current) {
         setError(errorText(e))
       }
     }
-  }, [id, hideQuiet])
+  }, [id])
   useEffect(() => {
     mounted.current = true
     void refresh()
@@ -159,12 +154,14 @@ export function AutomationView({
           onClose={() => setDryRun(null)}
         />
       ) : null}
-      <div className="flex gap-4 border-b border-border/50 text-sm">
+      <div role="tablist" className="flex gap-4 border-b border-border/50 text-sm">
         {TABS.map((t) => (
           <button
             key={t.id}
             type="button"
-            onClick={() => setTab(t.id)}
+            role="tab"
+            aria-selected={tab === t.id}
+            onClick={() => setPilotAutomationTab(t.id)}
             className={
               tab === t.id ? 'border-b-2 border-foreground pb-1' : 'pb-1 text-muted-foreground'
             }
@@ -172,18 +169,16 @@ export function AutomationView({
             {t.label}
           </button>
         ))}
-        {tab === 'activity' ? <QuietTicksSwitch hide={hideQuiet} onChange={setHideQuiet} /> : null}
       </div>
+      {tab === 'how' ? <HowItRuns summary={detail.summary} /> : null}
       {tab === 'activity' ? (
-        <ActivityTimeline
-          ticks={ticks}
-          checkNames={detail.checkNames}
-          notes={detail.notes ?? []}
-          empty={emptyActivityText(hideQuiet)}
-        />
-      ) : (
-        <AutomationOverview detail={detail} />
-      )}
+        <ActivityView automationIds={[id]} since={null} limit={30} notes={detail.notes ?? []} />
+      ) : null}
+      {tab === 'yaml' ? (
+        <pre className="overflow-auto rounded-md border border-border/50 bg-muted/20 p-3 text-xs">
+          {detail.yaml}
+        </pre>
+      ) : null}
     </div>
   )
 }

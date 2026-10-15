@@ -1,10 +1,9 @@
-import type { ActivityTick, HandoverRow } from '../../shared/api-types'
+import type { HandoverRow } from '../../shared/api-types'
 import type { JobGroup } from '../../shared/job-stages'
 
 // `last`: the rows of the most recent handover along the edge ([] when none, or the feed passes no ids).
 export type FlowEdge = { from: number; to: number; caption: string | null; last: HandoverRow[] }
 export type LatestHandover = (from: string, to: string) => HandoverRow[]
-export type JobActivityEntry = { tick: ActivityTick; stage: number; checkNames: string[] }
 
 // The job page's arrows: each stage's feeds connections, by stage number, each with its caption and the most recent
 // handover along it.
@@ -30,15 +29,6 @@ export function latestFrom(
 ): LatestHandover {
   return (from, to) =>
     details.find((d) => d?.summary.id === from)?.handovers?.find((h) => h.to === to)?.rows ?? []
-}
-
-// One timeline for the job: every stage's ticks, newest first (the tick id breaks a tie), each with its stage.
-export function mergeJobActivity(
-  stages: readonly { stage: number; checkNames: string[]; ticks: readonly ActivityTick[] }[]
-): JobActivityEntry[] {
-  return stages
-    .flatMap((s) => s.ticks.map((tick) => ({ tick, stage: s.stage, checkNames: s.checkNames })))
-    .sort((a, b) => b.tick.startedAt - a.tick.startedAt || b.tick.id - a.tick.id)
 }
 
 // The first words of the comment the YAML file opens with, or null when it opens with none.

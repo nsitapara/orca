@@ -250,12 +250,6 @@ describe('Pilot API handlers', () => {
     expect(activity(ctx, 'ci', 10)[0].runs[0].inbox.map((i) => i.title)).toEqual(['Push the fix?'])
   })
 
-  it("returns the definition's steps for the Overview", () => {
-    expect(getAutomation(context().ctx, 'ci').steps.map((s) => [s.name, s.agent])).toEqual([
-      ['step1', 'claude']
-    ])
-  })
-
   it("returns a stage's most recent handover to each stage it passes ids to", () => {
     const dir = mkdtempSync(join(tmpdir(), 'pilot-rpc-job-'))
     writeFileSync(

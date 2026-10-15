@@ -2,6 +2,7 @@ import { readdirSync, readFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
+import { decideStep } from '../../src/shared/run/step-plan'
 import type { PilotContext } from '../../src/main/pilot-services'
 import { recordRunOutput } from '../../src/main/rpc/run-channel'
 import { readMode } from '../../src/main/run/modes'
@@ -58,8 +59,25 @@ describe('09 · Prepare reviews requested of me: the definition', () => {
       ['card_context', 'per_tick']
     ])
     expect(definition.steps).toMatchObject([
+      {
+        name: 'still_due',
+        agent: 'shell',
+        run: 'pilotcli gitlab check-mr "$IID" state=opened sha="$HEAD_SHA" reviewers=me unapproved=true',
+        env: { IID: '{mr.iid}', HEAD_SHA: '{mr.head_sha}' },
+        exitCodes: { ok: [0], skip: [], stop: [3] }
+      },
       { name: 'prepare', agent: 'claude', skill: 'review-mr', mode: 'prepare' }
     ])
+  })
+
+  it('a head that moved, a closed MR, a dropped request or an approval since my Approve ends the run before the agent', () => {
+    const [stillDue, prepare] = definition.steps
+    const stopped = [
+      { name: stillDue.name, status: 'stopped' as const, always: false, error: 'sha moved' }
+    ]
+    expect(decideStep(prepare, stopped, {})).toMatchObject({ run: false })
+    const due = [{ name: stillDue.name, status: 'done' as const, always: false, error: null }]
+    expect(decideStep(prepare, due, {})).toEqual({ run: true })
   })
 
   it('reviews only requests of mine nobody approved: reviewer, not author, no approvals (unknown approvals fail closed)', () => {

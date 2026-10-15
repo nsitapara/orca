@@ -13,6 +13,7 @@ import { detail, summary } from './fixtures'
 const pilotRpc = vi.fn()
 vi.mock('../api', () => ({ pilotRpc: (...args: unknown[]) => pilotRpc(...args) }))
 
+import { resetAutomationsFeed } from '../run-views/automations-feed'
 import { JobView } from './JobView'
 
 const STAGE_1: AutomationSummary = {
@@ -124,8 +125,10 @@ function serve(
         checkNames: ['Quota']
       } satisfies AutomationDetailPayload
     }
-    if (method === 'pilot.automations.activity') {
-      return TICKS[params.id] ?? []
+    if (method === 'pilot.activity.list') {
+      const ids = (params as { automationIds?: string[] }).automationIds ?? Object.keys(TICKS)
+      const ticks = ids.flatMap((id) => TICKS[id] ?? []).sort((a, b) => b.startedAt - a.startedAt)
+      return { live: [], ticks, loose: [] }
     }
     throw new Error(`unexpected ${method}`)
   })
@@ -136,6 +139,7 @@ describe('JobView: a job of several automations on one page', () => {
   afterEach(() => {
     cleanup()
     pilotRpc.mockReset()
+    resetAutomationsFeed()
     localStorage.clear()
   })
 
@@ -194,10 +198,32 @@ describe('JobView: a job of several automations on one page', () => {
     expect(screen.queryByRole('img', { name: /hands stage/ })).toBeNull()
   })
 
-  it('merges every stage’s activity newest first, each tick tagged with its stage, out-of-scope items hidden', async () => {
+  it('stacks each stage’s rail on How it runs, joined by the handover its feeds draw', async () => {
     serve([STAGE_1, STAGE_2])
     render(<JobView jobId="13" onBack={() => {}} onOpenStage={() => {}} />)
-    await screen.findByText('Stage 1 · Pipelines')
+    expect(await screen.findByRole('tab', { name: 'How it runs', selected: true })).toBeTruthy()
+    expect(
+      within(await screen.findByRole('region', { name: 'Stage 1' })).getByText(
+        'Stage 1 · Pipelines'
+      )
+    ).toBeTruthy()
+    expect(
+      within(screen.getByRole('region', { name: 'Stage 2' })).getByRole('region', { name: 'Steps' })
+    ).toBeTruthy()
+  })
+
+  it('shows every stage’s ticks in one Activity, newest first, each tagged with its stage, out-of-scope items hidden', async () => {
+    serve([STAGE_1, STAGE_2])
+    render(<JobView jobId="13" onBack={() => {}} onOpenStage={() => {}} />)
+    fireEvent.click(await screen.findByRole('tab', { name: 'Activity' }))
+    await waitFor(() =>
+      expect(calls('pilot.activity.list').at(-1)?.[1]).toEqual({
+        automationIds: ['dev-e2e-fix', 'dev-e2e-fix-start'],
+        since: undefined,
+        limit: 60,
+        skipQuiet: true
+      })
+    )
     await waitFor(() => expect(screen.getAllByText(/^Stage \d$/)).toHaveLength(3))
     expect(screen.getAllByText(/^Stage \d$/).map((t) => t.textContent)).toEqual([
       'Stage 2',
@@ -205,32 +231,12 @@ describe('JobView: a job of several automations on one page', () => {
       'Stage 1'
     ])
     expect(screen.queryByText('WEB-50')).toBeNull()
-    expect(screen.getAllByText('0 checked')).toHaveLength(2)
-  })
-
-  it('asks every stage for only its ticks with something to do, until the switch is turned off', async () => {
-    serve([STAGE_1, STAGE_2])
-    render(<JobView jobId="13" onBack={() => {}} onOpenStage={() => {}} />)
-    const hide = await screen.findByRole('switch', { name: 'Hide ticks with nothing to do' })
-    await waitFor(() => expect(calls('pilot.automations.activity')).toHaveLength(2))
-    expect(calls('pilot.automations.activity').map((c) => c[1])).toEqual([
-      { id: 'dev-e2e-fix', limit: 30, skipQuiet: true },
-      { id: 'dev-e2e-fix-start', limit: 30, skipQuiet: true }
-    ])
-    fireEvent.click(hide)
-    await waitFor(() => expect(calls('pilot.automations.activity')).toHaveLength(4))
-    expect(calls('pilot.automations.activity').map((c) => c[1].skipQuiet)).toEqual([
-      true,
-      true,
-      false,
-      false
-    ])
   })
 
   it('shows each stage’s YAML in its own tab', async () => {
     serve([STAGE_1, STAGE_2])
     render(<JobView jobId="13" onBack={() => {}} onOpenStage={() => {}} />)
-    fireEvent.click(await screen.findByRole('button', { name: 'Stage 2 YAML' }))
+    fireEvent.click(await screen.findByRole('tab', { name: 'Stage 2 YAML' }))
     expect(screen.getByText(/Each open ticket gets one Claude session\.\s+name: two/)).toBeTruthy()
   })
 
@@ -379,6 +385,7 @@ describe('JobView: a job of several automations on one page', () => {
     render(<JobView jobId="13" onBack={() => {}} onOpenStage={onOpenStage} />)
     fireEvent.click(await screen.findByRole('button', { name: 'Start a fix session per ticket' }))
     expect(onOpenStage).toHaveBeenCalledWith('dev-e2e-fix-start')
+    fireEvent.click(screen.getByRole('tab', { name: 'Activity' }))
     fireEvent.click((await screen.findAllByRole('button', { name: 'Open stage 1' }))[0])
     expect(onOpenStage).toHaveBeenLastCalledWith('dev-e2e-fix')
     cleanup()

@@ -1,5 +1,6 @@
 import type { PreparationInput } from './preparation'
 import type {
+  ActivityRun,
   HoldReason,
   InboxItemRow,
   InboxListRow,
@@ -66,6 +67,8 @@ export type InboxListPayload = {
   runLines: Record<string, RunLine>
   // By card id, for each answered card.
   answerStates: Record<string, AnswerState>
+  // Each card's run by run id, with its steps and cards, for the card's "From run" strip. Absent from older builds.
+  runs?: Record<string, ActivityRun>
   people: { id: string; name: string }[]
   groups: { id: string; name: string; members: string[] }[]
   automations: { id: string; name: string }[]

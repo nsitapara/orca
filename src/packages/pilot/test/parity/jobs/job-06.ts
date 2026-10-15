@@ -5,6 +5,7 @@ import { mrFeedbackState } from '../../../src/main/importer/sweep-state/mr-feedb
 import { parseAutomationYaml } from '../../../src/shared/definition/parse'
 import type { AutomationDefinition } from '../../../src/shared/definition/types'
 import { parsePeopleYaml, type PeopleDirectory } from '../../../src/shared/people'
+import type { ScriptRunner } from '../../../src/main/fields/script-runner'
 import type { VerdictTable } from '../compare'
 import { seedByImport } from '../fixture-reader'
 import type { ParityJob } from '../parity-case'
@@ -29,7 +30,35 @@ export const VERDICTS_06: VerdictTable = {
     quota: ['skipped'],
     absent: ['out_of_scope']
   },
+  // The sweep skipped an MR whose worktree was dirty or mid-operation; the env's busy check replaces that gate
+  // (pilotcli M4 §8): the item starts in a throwaway, waits for the limit its start now uses, or is held by the quota
+  // check. The open-tab gate stays (session: none_open).
+  rows: [
+    {
+      word: 'skip',
+      reason: /^(uncommitted changes|\S+ present); retry next round$/,
+      verdicts: ['started', 'over_limit', 'skipped']
+    }
+  ],
+  // Those started MRs take the per-tick slots that the sweep gave to later due MRs.
+  known: [
+    {
+      key: 'mr:1715',
+      word: 'due',
+      verdict: 'over_limit',
+      why: 'An MR the sweep skipped for a dirty worktree now starts, and takes one of the three slots of the tick'
+    }
+  ],
   whenOldMissing: []
+}
+
+// due.sh, 06's script check (commits that wait to be pushed hold the MR back), has no counterpart in the sweep, and a
+// case holds no branch to ask about: every MR passes it, so the verdicts are the sweep's own gates.
+export const answerDue: ScriptRunner = async (req) => {
+  if (!req.command.endsWith('/scripts/due.sh')) {
+    throw new Error(`parity: no answer for the script ${req.command}`)
+  }
+  return { code: 0, stdout: 'nothing waits to be pushed\n', stderr: '', timedOut: false }
 }
 
 // The sweep's open feedback tabs, brought in as import-state would.
@@ -54,6 +83,7 @@ export const PARITY_06: ParityJob = {
   folder: JOB_06.sweep,
   files: [JOB_06.yaml, join(dirname(JOB_06.yaml), 'people.yaml')],
   table: VERDICTS_06,
+  runScript: answerDue,
   seed: seed06,
   load: load06
 }
