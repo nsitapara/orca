@@ -123,6 +123,7 @@ describe('the chain of every live automation', () => {
         '↳card_context:script',
         'Asks you:you',
         'Workspace:pilot',
+        'still_due:script',
         'prepare:agent',
         'Answers:you'
       ]
