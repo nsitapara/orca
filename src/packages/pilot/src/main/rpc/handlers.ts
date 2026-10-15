@@ -3,35 +3,25 @@ import type {
   ActivityTick,
   AutomationDetailPayload,
   AutomationListPayload,
-  AutomationSummary,
-  EventRow,
-  TickRow
+  ActivityRun,
+  AutomationSummary
 } from '../../shared/api-types'
 import { parseAutomationYaml } from '../../shared/definition/parse'
-import type { AutomationDefinition, ItemKind, ParseResult } from '../../shared/definition/types'
+import type { AutomationDefinition, ParseResult } from '../../shared/definition/types'
+import { chainOf } from '../../shared/run-views/chain'
+import { itemKindWords } from '../../shared/run-views/chain-text'
 import { checkName } from '../../shared/tick/checks'
 import { HANDOVER_EXPIRED_EVENT } from '../handover/housekeep'
 import type { PilotContext } from '../pilot-services'
+import { withDetail } from '../timeline/run-detail'
+import { activityTicks, noteOf } from './activity-ticks'
 
-const ITEM_KIND: Record<ItemKind, string> = {
-  merge_request: 'Merge requests',
-  worktree: 'Worktrees',
-  pipeline: 'Pipelines',
-  linear_ticket: 'Linear tickets',
-  inbox_preparation: 'Inbox context requests'
-}
-
-function itemKindLabel(def: AutomationDefinition): string {
-  if (!def.items) {
-    return 'Runs once'
-  }
-  return ITEM_KIND[def.items.kind]
-}
-
-// heldBack: its file is invalid and only its last valid version is shown, so it has no next tick.
+// heldBack: its file is invalid and only its last valid version is shown, so it has no next tick. `live`: its runs still
+// going or waiting on a person.
 function summarize(
   ctx: PilotContext,
   def: AutomationDefinition,
+  live: ActivityRun[],
   heldBack = false
 ): AutomationSummary {
   return {
@@ -41,21 +31,31 @@ function summarize(
     enabled: def.enabled,
     schedule: def.schedule,
     timezone: def.timezone,
-    itemKind: itemKindLabel(def),
+    itemKind: itemKindWords(def),
     agent: def.steps[0]?.agent ?? 'claude',
     powers: def.powers,
     inbox: def.inbox,
     nextTickAt: heldBack ? null : ctx.scheduler.nextTickAt(def),
     lastTick: ctx.store.lastTick(def.id),
-    job: def.job
+    job: def.job,
+    chain: chainOf(def, ctx.loaded().definitions),
+    live
   }
 }
 
 export function listAutomations(ctx: PilotContext): AutomationListPayload {
   const loaded = ctx.loaded()
   const displayOnly = new Set(loaded.displayOnly ?? [])
+  const live = withDetail(ctx.store, ctx.store.activity.live(null))
   return {
-    automations: loaded.definitions.map((d) => summarize(ctx, d, displayOnly.has(d.id))),
+    automations: loaded.definitions.map((d) =>
+      summarize(
+        ctx,
+        d,
+        live.filter((r) => r.automationId === d.id),
+        displayOnly.has(d.id)
+      )
+    ),
     errors: loaded.errors,
     warnings: loaded.warnings ?? [],
     peopleError: loaded.peopleError,
@@ -75,7 +75,7 @@ export function getAutomation(ctx: PilotContext, id: string): AutomationDetailPa
   const def = findDefinition(ctx, id)
   const passing = (def.job?.feeds ?? []).filter((f) => f.pass !== null)
   return {
-    summary: summarize(ctx, def),
+    summary: summarize(ctx, def, withDetail(ctx.store, ctx.store.activity.live([def.id]))),
     yaml: readFileSync(def.file, 'utf8'),
     checkNames: def.checks.map(checkName),
     steps: def.steps,
@@ -93,65 +93,11 @@ export function activity(
   limit: number,
   { skipQuiet = false }: { skipQuiet?: boolean } = {}
 ): ActivityTick[] {
-  const ticks = ctx.store
-    .listTicks(id, limit, skipQuiet)
-    .map((tick) => ({ tick, runs: ctx.store.runs.forTick(tick.id) }))
-  const asked = ctx.store.timeline.inboxForRuns(ticks.flatMap((t) => t.runs.map((r) => r.id)))
-  const tickIds = ticks.map((t) => t.tick.id)
-  const triggers = ctx.store.handovers.tickTriggers(tickIds)
-  const handedOver = ctx.store.handovers.consumedBy(tickIds)
-  const definitions = ctx.loaded().definitions
-  const stageOf = (id: string) => definitions.find((d) => d.id === id)?.job?.stage ?? null
-  const notes = notesByTick(
-    ctx,
-    id,
-    ticks.map((t) => t.tick),
-    limit
-  )
-  return ticks.map(({ tick, runs }) => ({
-    ...tick,
-    trigger: triggers.get(tick.id) ?? null,
-    handedOver: (handedOver.get(tick.id) ?? []).map((h) => ({
-      ...h,
-      senderStage: stageOf(h.senderId)
-    })),
-    notes: notes.get(tick.id) ?? [],
-    items: ctx.store.tickItems(tick.id),
-    runs: runs.map((run) => ({
-      ...run,
-      steps: ctx.store.runs.steps(run.id),
-      inbox: asked.filter((i) => i.runId === run.id)
-    }))
-  }))
-}
-
-// Each expiry the scheduler pass recorded on this stage, under the newest tick that started before it (ticks newest
-// first).
-function notesByTick(
-  ctx: PilotContext,
-  id: string,
-  ticks: readonly TickRow[],
-  limit: number
-): Map<number, { at: number; text: string }[]> {
-  const found = new Map<number, { at: number; text: string }[]>()
+  const ticks = ctx.store.listTicks(id, limit, skipQuiet)
   const oldest = ticks.at(-1)
-  if (!oldest) {
-    return found
-  }
-  const since = ticks.length < limit ? 0 : oldest.startedAt
-  const events = ctx.store.events.list({ kinds: [HANDOVER_EXPIRED_EVENT], automationId: id, since })
-  for (const e of events) {
-    // One from before every tick shown either belongs to an older tick or comes before the first (earlyNotes).
-    const tick = ticks.find((t) => t.startedAt <= e.at)
-    if (tick) {
-      found.set(tick.id, [...(found.get(tick.id) ?? []), noteOf(e)])
-    }
-  }
-  return found
-}
-
-function noteOf(e: EventRow): { at: number; text: string } {
-  return { at: e.at, text: typeof e.payload.text === 'string' ? e.payload.text : e.kind }
+  // Fewer ticks than asked for: every note of this stage belongs under one of them.
+  const floor = ticks.length < limit || !oldest ? 0 : oldest.startedAt
+  return activityTicks(ctx, ticks, floor)
 }
 
 // A stage's notes from before its first tick (or all of them, if it never ticked): no tick to sit under, so Activity

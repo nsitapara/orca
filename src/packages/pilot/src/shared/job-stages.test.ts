@@ -30,6 +30,8 @@ function summary(id: string, over: Partial<AutomationSummary> = {}): AutomationS
     nextTickAt: null,
     lastTick: null,
     job: null,
+    chain: [],
+    live: [],
     ...over
   }
 }
