@@ -108,7 +108,7 @@ describe('05 · Fix failed CI v2: the definition', () => {
   it("pushes the agent's commit pinned, only when it handed one over, else leaves a push card", () => {
     const [, , , , push, , card] = definition.steps
     expect(push.run).toBe(
-      'python3 /Users/nishsitapara/.agents/skills/fix-gitlab-ci/scripts/publish.py push'
+      'python3 /Users/nishsitapara/.agents/skills/worktree-gate/publish.py push'
     )
     expect(push.env).toMatchObject({
       HEAD_SHA: '{steps.fix.head}',
@@ -117,7 +117,7 @@ describe('05 · Fix failed CI v2: the definition', () => {
       MODE: '{env.mode}'
     })
     expect(card.run).toBe(
-      'python3 /Users/nishsitapara/.agents/skills/fix-gitlab-ci/scripts/publish.py card'
+      'python3 /Users/nishsitapara/.agents/skills/worktree-gate/publish.py card'
     )
     expect(card.env).toMatchObject({
       SUMMARY: '{steps.fix.summary}',

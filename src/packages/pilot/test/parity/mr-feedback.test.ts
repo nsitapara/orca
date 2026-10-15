@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest'
 import type { PilotStore } from '../../src/main/store/store'
 import { decideStep } from '../../src/shared/run/step-plan'
 import { loadFixture, type ParityFixture } from './fixture'
-import { JOB_06, PARITY_06, seed06 } from './jobs/job-06'
+import { answerDue, JOB_06, PARITY_06, seed06 } from './jobs/job-06'
 import { PARITY_DIR, runOldPlan } from './old-side'
 import { describeParity, expectParity } from './parity-case'
 import { caseFile, dryTick, failedCheck, loadPortedAutomation } from './ported'
@@ -36,7 +36,6 @@ describe('06 · Address reviewer feedback: the definition', () => {
       missedRunGraceMs: 12 * 3_600_000,
       oncePer: '{mr.iid}:{run.tick}',
       limits: { perTick: 3 },
-      workspace: { kind: 'item_worktree' },
       powers: ['commit', 'push', 'reply'],
       inbox: '{mr.author}'
     })
@@ -44,36 +43,138 @@ describe('06 · Address reviewer feedback: the definition', () => {
       kind: 'merge_request',
       match: ['{mr.waiting_threads} > 0']
     })
-    expect(definition.checks).toEqual([
+    // A dirty worktree is no gate: the env's busy check puts the run in a throwaway (pilotcli M4 §8). Commits that
+    // wait to be pushed are one (due.sh): the run's push would publish them, so it could only leave another card.
+    expect(definition.workspace).toEqual({
+      kind: 'env',
+      subject: { kind: 'worktree', worktree: '{worktree.path}', at: null },
+      writes: true,
+      stack: 'when_backend'
+    })
+    expect(definition.checks).toMatchObject([
       { kind: 'worktree_exists' },
       { kind: 'session_none_open', scope: 'automation' },
-      { kind: 'worktree_clean' },
+      {
+        kind: 'script',
+        run: '/Users/nishsitapara/.agents/skills/global-command-address-mr-feedback/scripts/due.sh',
+        timeoutMs: 60_000
+      },
       { kind: 'quota', agent: 'claude', weekly: 90, session: 95 }
     ])
   })
 
-  it('flags the worktree around the feedback run through env, and only flags a failed run', () => {
+  it('runs the chain: context, flag, catch-up, the agent, push, merge back, replies, card, and two always steps', () => {
     expect(definition.steps.map((s) => [s.name, s.agent, s.mode, s.always, s.when])).toEqual([
-      ['flag', 'shell', null, true, null],
+      ['context', 'shell', null, false, null],
+      ['flag', 'shell', null, true, "{steps.context.outcome} == 'ok'"],
+      ['catch_up', 'shell', null, false, null],
       ['address', 'claude', 'feedback', false, null],
+      [
+        'push',
+        'shell',
+        null,
+        false,
+        '{steps.address.head} != null and {steps.context.remote} != null and {steps.context.unpushed} != null'
+      ],
+      ['merge_back', 'shell', null, false, "{env.mode} == 'throwaway'"],
+      [
+        'replies',
+        'shell',
+        null,
+        false,
+        '{steps.address.replies} > 0 and {steps.address.head} == null or {steps.address.replies} > 0 and {steps.push.pushed} == true'
+      ],
+      ['card', 'shell', null, false, '{steps.push.pushed} == false'],
+      ['forget_replies', 'shell', null, true, null],
       ['flag_failed', 'shell', null, true, '{run.failed} == true']
     ])
-    const [flag, address, flagFailed] = definition.steps
-    expect(flag.env).toEqual({ WT: '{worktree.path}', IID: '{mr.iid}' })
-    expect(flag.run).toContain(
+    const step = (name: string) => definition.steps.find((s) => s.name === name)!
+    expect(step('context').run).toBe('pilotcli skills get-context address-mr-feedback "$IID"')
+    expect(step('context').exitCodes).toEqual({ ok: [0], skip: [], stop: [3] })
+    expect(step('flag').env).toEqual({ WT: '{worktree.path}', IID: '{mr.iid}' })
+    expect(step('flag').run).toContain(
       '--worktree "path:$WT" --gitlab-mr "!$IID" --comment "addressing MR feedback !$IID (auto)"'
     )
-    expect(flag.run).toContain('|| echo')
-    expect(flagFailed.env).toEqual({ WT: '{worktree.path}', IID: '{mr.iid}', RUN: '{run.id}' })
-    expect(flagFailed.run).toContain('--worktree "path:$WT" --unread')
-    expect(flagFailed.run).toContain('|| echo')
-    expect(address).toMatchObject({ skill: SKILL, mode: 'feedback', promptStyle: 'wrapped' })
+    expect(step('flag_failed').env).toEqual({
+      WT: '{worktree.path}',
+      IID: '{mr.iid}',
+      RUN: '{run.id}'
+    })
+    expect(step('flag_failed').run).toContain('--worktree "path:$WT" --unread')
+    expect(step('address')).toMatchObject({
+      skill: SKILL,
+      mode: 'feedback',
+      promptStyle: 'wrapped'
+    })
+    for (const placeholder of [
+      '{steps.context.result}',
+      '{steps.catch_up.status}',
+      '{run.id}/replies.jsonl'
+    ]) {
+      expect(step('address').prompt).toContain(placeholder)
+    }
+    expect(step('push').run).toBe(
+      'python3 /Users/nishsitapara/.agents/skills/worktree-gate/publish.py push'
+    )
+    expect(step('replies').run).toBe(
+      'python3 /Users/nishsitapara/.agents/skills/worktree-gate/publish.py replies'
+    )
+    expect(step('replies').env.REPLIES).toBe(
+      '/Users/nishsitapara/Library/Caches/pilot-replies/{run.id}/replies.jsonl'
+    )
+    expect(step('card').env).toMatchObject({
+      CARD_SKILL: 'mr-feedback-sweep',
+      SUMMARY: '{steps.address.summary}'
+    })
+    expect(step('forget_replies')).toMatchObject({
+      run: 'rm -rf "$DIR"',
+      env: { DIR: '/Users/nishsitapara/Library/Caches/pilot-replies/{run.id}' }
+    })
+  })
+
+  it('posts replies once the commits are on origin, or at once with none; a refused push leaves them for later', () => {
+    const step = (name: string) => definition.steps.find((s) => s.name === name)!
+    const done = [{ name: 'merge_back', status: 'skipped' as const, always: false, error: null }]
+    const cases: [string, Record<string, unknown>, boolean, boolean][] = [
+      // (what, fields, replies run, card runs)
+      [
+        'pushed',
+        { 'steps.address.replies': 2, 'steps.address.head': 'a', 'steps.push.pushed': true },
+        true,
+        false
+      ],
+      ['nothing to push', { 'steps.address.replies': 1 }, true, false],
+      [
+        'a refused push',
+        { 'steps.address.replies': 2, 'steps.address.head': 'a', 'steps.push.pushed': false },
+        false,
+        true
+      ],
+      [
+        'no replies, pushed',
+        { 'steps.address.replies': 0, 'steps.address.head': 'a', 'steps.push.pushed': true },
+        false,
+        false
+      ]
+    ]
+    for (const [what, fields, replies, card] of cases) {
+      expect([what, decideStep(step('replies'), done, fields as never).run]).toEqual([
+        what,
+        replies
+      ])
+      expect([what, decideStep(step('card'), done, fields as never).run]).toEqual([what, card])
+    }
+    const failed = [{ name: 'address', status: 'failed' as const, always: false, error: 'x' }]
+    expect(decideStep(step('forget_replies'), failed, {})).toEqual({ run: true })
   })
 
   it('still addresses feedback when the flag hangs, and flags a failed or timed-out run', () => {
-    const [flag, address, flagFailed] = definition.steps
+    const [context, flag, catchUp, address] = definition.steps
+    const flagFailed = definition.steps.find((s) => s.name === 'flag_failed')!
     const timedOut = [
-      { name: 'flag', status: 'timed_out' as const, always: flag.always, error: null }
+      { name: context.name, status: 'done' as const, always: false, error: null },
+      { name: flag.name, status: 'timed_out' as const, always: flag.always, error: null },
+      { name: catchUp.name, status: 'done' as const, always: false, error: null }
     ]
     expect(decideStep(address, timedOut, {})).toEqual({ run: true })
     const addressTimedOut = [
@@ -90,9 +191,10 @@ describe('06 · Address reviewer feedback: the definition', () => {
       else: { agent: 'claude', skill: SKILL, mode: 'answers' }
     })
     expect([modeOutputs('feedback'), modeOutputs('answers')]).toEqual([
-      [],
+      ['head', 'summary', 'replies'],
       ['outcome', 'item_status', 'reply']
     ])
+    expect(modeText('answers')).toContain('**Never push.**')
     expect(modeText('feedback')).toContain(
       `apply them as \`~/.agents/skills/${SKILL}/modes/answers.md\``
     )
@@ -120,7 +222,8 @@ describeParity(PARITY_06, '06 · Address reviewer feedback: parity with mr-feedb
       definition,
       people,
       fixture: fixture ?? loadFixture(caseFile(JOB_06.job, name)),
-      seed: seed06
+      seed: seed06,
+      runScript: answerDue
     })
 
   it.each(cases)(
@@ -143,43 +246,52 @@ describeParity(PARITY_06, '06 · Address reviewer feedback: parity with mr-feedb
     }
   })
 
-  it('gates: three start, the fourth is over the limit, and each skip names the sweep’s gate', async () => {
+  it('gates: the dirty worktree now starts too, so three start and two are over the limit', async () => {
     const neu = await decide('gates')
     expect(neu.filter((d) => d.verdict === 'started').map((d) => d.key)).toEqual([
+      'mr:1712',
       'mr:1713',
-      'mr:1714',
-      'mr:1715'
+      'mr:1714'
     ])
-    expect(neu.find((d) => d.key === 'mr:1716')?.verdict).toBe('over_limit')
+    expect(neu.filter((d) => d.verdict === 'over_limit').map((d) => d.key)).toEqual([
+      'mr:1715',
+      'mr:1716'
+    ])
     expect(neu.filter((d) => d.verdict === 'skipped').map((d) => [d.key, failedCheck(d)])).toEqual([
       ['mr:1710', 'Worktree'],
-      ['mr:1711', 'No open session'],
-      ['mr:1712', 'Clean']
+      ['mr:1711', 'No open session']
     ])
     const spent = await decide('quota-out')
     expect(failedCheck(spent.find((d) => d.key === 'mr:1720'))).toBe('Quota')
     expect(spent.find((d) => d.key === 'mr:1721')?.verdict).toBe('out_of_scope')
   })
 
-  // The ruling for 05/06: skip reasons, not only verdicts, on every case.
+  // The ruling for 05/06: skip reasons, not only verdicts, on every case. The sweep's skip for a dirty worktree or a
+  // git operation is gone: the env's busy check replaces that gate (pilotcli M4 §8), so no check names it.
   it.each(cases)("%s: each skip is for the check that names the sweep's reason", async (name) => {
     const byReason: [RegExp, string][] = [
       [/^no Orca worktree$/, 'Worktree'],
       [/^previous feedback session still open/, 'No open session'],
-      [/^(uncommitted changes|\S+ present); retry next round$/, 'Clean'],
       [/^claude .*(weekly|session)/, 'Quota']
     ]
+    const busy = /^(uncommitted changes|\S+ present); retry next round$/
     const neu = await decide(name.replace(/\.json$/, ''))
     const old = runOldPlan('06', join(CASES, name)).filter(
       (d) => d.decision === 'skip' || d.decision === 'quota'
     )
     for (const d of old) {
+      const fresh = neu.find((n) => n.key === d.key)
+      if (busy.test(d.reason)) {
+        const held = fresh?.verdict === 'skipped'
+        expect([d.key, d.reason, held ? failedCheck(fresh) : fresh?.verdict]).toEqual([
+          d.key,
+          d.reason,
+          held ? 'Quota' : expect.stringMatching(/^(started|over_limit)$/)
+        ])
+        continue
+      }
       const expected = byReason.find(([re]) => re.test(d.reason))?.[1]
-      expect([d.key, d.reason, failedCheck(neu.find((n) => n.key === d.key))]).toEqual([
-        d.key,
-        d.reason,
-        expected
-      ])
+      expect([d.key, d.reason, failedCheck(fresh)]).toEqual([d.key, d.reason, expected])
     }
   })
 
@@ -224,7 +336,7 @@ describeParity(PARITY_06, '06 · Address reviewer feedback: parity with mr-feedb
         f.now - 3_600_000
       )
     }
-    const after = await dryTick({ definition, people, fixture: closed, seed })
+    const after = await dryTick({ definition, people, fixture: closed, seed, runScript: answerDue })
     const decision = after.find((d) => d.key === 'mr:1711')
     expect(decision).toMatchObject({ verdict: 'started' })
     expect(decision?.onceKey).not.toBe(`1711:${earlier}`)
