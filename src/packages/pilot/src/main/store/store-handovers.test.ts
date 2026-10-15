@@ -139,6 +139,19 @@ describe('HandoverStore: ids one stage hands the next, kept until a tick of the 
     ])
   })
 
+  it('lists what one run handed over, to every stage, in order', () => {
+    const store = open()
+    store.handovers.add({ ...SENT, senderRunId: 'r1', itemIds: ['WEB-1', 'WEB-2'] })
+    store.handovers.add({ ...SENT, receiverId: 'other', senderRunId: 'r1', itemIds: ['X-1'] })
+    store.handovers.add({ ...SENT, at: 200, senderRunId: 'r2', itemIds: ['WEB-3'] })
+    expect(store.handovers.sentBy('r1').map((h) => [h.receiverId, h.itemId])).toEqual([
+      ['dev-e2e-fix-start', 'WEB-1'],
+      ['dev-e2e-fix-start', 'WEB-2'],
+      ['other', 'X-1']
+    ])
+    expect(store.handovers.sentBy('none')).toEqual([])
+  })
+
   it('keeps what triggered a tick, read back by tick id', () => {
     const store = open()
     const tickId = store.startTick('dev-e2e-fix-start', 1)

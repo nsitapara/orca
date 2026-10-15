@@ -26,6 +26,7 @@ import { AgentSessionStore } from './store-sessions'
 import { MarkerStore } from './store-markers'
 import { AdvanceStore } from './store-advance'
 import { HandoverStore } from './store-handovers'
+import { ActivityStore, QUIET_TICK, toTick } from './store-activity'
 
 const DAY = 24 * 60 * 60_000
 // Spec §7: ticks and their items are kept 30 days; runs and steps are kept indefinitely.
@@ -35,14 +36,6 @@ export const STUCK_TICK_MS = 60 * 60_000
 export const INTERRUPTED = 'interrupted'
 // How long opening the store waits on a lock another process holds (an old Pilot still quitting).
 export const STORE_BUSY_TIMEOUT_MS = 5_000
-// A tick that finished with nothing to do: it didn't fail, warned of nothing, started no run, wasn't triggered and read
-// or expired no handover, and every item it checked was not due (or out of scope). Activity can leave these out.
-const QUIET_TICK = `(ticks.status = 'ok' AND ticks.warnings_json = '[]' AND ticks.trigger_json IS NULL
-  AND NOT EXISTS (SELECT 1 FROM runs WHERE runs.tick_id = ticks.id)
-  AND NOT EXISTS (SELECT 1 FROM handovers WHERE handovers.tick_id = ticks.id)
-  AND NOT EXISTS (SELECT 1 FROM json_each(ticks.counts_json)
-    WHERE json_each.key NOT IN ('notdue', 'out_of_scope') AND json_each.value > 0))`
-
 // Pilot's startup logs this, and the trace marks the services phase failed with it.
 function storeOpenError(path: string, busyTimeoutMs: number, error: unknown): Error {
   const message = error instanceof Error ? error.message : String(error)
@@ -53,19 +46,6 @@ function storeOpenError(path: string, busyTimeoutMs: number, error: unknown): Er
     )
   }
   return new Error(`${path} couldn't be opened: ${message}`, { cause: error })
-}
-
-function toTick(r: Record<string, unknown>): TickRow {
-  return {
-    id: Number(r.id),
-    automationId: String(r.automation_id),
-    startedAt: Number(r.started_at),
-    finishedAt: (r.finished_at as number | null) ?? null,
-    status: r.status as TickRow['status'],
-    error: (r.error as string | null) ?? null,
-    counts: JSON.parse(String(r.counts_json)),
-    warnings: JSON.parse(String(r.warnings_json ?? '[]'))
-  }
 }
 
 // The worktree an item is about, in the one form the timeline reads it back in (worktreePathKey), so
@@ -92,6 +72,7 @@ export class PilotStore {
   readonly advance: AdvanceStore
   readonly imports: ImportStore
   readonly handovers: HandoverStore
+  readonly activity: ActivityStore
 
   private constructor(private readonly db: Database) {
     this.runs = new RunStore(db)
@@ -110,6 +91,7 @@ export class PilotStore {
     this.usage = new UsageStore(db, this.advance)
     this.spend = new SpendStore(db)
     this.handovers = new HandoverStore(db)
+    this.activity = new ActivityStore(db)
   }
 
   static open(path: string, options: { busyTimeoutMs?: number } = {}): PilotStore {
