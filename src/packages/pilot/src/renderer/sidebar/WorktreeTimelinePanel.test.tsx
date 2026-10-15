@@ -2,11 +2,16 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { WorktreeTimeline } from '../../shared/api-types'
-import { inboxItem, timelineRun, worktreeTimeline } from '../timeline/timeline.fixtures'
+import { pilotAutomationsView, showAutomationsPage } from '../pages/automations-view'
+import { summary } from '../pages/fixtures'
+import { resetAutomationsFeed } from '../run-views/automations-feed'
+import { closeRunPanel, openRunPanel } from '../run-views/run-panel-state'
+import { inboxItem, stepRow, timelineRun, worktreeTimeline } from '../timeline/timeline.fixtures'
 
 let path: string | null = '/wt/a'
 let feed: { data: WorktreeTimeline | null; error: string | null } = { data: null, error: null }
-vi.mock('../api', () => ({ pilotRpc: vi.fn() }))
+const pilotRpc = vi.fn()
+vi.mock('../api', () => ({ pilotRpc: (...args: unknown[]) => pilotRpc(...args) }))
 vi.mock('./active-worktree', () => ({ useActiveWorktreePath: () => path }))
 vi.mock('./timeline-feed', () => ({ useWorktreeTimeline: () => feed }))
 
@@ -24,6 +29,10 @@ const NEXT = {
 describe('WorktreeTimelinePanel', () => {
   afterEach(() => {
     cleanup()
+    pilotRpc.mockReset()
+    resetAutomationsFeed()
+    closeRunPanel()
+    showAutomationsPage()
     path = '/wt/a'
     feed = { data: null, error: null }
   })
@@ -101,5 +110,40 @@ describe('WorktreeTimelinePanel', () => {
     expect(screen.getByText('Nothing due here.')).toBeTruthy()
     expect(screen.getByText('Nothing running.')).toBeTruthy()
     expect(screen.getByText('No runs here today.')).toBeTruthy()
+  })
+
+  it("opens a run's panel over the Automations page's Activity, from its row or a chip of its strip", async () => {
+    pilotRpc.mockResolvedValue({
+      automations: [summary],
+      errors: [],
+      peopleError: null,
+      missingDirs: []
+    })
+    feed = {
+      error: null,
+      data: worktreeTimeline({
+        now: [
+          timelineRun({
+            id: 'r2',
+            status: 'running',
+            steps: [stepRow({ status: 'running' })],
+            inbox: []
+          })
+        ]
+      })
+    }
+    render(<WorktreeTimelinePanel />)
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Agent · Claude · fix-gitlab-ci · Running' })
+    )
+    expect([openRunPanel(), pilotAutomationsView()]).toEqual([
+      { runId: 'r2', part: 'step:0' },
+      'activity'
+    ])
+    closeRunPanel()
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Open !1561 web-1493 · Fix failed CI on my MRs' })
+    )
+    expect(openRunPanel()).toEqual({ runId: 'r2', part: null })
   })
 })

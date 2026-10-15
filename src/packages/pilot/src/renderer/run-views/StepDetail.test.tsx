@@ -2,7 +2,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { StepRow } from '../../shared/api-types'
-import { stepRow, timelineRun } from './timeline.fixtures'
+import { stepRow, timelineRun } from '../timeline/timeline.fixtures'
 
 const pilotRpc = vi.fn()
 vi.mock('../api', () => ({ pilotRpc: (...args: unknown[]) => pilotRpc(...args) }))
@@ -12,9 +12,28 @@ vi.mock('../sidebar/timeline-feed', () => ({
   refreshWorktreeTimeline: (...args: unknown[]) => refreshWorktreeTimeline(...args)
 }))
 
-import { StepList } from './StepList'
+import { StepDetail } from './StepDetail'
 
-describe('StepList', () => {
+// The rail renders one StepDetail per step it expands; this stands in for it.
+function Steps({
+  steps = timelineRun().steps,
+  ...rest
+}: {
+  runId: string
+  worktreePath?: string
+  checkoutRemoved?: boolean
+  steps?: StepRow[]
+}): React.JSX.Element {
+  return (
+    <>
+      {steps.map((step) => (
+        <StepDetail key={step.idx} {...rest} step={step} />
+      ))}
+    </>
+  )
+}
+
+describe('StepDetail', () => {
   afterEach(() => {
     cleanup()
     pilotRpc.mockReset()
@@ -22,8 +41,7 @@ describe('StepList', () => {
   })
 
   it('shows each step: agent or shell, mode, status, cost, exit code and outputs', () => {
-    render(<StepList runId="r1" steps={timelineRun().steps} />)
-    expect(screen.getByText('1. fix')).toBeTruthy()
+    render(<Steps runId="r1" />)
     expect(screen.getByText('Claude · mode fix · Done · $1.20')).toBeTruthy()
     expect(screen.getByText('Outputs: found_bugs=3')).toBeTruthy()
     expect(screen.getByText('Shell · Skipped · exit 3')).toBeTruthy()
@@ -35,7 +53,7 @@ describe('StepList', () => {
     ['focused', 'Switched to its tab']
   ])("resumes the step's session (%s) and says what happened", async (action, note) => {
     pilotRpc.mockResolvedValue({ action, handle: 'term_9' })
-    render(<StepList runId="r1" steps={timelineRun().steps} />)
+    render(<Steps runId="r1" />)
     fireEvent.click(screen.getByRole('button', { name: /resume/i }))
     expect(await screen.findByText(note)).toBeTruthy()
     expect(pilotRpc).toHaveBeenCalledWith('pilot.session.resume', { runId: 'r1', stepIdx: 0 })
@@ -43,7 +61,7 @@ describe('StepList', () => {
 
   it('shows why a resume failed', async () => {
     pilotRpc.mockRejectedValue(new Error('Run r1 has no worktree to resume in'))
-    render(<StepList runId="r1" steps={timelineRun().steps} />)
+    render(<Steps runId="r1" />)
     fireEvent.click(screen.getByRole('button', { name: /resume/i }))
     expect(await screen.findByText('Run r1 has no worktree to resume in')).toBeTruthy()
   })
@@ -51,7 +69,7 @@ describe('StepList', () => {
   it('disables Resume while its call is in flight, so a double click opens one tab', async () => {
     let finish: (v: unknown) => void = () => {}
     pilotRpc.mockReturnValue(new Promise((resolve) => (finish = resolve)))
-    render(<StepList runId="r1" steps={timelineRun().steps} />)
+    render(<Steps runId="r1" />)
     const button = screen.getByRole('button', { name: /resume/i })
     fireEvent.click(button)
     fireEvent.click(button)
@@ -66,7 +84,7 @@ describe('StepList', () => {
 
   it("refreshes the worktree's timeline after a successful resume only", async () => {
     pilotRpc.mockResolvedValueOnce({ action: 'opened', handle: 'term_9' })
-    render(<StepList runId="r1" worktreePath="/wt/a" steps={timelineRun().steps} />)
+    render(<Steps runId="r1" worktreePath="/wt/a" />)
     fireEvent.click(screen.getByRole('button', { name: /resume/i }))
     await screen.findByText('Opened in a new tab')
     expect(refreshWorktreeTimeline).toHaveBeenCalledWith('/wt/a')
@@ -78,7 +96,7 @@ describe('StepList', () => {
   })
 
   it('a removed checkout shows a note in place of Resume', () => {
-    render(<StepList runId="r1" checkoutRemoved steps={timelineRun().steps} />)
+    render(<Steps runId="r1" checkoutRemoved />)
     expect(screen.getByText('Checkout removed')).toBeTruthy()
     expect(screen.queryByRole('button', { name: /resume/i })).toBeNull()
   })
@@ -106,7 +124,7 @@ describe('StepList', () => {
         status,
         error
       })
-      render(<StepList runId="r1" steps={[step]} />)
+      render(<StepDetail runId="r1" step={step} />)
       expect(screen.getByText(facts)).toBeTruthy()
       expect(screen.getByText(error).className).toContain(colour)
     }
@@ -127,7 +145,7 @@ describe('StepList', () => {
 
   it("shows a step's pilotcli result: command, outcome and reason, and its data as JSON, folded", () => {
     render(
-      <StepList
+      <Steps
         runId="r1"
         steps={[
           shellStep({
@@ -151,7 +169,7 @@ describe('StepList', () => {
 
   it('says why a result’s data was not kept, with no viewer', () => {
     render(
-      <StepList
+      <Steps
         runId="r1"
         steps={[
           shellStep({
