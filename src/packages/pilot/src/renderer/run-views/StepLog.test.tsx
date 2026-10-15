@@ -7,6 +7,7 @@ import type { StepLog as Log } from '../../shared/visibility-types'
 const pilotRpc = vi.fn()
 vi.mock('../api', () => ({ pilotRpc: (...args: unknown[]) => pilotRpc(...args) }))
 
+import { StepDetail } from './StepDetail'
 import { linkLabel, StepLog } from './StepLog'
 import { STEP_LOG_POLL_MS } from './use-step-log'
 
@@ -124,6 +125,58 @@ describe('StepLog', () => {
       await vi.advanceTimersByTimeAsync(STEP_LOG_POLL_MS * 2)
     })
     expect(pilotRpc.mock.calls.filter((c) => c[0] === 'pilot.runs.log')).toHaveLength(1)
+  })
+
+  it('keeps the last good log, with the error under it, when a later poll fails', async () => {
+    vi.useFakeTimers()
+    serve()
+    render(<StepLog runId="r1" step={testStepRow({ idx: 1, status: 'running' })} />)
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0)
+    })
+    expect(screen.getByText('$ false')).toBeTruthy()
+    pilotRpc.mockRejectedValue(new Error('rpc down'))
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(STEP_LOG_POLL_MS)
+    })
+    expect(screen.getByText('$ false')).toBeTruthy()
+    expect(screen.getByText('rpc down')).toBeTruthy()
+  })
+
+  it('keeps Loading for a malformed entry answer, and ignores an answer after the row closes', async () => {
+    let answer: (v: unknown) => void = () => {}
+    pilotRpc.mockImplementation((method: string) => {
+      if (method === 'pilot.runs.log') {
+        return Promise.resolve(LOG)
+      }
+      return new Promise((resolve) => (answer = resolve))
+    })
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => {})
+    render(<StepLog runId="r1" step={testStepRow({ idx: 1, status: 'done' })} />)
+    const row = await screen.findByRole('button', { name: /glab mr create --fill/ })
+    fireEvent.click(row)
+    await act(async () => answer({ nope: 1 }))
+    expect(screen.getByText('Loading…')).toBeTruthy()
+    fireEvent.click(row)
+    await act(async () => answer({ input: '', output: 'late', inputCut: 0, outputCut: 0 }))
+    expect(screen.queryByText('late')).toBeNull()
+    expect(errors).not.toHaveBeenCalled()
+    errors.mockRestore()
+  })
+
+  it('shows an agent step in StepDetail with its log, and a shell step without asking for one', async () => {
+    serve()
+    render(<StepDetail runId="r1" step={testStepRow({ idx: 1, kind: 'agent', status: 'done' })} />)
+    expect(await screen.findByText('$ false')).toBeTruthy()
+    cleanup()
+    pilotRpc.mockClear()
+    render(
+      <StepDetail
+        runId="r1"
+        step={testStepRow({ idx: 1, agent: 'shell', kind: 'shell', sessionId: null })}
+      />
+    )
+    expect(pilotRpc.mock.calls.filter((c) => c[0] === 'pilot.runs.log')).toHaveLength(0)
   })
 })
 
