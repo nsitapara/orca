@@ -20,12 +20,17 @@ export function openableWorktreeId(group: InboxGroup): string | null {
   if (group.worktreeId && all.some((w) => w.id === group.worktreeId)) {
     return group.worktreeId
   }
-  const path = group.key.slice('wt:'.length)
-  return all.find((w) => trimmed(w.path) === path)?.id ?? null
+  return worktreeIdForPath(group.key.slice('wt:'.length))
+}
+
+// The app's id for the worktree at this path, or null when the app does not have it.
+export function worktreeIdForPath(path: string): string | null {
+  const all = Object.values(pilotStore()?.getState().worktreesByRepo ?? {}).flat()
+  return all.find((w) => trimmed(w.path) === trimmed(path))?.id ?? null
 }
 
 // The same activation the worktree palette makes, loaded when used so the page does not pull the app in.
-function openWorktree(id: string): void {
+export function openWorktree(id: string): void {
   void import('@/lib/worktree-activation').then((m) => m.activateAndRevealWorktree(id))
 }
 
