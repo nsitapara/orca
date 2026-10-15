@@ -2,7 +2,7 @@ import type { JobDef, StepDef } from './definition/types'
 import type { StageHandovers, TickHandover, TickHandoverFacts } from './api-types-handover'
 import type { RunEnv } from './api-types-env'
 import type { StoredResult } from './api-types-result'
-import type { InboxItemSummary } from './inbox-types'
+import type { ActivityRun } from './api-types-runs'
 import type { DetailsRef } from './details'
 import type { InboxPreparation, PreparationRef } from './preparation'
 
@@ -309,7 +309,6 @@ export type AutomationListPayload = {
   peopleError: string | null
   missingDirs: string[]
 }
-type ActivityRun = RunRow & { steps: StepRow[]; inbox: InboxItemSummary[] }
 export type ActivityTick = TickRow &
   TickHandoverFacts & { items: TickItemRow[]; runs: ActivityRun[] }
 export type AutomationDetailPayload = StageHandovers & {
@@ -343,3 +342,4 @@ export * from './api-types-spend'
 export * from './api-types-timeline'
 export * from './api-types-import'
 export * from './api-types-handover'
+export * from './api-types-runs'
