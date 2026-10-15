@@ -194,6 +194,8 @@ describe('Pilot RPC methods', () => {
     const act = find('pilot.automations.activity').params!
     expect(act.safeParse({ id: 'ci', limit: 200 }).success).toBe(true)
     expect(act.safeParse({ id: 'ci', limit: 201 }).success).toBe(false)
+    expect(act.safeParse({ id: 'ci', skipQuiet: true }).success).toBe(true)
+    expect(act.safeParse({ id: 'ci', skipQuiet: 'yes' }).success).toBe(false)
   })
 
   it('passes the scheduler result of dryRun and tickNow through unchanged', async () => {

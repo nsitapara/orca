@@ -35,7 +35,8 @@ const CallerBinding = {
 const Tick = Id.extend(CallerBinding)
 const SetEnabled = Id.extend({ enabled: z.boolean(), ...CallerBinding })
 const Activity = Id.extend({
-  limit: z.number().int().positive().max(MAX_ACTIVITY_LIMIT).optional()
+  limit: z.number().int().positive().max(MAX_ACTIVITY_LIMIT).optional(),
+  skipQuiet: z.boolean().optional()
 })
 // `file` is only a label for error messages and the id source; it is never read.
 const Validate = z.object({
@@ -125,7 +126,8 @@ export function buildPilotMethods(host: PilotHost) {
       name: 'pilot.automations.activity',
       permission: 'workspace',
       params: Activity,
-      handler: (p) => activity(ctx(), p.id, p.limit ?? DEFAULT_ACTIVITY_LIMIT)
+      handler: (p) =>
+        activity(ctx(), p.id, p.limit ?? DEFAULT_ACTIVITY_LIMIT, { skipQuiet: p.skipQuiet })
     }),
     // dryRun and tickNow can run long (GitLab calls plus facts for every item): callers must use a
     // timeout of at least 120 s. They return the scheduler's result unchanged:

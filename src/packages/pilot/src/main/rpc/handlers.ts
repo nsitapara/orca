@@ -86,10 +86,15 @@ export function getAutomation(ctx: PilotContext, id: string): AutomationDetailPa
 
 // Newest first. An id with no ticks (or no such automation) gives an empty list. Each run carries its steps and
 // what it asked (open and answered inbox items), for Activity and the Agent Console; each tick, what triggered it and
-// the handed-over ids it read.
-export function activity(ctx: PilotContext, id: string, limit: number): ActivityTick[] {
+// the handed-over ids it read. `skipQuiet`: only the ticks that had something to do (the store's QUIET_TICK).
+export function activity(
+  ctx: PilotContext,
+  id: string,
+  limit: number,
+  { skipQuiet = false }: { skipQuiet?: boolean } = {}
+): ActivityTick[] {
   const ticks = ctx.store
-    .listTicks(id, limit)
+    .listTicks(id, limit, skipQuiet)
     .map((tick) => ({ tick, runs: ctx.store.runs.forTick(tick.id) }))
   const asked = ctx.store.timeline.inboxForRuns(ticks.flatMap((t) => t.runs.map((r) => r.id)))
   const tickIds = ticks.map((t) => t.tick.id)
