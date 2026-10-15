@@ -12,7 +12,12 @@ vi.mock('../../api', () => ({ pilotRpc: (...args: unknown[]) => pilotRpc(...args
 
 import { stepAt, testCard, testRun } from '../../../shared/run-views/__fixtures__/runs'
 import { resetAutomationsFeed } from '../../run-views/automations-feed'
-import { pendingInboxCard, setPilotAutomationsView, showInboxCard } from '../automations-view'
+import {
+  pendingInboxCard,
+  pilotAutomationsView,
+  setPilotAutomationsView,
+  showInboxCard
+} from '../automations-view'
 import { summary } from '../fixtures'
 import { InboxPage } from './InboxPage'
 
@@ -238,10 +243,53 @@ describe('InboxPage', () => {
     const section = await screen.findByRole('region', { name: 'Done for you' })
     expect(within(section).getByRole('heading', { name: def.title })).toBeTruthy()
     expect(screen.queryByText(/Defaults without a run/)).toBeNull()
-    fireEvent.click(within(section).getByRole('button', { name: 'Got it' }))
+    fireEvent.click(within(section).getByRole('button', { name: 'Got it: WEB-2176' }))
     await waitFor(() =>
       expect(pilotRpc).toHaveBeenCalledWith('pilot.runs.acknowledge', { runIds: [def.runId] })
     )
+  })
+
+  it("keeps LIST's default in the fold when a run's default isn't in the inbox list", async () => {
+    pilotRpc.mockImplementation(async (method: string) => {
+      if (method === 'pilot.inbox.list') {
+        return LIST
+      }
+      if (method === 'pilot.runs.doneForYou') {
+        return [
+          {
+            run: { ...testRun({ id: 'r9', itemLabel: 'WEB-9', status: 'done' }), fields: {} },
+            effects: [],
+            defaults: [testCard({ id: 'in_unknown', type: 'default' })]
+          }
+        ]
+      }
+      return method === 'pilot.queue.list' ? { entries: [] } : []
+    })
+    render(<InboxPage />)
+    expect(await screen.findByText('Defaults without a run · 1')).toBeTruthy()
+    expect(screen.getByRole('region', { name: 'Done for you' })).toBeTruthy()
+  })
+
+  it('links to Activity with how many runs are going', async () => {
+    pilotRpc.mockImplementation(async (method: string) => {
+      if (method === 'pilot.inbox.list') {
+        return LIST
+      }
+      if (method === 'pilot.automations.list') {
+        const live = [testRun({ id: 'r1', automationId: 'ci', status: 'running' })]
+        return {
+          automations: [{ ...summary, id: 'ci', live }],
+          errors: [],
+          peopleError: null,
+          missingDirs: []
+        }
+      }
+      return method === 'pilot.queue.list' ? { entries: [] } : []
+    })
+    render(<InboxPage />)
+    fireEvent.click(await screen.findByRole('button', { name: '1 running →' }))
+    expect(pilotAutomationsView()).toBe('activity')
+    setPilotAutomationsView('automations')
   })
 
   it("shows Pilot's Run line in its own Pilot block on an action card, and none on a question", async () => {
