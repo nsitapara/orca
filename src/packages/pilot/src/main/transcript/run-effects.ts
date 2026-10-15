@@ -8,9 +8,11 @@ import { inWindow } from './claude-log'
 import { gitlabBaseOf, linearBaseOf, linkEffects, webBase } from './effect-links'
 import { actionEffects, stepEffects } from './effects'
 import type { LogReader } from './log-file'
+import { mapLimit } from '../map-limit'
 
 const exec = promisify(execFile)
 const MAX_CACHED_STEPS = 2000
+const RUNS_AT_ONCE = 8
 
 export type RemoteOf = (path: string) => Promise<string | null>
 export type RunEffectsDeps = {
@@ -46,16 +48,30 @@ function fieldUrls(store: PilotStore, row: RunRow): string[] {
 // links. An ended step's effects can't change, so they are kept after the first read.
 export class RunEffectsReader {
   private readonly ended = new Map<string, Effect[]>()
-  private readonly remotes = new Map<string, string | null>()
+  private readonly remotes = new Map<string, string>()
+  private readonly asking = new Map<string, Promise<string | null>>()
 
   constructor(private readonly deps: RunEffectsDeps) {}
 
   async forRuns(runIds: readonly string[]): Promise<RunEffects> {
-    const pairs = await Promise.all(runIds.map(async (id) => [id, await this.forRun(id)] as const))
+    let recent: string[] | null = null
+    const recentUrls = (): string[] => {
+      recent ??= this.deps.store.visibility.recentLinearUrls()
+      return recent
+    }
+    const ids = [...new Set(runIds)]
+    const pairs = await mapLimit(
+      ids,
+      RUNS_AT_ONCE,
+      async (id) => [id, await this.forRun(id, recentUrls)] as const
+    )
     return Object.fromEntries(pairs)
   }
 
-  async forRun(runId: string): Promise<Effect[]> {
+  async forRun(
+    runId: string,
+    recentUrls: () => string[] = () => this.deps.store.visibility.recentLinearUrls()
+  ): Promise<Effect[]> {
     const { store } = this.deps
     const row = store.runs.get(runId)
     if (!row) {
@@ -68,7 +84,7 @@ export class RunEffectsReader {
       ...all.map((e) => e.url).filter((u): u is string => u !== null),
       ...fieldUrls(store, row)
     ]
-    const linear = linearBaseOf(urls) ?? linearBaseOf(store.visibility.recentLinearUrls())
+    const linear = linearBaseOf(urls) ?? linearBaseOf(recentUrls())
     return linkEffects(all, { gitlab: await this.gitlabBase(row, urls), linear })
   }
 
@@ -107,11 +123,20 @@ export class RunEffectsReader {
     }
   }
 
+  // A found remote is kept; a miss is asked again next time, and callers asking at once share one git call.
   private async remoteBase(path: string): Promise<string | null> {
-    if (!this.remotes.has(path)) {
-      this.remotes.set(path, await (this.deps.remoteOf ?? originRemote)(path))
+    let remote = this.remotes.get(path) ?? null
+    if (remote === null) {
+      let pending = this.asking.get(path)
+      if (!pending) {
+        pending = (this.deps.remoteOf ?? originRemote)(path).finally(() => this.asking.delete(path))
+        this.asking.set(path, pending)
+      }
+      remote = await pending
+      if (remote) {
+        this.remotes.set(path, remote)
+      }
     }
-    const remote = this.remotes.get(path)
     return remote ? webBase(remote) : null
   }
 

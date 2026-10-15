@@ -1,4 +1,8 @@
+import { mkdtempSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
+import Database from '../../../../../main/sqlite/sync-database'
 import type { ItemDecision } from '../../shared/api-types'
 import { PilotStore } from './store'
 
@@ -33,6 +37,37 @@ describe('VisibilityStore.recentLinearUrls', () => {
       new Map()
     )
     expect(store.visibility.recentLinearUrls()).toEqual(['https://linear.app/new/issue/WEB-2/y'])
+    store.close()
+  })
+
+  it('skips a newer row that only mentions a Linear URL, and a corrupt one', () => {
+    const path = join(mkdtempSync(join(tmpdir(), 'pilot-visibility-')), 'db.sqlite')
+    const store = PilotStore.open(path)
+    const good = 'https://linear.app/x/issue/WEB-1/y'
+    store.recordDecisions(
+      store.startTick('a', 1),
+      [decision('WEB-1', { 'ticket.url': good })],
+      new Map()
+    )
+    store.recordDecisions(
+      store.startTick('a', 2),
+      [decision('N', { note: 'see https://linear.app/x/issue/WEB-9/y please' })],
+      new Map()
+    )
+    expect(store.visibility.recentLinearUrls()).toEqual([good])
+    store.recordDecisions(
+      store.startTick('a', 3),
+      [decision('C', { note: 'linear.app/x/issue/' })],
+      new Map()
+    )
+    const raw = new Database(path)
+    raw
+      .prepare(
+        "UPDATE tick_items SET fields_json = 'linear.app/x/issue/ not json' WHERE item_key = 'C'"
+      )
+      .run()
+    raw.close()
+    expect(store.visibility.recentLinearUrls()).toEqual([good])
     store.close()
   })
 })
