@@ -1,3 +1,4 @@
+import type { Effect } from '../../shared/visibility-types'
 import type { ActivityRun, AutomationSummary, ItemFields } from '../../shared/api-types'
 import { homeOf } from '../../shared/api-types-env'
 import { runStatusWord } from '../../shared/env-text'
@@ -6,6 +7,8 @@ import { paintRun } from '../../shared/run-views/paint'
 import { foldStrip, stripOf } from '../../shared/run-views/strip'
 import { clockTime, itemUrl, runStatusLabel } from '../pages/format'
 import { jobCode } from './activity-groups'
+import { useRunEffects } from './effects-feed'
+import { EffectsLine } from './EffectsLine'
 import { envCleanup } from './env-lines'
 import { RunStrip } from './RunStrip'
 import { openRun } from './run-panel-state'
@@ -19,15 +22,25 @@ function baseName(path: string): string {
 export function ActivityRunRow({
   run,
   fields,
-  summary
+  summary,
+  effects,
+  children
 }: {
   run: ActivityRun
   fields: ItemFields
   summary: AutomationSummary | undefined
+  effects?: readonly Effect[] | null
+  children?: React.ReactNode
 }): React.JSX.Element {
   const url = itemUrl(fields)
   const home = homeOf(run)
   const cleanup = envCleanup(run)
+  const fetched = useRunEffects(
+    run.id,
+    run.status === 'running' || run.status === 'asking',
+    effects === undefined
+  )
+  const shown = effects === undefined ? fetched : effects
   const items = summary ? foldStrip(stripOf(paintRun(summary.chain, { run }).parts)) : []
   return (
     <li className="flex flex-col gap-1 border-t border-border/50 py-2">
@@ -63,6 +76,7 @@ export function ActivityRunRow({
         </button>
       </div>
       {run.outcome ? <div className="text-xs text-muted-foreground">{run.outcome}</div> : null}
+      <EffectsLine effects={shown} />
       {cleanup ? <div className="text-xs text-muted-foreground">{cleanup}</div> : null}
       {items.length > 0 ? (
         <RunStrip
@@ -71,6 +85,7 @@ export function ActivityRunRow({
           onChip={(chip) => openRun(run.id, chip.part)}
         />
       ) : null}
+      {children}
     </li>
   )
 }
