@@ -27,6 +27,7 @@ import { MarkerStore } from './store-markers'
 import { AdvanceStore } from './store-advance'
 import { HandoverStore } from './store-handovers'
 import { ActivityStore, QUIET_TICK, toTick } from './store-activity'
+import { VisibilityStore } from './store-visibility'
 
 const DAY = 24 * 60 * 60_000
 // Spec §7: ticks and their items are kept 30 days; runs and steps are kept indefinitely.
@@ -73,6 +74,7 @@ export class PilotStore {
   readonly imports: ImportStore
   readonly handovers: HandoverStore
   readonly activity: ActivityStore
+  readonly visibility: VisibilityStore
 
   private constructor(private readonly db: Database) {
     this.runs = new RunStore(db)
@@ -92,6 +94,7 @@ export class PilotStore {
     this.spend = new SpendStore(db)
     this.handovers = new HandoverStore(db)
     this.activity = new ActivityStore(db)
+    this.visibility = new VisibilityStore(db)
   }
 
   static open(path: string, options: { busyTimeoutMs?: number } = {}): PilotStore {

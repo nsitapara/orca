@@ -85,7 +85,10 @@ describe('Pilot RPC methods', () => {
       'pilot.run.output',
       'pilot.run.event',
       'pilot.activity.list',
-      'pilot.runs.get'
+      'pilot.runs.get',
+      'pilot.runs.log',
+      'pilot.runs.logEntry',
+      'pilot.runs.effects'
     ]
     for (const n of names) {
       expect(find(n)).toMatchObject({
