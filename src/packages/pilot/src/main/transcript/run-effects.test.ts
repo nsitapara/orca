@@ -7,7 +7,7 @@ import { LogReader } from './log-file'
 import { RunEffectsReader } from './run-effects'
 import { lines, result, T0, use as toolUse } from './__fixtures__/transcript'
 
-function setup(text: string) {
+function setup(text: string, remote?: () => Promise<string | null>) {
   const root = mkdtempSync(join(tmpdir(), 'pilot-effects-'))
   mkdirSync(join(root, 'proj'))
   const file = join(root, 'proj', 'sess-1.jsonl')
@@ -48,7 +48,7 @@ function setup(text: string) {
     JSON.stringify({ detail: 'created WEB-5', link: 'https://linear.app/acme/issue/WEB-5' }),
     T0 + 1
   )
-  const remoteOf = vi.fn(async () => 'git@gitlab.com:g/p.git')
+  const remoteOf = vi.fn(remote ?? (async () => 'git@gitlab.com:g/p.git'))
   const reader = new RunEffectsReader({
     store,
     reader: new LogReader(root),
@@ -115,5 +115,36 @@ describe('RunEffectsReader', () => {
     const { reader } = setup(TEXT)
     expect(await reader.forRun('nope')).toEqual([])
     expect(Object.keys(await reader.forRuns(['r1', 'nope']))).toEqual(['r1', 'nope'])
+  })
+
+  it('reads the recent Linear URLs once for a batch and answers each distinct id once', async () => {
+    const { reader, store } = setup(TEXT)
+    store.runs.create({
+      id: 'r2',
+      automationId: 'a',
+      tickId: null,
+      itemKey: 'k2',
+      itemLabel: 'k2',
+      worktreePath: null,
+      startedAt: T0
+    })
+    const spy = vi.spyOn(store.visibility, 'recentLinearUrls')
+    expect(Object.keys(await reader.forRuns(['r1', 'r1', 'r2']))).toEqual(['r1', 'r2'])
+    expect(spy.mock.calls.length).toBeLessThanOrEqual(1)
+  })
+
+  it('asks git again after a miss', async () => {
+    const answers = [null, 'git@gitlab.com:g/p.git']
+    const { reader, remoteOf } = setup(TEXT, async () => answers.shift() ?? null)
+    const pushedUrl = async () => (await reader.forRun('r1')).find((e) => e.kind === 'pushed')?.url
+    expect(await pushedUrl()).toBeNull()
+    expect(await pushedUrl()).toBe('https://gitlab.com/g/p/-/tree/web-1')
+    expect(remoteOf).toHaveBeenCalledTimes(2)
+  })
+
+  it('shares one git call between concurrent reads of a run', async () => {
+    const { reader, remoteOf } = setup(TEXT)
+    await Promise.all([reader.forRun('r1'), reader.forRun('r1')])
+    expect(remoteOf).toHaveBeenCalledTimes(1)
   })
 })
