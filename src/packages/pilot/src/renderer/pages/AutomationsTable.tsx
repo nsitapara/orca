@@ -26,7 +26,7 @@ import { openRun } from '../run-views/run-panel-state'
 import { showActivity, showPilotAutomation } from './automations-view'
 
 const COLS =
-  'grid grid-cols-[minmax(14rem,2fr)_minmax(16rem,2.5fr)_minmax(8rem,1fr)_minmax(12rem,1.5fr)_6rem] gap-3'
+  'grid grid-cols-[minmax(14rem,2fr)_minmax(10rem,2.5fr)_minmax(8rem,1fr)_minmax(12rem,1.5fr)_6rem] gap-3'
 const ROW = 'min-h-11 w-full border-t border-border/50 px-3 py-3 text-left text-sm hover:bg-accent'
 const STAGE_ROW = 'min-h-9 w-full bg-muted/30 py-2 pl-10 pr-3 text-left text-sm hover:bg-accent'
 
@@ -62,13 +62,17 @@ function RunsCell({ a }: { a: AutomationSummary }): React.JSX.Element {
   )
 }
 
+function stagesMore(rest: number): StripItem[] {
+  if (rest <= 0) {
+    return []
+  }
+  return [{ kind: 'more', key: 'stages', count: rest, unit: rest === 1 ? 'stage' : 'stages' }]
+}
+
 function JobRunsCell({ job }: { job: JobGroup }): React.JSX.Element {
   const stage = job.stages.find((s) => s.live.length > 0) ?? job.stages[0]
   const rest = job.stages.length - 1
-  const extra: StripItem[] =
-    rest > 0
-      ? [{ kind: 'more', key: 'stages', count: rest, unit: rest === 1 ? 'stage' : 'stages' }]
-      : []
+  const extra = stagesMore(rest)
   return (
     <RunStrip
       items={[...foldStrip(liveStrip(stage.chain, stage.live)), ...extra]}
