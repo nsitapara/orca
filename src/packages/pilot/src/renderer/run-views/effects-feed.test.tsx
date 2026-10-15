@@ -63,13 +63,16 @@ describe('useRunEffects', () => {
     expect(pilotRpc).toHaveBeenCalledTimes(2)
   })
 
-  it('does not ask again when a run goes from live to finished', async () => {
+  it('asks once more when a run goes from live to finished, and not again while it stays finished', async () => {
     pilotRpc.mockResolvedValue({})
     const { rerender } = render(<Probe id="a" live />)
     await act(async () => {})
     rerender(<Probe id="a" live={false} />)
     await act(async () => {})
-    expect(pilotRpc).toHaveBeenCalledTimes(1)
+    expect(pilotRpc).toHaveBeenCalledTimes(2)
+    rerender(<Probe id="a" live={false} />)
+    await act(async () => {})
+    expect(pilotRpc).toHaveBeenCalledTimes(2)
   })
 
   it('asks again every 10 s for a live run, and not for a finished one', async () => {

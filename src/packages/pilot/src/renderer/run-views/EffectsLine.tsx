@@ -1,24 +1,12 @@
 import { useId } from 'react'
 import { effectText } from '../../shared/effect-text'
+import { safeHref } from '../../shared/safe-href'
 import type { Effect } from '../../shared/visibility-types'
 
 export const EFFECTS_SHOWN = 4
 
 function keyOf(e: Effect, i: number): string {
   return `${e.kind}:${e.target ?? ''}:${e.stepIdx ?? 'run'}:${i}`
-}
-
-// Only http and https links are clickable; the url came out of a transcript.
-function safeHref(url: string | null): string | null {
-  if (!url) {
-    return null
-  }
-  try {
-    const { protocol } = new URL(url)
-    return protocol === 'http:' || protocol === 'https:' ? url : null
-  } catch {
-    return null
-  }
 }
 
 function EffectLink({ effect }: { effect: Effect }): React.JSX.Element {

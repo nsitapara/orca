@@ -166,7 +166,7 @@ export function RunPanel({
       clearInterval(timer)
     }
   }, [runId])
-  const effects = useRunEffects(runId, detail === null || LIVE.has(detail.run.status))
+  const effects = useRunEffects(runId, detail !== null && LIVE.has(detail.run.status))
   const painted = detail ? paintRun(detail.chain, detail) : null
   return (
     <div className="flex flex-col gap-4 p-4">
