@@ -281,4 +281,51 @@ describe('paintRun', () => {
     expect(painted.parts.some((p) => p.key === 'step:0')).toBe(false)
     expect(byKey(painted.parts).answers.linkRunId).toBe('r1')
   })
+
+  it('paints an import run from its stored steps without saying the YAML changed', () => {
+    const painted = paintRun(chain, {
+      run: testRun({
+        trigger: 'import',
+        tickId: null,
+        status: 'done',
+        steps: [stepAt(0, 'imported', 'done')]
+      })
+    })
+    expect(painted.drifted).toBe(false)
+    expect(painted.parts.filter((p) => p.kind === 'step').map((p) => [p.name, p.state])).toEqual([
+      ['imported', 'done']
+    ])
+    expect(painted.parts.some((p) => p.key === 'step:1')).toBe(false)
+  })
+
+  it.each([
+    ['a short value', '1c9e04aa', 'head8 = 1c9e04aa'],
+    ['a long value', 'MR title that is a whole sentence', null],
+    ['a multi-line value', 'one\ntwo', null]
+  ])("shows a field row's value only when it is short and on one line: %s", (_n, value, detail) => {
+    const painted = paintRun(chain, {
+      run: testRun(),
+      tickItem: {
+        tickId: 7,
+        itemKey: '!1',
+        label: '!1',
+        verdict: 'started',
+        reason: '',
+        checks: [],
+        fields: { 'mr.head8': value },
+        runId: 'r1'
+      }
+    })
+    expect(byKey(painted.parts)['field:head8']).toMatchObject({ state: 'done', detail })
+  })
+
+  it('links the Starts row to the run that handed the work over', () => {
+    const painted = paintRun(chain, {
+      run: testRun(),
+      trigger: { automationId: 'one', runId: 'r0', stage: 1, ids: ['WEB-1'] },
+      receivedFrom: [testHandover({ senderRunId: 'r0' })]
+    })
+    expect(byKey(painted.parts).starts.linkRunId).toBe('r0')
+    expect(byKey(paintRun(chain, { run: testRun() }).parts).starts.linkRunId).toBeNull()
+  })
 })
