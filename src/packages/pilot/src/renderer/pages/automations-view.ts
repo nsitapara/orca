@@ -128,7 +128,11 @@ export function pendingInboxCard(): string | null {
 }
 
 export function clearPendingInboxCard(): void {
+  if (pendingCard === null) {
+    return
+  }
   pendingCard = null
+  notify()
 }
 
 export function pendingActivityFilter(): string[] | null {
@@ -154,7 +158,10 @@ export function showActivity(ids: string[] | null): void {
 
 export function takeActivityFilter(): string[] | null {
   const ids = pendingFilter
-  pendingFilter = null
+  if (ids !== null) {
+    pendingFilter = null
+    notify()
+  }
   return ids
 }
 
