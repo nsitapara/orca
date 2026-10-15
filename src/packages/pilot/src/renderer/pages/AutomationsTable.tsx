@@ -2,7 +2,13 @@ import { useState } from 'react'
 import { ChevronDown, ChevronRight } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import type { AutomationListPayload, AutomationSummary } from '../../shared/api-types'
-import { jobEnabled, jobLastTick, listEntries, type JobGroup } from '../../shared/job-stages'
+import {
+  jobEnabled,
+  jobLastTick,
+  jobTitle,
+  listEntries,
+  type JobGroup
+} from '../../shared/job-stages'
 import {
   loadFolded,
   loadSort,
@@ -107,7 +113,7 @@ function JobRows({
   onOpen: (id: string) => void
   onOpenJob: (jobId: string) => void
 }): React.JSX.Element {
-  const title = `${job.id} · ${job.name}`
+  const title = jobTitle(job)
   const count = stagesText(job.stages.length)
   const [folded, setFolded] = useState(() => loadFolded(job.id))
   const toggle = (e: React.MouseEvent): void => {

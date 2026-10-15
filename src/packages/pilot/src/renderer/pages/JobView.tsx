@@ -4,7 +4,7 @@ import type {
   AutomationDetailPayload,
   AutomationListPayload
 } from '../../shared/api-types'
-import { findJob, type JobGroup } from '../../shared/job-stages'
+import { findJob, jobTitle, type JobGroup } from '../../shared/job-stages'
 import { pilotRpc } from '../api'
 import { JobActivityTimeline } from './ActivityTimeline'
 import { DryRunPanel } from './DryRunPanel'
@@ -72,11 +72,13 @@ function Tabs({
 function TabBody({
   stages,
   tab,
-  hideQuiet
+  hideQuiet,
+  onOpenStage
 }: {
   stages: StageData[]
   tab: string
   hideQuiet: boolean
+  onOpenStage: (id: string) => void
 }): React.JSX.Element {
   const shown = stages.find((s) => s.summary.id === tab)
   if (shown?.detail) {
@@ -99,7 +101,12 @@ function TabBody({
     )
     .sort((a, b) => b.at - a.at)
   return (
-    <JobActivityTimeline entries={entries} notes={notes} empty={emptyActivityText(hideQuiet)} />
+    <JobActivityTimeline
+      entries={entries}
+      notes={notes}
+      empty={emptyActivityText(hideQuiet)}
+      onOpenStage={onOpenStage}
+    />
   )
 }
 
@@ -160,7 +167,7 @@ export function JobView({
         Automations
       </button>
       <span className="text-muted-foreground">›</span>
-      <span>{jobId}</span>
+      <span>{job ? jobTitle(job) : jobId}</span>
     </div>
   )
   if (!job) {
@@ -179,7 +186,7 @@ export function JobView({
     <div className="flex flex-col gap-4">
       {crumbs}
       <div className="flex flex-wrap items-start gap-2">
-        <h2 className="text-lg font-semibold">{`${job.id} · ${job.name}`}</h2>
+        <h2 className="text-lg font-semibold">{jobTitle(job)}</h2>
         <span className="flex-1" />
         <JobControls job={job} onDone={() => void refresh()} onDryRun={setDryRuns} />
       </div>
@@ -208,7 +215,7 @@ export function JobView({
         hideQuiet={hideQuiet}
         onHideQuiet={setHideQuiet}
       />
-      <TabBody stages={stages} tab={tab} hideQuiet={hideQuiet} />
+      <TabBody stages={stages} tab={tab} hideQuiet={hideQuiet} onOpenStage={onOpenStage} />
     </div>
   )
 }
