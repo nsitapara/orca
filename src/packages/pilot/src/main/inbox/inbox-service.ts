@@ -214,7 +214,9 @@ export function syncRunWaiting(store: PilotStore, runId: string | null, at: numb
     store.runs.update(runId, { status: 'needs_you' })
   }
   if (run.status === 'needs_you' && open === 0) {
-    store.runs.update(runId, { status: 'done', finishedAt: run.finishedAt ?? at })
+    // runEnd wrote "Inbox: N open items" while cards were open; with none left the run reads as done.
+    const outcome = run.outcome?.startsWith('Inbox: ') ? 'Done' : run.outcome
+    store.runs.update(runId, { status: 'done', finishedAt: run.finishedAt ?? at, outcome })
   }
 }
 

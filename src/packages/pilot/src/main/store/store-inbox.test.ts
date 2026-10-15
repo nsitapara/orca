@@ -233,6 +233,16 @@ describe('InboxStore', () => {
     })
   })
 
+  it("counts a run's open cards without the defaults its agent took", () => {
+    const store = PilotStore.open(':memory:')
+    store.inbox.add(item('q1', { runId: 'r1' }))
+    store.inbox.add(item('d1', { runId: 'r1', type: 'default' }))
+    store.inbox.add(item('d2', { runId: 'r2', type: 'default' }))
+    expect(store.inbox.openCountForRun('r1')).toBe(1)
+    expect(store.inbox.openCountForRun('r2')).toBe(0)
+    store.close()
+  })
+
   it('counts the open items a run left', () => {
     const store = PilotStore.open(':memory:')
     store.inbox.add(item('i1'))

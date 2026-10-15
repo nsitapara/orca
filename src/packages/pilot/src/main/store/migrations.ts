@@ -1,6 +1,6 @@
 import type Database from '../../../../../main/sqlite/sync-database'
 
-export const PILOT_SCHEMA_VERSION = 12
+export const PILOT_SCHEMA_VERSION = 13
 
 const V1 = `
 CREATE TABLE ticks (id INTEGER PRIMARY KEY AUTOINCREMENT, automation_id TEXT NOT NULL, started_at INTEGER NOT NULL,
@@ -154,8 +154,21 @@ ALTER TABLE ticks DROP COLUMN dry_run;
 // A shell step's pilotcli result (shared/run/step-result.ts): the envelope its whole stdout was, as JSON, or NULL.
 const V12 = `ALTER TABLE steps ADD COLUMN result_json TEXT;`
 
+// Run visibility (Done for you): when Nish acknowledged a finished run. Runs that ended before it count as
+// acknowledged, except those with an open default he never saw; runs held at needs_you only by defaults are done.
+const V13 = `
+ALTER TABLE runs ADD COLUMN acknowledged_at INTEGER;
+UPDATE runs SET status = 'done',
+  outcome = CASE WHEN outcome LIKE 'Inbox: %' THEN 'Done' ELSE outcome END
+  WHERE status = 'needs_you' AND NOT EXISTS (
+    SELECT 1 FROM inbox_items i WHERE i.run_id = runs.id AND i.status = 'open' AND i.type != 'default');
+UPDATE runs SET acknowledged_at = COALESCE(finished_at, started_at)
+  WHERE status NOT IN ('asking', 'running') AND NOT EXISTS (
+    SELECT 1 FROM inbox_items i WHERE i.run_id = runs.id AND i.status = 'open' AND i.type = 'default');
+`
+
 // MIGRATIONS[n - 1] takes a database from version n - 1 to n.
-const MIGRATIONS: readonly string[] = [V1, V2, V3, V4, V5, V6, V7, V8, V9, V10, V11, V12]
+const MIGRATIONS: readonly string[] = [V1, V2, V3, V4, V5, V6, V7, V8, V9, V10, V11, V12, V13]
 
 // Same pattern as Orca's orchestration.db (migrate.ts): user_version + one transaction, all or nothing.
 // `target` lets tests build a database at an older version.
