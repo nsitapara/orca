@@ -11,6 +11,7 @@ import {
 import { JobView } from './JobView'
 import { PilotAutomationsSection } from './PilotAutomationsSection'
 import { RunPanelHost } from '../run-views/RunPanelHost'
+import { ActivityPage } from './ActivityPage'
 import { InboxPage } from './waiting/InboxPage'
 
 function PageBody(): React.JSX.Element {
@@ -21,6 +22,13 @@ function PageBody(): React.JSX.Element {
     return (
       <main className="relative flex h-full flex-col overflow-y-auto scrollbar-sleek bg-background px-5 pb-10">
         <InboxPage />
+      </main>
+    )
+  }
+  if (view === 'activity') {
+    return (
+      <main className="relative flex h-full flex-col gap-4 overflow-y-auto bg-background px-5 pb-10 pt-6">
+        <ActivityPage />
       </main>
     )
   }
