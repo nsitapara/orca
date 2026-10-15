@@ -78,14 +78,15 @@ describe('AutomationView', () => {
     const { container } = render(
       <AutomationView id="fix-ci" onBack={() => {}} onOpenJob={() => {}} />
     )
-    fireEvent.change(await screen.findByRole('combobox', { name: 'Run' }), {
-      target: { value: '' }
+    const picker = (await screen.findByRole('combobox', { name: 'Run' })) as HTMLSelectElement
+    const state = (): string | null | undefined =>
+      container.querySelector('[data-part="workspace"]')?.getAttribute('data-state')
+    await waitFor(() => {
+      expect(picker.value).toBe('fix-ci-3')
+      expect(state()).toBe('failed')
     })
-    await waitFor(() =>
-      expect(
-        container.querySelector('[data-part="workspace"]')?.getAttribute('data-state')
-      ).toBeNull()
-    )
+    fireEvent.change(picker, { target: { value: '' } })
+    await waitFor(() => expect(state()).toBeNull())
   })
 
   it('shows its Activity, asking only for this automation and only ticks with something to do', async () => {
