@@ -4,10 +4,10 @@ import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 import { PilotStore } from '../store/store'
 import { LogReader } from './log-file'
-import { RunEffectsReader } from './run-effects'
+import { REMOTE_MISS_MS, RunEffectsReader } from './run-effects'
 import { lines, result, T0, use as toolUse } from './__fixtures__/transcript'
 
-function setup(text: string, remote?: () => Promise<string | null>) {
+function setup(text: string, remote?: () => Promise<string | null>, now = () => T0) {
   const root = mkdtempSync(join(tmpdir(), 'pilot-effects-'))
   mkdirSync(join(root, 'proj'))
   const file = join(root, 'proj', 'sess-1.jsonl')
@@ -49,13 +49,53 @@ function setup(text: string, remote?: () => Promise<string | null>) {
     T0 + 1
   )
   const remoteOf = vi.fn(remote ?? (async () => 'git@gitlab.com:g/p.git'))
+  const logReader = new LogReader(root)
   const reader = new RunEffectsReader({
     store,
-    reader: new LogReader(root),
+    reader: logReader,
     claudeProjects: root,
-    remoteOf
+    remoteOf,
+    now
   })
-  return { store, file, reader, remoteOf }
+  return { store, file, reader, remoteOf, logReader }
+}
+
+// An ended run whose one Claude step reads the same session, with no catalog action of its own.
+function endedRun(store: PilotStore, id: string, worktreePath: string | null = '/wt/web-1'): void {
+  store.runs.create({
+    id,
+    automationId: 'a',
+    tickId: null,
+    itemKey: id,
+    itemLabel: id,
+    worktreePath,
+    startedAt: T0,
+    status: 'done'
+  })
+  store.runs.createStep({
+    runId: id,
+    idx: 0,
+    name: 'fix',
+    agent: 'claude',
+    skill: 'x',
+    startedAt: T0,
+    sessionId: 'sess-1'
+  })
+  store.runs.updateStep(id, 0, { finishedAt: T0 + 30_000, status: 'done' })
+}
+
+function doneAction(store: PilotStore, runId: string, detail: string): void {
+  const id = store.actions.start({
+    inboxItemId: null,
+    runId,
+    action: 'push',
+    args: {},
+    digest: 'd',
+    phase: 'do',
+    dryRun: false,
+    startedAt: T0
+  })
+  store.actions.finish(id, 'done', JSON.stringify({ detail }), T0 + 2)
 }
 
 const TEXT = lines(
@@ -133,11 +173,20 @@ describe('RunEffectsReader', () => {
     expect(spy.mock.calls.length).toBeLessThanOrEqual(1)
   })
 
-  it('asks git again after a miss', async () => {
+  it('asks git again a minute after a miss, not before', async () => {
     const answers = [null, 'git@gitlab.com:g/p.git']
-    const { reader, remoteOf } = setup(TEXT, async () => answers.shift() ?? null)
+    let now = T0
+    const { reader, remoteOf } = setup(
+      TEXT,
+      async () => answers.shift() ?? null,
+      () => now
+    )
     const pushedUrl = async () => (await reader.forRun('r1')).find((e) => e.kind === 'pushed')?.url
     expect(await pushedUrl()).toBeNull()
+    now += REMOTE_MISS_MS - 1
+    expect(await pushedUrl()).toBeNull()
+    expect(remoteOf).toHaveBeenCalledTimes(1)
+    now += 1
     expect(await pushedUrl()).toBe('https://gitlab.com/g/p/-/tree/web-1')
     expect(remoteOf).toHaveBeenCalledTimes(2)
   })
@@ -146,5 +195,38 @@ describe('RunEffectsReader', () => {
     const { reader, remoteOf } = setup(TEXT)
     await Promise.all([reader.forRun('r1'), reader.forRun('r1')])
     expect(remoteOf).toHaveBeenCalledTimes(1)
+  })
+
+  it('answers a run with no effects without asking git or reading the recent Linear URLs', async () => {
+    const { reader, store, remoteOf } = setup(TEXT)
+    store.runs.create({
+      id: 'quiet',
+      automationId: 'a',
+      tickId: null,
+      itemKey: 'q',
+      itemLabel: 'q',
+      worktreePath: '/wt/q',
+      startedAt: T0,
+      status: 'done'
+    })
+    const recent = vi.spyOn(store.visibility, 'recentLinearUrls')
+    expect(await reader.forRun('quiet')).toEqual([])
+    expect(remoteOf).not.toHaveBeenCalled()
+    expect(recent).not.toHaveBeenCalled()
+  })
+
+  it("keeps an ended run's linked effects, reading nothing again until it gains a done action", async () => {
+    const { reader, store, logReader } = setup(TEXT)
+    endedRun(store, 'r2')
+    const read = vi.spyOn(logReader, 'read')
+    const recent = vi.fn(() => ['https://linear.app/acme/issue/WEB-1'])
+    const first = await reader.forRun('r2', recent)
+    expect(first.map((e) => e.url)).toContain('https://linear.app/acme/issue/WEB-5')
+    expect(await reader.forRun('r2', recent)).toEqual(first)
+    expect(read).toHaveBeenCalledTimes(1)
+    expect(recent).toHaveBeenCalledTimes(1)
+    doneAction(store, 'r2', 'pushed web-2')
+    expect((await reader.forRun('r2', recent)).map((e) => e.target)).toContain('pushed web-2')
+    expect(recent).toHaveBeenCalledTimes(2)
   })
 })

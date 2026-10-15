@@ -26,7 +26,7 @@ export class VisibilityStore {
     return []
   }
 
-  // Ended runs since `since` that Nish hasn't acknowledged, newest first: Done for you's candidates (spec §3).
+  // Ended runs since `since` nobody acknowledged, newest first (spec §3), read through V13's runs_unacknowledged.
   unacknowledged(
     automationIds: readonly string[] | null,
     since: number,

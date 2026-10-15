@@ -5,14 +5,16 @@ import { saveAnswer } from '../answers/save'
 import { toInboxSummary } from '../inbox/card'
 import { resolveInboxPerson } from '../inbox/person'
 import type { PilotContext } from '../pilot-services'
+import { mapLimit } from '../map-limit'
 import { inboxDeps } from '../rpc/methods-inbox'
 import { withDetail } from '../timeline/run-detail'
-import type { RunEffectsReader } from './run-effects'
+import { lazyRecentUrls, type RunEffectsReader } from './run-effects'
 
 export const DONE_WINDOW_MS = 7 * 24 * 3600_000
 export const DONE_LIMIT = 100
 export const DONE_SCAN_LIMIT = 1000
 const PAGE = 100
+const RUNS_AT_ONCE = 8
 
 export type AcknowledgeResult = {
   acknowledged: string[]
@@ -54,17 +56,16 @@ export async function doneForYou(
   now: number
 ): Promise<DoneRun[]> {
   const since = now - DONE_WINDOW_MS
+  const recent = lazyRecentUrls(ctx.store)
   const shown: DoneRun[] = []
   for (let offset = 0; offset < DONE_SCAN_LIMIT && shown.length < DONE_LIMIT; offset += PAGE) {
     const page = ctx.store.visibility.unacknowledged(null, since, PAGE, offset)
     const mine = page.filter((r) => person === null || isFor(ctx, r, fieldsOf(ctx, r), person))
-    const found = await Promise.all(
-      withDetail(ctx.store, mine).map(async (run) => ({
-        run: { ...run, fields: fieldsOf(ctx, run) },
-        effects: await effects.forRun(run.id),
-        defaults: openDefaults(ctx, run.id).map(toInboxSummary)
-      }))
-    )
+    const found = await mapLimit(withDetail(ctx.store, mine), RUNS_AT_ONCE, async (run) => ({
+      run: { ...run, fields: fieldsOf(ctx, run) },
+      effects: await effects.forRun(run.id, recent),
+      defaults: openDefaults(ctx, run.id).map(toInboxSummary)
+    }))
     shown.push(...found.filter((d) => d.effects.length > 0 || d.defaults.length > 0))
     if (page.length < PAGE) {
       break
