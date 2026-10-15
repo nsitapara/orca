@@ -1,4 +1,6 @@
-import { describe, expect, it, vi } from 'vitest'
+// @vitest-environment happy-dom
+import { act, renderHook } from '@testing-library/react'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   clearPendingInboxCard,
   pendingInboxCard,
@@ -11,10 +13,19 @@ import {
   showInboxCard,
   showPilotAutomation,
   subscribePilotAutomationsView,
-  takeActivityFilter
+  takeActivityFilter,
+  usePendingActivityFilter,
+  usePendingInboxCard
 } from './automations-view'
 
 describe('automations view', () => {
+  afterEach(() => {
+    clearPendingInboxCard()
+    takeActivityFilter()
+    setPilotOpenAutomation(null)
+    setPilotAutomationsView('automations')
+  })
+
   it('starts on automations and notifies only on change', () => {
     expect(pilotAutomationsView()).toBe('automations')
     const listener = vi.fn()
@@ -50,5 +61,24 @@ describe('automations view', () => {
     expect(takeActivityFilter()).toEqual(['fix-ci'])
     expect(takeActivityFilter()).toBeNull()
     setPilotAutomationsView('automations')
+  })
+
+  it('wakes a mounted Inbox on each new card, and a mounted Activity on each new filter', () => {
+    setPilotAutomationsView('inbox')
+    const card = renderHook(() => usePendingInboxCard())
+    act(() => showInboxCard('c1'))
+    expect(card.result.current).toBe('c1')
+    act(() => clearPendingInboxCard())
+    act(() => showInboxCard('c2'))
+    expect(card.result.current).toBe('c2')
+    card.unmount()
+
+    setPilotAutomationsView('activity')
+    const filter = renderHook(() => usePendingActivityFilter())
+    act(() => showActivity(['a']))
+    expect(filter.result.current).toEqual(['a'])
+    act(() => showActivity(['b']))
+    expect(filter.result.current).toEqual(['b'])
+    filter.unmount()
   })
 })
