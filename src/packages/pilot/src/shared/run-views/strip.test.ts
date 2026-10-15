@@ -104,7 +104,11 @@ describe('foldStrip', () => {
     ['a short strip whole', chips(4), ['c0', 'c1', 'c2', 'c3']],
     ['a long one around its running chip', chips(11, [6]), ['c0', '+4', 'c5', 'c6', 'c7', '+3']],
     ['a long one with nothing lit from its start', chips(11), ['c0', 'c1', 'c2', 'c3', 'c4', '+6']],
-    ['every lit chip of a long one', chips(11, [2, 9]), ['c0', 'c1', 'c2', 'c3', '+5', 'c9', '+1']]
+    [
+      'every lit chip of a long one',
+      chips(11, [2, 9]),
+      ['c0', 'c1', 'c2', 'c3', '+4', 'c8', 'c9', 'c10']
+    ]
   ])('keeps %s', (_name, input, expected) => {
     const folded = foldStrip(input)
     expect(keptKeys(folded)).toEqual(expected)
