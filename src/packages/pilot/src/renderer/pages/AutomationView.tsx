@@ -5,6 +5,7 @@ import { AutomationOverview } from './AutomationOverview'
 import { ActivityTimeline } from './ActivityTimeline'
 import { DryRunPanel } from './DryRunPanel'
 import { errorText } from './format'
+import { emptyActivityText, QuietTicksSwitch, useHideQuiet } from './QuietTicksSwitch'
 import { RunControls } from './RunControls'
 
 type Tab = 'overview' | 'activity'
@@ -23,13 +24,18 @@ export function AutomationView({
   const [detail, setDetail] = useState<AutomationDetailPayload | null>(null)
   const [ticks, setTicks] = useState<ActivityTick[]>([])
   const [tab, setTab] = useState<Tab>('activity')
+  const [hideQuiet, setHideQuiet] = useHideQuiet()
   const [dryRun, setDryRun] = useState<TickOutcome | null>(null)
   const [error, setError] = useState<string | null>(null)
   const mounted = useRef(true)
   const refresh = useCallback(async () => {
     try {
       const d = await pilotRpc<AutomationDetailPayload>('pilot.automations.get', { id })
-      const t = await pilotRpc<ActivityTick[]>('pilot.automations.activity', { id, limit: 30 })
+      const t = await pilotRpc<ActivityTick[]>('pilot.automations.activity', {
+        id,
+        limit: 30,
+        skipQuiet: hideQuiet
+      })
       if (!mounted.current) {
         return
       }
@@ -41,7 +47,7 @@ export function AutomationView({
         setError(errorText(e))
       }
     }
-  }, [id])
+  }, [id, hideQuiet])
   useEffect(() => {
     mounted.current = true
     void refresh()
@@ -101,9 +107,15 @@ export function AutomationView({
             {t.label}
           </button>
         ))}
+        {tab === 'activity' ? <QuietTicksSwitch hide={hideQuiet} onChange={setHideQuiet} /> : null}
       </div>
       {tab === 'activity' ? (
-        <ActivityTimeline ticks={ticks} checkNames={detail.checkNames} notes={detail.notes ?? []} />
+        <ActivityTimeline
+          ticks={ticks}
+          checkNames={detail.checkNames}
+          notes={detail.notes ?? []}
+          empty={emptyActivityText(hideQuiet)}
+        />
       ) : (
         <AutomationOverview detail={detail} />
       )}

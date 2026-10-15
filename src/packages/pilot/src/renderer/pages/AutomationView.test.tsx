@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { TickOutcome } from '../../shared/api-types'
 import { detail, failedRunTick } from './fixtures'
@@ -27,6 +27,7 @@ describe('AutomationView', () => {
   afterEach(() => {
     cleanup()
     pilotRpc.mockReset()
+    localStorage.clear()
   })
 
   it('shows a failed launch on the run, and the Overview tab shows the definition', async () => {
@@ -51,7 +52,31 @@ describe('AutomationView', () => {
       method === 'pilot.automations.get' ? detail : []
     )
     render(<AutomationView id="fix-ci" onBack={() => {}} />)
+    expect(await screen.findByText('No ticks with anything to do yet.')).toBeTruthy()
+    fireEvent.click(screen.getByRole('switch', { name: 'Hide ticks with nothing to do' }))
     expect(await screen.findByText('No ticks yet.')).toBeTruthy()
+  })
+
+  it('asks only for the ticks with something to do until the switch is turned off, and remembers that', async () => {
+    serve()
+    render(<AutomationView id="fix-ci" onBack={() => {}} />)
+    const hide = await screen.findByRole('switch', { name: 'Hide ticks with nothing to do' })
+    expect(hide.getAttribute('aria-checked')).toBe('true')
+    expect(calls('pilot.automations.activity').map((c) => c[1])).toEqual([
+      { id: 'fix-ci', limit: 30, skipQuiet: true }
+    ])
+    fireEvent.click(hide)
+    await waitFor(() =>
+      expect(calls('pilot.automations.activity').at(-1)?.[1]).toEqual({
+        id: 'fix-ci',
+        limit: 30,
+        skipQuiet: false
+      })
+    )
+    cleanup()
+    render(<AutomationView id="fix-ci" onBack={() => {}} />)
+    const shown = await screen.findByRole('switch', { name: 'Hide ticks with nothing to do' })
+    expect(shown.getAttribute('aria-checked')).toBe('false')
   })
 
   it('Run now needs a Confirm before it calls tickNow, with the long timeout', async () => {

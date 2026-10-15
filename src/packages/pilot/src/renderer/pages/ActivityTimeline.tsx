@@ -75,18 +75,22 @@ function NoteNode({ note }: { note: Note }): React.JSX.Element {
   )
 }
 
+const NO_TICKS = 'No ticks yet.'
+
 // Ticks arrive newest first from pilot.automations.activity; `notes` (newest first) come before the first tick.
 export function ActivityTimeline({
   ticks,
   checkNames,
-  notes = NO_NOTES
+  notes = NO_NOTES,
+  empty = NO_TICKS
 }: {
   ticks: ActivityTick[]
   checkNames: string[]
   notes?: Note[]
+  empty?: string
 }): React.JSX.Element {
   if (!ticks.length && !notes.length) {
-    return <p className="text-sm text-muted-foreground">No ticks yet.</p>
+    return <p className="text-sm text-muted-foreground">{empty}</p>
   }
   return (
     <ol className="ml-1">
@@ -103,13 +107,15 @@ export function ActivityTimeline({
 // A job's page: every stage's ticks in one timeline (mergeJobActivity), each tagged with its stage.
 export function JobActivityTimeline({
   entries,
-  notes = NO_NOTES
+  notes = NO_NOTES,
+  empty = NO_TICKS
 }: {
   entries: JobActivityEntry[]
   notes?: Note[]
+  empty?: string
 }): React.JSX.Element {
   if (!entries.length && !notes.length) {
-    return <p className="text-sm text-muted-foreground">No ticks yet.</p>
+    return <p className="text-sm text-muted-foreground">{empty}</p>
   }
   return (
     <ol className="ml-1">
