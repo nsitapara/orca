@@ -175,11 +175,28 @@ describe('planVaultImport', () => {
     expect(plan.runs[0]).toMatchObject({
       automationId: 'fix-failed-ci',
       agent: 'claude',
+      skill: 'ci-fix-sweep',
       sessionId: '1b2c3d4e-0000-4000-8000-00000000abcd',
-      itemKey: 'mr:1214',
-      itemLabel: '!1214 web-1-x'
+      itemKey: 'mr:1214'
     })
     expect(plan.items.map((i) => i.params.runId)).toEqual([plan.runs[0].id, plan.runs[0].id])
+  })
+
+  // A run holds every card of its note's section, so its name never comes from one card's location.
+  it.each<[string, Partial<VaultRow>, string]>([
+    ['an MR card by its MR and branch', {}, '!1214 web-1-x'],
+    [
+      'a branch card without an MR by its branch',
+      { mr_iid: null, location: 'Not established' },
+      'web-1-x'
+    ],
+    [
+      'a job card by its automation',
+      { scope: 'job', branch: '', worktree: null, mr_iid: null, location: 'Not established' },
+      'Fix failed CI on my MRs'
+    ]
+  ])('names the imported run of %s', (_, over, label) => {
+    expect(planVaultImport([row(over)], ctx()).runs[0]?.itemLabel).toBe(label)
   })
 
   it.each<[string, Partial<VaultRow>, (id: string) => boolean, string]>([

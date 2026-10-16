@@ -37,7 +37,7 @@ function createRun(deps: InboxDeps, run: ImportRun): boolean {
     idx: 0,
     name: 'imported',
     agent: run.agent,
-    skill: null,
+    skill: run.skill,
     startedAt: run.startedAt,
     sessionId: run.sessionId,
     status: 'done'
