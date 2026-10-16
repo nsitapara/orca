@@ -1,5 +1,5 @@
 import type { InboxListRow, InboxType } from '../../../shared/api-types'
-import type { QueueEntry } from '../../../shared/inbox-types'
+import type { DispatchReport, QueueEntry } from '../../../shared/inbox-types'
 
 const ACTION_TYPES = new Set<InboxType>(['action', 'bug', 'left_for_you'])
 
@@ -163,17 +163,74 @@ export const QUEUE_PILL = {
   held: { label: 'Held', variant: 'default' }
 } as const
 
+// "2:59": the time left, rounded up to the second, never below zero.
+export function countdown(ms: number): string {
+  const seconds = Math.max(0, Math.ceil(ms / 1000))
+  return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`
+}
+
 export function queueNote(
   entry: Pick<QueueEntry, 'state' | 'holdDetail' | 'readyAt'>,
-  clock: (ms: number) => string
+  now: number
 ): string {
   if (entry.state === 'held' && entry.holdDetail) {
     return entry.holdDetail
   }
-  if (entry.state === 'not_ready') {
-    return `Settles at ${clock(entry.readyAt)}`
+  if (entry.state === 'not_ready' && entry.readyAt > now) {
+    return `Goes in ${countdown(entry.readyAt - now)}`
   }
   return 'Next answer check, under a minute'
+}
+
+// The console's "Held 20+ min": an answer held this long past its settle wants a look. A not-yet hold ('waits') moves
+// its own recheck time on, so it never counts.
+const HELD_TOO_LONG_MS = 20 * 60_000
+
+export function heldTooLong(
+  entry: Pick<QueueEntry, 'state' | 'holdReason' | 'readyAt'>,
+  now: number
+): boolean {
+  return (
+    entry.state === 'held' &&
+    entry.holdReason !== 'waits' &&
+    now - entry.readyAt >= HELD_TOO_LONG_MS
+  )
+}
+
+// The folded In motion line's answers part: "3 from your answers (2 held · 1 in 2:41)".
+export function queueSummary(
+  entries: Pick<QueueEntry, 'state' | 'readyAt'>[],
+  now: number
+): string {
+  const held = entries.filter((e) => e.state === 'held').length
+  const settling = entries.filter((e) => e.state === 'not_ready' && e.readyAt > now)
+  const due = entries.length - held - settling.length
+  const parts: string[] = []
+  if (held) {
+    parts.push(`${held} held`)
+  }
+  if (due) {
+    parts.push(`${due} at the next check`)
+  }
+  if (settling.length) {
+    const first = countdown(Math.min(...settling.map((e) => e.readyAt)) - now)
+    parts.push(`${settling.length} ${settling.length === 1 ? 'in' : 'from'} ${first}`)
+  }
+  return `${entries.length} from your answers (${parts.join(' · ')})`
+}
+
+// What one Apply now did, in a line: "2 closed · 3 still held", or that there was nothing to do.
+export function applyReport(r: DispatchReport): string {
+  const parts = [
+    [r.ticked, 'closed'],
+    [r.actions, 'ran an action'],
+    [r.agents, 'sent to an agent'],
+    [r.reasked, 'asked again'],
+    [r.retired, 'retired with the MR'],
+    [r.held, 'still held']
+  ] as const
+  const said = parts.filter(([n]) => n > 0).map(([n, words]) => `${n} ${words}`)
+  return said.length ? said.join(' · ') : 'Nothing was due'
 }
 
 export function worktreeName(path: string | null): string {

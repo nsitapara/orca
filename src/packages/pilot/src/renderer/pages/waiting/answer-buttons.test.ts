@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { InboxItemRow } from '../../../shared/api-types'
-import { composeAnswer } from './answer-text'
-import { answeredLine, buttonsFor, countdown } from './answer-buttons'
+import { composeAnswer, countdown } from './answer-text'
+import { answeredLine, buttonsFor } from './answer-buttons'
 
 const base = {
   options: [],

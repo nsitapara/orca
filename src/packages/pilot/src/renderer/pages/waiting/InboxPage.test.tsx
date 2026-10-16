@@ -12,6 +12,7 @@ vi.mock('../../api', () => ({ pilotRpc: (...args: unknown[]) => pilotRpc(...args
 
 import { stepAt, testCard, testRun } from '../../../shared/run-views/__fixtures__/runs'
 import { resetAutomationsFeed } from '../../run-views/automations-feed'
+import { closeRunPanel, openRunPanel } from '../../run-views/run-panel-state'
 import {
   pendingInboxCard,
   pilotAutomationsView,
@@ -200,7 +201,7 @@ describe('InboxPage', () => {
     expect(within(article).getByText('From run')).toBeTruthy()
   })
 
-  it('shows the cards waiting, folds the defaults, and lists what saved answers set off', async () => {
+  it('shows the cards waiting, folds the defaults, and opens In motion by itself on an answer held 20+ minutes', async () => {
     serve()
     render(<InboxPage />)
     expect(
@@ -271,7 +272,8 @@ describe('InboxPage', () => {
     expect(screen.getByRole('region', { name: 'Done for you' })).toBeTruthy()
   })
 
-  it('links to Activity with how many runs are going', async () => {
+  it('folds what is running and what answers set off into one In motion line that opens on a click', async () => {
+    const settling = { ...HELD, state: 'not_ready' as const, holdReason: null, holdDetail: null }
     pilotRpc.mockImplementation(async (method: string) => {
       if (method === 'pilot.inbox.list') {
         return LIST
@@ -285,12 +287,38 @@ describe('InboxPage', () => {
           missingDirs: []
         }
       }
-      return method === 'pilot.queue.list' ? { entries: [] } : []
+      if (method === 'pilot.queue.list') {
+        return { entries: [{ ...settling, readyAt: Date.now() + 161_000 }] }
+      }
+      return []
     })
     render(<InboxPage />)
-    fireEvent.click(await screen.findByRole('button', { name: '1 running →' }))
+    const motion = await screen.findByRole('region', { name: 'In motion' })
+    const line = await within(motion).findByText(
+      /^1 running · 1 from your answers \(1 in 2:\d\d\)$/
+    )
+    expect(within(motion).queryByRole('button', { name: 'Open run' })).toBeNull()
+    fireEvent.click(line)
+    expect(within(motion).getByText(/Goes in 2:\d\d/)).toBeTruthy()
+    fireEvent.click(within(motion).getByRole('button', { name: 'Open run' }))
+    expect(openRunPanel()?.runId).toBe('r1')
+    closeRunPanel()
+    fireEvent.click(within(motion).getByRole('button', { name: 'Activity →' }))
     expect(pilotAutomationsView()).toBe('activity')
     setPilotAutomationsView('automations')
+  })
+
+  it('says what Apply now did, even when every answer stays held', async () => {
+    serve()
+    const served = pilotRpc.getMockImplementation()!
+    pilotRpc.mockImplementation(async (method: string, ...rest: unknown[]) =>
+      method === 'pilot.answers.applyNow'
+        ? { retired: 0, ticked: 0, actions: 0, agents: 0, held: 1, reasked: 0 }
+        : served(method, ...rest)
+    )
+    render(<InboxPage />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Apply now' }))
+    expect(await screen.findByText('1 still held')).toBeTruthy()
   })
 
   it("shows Pilot's Run line in its own Pilot block on an action card, and none on a question", async () => {

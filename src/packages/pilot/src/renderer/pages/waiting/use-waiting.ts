@@ -1,8 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { InboxListRow } from '../../../shared/api-types'
-import type { InboxListPayload, QueueEntry, QueueListPayload } from '../../../shared/inbox-types'
+import type {
+  DispatchReport,
+  InboxListPayload,
+  QueueEntry,
+  QueueListPayload
+} from '../../../shared/inbox-types'
 import { pilotRpc } from '../../api'
 import { errorText } from '../format'
+import { applyReport } from './answer-text'
 
 const REFRESH_MS = 10_000
 // Apply now may run actions (act.py allows 10 min) before it answers.
@@ -100,13 +106,18 @@ export function useWaiting(person: string | null) {
     [reload]
   )
 
+  // What the pass did, in a line, so Apply now always says something (even "2 still held").
   const applyNow = useCallback(async () => {
     try {
-      await pilotRpc('pilot.answers.applyNow', {}, { timeoutMs: APPLY_TIMEOUT_MS })
+      const report = await pilotRpc<DispatchReport>(
+        'pilot.answers.applyNow',
+        {},
+        { timeoutMs: APPLY_TIMEOUT_MS }
+      )
       await reload()
-      return null
+      return { said: applyReport(report), failed: false }
     } catch (e) {
-      return errorText(e)
+      return { said: errorText(e), failed: true }
     }
   }, [reload])
 

@@ -126,12 +126,6 @@ export function answeredLine(item: InboxListRow): Words {
   return { label: text || 'Answered', doing: 'Applying…' }
 }
 
-// "2:59": the time left, rounded up to the second, never below zero.
-export function countdown(ms: number): string {
-  const seconds = Math.max(0, Math.ceil(ms / 1000))
-  return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`
-}
-
 // Where a saved answer stands, from the server's answer state. Settling and held can be undone; applying
 // (locked: it may be being carried out) cannot; failed and sent-before-Pilot offer Change answer; waiting is an unlocked answer
 // nothing has picked up yet (past its settle time, or no row), which can still be undone.

@@ -4,7 +4,7 @@ import type { InboxListRow } from '../../../shared/api-types'
 import { groupItems, type Section } from '../../../shared/inbox-groups'
 import { waitingCount, preparingCount, preparationBlockedCount } from './answer-text'
 import { useAutomationsFeed } from '../../run-views/automations-feed'
-import { clearPendingInboxCard, showActivity, usePendingInboxCard } from '../automations-view'
+import { clearPendingInboxCard, usePendingInboxCard } from '../automations-view'
 import { CardList } from './CardList'
 import { DoneForYou } from './DoneForYou'
 import { FilterBadges } from './FilterBadges'
@@ -13,7 +13,7 @@ import { ALL, InboxHeader } from './InboxHeader'
 import { InboxCard } from './InboxCard'
 import { ImportNotice } from './ImportNotice'
 import { InboxStyle } from './inbox-style'
-import { UpNextPanel } from './UpNextPanel'
+import { InMotionPanel } from './InMotionPanel'
 import { WorktreeName } from './WorktreeLink'
 import { useElementWidth } from './use-element-width'
 import { useDoneForYou } from './use-done-for-you'
@@ -62,9 +62,8 @@ export function InboxPage(): React.JSX.Element {
   } = useWaiting(viewer)
   const done = useDoneForYou(viewer)
   const { list: summaries } = useAutomationsFeed()
-  const running = summaries.reduce(
-    (n, a) => n + a.live.filter((r) => r.status === 'running').length,
-    0
+  const running = summaries.flatMap((a) =>
+    a.live.filter((r) => r.status === 'running').map((run) => ({ run, automationName: a.name }))
   )
   // A card the run panel's "asks you" link named: picked and scrolled to once the list has it, then forgotten.
   const pending = usePendingInboxCard()
@@ -165,15 +164,7 @@ export function InboxPage(): React.JSX.Element {
         allOpen={allOpen}
         onToggleAll={() => setAllDetailsOpen(detailIds, !allOpen)}
       />
-      {running > 0 ? (
-        <button
-          type="button"
-          className="self-start text-sm underline"
-          onClick={() => showActivity(null)}
-        >
-          {`${running} running →`}
-        </button>
-      ) : null}
+      <InMotionPanel running={running} entries={queue} onApplyNow={applyNow} />
       {error ? <p className="text-sm text-destructive">{error}</p> : null}
       <ImportNotice onImported={() => void reload()} />
       {showList ? null : (
@@ -184,7 +175,6 @@ export function InboxPage(): React.JSX.Element {
           onGroup={setGroup}
         />
       )}
-      <UpNextPanel entries={queue} onApplyNow={applyNow} />
       <div className="flex flex-wrap items-start gap-4">
         {showList ? (
           <CardList

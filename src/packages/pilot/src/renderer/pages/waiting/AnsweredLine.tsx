@@ -1,20 +1,9 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef } from 'react'
 import type { InboxListRow } from '../../../shared/api-types'
 import type { AnswerState } from '../../../shared/inbox-types'
-import { answeredLine, countdown, type Phase, phaseOf } from './answer-buttons'
-
-function useNow(active: boolean): number {
-  const [now, setNow] = useState(() => Date.now())
-  useEffect(() => {
-    if (!active) {
-      return undefined
-    }
-    setNow(Date.now())
-    const timer = setInterval(() => setNow(Date.now()), 1000)
-    return () => clearInterval(timer)
-  }, [active])
-  return now
-}
+import { answeredLine, type Phase, phaseOf } from './answer-buttons'
+import { countdown } from './answer-text'
+import { useNow } from './use-now'
 
 // What a saved answer says on the card, in one line. Only the server's `locked` says it is being carried out;
 // until then it can be undone (or, once failed, changed).
