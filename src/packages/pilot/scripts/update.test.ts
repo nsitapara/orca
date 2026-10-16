@@ -82,6 +82,7 @@ describe('hookTestTargets', () => {
       'src/renderer/src/app-shell',
       'src/renderer/src/components/right-sidebar',
       'src/renderer/src/components/sidebar/SidebarNav.test',
+      'src/renderer/src/components/skills',
       'src/renderer/src/main.test',
       'src/renderer/src/store/right-sidebar-route.test'
     ])
