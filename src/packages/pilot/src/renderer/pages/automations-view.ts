@@ -1,7 +1,7 @@
 import { useSyncExternalStore } from 'react'
 
-// Which sub-view the Automations page shows. The sidebar's "Inbox" item flips it.
-export type PilotAutomationsView = 'automations' | 'inbox' | 'activity'
+// Which sub-view the Automations page shows. The sidebar's "Inbox" and "Playground" items flip it.
+export type PilotAutomationsView = 'automations' | 'inbox' | 'activity' | 'playground'
 
 let current: PilotAutomationsView = 'automations'
 let openId: string | null = null

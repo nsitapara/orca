@@ -40,6 +40,7 @@ import { sweepStaleStarts } from './run/stale-starts'
 import { terminalRelister } from './run/terminal-relist'
 import { agentStepStarter } from './run/step-starters'
 import { runtimeStepProbe } from './run/watcher'
+import { openPlayground, type PlaygroundService } from './playground/create'
 import { buildPilotMethods } from './rpc/methods'
 import { registerPilotRpcMethods } from './rpc/register'
 import { PilotScheduler } from './scheduler/scheduler'
@@ -75,6 +76,8 @@ export type PilotContext = {
   resumeSession?: (req: { runId: string; stepIdx: number }) => Promise<SessionResumeResult>
   // The Automations folder every card's Details bundle must live in; null reads no bundle.
   detailsRoot?: string | null
+  // pilotcli's playground (main/playground); absent in orcad, which has no launcher folder for View source.
+  playground?: PlaygroundService
 }
 export type PilotServices = { stop: () => void; context: PilotContext }
 // What pilot.status reads. It is registered before anything opens, so status still answers (with
@@ -261,6 +264,7 @@ function openPilot(
   })
   handover.deps.trigger = (id, cause) => scheduler.trigger(id, cause)
   opened.push(() => scheduler.stop())
+  const playground = openPlayground(runtime, engineEnv.binDir, opened)
   // The attach hooks decide (pilotSchedulerEnabled); a caller that doesn't say gets no scheduler.
   if (schedulerOn) {
     void softly('envs at start', () => envs.startup(), log)
@@ -281,6 +285,7 @@ function openPilot(
     schedulerOn,
     engineEnv,
     detailsRoot,
+    playground,
     writeUsageReport: (dir) => usageReports.write(dir),
     resumeSession: (req) => resumeStepSession(runtimeResumeDeps(runtime, store, fieldDeps), req)
   }

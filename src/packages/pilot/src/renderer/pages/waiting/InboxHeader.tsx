@@ -2,17 +2,20 @@ import { ChevronDown, ChevronsUpDown, PanelLeft } from 'lucide-react'
 
 export const ALL = 'all'
 
-function Select({
+// Also the Playground's project picker.
+export function Select({
   label,
   prefix,
   value,
   onChange,
+  disabled,
   children
 }: {
   label: string
   prefix?: string
   value: string
   onChange: (value: string) => void
+  disabled?: boolean
   children: React.ReactNode
 }): React.JSX.Element {
   return (
@@ -21,6 +24,7 @@ function Select({
       <select
         aria-label={label}
         value={value}
+        disabled={disabled}
         onChange={(e) => onChange(e.target.value)}
         className="max-w-64 appearance-none truncate bg-transparent pr-4 outline-none"
       >
