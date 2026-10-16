@@ -92,9 +92,14 @@ export function playgroundService(deps: PlaygroundDeps): PlaygroundService {
       throw new Error(`Stop the playground for ${before.repoPath} first`)
     }
     status = { state: 'starting', repoPath }
-    if (!(await projects()).some((p) => p.path === repoPath)) {
+    // Whatever stops the check (no repos yet, a refused repo) leaves the playground stopped, so a later Start works.
+    try {
+      if (!(await projects()).some((p) => p.path === repoPath)) {
+        throw new Error(`${repoPath} isn't a project pilotcli knows`)
+      }
+    } catch (error) {
       status = before
-      throw new Error(`${repoPath} isn't a project pilotcli knows`)
+      throw error
     }
     const spawned = deps.spawn(repoPath)
     if ('error' in spawned) {
