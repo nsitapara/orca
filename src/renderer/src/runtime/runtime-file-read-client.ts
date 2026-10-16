@@ -3,7 +3,8 @@ import type {
   RuntimeFileReadChunkResult,
   RuntimeFileReadResult
 } from '../../../shared/runtime-types'
-import { callRuntimeRpc, RuntimeRpcCallError } from './runtime-rpc-client'
+import { callRuntimeRpc } from './runtime-rpc-client'
+import { RuntimeRpcCallError } from './runtime-rpc-result'
 import type {
   RuntimeFileDownloadResult,
   RuntimeFileOperationArgs,
@@ -17,8 +18,10 @@ import {
   hasRemoteRuntimeOwner
 } from './runtime-file-routing'
 import { toRuntimeWorktreeSelector } from './runtime-worktree-selector'
+import { chatScratchFileAddress } from './runtime-chat-scratch-file-address'
 import { isAgentSessionAttachmentStorePath } from '../../../shared/agent-session-attachments'
 import type { LocalFileAccess } from '../../../shared/local-file-access'
+import { readRuntimeTerminalArtifactContent } from './runtime-terminal-artifact-read'
 
 const REMOTE_DOWNLOAD_CHUNK_BYTES = 384 * 1024
 const REMOTE_DOWNLOAD_UPDATE_REQUIRED_MESSAGE =
@@ -42,7 +45,8 @@ export async function readRuntimeFileContent({
   connectionId,
   expectedExternalSshTargetId,
   includeLocalLogMetadata,
-  access
+  access,
+  terminalArtifactGrantId
 }: RuntimeFileReadArgs): Promise<RuntimeReadableFileContent> {
   assertExternalSshReadOwnership(target, connectionId, expectedExternalSshTargetId)
   if (target.kind !== 'environment' || !worktreeId) {
@@ -53,17 +57,28 @@ export async function readRuntimeFileContent({
       ...localAccess(connectionId, access)
     })
   }
-  if (!canReadRelativeRuntimeFile(relativePath)) {
+  if (terminalArtifactGrantId) {
+    return readRuntimeTerminalArtifactContent({
+      target,
+      worktreeId,
+      absolutePath: filePath,
+      grantId: terminalArtifactGrantId
+    })
+  }
+  // A workspace path first; a chat's scratch file is the absolute path no workspace contains.
+  const scratch = canReadRelativeRuntimeFile(relativePath) ? null : chatScratchFileAddress(filePath)
+  const readPath = scratch?.relativePath ?? relativePath
+  if (!canReadRelativeRuntimeFile(readPath)) {
     throw new Error('Remote file is outside the owning runtime worktree')
   }
 
-  const worktree = toRuntimeWorktreeSelector(worktreeId)
+  const worktree = scratch?.worktreeSelector ?? toRuntimeWorktreeSelector(worktreeId)
   let result: RuntimeFileReadResult
   try {
     result = await callRuntimeRpc<RuntimeFileReadResult>(
       target,
       'files.read',
-      { worktree, relativePath },
+      { worktree, relativePath: readPath },
       { timeoutMs: 15_000 }
     )
   } catch (err) {
@@ -74,7 +89,7 @@ export async function readRuntimeFileContent({
       return callRuntimeRpc<RuntimeFilePreviewResult>(
         target,
         'files.readPreview',
-        { worktree, relativePath },
+        { worktree, relativePath: readPath },
         { timeoutMs: 15_000 }
       )
     }

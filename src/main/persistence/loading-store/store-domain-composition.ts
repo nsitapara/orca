@@ -16,6 +16,7 @@ import { MetadataLineageOperations } from './metadata-lineage-operations'
 import { ProjectCollectionOperations } from './project-collection-operations'
 import { AutomationPersistence } from './automation-persistence'
 import { MobileTabSelectionPersistence } from './mobile-tab-selection-persistence'
+import { RemoteLayoutSnapshotPersistence } from '../../remote-layout-snapshot'
 import { SparsePresetPersistence } from './sparse-preset-persistence'
 import { PtyBindingPersistenceOperations } from './pty-binding-persistence'
 import { SshProfileOperations } from './ssh-profile-operations'
@@ -23,12 +24,14 @@ import { RetiredWorktreeNamePersistence } from './retired-worktree-name-persiste
 import { SshLeaseRecoveryOperations } from './ssh-lease-recovery-operations'
 import { OrcadSourceExportPersistence } from '../migrating-orcad-catalog/orcad-source-export'
 import { OrcadCatalogImportPersistence } from '../migrating-orcad-catalog/orcad-catalog-import'
+import { OrcadMigrationBlobInstallPersistence } from '../migrating-orcad-catalog/orcad-migration-blob-install-persistence'
 
 export type StoreDomainOperations = WriteSchedulingOperations &
   PrimaryStateWriteOperations &
   ProjectCollectionOperations &
   RepoLifecycleOperations &
   MobileTabSelectionPersistence &
+  RemoteLayoutSnapshotPersistence &
   SparsePresetPersistence &
   AutomationPersistence &
   MetadataLineageOperations &
@@ -41,6 +44,7 @@ export type StoreDomainOperations = WriteSchedulingOperations &
   SshLeaseRecoveryOperations &
   OrcadSourceExportPersistence &
   OrcadCatalogImportPersistence &
+  OrcadMigrationBlobInstallPersistence &
   WriteFlushBarrierOperations
 
 export type StoreDomains = {
@@ -60,6 +64,7 @@ export type StoreDomains = {
   projects: ProjectCollectionOperations
   automations: AutomationPersistence
   mobileTabSelections: MobileTabSelectionPersistence
+  remoteLayoutSnapshots: RemoteLayoutSnapshotPersistence
   sparsePresets: SparsePresetPersistence
   ptyBindings: PtyBindingPersistenceOperations
   sshProfiles: SshProfileOperations
@@ -67,6 +72,7 @@ export type StoreDomains = {
   sshLeases: SshLeaseRecoveryOperations
   orcadSourceExport: OrcadSourceExportPersistence
   orcadCatalogImports: OrcadCatalogImportPersistence
+  orcadMigrationBlobInstalls: OrcadMigrationBlobInstallPersistence
 }
 
 export const STORE_DOMAIN_OPERATION_CLASSES = [
@@ -75,6 +81,7 @@ export const STORE_DOMAIN_OPERATION_CLASSES = [
   ProjectCollectionOperations,
   RepoLifecycleOperations,
   MobileTabSelectionPersistence,
+  RemoteLayoutSnapshotPersistence,
   SparsePresetPersistence,
   AutomationPersistence,
   MetadataLineageOperations,
@@ -87,6 +94,7 @@ export const STORE_DOMAIN_OPERATION_CLASSES = [
   SshLeaseRecoveryOperations,
   OrcadSourceExportPersistence,
   OrcadCatalogImportPersistence,
+  OrcadMigrationBlobInstallPersistence,
   WriteFlushBarrierOperations
 ] as const
 
@@ -122,6 +130,7 @@ export function createStoreDomains(runtime: StoreRuntimeState): StoreDomains {
   const projects = new ProjectCollectionOperations(runtime, repos, scheduling, metadata)
   const automations = new AutomationPersistence(runtime, flushBarriers, preferences)
   const mobileTabSelections = new MobileTabSelectionPersistence(runtime, scheduling)
+  const remoteLayoutSnapshots = new RemoteLayoutSnapshotPersistence(runtime, scheduling)
   const sparsePresets = new SparsePresetPersistence(runtime, scheduling)
   const ptyBindings = new PtyBindingPersistenceOperations(runtime, sessions)
   const sshProfiles = new SshProfileOperations(runtime, scheduling, repos)
@@ -150,6 +159,7 @@ export function createStoreDomains(runtime: StoreRuntimeState): StoreDomains {
     projects,
     automations,
     mobileTabSelections,
+    remoteLayoutSnapshots,
     sparsePresets,
     ptyBindings,
     sshProfiles,
@@ -157,6 +167,7 @@ export function createStoreDomains(runtime: StoreRuntimeState): StoreDomains {
     sshLeases,
     // Read-only: holds the runtime state and nothing that writes.
     orcadSourceExport: new OrcadSourceExportPersistence(runtime),
-    orcadCatalogImports
+    orcadCatalogImports,
+    orcadMigrationBlobInstalls: new OrcadMigrationBlobInstallPersistence(runtime)
   }
 }

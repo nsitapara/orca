@@ -5,7 +5,7 @@ import {
   type AgentStartupShell
 } from '../../../../../shared/tui-agent-startup-shell'
 
-// Hook target: src/main/runtime/orca-runtime-terminal-create-deduplication.ts (pilot-hook:
+// Hook target: src/main/runtime/terminal/launch/terminal-create-deduplication.ts (pilot-hook:
 // agent-launch-env). launchAgentTerminal forwards no caller env, and its extraAgentArgs allow only
 // --model/--effort/--add-dir (src/shared/automation-extra-agent-args.ts), so a Pilot step's env
 // (PILOT_*, AGENT_RUN) and its --session-id/--resume/args arrive here, on `opts.pilot`.
