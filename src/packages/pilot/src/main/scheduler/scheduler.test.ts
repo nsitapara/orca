@@ -344,6 +344,22 @@ describe('PilotScheduler', () => {
     expect(d.problems).toEqual([`ci: repo "r" isn't added to Pilot`])
   })
 
+  it("waits for the login shell's PATH before its first poll or tick", async () => {
+    let found!: () => void
+    const d = deps([def('ci', '10 * * * *')], at1012, null)
+    d.poll = vi.fn(async () => {})
+    const s = new PilotScheduler(d)
+    s.holdUntil(new Promise<void>((resolve) => (found = resolve)))
+    const loop = s.tickAll()
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(d.poll).not.toHaveBeenCalled()
+    expect(d.ran).toEqual([])
+    found()
+    await loop
+    expect(d.poll).toHaveBeenCalledTimes(1)
+    expect(d.ran).toEqual(['ci'])
+  })
+
   it("ticks the automations whose repo is listed and reports the one whose repo isn't", async () => {
     let now = at1012
     const d = deps(
