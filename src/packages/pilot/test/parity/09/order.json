@@ -521,5 +521,50 @@
       }
     }
   },
-  "exists": {}
+  "exists": {},
+  "old": {
+    "from": "run_old_plan.py 09 (review-requests/sweep.py) and sweep.py field head8|context on each item Pilot asked about, 2026-10-16, before milestone 7 deleted them",
+    "decisions": [
+      {
+        "key": "mr:1810",
+        "label": "!1810 web-1810-own-approved",
+        "decision": "skip",
+        "reason": "your own MR"
+      },
+      {
+        "key": "mr:1811",
+        "label": "!1811 web-1811-both",
+        "decision": "skip",
+        "reason": "you approved it"
+      },
+      {
+        "key": "mr:1812",
+        "label": "!1812 web-1812-two",
+        "decision": "skip",
+        "reason": "approved by jonathan.walker2, shivan2418"
+      },
+      {
+        "key": "mr:1813",
+        "label": "!1813 web-1813-offered",
+        "decision": "already",
+        "reason": "ask: already offered at aa11bb22"
+      },
+      {
+        "key": "mr:1814",
+        "label": "!1814 web-1814-new-head",
+        "decision": "ask",
+        "reason": "MR 1814 · by Alex Craig · 1 files · head cc33dd44. Nothing reaches GitLab until you approve the findings."
+      }
+    ],
+    "fields": {
+      "mr:1813": {
+        "head8": "\"aa11bb22\"\n",
+        "context": "\"MR 1813 \\u00b7 by Alex Craig \\u00b7 1 files \\u00b7 head aa11bb22. Nothing reaches GitLab until you approve the findings.\"\n"
+      },
+      "mr:1814": {
+        "head8": "\"cc33dd44\"\n",
+        "context": "\"MR 1814 \\u00b7 by Alex Craig \\u00b7 1 files \\u00b7 head cc33dd44. Nothing reaches GitLab until you approve the findings.\"\n"
+      }
+    }
+  }
 }

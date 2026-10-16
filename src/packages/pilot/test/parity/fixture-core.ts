@@ -1,5 +1,6 @@
 import type { QuotaReading } from '../../src/main/fields/quota'
 import type { AgentKind } from '../../src/shared/definition/types'
+import type { FrozenOldSide } from './old-side'
 
 // A recorded case and the reads it answers: the leaf every fixture module builds on (no import cycle).
 export type FixtureRead = {
@@ -20,6 +21,8 @@ export type ParityFixture = {
   reads: FixtureRead[]
   state: Record<string, unknown>
   exists: Record<string, boolean>
+  // The old side's verdicts, frozen into the case when its code was deleted (13, 09): old-side.ts frozenOldSide.
+  old?: FrozenOldSide
 }
 
 export class NotInFixture extends Error {

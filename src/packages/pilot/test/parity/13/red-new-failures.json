@@ -152,5 +152,20 @@
     "dev-e2e/tickets.json": {},
     "quota/claude.json": { "weekly": 20, "session": 10 }
   },
-  "exists": {}
+  "exists": {},
+  "old": {
+    "from": "run_old_plan.py 13 (dev-e2e-fix/sweep.py, pilot_mode.py check-worktree) and pilot_mode.py list-fix-tickets on the case's tickets.json, 2026-10-16, before milestone 7 deleted them",
+    "decisions": [
+      {
+        "key": "pipeline:9",
+        "label": "pipeline 9",
+        "decision": "act",
+        "reason": "e2e-checks-and-build, test-apps-e2e: [tasks]"
+      }
+    ],
+    "ids": {
+      "code": 3,
+      "stdout": "{\"v\": 1, \"command\": \"list-fix-tickets\", \"outcome\": \"none\", \"reason\": \"0 open fix ticket(s) in tickets.json\", \"data\": [], \"meta\": {\"recorded\": 0}}\n"
+    }
+  }
 }

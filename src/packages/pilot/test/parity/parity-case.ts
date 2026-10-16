@@ -14,7 +14,7 @@ import {
   loadFixture,
   type ParityFixture
 } from './fixture'
-import { oldSideMissing, runOldPlan, type OldDecision } from './old-side'
+import { frozenOldPlan, oldSideMissing, runOldPlan, type OldDecision } from './old-side'
 
 // What a job's parity test hands the shared runner (jobs/job-<code>.ts).
 export type ParityJob = {
@@ -22,15 +22,19 @@ export type ParityJob = {
   // The old side's own code: <skills>/<folder>/<script> (script defaults to sweep.py).
   folder: string
   script?: string
+  // The old code is gone: its verdicts are frozen in each case file (old-side.ts frozenOldSide), python3 and the
+  // folder are never looked for, and a case without them fails.
+  frozen?: boolean
   // The files the new side reads: the automation's YAML and people.yaml.
   files: string[]
   table: VerdictTable
   // Runs a custom field's script for real; 09's fields call the skill's own pure `sweep.py field`.
   runScript?: ScriptRunner
-  // The old side's own answers, for a script the new side can only run against the case (13's worktree check): a decision
-  // word `script_check` (key, reason: '' = passed) is no verdict, only the answer this returns for that key.
+  // The old side's own answers, for a script the new side can only run against the case: 13's worktree check (a decision
+  // word `script_check` (key, reason: '' = passed) is no verdict, only the answer this returns for that key) and 09's
+  // field scripts (the case's frozen `sweep.py field` output).
   runScriptFor?(old: OldDecision[], fixture: ParityFixture): ScriptRunner
-  // Answers where.ids_from on the case's own state (13's list-fix-tickets, run for real on the case's tickets.json).
+  // Answers where.ids_from from the case (13: what list-fix-tickets printed for its tickets.json, frozen).
   runIdsFor?(fixture: ParityFixture): IdsRunner
   // Swaps parts of the tick's deps: 13's Linear tickets, which the case's reads supply (test/parity/linear-fixture.ts).
   tickDeps?(deps: TickDeps, fixture: ParityFixture): TickDeps
@@ -41,11 +45,13 @@ export type ParityJob = {
 }
 
 export function parityMissing(job: ParityJob): string[] {
-  return [...oldSideMissing(job.folder, job.script), ...job.files.filter((p) => !existsSync(p))]
+  const old = job.frozen ? [] : oldSideMissing(job.folder, job.script)
+  return [...old, ...job.files.filter((p) => !existsSync(p))]
 }
 
 // A job's parity suite. Where python3, the old code or the YAML is missing it is skipped, and its
-// title and stderr say what's missing, so a green run without them reads as a skip.
+// title and stderr say what's missing, so a green run without them reads as a skip. A frozen job needs neither
+// python3 nor its old code, so only a missing YAML skips it.
 export function describeParity(job: ParityJob, title: string, body: () => void): void {
   const missing = parityMissing(job)
   if (missing.length === 0) {
@@ -114,7 +120,12 @@ export async function parityReport(
   }
 }
 
+// The old side's decisions on a case: frozen in the case file, or replayed by the job's old code.
+export function oldPlanOf(job: ParityJob, file: string): OldDecision[] {
+  return job.frozen ? frozenOldPlan(file) : runOldPlan(job.job, file)
+}
+
 // Both sides on one recorded case: nothing may keep it from passing.
 export async function expectParity(job: ParityJob, file: string): Promise<void> {
-  expect(await parityReport(job, loadFixture(file), runOldPlan(job.job, file))).toBe('')
+  expect(await parityReport(job, loadFixture(file), oldPlanOf(job, file))).toBe('')
 }

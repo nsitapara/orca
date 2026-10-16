@@ -660,5 +660,60 @@
       }
     }
   },
-  "exists": {}
+  "exists": {},
+  "old": {
+    "from": "run_old_plan.py 09 (review-requests/sweep.py) and sweep.py field head8|context on each item Pilot asked about, 2026-10-16, before milestone 7 deleted them",
+    "decisions": [
+      {
+        "key": "mr:1571",
+        "label": "!1571 web-2097-fix-cves-schedule",
+        "decision": "ask",
+        "reason": "Run the fix-cves skill on a schedule · by Alex Craig · 7 files · head 2b7e4c90. Nothing reaches GitLab until you approve the findings."
+      },
+      {
+        "key": "mr:1579",
+        "label": "!1579 web-2107-figaro-selector",
+        "decision": "already",
+        "reason": "ask: already offered at 815b3867"
+      },
+      {
+        "key": "mr:1580",
+        "label": "!1580 web-2110-donor-import",
+        "decision": "skip",
+        "reason": "you approved it"
+      },
+      {
+        "key": "mr:1588",
+        "label": "!1588 web-2115-ecs-deps",
+        "decision": "skip",
+        "reason": "approved by alex1craig"
+      },
+      {
+        "key": "mr:1592",
+        "label": "!1592 staff-feature-usage-page",
+        "decision": "skip",
+        "reason": "your own MR"
+      },
+      {
+        "key": "mr:1600",
+        "label": "!1600 web-1600-donor-status",
+        "decision": "ask",
+        "reason": "Add donor status · by Alex Craig · 3 files · head 1e345678 · draft. Nothing reaches GitLab until you approve the findings."
+      }
+    ],
+    "fields": {
+      "mr:1571": {
+        "head8": "\"2b7e4c90\"\n",
+        "context": "\"Run the fix-cves skill on a schedule \\u00b7 by Alex Craig \\u00b7 7 files \\u00b7 head 2b7e4c90. Nothing reaches GitLab until you approve the findings.\"\n"
+      },
+      "mr:1579": {
+        "head8": "\"815b3867\"\n",
+        "context": "\"Improve source figaro run selector \\u00b7 by Jonathan Walker \\u00b7 5 files \\u00b7 head 815b3867. Nothing reaches GitLab until you approve the findings.\"\n"
+      },
+      "mr:1600": {
+        "head8": "\"1e345678\"\n",
+        "context": "\"Add donor status \\u00b7 by Alex Craig \\u00b7 3 files \\u00b7 head 1e345678 \\u00b7 draft. Nothing reaches GitLab until you approve the findings.\"\n"
+      }
+    }
+  }
 }
