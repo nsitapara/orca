@@ -8,8 +8,8 @@ import type { DetailsSnapshot } from '../../shared/details'
 // The one canonical diff of a pushed range, base to head: plumbing (diff-tree), with every external hook a
 // repository could set (diff.external, a textconv driver from .gitattributes, core.fsmonitor, hooks) switched off,
 // the worktree only as -C, and the commits after --end-of-options. The preparation worker makes a push's patch with
-// the same argv (~/.agents/skills/prepare-inbox-item-context/scripts/context.py push_diff; a parity test keeps them
-// equal), so Pilot recomputes the same bytes.
+// the same argv (pilotcli's `git get-diff`, pilotCLI internal/modules/git; a parity test keeps them
+// identical), so Pilot recomputes the same bytes.
 export const PUSH_DIFF_ARGS = (worktree: string, base: string, head: string): string[] => [
   '-c',
   'core.fsmonitor=false',
@@ -40,8 +40,8 @@ const GIT_MAX_BYTES = 64 * 1024 * 1024
 
 // What git runs with, on top of an environment with nothing GIT_* inherited (no GIT_DIR, GIT_WORK_TREE, GIT_CONFIG_*
 // or GIT_EXTERNAL_DIFF): no system config, no prompt, no optional locks (read-only), and no fetching at all: no lazy
-// fetch of a partial clone's missing objects, no transport or helper but local files. context.py's PUSH_DIFF_ENV is
-// the same (a parity test keeps them equal).
+// fetch of a partial clone's missing objects, no transport or helper but local files. pilotcli's `git get-diff`
+// (pilotCLI internal/modules/git) runs git with the same environment (a parity test keeps them identical).
 export const PUSH_DIFF_ENV: Readonly<Record<string, string>> = {
   GIT_OPTIONAL_LOCKS: '0',
   GIT_CONFIG_NOSYSTEM: '1',

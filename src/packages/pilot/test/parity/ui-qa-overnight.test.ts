@@ -192,10 +192,8 @@ describe.skipIf(!existsSync(SKILL))(
       const fix = readFileSync(join(SKILL, 'modes', 'fix.md'), 'utf8')
       expect(fix).toContain("the report's findings are cards in Pilot's inbox")
       expect(fix).toContain("pilot inbox tick --id <the handoff's cards[<finding id>]>")
-      // Posted with inbox-card as plain cards (D1): no --evidence, and never through the intake.
-      expect(fix).toContain(
-        'python3 ~/.agents/skills/inbox-card/scripts/card.py post --kind <default|flagged|question>'
-      )
+      // Posted with pilotcli inbox create-card as plain cards (D1): no --evidence, and never through the intake.
+      expect(fix).toContain('pilotcli inbox create-card --kind <default|flagged|question>')
       expect(fix).toContain('as a plain card')
       expect(fix).not.toContain('--evidence')
       expect(fix).not.toContain('context.py enqueue')
