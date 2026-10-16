@@ -1,4 +1,5 @@
 import type { InboxItemRow, QueueRoute, QueueRow } from '../../shared/api-types'
+import type { Route } from '../../shared/answers/route'
 import type { DispatchReport } from '../../shared/inbox-types'
 import type { AttemptDeps } from '../actions/attempt'
 import {
@@ -31,6 +32,7 @@ export type DispatcherDeps = {
 }
 
 const PENDING: ReadonlySet<QueueRow['state']> = new Set(['not_ready', 'ready', 'held'])
+const CARD_ONLY: ReadonlySet<Route['kind']> = new Set(['tick', 'reask'])
 
 function messageOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
@@ -211,13 +213,17 @@ export class AnswerDispatcher {
       this.holdRows(group.entries, mr.hold, report)
       return
     }
-    const held = await answersHold(def, group.worktreePath, holds)
+    // A tick or a re-ask changes only the card, so a busy or missing worktree never holds it.
+    const touches = mr.open.filter(
+      (e) => !CARD_ONLY.has(routeOf(e.item, this.deps.attempt.catalog).kind)
+    )
+    const held = touches.length ? await answersHold(def, group.worktreePath, holds) : null
     if (held) {
-      this.holdRows(mr.open, held, report)
-      return
+      this.holdRows(touches, held, report)
     }
+    const go = held ? mr.open.filter((e) => !touches.includes(e)) : mr.open
     const forAgent: { entry: Entry; answer: AgentAnswer }[] = []
-    const locked = lockEntries(this.deps.inbox.store, mr.open, this.deps.inbox.now())
+    const locked = lockEntries(this.deps.inbox.store, go, this.deps.inbox.now())
     for (const read of locked) {
       const entry = this.fresh(read)
       if (!entry) {
