@@ -66,36 +66,57 @@ function heldForEvidence(item: InboxListRow): boolean {
   return state !== undefined && state !== 'ready' && state !== 'cancelled'
 }
 
+type HeldWords = { answer: string; answerMeaning: string; answerHint: string; skip: string }
+
+const PREPARING: HeldWords = {
+  answer: 'Answer before context is ready…',
+  answerMeaning: 'Stop context preparation and send your answer',
+  answerHint: 'Stops preparation; does not approve an unseen change',
+  skip: 'Skip this item and stop preparation'
+}
+// A never-prepared card has nothing preparing until Prepare evidence queues it, so no context is on its way.
+const NEVER_PREPARED: HeldWords = {
+  answer: 'Answer without evidence…',
+  answerMeaning: 'Send your answer without prepared evidence',
+  answerHint: 'Does not approve the change; use Prepare evidence for that',
+  skip: 'Skip this item'
+}
+
+function heldButtons(item: InboxListRow): AnswerButton[] {
+  const words = item.needsEvidence ? NEVER_PREPARED : PREPARING
+  return [
+    {
+      choice: {
+        label: 'Answer early',
+        meaning: words.answerMeaning,
+        notes: 'required',
+        option: null,
+        text: (notes) => notes.trim()
+      },
+      label: words.answer,
+      hint: words.answerHint,
+      role: 'notes',
+      recommended: false
+    },
+    {
+      choice: {
+        label: 'Skip',
+        meaning: words.skip,
+        notes: 'none',
+        option: null,
+        text: () => 'skip'
+      },
+      label: 'Skip',
+      hint: words.skip,
+      role: 'skip',
+      recommended: false
+    }
+  ]
+}
+
 export function buttonsFor(item: InboxListRow): AnswerButton[] {
   if (heldForEvidence(item)) {
-    return [
-      {
-        choice: {
-          label: 'Answer early',
-          meaning: 'Stop context preparation and send your answer',
-          notes: 'required',
-          option: null,
-          text: (notes) => notes.trim()
-        },
-        label: 'Answer before context is ready…',
-        hint: 'Stops preparation; does not approve an unseen change',
-        role: 'notes',
-        recommended: false
-      },
-      {
-        choice: {
-          label: 'Skip',
-          meaning: 'Skip this item and stop preparation',
-          notes: 'none',
-          option: null,
-          text: () => 'skip'
-        },
-        label: 'Skip',
-        hint: 'Skip this item and stop preparation',
-        role: 'skip',
-        recommended: false
-      }
-    ]
+    return heldButtons(item)
   }
   return choicesFor(item).map((choice) => {
     const role = roleOf(choice)
