@@ -20,7 +20,6 @@ describe('07 · Clean Docker when disk is 80% full: an env sweep, then the prune
       name: '07 · Clean Docker when disk is 80% full',
       schedule: '0 7 * * *',
       timezone: 'America/Los_Angeles',
-      enabled: false, // every automation is off since 2026-10-15 (~/.agents efc4ce1)
       missedRunGraceMs: 12 * 3_600_000,
       items: null,
       checks: [],

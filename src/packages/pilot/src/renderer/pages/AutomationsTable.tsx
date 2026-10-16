@@ -24,6 +24,7 @@ import { foldStrip, liveStrip, type StripChip, type StripItem } from '../../shar
 import { RunStrip } from '../run-views/RunStrip'
 import { openRun } from '../run-views/run-panel-state'
 import { showActivity, showPilotAutomation } from './automations-view'
+import { EnabledSwitch, type Toggle } from './EnabledSwitch'
 
 const COLS =
   'grid grid-cols-[minmax(14rem,2fr)_minmax(10rem,2.5fr)_minmax(8rem,1fr)_minmax(12rem,1.5fr)_6rem] gap-3'
@@ -82,8 +83,49 @@ function JobRunsCell({ job }: { job: JobGroup }): React.JSX.Element {
   )
 }
 
-export function StatusBadge({ enabled }: { enabled: boolean }): React.JSX.Element {
-  return <Badge variant={enabled ? 'secondary' : 'outline'}>{enabled ? 'Enabled' : 'Paused'}</Badge>
+function statusText(enabled: boolean): string {
+  return enabled ? 'Enabled' : 'Paused'
+}
+
+function jobStatusText(job: JobGroup): string {
+  const on = job.stages.filter((s) => s.enabled).length
+  if (on > 0 && on < job.stages.length) {
+    return 'Partly on'
+  }
+  return statusText(on > 0)
+}
+
+// A job's switch is on while any stage is: flipping it off turns every stage off, flipping it on turns every one on.
+function JobSwitch({ job, onToggle }: { job: JobGroup; onToggle: Toggle }): React.JSX.Element {
+  const on = jobEnabled(job)
+  const ids = job.stages.filter((s) => s.enabled === on).map((s) => s.id)
+  return (
+    <EnabledSwitch
+      name={`Job ${jobTitle(job)}`}
+      on={on}
+      text={jobStatusText(job)}
+      onToggle={() => onToggle(ids, !on)}
+    />
+  )
+}
+
+function AutomationSwitch({
+  a,
+  name,
+  onToggle
+}: {
+  a: AutomationSummary
+  name: string
+  onToggle: Toggle
+}): React.JSX.Element {
+  return (
+    <EnabledSwitch
+      name={name}
+      on={a.enabled}
+      text={statusText(a.enabled)}
+      onToggle={() => onToggle([a.id], !a.enabled)}
+    />
+  )
 }
 
 function lastText(a: Pick<AutomationSummary, 'lastTick'>, now: number): string {
@@ -93,11 +135,13 @@ function lastText(a: Pick<AutomationSummary, 'lastTick'>, now: number): string {
 function Row({
   a,
   now,
-  onOpen
+  onOpen,
+  onToggle
 }: {
   a: AutomationSummary
   now: number
   onOpen: (id: string) => void
+  onToggle: Toggle
 }): React.JSX.Element {
   return (
     <div onClick={() => onOpen(a.id)} className={`${COLS} ${ROW} cursor-pointer`}>
@@ -107,9 +151,7 @@ function Row({
       <RunsCell a={a} />
       <span className="truncate text-muted-foreground">{scheduleText(a)}</span>
       <span className="truncate text-muted-foreground">{lastText(a, now)}</span>
-      <span>
-        <StatusBadge enabled={a.enabled} />
-      </span>
+      <AutomationSwitch a={a} name={a.name} onToggle={onToggle} />
     </div>
   )
 }
@@ -117,11 +159,13 @@ function Row({
 function StageRow({
   a,
   now,
-  onOpen
+  onOpen,
+  onToggle
 }: {
   a: AutomationSummary
   now: number
   onOpen: (id: string) => void
+  onToggle: Toggle
 }): React.JSX.Element {
   const label = a.job?.label ?? a.name
   return (
@@ -137,9 +181,7 @@ function StageRow({
       <RunsCell a={a} />
       <span className="truncate text-muted-foreground">{scheduleText(a)}</span>
       <span className="truncate text-muted-foreground">{lastText(a, now)}</span>
-      <span>
-        <StatusBadge enabled={a.enabled} />
-      </span>
+      <AutomationSwitch a={a} name={`Stage ${a.job?.stage ?? ''} ${label}`} onToggle={onToggle} />
     </div>
   )
 }
@@ -149,12 +191,14 @@ function JobRows({
   job,
   now,
   onOpen,
-  onOpenJob
+  onOpenJob,
+  onToggle
 }: {
   job: JobGroup
   now: number
   onOpen: (id: string) => void
   onOpenJob: (jobId: string) => void
+  onToggle: Toggle
 }): React.JSX.Element {
   const title = jobTitle(job)
   const count = stagesText(job.stages.length)
@@ -197,13 +241,13 @@ function JobRows({
         <span className="truncate text-muted-foreground">
           {lastText({ lastTick: jobLastTick(job) }, now)}
         </span>
-        <span>
-          <StatusBadge enabled={jobEnabled(job)} />
-        </span>
+        <JobSwitch job={job} onToggle={onToggle} />
       </div>
       {folded
         ? null
-        : job.stages.map((s) => <StageRow key={s.id} a={s} now={now} onOpen={onOpen} />)}
+        : job.stages.map((s) => (
+            <StageRow key={s.id} a={s} now={now} onOpen={onOpen} onToggle={onToggle} />
+          ))}
     </div>
   )
 }
@@ -234,12 +278,14 @@ export function AutomationsTable({
   payload,
   now,
   onOpen,
-  onOpenJob
+  onOpenJob,
+  onToggle
 }: {
   payload: AutomationListPayload
   now: number
   onOpen: (id: string) => void
   onOpenJob: (jobId: string) => void
+  onToggle: Toggle
 }): React.JSX.Element {
   const [sort, setSort] = useState<SortState>(loadSort)
   const choose = (column: SortColumn): void => {
@@ -277,9 +323,16 @@ export function AutomationsTable({
             now={now}
             onOpen={onOpen}
             onOpenJob={onOpenJob}
+            onToggle={onToggle}
           />
         ) : (
-          <Row key={entry.automation.id} a={entry.automation} now={now} onOpen={onOpen} />
+          <Row
+            key={entry.automation.id}
+            a={entry.automation}
+            now={now}
+            onOpen={onOpen}
+            onToggle={onToggle}
+          />
         )
       )}
     </div>

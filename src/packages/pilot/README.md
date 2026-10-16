@@ -255,6 +255,7 @@ A job ported as several automations, such as 13's ticket step and its fix sessio
 
 **Where it shows.**
 - **The list** shows the job as one row (its id and name, an "N stages" chip, on when any stage is, the newest tick of any stage), with its stages under it in stage order.
+- **The list's Status switch** turns an automation on or off (`enabled:` in its YAML) through `pilot.automations.setEnabled`, without asking. A job's row reads "Partly on" when only some stages are on; its switch turns every on stage off, or, when none is on, every stage on. A refusal shows above the list. The parity tests don't pin `enabled`, so flipping a switch keeps them green.
 - **The job page** shows the stages as cards joined by their arrows. Each arrow shows its caption and the most recent handover with how it went ("Last: WEB-2123 started · 5 min ago", or "waiting" while pending). It has one Activity timeline with each tick tagged by its stage, and each stage's YAML.
 - **Activity** says which run triggered a tick and what it handed over ("Triggered by stage 1 run …, handed over WEB-2123"), and which handed-over ids a tick read.
 - **Dry run all** dry-runs every stage in order and says what each would read and hand on ("1 run would hand stage 2 its ticket output if it succeeds; stage 2 then ticks at once"). `pilot automations dry-run` prints the same lines.

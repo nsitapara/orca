@@ -19,7 +19,6 @@ describe('M01 · Start my Todo Linear tickets: the definition (old job: orca aut
       name: 'M01 · Start my Todo Linear tickets',
       schedule: 'manual',
       timezone: 'America/Los_Angeles',
-      enabled: false,
       missedRunGraceMs: 12 * HOUR,
       firstSeen: 'process',
       oncePer: '{ticket.id}',

@@ -22,7 +22,6 @@ describe('02 · Merge dev into my MR branches, on the engine', () => {
       name: '02 · Merge dev into my MR branches',
       schedule: '0 3 * * *',
       timezone: 'America/Los_Angeles',
-      enabled: false,
       missedRunGraceMs: 12 * 3_600_000,
       items: null,
       workspace: { kind: 'main_checkout' },

@@ -39,7 +39,6 @@ describe('03 · Review and fix branch code: the definition (old job: orca automa
       name: '03 · Review and fix branch code',
       schedule: '20 * * * *',
       timezone: 'America/Los_Angeles',
-      enabled: false,
       missedRunGraceMs: 12 * HOUR,
       firstSeen: 'baseline',
       oncePer: '{worktree.at_head}',

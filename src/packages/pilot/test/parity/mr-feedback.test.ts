@@ -32,7 +32,6 @@ describe('06 · Address reviewer feedback: the definition', () => {
     expect(definition).toMatchObject({
       name: '06 · Address reviewer feedback on my MRs',
       schedule: '40 * * * *',
-      enabled: false, // every automation is off since 2026-10-15 (~/.agents efc4ce1)
       missedRunGraceMs: 12 * 3_600_000,
       oncePer: '{mr.iid}:{run.tick}',
       limits: { perTick: 3 },
