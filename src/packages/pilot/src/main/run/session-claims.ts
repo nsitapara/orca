@@ -12,7 +12,7 @@ export const DEAD_GRACE_MS = 10_000
 // still appear, so its claim is kept (pending until landed, dead or the TTL) instead of released.
 // Only the two upstream messages count (an unrelated "SSH connect timed out" releases the claim). They are
 // plain strings in orca-runtime-create-terminal-desktop.ts and
-// orca-runtime-restore-live-paired-renderer-session-owned-mobile-terminals.ts, which export no constant.
+// session-tabs/renderer-session-terminal-rescue.ts, which export no constant.
 const START_TIMEOUT_MESSAGES = [
   'Terminal creation timed out',
   'Timed out waiting for terminal handle after creation'

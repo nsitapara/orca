@@ -72,7 +72,7 @@ describe('hookTestTargets', () => {
   it('maps each hooked code file in HOOKS.md to the upstream tests next to it', () => {
     const rows = parseHooksTable(readFileSync(join(import.meta.dirname, '../HOOKS.md'), 'utf8'))
     expect(hookTestTargets(rows)).toEqual([
-      'src/cli/handler-group-manifest.test',
+      'src/cli/dispatch.test',
       'src/cli/specs',
       'src/main/linear',
       'src/main/orcad',
