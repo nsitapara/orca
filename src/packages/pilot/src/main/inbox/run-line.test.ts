@@ -42,7 +42,8 @@ function catalog() {
   const binary = () => '/bin/pilotcli'
   const folder = vi.fn(() => '/wt')
   const push = pushBranchEntry({ pilotcli, binary })
-  const markReady = markReadyEntry({ pilotcli, binary, folder, openCards: () => null })
+  const cards = { branchOf: () => null, worktreeOn: () => null, openOn: () => null }
+  const markReady = markReadyEntry({ pilotcli, binary, folder, cards })
   const postReview = postReviewEntry({ pilotcli, binary, reviewsDir: () => '/vault/09', folder })
   return {
     catalog: buildActionCatalog({ push, markReady, postReview, linear: null, extra: [echo] }),

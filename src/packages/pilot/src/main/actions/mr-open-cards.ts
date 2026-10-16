@@ -1,36 +1,48 @@
 import type { InboxItemRow } from '../../shared/api-types'
-import type { AutomationDefinition } from '../../shared/definition/types'
 import { jobCode } from '../../shared/job-name'
+import { worktreePathKey } from '../fields/agent-activity'
 import { WAITING } from '../inbox/inbox-service'
-import { fieldsForRun } from '../inbox/run-fields'
+import { branchOfRun, fieldsForRun } from '../inbox/run-fields'
 import type { PilotStore } from '../store/store'
+import { branchWorktrees, namesMr, type StoreDeps } from './mr-branch'
 import type { ActionCaller } from './types'
-
-export type OpenCardsDeps = {
-  store: PilotStore
-  definitions(): readonly AutomationDefinition[]
-}
 
 // mark-ready.py's BLOCKING_JOBS: their open cards mean the branch still has work in it.
 const BLOCKING_JOBS: ReadonlySet<string> = new Set(['03', '04', '05', '06'])
 
-// A card is on !iid when it is about that MR (an MR job's item mr:<iid>), or its run's item names the MR as its
-// branch's (a worktree job's item carries mr.iid). Pilot's own store, so no pilotcli call.
-function onMr(store: PilotStore, card: InboxItemRow, iid: number): boolean {
-  if (card.itemKey === `mr:${iid}`) {
+// Whether a card is on MR !iid's branch, as mark-ready.py's items were (by branch, so a 03 card made before the MR
+// existed counts): about the MR (mr:<iid>), on one of the branch's worktrees (paths: what the newest 03/04 tick says,
+// which covers cards whose run has no tick fields), its run's item naming the MR or the branch, or, outside a run, an
+// item key under the branch.
+function onBranch(
+  store: PilotStore,
+  card: InboxItemRow,
+  mr: { iid: number; branch: string; paths: ReadonlySet<string> }
+): boolean {
+  if (card.itemKey === `mr:${mr.iid}`) {
+    return true
+  }
+  if (card.worktreePath && mr.paths.has(worktreePathKey(card.worktreePath))) {
     return true
   }
   if (!card.runId) {
-    return false
+    return (card.itemKey ?? '').startsWith(`${mr.branch}:`)
   }
-  const named = fieldsForRun(store, card.runId)['mr.iid']
-  return named === iid || named === String(iid)
+  return (
+    namesMr(fieldsForRun(store, card.runId), mr.iid) || branchOfRun(store, card.runId) === mr.branch
+  )
 }
 
-// The waiting cards from jobs 03–06 on MR !iid (mark-ready.py's open items: not a folded default, not done), less the
-// card being approved, as mark-ready.py's blocker: "<n> open item(s) from 03, 06". Null when there are none.
-export function openCardsOn(deps: OpenCardsDeps, iid: number, caller: ActionCaller): string | null {
+// The waiting cards from jobs 03–06 on MR !iid's branch (mark-ready.py's open items: not a folded default, not done),
+// less the card being approved, as mark-ready.py's blocker: "<n> open item(s) from 03, 06". Null when there are none.
+export function openCardsOn(
+  deps: StoreDeps,
+  iid: number,
+  branch: string,
+  caller: ActionCaller
+): string | null {
   const codes = new Map(deps.definitions().map((d) => [d.id, jobCode(d.name)]))
+  const paths = new Set(branchWorktrees(deps, branch).map(worktreePathKey))
   const open = deps.store.inbox
     .list({ status: WAITING })
     .filter(
@@ -38,7 +50,7 @@ export function openCardsOn(deps: OpenCardsDeps, iid: number, caller: ActionCall
         card.id !== caller.inboxItemId &&
         card.type !== 'default' &&
         BLOCKING_JOBS.has(codes.get(card.automationId) ?? '') &&
-        onMr(deps.store, card, iid)
+        onBranch(deps.store, card, { iid, branch, paths })
     )
   if (open.length === 0) {
     return null

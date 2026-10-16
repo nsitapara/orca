@@ -39,39 +39,68 @@ export function callerStore() {
     people: () => (people.ok ? people.directory : (null as never)),
     newId: () => `in_${String(++n).padStart(16, '0')}`
   }
+  const decision = (key: string, fields: ItemFields) => ({
+    key,
+    label: key,
+    verdict: 'started' as const,
+    reason: '',
+    checks: [],
+    onceKey: key,
+    fields
+  })
+  // A tick of an automation at a time, on items with these fields, that started no run.
+  const tick = (automationId: string, at: number, items: [string, ItemFields][]): void => {
+    const id = store.startTick(automationId, at)
+    store.recordDecisions(
+      id,
+      items.map(([key, fields]) => decision(key, fields)),
+      new Map()
+    )
+  }
+  // A run with no tick behind it (imported, or its tick aged out): fieldsForRun reads nothing for it.
+  const bareRun = (
+    id: string,
+    automationId: string,
+    itemKey: string,
+    worktreePath: string | null
+  ) =>
+    store.runs.create({
+      id,
+      automationId,
+      tickId: null,
+      itemKey,
+      itemLabel: itemKey,
+      worktreePath,
+      startedAt: 1
+    })
   // A run that a tick started on an item with these fields (what fieldsForRun reads back).
   const run = (
     id: string,
     automationId: string,
     itemKey: string,
     worktreePath: string | null,
-    fields: ItemFields
+    fields: ItemFields,
+    at = 1
   ): void => {
-    const tick = store.startTick(automationId, 1)
+    const tickId = store.startTick(automationId, at)
     store.runs.create({
       id,
       automationId,
-      tickId: tick,
+      tickId,
       itemKey,
       itemLabel: itemKey,
       worktreePath,
-      startedAt: 1
+      startedAt: at
     })
-    const decision = {
-      key: itemKey,
-      label: itemKey,
-      verdict: 'started' as const,
-      reason: '',
-      checks: [],
-      onceKey: itemKey,
-      fields
-    }
-    store.recordDecisions(tick, [decision], new Map([[itemKey, id]]))
+    store.recordDecisions(tickId, [decision(itemKey, fields)], new Map([[itemKey, id]]))
   }
-  // A card that run adds; returns its id.
-  const card = (runId: string, over: Partial<Parameters<typeof addInboxItem>[1]> = {}): string => {
+  // A card that run adds, or with no run one named by `over` (automation, item, worktree); returns its id.
+  const card = (
+    runId: string | null,
+    over: Partial<Parameters<typeof addInboxItem>[1]> = {}
+  ): string => {
     const added = addInboxItem(inbox, {
-      runId,
+      ...(runId ? { runId } : {}),
       type: 'question',
       title: `Card ${n + 1}?`,
       options: ['A', 'B'],
@@ -82,5 +111,5 @@ export function callerStore() {
     }
     return added.id
   }
-  return { store, inbox, run, card }
+  return { store, inbox, run, tick, bareRun, card }
 }

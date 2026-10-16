@@ -1,5 +1,6 @@
 import type { Pilotcli, PilotcliReply } from '../envs/pilotcli'
 import { RUN_TIMEOUT_MS } from './act-bridge'
+import { noFolder } from './caller-folder'
 import {
   actionDone,
   actionFailed,
@@ -27,6 +28,16 @@ export function markReadyPin(args: Record<string, unknown>): MarkReadyPin | null
     : null
 }
 
+// What mark_ready reads of Pilot's own store (mr-branch.ts, mr-open-cards.ts): pilotcli can't read Pilot's cards.
+export type MarkReadyCards = {
+  // The MR's source branch as the store knows it, or null.
+  branchOf(iid: number, caller: ActionCaller): string | null
+  // A worktree on the branch whose folder is there, for check-mr's unpushed count, or null.
+  worktreeOn(branch: string): string | null
+  // The open cards from jobs 03–06 on the branch, as mark-ready.py's blocker, or null.
+  openOn(iid: number, branch: string, caller: ActionCaller): string | null
+}
+
 function dirArgs(folder: string | null): string[] {
   return folder ? [`--dir=${folder}`] : []
 }
@@ -47,6 +58,11 @@ export function checkReadyArgs(pin: MarkReadyPin, folder: string | null): string
     ...dirArgs(folder),
     '--format=json'
   ]
+}
+
+// Read-only: the MR's source branch, when Pilot's store doesn't know it.
+export function getMrArgs(pin: MarkReadyPin, folder: string): string[] {
+  return ['gitlab', 'get-mr', pin.iid, `--dir=${folder}`, '--format=json']
 }
 
 export function updateMrArgs(pin: MarkReadyPin, folder: string | null, dryRun: boolean): string[] {
@@ -107,17 +123,44 @@ function updated(pin: MarkReadyPin, reply: PilotcliReply, dryRun: boolean): Acti
   return checked(reply) ?? failed(reply)
 }
 
-// The catalog's mark_ready (power mark_ready), mark-ready.py through pilotcli: Pilot's own open cards on the branch
-// first (pilotcli can't read Pilot's store), then check-mr ready=true, then update-mr draft=false at the pinned head.
-// No refresh, as in Python: a stale card closes. `folder` is where pilotcli acts (caller-folder.ts).
+function sourceBranch(reply: PilotcliReply): string | null {
+  const data: object = reply.data && typeof reply.data === 'object' ? reply.data : {}
+  const branch = 'source_branch' in data ? data.source_branch : null
+  return reply.outcome === 'ok' && typeof branch === 'string' && branch !== '' ? branch : null
+}
+
+// The catalog's mark_ready (power mark_ready), mark-ready.py through pilotcli. It learns the MR's branch (Pilot's store,
+// else pilotcli get-mr) and waits while that branch has open cards from jobs 03–06; with no branch it fails closed.
+// Then check-mr ready=true and update-mr draft=false at the pinned head, from the worktree on the branch when there is
+// one, else the card's folder (caller-folder.ts). No refresh, as in Python: a stale card closes.
 export function markReadyEntry(deps: {
   pilotcli: Pilotcli
   binary: () => string | null
   folder: (caller: ActionCaller) => string | null
-  openCards: (iid: number, caller: ActionCaller) => string | null
+  cards: MarkReadyCards
 }): ActionEntry {
   const usage = `usage: ${MARK_READY_USAGE}`
   const call = (args: string[]) => deps.pilotcli({ args, timeoutMs: RUN_TIMEOUT_MS })
+  // The folder check-mr and update-mr act in: the worktree on the MR's branch, else the card's.
+  const dirFor = (branch: string | null, caller: ActionCaller) =>
+    (branch ? deps.cards.worktreeOn(branch) : null) ?? deps.folder(caller)
+  const branchOf = async (
+    pin: MarkReadyPin,
+    caller: ActionCaller
+  ): Promise<{ branch: string } | ActionResult> => {
+    const known = deps.cards.branchOf(Number(pin.iid), caller)
+    if (known) {
+      return { branch: known }
+    }
+    const folder = deps.folder(caller)
+    if (!folder) {
+      return actionFailed(noFolder(pin.iid))
+    }
+    const reply = await call(getMrArgs(pin, folder))
+    const branch = sourceBranch(reply)
+    const why = reply.reason ? `: ${reply.reason}` : ''
+    return branch ? { branch } : notYet(`can't tell which cards are on !${pin.iid}'s branch${why}`)
+  }
   return {
     name: 'mark_ready',
     power: 'mark_ready',
@@ -133,9 +176,11 @@ export function markReadyEntry(deps: {
     // The Run line is the write the approval makes; the check before it only reads.
     command: (args, caller = { runId: null, inboxItemId: null }) => {
       const pin = markReadyPin(args)
-      return pin
-        ? [deps.binary() ?? 'pilotcli', ...updateMrArgs(pin, deps.folder(caller), false)]
-        : null
+      if (!pin) {
+        return null
+      }
+      const dir = dirFor(deps.cards.branchOf(Number(pin.iid), caller), caller)
+      return [deps.binary() ?? 'pilotcli', ...updateMrArgs(pin, dir, false)]
     },
     run: async (args, opts) => {
       const pin = markReadyPin(args)
@@ -143,16 +188,23 @@ export function markReadyEntry(deps: {
         return actionFailed(usage)
       }
       const caller = callerOf(opts)
-      const cards = deps.openCards(Number(pin.iid), caller)
+      const learned = await branchOf(pin, caller)
+      if (!('branch' in learned)) {
+        return learned
+      }
+      const cards = deps.cards.openOn(Number(pin.iid), learned.branch, caller)
       if (cards) {
         return notYet(cards)
       }
-      const folder = deps.folder(caller)
-      const check = checked(await call(checkReadyArgs(pin, folder)))
+      const dir = dirFor(learned.branch, caller)
+      if (!dir) {
+        return actionFailed(noFolder(pin.iid))
+      }
+      const check = checked(await call(checkReadyArgs(pin, dir)))
       if (check) {
         return check
       }
-      return updated(pin, await call(updateMrArgs(pin, folder, opts.dryRun)), opts.dryRun)
+      return updated(pin, await call(updateMrArgs(pin, dir, opts.dryRun)), opts.dryRun)
     }
   }
 }

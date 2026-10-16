@@ -44,3 +44,9 @@ export function callerFolder(deps: CallerFolderDeps, caller: ActionCaller): stri
   const main = repo ? deps.repoPath(repo) : null
   return main && deps.exists(main) ? main : null
 }
+
+// Why an action can't run when callerFolder finds nothing: pilotcli would refuse the numeric iid, and that refusal must
+// not read as the card's own (post_review's invalid is stale), so the entry fails first.
+export function noFolder(iid: string): string {
+  return `no folder to run pilotcli in for !${iid}: the card's worktree is gone and Pilot lists no checkout of its repo`
+}

@@ -4,6 +4,7 @@ import { basename, isAbsolute, relative, resolve, sep } from 'node:path'
 import { z } from 'zod'
 import type { Pilotcli, PilotcliReply } from '../envs/pilotcli'
 import { RUN_TIMEOUT_MS } from './act-bridge'
+import { noFolder } from './caller-folder'
 import {
   actionDone,
   actionFailed,
@@ -200,6 +201,9 @@ export function postReviewEntry(deps: {
         return actionFailed(got.problem)
       }
       const folder = deps.folder(callerOf(opts))
+      if (!folder) {
+        return actionFailed(noFolder(got.review.iid))
+      }
       const reply = await deps.pilotcli({
         args: createThreadArgs(got.review, folder, opts.dryRun),
         timeoutMs: RUN_TIMEOUT_MS

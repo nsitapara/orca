@@ -23,6 +23,7 @@ export type FakeVerb =
   | 'env-delete'
   | 'env-list'
   | 'git-push-branch'
+  | 'gitlab-get-mr'
   | 'gitlab-check-mr'
   | 'gitlab-update-mr'
   | 'gitlab-create-thread'
