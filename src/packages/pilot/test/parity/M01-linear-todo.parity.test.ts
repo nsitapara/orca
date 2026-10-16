@@ -4,7 +4,14 @@ import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { loadDefinitions } from '../../src/main/definitions/loader'
 import { loadFixture } from './fixture'
-import { JOB_M01, PARITY_M01, VERDICTS_M01, answerScripts, seedM01 } from './jobs/job-m01'
+import {
+  COMMANDS_M01,
+  JOB_M01,
+  PARITY_M01,
+  VERDICTS_M01,
+  answerScripts,
+  seedM01
+} from './jobs/job-m01'
 import { withLinearTickets } from './linear-fixture'
 import { PARITY_DIR, runOldPlan, type OldDecision } from './old-side'
 import { describeParity, expectParity } from './parity-case'
@@ -48,10 +55,7 @@ describe('M01 · Start my Todo Linear tickets: the definition (old job: orca aut
     expect(definition.items).toMatchObject({ kind: 'linear_ticket' })
     expect(definition.items?.where).toEqual({ state_type: ['unstarted'], has_branch: true })
     expect(definition.checks.map((c) => c.kind)).toEqual(['script', 'quota'])
-    expect(definition.checks[0]).toMatchObject({
-      run: 'python3 /Users/nishsitapara/.agents/skills/linear-todo-sweep/sweep.py --check-item',
-      timeoutMs: 60_000
-    })
+    expect(definition.checks[0]).toMatchObject({ run: COMMANDS_M01.checkItem, timeoutMs: 60_000 })
   })
 
   it('routes prepared kickoff decisions to a fresh answer worker after the original session ends', () => {

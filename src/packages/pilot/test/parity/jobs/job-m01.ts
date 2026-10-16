@@ -52,13 +52,19 @@ export function seedM01(store: PilotStore, f: ParityFixture): void {
   applyImport(store, linearTodoMapper.plan(fixtureStateReader(f)), f.now)
 }
 
+// The command M01's YAML checks each ticket with (pilotcli's since milestone 8), pinned as a literal: the definition test
+// checks the YAML names exactly this, and the answer below answers only this.
+export const COMMANDS_M01 = {
+  checkItem: 'pilotcli automations check-item linear-todo --pilot-item -'
+}
+
 // The script check answered from the old adapter's verdict on the same reads (jobs/job_m01.py runs sweep.check).
 export function answerScripts(old: OldDecision[]): ScriptRunner {
   const checks = new Map(
     old.filter((d) => d.decision === 'script_check').map((d) => [d.key, d.reason])
   )
   return async (req) => {
-    if (!req.command.includes('--check-item')) {
+    if (req.command !== COMMANDS_M01.checkItem) {
       throw new Error(`parity: no answer for the script ${req.command}`)
     }
     const reason = checks.get(req.env.PILOT_ITEM_KEY) ?? ''

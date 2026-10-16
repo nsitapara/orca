@@ -33,7 +33,7 @@ describe('02 · Merge dev into my MR branches, on the engine', () => {
       ['merge', 'codex']
     ])
     expect(definition.steps[0]).toMatchObject({
-      run: 'python3 /Users/nishsitapara/.agents/skills/worktree-gate/codex_hooks.py trust || true',
+      run: 'pilotcli agent update-hooks codex || true',
       timeoutMs: 60_000
     })
     expect(definition.steps[1]).toMatchObject({
