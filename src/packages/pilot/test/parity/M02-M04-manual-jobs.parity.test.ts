@@ -49,14 +49,12 @@ describe('M02, M03, M04 carry their Orca definitions over', () => {
       name: def.name,
       schedule: def.schedule,
       timezone: def.timezone,
-      enabled: def.enabled,
       items: def.items,
       checks: def.checks
     }).toEqual({
       name: saved.name,
       schedule: saved.schedule,
       timezone: 'America/Los_Angeles',
-      enabled: false,
       items: null,
       checks: saved.checks
     })

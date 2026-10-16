@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { AutomationListPayload, AutomationSummary, TickRow } from '../../shared/api-types'
 import { stepAt, testRun } from '../../shared/run-views/__fixtures__/runs'
@@ -76,15 +76,17 @@ const payload = (automations: AutomationSummary[]): AutomationListPayload => ({
 function renderTable(automations: AutomationSummary[]) {
   const onOpen = vi.fn()
   const onOpenJob = vi.fn()
+  const onToggle = vi.fn(() => Promise.resolve())
   render(
     <AutomationsTable
       payload={payload(automations)}
       now={NOW}
       onOpen={onOpen}
       onOpenJob={onOpenJob}
+      onToggle={onToggle}
     />
   )
-  return { onOpen, onOpenJob }
+  return { onOpen, onOpenJob, onToggle }
 }
 
 describe('AutomationsTable: a job of several automations', () => {
@@ -104,8 +106,8 @@ describe('AutomationsTable: a job of several automations', () => {
     ])
     const job = within(rows[1].closest('div[class*="cursor-pointer"]') as HTMLElement)
     expect(job.getByText('2 stages')).toBeTruthy()
-    // combined: on because stage 2 is; the newest tick is stage 2's
-    expect(job.getByText('Enabled')).toBeTruthy()
+    // combined: partly on because only stage 2 is; the newest tick is stage 2's
+    expect(job.getByText('Partly on')).toBeTruthy()
     expect(job.getByText('2 min ago · 0 checked')).toBeTruthy()
     const first = within(rows[2].closest('div[class*="cursor-pointer"]') as HTMLElement)
     expect(first.getByText('5,35 * * * *')).toBeTruthy()
@@ -134,6 +136,48 @@ describe('AutomationsTable: a job of several automations', () => {
     expect(screen.queryByRole('button', { name: /stages$/ })).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: /Clean Docker/ }))
     expect(onOpen).toHaveBeenCalledWith('docker-prune')
+  })
+})
+
+describe('AutomationsTable: the Status switch', () => {
+  beforeEach(() => localStorage.clear())
+  afterEach(cleanup)
+  const OFF_1 = { ...STAGE_1, enabled: false }
+  const OFF_2 = { ...STAGE_2, enabled: false }
+
+  it.each([
+    ['a plain automation off', [SOLO], '07 · Clean Docker: turn off', ['docker-prune'], false],
+    [
+      'a stage on',
+      [STAGE_1, STAGE_2],
+      'Stage 1 Open or update the ticket: turn on',
+      ['dev-e2e-fix'],
+      true
+    ],
+    [
+      'a partly-on job off, only its on stages',
+      [STAGE_1, STAGE_2],
+      /^Job 13 .*: turn off$/,
+      ['dev-e2e-fix-start'],
+      false
+    ],
+    [
+      'an off job on, every stage',
+      [OFF_1, OFF_2],
+      /^Job 13 .*: turn on$/,
+      ['dev-e2e-fix', 'dev-e2e-fix-start'],
+      true
+    ]
+  ] as const)('turns %s without opening the row', async (_case, rows, name, ids, enabled) => {
+    const { onOpen, onOpenJob, onToggle } = renderTable([...rows])
+    const toggle = screen.getByRole('switch', { name })
+    fireEvent.click(toggle)
+    expect(onToggle).toHaveBeenCalledWith(ids, enabled)
+    expect(onOpen).not.toHaveBeenCalled()
+    expect(onOpenJob).not.toHaveBeenCalled()
+    // shows the state asked for while the call runs
+    expect(toggle.getAttribute('aria-checked')).toBe(String(enabled))
+    await waitFor(() => expect(toggle.hasAttribute('disabled')).toBe(false))
   })
 })
 

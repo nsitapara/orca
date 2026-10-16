@@ -47,7 +47,6 @@ describe.skipIf(!existsSync(SKILL))(
         name: '04 · Test branch UIs overnight',
         schedule: '*/20 2-7 * * *',
         timezone: 'America/Los_Angeles',
-        enabled: false,
         missedRunGraceMs: 20 * MINUTE,
         firstSeen: 'baseline',
         oncePer: '{worktree.at_head}',

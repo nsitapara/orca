@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import type { AutomationListPayload, PilotStatus } from '../../shared/api-types'
 import { pilotRpc } from '../api'
 import { AutomationsTable } from './AutomationsTable'
+import { setEnabledAll } from './EnabledSwitch'
 import { setPilotAutomationsView } from './automations-view'
 import { errorText } from './format'
 import { ProblemNotices } from './ProblemNotices'
@@ -17,10 +18,11 @@ export function PilotAutomationsSection({
   const [payload, setPayload] = useState<AutomationListPayload | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [startError, setStartError] = useState<string | null>(null)
+  const [refused, setRefused] = useState<string[]>([])
   const [now, setNow] = useState(() => Date.now())
   const mounted = useRef(true)
   const load = useCallback(() => {
-    pilotRpc<AutomationListPayload>('pilot.automations.list').then(
+    return pilotRpc<AutomationListPayload>('pilot.automations.list').then(
       (p) => {
         if (!mounted.current) {
           return
@@ -52,6 +54,14 @@ export function PilotAutomationsSection({
       clearInterval(timer)
     }
   }, [load])
+  // The switch settles once the list has reloaded, so it never shows the old state in between.
+  const toggle = async (ids: string[], enabled: boolean): Promise<void> => {
+    const said = await setEnabledAll(ids, enabled)
+    if (mounted.current) {
+      setRefused(said)
+    }
+    await load()
+  }
 
   const loading = !payload && !error
   return (
@@ -72,10 +82,21 @@ export function PilotAutomationsSection({
         </button>
       </div>
       {error ? <p className="text-sm text-destructive">{error}</p> : null}
+      {refused.map((line) => (
+        <p key={line} className="text-sm text-destructive">
+          {`Couldn't change ${line}`}
+        </p>
+      ))}
       <ProblemNotices payload={payload} startError={startError} />
       {loading ? <p className="text-sm text-muted-foreground">Loading…</p> : null}
       {payload ? (
-        <AutomationsTable payload={payload} now={now} onOpen={onOpen} onOpenJob={onOpenJob} />
+        <AutomationsTable
+          payload={payload}
+          now={now}
+          onOpen={onOpen}
+          onOpenJob={onOpenJob}
+          onToggle={toggle}
+        />
       ) : null}
     </section>
   )
