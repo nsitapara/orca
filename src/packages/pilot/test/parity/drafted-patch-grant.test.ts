@@ -131,7 +131,7 @@ describe.skipIf(!existsSync(skillsDir()))(
         'This mode returns a candidate; it never attaches Details or clears an answer.'
       )
       expect(text).toContain(
-        'Do not run `extend-card`, `set-details` or `context.py complete`, post a card (`inbox-card`), or run action commands.'
+        'Do not run `extend-card`, `set-details` or `inbox update-preparation --complete`, post a card (`inbox-card`), or run action commands.'
       )
       expect(text).toContain('Never commit or push.')
       expect(text).not.toMatch(/draftApproved/)

@@ -131,8 +131,8 @@ describe('03 · Review and fix branch code: the definition (old job: orca automa
     })
     expect(preparation.steps[0].prompt).toContain('{preparation.item_id}')
     expect(preparation.steps[0].prompt).toContain('{preparation.revision}')
-    // The helper that stamps the provenance prepare-complete checks, not the bare CLI command.
-    expect(preparation.steps[0].prompt).toContain('context.py complete')
+    // Published through pilotcli's own command, which stamps the provenance; there is no prepare-complete command.
+    expect(preparation.steps[0].prompt).toContain('update-preparation --complete')
     expect(preparation.steps[0].prompt).not.toContain('prepare-complete')
   })
 

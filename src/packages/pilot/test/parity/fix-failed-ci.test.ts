@@ -26,7 +26,7 @@ describe('05 · Fix failed CI v2: the definition', () => {
     expect(definition).toMatchObject({
       name: '05 · Fix failed CI on my MRs',
       schedule: '10 * * * *',
-      enabled: true, // live since go-live stage B (2026-10-14)
+      enabled: false, // every automation is off since 2026-10-15 (~/.agents efc4ce1)
       missedRunGraceMs: 12 * 3_600_000,
       oncePer: '{mr.iid}:{mr.pipeline}',
       limits: { perTick: 3 },
@@ -53,21 +53,17 @@ describe('05 · Fix failed CI v2: the definition', () => {
       ['flag', 'shell', true, "{steps.context.outcome} == 'ok'"],
       ['catch_up', 'shell', false, null],
       ['fix', 'claude', false, null],
-      [
-        'push',
-        'shell',
-        false,
-        '{steps.fix.head} != null and {steps.context.remote} != null and {steps.context.unpushed} != null'
-      ],
+      ['push', 'shell', false, '{steps.fix.head} != null and {steps.context.remote} != null'],
       ['merge_back', 'shell', false, "{env.mode} == 'throwaway'"],
-      ['card', 'shell', false, '{steps.push.pushed} == false'],
+      ['card', 'shell', false, "{steps.push.outcome} != 'ok'"],
+      ['forget_branch', 'shell', true, "{env.mode} == 'throwaway'"],
       ['flag_failed', 'shell', true, '{run.failed} == true']
     ])
     expect(definition.steps[1].run).toContain(
       '--gitlab-mr "!$IID" --comment "fixing failed CI !$IID (auto)"'
     )
     expect(definition.steps[1].run).toContain('|| echo')
-    expect(definition.steps[7].run).toContain('--unread')
+    expect(definition.steps[8].run).toContain('--unread')
     expect(definition.steps[3]).toMatchObject({
       skill: 'fix-gitlab-ci',
       mode: 'fix',
@@ -108,23 +104,27 @@ describe('05 · Fix failed CI v2: the definition', () => {
   it("pushes the agent's commit pinned, only when it handed one over, else leaves a push card", () => {
     const [, , , , push, , card] = definition.steps
     expect(push.run).toBe(
-      'python3 /Users/nishsitapara/.agents/skills/worktree-gate/publish.py push'
+      'pilotcli git push-branch "$BRANCH" --checkout . --expect-sha "$REMOTE" --expect-head "$HEAD_SHA" --from "$FROM"'
     )
-    expect(push.env).toMatchObject({
+    expect(push.env).toEqual({
+      BRANCH: '{mr.branch}',
       HEAD_SHA: '{steps.fix.head}',
       REMOTE: '{steps.context.remote}',
-      UNPUSHED: '{steps.context.unpushed}',
-      MODE: '{env.mode}'
+      FROM: '{env.sha}'
     })
+    // A refusal is a skip that keeps outcome and reason for the card step.
+    expect(push.exitCodes).toMatchObject({ ok: [0], skip: [1, 2, 3, 5] })
     expect(card.run).toBe(
-      'python3 /Users/nishsitapara/.agents/skills/worktree-gate/publish.py card'
+      'pilotcli inbox create-card --push "$IID" --worktree "$HOME_WT" --contains "$HEAD_SHA" --context "$SUMMARY Not pushed: $WHY."'
     )
-    expect(card.env).toMatchObject({
+    expect(card.env).toEqual({
+      IID: '{mr.iid}',
+      HEAD_SHA: '{steps.fix.head}',
       SUMMARY: '{steps.fix.summary}',
-      WHY: '{steps.push.why}',
-      BACK: '{steps.merge_back.status}'
+      WHY: '{steps.push.reason}',
+      HOME_WT: '{worktree.path}'
     })
-    const fixed = { 'steps.context.remote': 'b'.repeat(40), 'steps.context.unpushed': 0 }
+    const fixed = { 'steps.context.remote': 'b'.repeat(40) }
     expect(decideStep(push, [], { ...fixed, 'steps.fix.head': 'a'.repeat(40) })).toEqual({
       run: true
     })
@@ -132,11 +132,28 @@ describe('05 · Fix failed CI v2: the definition', () => {
     const mergedOrSkipped = [
       { name: 'merge_back', status: 'skipped' as const, always: false, error: null }
     ]
-    expect(decideStep(card, mergedOrSkipped, { 'steps.push.pushed': false })).toEqual({ run: true })
-    expect(decideStep(card, mergedOrSkipped, { 'steps.push.pushed': true })).toMatchObject({
+    expect(decideStep(card, mergedOrSkipped, { 'steps.push.outcome': 'skip' })).toEqual({
+      run: true
+    })
+    expect(decideStep(card, mergedOrSkipped, { 'steps.push.outcome': 'ok' })).toMatchObject({
       run: false
     })
+    // The push step was skipped by its when: no outputs, so no card.
     expect(decideStep(card, mergedOrSkipped, {})).toMatchObject({ run: false })
+  })
+
+  it("forgets a throwaway's keep branch once its commits are home or on origin; exit 3 keeps it", () => {
+    const forget = definition.steps[7]
+    expect(forget).toMatchObject({
+      name: 'forget_branch',
+      always: true,
+      when: "{env.mode} == 'throwaway'",
+      exitCodes: { ok: [0], skip: [3] },
+      timeoutMs: 2 * 60_000
+    })
+    expect(forget.run).toBe(
+      'pilotcli git delete-branch "$KEEP_BRANCH" --kept-in "$HOME_WT" --pushed-to "$BRANCH"'
+    )
   })
 
   it("merges a throwaway's commits back into the worktree while holding its home", () => {
@@ -156,7 +173,7 @@ describe('05 · Fix failed CI v2: the definition', () => {
   })
 
   it('still fixes when the flag hangs to its timeout, and flags a failed or timed-out fix', () => {
-    const [, flag, , fix, , , , flagFailed] = definition.steps
+    const [, flag, , fix, , , , , flagFailed] = definition.steps
     const timedOut = [
       { name: 'context', status: 'done' as const, always: false, error: null },
       { name: 'flag', status: 'timed_out' as const, always: flag.always, error: null },

@@ -10,7 +10,7 @@ import { loadPortedAutomation } from './ported'
 const OLD_PRECHECK = '/Users/nishsitapara/.agents/skills/docker-prune/prune.sh 80; exit 1'
 const PRUNE = join(homedir(), '.agents', 'skills', 'docker-prune', 'prune.sh')
 // The env sweep that runs first (~/.agents bb75bf8): pilotcli's orphan envs only; Pilot tears down its own runs' envs.
-const SWEEP = 'python3 /Users/nishsitapara/.agents/skills/docker-prune/sweep_envs.py'
+const SWEEP = 'pilotcli env delete orphan=true'
 const { definition } = loadPortedAutomation('docker-prune')
 
 // These tests only read prune.sh's text and the YAML: nothing here runs prune.sh, the sweep or docker.
@@ -20,7 +20,7 @@ describe('07 · Clean Docker when disk is 80% full: an env sweep, then the prune
       name: '07 · Clean Docker when disk is 80% full',
       schedule: '0 7 * * *',
       timezone: 'America/Los_Angeles',
-      enabled: true, // live since go-live stage A (2026-10-13)
+      enabled: false, // every automation is off since 2026-10-15 (~/.agents efc4ce1)
       missedRunGraceMs: 12 * 3_600_000,
       items: null,
       checks: [],
@@ -28,7 +28,14 @@ describe('07 · Clean Docker when disk is 80% full: an env sweep, then the prune
       powers: []
     })
     expect(definition.steps).toMatchObject([
-      { name: 'sweep_envs', agent: 'shell', always: true, run: SWEEP, timeoutMs: 300_000 },
+      {
+        name: 'sweep_envs',
+        agent: 'shell',
+        always: true,
+        run: SWEEP,
+        exitCodes: { ok: [0], skip: [3], stop: [] },
+        timeoutMs: 300_000
+      },
       {
         name: 'stacks',
         agent: 'shell',

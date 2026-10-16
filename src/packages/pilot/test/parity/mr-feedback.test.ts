@@ -32,7 +32,7 @@ describe('06 · Address reviewer feedback: the definition', () => {
     expect(definition).toMatchObject({
       name: '06 · Address reviewer feedback on my MRs',
       schedule: '40 * * * *',
-      enabled: false,
+      enabled: false, // every automation is off since 2026-10-15 (~/.agents efc4ce1)
       missedRunGraceMs: 12 * 3_600_000,
       oncePer: '{mr.iid}:{run.tick}',
       limits: { perTick: 3 },
@@ -74,7 +74,7 @@ describe('06 · Address reviewer feedback: the definition', () => {
         'shell',
         null,
         false,
-        '{steps.address.head} != null and {steps.context.remote} != null and {steps.context.unpushed} != null'
+        '{steps.address.head} != null and {steps.context.remote} != null'
       ],
       ['merge_back', 'shell', null, false, "{env.mode} == 'throwaway'"],
       [
@@ -82,9 +82,10 @@ describe('06 · Address reviewer feedback: the definition', () => {
         'shell',
         null,
         false,
-        '{steps.address.replies} > 0 and {steps.address.head} == null or {steps.address.replies} > 0 and {steps.push.pushed} == true'
+        "{steps.address.replies} > 0 and {steps.address.head} == null or {steps.address.replies} > 0 and {steps.push.outcome} == 'ok'"
       ],
-      ['card', 'shell', null, false, '{steps.push.pushed} == false'],
+      ['card', 'shell', null, false, "{steps.push.outcome} != 'ok'"],
+      ['forget_branch', 'shell', null, true, "{env.mode} == 'throwaway'"],
       ['forget_replies', 'shell', null, true, null],
       ['flag_failed', 'shell', null, true, '{run.failed} == true']
     ])
@@ -118,17 +119,38 @@ describe('06 · Address reviewer feedback: the definition', () => {
       expect(step('address').prompt).toContain(placeholder)
     }
     expect(step('push').run).toBe(
-      'python3 /Users/nishsitapara/.agents/skills/worktree-gate/publish.py push'
+      'pilotcli git push-branch "$BRANCH" --checkout . --expect-sha "$REMOTE" --expect-head "$HEAD_SHA" --from "$FROM"'
     )
+    expect(step('push').env).toEqual({
+      BRANCH: '{mr.branch}',
+      HEAD_SHA: '{steps.address.head}',
+      REMOTE: '{steps.context.remote}',
+      FROM: '{env.sha}'
+    })
+    // A refusal is a skip that keeps outcome and reason for the card step.
+    expect(step('push').exitCodes).toMatchObject({ ok: [0], skip: [1, 2, 3, 5] })
     expect(step('replies').run).toBe(
-      'python3 /Users/nishsitapara/.agents/skills/worktree-gate/publish.py replies'
+      'pilotcli gitlab reply-thread --mr "$IID" --input "$REPLIES" --keep-going true'
     )
     expect(step('replies').env.REPLIES).toBe(
       '/Users/nishsitapara/Library/Caches/pilot-replies/{run.id}/replies.jsonl'
     )
-    expect(step('card').env).toMatchObject({
-      CARD_SKILL: 'mr-feedback-sweep',
-      SUMMARY: '{steps.address.summary}'
+    expect(step('card').run).toBe(
+      'pilotcli inbox create-card --push "$IID" --worktree "$HOME_WT" --contains "$HEAD_SHA" --context "$SUMMARY Not pushed: $WHY. $AFTER"'
+    )
+    expect(step('card').env).toEqual({
+      IID: '{mr.iid}',
+      HEAD_SHA: '{steps.address.head}',
+      SUMMARY: '{steps.address.summary}',
+      WHY: '{steps.push.reason}',
+      HOME_WT: '{worktree.path}',
+      AFTER: expect.stringContaining('wait for this push')
+    })
+    expect(step('forget_branch')).toMatchObject({
+      always: true,
+      run: 'pilotcli git delete-branch "$KEEP_BRANCH" --kept-in "$HOME_WT" --pushed-to "$BRANCH"',
+      exitCodes: { ok: [0], skip: [3] },
+      timeoutMs: 2 * 60_000
     })
     expect(step('forget_replies')).toMatchObject({
       run: 'rm -rf "$DIR"',
@@ -143,20 +165,20 @@ describe('06 · Address reviewer feedback: the definition', () => {
       // (what, fields, replies run, card runs)
       [
         'pushed',
-        { 'steps.address.replies': 2, 'steps.address.head': 'a', 'steps.push.pushed': true },
+        { 'steps.address.replies': 2, 'steps.address.head': 'a', 'steps.push.outcome': 'ok' },
         true,
         false
       ],
       ['nothing to push', { 'steps.address.replies': 1 }, true, false],
       [
         'a refused push',
-        { 'steps.address.replies': 2, 'steps.address.head': 'a', 'steps.push.pushed': false },
+        { 'steps.address.replies': 2, 'steps.address.head': 'a', 'steps.push.outcome': 'skip' },
         false,
         true
       ],
       [
         'no replies, pushed',
-        { 'steps.address.replies': 0, 'steps.address.head': 'a', 'steps.push.pushed': true },
+        { 'steps.address.replies': 0, 'steps.address.head': 'a', 'steps.push.outcome': 'ok' },
         false,
         false
       ]
@@ -202,9 +224,9 @@ describe('06 · Address reviewer feedback: the definition', () => {
     expect(modeText('feedback')).toContain(
       `apply them as \`~/.agents/skills/${SKILL}/modes/answers.md\``
     )
-    // D1: its default, flagged and question items are plain cards, answerable at once, posted with inbox-card.
+    // D1: its default, flagged and question items are plain cards, answerable at once, posted with pilotcli inbox create-card.
     expect(modeText('feedback')).toContain(
-      'python3 ~/.agents/skills/inbox-card/scripts/card.py post --kind <default|flagged|question>'
+      'pilotcli inbox create-card --kind <default|flagged|question>'
     )
     expect(modeText('feedback')).toContain('as a plain card')
     expect(modeText('feedback')).not.toContain('--evidence')

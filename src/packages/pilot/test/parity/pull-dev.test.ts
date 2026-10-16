@@ -14,7 +14,7 @@ describe('01 · Pull latest dev into local dev, as a pilotcli shell step', () =>
       repo: 'web-platform',
       schedule: '0 * * * *',
       timezone: 'America/Los_Angeles',
-      enabled: true, // live since go-live stage A (2026-10-13)
+      enabled: false, // every automation is off since 2026-10-15 (~/.agents efc4ce1)
       missedRunGraceMs: 12 * 3_600_000,
       items: null,
       checks: [],
