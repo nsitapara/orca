@@ -15,6 +15,7 @@ import { translate } from '@/i18n/i18n'
 import type { DiscoveredSkill } from '../../../../shared/skills'
 import { sourceKindLabel } from './skill-display-labels'
 import { skillAgentLabel } from './skill-agent-filter'
+import { OpenSkillFile } from '../../../../packages/pilot/src/renderer/skills/OpenSkillFile' // pilot-hook: skill-open-file
 
 const updatedFormatter = new Intl.DateTimeFormat(undefined, {
   year: 'numeric',
@@ -150,6 +151,8 @@ export function SkillDetailDialog({
             <FolderOpen className="size-3.5" />
             {translate('auto.components.skills.SkillsPage.dc4c3328ee', 'Reveal file')}
           </Button>
+          {/* pilot-hook: skill-open-file */}
+          <OpenSkillFile filePath={skill.skillFilePath} onOpened={() => onOpenChange(false)} />
           <Tooltip>
             <TooltipTrigger asChild>
               <span className="pointer-events-auto mr-auto inline-flex">
