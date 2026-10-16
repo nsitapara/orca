@@ -6,6 +6,7 @@ import type { ActivityRun } from '../../shared/api-types-runs'
 import type { ChainGroup, ChainPart } from '../../shared/run-views/chain'
 import { isPainted, type PaintedPart } from '../../shared/run-views/paint'
 import { formatDuration } from '../../shared/run/format-duration'
+import { SourceLink } from './SourceLink'
 import { StepDetail } from './StepDetail'
 import { STATE_CLASS, STATE_LABEL, STATE_MARK, WHO_CLASS, WHO_LABEL } from './tokens'
 
@@ -116,7 +117,12 @@ function RailRow({
         ) : null}
       </div>
       {part.runs ? (
-        <div className="break-all font-mono text-xs text-muted-foreground">{part.runs}</div>
+        <div className="flex items-start gap-2">
+          <div className="min-w-0 flex-1 break-all font-mono text-xs text-muted-foreground">
+            {part.runs}
+          </div>
+          <SourceLink part={part} />
+        </div>
       ) : null}
       {part.gives.length > 0 ? (
         <div className="text-xs text-muted-foreground">{`gives ${part.gives.join(', ')}`}</div>

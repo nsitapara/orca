@@ -22,6 +22,7 @@ import { buildInboxMethods } from './methods-inbox'
 import { buildImportMethods } from './methods-import'
 import { buildLinearMethods } from './methods-linear'
 import { buildPlaygroundMethods } from './methods-playground'
+import { buildStepSourceMethods } from './methods-step-source'
 
 export const PILOT_VERSION = '0.1.0'
 export const DEFAULT_ACTIVITY_LIMIT = 30
@@ -197,6 +198,7 @@ export function buildPilotMethods(host: PilotHost) {
     ...buildVisibilityMethods(ctx),
     ...buildImportMethods(host),
     ...buildPlaygroundMethods(ctx),
+    ...buildStepSourceMethods(ctx),
     ...buildLinearMethods()
   ].map((m) => Object.assign(m, { pilot: true }))
 }
