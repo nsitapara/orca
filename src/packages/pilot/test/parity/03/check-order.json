@@ -1290,5 +1290,46 @@
     "/wt/web-325": true,
     "/wt/web-326": true,
     "/wt/web-327": true
+  },
+  "old": {
+    "from": "run_old_plan.py 03 (review-cycles/loop.py sweep) with /opt/homebrew/bin/python3 3.15, 2026-10-16, before milestone 8 deleted it",
+    "decisions": [
+      {
+        "key": "wt:400fee61-a463-4f76-894a-39861e906007::/wt/web-321",
+        "label": "web-321-work",
+        "decision": "skip",
+        "reason": "uncommitted changes; retry next round"
+      },
+      {
+        "key": "wt:400fee61-a463-4f76-894a-39861e906007::/wt/web-322",
+        "label": "web-322-work",
+        "decision": "skip",
+        "reason": "uncommitted changes; retry next round"
+      },
+      {
+        "key": "wt:400fee61-a463-4f76-894a-39861e906007::/wt/web-323",
+        "label": "web-323-work",
+        "decision": "skip",
+        "reason": "uncommitted changes; retry next round"
+      },
+      {
+        "key": "wt:400fee61-a463-4f76-894a-39861e906007::/wt/web-324",
+        "label": "web-324-work",
+        "decision": "base",
+        "reason": "reviewing commits after d32400000"
+      },
+      {
+        "key": "wt:400fee61-a463-4f76-894a-39861e906007::/wt/web-326",
+        "label": "web-326-work",
+        "decision": "skip",
+        "reason": "!326 approved by alex1craig"
+      },
+      {
+        "key": "wt:400fee61-a463-4f76-894a-39861e906007::/wt/web-327",
+        "label": "web-327-work",
+        "decision": "QUOTA",
+        "reason": "claude weekly limit at 95% (automations stop at 90%); resets at an unknown time"
+      }
+    ]
   }
 }

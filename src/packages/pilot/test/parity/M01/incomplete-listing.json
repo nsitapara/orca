@@ -113,5 +113,10 @@
     "linear-todo/tabs.json": {},
     "quota/claude.json": { "weekly": 20, "session": 10 }
   },
-  "exists": {}
+  "exists": {},
+  "old": {
+    "from": "run_old_plan.py M01 (linear-todo-sweep/sweep.py) with /opt/homebrew/bin/python3 3.15, 2026-10-16, before milestone 8 deleted it",
+    "decisions": [],
+    "stopped": "RuntimeError: incomplete Linear listing, refusing to guess: {'filter': 'assigned', 'workspaceId': 'all', 'limit': 200, 'returned': 1, 'hasMore': True, 'partial': False, 'workspaceErrors': []}"
+  }
 }
