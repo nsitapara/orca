@@ -9,6 +9,7 @@ import { createLinearWriter } from '../linear-connector/linear-writer'
 import { buildActionCatalog } from './catalog'
 import { callerFolder } from './caller-folder'
 import { markReadyEntry } from './mark-ready'
+import { storeBranchOf, worktreeOn } from './mr-branch'
 import { openCardsOn } from './mr-open-cards'
 import { postReviewEntry, REVIEWS_JOB_FOLDER } from './post-review'
 import { pushBranchEntry } from './push-branch'
@@ -17,7 +18,7 @@ import type { ActionCaller, ActionCatalog } from './types'
 
 // The one catalog Pilot's services build: pilotcli's push, mark_ready and post_review, the Linear writes and start_run.
 // Built once; nothing runs until an action is attempted. start_run reaches the engine lazily. mark_ready and
-// post_review read the card or run that asks from Pilot's store: its folder, and the open cards on its MR.
+// post_review read the card or run that asks from Pilot's store: its folder, and the MR's branch and open cards there.
 export function pilotActionCatalog(deps: {
   engineEnv: EngineEnv
   runtime: OrcaRuntimeService
@@ -35,13 +36,18 @@ export function pilotActionCatalog(deps: {
     exists: existsSync
   }
   const folder = (caller: ActionCaller) => callerFolder(folderDeps, caller)
+  const mrDeps = { store, definitions, exists: existsSync }
   return buildActionCatalog({
     push: pushBranchEntry({ pilotcli, binary }),
     markReady: markReadyEntry({
       pilotcli,
       binary,
       folder,
-      openCards: (iid, caller) => openCardsOn({ store, definitions }, iid, caller)
+      cards: {
+        branchOf: (iid, caller) => storeBranchOf(mrDeps, iid, caller),
+        worktreeOn: (branch) => worktreeOn(mrDeps, branch),
+        openOn: (iid, branch, caller) => openCardsOn(mrDeps, iid, branch, caller)
+      }
     }),
     postReview: postReviewEntry({
       pilotcli,

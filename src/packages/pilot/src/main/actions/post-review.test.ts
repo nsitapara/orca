@@ -57,7 +57,7 @@ function reply(
   return { outcome, reason, data, code: null }
 }
 
-function entryAnswering(answer: PilotcliReply, folder: string | null = null) {
+function entryAnswering(answer: PilotcliReply, folder: string | null = '/repos/web-platform') {
   const v = vault()
   const pilotcli = vi.fn<Pilotcli>().mockResolvedValue(answer)
   const at = vi.fn((_caller: ActionCaller) => folder)
@@ -89,6 +89,7 @@ describe('the post_review action (pilotcli gitlab create-thread)', () => {
           '1579',
           `--review=${path}`,
           `--expect-sha256=${sha256}`,
+          '--dir=/repos/web-platform',
           flag,
           '--format=json'
         ],
@@ -110,6 +111,16 @@ describe('the post_review action (pilotcli gitlab create-thread)', () => {
       '--dry-run=false',
       '--format=json'
     ])
+  })
+
+  // A config fault (no worktree, no repo checkout Pilot lists) must not close the card as stale on pilotcli's invalid.
+  it('fails before any call when no folder names the project', async () => {
+    const { pilotcli, entry, args } = entryAnswering(POSTED(), null)
+    expect(await entry.run(args, { dryRun: false, runId: 'r' })).toMatchObject({
+      outcome: 'failed',
+      detail: expect.stringContaining('no folder to run pilotcli in for !1579')
+    })
+    expect(pilotcli).not.toHaveBeenCalled()
   })
 
   it.each<[string, PilotcliReply, Partial<ActionResult>]>([

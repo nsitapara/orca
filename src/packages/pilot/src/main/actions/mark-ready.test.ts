@@ -22,20 +22,34 @@ function reply(
 
 const READY = reply('ok', '', { subject: '1577', conditions: [] })
 const MARKED = reply('ok', '', { iid: 1577, draft: false, web_url: URL })
+const MAIN = '/repos/web-platform'
+const BRANCH = 'web-1577'
+const GET_MR = reply('ok', '', { iid: 1577, source_branch: BRANCH, web_url: URL })
 
-// The entry over an injected pilotcli that answers check-mr, then update-mr; no process runs.
-function entryAnswering(
-  answers: PilotcliReply[],
-  over: { folder?: string | null; openCards?: string | null } = {}
-) {
+type Over = {
+  folder?: string | null
+  branch?: string | null
+  worktree?: string | null
+  openCards?: string | null
+}
+
+// The entry over an injected pilotcli that answers in turn; no process runs. By default Pilot's store knows the MR's
+// branch, no worktree is on it, nothing is open there, and the card's folder is the repo's main checkout.
+function entryAnswering(answers: PilotcliReply[], over: Over = {}) {
   const pilotcli = vi.fn<Pilotcli>()
   for (const answer of answers) {
     pilotcli.mockResolvedValueOnce(answer)
   }
-  const folder = vi.fn((_caller: ActionCaller) => over.folder ?? null)
-  const openCards = vi.fn((_iid: number, _caller: ActionCaller) => over.openCards ?? null)
-  const entry = markReadyEntry({ pilotcli, binary: () => '/bin/pilotcli', folder, openCards })
-  return { pilotcli, entry, folder, openCards }
+  const at = (key: keyof Over, fallback: string | null) =>
+    over[key] === undefined ? fallback : (over[key] ?? null)
+  const folder = vi.fn((_caller: ActionCaller) => at('folder', MAIN))
+  const cards = {
+    branchOf: vi.fn((_iid: number, _caller: ActionCaller) => at('branch', BRANCH)),
+    worktreeOn: vi.fn((_branch: string) => at('worktree', null)),
+    openOn: vi.fn((_iid: number, _branch: string, _caller: ActionCaller) => at('openCards', null))
+  }
+  const entry = markReadyEntry({ pilotcli, binary: () => '/bin/pilotcli', folder, cards })
+  return { pilotcli, entry, folder, cards, args: () => pilotcli.mock.calls.map(([c]) => c.args) }
 }
 
 const run = (entry: ReturnType<typeof markReadyEntry>, dryRun = false) =>
@@ -43,9 +57,10 @@ const run = (entry: ReturnType<typeof markReadyEntry>, dryRun = false) =>
 
 describe('the mark_ready action (pilotcli gitlab check-mr ready=true, then update-mr draft=false)', () => {
   it('checks the MR in the order the rules need, then marks it ready at the pinned head', async () => {
-    const { pilotcli, entry } = entryAnswering([READY, MARKED])
+    const { pilotcli, entry, folder, args } = entryAnswering([READY, MARKED])
     await run(entry)
-    expect(pilotcli.mock.calls.map(([call]) => call.args)).toEqual([
+    expect(folder).toHaveBeenCalledWith(CARD)
+    expect(args()).toEqual([
       [
         'gitlab',
         'check-mr',
@@ -55,6 +70,7 @@ describe('the mark_ready action (pilotcli gitlab check-mr ready=true, then updat
         'author=me',
         `sha=${SHA}`,
         'ready=true',
+        `--dir=${MAIN}`,
         '--format=json'
       ],
       [
@@ -63,6 +79,7 @@ describe('the mark_ready action (pilotcli gitlab check-mr ready=true, then updat
         '1577',
         'draft=false',
         `--expect-sha=${SHA}`,
+        `--dir=${MAIN}`,
         '--dry-run=false',
         '--format=json'
       ]
@@ -73,17 +90,18 @@ describe('the mark_ready action (pilotcli gitlab check-mr ready=true, then updat
     ])
   })
 
-  it("passes the card's worktree (-C) to both calls only when its folder is there", async () => {
-    const { pilotcli, entry, folder } = entryAnswering([READY, MARKED], { folder: '/wt/web-1577' })
+  // mark-ready.py's _unpushed found the worktree by the MR's source branch.
+  it("checks from the worktree on the MR's branch when there is one, so its unpushed commits count", async () => {
+    const { entry, cards, args } = entryAnswering([READY, MARKED], { worktree: '/wt/web-1577' })
     await run(entry)
-    expect(folder).toHaveBeenCalledWith(CARD)
-    const [check, update] = pilotcli.mock.calls.map(([call]) => call.args)
+    expect(cards.worktreeOn).toHaveBeenCalledWith(BRANCH)
+    const [check, update] = args()
     expect(check.slice(-2)).toEqual(['--dir=/wt/web-1577', '--format=json'])
     expect(update.slice(-3)).toEqual(['--dir=/wt/web-1577', '--dry-run=false', '--format=json'])
   })
 
   it('a dry run checks for real and asks update-mr for a dry run, so nothing is written', async () => {
-    const { pilotcli, entry } = entryAnswering([
+    const { entry, args } = entryAnswering([
       READY,
       reply('ok', 'would mark !1577 ready for review', { iid: 1577, draft: true, web_url: URL })
     ])
@@ -92,13 +110,13 @@ describe('the mark_ready action (pilotcli gitlab check-mr ready=true, then updat
       detail: 'would mark !1577 ready for review',
       link: URL
     })
-    const [check, update] = pilotcli.mock.calls.map(([call]) => call.args)
+    const [check, update] = args()
     expect(check.some((word) => word.startsWith('--dry-run'))).toBe(false)
     expect(update).toContain('--dry-run=true')
   })
 
   it("refuses while the MR's branch has open Pilot cards, before any pilotcli call", async () => {
-    const { pilotcli, entry, openCards } = entryAnswering([READY, MARKED], {
+    const { pilotcli, entry, cards } = entryAnswering([READY, MARKED], {
       openCards: '2 open items from 03, 06'
     })
     expect(await run(entry)).toEqual({
@@ -108,8 +126,53 @@ describe('the mark_ready action (pilotcli gitlab check-mr ready=true, then updat
       log: null,
       onYou: true
     })
-    expect(openCards).toHaveBeenCalledWith(1577, CARD)
+    expect(cards.branchOf).toHaveBeenCalledWith(1577, CARD)
+    expect(cards.openOn).toHaveBeenCalledWith(1577, BRANCH, CARD)
     expect(pilotcli).not.toHaveBeenCalled()
+  })
+
+  it("asks pilotcli get-mr for the branch Pilot's store doesn't know, then checks its cards", async () => {
+    const { entry, cards, args } = entryAnswering([GET_MR, READY, MARKED], { branch: null })
+    expect(await run(entry)).toMatchObject({ outcome: 'done' })
+    expect(args()[0]).toEqual(['gitlab', 'get-mr', '1577', `--dir=${MAIN}`, '--format=json'])
+    expect(args().map((a) => a[1])).toEqual(['get-mr', 'check-mr', 'update-mr'])
+    expect(cards.openOn).toHaveBeenCalledWith(1577, BRANCH, CARD)
+  })
+
+  it('refuses on the cards of a branch get-mr named, with no check-mr or update-mr', async () => {
+    const { entry, args } = entryAnswering([GET_MR, READY, MARKED], {
+      branch: null,
+      openCards: '1 open item from 03'
+    })
+    expect(await run(entry)).toMatchObject({ outcome: 'not_yet', detail: '1 open item from 03' })
+    expect(args().map((a) => a[1])).toEqual(['get-mr'])
+  })
+
+  it.each<[string, PilotcliReply]>([
+    ['no such MR', reply('skip', 'no MR !1577')],
+    ['GitLab out of reach', reply('failed', 'gitlab.com unreachable')],
+    ['an MR with no branch', reply('ok', '', { iid: 1577 })]
+  ])(
+    'fails closed when no branch can be learned (%s): it waits, and nothing is checked or written',
+    async (_name, answer) => {
+      const { entry, cards, args } = entryAnswering([answer, READY, MARKED], { branch: null })
+      const result = await run(entry)
+      expect(result).toMatchObject({ outcome: 'not_yet', onYou: true })
+      expect(result.detail).toMatch(/^can't tell which cards are on !1577's branch/)
+      expect(args().map((a) => a[1])).toEqual(['get-mr'])
+      expect(cards.openOn).not.toHaveBeenCalled()
+    }
+  )
+
+  it('fails before any call when no folder names the project', async () => {
+    for (const branch of [BRANCH, null]) {
+      const { pilotcli, entry } = entryAnswering([READY, MARKED], { folder: null, branch })
+      expect(await run(entry)).toMatchObject({
+        outcome: 'failed',
+        detail: expect.stringContaining('no folder to run pilotcli in for !1577')
+      })
+      expect(pilotcli).not.toHaveBeenCalled()
+    }
   })
 
   it.each<[string, PilotcliReply[], Partial<ActionResult>, number]>([
@@ -231,17 +294,25 @@ describe('the mark_ready action (pilotcli gitlab check-mr ready=true, then updat
 
   it('runs what its Run line shows, through the real pilotcli client', async () => {
     const fake = fakePilotcli()
+    fake.answer('gitlab-get-mr', {
+      json: { v: 1, command: 'gitlab get-mr', outcome: 'ok', reason: '', data: GET_MR.data }
+    })
     fake.answer('gitlab-check-mr', {
       json: { v: 1, command: 'gitlab check-mr', outcome: 'ok', reason: '', data: READY.data }
     })
     fake.answer('gitlab-update-mr', {
       json: { v: 1, command: 'gitlab update-mr', outcome: 'ok', reason: '', data: MARKED.data }
     })
+    let known: string | null = null
     const entry = markReadyEntry({
       pilotcli: pilotcliRunner({ pilotBinDir: '', binary: () => fake.bin, baseEnv: fake.env }),
       binary: () => fake.bin,
-      folder: () => '/wt/web-1577',
-      openCards: () => null
+      folder: () => MAIN,
+      cards: {
+        branchOf: () => known,
+        worktreeOn: (branch) => (branch === BRANCH ? '/wt/web-1577' : null),
+        openOn: () => null
+      }
     })
     expect(await run(entry)).toMatchObject({
       outcome: 'done',
@@ -249,10 +320,14 @@ describe('the mark_ready action (pilotcli gitlab check-mr ready=true, then updat
       link: URL
     })
     expect(fake.calls()).toEqual([
+      `gitlab get-mr 1577 --dir=${MAIN} --format=json`,
       checkReadyArgs(PIN, '/wt/web-1577').join(' '),
       updateMrArgs(PIN, '/wt/web-1577', false).join(' ')
     ])
-    // The Run line is the write the approval makes; the check before it only reads.
+    // The Run line is the write the approval makes, from the worktree on the branch Pilot's store knows (the check
+    // before it only reads); with no branch known yet, from the card's folder.
+    expect(entry.command!(ARGS, CARD)).toEqual([fake.bin, ...updateMrArgs(PIN, MAIN, false)])
+    known = BRANCH
     expect(entry.command!(ARGS, CARD)).toEqual([
       fake.bin,
       ...updateMrArgs(PIN, '/wt/web-1577', false)

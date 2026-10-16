@@ -10,9 +10,10 @@ describe('the answer buttons', () => {
     const pilotcli = vi.fn()
     const binary = () => null
     const folder = () => null
+    const cards = { branchOf: () => null, worktreeOn: () => null, openOn: () => null }
     const names = buildActionCatalog({
       push: pushBranchEntry({ pilotcli, binary }),
-      markReady: markReadyEntry({ pilotcli, binary, folder, openCards: () => null }),
+      markReady: markReadyEntry({ pilotcli, binary, folder, cards }),
       postReview: postReviewEntry({ pilotcli, binary, reviewsDir: () => '/vault', folder }),
       linear: null
     })

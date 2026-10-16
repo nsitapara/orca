@@ -9,7 +9,8 @@ import type { ActionEntry } from './types'
 const pilotcli = vi.fn()
 const binary = () => '/bin/pilotcli'
 const push = pushBranchEntry({ pilotcli, binary })
-const markReady = markReadyEntry({ pilotcli, binary, folder: () => null, openCards: () => null })
+const cards = { branchOf: () => null, worktreeOn: () => null, openOn: () => null }
+const markReady = markReadyEntry({ pilotcli, binary, folder: () => null, cards })
 const postReview = postReviewEntry({
   pilotcli,
   binary,
