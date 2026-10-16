@@ -144,7 +144,7 @@ describe('the upstream start-timeout messages', () => {
   it.each([
     ['orca-runtime-create-terminal-desktop.ts', 'Terminal creation timed out'],
     [
-      'orca-runtime-restore-live-paired-renderer-session-owned-mobile-terminals.ts',
+      'session-tabs/renderer-session-terminal-rescue.ts',
       'Timed out waiting for terminal handle after creation'
     ]
   ])('%s still says "%s"', (file, message) => {
