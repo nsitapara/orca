@@ -124,7 +124,10 @@ describe('the chain of every live automation', () => {
         'Asks you:you',
         'Workspace:pilot',
         'still_due:script',
+        'checkout:script',
         'prepare:agent',
+        'card:script',
+        'forget_findings:script',
         'Answers:you'
       ]
     ],
@@ -146,9 +149,8 @@ describe('the chain of every live automation', () => {
         'Picks:pilot',
         '↳ids:script',
         'Gates:pilot',
-        '↳Check python3:script',
+        '↳Check pilotcli:script',
         'Workspace:pilot',
-        'record_start:script',
         'fix:agent',
         'Answers:you'
       ]

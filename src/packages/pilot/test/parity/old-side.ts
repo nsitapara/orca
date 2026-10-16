@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process'
-import { existsSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 
@@ -42,4 +42,36 @@ export function runOldPlan(job: string, fixturePath: string): OldDecision[] {
     )
   }
   return (JSON.parse(result.stdout) as { decisions: OldDecision[] }).decisions
+}
+
+// The old side of a job whose code is gone, frozen into each case file's `old` block while it still ran (13 and 09, on
+// 2026-10-16, before milestone 7 deleted dev-e2e-fix's sweep.py and pilot_mode.py and review-requests' sweep.py):
+// run_old_plan.py's decisions, and what the job's own scripts printed for the case.
+export type FrozenOldSide = {
+  // How it was recorded.
+  from: string
+  decisions: OldDecision[]
+  // 13: pilot_mode.py list-fix-tickets on the case's tickets.json, which where.ids_from now asks pilotcli for.
+  ids?: { code: number; stdout: string }
+  // 09: `sweep.py field <name>`'s stdout per item key, for each item Pilot asked (head8, context).
+  fields?: Record<string, Record<string, string>>
+}
+
+// A case's frozen old side. One without it fails, never skips: there is no old code left to run in its place.
+export function frozenOldSide(kase: {
+  job: string
+  case: string
+  old?: FrozenOldSide
+}): FrozenOldSide {
+  if (!kase.old || !Array.isArray(kase.old.decisions)) {
+    throw new Error(
+      `${kase.job}/${kase.case} has no frozen old side (its "old" block): its old code is gone, so the case can't be compared`
+    )
+  }
+  return kase.old
+}
+
+// The old plan's decisions on a case, as frozen in its file.
+export function frozenOldPlan(fixturePath: string): OldDecision[] {
+  return frozenOldSide(JSON.parse(readFileSync(fixturePath, 'utf8'))).decisions
 }

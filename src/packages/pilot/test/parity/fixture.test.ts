@@ -12,6 +12,7 @@ import {
   normalizeApiPath,
   type ParityFixture
 } from './fixture'
+import { frozenOldSide } from './old-side'
 
 const marker = (path: string, name: string, out: string) => ({
   argv: ['git', '-C', path, 'rev-parse', '--git-path', name],
@@ -238,5 +239,16 @@ describe('fixtureBusyReads', () => {
     const f: ParityFixture = { ...F, reads: [] }
     await expect(fixtureBusyReads(f).draft('t1')).rejects.toBeInstanceOf(NotInFixture)
     expect(fixtureMisses(f)).toEqual(['orca terminal read --terminal t1 --json'])
+  })
+})
+
+describe('frozenOldSide', () => {
+  it("returns a case's frozen old side, and fails (never skips) a case without one", () => {
+    const old = {
+      from: 'test',
+      decisions: [{ key: 'mr:1', label: '!1', decision: 'ask', reason: '' }]
+    }
+    expect(frozenOldSide({ ...F, old })).toBe(old)
+    expect(() => frozenOldSide(F)).toThrow('t/t has no frozen old side')
   })
 })

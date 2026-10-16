@@ -9,14 +9,17 @@ import { readMode } from '../../src/main/run/modes'
 import { PilotStore } from '../../src/main/store/store'
 import { renderTemplate } from '../../src/shared/template'
 import { loadFixture } from './fixture'
-import { JOB_09, PARITY_09, runFieldScript, seed09 } from './jobs/job-09'
-import { PARITY_DIR, runOldPlan } from './old-side'
+import { answerFields, FIELD_SCRIPTS_09, JOB_09, PARITY_09, seed09 } from './jobs/job-09'
+import { frozenOldPlan, PARITY_DIR } from './old-side'
 import { describeParity, expectParity } from './parity-case'
 import { caseFile, dryTick, loadPortedAutomation } from './ported'
 
 const SKILLS = join(homedir(), '.agents', 'skills')
 const { definition, people } = loadPortedAutomation(JOB_09.automationId)
-// sweep.py's PREPARE_OPTIONS, which the Prepare card showed.
+// The findings file the agent writes, the card step reads and forget_findings removes, under the run's own folder.
+const FINDINGS_DIR = '/Users/nishsitapara/Library/Caches/pilot-reviews/{run.id}'
+const FINDINGS = `${FINDINGS_DIR}/findings.json`
+// sweep.py's PREPARE_OPTIONS, which the Prepare card showed, pinned as literals now that sweep.py is gone.
 const PREPARE_OPTIONS = [
   'Approve — check the branch out in a worktree and prepare the review there; nothing posts yet',
   "Skip — don't review this head"
@@ -57,26 +60,88 @@ describe('09 · Prepare reviews requested of me: the definition', () => {
       ['head8', 'per_head'],
       ['card_context', 'per_tick']
     ])
+    const head = { IID: '{mr.iid}', HEAD_SHA: '{mr.head_sha}' }
     expect(definition.steps).toMatchObject([
       {
         name: 'still_due',
         agent: 'shell',
         run: 'pilotcli gitlab check-mr "$IID" state=opened sha="$HEAD_SHA" reviewers=me unapproved=true',
-        env: { IID: '{mr.iid}', HEAD_SHA: '{mr.head_sha}' },
+        env: head,
         exitCodes: { ok: [0], skip: [], stop: [3] }
       },
-      { name: 'prepare', agent: 'claude', skill: 'review-mr', mode: 'prepare' }
+      {
+        name: 'checkout',
+        agent: 'shell',
+        run: 'pilotcli worktree create-review "$IID" --expect-sha "$HEAD_SHA"',
+        env: head,
+        exitCodes: { ok: [0], skip: [4, 5], stop: [3] }
+      },
+      { name: 'prepare', agent: 'claude', skill: 'review-mr', mode: 'prepare', always: false },
+      {
+        name: 'card',
+        agent: 'shell',
+        when: '{steps.prepare.findings} != null',
+        run: 'pilotcli automations run-item review-requests "$IID" --findings "$FINDINGS"',
+        env: { IID: '{mr.iid}', FINDINGS: FINDINGS },
+        exitCodes: { ok: [0], skip: [3], stop: [] }
+      },
+      {
+        name: 'forget_findings',
+        agent: 'shell',
+        always: true,
+        run: 'rm -rf "$DIR"',
+        env: { DIR: FINDINGS_DIR }
+      }
     ])
+    expect(definition.steps).toHaveLength(5)
+  })
+
+  it("the agent's prompt names the review worktree, how its checkout went and the findings file the card step reads", () => {
+    const prompt = definition.steps.find((s) => s.name === 'prepare')?.prompt ?? ''
+    for (const part of [
+      '{steps.checkout.path}',
+      '{steps.checkout.outcome}',
+      '{steps.checkout.reason}',
+      FINDINGS,
+      '{run.answer}'
+    ]) {
+      expect([part, prompt.includes(part)]).toEqual([part, true])
+    }
   })
 
   it('a head that moved, a closed MR, a dropped request or an approval since my Approve ends the run before the agent', () => {
-    const [stillDue, prepare] = definition.steps
+    const [stillDue, checkout, prepare, card, forget] = definition.steps
     const stopped = [
       { name: stillDue.name, status: 'stopped' as const, always: false, error: 'sha moved' }
     ]
-    expect(decideStep(prepare, stopped, {})).toMatchObject({ run: false })
+    for (const step of [checkout, prepare, card]) {
+      expect([step.name, decideStep(step, stopped, {}).run]).toEqual([step.name, false])
+    }
+    expect(decideStep(forget, stopped, {})).toEqual({ run: true })
     const due = [{ name: stillDue.name, status: 'done' as const, always: false, error: null }]
     expect(decideStep(prepare, due, {})).toEqual({ run: true })
+  })
+
+  it("the checkout moving ends the run; a fork or a busy worktree still reaches the agent, in review-mr's own checkout", () => {
+    const [stillDue, checkout, prepare] = definition.steps
+    const due = { name: stillDue.name, status: 'done' as const, always: false, error: null }
+    const ended = (status: 'stopped' | 'skipped') => [
+      due,
+      { name: checkout.name, status, always: false, error: null }
+    ]
+    expect(decideStep(prepare, ended('stopped'), {})).toMatchObject({ run: false })
+    expect(decideStep(prepare, ended('skipped'), {})).toEqual({ run: true })
+  })
+
+  it('the card step posts only when the agent recorded its findings, and the findings file goes however the run ended', () => {
+    const [, , prepare, card, forget] = definition.steps
+    const ran = [{ name: prepare.name, status: 'done' as const, always: false, error: null }]
+    expect(decideStep(card, ran, { 'steps.prepare.findings': 3 })).toEqual({ run: true })
+    expect(decideStep(card, ran, { 'steps.prepare.findings': 0 })).toEqual({ run: true })
+    expect(decideStep(card, ran, {})).toMatchObject({ run: false })
+    const broke = [{ name: prepare.name, status: 'failed' as const, always: false, error: 'x' }]
+    expect(decideStep(card, broke, { 'steps.prepare.findings': 3 })).toMatchObject({ run: false })
+    expect(decideStep(forget, broke, {})).toEqual({ run: true })
   })
 
   it('reviews only requests of mine nobody approved: reviewer, not author, no approvals (unknown approvals fail closed)', () => {
@@ -88,22 +153,16 @@ describe('09 · Prepare reviews requested of me: the definition', () => {
     })
   })
 
-  it("words the card's options as the sweep did", () => {
-    const sweep = readFileSync(join(SKILLS, 'review-requests', 'sweep.py'), 'utf8')
-    for (const option of PREPARE_OPTIONS) {
-      expect(sweep).toContain(option)
-    }
-  })
-
   it("sends a revised Post card back to the asking session, else to review-mr's answers mode", () => {
     expect(definition.answers).toEqual({
       resume: 'asking_session',
       else: { agent: 'claude', skill: 'review-mr', mode: 'answers' }
     })
-    // answers declares post_card too: an approved Prepare card imported from the vault runs prepare.md from its
-    // step 2 inside the answer run, whose `pilot run output post_card=…` lands on that run.
+    // prepare records the findings count the card step's `when` reads; the card step posts the Post card. answers
+    // declares post_card: an approved Prepare card imported from the vault runs prepare.md from its step 2 inside the
+    // answer run, whose `pilot run output post_card=…` lands on that run.
     expect([modeOutputs('review-mr', 'prepare'), modeOutputs('review-mr', 'answers')]).toEqual([
-      ['outcome', 'post_card'],
+      ['outcome', 'findings'],
       ['outcome', 'item_status', 'reply', 'post_card']
     ])
     expect(modeText('review-mr', 'prepare')).toContain(
@@ -152,15 +211,24 @@ describe('09 · Prepare reviews requested of me: the definition', () => {
     ).toThrow("posted isn't one of them")
   })
 
-  it('names no placeholder in a script, and every field script is the skill’s own `sweep.py field`', () => {
-    for (const f of definition.items?.customFields ?? []) {
-      expect(f.script).toMatch(/review-requests\/sweep\.py field (head8|context)$/)
+  it('names no placeholder in a script, and every field script is pilotcli’s get-field', () => {
+    expect(definition.items?.customFields.map((f) => [f.name, f.script])).toEqual([
+      ['head8', FIELD_SCRIPTS_09.head8],
+      ['card_context', FIELD_SCRIPTS_09.context]
+    ])
+    const scripts = [
+      ...(definition.items?.customFields ?? []).map((f) => f.script),
+      ...definition.steps.flatMap((s) => (s.agent === 'shell' ? [s.run ?? ''] : []))
+    ]
+    for (const script of scripts) {
+      expect(script).not.toContain('{')
     }
   })
 })
 
-// review-requests' words (jobs/job_09.py) and the verdicts that agree with them, through the shared parity runner
-// (parity-case.ts): a missed read, a tick error or a verdict mismatch fails a case.
+// review-requests' words (jobs/job_09.py, frozen in each case's old block with what `sweep.py field` printed) and the
+// verdicts that agree with them, through the shared parity runner (parity-case.ts): a missed read, a tick error, a verdict
+// mismatch or a case without frozen verdicts fails a case.
 const CASES = join(PARITY_DIR, '09')
 const cases = readdirSync(CASES)
   .filter((f) => f.endsWith('.json'))
@@ -168,16 +236,18 @@ const cases = readdirSync(CASES)
 
 describeParity(
   PARITY_09,
-  '09 · Prepare reviews requested of me: parity with review-requests',
+  '09 · Prepare reviews requested of me: parity with review-requests (frozen)',
   () => {
-    const decide = (name: string) =>
-      dryTick({
+    const decide = (name: string) => {
+      const fixture = loadFixture(caseFile(JOB_09.job, name))
+      return dryTick({
         definition,
         people,
-        fixture: loadFixture(caseFile(JOB_09.job, name)),
+        fixture,
         seed: seed09,
-        runScript: runFieldScript
+        runScript: answerFields(fixture)
       })
+    }
 
     it.each(cases)(
       '%s: every review request gets the verdict the sweep gave it, from reads the case holds',
@@ -211,9 +281,7 @@ describeParity(
     it('an asked card reads exactly like the old Prepare card', async () => {
       for (const name of cases.map((c) => c.replace(/\.json$/, ''))) {
         const neu = await decide(name)
-        const old = runOldPlan(JOB_09.job, caseFile(JOB_09.job, name)).filter(
-          (o) => o.decision === 'ask'
-        )
+        const old = frozenOldPlan(caseFile(JOB_09.job, name)).filter((o) => o.decision === 'ask')
         for (const o of old) {
           const d = neu.find((n) => n.key === o.key)
           expect(d?.verdict).toBe('asked')
@@ -238,7 +306,7 @@ describeParity(
         [/^approved by /, /^Approved by /]
       ]
       const neu = await decide(name.replace(/\.json$/, ''))
-      const old = runOldPlan(JOB_09.job, join(CASES, name)).filter((d) => d.decision === 'skip')
+      const old = frozenOldPlan(join(CASES, name)).filter((d) => d.decision === 'skip')
       for (const d of old) {
         const expected = byReason.find(([re]) => re.test(d.reason))?.[1]
         expect(expected, d.reason).toBeDefined()
@@ -261,7 +329,7 @@ describeParity(
         people,
         fixture: unreadable,
         seed: seed09,
-        runScript: runFieldScript
+        runScript: answerFields(unreadable)
       })
       expect(neu.find((d) => d.key === 'mr:1571')).toMatchObject({
         verdict: 'out_of_scope',

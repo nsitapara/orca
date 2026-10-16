@@ -235,5 +235,32 @@
     "/parity-gitdirs/wt/web-2/rebase-apply": false,
     "/parity-gitdirs/wt/web-2/rebase-merge": false,
     "/wt/web-2": true
+  },
+  "old": {
+    "from": "run_old_plan.py 13 (dev-e2e-fix/sweep.py, pilot_mode.py check-worktree) and pilot_mode.py list-fix-tickets on the case's tickets.json, 2026-10-16, before milestone 7 deleted them",
+    "decisions": [
+      {
+        "key": "pipeline:9",
+        "label": "pipeline 9",
+        "decision": "green",
+        "reason": "pipeline 9 passed"
+      },
+      {
+        "key": "linear:WEB-2",
+        "label": "WEB-2",
+        "decision": "start",
+        "reason": "fix session in /wt/web-2"
+      },
+      {
+        "key": "linear:WEB-2",
+        "label": "WEB-2",
+        "decision": "script_check",
+        "reason": ""
+      }
+    ],
+    "ids": {
+      "code": 0,
+      "stdout": "{\"v\": 1, \"command\": \"list-fix-tickets\", \"outcome\": \"ok\", \"reason\": \"1 open fix ticket(s) in tickets.json\", \"data\": [{\"identifier\": \"WEB-2\", \"branch\": \"web-2-fix\", \"pipeline\": 3}], \"meta\": {\"recorded\": 1}}\n"
+    }
   }
 }
