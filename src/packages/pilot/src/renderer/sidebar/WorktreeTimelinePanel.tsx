@@ -8,7 +8,7 @@ import type {
 import { runStatusWord } from '../../shared/env-text'
 import { money } from '../../shared/money'
 import { paintRun } from '../../shared/run-views/paint'
-import { foldStrip, stripOf } from '../../shared/run-views/strip'
+import { runStrip } from '../../shared/run-views/strip'
 import { clockTime, runStatusLabel, spentLabel, verdictLabel } from '../pages/format'
 import { useAutomationsFeed } from '../run-views/automations-feed'
 import { envCleanup } from '../run-views/env-lines'
@@ -64,7 +64,7 @@ function PanelRun({
   summary: AutomationSummary | undefined
 }): React.JSX.Element {
   const cleanup = envCleanup(run)
-  const items = summary ? foldStrip(stripOf(paintRun(summary.chain, { run }).parts), 4) : []
+  const items = summary ? runStrip(paintRun(summary.chain, { run }).parts, run, null, 4) : []
   return (
     <li className="relative border-l border-border pb-3 pl-4">
       <span className="absolute -left-[5px] top-1.5 size-2.5 rounded-full border border-border bg-background" />

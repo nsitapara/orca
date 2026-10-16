@@ -87,7 +87,7 @@ describe('paintRun', () => {
       }
     ],
     [
-      'an agent step asking',
+      'an agent step that left an open question: it keeps its own state',
       chain,
       {
         run: testRun({
@@ -98,7 +98,7 @@ describe('paintRun', () => {
         })
       },
       {
-        'step:1': 'asking',
+        'step:1': 'done',
         'step:2': 'done',
         'step:3': 'skipped',
         answers: 'none',
@@ -231,7 +231,11 @@ describe('paintRun', () => {
       run: testRun({
         status: 'needs_you',
         steps: allSteps,
-        inbox: [testCard({ id: 'c1', stepIdx: 1 })]
+        inbox: [
+          testCard({ id: 'c1', stepIdx: 1 }),
+          testCard({ id: 'c2', stepIdx: 1, type: 'default' }),
+          testCard({ id: 'c3', stepIdx: 2, status: 'answered' })
+        ]
       }),
       tickItem: {
         tickId: 7,
@@ -255,6 +259,8 @@ describe('paintRun', () => {
     expect(by['check:1']).toMatchObject({ state: 'failed', detail: 'busy' })
     expect(by.starts.detail).toBe('Handed over by stage 1: WEB-1')
     expect(by['step:1'].card?.id).toBe('c1')
+    expect(by['step:1'].cards.map((c) => c.id)).toEqual(['c1', 'c2'])
+    expect(by['step:2'].cards.map((c) => c.id)).toEqual(['c3'])
     expect(by['handover:next']).toMatchObject({ detail: 'WEB-2 → started', linkRunId: 'r9' })
   })
 

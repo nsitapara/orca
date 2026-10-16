@@ -85,7 +85,7 @@ describe('ActivityView', () => {
     const today = screen.getByRole('region', { name: 'Earlier today' })
     expect(within(today).getByText("Couldn't start: no such repo")).toBeTruthy()
     fireEvent.click(
-      await within(running).findByRole('button', { name: /Claude · fix-gitlab-ci · Running/ })
+      await within(running).findByRole('button', { name: /1 fix · Running/ })
     )
     expect(openRunPanel()).toEqual({ runId: 'run-a', part: 'step:0' })
   })

@@ -1,17 +1,15 @@
 import { useEffect, useState } from 'react'
-import type {
-  ActivityPayload,
-  ActivityRun,
-  AutomationSummary,
-  RunDetail
-} from '../../shared/api-types'
+import { cn } from '@/lib/utils'
+import type { ActivityPayload, ActivityRun, AutomationSummary } from '../../shared/api-types'
 import { paintRun } from '../../shared/run-views/paint'
+import { runHeadline, runTimeline } from '../../shared/run-views/timeline'
 import { pilotRpc } from '../api'
 import { defaultRun, runCandidates } from '../run-views/activity-groups'
 import { RunRail } from '../run-views/RunRail'
-import { closeRunPanel, openRun } from '../run-views/run-panel-state'
+import { openRun } from '../run-views/run-panel-state'
+import { RUN_TONE } from '../run-views/tokens'
 import { scheduleText } from './AutomationsTable'
-import { showInboxCard } from './automations-view'
+import { showPilotAutomation } from './automations-view'
 import { clockTime, formatInZone, runStatusLabel } from './format'
 
 export const HOW_POLL_MS = 20_000
@@ -37,46 +35,48 @@ function Facts({ summary: s }: { summary: AutomationSummary }): React.JSX.Elemen
   )
 }
 
-function runLabel(r: ActivityRun): string {
-  return `${clockTime(r.startedAt)} · ${r.itemLabel} · ${runStatusLabel(r.status)}`
-}
-
-function RunPicker({
-  runs,
-  value,
-  onChange
+// The run How it runs points at: the running one, else the newest. The plan itself shows no run; Open run shows this one's
+// timeline.
+function LatestRun({
+  summary,
+  run
 }: {
-  runs: ActivityRun[]
-  value: string | null
-  onChange: (id: string | null) => void
+  summary: AutomationSummary
+  run: ActivityRun | null
 }): React.JSX.Element {
+  if (!run) {
+    return <p className="text-xs text-muted-foreground">No runs yet</p>
+  }
+  const parts = paintRun(summary.chain, { run }).parts
   return (
-    <label className="flex items-center gap-2 text-sm">
-      <span className="text-muted-foreground">Run</span>
-      <select
-        aria-label="Run"
-        value={value ?? ''}
-        onChange={(e) => onChange(e.target.value === '' ? null : e.target.value)}
-        className="min-w-0 rounded border border-border bg-background px-2 py-1 text-sm"
+    <div className="flex flex-wrap items-center gap-2 rounded border border-border bg-muted/30 px-3 py-1.5 text-xs">
+      <span className="text-muted-foreground">Latest run</span>
+      <span className="tabular-nums">{clockTime(run.startedAt)}</span>
+      <span className="min-w-0 truncate font-mono" title={run.itemLabel}>
+        {run.itemLabel}
+      </span>
+      <span className={cn('rounded px-1.5', RUN_TONE[run.status])}>
+        {runHeadline(run, runTimeline(parts, run), runStatusLabel)}
+      </span>
+      <span className="flex-1" />
+      <button type="button" className="underline" onClick={() => openRun(run.id)}>
+        Open run
+      </button>
+      <button
+        type="button"
+        className="underline"
+        onClick={() => showPilotAutomation(summary.id, 'activity')}
       >
-        <option value="">No run</option>
-        {runs.map((r) => (
-          <option key={r.id} value={r.id}>
-            {runLabel(r)}
-          </option>
-        ))}
-      </select>
-    </label>
+        All in Activity
+      </button>
+    </div>
   )
 }
 
-// An automation's chain with one run painted on it: the running run by default, else the newest; "No run" shows the
-// bare chain. Its facts (once the Overview's) head it.
+// An automation's plan: its facts, the run it points at, and its chain with the steps numbered. No run is painted on
+// it (spec revision 2026-10-16): a run shows as a timeline in the run panel.
 export function HowItRuns({ summary }: { summary: AutomationSummary }): React.JSX.Element {
   const [runs, setRuns] = useState<ActivityRun[]>([])
-  // undefined: not picked, so the default; null: No run.
-  const [picked, setPicked] = useState<string | null | undefined>(undefined)
-  const [detail, setDetail] = useState<RunDetail | null>(null)
   useEffect(() => {
     let alive = true
     const load = (): void => {
@@ -96,38 +96,11 @@ export function HowItRuns({ summary }: { summary: AutomationSummary }): React.JS
       clearInterval(timer)
     }
   }, [summary.id])
-  const chosen = picked === undefined ? defaultRun(runs) : picked
-  useEffect(() => {
-    if (!chosen) {
-      setDetail(null)
-      return
-    }
-    let alive = true
-    pilotRpc<RunDetail>('pilot.runs.get', { runId: chosen }).then(
-      (d) => alive && setDetail(d),
-      () => alive && setDetail(null)
-    )
-    return () => {
-      alive = false
-    }
-  }, [chosen, runs])
-  const shown = detail && detail.run.id === chosen ? detail : null
-  const painted = shown ? paintRun(shown.chain, shown) : null
   return (
     <div className="flex flex-col gap-3">
       <Facts summary={summary} />
-      <RunPicker runs={runs} value={chosen} onChange={setPicked} />
-      <RunRail
-        key={shown?.run.id ?? 'chain'}
-        parts={painted ? painted.parts : summary.chain}
-        run={shown ? shown.run : null}
-        drifted={painted?.drifted ?? false}
-        onOpenRun={(id) => openRun(id)}
-        onOpenCard={(id) => {
-          closeRunPanel()
-          showInboxCard(id)
-        }}
-      />
+      <LatestRun summary={summary} run={runs.find((r) => r.id === defaultRun(runs)) ?? null} />
+      <RunRail parts={summary.chain} />
     </div>
   )
 }

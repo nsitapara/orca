@@ -4,7 +4,7 @@ import { homeOf } from '../../shared/api-types-env'
 import { runStatusWord } from '../../shared/env-text'
 import { money } from '../../shared/money'
 import { paintRun } from '../../shared/run-views/paint'
-import { foldStrip, stripOf } from '../../shared/run-views/strip'
+import { runStrip } from '../../shared/run-views/strip'
 import { clockTime, itemUrl, runStatusLabel } from '../pages/format'
 import { jobCode } from './activity-groups'
 import { useRunEffects } from './effects-feed'
@@ -17,8 +17,8 @@ function baseName(path: string): string {
   return path.replace(/\/+$/, '').split('/').pop() ?? path
 }
 
-// One run on Activity (spec §3): job tag, item (linked out), worktree, cost, state and its strip. The strip's chips and
-// "Open run" open the run panel. A run whose automation isn't loaded shows no strip.
+// One run on Activity (spec §3): job tag, item (linked out), worktree, cost, state and the steps that ran, numbered in the
+// order they ran. The chips and "Open run" open the run panel. A run whose automation isn't loaded shows no steps.
 export function ActivityRunRow({
   run,
   fields,
@@ -41,7 +41,7 @@ export function ActivityRunRow({
     effects === undefined
   )
   const shown = effects === undefined ? fetched : effects
-  const items = summary ? foldStrip(stripOf(paintRun(summary.chain, { run }).parts)) : []
+  const items = summary ? runStrip(paintRun(summary.chain, { run }).parts, run) : []
   return (
     <li className="flex flex-col gap-1 border-t border-border/50 py-2">
       <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">

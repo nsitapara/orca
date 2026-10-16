@@ -1,10 +1,13 @@
 import { useEffect, useState } from 'react'
 import { X } from 'lucide-react'
+import { cn } from '@/lib/utils'
 import type { RunDetail } from '../../shared/api-types'
 import { homeOf } from '../../shared/api-types-env'
 import { runStatusWord } from '../../shared/env-text'
 import { money } from '../../shared/money'
-import { paintRun } from '../../shared/run-views/paint'
+import { paintRun, type PaintedRun } from '../../shared/run-views/paint'
+import { runHeadline, runTimeline } from '../../shared/run-views/timeline'
+import { formatDuration } from '../../shared/run/format-duration'
 import { pilotRpc } from '../api'
 import { showAutomationsPage, showInboxCard, showPilotAutomation } from '../pages/automations-view'
 import { errorText, itemUrl, runStatusLabel } from '../pages/format'
@@ -12,8 +15,9 @@ import { openWorktree, worktreeIdForPath } from '../pages/waiting/WorktreeLink'
 import { useRunEffects } from './effects-feed'
 import { WhatItChanged } from './EffectsLine'
 import { envLines } from './env-lines'
-import { RunRail } from './RunRail'
+import { RunTimeline } from './RunTimeline'
 import { closeRunPanel, openRun } from './run-panel-state'
+import { RUN_TONE } from './tokens'
 
 export const RUN_PANEL_POLL_MS = 10_000
 const LIVE: ReadonlySet<string> = new Set(['running', 'asking'])
@@ -53,7 +57,23 @@ function Worktree({ path }: { path: string }): React.JSX.Element {
   )
 }
 
-function Header({ detail }: { detail: RunDetail }): React.JSX.Element {
+// The run's state with the step it is at ("Failed at step 4"); a workspace still preparing or deferred says so instead.
+function stateWord(detail: RunDetail, painted: PaintedRun): string {
+  const { run } = detail
+  const word = runStatusWord(run, runStatusLabel)
+  if (word !== runStatusLabel(run.status)) {
+    return word
+  }
+  return runHeadline(run, runTimeline(painted.parts, run), runStatusLabel)
+}
+
+function Header({
+  detail,
+  painted
+}: {
+  detail: RunDetail
+  painted: PaintedRun
+}): React.JSX.Element {
   const { run } = detail
   const url = itemUrl(run.fields)
   const home = homeOf(run)
@@ -89,13 +109,20 @@ function Header({ detail }: { detail: RunDetail }): React.JSX.Element {
         )}
       </h3>
       <dl className="grid grid-cols-[5.5rem_minmax(0,1fr)] gap-y-0.5 text-xs">
-        <Fact name="State">{runStatusWord(run, runStatusLabel)}</Fact>
+        <Fact name="State">
+          <span className={cn('rounded px-1.5', RUN_TONE[run.status])}>
+            {stateWord(detail, painted)}
+          </span>
+        </Fact>
         {home ? (
           <Fact name="Worktree">
             <Worktree path={home} />
           </Fact>
         ) : null}
         <Fact name="Started">{new Date(run.startedAt).toLocaleString()}</Fact>
+        {run.finishedAt !== null ? (
+          <Fact name="Took">{formatDuration(run.finishedAt - run.startedAt)}</Fact>
+        ) : null}
         {run.costUsd !== null ? <Fact name="Spent">{money(run.costUsd)}</Fact> : null}
         {run.tickId !== null ? <Fact name="Tick">{`Tick ${run.tickId}`}</Fact> : null}
         {run.outcome ? <Fact name="Outcome">{run.outcome}</Fact> : null}
@@ -130,7 +157,7 @@ function Header({ detail }: { detail: RunDetail }): React.JSX.Element {
   )
 }
 
-// One run's rail and its links (spec §2 Run panel), polled while it is open so a running run moves along.
+// One run's timeline and its links (spec §2 Run panel), polled while it is open so a running run moves along.
 export function RunPanel({
   runId,
   part,
@@ -183,9 +210,9 @@ export function RunPanel({
       {error ? <p className="text-sm text-destructive">{error}</p> : null}
       {detail && painted ? (
         <>
-          <Header detail={detail} />
+          <Header detail={detail} painted={painted} />
           <WhatItChanged effects={effects} />
-          <RunRail
+          <RunTimeline
             parts={painted.parts}
             run={detail.run}
             highlight={part}

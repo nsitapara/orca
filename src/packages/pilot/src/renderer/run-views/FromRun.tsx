@@ -1,9 +1,14 @@
+import { cn } from '@/lib/utils'
 import type { ActivityRun, InboxListRow } from '../../shared/api-types'
+import { money } from '../../shared/money'
 import { paintRun } from '../../shared/run-views/paint'
-import { foldStrip, stripOf } from '../../shared/run-views/strip'
+import { runStrip } from '../../shared/run-views/strip'
+import { runHeadline, runTimeline } from '../../shared/run-views/timeline'
+import { clockTime, runStatusLabel } from '../pages/format'
 import { useAutomationsFeed } from './automations-feed'
 import { RunStrip } from './RunStrip'
 import { openRun } from './run-panel-state'
+import { RUN_TONE } from './tokens'
 
 type Asked = Pick<InboxListRow, 'automationId' | 'stepIdx'>
 
@@ -21,18 +26,16 @@ export function askingPart(
   return `step:${item.stepIdx}`
 }
 
-export function askedWhere(
-  item: Pick<InboxListRow, 'stepIdx'>,
-  run: ActivityRun,
-  steps: number
-): string {
-  if (item.stepIdx === null) {
-    return run.trigger === 'ask_first' ? `${run.itemLabel} · asks before starting` : run.itemLabel
+// "10:53 AM–11:21 AM", or "since 10:53 AM" while it runs.
+export function runSpan(run: Pick<ActivityRun, 'startedAt' | 'finishedAt'>): string {
+  if (run.finishedAt === null) {
+    return `since ${clockTime(run.startedAt)}`
   }
-  return `${run.itemLabel} · step ${item.stepIdx + 1} of ${steps} asked`
+  return `${clockTime(run.startedAt)}–${clockTime(run.finishedAt)}`
 }
 
-// A card's "From run" line (spec §3): the run's strip with where it asked lit, where that is, and Open run.
+// A card's "From run" block: the run's state, times, cost and item, then the steps that ran in order with the one the
+// card came from lit amber, and Open run at that step.
 export function FromRun({
   item,
   run
@@ -45,26 +48,30 @@ export function FromRun({
     return null
   }
   const parts = paintRun(summary.chain, { run }).parts
-  const steps = parts.filter((p) => p.kind === 'step').length
+  const asked = askingPart(item, run)
   return (
-    <div
-      data-from-run=""
-      className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground"
-    >
-      <span className="font-semibold">From run</span>
+    <div data-from-run="" className="flex flex-col gap-1.5 text-xs text-muted-foreground">
+      <div className="flex min-w-0 flex-wrap items-center gap-2">
+        <span className="font-semibold">From run</span>
+        <span className={cn('rounded px-1.5', RUN_TONE[run.status])}>
+          {runHeadline(run, runTimeline(parts, run), runStatusLabel)}
+        </span>
+        <span className="tabular-nums">{runSpan(run)}</span>
+        {run.costUsd !== null ? <span className="tabular-nums">{money(run.costUsd)}</span> : null}
+        <span className="min-w-0 truncate font-mono" title={run.itemLabel}>
+          {run.itemLabel}
+        </span>
+        <span className="flex-1" />
+        <button type="button" className="underline" onClick={() => openRun(run.id, asked)}>
+          Open run
+        </button>
+      </div>
       <RunStrip
-        items={foldStrip(stripOf(parts))}
+        items={runStrip(parts, run, asked)}
         label={`Run ${run.id}`}
+        highlight={asked}
         onChip={(chip) => openRun(run.id, chip.part)}
       />
-      <span>{askedWhere(item, run, steps)}</span>
-      <button
-        type="button"
-        className="underline"
-        onClick={() => openRun(run.id, askingPart(item, run))}
-      >
-        Open run
-      </button>
     </div>
   )
 }

@@ -196,7 +196,8 @@ describe('InboxPage', () => {
     render(<InboxPage />)
     const card = await screen.findByRole('heading', { name: 'Install LibreOffice in the job?' })
     const article = card.closest('article') as HTMLElement
-    expect(await within(article).findByText('!1561 · step 1 of 1 asked')).toBeTruthy()
+    expect(await within(article).findByText('!1561')).toBeTruthy()
+    expect(within(article).getByText('From run')).toBeTruthy()
   })
 
   it('shows the cards waiting, folds the defaults, and lists what saved answers set off', async () => {

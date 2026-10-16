@@ -293,19 +293,19 @@ describe('AutomationsTable: the Runs strip', () => {
       within(strip)
         .getAllByRole('button')
         .map((b) => b.getAttribute('aria-label'))
-    ).toEqual(['Pilot · MRs · 1 gate', 'Agent · Claude · fix-gitlab-ci'])
+    ).toEqual(['Pilot · MRs · 1 gate', 'Agent · 1 fix'])
   })
 
   it('opens the one run a lit chip is lit for, Activity when it is lit for several, and How it runs when it is not', () => {
     const first = renderTable([{ ...SOLO, live: [running('a', 'docker-prune')] }])
     fireEvent.click(
-      screen.getByRole('button', { name: 'Agent · Claude · fix-gitlab-ci · Running' })
+      screen.getByRole('button', { name: 'Agent · 1 fix · Running' })
     )
     expect(openRunPanel()).toEqual({ runId: 'a', part: 'step:0' })
     expect(first.onOpen).not.toHaveBeenCalled()
     cleanup()
     renderTable([{ ...SOLO, live: [running('a', 'docker-prune'), running('b', 'docker-prune')] }])
-    const lit = screen.getByRole('button', { name: 'Agent · Claude · fix-gitlab-ci · Running' })
+    const lit = screen.getByRole('button', { name: 'Agent · 1 fix · Running' })
     expect(lit.textContent).toContain('2')
     fireEvent.click(lit)
     expect([pilotAutomationsView(), takeActivityFilter()]).toEqual(['activity', ['docker-prune']])
@@ -318,7 +318,7 @@ describe('AutomationsTable: the Runs strip', () => {
     // stage 1 shares the job's title in this fixture, so the job row's strip is the first
     const [strip] = screen.getAllByRole('list', { name: '13 · Fix red hourly e2e on dev runs' })
     expect(
-      within(strip).getByRole('button', { name: 'Agent · Claude · fix-gitlab-ci · Running' })
+      within(strip).getByRole('button', { name: 'Agent · 1 fix · Running' })
     ).toBeTruthy()
     expect(within(strip).getByText('+1 stage')).toBeTruthy()
   })

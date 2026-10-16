@@ -134,7 +134,7 @@ describe('WorktreeTimelinePanel', () => {
     }
     render(<WorktreeTimelinePanel />)
     fireEvent.click(
-      await screen.findByRole('button', { name: 'Agent · Claude · fix-gitlab-ci · Running' })
+      await screen.findByRole('button', { name: 'Agent · 1 fix · Running' })
     )
     expect([openRunPanel(), pilotAutomationsView()]).toEqual([
       { runId: 'r2', part: 'step:0' },
