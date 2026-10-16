@@ -2,16 +2,15 @@ import { cpSync, mkdtempSync, readFileSync } from 'node:fs'
 import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
+import type { ItemFields } from '../../src/shared/api-types'
 import { loadDefinitions } from '../../src/main/definitions/loader'
-import { decideStep } from '../../src/shared/run/step-plan'
+import { decideStep, type EndedStep } from '../../src/shared/run/step-plan'
 import { loadPortedAutomation, portedAutomationsDir } from './ported'
 
 const SKILL = join(homedir(), '.agents', 'skills', 'review-cycles')
 const { definition } = loadPortedAutomation('review-branch-code')
 const HOUR = 3_600_000
-const SCRIPT = 'python3 /Users/nishsitapara/.agents/skills/review-cycles/loop.py'
-// No permission flag: Pilot's Codex command carries Settings' (agentDefaultArgs), and Codex refuses it twice.
-const CODEX_ARGS = ['-c', 'check_for_update_on_startup=false']
+const MINUTE = 60_000
 
 function modeOutputs(mode: string): string[] {
   const text = readFileSync(join(SKILL, 'modes', `${mode}.md`), 'utf8')
@@ -31,10 +30,19 @@ function step(name: string) {
   return found
 }
 
+// Whether a step runs after the steps before it ended so, with these fields (the engine's own rule, decideStep).
+function runs(name: string, ended: EndedStep[], fields: ItemFields): boolean {
+  return decideStep(step(name), ended, fields).run
+}
+
+const ok = (name: string): EndedStep => ({ name, status: 'done', always: false, error: null })
+const broke = (name: string): EndedStep => ({ name, status: 'failed', always: false, error: null })
+
 // Old: Orca automation 129cdf72 "03 · Review and fix branch code", rrule "20 * * * *" in America/Los_Angeles, a 720-minute
-// missed-run grace, precheck `loop.py sweep --push` (--max 2 by default), whose rounds handed off to each other's tabs.
+// missed-run grace, precheck `loop.py sweep --push` (--max 2). Since pilotCLI milestone 8 (spec §7.5) one orchestrating
+// agent runs the review (/orchestrate review-cycles) between pilotcli's context and its guarded publish.
 describe('03 · Review and fix branch code: the definition (old job: orca automation 129cdf72, precheck loop.py sweep --push)', () => {
-  it("keeps the sweep's schedule, two cycles per tick, its first-sight baseline and its retry of an abandoned cycle", () => {
+  it("keeps the sweep's schedule, two reviews per tick, its first-sight baseline and its retry of an abandoned review", () => {
     expect(definition).toMatchObject({
       name: '03 · Review and fix branch code',
       schedule: '20 * * * *',
@@ -42,15 +50,13 @@ describe('03 · Review and fix branch code: the definition (old job: orca automa
       missedRunGraceMs: 12 * HOUR,
       firstSeen: 'baseline',
       oncePer: '{worktree.at_head}',
-      retryAfterFailureMs: 50 * 60_000,
-      limits: { perTick: 2, atOnce: null, timeoutMs: 2 * HOUR, order: 'listed' },
+      retryAfterFailureMs: 50 * MINUTE,
+      // 3 phases × 45 minutes plus the publish's hooks (spec §7.5: at least 3h).
+      limits: { perTick: 2, atOnce: null, timeoutMs: 3 * HOUR, order: 'listed' },
       workspace: { kind: 'item_worktree' },
       powers: ['commit', 'push'],
       inbox: 'nish'
     })
-    expect(readFileSync(join(SKILL, 'loop.py'), 'utf8')).toContain(
-      's.add_argument("--max", type=int, default=2'
-    )
   })
 
   it('lists my worktrees with new own commits, and checks them in gate.evaluate’s order, then both agents’ quota', () => {
@@ -71,46 +77,83 @@ describe('03 · Review and fix branch code: the definition (old job: orca automa
     ])
   })
 
-  it('runs begin, the six round steps, complete, publish and a failure flag, each round in its agent’s worktree session', () => {
-    expect(definition.steps.map((s) => [s.name, s.agent, s.mode, s.always])).toEqual([
-      ['begin', 'shell', null, false],
-      ['r1_claude', 'claude', 'pass', false],
-      ['r1_codex', 'codex', 'pass', false],
-      ['r2_codex', 'codex', 'review', false],
-      ['r2_claude', 'claude', 'review', false],
-      ['r3_claude', 'claude', 'review', false],
-      ['r3_codex', 'codex', 'review', false],
-      ['complete', 'shell', null, false],
-      ['publish', 'shell', null, false],
-      ['flag_failed', 'shell', null, true]
+  it("runs pilotcli's context, one orchestrating review, pilotcli's guarded publish, then the two flags", () => {
+    expect(definition.steps.map((s) => [s.name, s.agent, s.always])).toEqual([
+      ['context', 'shell', false],
+      ['review', 'claude', false],
+      ['publish', 'shell', false],
+      ['flag_dirty', 'shell', true],
+      ['flag_failed', 'shell', true]
     ])
-    for (const s of definition.steps.filter((x) => /^r\d_/.test(x.name))) {
-      expect([s.name, s.skill, s.session, s.promptStyle]).toEqual([
-        s.name,
-        'review-cycles',
-        { kind: 'per_worktree' },
-        'wrapped'
-      ])
-      // One process per agent session: every Codex round launches with the same args, so a later round can reuse it.
-      expect(s.args).toEqual(s.agent === 'codex' ? CODEX_ARGS : [])
-    }
+    expect(step('context')).toMatchObject({
+      run: 'pilotcli skills get-context review-cycles --pilot-item -',
+      exitCodes: { ok: [0], stop: [3] },
+      timeoutMs: 2 * MINUTE
+    })
   })
 
-  it('passes values to shell steps only through env, and the cycle’s head is the once_per head', () => {
-    expect(step('begin')).toMatchObject({
-      env: { REVIEW_BASE: '{worktree.marker}', AT_HEAD: '{worktree.at_head}' },
-      run: `${SCRIPT} begin --base "$REVIEW_BASE" --head "\${AT_HEAD##*@}" --push`,
-      timeoutMs: 2 * 60_000
+  // Spec §7.5: the rounds run inside one agent step, Claude, Codex, and Claude again when Codex changed code; its review
+  // step outlasts 3 phases × 45 minutes.
+  it('reviews in one /orchestrate review-cycles step, from the context step’s facts, with the outputs publish reads', () => {
+    expect(step('review')).toMatchObject({
+      agent: 'claude',
+      skill: 'orchestrate',
+      promptStyle: 'raw',
+      prompt:
+        '/orchestrate review-cycles base={steps.context.base} head={steps.context.head} remote={steps.context.remote} branch={steps.context.branch} mr={steps.context.mr}',
+      outputs: ['verdict', 'head', 'summary', 'rounds', 'open', 'dirty'],
+      timeoutMs: 175 * MINUTE
     })
-    expect(step('complete')).toMatchObject({ run: `${SCRIPT} complete`, env: {} })
+  })
+
+  // pilot_mode.py's publication checks, now pilotcli's (spec §7.5): a refused push is a skip, never a failed run.
+  it('publishes only a reviewed head, through push-branch’s guards, from env', () => {
     expect(step('publish')).toMatchObject({
-      run: `${SCRIPT} publish`,
-      exitCodes: { ok: [0], skip: [3] },
-      timeoutMs: 30 * 60_000
+      when: "{steps.review.verdict} == 'ok' and {steps.context.remote} != null",
+      env: {
+        BRANCH: '{steps.context.branch}',
+        REMOTE: '{steps.context.remote}',
+        HEAD_SHA: '{steps.review.head}',
+        BASE: '{steps.context.base}',
+        REVIEWED: '{steps.context.head}'
+      },
+      run: 'pilotcli git push-branch "$BRANCH" unapproved=true --checkout . --expect-sha "$REMOTE" --expect-head "$HEAD_SHA" --from "$BASE" --reviewed "$REVIEWED" --trailer "Agent-Loop: standards"',
+      exitCodes: { ok: [0], skip: [1, 2, 3, 5] },
+      timeoutMs: 30 * MINUTE
     })
+    const reviewed = [ok('context'), ok('review')]
+    const at = (verdict: string, remote: string | null) => ({
+      'steps.review.verdict': verdict,
+      'steps.context.remote': remote
+    })
+    expect(runs('publish', reviewed, at('ok', 'a'.repeat(40)))).toBe(true)
+    expect(runs('publish', reviewed, at('ok', null))).toBe(false) // a branch not on origin
+    expect(runs('publish', reviewed, at('blocked', 'a'.repeat(40)))).toBe(false)
+    expect(runs('publish', [ok('context'), broke('review')], at('ok', 'a'.repeat(40)))).toBe(false)
     for (const s of definition.steps.filter((x) => x.agent === 'shell')) {
       expect(s.run).not.toMatch(/\{[a-z_]+\.[a-z_.]+\}/)
     }
+  })
+
+  // Spec §7.5's constraints: a failed phase's uncommitted changes flag the worktree, so the jobs that need a clean tree
+  // don't skip it silently; any failed run flags it. A flag that fails never fails the run.
+  it('flags the worktree when the review left it dirty or the run failed', () => {
+    for (const name of ['flag_dirty', 'flag_failed']) {
+      expect(step(name).env).toEqual({ WT: '{worktree.path}', RUN: '{run.id}' })
+      expect(step(name).run).toContain('orca worktree set --worktree "path:$WT" --unread')
+      expect(step(name).run).toContain('|| echo')
+    }
+    expect(step('flag_dirty').when).toBe("{steps.review.dirty} == 'yes'")
+    expect(step('flag_failed').when).toBe('{run.failed} == true')
+    const failed = [ok('context'), broke('review')]
+    expect(runs('flag_dirty', failed, { 'steps.review.dirty': 'yes', 'run.failed': true })).toBe(
+      true
+    )
+    expect(runs('flag_dirty', failed, { 'steps.review.dirty': null, 'run.failed': true })).toBe(
+      false
+    )
+    expect(runs('flag_failed', failed, { 'run.failed': true })).toBe(true)
+    expect(runs('flag_failed', [ok('context'), ok('review')], { 'run.failed': false })).toBe(false)
   })
 
   it('leaves evidence preparation to an independent item queue with no publication powers', () => {
@@ -135,50 +178,17 @@ describe('03 · Review and fix branch code: the definition (old job: orca automa
     expect(preparation.steps[0].prompt).not.toContain('prepare-complete')
   })
 
-  // The sweep flagged a cycle that failed to start. One a review block stopped (an approved MR) stayed unflagged, and the
-  // next sweep flagged an abandoned one as it restarted it (begin does that here), so neither is flagged twice.
-  it('flags the worktree only when the cycle failed to start, and a flag that fails never fails the run', () => {
-    const flag = step('flag_failed')
-    expect(flag).toMatchObject({
-      when: "{run.failed} == true and {steps.begin.status} != 'done'",
-      env: { WT: '{worktree.path}', RUN: '{run.id}' }
-    })
-    expect(flag.run).toContain('orca worktree set --worktree "path:$WT" --unread')
-    expect(flag.run).toContain('|| echo')
-    const ended = (begin: 'done' | 'failed' | 'timed_out') => [
-      { name: 'begin', status: begin, always: false, error: null },
-      {
-        name: 'complete',
-        status: begin === 'done' ? ('failed' as const) : ('skipped' as const),
-        always: false,
-        error: null
-      }
-    ]
-    const cases: [string, ReturnType<typeof ended>, boolean, boolean][] = [
-      ['begin failed', ended('failed'), true, true],
-      ['begin timed out', ended('timed_out'), true, true],
-      ['a round never handed off, or a review block stopped the cycle', ended('done'), true, false],
-      ['the cycle completed', ended('done').slice(0, 1), false, false]
-    ]
-    for (const [, steps, failed, flagged] of cases) {
-      const fields = { 'run.failed': failed, 'steps.begin.status': steps[0].status }
-      expect(decideStep(flag, steps, fields).run).toBe(flagged)
-    }
-  })
-
-  it("sends my answers back to the asking round's session, else to the skill's answers mode", () => {
+  // The orchestrator's session holds no phase's context (spec §7.5), so an answer starts a fresh session in the skill's
+  // answers mode, which pushes only through Pilot's push action.
+  it("sends my answers to a fresh session in the skill's answers mode", () => {
     expect(definition.answers).toEqual({
-      resume: 'asking_session',
+      resume: 'never',
       else: { agent: 'claude', skill: 'review-cycles', mode: 'answers' }
     })
-    expect(modeOutputs('pass')).toEqual(['changed', 'blocked'])
-    expect(modeOutputs('review')).toEqual(['changed', 'blocked'])
     expect(modeOutputs('answers')).toEqual(['outcome', 'item_status', 'reply'])
-    const answers = '~/.agents/skills/review-cycles/modes/answers.md'
-    for (const file of ['SKILL.md', join('modes', 'pass.md'), join('modes', 'review.md')]) {
-      expect(readFileSync(join(SKILL, file), 'utf8')).toContain(answers)
-    }
-    expect(readFileSync(join(SKILL, 'modes', 'answers.md'), 'utf8')).toContain('never `git push`')
+    expect(readFileSync(join(SKILL, 'modes', 'answers.md'), 'utf8')).toContain(
+      'pilot action run --name=push'
+    )
   })
 
   it('loads through the loader on a copy', () => {
