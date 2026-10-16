@@ -206,7 +206,10 @@ describe('action RPC', () => {
     expect(
       await call('pilot.action.run', { ...PUSH, runId: 'run-2', stepIdx: 0, dryRun: true })
     ).toMatchObject({ outcome: 'done' })
-    expect(push.run).toHaveBeenCalledWith({ argv: ['a'] }, { dryRun: true, runId: 'run-2' })
+    expect(push.run).toHaveBeenCalledWith(
+      { argv: ['a'] },
+      { dryRun: true, runId: 'run-2', inboxItemId: null }
+    )
   })
 })
 

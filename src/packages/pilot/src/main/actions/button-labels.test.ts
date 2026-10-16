@@ -1,12 +1,21 @@
 import { describe, expect, it, vi } from 'vitest'
 import { actionButton } from '../../shared/answer-actions'
 import { buildActionCatalog } from './catalog'
+import { markReadyEntry } from './mark-ready'
+import { postReviewEntry } from './post-review'
+import { pushBranchEntry } from './push-branch'
 
 describe('the answer buttons', () => {
   it('has a name for every action the catalog can run (start_run is the ask-first card’s own)', () => {
-    const act = { run: vi.fn(), describe: vi.fn(), refresh: vi.fn(), command: vi.fn() }
-    const linear = {} as never
-    const names = buildActionCatalog({ act, push: { name: 'push' }, linear } as never)
+    const pilotcli = vi.fn()
+    const binary = () => null
+    const folder = () => null
+    const names = buildActionCatalog({
+      push: pushBranchEntry({ pilotcli, binary }),
+      markReady: markReadyEntry({ pilotcli, binary, folder, openCards: () => null }),
+      postReview: postReviewEntry({ pilotcli, binary, reviewsDir: () => '/vault', folder }),
+      linear: null
+    })
       .entries()
       .map((e) => e.name)
       .filter((n) => n !== 'start_run')

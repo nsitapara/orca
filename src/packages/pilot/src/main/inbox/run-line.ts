@@ -6,8 +6,8 @@ import { routeOf } from '../answers/queue-view'
 
 // An action card's Run line: what its Approve runs, written by Pilot from the stored card version the
 // digest binds, never from the agent's words. The args are powers.ts approvedArgs (what cardToRun runs: the
-// parts left out applied, the write id pinned), and an act.py entry's line is its command(), built by the
-// code its run() spawns with. The text is printable ASCII only: anything else (bidi controls, zero-width
+// parts left out applied, the write id pinned), and a pilotcli entry's line is its command() for this card, built
+// by the code its run() spawns with. The text is printable ASCII only: anything else (bidi controls, zero-width
 // and other invisible or control characters, lookalike letters) shows as an escape, never raw.
 
 const SAFE_WORD = /^[A-Za-z0-9_@%+=:,./-]+$/
@@ -83,7 +83,8 @@ export function cardRunLine(catalog: ActionCatalog, card: InboxItemRow): RunLine
   if ('problem' in approved) {
     return cantRun(card, approved.problem)
   }
-  const command = entry.command?.(approved.args) ?? null
+  const command =
+    entry.command?.(approved.args, { runId: card.runId, inboxItemId: card.id }) ?? null
   const text = command
     ? command.map(shellWord).join(' ')
     : `${entry.name} ${asciiJson(approved.args)}`
