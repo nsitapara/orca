@@ -142,4 +142,17 @@ describe('a card that needs evidence', () => {
       expect(buttons.some((b) => /approve|post|push/i.test(b.label))).toBe(false)
     }
   )
+
+  // Nothing is preparing until Prepare evidence queues it, so its words never talk of context on its way.
+  it.each([
+    ['never prepared', { needsEvidence: true }, 'Answer without evidence…', /prepar(ation|ing)/i],
+    ['preparing', { preparation: { state: 'queued' } }, 'Answer before context is ready…', null]
+  ])('a %s card names its early answer for what it does', (_, over, label, absent) => {
+    const buttons = buttonsFor({ ...CARDS.bugDrafted, ...over } as never)
+    expect(buttons[0].label).toBe(label)
+    if (absent) {
+      const words = buttons.flatMap((b) => [b.label, b.hint, b.choice.meaning])
+      expect(words.filter((w) => absent.test(w))).toEqual([])
+    }
+  })
 })
