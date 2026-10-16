@@ -10,13 +10,10 @@ import { PILOT_COMMAND_SPECS } from './specs'
 const PILOT_KEYS = PILOT_HANDLER_GROUPS.flatMap((g) => g.keys)
 
 // Pilot's commands share upstream's `automations` namespace. If upstream ever adds the same verb, the
-// CLI throws at load (dispatch.ts builds its routes at import), so this test must fail first.
+// CLI throws at load (dispatch.ts builds its routes, Pilot's spread in, at import), so this test must fail first.
 describe("Pilot's CLI commands in upstream's route table", () => {
   it("builds upstream's routes with Pilot's groups spread in, with no duplicate key", () => {
-    for (const group of PILOT_HANDLER_GROUPS) {
-      expect(HANDLER_GROUPS).toContain(group)
-    }
-    expect(() => buildHandlerRoutes(HANDLER_GROUPS)).not.toThrow()
+    expect(() => buildHandlerRoutes([...HANDLER_GROUPS, ...PILOT_HANDLER_GROUPS])).not.toThrow()
     for (const key of PILOT_KEYS) {
       expect(HANDLER_COMMAND_KEYS.has(key)).toBe(true)
     }

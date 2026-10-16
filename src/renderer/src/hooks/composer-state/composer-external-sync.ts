@@ -22,6 +22,7 @@ export function useComposerExternalSync(target: ComposerTargetState): ComposerEx
     repoIdRef: target.runtimeTargetSelection.repoIdRef,
     runtimeEnvironmentId: target.workspaceIdentityState.runtimeEnvironmentId,
     selectedRepoConnectionIdRef: target.asyncComposerState.selectedRepoConnectionIdRef,
+    selectedRepoExecutionHostId: target.runtimeTargetSelection.selectedRepoExecutionHostId,
     selectedRepoHookContextKey: target.runtimeTargetSelection.selectedRepoHookContextKey,
     selectedRepoIsGit: target.runtimeTargetSelection.selectedRepoIsGit,
     selectedRepoSshStatus: target.runtimeTargetSelection.selectedRepoSshStatus,
@@ -97,8 +98,7 @@ export function useComposerExternalSync(target: ComposerTargetState): ComposerEx
     setPushTarget: target.workspaceIdentityState.setPushTarget,
     setStartFromResetHint: target.workspaceIdentityState.setStartFromResetHint,
     settings: target.composerTargetStore.settings,
-    smartGitHubPrStartPointSelectionRef:
-      target.asyncComposerState.smartGitHubPrStartPointSelectionRef
+    smartSourceSelectionRef: target.asyncComposerState.smartSourceSelectionRef
   })
   return {
     hostRuntimeEffects,

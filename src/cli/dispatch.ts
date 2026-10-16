@@ -1,6 +1,7 @@
 import type { RuntimeClient } from './runtime-client'
 import { RuntimeClientError } from './runtime/types'
 import { HANDLER_GROUPS, type HandlerGroup } from './handler-group-manifest'
+import { PILOT_HANDLER_GROUPS } from '../packages/pilot/src/cli/handler-groups' // pilot-hook: cli-handlers
 
 export type HandlerContext = {
   flags: Map<string, string | boolean>
@@ -30,7 +31,7 @@ function buildRoutes(groups: readonly HandlerGroup[]): Map<string, HandlerGroup>
   return table
 }
 
-const ROUTES = buildRoutes(HANDLER_GROUPS)
+const ROUTES = buildRoutes([...HANDLER_GROUPS, ...PILOT_HANDLER_GROUPS]) // pilot-hook: cli-handlers
 
 // Why: exposes only the canonical command keys, not the handler internals.
 export const HANDLER_COMMAND_KEYS: ReadonlySet<string> = new Set(ROUTES.keys())

@@ -3,7 +3,7 @@ import type { LocalFileAccess } from '../../../shared/local-file-access'
 import type { OpenFile } from '@/store/slices/editor'
 import { getConnectionIdForFile } from './connection-context'
 import { getRuntimeTargetForFileOwner } from './file-owner-runtime-target'
-import type { WorktreeRuntimeOwnerState } from './worktree-runtime-owner'
+import type { WorktreeRuntimeOwnerState } from './worktree-runtime-owner-state'
 
 const USER_FILE_ACCESS: LocalFileAccess = { kind: 'user-file' }
 const CHAT_IMAGE_ACCESS: LocalFileAccess = { kind: 'chat-image' }
@@ -47,9 +47,15 @@ type EditorTabAccessFile = Pick<
 
 /** A read-only tab named by absolute path is this computer's file: an AI Vault log or a client-local link. */
 export function isClientLocalReadOnlyTab(
-  file: Pick<OpenFile, 'filePath' | 'relativePath' | 'readOnly' | 'liveTail'>
+  file: Pick<OpenFile, 'filePath' | 'relativePath' | 'readOnly' | 'liveTail'> &
+    Partial<Pick<OpenFile, 'runtimeEnvironmentId'>>
 ): boolean {
-  return file.readOnly === true && (file.liveTail === true || file.relativePath === file.filePath)
+  return (
+    file.readOnly === true &&
+    // Why: a server-granted file (live or restored without its grant) names a server path.
+    !file.runtimeEnvironmentId?.trim() &&
+    (file.liveTail === true || file.relativePath === file.filePath)
+  )
 }
 
 /**

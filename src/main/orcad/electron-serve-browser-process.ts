@@ -5,14 +5,15 @@ import { join } from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
 import { z } from 'zod'
 import { BrowserError } from '../browser/browser-error'
-import type {
-  RuntimeBrowserCommandHost,
-  RuntimeBrowserCommands
-} from '../runtime/orca-runtime-browser'
+import type { RuntimeBrowserCommandHost } from '../runtime/browser/browser-command-contracts'
+import type { RuntimeBrowserCommands } from '../runtime/browser/browser-commands'
 import type { RuntimeMetadata } from '../../shared/runtime-bootstrap'
 import { BROWSER_UNAVAILABLE_ERROR_CODE } from '../../shared/runtime-types'
 import { readRuntimeMetadata } from '../runtime/runtime-metadata'
 import { spawnProcess } from '@orca/process-host'
+import { isProcessAlive } from '../../shared/serve-bundle-coordination'
+import { BROWSER_SIDECAR_OWNER_ENV } from '../../shared/browser-sidecar-lifetime'
+import { electronIsolatedProfileSwitches } from '../../shared/electron-isolated-profile-switches'
 import { sendOrcadSidecarRequest } from './orcad-sidecar-runtime-client'
 import {
   ElectronSidecarTabRegistry,
@@ -87,15 +88,6 @@ function signalProcess(pid: number, signal: NodeJS.Signals): void {
   }
 }
 
-function processIsLive(pid: number): boolean {
-  try {
-    process.kill(pid, 0)
-    return true
-  } catch {
-    return false
-  }
-}
-
 export class ElectronServeBrowserProcess {
   private child: ReturnType<typeof spawnProcess> | null = null
   private metadata: RuntimeMetadata | null = null
@@ -119,12 +111,12 @@ export class ElectronServeBrowserProcess {
         String(port),
         '--serve-json',
         '--serve-no-pairing',
-        ...(process.env.ORCA_E2E_USER_DATA_DIR || process.env.ORCA_E2E_HOME_DIR
-          ? ['--password-store=basic', '--use-mock-keychain']
-          : []),
+        ...electronIsolatedProfileSwitches(process.env),
         `--user-data-dir=${userDataPath}`
       ],
-      env: electronServeEnvironment(userDataPath)
+      env: { ...electronServeEnvironment(userDataPath), [BROWSER_SIDECAR_OWNER_ENV]: '1' },
+      stdio: ['pipe', 'pipe', 'pipe', 'ipc'],
+      serialization: 'json'
     })
     this.child = child
     for (const stream of [child.stdout, child.stderr]) {
@@ -165,6 +157,8 @@ export class ElectronServeBrowserProcess {
 
   createCommands(host: RuntimeBrowserCommandHost): RuntimeBrowserCommands {
     return new Proxy({} as RuntimeBrowserCommands, {
+      // Why: startup checks membership before invoking dynamically resolved commands.
+      has: (_target, property) => typeof property === 'string' && property !== 'then',
       get: (_target, property) => {
         if (property === 'then') {
           return undefined
@@ -177,7 +171,7 @@ export class ElectronServeBrowserProcess {
     })
   }
   isAvailable(): boolean {
-    return this.metadata !== null && processIsLive(this.metadata.pid)
+    return this.metadata !== null && isProcessAlive(this.metadata.pid)
   }
 
   async stop(): Promise<void> {
@@ -191,10 +185,10 @@ export class ElectronServeBrowserProcess {
     if (sidecarPid) {
       signalProcess(sidecarPid, 'SIGTERM')
       const deadline = Date.now() + STOP_TIMEOUT_MS
-      while (processIsLive(sidecarPid) && Date.now() < deadline) {
+      while (isProcessAlive(sidecarPid) && Date.now() < deadline) {
         await delay(50)
       }
-      if (processIsLive(sidecarPid)) {
+      if (isProcessAlive(sidecarPid)) {
         signalProcess(sidecarPid, 'SIGKILL')
       }
     }

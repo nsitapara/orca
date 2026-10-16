@@ -1,3 +1,4 @@
+import { orderTerminalRowsByTabGroups } from '../../../shared/workspace-layout/terminal-row-order'
 import type { PersistedState } from '../../../shared/persisted-state-types'
 import type { WorkspaceSessionState } from '../../../shared/workspace-session-state-types'
 import { sanitizeWorkspaceSessionTerminalRetirements } from '../../runtime/mobile-session-terminal-persistence-retirement'
@@ -16,6 +17,7 @@ import { preserveRuntimeAuthoredWorkspaceSessionFields } from '../runtime-author
 import { dropClosedTerminalTabs } from '../closed-terminal-tab-write-fence'
 import { findWorktreeIdForTab } from '../restoring-sessions/pane-identity-migration'
 import { invalidateLocalWorktreeMetadataPruneInputs } from '../../local-worktree-metadata-prune-gate'
+import { isWslMoveWorkspaceSessionFrozen } from '../moving-wsl-projects/wsl-move-scope-guard'
 import {
   removeWorkspaceSessionOwner,
   workspaceSessionPartitionIdsForHost
@@ -91,9 +93,11 @@ export class SessionHostPartitionOperations {
     const { [hostId]: _removed, ...remaining } = partitions
     runtime.state.workspaceSessionsByHostId = remaining
     invalidateLocalWorktreeMetadataPruneInputs()
-    scheduleSave(this[sessionHostPartitionOperationsContext].scheduling, [
-      'workspaceSessionsByHostId'
-    ])
+    scheduleSave(
+      this[sessionHostPartitionOperationsContext].scheduling,
+      ['workspaceSessionsByHostId'],
+      hostId
+    )
   }
 
   readTerminalScrollbackSnapshot(ref: string): string | null {
@@ -143,6 +147,10 @@ export function removeWorkspaceSessionOwnerInPartition(
   if (!hasPersistedWorkspaceSession(owner, resolved)) {
     return
   }
+  // A paused WSL move keeps its local rows for a downgrade.
+  if (resolved === LOCAL_EXECUTION_HOST_ID && isWslMoveWorkspaceSessionFrozen(worktreeId)) {
+    return
+  }
   const current = owner.getWorkspaceSession(resolved)
   const session = removeWorkspaceSessionOwner(current, worktreeId, {
     advanceTerminalTopologyRevision: options.advanceTerminalTopologyRevision ?? true
@@ -164,7 +172,8 @@ export function removeWorkspaceSessionOwnerInPartition(
   }
   scheduleSave(
     owner[sessionHostPartitionOperationsContext].scheduling,
-    resolved === LOCAL_EXECUTION_HOST_ID ? ['workspaceSession'] : ['workspaceSessionsByHostId']
+    resolved === LOCAL_EXECUTION_HOST_ID ? ['workspaceSession'] : ['workspaceSessionsByHostId'],
+    resolved
   )
 }
 
@@ -194,8 +203,11 @@ export function setHostWorkspaceSession(
   hostId: ExecutionHostId,
   session: WorkspaceSessionState
 ): void {
-  const prior =
+  const persisted =
     owner[sessionHostPartitionOperationsContext].runtime.state.workspaceSessionsByHostId?.[hostId]
+  const prior = persisted ? withRequiredWorkspaceSessionMaps(persisted) : undefined
+  // Host slices omit empty maps; retirement and rebasing need them before inspecting membership.
+  session = withRequiredWorkspaceSessionMaps(session)
   // Why here and not at the callers: the before-unload stage path writes the renderer's payload
   // straight through, so a per-caller guard leaves the quit write erasing runtime-authored rows.
   session = dropClosedTerminalTabs(preserveRuntimeAuthoredWorkspaceSessionFields(session, prior))
@@ -223,11 +235,13 @@ export function setHostWorkspaceSession(
   )
   owner[sessionHostPartitionOperationsContext].runtime.state.workspaceSessionsByHostId = {
     ...owner[sessionHostPartitionOperationsContext].runtime.state.workspaceSessionsByHostId,
-    [hostId]: withRequiredWorkspaceSessionMaps(pruned)
+    [hostId]: withRequiredWorkspaceSessionMaps(orderTerminalRowsByTabGroups(pruned))
   }
-  scheduleSave(owner[sessionHostPartitionOperationsContext].scheduling, [
-    'workspaceSessionsByHostId'
-  ])
+  scheduleSave(
+    owner[sessionHostPartitionOperationsContext].scheduling,
+    ['workspaceSessionsByHostId'],
+    hostId
+  )
 }
 
 /**
