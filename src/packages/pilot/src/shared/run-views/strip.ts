@@ -97,8 +97,9 @@ export function liveStrip(chain: readonly ChainPart[], live: readonly ActivityRu
       if (!lit.state || !LIT.includes(lit.state)) {
         continue
       }
-      // A run older than a YAML change: its step N isn't the chain's step N, so no step chip is lit for it.
-      if (painted.drifted && lit.key.startsWith('step:')) {
+      // A run older than a YAML change, or imported from the vault: its step N isn't the chain's step N, so no step
+      // chip is lit for it.
+      if ((painted.drifted || run.trigger === 'import') && lit.key.startsWith('step:')) {
         continue
       }
       const target = chips.find((c) => c.key === lit.key)

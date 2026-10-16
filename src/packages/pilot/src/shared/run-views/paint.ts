@@ -193,9 +193,12 @@ function paintBefore(p: ChainPart, input: PaintInput): PaintedPart {
 }
 
 // A step's row at its index (steps are written as they're reached: no row yet is not reached), or the open card it asked.
+// A default the agent took never holds the run (openCountForRun), so its step shows as it ran.
 function paintStep(p: ChainPart, run: ActivityRun): PaintedPart {
   const step = run.steps.find((s) => s.idx === p.stepIdx) ?? null
-  const card = run.inbox.find((i) => i.status === 'open' && i.stepIdx === p.stepIdx) ?? null
+  const card =
+    run.inbox.find((i) => i.status === 'open' && i.stepIdx === p.stepIdx && i.type !== 'default') ??
+    null
   if (card) {
     return painted(p, 'asking', null, { step, card })
   }
