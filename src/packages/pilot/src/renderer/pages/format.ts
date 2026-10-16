@@ -162,6 +162,15 @@ export function clockTime(ms: number): string {
   return new Date(ms).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
 }
 
+// "1:10:07 PM": the time of day to the second, for a run's timeline.
+export function clockSeconds(ms: number): string {
+  return new Date(ms).toLocaleTimeString([], {
+    hour: 'numeric',
+    minute: '2-digit',
+    second: '2-digit'
+  })
+}
+
 // Today's spend for the panel: the priced total, and "+ unpriced" when some usage had no price.
 export function spentLabel(usd: number, unpricedBuckets: number): string {
   if (unpricedBuckets > 0) {

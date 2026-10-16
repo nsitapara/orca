@@ -19,7 +19,7 @@ describe('FromRun', () => {
     pilotRpc.mockReset()
   })
 
-  it('shows the run that asked, lit where it asked, and opens it there', async () => {
+  it("shows the run's state and the steps that ran, lights the one that asked, and opens it there", async () => {
     pilotRpc.mockResolvedValue({
       automations: [summary],
       errors: [],
@@ -31,16 +31,36 @@ describe('FromRun', () => {
       automationId: 'fix-ci',
       itemLabel: '!1477',
       status: 'needs_you',
+      costUsd: 1.5,
       steps: [stepAt(0, 'fix', 'done')],
       inbox: [testCard({ automationId: 'fix-ci', stepIdx: 0 })]
     })
     render(<FromRun item={{ automationId: 'fix-ci', stepIdx: 0 }} run={run} />)
-    expect(
-      await screen.findByRole('button', { name: 'Agent · Claude · fix-gitlab-ci · Waiting on you' })
-    ).toBeTruthy()
-    expect(screen.getByText('!1477 · step 1 of 1 asked')).toBeTruthy()
+    const asked = await screen.findByRole('button', { name: 'Agent · 1 fix · Done' })
+    expect(asked.dataset.highlighted).toBe('')
+    expect(screen.getByText('Needs you')).toBeTruthy()
+    expect(screen.getByText('!1477')).toBeTruthy()
+    expect(screen.getByText('$1.50')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Open run' }))
     expect(openRunPanel()).toEqual({ runId: 'r1', part: 'step:0' })
+  })
+
+  it('says where a failed run stopped', async () => {
+    pilotRpc.mockResolvedValue({
+      automations: [summary],
+      errors: [],
+      peopleError: null,
+      missingDirs: []
+    })
+    const run = testRun({
+      automationId: 'fix-ci',
+      status: 'failed',
+      finishedAt: 9,
+      steps: [stepAt(0, 'fix', 'failed')],
+      inbox: [testCard({ automationId: 'fix-ci', stepIdx: 0 })]
+    })
+    render(<FromRun item={{ automationId: 'fix-ci', stepIdx: 0 }} run={run} />)
+    expect(await screen.findByText('Failed at step 1')).toBeTruthy()
   })
 
   it("opens a card an answer run asked at the answer run's step", async () => {

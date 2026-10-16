@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type {
   ActivityPayload,
@@ -8,6 +8,7 @@ import type {
   TickOutcome
 } from '../../shared/api-types'
 import { resetAutomationsFeed } from '../run-views/automations-feed'
+import { closeRunPanel, openRunPanel } from '../run-views/run-panel-state'
 import { detail, failedRunTick, summary } from './fixtures'
 
 const pilotRpc = vi.fn()
@@ -58,36 +59,20 @@ describe('AutomationView', () => {
     setPilotAutomationTab('how')
   })
 
-  it('opens on How it runs: the facts, the chain, and the newest run painted on it', async () => {
+  it('opens on How it runs: the facts and the plan with no run painted on it, and its latest run opens the run', async () => {
     serve()
     const { container } = render(
       <AutomationView id="fix-ci" onBack={() => {}} onOpenJob={() => {}} />
     )
     expect(await screen.findByRole('tab', { name: 'How it runs', selected: true })).toBeTruthy()
     expect(screen.getByText('Run by hand (America/Los_Angeles)')).toBeTruthy()
-    const picker = (await screen.findByRole('combobox', { name: 'Run' })) as HTMLSelectElement
-    await waitFor(() => expect(picker.value).toBe('fix-ci-3'))
-    await waitFor(() =>
-      expect(container.querySelector('[data-part="workspace"]')?.getAttribute('data-state')).toBe(
-        'failed'
-      )
-    )
-  })
-
-  it('shows the bare chain when No run is picked', async () => {
-    serve()
-    const { container } = render(
-      <AutomationView id="fix-ci" onBack={() => {}} onOpenJob={() => {}} />
-    )
-    const picker = (await screen.findByRole('combobox', { name: 'Run' })) as HTMLSelectElement
-    const state = (): string | null | undefined =>
-      container.querySelector('[data-part="workspace"]')?.getAttribute('data-state')
-    await waitFor(() => {
-      expect(picker.value).toBe('fix-ci-3')
-      expect(state()).toBe('failed')
-    })
-    fireEvent.change(picker, { target: { value: '' } })
-    await waitFor(() => expect(state()).toBeNull())
+    expect(await screen.findByText('Latest run')).toBeTruthy()
+    expect(screen.getByText('Failed')).toBeTruthy()
+    expect(container.querySelector('[data-part="workspace"]')).toBeTruthy()
+    expect(container.querySelector('[data-state]')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Open run' }))
+    expect(openRunPanel()).toEqual({ runId: 'fix-ci-3', part: null })
+    closeRunPanel()
   })
 
   it('shows its Activity, asking only for this automation and only ticks with something to do', async () => {

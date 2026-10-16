@@ -30,6 +30,8 @@ export type PaintedPart = ChainPart & {
   step: StepRow | null
   // The open card this part waits on.
   card: InboxItemSummary | null
+  // Every card a step left, open or not, defaults too: the run panel shows them under the step.
+  cards: InboxItemSummary[]
   // A run this part leads to: the run a handover started, an answer run, the run an answer run answers.
   linkRunId: string | null
 }
@@ -92,9 +94,9 @@ function painted(
   p: ChainPart,
   state: PartState,
   detail: string | null = null,
-  extra: Partial<Pick<PaintedPart, 'step' | 'card' | 'linkRunId'>> = {}
+  extra: Partial<Pick<PaintedPart, 'step' | 'card' | 'cards' | 'linkRunId'>> = {}
 ): PaintedPart {
-  return { ...p, state, detail, step: null, card: null, linkRunId: null, ...extra }
+  return { ...p, state, detail, step: null, card: null, cards: [], linkRunId: null, ...extra }
 }
 
 function isLive(run: RunRow): boolean {
@@ -192,24 +194,21 @@ function paintBefore(p: ChainPart, input: PaintInput): PaintedPart {
   return painted(p, 'done')
 }
 
-// A step's row at its index (steps are written as they're reached: no row yet is not reached), or the open card it asked.
-// A default the agent took never holds the run (openCountForRun), so its step shows as it ran.
+// A step's row at its index (steps are written as they're reached: no row yet is not reached), with the cards it left.
+// A card never holds a step: a finished run with an open card waits on its person (needs_you), so the step shows as it
+// ran and `card` names the open one (a default the agent took never holds the run: openCountForRun).
 function paintStep(p: ChainPart, run: ActivityRun): PaintedPart {
   const step = run.steps.find((s) => s.idx === p.stepIdx) ?? null
-  const card =
-    run.inbox.find((i) => i.status === 'open' && i.stepIdx === p.stepIdx && i.type !== 'default') ??
-    null
-  if (card) {
-    return painted(p, 'asking', null, { step, card })
-  }
+  const cards = run.inbox.filter((i) => i.stepIdx === p.stepIdx)
+  const card = cards.find((i) => i.status === 'open' && i.type !== 'default') ?? null
   if (!step) {
-    return painted(p, 'not_reached')
+    return painted(p, card ? 'asking' : 'not_reached', null, { card, cards })
   }
   return painted(
     p,
     STEP_STATE[step.status],
     step.status === 'stopped' ? 'Stopped the run here' : null,
-    { step }
+    { step, card, cards }
   )
 }
 
