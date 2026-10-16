@@ -23,7 +23,9 @@ export const R10_FOLDERS = [
   'src/main/startup',
   'src/main/updater',
   'src/renderer/src/app-shell',
-  'src/renderer/src/components/right-sidebar'
+  'src/renderer/src/components/right-sidebar',
+  // skill-open-file: SkillDetailDialog has no test of its own; the skills page's tests render it.
+  'src/renderer/src/components/skills'
 ]
 const CODE_FILE = /\.tsx?$/
 
