@@ -91,6 +91,16 @@ describe('starting the playground', () => {
     expect(service.status()).toEqual({ state: 'stopped', repoPath: '/r/web', reason })
   })
 
+  it('is stopped again when the project check fails, so a later Start works', async () => {
+    const { service } = world({
+      repos: () => {
+        throw new Error('the runtime has no repos yet')
+      }
+    })
+    await expect(service.start('/r/web')).rejects.toThrow('the runtime has no repos yet')
+    expect(service.status()).toEqual({ state: 'stopped', repoPath: null, reason: null })
+  })
+
   it('says why it could not spawn', async () => {
     const { service } = world({ spawn: () => ({ error: "pilotcli isn't installed" }) })
     expect(await service.start('/r/web')).toEqual({
