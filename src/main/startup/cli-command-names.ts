@@ -1,5 +1,5 @@
 // Kept import-free for main/CLI project isolation; a parity test prevents drift.
-import { PILOT_CLI_COMMAND_NAMES } from '../../packages/pilot/src/cli/command-names' // pilot-hook: cli-command-names
+import { PILOT_CLI_COMMAND_NAMES } from '../../packages/pilot/src/shared/cli-command-names' // pilot-hook: cli-command-names
 export const CLI_COMMAND_NAMES = [
   ...PILOT_CLI_COMMAND_NAMES, // pilot-hook: cli-command-names
   'account',
