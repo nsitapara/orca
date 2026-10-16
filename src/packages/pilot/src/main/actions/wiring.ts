@@ -1,28 +1,55 @@
+import { existsSync } from 'node:fs'
+import { join } from 'node:path'
+import type { OrcaRuntimeService } from '../../../../../main/runtime/orca-runtime'
 import type { EngineEnv } from '../engine-env'
+import { pilotDetailsRoot } from '../env'
 import { pilotcliPath, pilotcliRunner } from '../envs/pilotcli'
-import type { LinearWriter } from '../linear-connector/linear-writer'
-import { actBridge } from './act-bridge'
+import { listedRepoPath } from '../fields/runtime-facts'
+import { createLinearWriter } from '../linear-connector/linear-writer'
 import { buildActionCatalog } from './catalog'
+import { callerFolder } from './caller-folder'
+import { markReadyEntry } from './mark-ready'
+import { openCardsOn } from './mr-open-cards'
+import { postReviewEntry, REVIEWS_JOB_FOLDER } from './post-review'
 import { pushBranchEntry } from './push-branch'
 import { startRunEntry } from './start-run-entry'
-import type { ActionCatalog } from './types'
+import type { ActionCaller, ActionCatalog } from './types'
 
-// The one catalog Pilot's services build: act.py's mark_ready and post_review, pilotcli's push, the Linear writes and
-// start_run. Built once; nothing runs until an action is attempted. start_run reaches the engine lazily.
+// The one catalog Pilot's services build: pilotcli's push, mark_ready and post_review, the Linear writes and start_run.
+// Built once; nothing runs until an action is attempted. start_run reaches the engine lazily. mark_ready and
+// post_review read the card or run that asks from Pilot's store: its folder, and the open cards on its MR.
 export function pilotActionCatalog(deps: {
   engineEnv: EngineEnv
-  linear: LinearWriter | null
+  runtime: OrcaRuntimeService
   startRun: Parameters<typeof startRunEntry>[0]
 }): ActionCatalog {
-  // One lookup for a push card's Run line and the call itself, read at each use (pilotcli.ts).
+  // One lookup for a card's Run line and the call itself, read at each use (pilotcli.ts).
   const binary = () => pilotcliPath()
+  const pilotcli = pilotcliRunner({ pilotBinDir: deps.engineEnv.binDir, binary })
+  const store = deps.startRun.store
+  const definitions = () => deps.startRun.definitions()
+  const folderDeps = {
+    store,
+    definitions,
+    repoPath: (repo: string) => listedRepoPath(deps.runtime, repo),
+    exists: existsSync
+  }
+  const folder = (caller: ActionCaller) => callerFolder(folderDeps, caller)
   return buildActionCatalog({
-    act: actBridge({ engineEnv: deps.engineEnv }),
-    push: pushBranchEntry({
-      pilotcli: pilotcliRunner({ pilotBinDir: deps.engineEnv.binDir, binary }),
-      binary
+    push: pushBranchEntry({ pilotcli, binary }),
+    markReady: markReadyEntry({
+      pilotcli,
+      binary,
+      folder,
+      openCards: (iid, caller) => openCardsOn({ store, definitions }, iid, caller)
     }),
-    linear: deps.linear,
+    postReview: postReviewEntry({
+      pilotcli,
+      binary,
+      reviewsDir: () => join(pilotDetailsRoot(), REVIEWS_JOB_FOLDER),
+      folder
+    }),
+    linear: createLinearWriter(deps.runtime),
     extra: [startRunEntry(deps.startRun)]
   })
 }

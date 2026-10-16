@@ -47,7 +47,6 @@ import { PilotScheduler } from './scheduler/scheduler'
 import { registrySources } from './scheduler/tick-decide'
 import { runTick, type TickDeps } from './scheduler/tick-runner'
 import { createPassFetchCache } from './sources/fetch-cache'
-import { createLinearWriter } from './linear-connector/linear-writer'
 import { glabApiForRepo } from './sources/gitlab-api'
 import { registerPilotSources } from './sources/register-sources'
 import { PilotStore } from './store/store'
@@ -171,7 +170,7 @@ function openPilot(
   })
   const actions = pilotActionCatalog({
     engineEnv,
-    linear: createLinearWriter(runtime),
+    runtime,
     startRun: {
       store,
       now,

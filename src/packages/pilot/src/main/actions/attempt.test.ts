@@ -101,7 +101,11 @@ describe('attemptAction', () => {
       outcome: 'done',
       detail: 'pushed web-1 to 9c1e2f04'
     })
-    expect(push.run).toHaveBeenCalledWith(REQ.args, { dryRun: false, runId: 'run-1' })
+    expect(push.run).toHaveBeenCalledWith(REQ.args, {
+      dryRun: false,
+      runId: 'run-1',
+      inboxItemId: null
+    })
     expect(store.actions.forRun('run-1')).toMatchObject([
       { action: 'publish', phase: 'do', status: 'done', dryRun: false, finishedAt: 50 }
     ])
@@ -242,7 +246,11 @@ describe('attemptAction', () => {
     expect(await attemptAction(deps, { ...REQ, runId: null, dryRun: true })).toMatchObject({
       outcome: 'done'
     })
-    expect(push.run).toHaveBeenCalledWith(REQ.args, { dryRun: true, runId: null })
+    expect(push.run).toHaveBeenCalledWith(REQ.args, {
+      dryRun: true,
+      runId: null,
+      inboxItemId: null
+    })
   })
 
   it('refuses an approval that names no card, or no digest', async () => {
@@ -289,14 +297,22 @@ describe('attemptAction on an approved card', () => {
   it('runs a card Pilot asked about, without the power: the approval is the go-ahead', async () => {
     const { push, deps, card } = await asked()
     expect(await attemptAction(deps, approve(card))).toMatchObject({ outcome: 'done' })
-    expect(push.run).toHaveBeenCalledWith(REQ.args, { dryRun: false, runId: 'run-1' })
+    expect(push.run).toHaveBeenCalledWith(REQ.args, {
+      dryRun: false,
+      runId: 'run-1',
+      inboxItemId: card.id
+    })
   })
 
   it("runs the card's own args, whatever args the request carries", async () => {
     const { push, deps, card } = await asked()
     const sneaky = { ...approve(card), args: { argv: ['/elsewhere', 'main', 'x', 'y'] } }
     expect(await attemptAction(deps, sneaky)).toMatchObject({ outcome: 'done' })
-    expect(push.run).toHaveBeenCalledWith(REQ.args, { dryRun: false, runId: 'run-1' })
+    expect(push.run).toHaveBeenCalledWith(REQ.args, {
+      dryRun: false,
+      runId: 'run-1',
+      inboxItemId: card.id
+    })
   })
 
   it("runs a card the automation filed itself while it has the action's power", async () => {
@@ -329,7 +345,8 @@ describe('attemptAction on an approved card', () => {
     })
     expect(push.run).toHaveBeenCalledWith('args' in shown ? shown.args : null, {
       dryRun: false,
-      runId: 'run-1'
+      runId: 'run-1',
+      inboxItemId: card.id
     })
   })
 
@@ -348,7 +365,7 @@ describe('attemptAction on an approved card', () => {
     })
     expect(push.run).toHaveBeenCalledWith(
       { argv: [...(REQ.args.argv as string[]), '--except', 'F2'] },
-      { dryRun: false, runId: 'run-1' }
+      { dryRun: false, runId: 'run-1', inboxItemId: card.id }
     )
   })
 
@@ -449,7 +466,7 @@ describe('attemptAction on an approved card', () => {
     expect(await attemptAction(deps, approve(revised))).toMatchObject({ outcome: 'done' })
     expect(push.run).toHaveBeenCalledWith(
       { argv: ['/wt', 'web-1', 'ffff', 'bbb'] },
-      { dryRun: false, runId: 'run-1' }
+      { dryRun: false, runId: 'run-1', inboxItemId: card.id }
     )
   })
 
@@ -485,7 +502,7 @@ describe('attemptAction on an approved card', () => {
     expect(await attemptAction(deps, approve(twice))).toMatchObject({ outcome: 'done' })
     expect(push.run).toHaveBeenCalledWith(
       { argv: ['/wt', 'web-1', 'eeee', 'bbb'] },
-      { dryRun: false, runId: 'run-1' }
+      { dryRun: false, runId: 'run-1', inboxItemId: card.id }
     )
   })
 

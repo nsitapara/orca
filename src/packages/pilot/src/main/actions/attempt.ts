@@ -189,7 +189,11 @@ async function runEntry(
   args: Record<string, unknown>
 ): Promise<ActionResult> {
   const id = startRow(deps, row, args)
-  const result = await runSafely(entry, args, { dryRun: row.dryRun, runId: row.runId })
+  const result = await runSafely(entry, args, {
+    dryRun: row.dryRun,
+    runId: row.runId,
+    inboxItemId: row.inboxItemId
+  })
   const at = deps.now()
   deps.store.actions.finish(id, result.outcome, JSON.stringify(result), at)
   if (result.outcome !== 'not_yet') {
