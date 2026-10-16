@@ -28,11 +28,12 @@ Every change Pilot makes to an upstream file is listed here (D24). Each one is a
 | orca-automations-off       | src/main/startup/main-process-automations.ts                                  | keepOrcaAutomationsOff(service, store)                 | Pilot runs YAML automations only: Orca's own engine is stopped at startup (spec hook 1)                                                                                                   |
 | agent-launch-env           | src/main/runtime/terminal/launch/terminal-create-deduplication.ts             | withPilotAgentLaunch(                                  | a Pilot step's env (PILOT_*, AGENT_RUN) and its --session-id/--resume/args reach the agent; launchAgentTerminal forwards no env and extraAgentArgs allows only --model/--effort/--add-dir |
 | right-sidebar-badge        | src/renderer/src/components/right-sidebar/activity-bar-buttons.tsx            | <PilotActivityBadge                                    | waiting count or running dot on the Automations icon (the bar's own slot is a status dot with no count, fed from a memo Pilot can't refresh)                                              |
-| sidebar-waiting-item       | src/renderer/src/components/sidebar/SidebarNav.tsx                            | <PilotWaiting.WaitingNavItem />                        | Inbox under Automations, with its count                                                                                                                                                   |
+| sidebar-waiting-item       | src/renderer/src/components/sidebar/SidebarNav.tsx                            | <PilotWaiting.WaitingNavItem />                        | Inbox (with its count) and Playground under Automations                                                                                                                                   |
 | sidebar-automations-active | src/renderer/src/components/sidebar/SidebarNav.tsx                            | PilotWaiting.useAutomationsActive(                     | Automations isn't highlighted while Inbox shows                                                                                                                                           |
 | sidebar-automations-open   | src/renderer/src/components/sidebar/SidebarNav.tsx                            | PilotWaiting.useOpenAutomationsPage(                   | clicking Automations leaves Inbox                                                                                                                                                         |
 | tray-after-launch          | src/main/startup/main-window-controller.ts                                    | deferTrayPastLaunch(                                   | macOS can deadlock the main thread for good when the status item is made as the window is revealed (stablyai/orca#17045): make it 10s later; end the window's startup phases              |
 | vitest-orcad-sidecar-sweep | config/vitest.config.ts                                                       | pilot-hook: vitest-orcad-sidecar-sweep                 | stop the `--serve` browser host upstream's serve-parity test orphans when it SIGKILLs orcad; it holds a port on every interface and blocks Orca's updater                                 |
+| skill-open-file            | src/renderer/src/components/skills/SkillDetailDialog.tsx                      | <OpenSkillFile                                         | Open in a skill's details opens its SKILL.md in the editor                                                                                                                                |
 
 Which hook was added for the startup hang, and why:
 
@@ -59,5 +60,9 @@ Which hooks were added for the YAML engine, and why:
 Which hooks were added for card details, and why:
 
 - `sidebar-waiting-item`, `sidebar-automations-active` and `sidebar-automations-open`: the Inbox item under Automations, its highlight rule, and the Automations click that leaves it. They are three one-line hooks in `SidebarNav.tsx` and add no `activeView`; the card Details themselves live wholly in Pilot's folder.
+
+Which hook was added for reading skills, and why:
+
+- `skill-open-file`: upstream's skill details can Reveal a skill's file or copy its path, but not open it. Nish wants the skills a job uses to be easy to read (2026-10-15), so Open puts the SKILL.md in the floating workspace's editor, as the OS's "Open With" does, and closes the details. The hook is the import and one JSX element; `OpenSkillFile` renders nothing until `attachPilotRenderer()` registers the store, so upstream's skills tests see the dialog as it was.
 
 The table says which of these are in place.
