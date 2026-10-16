@@ -3,11 +3,14 @@ import type { InboxItemRow } from '../../../shared/api-types'
 import { startNotes } from '../../../shared/answers/route'
 import {
   ageLabel,
+  applyReport,
   askedLabel,
   choicesFor,
   composeAnswer,
+  heldTooLong,
   jobCode,
   queueNote,
+  queueSummary,
   waitingCount,
   worktreeName
 } from './answer-text'
@@ -193,12 +196,65 @@ describe('queue and rail words', () => {
       { state: 'held', holdReason: 'typing', holdDetail: 'someone is typing in zsh', readyAt: 0 },
       'someone is typing in zsh'
     ],
-    [{ state: 'not_ready', holdReason: null, holdDetail: null, readyAt: 5 }, 'Settles at 10:42'],
+    [{ state: 'not_ready', holdReason: null, holdDetail: null, readyAt: 161_000 }, 'Goes in 2:41'],
+    [
+      { state: 'not_ready', holdReason: null, holdDetail: null, readyAt: 0 },
+      'Next answer check, under a minute'
+    ],
     [
       { state: 'ready', holdReason: null, holdDetail: null, readyAt: 0 },
       'Next answer check, under a minute'
     ]
-  ])('%j', (entry, note) => expect(queueNote(entry as never, () => '10:42')).toBe(note))
+  ])('%j', (entry, note) => expect(queueNote(entry as never, 0)).toBe(note))
+
+  const MIN = 60_000
+  it.each([
+    ['held 20 minutes', { state: 'held', holdReason: 'typing', readyAt: -20 * MIN }, true],
+    ['held 19 minutes', { state: 'held', holdReason: 'typing', readyAt: -19 * MIN }, false],
+    [
+      'a not-yet hold, however old',
+      { state: 'held', holdReason: 'waits', readyAt: -60 * MIN },
+      false
+    ],
+    ['settling', { state: 'not_ready', holdReason: null, readyAt: -60 * MIN }, false]
+  ])('%s: held too long is %s', (_name, entry, want) => {
+    expect(heldTooLong(entry as never, 0)).toBe(want)
+  })
+
+  it.each([
+    [
+      'held, due and settling',
+      [
+        { state: 'held', readyAt: -MIN },
+        { state: 'held', readyAt: -MIN },
+        { state: 'ready', readyAt: -MIN },
+        { state: 'not_ready', readyAt: 161_000 }
+      ],
+      '4 from your answers (2 held · 1 at the next check · 1 in 2:41)'
+    ],
+    [
+      'several settling, from the first',
+      [
+        { state: 'not_ready', readyAt: 3 * MIN },
+        { state: 'not_ready', readyAt: 61_000 }
+      ],
+      '2 from your answers (2 from 1:01)'
+    ]
+  ])('sums up %s', (_name, entries, want) => {
+    expect(queueSummary(entries as never, 0)).toBe(want)
+  })
+
+  it.each([
+    [{ ticked: 3, held: 2 }, '3 closed · 2 still held'],
+    [
+      { actions: 1, agents: 1, reasked: 1, retired: 1 },
+      '1 ran an action · 1 sent to an agent · 1 asked again · 1 retired with the MR'
+    ],
+    [{}, 'Nothing was due']
+  ])('says what Apply now did: %j', (counts, want) => {
+    const report = { retired: 0, ticked: 0, actions: 0, agents: 0, held: 0, reasked: 0, ...counts }
+    expect(applyReport(report)).toBe(want)
+  })
 
   it('names a worktree by its folder, and counts only open non-default cards', () => {
     expect([worktreeName('/wt/web-1493'), worktreeName(null)]).toEqual(['web-1493', 'Job-wide'])
