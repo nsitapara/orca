@@ -8,8 +8,10 @@ const m = vi.hoisted(() => ({
   stop: vi.fn(),
   quota: vi.fn(),
   codexQuota: vi.fn(),
-  onWillQuit: vi.fn()
+  onWillQuit: vi.fn(),
+  hold: vi.fn()
 }))
+const PATH_FOUND = vi.hoisted(() => Promise.resolve())
 const dog = vi.hoisted(() => ({ begin: vi.fn(), end: vi.fn(), stop: vi.fn() }))
 const host = vi.hoisted(() => ({
   app: { isPackaged: false, setName: () => {}, getAppPath: () => '/repo' },
@@ -21,10 +23,12 @@ vi.mock('./pilot-services', () => ({ startPilotServices: m.start }))
 vi.mock('./fields/claude-quota', () => ({ claudeQuotaReader: () => m.quota }))
 vi.mock('./fields/codex-quota', () => ({ codexQuotaReader: () => m.codexQuota }))
 vi.mock('./startup/startup-watchdog', () => ({ startStartupWatchdog: () => dog }))
+vi.mock('./startup/login-path', () => ({ loginPath: () => PATH_FOUND }))
 
 import { attachPilotMain } from './attach-main'
 
 const runtime = {} as OrcaRuntimeService
+const services = () => ({ stop: m.stop, context: { scheduler: { holdUntil: m.hold } } })
 
 describe('attachPilotMain', () => {
   beforeEach(() => {
@@ -50,14 +54,15 @@ describe('attachPilotMain', () => {
     vi.restoreAllMocks()
   })
 
-  it('starts Pilot with both quota readers and stops it when the app quits', () => {
-    m.start.mockReturnValue({ stop: m.stop, context: {} })
+  it("starts Pilot with both quota readers, holds its scheduler until the login shell's PATH is in, and stops it when the app quits", () => {
+    m.start.mockReturnValue(services())
     attachPilotMain(runtime)
     expect(m.start).toHaveBeenCalledWith(runtime, 'main', {
       quotas: { claude: m.quota, codex: m.codexQuota },
       engineEnv: { binDir: '/Apps/Pilot.app/Contents/Resources/bin', dataDir: '/data/pilot' },
       schedulerEnabled: true
     })
+    expect(m.hold).toHaveBeenCalledWith(PATH_FOUND)
     m.onWillQuit.mock.calls[0][0]()
     expect(m.stop).toHaveBeenCalledTimes(1)
   })
@@ -80,9 +85,11 @@ describe('attachPilotMain', () => {
       host.app.isPackaged = packaged
       host.state.isServeMode = serve
       vi.stubEnv('PILOT_SCHEDULER', env)
-      m.start.mockReturnValue({ stop: m.stop, context: {} })
+      m.start.mockReturnValue(services())
       attachPilotMain(runtime)
       expect(m.start.mock.calls[0][2]).toMatchObject({ schedulerEnabled: on })
+      // Upstream probes the login shell's PATH only in a packaged app.
+      expect(m.hold).toHaveBeenCalledTimes(packaged ? 1 : 0)
     }
   )
 
@@ -135,7 +142,7 @@ describe('attachPilotMain', () => {
           throw new Error('database is locked')
         })
       } else {
-        m.start.mockReturnValue({ stop: m.stop, context: {} })
+        m.start.mockReturnValue(services())
       }
       attachPilotMain(runtime)
       expect(dog.begin.mock.calls.map(([phase]) => phase)).toEqual(watched)

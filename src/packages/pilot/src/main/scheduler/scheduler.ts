@@ -73,6 +73,7 @@ export class PilotScheduler {
   // When each stage was last triggered (within the minute), and the trigger that came while its tick ran.
   private readonly triggeredAt = new Map<string, number[]>()
   private readonly retrigger = new Map<string, TickTrigger>()
+  private ready: Promise<void> = Promise.resolve()
 
   constructor(
     private readonly deps: SchedulerDeps,
@@ -101,6 +102,12 @@ export class PilotScheduler {
     this.deps.log(
       `[pilot] scheduler started: first check in ${seconds(this.startDelayMs)}, then every ${seconds(this.intervalMs)}`
     )
+  }
+
+  // Loops wait for `ready` before they poll or tick: a poll starts runs' next steps and a tick starts runs. attach-main
+  // holds them until PATH is the login shell's (startup/login-path.ts).
+  holdUntil(ready: Promise<void>): void {
+    this.ready = ready
   }
 
   // A loop already running finishes its ticks in flight and starts no more.
@@ -196,6 +203,12 @@ export class PilotScheduler {
   // Poll first, so runs that ended (or never started) free their at_once slots and worktrees before
   // this loop's decisions. Every step is isolated: one failure never skips the rest.
   private async runLoop(): Promise<void> {
+    try {
+      await this.ready
+    } catch (error) {
+      this.ready = Promise.resolve()
+      this.deps.log(`[pilot] login-shell PATH wait failed: ${messageOf(error)}`)
+    }
     try {
       await this.deps.poll()
     } catch (error) {

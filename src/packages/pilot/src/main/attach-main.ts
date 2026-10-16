@@ -7,6 +7,7 @@ import { pilotBinDir } from './engine-env'
 import { claudeQuotaReader } from './fields/claude-quota'
 import { codexQuotaReader } from './fields/codex-quota'
 import { startPilotServices, type PilotServices } from './pilot-services'
+import { loginPath } from './startup/login-path'
 import { beginPilotStartup } from './startup/pilot-startup'
 
 // Hook target: src/main/startup/main-process-ready-runtime.ts (pilot-hook: main). Runs once in desktop
@@ -69,6 +70,10 @@ export function attachPilotMain(runtime: OrcaRuntimeService): void {
   } finally {
     // Ended when the main window is created (pilot-hook: tray-after-launch); serve has no such phase.
     startup.begin('launch')
+  }
+  // Upstream probes the login shell's PATH only in a packaged app outside Windows (main-process-preflight.ts).
+  if (app.isPackaged && process.platform !== 'win32') {
+    services.context.scheduler.holdUntil(loginPath())
   }
   getAppEnvironment().onWillQuit(() => services.stop())
 }
