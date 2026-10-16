@@ -106,6 +106,19 @@ describe('paintRun', () => {
       }
     ],
     [
+      'a step that took a default',
+      chain,
+      {
+        run: testRun({
+          status: 'done',
+          finishedAt: 5,
+          steps: allSteps,
+          inbox: [testCard({ stepIdx: 1, type: 'default' })]
+        })
+      },
+      { 'step:1': 'done', answers: 'none' }
+    ],
+    [
       'failed, with its always cleanup run',
       chain,
       {

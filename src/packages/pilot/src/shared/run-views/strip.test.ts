@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { testDefinition, testStep } from '../definition/__fixtures__/definition'
-import { stepAt, testRun } from './__fixtures__/runs'
+import { stepAt, testCard, testRun } from './__fixtures__/runs'
 import { chainOf } from './chain'
 import { paintRun } from './paint'
 import { foldStrip, liveStrip, stripOf, type StripChip, type StripItem } from './strip'
@@ -96,14 +96,30 @@ describe('liveStrip', () => {
     expect(lit.find((c) => c.key === 'pre')).toMatchObject({ state: null, runIds: [] })
   })
 
-  it('lights no step chip for a live run older than a YAML change', () => {
-    const old = testRun({
-      id: 'old',
-      automationId: 'review',
-      trigger: 'ask_first',
-      steps: [stepAt(0, 'renamed_step', 'running')]
-    })
-    const lit = liveStrip(chain, [old])
+  it.each([
+    [
+      'older than a YAML change',
+      testRun({
+        id: 'old',
+        automationId: 'review',
+        trigger: 'ask_first',
+        steps: [stepAt(0, 'renamed_step', 'running')]
+      })
+    ],
+    [
+      'imported from the vault',
+      testRun({
+        id: 'imp',
+        automationId: 'review',
+        tickId: null,
+        trigger: 'import',
+        status: 'needs_you',
+        steps: [stepAt(0, 'imported', 'done')],
+        inbox: [testCard({ runId: 'imp', stepIdx: 0, type: 'left_for_you' })]
+      })
+    ]
+  ])('lights no step chip for a live run %s', (_, run) => {
+    const lit = liveStrip(chain, [run])
     expect(lit.find((c) => c.key === 'step:0')).toMatchObject({ state: null, runIds: [] })
   })
 
