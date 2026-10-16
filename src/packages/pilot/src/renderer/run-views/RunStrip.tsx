@@ -30,7 +30,7 @@ function Chip({
         onChip(chip)
       }}
       className={cn(
-        'inline-flex max-w-[14rem] items-center gap-1 rounded border px-1.5 text-[11px] leading-5 hover:brightness-110',
+        'inline-flex max-w-[min(14rem,100%)] items-center gap-1 rounded border px-1.5 text-[11px] leading-5 hover:brightness-110',
         WHO_CLASS[chip.who],
         chip.state ? STATE_CLASS[chip.state] : ''
       )}

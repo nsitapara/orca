@@ -26,10 +26,14 @@ import { openRun } from '../run-views/run-panel-state'
 import { showActivity, showPilotAutomation } from './automations-view'
 import { EnabledSwitch, type Toggle } from './EnabledSwitch'
 
+// Names and ticks truncate, so the columns can be narrow. Below the sum of their minimums (TABLE_MIN) the table
+// scrolls inside its own box instead of pushing the page sideways.
 const COLS =
-  'grid grid-cols-[minmax(14rem,2fr)_minmax(10rem,2.5fr)_minmax(8rem,1fr)_minmax(12rem,1.5fr)_6rem] gap-3'
+  'grid grid-cols-[minmax(9rem,2fr)_minmax(9rem,2.5fr)_minmax(5rem,1fr)_minmax(7rem,1.5fr)_6rem] gap-3'
+const TABLE_MIN = 'min-w-[40.5rem]'
 const ROW = 'min-h-11 w-full border-t border-border/50 px-3 py-3 text-left text-sm hover:bg-accent'
-const STAGE_ROW = 'min-h-9 w-full bg-muted/30 py-2 pl-10 pr-3 text-left text-sm hover:bg-accent'
+// Same padding as ROW so the stage's cells line up with the headers; the indent is inside its name cell.
+const STAGE_ROW = 'min-h-9 w-full bg-muted/30 px-3 py-2 text-left text-sm hover:bg-accent'
 
 export function scheduleText(a: AutomationSummary): string {
   return a.schedule === 'manual' ? 'Run by hand' : a.schedule
@@ -173,7 +177,7 @@ function StageRow({
       <button
         type="button"
         aria-label={`Stage ${a.job?.stage ?? ''} ${label}`}
-        className="flex min-w-0 items-baseline gap-3 text-left"
+        className="flex min-w-0 items-baseline gap-3 pl-7 text-left"
       >
         <span className="font-mono text-xs text-muted-foreground">{a.job?.stage}</span>
         <span className="truncate">{label}</span>
@@ -297,44 +301,46 @@ export function AutomationsTable({
     return <p className="text-sm text-muted-foreground">No automations found.</p>
   }
   return (
-    <div className="rounded-md border border-border/50 bg-muted/20">
-      <div
-        role="row"
-        className={`${COLS} h-8 items-center px-3 text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground`}
-      >
-        {HEADERS.map(([column, label]) => (
-          <span key={column} role="columnheader" aria-sort={ariaSort(sort, column)}>
-            <button
-              type="button"
-              onClick={() => choose(column)}
-              className="uppercase hover:text-foreground"
-            >
-              {label}
-              {sortMark(sort, column)}
-            </button>
-          </span>
-        ))}
+    <div className="overflow-x-auto rounded-md border border-border/50 bg-muted/20">
+      <div className={TABLE_MIN}>
+        <div
+          role="row"
+          className={`${COLS} h-8 items-center px-3 text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground`}
+        >
+          {HEADERS.map(([column, label]) => (
+            <span key={column} role="columnheader" aria-sort={ariaSort(sort, column)}>
+              <button
+                type="button"
+                onClick={() => choose(column)}
+                className="uppercase hover:text-foreground"
+              >
+                {label}
+                {sortMark(sort, column)}
+              </button>
+            </span>
+          ))}
+        </div>
+        {sortEntries(listEntries(payload.automations), sort).map((entry) =>
+          entry.kind === 'job' ? (
+            <JobRows
+              key={`job:${entry.id}`}
+              job={entry}
+              now={now}
+              onOpen={onOpen}
+              onOpenJob={onOpenJob}
+              onToggle={onToggle}
+            />
+          ) : (
+            <Row
+              key={entry.automation.id}
+              a={entry.automation}
+              now={now}
+              onOpen={onOpen}
+              onToggle={onToggle}
+            />
+          )
+        )}
       </div>
-      {sortEntries(listEntries(payload.automations), sort).map((entry) =>
-        entry.kind === 'job' ? (
-          <JobRows
-            key={`job:${entry.id}`}
-            job={entry}
-            now={now}
-            onOpen={onOpen}
-            onOpenJob={onOpenJob}
-            onToggle={onToggle}
-          />
-        ) : (
-          <Row
-            key={entry.automation.id}
-            a={entry.automation}
-            now={now}
-            onOpen={onOpen}
-            onToggle={onToggle}
-          />
-        )
-      )}
     </div>
   )
 }
