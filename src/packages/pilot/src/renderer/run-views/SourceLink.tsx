@@ -33,6 +33,17 @@ function useSourceIndex(): SourceIndex | null {
   return index
 }
 
+// A click reads the index again (main keeps it at most a minute): pilotcli's source_root is where main is checked out
+// now, which can move after the link was drawn. Without a fresh index the drawn source still opens.
+async function sourceAtClick(
+  part: Pick<ChainPart, 'skill' | 'runs'>,
+  drawn: StepSource
+): Promise<StepSource> {
+  pending = null
+  const index = await sourceIndex()
+  return (index ? stepSource(part, index) : null) ?? drawn
+}
+
 // pilotcli's code opens at its line in the worktree Pilot knows it by; with none there, the file opens on its own.
 async function openStepSource(source: StepSource): Promise<void> {
   if (source.kind === 'file') {
@@ -61,9 +72,9 @@ export function SourceLink({
     return null
   }
   const open = (): void => {
-    openStepSource(source).catch((error: unknown) =>
-      console.error("[pilot] couldn't open the step's source:", error)
-    )
+    sourceAtClick(part, source)
+      .then(openStepSource)
+      .catch((error: unknown) => console.error("[pilot] couldn't open the step's source:", error))
   }
   return (
     <button type="button" className="shrink-0 text-xs underline" onClick={open}>

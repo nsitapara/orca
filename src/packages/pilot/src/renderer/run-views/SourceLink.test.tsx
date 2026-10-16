@@ -54,6 +54,26 @@ describe('SourceLink', () => {
     expect(openFloating).not.toHaveBeenCalled()
   })
 
+  // source_root is where main is checked out now (pilotcli 7feb434); a click reads it again, so a link drawn before
+  // main moved opens main's new worktree, not the old one.
+  it('opens where the index says at the click, not where it said when the link was drawn', async () => {
+    let root = '/src/pilotCLI-old'
+    pilotRpc.mockImplementation(async (method: string) =>
+      method === 'pilot.sourceIndex.get' ? { ...INDEX, pilotcli: { ...INDEX.pilotcli!, root } } : {}
+    )
+    render(<SourceLink part={{ skill: null, runs: 'pilotcli git push-branch' }} />)
+    await act(async () => {})
+    root = '/src/pilotCLI'
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Source' }))
+    })
+    expect(pilotRpc).toHaveBeenCalledWith('files.open', {
+      worktree: 'path:/src/pilotCLI',
+      relativePath: 'internal/modules/git/push_branch.go',
+      line: 84
+    })
+  })
+
   it('opens the file on its own when Pilot has no worktree there', async () => {
     serve(async () => {
       throw new Error('no worktree')
