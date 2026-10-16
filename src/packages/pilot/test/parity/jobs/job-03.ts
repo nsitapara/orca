@@ -93,10 +93,13 @@ export function seed03(store: PilotStore, f: ParityFixture): void {
   seedRunning(store, JOB_03.automationId, runs, f.now - 600_000)
 }
 
-export const PARITY_03: ParityJob = {
+// loop.py sweep's per-worktree decisions, frozen in each case's old block (milestone 8 deletes loop.py): the item parity
+// runs on these, and a case without them fails.
+export const PARITY_03_FROZEN: ParityJob = {
   job: JOB_03.job,
   folder: JOB_03.folder,
   script: JOB_03.script,
+  frozen: true,
   files: [
     join(portedAutomationsDir(), 'review-branch-code.yaml'),
     join(portedAutomationsDir(), 'people.yaml')
@@ -109,8 +112,3 @@ export const PARITY_03: ParityJob = {
     return { def: definition, people }
   }
 }
-
-// loop.py sweep's per-worktree decisions, frozen in each case's old block (milestone 8 deletes loop.py): the item parity
-// runs on these, and a case without them fails. PARITY_03 above still replays loop.py for the steps test, which goes when
-// 03's YAML switches to /orchestrate.
-export const PARITY_03_FROZEN: ParityJob = { ...PARITY_03, frozen: true }
