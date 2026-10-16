@@ -188,16 +188,18 @@ describe('AnswerDispatcher', () => {
       'someone is typing in zsh'
     ]
   ])(
-    'holds every answer in the worktree while %s',
+    'holds what would touch the worktree while %s, and still closes a card-only answer',
     async (_name, holds, holdReason, holdDetail) => {
       const { store, push, dispatcher, answer, settle } = setup({ holds })
       const action = answer(ACTION, 'approve')
+      const kept = answer({ ...QUESTION, type: 'default' }, 'keep')
       settle()
-      expect(await dispatcher.pass()).toMatchObject({ held: 1, actions: 0 })
+      expect(await dispatcher.pass()).toMatchObject({ held: 1, actions: 0, ticked: 1 })
       expect(push.run).not.toHaveBeenCalled()
       expect(store.queue.forInboxItem(action)).toMatchObject([
         { state: 'held', holdReason, holdDetail }
       ])
+      expect(store.inbox.get(kept)).toMatchObject({ status: 'done', outcome: 'kept' })
     }
   )
 
