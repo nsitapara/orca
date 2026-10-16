@@ -38,6 +38,7 @@ export type ImportRun = {
   worktreePath: string | null
   startedAt: number
   agent: AgentKind
+  skill: string | null
   sessionId: string
 }
 export type PlannedItem = {
@@ -169,6 +170,15 @@ function actionOf(row: VaultRow): ActionPin {
 // A Resume: line is note text agents can write, and the dispatcher resumes whatever session id lands here:
 // only a session id (shared/session-id.ts) counts.
 
+// A run holds every card of its note's section, so it's named after the MR or branch they share, never one card's
+// location.
+function runLabel(row: VaultRow, def: AutomationDefinition): string {
+  if (row.mr_iid) {
+    return `!${row.mr_iid} ${row.branch}`
+  }
+  return row.branch || def.name
+}
+
 function runOf(
   row: VaultRow,
   def: AutomationDefinition,
@@ -182,10 +192,11 @@ function runOf(
     id: `import-${sha(`${def.id}|${row.note}|${row.asked_in}|${row.section_time}`).slice(0, 12)}`,
     automationId: def.id,
     itemKey: itemKey ?? `repo:${def.repo}`,
-    itemLabel: row.mr_iid ? `!${row.mr_iid} ${row.branch}` : row.location || def.name,
+    itemLabel: runLabel(row, def),
     worktreePath: row.scope === 'branch' ? row.worktree : null,
     startedAt: vaultAskedAt(row) ?? now,
     agent: row.resume.startsWith('codex') ? 'codex' : 'claude',
+    skill: row.skill || null,
     sessionId: row.session
   }
 }
