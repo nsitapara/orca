@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useState, useSyncExternalStore } from 'react'
-import { Inbox } from 'lucide-react'
+import { FlaskConical, Inbox, type LucideIcon } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { InboxListPayload } from '../../shared/inbox-types'
 import { pilotRpc } from '../api'
 import {
   setPilotAutomationsView,
   setPilotOpenAutomation,
-  usePilotAutomationsView
+  usePilotAutomationsView,
+  type PilotAutomationsView
 } from '../pages/automations-view'
 import { waitingCount } from '../pages/waiting/answer-text'
 import { pilotStore } from '../store'
@@ -32,10 +33,10 @@ export function useWaitingTotal(): number {
   return total
 }
 
-// Automations is not highlighted while the Inbox view shows.
+// Automations is not highlighted while a view with its own sidebar item shows.
 export function useAutomationsActive(pageOpen: boolean): boolean {
   const view = usePilotAutomationsView()
-  return pageOpen && view !== 'inbox'
+  return pageOpen && view !== 'inbox' && view !== 'playground'
 }
 
 // Clicking Automations leaves the Inbox view, and always lands on the list: an automation that was
@@ -64,13 +65,23 @@ function useActiveView(): string | undefined {
   return useSyncExternalStore(subscribe, () => store?.getState().activeView)
 }
 
-function WaitingNavButton(): React.JSX.Element {
-  const total = useWaitingTotal()
+// A sidebar item under Automations that opens one of its views.
+function ViewNavButton({
+  view: target,
+  icon: Icon,
+  label,
+  count = 0
+}: {
+  view: PilotAutomationsView
+  icon: LucideIcon
+  label: string
+  count?: number
+}): React.JSX.Element {
   const view = usePilotAutomationsView()
   const activeView = useActiveView()
-  const active = activeView === 'automations' && view === 'inbox'
+  const active = activeView === 'automations' && view === target
   const open = (): void => {
-    setPilotAutomationsView('inbox')
+    setPilotAutomationsView(target)
     pilotStore()?.getState().openAutomationsPage?.()
   }
   return (
@@ -85,18 +96,22 @@ function WaitingNavButton(): React.JSX.Element {
           : 'text-worktree-sidebar-foreground/60 hover:bg-worktree-sidebar-foreground/8'
       )}
     >
-      <Inbox
+      <Icon
         className={cn('size-4 shrink-0', !active && 'text-worktree-sidebar-foreground/30')}
         strokeWidth={active ? 2.25 : 1.75}
       />
-      <span className="flex-1">Inbox</span>
-      {total > 0 ? (
+      <span className="flex-1">{label}</span>
+      {count > 0 ? (
         <span className="shrink-0 rounded-full bg-primary px-1.5 py-px text-[10px] font-semibold text-primary-foreground">
-          {total}
+          {count}
         </span>
       ) : null}
     </button>
   )
+}
+
+function WaitingNavButton(): React.JSX.Element {
+  return <ViewNavButton view="inbox" icon={Inbox} label="Inbox" count={useWaitingTotal()} />
 }
 
 export function WaitingNavItem(): React.JSX.Element | null {
@@ -104,5 +119,10 @@ export function WaitingNavItem(): React.JSX.Element | null {
   if (!store || store.getState().settings?.showAutomationsButton === false) {
     return null
   }
-  return <WaitingNavButton />
+  return (
+    <>
+      <WaitingNavButton />
+      <ViewNavButton view="playground" icon={FlaskConical} label="Playground" />
+    </>
+  )
 }
