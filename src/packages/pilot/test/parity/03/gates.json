@@ -2490,5 +2490,82 @@
     "/wt/web-312": true,
     "/wt/web-313": true,
     "/wt/web-314": true
+  },
+  "old": {
+    "from": "run_old_plan.py 03 (review-cycles/loop.py sweep) with /opt/homebrew/bin/python3 3.15, 2026-10-16, before milestone 8 deleted it",
+    "decisions": [
+      {
+        "key": "wt:400fee61-a463-4f76-894a-39861e906007::/wt/web-301",
+        "label": "web-301-work",
+        "decision": "base",
+        "reason": "reviewing commits after d30100000"
+      },
+      {
+        "key": "wt:400fee61-a463-4f76-894a-39861e906007::/wt/web-302",
+        "label": "web-302-work",
+        "decision": "base",
+        "reason": "reviewing commits after d30200000"
+      },
+      {
+        "key": "wt:400fee61-a463-4f76-894a-39861e906007::/wt/web-303",
+        "label": "web-303-work",
+        "decision": "nothing_new",
+        "reason": ""
+      },
+      {
+        "key": "wt:400fee61-a463-4f76-894a-39861e906007::/wt/web-304",
+        "label": "web-304-work",
+        "decision": "nothing_new",
+        "reason": ""
+      },
+      {
+        "key": "wt:400fee61-a463-4f76-894a-39861e906007::/wt/web-305",
+        "label": "web-305-work",
+        "decision": "skip",
+        "reason": "uncommitted changes; retry next round"
+      },
+      {
+        "key": "wt:400fee61-a463-4f76-894a-39861e906007::/wt/web-306",
+        "label": "web-306-work",
+        "decision": "skip",
+        "reason": "MERGE_HEAD present; retry next round"
+      },
+      {
+        "key": "wt:400fee61-a463-4f76-894a-39861e906007::/wt/web-307",
+        "label": "web-307-work",
+        "decision": "skip",
+        "reason": "!307 merged"
+      },
+      {
+        "key": "wt:400fee61-a463-4f76-894a-39861e906007::/wt/web-308",
+        "label": "web-308-work",
+        "decision": "skip",
+        "reason": "!308 closed"
+      },
+      {
+        "key": "wt:400fee61-a463-4f76-894a-39861e906007::/wt/web-309",
+        "label": "web-309-work",
+        "decision": "skip",
+        "reason": "!309 approved by alex1craig"
+      },
+      {
+        "key": "wt:400fee61-a463-4f76-894a-39861e906007::/wt/web-310",
+        "label": "web-310-work",
+        "decision": "skip",
+        "reason": "MR approval unknown: Command '['glab', 'api', '--hostname', 'gitlab.com', 'projects/polygenx%2Fweb-platform/merge_requests/310/approvals']' returned non-zero exit status 1."
+      },
+      {
+        "key": "wt:400fee61-a463-4f76-894a-39861e906007::/wt/web-313",
+        "label": "web-313-work",
+        "decision": "nothing_new",
+        "reason": ""
+      },
+      {
+        "key": "wt:400fee61-a463-4f76-894a-39861e906007::/wt/web-314",
+        "label": "web-314-work",
+        "decision": "start",
+        "reason": "1 new commit(s) since aaaaaaaaa, claude leads"
+      }
+    ]
   }
 }

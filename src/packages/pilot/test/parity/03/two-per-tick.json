@@ -611,5 +611,28 @@
     "/wt/web-331": true,
     "/wt/web-332": true,
     "/wt/web-333": true
+  },
+  "old": {
+    "from": "run_old_plan.py 03 (review-cycles/loop.py sweep) with /opt/homebrew/bin/python3 3.15, 2026-10-16, before milestone 8 deleted it",
+    "decisions": [
+      {
+        "key": "wt:400fee61-a463-4f76-894a-39861e906007::/wt/web-331",
+        "label": "web-331-work",
+        "decision": "start",
+        "reason": "1 new commit(s) since aaaaaaaaa, claude leads"
+      },
+      {
+        "key": "wt:400fee61-a463-4f76-894a-39861e906007::/wt/web-332",
+        "label": "web-332-work",
+        "decision": "start",
+        "reason": "1 new commit(s) since aaaaaaaaa, claude leads"
+      },
+      {
+        "key": "wt:400fee61-a463-4f76-894a-39861e906007::/wt/web-333",
+        "label": "web-333-work",
+        "decision": "defer",
+        "reason": "--max 2 reached"
+      }
+    ]
   }
 }

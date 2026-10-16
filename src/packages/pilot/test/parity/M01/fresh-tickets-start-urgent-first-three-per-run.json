@@ -305,5 +305,70 @@
     "linear-todo/tabs.json": {},
     "quota/claude.json": { "weekly": 20, "session": 10 }
   },
-  "exists": {}
+  "exists": {},
+  "old": {
+    "from": "run_old_plan.py M01 (linear-todo-sweep/sweep.py) with /opt/homebrew/bin/python3 3.15, 2026-10-16, before milestone 8 deleted it",
+    "decisions": [
+      {
+        "key": "linear:WEB-3",
+        "label": "WEB-3",
+        "decision": "start",
+        "reason": "new worktree /wt/new"
+      },
+      {
+        "key": "linear:WEB-5",
+        "label": "WEB-5",
+        "decision": "start",
+        "reason": "new worktree /wt/new"
+      },
+      {
+        "key": "linear:WEB-4",
+        "label": "WEB-4",
+        "decision": "start",
+        "reason": "new worktree /wt/new"
+      },
+      {
+        "key": "linear:WEB-2",
+        "label": "WEB-2",
+        "decision": "defer",
+        "reason": "--max 3 reached"
+      },
+      {
+        "key": "linear:WEB-1",
+        "label": "WEB-1",
+        "decision": "defer",
+        "reason": "--max 3 reached"
+      },
+      {
+        "key": "linear:WEB-3",
+        "label": "WEB-3",
+        "decision": "script_check",
+        "reason": ""
+      },
+      {
+        "key": "linear:WEB-5",
+        "label": "WEB-5",
+        "decision": "script_check",
+        "reason": ""
+      },
+      {
+        "key": "linear:WEB-4",
+        "label": "WEB-4",
+        "decision": "script_check",
+        "reason": ""
+      },
+      {
+        "key": "linear:WEB-2",
+        "label": "WEB-2",
+        "decision": "script_check",
+        "reason": ""
+      },
+      {
+        "key": "linear:WEB-1",
+        "label": "WEB-1",
+        "decision": "script_check",
+        "reason": ""
+      }
+    ]
+  }
 }

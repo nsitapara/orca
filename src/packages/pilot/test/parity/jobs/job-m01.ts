@@ -19,7 +19,7 @@ export const JOB_M01 = {
   automationId: 'linear-todo'
 }
 
-// M01's words (jobs/job_m01.py) and the verdicts that agree with them. decide()'s skips: no branch name is a `where`
+// M01's words (jobs/job_m01.py, frozen in each case's old block) and the verdicts that agree with them. decide()'s skips: no branch name is a `where`
 // clause (out of scope), a kickoff already made is once_per (not due), the rest are the script check with the same
 // reason (skipped). A ticket the old sweep never lists (not in Todo) has no word: out of scope.
 export const VERDICTS_M01: VerdictTable = {
@@ -58,7 +58,8 @@ export const COMMANDS_M01 = {
   checkItem: 'pilotcli automations check-item linear-todo --pilot-item -'
 }
 
-// The script check answered from the old adapter's verdict on the same reads (jobs/job_m01.py runs sweep.check).
+// The script check answered from the old adapter's verdict on the same reads (jobs/job_m01.py ran sweep.check: the
+// `script_check` decisions frozen in the case's old block).
 export function answerScripts(old: OldDecision[]): ScriptRunner {
   const checks = new Map(
     old.filter((d) => d.decision === 'script_check').map((d) => [d.key, d.reason])
@@ -72,9 +73,11 @@ export function answerScripts(old: OldDecision[]): ScriptRunner {
   }
 }
 
+// sweep.py's decisions are frozen in each case's old block (milestone 8 deletes it); a case without them fails.
 export const PARITY_M01: ParityJob = {
   job: JOB_M01.job,
   folder: JOB_M01.sweep,
+  frozen: true,
   files: [
     join(portedAutomationsDir(), 'linear-todo.yaml'),
     join(portedAutomationsDir(), 'people.yaml')
