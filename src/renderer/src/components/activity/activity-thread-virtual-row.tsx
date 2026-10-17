@@ -6,6 +6,7 @@ import { ActivityThreadContextMenu } from './activity-thread-context-menu'
 import { ActivityThreadRow } from './activity-thread-row'
 import type { AgentPaneThread } from './activity-thread-types'
 import type { ActivityVirtualItemDescriptor } from './activity-thread-virtual-items'
+import { ActivityTabsVirtualRow } from '../../../../packages/pilot/src/renderer/activity-tabs/WorkspaceTabRow' // pilot-hook: activity-tabs-row
 
 type ContextMenuProps = Parameters<typeof ActivityThreadContextMenu>[0]
 
@@ -64,6 +65,9 @@ export function ActivityThreadVirtualRow({
         />
       </div>
     )
+  }
+  if (item.type === 'workspace-tab') {
+    return <ActivityTabsVirtualRow item={item} compactMode={compactMode} /> // pilot-hook: activity-tabs-row
   }
   const canJump = canJumpToWorkspace(item.thread)
   const isOpen = item.thread.paneKey === selectedPaneKey

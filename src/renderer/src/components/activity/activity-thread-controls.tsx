@@ -14,6 +14,7 @@ import {
   threadAgentStateLabel
 } from './activity-thread-presentation'
 import type { ActivityThreadGroup, AgentPaneThread } from './activity-thread-types'
+import { activityTabsGroupCount } from '../../../../packages/pilot/src/renderer/activity-tabs/activity-tabs-rows' // pilot-hook: activity-tabs-header-count
 
 export { ActivityThreadOptionsMenu } from './activity-thread-options-menu'
 
@@ -135,7 +136,10 @@ export function ActivityStatusGroupHeader({
         {group.label}
       </span>
       <span className="rounded-full border border-border/80 bg-muted/80 px-1.5 py-0.5 text-[10px] font-semibold tabular-nums leading-none text-foreground/80 shadow-xs">
-        {group.threads.length}
+        {
+          group.threads.length +
+            activityTabsGroupCount(group) /* pilot-hook: activity-tabs-header-count */
+        }
       </span>
     </div>
   )

@@ -1,20 +1,19 @@
-import { useEffect } from 'react'
-import { create } from 'zustand'
+import { useMemo } from 'react'
 import { useAppStore } from '@/store'
 import { isPaletteCurrentWorktree } from '@/lib/palette-repo-resolution'
 import {
   isClientHostedBrowserRowSelectionLive,
   useClientHostedBrowserRowSelection
 } from '@/lib/pane-manager/client-hosted-browser-row-state'
-import type { AgentPaneThread } from '@/components/activity/activity-thread-types'
+import type {
+  ActivityGroupBy,
+  ActivityThreadGroup,
+  AgentPaneThread,
+  ThreadReadFilter
+} from '@/components/activity/activity-thread-types'
+import { mergeTabsIntoGroups } from './activity-tabs-groups'
 import { useActivityTabsVisible } from './activity-tabs-setting'
-
-const NO_THREADS: readonly AgentPaneThread[] = []
-
-// The panel skips terminals Activity already lists as agents; it reads them here.
-export const useActivityTabsThreadSnapshot = create<{ threads: readonly AgentPaneThread[] }>(
-  () => ({ threads: NO_THREADS })
-)
+import { useOpenTabItems } from './use-open-tab-items'
 
 // The agent thread behind the active workspace tab, so its row reads as current.
 export function useActiveWorkspaceThread(
@@ -53,14 +52,31 @@ export function useActiveWorkspaceThread(
   })
 }
 
-// pilot-hook: activity-tabs-threads. Wraps useAgentPaneThreads in the Activity sidebar.
+export type ActivityTabsView = {
+  query: string
+  readFilter: ThreadReadFilter
+  groupBy: ActivityGroupBy
+}
+
+// pilot-hook: activity-tabs-threads. Wraps useAgentPaneThreads in the Activity sidebar: while
+// "Show all tabs" is on, every other open tab joins the agents' groups and the active tab's agent
+// reads as current.
 export function useActivityTabsThreads<
-  T extends { allThreads: AgentPaneThread[]; effectiveSelectedPaneKey: string | null }
->(result: T): T {
+  T extends {
+    allThreads: AgentPaneThread[]
+    effectiveSelectedPaneKey: string | null
+    visibleThreadGroups: ActivityThreadGroup[]
+  }
+>(result: T, view: ActivityTabsView): T {
   const visible = useActivityTabsVisible()
   const activePaneKey = useActiveWorkspaceThread(result.allThreads, result.effectiveSelectedPaneKey)
-  useEffect(() => {
-    useActivityTabsThreadSnapshot.setState({ threads: visible ? result.allThreads : NO_THREADS })
-  }, [visible, result.allThreads])
-  return visible ? { ...result, effectiveSelectedPaneKey: activePaneKey } : result
+  // A tab is never unread, so "Show unread only" leaves it out.
+  const tabs = useOpenTabItems(visible && view.readFilter === 'all', view.query, result.allThreads)
+  const visibleThreadGroups = useMemo(
+    () => mergeTabsIntoGroups(result.visibleThreadGroups, tabs, view.groupBy),
+    [result.visibleThreadGroups, tabs, view.groupBy]
+  )
+  return visible
+    ? { ...result, effectiveSelectedPaneKey: activePaneKey, visibleThreadGroups }
+    : result
 }
