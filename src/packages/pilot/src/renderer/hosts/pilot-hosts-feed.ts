@@ -21,6 +21,8 @@ let detach: (() => void) | null = null
 let timer: ReturnType<typeof setInterval> | null = null
 let signature = ''
 let probeSeq = 0
+// The probe a start runs; a failed one leaves the list as it was.
+let settled: Promise<void> = Promise.resolve()
 
 export function contactOf(entry: RuntimeEnvironmentStatus | undefined): EnvironmentContact {
   if (isRuntimeHostContactRevoked(entry)) {
@@ -83,10 +85,11 @@ async function probe(): Promise<void> {
   }
 }
 
-function pollIfVisible(): void {
+function pollIfVisible(): Promise<void> {
   if (typeof document === 'undefined' || document.visibilityState !== 'hidden') {
-    void probe()
+    return probe()
   }
+  return Promise.resolve()
 }
 
 function start(): void {
@@ -98,7 +101,7 @@ function start(): void {
       void probe()
     }
   })
-  timer = setInterval(pollIfVisible, HOSTS_POLL_MS)
+  timer = setInterval(() => void pollIfVisible(), HOSTS_POLL_MS)
   detach = () => {
     unsubscribeStore?.()
     if (timer) {
@@ -107,7 +110,7 @@ function start(): void {
     timer = null
     detach = null
   }
-  pollIfVisible()
+  settled = pollIfVisible().catch(() => undefined)
 }
 
 export function subscribePilotHosts(listener: () => void): () => void {
@@ -125,6 +128,19 @@ export function subscribePilotHosts(listener: () => void): () => void {
 
 export function currentPilotHosts(): readonly PilotHostEntry[] {
   return hosts
+}
+
+// Holds the feed while work runs: a warm list is used as is, a cold feed probes once for every read inside.
+export async function withPilotHosts<T>(
+  work: (hosts: readonly PilotHostEntry[]) => Promise<T>
+): Promise<T> {
+  const release = subscribePilotHosts(() => {})
+  try {
+    await settled
+    return await work(hosts)
+  } finally {
+    release()
+  }
 }
 
 export function usePilotHosts(): readonly PilotHostEntry[] {
@@ -145,4 +161,5 @@ export function resetPilotHostsFeed(): void {
   probeSeq++
   hosts = [LOCAL_PILOT_HOST]
   signature = ''
+  settled = Promise.resolve()
 }

@@ -4,6 +4,7 @@ import { newestTick } from '../../shared/job-stages'
 import { answered, refOf, type AnsweredRead } from './answered-reads'
 import { createHostPoller, type HostRead } from './host-poll'
 import { LOCAL_PILOT_HOST, type Hosted, type PilotHostEntry, type PilotHostRef } from './pilot-host'
+import { withPilotHosts } from './pilot-hosts-feed'
 
 export const AUTOMATIONS_LIST = 'pilot.automations.list'
 
@@ -16,12 +17,16 @@ export type MergedAutomation = Omit<AutomationSummary, 'live'> & {
 export type MergedAutomationList = Omit<AutomationListPayload, 'automations'> & {
   automations: MergedAutomation[]
 }
+export type LoadedAutomations = MergedAutomationList & {
+  // Every listed machine whose list isn't in it: offline, or its read failed.
+  failedHosts: PilotHostRef[]
+}
 
 type HostedSummary = { host: PilotHostEntry; summary: AutomationSummary }
 type Problems = Omit<AutomationListPayload, 'automations'>
 
 // runs_on matches a machine's name trimmed and in any case.
-function sameName(a: string, b: string): boolean {
+export function sameName(a: string, b: string): boolean {
   return a.trim().toLowerCase() === b.trim().toLowerCase()
 }
 
@@ -99,10 +104,30 @@ function problemsOf(got: readonly AnsweredRead<AutomationListPayload>[]): Proble
   }
 }
 
+function listsOf(
+  reads: readonly HostRead<AutomationListPayload>[]
+): AnsweredRead<AutomationListPayload>[] {
+  return answered(reads).filter((r) => isListPayload(r.value))
+}
+
+function failedHostsOf(
+  reads: readonly HostRead<AutomationListPayload>[],
+  hosts: readonly PilotHostEntry[]
+): PilotHostRef[] {
+  const got = new Set(listsOf(reads).map((r) => r.host.key))
+  const failed = new Map<string, PilotHostEntry>()
+  for (const host of [...reads.map((r) => r.host), ...hosts]) {
+    if (!got.has(host.key) && !failed.has(host.key)) {
+      failed.set(host.key, host)
+    }
+  }
+  return [...failed.values()].map(refOf)
+}
+
 export function mergeAutomationLists(
   reads: readonly HostRead<AutomationListPayload>[]
 ): MergedAutomationList | null {
-  const got = answered(reads).filter((r) => isListPayload(r.value))
+  const got = listsOf(reads)
   if (got.length === 0) {
     return null
   }
@@ -119,22 +144,24 @@ export function mergeAutomationLists(
 }
 
 // Every machine's list as of now, for an action that must first find a row's home machine.
-export async function loadMergedAutomations(): Promise<MergedAutomationList> {
-  const poller = createHostPoller<AutomationListPayload>({
-    method: AUTOMATIONS_LIST,
-    // Stopped once its one read per machine is in, so this never ticks.
-    intervalMs: 60_000,
-    onChange: () => {}
+export function loadMergedAutomations(): Promise<LoadedAutomations> {
+  return withPilotHosts(async (hosts) => {
+    const poller = createHostPoller<AutomationListPayload>({
+      method: AUTOMATIONS_LIST,
+      // Stopped once its one read per machine is in, so this never ticks.
+      intervalMs: 60_000,
+      onChange: () => {}
+    })
+    try {
+      await poller.refresh()
+    } finally {
+      poller.stop()
+    }
+    const reads = poller.reads()
+    const merged = mergeAutomationLists(reads)
+    if (!merged) {
+      throw new Error(reads.find((r) => r.error !== null)?.error ?? 'No Pilot answered')
+    }
+    return { ...merged, failedHosts: failedHostsOf(reads, hosts) }
   })
-  try {
-    await poller.refresh()
-  } finally {
-    poller.stop()
-  }
-  const reads = poller.reads()
-  const merged = mergeAutomationLists(reads)
-  if (!merged) {
-    throw new Error(reads.find((r) => r.error !== null)?.error ?? 'No Pilot answered')
-  }
-  return merged
 }

@@ -180,4 +180,22 @@ describe('loadMergedAutomations', () => {
     pilotRpc.mockRejectedValue(new Error('timed out'))
     await expect(loadMergedAutomations()).rejects.toThrow('timed out')
   })
+
+  it('names every machine whose list it lacks: one whose read failed, and one offline', async () => {
+    const studio = { ...MINI_OFFLINE, key: 'env:studio', machineName: 'Studio' }
+    setPilotHostsForTests([LOCAL_NAMED, MINI, studio])
+    pilotRpc.mockImplementation(
+      byHost({
+        local: () => list([summary()]),
+        mini: () => {
+          throw new Error('timed out')
+        }
+      })
+    )
+    const merged = await loadMergedAutomations()
+    expect(merged.failedHosts.map((h) => h.machineName)).toEqual(['Mac mini', 'Studio'])
+    setPilotHostsForTests([LOCAL_NAMED])
+    pilotRpc.mockResolvedValue(list([summary()]))
+    expect((await loadMergedAutomations()).failedHosts).toEqual([])
+  })
 })

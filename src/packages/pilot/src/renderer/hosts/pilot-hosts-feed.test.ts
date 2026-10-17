@@ -3,13 +3,14 @@ import type { RuntimeEnvironmentStatus } from '../../../../../shared/runtime-hos
 import type { PilotStatus } from '../../shared/api-types'
 import { pilotRpc } from '../api'
 import { registerPilotStore, type PilotStoreState } from '../store'
-import { LOCAL_PILOT_HOST } from './pilot-host'
+import { LOCAL_PILOT_HOST, type PilotHostEntry } from './pilot-host'
 import {
   contactOf,
   currentPilotHosts,
   HOSTS_POLL_MS,
   resetPilotHostsFeed,
-  subscribePilotHosts
+  subscribePilotHosts,
+  withPilotHosts
 } from './pilot-hosts-feed'
 
 vi.mock('../api', () => ({ pilotRpc: vi.fn() }))
@@ -159,6 +160,26 @@ describe('pilot hosts feed refreshes', () => {
     expect(after[0]).toBe(before[0])
     expect(after[1] === before[1]).toBe(!changed)
     expect(after.map((h) => h.machineName)).toEqual(['MacBook', renamed])
+    unsubscribe()
+  })
+
+  it('holds a cold feed open while a load reads, so one probe serves it; a warm feed is read as it is', async () => {
+    vi.mocked(pilotRpc).mockImplementation(async (_method, _params, opts) =>
+      engine(opts?.target ? 'mini' : 'MacBook')
+    )
+    registerPilotStore(fakeStore({ runtimeEnvironments: [{ id: 'a', name: 'A' }] }))
+    const names = (hosts: readonly PilotHostEntry[]) => hosts.map((h) => h.machineName)
+    // A load inside another one (a row's home, then its list) adds no probe.
+    const cold = await withPilotHosts(async (hosts) => {
+      await withPilotHosts(async () => undefined)
+      return names(hosts)
+    })
+    expect([cold, vi.mocked(pilotRpc).mock.calls.length]).toEqual([['MacBook', 'mini'], 2])
+    const unsubscribe = subscribePilotHosts(() => {})
+    await flush()
+    vi.mocked(pilotRpc).mockClear()
+    expect(await withPilotHosts(async (hosts) => names(hosts))).toEqual(['MacBook', 'mini'])
+    expect(pilotRpc).not.toHaveBeenCalled()
     unsubscribe()
   })
 })
