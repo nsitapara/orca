@@ -2,6 +2,7 @@ import type { CapacityPayload, CapacityRun, HeaviestJob } from '../../shared/api
 import { suggestRunLimit, UNMEASURED_JOB_BYTES } from '../../shared/capacity/limit-suggestion'
 import type { AutomationDefinition } from '../../shared/definition/types'
 import type { PilotStore } from '../store/store'
+import { listedRuns } from '../timeline/run-detail'
 import { holdsSlot } from './run-capacity'
 import type { RunMemorySnapshot } from './run-memory'
 import type { SystemMemory } from './system-memory'
@@ -12,6 +13,9 @@ export type CapacityViewInput = {
   memory: RunMemorySnapshot | null
   system: SystemMemory
 }
+
+// The Running page's Finished list: the slot-holding jobs' newest ended runs.
+export const MAX_FINISHED_RUNS = 10
 
 // The heaviest of the jobs that hold a slot: a measured one at its peak, an enabled one never measured at the
 // unmeasured budget, so a light job measured first can't talk the suggestion up before the heavy ones have run.
@@ -58,6 +62,11 @@ export function capacityView(input: CapacityViewInput): CapacityPayload {
       counted: def !== undefined && holdsSlot(def)
     }
   })
+  const ended = store.capacity.finished(
+    input.definitions.filter(holdsSlot).map((d) => d.id),
+    MAX_FINISHED_RUNS
+  )
+  const endedPeaks = store.capacity.peaks(ended.map((r) => r.id))
   const heaviest = heaviestJob(store.capacity.heaviestPeaks(), input.definitions)
   const runningJobsBytes = running
     .filter((r) => r.counted)
@@ -69,6 +78,11 @@ export function capacityView(input: CapacityViewInput): CapacityPayload {
       .queued()
       .filter((q) => byId.has(q.automationId))
       .map((q) => ({ ...q, automationName: nameOf(q.automationId) })),
+    finished: listedRuns(store, ended).map((run) => ({
+      ...run,
+      automationName: nameOf(run.automationId),
+      peakBytes: endedPeaks.get(run.id) ?? null
+    })),
     memory: input.system,
     suggestion: suggestRunLimit({
       availableBytes: input.system.availableBytes,
