@@ -1,7 +1,10 @@
 // @vitest-environment happy-dom
-import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { AutomationListPayload, PilotStatus } from '../../shared/api-types'
+import { byHost, LOCAL_NAMED, MINI, MINI_OFFLINE } from '../hosts/__fixtures__/hosts'
+import type { PilotHostEntry } from '../hosts/pilot-host'
+import { resetPilotHostsFeed, setPilotHostsForTests } from '../hosts/pilot-hosts-feed'
 import {
   setPilotAutomationsView,
   setPilotOpenAutomation,
@@ -242,5 +245,87 @@ describe('PilotAutomationsPage', () => {
     render(<PilotAutomationsPage />)
     expect(await screen.findByText('timed out')).toBeTruthy()
     expect(screen.queryByText(/couldn't start/)).toBeNull()
+  })
+})
+
+describe('PilotAutomationsPage on more than one machine', () => {
+  afterEach(() => {
+    cleanup()
+    resetAutomationsFeed()
+    resetPilotHostsFeed()
+    pilotRpc.mockReset()
+  })
+
+  // A machine's answers: its list (or the error its list read throws), and its status for anything else.
+  const machine = (answer: AutomationListPayload | string) => (method: string) => {
+    if (method !== 'pilot.automations.list') {
+      return status
+    }
+    if (typeof answer === 'string') {
+      throw new Error(answer)
+    }
+    return answer
+  }
+  const MINI_LIST = {
+    ...list,
+    automations: [summary, { ...summary, id: 'mini', name: 'Mini only' }]
+  }
+
+  it("lists every machine's automations once, each row naming the machines it is on", async () => {
+    setPilotHostsForTests([LOCAL_NAMED, MINI])
+    pilotRpc.mockImplementation(byHost({ local: machine(list), mini: machine(MINI_LIST) }))
+    render(<PilotAutomationsPage />)
+    expect(await screen.findByRole('button', { name: 'Mini only' })).toBeTruthy()
+    const [shared, ...others] = screen.getAllByRole('button', { name: 'Fix failed CI' })
+    expect(others).toHaveLength(0)
+    const row = shared.closest<HTMLElement>('div[class*="cursor-pointer"]')
+    if (!row) {
+      throw new Error('no row for Fix failed CI')
+    }
+    expect(within(row).getByText('MacBook')).toBeTruthy()
+    expect(within(row).getByText('Mac mini')).toBeTruthy()
+  })
+
+  const noticeLines = () =>
+    screen
+      .queryAllByText(/^(Couldn't refresh |Mac mini can't be reached)/)
+      .map((line) => line.textContent)
+  const pageErrors = () =>
+    [...document.querySelectorAll('p.text-sm.text-destructive')].map((p) => p.textContent)
+
+  it.each<[string, PilotHostEntry, string | null, string[], string[]]>([
+    [
+      'names the machine whose list failed, and keeps the rest',
+      MINI,
+      'timed out',
+      ["Couldn't refresh Mac mini's automations: timed out"],
+      []
+    ],
+    [
+      "says an unreachable machine's automations aren't shown",
+      MINI_OFFLINE,
+      null,
+      ["Mac mini can't be reached: its automations aren't shown here."],
+      []
+    ]
+  ])('%s', async (_w, mini, miniFails, lines, errors) => {
+    setPilotHostsForTests([LOCAL_NAMED, mini])
+    pilotRpc.mockImplementation(
+      byHost({ local: machine(list), mini: machine(miniFails ?? MINI_LIST) })
+    )
+    render(<PilotAutomationsPage />)
+    await screen.findByText(lines[0])
+    expect(noticeLines()).toEqual(lines)
+    expect(pageErrors()).toEqual(errors)
+    expect(screen.getByRole('button', { name: 'Fix failed CI' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Mini only' })).toBeNull()
+  })
+
+  it('says only the page error when every machine failed', async () => {
+    setPilotHostsForTests([LOCAL_NAMED, MINI])
+    pilotRpc.mockImplementation(byHost({ local: machine('down'), mini: machine('timed out') }))
+    render(<PilotAutomationsPage />)
+    expect(await screen.findByText('down')).toBeTruthy()
+    expect(noticeLines()).toEqual([])
   })
 })

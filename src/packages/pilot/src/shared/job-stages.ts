@@ -1,8 +1,15 @@
 import type { AutomationSummary, TickRow } from './api-types'
 
 // A job of several automations (their job: blocks share an id), its stages in stage order.
-export type JobGroup = { kind: 'job'; id: string; name: string; stages: AutomationSummary[] }
-export type ListEntry = { kind: 'automation'; automation: AutomationSummary } | JobGroup
+export type JobGroup<T extends AutomationSummary = AutomationSummary> = {
+  kind: 'job'
+  id: string
+  name: string
+  stages: T[]
+}
+export type ListEntry<T extends AutomationSummary = AutomationSummary> =
+  | { kind: 'automation'; automation: T }
+  | JobGroup<T>
 
 function byStage(a: AutomationSummary, b: AutomationSummary): number {
   return (a.job?.stage ?? 0) - (b.job?.stage ?? 0)
@@ -13,15 +20,17 @@ function jobName(stages: readonly AutomationSummary[]): string {
   return stages.find((s) => s.job?.name)?.job?.name ?? stages[0].name
 }
 
-function group(id: string, members: readonly AutomationSummary[]): JobGroup {
+function group<T extends AutomationSummary>(id: string, members: readonly T[]): JobGroup<T> {
   const stages = [...members].sort(byStage)
   return { kind: 'job', id, name: jobName(stages), stages }
 }
 
 // The list as the Automations page shows it: each job once, where its first automation is listed; an
 // automation with no job: block is a row of its own, as before.
-export function listEntries(automations: readonly AutomationSummary[]): ListEntry[] {
-  const entries: ListEntry[] = []
+export function listEntries<T extends AutomationSummary>(
+  automations: readonly T[]
+): ListEntry<T>[] {
+  const entries: ListEntry<T>[] = []
   const placed = new Set<string>()
   for (const a of automations) {
     if (!a.job) {
@@ -57,13 +66,17 @@ export function jobEnabled(job: JobGroup): boolean {
   return job.stages.some((s) => s.enabled)
 }
 
-// The newest tick of any stage, dry runs included (as each row's own last tick is).
-export function jobLastTick(job: JobGroup): TickRow | null {
+export function newestTick(list: readonly Pick<AutomationSummary, 'lastTick'>[]): TickRow | null {
   let newest: TickRow | null = null
-  for (const s of job.stages) {
+  for (const s of list) {
     if (s.lastTick && (!newest || s.lastTick.startedAt > newest.startedAt)) {
       newest = s.lastTick
     }
   }
   return newest
+}
+
+// The newest tick of any stage, dry runs included (as each row's own last tick is).
+export function jobLastTick(job: JobGroup): TickRow | null {
+  return newestTick(job.stages)
 }

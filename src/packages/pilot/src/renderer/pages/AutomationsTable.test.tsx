@@ -3,6 +3,9 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-li
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { AutomationListPayload, AutomationSummary, TickRow } from '../../shared/api-types'
 import { stepAt, testRun } from '../../shared/run-views/__fixtures__/runs'
+import { LOCAL_NAMED, MINI } from '../hosts/__fixtures__/hosts'
+import type { PilotHostRef } from '../hosts/pilot-host'
+import { resetPilotHostsFeed, setPilotHostsForTests } from '../hosts/pilot-hosts-feed'
 import { closeRunPanel, openRunPanel } from '../run-views/run-panel-state'
 import { AutomationsTable } from './AutomationsTable'
 import {
@@ -298,9 +301,7 @@ describe('AutomationsTable: the Runs strip', () => {
 
   it('opens the one run a lit chip is lit for, Activity when it is lit for several, and How it runs when it is not', () => {
     const first = renderTable([{ ...SOLO, live: [running('a', 'docker-prune')] }])
-    fireEvent.click(
-      screen.getByRole('button', { name: 'Agent · 1 fix · Running' })
-    )
+    fireEvent.click(screen.getByRole('button', { name: 'Agent · 1 fix · Running' }))
     expect(openRunPanel()).toEqual({ runId: 'a', part: 'step:0' })
     expect(first.onOpen).not.toHaveBeenCalled()
     cleanup()
@@ -317,9 +318,38 @@ describe('AutomationsTable: the Runs strip', () => {
     renderTable([STAGE_1, { ...STAGE_2, live: [running('r', 'dev-e2e-fix-start')] }])
     // stage 1 shares the job's title in this fixture, so the job row's strip is the first
     const [strip] = screen.getAllByRole('list', { name: '13 · Fix red hourly e2e on dev runs' })
-    expect(
-      within(strip).getByRole('button', { name: 'Agent · 1 fix · Running' })
-    ).toBeTruthy()
+    expect(within(strip).getByRole('button', { name: 'Agent · 1 fix · Running' })).toBeTruthy()
     expect(within(strip).getByText('+1 stage')).toBeTruthy()
+  })
+})
+
+describe('AutomationsTable on more than one machine', () => {
+  beforeEach(() => {
+    localStorage.clear()
+    setPilotHostsForTests([LOCAL_NAMED, MINI])
+  })
+  afterEach(() => {
+    cleanup()
+    resetPilotHostsFeed()
+  })
+  const on = (a: AutomationSummary, hosts: PilotHostRef[]) => ({ ...a, hosts })
+  const rowOf = (name: RegExp) => {
+    const row = screen
+      .getByRole('button', { name })
+      .closest<HTMLElement>('div[class*="cursor-pointer"]')
+    if (!row) {
+      throw new Error(`no row for ${name}`)
+    }
+    return within(row)
+  }
+
+  it.each<[string, AutomationSummary[], RegExp]>([
+    ['a plain row', [on(SOLO, [LOCAL_NAMED, MINI])], /Clean Docker/],
+    ["a job's row, from its stages", [on(STAGE_1, [LOCAL_NAMED]), on(STAGE_2, [MINI])], /^Job 13 /],
+    ['a stage row', [on(STAGE_1, [LOCAL_NAMED, MINI]), on(STAGE_2, [MINI])], /^Stage 1 /]
+  ])('names every machine a row is loaded on: %s', (_w, rows, name) => {
+    renderTable(rows)
+    expect(rowOf(name).getByText('MacBook')).toBeTruthy()
+    expect(rowOf(name).getByText('Mac mini')).toBeTruthy()
   })
 })

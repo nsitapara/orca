@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { ChevronDown, ChevronRight } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
-import type { AutomationListPayload, AutomationSummary } from '../../shared/api-types'
+import type { AutomationSummary } from '../../shared/api-types'
 import {
   jobEnabled,
   jobLastTick,
@@ -20,6 +20,8 @@ import {
   type SortState
 } from './automations-sort'
 import { lastTickText } from './format'
+import { MachineChips } from '../hosts/MachineChip'
+import type { PilotHostRef } from '../hosts/pilot-host'
 import { foldStrip, liveStrip, type StripChip, type StripItem } from '../../shared/run-views/strip'
 import { RunStrip } from '../run-views/RunStrip'
 import { openRun } from '../run-views/run-panel-state'
@@ -34,6 +36,9 @@ const TABLE_MIN = 'min-w-[40.5rem]'
 const ROW = 'min-h-11 w-full border-t border-border/50 px-3 py-3 text-left text-sm hover:bg-accent'
 // Same padding as ROW so the stage's cells line up with the headers; the indent is inside its name cell.
 const STAGE_ROW = 'min-h-9 w-full bg-muted/30 px-3 py-2 text-left text-sm hover:bg-accent'
+
+// A row of the merged list names the machines it is loaded on; a list from one machine has none.
+type ListedAutomation = AutomationSummary & { hosts?: readonly PilotHostRef[] }
 
 export function scheduleText(a: AutomationSummary): string {
   return a.schedule === 'manual' ? 'Run by hand' : a.schedule
@@ -142,16 +147,19 @@ function Row({
   onOpen,
   onToggle
 }: {
-  a: AutomationSummary
+  a: ListedAutomation
   now: number
   onOpen: (id: string) => void
   onToggle: Toggle
 }): React.JSX.Element {
   return (
     <div onClick={() => onOpen(a.id)} className={`${COLS} ${ROW} cursor-pointer`}>
-      <button type="button" className="truncate text-left font-medium">
-        {a.name}
-      </button>
+      <span className="flex min-w-0 items-center gap-2">
+        <button type="button" className="min-w-0 truncate text-left font-medium">
+          {a.name}
+        </button>
+        <MachineChips hosts={a.hosts ?? []} />
+      </span>
       <RunsCell a={a} />
       <span className="truncate text-muted-foreground">{scheduleText(a)}</span>
       <span className="truncate text-muted-foreground">{lastText(a, now)}</span>
@@ -166,7 +174,7 @@ function StageRow({
   onOpen,
   onToggle
 }: {
-  a: AutomationSummary
+  a: ListedAutomation
   now: number
   onOpen: (id: string) => void
   onToggle: Toggle
@@ -174,14 +182,17 @@ function StageRow({
   const label = a.job?.label ?? a.name
   return (
     <div onClick={() => onOpen(a.id)} className={`${COLS} ${STAGE_ROW} cursor-pointer`}>
-      <button
-        type="button"
-        aria-label={`Stage ${a.job?.stage ?? ''} ${label}`}
-        className="flex min-w-0 items-baseline gap-3 pl-7 text-left"
-      >
-        <span className="font-mono text-xs text-muted-foreground">{a.job?.stage}</span>
-        <span className="truncate">{label}</span>
-      </button>
+      <span className="flex min-w-0 items-center gap-2">
+        <button
+          type="button"
+          aria-label={`Stage ${a.job?.stage ?? ''} ${label}`}
+          className="flex min-w-0 items-baseline gap-3 pl-7 text-left"
+        >
+          <span className="font-mono text-xs text-muted-foreground">{a.job?.stage}</span>
+          <span className="truncate">{label}</span>
+        </button>
+        <MachineChips hosts={a.hosts ?? []} />
+      </span>
       <RunsCell a={a} />
       <span className="truncate text-muted-foreground">{scheduleText(a)}</span>
       <span className="truncate text-muted-foreground">{lastText(a, now)}</span>
@@ -198,7 +209,7 @@ function JobRows({
   onOpenJob,
   onToggle
 }: {
-  job: JobGroup
+  job: JobGroup<ListedAutomation>
   now: number
   onOpen: (id: string) => void
   onOpenJob: (jobId: string) => void
@@ -239,6 +250,7 @@ function JobRows({
               {count}
             </Badge>
           </button>
+          <MachineChips hosts={job.stages.flatMap((s) => s.hosts ?? [])} />
         </span>
         <JobRunsCell job={job} />
         <span />
@@ -285,7 +297,7 @@ export function AutomationsTable({
   onOpenJob,
   onToggle
 }: {
-  payload: AutomationListPayload
+  payload: { automations: ListedAutomation[] }
   now: number
   onOpen: (id: string) => void
   onOpenJob: (jobId: string) => void

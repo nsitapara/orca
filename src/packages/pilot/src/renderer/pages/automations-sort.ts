@@ -124,7 +124,7 @@ function compareBy(a: ListEntry, b: ListEntry, state: SortState): number {
 }
 
 // A job's stages stay inside it, already in stage order; only the top-level entries move.
-export function sortEntries(entries: readonly ListEntry[], state: SortState): ListEntry[] {
+export function sortEntries<T extends ListEntry>(entries: readonly T[], state: SortState): T[] {
   return [...entries].sort(
     (a, b) => compareBy(a, b, state) || compareNatural(entryName(a), entryName(b))
   )

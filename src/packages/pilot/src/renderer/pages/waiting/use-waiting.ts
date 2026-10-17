@@ -1,4 +1,4 @@
-import { useCallback, useLayoutEffect, useRef, useState } from 'react'
+import { useCallback } from 'react'
 import type { InboxListRow } from '../../../shared/api-types'
 import type {
   DispatchReport,
@@ -7,7 +7,8 @@ import type {
 } from '../../../shared/inbox-types'
 import { pilotRpc } from '../../api'
 import { useHeldMerge } from '../../hosts/held-merge'
-import { useHostPoll, type HostRead } from '../../hosts/host-poll'
+import { useHostPoll } from '../../hosts/host-poll'
+import { useLoadedAt } from '../../hosts/loaded-at'
 import { mergedError, mergeInbox, mergeQueue } from '../../hosts/merge-inbox'
 import { errorText } from '../format'
 import { applyReport } from './answer-text'
@@ -15,22 +16,6 @@ import { applyReport } from './answer-text'
 const REFRESH_MS = 10_000
 // Apply now may run actions (act.py allows 10 min) before it answers.
 const APPLY_TIMEOUT_MS = 660_000
-
-// When a machine last brought a new list: card ages are measured from it, so a render never reads the clock.
-function useLoadedAt(reads: readonly HostRead<unknown>[]): number {
-  const [loadedAt, setLoadedAt] = useState(0)
-  const seen = useRef<ReadonlySet<unknown>>(new Set())
-  // Before paint, so a new list never shows with the old clock.
-  useLayoutEffect(() => {
-    const values = reads.map((r) => r.value)
-    const fresh = values.some((v) => v !== null && !seen.current.has(v))
-    seen.current = new Set(values)
-    if (fresh) {
-      setLoadedAt(Date.now())
-    }
-  }, [reads])
-  return loadedAt
-}
 
 export function useWaiting(person: string | null) {
   const params = person ? { person } : {}

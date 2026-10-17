@@ -10,8 +10,9 @@ import type {
 } from '../../shared/inbox-types'
 import type { DoneRun } from '../../shared/visibility-types'
 import { waitingCount } from '../pages/waiting/answer-text'
+import { answered, type Answered } from './answered-reads'
 import type { HostRead } from './host-poll'
-import { hostedKey, type Hosted, type PilotHostEntry, type PilotHostRef } from './pilot-host'
+import { hostedKey, type Hosted } from './pilot-host'
 
 export type MergedInbox = {
   items: Hosted<InboxListRow>[]
@@ -24,20 +25,6 @@ export type MergedInbox = {
   people: InboxListPayload['people']
   groups: InboxListPayload['groups']
   automations: InboxListPayload['automations']
-}
-
-type Answered<T> = { host: PilotHostRef; value: T }
-
-function refOf(host: PilotHostEntry): PilotHostRef {
-  return { key: host.key, target: host.target, machineName: host.machineName, local: host.local }
-}
-
-// Only an online host with a value counts; this machine comes first, the rest keep host order.
-function answered<T>(reads: readonly HostRead<T>[]): Answered<T>[] {
-  const live = reads.flatMap((r) =>
-    r.value !== null && r.host.state === 'online' ? [{ host: refOf(r.host), value: r.value }] : []
-  )
-  return [...live.filter((r) => r.host.local), ...live.filter((r) => !r.host.local)]
 }
 
 function joinById<T extends { id: string }>(lists: readonly T[][], join?: (a: T, b: T) => T): T[] {

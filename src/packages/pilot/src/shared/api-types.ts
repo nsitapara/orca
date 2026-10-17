@@ -314,6 +314,10 @@ export type AutomationSummary = {
   chain: ChainPart[]
   // Its runs still going or waiting on a person, with their steps: the list's lit chips.
   live: ActivityRun[]
+  // The machine its runs_on names; null without one. Absent from engines older than runs_on.
+  runsOn?: string | null
+  // Whether this engine's scheduler ticks it. Absent from engines older than runs_on.
+  ticksHere?: boolean
 }
 export type AutomationListPayload = {
   automations: AutomationSummary[]

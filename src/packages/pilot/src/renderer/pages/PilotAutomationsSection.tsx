@@ -1,13 +1,38 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type { AutomationListPayload, PilotStatus } from '../../shared/api-types'
 import { pilotRpc } from '../api'
+import { useHostPoll, type HostRead } from '../hosts/host-poll'
+import { HostsNotice } from '../hosts/HostsNotice'
+import { useLoadedAt } from '../hosts/loaded-at'
+import { AUTOMATIONS_LIST, mergeAutomationLists } from '../hosts/merge-automations'
+import { mergedError } from '../hosts/merge-inbox'
+import { AUTOMATIONS_POLL_MS } from '../run-views/automations-feed'
 import { AutomationsTable } from './AutomationsTable'
 import { setEnabledAll } from './EnabledSwitch'
 import { setPilotAutomationsView } from './automations-view'
-import { errorText } from './format'
 import { ProblemNotices } from './ProblemNotices'
 
-// The Automations page's list: Pilot's YAML automations.
+// The list fails in degraded mode; this machine's pilot.status still says why Pilot didn't start.
+function useStartError(reads: readonly HostRead<unknown>[]): string | null {
+  const failed = reads.find((r) => r.host.local)?.error ?? null
+  const [said, setSaid] = useState<{ after: string; error: string | null } | null>(null)
+  useEffect(() => {
+    if (failed === null) {
+      return undefined
+    }
+    let alive = true
+    pilotRpc<PilotStatus>('pilot.status').then(
+      (s) => alive && setSaid({ after: failed, error: s.error }),
+      () => alive && setSaid(null)
+    )
+    return () => {
+      alive = false
+    }
+  }, [failed])
+  return said && said.after === failed ? said.error : null
+}
+
+// The Automations page's list: Pilot's YAML automations, one row per automation across every machine.
 export function PilotAutomationsSection({
   onOpen,
   onOpenJob
@@ -15,52 +40,20 @@ export function PilotAutomationsSection({
   onOpen: (id: string) => void
   onOpenJob: (jobId: string) => void
 }): React.JSX.Element {
-  const [payload, setPayload] = useState<AutomationListPayload | null>(null)
-  const [error, setError] = useState<string | null>(null)
-  const [startError, setStartError] = useState<string | null>(null)
+  const { reads, reload } = useHostPoll<AutomationListPayload>(
+    AUTOMATIONS_LIST,
+    undefined,
+    AUTOMATIONS_POLL_MS
+  )
+  const payload = useMemo(() => mergeAutomationLists(reads), [reads])
+  const error = mergedError(reads)
+  const startError = useStartError(reads)
+  const now = useLoadedAt(reads)
   const [refused, setRefused] = useState<string[]>([])
-  const [now, setNow] = useState(() => Date.now())
-  const mounted = useRef(true)
-  const load = useCallback(() => {
-    return pilotRpc<AutomationListPayload>('pilot.automations.list').then(
-      (p) => {
-        if (!mounted.current) {
-          return
-        }
-        setPayload(p)
-        setNow(Date.now())
-        setError(null)
-        setStartError(null)
-      },
-      (e: unknown) => {
-        if (!mounted.current) {
-          return
-        }
-        setError(errorText(e))
-        // The list fails in degraded mode; pilot.status still says why Pilot didn't start.
-        pilotRpc<PilotStatus>('pilot.status').then(
-          (s) => mounted.current && setStartError(s.error),
-          () => mounted.current && setStartError(null)
-        )
-      }
-    )
-  }, [])
-  useEffect(() => {
-    mounted.current = true
-    load()
-    const timer = setInterval(load, 20_000)
-    return () => {
-      mounted.current = false
-      clearInterval(timer)
-    }
-  }, [load])
   // The switch settles once the list has reloaded, so it never shows the old state in between.
   const toggle = async (ids: string[], enabled: boolean): Promise<void> => {
-    const said = await setEnabledAll(ids, enabled)
-    if (mounted.current) {
-      setRefused(said)
-    }
-    await load()
+    setRefused(await setEnabledAll(ids, enabled))
+    await reload()
   }
 
   const loading = !payload && !error
@@ -82,6 +75,7 @@ export function PilotAutomationsSection({
         </button>
       </div>
       {error ? <p className="text-sm text-destructive">{error}</p> : null}
+      <HostsNotice reads={reads} what="automations" />
       {refused.map((line) => (
         <p key={line} className="text-sm text-destructive">
           {`Couldn't change ${line}`}
