@@ -5,17 +5,61 @@ import type {
   InboxListPayload,
   QueueListPayload
 } from '../../../shared/inbox-types'
-import { pilotRpc } from '../../api'
 import { useHeldMerge } from '../../hosts/held-merge'
 import { useHostPoll } from '../../hosts/host-poll'
+import { hostRpc } from '../../hosts/host-rpc'
 import { useLoadedAt } from '../../hosts/loaded-at'
 import { mergedError, mergeInbox, mergeQueue } from '../../hosts/merge-inbox'
+import type { Hosted, PilotHostEntry } from '../../hosts/pilot-host'
+import { currentPilotHosts } from '../../hosts/pilot-hosts-feed'
 import { errorText } from '../format'
 import { applyReport } from './answer-text'
+import type { ApplyResult } from './InMotionPanel'
 
 const REFRESH_MS = 10_000
 // Apply now may run actions (act.py allows 10 min) before it answers.
 const APPLY_TIMEOUT_MS = 660_000
+
+export function sumDispatchReports(reports: readonly DispatchReport[]): DispatchReport {
+  return reports.reduce<DispatchReport>(
+    (sum, r) => ({
+      retired: sum.retired + r.retired,
+      ticked: sum.ticked + r.ticked,
+      actions: sum.actions + r.actions,
+      agents: sum.agents + r.agents,
+      held: sum.held + r.held,
+      reasked: sum.reasked + r.reasked
+    }),
+    { retired: 0, ticked: 0, actions: 0, agents: 0, held: 0, reasked: 0 }
+  )
+}
+
+// Machines that apply answers: online, and not reporting their scheduler off (an older engine reports nothing).
+function applyingHosts(): PilotHostEntry[] {
+  return currentPilotHosts().filter((h) => h.state === 'online' && h.schedulerOn !== false)
+}
+
+// One machine says its own line as before; several say the summed pass, then what each one couldn't.
+function applyResult(
+  hosts: readonly PilotHostEntry[],
+  settled: readonly PromiseSettledResult<DispatchReport>[]
+): ApplyResult {
+  const reports = settled.flatMap((s) => (s.status === 'fulfilled' ? [s.value] : []))
+  const failures = settled.flatMap((s, i) =>
+    s.status === 'rejected' ? [{ host: hosts[i], text: errorText(s.reason) }] : []
+  )
+  if (hosts.length === 0) {
+    return { said: 'No connected Pilot applies answers right now', failed: true }
+  }
+  if (hosts.length === 1 && failures.length === 1) {
+    return { said: failures[0].text, failed: true }
+  }
+  const said = [
+    ...(reports.length > 0 ? [applyReport(sumDispatchReports(reports))] : []),
+    ...failures.map((f) => `${f.host.machineName} couldn't apply: ${f.text}`)
+  ]
+  return { said: said.join(' · '), failed: failures.length > 0 }
+}
 
 export function useWaiting(person: string | null) {
   const params = person ? { person } : {}
@@ -39,14 +83,15 @@ export function useWaiting(person: string | null) {
   }, [reloadInbox, reloadQueue])
 
   // Error text for the card (the card changed, it closed meanwhile), or null once saved.
+  // Every card action goes to the card's own machine; this machine's keep their exact call.
   const save = useCallback(
     async (
-      item: InboxListRow,
+      item: Hosted<InboxListRow>,
       answer: { option: number | null; text: string },
       by: string | null
     ) => {
       try {
-        await pilotRpc('pilot.inbox.answer', {
+        await hostRpc(item.host, 'pilot.inbox.answer', {
           id: item.id,
           text: answer.text,
           ...(answer.option === null ? {} : { option: answer.option }),
@@ -65,9 +110,9 @@ export function useWaiting(person: string | null) {
 
   // A person's Retry on a blocked preparation: null once requeued, else why not.
   const retryPreparation = useCallback(
-    async (item: InboxListRow) => {
+    async (item: Hosted<InboxListRow>) => {
       try {
-        await pilotRpc('pilot.inbox.prepareRetry', { id: item.id })
+        await hostRpc(item.host, 'pilot.inbox.prepareRetry', { id: item.id })
         await reload()
         return null
       } catch (e) {
@@ -80,9 +125,9 @@ export function useWaiting(person: string | null) {
 
   // R-P5: a person's Prepare evidence on a never-prepared push or drafted card.
   const prepareEvidence = useCallback(
-    async (item: InboxListRow) => {
+    async (item: Hosted<InboxListRow>) => {
       try {
-        await pilotRpc('pilot.inbox.prepareEvidence', { id: item.id })
+        await hostRpc(item.host, 'pilot.inbox.prepareEvidence', { id: item.id })
         await reload()
         return null
       } catch (e) {
@@ -94,18 +139,17 @@ export function useWaiting(person: string | null) {
   )
 
   // What the pass did, in a line, so Apply now always says something (even "2 still held").
-  const applyNow = useCallback(async () => {
-    try {
-      const report = await pilotRpc<DispatchReport>(
-        'pilot.answers.applyNow',
-        {},
-        { timeoutMs: APPLY_TIMEOUT_MS }
+  const applyNow = useCallback(async (): Promise<ApplyResult> => {
+    const hosts = applyingHosts()
+    const settled = await Promise.allSettled(
+      hosts.map((host) =>
+        hostRpc<DispatchReport>(host, 'pilot.answers.applyNow', {}, { timeoutMs: APPLY_TIMEOUT_MS })
       )
+    )
+    if (settled.some((s) => s.status === 'fulfilled')) {
       await reload()
-      return { said: applyReport(report), failed: false }
-    } catch (e) {
-      return { said: errorText(e), failed: true }
     }
+    return applyResult(hosts, settled)
   }, [reload])
 
   return {

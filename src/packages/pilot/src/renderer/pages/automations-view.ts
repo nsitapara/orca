@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from 'react'
+import { hostedKey, LOCAL_PILOT_HOST, type PilotHostRef } from '../hosts/pilot-host'
 
 // Which sub-view the Automations page shows. The sidebar's "Inbox", "Running" and "Playground" items flip it.
 export type PilotAutomationsView = 'automations' | 'inbox' | 'activity' | 'running' | 'playground'
@@ -10,7 +11,7 @@ let openJobId: string | null = null
 // The tab an automation's page shows; a newly opened automation starts on How it runs.
 export type AutomationTab = 'how' | 'activity' | 'yaml'
 let tab: AutomationTab = 'how'
-// A card the Inbox picks once its list has loaded (the run panel's "asks you" link).
+// A card the Inbox picks once its list has loaded (the run panel's "asks you" link), by its hostedKey.
 let pendingCard: string | null = null
 // The automations Activity opens filtered to (a list chip with several live runs).
 let pendingFilter: string[] | null = null
@@ -115,11 +116,12 @@ export function showAutomationsPage(): void {
   notify()
 }
 
-export function showInboxCard(id: string): void {
+// Card ids are per machine, so the card is named on its machine (none: this machine).
+export function showInboxCard(id: string, host: PilotHostRef = LOCAL_PILOT_HOST): void {
   current = 'inbox'
   openId = null
   openJobId = null
-  pendingCard = id
+  pendingCard = hostedKey(host, id)
   notify()
 }
 

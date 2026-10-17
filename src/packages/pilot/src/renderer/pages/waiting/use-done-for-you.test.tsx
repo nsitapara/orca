@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { testRun } from '../../../shared/run-views/__fixtures__/runs'
 import type { DoneRun } from '../../../shared/visibility-types'
 import { byHost, LOCAL_NAMED, MINI } from '../../hosts/__fixtures__/hosts'
-import { hostOf } from '../../hosts/pilot-host'
+import { hostOf, LOCAL_PILOT_HOST } from '../../hosts/pilot-host'
 import { resetPilotHostsFeed, setPilotHostsForTests } from '../../hosts/pilot-hosts-feed'
 
 const pilotRpc = vi.fn()
@@ -53,7 +53,7 @@ describe('useDoneForYou', () => {
     let acknowledged: Promise<string | null> = Promise.resolve(null)
     let settled = false
     act(() => {
-      acknowledged = result.current.acknowledge(['old'])
+      acknowledged = result.current.acknowledge([{ id: 'old', host: LOCAL_PILOT_HOST }])
       void acknowledged.then(() => (settled = true))
     })
     await act(async () => {})
@@ -76,5 +76,30 @@ describe('useDoneForYou', () => {
         ['r1', 'env:mini']
       ])
     )
+  })
+
+  it("names the machine that couldn't acknowledge when several were asked", async () => {
+    setPilotHostsForTests([LOCAL_NAMED, MINI])
+    pilotRpc.mockImplementation(
+      byHost({
+        local: () => [],
+        mini: (method) => {
+          if (method === 'pilot.runs.acknowledge') {
+            throw new Error('Pilot is busy')
+          }
+          return []
+        }
+      })
+    )
+    const { result } = renderHook(() => useDoneForYou(null))
+    await act(async () => {})
+    let failed: string | null = null
+    await act(async () => {
+      failed = await result.current.acknowledge([
+        { id: 'r1', host: LOCAL_NAMED },
+        { id: 'r1', host: MINI }
+      ])
+    })
+    expect(failed).toBe('Mac mini: Pilot is busy')
   })
 })

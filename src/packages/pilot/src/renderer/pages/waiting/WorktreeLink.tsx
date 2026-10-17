@@ -1,32 +1,62 @@
 import { ArrowUpRight } from 'lucide-react'
 import type { InboxGroup } from '../../../shared/inbox-groups'
-import { pilotStore } from '../../store'
+import { LOCAL_PILOT_HOST, type PilotHostRef } from '../../hosts/pilot-host'
+import { currentPilotHosts } from '../../hosts/pilot-hosts-feed'
+import { pilotStore, type PilotStoreState } from '../../store'
+
+type StoreWorktree = NonNullable<PilotStoreState['worktreesByRepo']>[string][number]
 
 const trimmed = (path: string): string => path.replace(/\/+$/, '')
+
+// The environments of the other Pilot machines this window lists.
+function otherPilotEnvironments(): Set<string> {
+  return new Set(
+    currentPilotHosts().flatMap((h) =>
+      h.target.kind === 'environment' ? [h.target.environmentId] : []
+    )
+  )
+}
+
+// Another machine's worktrees carry its environment id. This machine's carry none, or (in the browser, where this
+// machine is the page's server) an environment no other listed Pilot is on.
+function worktreesOn(host: PilotHostRef): StoreWorktree[] {
+  const all = Object.values(pilotStore()?.getState().worktreesByRepo ?? {}).flat()
+  const { target } = host
+  if (target.kind === 'environment') {
+    return all.filter((w) => w.runtimeOwnerEnvironmentId === target.environmentId)
+  }
+  const others = otherPilotEnvironments()
+  return all.filter(
+    (w) => w.runtimeOwnerEnvironmentId === undefined || !others.has(w.runtimeOwnerEnvironmentId)
+  )
+}
 
 export function isWorktreeGroup(group: InboxGroup): boolean {
   return group.key.startsWith('wt:')
 }
 
-// The app's id for a worktree group's worktree, or null when the group is not a worktree or the app does not
-// have it. An id an item key named is used when the store knows it; otherwise the worktree is looked up by
-// its path (no id format is guessed).
-export function openableWorktreeId(group: InboxGroup): string | null {
+// The app's id for a worktree group's worktree on the group's machine, or null when the group is not a worktree
+// or the app does not have it there. An id an item key named is used when that machine's worktrees have it;
+// otherwise the worktree is looked up by its path (no id format is guessed).
+export function openableWorktreeId(
+  group: InboxGroup,
+  host: PilotHostRef = LOCAL_PILOT_HOST
+): string | null {
   if (!isWorktreeGroup(group)) {
     return null
   }
-  const repos = pilotStore()?.getState().worktreesByRepo ?? {}
-  const all = Object.values(repos).flat()
-  if (group.worktreeId && all.some((w) => w.id === group.worktreeId)) {
+  if (group.worktreeId && worktreesOn(host).some((w) => w.id === group.worktreeId)) {
     return group.worktreeId
   }
-  return worktreeIdForPath(group.key.slice('wt:'.length))
+  return worktreeIdForPath(group.key.slice('wt:'.length), host)
 }
 
-// The app's id for the worktree at this path, or null when the app does not have it.
-export function worktreeIdForPath(path: string): string | null {
-  const all = Object.values(pilotStore()?.getState().worktreesByRepo ?? {}).flat()
-  return all.find((w) => trimmed(w.path) === trimmed(path))?.id ?? null
+// The app's id for the worktree at this path on that machine, or null when the app does not have it there.
+export function worktreeIdForPath(
+  path: string,
+  host: PilotHostRef = LOCAL_PILOT_HOST
+): string | null {
+  return worktreesOn(host).find((w) => trimmed(w.path) === trimmed(path))?.id ?? null
 }
 
 // The display name of the project the app lists this worktree under, or null when the app does not have it.
@@ -47,8 +77,15 @@ export function openWorktree(id: string): void {
 }
 
 // A section heading's worktree name: a link that opens the worktree, plain text when the app does not have it.
-export function WorktreeName({ group }: { group: InboxGroup }): React.JSX.Element {
-  const id = openableWorktreeId(group)
+export function WorktreeName({
+  group,
+  host
+}: {
+  group: InboxGroup
+  // The section's machine; none is this machine.
+  host?: PilotHostRef
+}): React.JSX.Element {
+  const id = openableWorktreeId(group, host)
   if (!isWorktreeGroup(group)) {
     return <span className="text-foreground">{group.label}</span>
   }
@@ -73,8 +110,14 @@ export function WorktreeName({ group }: { group: InboxGroup }): React.JSX.Elemen
 }
 
 // The small open button beside a group's name in the card list; none unless the app has the worktree.
-export function OpenWorktreeButton({ group }: { group: InboxGroup }): React.JSX.Element | null {
-  const id = openableWorktreeId(group)
+export function OpenWorktreeButton({
+  group,
+  host
+}: {
+  group: InboxGroup
+  host?: PilotHostRef
+}): React.JSX.Element | null {
+  const id = openableWorktreeId(group, host)
   if (!id) {
     return null
   }

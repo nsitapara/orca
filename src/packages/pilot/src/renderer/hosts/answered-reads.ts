@@ -4,8 +4,22 @@ import type { PilotHostEntry, PilotHostRef } from './pilot-host'
 export type Answered<T> = { host: PilotHostRef; value: T }
 export type AnsweredRead<T> = Answered<T> & { entry: PilotHostEntry }
 
+// One ref per entry: a card's host stays the same object across polls, so effects keyed on it don't restart.
+const refs = new WeakMap<PilotHostEntry, PilotHostRef>()
+
 export function refOf(host: PilotHostEntry): PilotHostRef {
-  return { key: host.key, target: host.target, machineName: host.machineName, local: host.local }
+  const known = refs.get(host)
+  if (known) {
+    return known
+  }
+  const ref = {
+    key: host.key,
+    target: host.target,
+    machineName: host.machineName,
+    local: host.local
+  }
+  refs.set(host, ref)
+  return ref
 }
 
 // Only an online host with a value counts; this machine comes first, the rest keep host order.

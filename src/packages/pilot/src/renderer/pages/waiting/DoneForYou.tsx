@@ -12,6 +12,17 @@ function runKey(d: ShownRun): string {
   return hostedKey(hostOf(d.run), d.run.id)
 }
 
+// The runs a Got it named by their keys, each with the machine that acknowledges it.
+export function runsOfKeys(
+  runs: readonly ShownRun[],
+  keys: readonly string[]
+): { id: string; host: PilotHostRef }[] {
+  const named = new Set(keys)
+  return runs
+    .filter((d) => named.has(runKey(d)))
+    .map((d) => ({ id: d.run.id, host: hostOf(d.run) }))
+}
+
 // Done for you (Run visibility spec §3): finished runs that changed something outside Pilot or took a default, until
 // Got it. A run's open defaults sit under it as their own cards, so Keep and Override work as anywhere.
 export function DoneForYou({
@@ -22,7 +33,8 @@ export function DoneForYou({
   runs: ShownRun[]
   // By the card's hostedKey: a run's defaults are cards on the run's machine.
   cardFor: (cardKey: string) => React.ReactNode
-  onAcknowledge: (runIds: string[]) => Promise<string | null>
+  // By each run's hostedKey (a bare id for this machine's runs): run ids are per machine.
+  onAcknowledge: (runKeys: string[]) => Promise<string | null>
 }): React.JSX.Element | null {
   const { byId } = useAutomationsFeed()
   // An acknowledge error is kept with the list it came from, so it goes when the list changes.
@@ -33,13 +45,13 @@ export function DoneForYou({
   }
   const listKey = runs.map(runKey).join(',')
   const error = failure?.key === listKey ? failure.text : null
-  const acknowledge = async (ids: string[]): Promise<void> => {
+  const acknowledge = async (keys: string[]): Promise<void> => {
     if (busy) {
       return
     }
     setBusy(true)
     try {
-      const failed = await onAcknowledge(ids)
+      const failed = await onAcknowledge(keys)
       setFailure(failed ? { key: listKey, text: failed } : null)
     } catch (e) {
       setFailure({ key: listKey, text: errorText(e) })
@@ -62,7 +74,7 @@ export function DoneForYou({
           type="button"
           disabled={busy}
           className="text-xs underline"
-          onClick={() => void acknowledge(runs.map((d) => d.run.id))}
+          onClick={() => void acknowledge(runs.map(runKey))}
         >
           Got all
         </button>
@@ -86,7 +98,7 @@ export function DoneForYou({
               disabled={busy}
               aria-label={`Got it: ${d.run.itemLabel}`}
               className="self-start text-xs underline"
-              onClick={() => void acknowledge([d.run.id])}
+              onClick={() => void acknowledge([runKey(d)])}
             >
               Got it
             </button>

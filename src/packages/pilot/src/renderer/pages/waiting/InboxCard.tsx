@@ -5,6 +5,7 @@ import type { ActivityRun, InboxListRow, InboxReply } from '../../../shared/api-
 import type { AnswerState, CardHistoryEntry, RunLine } from '../../../shared/inbox-types'
 import type { PartSwitches } from '../../details/ReviewBlock'
 import { MachineChip } from '../../hosts/MachineChip'
+import { PilotHostProvider } from '../../hosts/PilotHostContext'
 import { hostedKey, hostOf, type Hosted } from '../../hosts/pilot-host'
 import { FromRun } from '../../run-views/FromRun'
 import { PreparationProgress } from './PreparationProgress'
@@ -119,20 +120,7 @@ function Eyebrow({
   )
 }
 
-export function InboxCard({
-  item,
-  automationName,
-  run,
-  runLine,
-  answerState,
-  history,
-  error,
-  selected,
-  now,
-  onSave,
-  onRetryPreparation,
-  onPrepareEvidence
-}: {
+type InboxCardProps = {
   item: Hosted<InboxListRow>
   automationName: string
   // The run the card came from (InboxListPayload.runs), for its "From run" line; null when it has none.
@@ -154,7 +142,31 @@ export function InboxCard({
   onRetryPreparation: () => Promise<string | null>
   // Prepare evidence on a never-prepared push or drafted card: null once queued, else why not.
   onPrepareEvidence: () => Promise<string | null>
-}): React.JSX.Element {
+}
+
+// Everything inside a card (its Details, its preparation request) asks the card's own machine.
+export function InboxCard(props: InboxCardProps): React.JSX.Element {
+  return (
+    <PilotHostProvider host={hostOf(props.item)}>
+      <CardBody {...props} />
+    </PilotHostProvider>
+  )
+}
+
+function CardBody({
+  item,
+  automationName,
+  run,
+  runLine,
+  answerState,
+  history,
+  error,
+  selected,
+  now,
+  onSave,
+  onRetryPreparation,
+  onPrepareEvidence
+}: InboxCardProps): React.JSX.Element {
   const [unsaved, setUnsaved] = useState(false)
   // Set while the card is open: when it is answered from here the next line takes focus (not on page load).
   const justAnswered = useRef(item.status === 'open')

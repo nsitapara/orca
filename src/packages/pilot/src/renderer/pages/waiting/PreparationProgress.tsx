@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import type { InboxItemRow, InboxListRow } from '../../../shared/api-types'
 import type { PreparationRequirement } from '../../../shared/preparation'
-import { pilotRpc } from '../../api'
+import { hostRpc } from '../../hosts/host-rpc'
+import { usePilotHost } from '../../hosts/PilotHostContext'
 import { errorText } from '../format'
 
 const ARTIFACT_LABELS: Record<PreparationRequirement, string> = {
@@ -23,6 +24,8 @@ function requestText(context: string): string {
 
 // The list carries a light ref (Ruling 2); the full request is read only when asked (pilot.inbox.get).
 function RequestView({ id }: { id: string }): React.JSX.Element {
+  // The card's own machine holds its request.
+  const host = usePilotHost()
   const [open, setOpen] = useState(false)
   const [text, setText] = useState<string | null>(null)
   const toggle = async (): Promise<void> => {
@@ -31,7 +34,7 @@ function RequestView({ id }: { id: string }): React.JSX.Element {
       return
     }
     try {
-      const item = await pilotRpc<InboxItemRow>('pilot.inbox.get', { id })
+      const item = await hostRpc<InboxItemRow>(host, 'pilot.inbox.get', { id })
       setText(requestText(item.preparation?.input.context ?? ''))
     } catch (e) {
       setText(errorText(e))

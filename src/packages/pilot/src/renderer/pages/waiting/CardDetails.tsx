@@ -12,9 +12,12 @@ import { Markdown } from '../../details/markdown'
 import type { PartSwitches } from '../../details/ReviewBlock'
 import { setAllSections, useOffSections } from '../../details/section-filter'
 import { sectionsOf } from '../../details/sections'
+import { hostRpc } from '../../hosts/host-rpc'
+import { usePilotHost } from '../../hosts/PilotHostContext'
+import { hostedKey, type PilotHostRef } from '../../hosts/pilot-host'
 import { setDetailsOpen, useDetailsOpen } from './details-open'
 
-// Snapshots by `${id}@${digest}`, newest last, capped: a snapshot is bound to one digest and never changes.
+// Snapshots by `${hostedKey}@${digest}`, newest last, capped: a snapshot is bound to one digest and never changes.
 const SNAPSHOTS = new Map<string, DetailsSnapshot>()
 const MAX_SNAPSHOTS = 30
 
@@ -37,10 +40,11 @@ function whyOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
 }
 
-function useSnapshot(item: InboxListRow, open: boolean): Snapshot {
+function useSnapshot(item: InboxListRow, open: boolean, host: PilotHostRef): Snapshot {
   const { id, digest } = item
   const wanted = item.details !== null && open
-  const key = `${id}@${digest}`
+  // Card ids are per machine, so another machine's card never takes this one's snapshot.
+  const key = `${hostedKey(host, id)}@${digest}`
   const [loaded, setLoaded] = useState<Loaded | null>(null)
   const [attempt, setAttempt] = useState(0)
   useEffect(() => {
@@ -48,7 +52,7 @@ function useSnapshot(item: InboxListRow, open: boolean): Snapshot {
       return undefined
     }
     let live = true
-    pilotRpc<{ snapshot: DetailsSnapshot }>('pilot.inbox.details', { id, digest }).then(
+    hostRpc<{ snapshot: DetailsSnapshot }>(host, 'pilot.inbox.details', { id, digest }).then(
       (result) => {
         remember(key, result.snapshot)
         if (live) {
@@ -64,7 +68,7 @@ function useSnapshot(item: InboxListRow, open: boolean): Snapshot {
     return () => {
       live = false
     }
-  }, [wanted, key, id, digest, attempt])
+  }, [wanted, key, id, digest, attempt, host])
   const cached = SNAPSHOTS.get(key)
   const retry = () => {
     setLoaded(null)
@@ -96,6 +100,7 @@ function BundleBody({
   retry: () => void
   parts: PartSwitches | null
 }): React.JSX.Element | null {
+  const host = usePilotHost()
   if (!loaded) {
     return <p className="text-sm text-muted-foreground">Loading…</p>
   }
@@ -110,7 +115,7 @@ function BundleBody({
     )
   }
   const loadImage = async (file: string): Promise<string> => {
-    const image = await pilotRpc<{ mime: string; base64: string }>('pilot.inbox.image', {
+    const image = await hostRpc<{ mime: string; base64: string }>(host, 'pilot.inbox.image', {
       id: item.id,
       digest: item.digest,
       file
@@ -118,6 +123,10 @@ function BundleBody({
     return base64Url(image.mime, image.base64)
   }
   const openReport = async (file: string): Promise<void> => {
+    // The report is a file on the card's machine; this machine's system can't open it.
+    if (!host.local) {
+      throw new Error(`This report is on ${host.machineName}; open it there`)
+    }
     const { path } = await pilotRpc<{ path: string }>('pilot.inbox.report', {
       id: item.id,
       digest: item.digest,
@@ -211,8 +220,11 @@ export function CardDetails({
   item: InboxListRow
   parts: PartSwitches | null
 }): React.JSX.Element | null {
-  const open = useDetailsOpen(item.id)
-  const { loaded, retry } = useSnapshot(item, open)
+  const host = usePilotHost()
+  // Open state by hostedKey too, so another machine's card with the same id keeps its own.
+  const openKey = hostedKey(host, item.id)
+  const open = useDetailsOpen(openKey)
+  const { loaded, retry } = useSnapshot(item, open, host)
   const off = useOffSections()
   if (!item.details && !item.detailsMd) {
     return null
@@ -222,7 +234,7 @@ export function CardDetails({
   return (
     <Collapsible
       open={open}
-      onOpenChange={(next) => setDetailsOpen(item.id, next)}
+      onOpenChange={(next) => setDetailsOpen(openKey, next)}
       className="min-w-0 overflow-hidden rounded-lg border border-border bg-background/60"
     >
       <div className="flex items-center bg-muted/60">

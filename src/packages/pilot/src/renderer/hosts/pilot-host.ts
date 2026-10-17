@@ -31,6 +31,19 @@ export function hostOf(value: { host?: PilotHostRef }): PilotHostRef {
   return value.host ?? LOCAL_PILOT_HOST
 }
 
+// Machines in first-seen order, each with its own items in their order.
+export function groupByHost<T extends { host: PilotHostRef }>(
+  items: readonly T[]
+): { host: PilotHostRef; items: T[] }[] {
+  const groups = new Map<string, { host: PilotHostRef; items: T[] }>()
+  for (const item of items) {
+    const group = groups.get(item.host.key) ?? { host: item.host, items: [] }
+    group.items.push(item)
+    groups.set(item.host.key, group)
+  }
+  return [...groups.values()]
+}
+
 // Local ids stay bare so existing keys and persisted state keep working.
 export function hostedKey(host: Pick<PilotHostRef, 'key' | 'local'>, id: string): string {
   return host.local ? id : `${host.key}/${id}`

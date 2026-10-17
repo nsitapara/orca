@@ -8,6 +8,8 @@ vi.mock('../../api', () => ({
   pilotRpc: (...args: unknown[]) => pilotRpc(...args)
 }))
 
+import { MINI } from '../../hosts/__fixtures__/hosts'
+import { PilotHostProvider } from '../../hosts/PilotHostContext'
 import { CardDetails } from './CardDetails'
 
 const snapshot = {
@@ -91,4 +93,29 @@ describe('CardDetails', () => {
       expect(screen.queryAllByRole('button', { name: 'Open' })).toHaveLength(opens)
     }
   )
+
+  it("loads a remote card's details from its machine and won't open its report here", async () => {
+    pilotRpc.mockResolvedValue({ snapshot: reportSnapshot })
+    const shared = item('on-both')
+    // This machine's card with the same id and digest loads first, so a cache keyed by id alone would answer.
+    render(<CardDetails item={shared} parts={null} />)
+    fireEvent.click(screen.getByText('Details'))
+    await screen.findByText('1579-v1.html')
+    cleanup()
+    render(
+      <PilotHostProvider host={MINI}>
+        <CardDetails item={shared} parts={null} />
+      </PilotHostProvider>
+    )
+    fireEvent.click(screen.getByText('Details'))
+    await screen.findByText('1579-v1.html')
+    expect(pilotRpc).toHaveBeenLastCalledWith(
+      'pilot.inbox.details',
+      { id: 'on-both', digest: shared.digest },
+      { target: MINI.target }
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Open' }))
+    expect(await screen.findByText(/This report is on Mac mini; open it there/)).toBeTruthy()
+    expect(pilotRpc.mock.calls.some(([method]) => method === 'pilot.inbox.report')).toBe(false)
+  })
 })

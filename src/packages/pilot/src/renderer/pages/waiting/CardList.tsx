@@ -59,7 +59,7 @@ export function CardList({
             >
               {s.group.label} · {s.items.length}
             </button>
-            <OpenWorktreeButton group={s.group} />
+            <OpenWorktreeButton group={s.group} host={s.host} />
           </div>
           {s.items.map((i) => {
             const key = hostedKey(i.host, i.id)

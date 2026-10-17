@@ -11,6 +11,8 @@ import {
 const pilotRpc = vi.fn()
 vi.mock('../../api', () => ({ pilotRpc: (...args: unknown[]) => pilotRpc(...args) }))
 
+import { MINI } from '../../hosts/__fixtures__/hosts'
+import { PilotHostProvider } from '../../hosts/PilotHostContext'
 import { PreparationProgress } from './PreparationProgress'
 
 const REQUEST = JSON.stringify({ ask: 'Push !1561?', recovery: 'Rerun the pinned checks' })
@@ -91,5 +93,21 @@ describe('PreparationProgress', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Show the request' }))
     expect(await screen.findByText(/Rerun the pinned checks/)).toBeTruthy()
     expect(pilotRpc).toHaveBeenCalledWith('pilot.inbox.get', { id: 'c1' })
+  })
+
+  it("loads a remote card's full request from its machine", async () => {
+    pilotRpc.mockResolvedValue({ id: 'c1', preparation: full('queued') })
+    render(
+      <PilotHostProvider host={MINI}>
+        <PreparationProgress
+          item={row('queued')}
+          onRetry={async () => null}
+          onPrepareEvidence={async () => null}
+        />
+      </PilotHostProvider>
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Show the request' }))
+    expect(await screen.findByText(/Rerun the pinned checks/)).toBeTruthy()
+    expect(pilotRpc).toHaveBeenCalledWith('pilot.inbox.get', { id: 'c1' }, { target: MINI.target })
   })
 })

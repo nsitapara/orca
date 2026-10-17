@@ -72,6 +72,13 @@ describe('mergeInbox', () => {
     expect(m.history.has(hostedKey(MINI, 'in_1'))).toBe(true)
   })
 
+  // A card's details load keys on its host: a new object each poll would restart a failed load unasked.
+  it("gives a machine's cards the same host object on every merge", () => {
+    const first = mergeInbox([read(MINI, inbox('in_1', 'r1'))])!
+    const again = mergeInbox([read(MINI, inbox('in_1', 'r1'))])!
+    expect(again.items[0].host).toBe(first.items[0].host)
+  })
+
   it("joins people, groups and automations by id, this machine's first", () => {
     const mini = inbox('in_2', 'r2', {
       people: [

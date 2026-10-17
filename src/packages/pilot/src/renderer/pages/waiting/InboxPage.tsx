@@ -8,7 +8,7 @@ import { waitingCount, preparingCount, preparationBlockedCount } from './answer-
 import { useAutomationsFeed } from '../../run-views/automations-feed'
 import { clearPendingInboxCard, usePendingInboxCard } from '../automations-view'
 import { CardList } from './CardList'
-import { DoneForYou } from './DoneForYou'
+import { DoneForYou, runsOfKeys } from './DoneForYou'
 import { FilterBadges } from './FilterBadges'
 import { setAllDetailsOpen, useAllDetailsOpen } from './details-open'
 import { ALL, InboxHeader } from './InboxHeader'
@@ -39,7 +39,7 @@ function SectionHeading({ section }: { section: HostedSection }): React.JSX.Elem
       title={section.group.label}
       className="sticky top-0 z-20 -mx-5 truncate border-b border-border bg-background px-5 py-1.5 font-mono text-xs font-semibold text-muted-foreground"
     >
-      <WorktreeName group={section.group} /> · {section.items.length}
+      <WorktreeName group={section.group} host={section.host} /> · {section.items.length}
     </h2>
   )
 }
@@ -74,13 +74,17 @@ export function InboxPage(): React.JSX.Element {
     if (!pending || !inbox) {
       return
     }
+    // The pending card is a hostedKey; another machine's card can arrive in a later read than this machine's.
+    const found = inbox.items.some((i) => hostedKey(i.host, i.id) === pending)
+    if (!found && reads.some((r) => r.value === null && r.error === null)) {
+      return
+    }
     clearPendingInboxCard()
-    // The run panel names this machine's cards, whose hostedKey is their bare id.
-    if (inbox.items.some((i) => hostedKey(i.host, i.id) === pending)) {
+    if (found) {
       setSelected(pending)
       document.getElementById(`card-${pending}`)?.scrollIntoView?.({ block: 'start' })
     }
-  }, [pending, inbox])
+  }, [pending, inbox, reads])
   // Save errors are kept here, by card hostedKey: a card remounts as a new version on every reload.
   const [errors, setErrors] = useState<Record<string, string>>({})
   const people = inbox?.people ?? []
@@ -112,8 +116,9 @@ export function InboxPage(): React.JSX.Element {
     (s) => activeGroup === ALL || s.key === activeGroup
   )
   const defaultCount = defaultSections.reduce((n, s) => n + s.items.length, 0)
+  // By hostedKey, as each card's Details keeps its open state.
   const detailIds = useMemo(
-    () => items.filter((i) => i.details || i.detailsMd).map((i) => i.id),
+    () => items.filter((i) => i.details || i.detailsMd).map((i) => hostedKey(i.host, i.id)),
     [items]
   )
   const allOpen = useAllDetailsOpen(detailIds)
@@ -220,8 +225,8 @@ export function InboxPage(): React.JSX.Element {
           <DoneForYou
             runs={done.runs}
             cardFor={cardFor}
-            onAcknowledge={async (ids) => {
-              const failed = await done.acknowledge(ids)
+            onAcknowledge={async (keys) => {
+              const failed = await done.acknowledge(runsOfKeys(done.runs, keys))
               await reload()
               return failed
             }}
