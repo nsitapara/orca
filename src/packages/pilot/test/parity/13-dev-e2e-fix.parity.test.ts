@@ -273,7 +273,7 @@ describe('13 · Fix red hourly e2e on dev: the definitions (old job: orca automa
   })
 })
 
-// 13's words (jobs/job_13.py, frozen in each case's old block) and the verdicts that agree with them, through the shared
+// 13's words (frozen in each case's old block) and the verdicts that agree with them, through the shared
 // parity runner (parity-case.ts): a missed read, a tick error, a verdict mismatch or a case without frozen verdicts fails
 // a case. One old sweep, two automations: each compares its own keys.
 const QUOTA_OLD = /^claude (weekly|session) limit at (\d+)%/

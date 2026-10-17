@@ -11,8 +11,8 @@ import type { ParityJob } from '../parity-case'
 import { loadPortedAutomation, portedAutomationsDir } from '../ported'
 import { withWorktrees } from '../worktree-fixture'
 
-// The old side's code was ui-qa/scripts/loop.py (no sweep.py: jobs/job_04.py sets SWEEP = None); its decisions are frozen
-// in each case's old block until milestone 8b deletes it.
+// The old side's code was ui-qa/scripts/loop.py (it had no sweep.py); its decisions are frozen
+// in each case's old block.
 export const JOB_04 = {
   job: '04',
   folder: 'ui-qa',
@@ -24,7 +24,7 @@ export const JOB_04 = {
 const REPO = '400fee61-a463-4f76-894a-39861e906007'
 const wt = (n: number): string => `wt:${REPO}::/wt/web-${n}`
 
-// 04's words (jobs/job_04.py) and the verdicts that agree with them. Nothing new since the last test is the worktree
+// 04's words (frozen in the test data) and the verdicts that agree with them. Nothing new since the last test is the worktree
 // kind's `where.commits` clause (out of scope); a failed head's 12-hour hold is retry_after_failure (not due); a QA run in
 // progress holds its own head (already handled) and every other due worktree (at most 1 at once). A teammate's branch,
 // or one whose owner GitLab can't name, is never listed by the sweep and is out of scope for Pilot.
@@ -155,9 +155,6 @@ function withAnswers(deps: TickDeps, f: ParityFixture): TickDeps {
 
 export const PARITY_04: ParityJob = {
   job: JOB_04.job,
-  folder: JOB_04.folder,
-  script: JOB_04.script,
-  frozen: true,
   files: [
     join(portedAutomationsDir(), 'ui-qa-overnight.yaml'),
     join(portedAutomationsDir(), 'people.yaml')

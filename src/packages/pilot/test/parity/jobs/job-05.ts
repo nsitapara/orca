@@ -22,7 +22,7 @@ export const JOB_05 = {
   )
 }
 
-// 05's words (jobs/job_05.py) and the verdicts that agree with them.
+// 05's words (frozen in the test data) and the verdicts that agree with them.
 export const VERDICTS_05: VerdictTable = {
   map: {
     due: ['started'],
@@ -117,8 +117,6 @@ export function load05(): { def: AutomationDefinition; people: PeopleDirectory }
 // block, recorded before the sweep was deleted.
 export const PARITY_05: ParityJob = {
   job: JOB_05.job,
-  folder: JOB_05.sweep,
-  frozen: true,
   files: [JOB_05.yaml, join(dirname(JOB_05.yaml), 'people.yaml')],
   table: VERDICTS_05,
   seed: seed05,

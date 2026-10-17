@@ -124,7 +124,7 @@ function night(def: AutomationDefinition, n: Night, old: OldEnd): Night04 {
 
 // How each step of a night ends: the context ok; the session as the night says, naming its page; create-report's data as
 // spec §7.10.5 gives it (the session's ending and whether it counts as tested are close_out's, from loop.py itself
-// through jobs/job_04.py, frozen below; the fix only for a complete night with a confirmed bug in this change; a render
+// through the old side, frozen below; the fix only for a complete night with a confirmed bug in this change; a render
 // that failed still gives its flag); the verdict is the YAML's own command.
 function play(n: Night, old: OldEnd): (step: StepDef, fields: ItemFields) => Ended {
   return (step, fields) => {
@@ -297,7 +297,7 @@ const NIGHTS: Night[] = [
 ]
 
 // close_out's outcome and count for each night (NIGHTS, in order), from ui-qa's own pilot_mode.classify and
-// loop.counts_as_tested: run_old_plan.py 04 on the nights, recorded with /opt/homebrew/bin/python3 3.15.0 on 2026-10-16,
+// loop.counts_as_tested: the old plan on the nights, recorded with /opt/homebrew/bin/python3 3.15.0 on 2026-10-16,
 // before milestone 8b deleted them.
 const FROZEN_ENDS: OldEnd[] = [
   { outcome: 'start_failed', tested: false }, // 0: the stack never started

@@ -24,7 +24,7 @@ export const JOB_09 = {
   )
 }
 
-// 09's words (jobs/job_09.py, plan_pass's log, frozen in each case's old block) and the verdicts that agree with them.
+// 09's words (frozen in the test data, plan_pass's log, frozen in each case's old block) and the verdicts that agree with them.
 // An MR that isn't a review request of mine has no word: GitLab's reviewer filter never lists it, for either side. An
 // approved MR is out of scope on the engine (approved_by: none) with the approvers named, as the sweep's skip reasons
 // name them.
@@ -80,8 +80,6 @@ export function load09(): { def: AutomationDefinition; people: PeopleDirectory }
 
 export const PARITY_09: ParityJob = {
   job: JOB_09.job,
-  folder: JOB_09.sweep,
-  frozen: true,
   files: [JOB_09.yaml, join(dirname(JOB_09.yaml), 'people.yaml')],
   table: VERDICTS_09,
   seed: seed09,

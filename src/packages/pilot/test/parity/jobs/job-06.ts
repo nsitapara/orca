@@ -20,7 +20,7 @@ export const JOB_06 = {
   )
 }
 
-// 06's words (jobs/job_06.py) and the verdicts that agree with them. An MR with no thread waiting on me got no word
+// 06's words (frozen in the test data) and the verdicts that agree with them. An MR with no thread waiting on me got no word
 // from the sweep; the engine's `match` puts it out of scope.
 export const VERDICTS_06: VerdictTable = {
   map: {
@@ -81,8 +81,6 @@ export function load06(): { def: AutomationDefinition; people: PeopleDirectory }
 // old block, recorded before the sweep was deleted.
 export const PARITY_06: ParityJob = {
   job: JOB_06.job,
-  folder: JOB_06.sweep,
-  frozen: true,
   files: [JOB_06.yaml, join(dirname(JOB_06.yaml), 'people.yaml')],
   table: VERDICTS_06,
   runScript: answerDue,
