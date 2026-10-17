@@ -12,7 +12,8 @@ export const BLOCK_TYPES = [
   'thread',
   'text',
   'missing',
-  'review'
+  'review',
+  'report'
 ] as const
 
 const text = z.string()
@@ -113,6 +114,7 @@ const Missing = z.looseObject({
   base: maybeText
 })
 const Review = z.looseObject({ type: z.literal('review'), title: maybeText, file: Ref })
+const Report = z.looseObject({ type: z.literal('report'), title: maybeText, file: Ref })
 
 export const BundleSchema: z.ZodType<DetailsBundle> = z
   .looseObject({
@@ -141,7 +143,8 @@ export const BundleSchema: z.ZodType<DetailsBundle> = z
         Thread,
         Text,
         Missing,
-        Review
+        Review,
+        Report
       ]),
       LIMITS.blocks
     )

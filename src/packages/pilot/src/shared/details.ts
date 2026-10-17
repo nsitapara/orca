@@ -70,7 +70,7 @@ export type ArtifactProvenance = {
 }
 export type ArtifactFile = {
   ref: string
-  role: 'patch' | 'review' | 'before' | 'after' | 'screenshot' | 'check'
+  role: 'patch' | 'review' | 'before' | 'after' | 'screenshot' | 'check' | 'report'
   sha256: string
   bytes: number
   // The patch's files, read from its bytes: rename source (null unless renamed), counts, and the hash of the rows.
@@ -123,6 +123,8 @@ export type MissingBlock = Titled & {
   base?: string | null
 }
 export type ReviewBlock = Titled & { type: 'review'; file: string }
+// A page to read outside Pilot (job 09's review guide): an .html file in the Automations folder, opened by Open.
+export type ReportBlock = Titled & { type: 'report'; file: string }
 export type DetailsBlock =
   | FactsBlock
   | DiffBlock
@@ -133,6 +135,7 @@ export type DetailsBlock =
   | TextBlock
   | MissingBlock
   | ReviewBlock
+  | ReportBlock
 export type DetailsBundle = {
   version: 1
   item: string

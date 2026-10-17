@@ -1,6 +1,7 @@
 import { ChevronRight } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
+import { LOCAL_EXECUTION_HOST_ID } from '../../../../../../shared/execution-host'
 import type { InboxListRow } from '../../../shared/api-types'
 import type { DetailsSnapshot } from '../../../shared/details'
 import { pilotRpc } from '../../api'
@@ -115,7 +116,24 @@ function BundleBody({
     })
     return base64Url(image.mime, image.base64)
   }
-  return <DetailsView snapshot={loaded.snapshot} loadImage={loadImage} parts={parts} />
+  const openReport = async (file: string): Promise<void> => {
+    const { path } = await pilotRpc<{ path: string }>('pilot.inbox.report', {
+      id: item.id,
+      digest: item.digest,
+      file
+    })
+    if (!(await window.api.shell.openFilePath(path, LOCAL_EXECUTION_HOST_ID))) {
+      throw new Error(`the system couldn't open ${path}`)
+    }
+  }
+  return (
+    <DetailsView
+      snapshot={loaded.snapshot}
+      loadImage={loadImage}
+      openReport={openReport}
+      parts={parts}
+    />
+  )
 }
 
 function Body({
