@@ -55,11 +55,7 @@ function answerEnvFolder(
     throw new Error(`${def.name} has no env workspace`)
   }
   if (ws.subject.kind === 'worktree' && home) {
-    return {
-      ...ws,
-      writes: true,
-      subject: { kind: 'worktree', worktree: home, at: null }
-    }
+    return { ...ws, writes: true, subject: { kind: 'worktree', worktree: home, at: null } }
   }
   const stayed = asking?.mode === 'in_place' || asking?.mode === 'kept'
   if (stayed && asking?.homePath) {
@@ -147,10 +143,7 @@ export function prepareAnswerRun(
   const walk = async (): Promise<void> => {
     const ready = stored()
     const route = routeIn(deps.store, ready, target, group.def)
-    deps.store.runs.updateStep(run.id, 0, {
-      status: 'starting',
-      ...answersStepOf(route)
-    })
+    deps.store.runs.updateStep(run.id, 0, { status: 'starting', ...answersStepOf(route) })
     const sent = await launchAnswerRun(deps, group, route, run, ready.worktreePath ?? home)
     settleLaunch(deps, envs, group, run, sent)
   }
@@ -183,11 +176,5 @@ export function prepareAnswerRun(
       hooks.end({ status: 'failed', outcome: messageOf(error) }, {})
     }
   }
-  return {
-    kind: 'dispatched',
-    runId: run.id,
-    route: target.kind,
-    sessionId: null,
-    afterSent
-  }
+  return { kind: 'dispatched', runId: run.id, route: target.kind, sessionId: null, afterSent }
 }

@@ -171,11 +171,7 @@ function normalizeAnswers(raw: RawAutomation): AnswersDef | null {
       }
     : null
   const stack = answers.stack === undefined ? {} : { stack: answers.stack }
-  return {
-    resume: answers.resume ?? 'asking_session',
-    ...stack,
-    else: fallback
-  }
+  return { resume: answers.resume ?? 'asking_session', ...stack, else: fallback }
 }
 
 // `where` is items.where after its kind's schema (parse.ts); {} for a run-once automation.
