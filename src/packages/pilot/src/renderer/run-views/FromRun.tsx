@@ -1,13 +1,14 @@
 import { cn } from '@/lib/utils'
-import type { ActivityRun, InboxListRow } from '../../shared/api-types'
+import type { ActivityRun, AutomationSummary, InboxListRow } from '../../shared/api-types'
 import { money } from '../../shared/money'
 import { paintRun } from '../../shared/run-views/paint'
 import { runStrip } from '../../shared/run-views/strip'
 import { runHeadline, runTimeline } from '../../shared/run-views/timeline'
+import { hostOf, type PilotHostRef } from '../hosts/pilot-host'
 import { clockTime, runStatusLabel } from '../pages/format'
 import { useAutomationsFeed } from './automations-feed'
 import { ContinueRun } from './ContinueRun'
-import { RunStrip } from './RunStrip'
+import { RunStrip, useRunStripLabel } from './RunStrip'
 import { openRun } from './run-panel-state'
 import { RUN_TONE } from './tokens'
 
@@ -35,19 +36,36 @@ export function runSpan(run: Pick<ActivityRun, 'startedAt' | 'finishedAt'>): str
   return `${clockTime(run.startedAt)}–${clockTime(run.finishedAt)}`
 }
 
+type HostedRun = ActivityRun & { host?: PilotHostRef }
+
 // A card's "From run" block: the run's state, times, cost and item, then the steps that ran in order with the one the
-// card came from lit amber, and Open run at that step.
+// card came from lit amber, and Open run at that step, on the run's machine.
 export function FromRun({
   item,
   run
 }: {
   item: Asked
-  run: ActivityRun | null
+  // An untagged run is this machine's.
+  run: HostedRun | null
 }): React.JSX.Element | null {
   const summary = useAutomationsFeed().byId.get(item.automationId)
   if (!run || !summary) {
     return null
   }
+  return <FromRunBlock item={item} run={run} summary={summary} />
+}
+
+function FromRunBlock({
+  item,
+  run,
+  summary
+}: {
+  item: Asked
+  run: HostedRun
+  summary: AutomationSummary
+}): React.JSX.Element {
+  const host = hostOf(run)
+  const label = useRunStripLabel(run.id, host)
   const parts = paintRun(summary.chain, { run }).parts
   const asked = askingPart(item, run)
   return (
@@ -64,15 +82,15 @@ export function FromRun({
         </span>
         <span className="flex-1" />
         <ContinueRun run={run} />
-        <button type="button" className="underline" onClick={() => openRun(run.id, asked)}>
+        <button type="button" className="underline" onClick={() => openRun(run.id, asked, host)}>
           Open run
         </button>
       </div>
       <RunStrip
         items={runStrip(parts, run, asked)}
-        label={`Run ${run.id}`}
+        label={label}
         highlight={asked}
-        onChip={(chip) => openRun(run.id, chip.part)}
+        onChip={(chip) => openRun(run.id, chip.part, host)}
       />
     </div>
   )

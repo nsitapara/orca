@@ -1,9 +1,11 @@
 import { useSyncExternalStore } from 'react'
+import { LOCAL_PILOT_HOST, type PilotHostRef } from '../hosts/pilot-host'
 import { setPilotAutomationsView } from '../pages/automations-view'
 import { pilotStore } from '../store'
 
-// The run the panel shows, and the part it scrolls to (spec §5). One panel, over whichever page is open.
-export type OpenRun = { runId: string; part: string | null }
+// The run the panel shows, the part it scrolls to (spec §5), and the machine it ran on. One panel, over whichever page
+// is open.
+export type OpenRun = { runId: string; part: string | null; host: PilotHostRef }
 
 let current: OpenRun | null = null
 const listeners = new Set<() => void>()
@@ -12,8 +14,13 @@ function notify(): void {
   listeners.forEach((listener) => listener())
 }
 
-export function openRun(runId: string, part: string | null = null): void {
-  current = { runId, part }
+// Run ids are per machine, so a run opens on its own machine; none is this machine.
+export function openRun(
+  runId: string,
+  part: string | null = null,
+  host: PilotHostRef = LOCAL_PILOT_HOST
+): void {
+  current = { runId, part, host }
   notify()
 }
 
@@ -40,7 +47,8 @@ export function useOpenRun(): OpenRun | null {
   return useSyncExternalStore(subscribe, openRunPanel, () => null)
 }
 
-// The right sidebar is too narrow for the panel: open the Automations page's Activity with the panel over it.
+// The right sidebar is too narrow for the panel: open the Automations page's Activity with the panel over it. The
+// sidebar's worktree timeline is this machine's, so its runs are too.
 export function openRunFromSidebar(runId: string, part: string | null = null): void {
   setPilotAutomationsView('activity')
   pilotStore()?.getState().openAutomationsPage?.()

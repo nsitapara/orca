@@ -153,14 +153,18 @@ describe('WorktreeTimelinePanel', () => {
     render(<WorktreeTimelinePanel />)
     fireEvent.click(await screen.findByRole('button', { name: 'Agent · 1 fix · Running' }))
     expect([openRunPanel(), pilotAutomationsView()]).toEqual([
-      { runId: 'r2', part: 'step:0' },
+      { runId: 'r2', part: 'step:0', host: expect.objectContaining({ key: 'local' }) },
       'activity'
     ])
     closeRunPanel()
     fireEvent.click(
       screen.getByRole('button', { name: 'Open !1561 web-1493 · Fix failed CI on my MRs' })
     )
-    expect(openRunPanel()).toEqual({ runId: 'r2', part: null })
+    expect(openRunPanel()).toEqual({
+      runId: 'r2',
+      part: null,
+      host: expect.objectContaining({ key: 'local' })
+    })
   })
 
   it("shows a finished run's cleanup that hasn't finished, in its row", () => {

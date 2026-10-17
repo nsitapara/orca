@@ -1,11 +1,12 @@
 // @vitest-environment happy-dom
-import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { RunDetail, RunStatus } from '../../shared/api-types'
 import type { RunEnv } from '../../shared/api-types-env'
 import { testDefinition, testStep } from '../../shared/definition/__fixtures__/definition'
 import { stepAt, testCard, testRun } from '../../shared/run-views/__fixtures__/runs'
 import { chainOf } from '../../shared/run-views/chain'
+import { byHost, MINI } from '../hosts/__fixtures__/hosts'
 import {
   clearPendingInboxCard,
   pendingInboxCard,
@@ -17,7 +18,12 @@ import {
 
 const pilotRpc = vi.fn()
 vi.mock('../api', () => ({ pilotRpc: (...args: unknown[]) => pilotRpc(...args) }))
+const activate = vi.fn()
+vi.mock('@/lib/worktree-activation', () => ({
+  activateAndRevealWorktree: (...args: unknown[]) => activate(...args)
+}))
 
+import { registerPilotStore } from '../store'
 import { resetEffectsFeed } from './effects-feed'
 import { RunPanelHost } from './RunPanelHost'
 import { closeRunPanel, openRun, openRunPanel } from './run-panel-state'
@@ -215,5 +221,136 @@ describe('the run panel', () => {
     expect(screen.getByRole('link', { name: 'opened !9 ↗' }).getAttribute('href')).toBe(
       'https://gitlab.example/mr/9'
     )
+  })
+})
+
+describe("the run panel, for another machine's run", () => {
+  afterEach(() => {
+    cleanup()
+    closeRunPanel()
+    clearPendingInboxCard()
+    showAutomationsPage()
+    resetEffectsFeed()
+    registerPilotStore(null)
+    pilotRpc.mockReset()
+    activate.mockReset()
+  })
+
+  // Only Mac mini answers, so a call that reaches this machine fails.
+  const onMini = (run: RunDetail, answers: Record<string, unknown> = {}): void => {
+    pilotRpc.mockImplementation(
+      byHost({
+        mini: (method) => (method === 'pilot.runs.get' ? run : (answers[method] ?? {}))
+      })
+    )
+  }
+
+  it('reads a remote run from its machine, and its links open on the same machine', async () => {
+    onMini({ ...detail, run: { ...detail.run, parentRunId: 'r0' } })
+    openRun('r1', null, MINI)
+    render(<RunPanelHost />)
+    await waitFor(() =>
+      expect(pilotRpc).toHaveBeenCalledWith(
+        'pilot.runs.get',
+        { runId: 'r1' },
+        { target: MINI.target }
+      )
+    )
+    await waitFor(() =>
+      expect(pilotRpc).toHaveBeenCalledWith(
+        'pilot.runs.effects',
+        { runIds: ['r1'] },
+        { target: MINI.target }
+      )
+    )
+    fireEvent.click(await screen.findByRole('button', { name: 'Answers run r0' }))
+    expect(openRunPanel()?.host.key).toBe('env:mini')
+  })
+
+  it("opens a run its timeline links to on the panel's machine", async () => {
+    const handover = {
+      id: 1,
+      senderId: 'triage',
+      senderRunId: 'r0',
+      receiverId: 'fix-ci',
+      itemId: '!1561',
+      createdAt: 1,
+      state: 'consumed' as const,
+      consumedAt: 2,
+      tickId: 7,
+      verdict: null,
+      reason: null,
+      runId: 'r1'
+    }
+    onMini({ ...detail, receivedFrom: [handover] })
+    openRun('r1', 'starts', MINI)
+    render(<RunPanelHost />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Open run' }))
+    expect([openRunPanel()?.runId, openRunPanel()?.host.key]).toEqual(['r0', 'env:mini'])
+  })
+
+  it("opens a remote run's card in the Inbox on its machine", async () => {
+    onMini(detail)
+    openRun('r1', null, MINI)
+    render(<RunPanelHost />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Open card' }))
+    expect(pendingInboxCard()).toBe('env:mini/c1')
+  })
+
+  it('continues a remote run on its machine', async () => {
+    const broken: RunDetail = {
+      ...detail,
+      run: { ...detail.run, status: 'failed', finishedAt: 9, steps: [stepAt(0, 'fix', 'failed')] }
+    }
+    onMini(broken, { 'pilot.runs.continue': { step: 'fix', resumed: true } })
+    openRun('r1', null, MINI)
+    render(<RunPanelHost />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Continue run' }))
+    expect(await screen.findByText('Continuing from step fix, in its own session')).toBeTruthy()
+    expect(pilotRpc).toHaveBeenCalledWith(
+      'pilot.runs.continue',
+      { runId: 'r1' },
+      { target: MINI.target }
+    )
+  })
+
+  it("opens a remote run's worktree on its machine, though this machine has the same worktree id", async () => {
+    registerPilotStore({
+      getState: () => ({
+        rightSidebarOpen: false,
+        setRightSidebarOpen: () => {},
+        worktreesByRepo: {
+          'repo-1': [
+            { id: 'a', path: '/w/x' },
+            { id: 'a', path: '/w/x', runtimeOwnerEnvironmentId: 'mini' }
+          ]
+        }
+      })
+    })
+    onMini({ ...detail, run: { ...detail.run, worktreePath: '/w/x' } })
+    openRun('r1', null, MINI)
+    render(<RunPanelHost />)
+    fireEvent.click(await screen.findByRole('button', { name: 'x' }))
+    await waitFor(() =>
+      expect(activate).toHaveBeenCalledWith('a', { executionHostId: 'runtime:mini' })
+    )
+    expect(activate).toHaveBeenCalledTimes(1)
+  })
+
+  it("never shows this machine's run in place of another machine's run with the same id", async () => {
+    pilotRpc.mockImplementation(
+      byHost({
+        local: (method) => (method === 'pilot.runs.get' ? detail : {}),
+        mini: () => {
+          throw new Error('Mac mini timed out')
+        }
+      })
+    )
+    openRun('r1')
+    render(<RunPanelHost />)
+    expect(await screen.findByRole('link', { name: '!1561 web-1' })).toBeTruthy()
+    act(() => openRun('r1', null, MINI))
+    expect(await screen.findByText('Mac mini timed out')).toBeTruthy()
+    expect(screen.queryByRole('link', { name: '!1561 web-1' })).toBeNull()
   })
 })

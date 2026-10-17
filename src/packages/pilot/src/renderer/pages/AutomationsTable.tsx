@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { ChevronDown, ChevronRight } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
-import type { AutomationSummary } from '../../shared/api-types'
+import type { ActivityRun, AutomationSummary } from '../../shared/api-types'
 import {
   jobEnabled,
   jobLastTick,
@@ -21,7 +21,8 @@ import {
 } from './automations-sort'
 import { lastTickText } from './format'
 import { MachineChips } from '../hosts/MachineChip'
-import type { PilotHostRef } from '../hosts/pilot-host'
+import { hostedRunKey } from '../hosts/merge-activity'
+import { hostOf, type PilotHostRef } from '../hosts/pilot-host'
 import { foldStrip, liveStrip, type StripChip, type StripItem } from '../../shared/run-views/strip'
 import { RunStrip } from '../run-views/RunStrip'
 import { openRun } from '../run-views/run-panel-state'
@@ -48,11 +49,21 @@ export function stagesText(count: number): string {
   return count === 1 ? '1 stage' : `${count} stages`
 }
 
-// A chip on the list (spec §2 Strip): the one live run it is lit for, Activity filtered to this automation when it is lit
-// for several, else its How it runs.
-export function openChip(a: AutomationSummary, chip: StripChip): void {
-  if (chip.runIds.length === 1) {
-    openRun(chip.runIds[0], chip.part)
+// A merged row's live runs name their machines; an untagged one is this machine's.
+type ListedLive = { id: string; live: readonly (ActivityRun & { host?: PilotHostRef })[] }
+
+// The list's strip, its chips naming their runs by hostedRunKey: two machines' live runs can share an id.
+function listStrip(a: Pick<AutomationSummary, 'chain'> & ListedLive): StripChip[] {
+  return liveStrip(a.chain, a.live, hostedRunKey)
+}
+
+// A chip on the list (spec §2 Strip): the one live run it is lit for, on its machine; Activity filtered to this
+// automation when it is lit for several, else its How it runs.
+export function openChip(a: ListedLive, chip: StripChip): void {
+  const only =
+    chip.runIds.length === 1 ? a.live.find((r) => hostedRunKey(r) === chip.runIds[0]) : null
+  if (only) {
+    openRun(only.id, chip.part, hostOf(only))
     return
   }
   if (chip.runIds.length > 1) {
@@ -65,7 +76,7 @@ export function openChip(a: AutomationSummary, chip: StripChip): void {
 function RunsCell({ a }: { a: AutomationSummary }): React.JSX.Element {
   return (
     <RunStrip
-      items={foldStrip(liveStrip(a.chain, a.live))}
+      items={foldStrip(listStrip(a))}
       label={`${a.name} runs`}
       onChip={(chip) => openChip(a, chip)}
     />
@@ -85,7 +96,7 @@ function JobRunsCell({ job }: { job: JobGroup }): React.JSX.Element {
   const extra = stagesMore(rest)
   return (
     <RunStrip
-      items={[...foldStrip(liveStrip(stage.chain, stage.live)), ...extra]}
+      items={[...foldStrip(listStrip(stage)), ...extra]}
       label={`${jobTitle(job)} runs`}
       onChip={(chip) => openChip(stage, chip)}
     />

@@ -3,7 +3,8 @@ import type { ChainPart, Who } from './chain'
 import { isPainted, paintRun, type PaintedPart, type PartState } from './paint'
 import { NOT_REACHED, NOT_REACHED_YET, runTimeline, type RunTimeline } from './timeline'
 
-// One chip of a strip. `state` is null on a chain with no run; `runIds` are the live runs a list chip is lit for.
+// One chip of a strip. `state` is null on a chain with no run; `runIds` are the live runs a list chip is lit for, as
+// liveStrip's keyOf names them.
 export type StripChip = {
   key: string
   label: string
@@ -156,9 +157,13 @@ export function runStrip(
   return note ? [...items, { kind: 'note', key: 'not-run', text: note }] : items
 }
 
-// The list's strip (no run of its own): the chain, each chip lit where live runs are, with their ids, so a chip opens its
-// one run, or Activity when there are several. A lit chip the chain has no place for (an answer run's) is added.
-export function liveStrip(chain: readonly ChainPart[], live: readonly ActivityRun[]): StripChip[] {
+// The list's strip (no run of its own): the chain, each chip lit where live runs are, with their ids (`keyOf`), so a chip
+// opens its one run, or Activity when there are several. A lit chip the chain has no place for (an answer run's) is added.
+export function liveStrip<R extends ActivityRun>(
+  chain: readonly ChainPart[],
+  live: readonly R[],
+  keyOf: (run: R) => string = (run) => run.id
+): StripChip[] {
   const chips = stripOf(chain)
   for (const run of live) {
     const painted = paintRun(chain, { run })
@@ -173,10 +178,10 @@ export function liveStrip(chain: readonly ChainPart[], live: readonly ActivityRu
       }
       const target = chips.find((c) => c.key === lit.key)
       if (!target) {
-        chips.push({ ...lit, runIds: [run.id] })
+        chips.push({ ...lit, runIds: [keyOf(run)] })
         continue
       }
-      target.runIds.push(run.id)
+      target.runIds.push(keyOf(run))
       target.state = target.state === 'running' ? 'running' : lit.state
     }
   }

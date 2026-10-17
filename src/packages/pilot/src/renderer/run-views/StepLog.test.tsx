@@ -1,8 +1,10 @@
 // @vitest-environment happy-dom
-import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { testStepRow } from '../../shared/run-views/__fixtures__/runs'
 import type { StepLog as Log } from '../../shared/visibility-types'
+import { byHost, MINI } from '../hosts/__fixtures__/hosts'
+import { PilotHostProvider } from '../hosts/PilotHostContext'
 
 const pilotRpc = vi.fn()
 vi.mock('../api', () => ({ pilotRpc: (...args: unknown[]) => pilotRpc(...args) }))
@@ -98,6 +100,35 @@ describe('StepLog', () => {
       stepIdx: 1,
       id: 't1'
     })
+  })
+
+  it("reads another machine's step log, and its entries, from that machine", async () => {
+    pilotRpc.mockImplementation(
+      byHost({
+        mini: (method) =>
+          method === 'pilot.runs.log'
+            ? LOG
+            : { input: '', output: 'done', inputCut: 0, outputCut: 0 }
+      })
+    )
+    render(
+      <PilotHostProvider host={MINI}>
+        <StepLog runId="r1" step={testStepRow({ idx: 1, status: 'done' })} />
+      </PilotHostProvider>
+    )
+    fireEvent.click(await screen.findByRole('button', { name: /glab mr create --fill/ }))
+    await waitFor(() =>
+      expect(pilotRpc).toHaveBeenCalledWith(
+        'pilot.runs.logEntry',
+        { runId: 'r1', stepIdx: 1, id: 't1' },
+        { target: MINI.target }
+      )
+    )
+    expect(pilotRpc).toHaveBeenCalledWith(
+      'pilot.runs.log',
+      { runId: 'r1', stepIdx: 1 },
+      { target: MINI.target }
+    )
   })
 
   it('says why a step has no log, and treats a malformed answer as still loading', async () => {

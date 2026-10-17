@@ -3,6 +3,8 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { StepRow } from '../../shared/api-types'
 import { testStepRow } from '../../shared/run-views/__fixtures__/runs'
+import { byHost, MINI } from '../hosts/__fixtures__/hosts'
+import { PilotHostProvider } from '../hosts/PilotHostContext'
 import { stepRow, timelineRun } from '../timeline/timeline.fixtures'
 
 const pilotRpc = vi.fn()
@@ -72,6 +74,24 @@ describe('StepDetail', () => {
     fireEvent.click(screen.getByRole('button', { name: /resume/i }))
     expect(await screen.findByText(note)).toBeTruthy()
     expect(pilotRpc).toHaveBeenCalledWith('pilot.session.resume', { runId: 'r1', stepIdx: 0 })
+  })
+
+  it('resumes a remote step on its machine', async () => {
+    pilotRpc.mockImplementation(byHost({ mini: () => ({ action: 'opened', handle: 'term_9' }) }))
+    render(
+      <PilotHostProvider host={MINI}>
+        <Steps runId="r1" worktreePath="/wt/a" />
+      </PilotHostProvider>
+    )
+    fireEvent.click(screen.getByRole('button', { name: /resume/i }))
+    expect(await screen.findByText('Opened in a new tab')).toBeTruthy()
+    expect(pilotRpc).toHaveBeenCalledWith(
+      'pilot.session.resume',
+      { runId: 'r1', stepIdx: 0 },
+      { target: MINI.target }
+    )
+    // The sidebar's timeline is this machine's, so a path on another machine has nothing there to refresh.
+    expect(refreshWorktreeTimeline).not.toHaveBeenCalled()
   })
 
   it('shows why a resume failed', async () => {

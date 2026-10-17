@@ -2,7 +2,8 @@ import { useState } from 'react'
 import { StepForward } from 'lucide-react'
 import { isWebClientLocation } from '@/lib/web-client-location'
 import type { ContinueRunResult, RunRow } from '../../shared/api-types'
-import { pilotRpc } from '../api'
+import { hostRpc } from '../hosts/host-rpc'
+import { usePilotHost } from '../hosts/PilotHostContext'
 import { errorText } from '../pages/format'
 
 const BROKEN: ReadonlySet<RunRow['status']> = new Set(['failed', 'timed_out', 'cancelled'])
@@ -19,12 +20,14 @@ function continuedNote(result: ContinueRunResult): string {
 }
 
 // Continue run: the steps that finished keep their results, the step that broke goes again (resuming its agent's
-// session when it can), and the run goes on from there. Pilot's reason shows when it won't.
+// session when it can), and the run goes on from there. Pilot's reason shows when it won't. It asks the machine the
+// surrounding view (run panel, card) is for.
 export function ContinueRun({
   run
 }: {
   run: Pick<RunRow, 'id' | 'status' | 'trigger'>
 }): React.JSX.Element | null {
+  const host = usePilotHost()
   const [note, setNote] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   if (!canContinue(run) && note === null) {
@@ -36,7 +39,9 @@ export function ContinueRun({
     }
     setBusy(true)
     try {
-      const result = await pilotRpc<ContinueRunResult>('pilot.runs.continue', { runId: run.id })
+      const result = await hostRpc<ContinueRunResult>(host, 'pilot.runs.continue', {
+        runId: run.id
+      })
       setNote(continuedNote(result))
     } catch (e) {
       setNote(errorText(e))

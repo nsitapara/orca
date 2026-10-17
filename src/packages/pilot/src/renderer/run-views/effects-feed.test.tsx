@@ -2,6 +2,8 @@
 import { act, cleanup, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { Effect } from '../../shared/visibility-types'
+import { byHost, MINI } from '../hosts/__fixtures__/hosts'
+import type { PilotHostRef } from '../hosts/pilot-host'
 
 const pilotRpc = vi.fn()
 vi.mock('../api', () => ({ pilotRpc: (...args: unknown[]) => pilotRpc(...args) }))
@@ -15,9 +17,19 @@ import {
 
 const PUSHED: Effect = { kind: 'pushed', target: 'web-1', url: null, count: 1, stepIdx: 0, at: 1 }
 
-function Probe({ id, live = false }: { id: string; live?: boolean }): React.JSX.Element {
-  const effects = useRunEffects(id, live)
-  return <span data-testid={id}>{effects === null ? 'none' : String(effects.length)}</span>
+function Probe({
+  id,
+  live = false,
+  host,
+  name = id
+}: {
+  id: string
+  live?: boolean
+  host?: PilotHostRef
+  name?: string
+}): React.JSX.Element {
+  const effects = useRunEffects(id, live, true, host)
+  return <span data-testid={name}>{effects === null ? 'none' : String(effects.length)}</span>
 }
 
 describe('useRunEffects', () => {
@@ -90,5 +102,42 @@ describe('useRunEffects', () => {
     const asked = pilotRpc.mock.calls.flatMap((c) => (c[1] as { runIds: string[] }).runIds)
     expect(asked.filter((id) => id === 'live')).toHaveLength(2)
     expect(asked.filter((id) => id === 'done')).toHaveLength(1)
+  })
+
+  it("asks each machine for its own runs' effects, and keeps two machines' same-id runs apart (Review Focus 1)", async () => {
+    pilotRpc.mockImplementation(
+      byHost({ local: () => ({ r1: [PUSHED] }), mini: () => ({ r1: [PUSHED, PUSHED] }) })
+    )
+    render(
+      <>
+        <Probe id="r1" />
+        <Probe id="r1" host={MINI} name="mini" />
+      </>
+    )
+    await act(async () => {})
+    expect([screen.getByTestId('r1').textContent, screen.getByTestId('mini').textContent]).toEqual([
+      '1',
+      '2'
+    ])
+    expect(pilotRpc.mock.calls).toEqual([
+      ['pilot.runs.effects', { runIds: ['r1'] }],
+      ['pilot.runs.effects', { runIds: ['r1'] }, { target: MINI.target }]
+    ])
+  })
+
+  it("still shows one machine's effects when another machine's read fails", async () => {
+    // Mac mini has no answer, so its read fails.
+    pilotRpc.mockImplementation(byHost({ local: () => ({ r1: [PUSHED] }) }))
+    render(
+      <>
+        <Probe id="r1" />
+        <Probe id="r1" host={MINI} name="mini" />
+      </>
+    )
+    await act(async () => {})
+    expect([screen.getByTestId('r1').textContent, screen.getByTestId('mini').textContent]).toEqual([
+      '1',
+      'none'
+    ])
   })
 })

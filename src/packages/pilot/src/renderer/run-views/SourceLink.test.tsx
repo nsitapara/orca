@@ -2,6 +2,8 @@
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { SourceIndex } from '../../shared/source-types'
+import { MINI } from '../hosts/__fixtures__/hosts'
+import { PilotHostProvider } from '../hosts/PilotHostContext'
 
 const pilotRpc = vi.fn()
 vi.mock('../api', () => ({ pilotRpc: (...args: unknown[]) => pilotRpc(...args) }))
@@ -106,6 +108,19 @@ describe('SourceLink', () => {
     serve(async () => ({}))
     vi.stubGlobal('__ORCA_WEB_CLIENT__', true)
     render(<SourceLink part={{ skill: null, runs: 'pilotcli git push-branch' }} />)
+    await act(async () => {})
+    expect(screen.queryByRole('button', { name: 'Source' })).toBeNull()
+    expect(pilotRpc).not.toHaveBeenCalled()
+  })
+
+  // Why: this machine's index and files.open name this machine's checkouts, not the run's machine's.
+  it("shows no Source link for another machine's run", async () => {
+    serve(async () => ({}))
+    render(
+      <PilotHostProvider host={MINI}>
+        <SourceLink part={{ skill: null, runs: 'pilotcli git push-branch' }} />
+      </PilotHostProvider>
+    )
     await act(async () => {})
     expect(screen.queryByRole('button', { name: 'Source' })).toBeNull()
     expect(pilotRpc).not.toHaveBeenCalled()

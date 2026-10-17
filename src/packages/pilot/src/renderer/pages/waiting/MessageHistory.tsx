@@ -4,6 +4,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import { cn } from '@/lib/utils'
 import type { InboxListRow } from '../../../shared/api-types'
 import type { CardHistoryEntry, HistoryRun } from '../../../shared/inbox-types'
+import { usePilotHost } from '../../hosts/PilotHostContext'
 import { openRun } from '../../run-views/run-panel-state'
 import { RUN_TONE } from '../../run-views/tokens'
 import { runStatusLabel } from '../format'
@@ -60,7 +61,9 @@ export function CardTimes({
   )
 }
 
+// The history's runs are the card's machine's.
 function OpenRun({ run }: { run: HistoryRun }): React.JSX.Element | null {
+  const host = usePilotHost()
   if (run.status === null) {
     return null
   }
@@ -69,7 +72,7 @@ function OpenRun({ run }: { run: HistoryRun }): React.JSX.Element | null {
       type="button"
       className="underline underline-offset-4 hover:text-foreground"
       title={run.id}
-      onClick={() => openRun(run.id)}
+      onClick={() => openRun(run.id, null, host)}
     >
       Open run
     </button>

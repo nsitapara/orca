@@ -1,5 +1,7 @@
 import { cn } from '@/lib/utils'
 import type { StripChip, StripItem } from '../../shared/run-views/strip'
+import type { PilotHostRef } from '../hosts/pilot-host'
+import { useMachineChipsShown } from '../hosts/pilot-hosts-feed'
 import {
   HIGHLIGHT_CLASS,
   STATE_CLASS,
@@ -8,6 +10,12 @@ import {
   WHO_CLASS,
   WHO_LABEL
 } from './tokens'
+
+// A run's strip name; with more than one machine listed it names the machine, as two machines' runs can share an id.
+export function useRunStripLabel(runId: string, host: PilotHostRef): string {
+  const named = useMachineChipsShown()
+  return named ? `Run ${runId} on ${host.machineName}` : `Run ${runId}`
+}
 
 function chipText(chip: StripChip): string {
   return chip.n === null ? chip.label : `${chip.n} ${chip.label}`

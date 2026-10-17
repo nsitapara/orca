@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { InboxListRow } from '../../../shared/api-types'
 import type { DispatchReport, InboxListPayload, QueueEntry } from '../../../shared/inbox-types'
 import { APPROVE_ON_DESKTOP } from '../../../shared/pilot-replies'
-import { testRun } from '../../../shared/run-views/__fixtures__/runs'
+import { stepAt, testRun } from '../../../shared/run-views/__fixtures__/runs'
 import type { DoneRun } from '../../../shared/visibility-types'
 
 const pilotRpc = vi.fn()
@@ -15,7 +15,9 @@ import { inboxRow } from '../../hosts/__fixtures__/inbox-row'
 import type { PilotHostEntry } from '../../hosts/pilot-host'
 import { resetPilotHostsFeed, setPilotHostsForTests } from '../../hosts/pilot-hosts-feed'
 import { resetAutomationsFeed } from '../../run-views/automations-feed'
+import { closeRunPanel, openRunPanel } from '../../run-views/run-panel-state'
 import { pendingInboxCard, setPilotAutomationsView, showInboxCard } from '../automations-view'
+import { summary } from '../fixtures'
 import { InboxPage } from './InboxPage'
 
 const question = (worktreePath: string, title: string): InboxListRow =>
@@ -320,5 +322,96 @@ describe('InboxPage card actions, by machine', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Apply now' }))
     expect(await screen.findByText("Mac mini couldn't apply: Pilot is busy")).toBeTruthy()
     expect(callsOf('pilot.answers.applyNow').map(([, , o]) => o?.target)).toEqual([MINI.target])
+  })
+})
+
+describe('InboxPage runs, by machine', () => {
+  afterEach(() => {
+    cleanup()
+    closeRunPanel()
+    resetAutomationsFeed()
+    resetPilotHostsFeed()
+    pilotRpc.mockReset()
+  })
+
+  // Mac mini's card asked from its run r1, which is in motion and in the card's history.
+  function serveMiniRun(): void {
+    setPilotHostsForTests([LOCAL_NAMED, MINI])
+    const run = testRun({
+      id: 'r1',
+      automationId: 'fix-ci',
+      status: 'running',
+      steps: [stepAt(0, 'fix', 'running')]
+    })
+    const list: InboxListPayload = {
+      ...listOf([{ ...question('/wt/web-2', 'Mini question'), automationId: 'fix-ci' }]),
+      runs: { r1: run },
+      history: {
+        in_1: [
+          {
+            kind: 'reply',
+            at: 1,
+            by: 'agent',
+            text: 'Not yet',
+            run: { id: 'r1', status: 'running' }
+          }
+        ]
+      }
+    }
+    const feed = {
+      automations: [{ ...summary, live: [run] }],
+      errors: [],
+      peopleError: null,
+      missingDirs: []
+    }
+    const mini = machine({})
+    pilotRpc.mockImplementation(
+      byHost({
+        local: machine({}),
+        mini: (method) => {
+          if (method === 'pilot.inbox.list') {
+            return list
+          }
+          return method === 'pilot.automations.list' ? feed : mini(method)
+        }
+      })
+    )
+  }
+
+  it.each<[string, () => Promise<HTMLElement>]>([
+    [
+      'In motion',
+      async () => {
+        const motion = within(await screen.findByRole('region', { name: 'In motion' }))
+        fireEvent.click(motion.getByText('In motion'))
+        return motion.getByRole('button', { name: 'Open run' })
+      }
+    ],
+    [
+      'its From run',
+      async () => {
+        const card = await cardTitled('Mini question')
+        const from = await waitFor(() => {
+          const found = card.querySelector<HTMLElement>('[data-from-run]')
+          if (!found) {
+            throw new Error('No From run yet')
+          }
+          return found
+        })
+        return within(from).getByRole('button', { name: 'Open run' })
+      }
+    ],
+    [
+      'its Message history',
+      async () =>
+        within(await screen.findByRole('region', { name: 'Message history' })).getByRole('button', {
+          name: 'Open run'
+        })
+    ]
+  ])("opens another machine's run on that machine from %s", async (_from, control) => {
+    serveMiniRun()
+    render(<InboxPage />)
+    fireEvent.click(await control())
+    expect([openRunPanel()?.runId, openRunPanel()?.host.key]).toEqual(['r1', 'env:mini'])
   })
 })

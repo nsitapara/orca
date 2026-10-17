@@ -12,27 +12,16 @@ import { jobCode } from './activity-groups'
 import { useRunEffects } from './effects-feed'
 import { EffectsLine } from './EffectsLine'
 import { envCleanup } from './env-lines'
-import { RunStrip } from './RunStrip'
+import { RunStrip, useRunStripLabel } from './RunStrip'
 import { openRun } from './run-panel-state'
 
 function baseName(path: string): string {
   return path.replace(/\/+$/, '').split('/').pop() ?? path
 }
 
-// The effects feed reads this machine only, where another machine's run id may name a different run.
-function shownEffects(
-  given: readonly Effect[] | null | undefined,
-  fetched: readonly Effect[] | null,
-  ownRun: boolean
-): readonly Effect[] | null {
-  if (given !== undefined) {
-    return given
-  }
-  return ownRun ? fetched : null
-}
-
 // One run on Activity (spec §3): job tag, item (linked out), worktree, cost, state and the steps that ran, numbered in the
-// order they ran. The chips and "Open run" open the run panel. A run whose automation isn't loaded shows no steps.
+// order they ran. The chips and "Open run" open the run panel on the run's machine, and its effects are asked of it. A
+// run whose automation isn't loaded shows no steps.
 export function ActivityRunRow({
   run,
   fields,
@@ -50,13 +39,15 @@ export function ActivityRunRow({
   const url = itemUrl(fields)
   const home = homeOf(run)
   const cleanup = envCleanup(run)
-  const ownRun = hostOf(run).local
+  const host = hostOf(run)
   const fetched = useRunEffects(
     run.id,
     run.status === 'running' || run.status === 'asking',
-    effects === undefined && ownRun
+    effects === undefined,
+    host
   )
-  const shown = shownEffects(effects, fetched, ownRun)
+  const shown = effects === undefined ? fetched : effects
+  const label = useRunStripLabel(run.id, host)
   const items = summary ? runStrip(paintRun(summary.chain, { run }).parts, run) : []
   return (
     <li className="flex flex-col gap-1 border-t border-border/50 py-2">
@@ -86,9 +77,9 @@ export function ActivityRunRow({
         <span className="rounded bg-muted px-1.5 text-foreground">
           {runStatusWord(run, runStatusLabel)}
         </span>
-        <MachineChip host={hostOf(run)} />
+        <MachineChip host={host} />
         <span className="flex-1" />
-        <button type="button" className="underline" onClick={() => openRun(run.id)}>
+        <button type="button" className="underline" onClick={() => openRun(run.id, null, host)}>
           Open run
         </button>
       </div>
@@ -96,11 +87,7 @@ export function ActivityRunRow({
       <EffectsLine effects={shown} />
       {cleanup ? <div className="text-xs text-muted-foreground">{cleanup}</div> : null}
       {items.length > 0 ? (
-        <RunStrip
-          items={items}
-          label={`Run ${run.id}`}
-          onChip={(chip) => openRun(run.id, chip.part)}
-        />
+        <RunStrip items={items} label={label} onChip={(chip) => openRun(run.id, chip.part, host)} />
       ) : null}
       {children}
     </li>

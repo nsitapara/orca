@@ -4,6 +4,7 @@ import type { SourceIndex, StepSource } from '../../shared/source-types'
 import { stepSource } from '../../shared/run-views/step-source'
 import type { ChainPart } from '../../shared/run-views/chain'
 import { pilotRpc } from '../api'
+import { usePilotHost } from '../hosts/PilotHostContext'
 import { openInFloatingWorkspace } from '../skills/OpenSkillFile'
 
 // One read for every row on screen; main keeps it a minute (main/step-source).
@@ -67,8 +68,13 @@ export function SourceLink({
 }: {
   part: Pick<ChainPart, 'skill' | 'runs'>
 }): React.JSX.Element | null {
+  const host = usePilotHost()
   // Why: files.open would act on the server Mac's window, and the browser never reads the index.
   if (isWebClientLocation()) {
+    return null
+  }
+  // Why: this machine's index and checkouts aren't another machine's run's.
+  if (!host.local) {
     return null
   }
   return <ServerSourceLink part={part} />

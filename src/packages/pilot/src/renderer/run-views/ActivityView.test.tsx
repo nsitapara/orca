@@ -88,7 +88,11 @@ describe('ActivityView', () => {
     const today = screen.getByRole('region', { name: 'Earlier today' })
     expect(within(today).getByText("Couldn't start: no such repo")).toBeTruthy()
     fireEvent.click(await within(running).findByRole('button', { name: /1 fix · Running/ }))
-    expect(openRunPanel()).toEqual({ runId: 'run-a', part: 'step:0' })
+    expect(openRunPanel()).toEqual({
+      runId: 'run-a',
+      part: 'step:0',
+      host: expect.objectContaining({ key: 'local' })
+    })
   })
 
   it('asks for the named automations, and only ticks with something to do until the switch is turned off', async () => {
@@ -162,6 +166,7 @@ describe('ActivityView on more than one machine', () => {
     resetAutomationsFeed()
     resetEffectsFeed()
     resetPilotHostsFeed()
+    closeRunPanel()
     pilotRpc.mockReset()
     localStorage.clear()
   })
@@ -209,6 +214,53 @@ describe('ActivityView on more than one machine', () => {
     expect(await rowOf('!1561 web-1').findByText('pushed web-1')).toBeTruthy()
     expect(rowOf('Fixed on the mini').queryByText('pushed web-1')).toBeNull()
   })
+
+  // Both machines have a run-a; Mac mini's ran and ended there.
+  const sameIdOnMini = (effects: Record<string, unknown> = {}) => {
+    setPilotHostsForTests([LOCAL_NAMED, MINI])
+    const ranOnMini = testRun({
+      id: 'run-a',
+      automationId: 'fix-ci',
+      status: 'done',
+      outcome: 'Fixed on the mini',
+      steps: [stepAt(0, 'fix', 'done')]
+    })
+    const mini: ActivityPayload = {
+      ...payload,
+      live: [],
+      ticks: [{ ...payload.ticks[0], runs: [ranOnMini] }]
+    }
+    pilotRpc.mockImplementation(byHost({ local: machine(payload), mini: machine(mini, effects) }))
+    render(<ActivityView automationIds={null} since={0} limit={100} />)
+  }
+
+  it("shows another machine's run's effects, asked of that machine", async () => {
+    const pushed = { kind: 'pushed', target: 'mini-1', url: null, count: 1, stepIdx: 0, at: 1 }
+    sameIdOnMini({ 'run-a': [pushed] })
+    await screen.findByText('Fixed on the mini')
+    expect(await rowOf('Fixed on the mini').findByText('pushed mini-1')).toBeTruthy()
+    expect(rowOf('!1561 web-1').queryByText('pushed mini-1')).toBeNull()
+  })
+
+  it.each<[string, () => HTMLElement]>([
+    ['Open run', () => rowOf('Fixed on the mini').getByRole('button', { name: 'Open run' })],
+    [
+      'its strip, named by its machine',
+      () =>
+        within(screen.getByRole('list', { name: 'Run run-a on Mac mini' })).getByRole('button', {
+          name: /1 fix/
+        })
+    ]
+  ])(
+    "opens another machine's run there from %s, though this machine has a run with its id",
+    async (_from, control) => {
+      sameIdOnMini()
+      await screen.findByText('Fixed on the mini')
+      expect(screen.getByRole('list', { name: 'Run run-a on MacBook' })).toBeTruthy()
+      fireEvent.click(control())
+      expect([openRunPanel()?.runId, openRunPanel()?.host.key]).toEqual(['run-a', 'env:mini'])
+    }
+  )
 
   it.each<[string, PilotHostEntry, string]>([
     ['whose read failed', MINI, "Couldn't refresh Mac mini's runs: timed out"],

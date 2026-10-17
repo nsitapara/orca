@@ -1,14 +1,18 @@
 import { useEffect, useRef, useSyncExternalStore } from 'react'
 import type { Effect, RunEffects } from '../../shared/visibility-types'
-import { pilotRpc } from '../api'
+import { hostRpc } from '../hosts/host-rpc'
+import { hostedKey, LOCAL_PILOT_HOST, type PilotHostRef } from '../hosts/pilot-host'
+import { usePilotHost } from '../hosts/PilotHostContext'
 
 export const EFFECTS_REFRESH_MS = 10_000
 export const EFFECTS_RETRY_MS = 5_000
 export const MAX_CACHED_RUNS = 2000
 const BATCH = 300
 
+// Keyed hostedKey(host, runId): run ids are numbered per machine.
 let cache: ReadonlyMap<string, readonly Effect[]> = new Map()
-const wanted = new Set<string>()
+// The runs asked for this tick, by machine (host key).
+const wanted = new Map<string, { host: PilotHostRef; ids: Set<string> }>()
 const listeners = new Set<() => void>()
 let scheduled = false
 
@@ -39,14 +43,15 @@ function isEffect(e: unknown): e is Effect {
   return typeof kind === 'string' && typeof count === 'number'
 }
 
-// Asks for one chunk; a failed read is tried once more after 5 s.
-async function fetchChunk(ids: string[], canRetry = true): Promise<void> {
+// Asks one machine for one chunk; a failed read is tried once more after 5 s, and never holds back another machine's.
+async function fetchChunk(host: PilotHostRef, ids: string[], canRetry = true): Promise<void> {
   try {
-    const got = await pilotRpc<RunEffects>('pilot.runs.effects', { runIds: ids })
+    const got = await hostRpc<RunEffects>(host, 'pilot.runs.effects', { runIds: ids })
     const next = new Map(cache)
     for (const id of ids) {
-      next.delete(id)
-      next.set(id, listOf(got, id))
+      const key = hostedKey(host, id)
+      next.delete(key)
+      next.set(key, listOf(got, id))
     }
     for (const old of next.keys()) {
       if (next.size <= MAX_CACHED_RUNS) {
@@ -58,23 +63,29 @@ async function fetchChunk(ids: string[], canRetry = true): Promise<void> {
     notify()
   } catch {
     if (canRetry) {
-      setTimeout(() => void fetchChunk(ids, false), EFFECTS_RETRY_MS)
+      setTimeout(() => void fetchChunk(host, ids, false), EFFECTS_RETRY_MS)
     }
   }
 }
 
 function flush(): void {
   scheduled = false
-  const ids = [...wanted]
+  const batches = [...wanted.values()]
   wanted.clear()
-  for (let i = 0; i < ids.length; i += BATCH) {
-    void fetchChunk(ids.slice(i, i + BATCH))
+  for (const { host, ids } of batches) {
+    const list = [...ids]
+    for (let i = 0; i < list.length; i += BATCH) {
+      void fetchChunk(host, list.slice(i, i + BATCH))
+    }
   }
 }
 
-// Asks for a run's effects; every run asked for in the same tick goes in one pilot.runs.effects call.
-export function requestEffects(runId: string): void {
-  wanted.add(runId)
+// Asks a machine (none: this one) for a run's effects; every run asked of it in the same tick goes in one
+// pilot.runs.effects call to it.
+export function requestEffects(runId: string, host: PilotHostRef = LOCAL_PILOT_HOST): void {
+  const batch = wanted.get(host.key) ?? { host, ids: new Set<string>() }
+  batch.ids.add(runId)
+  wanted.set(host.key, batch)
   if (!scheduled) {
     scheduled = true
     queueMicrotask(flush)
@@ -82,33 +93,38 @@ export function requestEffects(runId: string): void {
 }
 
 // A run's effects (null until first loaded): asked for when the row mounts, every 10 s while the run is live, and once
-// more when it ends. `enabled` false: the caller already has them (Done for you), so nothing is asked.
+// more when it ends. `enabled` false: the caller already has them (Done for you), so nothing is asked. They are asked of
+// `host`, else the machine the surrounding view is for.
 export function useRunEffects(
   runId: string,
   live: boolean,
-  enabled = true
+  enabled = true,
+  host?: PilotHostRef
 ): readonly Effect[] | null {
-  const effects = useSyncExternalStore(subscribe, () => cache.get(runId) ?? null)
+  const viewHost = usePilotHost()
+  const on = host ?? viewHost
+  const key = hostedKey(on, runId)
+  const effects = useSyncExternalStore(subscribe, () => cache.get(key) ?? null)
   const wasLive = useRef(live)
   useEffect(() => {
     if (enabled) {
-      requestEffects(runId)
+      requestEffects(runId, on)
     }
-  }, [runId, enabled])
+  }, [runId, enabled, on])
   useEffect(() => {
     const ended = wasLive.current && !live
     wasLive.current = live
     if (enabled && ended) {
-      requestEffects(runId)
+      requestEffects(runId, on)
     }
-  }, [runId, live, enabled])
+  }, [runId, live, enabled, on])
   useEffect(() => {
     if (!enabled || !live) {
       return undefined
     }
-    const timer = setInterval(() => requestEffects(runId), EFFECTS_REFRESH_MS)
+    const timer = setInterval(() => requestEffects(runId, on), EFFECTS_REFRESH_MS)
     return () => clearInterval(timer)
-  }, [runId, live, enabled])
+  }, [runId, live, enabled, on])
   return effects
 }
 

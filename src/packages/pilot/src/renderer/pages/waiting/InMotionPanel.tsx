@@ -48,7 +48,11 @@ function RunningList({ running }: { running: RunningRun[] }): React.JSX.Element 
             <span className="text-xs tabular-nums text-muted-foreground">{runSpan(run)}</span>
             <MachineChip host={hostOf(run)} />
             <span className="flex-1" />
-            <button type="button" className="text-xs underline" onClick={() => openRun(run.id)}>
+            <button
+              type="button"
+              className="text-xs underline"
+              onClick={() => openRun(run.id, null, hostOf(run))}
+            >
               Open run
             </button>
           </li>

@@ -8,7 +8,8 @@ import { money } from '../../shared/money'
 import { paintRun, type PaintedRun } from '../../shared/run-views/paint'
 import { runHeadline, runTimeline } from '../../shared/run-views/timeline'
 import { formatDuration } from '../../shared/run/format-duration'
-import { pilotRpc } from '../api'
+import { hostRpc } from '../hosts/host-rpc'
+import { usePilotHost } from '../hosts/PilotHostContext'
 import { showAutomationsPage, showInboxCard, showPilotAutomation } from '../pages/automations-view'
 import { errorText, itemUrl, runStatusLabel } from '../pages/format'
 import { openWorktree, worktreeIdForPath } from '../pages/waiting/WorktreeLink'
@@ -40,8 +41,10 @@ function Fact({ name, children }: { name: string; children: React.ReactNode }): 
   )
 }
 
+// The run's worktree on the run's machine: the same path can be another worktree here.
 function Worktree({ path }: { path: string }): React.JSX.Element {
-  const id = worktreeIdForPath(path)
+  const host = usePilotHost()
+  const id = worktreeIdForPath(path, host)
   const name = path.replace(/\/+$/, '').split('/').pop() || path
   if (!id) {
     return <span title={path}>{name}</span>
@@ -51,7 +54,7 @@ function Worktree({ path }: { path: string }): React.JSX.Element {
       type="button"
       title={path}
       className="underline"
-      onClick={leave(() => openWorktree(id))}
+      onClick={leave(() => openWorktree(id, host))}
     >
       {name}
     </button>
@@ -76,6 +79,7 @@ function Header({
   painted: PaintedRun
 }): React.JSX.Element {
   const { run } = detail
+  const host = usePilotHost()
   const url = itemUrl(run.fields)
   const home = homeOf(run)
   const parent = run.parentRunId
@@ -149,7 +153,7 @@ function Header({
           Activity
         </button>
         {parent ? (
-          <button type="button" className="underline" onClick={() => openRun(parent)}>
+          <button type="button" className="underline" onClick={() => openRun(parent, null, host)}>
             {`Answers run ${parent}`}
           </button>
         ) : null}
@@ -159,7 +163,8 @@ function Header({
   )
 }
 
-// One run's timeline and its links (spec §2 Run panel), polled while it is open so a running run moves along.
+// One run's timeline and its links (spec §2 Run panel), polled while it is open so a running run moves along. It reads
+// from, and its links open on, the machine the run is on.
 export function RunPanel({
   runId,
   part,
@@ -169,12 +174,13 @@ export function RunPanel({
   part: string | null
   onClose: () => void
 }): React.JSX.Element {
+  const host = usePilotHost()
   const [detail, setDetail] = useState<RunDetail | null>(null)
   const [error, setError] = useState<string | null>(null)
   useEffect(() => {
     let alive = true
     const load = (): void => {
-      pilotRpc<RunDetail>('pilot.runs.get', { runId }).then(
+      hostRpc<RunDetail>(host, 'pilot.runs.get', { runId }).then(
         (d) => {
           if (alive) {
             setDetail(d)
@@ -194,7 +200,7 @@ export function RunPanel({
       alive = false
       clearInterval(timer)
     }
-  }, [runId])
+  }, [runId, host])
   const effects = useRunEffects(runId, detail !== null && LIVE.has(detail.run.status))
   const painted = detail ? paintRun(detail.chain, detail) : null
   return (
@@ -219,8 +225,8 @@ export function RunPanel({
             run={detail.run}
             highlight={part}
             drifted={painted.drifted}
-            onOpenRun={(id) => openRun(id)}
-            onOpenCard={(id) => leave(() => showInboxCard(id))()}
+            onOpenRun={(id) => openRun(id, null, host)}
+            onOpenCard={(id) => leave(() => showInboxCard(id, host))()}
           />
         </>
       ) : null}

@@ -7,6 +7,8 @@ import type {
   RunDetail,
   TickOutcome
 } from '../../shared/api-types'
+import { byHost, LOCAL_NAMED, MINI } from '../hosts/__fixtures__/hosts'
+import { resetPilotHostsFeed, setPilotHostsForTests } from '../hosts/pilot-hosts-feed'
 import { resetAutomationsFeed } from '../run-views/automations-feed'
 import { closeRunPanel, openRunPanel } from '../run-views/run-panel-state'
 import { detail, failedRunTick, summary } from './fixtures'
@@ -56,6 +58,8 @@ describe('AutomationView', () => {
     pilotRpc.mockReset()
     localStorage.clear()
     resetAutomationsFeed()
+    resetPilotHostsFeed()
+    closeRunPanel()
     setPilotAutomationTab('how')
   })
 
@@ -71,8 +75,31 @@ describe('AutomationView', () => {
     expect(container.querySelector('[data-part="workspace"]')).toBeTruthy()
     expect(container.querySelector('[data-state]')).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: 'Open run' }))
-    expect(openRunPanel()).toEqual({ runId: 'fix-ci-3', part: null })
+    expect(openRunPanel()).toEqual({
+      runId: 'fix-ci-3',
+      part: null,
+      host: expect.objectContaining({ key: 'local' })
+    })
     closeRunPanel()
+  })
+
+  it('opens the latest run on the machine it ran on', async () => {
+    setPilotHostsForTests([LOCAL_NAMED, MINI])
+    // A machine's answers, with its own Activity.
+    const machine = (activity: ActivityPayload) => (method: string) => {
+      if (method === 'pilot.activity.list') {
+        return activity
+      }
+      if (method === 'pilot.automations.list') {
+        return { automations: [summary], errors: [], peopleError: null, missingDirs: [] }
+      }
+      return method === 'pilot.automations.get' ? detail : {}
+    }
+    pilotRpc.mockImplementation(byHost({ local: machine(EMPTY), mini: machine(ACTIVITY) }))
+    render(<AutomationView id="fix-ci" onBack={() => {}} onOpenJob={() => {}} />)
+    expect(await screen.findByText('Latest run')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Open run' }))
+    expect([openRunPanel()?.runId, openRunPanel()?.host.key]).toEqual(['fix-ci-3', 'env:mini'])
   })
 
   it('shows its Activity, asking only for this automation and only ticks with something to do', async () => {

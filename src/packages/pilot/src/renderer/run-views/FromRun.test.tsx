@@ -1,7 +1,9 @@
 // @vitest-environment happy-dom
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { stepAt, testCard, testRun } from '../../shared/run-views/__fixtures__/runs'
+import { LOCAL_NAMED, MINI } from '../hosts/__fixtures__/hosts'
+import { resetPilotHostsFeed, setPilotHostsForTests } from '../hosts/pilot-hosts-feed'
 import { summary } from '../pages/fixtures'
 
 const pilotRpc = vi.fn()
@@ -16,6 +18,7 @@ describe('FromRun', () => {
     cleanup()
     resetAutomationsFeed()
     closeRunPanel()
+    resetPilotHostsFeed()
     pilotRpc.mockReset()
     vi.unstubAllGlobals()
   })
@@ -43,7 +46,11 @@ describe('FromRun', () => {
     expect(screen.getByText('!1477')).toBeTruthy()
     expect(screen.getByText('$1.50')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Open run' }))
-    expect(openRunPanel()).toEqual({ runId: 'r1', part: 'step:0' })
+    expect(openRunPanel()).toEqual({
+      runId: 'r1',
+      part: 'step:0',
+      host: expect.objectContaining({ key: 'local' })
+    })
   })
 
   it('says where a failed run stopped', async () => {
@@ -83,7 +90,40 @@ describe('FromRun', () => {
     })
     render(<FromRun item={{ automationId: 'fix-ci', stepIdx: 0 }} run={run} />)
     fireEvent.click(await screen.findByRole('button', { name: 'Open run' }))
-    expect(openRunPanel()).toEqual({ runId: 'r2', part: 'answer:0' })
+    expect(openRunPanel()).toEqual({
+      runId: 'r2',
+      part: 'answer:0',
+      host: expect.objectContaining({ key: 'local' })
+    })
+  })
+
+  it.each<[string, () => HTMLElement]>([
+    ['Open run', () => screen.getByRole('button', { name: 'Open run' })],
+    [
+      'its strip, named by its machine',
+      () =>
+        within(screen.getByRole('list', { name: 'Run r1 on Mac mini' })).getByRole('button', {
+          name: /1 fix/
+        })
+    ]
+  ])("opens another machine's card's run there from %s", async (_from, control) => {
+    setPilotHostsForTests([LOCAL_NAMED, MINI])
+    pilotRpc.mockResolvedValue({
+      automations: [summary],
+      errors: [],
+      peopleError: null,
+      missingDirs: []
+    })
+    const run = testRun({
+      id: 'r1',
+      automationId: 'fix-ci',
+      status: 'needs_you',
+      steps: [stepAt(0, 'fix', 'done')]
+    })
+    render(<FromRun item={{ automationId: 'fix-ci', stepIdx: 0 }} run={{ ...run, host: MINI }} />)
+    await screen.findByRole('button', { name: /1 fix/ })
+    fireEvent.click(control())
+    expect([openRunPanel()?.runId, openRunPanel()?.host.key]).toEqual(['r1', 'env:mini'])
   })
 
   describe('Continue run', () => {

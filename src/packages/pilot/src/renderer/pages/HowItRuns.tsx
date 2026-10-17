@@ -62,7 +62,11 @@ function LatestRun({
       </span>
       <MachineChip host={hostOf(run)} />
       <span className="flex-1" />
-      <button type="button" className="underline" onClick={() => openRun(run.id)}>
+      <button
+        type="button"
+        className="underline"
+        onClick={() => openRun(run.id, null, hostOf(run))}
+      >
         Open run
       </button>
       <button

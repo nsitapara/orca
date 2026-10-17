@@ -3,7 +3,8 @@ import { RotateCcw } from 'lucide-react'
 import { isWebClientLocation } from '@/lib/web-client-location'
 import type { SessionResumeResult, StepRow } from '../../shared/api-types'
 import { money } from '../../shared/money'
-import { pilotRpc } from '../api'
+import { hostRpc } from '../hosts/host-rpc'
+import { usePilotHost } from '../hosts/PilotHostContext'
 import { errorText, stepStatusLabel } from '../pages/format'
 import { refreshWorktreeTimeline } from '../sidebar/timeline-feed'
 import { StepResultView } from '../timeline/StepResult'
@@ -54,6 +55,7 @@ function outputsText(step: StepRow): string | null {
   return entries.map(([k, v]) => `${k}=${String(v)}`).join(' · ')
 }
 
+// Resumes on the machine the surrounding view (run panel, Running section) is for; that machine says if it won't.
 export function ResumeButton({
   runId,
   worktreePath,
@@ -63,6 +65,7 @@ export function ResumeButton({
   worktreePath: string | null
   step: StepRow
 }): React.JSX.Element {
+  const host = usePilotHost()
   const [note, setNote] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const resume = async (): Promise<void> => {
@@ -71,12 +74,13 @@ export function ResumeButton({
     }
     setBusy(true)
     try {
-      const result = await pilotRpc<SessionResumeResult>('pilot.session.resume', {
+      const result = await hostRpc<SessionResumeResult>(host, 'pilot.session.resume', {
         runId,
         stepIdx: step.idx
       })
       setNote(RESUMED[result.action])
-      if (worktreePath) {
+      // The sidebar's timeline is this machine's: another machine's path names nothing there.
+      if (worktreePath && host.local) {
         refreshWorktreeTimeline(worktreePath)
       }
     } catch (e) {

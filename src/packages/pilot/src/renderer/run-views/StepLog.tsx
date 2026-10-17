@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react'
 import type { StepRow } from '../../shared/api-types'
 import { safeHref } from '../../shared/safe-href'
 import type { LogEntry, LogEntryDetail, LogStatus } from '../../shared/visibility-types'
-import { pilotRpc } from '../api'
+import { hostRpc } from '../hosts/host-rpc'
+import { usePilotHost } from '../hosts/PilotHostContext'
 import { clockTime, errorText } from '../pages/format'
 import { useStepLog } from './use-step-log'
 
@@ -74,11 +75,13 @@ function Detail({
   stepIdx: number
   id: string
 }): React.JSX.Element {
+  const host = usePilotHost()
   const [detail, setDetail] = useState<LogEntryDetail | null>(null)
   const [error, setError] = useState<string | null>(null)
   useEffect(() => {
     let alive = true
-    Promise.resolve(pilotRpc<LogEntryDetail>('pilot.runs.logEntry', { runId, stepIdx, id })).then(
+    const read = hostRpc<LogEntryDetail>(host, 'pilot.runs.logEntry', { runId, stepIdx, id })
+    Promise.resolve(read).then(
       (got) => {
         if (alive && typeof got?.output === 'string') {
           setDetail(got)
@@ -93,7 +96,7 @@ function Detail({
     return () => {
       alive = false
     }
-  }, [runId, stepIdx, id])
+  }, [runId, stepIdx, id, host])
   if (error) {
     return <p className="text-destructive">{error}</p>
   }

@@ -207,7 +207,11 @@ describe('RunningPage', () => {
     expect(screen.getByText('Merge conflict in api/models.py')).toBeTruthy()
     expect(screen.getByText('Resolve the conflict?')).toBeTruthy()
     await click('Open')
-    expect(openRunPanel()).toEqual({ runId: 'f1', part: null })
+    expect(openRunPanel()).toEqual({
+      runId: 'f1',
+      part: null,
+      host: expect.objectContaining({ key: 'local' })
+    })
   })
 
   it.each([
