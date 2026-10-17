@@ -1,0 +1,108 @@
+import { mkdtempSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { describe, expect, it } from 'vitest'
+import { testDefinition, testStep } from '../../shared/definition/__fixtures__/definition'
+import { PilotStore } from '../store/store'
+import { capacityView } from './capacity-view'
+
+const GIB = 1024 ** 3
+
+describe('capacityView', () => {
+  it('lists running runs with their memory, the queue in line order, and suggests from the heaviest job', () => {
+    const store = PilotStore.open(
+      join(mkdtempSync(join(tmpdir(), 'pilot-capacity-view-')), 'db.sqlite')
+    )
+    const review = testDefinition({ id: 'review', name: '03 Review and fix' })
+    const ci = testDefinition({ id: 'ci', name: '05 Fix failed CI' })
+    const pull = testDefinition({
+      id: 'pull',
+      name: '01 Pull dev',
+      steps: [testStep({ agent: 'shell', run: 'git pull', prompt: null })]
+    })
+    const run = (id: string, automationId: string, startedAt: number) =>
+      store.runs.create({
+        id,
+        automationId,
+        tickId: null,
+        itemKey: id,
+        itemLabel: `!${id}`,
+        worktreePath: null,
+        startedAt
+      })
+    run('old-review', 'review', 1)
+    store.capacity.recordPeak('old-review', 3 * GIB)
+    store.runs.update('old-review', { status: 'done', finishedAt: 2 })
+    run('r1', 'review', 10)
+    run('p1', 'pull', 11)
+    store.capacity.recordPeak('r1', 2 * GIB)
+    store.capacity.setRunLimit(2, 0)
+    store.capacity.enqueue({
+      automationId: 'ci',
+      itemKey: 'mr:9',
+      itemLabel: '!9',
+      queuedAt: 5,
+      byHand: true
+    })
+    store.capacity.enqueue({
+      automationId: 'gone',
+      itemKey: 'x',
+      itemLabel: 'x',
+      queuedAt: 1,
+      byHand: false
+    })
+
+    const view = capacityView({
+      store,
+      definitions: [review, ci, pull],
+      memory: { runs: new Map([['r1', 1.5 * GIB]]), system: null, sampledAt: 1 },
+      system: { totalBytes: 24 * GIB, availableBytes: 11 * GIB }
+    })
+
+    expect(view.limit).toBe(2)
+    expect(view.running).toEqual([
+      {
+        id: 'r1',
+        automationId: 'review',
+        automationName: '03 Review and fix',
+        itemLabel: '!r1',
+        startedAt: 10,
+        memoryBytes: 1.5 * GIB,
+        peakBytes: 2 * GIB,
+        counted: true
+      },
+      {
+        id: 'p1',
+        automationId: 'pull',
+        automationName: '01 Pull dev',
+        itemLabel: '!p1',
+        startedAt: 11,
+        memoryBytes: null,
+        peakBytes: null,
+        counted: false
+      }
+    ])
+    expect(view.queued).toEqual([
+      {
+        automationId: 'ci',
+        automationName: '05 Fix failed CI',
+        itemKey: 'mr:9',
+        itemLabel: '!9',
+        queuedAt: 5,
+        byHand: true
+      }
+    ])
+    expect(view.heaviest).toEqual({
+      automationId: 'review',
+      automationName: '03 Review and fix',
+      peakBytes: 3 * GIB
+    })
+    // (11 free + 1.5 held by running jobs - 4 headroom) / 3 for the heaviest job = 2.8, so 2.
+    expect(view.suggestion).toEqual({
+      limit: 2,
+      budgetBytes: 8.5 * GIB,
+      perJobBytes: 3 * GIB,
+      measured: true
+    })
+  })
+})
