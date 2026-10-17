@@ -98,16 +98,25 @@ describe('env words', () => {
   it.each([
     [
       'running, preparing',
-      { status: 'running', env: env({ state: 'preparing' }) },
+      { status: 'running', env: env({ state: 'preparing' }), outcome: null },
       'Preparing workspace'
     ],
-    ['cancelled, deferred', { status: 'cancelled', env: env({ state: 'deferred' }) }, 'Deferred'],
     [
-      'deferred and since removed',
-      { status: 'cancelled', env: env({ state: 'deferred', removedAt: 9 }) },
+      'cancelled, deferred',
+      { status: 'cancelled', env: env({ state: 'deferred' }), outcome: null },
       'Deferred'
     ],
-    ['anything else', { status: 'done', env: null }, 'done']
+    [
+      'deferred and since removed',
+      { status: 'cancelled', env: env({ state: 'deferred', removedAt: 9 }), outcome: null },
+      'Deferred'
+    ],
+    [
+      'done with nothing to do',
+      { status: 'done', env: null, outcome: 'Nothing to do: the card was already answered' },
+      'Nothing to do'
+    ],
+    ['anything else', { status: 'done', env: null, outcome: 'Done' }, 'done']
   ] as const)('status word: %s', (_name, run, word) => {
     expect(runStatusWord(run, (s) => s)).toBe(word)
   })

@@ -18,7 +18,7 @@ import { WhatItChanged } from './EffectsLine'
 import { envLines } from './env-lines'
 import { RunTimeline } from './RunTimeline'
 import { closeRunPanel, openRun } from './run-panel-state'
-import { RUN_TONE } from './tokens'
+import { runTone } from './tokens'
 
 export const RUN_PANEL_POLL_MS = 10_000
 const LIVE: ReadonlySet<string> = new Set(['running', 'asking'])
@@ -111,9 +111,7 @@ function Header({
       </h3>
       <dl className="grid grid-cols-[5.5rem_minmax(0,1fr)] gap-y-0.5 text-xs">
         <Fact name="State">
-          <span className={cn('rounded px-1.5', RUN_TONE[run.status])}>
-            {stateWord(detail, painted)}
-          </span>
+          <span className={cn('rounded px-1.5', runTone(run))}>{stateWord(detail, painted)}</span>
         </Fact>
         {home ? (
           <Fact name="Worktree">

@@ -1,4 +1,4 @@
-import type { FieldValue, ItemFields, RunStatus, StepStatus } from '../api-types'
+import type { FieldValue, ItemFields, RunRow, RunStatus, StepStatus } from '../api-types'
 import type { StepDef } from '../definition/types'
 import { evalExpr, exprPlaceholders, parseExpr } from '../expr'
 
@@ -93,11 +93,18 @@ function cleanupVerb(step: EndedStep): string {
   return 'failed'
 }
 
+export const NOTHING_TO_DO = 'Nothing to do'
+
 function nothingToDo(step: EndedStep): string {
   if (step.error) {
-    return `Nothing to do: ${step.error}`
+    return `${NOTHING_TO_DO}: ${step.error}`
   }
-  return 'Nothing to do'
+  return NOTHING_TO_DO
+}
+
+// A run that ended because a step found nothing to do (runEnd's stopped outcome): no work done, nothing failed.
+export function hadNothingToDo(run: Pick<RunRow, 'status' | 'outcome'>): boolean {
+  return run.status === 'done' && (run.outcome?.startsWith(NOTHING_TO_DO) ?? false)
 }
 
 function cleanupNote(step: EndedStep | undefined): string {

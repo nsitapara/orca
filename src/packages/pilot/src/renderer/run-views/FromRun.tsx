@@ -9,7 +9,7 @@ import { useAutomationsFeed } from './automations-feed'
 import { ContinueRun } from './ContinueRun'
 import { RunStrip } from './RunStrip'
 import { openRun } from './run-panel-state'
-import { RUN_TONE } from './tokens'
+import { runTone } from './tokens'
 
 type Asked = Pick<InboxListRow, 'automationId' | 'stepIdx'>
 
@@ -54,7 +54,7 @@ export function FromRun({
     <div data-from-run="" className="flex flex-col gap-1.5 text-xs text-muted-foreground">
       <div className="flex min-w-0 flex-wrap items-center gap-2">
         <span className="font-semibold">From run</span>
-        <span className={cn('rounded px-1.5', RUN_TONE[run.status])}>
+        <span className={cn('rounded px-1.5', runTone(run))}>
           {runHeadline(run, runTimeline(parts, run), runStatusLabel)}
         </span>
         <span className="tabular-nums">{runSpan(run)}</span>

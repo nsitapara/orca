@@ -45,6 +45,13 @@ function timelineOf(status: RunStatus, steps: StepRow[]) {
   }
 }
 
+// A step found nothing to do (a shell step's stop code, or a card with nothing left to prepare): its own word, whatever
+// the steps did.
+it('heads a run that had nothing to do with Nothing to do', () => {
+  const run = { status: 'done' as const, outcome: 'Nothing to do: the card was already answered' }
+  expect(runHeadline(run, { ran: [], notRun: [] }, (s) => LABEL[s])).toBe('Nothing to do')
+})
+
 describe('runTimeline', () => {
   it.each([
     [

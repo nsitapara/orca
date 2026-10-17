@@ -7,7 +7,7 @@ import { pilotRpc } from '../api'
 import { defaultRun, runCandidates } from '../run-views/activity-groups'
 import { RunRail } from '../run-views/RunRail'
 import { openRun } from '../run-views/run-panel-state'
-import { RUN_TONE } from '../run-views/tokens'
+import { runTone } from '../run-views/tokens'
 import { scheduleText } from './AutomationsTable'
 import { showPilotAutomation } from './automations-view'
 import { clockTime, formatInZone, runStatusLabel } from './format'
@@ -55,7 +55,7 @@ function LatestRun({
       <span className="min-w-0 truncate font-mono" title={run.itemLabel}>
         {run.itemLabel}
       </span>
-      <span className={cn('rounded px-1.5', RUN_TONE[run.status])}>
+      <span className={cn('rounded px-1.5', runTone(run))}>
         {runHeadline(run, runTimeline(parts, run), runStatusLabel)}
       </span>
       <span className="flex-1" />

@@ -16,7 +16,7 @@ import { EffectsLine } from '../../run-views/EffectsLine'
 import { openRun } from '../../run-views/run-panel-state'
 import { RunStrip } from '../../run-views/RunStrip'
 import { canResume, ResumeButton } from '../../run-views/StepDetail'
-import { RUN_TONE } from '../../run-views/tokens'
+import { runTone } from '../../run-views/tokens'
 import { WaitingRow } from '../../timeline/WaitingRow'
 import { clockTime, itemUrl, runStatusLabel } from '../format'
 import { worktreeName } from '../waiting/answer-text'
@@ -175,7 +175,7 @@ function FinishedRow({
           </button>
         </td>
         <td className={CELL}>
-          <span className={cn('rounded px-1.5', RUN_TONE[run.status])}>
+          <span className={cn('rounded px-1.5', runTone(run))}>
             {runStatusWord(run, runStatusLabel)}
           </span>
         </td>
