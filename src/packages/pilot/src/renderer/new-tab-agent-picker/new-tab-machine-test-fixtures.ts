@@ -5,6 +5,7 @@ import type {
 } from '../../../../../shared/execution-host-registry'
 import type { ProjectHostSetup } from '../../../../../shared/project-types'
 import type { Worktree } from '../../../../../shared/worktree/types'
+import type { NewTabMachineTarget } from './new-tab-machine-step'
 import { makeWorktree } from '@/components/worktree-jump-palette-test-fixtures'
 
 export const PROJECT = 'git:example.invalid/pilot/machine-step'
@@ -50,4 +51,20 @@ export function machineWorktree(
   over: Partial<Worktree> = {}
 ): Worktree {
   return makeWorktree(`${repoId}::${path}`, path, { repoId, path, ...over })
+}
+
+export function machineTarget(
+  hostId: ExecutionHostId,
+  worktreeId: string,
+  over: Partial<NewTabMachineTarget> = {}
+): NewTabMachineTarget {
+  return {
+    hostId,
+    machineLabel: hostId,
+    worktreeId,
+    worktreeName: worktreeId,
+    opensIn: 'same-branch',
+    isCurrent: false,
+    ...over
+  }
 }
