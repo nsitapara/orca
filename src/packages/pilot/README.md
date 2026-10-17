@@ -433,7 +433,7 @@ A run costs the sum of its steps. A Claude step's session id is pinned at launch
 
 **Memory and the suggestion.** On each scheduler poll Pilot sums the RSS of every running agent step's terminal process tree and keeps each run's peak (`runs.peak_rss_bytes`). Shell steps and Docker's containers aren't counted.
 - The suggestion is what can go to jobs (available memory plus what running jobs hold, less 4 GB), divided by the heaviest job's peak over its last 20 measured runs. It is at least 1 and at most 10.
-- Before any job has been measured, each counts as 2.5 GB, as web-platform's `e2e-parallel.sh` budgets a stack.
+- An enabled job not measured yet counts as 2.5 GB, as web-platform's `e2e-parallel.sh` budgets a stack, so a light job measured first can't raise the suggestion before the heavy ones have run.
 - It is a suggestion only; nothing changes until you pick a number.
 
 ## Agent Console
