@@ -15,6 +15,7 @@ import { verifyOrcadManagedServing } from '../ssh/orcad-managed-serving-verify'
 import { convertSshTargetToManagedOrcad } from '../ssh/orcad-runtime-conversion'
 import {
   orcadMigrationDestinationFor,
+  orcadServerFolderCatalogFor,
   orcadServerRepositoriesFor
 } from '../ssh/orcad-runtime-conversion-wiring'
 import { createManagedOrcadEnvironment } from '../ssh/orcad-runtime-deployment'
@@ -98,7 +99,7 @@ export function hostServerOnConnectDeps(userDataPath: string): HostServerOnConne
       if (hostProof?.bridged) {
         await startLegacyRelayBridge(target.id)
       }
-      return convertSshTargetToManagedOrcad(userDataPath, {
+      const converted = await convertSshTargetToManagedOrcad(userDataPath, {
         sshTargetId: target.id,
         name: managedOrcadServerName(target),
         // The connect's own census already answered; a conversion before any session reuses it.
@@ -106,8 +107,15 @@ export function hostServerOnConnectDeps(userDataPath: string): HostServerOnConne
           hostProof ? Promise.resolve(hostProof) : censusHostRelayTerminalsFor(host)(),
         // Why no releaseDirectSession: a disconnect here would cancel the connect that asked for it.
         destinationFor: orcadMigrationDestinationFor,
-        serverRepositoriesFor: orcadServerRepositoriesFor
+        serverRepositoriesFor: orcadServerRepositoriesFor,
+        serverFolderCatalogFor: orcadServerFolderCatalogFor
       })
+      if (converted.outcome === 'converted' || converted.outcome === 'refused') {
+        // "Move anyway" covers one attempt; a later move, or a later delta, asks again.
+        // Kept on a throw: verifyFence re-exports with it, so a held fence could never resume.
+        registry.updateTarget(target.id, { managedServerLeaveBehind: undefined })
+      }
+      return converted
     },
     abandonDeploy: async (target) => {
       const environmentId =

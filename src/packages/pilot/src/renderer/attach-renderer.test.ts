@@ -22,7 +22,7 @@ describe('attachPilotRenderer', () => {
       i18n.t('b', {
         defaultValue: 'Make the left sidebar match your terminal, stay default, or use a tint.'
       })
-    ).toBe('Make both sidebars match your terminal, stay default, or use a tint.')
+    ).toBe('Match your terminal across the whole window, stay default, or tint both sidebars.')
     const elsewhere = 'Show the Tasks button at the top of the left sidebar.'
     expect(i18n.t('c', { defaultValue: elsewhere })).toBe(elsewhere)
   })

@@ -20,6 +20,7 @@ import { reconcileStartupManagedAgentHooks } from '../agent-hooks/managed-agent-
 import { shouldInstallManagedHooks } from './configure-process'
 import { mainProcessState as state } from './main-process-state'
 import { initializeMainProcessObservers } from './main-process-observers'
+import { installFirstWorkRenameHookSubscription } from './branch-rename-hook'
 import { initializeMainProcessAccountServices } from './main-process-account-services'
 import {
   initializeMainProcessRuntime,
@@ -51,6 +52,7 @@ export async function initializeReadyRuntimeServices(): Promise<void> {
   initializeMainProcessAutomations()
   configureRuntimeServices(runtime)
   attachPilotMain(runtime) // pilot-hook: main
+  installFirstWorkRenameHookSubscription()
   await initializeMainProcessPlugins(runtime)
   state.starNag = new StarNagService(store, state.stats!)
   state.starNag.start()
