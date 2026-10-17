@@ -410,12 +410,7 @@ A run costs the sum of its steps. A Claude step's session id is pinned at launch
 
 **The token usage report.** Pilot writes job 08's files: `usage.json`, `usage.csv`, `usage-data.js`, `Token usage.html` and `Token usage.md`. They use the same paths and schema, so the Agent Console and the vault note keep working.
 - Folder: `PILOT_USAGE_REPORT_DIR`, default `~/Documents/WebPortal/Agent Work/Automations/08 · Tally token usage by job`. HTML template: `PILOT_USAGE_TEMPLATE`, default Pilot's own `resources/usage_report.html` (shipped as `Contents/Resources/pilot/usage_report.html`; orcad writes the report without it).
-- **The hand-over from job 08.** Pilot writes into that folder only once `usage-legacy.json` is there. To hand it over:
-  1. Leave job 08 disabled.
-  2. Run `python3 ~/.agents/skills/worktree-gate/usage.py report` once more.
-  3. In that folder, `cp usage.json usage-legacy.json`.
-
-  From then on the packaged app refreshes the files after each measured step and at least hourly. It keeps 08's history (the legacy rows) and replaces only the sessions it measured itself.
+- **The hand-over from job 08** was done on 2026-10-12: 08's last `usage.json` was copied to `usage-legacy.json` in that folder, and Pilot writes there only while that file is there. The packaged app refreshes the files after each measured step and at least hourly. It keeps 08's history (the legacy rows) and replaces only the sessions it measured itself.
 - To write the report anywhere else, at any time: `pilot automations usage-report --out <dir>`.
 
 ## Agent Console

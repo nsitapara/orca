@@ -6,7 +6,7 @@ const FOLDER = '08 · Tally token usage by job'
 // 08 is retired: the engine writes usage.json itself (Task 29c). The old tally's rows, for sessions Pilot
 // never ran and for totals Claude's 30-day pruning would otherwise lose, are handed over as usage-legacy.json beside
 // it, which Pilot's report keeps (Task 29b). That file is also the marker that lets Pilot write into the folder.
-// Run `usage.py report` just before importing.
+// The hand-over was applied on 2026-10-12.
 export const agentUsageState: SweepStateMapper = {
   automationId: 'agent-usage',
   plan(read) {
@@ -16,7 +16,6 @@ export const agentUsageState: SweepStateMapper = {
     }
     return {
       ...emptyPlan('agent-usage', [
-        'Run `python3 ~/.agents/skills/worktree-gate/usage.py report` first, so the history is current',
         "After --apply Pilot writes this folder's usage.json itself, so apply it only at go-live"
       ]),
       files: [{ from, to: read.vaultPath(`${FOLDER}/usage-legacy.json`) }]
