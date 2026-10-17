@@ -8,6 +8,7 @@ const OUTCOME: Record<Verdict, string> = {
   notdue: 'not due',
   out_of_scope: 'not in scope',
   over_limit: 'next tick',
+  queued: 'waiting for a slot',
   baselined: 'baselined',
   asked: 'asked first'
 }

@@ -9,6 +9,7 @@ import { EMPTY_PEOPLE, parsePeopleYaml } from '../../shared/people'
 import { fakeFieldDeps, testItem } from '../fields/__fixtures__/field-deps'
 import type { FieldEngineDeps } from '../fields/engine'
 import type { WorktreeInfo } from '../fields/worktree-facts'
+import { runCapacity } from '../capacity/run-capacity'
 import { makeLauncher } from '../run/__fixtures__/launcher'
 import { runtimeWorkspaceDeps } from '../run/workspace'
 import { createPassFetchCache } from '../sources/fetch-cache'
@@ -763,5 +764,44 @@ describe('runTick v2', () => {
     expect((seen as SourceContext | null)?.fetch.passId).toBe(`tick-${result.tickId}`)
     await runTick(def, people, d, { dryRun: true })
     expect((seen as SourceContext | null)?.fetch.passId).toBe('dry-run-fix-failed-ci')
+  })
+})
+
+describe('runTick with a run limit', () => {
+  it('queues an item past the limit, then starts it as Run now asked once a slot frees', async () => {
+    const d = deps()
+    const capacity = runCapacity({ store: d.store, definitions: () => [def], now: d.now })
+    d.store.capacity.setRunLimit(1, 0)
+    const first = await runTick(def, people, { ...d, capacity }, { dryRun: false, byHand: true })
+    expect(d.launched).toEqual(['mr:1561'])
+    expect(d.store.tickItems(first.tickId).map((i) => [i.itemKey, i.verdict, i.reason])).toEqual([
+      ['mr:1561', 'started', 'All checks pass'],
+      ['mr:1574', 'queued', 'Waiting for a slot: 1 of 1 running']
+    ])
+    expect(d.store.capacity.queued().map((q) => [q.itemKey, q.byHand])).toEqual([['mr:1574', true]])
+    for (const run of d.store.runs.forTick(first.tickId)) {
+      d.store.runs.update(run.id, { status: 'done', finishedAt: d.now() })
+    }
+    const second = await runTick(def, people, { ...d, capacity }, { dryRun: false })
+    expect(d.launched).toEqual(['mr:1561', 'mr:1574'])
+    expect(d.store.runs.forTick(second.tickId).map((r) => [r.itemKey, r.trigger])).toEqual([
+      ['mr:1574', 'manual']
+    ])
+    expect(d.store.capacity.queued()).toEqual([])
+  })
+
+  it("drops a job's queued items when its tick fails, so they can't hold the line", async () => {
+    const d = deps({ sources: failingSources(new Error('glab is down')) })
+    d.store.capacity.enqueue({
+      automationId: def.id,
+      itemKey: 'mr:1561',
+      itemLabel: '!1561',
+      queuedAt: 1,
+      byHand: false
+    })
+    const capacity = runCapacity({ store: d.store, definitions: () => [def], now: d.now })
+    const result = await runTick(def, people, { ...d, capacity }, { dryRun: false })
+    expect(result.status).toBe('failed')
+    expect(d.store.capacity.queued()).toEqual([])
   })
 })

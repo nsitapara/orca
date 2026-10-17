@@ -4,6 +4,7 @@ import { expireStale, handoverOf, settleFed } from '../handover/tick-handover'
 import type { AutomationDefinition } from '../../shared/definition/types'
 import type { PeopleDirectory } from '../../shared/people'
 import { usesHandled, workspacePathOf } from '../../shared/tick/decide'
+import type { Admission, RunCapacity } from '../capacity/run-capacity'
 import { askDecisions, type AskDeps } from '../run/ask-first'
 import type { PassFetchCache } from '../sources/fetch-cache'
 import type { GlabApi } from '../sources/gitlab-api'
@@ -41,6 +42,8 @@ export type TickDeps = DecideDeps & {
   ask: AskDeps
   // A dry run of an env automation: where each started item would work (main/envs/preview.ts).
   previewEnvs?(def: AutomationDefinition, decisions: ItemDecision[]): Promise<void>
+  // The run limit across automations: a started item past it waits in the queue instead (verdict queued).
+  capacity?: Pick<RunCapacity, 'admit' | 'settle' | 'forget'>
 }
 // `pass` is the scheduler pass's fetch cache, shared by every automation that ticks in that pass. `trigger`: the run
 // whose feed (run: now) asked for this tick, recorded on it for Activity. `byHand`: a Run now, whose runs are stored
@@ -130,6 +133,15 @@ async function startRuns(
       decision.reason = `Another run is active in ${busy}`
       continue
     }
+    const admission: Admission = deps.capacity?.admit(def, decision, byHand) ?? {
+      start: true,
+      byHand
+    }
+    if (!admission.start) {
+      decision.verdict = 'queued'
+      decision.reason = admission.reason
+      continue
+    }
     n += 1
     const runId = makeRunId(def.id, at, n, tickId)
     deps.store.runs.create({
@@ -140,7 +152,7 @@ async function startRuns(
       itemLabel: decision.label,
       worktreePath,
       startedAt: at,
-      ...(byHand ? { trigger: 'manual' as const } : {})
+      ...(admission.byHand ? { trigger: 'manual' as const } : {})
     })
     runIds.set(decision.key, runId)
     unlaunched.current = { runId, onceKey: decision.onceKey }
@@ -273,6 +285,10 @@ export async function runTick(
   } catch (error) {
     const message = errorMessage(error)
     finishFailed(tickId, message, {}, deps)
+    // Its queued items leave the line, so a job whose ticks keep failing can't hold the slot they wait for.
+    try {
+      deps.capacity?.forget(def.id)
+    } catch {}
     return { tickId, status: 'failed', error: message, decisions: [], warnings: [] }
   }
   for (const warning of warnings) {
@@ -288,6 +304,7 @@ export async function runTick(
       runIdFor: (n) => `${makeRunId(def.id, at, n, tickId)}-ask`
     })
     await startRuns(def, decisions, tickId, deps, runIds, unlaunched, opts.byHand === true)
+    deps.capacity?.settle(def, decisions)
     deps.store.recordDecisions(tickId, decisions, runIds)
     settleFed(deps.store, def, feeding, decisions, runIds, tickId, deps.now())
     deps.store.finishTick(tickId, 'ok', null, countVerdicts(decisions), deps.now(), warnings)
