@@ -44,6 +44,21 @@ describe('pilotRpc', () => {
     )
   })
 
+  // LOCAL_PILOT_HOST.target is local: a caller passing a host's target keeps the browser's route.
+  it("sends an explicit local target to the browser version's active environment", async () => {
+    vi.stubGlobal('window', {
+      __ORCA_WEB_CLIENT__: true,
+      location: { pathname: '/web-index.html' }
+    })
+    await pilotRpc('pilot.inbox.list', {}, { target: { kind: 'local' } })
+    expect(callRuntimeRpc).toHaveBeenCalledWith(
+      { kind: 'environment', environmentId: 'active' },
+      'pilot.inbox.list',
+      {},
+      { timeoutMs: 15_000 }
+    )
+  })
+
   it('sends a call to the environment it names', async () => {
     const target = { kind: 'environment', environmentId: 'mini' } as const
     await pilotRpc('pilot.inbox.list', {}, { target })

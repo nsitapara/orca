@@ -1,6 +1,14 @@
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import type { RuntimeClientTarget } from '../../../../../shared/runtime-client-target'
 import type { PilotStatus } from '../../shared/api-types'
 import { RuntimeRpcCallError } from '@/runtime/runtime-rpc-result'
+
+const callRuntimeRpc = vi.fn()
+vi.mock('@/runtime/runtime-rpc-client', () => ({
+  callRuntimeRpc: (...args: unknown[]) => callRuntimeRpc(...args)
+}))
+
+import { pilotRpc } from '../api'
 import { discoverPilotHosts, type EnvironmentContact, type DiscoveryDeps } from './host-discovery'
 import { environmentHostKey, hostedKey, hostOf, LOCAL_PILOT_HOST } from './pilot-host'
 import { localStorageKnownHosts, type KnownPilotHosts } from './known-hosts'
@@ -189,6 +197,35 @@ describe('discoverPilotHosts', () => {
       'env:mini',
       'env:self'
     ])
+  })
+})
+
+describe('discoverPilotHosts in the browser version', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+    callRuntimeRpc.mockReset()
+  })
+
+  it("lists the page's own server once: 'local' and its runtime environment are the same server", async () => {
+    vi.stubGlobal('window', {
+      __ORCA_WEB_CLIENT__: true,
+      location: { pathname: '/web-index.html' }
+    })
+    const SERVER_ENV = { id: 'web-server-a', name: 'Linux box' }
+    // The one server answers both its 'active' selector and its own environment id; nothing else answers.
+    callRuntimeRpc.mockImplementation(async (target: RuntimeClientTarget) => {
+      if (
+        target.kind === 'environment' &&
+        ['active', SERVER_ENV.id].includes(target.environmentId)
+      ) {
+        return status('Linux box', '/srv/pilot')
+      }
+      throw new Error('not this server')
+    })
+    const { value } = deps([SERVER_ENV], {}, {})
+    value.status = (target) => pilotRpc<PilotStatus>('pilot.status', undefined, { target })
+    const hosts = await discoverPilotHosts(value)
+    expect(hosts.map((h) => `${h.key}:${h.machineName}`)).toEqual(['local:Linux box'])
   })
 })
 

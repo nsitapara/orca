@@ -12,13 +12,21 @@ function pilotRpcTarget(): RuntimeClientTarget {
   return { kind: 'local' }
 }
 
-// A caller's target wins; long calls (dry run, Run now) pass a larger timeoutMs.
+// An explicit local target is this window's own Pilot too (LOCAL_PILOT_HOST.target), so it keeps the browser's route.
+function targetOf(target: RuntimeClientTarget | undefined): RuntimeClientTarget {
+  if (!target || target.kind === 'local') {
+    return pilotRpcTarget()
+  }
+  return target
+}
+
+// A caller's environment target wins; long calls (dry run, Run now) pass a larger timeoutMs.
 export function pilotRpc<T>(
   method: string,
   params?: unknown,
   opts?: { timeoutMs?: number; target?: RuntimeClientTarget }
 ): Promise<T> {
-  return callRuntimeRpc<T>(opts?.target ?? pilotRpcTarget(), method, params, {
+  return callRuntimeRpc<T>(targetOf(opts?.target), method, params, {
     timeoutMs: opts?.timeoutMs ?? DEFAULT_TIMEOUT_MS
   })
 }
