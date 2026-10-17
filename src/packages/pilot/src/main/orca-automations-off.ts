@@ -6,13 +6,12 @@ import type { Store } from '../../../../main/persistence'
 export const ORCA_AUTOMATIONS_OFF =
   "Orca's own automations are off in Pilot. Pilot runs the YAML automations (pilot automations list-yaml)."
 
-type Opts = { env?: NodeJS.ProcessEnv; inElectron?: boolean; log?: (message: string) => void }
+type Opts = { inElectron?: boolean; log?: (message: string) => void }
 
+// Always off inside Electron: there is no switch back on, since the way back to Orca was retired (2026-10-15).
 export function isOrcaAutomationsOff(opts: Opts = {}): boolean {
-  const env = opts.env ?? process.env
-  const inElectron = opts.inElectron ?? Boolean(process.versions.electron)
   // Why: upstream's startup and automation tests run under plain Node; they keep the real service.
-  return inElectron && env.PILOT_ORCA_AUTOMATIONS !== 'on'
+  return opts.inElectron ?? Boolean(process.versions.electron)
 }
 
 function enabledCount(store: Pick<Store, 'listAutomations'>): number | null {
@@ -24,11 +23,10 @@ function enabledCount(store: Pick<Store, 'listAutomations'>): number | null {
 }
 
 function offLine(count: number | null): string {
-  const back = '(PILOT_ORCA_AUTOMATIONS=on turns it back on)'
   if (!count) {
-    return `[pilot] Orca's automation engine is off in Pilot ${back}`
+    return "[pilot] Orca's automation engine is off in Pilot"
   }
-  return `[pilot] Orca's automation engine is off in Pilot: ${count} enabled Orca automation(s) won't run here ${back}`
+  return `[pilot] Orca's automation engine is off in Pilot: ${count} enabled Orca automation(s) won't run here`
 }
 
 // The service is still built (the window's IPC takes it), then stopped with Orca's own stop(): every
