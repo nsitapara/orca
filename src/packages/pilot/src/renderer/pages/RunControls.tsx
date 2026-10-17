@@ -1,20 +1,24 @@
 import { useEffect, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import type { TickOutcome } from '../../shared/api-types'
-import { pilotRpc } from '../api'
+import { hostRpc } from '../hosts/host-rpc'
+import type { PilotHostRef } from '../hosts/pilot-host'
 import { errorText, outcomeLine } from './format'
 
 export const LONG_CALL_MS = 180_000
 type Phase = 'idle' | 'confirm' | 'running'
 
-// Dry run is safe; Run now starts real agents, so it takes an explicit inline Confirm. A dry run's answer goes to
-// onDryRun for the page to show (it is stored nowhere); a real tick's outcome is the line under the buttons.
+// Dry run is safe; Run now starts real agents, so it takes an explicit inline Confirm. Both go to the automation's
+// home machine. A dry run's answer goes to onDryRun for the page to show (it is stored nowhere); a real tick's outcome
+// is the line under the buttons.
 export function RunControls({
   id,
+  host,
   onDone,
   onDryRun
 }: {
   id: string
+  host: PilotHostRef
   onDone: () => void
   onDryRun: (outcome: TickOutcome) => void
 }): React.JSX.Element {
@@ -39,7 +43,7 @@ export function RunControls({
     setPhase('running')
     setMessage(null)
     try {
-      const result = await pilotRpc<TickOutcome>(method, { id }, { timeoutMs: LONG_CALL_MS })
+      const result = await hostRpc<TickOutcome>(host, method, { id }, { timeoutMs: LONG_CALL_MS })
       if (mounted.current && method === 'pilot.automations.dryRun') {
         onDryRun(result)
       } else if (mounted.current) {

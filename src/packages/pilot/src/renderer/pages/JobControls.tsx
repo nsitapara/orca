@@ -1,13 +1,16 @@
 import { useEffect, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
-import type { TickOutcome } from '../../shared/api-types'
+import type { AutomationSummary, TickOutcome } from '../../shared/api-types'
 import type { JobGroup } from '../../shared/job-stages'
-import { pilotRpc } from '../api'
+import { hostRpc } from '../hosts/host-rpc'
+import type { Hosted } from '../hosts/pilot-host'
 import { stagesText } from './AutomationsTable'
 import { errorText } from './format'
 import { LONG_CALL_MS } from './RunControls'
 
 type Phase = 'idle' | 'confirm' | 'running'
+// Each stage carries its home machine, where its own buttons' calls go.
+type HostedJob = JobGroup<Hosted<AutomationSummary>>
 
 function stageName(n: number | undefined): string {
   return `Stage ${n ?? '?'}`
@@ -27,14 +30,15 @@ export function stageNamer(job: JobGroup): (automationId: string) => string {
 
 export type StageDryRun = { id: string; stage: string; outcome: TickOutcome }
 
-// Dry run each stage, in stage order. Dry runs only: nothing starts, nothing is handed over, nothing is triggered,
-// nothing is stored. A call that throws is that stage's failed outcome.
-async function dryRunAll(job: JobGroup): Promise<StageDryRun[]> {
+// Dry run each stage on its machine, in stage order. Dry runs only: nothing starts, nothing is handed over, nothing is
+// triggered, nothing is stored. A call that throws is that stage's failed outcome.
+async function dryRunAll(job: HostedJob): Promise<StageDryRun[]> {
   const results: StageDryRun[] = []
   for (const s of job.stages) {
     let outcome: TickOutcome
     try {
-      outcome = await pilotRpc<TickOutcome>(
+      outcome = await hostRpc<TickOutcome>(
+        s.host,
         'pilot.automations.dryRun',
         { id: s.id },
         { timeoutMs: LONG_CALL_MS }
@@ -60,15 +64,15 @@ export function jobStateLine(job: JobGroup, enabled: ReadonlyMap<string, boolean
   return `Job ${job.id} is partly on: ${each.join(', ')}.`
 }
 
-// Every stage not yet in the wanted state, through the one-automation call, so Pilot applies the same caller rules
-// (an agent in a run is refused). Each stage is tried; nothing is rolled back. The lines say which stages changed,
-// which were refused and why, then what state the job is in.
-async function setAll(job: JobGroup, enabled: boolean): Promise<string[]> {
+// Every stage not yet in the wanted state, through the one-automation call on its machine, so Pilot applies the same
+// caller rules (an agent in a run is refused). Each stage is tried; nothing is rolled back. The lines say which stages
+// changed, which were refused and why, then what state the job is in.
+async function setAll(job: HostedJob, enabled: boolean): Promise<string[]> {
   const now = new Map(job.stages.map((s) => [s.id, s.enabled]))
   const lines: string[] = []
   for (const s of job.stages.filter((x) => x.enabled !== enabled)) {
     try {
-      await pilotRpc('pilot.automations.setEnabled', { id: s.id, enabled })
+      await hostRpc(s.host, 'pilot.automations.setEnabled', { id: s.id, enabled })
       now.set(s.id, enabled)
       lines.push(`${stageName(s.job?.stage)}: turned ${onOff(enabled)}`)
     } catch (e) {
@@ -143,7 +147,7 @@ export function JobControls({
   onDone,
   onDryRun
 }: {
-  job: JobGroup
+  job: HostedJob
   onDone: () => void
   onDryRun: (results: StageDryRun[]) => void
 }): React.JSX.Element {

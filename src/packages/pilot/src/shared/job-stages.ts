@@ -56,7 +56,10 @@ export function jobTitle(job: JobGroup): string {
   return `${job.id} · ${job.name}`
 }
 
-export function findJob(automations: readonly AutomationSummary[], id: string): JobGroup | null {
+export function findJob<T extends AutomationSummary>(
+  automations: readonly T[],
+  id: string
+): JobGroup<T> | null {
   const members = automations.filter((a) => a.job?.id === id)
   return members.length ? group(id, members) : null
 }

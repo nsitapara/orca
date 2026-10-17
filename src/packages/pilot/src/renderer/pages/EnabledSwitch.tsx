@@ -1,17 +1,23 @@
 import { useState } from 'react'
 import { SwitchIndicator } from '@/components/ui/switch'
-import { pilotRpc } from '../api'
+import { hostRpc } from '../hosts/host-rpc'
+import type { PilotHostRef } from '../hosts/pilot-host'
 import { errorText } from './format'
 
-export type Toggle = (ids: string[], enabled: boolean) => Promise<void>
+// A row to switch, with the machine whose YAML it is.
+export type ToggleRow = { id: string; host: PilotHostRef }
+export type Toggle = (rows: readonly ToggleRow[], enabled: boolean) => Promise<void>
 
-// Each automation through the one-automation call, one at a time, so Pilot applies its caller rules (an agent in a
-// run is refused). Each is tried; nothing is rolled back. Returns the refusals as "<id>: <why>".
-export async function setEnabledAll(ids: string[], enabled: boolean): Promise<string[]> {
+// Each automation through the one-automation call on its own machine, one at a time, so Pilot applies its caller rules
+// (an agent in a run is refused). Each is tried; nothing is rolled back. Returns the refusals as "<id>: <why>".
+export async function setEnabledAll(
+  rows: readonly ToggleRow[],
+  enabled: boolean
+): Promise<string[]> {
   const refused: string[] = []
-  for (const id of ids) {
+  for (const { id, host } of rows) {
     try {
-      await pilotRpc('pilot.automations.setEnabled', { id, enabled })
+      await hostRpc(host, 'pilot.automations.setEnabled', { id, enabled })
     } catch (e) {
       refused.push(`${id}: ${errorText(e)}`)
     }

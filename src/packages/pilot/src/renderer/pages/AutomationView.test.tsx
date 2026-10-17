@@ -7,7 +7,8 @@ import type {
   RunDetail,
   TickOutcome
 } from '../../shared/api-types'
-import { byHost, LOCAL_NAMED, MINI } from '../hosts/__fixtures__/hosts'
+import { byHost, LOCAL_NAMED, MINI, MINI_OFFLINE } from '../hosts/__fixtures__/hosts'
+import type { PilotHostEntry } from '../hosts/pilot-host'
 import { resetPilotHostsFeed, setPilotHostsForTests } from '../hosts/pilot-hosts-feed'
 import { resetAutomationsFeed } from '../run-views/automations-feed'
 import { closeRunPanel, openRunPanel } from '../run-views/run-panel-state'
@@ -51,6 +52,20 @@ function serve(outcome: TickOutcome = { status: 'busy' }): void {
 }
 
 const calls = (method: string): unknown[][] => pilotRpc.mock.calls.filter((c) => c[0] === method)
+
+// A machine's answers: its list, no Activity, the detail and a busy tick; a string is what its every call throws.
+const answersFrom = (automations: AutomationSummary[] | string) => (method: string) => {
+  if (typeof automations === 'string') {
+    throw new Error(automations)
+  }
+  if (method === 'pilot.automations.list') {
+    return { automations, errors: [], peopleError: null, missingDirs: [] }
+  }
+  if (method === 'pilot.activity.list') {
+    return EMPTY
+  }
+  return method === 'pilot.automations.get' ? detail : { status: 'busy' }
+}
 
 describe('AutomationView', () => {
   afterEach(() => {
@@ -100,6 +115,43 @@ describe('AutomationView', () => {
     expect(await screen.findByText('Latest run')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Open run' }))
     expect([openRunPanel()?.runId, openRunPanel()?.host.key]).toEqual(['fix-ci-3', 'env:mini'])
+  })
+
+  it('opens an automation from its home machine and dry-runs it there', async () => {
+    setPilotHostsForTests([LOCAL_NAMED, MINI])
+    pilotRpc.mockImplementation(
+      byHost({
+        local: answersFrom([summary]),
+        mini: answersFrom([{ ...summary, ticksHere: true }])
+      })
+    )
+    render(<AutomationView id="fix-ci" onBack={() => {}} onOpenJob={() => {}} />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Dry run' }))
+    expect(await screen.findByText('Tick already running')).toBeTruthy()
+    expect(calls('pilot.automations.get')).toEqual([
+      ['pilot.automations.get', { id: 'fix-ci' }, { target: MINI.target }]
+    ])
+    expect(calls('pilot.automations.dryRun')).toEqual([
+      ['pilot.automations.dryRun', { id: 'fix-ci' }, { timeoutMs: 180_000, target: MINI.target }]
+    ])
+  })
+
+  it.each<[string, PilotHostEntry, AutomationSummary[]]>([
+    ["its runs_on machine's list failed", MINI, [{ ...summary, runsOn: 'Mac mini' }]],
+    ['its runs_on machine is offline', MINI_OFFLINE, [{ ...summary, runsOn: ' mac MINI ' }]],
+    ['no answered list has it while a machine failed', MINI, []]
+  ])('sends it nothing, and says why, when %s', async (_w, mini, here) => {
+    setPilotHostsForTests([LOCAL_NAMED, mini])
+    pilotRpc.mockImplementation(
+      byHost({ local: answersFrom(here), mini: answersFrom('timed out') })
+    )
+    render(<AutomationView id="fix-ci" onBack={() => {}} onOpenJob={() => {}} />)
+    expect(
+      await screen.findByText(
+        "Mac mini isn't answering, so this automation can't be changed from here right now."
+      )
+    ).toBeTruthy()
+    expect(pilotRpc.mock.calls.filter((c) => c[0] !== 'pilot.automations.list')).toEqual([])
   })
 
   it('shows its Activity, asking only for this automation and only ticks with something to do', async () => {

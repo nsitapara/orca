@@ -8,7 +8,7 @@ import { AUTOMATIONS_LIST, mergeAutomationLists } from '../hosts/merge-automatio
 import { mergedError } from '../hosts/merge-inbox'
 import { AUTOMATIONS_POLL_MS } from '../run-views/automations-feed'
 import { AutomationsTable } from './AutomationsTable'
-import { setEnabledAll } from './EnabledSwitch'
+import { setEnabledAll, type Toggle } from './EnabledSwitch'
 import { setPilotAutomationsView } from './automations-view'
 import { ProblemNotices } from './ProblemNotices'
 
@@ -51,8 +51,8 @@ export function PilotAutomationsSection({
   const now = useLoadedAt(reads)
   const [refused, setRefused] = useState<string[]>([])
   // The switch settles once the list has reloaded, so it never shows the old state in between.
-  const toggle = async (ids: string[], enabled: boolean): Promise<void> => {
-    setRefused(await setEnabledAll(ids, enabled))
+  const toggle: Toggle = async (rows, enabled) => {
+    setRefused(await setEnabledAll(rows, enabled))
     await reload()
   }
 

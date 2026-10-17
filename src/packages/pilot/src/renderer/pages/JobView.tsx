@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { AutomationDetailPayload, AutomationListPayload } from '../../shared/api-types'
+import type { AutomationDetailPayload } from '../../shared/api-types'
 import { findJob, jobTitle, type JobGroup } from '../../shared/job-stages'
-import { pilotRpc } from '../api'
+import { jobRefusal } from '../hosts/automation-home'
+import { hostRpc } from '../hosts/host-rpc'
+import { loadMergedAutomations, type MergedAutomation } from '../hosts/merge-automations'
 import { ActivityView } from '../run-views/ActivityView'
 import { DryRunPanel } from './DryRunPanel'
 import { errorText } from './format'
@@ -12,10 +14,16 @@ import { flowEdges, latestFrom } from './job-flow'
 const HOW = 'how'
 const ACTIVITY = 'activity'
 
-async function stageData(job: JobGroup): Promise<StageCardData[]> {
+type MergedJob = JobGroup<MergedAutomation>
+
+// Each stage from its own home machine; one waiting on a machine that isn't answering isn't read from another.
+async function stageData(job: MergedJob, waiting: ReadonlySet<string>): Promise<StageCardData[]> {
   return Promise.all(
     job.stages.map(async (summary) => {
-      const detail = await pilotRpc<AutomationDetailPayload>('pilot.automations.get', {
+      if (waiting.has(summary.id)) {
+        return { summary, detail: null }
+      }
+      const detail = await hostRpc<AutomationDetailPayload>(summary.host, 'pilot.automations.get', {
         id: summary.id
       })
       return { summary, detail }
@@ -77,8 +85,9 @@ export function JobView({
   onBack: () => void
   onOpenStage: (id: string) => void
 }): React.JSX.Element {
-  const [job, setJob] = useState<JobGroup | null>(null)
+  const [job, setJob] = useState<MergedJob | null>(null)
   const [stages, setStages] = useState<StageCardData[]>([])
+  const [refusal, setRefusal] = useState<string | null>(null)
   const [loaded, setLoaded] = useState(false)
   const [tab, setTab] = useState(HOW)
   const [dryRuns, setDryRuns] = useState<StageDryRun[]>([])
@@ -87,14 +96,16 @@ export function JobView({
   const mounted = useRef(true)
   const refresh = useCallback(async () => {
     try {
-      const list = await pilotRpc<AutomationListPayload>('pilot.automations.list')
-      const found = findJob(list.automations, jobId)
-      const data = found ? await stageData(found) : []
+      const merged = await loadMergedAutomations()
+      const found = findJob(merged.automations, jobId)
+      const refused = jobRefusal(found, merged.failedHosts)
+      const data = found ? await stageData(found, refused.waiting) : []
       if (!mounted.current) {
         return
       }
       setJob(found)
       setStages(data)
+      setRefusal(refused.reason)
       setNow(Date.now())
       setError(null)
     } catch (e) {
@@ -128,7 +139,7 @@ export function JobView({
   if (!job) {
     let note = 'Loading…'
     if (loaded) {
-      note = error ?? `No automation is part of job ${jobId}.`
+      note = refusal ?? error ?? `No automation is part of job ${jobId}.`
     }
     return (
       <div className="flex flex-col gap-3">
@@ -144,8 +155,11 @@ export function JobView({
       <div className="flex flex-wrap items-start gap-2">
         <h2 className="text-lg font-semibold">{jobTitle(job)}</h2>
         <span className="flex-1" />
-        <JobControls job={job} onDone={() => void refresh()} onDryRun={setDryRuns} />
+        {refusal ? null : (
+          <JobControls job={job} onDone={() => void refresh()} onDryRun={setDryRuns} />
+        )}
       </div>
+      {refusal ? <p className="text-sm text-destructive">{refusal}</p> : null}
       {error ? <p className="text-sm text-destructive">{error}</p> : null}
       {dryRuns.map((d) => (
         <DryRunPanel

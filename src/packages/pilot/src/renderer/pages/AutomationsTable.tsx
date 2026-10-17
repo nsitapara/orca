@@ -27,7 +27,7 @@ import { foldStrip, liveStrip, type StripChip, type StripItem } from '../../shar
 import { RunStrip } from '../run-views/RunStrip'
 import { openRun } from '../run-views/run-panel-state'
 import { showActivity, showPilotAutomation } from './automations-view'
-import { EnabledSwitch, type Toggle } from './EnabledSwitch'
+import { EnabledSwitch, type Toggle, type ToggleRow } from './EnabledSwitch'
 
 // Names and ticks truncate, so the columns can be narrow. Below the sum of their minimums (TABLE_MIN) the table
 // scrolls inside its own box instead of pushing the page sideways.
@@ -38,8 +38,8 @@ const ROW = 'min-h-11 w-full border-t border-border/50 px-3 py-3 text-left text-
 // Same padding as ROW so the stage's cells line up with the headers; the indent is inside its name cell.
 const STAGE_ROW = 'min-h-9 w-full bg-muted/30 px-3 py-2 text-left text-sm hover:bg-accent'
 
-// A row of the merged list names the machines it is loaded on; a list from one machine has none.
-type ListedAutomation = AutomationSummary & { hosts?: readonly PilotHostRef[] }
+// A row of the merged list names its home and every machine it is loaded on; a list from one machine has neither.
+type ListedAutomation = AutomationSummary & { host?: PilotHostRef; hosts?: readonly PilotHostRef[] }
 
 export function scheduleText(a: AutomationSummary): string {
   return a.schedule === 'manual' ? 'Run by hand' : a.schedule
@@ -103,6 +103,10 @@ function JobRunsCell({ job }: { job: JobGroup }): React.JSX.Element {
   )
 }
 
+function toggleRow(a: ListedAutomation): ToggleRow {
+  return { id: a.id, host: hostOf(a) }
+}
+
 function statusText(enabled: boolean): string {
   return enabled ? 'Enabled' : 'Paused'
 }
@@ -116,15 +120,21 @@ function jobStatusText(job: JobGroup): string {
 }
 
 // A job's switch is on while any stage is: flipping it off turns every stage off, flipping it on turns every one on.
-function JobSwitch({ job, onToggle }: { job: JobGroup; onToggle: Toggle }): React.JSX.Element {
+function JobSwitch({
+  job,
+  onToggle
+}: {
+  job: JobGroup<ListedAutomation>
+  onToggle: Toggle
+}): React.JSX.Element {
   const on = jobEnabled(job)
-  const ids = job.stages.filter((s) => s.enabled === on).map((s) => s.id)
+  const rows = job.stages.filter((s) => s.enabled === on).map(toggleRow)
   return (
     <EnabledSwitch
       name={`Job ${jobTitle(job)}`}
       on={on}
       text={jobStatusText(job)}
-      onToggle={() => onToggle(ids, !on)}
+      onToggle={() => onToggle(rows, !on)}
     />
   )
 }
@@ -134,7 +144,7 @@ function AutomationSwitch({
   name,
   onToggle
 }: {
-  a: AutomationSummary
+  a: ListedAutomation
   name: string
   onToggle: Toggle
 }): React.JSX.Element {
@@ -143,7 +153,7 @@ function AutomationSwitch({
       name={name}
       on={a.enabled}
       text={statusText(a.enabled)}
-      onToggle={() => onToggle([a.id], !a.enabled)}
+      onToggle={() => onToggle([toggleRow(a)], !a.enabled)}
     />
   )
 }

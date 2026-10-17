@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { AutomationListPayload, PilotStatus } from '../../shared/api-types'
 import { byHost, LOCAL_NAMED, MINI, MINI_OFFLINE } from '../hosts/__fixtures__/hosts'
@@ -319,6 +319,29 @@ describe('PilotAutomationsPage on more than one machine', () => {
     expect(pageErrors()).toEqual(errors)
     expect(screen.getByRole('button', { name: 'Fix failed CI' })).toBeTruthy()
     expect(screen.queryByRole('button', { name: 'Mini only' })).toBeNull()
+  })
+
+  it('turns an automation whose home is another machine on there', async () => {
+    setPilotHostsForTests([LOCAL_NAMED, MINI])
+    const off = { ...summary, enabled: false }
+    pilotRpc.mockImplementation(
+      byHost({
+        local: machine({ ...list, automations: [off] }),
+        mini: machine({ ...list, automations: [{ ...off, ticksHere: true }] })
+      })
+    )
+    render(<PilotAutomationsPage />)
+    fireEvent.click(await screen.findByRole('switch', { name: 'Fix failed CI: turn on' }))
+    await waitFor(() =>
+      expect(pilotRpc).toHaveBeenCalledWith(
+        'pilot.automations.setEnabled',
+        { id: 'fix-ci', enabled: true },
+        { target: MINI.target }
+      )
+    )
+    expect(pilotRpc.mock.calls.filter((c) => c[0] === 'pilot.automations.setEnabled')).toHaveLength(
+      1
+    )
   })
 
   it('says only the page error when every machine failed', async () => {

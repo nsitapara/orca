@@ -6,7 +6,7 @@ import { testDefinition, testStep } from '../../shared/definition/__fixtures__/d
 import { chainOf } from '../../shared/run-views/chain'
 import { stepAt, testRun } from '../../shared/run-views/__fixtures__/runs'
 import { LOCAL_NAMED, MINI } from '../hosts/__fixtures__/hosts'
-import type { PilotHostRef } from '../hosts/pilot-host'
+import { LOCAL_PILOT_HOST, type PilotHostRef } from '../hosts/pilot-host'
 import { resetPilotHostsFeed, setPilotHostsForTests } from '../hosts/pilot-hosts-feed'
 import { closeRunPanel, openRunPanel } from '../run-views/run-panel-state'
 import { AutomationsTable } from './AutomationsTable'
@@ -177,7 +177,10 @@ describe('AutomationsTable: the Status switch', () => {
     const { onOpen, onOpenJob, onToggle } = renderTable([...rows])
     const toggle = screen.getByRole('switch', { name })
     fireEvent.click(toggle)
-    expect(onToggle).toHaveBeenCalledWith(ids, enabled)
+    expect(onToggle).toHaveBeenCalledWith(
+      ids.map((id) => ({ id, host: LOCAL_PILOT_HOST })),
+      enabled
+    )
     expect(onOpen).not.toHaveBeenCalled()
     expect(onOpenJob).not.toHaveBeenCalled()
     // shows the state asked for while the call runs
@@ -358,6 +361,22 @@ describe('AutomationsTable on more than one machine', () => {
     renderTable(rows)
     expect(rowOf(name).getByText('MacBook')).toBeTruthy()
     expect(rowOf(name).getByText('Mac mini')).toBeTruthy()
+  })
+
+  it("turns a job's stages on, each on its own machine", () => {
+    const homed = (a: AutomationSummary, host: PilotHostRef) => ({ ...a, host })
+    const { onToggle } = renderTable([
+      homed(STAGE_1, LOCAL_NAMED),
+      homed({ ...STAGE_2, enabled: false }, MINI)
+    ])
+    fireEvent.click(screen.getByRole('switch', { name: /^Job 13 .*: turn on$/ }))
+    expect(onToggle).toHaveBeenCalledWith(
+      [
+        { id: 'dev-e2e-fix', host: LOCAL_NAMED },
+        { id: 'dev-e2e-fix-start', host: MINI }
+      ],
+      true
+    )
   })
 
   // Run ids are per machine: this machine's run a is at step 2, Mac mini's run a at step 1.

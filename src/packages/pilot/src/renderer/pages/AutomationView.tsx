@@ -2,10 +2,13 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import type {
   AutomationDetailPayload,
   AutomationListPayload,
+  AutomationSummary,
   TickOutcome
 } from '../../shared/api-types'
 import { findJob, jobTitle, type JobGroup } from '../../shared/job-stages'
-import { pilotRpc } from '../api'
+import { automationHome } from '../hosts/automation-home'
+import { hostRpc } from '../hosts/host-rpc'
+import type { PilotHostRef } from '../hosts/pilot-host'
 import { ActivityView } from '../run-views/ActivityView'
 import {
   setPilotAutomationTab,
@@ -32,6 +35,21 @@ function heading(detail: AutomationDetailPayload, job: JobGroup | null): string 
   }
   const of = job ? ` of ${job.stages.length}` : ''
   return `Stage ${own.stage}${of} · ${own.label}`
+}
+
+// A stage's job, for its crumb and how many stages it has: from the list its home was found in, else its home's own.
+async function jobOf(
+  detail: AutomationDetailPayload,
+  home: PilotHostRef,
+  listed: readonly AutomationSummary[] | null
+): Promise<JobGroup | null> {
+  const jobId = detail.summary.job?.id
+  if (!jobId) {
+    return null
+  }
+  const automations =
+    listed ?? (await hostRpc<AutomationListPayload>(home, 'pilot.automations.list')).automations
+  return findJob(automations, jobId)
 }
 
 function crumbName(detail: AutomationDetailPayload): string {
@@ -89,26 +107,33 @@ export function AutomationView({
 }): React.JSX.Element {
   const [detail, setDetail] = useState<AutomationDetailPayload | null>(null)
   const [job, setJob] = useState<JobGroup | null>(null)
+  // Where its buttons' calls go; null while they're refused.
+  const [home, setHome] = useState<PilotHostRef | null>(null)
+  const [refusal, setRefusal] = useState<string | null>(null)
   const tab = usePilotAutomationTab()
   const [dryRun, setDryRun] = useState<TickOutcome | null>(null)
   const [error, setError] = useState<string | null>(null)
   const mounted = useRef(true)
   const refresh = useCallback(async () => {
     try {
-      const d = await pilotRpc<AutomationDetailPayload>('pilot.automations.get', { id })
-      // A stage's job, for its crumb and how many stages it has.
-      const jobId = d.summary.job?.id
-      const j = jobId
-        ? findJob(
-            (await pilotRpc<AutomationListPayload>('pilot.automations.list')).automations,
-            jobId
-          )
-        : null
+      const found = await automationHome(id)
+      if (found.kind === 'refused') {
+        if (mounted.current) {
+          setHome(null)
+          setRefusal(found.reason)
+          setError(null)
+        }
+        return
+      }
+      const d = await hostRpc<AutomationDetailPayload>(found.host, 'pilot.automations.get', { id })
+      const j = await jobOf(d, found.host, found.automations)
       if (!mounted.current) {
         return
       }
       setDetail(d)
       setJob(j)
+      setHome(found.host)
+      setRefusal(null)
       setError(null)
     } catch (e) {
       if (mounted.current) {
@@ -128,11 +153,12 @@ export function AutomationView({
 
   const crumbs = <Crumbs detail={detail} job={job} onBack={onBack} onOpenJob={onOpenJob} />
   if (!detail) {
+    const note = refusal ?? error
     return (
       <div className="flex flex-col gap-3">
         {crumbs}
-        <p className={error ? 'text-sm text-destructive' : 'text-sm text-muted-foreground'}>
-          {error ?? 'Loading…'}
+        <p className={note ? 'text-sm text-destructive' : 'text-sm text-muted-foreground'}>
+          {note ?? 'Loading…'}
         </p>
       </div>
     )
@@ -143,8 +169,11 @@ export function AutomationView({
       <div className="flex flex-wrap items-start gap-2">
         <h2 className="text-lg font-semibold">{heading(detail, job)}</h2>
         <span className="flex-1" />
-        <RunControls id={id} onDone={() => void refresh()} onDryRun={setDryRun} />
+        {home ? (
+          <RunControls id={id} host={home} onDone={() => void refresh()} onDryRun={setDryRun} />
+        ) : null}
       </div>
+      {refusal ? <p className="text-sm text-destructive">{refusal}</p> : null}
       {error ? <p className="text-sm text-destructive">{error}</p> : null}
       {dryRun ? (
         <DryRunPanel
