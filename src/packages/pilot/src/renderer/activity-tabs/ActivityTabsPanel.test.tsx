@@ -66,16 +66,23 @@ function renderPanel() {
   )
 }
 
-it('lists each workspace’s tabs, the active workspace first, only while the setting is on', () => {
+it('lists every workspace’s tabs as cards naming their workspace, the active one first, only while the setting is on', () => {
   expect(renderPanel().container.innerHTML).toBe('')
   cleanup()
   act(() => setActivityShowAllTabs(true))
   const view = renderPanel()
-  const order = [...view.container.querySelectorAll('[data-activity-tabs-worktree]')].map((el) =>
-    el.getAttribute('data-activity-tabs-worktree')
-  )
-  expect(order).toEqual(['wt-c', 'wt-a', 'wt-b'])
-  expect(view.getByRole('button', { name: 'wt-a-shell' })).toBeTruthy()
+  const cards = view.getAllByRole('listitem')
+  expect(cards.map((card) => card.getAttribute('aria-label'))).toEqual([
+    'wt-c-shell',
+    'wt-a-shell',
+    'wt-b-shell'
+  ])
+  expect(cards.map((card) => card.querySelector('[title]')?.textContent)).toEqual([
+    'wt-c',
+    'wt-a',
+    'wt-b'
+  ])
+  expect(view.getByRole('button', { name: 'Open tabs 3' })).toBeTruthy()
 })
 
 it('the options menu item turns the setting on and off', () => {

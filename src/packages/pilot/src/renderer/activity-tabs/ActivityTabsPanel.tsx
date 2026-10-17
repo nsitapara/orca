@@ -1,15 +1,18 @@
-import { useMemo, useState } from 'react'
+import { useState } from 'react'
 import { ChevronDown } from 'lucide-react'
 import { useShallow } from 'zustand/react/shallow'
 import { FLOATING_TERMINAL_WORKTREE_ID } from '../../../../../shared/constants'
 import type { Tab, TabGroup } from '../../../../../shared/tab-types'
-import { useClientHostedBrowserRows } from '@/lib/pane-manager/client-hosted-browser-row-state'
+import {
+  getClientHostedBrowserRows,
+  useClientHostedBrowserRows
+} from '@/lib/pane-manager/client-hosted-browser-row-state'
 import { cn } from '@/lib/utils'
 import { useAppStore } from '@/store'
 import { pilotStore } from '../store'
 import { useActivityShowAllTabs } from './activity-tabs-setting'
 import { useWorktreeTabsContext } from './use-worktree-tabs-context'
-import { buildWorktreeTabItems, type WorktreeTabsContext } from './workspace-tab-items'
+import { buildWorktreeTabItems, type WorkspaceTabItem } from './workspace-tab-items'
 import { WorkspaceActions } from './WorkspaceActions'
 import { WorkspaceTabRow } from './WorkspaceTabRow'
 
@@ -24,7 +27,7 @@ function GroupHeader({
   onToggle
 }: {
   label: string
-  count?: number
+  count: number
   collapsed: boolean
   onToggle: () => void
 }): React.JSX.Element {
@@ -44,43 +47,10 @@ function GroupHeader({
       <span className="min-w-0 flex-1 truncate text-left text-[11px] font-semibold uppercase tracking-[0.05em] text-foreground/80 transition-colors group-hover:text-foreground">
         {label}
       </span>
-      {count === undefined ? null : (
-        <span className="rounded-full border border-border/80 bg-muted/80 px-1.5 py-0.5 text-[10px] font-semibold tabular-nums leading-none text-foreground/80 shadow-xs">
-          {count}
-        </span>
-      )}
+      <span className="rounded-full border border-border/80 bg-muted/80 px-1.5 py-0.5 text-[10px] font-semibold tabular-nums leading-none text-foreground/80 shadow-xs">
+        {count}
+      </span>
     </button>
-  )
-}
-
-function WorktreeTabs({
-  worktreeId,
-  ctx
-}: {
-  worktreeId: string
-  ctx: WorktreeTabsContext
-}): React.JSX.Element | null {
-  const tabs = useAppStore((s) => s.unifiedTabsByWorktree[worktreeId] ?? NO_TABS)
-  const groups = useAppStore((s) => s.groupsByWorktree[worktreeId] ?? NO_GROUPS)
-  const clientRows = useClientHostedBrowserRows(worktreeId)
-  const [collapsed, setCollapsed] = useState(false)
-  const items = useMemo(
-    () => buildWorktreeTabItems(worktreeId, { tabs, groups, clientRows }, ctx),
-    [worktreeId, tabs, groups, clientRows, ctx]
-  )
-  if (items.length === 0) {
-    return null
-  }
-  return (
-    <div data-activity-tabs-worktree={worktreeId}>
-      <GroupHeader
-        label={items[0].worktree.displayName}
-        count={items.length}
-        collapsed={collapsed}
-        onToggle={() => setCollapsed(!collapsed)}
-      />
-      {collapsed ? null : items.map((item) => <WorkspaceTabRow key={item.key} item={item} />)}
-    </div>
   )
 }
 
@@ -93,30 +63,58 @@ function compareWorktrees(activeId: string | null, nameOf: (id: string) => strin
   }
 }
 
-function OpenTabs({ query }: { query: string }): React.JSX.Element {
+// Every workspace's tabs in one list: the active workspace first, then by name, each in tab order.
+function useOpenTabItems(query: string): WorkspaceTabItem[] {
   const ctx = useWorktreeTabsContext(query)
   const activeWorktreeId = useAppStore((s) => s.activeWorktreeId)
-  const worktreeIds = useAppStore(
-    useShallow((s) =>
-      Object.keys(s.groupsByWorktree).filter((id) => id !== FLOATING_TERMINAL_WORKTREE_ID)
-    )
+  const { tabsByWorktree, groupsByWorktree } = useAppStore(
+    useShallow((s) => ({
+      tabsByWorktree: s.unifiedTabsByWorktree,
+      groupsByWorktree: s.groupsByWorktree
+    }))
   )
+  // Why: the row store bumps one version for every workspace, so this re-renders on any of them.
+  useClientHostedBrowserRows(activeWorktreeId ?? '')
+  const nameOf = (id: string) => ctx.getKnownWorktreeById(id)?.displayName ?? id
+  return Object.keys(groupsByWorktree)
+    .filter((id) => id !== FLOATING_TERMINAL_WORKTREE_ID)
+    .sort(compareWorktrees(activeWorktreeId, nameOf))
+    .flatMap((id) =>
+      buildWorktreeTabItems(
+        id,
+        {
+          tabs: tabsByWorktree[id] ?? NO_TABS,
+          groups: groupsByWorktree[id] ?? NO_GROUPS,
+          clientRows: getClientHostedBrowserRows(id)
+        },
+        ctx
+      )
+    )
+}
+
+function OpenTabs({ query }: { query: string }): React.JSX.Element | null {
+  const items = useOpenTabItems(query)
+  const compactMode = useAppStore((s) => s.agentsCompactMode)
   const [collapsed, setCollapsed] = useState(false)
-  const ordered = useMemo(() => {
-    const nameOf = (id: string) => ctx.getKnownWorktreeById(id)?.displayName ?? id
-    return [...worktreeIds].sort(compareWorktrees(activeWorktreeId, nameOf))
-  }, [worktreeIds, activeWorktreeId, ctx])
+  if (items.length === 0) {
+    return null
+  }
   return (
-    <div className="flex min-h-0 flex-col px-1 py-1">
-      <GroupHeader
-        label="Open tabs"
-        collapsed={collapsed}
-        onToggle={() => setCollapsed(!collapsed)}
-      />
+    <div className="min-h-0 overflow-y-auto overflow-x-hidden px-1.5 pb-1.5 pt-px scrollbar-sleek">
+      <div className="sticky -top-px z-20 bg-worktree-sidebar pb-1">
+        <GroupHeader
+          label="Open tabs"
+          count={items.length}
+          collapsed={collapsed}
+          onToggle={() => setCollapsed(!collapsed)}
+        />
+      </div>
       {collapsed ? null : (
-        <div className="min-h-0 overflow-y-auto pl-2">
-          {ordered.map((id) => (
-            <WorktreeTabs key={id} worktreeId={id} ctx={ctx} />
+        <div role="list" aria-label="Open tabs">
+          {items.map((item) => (
+            <div key={item.key} className="pb-0.5">
+              <WorkspaceTabRow item={item} compactMode={compactMode} />
+            </div>
           ))}
         </div>
       )}
