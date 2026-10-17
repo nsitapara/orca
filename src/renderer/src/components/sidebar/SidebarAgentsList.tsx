@@ -10,6 +10,8 @@ import { ActivityThreadListPane } from '@/components/activity/activity-thread-li
 import { useAgentPaneThreads } from '@/components/activity/use-agent-pane-threads'
 import { ActivityThreadOptionsMenu } from '@/components/activity/activity-thread-controls'
 import type { ActivityGroupBy, ThreadReadFilter } from '@/components/activity/activity-thread-types'
+import { useActivityTabsThreads } from '../../../../packages/pilot/src/renderer/activity-tabs/activity-tabs-threads' // pilot-hook: activity-tabs-threads
+import { ActivityTabsPanel } from '../../../../packages/pilot/src/renderer/activity-tabs/ActivityTabsPanel' // pilot-hook: activity-tabs-panel
 
 /**
  * The Activity thread list, hosted in the sidebar as a navigator: selecting a
@@ -69,7 +71,9 @@ export default function SidebarAgentsList({
     visibleThreads,
     markAllReadThreads,
     visibleThreadGroups
-  } = useAgentPaneThreads({ query, readFilter, groupBy, selectedPaneKey, showChildAgents })
+  } = useActivityTabsThreads(
+    useAgentPaneThreads({ query, readFilter, groupBy, selectedPaneKey, showChildAgents })
+  ) // pilot-hook: activity-tabs-threads
 
   useEffect(() => {
     if (!selectedPaneKeyIsLive) {
@@ -139,6 +143,7 @@ export default function SidebarAgentsList({
           />
         </div>
       ) : null}
+      <ActivityTabsPanel query={query} /> {/* pilot-hook: activity-tabs-panel */}
       <ActivityThreadListPane
         activityFilterInputRef={activityFilterInputRef}
         query={query}
