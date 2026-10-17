@@ -82,6 +82,7 @@ describe('hookTestTargets', () => {
       'src/renderer/src/app-shell',
       'src/renderer/src/components/activity/activity-thread-controls.test',
       'src/renderer/src/components/activity/activity-thread-options-menu.test',
+      'src/renderer/src/components/activity/activity-thread-row.test',
       'src/renderer/src/components/activity/activity-thread-virtual-items.test',
       'src/renderer/src/components/activity/activity-thread-virtual-row.test',
       'src/renderer/src/components/right-sidebar',

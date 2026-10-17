@@ -7,6 +7,10 @@ import {
   ContextMenuTrigger
 } from '@/components/ui/context-menu'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import type { TerminalAgent } from '../../../../../shared/terminal-agent'
+import type { Tab } from '../../../../../shared/tab-types'
+import { AgentIcon } from '@/lib/agent-catalog'
+import { agentTypeToIconAgent, formatAgentTypeLabel } from '@/lib/agent-status'
 import { getActivityThreadWorkspaceTitle } from '@/lib/activity-thread-display'
 import { useActiveClientHostedBrowserRowId } from '@/lib/pane-manager/client-hosted-browser-row-state'
 import { isPaletteCurrentWorktree } from '@/lib/palette-repo-resolution'
@@ -15,7 +19,9 @@ import { dispatchWorkspaceTabCommand } from '@/lib/workspace-tab-commands'
 import { closeClientHostedBrowserRow } from '@/runtime/client-hosted-browser-row-close'
 import { useAppStore } from '@/store'
 import { activateWorkspaceTab } from './activate-workspace-tab'
+import { ActivityTabsNest } from './ActivityTabsNest'
 import type { ActivityTabsVirtualItem } from './activity-tabs-rows'
+import { RecentWorktreeRow } from './RecentWorktreeRow'
 import type { WorkspaceTabItem } from './workspace-tab-items'
 
 const icons = {
@@ -27,6 +33,19 @@ const icons = {
   diff: FileDiff,
   'conflict-review': FileDiff,
   'check-details': File
+}
+
+// The agent a tab runs, when the tab itself says: a chat's provider, or the agent Orca launched in a terminal.
+function useTabAgent(tab: Tab): TerminalAgent | null {
+  const launchAgent = useAppStore((s) =>
+    tab.contentType === 'terminal'
+      ? (s.tabsByWorktree[tab.worktreeId]?.find((t) => t.id === tab.entityId)?.launchAgent ?? null)
+      : null
+  )
+  if (tab.contentType === 'agent-session') {
+    return agentTypeToIconAgent(tab.agentSessionAgent)
+  }
+  return launchAgent
 }
 
 function errorText(error: unknown): string {
@@ -66,6 +85,7 @@ export function WorkspaceTabRow({
     : !activeClientRowId && groupActiveTabId === tab.id
   const active = workspaceActive && rowActive
   const Icon = icons[tab.contentType]
+  const agent = useTabAgent(tab)
   const workspaceLabel = getActivityThreadWorkspaceTitle(item.worktree)
   const close = () => {
     if (item.clientHostedRow) {
@@ -99,8 +119,11 @@ export function WorkspaceTabRow({
           className="group relative flex w-full cursor-pointer flex-col gap-1 rounded-lg border border-transparent px-1.5 py-1.5 text-left transition-[background-color,border-color,opacity,box-shadow] duration-200 outline-none select-none worktree-sidebar-card-hover focus-visible:ring-1 focus-visible:ring-ring"
         >
           <div className="flex min-w-0 items-start gap-1.5">
-            <span className="mt-0.5 inline-flex size-4 shrink-0 items-center justify-center text-muted-foreground">
-              <Icon className="size-3.5" />
+            <span
+              className="mt-0.5 inline-flex size-4 shrink-0 items-center justify-center text-muted-foreground"
+              title={agent ? formatAgentTypeLabel(agent) : undefined}
+            >
+              {agent ? <AgentIcon agent={agent} size={14} /> : <Icon className="size-3.5" />}
             </span>
             <div className="flex min-w-0 flex-1 flex-col gap-0.5">
               <button
@@ -166,7 +189,7 @@ export function WorkspaceTabRow({
   )
 }
 
-// pilot-hook: activity-tabs-row. A tab's row in Activity's list, spaced like a thread row.
+// pilot-hook: activity-tabs-row. A Pilot row in Activity's list, spaced like a thread row.
 export function ActivityTabsVirtualRow({
   item,
   compactMode
@@ -174,9 +197,16 @@ export function ActivityTabsVirtualRow({
   item: ActivityTabsVirtualItem
   compactMode: boolean
 }): React.JSX.Element {
+  const { row } = item
   return (
     <div className="pb-0.5">
-      <WorkspaceTabRow item={item.tab} compactMode={compactMode} />
+      <ActivityTabsNest groupKey={item.groupKey}>
+        {row.kind === 'tab' ? (
+          <WorkspaceTabRow item={row.tab} compactMode={compactMode} />
+        ) : (
+          <RecentWorktreeRow item={row.recent} />
+        )}
+      </ActivityTabsNest>
     </div>
   )
 }

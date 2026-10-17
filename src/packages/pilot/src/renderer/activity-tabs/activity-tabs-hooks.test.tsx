@@ -3,15 +3,17 @@ import { renderHook } from '@testing-library/react'
 import { act } from 'react'
 import { afterEach, describe, expect, it } from 'vitest'
 import type { AgentPaneThread, ThreadReadFilter } from '@/components/activity/activity-thread-types'
+import { buildActivityThreadGroups } from '@/components/activity/activity-thread-grouping'
 import {
   makeRepo,
   makeTab,
-  makeWorktree
+  makeWorktree,
+  makeWorktreeWithId
 } from '@/components/activity/ActivityPrototypePage-test-fixtures'
 import { useAppStore } from '@/store'
 import { registerPilotStore } from '../store'
-import { setActivityShowAllTabs } from './activity-tabs-setting'
-import { activityTabsGroupRows } from './activity-tabs-rows'
+import { setActivityShowAllTabs, setActivityShowRecentWorktrees } from './activity-tabs-setting'
+import { activityTabsGroupRows, type ActivityTabsVirtualItem } from './activity-tabs-rows'
 import { useActivityTabsThreads } from './activity-tabs-threads'
 
 function arrange(args: { attached: boolean; on: boolean; body: 'agents' | 'workspaces' }): void {
@@ -22,6 +24,7 @@ function arrange(args: { attached: boolean; on: boolean; body: 'agents' | 'works
 
 afterEach(() => {
   act(() => setActivityShowAllTabs(false))
+  act(() => setActivityShowRecentWorktrees(false))
   registerPilotStore(null)
   window.localStorage.clear()
 })
@@ -34,6 +37,10 @@ describe('the Show all tabs setting', () => {
     expect(window.localStorage.getItem('pilot.activity.show-all-tabs')).toBe('true')
   })
 })
+
+function rowLabel({ row }: ActivityTabsVirtualItem): string {
+  return row.kind === 'tab' ? row.tab.label : `recent:${row.recent.worktree.id}`
+}
 
 describe('useActivityTabsThreads', () => {
   const thread: AgentPaneThread = {
@@ -124,7 +131,39 @@ describe('useActivityTabsThreads', () => {
     ({ on, readFilter, rows }) => {
       arrangeTabs(on)
       const groups = renderThreads(readFilter).visibleThreadGroups
-      expect(groups.flatMap(activityTabsGroupRows).map((row) => row.tab.label)).toEqual(rows)
+      expect(groups.flatMap(activityTabsGroupRows).map(rowLabel)).toEqual(rows)
     }
   )
+  // wt-1 holds the agent; wt-2 was active a minute ago; wt-3 four days ago.
+  it.each([
+    { on: true, rows: ['recent:wt-2'] },
+    { on: false, rows: [] }
+  ])('adds recently active worktrees with no row only while on (on=$on)', ({ on, rows }) => {
+    arrange({ attached: true, on: false, body: 'agents' })
+    act(() => setActivityShowRecentWorktrees(on))
+    const now = Date.now()
+    useAppStore.setState({
+      repos: [makeRepo()],
+      folderWorkspaces: [],
+      unifiedTabsByWorktree: {},
+      worktreesByRepo: {
+        'repo-1': [
+          { ...makeWorktree(), lastActivityAt: now },
+          { ...makeWorktreeWithId('wt-2'), lastActivityAt: now - 60_000 },
+          { ...makeWorktreeWithId('wt-3'), lastActivityAt: now - 4 * 24 * 60 * 60 * 1000 }
+        ]
+      }
+    })
+    const groups = renderHook(() =>
+      useActivityTabsThreads(
+        {
+          allThreads: [thread],
+          effectiveSelectedPaneKey: null,
+          visibleThreadGroups: buildActivityThreadGroups([thread], 'worktree')
+        },
+        { query: '', readFilter: 'all', groupBy: 'worktree' }
+      )
+    ).result.current.visibleThreadGroups
+    expect(groups.flatMap(activityTabsGroupRows).map(rowLabel)).toEqual(rows)
+  })
 })

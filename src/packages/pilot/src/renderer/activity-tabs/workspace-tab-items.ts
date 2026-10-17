@@ -75,7 +75,7 @@ export function workspaceMatchesActivityScope(
   )
 }
 
-function matchesQuery(search: string, parts: readonly string[]): boolean {
+export function matchesQuery(search: string, parts: readonly string[]): boolean {
   return !search || parts.join(' ').toLowerCase().includes(search)
 }
 
