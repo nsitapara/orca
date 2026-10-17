@@ -87,6 +87,7 @@ export function useTerminalCreateActions(controller: TerminalColdActivationContr
           )
         )
       }
+      return result
     },
     [activeWorktreeId]
   )

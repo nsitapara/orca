@@ -202,10 +202,14 @@ test.describe('Tabs', () => {
    * User Prompt:
    * - New tab works
    */
-  test('Cmd/Ctrl+T creates a new terminal tab', async ({ orcaPage }) => {
+  test('Cmd/Ctrl+T opens the agent picker, and Blank Terminal creates a terminal tab', async ({
+    orcaPage
+  }) => {
     const isMac = process.platform === 'darwin'
     const mod = isMac ? 'Meta' : 'Control'
     const tabsBefore = await countRenderedTabs(orcaPage)
+    const picker = orcaPage.getByRole('dialog', { name: 'New tab' })
+    const pickerInput = picker.getByPlaceholder('Open a new tab with...')
 
     // Why: focus body first so the window-level keydown handler on Terminal.tsx
     // actually sees the event. Without focus the key may be eaten by an
@@ -213,11 +217,31 @@ test.describe('Tabs', () => {
     await orcaPage.evaluate(() => document.body.focus())
     await orcaPage.keyboard.press(`${mod}+t`)
 
+    // The picker opens focused on its search box with the first (default) row selected.
+    await expect(pickerInput).toBeFocused()
+    await expect(picker.getByRole('option').first()).toHaveAttribute('aria-selected', 'true')
+
+    // Escape backs out without creating anything.
+    await orcaPage.keyboard.press('Escape')
+    await expect(picker).toBeHidden()
+    expect(await countRenderedTabs(orcaPage)).toBe(tabsBefore)
+
+    await orcaPage.evaluate(() => document.body.focus())
+    await orcaPage.keyboard.press(`${mod}+t`)
+    await expect(pickerInput).toBeFocused()
+    await orcaPage.keyboard.type('terminal')
+    await expect(picker.getByRole('option', { name: 'Blank Terminal' })).toHaveAttribute(
+      'aria-selected',
+      'true'
+    )
+    await orcaPage.keyboard.press('Enter')
+    await expect(picker).toBeHidden()
+
     // DOM-level count increased — confirms a new tab actually rendered.
     await expect
       .poll(() => countRenderedTabs(orcaPage), {
         timeout: 5_000,
-        message: `${mod}+T did not add a tab to the tab bar`
+        message: 'Blank Terminal from the picker did not add a tab to the tab bar'
       })
       .toBe(tabsBefore + 1)
 

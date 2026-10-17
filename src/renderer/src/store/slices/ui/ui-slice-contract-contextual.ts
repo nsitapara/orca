@@ -42,6 +42,7 @@ export type UISliceContextual = {
     | 'confirm-remove-folder'
     | 'add-repo'
     | 'quick-open'
+    | 'new-tab-agent-picker'
     | 'worktree-palette'
     | 'workspace-cleanup'
     | 'project-added'

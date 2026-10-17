@@ -34,15 +34,10 @@ describe('useIpcEvents updater integration', () => {
     await Promise.resolve()
     await Promise.resolve()
     expect(createFloatingWorkspaceTerminalTab).not.toHaveBeenCalled()
-    expect(createWebRuntimeSessionTerminal).toHaveBeenCalledWith({
-      worktreeId: 'wt-1',
-      // Why: multi-host scopes the new terminal to the worktree's own runtime
-      // env (null here -> falls back to the active env inside the helper).
-      environmentId: null,
-      activate: true
-    })
-    expect(createTab).toHaveBeenCalledWith('wt-1', undefined, undefined, expect.anything())
-    expect(setActiveTabType).toHaveBeenCalledWith('terminal', 'wt-1')
+    // The workspace's Cmd+T opens the agent picker; the picker creates the tab.
+    expect(storeState.openModal).toHaveBeenCalledWith('new-tab-agent-picker')
+    expect(createWebRuntimeSessionTerminal).not.toHaveBeenCalled()
+    expect(createTab).not.toHaveBeenCalled()
 
     // Exact regression sequence: Local default -> connect/navigate Windows 2 ->
     // reveal a local terminal -> restart. Connection and navigation are transient.
