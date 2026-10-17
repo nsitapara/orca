@@ -234,5 +234,16 @@
     "/parity-gitdirs/wt/web-2210/rebase-apply": false,
     "/parity-gitdirs/wt/web-2210/rebase-merge": false,
     "/wt/web-2210": true
+  },
+  "old": {
+    "from": "run_old_plan.py 05 (ci-fix-sweep/sweep.py) with /opt/homebrew/bin/python3 3.15.0, 2026-10-16, before it was deleted",
+    "decisions": [
+      {
+        "key": "mr:1610",
+        "label": "!1610 web-2210-tab-and-dirty",
+        "decision": "skip",
+        "reason": "previous CI-fix session still open"
+      }
+    ]
   }
 }

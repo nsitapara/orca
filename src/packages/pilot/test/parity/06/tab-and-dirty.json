@@ -246,5 +246,16 @@
     "/parity-gitdirs/wt/web-1730/rebase-apply": false,
     "/parity-gitdirs/wt/web-1730/rebase-merge": false,
     "/wt/web-1730": true
+  },
+  "old": {
+    "from": "run_old_plan.py 06 (mr-feedback-sweep/sweep.py) with /opt/homebrew/bin/python3 3.15.0, 2026-10-16, before it was deleted",
+    "decisions": [
+      {
+        "key": "mr:1730",
+        "label": "!1730 web-1730 (1 waiting)",
+        "decision": "skip",
+        "reason": "previous feedback session still open (no comment)"
+      }
+    ]
   }
 }

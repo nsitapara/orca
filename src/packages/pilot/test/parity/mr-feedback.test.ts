@@ -6,7 +6,7 @@ import type { PilotStore } from '../../src/main/store/store'
 import { decideStep } from '../../src/shared/run/step-plan'
 import { loadFixture, type ParityFixture } from './fixture'
 import { answerDue, JOB_06, PARITY_06, seed06 } from './jobs/job-06'
-import { PARITY_DIR, runOldPlan } from './old-side'
+import { frozenOldPlan, PARITY_DIR } from './old-side'
 import { describeParity, expectParity } from './parity-case'
 import { caseFile, dryTick, failedCheck, loadPortedAutomation } from './ported'
 
@@ -235,7 +235,8 @@ describe('06 · Address reviewer feedback: the definition', () => {
 })
 
 // mr-feedback-sweep's words (jobs/job_06.py) and the verdicts that agree with them, through the shared parity runner
-// (parity-case.ts): a missed read, a tick error or a verdict mismatch fails a case.
+// (parity-case.ts): a missed read, a tick error or a verdict mismatch fails a case. The sweep's decisions are frozen in
+// each case (its old block), so neither python3 nor the sweep is needed; a case without its old block fails.
 const CASES = join(PARITY_DIR, '06')
 const cases = readdirSync(CASES)
   .filter((f) => f.endsWith('.json'))
@@ -301,7 +302,7 @@ describeParity(PARITY_06, '06 · Address reviewer feedback: parity with mr-feedb
     ]
     const busy = /^(uncommitted changes|\S+ present); retry next round$/
     const neu = await decide(name.replace(/\.json$/, ''))
-    const old = runOldPlan('06', join(CASES, name)).filter(
+    const old = frozenOldPlan(join(CASES, name)).filter(
       (d) => d.decision === 'skip' || d.decision === 'quota'
     )
     for (const d of old) {
@@ -320,9 +321,9 @@ describeParity(PARITY_06, '06 · Address reviewer feedback: parity with mr-feedb
     }
   })
 
-  // The sweep tests the open tab before the dirty worktree.
-  it('skips an MR with an open tab and a dirty worktree for the open tab, as the sweep does', async () => {
-    expect(runOldPlan('06', caseFile(JOB_06.job, 'tab-and-dirty'))).toMatchObject([
+  // The sweep tested the open tab before the dirty worktree.
+  it('skips an MR with an open tab and a dirty worktree for the open tab, as the sweep did', async () => {
+    expect(frozenOldPlan(caseFile(JOB_06.job, 'tab-and-dirty'))).toMatchObject([
       {
         key: 'mr:1730',
         decision: 'skip',
@@ -361,7 +362,13 @@ describeParity(PARITY_06, '06 · Address reviewer feedback: parity with mr-feedb
         f.now - 3_600_000
       )
     }
-    const after = await dryTick({ definition, people, fixture: closed, seed, runScript: answerDue })
+    const after = await dryTick({
+      definition,
+      people,
+      fixture: closed,
+      seed,
+      runScript: answerDue
+    })
     const decision = after.find((d) => d.key === 'mr:1711')
     expect(decision).toMatchObject({ verdict: 'started' })
     expect(decision?.onceKey).not.toBe(`1711:${earlier}`)

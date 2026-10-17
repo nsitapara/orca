@@ -113,10 +113,12 @@ export function load05(): { def: AutomationDefinition; people: PeopleDirectory }
   return { def: parsed.definition, people: people.directory }
 }
 
-// What the shared parity runner (parity-case.ts) needs for 05.
+// What the shared parity runner (parity-case.ts) needs for 05. ci-fix-sweep's decisions are frozen in each case's old
+// block, recorded before the sweep was deleted.
 export const PARITY_05: ParityJob = {
   job: JOB_05.job,
   folder: JOB_05.sweep,
+  frozen: true,
   files: [JOB_05.yaml, join(dirname(JOB_05.yaml), 'people.yaml')],
   table: VERDICTS_05,
   seed: seed05,

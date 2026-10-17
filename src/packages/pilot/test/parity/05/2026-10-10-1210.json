@@ -2173,5 +2173,82 @@
     "/wt/web-2205": true,
     "/wt/web-2206": true,
     "/wt/web-2207": true
+  },
+  "old": {
+    "from": "run_old_plan.py 05 (ci-fix-sweep/sweep.py) with /opt/homebrew/bin/python3 3.15.0, 2026-10-16, before it was deleted",
+    "decisions": [
+      {
+        "key": "mr:1347",
+        "label": "!1347 web-1689-app-id",
+        "decision": "absent",
+        "reason": "head pipeline success"
+      },
+      {
+        "key": "mr:1561",
+        "label": "!1561 web-1493-confidence",
+        "decision": "due",
+        "reason": ""
+      },
+      {
+        "key": "mr:1574",
+        "label": "!1574 web-1474-donor-status",
+        "decision": "skip",
+        "reason": "uncommitted changes; retry next round"
+      },
+      {
+        "key": "mr:1587",
+        "label": "!1587 web-2118-hourly-e2e",
+        "decision": "absent",
+        "reason": "already handled pipeline 2933991087"
+      },
+      {
+        "key": "mr:1590",
+        "label": "!1590 web-1690-filenames",
+        "decision": "absent",
+        "reason": "head pipeline running"
+      },
+      {
+        "key": "mr:1592",
+        "label": "!1592 staff-feature-usage-page",
+        "decision": "skip",
+        "reason": "previous CI-fix session still open"
+      },
+      {
+        "key": "mr:1601",
+        "label": "!1601 web-2201-no-worktree",
+        "decision": "skip",
+        "reason": "no Orca worktree"
+      },
+      {
+        "key": "mr:1603",
+        "label": "!1603 web-2203-untracked",
+        "decision": "skip",
+        "reason": "uncommitted changes; retry next round"
+      },
+      {
+        "key": "mr:1604",
+        "label": "!1604 web-2204-rebase",
+        "decision": "skip",
+        "reason": "rebase-merge present; retry next round"
+      },
+      {
+        "key": "mr:1605",
+        "label": "!1605 web-2205-due",
+        "decision": "due",
+        "reason": ""
+      },
+      {
+        "key": "mr:1606",
+        "label": "!1606 web-2206-due",
+        "decision": "due",
+        "reason": ""
+      },
+      {
+        "key": "mr:1607",
+        "label": "!1607 web-2207-due",
+        "decision": "defer",
+        "reason": "--max 3 reached"
+      }
+    ]
   }
 }

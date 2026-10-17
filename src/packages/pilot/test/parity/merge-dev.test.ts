@@ -3,7 +3,7 @@ import type { PilotStore } from '../../src/main/store/store'
 import { compareDecisions, formatMismatches } from './compare'
 import { loadFixture, type ParityFixture } from './fixture'
 import { JOB_02, VERDICTS_02 } from './jobs/job-02'
-import { canRunOldSide, runOldPlan } from './old-side'
+import { frozenOldPlan } from './old-side'
 import { caseFile, dryTick, failedCheck, loadPortedAutomation } from './ported'
 
 const CASES = [
@@ -44,18 +44,17 @@ describe('02 · Merge dev into my MR branches, on the engine', () => {
     })
   })
 
-  describe.skipIf(!canRunOldSide('worktree-gate', 'quota.py'))(
-    'parity with quota.py check codex',
-    () => {
-      it.each(CASES)('%s: the Codex quota gate decides as quota.py did', async (name) => {
-        const file = caseFile(JOB_02.job, name)
-        const old = runOldPlan(JOB_02.job, file)
-        const neu = await dryTick({ definition, people, fixture: loadFixture(file) })
-        expect(formatMismatches(compareDecisions(old, neu, VERDICTS_02))).toBe('')
-        expect(failedCheck(neu[0])).toBe(old[0].decision === 'quota' ? 'Codex quota' : null)
-      })
-    }
-  )
+  // quota.py check codex's decisions are frozen in each case (its old block), recorded before quota.py was deleted, so
+  // neither python3 nor quota.py is needed and nothing skips; a case without its old block fails.
+  describe('parity with quota.py check codex (frozen)', () => {
+    it.each(CASES)('%s: the Codex quota gate decides as quota.py did', async (name) => {
+      const file = caseFile(JOB_02.job, name)
+      const old = frozenOldPlan(file)
+      const neu = await dryTick({ definition, people, fixture: loadFixture(file) })
+      expect(formatMismatches(compareDecisions(old, neu, VERDICTS_02))).toBe('')
+      expect(failedCheck(neu[0])).toBe(old[0].decision === 'quota' ? 'Codex quota' : null)
+    })
+  })
 
   it('a run in the main checkout never blocks another (01 at 03:00, a manual M02)', async () => {
     const fixture = loadFixture(caseFile(JOB_02.job, 'quota-ok'))

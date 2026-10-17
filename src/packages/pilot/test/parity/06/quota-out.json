@@ -435,5 +435,22 @@
     "/parity-gitdirs/wt/web-1721/rebase-merge": false,
     "/wt/web-1720": true,
     "/wt/web-1721": true
+  },
+  "old": {
+    "from": "run_old_plan.py 06 (mr-feedback-sweep/sweep.py) with /opt/homebrew/bin/python3 3.15.0, 2026-10-16, before it was deleted",
+    "decisions": [
+      {
+        "key": "mr:1720",
+        "label": "!1720 web-1720 (1 waiting)",
+        "decision": "quota",
+        "reason": "claude session limit at 96% (automations stop at 95%); resets at an unknown time"
+      },
+      {
+        "key": "mr:1721",
+        "label": "!1721 web-1721",
+        "decision": "absent",
+        "reason": "no thread waiting on me"
+      }
+    ]
   }
 }
