@@ -17,7 +17,6 @@ export type RecentWorktreeItem = {
   key: string
   worktree: Worktree
   repo: Repo | null
-  openTabCount: number
   pinned: boolean
 }
 
@@ -34,7 +33,6 @@ export function buildRecentWorktreeItems(input: {
   includeRecent: boolean
   // worktreeRowKey of every worktree Activity already has a row for.
   listed: ReadonlySet<string>
-  openTabCount(worktreeId: string): number
   now: number
   ctx: Pick<WorktreeTabsContext, 'resolveRepo' | 'scope' | 'query'>
 }): RecentWorktreeItem[] {
@@ -63,8 +61,7 @@ export function buildRecentWorktreeItems(input: {
     if (!matchesQuery(search, [worktree.displayName, worktree.branch, repo?.displayName ?? ''])) {
       continue
     }
-    const openTabCount = input.openTabCount(worktree.id)
-    items.push({ key, worktree, repo, openTabCount, pinned: worktree.isPinned })
+    items.push({ key, worktree, repo, pinned: worktree.isPinned })
   }
   return items.sort(
     (a, b) =>

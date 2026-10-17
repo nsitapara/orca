@@ -136,37 +136,40 @@ describe('useActivityTabsThreads', () => {
   )
   // wt-1 holds the agent; wt-2 was active a minute ago; wt-3 four days ago; wt-4 is pinned, from long ago.
   it.each([
-    { on: true, rows: ['recent:wt-4', 'recent:wt-2'] },
-    { on: false, rows: ['recent:wt-4'] }
-  ])('adds pinned worktrees, and recent ones only while on (on=$on)', ({ on, rows }) => {
-    arrange({ attached: true, on: false, body: 'agents' })
-    act(() => setActivityShowRecentWorktrees(on))
-    const now = Date.now()
-    useAppStore.setState({
-      repos: [makeRepo()],
-      folderWorkspaces: [],
-      unifiedTabsByWorktree: {},
-      worktreesByRepo: {
-        'repo-1': [
-          { ...makeWorktree(), lastActivityAt: now },
-          { ...makeWorktreeWithId('wt-2'), lastActivityAt: now - 60_000 },
-          { ...makeWorktreeWithId('wt-3'), lastActivityAt: now - 4 * 24 * 60 * 60 * 1000 },
-          { ...makeWorktreeWithId('wt-4'), lastActivityAt: 1, isPinned: true }
-        ]
-      }
-    })
-    const groups = renderHook(() =>
-      useActivityTabsThreads(
-        {
-          allThreads: [thread],
-          effectiveSelectedPaneKey: null,
-          visibleThreadGroups: buildActivityThreadGroups([thread], 'worktree')
-        },
-        { query: '', readFilter: 'all', groupBy: 'worktree' }
-      )
-    ).result.current.visibleThreadGroups
-    expect(groups.flatMap(activityTabsGroupRows).map(rowLabel)).toEqual(rows)
-  })
+    { on: true, groups: ['worktree:wt-4', 'worktree:wt-1', 'worktree:wt-2'] },
+    { on: false, groups: ['worktree:wt-4', 'worktree:wt-1'] }
+  ])(
+    'adds pinned worktrees, and recent ones only while on (on=$on)',
+    ({ on, groups: expected }) => {
+      arrange({ attached: true, on: false, body: 'agents' })
+      act(() => setActivityShowRecentWorktrees(on))
+      const now = Date.now()
+      useAppStore.setState({
+        repos: [makeRepo()],
+        folderWorkspaces: [],
+        unifiedTabsByWorktree: {},
+        worktreesByRepo: {
+          'repo-1': [
+            { ...makeWorktree(), lastActivityAt: now },
+            { ...makeWorktreeWithId('wt-2'), lastActivityAt: now - 60_000 },
+            { ...makeWorktreeWithId('wt-3'), lastActivityAt: now - 4 * 24 * 60 * 60 * 1000 },
+            { ...makeWorktreeWithId('wt-4'), lastActivityAt: 1, isPinned: true }
+          ]
+        }
+      })
+      const groups = renderHook(() =>
+        useActivityTabsThreads(
+          {
+            allThreads: [thread],
+            effectiveSelectedPaneKey: null,
+            visibleThreadGroups: buildActivityThreadGroups([thread], 'worktree')
+          },
+          { query: '', readFilter: 'all', groupBy: 'worktree' }
+        )
+      ).result.current.visibleThreadGroups
+      expect(groups.map((group) => group.key)).toEqual(expected)
+    }
+  )
 
   // The active workspace (wt-1, "feature") sorts after "alpha" (wt-2): selecting it moves nothing.
   it('lists open tabs by workspace name, not with the active workspace first', () => {

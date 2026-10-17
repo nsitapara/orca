@@ -32,9 +32,15 @@ function groupRows(group: ActivityThreadGroup): readonly ActivityTabsRow[] {
   return rowsByGroup.get(group) ?? NO_ROWS
 }
 
+// A worktree group's header is a recent worktree's row (with its own New agent): no row under it.
+function shownRows(group: ActivityThreadGroup): readonly ActivityTabsRow[] {
+  const rows = groupRows(group)
+  return group.key.startsWith('worktree:') ? rows.filter((row) => row.kind === 'tab') : rows
+}
+
 // pilot-hook: activity-tabs-rows. Called per group by buildActivityVirtualItems.
 export function activityTabsGroupRows(group: ActivityThreadGroup): ActivityTabsVirtualItem[] {
-  return groupRows(group).map((row) => ({ type: 'workspace-tab', row, groupKey: group.key }))
+  return shownRows(group).map((row) => ({ type: 'workspace-tab', row, groupKey: group.key }))
 }
 
 // pilot-hook: activity-tabs-row-key.
@@ -47,7 +53,8 @@ export function activityTabsGroupCount(group: ActivityThreadGroup): number {
   return groupRows(group).filter((row) => row.kind === 'tab').length
 }
 
-// pilot-hook: activity-tabs-count. Keeps "No agent activity" away while Pilot rows are listed.
+// pilot-hook: activity-tabs-count. Keeps "No agent activity" away while Pilot rows are listed,
+// a worktree header standing in for its row included.
 export function withActivityTabsCount(
   threadCount: number,
   groups: readonly ActivityThreadGroup[]
