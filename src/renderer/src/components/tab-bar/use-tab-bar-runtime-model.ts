@@ -31,6 +31,7 @@ import { DEFAULT_DISABLED_TUI_AGENTS } from '../../../../shared/tui-agent-select
 import { shouldShowWindowsShellMenu } from './windows-shell-menu-visibility'
 import { createUnifiedTabLookup } from './tab-bar-item-model'
 import { getClientCreationActionPolicy } from '@/lib/client-creation-action-policy'
+import { newTerminalShortcutLabel } from '../../../../packages/pilot/src/renderer/new-tab-agent-picker/new-tab-agent-picker-open-state' // pilot-hook: new-tab-picker-chip
 
 const isWindows = navigator.userAgent.includes('Windows')
 export const isMacOs = navigator.userAgent.includes('Mac')
@@ -60,6 +61,7 @@ export function resolveWindowsPowerShellImplementationSetting(settings: GlobalSe
 }
 
 export type TabBarRuntimeModel = {
+  newTerminalShortcut: string
   newBrowserShortcut: string
   newSimulatorShortcut: string
   newFileShortcut: string
@@ -95,6 +97,7 @@ export function useTabBarRuntimeModel({
   worktreeId: string
   groupId?: string
 }): TabBarRuntimeModel {
+  const newTerminalShortcut = newTerminalShortcutLabel(useShortcutLabel('tab.newTerminal')) // pilot-hook: new-tab-picker-chip
   const newBrowserShortcut = useShortcutLabel('tab.newBrowser')
   const newSimulatorShortcut = useShortcutLabel('tab.newSimulator')
   const newFileShortcut = useShortcutLabel('tab.newMarkdown')
@@ -255,6 +258,7 @@ export function useTabBarRuntimeModel({
   )
 
   return {
+    newTerminalShortcut,
     newBrowserShortcut,
     newSimulatorShortcut,
     newFileShortcut,
