@@ -71,8 +71,12 @@ test("Inbox lists the server's card", async () => {
   const inbox = page.getByRole('button', { name: /^Inbox/ })
   await expect(inbox).toBeVisible({ timeout: 60_000 })
   await expect(inbox).toContainText('1')
-  await inbox.click()
-  await expect(page.getByRole('heading', { name: 'Inbox', exact: true })).toBeVisible()
+  const heading = page.getByRole('heading', { name: 'Inbox', exact: true })
+  // Startup's UI restore puts back the saved view, undoing a click that lands before it.
+  await expect(async () => {
+    await inbox.click()
+    await expect(heading).toBeVisible({ timeout: 2_000 })
+  }).toPass({ timeout: 60_000 })
   // The card shows twice: its row in the list, and the open card beside it.
   await expect(page.getByRole('button').filter({ hasText: PROBE_TITLE })).toBeVisible()
   await expect(page.getByRole('heading', { name: PROBE_TITLE, exact: true })).toBeVisible()
