@@ -52,7 +52,7 @@ type PickerStep =
 const AGENT_STEP: PickerStep = { kind: 'agent' }
 const NO_DETECTIONS: readonly (TuiAgent[] | null)[] = []
 
-// Why: live while open so an offline machine drops out; the snapshot only covers the fade-out.
+// Why: live while open so an offline machine drops out; the whole snapshot only covers the fade-out.
 function shownMachines(
   step: PickerStep,
   live: NewTabMachineStep | null,
@@ -61,10 +61,14 @@ function shownMachines(
   if (step.kind !== 'machine') {
     return null
   }
-  if (visible && live) {
+  if (!visible) {
+    return step.machines
+  }
+  if (live) {
     return live
   }
-  return step.machines
+  // Why: with no live step (one machine left), only the current machine is still known to be up.
+  return { ...step.machines, targets: step.machines.targets.filter((t) => t.isCurrent) }
 }
 
 export function NewTabAgentPicker({

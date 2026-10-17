@@ -324,17 +324,31 @@ describe('NewTabAgentPicker', () => {
     ])
   })
 
-  it('drops a machine that goes offline while step 2 is open', () => {
-    machineStep.value = { projectId: PROJECT, targets: [here, there, box] }
-    const { rerender } = openPicker()
-    enter()
-    machineStep.value = { projectId: PROJECT, targets: [here, box] }
-    rerender()
-    expect(screen.getAllByRole('option').map((o) => o.textContent)).toEqual([
-      'Local Macfeat · this workspaceCurrent',
-      'Build Boxfeat · same branch'
-    ])
-  })
+  it.each([
+    {
+      machines: 3,
+      before: [here, there, box],
+      after: { projectId: PROJECT, targets: [here, box] },
+      rows: ['Local Macfeat · this workspaceCurrent', 'Build Boxfeat · same branch']
+    },
+    // Why null: with one machine left there is no live step at all.
+    {
+      machines: 2,
+      before: [here, there],
+      after: null,
+      rows: ['Local Macfeat · this workspaceCurrent']
+    }
+  ])(
+    'drops a machine that goes offline while step 2 is open ($machines machines)',
+    ({ before, after, rows }) => {
+      machineStep.value = { projectId: PROJECT, targets: before }
+      const { rerender } = openPicker()
+      enter()
+      machineStep.value = after
+      rerender()
+      expect(screen.getAllByRole('option').map((o) => o.textContent)).toEqual(rows)
+    }
+  )
 
   it.each([
     { name: 'a machine pick', close: (): boolean => enter() },
