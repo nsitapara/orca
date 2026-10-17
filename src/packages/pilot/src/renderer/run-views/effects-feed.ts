@@ -80,8 +80,7 @@ function flush(): void {
   }
 }
 
-// Asks a machine (none: this one) for a run's effects; every run asked of it in the same tick goes in one
-// pilot.runs.effects call to it.
+// Asks a machine (none: this one) for a run's effects; one pilot.runs.effects call per machine per tick.
 export function requestEffects(runId: string, host: PilotHostRef = LOCAL_PILOT_HOST): void {
   const batch = wanted.get(host.key) ?? { host, ids: new Set<string>() }
   batch.ids.add(runId)
@@ -93,12 +92,12 @@ export function requestEffects(runId: string, host: PilotHostRef = LOCAL_PILOT_H
 }
 
 // A run's effects (null until first loaded): asked for when the row mounts, every 10 s while the run is live, and once
-// more when it ends. `enabled` false: the caller already has them (Done for you), so nothing is asked. They are asked of
-// `host`, else the machine the surrounding view is for.
+// more when it ends. `enabled` false: the caller already has them (Done for you), so nothing is asked.
 export function useRunEffects(
   runId: string,
   live: boolean,
   enabled = true,
+  // The run's machine; none is the machine the surrounding view is for.
   host?: PilotHostRef
 ): readonly Effect[] | null {
   const viewHost = usePilotHost()

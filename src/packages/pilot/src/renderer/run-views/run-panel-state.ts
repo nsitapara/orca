@@ -3,8 +3,7 @@ import { LOCAL_PILOT_HOST, type PilotHostRef } from '../hosts/pilot-host'
 import { setPilotAutomationsView } from '../pages/automations-view'
 import { pilotStore } from '../store'
 
-// The run the panel shows, the part it scrolls to (spec §5), and the machine it ran on. One panel, over whichever page
-// is open.
+// The run the panel shows, its machine, and the part it scrolls to (spec §5). One panel, over whichever page is open.
 export type OpenRun = { runId: string; part: string | null; host: PilotHostRef }
 
 let current: OpenRun | null = null
@@ -47,8 +46,7 @@ export function useOpenRun(): OpenRun | null {
   return useSyncExternalStore(subscribe, openRunPanel, () => null)
 }
 
-// The right sidebar is too narrow for the panel: open the Automations page's Activity with the panel over it. The
-// sidebar's worktree timeline is this machine's, so its runs are too.
+// The right sidebar is too narrow for the panel: open the Automations page's Activity with the panel over it.
 export function openRunFromSidebar(runId: string, part: string | null = null): void {
   setPilotAutomationsView('activity')
   pilotStore()?.getState().openAutomationsPage?.()

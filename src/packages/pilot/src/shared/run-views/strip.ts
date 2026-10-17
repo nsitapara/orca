@@ -3,8 +3,7 @@ import type { ChainPart, Who } from './chain'
 import { isPainted, paintRun, type PaintedPart, type PartState } from './paint'
 import { NOT_REACHED, NOT_REACHED_YET, runTimeline, type RunTimeline } from './timeline'
 
-// One chip of a strip. `state` is null on a chain with no run; `runIds` are the live runs a list chip is lit for, as
-// liveStrip's keyOf names them.
+// One chip of a strip. `state` is null on a chain with no run; `runIds` key the live runs a list chip is lit for.
 export type StripChip = {
   key: string
   label: string

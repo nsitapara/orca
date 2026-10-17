@@ -20,8 +20,7 @@ function baseName(path: string): string {
 }
 
 // One run on Activity (spec §3): job tag, item (linked out), worktree, cost, state and the steps that ran, numbered in the
-// order they ran. The chips and "Open run" open the run panel on the run's machine, and its effects are asked of it. A
-// run whose automation isn't loaded shows no steps.
+// order they ran. The chips and "Open run" open the run panel. A run whose automation isn't loaded shows no steps.
 export function ActivityRunRow({
   run,
   fields,

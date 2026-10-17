@@ -45,8 +45,7 @@ function ItemCell({ run }: { run: FinishedRun }): React.JSX.Element {
   )
 }
 
-// The worktree the run worked in and the project the app lists it under; the name opens it, on the run's machine, when
-// the app has it there.
+// The worktree the run worked in and the project the app lists it under; the name opens it when the app has it.
 function WorktreeCell({ path }: { path: string | null }): React.JSX.Element {
   const host = usePilotHost()
   if (!path) {
@@ -78,8 +77,7 @@ function SessionCell({ run }: { run: FinishedRun }): React.JSX.Element {
   return <ResumeButton runId={run.id} worktreePath={run.worktreePath} step={step} />
 }
 
-// What a row opens to: how it ended, what it changed, the cards it made and its steps (each opens its log), all from the
-// run's machine.
+// What a row opens to, from the run's machine: how it ended, what it changed, the cards it made and its steps.
 function FinishedDetails({ run }: { run: FinishedRun }): React.JSX.Element {
   const host = usePilotHost()
   const effects = useRunEffects(run.id, false)
@@ -174,8 +172,7 @@ function FinishedRow({
   )
 }
 
-// The slot-holding jobs' newest ended runs (main/capacity), folded until asked for; a row opens to its details. They are
-// the runs of the machine the surrounding section is for.
+// The slot-holding jobs' newest ended runs (main/capacity), folded until asked for; a row opens to its details.
 export function FinishedRuns({
   runs,
   now
