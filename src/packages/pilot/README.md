@@ -393,6 +393,16 @@ A run costs the sum of its steps. A Claude step's session id is pinned at launch
 - An enabled job not measured yet counts as 2.5 GB, as web-platform's `e2e-parallel.sh` budgets a stack, so a light job measured first can't raise the suggestion before the heavy ones have run.
 - It is a suggestion only; nothing changes until you pick a number.
 
+## Activity across machines
+
+Activity lists the sessions of every machine you are connected to.
+
+- **Machine chip:** while the listed rows come from more than one machine, each row shows a chip with its machine's name. This covers agent rows, Pilot's tab rows and recent-worktree rows. With one machine, no chip shows. It is the same chip the sidebar uses for a host.
+- **Machines filter:** Options > Hosts filters by machine, and now covers every machine.
+- **Projects filter:** a project picked here includes that project's copy on every machine, and it is listed once. A repo with no git remote can't be matched across machines, so it stays per machine.
+
+The hooks are `activity-machines-*` and `activity-project-*` (see `HOOKS.md`).
+
 ## Agent Console
 
 The console (`~/.agents/skills/agent-console`) reads `pilot automations list-yaml --json` and maps each automation to its job by name:
