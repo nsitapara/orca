@@ -92,67 +92,24 @@ How one of the old sweeps that real Orca schedules (`~/.agents/skills/<name>-swe
 - [ ] 3. Shadow for a working day: **pending, Nish**.
 - [ ] 4. Cut over (disable Orca's 05, schedule `"10 * * * *"`): **pending, Nish**.
 
-## Moving an Orca automation into Pilot (retired)
+## Pilot beside Orca
 
-**Retired.** Orca's own automation engine is off inside Pilot (hook `orca-automations-off`), so an automation this script copies into Pilot never runs there. Jobs move to Pilot as YAML automations instead (Migrating an automation, above). The script stays for the record; don't run it with `--apply`.
+Both apps can run at once, each with its own backend and data. Pilot runs YAML automations only: Orca's own automation engine is always off inside Pilot (hook `orca-automations-off`), and there is no way back to Orca's jobs (retired 2026-10-15).
 
-`scripts/move-orca-automation.mjs` copies one automation from real Orca into Pilot so it never runs in both at once. It reads Orca with `orca automations show` (read-only), maps each field onto `pilot automations create` flags, and never deletes anything in Orca. Pilot has to be running (its CLI talks to it).
-
-Dry run (the default; prints the exact `create` command and the fields mapped and dropped, changes nothing):
-
-```
-node src/packages/pilot/scripts/move-orca-automation.mjs --id <orca automation id>
-```
-
-Move it for real:
-
-```
-node src/packages/pilot/scripts/move-orca-automation.mjs --id <orca automation id> --apply --disable-in-orca
-```
-
-The order is fixed: create in Pilot disabled, read it back and verify every mapped field, disable it in Orca and verify, then enable it in Pilot. If a step fails it prints what was created and what was disabled, and removes the Pilot copy only when Orca is still untouched. Without `--disable-in-orca`, `--apply` stops after the verified, disabled Pilot copy and prints the two commands to finish by hand.
-
-- It refuses, changing nothing, when the target repo or worktree isn't in Pilot, or when Orca's automation has a field `create` can't express (`--allow-drop <field>` accepts the loss).
-- It does nothing when Pilot already has an automation with the same name and target.
-- Pilot sets `id`, `dtstart`, `nextRunAt`, `lastRunAt` and the timestamps itself, so those aren't copied.
-
-Moving it back: disable it in Pilot, then enable it in Orca (in that order, so it never runs twice):
-
-```
-pilot automations edit --id <pilot id> --disabled
-orca automations edit --id <orca id> --enabled
-```
-
-## Pilot and Orca side by side
-
-Both apps can run at once, each with its own backend and data. Pilot runs YAML automations only: Orca's own automation engine is off inside Pilot (hook `orca-automations-off`; starting Pilot with `PILOT_ORCA_AUTOMATIONS=on` turns it back on, as a fallback before go-live). Orca keeps the Orca-style jobs, disabled, as the fallback.
-
-| | Pilot (where the jobs run) | Orca (the fallback) |
+| | Pilot | Orca |
 |---|---|---|
 | App | `dist/mac-arm64/Pilot.app`, port 6868 | `/Applications/Orca.app`, port 6768 |
 | Data | `~/Library/Application Support/Pilot` | `~/Library/Application Support/orca` |
-| Jobs | YAML automations (Orca's own engine is off) | the Orca-style jobs, disabled (the fallback) |
+| Jobs | YAML automations (Orca's own engine is off) | none: the Orca-style jobs stay disabled |
 | `orca` in its terminals and prechecks | reaches Pilot | reaches Orca |
 
 What follows from that:
 
-- **Keep Pilot open.** Its jobs run only while Pilot runs, and the ones that start an agent (02, M01–M03) need its window. Launch it from the Dock or Finder. Launched from an Orca terminal, it inherits that terminal's `ORCA_*` routing.
+- **Keep Pilot open.** Its jobs run only while Pilot runs, and the ones that start an agent need its window. Launch it from the Dock or Finder. Launched from an Orca terminal, it inherits that terminal's `ORCA_*` routing.
 - **Prechecks reach the app that runs them.** A precheck runs with the app's own environment. Pilot sets `ORCA_USER_DATA_PATH` to its data folder, so even `/opt/homebrew/bin/orca` (real Orca's launcher) answers from Pilot. Verified with a probe job on 2026-10-11.
-- **Agent tabs open where the job runs.** Tabs a job opened in Orca before the move stay in Orca, and Pilot's sweeps can't see them. Check `orca worktree ps` in Orca before a switch and let working agents finish.
+- **Agent tabs open where the job runs.** Tabs a job opened in Orca before the move stay in Orca, and Pilot's sweeps can't see them.
 - **History:** each app keeps its own runs.
 - **A restart can skip one slot.** A slot missed while Pilot was closed is retried at launch. That retry can come before Pilot has loaded its projects, and then it's recorded as `skipped_unavailable` ("The target project is no longer available."). The next slot runs normally. To cover the gap, use the automation's Run now in Pilot. Seen 2026-10-11 10:10 for 05 and 12.
-
-This switches the old, moved Orca-style automations (dry run without `--apply`). It is not how the YAML automations go live: use `pilot automations enable --id`. `--to pilot --apply` refuses while Pilot's Orca engine is off, which is the default, because the moved copies would run nowhere. It works only when Pilot starts with `PILOT_ORCA_AUTOMATIONS=on`.
-
-```
-node src/packages/pilot/scripts/switch-automations.mjs --to orca --apply    # back to Orca
-PILOT_ORCA_AUTOMATIONS=on  # start Pilot with this first, or --to pilot refuses
-node src/packages/pilot/scripts/switch-automations.mjs --to pilot --apply   # back to Pilot
-```
-
-- It works from `moved-automations.json`, and touches only automations that were enabled in Orca when they moved. Hand-started ones stay disabled in both.
-- For each automation it disables the app it leaves, reads that back, and only then enables the other. If the disable doesn't take, it leaves the other app alone.
-- It refuses unless both apps are running and the two CLIs reach different apps, since `orca` in a Pilot terminal is Pilot's. It calls real Orca's CLI by its full path with Orca's data folder.
 
 ## Automations on the YAML engine
 

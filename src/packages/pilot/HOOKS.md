@@ -55,7 +55,7 @@ Which hook was added for orphaned browser hosts, and why:
 Which hooks were added for the YAML engine, and why:
 
 - `right-sidebar-badge`: the activity bar's own slot is a status dot with no count, fed from a memo Pilot can't refresh.
-- `orca-automations-off`: the desktop app and `serve` never start Orca's automation service. Pilot's `orcad` keeps upstream's engine; `PILOT_ORCA_AUTOMATIONS=on` turns Orca's service back on.
+- `orca-automations-off`: the desktop app and `serve` never start Orca's automation service, and nothing turns it back on. Pilot's `orcad` keeps upstream's engine.
 - `agent-launch-env` (required): carries each agent terminal's environment and its agent arguments (a pinned session id, `--resume`, `codex resume <id>`, a step's `args`) through one call, so upstream's `extraAgentArgs` allowlist isn't used for them.
 
 Which hooks were added for card details, and why:
