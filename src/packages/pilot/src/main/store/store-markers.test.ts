@@ -2,6 +2,7 @@ import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { addImportedHandled } from './__fixtures__/imported-rows'
 import { PilotStore } from './store'
 
 let store: PilotStore
@@ -41,21 +42,15 @@ describe('MarkerStore.progressMarkers', () => {
     handledBy('review', `repo::/wt/d@${'a'.repeat(64)}`, 9, 'done') // a sha-256 head
     handledBy('review', 'repo::/wt/e@9999999', 10, 'running') // run still going...
     store.setHandledStatus('review', 'review-10', 'done', 11) // ...but its key settled done
-    store.imports.addHandled(
-      'review',
-      [{ onceKey: 'repo::/wt/f@2222222', status: 'failed', at: 12, failedAt: 12 }],
-      12
-    ) // a sweep's failure, imported: no progress
-    store.imports.addHandled(
-      'review',
-      [{ onceKey: 'repo::/wt/b@3333333', status: 'failed', at: 13, failedAt: 13 }],
-      13
-    ) // nor after a baseline
-    store.imports.addHandled(
-      'review',
-      [{ onceKey: 'repo::/wt/g@4444444', status: 'done', at: 14, failedAt: null }],
-      14
-    ) // a sweep's tested head, imported
+    addImportedHandled(store, 'review', [
+      { onceKey: 'repo::/wt/f@2222222', status: 'failed', at: 12, failedAt: 12 }
+    ]) // a sweep's failure, imported: no progress
+    addImportedHandled(store, 'review', [
+      { onceKey: 'repo::/wt/b@3333333', status: 'failed', at: 13, failedAt: 13 }
+    ]) // nor after a baseline
+    addImportedHandled(store, 'review', [
+      { onceKey: 'repo::/wt/g@4444444', status: 'done', at: 14, failedAt: null }
+    ]) // a sweep's tested head, imported
     expect(store.markers.progressMarkers('review')).toEqual(
       new Map([
         ['repo::/wt/a', 'bbbbbbb'],

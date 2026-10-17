@@ -1,21 +1,17 @@
 import { join } from 'node:path'
-import { applyImport } from '../../../src/main/importer/sweep-state/apply'
-import {
-  devE2ePipelinesMapper,
-  devE2eStartsMapper
-} from '../../../src/main/importer/sweep-state/dev-e2e'
 import type { ScriptRunner } from '../../../src/main/fields/script-runner'
 import type { IdsRunner } from '../../../src/main/sources/ids-from'
+import { addImportedHandled } from '../../../src/main/store/__fixtures__/imported-rows'
 import type { PilotStore } from '../../../src/main/store/store'
 import type { VerdictTable } from '../compare'
 import type { ParityFixture } from '../fixture'
 import { miss } from '../fixture-core'
-import { fixtureStateReader } from '../fixture-reader'
 import { withLinearTickets } from '../linear-fixture'
 import { frozenOldSide, type OldDecision } from '../old-side'
 import { failed, ok } from '../overrides'
 import type { ParityJob } from '../parity-case'
 import { loadPortedAutomation, portedAutomationsDir } from '../ported'
+import { savedAt, stateObject } from '../sweep-state'
 
 export const JOB_13 = {
   job: '13',
@@ -55,13 +51,23 @@ export const VERDICTS_13: VerdictTable = {
   ]
 }
 
-// The sweep's state, as Pilot keeps it: the two mappers' plans applied to the case's state files (each handled pipeline is
-// dev-e2e-fix's once_per key "<id>"; each ticket whose session started is dev-e2e-fix-start's "<ID>"), so the import and
-// the decisions are tested together.
+// The sweep's state, as Pilot keeps it: each pipeline in handled.json ({ "<pipeline id>": [tickets] }) is dev-e2e-fix's
+// once_per key "<id>"; each ticket in tickets.json whose session started (it has a path) is dev-e2e-fix-start's "<ID>",
+// from its start. A ticket without a path stays due, so Pilot starts it, as the old sweep's retry did.
 export function seed13(store: PilotStore, f: ParityFixture): void {
-  const read = fixtureStateReader(f)
-  applyImport(store, devE2ePipelinesMapper.plan(read), f.now)
-  applyImport(store, devE2eStartsMapper.plan(read), f.now)
+  const pipelines = Object.entries(stateObject(f, 'dev-e2e/handled.json'))
+    .filter(([pipeline, tickets]) => /^\d+$/.test(pipeline) && Array.isArray(tickets))
+    .map(([pipeline]) => ({ onceKey: pipeline, status: 'done' as const, at: f.now }))
+  addImportedHandled(store, JOB_13.pipelines, pipelines)
+  const started = Object.entries(stateObject(f, 'dev-e2e/tickets.json')).flatMap(
+    ([ident, entry]) => {
+      const e = (entry ?? {}) as { path?: unknown; startedAt?: unknown }
+      return typeof e.path === 'string' && e.path !== ''
+        ? [{ onceKey: ident, status: 'done' as const, at: savedAt(f, e.startedAt) }]
+        : []
+    }
+  )
+  addImportedHandled(store, JOB_13.starts, started)
 }
 
 // The commands 13's YAML runs (pilotcli's since milestone 7), pinned as literals: 13-dev-e2e-fix.parity.test.ts checks

@@ -19,7 +19,6 @@ import { buildChannelMethods } from './methods-channel'
 import { buildPreparationMethods } from './methods-preparation'
 import { buildDetailsMethods } from './methods-details'
 import { buildInboxMethods } from './methods-inbox'
-import { buildImportMethods } from './methods-import'
 import { buildLinearMethods } from './methods-linear'
 import { buildPlaygroundMethods } from './methods-playground'
 import { buildStepSourceMethods } from './methods-step-source'
@@ -162,7 +161,6 @@ export function buildPilotMethods(host: PilotHost) {
     ...buildTimelineMethods(ctx),
     ...buildRunMethods(ctx),
     ...buildVisibilityMethods(ctx),
-    ...buildImportMethods(host),
     ...buildPlaygroundMethods(ctx),
     ...buildCapacityMethods(ctx),
     ...buildStepSourceMethods(ctx),

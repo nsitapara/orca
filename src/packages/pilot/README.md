@@ -119,7 +119,6 @@ Every job is a YAML automation in `~/.agents/automations/` (one file per automat
   - `pilot automations list-yaml`, `show-yaml --id` (alias `get`), `reload` (`pilot automations list` is upstream's own command)
   - `enable --id`, `disable --id`
   - `validate --file`, `dry-run --id`, `tick --id`, `activity --id`
-  - `import-state --id [--apply]`
   - `spend`, `usage-report`
 - **Nothing runs until Nish switches it on** (build plan Task 50). An automation's first tick shows in its Activity and in the worktree panel.
 - **A run's tabs close when it ends**, however it ends (`main/run/ended-run-tabs.ts`). Once every run on an agent tab has ended, the scheduler's next poll (every 15 s) closes it, and Resume reopens the session. A tab is found by its handle or its pane, since a restart can give the terminal a new handle. A tab stays when:

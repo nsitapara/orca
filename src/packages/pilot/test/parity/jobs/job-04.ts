@@ -1,14 +1,13 @@
 import { join } from 'node:path'
 import type { TickDeps } from '../../../src/main/scheduler/tick-runner'
-import { applyImport } from '../../../src/main/importer/sweep-state/apply'
-import { uiQaOvernightMapper } from '../../../src/main/importer/sweep-state/ui-qa-overnight'
+import { addImportedHandled } from '../../../src/main/store/__fixtures__/imported-rows'
 import type { PilotStore } from '../../../src/main/store/store'
 import type { VerdictTable } from '../compare'
 import { stdoutOf, type ParityFixture } from '../fixture'
-import { fixtureStateReader } from '../fixture-reader'
 import { seedRunning } from '../overrides'
 import type { ParityJob } from '../parity-case'
 import { loadPortedAutomation, portedAutomationsDir } from '../ported'
+import { isSha, listedWorktrees, seedSeenHeads, stateObject } from '../sweep-state'
 import { withWorktrees } from '../worktree-fixture'
 
 // The old side's code was ui-qa/scripts/loop.py (it had no sweep.py); its decisions are frozen
@@ -97,15 +96,30 @@ function midTurn(f: ParityFixture, handle: string): boolean {
   return answer.result?.wait?.satisfied === false
 }
 
-// The sweep's state as Pilot keeps it: the mapper's plan applied to the case (each tested head a done
-// `<worktree id>@<sha>` key, each failed one a failed key from its failure time). A QA run whose Codex tab was mid-turn
-// (the sweep's "active") is a running run of this automation in its worktree, holding its head; an automatic fix whose
-// tab was mid-turn is the fix step of a run still running there.
+// failed.json, { "<path>": { head, at (epoch s) } }: each failed head is a failed key no run holds, from its failure
+// time, so retry_after_failure's 12 hours run from the old failure. A head also in seen.json keeps its tested key.
+function seedFailedHeads(store: PilotStore, f: ParityFixture): void {
+  const byPath = new Map(listedWorktrees(f).map((w) => [w.path, w]))
+  for (const [path, entry] of Object.entries(stateObject(f, `${JOB_04.loop}/failed.json`))) {
+    const wt = byPath.get(path)
+    const e = (entry ?? {}) as { head?: unknown; at?: unknown }
+    if (wt && isSha(e.head) && typeof e.at === 'number') {
+      const at = Math.round(e.at * 1000)
+      addImportedHandled(store, JOB_04.automationId, [
+        { onceKey: `${wt.id}@${e.head}`, status: 'failed', at, failedAt: at }
+      ])
+    }
+  }
+}
+
+// The sweep's state as Pilot keeps it: each tested head a done `<worktree id>@<sha>` key, each failed one a failed key
+// from its failure time. A QA run whose Codex tab was mid-turn (the sweep's "active") is a running run of this automation
+// in its worktree, holding its head; an automatic fix whose tab was mid-turn is the fix step of a run still running there.
 export function seed04(store: PilotStore, f: ParityFixture): void {
-  const read = fixtureStateReader(f)
-  applyImport(store, uiQaOvernightMapper.plan(read), f.now)
+  seedSeenHeads(store, JOB_04.automationId, f, `${JOB_04.loop}/seen.json`)
+  seedFailedHeads(store, f)
   const at = f.now - 600_000
-  const byPath = new Map(read.worktrees().map((w) => [w.path, w]))
+  const byPath = new Map(listedWorktrees(f).map((w) => [w.path, w]))
   const held = (path: string | undefined) => (path ? byPath.get(path) : undefined)
   const run = (f.state[`${JOB_04.loop}/run.json`] ?? {}) as OpenRun
   const active = run.status === 'running' && run.codex_tab ? held(run.worktree?.path) : undefined
@@ -138,11 +152,7 @@ export function seed04(store: PilotStore, f: ParityFixture): void {
 // sweep read from the branch's note: in Pilot, this automation's answers saved on the item and not yet dispatched.
 function withAnswers(deps: TickDeps, f: ParityFixture): TickDeps {
   const waiting = (f.state['parity/answers.json'] ?? {}) as Record<string, number>
-  const branchOf = new Map(
-    fixtureStateReader(f)
-      .worktrees()
-      .map((w) => [`wt:${w.id}`, w.branch ?? ''])
-  )
+  const branchOf = new Map(listedWorktrees(f).map((w) => [`wt:${w.id}`, w.branch ?? '']))
   return {
     ...deps,
     fields: {
