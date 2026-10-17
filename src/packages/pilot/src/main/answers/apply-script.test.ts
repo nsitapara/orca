@@ -40,11 +40,7 @@ const PUSH: InboxAddParams = {
 }
 const ID = 'in_0000000000000001'
 
-function setup(
-  result: ActionResult = DONE,
-  card: InboxAddParams = PUSH,
-  refresh: ActionEntry['refresh'] = async () => null
-) {
+function setup(result: ActionResult = DONE, card: InboxAddParams = PUSH) {
   const store = PilotStore.open(
     join(mkdtempSync(join(tmpdir(), 'pilot-apply-script-')), 'db.sqlite')
   )
@@ -64,8 +60,7 @@ function setup(
     usage: 'x',
     checkArgs: (args) => (Array.isArray(args.argv) ? null : 'usage: x'),
     describe: async () => 'x',
-    run: vi.fn().mockResolvedValue(result),
-    refresh: vi.fn(refresh)
+    run: vi.fn().mockResolvedValue(result)
   }
   let clock = 100
   const inbox: InboxDeps = {
@@ -203,29 +198,7 @@ describe('applyScript', () => {
     expect(item().status).toBe('answered')
   })
 
-  it('asks again, pinned to the new state, when a stale action can be refreshed', async () => {
-    const { deps, entry, item, approve } = setup(
-      { ...DONE, outcome: 'stale', detail: 'head moved to ffff0000' },
-      PUSH,
-      async () => ({
-        args: { argv: ['/wt', 'web-1', 'ffff', 'bbbb'] },
-        changed: 'the head moved to ffff'
-      })
-    )
-    approve()
-    expect(await applyScript(deps, item(), [])).toEqual({ kind: 'reasked' })
-    expect(entry.refresh).toHaveBeenCalledWith(PUSH.actionArgs)
-    expect(item()).toMatchObject({
-      status: 'open',
-      version: 2,
-      answer: null,
-      actionArgs: { argv: ['/wt', 'web-1', 'ffff', 'bbbb'] },
-      context:
-        'The head moved to ffff since you approved; approve this version to go ahead. Fixed it.'
-    })
-  })
-
-  it('closes a stale action that cannot be refreshed', async () => {
+  it('closes a stale action', async () => {
     const { deps, item, approve } = setup({
       ...DONE,
       outcome: 'stale',
@@ -238,8 +211,8 @@ describe('applyScript', () => {
   })
 
   // Spec E: a push pilotcli skipped (a pin moved, not a fast-forward, not mine) leaves its card open with why.
-  it('re-asks a stale action that keeps its card open, with why, and never refreshes it', async () => {
-    const { deps, entry, item, approve } = setup({
+  it('re-asks a stale action that keeps its card open, with why', async () => {
+    const { deps, item, approve } = setup({
       ...DONE,
       outcome: 'stale',
       detail: 'not pushed: stale: HEAD is now 7f00aa1',
@@ -248,7 +221,6 @@ describe('applyScript', () => {
     })
     approve()
     expect(await applyScript(deps, item(), [])).toEqual({ kind: 'reasked' })
-    expect(entry.refresh).not.toHaveBeenCalled()
     expect(item()).toMatchObject({ status: 'open', answer: null, outcome: null })
     expect(item().replies.at(-1)).toEqual({
       text: 'not pushed: stale: HEAD is now 7f00aa1',

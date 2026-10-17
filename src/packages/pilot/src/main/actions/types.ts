@@ -14,7 +14,6 @@ export type ActionResult = {
   // What a later step needs from the effect (linear_create: identifier, branchName).
   data?: Record<string, string>
 }
-export type Refreshed = { args: Record<string, unknown>; changed: string }
 export type ActionRunOpts = { dryRun: boolean; runId: string | null; inboxItemId?: string | null }
 // Who asks for an action: a run's own attempt (its run), or a card's Approve (the card, and the run it belongs to).
 export type ActionCaller = { runId: string | null; inboxItemId: string | null }
@@ -38,8 +37,6 @@ export type ActionEntry = {
   // The exact argv this entry spawns for these args (program first), built by the code run() spawns with,
   // so a card's Run line is what runs. Absent for an entry that runs inside Pilot (its args are what runs).
   command?(args: Record<string, unknown>, caller?: ActionCaller): string[] | null
-  // A stale action that still makes sense at the new state: the args that pin it, and what changed.
-  refresh?(args: Record<string, unknown>): Promise<Refreshed | null>
 }
 
 export type ActionCatalog = { entries(): ActionEntry[]; get(name: string): ActionEntry | null }

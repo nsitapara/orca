@@ -89,7 +89,7 @@ export function queuedPreparation(input: PreparationInput, at: number): InboxPre
   }
 }
 
-// Back in the queue for a fresh attempt (an undone early answer, refreshed action args, a person's Retry): a new
+// Back in the queue for a fresh attempt (an undone early answer, a person's Retry): a new
 // revision voids every claim on the old one, and the attempts start over. The old worker's run stays named, so a new
 // one never starts beside it while it still runs.
 export function requeuedPreparation(p: InboxPreparation, at: number): InboxPreparation {

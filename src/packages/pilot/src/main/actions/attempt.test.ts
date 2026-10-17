@@ -10,7 +10,7 @@ import type { InboxDeps } from '../inbox/inbox-service'
 import type { InboxAddParams } from '../../shared/inbox-types'
 import { PilotStore } from '../store/store'
 import type { InboxItemRow } from '../../shared/api-types'
-import { attemptAction, refreshAction, type CardAttempt, type RunAttempt } from './attempt'
+import { attemptAction, type CardAttempt, type RunAttempt } from './attempt'
 import { approvedArgs, proposalProblem } from './powers'
 import type { ActionCatalog, ActionEntry } from './types'
 
@@ -47,10 +47,6 @@ function setup(powers?: string[], loaded = true) {
       link: 'https://x',
       log: '/l',
       onYou: false
-    }),
-    refresh: vi.fn().mockResolvedValue({
-      args: { argv: ['/wt', 'web-1', 'ffff', 'bbb'] },
-      changed: 'head moved to ffff'
     })
   }
   const catalog: ActionCatalog = {
@@ -420,7 +416,7 @@ describe('attemptAction on an approved card', () => {
     expect(withPower.push.run).not.toHaveBeenCalled()
   })
 
-  it('refuses a card Pilot asked about once its args changed other than by its own refresh', async () => {
+  it('refuses a card Pilot asked about once its args changed', async () => {
     const { push, deps, store, card } = await asked()
     const changed = revise(store, card, { argv: ['/elsewhere', 'main', 'x', 'y'] })
     expect(await attemptAction(deps, approve(changed))).toMatchObject({
@@ -428,58 +424,6 @@ describe('attemptAction on an approved card', () => {
       detail: expect.stringContaining("Pilot didn't ask for card")
     })
     expect(push.run).not.toHaveBeenCalled()
-  })
-
-  it('runs a card Pilot asked about with the args its own refresh pinned again', async () => {
-    const { push, deps, store, card } = await asked()
-    const again = await refreshAction(deps, {
-      action: 'publish',
-      args: REQ.args,
-      runId: 'run-1',
-      inboxItemId: card.id
-    })
-    const revised = revise(store, card, again!.args)
-    expect(await attemptAction(deps, approve(revised))).toMatchObject({ outcome: 'done' })
-    expect(push.run).toHaveBeenCalledWith(
-      { argv: ['/wt', 'web-1', 'ffff', 'bbb'] },
-      { dryRun: false, runId: 'run-1', inboxItemId: card.id }
-    )
-  })
-
-  // Group 22 note: a refresh row counts as Pilot's own only when what it refreshed was Pilot's already.
-  it('refuses a card whose args came from a refresh of args Pilot never asked with', async () => {
-    const { push, deps, store, card } = await asked()
-    const foreign = await refreshAction(deps, {
-      action: 'publish',
-      args: { argv: ['/elsewhere', 'main', 'x', 'y'] },
-      runId: 'run-1',
-      inboxItemId: card.id
-    })
-    const revised = revise(store, card, foreign!.args)
-    expect(await attemptAction(deps, approve(revised))).toMatchObject({
-      outcome: 'failed',
-      detail: expect.stringContaining("Pilot didn't ask for card")
-    })
-    expect(push.run).not.toHaveBeenCalled()
-  })
-
-  it('follows a chain of its own refreshes: asked, refreshed, refreshed again', async () => {
-    const { push, deps, store, card } = await asked()
-    const refresh = (args: Record<string, unknown>) =>
-      refreshAction(deps, { action: 'publish', args, runId: 'run-1', inboxItemId: card.id })
-    const first = await refresh(REQ.args)
-    const once = revise(store, card, first!.args)
-    vi.mocked(push.refresh!).mockResolvedValueOnce({
-      args: { argv: ['/wt', 'web-1', 'eeee', 'bbb'] },
-      changed: 'head moved to eeee'
-    })
-    const second = await refresh(once.actionArgs!)
-    const twice = revise(store, once, second!.args)
-    expect(await attemptAction(deps, approve(twice))).toMatchObject({ outcome: 'done' })
-    expect(push.run).toHaveBeenCalledWith(
-      { argv: ['/wt', 'web-1', 'eeee', 'bbb'] },
-      { dryRun: false, runId: 'run-1', inboxItemId: card.id }
-    )
   })
 
   it('refuses stored args that no longer fit the entry', async () => {
@@ -547,42 +491,5 @@ describe('proposalProblem', () => {
     expect(proposalProblem(catalog, deps.definitions()[0], 'start_run', {})).toBe(
       "start_run needs a person's approval; only Pilot asks for it"
     )
-  })
-})
-
-describe('refreshAction', () => {
-  it('asks the entry for new pinned args and records the refresh', async () => {
-    const { store, deps } = setup(['push'])
-    expect(
-      await refreshAction(deps, {
-        action: 'publish',
-        args: REQ.args,
-        runId: 'run-1',
-        inboxItemId: 'in_x'
-      })
-    ).toEqual({ args: { argv: ['/wt', 'web-1', 'ffff', 'bbb'] }, changed: 'head moved to ffff' })
-    expect(store.actions.forInboxItem('in_x')).toMatchObject([{ phase: 'refresh', status: 'done' }])
-  })
-
-  it("refreshes nothing for args that don't fit, and keeps refreshed args that don't", async () => {
-    const { push, deps } = setup(['push'])
-    expect(
-      await refreshAction(deps, {
-        action: 'publish',
-        args: { argv: 1 },
-        runId: 'run-1',
-        inboxItemId: 'in_x'
-      })
-    ).toBeNull()
-    expect(push.refresh).not.toHaveBeenCalled()
-    vi.mocked(push.refresh!).mockResolvedValueOnce({ args: { argv: 2 }, changed: 'x' })
-    expect(
-      await refreshAction(deps, {
-        action: 'publish',
-        args: REQ.args,
-        runId: 'run-1',
-        inboxItemId: 'in_x'
-      })
-    ).toBeNull()
   })
 })

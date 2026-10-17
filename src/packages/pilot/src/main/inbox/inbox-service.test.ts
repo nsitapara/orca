@@ -11,7 +11,6 @@ import {
   listInbox,
   replyToInboxItem,
   resolveInboxItem,
-  reviseInboxItem,
   syncRunWaiting,
   type InboxDeps
 } from './inbox-service'
@@ -764,65 +763,6 @@ it('uses the stable decision key rather than a repeated display title for manage
     })
   }
   expect(store.inbox.list()).toHaveLength(2)
-})
-
-// A refreshed action (act.py refresh) pins new args: a ready prepared card's evidence was for the old ones, so its
-// preparation goes back in the queue with a new revision, as an undone early answer's does (save.ts clearAnswer).
-describe('reviseInboxItem on a prepared card', () => {
-  const PUSH: InboxAddParams = {
-    ...QUESTION,
-    type: 'action',
-    title: 'Push !1561?',
-    options: [],
-    action: 'push',
-    actionArgs: { argv: ['/wt/1493', 'web-1493-a', 'aaa', 'bbb'] },
-    preparation: { key: 'push:1561', context: 'Pinned push', requirements: ['context', 'diff'] }
-  }
-  function ready() {
-    const { deps, store } = setup()
-    const id = addInboxItem(deps, PUSH).id!
-    const row = store.inbox.get(id)!
-    store.inboxPreparations.write(id, {
-      ...row.preparation!,
-      state: 'ready',
-      attempt: 1,
-      runId: 'worker',
-      stepIdx: 0,
-      progress: 'Ready for your decision',
-      updatedAt: 100
-    })
-    store.inbox.saveAnswer(
-      id,
-      { text: 'Approve', option: null, digest: row.digest, via: 'page', callerKind: 'desktop' },
-      'nish',
-      100
-    )
-    return { deps, store, id }
-  }
-
-  it('requeues its preparation with a new revision when the pinned args change', () => {
-    const { deps, store, id } = ready()
-    const revised = reviseInboxItem(deps, id, {
-      actionArgs: { argv: ['/wt/1493', 'web-1493-a', 'ccc', 'bbb'] },
-      context: 'Pinned push, refreshed'
-    })
-    const want = {
-      state: 'queued',
-      revision: 2,
-      attempt: 0,
-      progress: 'Context queued'
-    }
-    expect(revised.preparation).toMatchObject(want)
-    expect(store.inbox.get(id)?.preparation).toMatchObject(want)
-    expect(store.inboxPreparations.listEligible(101).map((item) => item.id)).toEqual([id])
-  })
-
-  it('keeps it ready when the refresh changes nothing Approve binds to', () => {
-    const { deps, store, id } = ready()
-    const row = store.inbox.get(id)!
-    reviseInboxItem(deps, id, { actionArgs: row.actionArgs ?? {}, context: row.context ?? '' })
-    expect(store.inbox.get(id)?.preparation).toMatchObject({ state: 'ready', revision: 1 })
-  })
 })
 
 describe('syncRunWaiting', () => {

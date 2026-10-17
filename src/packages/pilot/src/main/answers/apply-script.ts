@@ -1,21 +1,15 @@
 import type { InboxItemRow } from '../../shared/api-types'
 import { evidenceGate } from '../../shared/evidence'
-import { attemptAction, refreshAction, type AttemptDeps } from '../actions/attempt'
+import { attemptAction, type AttemptDeps } from '../actions/attempt'
 import { actionFailed, type ActionResult } from '../actions/types'
-import {
-  reaskInboxItem,
-  resolveInboxItem,
-  reviseInboxItem,
-  type InboxDeps
-} from '../inbox/inbox-service'
+import { reaskInboxItem, resolveInboxItem, type InboxDeps } from '../inbox/inbox-service'
 import { CARD_CHANGED, INTERRUPTED_AGAIN } from '../../shared/pilot-replies'
 import { ACTION_INTERRUPTED } from '../store/store-actions'
 import { APPROVE_ON_DESKTOP } from './queue-view'
 
-// apply.py CARD_CHANGED / ASKED_AGAIN. An approval from anywhere but Pilot's desktop app is re-asked with
-// APPROVE_ON_DESKTOP (apply.py's PAGE_ONLY, under the desktop-only ruling).
+// apply.py CARD_CHANGED. An approval from anywhere but Pilot's desktop app is re-asked with APPROVE_ON_DESKTOP
+// (apply.py's PAGE_ONLY, under the desktop-only ruling).
 export { CARD_CHANGED, INTERRUPTED_AGAIN }
-export const ASKED_AGAIN = ' since you approved; approve this version to go ahead. '
 
 export type ScriptStep =
   | { kind: 'done' }
@@ -41,15 +35,6 @@ export function partsOutcome(item: InboxItemRow, result: ActionResult, leaveOut:
     counts.set(word, (counts.get(word) ?? 0) + 1)
   }
   return `${result.outcome}: ${[...counts].map(([word, n]) => `${n} ${word}`).join(' · ')}`
-}
-
-// apply.py _ask_again: what changed, then the original context (an earlier round's note doesn't pile up).
-// The marker is searched trimmed: oneLine (Task 20a) collapses the whitespace around it.
-export function askedAgainContext(context: string, changed: string): string {
-  const marker = ASKED_AGAIN.trim()
-  const at = context.indexOf(marker)
-  const original = at === -1 ? context : context.slice(at + marker.length).trim()
-  return `${changed.charAt(0).toUpperCase()}${changed.slice(1)}${ASKED_AGAIN}${original || context}`
 }
 
 function interruptedOutput(output: string | null): boolean {
@@ -126,20 +111,6 @@ export async function applyScript(
   }
   if (result.outcome === 'not_yet' && !parts) {
     return { kind: 'waits', reason: result.detail + (result.onYou ? ' (waits on you)' : '') }
-  }
-  if (result.outcome === 'stale' && !parts) {
-    // The card's own args, as attemptAction ran them (the approval was for this version).
-    const again = await refreshAction(deps.attempt, {
-      action,
-      args: item.actionArgs ?? {},
-      runId: item.runId,
-      inboxItemId: item.id
-    })
-    if (again) {
-      const context = askedAgainContext(item.context, again.changed)
-      reviseInboxItem(deps.inbox, item.id, { actionArgs: again.args, context })
-      return { kind: 'reasked' }
-    }
   }
   if (result.outcome === 'needs_agent') {
     return { kind: 'agent', note: result.detail }

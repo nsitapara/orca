@@ -82,34 +82,21 @@ function parsed(output: string | null): Record<string, unknown> | null {
   }
 }
 
-function refreshedArgs(output: string | null): Record<string, unknown> | null {
-  const args = parsed(output)?.args
-  return args && typeof args === 'object' && !Array.isArray(args)
-    ? (args as Record<string, unknown>)
-    : null
-}
-
 // Whether Pilot itself wrote this card's current args: it asked about the action (a run lacked the power;
 // that ask is a row under the card refused with the outcome `asked`), and the card's args are the ones it
-// asked with or ones a chain of its own refreshes produced from them. A refresh counts only when the args
-// it refreshed were already Pilot's (its row's digest is of its input), walking the rows oldest first, so a
-// refresh of args from anywhere else never makes its output Pilot's. Args changed any other way lose that.
+// asked with. Args changed any other way lose that.
 function askedByPilot(store: PilotStore, card: InboxItemRow): boolean {
   const action = card.action ?? ''
-  const made = new Set<string>()
-  for (const row of store.actions.forInboxItem(card.id)) {
-    if (row.action !== action) {
-      continue
-    }
-    if (row.status === 'refused' && parsed(row.output)?.outcome === 'asked') {
-      made.add(row.digest)
-    }
-    const args = row.phase === 'refresh' && row.status === 'done' ? refreshedArgs(row.output) : null
-    if (args && made.has(row.digest)) {
-      made.add(argsDigest(action, args))
-    }
-  }
-  return made.has(argsDigest(action, card.actionArgs ?? {}))
+  const digest = argsDigest(action, card.actionArgs ?? {})
+  return store.actions
+    .forInboxItem(card.id)
+    .some(
+      (row) =>
+        row.action === action &&
+        row.digest === digest &&
+        row.status === 'refused' &&
+        parsed(row.output)?.outcome === 'asked'
+    )
 }
 
 // No catalog entry can leave parts out, so an approval that leaves any out is refused.
