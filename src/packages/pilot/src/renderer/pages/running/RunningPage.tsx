@@ -7,14 +7,16 @@ import { useNow } from '../waiting/use-now'
 import { FinishedRuns } from './FinishedRuns'
 import { RunLimitPicker } from './RunLimitPicker'
 import { memoryText, runMemoryText, suggestionText, usageText } from './running-text'
-import { useCapacity } from './use-capacity'
+import { useCapacities, type MachineCapacity } from './use-capacity'
 
 function LimitPanel({
   payload,
+  where,
   saving,
   onChange
 }: {
   payload: CapacityPayload
+  where: string
   saving: boolean
   onChange(limit: number | null): void
 }): React.JSX.Element {
@@ -46,7 +48,7 @@ function LimitPanel({
         )}
         {memory ? <p className="basis-full text-xs tabular-nums">{memory}</p> : null}
         <p className="basis-full text-xs text-muted-foreground">
-          {suggestionText(payload)} Memory counts each job&apos;s processes on this Mac, not
+          {suggestionText(payload)} Memory counts each job&apos;s processes on {where}, not
           Docker&apos;s containers.
         </p>
       </div>
@@ -133,52 +135,109 @@ function ListSection({
   )
 }
 
-// What runs now, what waits for a slot in line order, and how many jobs may run at once (main/capacity).
+type MachineProps = {
+  machine: MachineCapacity
+  // More than one machine: each section is named, and the page header says no figures of its own.
+  named: boolean
+  saving: boolean
+  now: number
+  onLimit(limit: number | null): void
+}
+
+// Today's page for one machine: its run limit, what runs, what waits and what finished.
+function MachineRuns({
+  payload,
+  where,
+  saving,
+  now,
+  onLimit
+}: Omit<MachineProps, 'machine' | 'named'> & {
+  payload: CapacityPayload
+  where: string
+}): React.JSX.Element {
+  return (
+    <>
+      <LimitPanel payload={payload} where={where} saving={saving} onChange={onLimit} />
+      <ListSection title="Running now" empty="Nothing is running." count={payload.running.length}>
+        {payload.running.map((run) => (
+          <RunningRow key={run.id} run={run} now={now} />
+        ))}
+      </ListSection>
+      <ListSection
+        title="Waiting for a slot"
+        empty="Nothing is waiting."
+        count={payload.queued.length}
+      >
+        {payload.queued.map((item, i) => (
+          <QueuedRow
+            key={`${item.automationId}:${item.itemKey}`}
+            item={item}
+            place={i + 1}
+            now={now}
+          />
+        ))}
+      </ListSection>
+      <FinishedRuns runs={payload.finished} now={now} />
+    </>
+  )
+}
+
+function MachineSection({ machine, named, ...rest }: MachineProps): React.JSX.Element {
+  const { host, payload, error } = machine
+  const heading = named ? (
+    <div>
+      <h3 className="text-sm font-semibold leading-6">{host.machineName}</h3>
+      {payload ? <p className="text-xs text-muted-foreground">{usageText(payload)}</p> : null}
+    </div>
+  ) : null
+  if (host.state === 'offline') {
+    return (
+      <section aria-label={host.machineName} className="flex flex-col gap-4">
+        {heading}
+        <p className="text-sm text-muted-foreground">
+          {host.machineName} can&apos;t be reached, so its runs aren&apos;t shown here. They go on
+          running there.
+        </p>
+      </section>
+    )
+  }
+  return (
+    <section aria-label={host.machineName} className="flex flex-col gap-4">
+      {heading}
+      {error ? <p className="text-sm text-destructive">{error}</p> : null}
+      {payload ? (
+        <MachineRuns payload={payload} where={named ? host.machineName : 'this Mac'} {...rest} />
+      ) : null}
+    </section>
+  )
+}
+
+// What runs now, what waits for a slot in line order, and how many jobs may run at once (main/capacity), per machine.
 export function RunningPage(): React.JSX.Element {
-  const { payload, error, saving, setLimit } = useCapacity()
+  const { machines, saving, setLimit } = useCapacities()
   const now = useNow(true)
+  const named = machines.length > 1
+  const only = named ? null : machines[0]?.payload
   return (
     <section className="flex max-w-6xl flex-col gap-4 px-5 pb-6 pt-4">
       <div>
         <h2 className="text-sm font-semibold leading-6">Running</h2>
         <p className="text-xs text-muted-foreground">
-          {payload ? usageText(payload) : 'Jobs running now, and the ones waiting for a slot.'}
+          {only ? usageText(only) : 'Jobs running now, and the ones waiting for a slot.'}
         </p>
       </div>
-      {error ? <p className="text-sm text-destructive">{error}</p> : null}
-      {payload ? (
-        <>
-          <LimitPanel
-            payload={payload}
-            saving={saving}
-            onChange={(limit) => void setLimit(limit)}
+      <div className="flex flex-col gap-8">
+        {machines.map((machine) => (
+          <MachineSection
+            key={machine.host.key}
+            machine={machine}
+            named={named}
+            saving={saving === machine.host.key}
+            now={now}
+            onLimit={(limit) => void setLimit(machine.host, limit)}
           />
-          <ListSection
-            title="Running now"
-            empty="Nothing is running."
-            count={payload.running.length}
-          >
-            {payload.running.map((run) => (
-              <RunningRow key={run.id} run={run} now={now} />
-            ))}
-          </ListSection>
-          <ListSection
-            title="Waiting for a slot"
-            empty="Nothing is waiting."
-            count={payload.queued.length}
-          >
-            {payload.queued.map((item, i) => (
-              <QueuedRow
-                key={`${item.automationId}:${item.itemKey}`}
-                item={item}
-                place={i + 1}
-                now={now}
-              />
-            ))}
-          </ListSection>
-          <FinishedRuns runs={payload.finished} now={now} />
-        </>
-      ) : null}
+        ))}
+      </div>
     </section>
   )
 }

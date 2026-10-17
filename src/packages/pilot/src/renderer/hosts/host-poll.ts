@@ -184,7 +184,11 @@ export function useHostPoll<T>(
   params: unknown,
   intervalMs: number,
   opts?: { skipHidden?: boolean }
-): { reads: readonly HostRead<T>[]; reload(): Promise<void> } {
+): {
+  reads: readonly HostRead<T>[]
+  reload(): Promise<void>
+  latest(): readonly HostRead<T>[]
+} {
   const [reads, setReads] = useState<readonly HostRead<T>[]>([])
   const poller = useRef<HostPoller<T> | null>(null)
   const latestParams = useRef(params)
@@ -212,5 +216,7 @@ export function useHostPoll<T>(
     }
   }, [method, paramsKey, intervalMs, skipHidden])
   const reload = useCallback(() => poller.current?.refresh() ?? Promise.resolve(), [])
-  return { reads, reload }
+  // The reads as of now, ahead of the next render: a change's boundary must count a read just started.
+  const latest = useCallback(() => poller.current?.reads() ?? [], [])
+  return { reads, reload, latest }
 }

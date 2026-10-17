@@ -3,12 +3,16 @@ import { act, cleanup, fireEvent, render, screen, within } from '@testing-librar
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { CapacityPayload, FinishedRun } from '../../../shared/api-types-capacity'
 import { testStepRow } from '../../../shared/run-views/__fixtures__/runs'
+import { byHost, LOCAL_NAMED, MINI, MINI_OFFLINE } from '../../hosts/__fixtures__/hosts'
+import type { PilotHostEntry } from '../../hosts/pilot-host'
+import { resetPilotHostsFeed, setPilotHostsForTests } from '../../hosts/pilot-hosts-feed'
 import { openRunPanel } from '../../run-views/run-panel-state'
 
 const pilotRpc = vi.fn()
 vi.mock('../../api', () => ({ pilotRpc: (...args: unknown[]) => pilotRpc(...args) }))
 
 import { RunningPage } from './RunningPage'
+import { CAPACITY_POLL_MS } from './use-capacity'
 
 const GIB = 1024 ** 3
 
@@ -226,5 +230,188 @@ describe('RunningPage', () => {
     expect(screen.getByText('0 running, no limit')).toBeTruthy()
     expect(screen.getByText('Nothing is running.')).toBeTruthy()
     expect(screen.getByText('Nothing is waiting.')).toBeTruthy()
+  })
+})
+
+describe('RunningPage on more than one machine', () => {
+  afterEach(() => {
+    resetPilotHostsFeed()
+    vi.useRealTimers()
+  })
+
+  const region = (name: string) => within(screen.getByRole('region', { name }))
+  const limitOf = (name: string) =>
+    region(name).getByRole('status', { name: 'Jobs at once' }).textContent
+  // Each machine answers its own figures; a change answers them with the limit it set.
+  const machine = (over: Partial<CapacityPayload>) => (method: string, params?: unknown) =>
+    method === 'pilot.capacity.setLimit' && typeof params === 'object' && params !== null
+      ? { ...capacity(over), ...params }
+      : capacity(over)
+
+  it("shows each machine's runs, queue and run limit under its name", async () => {
+    setPilotHostsForTests([LOCAL_NAMED, MINI])
+    pilotRpc.mockImplementation(
+      byHost({ local: machine({}), mini: machine({ running: [], limit: 4 }) })
+    )
+    render(<RunningPage />)
+    const mini = within(await screen.findByRole('region', { name: 'Mac mini' }))
+    expect(await mini.findByText('Nothing is running.')).toBeTruthy()
+    expect(mini.getByRole('heading', { name: 'Mac mini' })).toBeTruthy()
+    expect(mini.getByText('0 of 4 in use · 1 waiting')).toBeTruthy()
+    const queue = within(mini.getByRole('region', { name: 'Waiting for a slot' }))
+    expect(queue.getByText('05 Fix failed CI')).toBeTruthy()
+    const local = within(region('MacBook').getByRole('region', { name: 'Running now' }))
+    expect(local.getByText('03 Review and fix')).toBeTruthy()
+    expect([limitOf('MacBook'), limitOf('Mac mini')]).toEqual(['2', '4'])
+  })
+
+  it('names no machine when this is the only one', async () => {
+    setPilotHostsForTests([LOCAL_NAMED])
+    pilotRpc.mockImplementation(byHost({ local: machine({}) }))
+    render(<RunningPage />)
+    expect(await screen.findByText('1 of 2 in use · 1 waiting')).toBeTruthy()
+    expect(screen.queryByRole('heading', { name: 'MacBook' })).toBeNull()
+  })
+
+  it("sets a machine's limit on that machine only", async () => {
+    setPilotHostsForTests([LOCAL_NAMED, MINI])
+    pilotRpc.mockImplementation(byHost({ local: machine({}), mini: machine({ running: [] }) }))
+    render(<RunningPage />)
+    const mini = within(await screen.findByRole('region', { name: 'Mac mini' }))
+    const use = await mini.findByRole('button', { name: 'Use 3' })
+    await act(async () => {
+      fireEvent.click(use)
+    })
+    expect(pilotRpc).toHaveBeenCalledWith(
+      'pilot.capacity.setLimit',
+      { limit: 3 },
+      { target: MINI.target }
+    )
+    const localChanges = pilotRpc.mock.calls.filter(
+      ([method, , opts]) => method === 'pilot.capacity.setLimit' && opts === undefined
+    )
+    expect(localChanges).toEqual([])
+    expect([limitOf('MacBook'), limitOf('Mac mini')]).toEqual(['2', '3'])
+  })
+
+  it('says an unreachable machine is not shown, and that its runs go on there', async () => {
+    setPilotHostsForTests([LOCAL_NAMED, MINI_OFFLINE])
+    pilotRpc.mockImplementation(byHost({ local: machine({}) }))
+    render(<RunningPage />)
+    expect(await region('MacBook').findByText('1 of 2 in use · 1 waiting')).toBeTruthy()
+    const mini = region('Mac mini')
+    expect(
+      mini.getByText(
+        "Mac mini can't be reached, so its runs aren't shown here. They go on running there."
+      )
+    ).toBeTruthy()
+    expect(mini.queryByRole('region', { name: 'Run limit' })).toBeNull()
+  })
+
+  type Read = { resolve(p: CapacityPayload): void; reject(e: Error): void; done: boolean }
+  const advance = async (ms: number): Promise<void> => {
+    await act(() => vi.advanceTimersByTimeAsync(ms))
+  }
+  const flush = () => advance(0)
+  const tick = () => advance(CAPACITY_POLL_MS)
+  const hosts = (next: PilotHostEntry[]) => act(() => setPilotHostsForTests(next))
+
+  // Mac mini's reads wait until the test answers the newest one; its change answers at once unless told.
+  function miniReads(change: () => unknown = () => capacity({ limit: 3 })) {
+    const reads: Read[] = []
+    pilotRpc.mockImplementation(
+      byHost({
+        local: machine({}),
+        mini: (method) =>
+          method === 'pilot.capacity.setLimit'
+            ? change()
+            : new Promise<CapacityPayload>((resolve, reject) => {
+                reads.push({ resolve, reject, done: false })
+              })
+      })
+    )
+    const newest = (): Read => {
+      const read = reads.findLast((r) => !r.done)
+      if (!read) {
+        throw new Error('No read of Mac mini in flight')
+      }
+      read.done = true
+      return read
+    }
+    return {
+      answer: async (p: CapacityPayload) => {
+        newest().resolve(p)
+        await flush()
+      },
+      fail: async (error: string) => {
+        newest().reject(new Error(error))
+        await flush()
+      },
+      inFlight: () => reads.some((r) => !r.done)
+    }
+  }
+  type MiniReads = ReturnType<typeof miniReads>
+
+  it.each<[string, (mini: MiniReads) => Promise<void>, (mini: MiniReads) => Promise<void>]>([
+    ['the read in flight at the change', tick, (mini) => mini.answer(capacity({ limit: 2 }))],
+    [
+      'a read that fails after it',
+      async () => {},
+      async (mini) => {
+        await tick()
+        await mini.fail('timeout')
+      }
+    ],
+    [
+      "the machine's empty first read when it comes back",
+      async () => {},
+      async () => {
+        await tick()
+        await hosts([LOCAL_NAMED, MINI_OFFLINE])
+        await hosts([LOCAL_NAMED, MINI])
+      }
+    ]
+  ])("%s never undoes a machine's new limit", async (_w, before, after) => {
+    vi.useFakeTimers()
+    setPilotHostsForTests([LOCAL_NAMED, MINI])
+    const mini = miniReads()
+    render(<RunningPage />)
+    await flush()
+    await mini.answer(capacity({ limit: 2 }))
+    await before(mini)
+    await act(async () => {
+      fireEvent.click(region('Mac mini').getByRole('button', { name: 'Use 3' }))
+    })
+    await after(mini)
+    expect(limitOf('Mac mini')).toBe('3')
+    // A read started after the change does count.
+    if (!mini.inFlight()) {
+      await tick()
+    }
+    await mini.answer(capacity({ limit: 3, running: [] }))
+    expect(region('Mac mini').getByText('Nothing is running.')).toBeTruthy()
+  })
+
+  it("shows a machine's refusal even when a read lands before it", async () => {
+    vi.useFakeTimers()
+    setPilotHostsForTests([LOCAL_NAMED, MINI])
+    let refuse: (e: Error) => void = () => {}
+    const mini = miniReads(
+      () =>
+        new Promise((_resolve, reject) => {
+          refuse = reject
+        })
+    )
+    render(<RunningPage />)
+    await flush()
+    await mini.answer(capacity({ limit: 2 }))
+    await act(async () => {
+      fireEvent.click(region('Mac mini').getByRole('button', { name: 'Use 3' }))
+    })
+    await tick()
+    await mini.answer(capacity({ limit: 2 }))
+    await act(async () => refuse(new Error("Pilot isn't running")))
+    expect(region('Mac mini').getByText("Pilot isn't running")).toBeTruthy()
+    expect(limitOf('Mac mini')).toBe('2')
   })
 })
