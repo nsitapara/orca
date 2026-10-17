@@ -30,7 +30,8 @@ import { launchAgentStep } from './run/agent-step'
 import { wireRunEngine } from './run/engine-wiring'
 import { pilotShellWiring } from './run/shell-wiring'
 import { cancelUnstartedRun, runAnswerSources } from './run/ask-first'
-import { runtimeLauncherDeps } from './run/launch'
+import { createEndedRunTabs, runtimeOpenHandles } from './run/ended-run-tabs'
+import { runtimeLauncherDeps, runtimeSessionTerminals } from './run/launch'
 import { resumeStepSession, runtimeResumeDeps } from './run/resume-session'
 import { modeTextFor, readMode } from './run/modes'
 import { sweepStaleStarts } from './run/stale-starts'
@@ -211,6 +212,13 @@ function openPilot(
     : null
   const readUsage = stepUsageReader(defaultUsagePaths(), now)
   const usageReports = usageReporter(store, definitions, now, log, options.resourcesDir)
+  const endedTabs = createEndedRunTabs({
+    store,
+    openHandles: runtimeOpenHandles(runtime),
+    rowsOf: (paneKey) => runtime.getAgentStatusRowsForPane(paneKey),
+    terminals: runtimeSessionTerminals(runtime, fieldDeps),
+    log
+  })
   const scheduler = new PilotScheduler({
     now,
     definitions: definitions.current,
@@ -218,6 +226,8 @@ function openPilot(
     lastTickAt: (id) => store.lastTick(id)?.startedAt ?? null,
     poll: async () => {
       await wired.poll()
+      // After the engine's poll, so a run it just ended has its tabs closed in the same loop.
+      await softly('tabs', () => endedTabs.pass(), log)
       await softly('memory', () => memory.sample(), log)
       await softly('usage', () => measureFinishedSteps(store, readUsage, now, log), log)
       await softly('usage report', () => usageReports.refreshIfDue(), log)
