@@ -15,13 +15,13 @@ import type { WorkspaceTabItem } from './workspace-tab-items'
 
 const NO_ITEMS: readonly RecentWorktreeItem[] = []
 const NO_THREADS: readonly AgentPaneThread[] = []
-type Sources = Pick<AppState, 'worktreesByRepo' | 'folderWorkspaces' | 'unifiedTabsByWorktree'>
-const NO_SOURCES: Sources = { worktreesByRepo: {}, folderWorkspaces: [], unifiedTabsByWorktree: {} }
+type Sources = Pick<AppState, 'worktreesByRepo' | 'folderWorkspaces'>
+const NO_SOURCES: Sources = { worktreesByRepo: {}, folderWorkspaces: [] }
 const MINUTE_MS = 60_000
 
 const NO_IDS: readonly string[] = []
 
-function allWorktrees(sources: Pick<Sources, 'worktreesByRepo' | 'folderWorkspaces'>) {
+function allWorktrees(sources: Sources) {
   return [
     ...Object.values(sources.worktreesByRepo).flat(),
     ...sources.folderWorkspaces.map(folderWorkspaceToWorktree)
@@ -59,8 +59,7 @@ export function useRecentWorktreeItems(
       enabled
         ? {
             worktreesByRepo: s.worktreesByRepo,
-            folderWorkspaces: s.folderWorkspaces,
-            unifiedTabsByWorktree: s.unifiedTabsByWorktree
+            folderWorkspaces: s.folderWorkspaces
           }
         : NO_SOURCES
     )
@@ -77,7 +76,6 @@ export function useRecentWorktreeItems(
       worktrees: allWorktrees(sources),
       includeRecent,
       listed,
-      openTabCount: (id) => sources.unifiedTabsByWorktree[id]?.length ?? 0,
       now,
       ctx
     })
