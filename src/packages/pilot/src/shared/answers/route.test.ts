@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { InboxType } from '../api-types'
-import { answerWord, routeAnswer, START_RUN_ONLY, startNotes, type Route } from './route'
+import { answerWord, routeAnswer, START_RUN_ONLY, startNotes, startsRun, type Route } from './route'
 
 type Parts = Record<string, string>
 const CLEANUP: Parts = { '1': 'web-1474 !1402', '2': 'web-2077 !1499', '3': 'web-1513 !1513' }
@@ -86,7 +86,7 @@ describe('routeAnswer (test_apply.py test_route)', () => {
     [0, { kind: 'script', leaveOut: [] }],
     [1, { kind: 'tick', outcome: 'skipped' }]
   ])(
-    'an ask-first card with its own option labels, answered with option %i',
+    'an ask-first card whose labels it was not given, answered with option %i',
     (option, expected) => {
       expect(
         routeAnswer({
@@ -100,6 +100,49 @@ describe('routeAnswer (test_apply.py test_route)', () => {
       ).toEqual(expected)
     }
   )
+
+  const START: Route = { kind: 'script', leaveOut: [] }
+  const SKIPPED: Route = { kind: 'tick', outcome: 'skipped' }
+  it.each<[string, number | null, string, Route]>([
+    ['the first start option', 0, 'Backend', START],
+    ['another start option', 1, 'Full stack + UI', START],
+    ['another start option, with notes', 1, 'approve: check the migration', START],
+    ['the Skip option', 2, 'Skip', SKIPPED],
+    ['an option past the labels', 3, 'x', SKIPPED],
+    ['words, no option', null, 'approve', START]
+  ])('a card with more than one start option, answered with %s', (_, option, text, expected) => {
+    expect(
+      routeAnswer({
+        type: 'action',
+        action: 'start_run',
+        runnable: true,
+        parts: {},
+        text,
+        option,
+        options: ['Backend', 'Full stack + UI', 'Skip']
+      })
+    ).toEqual(expected)
+  })
+
+  it('a two-option card with its labels routes as before: Approve starts, Skip skips', () => {
+    const labels = ['Approve', 'Skip']
+    const answer = { type: 'action' as const, action: 'start_run', runnable: true, parts: {} }
+    expect(routeAnswer({ ...answer, text: 'Approve', option: 0, options: labels })).toEqual(START)
+    expect(routeAnswer({ ...answer, text: 'Skip', option: 1, options: labels })).toEqual(SKIPPED)
+  })
+})
+
+describe('startsRun', () => {
+  it.each<[number, readonly string[] | undefined, boolean]>([
+    [0, undefined, true],
+    [1, undefined, false],
+    [1, ['Backend', 'Full stack + UI', 'Skip'], true],
+    [2, ['Backend', 'Full stack + UI', 'Skip'], false],
+    [1, ['Approve', 'No'], false],
+    [5, ['Approve'], false]
+  ])('option %i of %j → %s', (option, labels, starts) => {
+    expect(startsRun(option, labels)).toBe(starts)
+  })
 })
 
 describe('startNotes', () => {

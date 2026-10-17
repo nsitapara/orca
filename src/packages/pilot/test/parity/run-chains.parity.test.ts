@@ -125,9 +125,11 @@ describe('the chain of every live automation', () => {
         'Workspace:pilot',
         'still_due:script',
         'checkout:script',
+        'env:script',
         'prepare:agent',
-        'card:script',
-        'forget_findings:script',
+        'guide:script',
+        'teardown:script',
+        'forget_guide:script',
         'Answers:you'
       ]
     ],

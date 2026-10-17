@@ -39,6 +39,8 @@ export type RunEngineDeps = {
   // The answer text for {run.answer}: set for runs an answer starts, '' for a plain Approve, null
   // for any other run (Task 25 wires it).
   runAnswer?(run: RunRow): string | null
+  // The label of the option that started an ask-first run, for {run.choice}; '' for any other run.
+  runChoice?(run: RunRow): string
   // Env workspaces (main/envs): records the run as preparing and makes its env off the tick.
   envs?: EnvPreparer
 }
@@ -200,7 +202,8 @@ export function createRunEngine(deps: RunEngineDeps): RunEngine {
     for (let idx = opening ? 0 : nextIdx(rows); idx < def.steps.length; idx += 1) {
       const step = def.steps[idx]
       const answer = deps.runAnswer?.(run) ?? null
-      const fields = stepInputFields({ run, def, item, rows, idx, answer })
+      const choice = deps.runChoice?.(run) ?? ''
+      const fields = stepInputFields({ run, def, item, rows, idx, answer, choice })
       const verdict = decideStep(step, endedSteps(rows, def), fields)
       if (!verdict.run) {
         skipStep(runId, idx, step, verdict.reason)

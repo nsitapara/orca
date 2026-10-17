@@ -34,7 +34,8 @@ export function routeFor(
     runnable: item.action !== null && catalog.get(item.action) !== null,
     parts: item.parts,
     text: answer.text,
-    option: answer.option
+    option: answer.option,
+    options: item.options.map((o) => o.label)
   })
   if (route.kind === 'script' && answer.callerKind !== 'desktop') {
     return { kind: 'reask', reason: APPROVE_ON_DESKTOP }

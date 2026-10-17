@@ -23,6 +23,8 @@ export type RoutableAnswer = {
   text: string
   // The 0-based option the answer picked, when it picked one.
   option?: number | null
+  // The card's option labels, in order. Without them only an ask-first card's first option starts its run.
+  options?: readonly string[]
 }
 
 export type Route =
@@ -75,12 +77,32 @@ export function startNotes(text: string): string {
   return START_NOTES.exec(text.trim())?.[1].trim() ?? ''
 }
 
-// An ask-first card takes Approve or Skip: by the option picked (the first starts the run), else by the words.
-function routeStartRun(word: string, text: string, option: number | null | undefined): Route {
-  if (option === 0 || APPROVE.has(word) || word === 'start' || startNotes(text) !== '') {
+// Whether an ask-first card's option starts its run: any but a Skip one ("Skip", "No", …).
+export function startsRun(option: number, labels: readonly string[] | undefined): boolean {
+  if (labels === undefined) {
+    return option === 0
+  }
+  const label = labels[option]
+  return label !== undefined && !SKIP.has(answerWord(label))
+}
+
+// An ask-first card takes a start option or Skip: by the option picked, else by the words (which start the first).
+function routeStartRun(
+  word: string,
+  text: string,
+  option: number | null | undefined,
+  labels: readonly string[] | undefined
+): Route {
+  const picked = option !== null && option !== undefined
+  if (
+    (picked && startsRun(option, labels)) ||
+    APPROVE.has(word) ||
+    word === 'start' ||
+    startNotes(text) !== ''
+  ) {
     return { kind: 'script', leaveOut: [] }
   }
-  if ((option !== null && option !== undefined) || SKIP.has(word)) {
+  if (picked || SKIP.has(word)) {
     return { kind: 'tick', outcome: 'skipped' }
   }
   return { kind: 'reask', reason: START_RUN_ONLY }
@@ -114,7 +136,7 @@ function routeAction(answer: RoutableAnswer, word: string): Route {
 export function routeAnswer(answer: RoutableAnswer): Route {
   const word = answerWord(answer.text)
   if (answer.action === 'start_run') {
-    return routeStartRun(word, answer.text, answer.option)
+    return routeStartRun(word, answer.text, answer.option, answer.options)
   }
   if (QUESTION_TYPES.has(answer.type)) {
     if ((answer.type === 'default' || answer.type === 'flagged') && KEEP.has(word)) {
