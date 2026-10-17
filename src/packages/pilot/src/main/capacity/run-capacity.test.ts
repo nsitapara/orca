@@ -77,11 +77,19 @@ describe('runCapacity.admit', () => {
     store.runs.update('run-1', { status: 'done', finishedAt: 50 })
     // The newer item can't take the slot the older one is first in line for.
     expect(capacity.admit(b, item('second'), true).start).toBe(false)
-    expect(capacity.admit(a, item('first'), false)).toEqual({ start: true, byHand: false })
+    expect(capacity.admit(a, item('first'), false)).toEqual({
+      start: true,
+      byHand: false,
+      queuedAt: 101
+    })
     running('a')
     store.runs.update('run-2', { status: 'done', finishedAt: 60 })
     // Run now queued it, so its run is still recorded as by hand.
-    expect(capacity.admit(b, item('second'), false)).toEqual({ start: true, byHand: true })
+    expect(capacity.admit(b, item('second'), false)).toEqual({
+      start: true,
+      byHand: true,
+      queuedAt: 102
+    })
     expect(store.capacity.queued()).toEqual([])
   })
 

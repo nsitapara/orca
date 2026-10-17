@@ -7,7 +7,10 @@ export function holdsSlot(def: AutomationDefinition): boolean {
   return def.steps.some((step) => step.agent !== 'shell')
 }
 
-export type Admission = { start: true; byHand: boolean } | { start: false; reason: string }
+// queuedAt: when a started item joined the line; absent when it never waited.
+export type Admission =
+  | { start: true; byHand: boolean; queuedAt?: number }
+  | { start: false; reason: string }
 
 export type RunCapacity = {
   // Synchronous, so the check and the run it lets start can't interleave with another tick. A waiting item is
@@ -52,7 +55,8 @@ export function runCapacity(deps: RunCapacityDeps): RunCapacity {
     capacity.running().filter((run) => ids.has(run.automationId)).length
   const started = (def: AutomationDefinition, key: string, byHand: boolean): Admission => {
     const row = capacity.dequeue(def.id, key)
-    return { start: true, byHand: byHand || row?.byHand === true }
+    const admission: Admission = { start: true, byHand: byHand || row?.byHand === true }
+    return row ? { ...admission, queuedAt: row.queuedAt } : admission
   }
 
   return {
