@@ -11,6 +11,8 @@ const pilotRpc = vi.fn()
 vi.mock('../../api', () => ({ pilotRpc: (...args: unknown[]) => pilotRpc(...args) }))
 
 import { stepAt, testCard, testRun } from '../../../shared/run-views/__fixtures__/runs'
+import { byHost, LOCAL_NAMED, MINI } from '../../hosts/__fixtures__/hosts'
+import { resetPilotHostsFeed, setPilotHostsForTests } from '../../hosts/pilot-hosts-feed'
 import { resetAutomationsFeed } from '../../run-views/automations-feed'
 import { closeRunPanel, openRunPanel } from '../../run-views/run-panel-state'
 import {
@@ -565,6 +567,38 @@ describe('InboxPage', () => {
         expect.objectContaining({ id: 'in_ask', text: 'approve: use the second fix', digest: 'da' })
       )
     )
+  })
+})
+
+describe('InboxPage on more than one machine', () => {
+  afterEach(() => {
+    cleanup()
+    resetAutomationsFeed()
+    resetPilotHostsFeed()
+    pilotRpc.mockReset()
+  })
+
+  const machine = (list: InboxListPayload) => (method: string) => {
+    if (method === 'pilot.inbox.list') {
+      return list
+    }
+    return method === 'pilot.queue.list' ? { entries: [] } : []
+  }
+  const cardTitled = async (title: string) =>
+    (await screen.findByRole('heading', { name: title })).closest('article')!
+
+  it("shows both machines' cards, each with its machine", async () => {
+    setPilotHostsForTests([LOCAL_NAMED, MINI])
+    // The same card id and worktree on both machines.
+    pilotRpc.mockImplementation(
+      byHost({
+        local: machine({ ...LIST, items: [card({ title: 'Local question' })], runLines: {} }),
+        mini: machine({ ...LIST, items: [card({ title: 'Mini question' })], runLines: {} })
+      })
+    )
+    render(<InboxPage />)
+    expect(within(await cardTitled('Local question')).getByText('MacBook')).toBeTruthy()
+    expect(within(await cardTitled('Mini question')).getByText('Mac mini')).toBeTruthy()
   })
 })
 

@@ -22,7 +22,7 @@ export type InboxGroup = {
 export type GroupableItem = Pick<InboxListRow, 'itemKey' | 'worktreePath' | 'automationId'> & {
   itemLabel?: string
 }
-export type Section = { group: InboxGroup; items: InboxListRow[] }
+export type Section<T extends InboxListRow = InboxListRow> = { group: InboxGroup; items: T[] }
 
 const RANK = { worktree: 0, mr: 1, pipeline: 2, ticket: 3, job: 4, cleanup: 5 } as const
 const CLEAN_UP = new Set(['docker-prune'])
@@ -125,25 +125,22 @@ function byCard(a: InboxListRow, b: InboxListRow): number {
   )
 }
 
-function bySection(a: Section, b: Section): number {
-  return (
-    a.group.rank - b.group.rank ||
-    a.group.label.localeCompare(b.group.label, undefined, { numeric: true })
-  )
+export function compareGroups(a: InboxGroup, b: InboxGroup): number {
+  return a.rank - b.rank || a.label.localeCompare(b.label, undefined, { numeric: true })
 }
 
 // Every card in exactly one section, sections in order, cards in the console's order inside each.
-export function groupItems(
-  items: InboxListRow[],
+export function groupItems<T extends InboxListRow>(
+  items: readonly T[],
   automations: { id: string; name: string }[]
-): Section[] {
+): Section<T>[] {
   const mrWorktrees = new Map<string, string>()
   for (const i of items) {
     if (i.worktreePath && i.itemKey?.startsWith('mr:')) {
       mrWorktrees.set(i.itemKey, i.worktreePath)
     }
   }
-  const sections = new Map<string, Section>()
+  const sections = new Map<string, Section<T>>()
   for (const item of items) {
     const group = groupOf(item, automations, mrWorktrees)
     const section = sections.get(group.key) ?? { group, items: [] }
@@ -163,5 +160,5 @@ export function groupItems(
   }
   return [...sections.values()]
     .map((s) => ({ group: s.group, items: s.items.sort(byCard) }))
-    .sort(bySection)
+    .sort((a, b) => compareGroups(a.group, b.group))
 }

@@ -1,12 +1,13 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { InboxListRow } from '../../../shared/api-types'
 import type {
   DispatchReport,
   InboxListPayload,
-  QueueEntry,
   QueueListPayload
 } from '../../../shared/inbox-types'
 import { pilotRpc } from '../../api'
+import { useHostPoll, type HostRead } from '../../hosts/host-poll'
+import { mergedError, mergeInbox, mergeQueue } from '../../hosts/merge-inbox'
 import { errorText } from '../format'
 import { applyReport } from './answer-text'
 
@@ -14,42 +15,41 @@ const REFRESH_MS = 10_000
 // Apply now may run actions (act.py allows 10 min) before it answers.
 const APPLY_TIMEOUT_MS = 660_000
 
-export function useWaiting(person: string | null) {
-  const [inbox, setInbox] = useState<InboxListPayload | null>(null)
-  const [queue, setQueue] = useState<QueueEntry[]>([])
-  const [error, setError] = useState<string | null>(null)
-  // When the list was read: card ages are measured from it, so a render never reads the clock.
+// When a machine last brought a new list: card ages are measured from it, so a render never reads the clock.
+function useLoadedAt(reads: readonly HostRead<unknown>[]): number {
   const [loadedAt, setLoadedAt] = useState(0)
-  const mounted = useRef(true)
-  const reload = useCallback(async () => {
-    const params = person ? { person } : {}
-    try {
-      const [items, queued] = await Promise.all([
-        pilotRpc<InboxListPayload>('pilot.inbox.list', params),
-        pilotRpc<QueueListPayload>('pilot.queue.list', params)
-      ])
-      if (!mounted.current) {
-        return
-      }
-      setInbox(items)
+  const seen = useRef<ReadonlySet<unknown>>(new Set())
+  // Before paint, so a new list never shows with the old clock.
+  useLayoutEffect(() => {
+    const values = reads.map((r) => r.value)
+    const fresh = values.some((v) => v !== null && !seen.current.has(v))
+    seen.current = new Set(values)
+    if (fresh) {
       setLoadedAt(Date.now())
-      setQueue(queued.entries)
-      setError(null)
-    } catch (e) {
-      if (mounted.current) {
-        setError(errorText(e))
-      }
     }
-  }, [person])
-  useEffect(() => {
-    mounted.current = true
-    void reload()
-    const timer = setInterval(() => void reload(), REFRESH_MS)
-    return () => {
-      mounted.current = false
-      clearInterval(timer)
-    }
-  }, [reload])
+  }, [reads])
+  return loadedAt
+}
+
+export function useWaiting(person: string | null) {
+  const params = person ? { person } : {}
+  const { reads, reload: reloadInbox } = useHostPoll<InboxListPayload>(
+    'pilot.inbox.list',
+    params,
+    REFRESH_MS
+  )
+  const { reads: queueReads, reload: reloadQueue } = useHostPoll<QueueListPayload>(
+    'pilot.queue.list',
+    params,
+    REFRESH_MS
+  )
+  const inbox = useMemo(() => mergeInbox(reads), [reads])
+  const queue = useMemo(() => mergeQueue(queueReads), [queueReads])
+  const error = mergedError([...reads, ...queueReads])
+  const loadedAt = useLoadedAt(reads)
+  const reload = useCallback(async () => {
+    await Promise.all([reloadInbox(), reloadQueue()])
+  }, [reloadInbox, reloadQueue])
 
   // Error text for the card (the card changed, it closed meanwhile), or null once saved.
   const save = useCallback(
@@ -124,6 +124,7 @@ export function useWaiting(person: string | null) {
   return {
     inbox,
     queue,
+    reads,
     error,
     loadedAt,
     reload,

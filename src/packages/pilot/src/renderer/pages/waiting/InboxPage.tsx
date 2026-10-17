@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import type { InboxListRow } from '../../../shared/api-types'
-import { groupItems, type Section } from '../../../shared/inbox-groups'
+import { groupHostedItems, type HostedSection } from '../../hosts/hosted-sections'
+import { HostsNotice } from '../../hosts/HostsNotice'
+import { hostedKey, type Hosted } from '../../hosts/pilot-host'
 import { waitingCount, preparingCount, preparationBlockedCount } from './answer-text'
 import { useAutomationsFeed } from '../../run-views/automations-feed'
 import { clearPendingInboxCard, usePendingInboxCard } from '../automations-view'
@@ -31,7 +33,7 @@ function withError(
   return failed ? { ...rest, [id]: failed } : rest
 }
 
-function SectionHeading({ section }: { section: Section }): React.JSX.Element {
+function SectionHeading({ section }: { section: HostedSection }): React.JSX.Element {
   return (
     <h2
       title={section.group.label}
@@ -51,6 +53,7 @@ export function InboxPage(): React.JSX.Element {
   const {
     inbox,
     queue,
+    reads,
     error,
     loadedAt,
     save,
@@ -71,12 +74,13 @@ export function InboxPage(): React.JSX.Element {
       return
     }
     clearPendingInboxCard()
-    if (inbox.items.some((i) => i.id === pending)) {
+    // The run panel names this machine's cards, whose hostedKey is their bare id.
+    if (inbox.items.some((i) => hostedKey(i.host, i.id) === pending)) {
       setSelected(pending)
       document.getElementById(`card-${pending}`)?.scrollIntoView?.({ block: 'start' })
     }
   }, [pending, inbox])
-  // Save errors are kept here, by card id: a card remounts as a new version on every reload.
+  // Save errors are kept here, by card hostedKey: a card remounts as a new version on every reload.
   const [errors, setErrors] = useState<Record<string, string>>({})
   const people = inbox?.people ?? []
   const firstPerson = people[0]?.id ?? null
@@ -90,17 +94,21 @@ export function InboxPage(): React.JSX.Element {
   const names = useMemo(() => new Map(automations.map((a) => [a.id, a.name])), [automations])
   const openItems = items.filter((i) => i.type !== 'default')
   // Defaults show under their run in Done for you; only the rest (no run, or a run already seen) fold at the end.
-  const itemIds = new Set(items.map((i) => i.id))
+  const itemKeys = new Set(items.map((i) => hostedKey(i.host, i.id)))
   const underRuns = new Set(
-    done.runs.flatMap((d) => d.defaults.map((c) => c.id)).filter((id) => itemIds.has(id))
+    done.runs
+      .flatMap((d) => d.defaults.map((c) => hostedKey(d.run.host, c.id)))
+      .filter((key) => itemKeys.has(key))
   )
-  const defaults = items.filter((i) => i.type === 'default' && !underRuns.has(i.id))
-  const sections = groupItems(openItems, automations)
+  const defaults = items.filter(
+    (i) => i.type === 'default' && !underRuns.has(hostedKey(i.host, i.id))
+  )
+  const sections = groupHostedItems(openItems, automations)
   // A selected group with no card left (its last one was answered) counts as All.
-  const activeGroup = sections.some((s) => s.group.key === group) ? group : ALL
-  const shown = sections.filter((s) => activeGroup === ALL || s.group.key === activeGroup)
-  const defaultSections = groupItems(defaults, automations).filter(
-    (s) => activeGroup === ALL || s.group.key === activeGroup
+  const activeGroup = sections.some((s) => s.key === group) ? group : ALL
+  const shown = sections.filter((s) => activeGroup === ALL || s.key === activeGroup)
+  const defaultSections = groupHostedItems(defaults, automations).filter(
+    (s) => activeGroup === ALL || s.key === activeGroup
   )
   const defaultCount = defaultSections.reduce((n, s) => n + s.items.length, 0)
   const detailIds = useMemo(
@@ -112,37 +120,41 @@ export function InboxPage(): React.JSX.Element {
   const wide = width === null || width >= WIDE_PX
   const showList = wide && listOpen
   const viewerName = people.find((p) => p.id === viewer)?.name.split(' ')[0] ?? 'you'
-  const select = (item: InboxListRow) => {
-    setSelected(item.id)
-    document.getElementById(`card-${item.id}`)?.scrollIntoView?.({ block: 'start' })
+  const select = (item: Hosted<InboxListRow>) => {
+    const key = hostedKey(item.host, item.id)
+    setSelected(key)
+    document.getElementById(`card-${key}`)?.scrollIntoView?.({ block: 'start' })
   }
-  const cardOf = (i: InboxListRow) => (
-    <InboxCard
-      key={`${i.id}@${i.version}`}
-      item={i}
-      automationName={names.get(i.automationId) ?? i.automationId}
-      run={i.runId ? (inbox?.runs?.[i.runId] ?? null) : null}
-      runLine={inbox?.runLines[i.id] ?? null}
-      answerState={inbox?.answerStates?.[i.id] ?? null}
-      history={inbox?.history?.[i.id] ?? null}
-      error={errors[i.id] ?? null}
-      selected={selected === i.id}
-      now={loadedAt}
-      onSave={async (answer) => {
-        const failed = await save(i, answer, viewer)
-        setErrors((now) => withError(now, i.id, failed))
-        return failed
-      }}
-      onRetryPreparation={() => retryPreparation(i)}
-      onPrepareEvidence={() => prepareEvidence(i)}
-    />
-  )
-  const cardFor = (id: string) => {
-    const item = items.find((i) => i.id === id)
+  const cardOf = (i: Hosted<InboxListRow>) => {
+    const key = hostedKey(i.host, i.id)
+    return (
+      <InboxCard
+        key={`${key}@${i.version}`}
+        item={i}
+        automationName={names.get(i.automationId) ?? i.automationId}
+        run={i.runId ? (inbox?.runs.get(hostedKey(i.host, i.runId)) ?? null) : null}
+        runLine={inbox?.runLines.get(key) ?? null}
+        answerState={inbox?.answerStates.get(key) ?? null}
+        history={inbox?.history.get(key) ?? null}
+        error={errors[key] ?? null}
+        selected={selected === key}
+        now={loadedAt}
+        onSave={async (answer) => {
+          const failed = await save(i, answer, viewer)
+          setErrors((now) => withError(now, key, failed))
+          return failed
+        }}
+        onRetryPreparation={() => retryPreparation(i)}
+        onPrepareEvidence={() => prepareEvidence(i)}
+      />
+    )
+  }
+  const cardFor = (key: string) => {
+    const item = items.find((i) => hostedKey(i.host, i.id) === key)
     return item ? cardOf(item) : null
   }
-  const sectionOf = (s: Section) => (
-    <section key={s.group.key} aria-label={s.group.label} className="flex min-w-0 flex-col gap-3">
+  const sectionOf = (s: HostedSection) => (
+    <section key={s.key} aria-label={s.group.label} className="flex min-w-0 flex-col gap-3">
       <SectionHeading section={s} />
       {s.items.map(cardOf)}
     </section>
@@ -166,6 +178,7 @@ export function InboxPage(): React.JSX.Element {
       />
       <InMotionPanel running={running} entries={queue} onApplyNow={applyNow} />
       {error ? <p className="text-sm text-destructive">{error}</p> : null}
+      <HostsNotice reads={reads} what="cards" />
       {showList ? null : (
         <FilterBadges
           sections={sections}

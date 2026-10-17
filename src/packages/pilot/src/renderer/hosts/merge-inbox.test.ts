@@ -3,8 +3,16 @@ import type { InboxListRow } from '../../shared/api-types'
 import type { ActivityRun, ListedRun } from '../../shared/api-types-runs'
 import type { InboxListPayload, QueueEntry } from '../../shared/inbox-types'
 import { LOCAL_NAMED, MINI, MINI_OFFLINE } from './__fixtures__/hosts'
+import { inboxRow } from './__fixtures__/inbox-row'
 import type { HostRead } from './host-poll'
-import { isDoneRun, mergeDoneForYou, mergeInbox, mergeQueue, waitingTotal } from './merge-inbox'
+import {
+  isDoneRun,
+  mergeDoneForYou,
+  mergedError,
+  mergeInbox,
+  mergeQueue,
+  waitingTotal
+} from './merge-inbox'
 import { hostedKey, type PilotHostEntry } from './pilot-host'
 
 function read<T>(host: PilotHostEntry, value: T | null): HostRead<T> {
@@ -12,38 +20,7 @@ function read<T>(host: PilotHostEntry, value: T | null): HostRead<T> {
 }
 
 function row(id: string, runId: string): InboxListRow {
-  return {
-    id,
-    automationId: 'tests',
-    runId,
-    stepIdx: 0,
-    itemKey: null,
-    worktreePath: null,
-    person: 'nish',
-    type: 'question',
-    title: 't',
-    context: '',
-    options: [],
-    suggested: null,
-    detailsMd: null,
-    details: null,
-    action: null,
-    actionArgs: null,
-    parts: {},
-    switchWords: [],
-    digest: 'd1',
-    version: 1,
-    status: 'open',
-    answer: null,
-    answeredAt: null,
-    answeredBy: null,
-    replies: [],
-    outcome: null,
-    createdAt: 1,
-    updatedAt: 1,
-    source: 'engine',
-    vaultRef: null
-  }
+  return inboxRow({ id, runId })
 }
 
 function activityRun(id: string): ActivityRun {
@@ -181,4 +158,31 @@ describe('mergeDoneForYou', () => {
     expect(isDoneRun(good)).toBe(true)
     expect(isDoneRun({ run: { id: 3 }, effects: [], defaults: [] })).toBe(false)
   })
+})
+
+describe('mergedError', () => {
+  const failed = (host: PilotHostEntry, error: string): HostRead<unknown> => ({
+    ...read<unknown>(host, null),
+    error
+  })
+  it.each([
+    ['one machine that failed: its error, as before', [failed(LOCAL_NAMED, 'down')], 'down'],
+    ['one machine that answered', [read<unknown>(LOCAL_NAMED, [])], null],
+    [
+      'one of two machines that failed (the hosts notice names it)',
+      [read<unknown>(LOCAL_NAMED, []), failed(MINI, 'timeout')],
+      null
+    ],
+    [
+      "two machines that both failed: the first one's",
+      [failed(LOCAL_NAMED, 'down'), failed(MINI, 'timeout')],
+      'down'
+    ],
+    [
+      'a machine that failed one of its reads',
+      [read<unknown>(LOCAL_NAMED, []), failed(LOCAL_NAMED, 'queue down')],
+      'queue down'
+    ],
+    ['no reads yet', [], null]
+  ])('says %s', (_w, reads, error) => expect(mergedError(reads)).toBe(error))
 })

@@ -5,6 +5,8 @@ import { runStatusWord } from '../../shared/env-text'
 import { money } from '../../shared/money'
 import { paintRun } from '../../shared/run-views/paint'
 import { runStrip } from '../../shared/run-views/strip'
+import { MachineChip } from '../hosts/MachineChip'
+import type { PilotHostRef } from '../hosts/pilot-host'
 import { clockTime, itemUrl, runStatusLabel } from '../pages/format'
 import { jobCode } from './activity-groups'
 import { useRunEffects } from './effects-feed'
@@ -24,12 +26,15 @@ export function ActivityRunRow({
   fields,
   summary,
   effects,
+  host,
   children
 }: {
   run: ActivityRun
   fields: ItemFields
   summary: AutomationSummary | undefined
   effects?: readonly Effect[] | null
+  // The run's machine, for its chip; none while the caller's runs aren't tagged yet.
+  host?: PilotHostRef
   children?: React.ReactNode
 }): React.JSX.Element {
   const url = itemUrl(fields)
@@ -70,6 +75,7 @@ export function ActivityRunRow({
         <span className="rounded bg-muted px-1.5 text-foreground">
           {runStatusWord(run, runStatusLabel)}
         </span>
+        {host ? <MachineChip host={host} /> : null}
         <span className="flex-1" />
         <button type="button" className="underline" onClick={() => openRun(run.id)}>
           Open run

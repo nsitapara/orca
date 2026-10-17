@@ -6,14 +6,21 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import { cn } from '@/lib/utils'
 import type { ActivityRun } from '../../../shared/api-types'
 import type { QueueEntry } from '../../../shared/inbox-types'
+import { MachineChip } from '../../hosts/MachineChip'
+import { hostedKey, hostOf, type Hosted, type PilotHostRef } from '../../hosts/pilot-host'
 import { runSpan } from '../../run-views/FromRun'
 import { openRun } from '../../run-views/run-panel-state'
 import { showActivity } from '../automations-view'
 import { QUEUE_PILL, heldTooLong, queueNote, queueSummary, worktreeName } from './answer-text'
 import { useNow } from './use-now'
 
-export type RunningRun = { run: ActivityRun; automationName: string }
+export type RunningRun = { run: ActivityRun & { host?: PilotHostRef }; automationName: string }
 export type ApplyResult = { said: string; failed: boolean }
+
+// Row ids are per machine, so two machines' entries can share one.
+function entryKey(e: Hosted<QueueEntry>): string {
+  return hostedKey(e.host, String(e.rowId))
+}
 
 function RunningList({ running }: { running: RunningRun[] }): React.JSX.Element {
   return (
@@ -27,7 +34,10 @@ function RunningList({ running }: { running: RunningRun[] }): React.JSX.Element 
       </div>
       <ul className="flex flex-col divide-y divide-border/50">
         {running.map(({ run, automationName }) => (
-          <li key={run.id} className="flex min-w-0 items-center gap-2 px-3 py-2 text-sm">
+          <li
+            key={hostedKey(hostOf(run), run.id)}
+            className="flex min-w-0 items-center gap-2 px-3 py-2 text-sm"
+          >
             <span className="font-medium">{automationName}</span>
             <span
               className="min-w-0 truncate font-mono text-xs text-muted-foreground"
@@ -36,6 +46,7 @@ function RunningList({ running }: { running: RunningRun[] }): React.JSX.Element 
               {run.itemLabel}
             </span>
             <span className="text-xs tabular-nums text-muted-foreground">{runSpan(run)}</span>
+            <MachineChip host={hostOf(run)} />
             <span className="flex-1" />
             <button type="button" className="text-xs underline" onClick={() => openRun(run.id)}>
               Open run
@@ -47,7 +58,13 @@ function RunningList({ running }: { running: RunningRun[] }): React.JSX.Element 
   )
 }
 
-function QueueList({ entries, now }: { entries: QueueEntry[]; now: number }): React.JSX.Element {
+function QueueList({
+  entries,
+  now
+}: {
+  entries: Hosted<QueueEntry>[]
+  now: number
+}): React.JSX.Element {
   return (
     <section aria-label="Up next from your answers">
       <div className="flex items-center gap-2 px-3 pt-2 text-xs text-muted-foreground">
@@ -61,10 +78,11 @@ function QueueList({ entries, now }: { entries: QueueEntry[]; now: number }): Re
               ? QUEUE_PILL[e.state]
               : null
           return (
-            <li key={e.rowId} className="flex flex-col gap-0.5 px-3 py-2 text-sm">
+            <li key={entryKey(e)} className="flex flex-col gap-0.5 px-3 py-2 text-sm">
               <div className="flex items-center gap-2">
                 <span className="font-medium">{e.title}</span>
                 {pill ? <Badge variant={pill.variant}>{pill.label}</Badge> : null}
+                <MachineChip host={hostOf(e)} />
               </div>
               <span className="text-xs text-muted-foreground">
                 {e.fires} · {worktreeName(e.worktreePath)} · {queueNote(e, now)}
@@ -85,19 +103,19 @@ export function InMotionPanel({
   onApplyNow
 }: {
   running: RunningRun[]
-  entries: QueueEntry[]
+  entries: Hosted<QueueEntry>[]
   onApplyNow: () => Promise<ApplyResult>
 }): React.JSX.Element | null {
   const [busy, setBusy] = useState(false)
   const [result, setResult] = useState<ApplyResult | null>(null)
   const [picked, setPicked] = useState(false)
-  const [dismissed, setDismissed] = useState<number[]>([])
+  const [dismissed, setDismissed] = useState<string[]>([])
   // Ticks while any answer waits: the countdowns move, and a hold turns overdue without a reload.
   const now = useNow(entries.length > 0)
   if (running.length === 0 && entries.length === 0) {
     return null
   }
-  const overdue = entries.filter((e) => heldTooLong(e, now)).map((e) => e.rowId)
+  const overdue = entries.filter((e) => heldTooLong(e, now)).map(entryKey)
   const open = picked || overdue.some((id) => !dismissed.includes(id))
   const toggle = (next: boolean) => {
     setPicked(next)

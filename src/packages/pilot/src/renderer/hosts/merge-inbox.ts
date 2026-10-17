@@ -120,3 +120,19 @@ export function mergeDoneForYou(
 export function waitingTotal(reads: readonly HostRead<InboxListPayload>[]): number {
   return answered(reads).reduce((sum, { value }) => sum + waitingCount(value.items), 0)
 }
+
+// One machine: its error, as before. Several: only when every machine failed a read; HostsNotice names the rest.
+export function mergedError(reads: readonly HostRead<unknown>[]): string | null {
+  const hosts = new Set<string>()
+  const failed = new Map<string, string>()
+  for (const r of reads) {
+    hosts.add(r.host.key)
+    if (r.error !== null && !failed.has(r.host.key)) {
+      failed.set(r.host.key, r.error)
+    }
+  }
+  if (hosts.size === 0 || failed.size < hosts.size) {
+    return null
+  }
+  return [...failed.values()][0] ?? null
+}

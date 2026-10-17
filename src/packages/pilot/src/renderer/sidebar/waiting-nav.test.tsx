@@ -1,6 +1,16 @@
 // @vitest-environment happy-dom
-import { act, cleanup, fireEvent, render, renderHook, screen } from '@testing-library/react'
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  renderHook,
+  screen,
+  waitFor
+} from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { byHost, LOCAL_NAMED, MINI } from '../hosts/__fixtures__/hosts'
+import { resetPilotHostsFeed, setPilotHostsForTests } from '../hosts/pilot-hosts-feed'
 import {
   pilotAutomationsView,
   pilotOpenAutomation,
@@ -18,6 +28,7 @@ import {
   useAutomationsActive,
   useOpenAutomations,
   useOpenAutomationsPage,
+  useWaitingTotal,
   WaitingNavItem
 } from './waiting-nav'
 
@@ -47,6 +58,7 @@ describe('waiting nav', () => {
     cleanup()
     pilotRpc.mockReset()
     registerPilotStore(null)
+    resetPilotHostsFeed()
     setPilotAutomationsView('automations')
     setPilotOpenAutomation(null)
   })
@@ -85,6 +97,18 @@ describe('waiting nav', () => {
     fireEvent.click(button)
     expect(pilotAutomationsView()).toBe('inbox')
     expect(openAutomationsPage).toHaveBeenCalledTimes(1)
+  })
+
+  it("counts every machine's waiting cards", async () => {
+    setPilotHostsForTests([LOCAL_NAMED, MINI])
+    pilotRpc.mockImplementation(
+      byHost({
+        local: () => ({ items: [card('a', 'question')] }),
+        mini: () => ({ items: [card('a', 'question'), card('b', 'flagged'), card('c', 'default')] })
+      })
+    )
+    const { result } = renderHook(() => useWaitingTotal())
+    await waitFor(() => expect(result.current).toBe(3))
   })
 
   it('is current only on the automations page in the waiting view', async () => {

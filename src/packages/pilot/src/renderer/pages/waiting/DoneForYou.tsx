@@ -1,8 +1,16 @@
 import { useState } from 'react'
 import type { DoneRun } from '../../../shared/visibility-types'
+import { hostedKey, hostOf, type PilotHostRef } from '../../hosts/pilot-host'
 import { ActivityRunRow } from '../../run-views/ActivityRunRow'
 import { useAutomationsFeed } from '../../run-views/automations-feed'
 import { errorText } from '../format'
+
+type ShownRun = DoneRun & { run: { host?: PilotHostRef } }
+
+// Run ids are per machine, so two machines' runs can share one.
+function runKey(d: ShownRun): string {
+  return hostedKey(hostOf(d.run), d.run.id)
+}
 
 // Done for you (Run visibility spec §3): finished runs that changed something outside Pilot or took a default, until
 // Got it. A run's open defaults sit under it as their own cards, so Keep and Override work as anywhere.
@@ -11,8 +19,9 @@ export function DoneForYou({
   cardFor,
   onAcknowledge
 }: {
-  runs: DoneRun[]
-  cardFor: (cardId: string) => React.ReactNode
+  runs: ShownRun[]
+  // By the card's hostedKey: a run's defaults are cards on the run's machine.
+  cardFor: (cardKey: string) => React.ReactNode
   onAcknowledge: (runIds: string[]) => Promise<string | null>
 }): React.JSX.Element | null {
   const { byId } = useAutomationsFeed()
@@ -22,7 +31,7 @@ export function DoneForYou({
   if (runs.length === 0) {
     return null
   }
-  const listKey = runs.map((d) => d.run.id).join(',')
+  const listKey = runs.map(runKey).join(',')
   const error = failure?.key === listKey ? failure.text : null
   const acknowledge = async (ids: string[]): Promise<void> => {
     if (busy) {
@@ -62,15 +71,17 @@ export function DoneForYou({
       <ol className="flex flex-col">
         {runs.map((d) => (
           <ActivityRunRow
-            key={d.run.id}
+            key={runKey(d)}
             run={d.run}
+            host={hostOf(d.run)}
             fields={d.run.fields}
             summary={byId.get(d.run.automationId)}
             effects={d.effects}
           >
-            {d.defaults.map((c) => (
-              <div key={c.id}>{cardFor(c.id)}</div>
-            ))}
+            {d.defaults.map((c) => {
+              const key = hostedKey(hostOf(d.run), c.id)
+              return <div key={key}>{cardFor(key)}</div>
+            })}
             <button
               type="button"
               disabled={busy}

@@ -4,6 +4,8 @@ import { cn } from '@/lib/utils'
 import type { ActivityRun, InboxListRow, InboxReply } from '../../../shared/api-types'
 import type { AnswerState, CardHistoryEntry, RunLine } from '../../../shared/inbox-types'
 import type { PartSwitches } from '../../details/ReviewBlock'
+import { MachineChip } from '../../hosts/MachineChip'
+import { hostedKey, hostOf, type Hosted } from '../../hosts/pilot-host'
 import { FromRun } from '../../run-views/FromRun'
 import { PreparationProgress } from './PreparationProgress'
 import { AnsweredLine } from './AnsweredLine'
@@ -106,7 +108,7 @@ function Eyebrow({
   return (
     <div
       data-eyebrow=""
-      className="flex items-center gap-2 text-[11.5px] tracking-[0.04em] text-muted-foreground uppercase"
+      className="flex min-w-0 flex-1 items-center gap-2 text-[11.5px] tracking-[0.04em] text-muted-foreground uppercase"
     >
       <span className="min-w-0 flex-1 truncate" title={job}>
         {job}
@@ -131,7 +133,7 @@ export function InboxCard({
   onRetryPreparation,
   onPrepareEvidence
 }: {
-  item: InboxListRow
+  item: Hosted<InboxListRow>
   automationName: string
   // The run the card came from (InboxListPayload.runs), for its "From run" line; null when it has none.
   run: ActivityRun | null
@@ -165,6 +167,8 @@ export function InboxCard({
     justAnswered.current = true
   }
   const parts = editing ? partSwitches(item, off, toggle) : null
+  const host = hostOf(item)
+  const domId = `card-${hostedKey(host, item.id)}`
   const status = statusOf(item, answerState, unsaved && editing)
   const frame = cn(
     'flex min-w-0 scroll-mt-14 flex-col gap-2 rounded-[10px] border bg-card px-3.5 py-3 text-card-foreground',
@@ -172,10 +176,11 @@ export function InboxCard({
   )
   if (!editing) {
     return (
-      <article id={`card-${item.id}`} data-selected={selected ? '' : undefined} className={frame}>
+      <article id={domId} data-selected={selected ? '' : undefined} className={frame}>
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
           <h3 className="min-w-0 flex-1 truncate text-sm font-semibold">{item.title}</h3>
           <span className={statusPillClass(status)}>{status}</span>
+          <MachineChip host={host} />
         </div>
         <PreparationProgress
           item={item}
@@ -193,8 +198,12 @@ export function InboxCard({
     )
   }
   return (
-    <article id={`card-${item.id}`} data-selected={selected ? '' : undefined} className={frame}>
-      <Eyebrow job={automationName} drafted={item.details?.drafted === true} status={status} />
+    <article id={domId} data-selected={selected ? '' : undefined} className={frame}>
+      {/* The chip sits beside the eyebrow, not in it, so it keeps its own case. */}
+      <div className="flex items-center gap-2">
+        <Eyebrow job={automationName} drafted={item.details?.drafted === true} status={status} />
+        <MachineChip host={host} />
+      </div>
       <CardTimes createdAt={item.createdAt} history={history} now={now} />
       <FromRun item={item} run={run} />
       <PreparationProgress

@@ -1,5 +1,5 @@
 import { cn } from '@/lib/utils'
-import type { Section } from '../../../shared/inbox-groups'
+import type { HostedSection } from '../../hosts/hosted-sections'
 import { ALL } from './InboxHeader'
 
 // The filter when the list is not beside the cards: one wrapping row of toggle buttons, "All" first, then
@@ -10,7 +10,7 @@ export function FilterBadges({
   group,
   onGroup
 }: {
-  sections: Section[]
+  sections: HostedSection[]
   total: number
   group: string
   onGroup: (key: string) => void
@@ -39,7 +39,7 @@ export function FilterBadges({
   return (
     <div role="toolbar" aria-label="Filter by group" className="flex flex-wrap gap-1.5">
       {badge(ALL, 'All', total)}
-      {sections.map((s) => badge(s.group.key, s.group.label, s.items.length))}
+      {sections.map((s) => badge(s.key, s.group.label, s.items.length))}
     </div>
   )
 }

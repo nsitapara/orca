@@ -1,48 +1,28 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useMemo } from 'react'
+import type { ListedRun } from '../../../shared/api-types-runs'
 import type { DoneRun } from '../../../shared/visibility-types'
 import { pilotRpc } from '../../api'
+import { useHostPoll } from '../../hosts/host-poll'
+import { mergedError, mergeDoneForYou } from '../../hosts/merge-inbox'
+import type { Hosted } from '../../hosts/pilot-host'
 import { errorText } from '../format'
-import { isDoneRun } from '../../hosts/merge-inbox'
 
 export const DONE_POLL_MS = 10_000
 
-// Done for you (Run visibility spec §3): the person's finished runs that changed something, read every 10 s; Got it
-// acknowledges them and reads the list again.
+// Done for you (Run visibility spec §3): every machine's finished runs for the person that changed something, read
+// every 10 s; Got it acknowledges them and reads the list again.
 export function useDoneForYou(person: string | null): {
-  runs: DoneRun[]
+  runs: (DoneRun & { run: Hosted<ListedRun> })[]
   error: string | null
   acknowledge: (runIds: string[]) => Promise<string | null>
 } {
-  const [runs, setRuns] = useState<DoneRun[]>([])
-  const [error, setError] = useState<string | null>(null)
-  const mounted = useRef(true)
-  // Each read's number: only the newest read's answer is shown, so a slow older poll can't undo a newer one.
-  const latest = useRef(0)
-  const reload = useCallback(async () => {
-    latest.current += 1
-    const asked = latest.current
-    const current = (): boolean => mounted.current && asked === latest.current
-    try {
-      const got = await pilotRpc<unknown>('pilot.runs.doneForYou', person ? { person } : {})
-      if (current()) {
-        setRuns(Array.isArray(got) ? got.filter(isDoneRun) : [])
-        setError(null)
-      }
-    } catch (e) {
-      if (current()) {
-        setError(errorText(e))
-      }
-    }
-  }, [person])
-  useEffect(() => {
-    mounted.current = true
-    void reload()
-    const timer = setInterval(() => void reload(), DONE_POLL_MS)
-    return () => {
-      mounted.current = false
-      clearInterval(timer)
-    }
-  }, [reload])
+  const { reads, reload } = useHostPoll<unknown>(
+    'pilot.runs.doneForYou',
+    person ? { person } : {},
+    DONE_POLL_MS
+  )
+  const runs = useMemo(() => mergeDoneForYou(reads), [reads])
+  const error = mergedError(reads)
   const acknowledge = useCallback(
     async (runIds: string[]): Promise<string | null> => {
       try {

@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useState, useSyncExternalStore } from 'react'
+import { useCallback, useSyncExternalStore } from 'react'
 import { FlaskConical, Gauge, Inbox, type LucideIcon } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { InboxListPayload } from '../../shared/inbox-types'
-import { pilotRpc } from '../api'
+import { useHostPoll } from '../hosts/host-poll'
+import { waitingTotal } from '../hosts/merge-inbox'
 import {
   setPilotAutomationsView,
   setPilotOpenAutomation,
@@ -10,28 +11,15 @@ import {
   type PilotAutomationsView
 } from '../pages/automations-view'
 import { useCapacity } from '../pages/running/use-capacity'
-import { waitingCount } from '../pages/waiting/answer-text'
 import { pilotStore } from '../store'
 
-// The count on the sidebar item: every open card, whoever it is for (one person uses Pilot today).
+const WAITING_TOTAL_MS = 20_000
+
+// The count on the sidebar item: every machine's open cards, whoever they are for (one person uses Pilot today).
 export function useWaitingTotal(): number {
-  const [total, setTotal] = useState(0)
-  useEffect(() => {
-    let alive = true
-    const load = (): void => {
-      pilotRpc<InboxListPayload>('pilot.inbox.list', {}).then(
-        (p) => alive && setTotal(waitingCount(p.items)),
-        () => alive && setTotal(0)
-      )
-    }
-    load()
-    const timer = setInterval(load, 20_000)
-    return () => {
-      alive = false
-      clearInterval(timer)
-    }
-  }, [])
-  return total
+  const { reads } = useHostPoll<InboxListPayload>('pilot.inbox.list', {}, WAITING_TOTAL_MS)
+  // A machine whose last read failed counts nothing, as before: the pill never shows a stale count.
+  return waitingTotal(reads.filter((r) => r.error === null))
 }
 
 // Automations is not highlighted while a view with its own sidebar item shows.
