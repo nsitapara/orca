@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { RotateCcw } from 'lucide-react'
+import { isWebClientLocation } from '@/lib/web-client-location'
 import type { SessionResumeResult, StepRow } from '../../shared/api-types'
 import { money } from '../../shared/money'
 import { pilotRpc } from '../api'
@@ -109,14 +110,16 @@ export function StepDetail({
   step: StepRow
 }): React.JSX.Element {
   const outputs = outputsText(step)
+  // Why: the server refuses a resume from a paired device, so the browser has nothing to offer.
+  const resumable = canResume(step) && !isWebClientLocation()
   return (
     <div className="mt-1 flex flex-col gap-0.5 text-xs">
       <div className="flex flex-wrap items-center gap-2">
         <span className="text-muted-foreground">{stepFacts(step)}</span>
-        {canResume(step) && !checkoutRemoved ? (
+        {resumable && !checkoutRemoved ? (
           <ResumeButton runId={runId} worktreePath={worktreePath} step={step} />
         ) : null}
-        {canResume(step) && checkoutRemoved ? (
+        {resumable && checkoutRemoved ? (
           <span className="text-muted-foreground">Checkout removed</span>
         ) : null}
       </div>

@@ -1,5 +1,6 @@
 import { ChevronRight } from 'lucide-react'
 import { useEffect, useState } from 'react'
+import { isWebClientLocation } from '@/lib/web-client-location'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { LOCAL_EXECUTION_HOST_ID } from '../../../../../../shared/execution-host'
 import type { InboxListRow } from '../../../shared/api-types'
@@ -130,7 +131,8 @@ function BundleBody({
     <DetailsView
       snapshot={loaded.snapshot}
       loadImage={loadImage}
-      openReport={openReport}
+      // Why: the report would open on the server machine's screen, not the browser's.
+      openReport={isWebClientLocation() ? undefined : openReport}
       parts={parts}
     />
   )

@@ -45,15 +45,23 @@ describe('StepDetail', () => {
     cleanup()
     pilotRpc.mockReset()
     refreshWorktreeTimeline.mockReset()
+    vi.unstubAllGlobals()
   })
 
-  it('shows each step: agent or shell, mode, status, cost, exit code and outputs', () => {
-    render(<Steps runId="r1" />)
-    expect(screen.getByText('Claude · mode fix · Done · $1.20')).toBeTruthy()
-    expect(screen.getByText('Outputs: found_bugs=3')).toBeTruthy()
-    expect(screen.getByText('Shell · Skipped · exit 3')).toBeTruthy()
-    expect(screen.getAllByRole('button', { name: /resume/i })).toHaveLength(1)
-  })
+  it.each([
+    ['the desktop', false, 1],
+    ['the browser version', true, 0]
+  ])(
+    'shows each step on %s: agent or shell, mode, status, cost, exit code and outputs',
+    (_where, browser, resumes) => {
+      vi.stubGlobal('__ORCA_WEB_CLIENT__', browser)
+      render(<Steps runId="r1" />)
+      expect(screen.getByText('Claude · mode fix · Done · $1.20')).toBeTruthy()
+      expect(screen.getByText('Outputs: found_bugs=3')).toBeTruthy()
+      expect(screen.getByText('Shell · Skipped · exit 3')).toBeTruthy()
+      expect(screen.queryAllByRole('button', { name: /resume/i })).toHaveLength(resumes)
+    }
+  )
 
   it.each([
     ['opened', 'Opened in a new tab'],

@@ -10,6 +10,7 @@ const store: PilotStoreState = { rightSidebarOpen: false, setRightSidebarOpen: (
 afterEach(() => {
   cleanup()
   registerPilotStore(null)
+  vi.unstubAllGlobals()
 })
 
 describe('OpenSkillFile', () => {
@@ -26,6 +27,13 @@ describe('OpenSkillFile', () => {
   })
 
   it('is not there without Pilot', () => {
+    const { container } = render(<OpenSkillFile filePath={SKILL} onOpened={() => {}} />)
+    expect(container.innerHTML).toBe('')
+  })
+
+  it('is not there in the browser version, which reads no files outside a worktree', () => {
+    registerPilotStore({ getState: () => store })
+    vi.stubGlobal('__ORCA_WEB_CLIENT__', true)
     const { container } = render(<OpenSkillFile filePath={SKILL} onOpened={() => {}} />)
     expect(container.innerHTML).toBe('')
   })
