@@ -82,7 +82,7 @@ export function pilotRow(
   if (kind === 'recent-worktree') {
     return {
       kind,
-      recent: { key: `recent-${worktree.id}`, worktree, repo, openTabCount: 0, pinned: false }
+      recent: { key: `recent-${worktree.id}`, worktree, repo, pinned: false }
     }
   }
   const tab = {
