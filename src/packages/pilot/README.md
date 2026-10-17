@@ -122,6 +122,12 @@ Every job is a YAML automation in `~/.agents/automations/` (one file per automat
   - `import-state --id [--apply]`
   - `spend`, `usage-report`
 - **Nothing runs until Nish switches it on** (build plan Task 50). An automation's first tick shows in its Activity and in the worktree panel.
+- **A run's tabs close when it ends**, however it ends (`main/run/ended-run-tabs.ts`). Once every run on an agent tab has ended, the scheduler's next poll (every 15 s) closes it, and Resume reopens the session. A tab stays when:
+  - its last step has no session id to resume;
+  - a turn began there after that step ended (someone took it over);
+  - it runs another session now, or its agent exited;
+  - someone is typing in it, or its agent is busy (looked at again next poll);
+  - a launch, Resume or answer is opening its session.
 - **Go-live check:** `node src/packages/pilot/scripts/go-live-check.mjs --help`.
   - It validates every file, dry-runs each automation in a scratch Pilot, and summarises the parity tests as a vault section.
   - It also flags a Codex step whose args repeat an option of the configured Codex command, and refuses a `--data` link to the packaged app's folder.
@@ -341,6 +347,7 @@ Rulings:
 
 The calendar-clock icon in the right sidebar shows the active worktree's automations (`pilot.worktree.timeline`, polled every 15 s while shown):
 
+- **Header:** the worktree's name and its project, so it's clear which one the panel follows, and what was spent here today.
 - **Next:** each automation's last check on this worktree, with its reason and when it ticks again. The ones with nothing due fold away.
 - **Now** and **Earlier today:** the runs here. Each shows its status, cost and outcome, what it asked, and its steps on demand: agent or shell, mode, status, cost, outputs.
 - **Resume** on an agent step switches to its tab while it's open. Otherwise it reopens the session (`claude --resume <id>`, `codex resume <id>`) in a new tab in the worktree.
@@ -416,6 +423,7 @@ The order, behaviour changes and follow-ups come from the build (`go-live-notes.
 - **Answers** to sessions from the old system fork instead of resuming. Imported sessions have no recorded launch arguments.
 - **Approvals** come only from Pilot's own window on this Mac. Paired devices can answer, skip and revise, but not approve. The local CLI can't answer cards. An approval imported from the vault comes back as a re-ask.
 - **Idle tabs** that hold a session a step needs (no draft, no agent working) are closed, and the session resumes in Pilot's own tab.
+- **A finished run's tabs close** (the old jobs left them open), so `session: none_open` no longer waits on a tab nobody is using.
 - **Action cards** show, in a Pilot block apart from the agent's words, the exact command or args Approve runs (escaped to printable text).
 - **Ticking, enabling and pausing** are yours alone: Pilot's window, a paired device, or the CLI in your own terminal. An agent in a run is refused, and a real tick (Run now) runs only in the process that runs the scheduler.
 - **A definition file that turns invalid** is shown from its last valid version but never ticked until it is fixed.

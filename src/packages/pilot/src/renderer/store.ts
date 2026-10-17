@@ -5,7 +5,10 @@ export type PilotStoreState = {
   setRightSidebarOpen(open: boolean): void
   // Read by the Automations panel. Optional so the sidebar hooks' test fakes stay valid.
   activeWorktreeId?: string | null
-  getKnownWorktreeById?(worktreeId: string): { path: string } | undefined
+  getKnownWorktreeById?(
+    worktreeId: string
+  ): { path: string; displayName?: string; repoId?: string } | undefined
+  repos?: readonly { id: string; displayName: string }[]
   // Read by the sidebar's Inbox item.
   activeView?: string
   openAutomationsPage?(): void
