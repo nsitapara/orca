@@ -2,7 +2,7 @@ import React from 'react'
 import { useAppStore } from '@/store'
 import { DropdownMenuCheckboxItem, DropdownMenuItem } from '@/components/ui/dropdown-menu'
 import { translate } from '@/i18n/i18n'
-import SidebarRepositoryFilterSection from '@/components/sidebar/SidebarRepositoryFilterSection'
+import { ActivityProjectFilterSection } from '../../../../packages/pilot/src/renderer/activity-machines/ActivityProjectFilterSection' // pilot-hook: activity-project-filter
 import { SidebarHostScopeMenuSection } from '@/components/sidebar/SidebarHostScopeMenuSection'
 import {
   getSidebarHostVisibilityLabel,
@@ -89,7 +89,7 @@ export function ActivityScopeFilterMenuItems(): React.JSX.Element {
           setVisibleWorkspaceHostIds={setAgentsVisibleHostIds}
         />
       ) : null}
-      <SidebarRepositoryFilterSection
+      <ActivityProjectFilterSection
         filterRepoIds={agentsFilterRepoIds}
         setFilterRepoIds={setAgentsFilterRepoIds}
       />

@@ -5,7 +5,7 @@ import { useAppStore } from '@/store'
 import { useWorktreeTabsContext } from '../activity-tabs/use-worktree-tabs-context'
 import { registerPilotStore } from '../store'
 import { PROJECT_REPOS, attach } from './activity-machines-test-fixtures'
-import { useActivityProjectRepoIds } from './use-activity-project-scope'
+import { useActivityProjectChoices, useActivityProjectRepoIds } from './use-activity-project-scope'
 
 beforeEach(() => {
   useAppStore.setState({
@@ -48,4 +48,17 @@ it('keeps the other machine’s tabs under a project filter', () => {
   expect(
     renderHook(() => useWorktreeTabsContext('', [])).result.current.scope.filterRepoIds
   ).toEqual(['a-local', 'a-mini'])
+})
+
+it('offers no choices until Pilot attaches', () => {
+  expect(renderHook(() => useActivityProjectChoices([])).result.current).toBeNull()
+})
+
+it('selects a project from any machine’s copy', () => {
+  attach()
+  expect(
+    renderHook(() => useActivityProjectChoices(['a-mini'])).result.current?.selected.map(
+      (r) => r.id
+    )
+  ).toEqual(['a-local'])
 })
