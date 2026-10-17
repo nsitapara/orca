@@ -343,6 +343,14 @@ Rulings:
 - **R-P5.** An evidence-needing decision (the `push` action, applying a drafted change) runs only from a prepared card whose preparation is ready and verified. The rule reads the card, never who added it or how the caller is bound: such a card is refused at add without a preparation request (imports are the one exception), and save, `cardToRun`, `applyScript` and `draftApproved` refuse it until it is ready. An imported or legacy push or drafted card shows **Needs evidence** with **Prepare evidence** (`pilot.inbox.prepareEvidence`, the desktop or a paired device), which queues it for job 14 with a request built from the card. A prepared push's patch is recomputed by Pilot from its pinned range (`PUSH_DIFF_ARGS`, the same command as `pilotcli git get-diff --card`).
 - **Go-live:** the check's "Card details" line (read-only) counts waiting cards (open or answered), those with a bundle, and imported cards still pointing at a vault bundle.
 
+## New tab picker
+
+- After you pick an agent in the Cmd+T picker, a second step asks which machine to open it on. It appears only when the workspace's project is set up on 2 or more online machines; otherwise the agent launches straight away. Blank Terminal never gets this step.
+- Each machine opens the same branch's worktree if it has one, or else that machine's main checkout.
+- A machine that does not have the chosen agent installed is disabled and reads "<Agent> not found here".
+- The row that starts selected is the machine last picked for this project, or else the current machine, and it stays the default even after you type to filter. The choice is remembered per project in localStorage under `pilot.new-tab.machine-by-project`. Enter, Enter is the fast path.
+- Esc goes back to the agent list. It stops listening when the dialog closes.
+
 ## The worktree panel
 
 The calendar-clock icon in the right sidebar shows the active worktree's automations (`pilot.worktree.timeline`, polled every 15 s while shown):
