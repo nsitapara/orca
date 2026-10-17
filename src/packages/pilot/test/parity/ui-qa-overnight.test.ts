@@ -288,7 +288,7 @@ describe.skipIf(!existsSync(SKILL))(
       expect(runs('test', [ok('context')], context)).toBe(true)
       const stopped = exited('context', 3, 'skip')
       expect(stopped.status).toBe('stopped')
-      const skip = { 'steps.context.outcome': 'skip' }
+      const skip = { 'steps.context.status': 'stopped', 'steps.context.outcome': 'skip' }
       for (const name of [
         'test',
         'report',
@@ -311,7 +311,7 @@ describe.skipIf(!existsSync(SKILL))(
         env: { WT: '{worktree.path}', TEXT: '{steps.report.flag}', UNREAD: '{steps.report.unread}' }
       })
       expect(step('flag_failed')).toMatchObject({
-        when: "{steps.context.outcome} != 'skip' and {steps.report.flag} == null",
+        when: "{steps.context.status} != 'stopped' and {steps.report.flag} == null",
         env: { WT: '{worktree.path}', RUN: '{run.id}' }
       })
       for (const name of ['flag', 'flag_failed', 'flag_held']) {
@@ -320,31 +320,43 @@ describe.skipIf(!existsSync(SKILL))(
       }
       expect(step('flag_failed').run).toContain('--unread')
       const flagged = 'ui-qa: 2 bugs → Agent Work/Automations/ui-qa-overnight/feat-x.md'
-      // [why, how the steps before ended, the context's outcome, the report's flag, flag runs, flag_failed runs]
-      const cases: [string, EndedStep[], string, string | null, boolean, boolean][] = [
-        ['the report gave its flag', [ok('context'), ok('report')], 'ok', flagged, true, false],
+      // A null outcome compares false, so flag_failed reads the context's status: a context that left no envelope
+      // (timed out, failed at start, crashed) is flagged too.
+      // [why, the context's ending, its envelope's outcome (null: none), the report's ending (null: it didn't run), its
+      // flag, flag runs, flag_failed runs]
+      const cases: [
+        string,
+        EndedStep,
+        string | null,
+        EndedStep | null,
+        string | null,
+        boolean,
+        boolean
+      ][] = [
+        ['the report gave its flag', ok('context'), 'ok', ok('report'), flagged, true, false],
         // create-report fails when a card or a write failed, and still gives the render_failed flag.
-        [
-          'the report failed to render',
-          [ok('context'), broke('report')],
-          'ok',
-          flagged,
-          true,
-          false
-        ],
-        ['the report crashed', [ok('context'), broke('report')], 'ok', null, false, true],
-        ['the context failed', [exited('context', 1, 'failed')], 'failed', null, false, true],
+        ['the report failed to render', ok('context'), 'ok', broke('report'), flagged, true, false],
+        ['the report gave no flag', ok('context'), 'ok', broke('report'), null, false, true],
+        ['the context failed', exited('context', 1, 'failed'), 'failed', null, null, false, true],
+        ['the context failed with no envelope', broke('context'), null, null, null, false, true],
+        ['the context timed out', late('context'), null, null, null, false, true],
         [
           'the context had nothing to test',
-          [exited('context', 3, 'skip')],
+          exited('context', 3, 'skip'),
           'skip',
+          null,
           null,
           false,
           false
         ]
       ]
-      for (const [why, ended, context, text, flag, failed] of cases) {
-        const at = { 'steps.context.outcome': context, 'steps.report.flag': text }
+      for (const [why, context, outcome, report, text, flag, failed] of cases) {
+        const ended = report ? [context, report] : [context]
+        const at = {
+          'steps.context.status': context.status,
+          'steps.context.outcome': outcome,
+          'steps.report.flag': text
+        }
         expect([why, runs('flag', ended, at), runs('flag_failed', ended, at)]).toEqual([
           why,
           flag,
