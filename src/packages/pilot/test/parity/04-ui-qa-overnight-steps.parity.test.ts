@@ -1,6 +1,7 @@
 import { spawnSync } from 'node:child_process'
 import { expect, it } from 'vitest'
 import type { ItemFields, StepStatus } from '../../src/shared/api-types'
+import type { StoredResult } from '../../src/shared/api-types-result'
 import type { AutomationDefinition, StepDef } from '../../src/shared/definition/types'
 import { renderShellEnv } from '../../src/shared/run/shell-template'
 import { decideStep, runEnd, type EndedStep } from '../../src/shared/run/step-plan'
@@ -9,20 +10,30 @@ import { JOB_04, PARITY_04 } from './jobs/job-04'
 import { describeParity, parityMissing } from './parity-case'
 import { loadPortedAutomation } from './ported'
 
-type Ended = { status: StepStatus; outputs: ItemFields }
+type Ended = { status: StepStatus; outputs: ItemFields; result?: StoredResult }
 type Night = {
   name: string
-  stack: StepStatus
+  // env create's answer before any step (spec §7.10.2): ready, failed (setup, or a stack that never served), or not_yet
+  // (the full-stack cap).
+  prepared: 'ok' | 'failed' | 'not_yet'
   test: StepStatus
-  finished: 'complete' | 'stack_failed' | null
+  // What the session said with `pilot run output outcome=…` (run.md); it survives the session's timeout.
+  said: 'complete' | 'stack_failed' | null
   nothing: boolean
   renderFailed?: boolean
   bug?: boolean
-  teardown?: StepStatus
+  closePage?: StepStatus
   report?: StepStatus
   fixer?: StepStatus
 }
 type OldEnd = { outcome: string; tested: boolean }
+type Night04 = {
+  ran: string[]
+  steps: Record<string, StepStatus>
+  status: string
+  outcome: string
+  release: boolean
+}
 
 const ITEM: ItemFields = {
   'worktree.path': '/wt/web-1',
@@ -48,15 +59,29 @@ function shell(step: StepDef, fields: ItemFields): Ended {
   return { status: done.status === 0 ? 'done' : 'failed', outputs: {} }
 }
 
+// A pilotcli step's ending: its outputs as pilotcli writes them to $PILOT_OUTPUT_FILE (data's scalars, then outcome and
+// reason) and its stdout's envelope as Pilot stores it.
+function pilotcli(status: StepStatus, outcome: string, data: Record<string, unknown>): Ended {
+  const scalars = Object.fromEntries(
+    Object.entries(data).filter(([, v]) => v === null || typeof v !== 'object')
+  ) as ItemFields
+  return {
+    status,
+    outputs: { ...scalars, outcome, reason: '' },
+    result: { command: 'skills', outcome, reason: '', data }
+  }
+}
+
 // The run engine's own step rules (contract §7 with H3): each step's `when` and the failure gate through decideStep,
 // over the fields earlier steps left (stepFields) and {run.failed}; the run's end through runEnd.
 function simulate(
   def: AutomationDefinition,
   outcome: (step: StepDef, fields: ItemFields) => Ended
-): { ran: string[]; status: string; outcome: string } {
+): Night04 {
   const rows: StepResult[] = []
   const ended: EndedStep[] = []
   const ran: string[] = []
+  const steps: Record<string, StepStatus> = {}
   def.steps.forEach((step, idx) => {
     const fields = {
       ...ITEM,
@@ -68,170 +93,203 @@ function simulate(
     if (go) {
       ran.push(step.name)
     }
-    rows.push({ name: step.name, status: result.status, exitCode: null, outputs: result.outputs })
+    steps[step.name] = result.status
+    rows.push({
+      name: step.name,
+      status: result.status,
+      exitCode: null,
+      outputs: result.outputs,
+      result: result.result ?? null
+    })
     ended.push({ name: step.name, status: result.status, always: step.always, error: null })
   })
   const end = runEnd(ended, 0)
-  return { ran, status: end.status, outcome: end.outcome }
+  return { ran, steps, status: end.status, outcome: end.outcome, release: false }
 }
 
-// How each step of a night ends: the stack and the session as the night says; report's outputs as pilot_mode.report
-// gives them (close_out's outcome and whether it counts as tested, from loop.py itself through jobs/job_04.py; the fix
-// handoff only for a complete night with a confirmed bug in this change); the verdict is the YAML's own command.
+// A night as Pilot runs it: env create first (main/envs/prepare.ts, spec §7.10.13 (d)). A failed create fails the run
+// "Couldn't prepare its workspace", so its head waits 12 hours; not_yet cancels it "Deferred", its key released for the
+// next tick. Either way no step runs and nothing flags the worktree (§7.10.14 (4)). Ready, the steps run.
+function night(def: AutomationDefinition, n: Night, old: OldEnd): Night04 {
+  if (n.prepared === 'failed') {
+    const reason = "Couldn't prepare its workspace: the stack never served"
+    return { ran: [], steps: {}, status: 'failed', outcome: reason, release: false }
+  }
+  if (n.prepared === 'not_yet') {
+    const reason = 'Deferred: the stack cap is reached (full 2 of 2)'
+    return { ran: [], steps: {}, status: 'cancelled', outcome: reason, release: true }
+  }
+  return simulate(def, play(n, old))
+}
+
+// How each step of a night ends: the context ok; the session as the night says, naming its page; create-report's data as
+// spec §7.10.5 gives it (the session's ending and whether it counts as tested are close_out's, from loop.py itself
+// through jobs/job_04.py, frozen below; the fix only for a complete night with a confirmed bug in this change; a render
+// that failed still gives its flag); the verdict is the YAML's own command.
 function play(n: Night, old: OldEnd): (step: StepDef, fields: ItemFields) => Ended {
   return (step, fields) => {
     switch (step.name) {
-      case 'stack':
-        return { status: n.stack, outputs: {} }
+      case 'context':
+        return pilotcli('done', 'ok', { branch: 'feat/x', worktree: '/wt/web-1', checkout: '.' })
       case 'test':
-        return { status: n.test, outputs: n.finished ? { outcome: n.finished } : {} }
-      case 'teardown':
-        return { status: n.teardown ?? 'done', outputs: {} }
+        return {
+          status: n.test,
+          outputs: n.said ? { outcome: n.said, page: 'p1' } : { page: 'p1' }
+        }
+      case 'close_page':
+        return { status: n.closePage ?? 'done', outputs: {} }
       case 'report': {
-        if (n.report && n.report !== 'done') {
-          return { status: n.report, outputs: {} }
+        if (n.report) {
+          return { status: n.report, outputs: {} } // crashed or timed out: no outputs
         }
         const fix = Boolean(n.bug) && old.outcome === 'complete'
-        const outputs: ItemFields = {
-          outcome: old.outcome,
-          tested: old.tested ? 'yes' : 'no',
-          fix: fix ? 'yes' : 'no'
+        const clean = old.outcome === 'complete' && !n.bug
+        const data = {
+          session: old.outcome,
+          tested: old.tested,
+          fix,
+          flag: clean ? 'ui-qa: clean through cccccccc' : 'ui-qa: 1 bug → feat-x.md',
+          unread: !clean,
+          handoff: fix ? { findings: ['F1'] } : null
         }
-        if (fix) {
-          outputs.handoff = '{"findings":["F1"]}'
-        }
-        return { status: 'done', outputs }
+        return n.renderFailed ? pilotcli('failed', 'failed', data) : pilotcli('done', 'ok', data)
       }
       case 'verdict':
         return shell(step, fields)
       case 'fix':
         return { status: n.fixer ?? 'done', outputs: {} }
+      case 'merge_back':
+        return pilotcli('done', 'ok', { merged: true })
       default:
-        return { status: 'done', outputs: {} } // flag_failed: its command's own `|| echo` keeps it from failing
+        return { status: 'done', outputs: {} } // the flags and close_page: their own `|| echo` keeps them from failing
     }
   }
 }
 
+// The old nights, in their frozen order. The stack nights are preparation outcomes now: a stack that never started fails
+// env create; the old stack step's timeout is the full-stack cap's wait, which defers (a deliberate difference: the next
+// tick tries again, not the next night). The old teardown is Pilot's env delete after the last step, so night 11's
+// cleanup step that broke is close_page.
 const NIGHTS: Night[] = [
   {
     name: 'the stack never started',
-    stack: 'failed',
+    prepared: 'failed',
     test: 'skipped',
-    finished: null,
+    said: null,
     nothing: true
   },
   {
     name: 'the stack step timed out',
-    stack: 'timed_out',
+    prepared: 'not_yet',
     test: 'skipped',
-    finished: null,
+    said: null,
     nothing: true
   },
   {
     name: 'a complete session with a bug to fix',
-    stack: 'done',
+    prepared: 'ok',
     test: 'done',
-    finished: 'complete',
+    said: 'complete',
     nothing: false,
     bug: true
   },
   {
     name: 'a complete session with nothing to fix',
-    stack: 'done',
+    prepared: 'ok',
     test: 'done',
-    finished: 'complete',
+    said: 'complete',
     nothing: false
   },
   {
     name: 'the session found the stack dead',
-    stack: 'done',
+    prepared: 'ok',
     test: 'done',
-    finished: 'stack_failed',
+    said: 'stack_failed',
     nothing: false
   },
   {
     name: 'timed out after writing findings',
-    stack: 'done',
+    prepared: 'ok',
     test: 'timed_out',
-    finished: null,
+    said: null,
     nothing: false
   },
   {
     name: 'timed out having written nothing',
-    stack: 'done',
+    prepared: 'ok',
     test: 'timed_out',
-    finished: null,
+    said: null,
     nothing: true
   },
   {
     name: 'finished, then cut off at 60 minutes',
-    stack: 'done',
+    prepared: 'ok',
     test: 'timed_out',
-    finished: 'complete',
+    said: 'complete',
     nothing: false,
     bug: true
   },
   {
     name: 'stopped having written nothing',
-    stack: 'done',
+    prepared: 'ok',
     test: 'done',
-    finished: null,
+    said: null,
     nothing: true
   },
   {
     name: 'its terminal closed after it wrote a charter',
-    stack: 'done',
+    prepared: 'ok',
     test: 'failed',
-    finished: null,
+    said: null,
     nothing: false
   },
   {
     name: 'the report failed to render',
-    stack: 'done',
+    prepared: 'ok',
     test: 'done',
-    finished: 'complete',
+    said: 'complete',
     nothing: false,
     renderFailed: true,
     bug: true
   },
   {
     name: 'the teardown failed',
-    stack: 'done',
+    prepared: 'ok',
     test: 'done',
-    finished: 'complete',
+    said: 'complete',
     nothing: false,
-    teardown: 'failed'
+    closePage: 'timed_out'
   },
   {
     name: 'the report step crashed',
-    stack: 'done',
+    prepared: 'ok',
     test: 'done',
-    finished: 'complete',
+    said: 'complete',
     nothing: false,
     report: 'failed'
   },
   {
     name: 'the report step timed out',
-    stack: 'done',
+    prepared: 'ok',
     test: 'done',
-    finished: 'complete',
+    said: 'complete',
     nothing: false,
     report: 'timed_out'
   },
   {
     name: 'the fixer failed',
-    stack: 'done',
+    prepared: 'ok',
     test: 'done',
-    finished: 'complete',
+    said: 'complete',
     nothing: false,
     bug: true,
     fixer: 'failed'
   },
   {
     name: 'the fixer timed out',
-    stack: 'done',
+    prepared: 'ok',
     test: 'done',
-    finished: 'complete',
+    said: 'complete',
     nothing: false,
     bug: true,
     fixer: 'timed_out'
@@ -269,36 +327,52 @@ const def = ready ? loadPortedAutomation(JOB_04.automationId).definition : null
 describeParity(PARITY_04, '04 · a night run ends as close_out would have counted it', () => {
   it.each(NIGHTS.map((n, i) => [i, n.name, n] as const))('night %i: %s', (i, _name, n) => {
     const expected = old[i]
-    const reported = !n.report || n.report === 'done'
-    const { ran, status, outcome } = simulate(def!, play(n, expected))
+    const { ran, steps, status, outcome, release } = night(def!, n, expected)
+    if (n.prepared !== 'ok') {
+      // No step runs, so nothing is counted and nothing flags; a deferred night's key is freed for the next tick.
+      expect([ran, status === 'done', expected.tested, release]).toEqual([
+        [],
+        false,
+        false,
+        n.prepared === 'not_yet'
+      ])
+      return
+    }
+    // The report gave its answer (a render that failed still gives one); a report that crashed or timed out gave none.
+    const reported = !n.report
+    const tested = expected.tested && reported
     // done: the marker moves. Failed or timed out: the run's key is failed (run-close.ts), so the same head waits 12
-    // hours. A report that broke gives no answer, so the night isn't counted.
-    expect(status === 'done').toBe(expected.tested && reported)
+    // hours. A report that gave no answer leaves the night uncounted.
+    expect(status === 'done').toBe(tested)
     expect(['done', 'failed', 'timed_out']).toContain(status)
-    expect(ran).toContain('teardown') // the stack comes down on every path
-    expect(ran).toContain('report')
-    expect(ran.includes('test')).toBe(n.stack === 'done')
+    expect(ran.slice(0, 2)).toEqual(['context', 'test'])
+    expect(ran).toContain('report') // whenever the context is ok
+    expect(ran.includes('flag')).toBe(reported)
+    expect(ran.includes('flag_failed')).toBe(!reported) // flag xor flag_failed: never flagged twice
+    expect(steps.verdict === 'failed').toBe(!tested) // the verdict fails only when untested
     expect(ran.includes('fix')).toBe(reported && Boolean(n.bug) && expected.outcome === 'complete')
-    expect(ran.includes('flag_failed')).toBe(!reported) // report flags every other ending itself: never twice
+    expect(ran.includes('merge_back')).toBe(ran.includes('fix'))
+    expect(ran.includes('forget_branch')).toBe(ran.includes('fix'))
+    expect(ran.includes('flag_held')).toBe(false) // every merge back here came home
     // The report queues context work for a separate run; no preparation step holds the night open.
     expect(ran.includes('drafts')).toBe(false)
     expect(ran.includes('draft')).toBe(false)
     // A cleanup step that broke never masks what the night counted as.
-    if (status === 'done' && n.teardown === 'failed') {
-      expect(outcome).toBe('Done; cleanup step teardown failed')
+    if (n.closePage) {
+      expect(outcome).toBe('Done; cleanup step close_page timed out')
     }
   })
 
   it('a separate context failure or timeout does not hold the completed night open', () => {
     const complete = NIGHTS.findIndex((n) => n.name === 'a complete session with nothing to fix')
-    const night = simulate(def!, play(NIGHTS[complete], old[complete]))
+    const done = night(def!, NIGHTS[complete], old[complete])
     const preparation = loadPortedAutomation('prepare-inbox-item-context').definition
     for (const broken of ['failed', 'timed_out'] as const) {
       const context = simulate(preparation, () => ({ status: broken, outputs: {} }))
       expect(context.ran).toEqual(['prepare'])
       expect(context.status).toBe(broken)
-      expect(night.status).toBe('done')
-      expect(night.ran.at(-1)).toBe('verdict')
+      expect(done.status).toBe('done')
+      expect(done.ran.at(-1)).toBe('verdict')
     }
   })
 
