@@ -60,8 +60,7 @@ export const VERDICTS_05: VerdictTable = {
 }
 
 // The sweep's state, as Pilot keeps it: handled.json pipelines are handled once_per keys
-// ("<iid>:<pipeline>", as seed-handled-from-sweep.mjs maps them), and each tab in tabs*.json is a
-// finished step whose terminal the session check asks about.
+// ("<iid>:<pipeline>"), and each tab in tabs*.json is a finished step whose terminal the session check asks about.
 export function seed05(store: PilotStore, f: ParityFixture): void {
   const handled = (f.state[`${JOB_05.loop}/handled.json`] ?? {}) as Record<string, number>
   for (const [iid, pipeline] of Object.entries(handled)) {

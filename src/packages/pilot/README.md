@@ -128,10 +128,6 @@ Every job is a YAML automation in `~/.agents/automations/` (one file per automat
   - it runs another session now, or its agent exited;
   - someone is typing in it, or its agent is busy (looked at again next poll);
   - a launch, Resume or answer is opening its session.
-- **Go-live check:** `node src/packages/pilot/scripts/go-live-check.mjs --help`.
-  - It validates every file, dry-runs each automation in a scratch Pilot, and summarises the parity tests as a vault section.
-  - It also flags a Codex step whose args repeat an option of the configured Codex command, and refuses a `--data` link to the packaged app's folder.
-  - Build plan Task 47b has the steps for the scratch Pilot. It mirrors the packaged app's data, and `import-orca-settings.mjs` can fill it while the packaged app runs.
 
 ### Shell steps
 
