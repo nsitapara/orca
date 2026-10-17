@@ -13,6 +13,7 @@ import { PilotAutomationsSection } from './PilotAutomationsSection'
 import { RunPanelHost } from '../run-views/RunPanelHost'
 import { ActivityPage } from './ActivityPage'
 import { PlaygroundPage } from './playground/PlaygroundPage'
+import { RunningPage } from './running/RunningPage'
 import { InboxPage } from './waiting/InboxPage'
 
 function PageBody(): React.JSX.Element {
@@ -23,6 +24,13 @@ function PageBody(): React.JSX.Element {
     return (
       <main className="relative flex h-full flex-col overflow-y-auto scrollbar-sleek bg-background px-5 pb-10">
         <InboxPage />
+      </main>
+    )
+  }
+  if (view === 'running') {
+    return (
+      <main className="relative flex h-full flex-col overflow-y-auto scrollbar-sleek bg-background">
+        <RunningPage />
       </main>
     )
   }
