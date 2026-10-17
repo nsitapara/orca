@@ -15,6 +15,12 @@ const CARDS: Record<string, InboxItemRow> = {
   push: { ...base, type: 'action', action: 'push', options: opts('Approve', 'Skip') },
   postReview: { ...base, type: 'action', action: 'post_review', options: opts('Approve', 'Skip') },
   startRun: { ...base, type: 'action', action: 'start_run', options: opts('Approve', 'Skip') },
+  multiStart: {
+    ...base,
+    type: 'action',
+    action: 'start_run',
+    options: opts('Backend', 'Full stack + UI', 'Skip')
+  },
   leftNoDraft: { ...base, type: 'left_for_you', options: opts('Approve', 'Skip') },
   bugDrafted: {
     ...base,
@@ -49,6 +55,12 @@ const OLD: Record<string, [string, string, number | null, string][]> = {
     ['Approve', 'primary', 0, 'Approve'],
     ['With notes…', 'notes', null, 'approve: some notes'],
     ['Skip', 'skip', 1, 'Skip']
+  ],
+  // Not an old radio card: each start option takes optional notes and keeps its index.
+  multiStart: [
+    ['Backend', 'notes', 0, 'approve: some notes'],
+    ['Full stack + UI', 'notes', 1, 'approve: some notes'],
+    ['Skip', 'skip', 2, 'Skip']
   ],
   leftNoDraft: [
     ['Fix it', 'primary', 0, 'approve'],
@@ -98,6 +110,11 @@ describe('buttonsFor', () => {
     expect(buttonsFor(CARDS.default).some((b) => b.recommended)).toBe(false)
   })
 
+  it("highlights a multi-start card's first start option, and nothing on a single-start card", () => {
+    expect(buttonsFor(CARDS.multiStart).map((b) => b.recommended)).toEqual([true, false, false])
+    expect(buttonsFor(CARDS.startRun).some((b) => b.recommended)).toBe(false)
+  })
+
   it('has no Save button among them', () => {
     for (const item of Object.values(CARDS)) {
       expect(buttonsFor(item).map((b) => b.label)).not.toContain('Save answer')
@@ -142,4 +159,17 @@ describe('a card that needs evidence', () => {
       expect(buttons.some((b) => /approve|post|push/i.test(b.label))).toBe(false)
     }
   )
+
+  // Nothing is preparing until Prepare evidence queues it, so its words never talk of context on its way.
+  it.each([
+    ['never prepared', { needsEvidence: true }, 'Answer without evidence…', /prepar(ation|ing)/i],
+    ['preparing', { preparation: { state: 'queued' } }, 'Answer before context is ready…', null]
+  ])('a %s card names its early answer for what it does', (_, over, label, absent) => {
+    const buttons = buttonsFor({ ...CARDS.bugDrafted, ...over } as never)
+    expect(buttons[0].label).toBe(label)
+    if (absent) {
+      const words = buttons.flatMap((b) => [b.label, b.hint, b.choice.meaning])
+      expect(words.filter((w) => absent.test(w))).toEqual([])
+    }
+  })
 })

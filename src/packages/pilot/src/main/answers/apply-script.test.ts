@@ -119,7 +119,11 @@ describe('applyScript', () => {
     approve()
     const digest = item().digest
     expect(await applyScript(deps, item(), [])).toEqual({ kind: 'done' })
-    expect(entry.run).toHaveBeenCalledWith(PUSH.actionArgs, { dryRun: false, runId: 'run-1' })
+    expect(entry.run).toHaveBeenCalledWith(PUSH.actionArgs, {
+      dryRun: false,
+      runId: 'run-1',
+      inboxItemId: ID
+    })
     expect(store.actions.forInboxItem(ID)).toMatchObject([
       { phase: 'do', status: 'done', digest, args: PUSH.actionArgs }
     ])
@@ -297,7 +301,7 @@ describe('applyScript', () => {
     await applyScript(deps, item(), ['F2'])
     expect(entry.run).toHaveBeenCalledWith(
       { argv: ['1579', 'f.json', 'abc', '--except', 'F2'] },
-      { dryRun: false, runId: 'run-1' }
+      { dryRun: false, runId: 'run-1', inboxItemId: ID }
     )
     expect(item().outcome).toBe('done: 1 done · 1 left out')
   })

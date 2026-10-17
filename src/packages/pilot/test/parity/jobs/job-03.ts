@@ -19,7 +19,7 @@ export const JOB_03 = {
   automationId: 'review-branch-code'
 }
 
-// 03's words (jobs/job_03.py) and the verdicts that agree with them. Nothing new since the review is the worktree kind's
+// 03's words (jobs/job_03.py, frozen in each case's old block) and the verdicts that agree with them. Nothing new since the review is the worktree kind's
 // `where.commits` clause (out of scope); a parked hand-off is a run still active there (Pilot has no parking). A
 // teammate's branch, or one whose owner GitLab can't name, is never listed by the sweep and is out of scope for Pilot.
 export const VERDICTS_03: VerdictTable = {
@@ -93,10 +93,13 @@ export function seed03(store: PilotStore, f: ParityFixture): void {
   seedRunning(store, JOB_03.automationId, runs, f.now - 600_000)
 }
 
-export const PARITY_03: ParityJob = {
+// loop.py sweep's per-worktree decisions, frozen in each case's old block (milestone 8 deletes loop.py): the item parity
+// runs on these, and a case without them fails.
+export const PARITY_03_FROZEN: ParityJob = {
   job: JOB_03.job,
   folder: JOB_03.folder,
   script: JOB_03.script,
+  frozen: true,
   files: [
     join(portedAutomationsDir(), 'review-branch-code.yaml'),
     join(portedAutomationsDir(), 'people.yaml')

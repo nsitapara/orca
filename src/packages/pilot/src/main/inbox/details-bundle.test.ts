@@ -17,8 +17,9 @@ import {
   type DetailsFixture as Fixture,
   type FixtureBundle as Bundle
 } from './__fixtures__/details-fixture'
-import { loadDetails, readDetailsImage, DetailsRefused } from './details-bundle'
+import { loadDetails, readDetailsImage, reportPath, DetailsRefused } from './details-bundle'
 
+const REPORT = { type: 'report', title: 'Your review guide', file: 'guide.html' }
 const sha = (data: string | Buffer) => createHash('sha256').update(data).digest('hex')
 
 function rewrite(f: Fixture, change: (bundle: Bundle) => void): void {
@@ -77,6 +78,16 @@ describe('loadDetails', () => {
       drafted: true,
       draftedOption: 'Bake it — fast'
     })
+  })
+
+  it('takes a report block naming an .html file beside it, and neither inlines nor hashes it', () => {
+    const f = fixture()
+    writeFileSync(join(f.dir, 'guide.html'), '<!doctype html><title>g</title>')
+    rewrite(f, (b) => b.blocks.push(REPORT))
+    const snapshot = loadDetails(f.root, f.bundle)
+    expect(snapshot.bundle.blocks.at(-1)).toEqual(REPORT)
+    expect(snapshot.texts).toEqual({})
+    expect(snapshot.ref.inlined).toEqual({})
   })
 
   it('inlines a review file the bundle names, and keeps its sha', () => {
@@ -210,6 +221,28 @@ describe('loadDetails', () => {
       'reviewer'
     ],
     [
+      'a report that is not an .html file',
+      (f) => (
+        rewrite(f, (b) => b.blocks.push({ ...REPORT, file: 'F2.patch' })),
+        [f.root, f.bundle]
+      ),
+      'F2.patch'
+    ],
+    [
+      'a missing report',
+      (f) => (rewrite(f, (b) => b.blocks.push(REPORT)), [f.root, f.bundle]),
+      'guide.html'
+    ],
+    [
+      'a report outside the root',
+      (f) => {
+        writeFileSync(join(f.top, 'guide.html'), '<p>x</p>')
+        rewrite(f, (b) => b.blocks.push({ ...REPORT, file: '../../../../../guide.html' }))
+        return [f.root, f.bundle]
+      },
+      'guide.html'
+    ],
+    [
       'three review blocks',
       (f) => (rewrite(f, (b) => b.blocks.push(REVIEW, REVIEW, REVIEW)), [f.root, f.bundle])
     ]
@@ -221,6 +254,48 @@ describe('loadDetails', () => {
     if (names) {
       expect(message).toContain(names)
     }
+  })
+})
+
+describe('reportPath', () => {
+  function withReport(): { f: Fixture; snapshot: ReturnType<typeof loadDetails> } {
+    const f = fixture()
+    writeFileSync(join(f.dir, 'guide.html'), '<!doctype html><title>g</title>')
+    rewrite(f, (b) => b.blocks.push(REPORT))
+    return { f, snapshot: loadDetails(f.root, f.bundle) }
+  }
+
+  it("is the report's real path, inside the Automations folder", () => {
+    const { f, snapshot } = withReport()
+    expect(reportPath(f.root, snapshot, 'guide.html')).toBe(realpathSync(join(f.dir, 'guide.html')))
+  })
+
+  it.each<[string, (f: Fixture) => string, string]>([
+    ['a file no report block names', () => 'F2-qa.png', 'not a report'],
+    [
+      'a report swapped for a symlink outside the root since it was read',
+      (f) => {
+        writeFileSync(join(f.top, 'elsewhere.html'), '<p>x</p>')
+        rmSync(join(f.dir, 'guide.html'))
+        symlinkSync(join(f.top, 'elsewhere.html'), join(f.dir, 'guide.html'))
+        return 'guide.html'
+      },
+      'outside the Automations folder'
+    ],
+    [
+      'a report removed since it was read',
+      (f) => (rmSync(join(f.dir, 'guide.html')), 'guide.html'),
+      "doesn't exist"
+    ]
+  ])('refuses %s', (_name, arrange, names) => {
+    const { f, snapshot } = withReport()
+    const file = arrange(f)
+    expect(refusal(() => reportPath(f.root, snapshot, file))).toContain(names)
+  })
+
+  it('refuses with no Automations folder', () => {
+    const { snapshot } = withReport()
+    expect(refusal(() => reportPath(null, snapshot, 'guide.html'))).toContain('Automations folder')
   })
 })
 

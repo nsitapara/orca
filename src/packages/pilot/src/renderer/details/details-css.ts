@@ -49,6 +49,7 @@ export const DETAILS_CSS = `
 .dt-note{display:grid;gap:4px;padding:8px 0;border-top:1px solid var(--g-line)}
 .dt-note:first-of-type{border-top:0}
 .dt-error{color:var(--g-minus);font-size:13px;margin:0}
+.dt-report-row{display:flex;align-items:center;justify-content:space-between;gap:8px 12px;flex-wrap:wrap;padding:8px 12px;border:1px solid var(--g-line);border-radius:6px;background:var(--g-head);min-width:0}
 @media (max-width:600px){.dt-pairs{grid-template-columns:minmax(0,1fr)}}
 .glr-mr{display:grid;gap:2px}
 .glr-mr a{color:var(--g-link);text-decoration:none;font-size:13px}

@@ -32,7 +32,7 @@ import { runShellScript } from './fields/script-runner'
 import { launchAgentStep } from './run/agent-step'
 import { wireRunEngine } from './run/engine-wiring'
 import { pilotShellWiring } from './run/shell-wiring'
-import { cancelUnstartedRun, runAnswerOf } from './run/ask-first'
+import { cancelUnstartedRun, runAnswerSources } from './run/ask-first'
 import { runtimeLauncherDeps } from './run/launch'
 import { resumeStepSession, runtimeResumeDeps } from './run/resume-session'
 import { modeTextFor, readMode } from './run/modes'
@@ -47,7 +47,6 @@ import { PilotScheduler } from './scheduler/scheduler'
 import { registrySources } from './scheduler/tick-decide'
 import { runTick, type TickDeps } from './scheduler/tick-runner'
 import { createPassFetchCache } from './sources/fetch-cache'
-import { createLinearWriter } from './linear-connector/linear-writer'
 import { glabApiForRepo } from './sources/gitlab-api'
 import { registerPilotSources } from './sources/register-sources'
 import { PilotStore } from './store/store'
@@ -166,12 +165,12 @@ function openPilot(
     onRunEnd: (run) => envs.runEnded(run),
     // A stage's run hands its outputs to the next stage (job.feeds).
     handover: handover.runEnd,
-    // {run.answer}: the free text that started an ask-first or answer run.
-    runAnswer: (run) => runAnswerOf(store, run)
+    // {run.answer}: the free text that started an ask-first or answer run; {run.choice}: the option that started it.
+    ...runAnswerSources(store)
   })
   const actions = pilotActionCatalog({
     engineEnv,
-    linear: createLinearWriter(runtime),
+    runtime,
     startRun: {
       store,
       now,

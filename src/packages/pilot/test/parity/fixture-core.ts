@@ -21,7 +21,7 @@ export type ParityFixture = {
   reads: FixtureRead[]
   state: Record<string, unknown>
   exists: Record<string, boolean>
-  // The old side's verdicts, frozen into the case when its code was deleted (13, 09): old-side.ts frozenOldSide.
+  // The old side's verdicts, frozen into the case when its code was deleted (13, 09, M01, 03): old-side.ts frozenOldSide.
   old?: FrozenOldSide
 }
 

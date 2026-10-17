@@ -211,5 +211,22 @@
     "/parity-gitdirs/wt/web-1/rebase-apply": false,
     "/parity-gitdirs/wt/web-1/rebase-merge": false,
     "/wt/web-1": true
+  },
+  "old": {
+    "from": "run_old_plan.py M01 (linear-todo-sweep/sweep.py) with /opt/homebrew/bin/python3 3.15, 2026-10-16, before milestone 8 deleted it",
+    "decisions": [
+      {
+        "key": "linear:WEB-1",
+        "label": "WEB-1",
+        "decision": "skip",
+        "reason": "uncommitted changes in /wt/web-1; retry next run"
+      },
+      {
+        "key": "linear:WEB-1",
+        "label": "WEB-1",
+        "decision": "script_check",
+        "reason": ""
+      }
+    ]
   }
 }

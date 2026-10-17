@@ -1,25 +1,35 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { InboxItemRow } from '../../shared/api-types'
-import { actBridge, type ProcessRun } from '../actions/act-bridge'
 import { buildActionCatalog } from '../actions/catalog'
+import { markReadyEntry } from '../actions/mark-ready'
+import { postReviewEntry } from '../actions/post-review'
 import { pushBranchEntry } from '../actions/push-branch'
+import type { ActionEntry } from '../actions/types'
 import type { Pilotcli } from '../envs/pilotcli'
 import { approvedArgs } from '../actions/powers'
 import { cardRunLine, shellWord } from './run-line'
 
-const DONE = { code: 0, stdout: '{"outcome":"done"}', stderr: '', timedOut: false }
 const PRINTABLE_ASCII = /^[\x20-\x7e]*$/
 const HEAD = '9c1e2f04'.padEnd(40, 'a')
 const BASE = '1a2b3c4d'.padEnd(40, 'b')
+const SHA256 = 'f00d'.padEnd(64, '0')
 
-// The real catalog over a real act bridge and the real push entry, whose runners only record what they would spawn.
+// An entry whose Run line is its args as they are, for the escaping rules alone.
+const echo: ActionEntry = {
+  name: 'echo',
+  power: null,
+  label: 'Echo',
+  usage: 'echo { "argv": [<word>…] }',
+  checkArgs: () => null,
+  describe: async () => 'Echo',
+  command: (args) => ['/bin/echo', ...(Array.isArray(args.argv) ? args.argv.map(String) : [])],
+  run: async () => ({ outcome: 'done', detail: '', link: null, log: null, onYou: false })
+}
+
+// The real catalog over the real pilotcli entries, whose runner only records what it would spawn. The card's folder
+// is the one each entry acts in.
 function catalog() {
   const spawned: { program: string; args: string[] }[] = []
-  const run: ProcessRun = vi.fn(async (spec) => {
-    spawned.push({ program: spec.program, args: spec.args })
-    return DONE
-  })
-  const act = actBridge({ actPy: '/skills/worktree-gate/act.py', python: 'python3', run, env: {} })
   const pilotcli: Pilotcli = vi.fn(async (call) => {
     spawned.push({ program: '/bin/pilotcli', args: [...call.args] })
     return {
@@ -29,8 +39,17 @@ function catalog() {
       code: 0
     }
   })
-  const push = pushBranchEntry({ pilotcli, binary: () => '/bin/pilotcli' })
-  return { catalog: buildActionCatalog({ act, push, linear: null }), spawned }
+  const binary = () => '/bin/pilotcli'
+  const folder = vi.fn(() => '/wt')
+  const push = pushBranchEntry({ pilotcli, binary })
+  const cards = { branchOf: () => null, worktreeOn: () => null, openOn: () => null }
+  const markReady = markReadyEntry({ pilotcli, binary, folder, cards })
+  const postReview = postReviewEntry({ pilotcli, binary, reviewsDir: () => '/vault/09', folder })
+  return {
+    catalog: buildActionCatalog({ push, markReady, postReview, linear: null, extra: [echo] }),
+    spawned,
+    folder
+  }
 }
 
 function card(over: Partial<InboxItemRow>): InboxItemRow {
@@ -88,7 +107,7 @@ describe("an action card's Run line", () => {
     const { catalog: c, spawned } = catalog()
     const item = card({
       action: 'post_review',
-      actionArgs: { argv: ['1588', '/r/review.md', 'f00d'] },
+      actionArgs: { argv: ['1588', 'reviews/1588-1.json', SHA256] },
       parts: { a: 'Nit on line 3', b: 'Rename' },
       answer: {
         option: null,
@@ -101,16 +120,29 @@ describe("an action card's Run line", () => {
     })
     const line = cardRunLine(c, item)
     expect(line?.text).toBe(
-      'python3 /skills/worktree-gate/act.py post-review run 1588 /r/review.md f00d --except a'
+      `/bin/pilotcli gitlab create-thread 1588 --review=/vault/09/reviews/1588-1.json --expect-sha256=${SHA256} --except=a --dir=/wt --dry-run=false --format=json`
     )
     const args = approvedArgs(c.get('post_review')!, item, ['a'])
     if ('problem' in args) {
       throw new Error(args.problem)
     }
-    await c.get('post_review')!.run(args.args, { dryRun: false, runId: 'run-1' })
+    await c.get('post_review')!.run(args.args, {
+      dryRun: false,
+      runId: 'run-1',
+      inboxItemId: item.id
+    })
     for (const word of spawned[0].args) {
       expect(line?.text).toContain(shellWord(word))
     }
+  })
+
+  it("shows a mark_ready card's write, in the folder the card's own action acts in", () => {
+    const { catalog: c, folder } = catalog()
+    const item = card({ action: 'mark_ready', actionArgs: { argv: ['1577', '430f7e68'] } })
+    expect(cardRunLine(c, item)?.text).toBe(
+      '/bin/pilotcli gitlab update-mr 1577 draft=false --expect-sha=430f7e68 --dir=/wt --dry-run=false --format=json'
+    )
+    expect(folder).toHaveBeenCalledWith({ runId: 'run-1', inboxItemId: 'in_1' })
   })
 
   it.each<[string, string, string]>([
@@ -128,7 +160,7 @@ describe("an action card's Run line", () => {
     const { catalog: c } = catalog()
     const text = cardRunLine(
       c,
-      card({ action: 'mark_ready', actionArgs: { argv: [branch, 'abc'] } })
+      card({ action: 'echo', actionArgs: { argv: ['git', branch, 'abc'] } })
     )!.text
     expect(text).toContain(` ${shown} `)
     expect(text).toMatch(PRINTABLE_ASCII)

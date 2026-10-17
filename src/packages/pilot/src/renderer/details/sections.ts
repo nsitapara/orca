@@ -12,6 +12,7 @@ const DEFAULT_LABEL: Record<DetailsBlock['type'], string> = {
   shots: 'Screenshots',
   code: 'Code',
   review: 'Review',
+  report: 'Report',
   thread: 'Thread',
   text: 'Notes',
   missing: 'Missing'

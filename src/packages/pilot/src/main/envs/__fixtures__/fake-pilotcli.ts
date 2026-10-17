@@ -5,7 +5,7 @@ import { join } from 'node:path'
 // Tests only: a stand-in for pilotcli; no test ever runs the real one. A call appends its argv to calls.log, the
 // ORCA_*/PILOT_* names it sees to env.log and its PATH to path.log. When <verb>.sleep exists, it writes its pid to
 // <verb>.pid and sleeps that many seconds. Then it prints <verb>.json (stdout) and <verb>.stderr, and exits <verb>.code
-// (default 0). <verb> is its first two words: env-create, env-delete, env-list, git-push-branch.
+// (default 0). <verb> is its first two words (FakeVerb), such as env-create or gitlab-check-mr.
 const SCRIPT = `#!/bin/sh
 d="$FAKE_PILOTCLI_DIR"
 v="$1-$2"
@@ -18,11 +18,20 @@ if [ -f "$d/$v.stderr" ]; then cat "$d/$v.stderr" >&2; fi
 exit "$(cat "$d/$v.code" 2>/dev/null || echo 0)"
 `
 export type FakeReply = { json?: unknown; code?: number; stderr?: string; sleep?: number }
+export type FakeVerb =
+  | 'env-create'
+  | 'env-delete'
+  | 'env-list'
+  | 'git-push-branch'
+  | 'gitlab-get-mr'
+  | 'gitlab-check-mr'
+  | 'gitlab-update-mr'
+  | 'gitlab-create-thread'
 export type FakePilotcli = {
   bin: string
   dir: string
   env: NodeJS.ProcessEnv
-  answer(verb: 'env-create' | 'env-delete' | 'env-list' | 'git-push-branch', reply: FakeReply): void
+  answer(verb: FakeVerb, reply: FakeReply): void
   calls(): string[]
   read(name: string): string
 }
