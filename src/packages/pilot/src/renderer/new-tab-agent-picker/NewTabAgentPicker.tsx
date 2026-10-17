@@ -39,7 +39,7 @@ import {
   type NewTabMachineRow
 } from './new-tab-machine-rows'
 import type { NewTabMachineStep } from './new-tab-machine-step'
-import { NewTabMachineList } from './NewTabMachineList'
+import { NewTabMachineCommand } from './NewTabMachineCommand'
 import { useEscapeBack } from './use-escape-back'
 import { useNewTabMachineStep } from './use-new-tab-machine-step'
 
@@ -87,6 +87,8 @@ function NewTabAgentPickerDialog({
   const [step, setStep] = useState<PickerStep>(AGENT_STEP)
   const [machineQuery, setMachineQuery] = useState('')
   const [selectedMachine, setSelectedMachine] = useState('')
+  // Why: each step mounts its own search box, which takes focus only after a step change.
+  const [movedBetweenSteps, setMovedBetweenSteps] = useState(false)
   const { captureReturnFocus, skipReturnFocus } = useModalReturnFocus(visible)
 
   // Why: reset on open only, so a store update mid-typing never wipes the query.
@@ -99,6 +101,7 @@ function NewTabAgentPickerDialog({
       setStep(AGENT_STEP)
       setMachineQuery('')
       setSelectedMachine('')
+      setMovedBetweenSteps(false)
     }
   }
 
@@ -154,6 +157,7 @@ function NewTabAgentPickerDialog({
       })
       setMachineQuery('')
       setSelectedMachine('')
+      setMovedBetweenSteps(true)
       return
     }
     closeThen(() => {
@@ -193,29 +197,11 @@ function NewTabAgentPickerDialog({
     }
   }, [])
 
-  let placeholder = 'Open a new tab with...'
-  let emptyText = 'No agents match your search.'
   let footerText = workspaceName ? `In ${workspaceName}` : null
   let escLabel = 'Close'
-  let inputValue = query
-  let onInputChange = (value: string): void => {
-    setQuery(value)
-    setSelectedId('')
-  }
-  let commandValue = agentValue
-  let onCommandValueChange = setSelectedId
   if (step.kind === 'machine') {
-    placeholder = `Open ${step.agentLabel} on...`
-    emptyText = 'No machines match your search.'
     footerText = `${step.agentLabel} · choose a machine`
     escLabel = 'Back'
-    inputValue = machineQuery
-    onInputChange = (value) => {
-      setMachineQuery(value)
-      setSelectedMachine('')
-    }
-    commandValue = highlightedNewTabMachine(machineRows, selectedMachine, step.lastHostId)
-    onCommandValueChange = setSelectedMachine
   }
 
   return (
@@ -229,44 +215,64 @@ function NewTabAgentPickerDialog({
       title="New tab"
       description="Choose an agent to open in a new tab"
       contentClassName="w-[480px]"
-      commandProps={{ loop: true, value: commandValue, onValueChange: onCommandValueChange }}
+      commandProps={{ loop: true, value: agentValue, onValueChange: setSelectedId }}
     >
-      <CommandInput placeholder={placeholder} value={inputValue} onValueChange={onInputChange} />
-      {/* Why keyed: a fresh list per step stops cmdk reselecting its first row as the old rows unmount. */}
-      <CommandList key={step.kind}>
-        <CommandEmpty>{emptyText}</CommandEmpty>
-        {step.kind === 'machine' ? (
-          <NewTabMachineList rows={machineRows} onPick={pickMachine} />
-        ) : (
-          <CommandGroup>
-            {options.map((option) => (
-              <CommandItem
-                key={option.id}
-                value={option.id}
-                selection="palette"
-                onSelect={() => pickAgent(option)}
-              >
-                {option.kind === 'agent' ? (
-                  <AgentIcon agent={option.id} size={16} />
-                ) : (
-                  <TerminalSquare className="text-muted-foreground" />
-                )}
-                <span className="min-w-0 flex-1 truncate">
-                  {option.kind === 'agent' ? option.entry.label : 'Blank Terminal'}
-                </span>
-                {option.isDefault ? (
-                  <span className="text-2xs text-muted-foreground">Default</span>
-                ) : null}
-              </CommandItem>
-            ))}
-          </CommandGroup>
-        )}
-        {step.kind === 'agent' && isLoading && detectedIds === null ? (
-          <div className="px-3 py-2 text-xs text-muted-foreground">
-            Looking for installed agents...
-          </div>
-        ) : null}
-      </CommandList>
+      {step.kind === 'machine' ? (
+        <NewTabMachineCommand
+          agentLabel={step.agentLabel}
+          query={machineQuery}
+          onQueryChange={(value) => {
+            setMachineQuery(value)
+            setSelectedMachine('')
+          }}
+          value={highlightedNewTabMachine(machineRows, selectedMachine, step.lastHostId)}
+          onValueChange={setSelectedMachine}
+          rows={machineRows}
+          onPick={pickMachine}
+        />
+      ) : (
+        <>
+          <CommandInput
+            autoFocus={movedBetweenSteps}
+            placeholder="Open a new tab with..."
+            value={query}
+            onValueChange={(value) => {
+              setQuery(value)
+              setSelectedId('')
+            }}
+          />
+          <CommandList>
+            <CommandEmpty>No agents match your search.</CommandEmpty>
+            <CommandGroup>
+              {options.map((option) => (
+                <CommandItem
+                  key={option.id}
+                  value={option.id}
+                  selection="palette"
+                  onSelect={() => pickAgent(option)}
+                >
+                  {option.kind === 'agent' ? (
+                    <AgentIcon agent={option.id} size={16} />
+                  ) : (
+                    <TerminalSquare className="text-muted-foreground" />
+                  )}
+                  <span className="min-w-0 flex-1 truncate">
+                    {option.kind === 'agent' ? option.entry.label : 'Blank Terminal'}
+                  </span>
+                  {option.isDefault ? (
+                    <span className="text-2xs text-muted-foreground">Default</span>
+                  ) : null}
+                </CommandItem>
+              ))}
+            </CommandGroup>
+            {isLoading && detectedIds === null ? (
+              <div className="px-3 py-2 text-xs text-muted-foreground">
+                Looking for installed agents...
+              </div>
+            ) : null}
+          </CommandList>
+        </>
+      )}
       <div className="flex items-center gap-2 border-t border-border/60 px-3.5 py-2.5 text-2xs text-muted-foreground">
         <span className="min-w-0 flex-1 truncate">{footerText}</span>
         <FooterKey>Enter</FooterKey>
