@@ -4,6 +4,7 @@ import { nextTickAfter } from '../../shared/schedule/cron'
 import type { LoadedDefinitions } from '../definitions/loader'
 import { mapLimit } from '../map-limit'
 import type { PassFetchCache } from '../sources/fetch-cache'
+import { tickQueued, type QueuedTickDeps } from './queued-ticks'
 import type { TickOptions, TickResult } from './tick-runner'
 
 export type SchedulerDeps = {
@@ -21,7 +22,7 @@ export type SchedulerDeps = {
   // reported (A4), so it shows as a definition problem rather than a failed tick.
   repoProblem(def: AutomationDefinition, message: string): void
   log(message: string): void
-}
+} & QueuedTickDeps
 
 export type TickNowResult = TickResult | { status: 'busy' } | { status: 'unknown' }
 
@@ -225,6 +226,11 @@ export class PilotScheduler {
       return
     }
     const pass = this.deps.newPass()
+    await tickQueued(this.deps, definitions, {
+      stopped: () => this.stopped,
+      busy: (id) => this.running.has(id),
+      tick: (id) => this.tickNow(id, { dryRun: false, pass })
+    })
     await mapLimit(definitions, MAX_CONCURRENT_TICKS, async (def) => {
       if (!this.stopped) {
         await this.tickIfDue(def, pass)

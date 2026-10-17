@@ -506,3 +506,33 @@ describe('PilotScheduler.trigger: a feed’s run: now ticks the receiving stage'
     expect(d.ran).toEqual([])
   })
 })
+
+describe('PilotScheduler run queue', () => {
+  const at1012 = Date.UTC(2026, 9, 10, 19, 12) // 12:12 PDT
+
+  it('ticks the automations with queued items first, in line order, though none is due', async () => {
+    const d = deps(
+      [def('ci', '10 * * * *'), def('review', '20 * * * *'), def('manual-job', 'manual')],
+      at1012,
+      Date.UTC(2026, 9, 10, 19, 10)
+    )
+    const asked: string[][] = []
+    d.queuedToTick = (defs) => {
+      asked.push(defs.map((x) => x.id))
+      return ['manual-job', 'review']
+    }
+    await new PilotScheduler(d).tickAll()
+    expect(d.ran).toEqual(['manual-job', 'review'])
+    expect(asked).toEqual([['ci', 'review', 'manual-job']])
+  })
+
+  it('still ticks the due automations when the run queue cannot be read', async () => {
+    const d = deps([def('ci', '10 * * * *')], at1012, Date.UTC(2026, 9, 10, 18, 10))
+    d.queuedToTick = () => {
+      throw new Error('database is locked')
+    }
+    await new PilotScheduler(d).tickAll()
+    expect(d.ran).toEqual(['ci'])
+    expect(d.logs).toContain("[pilot] couldn't read the run queue: database is locked")
+  })
+})

@@ -36,6 +36,7 @@ export type Verdict =
   | 'notdue'
   | 'out_of_scope'
   | 'over_limit'
+  | 'queued'
   | 'baselined'
   | 'asked'
 export type CheckOutcome = { check: string; ok: boolean; reason: string }
@@ -241,6 +242,7 @@ export type HoldReason =
   | 'in_flight'
   | 'waits'
   | 'retry'
+  | 'capacity'
 export type QueueRoute = 'resume' | 'fork' | 'new' | 'action'
 export type QueueRow = {
   id: number

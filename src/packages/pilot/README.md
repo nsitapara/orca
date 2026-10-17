@@ -367,6 +367,33 @@ A run costs the sum of its steps. A Claude step's session id is pinned at launch
 - **The hand-over from job 08** was done on 2026-10-12: 08's last `usage.json` was copied to `usage-legacy.json` in that folder, and Pilot writes there only while that file is there. The packaged app refreshes the files after each measured step and at least hourly. It keeps 08's history (the legacy rows) and replaces only the sessions it measured itself.
 - To write the report anywhere else, at any time: `pilot automations usage-report --out <dir>`.
 
+## Run limit and the Running page
+
+**The limit.** One number for every automation: how many runs may go at once. The default is no limit. Set it on the Running page (sidebar, beside Inbox), with `pilot automations capacity --set <n>|none`, or the RPC `pilot.capacity.setLimit`. An agent in a Pilot run can't change it.
+- Only jobs with an agent step hold a slot. A shell-only job (01 Pull dev) never waits.
+- A run waiting on you (asking, needs you) holds none, as with `limits.at_once`, which still applies on top.
+- Lowering the limit stops nothing that is running.
+
+**The queue.** An item a tick would start, past the limit, gets the verdict `queued` and waits in `run_queue`, oldest first. It keeps its place across ticks.
+- When a slot frees, the scheduler ticks the job of the oldest queued item at once, whatever its schedule, so the item starts on a fresh decision.
+- Run now waits in the same line, and its run is still recorded as by hand.
+- An answer run or an approved ask-first card waits only for a free slot (its answer is held), ahead of the line.
+- A queued item leaves the line when its job's next tick doesn't leave it waiting (it started, or isn't due), when the tick fails, or when the job is turned off (unless Run now queued it).
+
+**Memory and the suggestion.** On each scheduler poll Pilot sums the RSS of every running agent step's terminal process tree and keeps each run's peak (`runs.peak_rss_bytes`). Shell steps and Docker's containers aren't counted.
+- The suggestion is what can go to jobs (available memory plus what running jobs hold, less 4 GB), divided by the heaviest job's peak over its last 20 measured runs. It is at least 1 and at most 10.
+- Before any job has been measured, each counts as 2.5 GB, as web-platform's `e2e-parallel.sh` budgets a stack.
+- It is a suggestion only; nothing changes until you pick a number.
+
+## Agent Console
+
+The console (`~/.agents/skills/agent-console`) reads `pilot automations list-yaml --json` and maps each automation to its job by name:
+- a name that starts with its code (`01 · …`), else
+- the vault job with the same name, else
+- its id.
+
+It reads each automation's `activity`. A job whose automation is switched on takes its schedule and Run by hand from Pilot: Preview runs `dry-run`, and Run now runs `tick`. Keep `ActivityTick`, `RunRow` and `StepRow` field names stable: add fields, never rename one. (`dryRun` was dropped on 2026-10-14: dry runs are no longer stored, so Activity holds real ticks only.)
+
 ## Going live
 
 The order, behaviour changes and follow-ups come from the build (`go-live-notes.md` and `go-live-report.md` in the build plan folder). Run the go-live check first.

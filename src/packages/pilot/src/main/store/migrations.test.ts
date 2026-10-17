@@ -77,8 +77,10 @@ describe('migrate', () => {
       'handovers',
       'inbox_items',
       'queue',
+      'run_queue',
       'runs',
       'seen',
+      'settings',
       'step_usage',
       'steps',
       'tick_items',
@@ -241,8 +243,8 @@ describe('migrate', () => {
       "INSERT INTO inbox_items (id, automation_id, person, type, title, digest, created_at, updated_at) VALUES ('i1', 'a', 'p', 'question', 't', 'd', 1, 1)"
     )
     migrate(db)
-    expect(PILOT_SCHEMA_VERSION).toBe(13)
-    expect(db.pragma('user_version', { simple: true })).toBe(13)
+    expect(PILOT_SCHEMA_VERSION).toBe(14)
+    expect(db.pragma('user_version', { simple: true })).toBe(14)
     expect(
       firstRow(
         db,
@@ -380,7 +382,7 @@ describe('migrate', () => {
       "INSERT INTO steps (run_id, idx, name, agent, status) VALUES ('r1', 0, 'context', 'shell', 'done')"
     )
     migrate(db)
-    expect(db.pragma('user_version', { simple: true })).toBe(13)
+    expect(db.pragma('user_version', { simple: true })).toBe(14)
     expect(firstRow(db, 'SELECT result_json FROM steps')).toEqual({ result_json: null })
   })
 
@@ -430,5 +432,23 @@ describe('migrate', () => {
       )
       .all(0) as { detail: string }[]
     expect(plan.map((p) => p.detail).join(' ')).toContain('runs_unacknowledged')
+  })
+
+  it('V14 adds the settings and run queue tables, and runs.peak_rss_bytes empty on the runs a V13 database had', () => {
+    const db = openDb()
+    migrate(db, 13)
+    db.exec(
+      "INSERT INTO runs (id, automation_id, item_key, item_label, status, started_at) VALUES ('r1', 'a', 'k', 'k', 'running', 1)"
+    )
+    migrate(db)
+    expect(firstRow(db, 'SELECT peak_rss_bytes FROM runs')).toEqual({ peak_rss_bytes: null })
+    expect(columnsOf(db, 'settings')).toEqual(['key', 'value', 'updated_at'])
+    expect(columnsOf(db, 'run_queue')).toEqual([
+      'automation_id',
+      'item_key',
+      'item_label',
+      'queued_at',
+      'by_hand'
+    ])
   })
 })
