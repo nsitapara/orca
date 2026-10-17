@@ -9,7 +9,7 @@ import {
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { translate } from '@/i18n/i18n'
-import { NewTabAgentPicker } from './new-tab-agent-picker/NewTabAgentPicker'
+import { NewTabAgentPicker } from '../../../packages/pilot/src/renderer/new-tab-agent-picker/NewTabAgentPicker' // pilot-hook: new-tab-picker
 import type { TerminalController } from './use-terminal-controller'
 
 export function TerminalWorkspaceDialogs({
@@ -18,10 +18,7 @@ export function TerminalWorkspaceDialogs({
   controller: TerminalController
 }): React.JSX.Element {
   const {
-    activeWorktreeId,
     confirmNativeWindowClose,
-    handleNewAgentTab,
-    handleNewTab,
     handleSaveDialogCancel,
     handleSaveDialogDiscard,
     handleSaveDialogSave,
@@ -33,11 +30,8 @@ export function TerminalWorkspaceDialogs({
   } = controller
   return (
     <>
-      <NewTabAgentPicker
-        worktreeId={activeWorktreeId}
-        onLaunchAgent={handleNewAgentTab}
-        onOpenBlankTerminal={() => handleNewTab()}
-      />
+      {/* pilot-hook: new-tab-picker */}
+      <NewTabAgentPicker controller={controller} />
       <Dialog
         open={saveDialogFileId !== null}
         onOpenChange={(open) => {

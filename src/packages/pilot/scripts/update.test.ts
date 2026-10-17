@@ -80,6 +80,7 @@ describe('hookTestTargets', () => {
       'src/main/startup',
       'src/main/updater',
       'src/renderer/src/app-shell',
+      'src/renderer/src/components/TerminalWorkspaceDialogs.test',
       'src/renderer/src/components/activity/activity-thread-controls.test',
       'src/renderer/src/components/activity/activity-thread-options-menu.test',
       'src/renderer/src/components/activity/activity-thread-row.test',
@@ -89,6 +90,9 @@ describe('hookTestTargets', () => {
       'src/renderer/src/components/sidebar/SidebarAgentsList.test',
       'src/renderer/src/components/sidebar/SidebarNav.test',
       'src/renderer/src/components/skills',
+      'src/renderer/src/components/tab-bar/use-tab-bar-runtime-model.test',
+      'src/renderer/src/components/terminal-workspace-keydown.test',
+      'src/renderer/src/hooks/ipc-events/tab-lifecycle-ipc-bridge.test',
       'src/renderer/src/main.test',
       'src/renderer/src/store/right-sidebar-route.test'
     ])

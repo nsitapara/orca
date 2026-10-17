@@ -1,3 +1,9 @@
+import { focusTerminalTabSurface } from '@/lib/focus-terminal-tab-surface'
+import { createBrowserUuid } from '@/lib/browser-uuid'
+import { persistAgentLaunchTabOrder } from '@/lib/launch-agent-tab-order'
+import { getRuntimeEnvironmentIdForWorktree } from '@/lib/worktree-runtime-owner'
+import { createWebRuntimeSessionTerminal } from '@/runtime/web-runtime-terminal-creation'
+import { isWebRuntimeSessionActive } from '@/runtime/web-runtime-session-environment'
 import { dispatchWorkspaceTabCommand } from '@/lib/workspace-tab-commands'
 import {
   createFloatingWorkspaceTerminalTab,
@@ -10,6 +16,10 @@ import {
 } from '@/lib/floating-workspace-guest-bridge'
 
 import { useAppStore } from '../../store'
+import { openNewTabAgentPicker } from '../../../../packages/pilot/src/renderer/new-tab-agent-picker/new-tab-agent-picker-open-state' // pilot-hook: new-tab-picker-ipc
+function getWorktreeRuntimeEnvironmentId(worktreeId: string | null | undefined): string | null {
+  return getRuntimeEnvironmentIdForWorktree(useAppStore.getState(), worktreeId)
+}
 
 export function registerTabLifecycleIpcBridge(unsubs: (() => void)[]): void {
   unsubs.push(
@@ -19,11 +29,27 @@ export function registerTabLifecycleIpcBridge(unsubs: (() => void)[]): void {
         void createFloatingWorkspaceTerminalTab(store)
         return
       }
-      if (!store.activeWorktreeId) {
+      const worktreeId = store.activeWorktreeId
+      // pilot-hook: new-tab-picker-ipc
+      if (!worktreeId || openNewTabAgentPicker()) {
         return
       }
-      // Why: a browser guest swallows Cmd+T, so it opens the same picker the keydown path does.
-      store.openModal('new-tab-agent-picker')
+      void (async () => {
+        const environmentId = getWorktreeRuntimeEnvironmentId(worktreeId)
+        const outcome = await createWebRuntimeSessionTerminal({
+          worktreeId,
+          environmentId,
+          activate: true
+        })
+        if (outcome.status === 'created' || isWebRuntimeSessionActive(environmentId)) {
+          return
+        }
+        const tabId = createBrowserUuid()
+        store.createTab(worktreeId, undefined, undefined, { id: tabId })
+        store.setActiveTabType('terminal', worktreeId)
+        persistAgentLaunchTabOrder(worktreeId, tabId)
+        focusTerminalTabSurface(tabId)
+      })()
     })
   )
 
