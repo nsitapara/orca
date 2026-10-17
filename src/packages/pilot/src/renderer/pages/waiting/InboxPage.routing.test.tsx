@@ -113,8 +113,27 @@ const cardTitled = async (title: string) =>
 const choice = (from: ParentNode, value: string): Element =>
   from.querySelector(`[data-choice="${value}"]`)!
 const callsOf = (method: string) => pilotRpc.mock.calls.filter(([m]) => m === method)
+// A headless engine's Apply now refusal (APPLY_NOW_ELSEWHERE in main/rpc/methods-answers.ts).
+const ELSEWHERE =
+  "Answers are applied by the Pilot app that runs the scheduler; this process doesn't run it"
 
-describe('InboxPage card actions on more than one machine', () => {
+// This machine has a question; Mini's list answers only when the returned function is called.
+function serveMiniLate(): (list: InboxListPayload) => void {
+  let answerMini: (list: InboxListPayload) => void = () => {}
+  const mini = machine({})
+  pilotRpc.mockImplementation(
+    byHost({
+      local: machine({ items: [question('/wt/web-1', 'Local question')] }),
+      mini: (method) =>
+        method === 'pilot.inbox.list'
+          ? new Promise<InboxListPayload>((resolve) => (answerMini = resolve))
+          : mini(method)
+    })
+  )
+  return (list) => answerMini(list)
+}
+
+describe('InboxPage card actions, by machine', () => {
   afterEach(() => {
     cleanup()
     resetAutomationsFeed()
@@ -245,17 +264,7 @@ describe('InboxPage card actions on more than one machine', () => {
 
   it("picks the card the run panel named on its machine once that machine answers, not this machine's same-id card", async () => {
     setPilotHostsForTests([LOCAL_NAMED, MINI])
-    let answerMini: (list: InboxListPayload) => void = () => {}
-    const mini = machine({})
-    pilotRpc.mockImplementation(
-      byHost({
-        local: machine({ items: [question('/wt/web-1', 'Local question')] }),
-        mini: (method) =>
-          method === 'pilot.inbox.list'
-            ? new Promise<InboxListPayload>((resolve) => (answerMini = resolve))
-            : mini(method)
-      })
-    )
+    const answerMini = serveMiniLate()
     showInboxCard('in_1', MINI)
     render(<InboxPage />)
     await cardTitled('Local question')
@@ -268,5 +277,33 @@ describe('InboxPage card actions on more than one machine', () => {
     )
     expect(document.getElementById('card-in_1')?.hasAttribute('data-selected')).toBe(false)
     setPilotAutomationsView('automations')
+  })
+
+  // The browser's only host is its headless server, which reports its scheduler off.
+  it("asks this machine's Apply now when no listed machine runs a scheduler, and shows its own refusal", async () => {
+    setPilotHostsForTests([{ ...LOCAL_NAMED, schedulerOn: false }])
+    pilotRpc.mockImplementation(
+      byHost({
+        local: machine({ queue: [HELD], fails: { 'pilot.answers.applyNow': ELSEWHERE } })
+      })
+    )
+    render(<InboxPage />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Apply now' }))
+    expect(await screen.findByText(ELSEWHERE)).toBeTruthy()
+    expect(callsOf('pilot.answers.applyNow')).toHaveLength(1)
+  })
+
+  it('names the one machine asked to apply when it fails and more than one is listed', async () => {
+    setPilotHostsForTests([{ ...LOCAL_NAMED, schedulerOn: false }, MINI])
+    pilotRpc.mockImplementation(
+      byHost({
+        local: machine({ queue: [HELD] }),
+        mini: machine({ fails: { 'pilot.answers.applyNow': 'Pilot is busy' } })
+      })
+    )
+    render(<InboxPage />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Apply now' }))
+    expect(await screen.findByText("Mac mini couldn't apply: Pilot is busy")).toBeTruthy()
+    expect(callsOf('pilot.answers.applyNow').map(([, , o]) => o?.target)).toEqual([MINI.target])
   })
 })

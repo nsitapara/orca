@@ -10,7 +10,7 @@ import { useHostPoll } from '../../hosts/host-poll'
 import { hostRpc } from '../../hosts/host-rpc'
 import { useLoadedAt } from '../../hosts/loaded-at'
 import { mergedError, mergeInbox, mergeQueue } from '../../hosts/merge-inbox'
-import type { Hosted, PilotHostEntry } from '../../hosts/pilot-host'
+import { LOCAL_PILOT_HOST, type Hosted, type PilotHostEntry } from '../../hosts/pilot-host'
 import { currentPilotHosts } from '../../hosts/pilot-hosts-feed'
 import { errorText } from '../format'
 import { applyReport } from './answer-text'
@@ -35,12 +35,18 @@ export function sumDispatchReports(reports: readonly DispatchReport[]): Dispatch
 }
 
 // Machines that apply answers: online, and not reporting their scheduler off (an older engine reports nothing).
-function applyingHosts(): PilotHostEntry[] {
-  return currentPilotHosts().filter((h) => h.state === 'online' && h.schedulerOn !== false)
+// With none, this machine (the browser's server) is still asked, so its own reply shows as before.
+function applyingHosts(listed: readonly PilotHostEntry[]): PilotHostEntry[] {
+  const running = listed.filter((h) => h.state === 'online' && h.schedulerOn !== false)
+  if (running.length > 0) {
+    return running
+  }
+  return [listed.find((h) => h.local) ?? LOCAL_PILOT_HOST]
 }
 
-// One machine says its own line as before; several say the summed pass, then what each one couldn't.
+// The summed pass, then what each machine couldn't; a failure names its machine once more than one is listed.
 function applyResult(
+  named: boolean,
   hosts: readonly PilotHostEntry[],
   settled: readonly PromiseSettledResult<DispatchReport>[]
 ): ApplyResult {
@@ -48,16 +54,13 @@ function applyResult(
   const failures = settled.flatMap((s, i) =>
     s.status === 'rejected' ? [{ host: hosts[i], text: errorText(s.reason) }] : []
   )
-  if (hosts.length === 0) {
-    return { said: 'No connected Pilot applies answers right now', failed: true }
-  }
-  if (hosts.length === 1 && failures.length === 1) {
-    return { said: failures[0].text, failed: true }
-  }
-  const said = [
-    ...(reports.length > 0 ? [applyReport(sumDispatchReports(reports))] : []),
-    ...failures.map((f) => `${f.host.machineName} couldn't apply: ${f.text}`)
-  ]
+  const lines = failures.map((f) => {
+    if (!named) {
+      return f.text
+    }
+    return `${f.host.machineName} couldn't apply: ${f.text}`
+  })
+  const said = [...(reports.length > 0 ? [applyReport(sumDispatchReports(reports))] : []), ...lines]
   return { said: said.join(' · '), failed: failures.length > 0 }
 }
 
@@ -140,7 +143,8 @@ export function useWaiting(person: string | null) {
 
   // What the pass did, in a line, so Apply now always says something (even "2 still held").
   const applyNow = useCallback(async (): Promise<ApplyResult> => {
-    const hosts = applyingHosts()
+    const listed = currentPilotHosts()
+    const hosts = applyingHosts(listed)
     const settled = await Promise.allSettled(
       hosts.map((host) =>
         hostRpc<DispatchReport>(host, 'pilot.answers.applyNow', {}, { timeoutMs: APPLY_TIMEOUT_MS })
@@ -149,7 +153,7 @@ export function useWaiting(person: string | null) {
     if (settled.some((s) => s.status === 'fulfilled')) {
       await reload()
     }
-    return applyResult(hosts, settled)
+    return applyResult(listed.length > 1, hosts, settled)
   }, [reload])
 
   return {

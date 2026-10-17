@@ -6,6 +6,7 @@ import { useHostPoll, type HostRead } from '../../hosts/host-poll'
 import { hostRpc } from '../../hosts/host-rpc'
 import { mergedError, mergeDoneForYou } from '../../hosts/merge-inbox'
 import { groupByHost, type Hosted, type PilotHostRef } from '../../hosts/pilot-host'
+import { currentPilotHosts } from '../../hosts/pilot-hosts-feed'
 import { errorText } from '../format'
 
 type MachineRun = { id: string; host: PilotHostRef }
@@ -27,7 +28,8 @@ export function useDoneForYou(person: string | null): {
   )
   const runs = useHeldMerge(reads, mergeDoneForYou) ?? []
   const error = mergedError(reads)
-  // Run ids are per machine: each machine acknowledges only its own, and one failing never stops the rest.
+  // Run ids are per machine: each machine acknowledges only its own, and one failing never stops the rest. A
+  // failure names its machine once more than one is listed.
   const acknowledge = useCallback(
     async (picked: readonly MachineRun[]): Promise<string | null> => {
       const machines = groupByHost(picked)
@@ -43,7 +45,7 @@ export function useDoneForYou(person: string | null): {
       if (failures.length === 0) {
         return null
       }
-      if (machines.length === 1) {
+      if (currentPilotHosts().length <= 1) {
         return failures[0].text
       }
       return failures.map((f) => `${f.host.machineName}: ${f.text}`).join(' · ')

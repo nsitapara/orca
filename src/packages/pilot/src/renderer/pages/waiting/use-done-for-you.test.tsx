@@ -78,7 +78,10 @@ describe('useDoneForYou', () => {
     )
   })
 
-  it("names the machine that couldn't acknowledge when several were asked", async () => {
+  it.each([
+    ['several machines were asked', [LOCAL_NAMED, MINI]],
+    ['only that machine was asked, with more than one listed', [MINI]]
+  ])("names the machine that couldn't acknowledge when %s", async (_case, asked) => {
     setPilotHostsForTests([LOCAL_NAMED, MINI])
     pilotRpc.mockImplementation(
       byHost({
@@ -95,10 +98,7 @@ describe('useDoneForYou', () => {
     await act(async () => {})
     let failed: string | null = null
     await act(async () => {
-      failed = await result.current.acknowledge([
-        { id: 'r1', host: LOCAL_NAMED },
-        { id: 'r1', host: MINI }
-      ])
+      failed = await result.current.acknowledge(asked.map((host) => ({ id: 'r1', host })))
     })
     expect(failed).toBe('Mac mini: Pilot is busy')
   })
