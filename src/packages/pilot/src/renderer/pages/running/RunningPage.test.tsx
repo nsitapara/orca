@@ -1,16 +1,26 @@
 // @vitest-environment happy-dom
-import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { CapacityPayload, FinishedRun } from '../../../shared/api-types-capacity'
 import { testStepRow } from '../../../shared/run-views/__fixtures__/runs'
 import { byHost, LOCAL_NAMED, MINI, MINI_OFFLINE } from '../../hosts/__fixtures__/hosts'
 import type { PilotHostEntry } from '../../hosts/pilot-host'
+import { PilotHostProvider } from '../../hosts/PilotHostContext'
 import { resetPilotHostsFeed, setPilotHostsForTests } from '../../hosts/pilot-hosts-feed'
-import { openRunPanel } from '../../run-views/run-panel-state'
+import { resetAutomationsFeed } from '../../run-views/automations-feed'
+import { resetEffectsFeed } from '../../run-views/effects-feed'
+import { closeRunPanel, openRunPanel } from '../../run-views/run-panel-state'
+import { registerPilotStore } from '../../store'
+import { summary } from '../fixtures'
 
 const pilotRpc = vi.fn()
 vi.mock('../../api', () => ({ pilotRpc: (...args: unknown[]) => pilotRpc(...args) }))
+const activate = vi.fn()
+vi.mock('@/lib/worktree-activation', () => ({
+  activateAndRevealWorktree: (...args: unknown[]) => activate(...args)
+}))
 
+import { FinishedRuns } from './FinishedRuns'
 import { RunningPage } from './RunningPage'
 import { CAPACITY_POLL_MS } from './use-capacity'
 
@@ -417,5 +427,137 @@ describe('RunningPage on more than one machine', () => {
     await act(async () => refuse(new Error("Pilot isn't running")))
     expect(region('Mac mini').getByText("Pilot isn't running")).toBeTruthy()
     expect(limitOf('Mac mini')).toBe('2')
+  })
+})
+
+describe("RunningPage: another machine's runs", () => {
+  afterEach(() => {
+    closeRunPanel()
+    resetPilotHostsFeed()
+    resetEffectsFeed()
+    resetAutomationsFeed()
+    registerPilotStore(null)
+    activate.mockReset()
+  })
+
+  const REVIEW = { ...summary, id: 'review', name: '03 Review and fix' }
+  // Both machines run r1 and finished f1, the same ids; each answers its own figures and effects.
+  const machine =
+    (effects: Record<string, unknown> = {}) =>
+    (method: string): unknown => {
+      if (method === 'pilot.runs.effects') {
+        return effects
+      }
+      if (method === 'pilot.automations.list') {
+        return { automations: [REVIEW], errors: [], peopleError: null, missingDirs: [] }
+      }
+      if (method === 'pilot.session.resume') {
+        return { action: 'opened', handle: 'term_9' }
+      }
+      return capacity({ finished: [finishedRun({ steps: [testStepRow({ runId: 'f1' })] })] })
+    }
+  const miniFinished = async () => {
+    const mini = within(await screen.findByRole('region', { name: 'Mac mini' }))
+    const finished = within(await mini.findByRole('region', { name: 'Recently finished' }))
+    await act(async () => {
+      fireEvent.click(await finished.findByRole('button', { name: 'Recently finished · 1' }))
+    })
+    return finished
+  }
+  const showMini = (local = machine(), mini = machine()) => {
+    setPilotHostsForTests([LOCAL_NAMED, MINI])
+    pilotRpc.mockImplementation(byHost({ local, mini }))
+    render(<RunningPage />)
+    return miniFinished()
+  }
+  const showDetails = async (finished: ReturnType<typeof within>) => {
+    await act(async () => {
+      fireEvent.click(finished.getByRole('button', { name: 'Show details of 03 Review and fix' }))
+    })
+  }
+
+  it.each<[string, string, (finished: ReturnType<typeof within>) => Promise<HTMLElement>]>([
+    [
+      'Running now',
+      'r1',
+      async () => {
+        const mini = within(screen.getByRole('region', { name: 'Mac mini' }))
+        return within(mini.getByRole('region', { name: 'Running now' })).getByRole('button', {
+          name: 'Open run'
+        })
+      }
+    ],
+    ['a finished row', 'f1', async (finished) => finished.getByRole('button', { name: 'Open' })],
+    [
+      "a finished run's strip, named by its machine",
+      'f1',
+      async (finished) => {
+        await showDetails(finished)
+        const strip = await finished.findByRole('list', { name: 'Run f1 on Mac mini' })
+        return within(strip).getByRole('button', { name: /1 fix/ })
+      }
+    ]
+  ])(
+    'opens a Mac mini run there from %s, though this machine has a run with its id',
+    async (_from, runId, control) => {
+      const finished = await showMini()
+      fireEvent.click(await control(finished))
+      expect([openRunPanel()?.runId, openRunPanel()?.host.key]).toEqual([runId, 'env:mini'])
+    }
+  )
+
+  it("shows a Mac mini finished run's own effects, never this machine's for the same id (Review Focus 1)", async () => {
+    const pushed = (target: string) => ({
+      kind: 'pushed',
+      target,
+      url: null,
+      count: 1,
+      stepIdx: 0,
+      at: 1
+    })
+    const finished = await showMini(
+      machine({ f1: [pushed('web-1')] }),
+      machine({ f1: [pushed('mini-1')] })
+    )
+    await showDetails(finished)
+    expect(await finished.findByText('pushed mini-1')).toBeTruthy()
+    expect(finished.queryByText('pushed web-1')).toBeNull()
+  })
+
+  it("resumes a Mac mini finished run's session there", async () => {
+    const finished = await showMini()
+    await act(async () => {
+      fireEvent.click(finished.getByRole('button', { name: /resume/i }))
+    })
+    expect(pilotRpc.mock.calls.filter(([m]) => m === 'pilot.session.resume')).toEqual([
+      ['pilot.session.resume', { runId: 'f1', stepIdx: 0 }, { target: MINI.target }]
+    ])
+  })
+
+  it("opens a Mac mini finished run's worktree there, though this machine has the same worktree id", async () => {
+    registerPilotStore({
+      getState: () => ({
+        rightSidebarOpen: false,
+        setRightSidebarOpen: () => {},
+        worktreesByRepo: {
+          'repo-1': [
+            { id: 'a', path: '/wt/web-1' },
+            { id: 'a', path: '/wt/web-1', runtimeOwnerEnvironmentId: 'mini' }
+          ]
+        }
+      })
+    })
+    pilotRpc.mockResolvedValue({})
+    render(
+      <PilotHostProvider host={MINI}>
+        <FinishedRuns runs={[finishedRun()]} now={Date.now()} />
+      </PilotHostProvider>
+    )
+    await click('Recently finished · 1')
+    await click('web-1')
+    await waitFor(() =>
+      expect(activate).toHaveBeenCalledWith('a', { executionHostId: 'runtime:mini' })
+    )
+    expect(activate).toHaveBeenCalledTimes(1)
   })
 })

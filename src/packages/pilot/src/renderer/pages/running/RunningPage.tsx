@@ -2,6 +2,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import type { CapacityPayload, CapacityRun, QueuedRun } from '../../../shared/api-types-capacity'
 import { formatDuration } from '../../../shared/run/format-duration'
+import { PilotHostProvider, usePilotHost } from '../../hosts/PilotHostContext'
 import { openRun } from '../../run-views/run-panel-state'
 import { useNow } from '../waiting/use-now'
 import { FinishedRuns } from './FinishedRuns'
@@ -57,6 +58,7 @@ function LimitPanel({
 }
 
 function RunningRow({ run, now }: { run: CapacityRun; now: number }): React.JSX.Element {
+  const host = usePilotHost()
   return (
     <li className="flex min-w-0 items-center gap-2 px-3 py-2 text-sm">
       <span className="shrink-0 font-medium">{run.automationName}</span>
@@ -72,7 +74,11 @@ function RunningRow({ run, now }: { run: CapacityRun; now: number }): React.JSX.
       <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
         {runMemoryText(run)}
       </span>
-      <button type="button" className="shrink-0 text-xs underline" onClick={() => openRun(run.id)}>
+      <button
+        type="button"
+        className="shrink-0 text-xs underline"
+        onClick={() => openRun(run.id, null, host)}
+      >
         Open run
       </button>
     </li>
@@ -201,14 +207,17 @@ function MachineSection({ machine, named, ...rest }: MachineProps): React.JSX.El
       </section>
     )
   }
+  // Its runs open, resume and read on this section's machine.
   return (
-    <section aria-label={host.machineName} className="flex flex-col gap-4">
-      {heading}
-      {error ? <p className="text-sm text-destructive">{error}</p> : null}
-      {payload ? (
-        <MachineRuns payload={payload} where={named ? host.machineName : 'this Mac'} {...rest} />
-      ) : null}
-    </section>
+    <PilotHostProvider host={host}>
+      <section aria-label={host.machineName} className="flex flex-col gap-4">
+        {heading}
+        {error ? <p className="text-sm text-destructive">{error}</p> : null}
+        {payload ? (
+          <MachineRuns payload={payload} where={named ? host.machineName : 'this Mac'} {...rest} />
+        ) : null}
+      </section>
+    </PilotHostProvider>
   )
 }
 

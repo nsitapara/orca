@@ -10,11 +10,12 @@ import { money } from '../../../shared/money'
 import { formatDuration } from '../../../shared/run/format-duration'
 import { paintRun } from '../../../shared/run-views/paint'
 import { runStrip } from '../../../shared/run-views/strip'
+import { usePilotHost } from '../../hosts/PilotHostContext'
 import { useAutomationsFeed } from '../../run-views/automations-feed'
 import { useRunEffects } from '../../run-views/effects-feed'
 import { EffectsLine } from '../../run-views/EffectsLine'
 import { openRun } from '../../run-views/run-panel-state'
-import { RunStrip } from '../../run-views/RunStrip'
+import { RunStrip, useRunStripLabel } from '../../run-views/RunStrip'
 import { canResume, ResumeButton } from '../../run-views/StepDetail'
 import { RUN_TONE } from '../../run-views/tokens'
 import { WaitingRow } from '../../timeline/WaitingRow'
@@ -44,18 +45,20 @@ function ItemCell({ run }: { run: FinishedRun }): React.JSX.Element {
   )
 }
 
-// The worktree the run worked in and the project the app lists it under; the name opens it when the app has it.
+// The worktree the run worked in and the project the app lists it under; the name opens it, on the run's machine, when
+// the app has it there.
 function WorktreeCell({ path }: { path: string | null }): React.JSX.Element {
+  const host = usePilotHost()
   if (!path) {
     return <span className="text-muted-foreground">–</span>
   }
-  const id = worktreeIdForPath(path)
+  const id = worktreeIdForPath(path, host)
   const project = repoNameForPath(path)
   const name = <span className="font-mono">{worktreeName(path)}</span>
   return (
     <span title={path}>
       {id ? (
-        <button type="button" className="hover:underline" onClick={() => openWorktree(id)}>
+        <button type="button" className="hover:underline" onClick={() => openWorktree(id, host)}>
           {name}
         </button>
       ) : (
@@ -75,9 +78,12 @@ function SessionCell({ run }: { run: FinishedRun }): React.JSX.Element {
   return <ResumeButton runId={run.id} worktreePath={run.worktreePath} step={step} />
 }
 
-// What a row opens to: how it ended, what it changed, the cards it made and its steps (each opens its log).
+// What a row opens to: how it ended, what it changed, the cards it made and its steps (each opens its log), all from the
+// run's machine.
 function FinishedDetails({ run }: { run: FinishedRun }): React.JSX.Element {
+  const host = usePilotHost()
   const effects = useRunEffects(run.id, false)
+  const label = useRunStripLabel(run.id, host)
   const summary = useAutomationsFeed().byId.get(run.automationId)
   const chips = summary ? runStrip(paintRun(summary.chain, { run }).parts, run) : []
   return (
@@ -88,11 +94,7 @@ function FinishedDetails({ run }: { run: FinishedRun }): React.JSX.Element {
         <WaitingRow key={item.id} item={item} />
       ))}
       {chips.length > 0 ? (
-        <RunStrip
-          items={chips}
-          label={`Run ${run.id}`}
-          onChip={(chip) => openRun(run.id, chip.part)}
-        />
+        <RunStrip items={chips} label={label} onChip={(chip) => openRun(run.id, chip.part, host)} />
       ) : null}
       <div>Started {clockTime(run.startedAt)}</div>
     </div>
@@ -110,6 +112,7 @@ function FinishedRow({
   open: boolean
   onToggle(): void
 }): React.JSX.Element {
+  const host = usePilotHost()
   const ended = run.finishedAt ?? now
   return (
     <>
@@ -155,7 +158,7 @@ function FinishedRow({
           <SessionCell run={run} />
         </td>
         <td className="py-1.5 pr-3 text-right text-xs">
-          <button type="button" className="underline" onClick={() => openRun(run.id)}>
+          <button type="button" className="underline" onClick={() => openRun(run.id, null, host)}>
             Open
           </button>
         </td>
@@ -171,7 +174,8 @@ function FinishedRow({
   )
 }
 
-// The slot-holding jobs' newest ended runs (main/capacity), folded until asked for; a row opens to its details.
+// The slot-holding jobs' newest ended runs (main/capacity), folded until asked for; a row opens to its details. They are
+// the runs of the machine the surrounding section is for.
 export function FinishedRuns({
   runs,
   now
