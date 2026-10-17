@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest'
+import type { InboxStatus } from '../../shared/api-types'
 import {
   queuedPreparation,
   PREPARATION_HOLD_MAX_MS,
-  PREPARATION_LEASE_MS
+  PREPARATION_LEASE_MS,
+  type InboxPreparation
 } from '../../shared/preparation'
 import { PilotStore } from './store'
 
@@ -69,6 +71,67 @@ describe('preparation leases', () => {
       error: 'Missing screenshot'
     })
     expect(queue.listEligible(later + 2)).toEqual([])
+    store.close()
+  })
+})
+
+// A refused claim says which reason applies, after the prefix pilotcli reads as a skip; nothingToDo: nothing is left
+// for worker-2 (its step stops), false: the card still needs a person (its step fails).
+describe('a refused claim', () => {
+  const at = 200
+  it.each<[string, InboxStatus, Partial<InboxPreparation>, string, boolean]>([
+    ['an answered card', 'done', {}, 'the card was already answered', true],
+    ['a dismissed card', 'dismissed', {}, 'the card was dismissed', true],
+    [
+      'a newer request',
+      'open',
+      { revision: 2 },
+      'the card was queued again since this run took it',
+      true
+    ],
+    [
+      'a card another run prepared',
+      'open',
+      { state: 'ready', runId: 'worker-1', attempt: 1 },
+      'run worker-1 already prepared this card',
+      true
+    ],
+    [
+      'a card another run is preparing',
+      'open',
+      { state: 'generating', runId: 'worker-1', stepIdx: 0, attempt: 1, leaseUntil: at + 1 },
+      'run worker-1 is preparing this card',
+      true
+    ],
+    [
+      'a blocked preparation',
+      'open',
+      { state: 'blocked', attempt: 1 },
+      'its preparation is blocked until you Retry it on the card',
+      false
+    ],
+    [
+      'a preparation out of attempts',
+      'open',
+      { attempt: 2 },
+      'every attempt is used (2 of 2) until you Retry it on the card',
+      false
+    ]
+  ])('names %s', (_name, status, over, reason, nothingToDo) => {
+    const store = setup()
+    const p = store.inbox.get('item')?.preparation
+    if (!p) {
+      throw new Error('no preparation')
+    }
+    store.inboxPreparations.write('item', { ...p, ...over })
+    if (status !== 'open') {
+      store.inbox.update('item', { status }, at)
+    }
+    expect(store.inboxPreparations.claimRefusal('item', 1, 'worker-2', 0, at)).toMatchObject({
+      message: `Preparation claim is stale: ${reason}`,
+      nothingToDo
+    })
+    expect(() => store.inboxPreparations.claim('item', 1, 'worker-2', 0, at)).toThrow(reason)
     store.close()
   })
 })

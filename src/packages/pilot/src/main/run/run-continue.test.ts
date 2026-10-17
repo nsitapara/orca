@@ -1,7 +1,8 @@
 import { describe, expect, it, vi } from 'vitest'
-import type { RunRow, StepStatus } from '../../shared/api-types'
+import type { InboxStatus, ItemFields, RunRow, StepStatus } from '../../shared/api-types'
 import { testDefinition, testStep } from '../../shared/definition/__fixtures__/definition'
 import type { AutomationDefinition } from '../../shared/definition/types'
+import { queuedPreparation, type InboxPreparation } from '../../shared/preparation'
 import { PilotStore } from '../store/store'
 import { continueRun, type ContinueRunDeps } from './run-continue'
 
@@ -23,12 +24,21 @@ const BROKEN: Step[] = [
   { name: 'flag_failed', agent: 'shell', status: 'done' }
 ]
 
+function recordTick(store: PilotStore, fields: ItemFields): number {
+  const tickId = store.startTick('review', 1)
+  const decision = { key: 'mr:1', label: '!1', verdict: 'started' as const, reason: '', checks: [] }
+  store.recordDecisions(tickId, [{ ...decision, onceKey: '1:9', fields }], new Map())
+  return tickId
+}
+
 function setup(
   over: {
     def?: AutomationDefinition | null
     steps?: Step[]
     run?: Partial<Pick<RunRow, 'status' | 'trigger'>>
     deps?: Partial<ContinueRunDeps>
+    // The item fields the run's tick decided it on: the run gets a tick only when given them.
+    tickFields?: ItemFields
   } = {}
 ) {
   const store = PilotStore.open(':memory:')
@@ -36,7 +46,7 @@ function setup(
   store.runs.create({
     id: 'run-1',
     automationId: 'review',
-    tickId: null,
+    tickId: over.tickFields ? recordTick(store, over.tickFields) : null,
     itemKey: 'mr:1',
     itemLabel: '!1 web-1',
     worktreePath: '/wt',
@@ -189,5 +199,86 @@ describe('continueRun', () => {
     await expect(continueRun(deps, 'run-1')).rejects.toThrow('run-2')
     expect(store.runs.get('run-1')?.status).toBe('failed')
     expect(continued).not.toHaveBeenCalled()
+  })
+})
+
+// Job 14: the run's item is a card (here mr:1), bound by its tick to one revision of the card's preparation.
+describe('continueRun on a context-preparation run', () => {
+  const PREPARE = testDefinition({
+    id: 'review',
+    items: { kind: 'inbox_preparation', where: {}, match: [], customFields: [] },
+    steps: [testStep({ name: 'prepare', skill: 'prepare-inbox-item-context' })]
+  })
+  const queued = queuedPreparation(
+    { key: 'decision', context: 'Investigate', requirements: ['context'] },
+    1
+  )
+
+  function preparing(status: InboxStatus, preparation: InboxPreparation) {
+    const built = setup({
+      def: PREPARE,
+      steps: [{ name: 'prepare', agent: 'claude', status: 'failed', error: 'lease expired' }],
+      tickFields: { 'preparation.item_id': 'mr:1', 'preparation.revision': 1 }
+    })
+    built.store.inbox.add({
+      id: 'mr:1',
+      automationId: 'origin',
+      runId: null,
+      stepIdx: null,
+      itemKey: 'mr:9',
+      worktreePath: '/wt',
+      person: 'nish',
+      type: 'question',
+      title: 'Decision',
+      context: 'Context',
+      options: [],
+      suggested: null,
+      detailsMd: null,
+      action: null,
+      actionArgs: null,
+      digest: 'digest',
+      createdAt: 1,
+      source: 'engine',
+      vaultRef: null,
+      preparation
+    })
+    if (status !== 'open') {
+      built.store.inbox.update('mr:1', { status }, 5)
+    }
+    return built
+  }
+
+  it.each<[string, InboxStatus, InboxPreparation, string]>([
+    ['an answered card', 'done', queued, 'Nothing to continue: the card was already answered'],
+    [
+      'a card another run prepared',
+      'open',
+      { ...queued, state: 'ready', attempt: 1, runId: 'run-2', stepIdx: 0 },
+      'Nothing to continue: run run-2 already prepared this card'
+    ],
+    [
+      'a card queued again since',
+      'open',
+      { ...queued, revision: 2 },
+      'Nothing to continue: the card was queued again since this run took it'
+    ],
+    [
+      'a blocked preparation',
+      'open',
+      { ...queued, state: 'blocked', attempt: 1, runId: 'run-1', stepIdx: 0 },
+      "Can't continue: its preparation is blocked until you Retry it on the card"
+    ]
+  ])('refuses %s and changes nothing', async (_name, status, preparation, why) => {
+    const { store, deps, continued } = preparing(status, preparation)
+    const before = { run: store.runs.get('run-1'), steps: store.runs.steps('run-1') }
+    await expect(continueRun(deps, 'run-1')).rejects.toThrow(why)
+    expect({ run: store.runs.get('run-1'), steps: store.runs.steps('run-1') }).toEqual(before)
+    expect(continued).not.toHaveBeenCalled()
+  })
+
+  it("goes on while the preparation is still the run's to take", async () => {
+    const { deps, continued } = preparing('open', queued)
+    await expect(continueRun(deps, 'run-1')).resolves.toEqual({ step: 'prepare', resumed: false })
+    expect(continued).toHaveBeenCalledWith('run-1', null)
   })
 })

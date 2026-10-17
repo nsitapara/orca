@@ -15,6 +15,7 @@ import { isStartTimeout, type SessionClaimTable } from './session-claims'
 import { sessionHome } from './session-home'
 import { rememberWorktreeSession, worktreeSessionToResume } from './worktree-session'
 import type { Workspace } from './workspace'
+import { NothingToDoError } from './nothing-to-do'
 import { blockUntrackedPreparation, claimPreparationWorker } from './preparation-worker'
 
 export type AgentStepRequest = {
@@ -85,6 +86,12 @@ function messageOf(error: unknown): string {
 function failStep(store: PilotStore, runId: string, idx: number, error: string, at: number): void {
   try {
     store.runs.updateStep(runId, idx, { status: 'failed', error, finishedAt: at })
+  } catch {}
+}
+
+function stopStep(store: PilotStore, runId: string, idx: number, reason: string, at: number): void {
+  try {
+    store.runs.updateStep(runId, idx, { status: 'stopped', error: reason, finishedAt: at })
   } catch {}
 }
 
@@ -268,6 +275,10 @@ export async function launchAgentStep(
     // A launch that timed out may still produce its tab: the claim stays (until landed, dead or the TTL).
     if (session.kind === 'resume' && !(launching && isStartTimeout(error))) {
       claims?.release(session.sessionId, by)
+    }
+    if (error instanceof NothingToDoError) {
+      stopStep(store, runId, idx, error.message, deps.now())
+      throw error
     }
     const message = messageOf(error)
     const reason = message === 'selector_not_found' ? 'worktree is gone' : message

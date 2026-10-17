@@ -1,10 +1,13 @@
 import type { RunRow } from '../../shared/api-types'
 import type { AutomationDefinition } from '../../shared/definition/types'
 import type { PilotStore } from '../store/store'
+import { PreparationStaleError } from '../store/store-inbox-preparations'
 import type { AgentStepRequest } from './agent-step'
+import { NothingToDoError } from './nothing-to-do'
 import { closeRun } from './run-close'
 
-// Called after asynchronous launch preparation, immediately before sending the prompt/spawning.
+// Called after asynchronous launch preparation, immediately before sending the prompt/spawning. A card with nothing
+// left for this run (answered, prepared, or someone else's) stops the step: the run had nothing to do.
 export function claimPreparationWorker(store: PilotStore, req: AgentStepRequest, at: number): void {
   if (req.definition.items?.kind !== 'inbox_preparation') {
     return
@@ -13,9 +16,16 @@ export function claimPreparationWorker(store: PilotStore, req: AgentStepRequest,
   if (req.fields['preparation.item_id'] !== req.itemKey || typeof revision !== 'number') {
     throw new Error('Preparation worker is missing its item/revision binding')
   }
-  store.transaction(() =>
-    store.inboxPreparations.claim(req.itemKey, revision, req.runId, req.stepIdx, at)
-  )
+  try {
+    store.transaction(() =>
+      store.inboxPreparations.claim(req.itemKey, revision, req.runId, req.stepIdx, at)
+    )
+  } catch (error) {
+    if (error instanceof PreparationStaleError && error.nothingToDo) {
+      throw new NothingToDoError(error.reason)
+    }
+    throw error
+  }
 }
 
 // A process exists but no step can watch it. Do not give a replacement the same checkout.

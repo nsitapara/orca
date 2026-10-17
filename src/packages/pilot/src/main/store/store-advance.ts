@@ -63,13 +63,22 @@ export class AdvanceStore {
   // The starter threw. Its row, if it wrote one and left it open, becomes failed; a row it never
   // wrote is added failed. A row it already closed keeps its own error.
   ensureFailedStep(step: AdvancedStep, error: string): void {
+    this.endOpenStep(step, 'failed', error)
+  }
+
+  // The starter found nothing for the step to do (run/nothing-to-do.ts): as ensureFailedStep, but stopped.
+  ensureStoppedStep(step: AdvancedStep, reason: string): void {
+    this.endOpenStep(step, 'stopped', reason)
+  }
+
+  private endOpenStep(step: AdvancedStep, status: 'failed' | 'stopped', error: string): void {
     this.db
       .prepare(
         `${INSERT_STEP}
-         ON CONFLICT (run_id, idx) DO UPDATE SET status = 'failed', finished_at = excluded.finished_at, error = excluded.error
+         ON CONFLICT (run_id, idx) DO UPDATE SET status = excluded.status, finished_at = excluded.finished_at, error = excluded.error
          WHERE steps.status IN ('pending', 'starting', 'running')`
       )
-      .run(...(stepValues(step, 'failed', error) as never[]))
+      .run(...(stepValues(step, status, error) as never[]))
   }
 
   mergeStepOutputs(runId: string, idx: number, outputs: ItemFields): ItemFields {

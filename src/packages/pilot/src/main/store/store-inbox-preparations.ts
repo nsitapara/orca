@@ -1,12 +1,78 @@
 import type Database from '../../../../../main/sqlite/sync-database'
-import type { InboxItemRow } from '../../shared/api-types'
+import type { InboxItemRow, InboxStatus } from '../../shared/api-types'
 import type { InboxPreparation } from '../../shared/preparation'
 import { PREPARATION_HOLD_MAX_MS, PREPARATION_LEASE_MS } from '../../shared/preparation'
 import type { InboxStore } from './store-inbox'
 
 export type PreparationClaim = { runId: string; stepIdx: number; revision: number; attempt: number }
-export const PREPARATION_STALE =
-  'Preparation claim is stale, expired, or the item has been answered'
+// pilotcli reads a refusal that starts with this as a skip (pilotCLI internal/pilot/pilot.go); the reason follows it.
+export const PREPARATION_STALE = 'Preparation claim is stale'
+
+// Why a run can't take or keep a card's preparation. `nothingToDo`: nothing is left for that run (the card was
+// answered, prepared, or went to another run or a newer request); false when the card still needs a person.
+export class PreparationStaleError extends Error {
+  constructor(
+    readonly reason: string,
+    readonly nothingToDo = true
+  ) {
+    super(`${PREPARATION_STALE}: ${reason}`)
+  }
+}
+
+const CLOSED: Record<Exclude<InboxStatus, 'open'>, string> = {
+  answered: 'the card was already answered',
+  done: 'the card was already answered',
+  dismissed: 'the card was dismissed',
+  obsolete: 'the card is obsolete',
+  stale: 'the card went stale'
+}
+
+function preparedBy(p: InboxPreparation, runId: string): string {
+  if (p.runId === runId) {
+    return 'this run already prepared this card'
+  }
+  if (p.runId) {
+    return `run ${p.runId} already prepared this card`
+  }
+  return 'the card is already prepared'
+}
+
+// What stops every run bound to `revision`: a closed card, a newer request, or a preparation that has ended.
+function endedRefusal(
+  item: InboxItemRow | null | undefined,
+  revision: number,
+  runId: string
+): PreparationStaleError | null {
+  if (!item) {
+    return new PreparationStaleError('the card is gone')
+  }
+  if (item.status !== 'open') {
+    return new PreparationStaleError(CLOSED[item.status])
+  }
+  if (item.answer) {
+    return new PreparationStaleError(CLOSED.answered)
+  }
+  const p = item.preparation
+  if (!p) {
+    return new PreparationStaleError('the card no longer asks for context')
+  }
+  if (p.revision !== revision) {
+    return new PreparationStaleError('the card was queued again since this run took it')
+  }
+  if (p.state === 'ready') {
+    return new PreparationStaleError(preparedBy(p, runId))
+  }
+  if (p.state === 'cancelled') {
+    return new PreparationStaleError('its preparation was cancelled')
+  }
+  if (p.state === 'blocked') {
+    return new PreparationStaleError(
+      'its preparation is blocked until you Retry it on the card',
+      false
+    )
+  }
+  return null
+}
 
 export class InboxPreparationStore {
   constructor(
@@ -52,25 +118,47 @@ export class InboxPreparationStore {
     })
   }
 
-  claim(id: string, revision: number, runId: string, stepIdx: number, at: number): InboxItemRow {
+  private ownsLiveClaim(p: InboxPreparation, runId: string, stepIdx: number, at: number): boolean {
+    return (
+      p.state === 'generating' && p.runId === runId && p.stepIdx === stepIdx && this.holds(p, at)
+    )
+  }
+
+  // Why this run's step can't claim the card's preparation now, or null when it can (its own live claim included).
+  claimRefusal(
+    id: string,
+    revision: number,
+    runId: string,
+    stepIdx: number,
+    at: number
+  ): PreparationStaleError | null {
     const item = this.inbox.get(id)
     const p = item?.preparation
-    if (!item || item.status !== 'open' || item.answer || !p || p.revision !== revision) {
-      throw new Error(PREPARATION_STALE)
+    const ended = endedRefusal(item, revision, runId)
+    if (ended || !p || this.ownsLiveClaim(p, runId, stepIdx, at)) {
+      return ended
     }
-    if (
-      p.state === 'generating' &&
-      p.runId === runId &&
-      p.stepIdx === stepIdx &&
-      this.holds(p, at)
-    ) {
+    if (p.state === 'generating' && this.holds(p, at)) {
+      return new PreparationStaleError(`run ${p.runId} is preparing this card`)
+    }
+    if (p.attempt >= p.maxAttempts) {
+      return new PreparationStaleError(
+        `every attempt is used (${p.attempt} of ${p.maxAttempts}) until you Retry it on the card`,
+        false
+      )
+    }
+    return null
+  }
+
+  claim(id: string, revision: number, runId: string, stepIdx: number, at: number): InboxItemRow {
+    const refused = this.claimRefusal(id, revision, runId, stepIdx, at)
+    const item = this.inbox.get(id)
+    const p = item?.preparation
+    if (refused || !item || !p) {
+      throw refused ?? new PreparationStaleError('the card is gone')
+    }
+    if (this.ownsLiveClaim(p, runId, stepIdx, at)) {
       return item
-    }
-    if (
-      p.attempt >= p.maxAttempts ||
-      (p.state !== 'queued' && !(p.state === 'generating' && !this.holds(p, at)))
-    ) {
-      throw new Error(PREPARATION_STALE)
     }
     const next: InboxPreparation = {
       ...p,
@@ -95,19 +183,18 @@ export class InboxPreparationStore {
   ): InboxItemRow & { preparation: InboxPreparation } {
     const item = this.inbox.get(id)
     const p = item?.preparation
-    if (
-      !item ||
-      item.status !== 'open' ||
-      item.answer ||
-      !p ||
-      p.state !== 'generating' ||
-      p.revision !== claim.revision ||
-      p.attempt !== claim.attempt ||
-      p.runId !== claim.runId ||
-      p.stepIdx !== claim.stepIdx ||
-      !this.holds(p, at)
-    ) {
-      throw new Error(PREPARATION_STALE)
+    const ended = endedRefusal(item, claim.revision, claim.runId)
+    if (ended || !item || !p) {
+      throw ended ?? new PreparationStaleError('the card is gone')
+    }
+    if (p.state !== 'generating') {
+      throw new PreparationStaleError("this attempt's claim expired")
+    }
+    if (p.runId !== claim.runId || p.stepIdx !== claim.stepIdx || p.attempt !== claim.attempt) {
+      throw new PreparationStaleError(`a newer attempt by run ${p.runId} took the card over`)
+    }
+    if (!this.holds(p, at)) {
+      throw new PreparationStaleError("this attempt's claim expired")
     }
     return { ...item, preparation: p }
   }
