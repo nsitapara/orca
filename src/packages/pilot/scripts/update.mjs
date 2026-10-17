@@ -23,6 +23,8 @@ export const R10_FOLDERS = [
   'src/main/startup',
   'src/main/updater',
   'src/renderer/src/app-shell',
+  // activity: its hooked files have no same-name tests, so per-file targets ran none.
+  'src/renderer/src/components/activity',
   'src/renderer/src/components/right-sidebar',
   // skill-open-file: SkillDetailDialog has no test of its own; the skills page's tests render it.
   'src/renderer/src/components/skills'
