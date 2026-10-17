@@ -75,6 +75,9 @@ export function workspaceMatchesActivityScope(
   )
 }
 
+// How Activity orders worktrees by name, ignoring case: one collator for every sort.
+export const compareWorktreeNames = new Intl.Collator(undefined, { sensitivity: 'base' }).compare
+
 export function matchesQuery(search: string, parts: readonly string[]): boolean {
   return !search || parts.join(' ').toLowerCase().includes(search)
 }

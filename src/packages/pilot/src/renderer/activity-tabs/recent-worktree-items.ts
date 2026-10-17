@@ -4,6 +4,7 @@ import type { Worktree } from '../../../../../shared/worktree/types'
 import { isActivitySearchQueryTooLarge } from '@/components/activity/activity-thread-grouping'
 import { getPaletteWorktreeIdentity } from '@/lib/palette-repo-resolution'
 import {
+  compareWorktreeNames,
   matchesQuery,
   workspaceMatchesActivityScope,
   type WorktreeTabsContext
@@ -26,7 +27,7 @@ export function worktreeRowKey(worktree: Worktree): string {
 
 /**
  * Worktrees in Activity's scope with no row there yet: every pinned one, and with `includeRecent` those
- * active within the window. Pinned first, then newest first.
+ * active within the window. Pinned first, then by name, so opening one never moves it.
  */
 export function buildRecentWorktreeItems(input: {
   worktrees: readonly Worktree[]
@@ -67,6 +68,7 @@ export function buildRecentWorktreeItems(input: {
   }
   return items.sort(
     (a, b) =>
-      Number(b.pinned) - Number(a.pinned) || b.worktree.lastActivityAt - a.worktree.lastActivityAt
+      Number(b.pinned) - Number(a.pinned) ||
+      compareWorktreeNames(a.worktree.displayName, b.worktree.displayName)
   )
 }

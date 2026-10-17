@@ -4,6 +4,7 @@ import type {
 } from '@/components/activity/activity-thread-types'
 import { translate } from '@/i18n/i18n'
 import { withGroupRows, type ActivityTabsRow } from './activity-tabs-rows'
+import { compareWorktreeNames } from './workspace-tab-items'
 
 export const OPEN_TABS_GROUP_KEY = 'pilot:open-tabs'
 export const RECENT_WORKTREES_GROUP_KEY = 'pilot:recent-worktrees'
@@ -39,25 +40,28 @@ function rowGroup(row: ActivityTabsRow, groupBy: ActivityGroupBy): { key: string
     : { key: RECENT_WORKTREES_GROUP_KEY, label: 'Recently active' }
 }
 
-// Grouped by worktree, pinned worktrees' groups lead; the rest keep their order.
-function pinnedFirst(
+// Grouped by worktree, a group's place depends only on its pin and its name: pinned first, then by
+// name. Upstream orders agents' groups by their latest activity, and selecting a worktree must never
+// move it.
+function worktreeOrder(
   groups: ActivityThreadGroup[],
   groupBy: ActivityGroupBy,
   pinnedWorktreeIds: readonly string[]
 ): ActivityThreadGroup[] {
-  if (groupBy !== 'worktree' || pinnedWorktreeIds.length === 0) {
+  if (groupBy !== 'worktree') {
     return groups
   }
   const pinned = new Set(pinnedWorktreeIds.map((id) => `${WORKTREE_GROUP}${id}`))
-  return [
-    ...groups.filter((group) => pinned.has(group.key)),
-    ...groups.filter((group) => !pinned.has(group.key))
-  ]
+  return [...groups].sort(
+    (a, b) =>
+      Number(pinned.has(b.key)) - Number(pinned.has(a.key)) ||
+      compareWorktreeNames(a.label, b.label)
+  )
 }
 
 /**
  * Puts each row in its Group by group, after the agents; groups with only Pilot rows go after the
- * rest, and pinned worktrees' groups first.
+ * rest. Grouped by worktree, groups go pinned first, then by name.
  */
 export function mergeRowsIntoGroups(
   groups: ActivityThreadGroup[],
@@ -66,7 +70,7 @@ export function mergeRowsIntoGroups(
   pinnedWorktreeIds: readonly string[] = []
 ): ActivityThreadGroup[] {
   if (rows.length === 0) {
-    return pinnedFirst(groups, groupBy, pinnedWorktreeIds)
+    return worktreeOrder(groups, groupBy, pinnedWorktreeIds)
   }
   const pending = new Map<string, { label: string; rows: ActivityTabsRow[] }>()
   for (const row of rows) {
@@ -89,5 +93,5 @@ export function mergeRowsIntoGroups(
   for (const [key, entry] of pending) {
     merged.push(withGroupRows({ key, label: entry.label, threads: [] }, entry.rows))
   }
-  return pinnedFirst(merged, groupBy, pinnedWorktreeIds)
+  return worktreeOrder(merged, groupBy, pinnedWorktreeIds)
 }
