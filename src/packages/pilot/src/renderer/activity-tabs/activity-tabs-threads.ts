@@ -13,9 +13,13 @@ import type {
 } from '@/components/activity/activity-thread-types'
 import { mergeRowsIntoGroups } from './activity-tabs-groups'
 import type { ActivityTabsRow } from './activity-tabs-rows'
-import { useActivityRecentWorktreesVisible, useActivityTabsVisible } from './activity-tabs-setting'
+import {
+  useActivityShowRecentWorktrees,
+  useActivitySidebarAttached,
+  useActivityTabsVisible
+} from './activity-tabs-setting'
 import { useOpenTabItems } from './use-open-tab-items'
-import { useRecentWorktreeItems } from './use-recent-worktree-items'
+import { usePinnedWorktreeIds, useRecentWorktreeItems } from './use-recent-worktree-items'
 
 // The agent thread behind the active workspace tab, so its row reads as current.
 export function useActiveWorkspaceThread(
@@ -62,8 +66,9 @@ export type ActivityTabsView = {
 
 // pilot-hook: activity-tabs-threads. Wraps useAgentPaneThreads in the Activity sidebar: while
 // "Show all tabs" is on, every other open tab joins the agents' groups and the active tab's agent
-// reads as current; while "Show recently active worktrees" is on, each such worktree with no row
-// gets one to start a session from.
+// reads as current. A pinned worktree with no row always gets one to start a session from, and so,
+// while "Show recently active worktrees" is on, does each recently active one; pinned worktrees'
+// groups lead the worktree grouping.
 export function useActivityTabsThreads<
   T extends {
     allThreads: AgentPaneThread[]
@@ -71,8 +76,10 @@ export function useActivityTabsThreads<
     visibleThreadGroups: ActivityThreadGroup[]
   }
 >(result: T, view: ActivityTabsView): T {
+  const attached = useActivitySidebarAttached()
   const tabsVisible = useActivityTabsVisible()
-  const recentVisible = useActivityRecentWorktreesVisible()
+  const recentOn = useActivityShowRecentWorktrees()
+  const pinnedIds = usePinnedWorktreeIds(attached)
   const activePaneKey = useActiveWorkspaceThread(result.allThreads, result.effectiveSelectedPaneKey)
   // A tab or a worktree is never unread, so "Show unread only" leaves them out.
   const listsAll = view.readFilter === 'all'
@@ -81,15 +88,21 @@ export function useActivityTabsThreads<
     () => result.visibleThreadGroups.flatMap((group) => group.threads),
     [result.visibleThreadGroups]
   )
-  const recent = useRecentWorktreeItems(recentVisible && listsAll, view.query, visibleThreads, tabs)
+  const recent = useRecentWorktreeItems(
+    attached && listsAll,
+    recentOn,
+    view.query,
+    visibleThreads,
+    tabs
+  )
   const visibleThreadGroups = useMemo(() => {
     const rows: ActivityTabsRow[] = [
       ...tabs.map((tab): ActivityTabsRow => ({ kind: 'tab', tab })),
       ...recent.map((item): ActivityTabsRow => ({ kind: 'recent-worktree', recent: item }))
     ]
-    return mergeRowsIntoGroups(result.visibleThreadGroups, rows, view.groupBy)
-  }, [result.visibleThreadGroups, tabs, recent, view.groupBy])
-  if (!tabsVisible && !recentVisible) {
+    return mergeRowsIntoGroups(result.visibleThreadGroups, rows, view.groupBy, pinnedIds)
+  }, [result.visibleThreadGroups, tabs, recent, view.groupBy, pinnedIds])
+  if (!attached) {
     return result
   }
   return {

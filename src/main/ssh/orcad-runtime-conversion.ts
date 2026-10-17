@@ -33,6 +33,11 @@ import type { SshTarget } from '../../shared/ssh-types'
 import type { CensusHostRelayTerminals } from './orcad-migration-terminal-gate'
 import { createManagedOrcadEnvironment } from './orcad-runtime-deployment'
 import { createSshRelayMigrationSource } from './orcad-migration-ssh-relay-source'
+import {
+  leaveBehindClearsOrcadMigrationBlockers,
+  onlyLeavableOrcadMigrationBlockers
+} from './ssh-target-orcad-preflight'
+import { ORCAD_MIGRATION_LEAVE_BEHIND_TERMINALS_REASON } from './orcad-migration-source-fence'
 import { retainOrcadMigrationSource } from './orcad-migration-source-retention'
 import {
   linkedOrcadMigrationCutoverPort,
@@ -40,6 +45,7 @@ import {
   linkServerHeldRepositories,
   type OrcadServerRepository
 } from './orcad-migration-repository-link'
+import type { OrcadServerFolderCatalog } from './orcad-server-folder-workspaces'
 
 export type OrcadManagedConversionArgs = {
   sshTargetId: string
@@ -50,6 +56,10 @@ export type OrcadManagedConversionArgs = {
   destinationFor: (environment: KnownRuntimeEnvironment) => OrcadMigrationDestinationCatalog
   /** The server's own projects, so ones this host already holds at the same path link to them. */
   serverRepositoriesFor?: (environment: KnownRuntimeEnvironment) => Promise<OrcadServerRepository[]>
+  /** The server's folder workspaces, so ones an earlier move left there link to them. */
+  serverFolderCatalogFor?: (
+    environment: KnownRuntimeEnvironment
+  ) => Promise<OrcadServerFolderCatalog>
   /** Releases the direct SSH session after the terminal check, before the fence. */
   releaseDirectSession?: (sshTargetId: string) => Promise<void>
   now?: () => Date
@@ -90,7 +100,11 @@ export async function convertSshTargetToManagedOrcad(
   const store = targetStore.getOrcadMigrationSource()
   const destination = args.destinationFor(marked)
   const serverRepositoriesFor = args.serverRepositoriesFor
-  let linkedRepositoryIds: string[] | undefined
+  const serverFolderCatalogFor = args.serverFolderCatalogFor
+  let linked: Pick<
+    OrcadMigrationSourceCutover,
+    'linkedRepositoryIds' | 'linkedFolderWorkspaceIds'
+  > = {}
   const committed = await runTargetLifecycle(fenced.sshTargetId, async () => {
     const journaled = requireJournaledCutover(userDataPath, fenced)
     const cutover = serverRepositoriesFor
@@ -101,10 +115,13 @@ export async function convertSshTargetToManagedOrcad(
           cutover: journaled,
           destination,
           serverRepositories: () => serverRepositoriesFor(marked),
+          ...(serverFolderCatalogFor
+            ? { serverFolderCatalog: () => serverFolderCatalogFor(marked) }
+            : {}),
           now: args.now
         })
       : journaled
-    linkedRepositoryIds = cutover.linkedRepositoryIds
+    linked = cutover
     return commitOrcadMigrationDestination(
       {
         userDataPath,
@@ -123,7 +140,7 @@ export async function convertSshTargetToManagedOrcad(
   if (committed.phase === 'destination-committed') {
     retainOrcadMigrationSource(userDataPath, committed.migrationId, args.now)
   }
-  const linkedProjects = linkedOrcadMigrationProjects(store, { linkedRepositoryIds })
+  const linkedProjects = linkedOrcadMigrationProjects(store, linked)
   return {
     outcome: 'converted',
     environment: redactRuntimeEnvironment(marked),
@@ -207,7 +224,26 @@ async function fenceOrResume(
       )
     )
   }
-  return refuse(result.verdict, result.code, result.reason)
+  // Already moving anyway: what still refuses is what can't be left behind.
+  const leavable =
+    result.blockers &&
+    onlyLeavableOrcadMigrationBlockers(result.blockers) &&
+    !target.managedServerLeaveBehind
+  if (leavable && terminalProof.verdict !== 'exited') {
+    // Why no offer: leaving tabs behind would strand terminals the relay bridge still serves.
+    return refuse(
+      result.verdict,
+      result.code,
+      `${result.reason} ${ORCAD_MIGRATION_LEAVE_BEHIND_TERMINALS_REASON}`
+    )
+  }
+  return {
+    ...refuse(result.verdict, result.code, result.reason),
+    // Why previewed: an offer the confirmed export would refuse again is a dead end.
+    ...(leavable && leaveBehindClearsOrcadMigrationBlockers(store, target.id)
+      ? { canLeaveBehind: true }
+      : {})
+  }
 }
 
 function requireJournaledCutover(

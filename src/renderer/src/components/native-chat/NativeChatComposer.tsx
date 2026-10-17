@@ -171,24 +171,30 @@ const NativeChatComposerPane = forwardRef<NativeChatComposerHandle, NativeChatCo
     const { imageAttachments, attachResolvedPaths, clearImageAttachments, removeImageAttachment } =
       attachments
     const imageBlock = nativeChatImageSendBlock(imageAttachments)
-    const sendHeld = disabled || structuredTransport?.sendOut === true || imageBlock.holdsSend
+    const sendBlockedReason = imageBlock.reason ?? structuredTransport?.sendBlockedReason ?? null
+    const sendHeld =
+      disabled ||
+      structuredTransport?.sendOut === true ||
+      imageBlock.holdsSend ||
+      structuredTransport?.sendBlockedReason !== undefined
     const sendButtonDisabled = isWorking
       ? !hasPty || !onStop
       : sendHeld || (draft.trim() === '' && imageAttachments.length === 0)
 
-    const { pickAttachments, resolveAttachmentOwner } = useNativeChatFileDrops({
-      paneKey,
-      draftScopeKey,
-      targetPtyId,
-      structuredTransport,
-      terminalTabId,
-      structuredWorktreeId: structuredTransport?.worktreeId,
-      structuredSession: structuredTransport,
-      disabled,
-      attachResolvedPaths,
-      pendingChips: attachments.pendingChips,
-      setNotice
-    })
+    const { pickAttachments, attachExternalPaths, captureCopiedFiles, resolveAttachmentOwner } =
+      useNativeChatFileDrops({
+        paneKey,
+        draftScopeKey,
+        targetPtyId,
+        structuredTransport,
+        terminalTabId,
+        structuredWorktreeId: structuredTransport?.worktreeId,
+        structuredSession: structuredTransport,
+        disabled,
+        attachResolvedPaths,
+        pendingChips: attachments.pendingChips,
+        setNotice
+      })
 
     const handlePasteEvent = useNativeChatComposerHandle(ref, {
       attachmentScopeKey: draftScopeKey,
@@ -209,6 +215,8 @@ const NativeChatComposerPane = forwardRef<NativeChatComposerHandle, NativeChatCo
       disabled,
       resolveAttachmentOwner,
       attachResolvedPaths,
+      attachCopiedFiles: attachExternalPaths,
+      captureCopiedFiles,
       beginPendingImageAttachment: attachments.beginPendingImageAttachment,
       // Settles into the scope cache, which outlives a composer a prompt card unmounted.
       resolvePendingImageAttachment: attachments.pendingChips.resolve,
@@ -360,7 +368,7 @@ const NativeChatComposerPane = forwardRef<NativeChatComposerHandle, NativeChatCo
         imageAttachments={imageAttachments}
         attachmentEnvironmentId={structuredTransport?.runtimeEnvironmentId ?? undefined}
         sendButtonDisabled={sendButtonDisabled}
-        sendBlockedReason={imageBlock.reason}
+        sendBlockedReason={sendBlockedReason}
         isWorking={isWorking}
         isStopping={isStopping}
         afterStop={afterStop}

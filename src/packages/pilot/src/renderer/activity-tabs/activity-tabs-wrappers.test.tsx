@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
-import { cleanup, render } from '@testing-library/react'
-import { afterEach, describe, expect, it } from 'vitest'
+import { cleanup, fireEvent, render } from '@testing-library/react'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { AgentPaneThread } from '@/components/activity/activity-thread-types'
 import {
   makeRepo,
@@ -85,6 +85,53 @@ describe('Pilot wrappers around upstream Activity elements', () => {
     )
     expect(view.getByTitle('feature').textContent).toBe('feature')
     expect(view.getByText('Repo')).toBeTruthy()
+    expect(view.container.querySelector('div[aria-expanded] .lucide-chevron-down')).not.toBeNull()
     expect(view.getByTitle('Claude')).toBeTruthy()
+  })
+
+  it.each([
+    { isPinned: false, label: 'Pin worktree', next: true },
+    { isPinned: true, label: 'Unpin worktree', next: false }
+  ])(
+    'the header’s "$label" sets the Workspaces pin, not the group’s collapse',
+    ({ isPinned, label, next }) => {
+      registerPilotStore(useAppStore)
+      const setWorktreesPinnedAndReveal = vi.fn()
+      useAppStore.setState({
+        repos: [makeRepo()],
+        worktreesByRepo: { 'repo-1': [{ ...makeWorktree(), isPinned }] },
+        setWorktreesPinnedAndReveal
+      })
+      const onToggle = vi.fn()
+      const group = { key: 'worktree:wt-1', label: 'feature', threads: [thread] }
+      const view = render(
+        <TooltipProvider>
+          <ActivityTabsGroupHeader group={group} onToggle={onToggle}>
+            {UPSTREAM}
+          </ActivityTabsGroupHeader>
+        </TooltipProvider>
+      )
+      fireEvent.click(view.getByRole('button', { name: label }))
+      expect(setWorktreesPinnedAndReveal).toHaveBeenCalledWith(['wt-1'], next)
+      expect(onToggle).not.toHaveBeenCalled()
+    }
+  )
+
+  it('a worktree header with no sessions has no chevron and doesn’t fold, but keeps New agent', () => {
+    registerPilotStore(useAppStore)
+    useAppStore.setState({ repos: [makeRepo()], worktreesByRepo: { 'repo-1': [makeWorktree()] } })
+    const onToggle = vi.fn()
+    const empty = { key: 'worktree:wt-1', label: 'feature', threads: [] }
+    const view = render(
+      <TooltipProvider>
+        <ActivityTabsGroupHeader group={empty} onToggle={onToggle}>
+          {UPSTREAM}
+        </ActivityTabsGroupHeader>
+      </TooltipProvider>
+    )
+    fireEvent.click(view.getByText('feature'))
+    expect(onToggle).not.toHaveBeenCalled()
+    expect(view.container.querySelector('div[aria-expanded], .lucide-chevron-down')).toBeNull()
+    expect(view.getByRole('button', { name: 'New agent' })).toBeTruthy()
   })
 })
