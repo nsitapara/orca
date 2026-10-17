@@ -1,9 +1,10 @@
 // @vitest-environment happy-dom
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { InboxItemRow, PilotStatus } from '../../../shared/api-types'
+import { groupOf } from '../../../shared/inbox-groups'
 import { byHost, LOCAL_NAMED, MINI } from '../../hosts/__fixtures__/hosts'
-import { LOCAL_PILOT_HOST, type PilotHostEntry } from '../../hosts/pilot-host'
+import { LOCAL_PILOT_HOST, type PilotHostEntry, type PilotHostRef } from '../../hosts/pilot-host'
 import { resetPilotHostsFeed, setPilotHostsForTests } from '../../hosts/pilot-hosts-feed'
 import { registerPilotStore, type PilotStore, type PilotStoreState } from '../../store'
 
@@ -15,7 +16,7 @@ vi.mock('@/lib/worktree-activation', () => ({
 }))
 
 import { InboxPage } from './InboxPage'
-import { repoNameForPath, worktreeIdForPath } from './WorktreeLink'
+import { repoNameForPath, worktreeIdForPath, WorktreeName } from './WorktreeLink'
 
 function card(over: Partial<InboxItemRow>): InboxItemRow {
   return {
@@ -161,6 +162,10 @@ type StoreWorktree = NonNullable<PilotStoreState['worktreesByRepo']>[string][num
 
 const LOCAL_X: StoreWorktree = { id: 'a', path: '/w/x' }
 const MINI_X: StoreWorktree = { id: 'b', path: '/w/x', runtimeOwnerEnvironmentId: 'mini' }
+// Mini's worktree named only by the execution-host alias.
+const MINI_ALIAS: StoreWorktree = { id: 'c', path: '/w/x', hostId: 'runtime:mini' }
+// Mini's worktree with this machine's id: worktree ids are per machine too.
+const MINI_SAME_ID: StoreWorktree = { ...LOCAL_X, runtimeOwnerEnvironmentId: 'mini' }
 
 // Paired with Mini, as the store shows it: the hosts feed finds Mini through its runtime environment.
 function storeWith(worktrees: StoreWorktree[], paired = false): PilotStore {
@@ -226,52 +231,91 @@ describe('opening a worktree on another machine', () => {
     expect(worktreeIdForPath('/w/x', MINI)).toBeNull()
   })
 
-  it.each([
+  it.each<[string, PilotHostEntry[], StoreWorktree[], PilotHostRef | undefined, string | null]>([
     [
-      "skips another Pilot machine's worktree at the path",
+      "this machine skips another Pilot machine's worktree at the path",
       [LOCAL_NAMED, MINI],
       [MINI_X, LOCAL_X],
+      undefined,
       'a'
     ],
     // The browser lists the page's own server's worktrees under its environment; that server is this machine.
     [
-      'keeps a worktree of an environment no other Pilot is on',
+      'this machine keeps a worktree of an environment no other Pilot is on',
       [LOCAL_PILOT_HOST],
       [{ id: 's', path: '/w/x', runtimeOwnerEnvironmentId: 'server' }],
+      undefined,
       's'
+    ],
+    [
+      'Mini finds its worktree by the hostId alias',
+      [LOCAL_NAMED, MINI],
+      [LOCAL_X, MINI_ALIAS],
+      MINI,
+      'c'
+    ],
+    [
+      "this machine skips Mini's worktree named by the hostId alias",
+      [LOCAL_NAMED, MINI],
+      [MINI_ALIAS],
+      undefined,
+      null
     ]
-  ])("finds this machine's worktree by path: %s", (_case, hosts, worktrees, id) => {
+  ])('finds the worktree at the path on its machine: %s', (_case, hosts, worktrees, host, id) => {
     setPilotHostsForTests(hosts)
     registerPilotStore(storeWith(worktrees))
-    expect(worktreeIdForPath('/w/x')).toBe(id)
+    expect(worktreeIdForPath('/w/x', host)).toBe(id)
   })
 
-  it.each<[string, StoreWorktree[], string | null]>([
-    ["opens that machine's worktree", [LOCAL_X, MINI_X], 'b'],
-    ['stays plain text when only this machine has the path', [LOCAL_X], null]
-  ])("a remote section's worktree name %s, never this machine's", async (_case, worktrees, id) => {
-    registerPilotStore(storeWith(worktrees, true))
-    pilotRpc.mockImplementation(
-      byHost({
-        local: machineWith(LOCAL_NAMED, []),
-        mini: machineWith(MINI, [card({ id: 'm', title: 'Mini card', worktreePath: '/w/x' })])
-      })
+  it("shows this machine's worktree name as plain text once the worktree's environment turns out to be another Pilot", async () => {
+    registerPilotStore(storeWith([MINI_X]))
+    render(
+      <WorktreeName
+        group={groupOf({ itemKey: null, worktreePath: '/w/x', automationId: 'a' }, [])}
+      />
     )
-    render(<InboxPage />)
-    await screen.findByRole('heading', { name: 'Mini card' })
-    const nav = within(screen.getByRole('navigation', { name: 'Cards' }))
-    // The heading's name and the list's open button: both, or neither.
-    const openers = [
-      ...within(heading('x')).queryAllByRole('button'),
-      ...nav.queryAllByRole('button', { name: 'Open x in Pilot' })
-    ]
-    const opened = id ? [[id], [id]] : []
-    // One at a time: each click loads the activation module before it opens.
-    for (const [at, button] of openers.entries()) {
-      fireEvent.click(button)
-      await waitFor(() => expect(activate).toHaveBeenCalledTimes(at + 1))
-    }
-    expect(activate.mock.calls).toEqual(opened)
-    expect(openers).toHaveLength(opened.length)
+    await act(async () => {})
+    expect(screen.queryByRole('button')).toBeTruthy()
+    act(() => setPilotHostsForTests([LOCAL_NAMED, MINI]))
+    expect(screen.queryByRole('button')).toBeNull()
   })
+
+  const onMini = { executionHostId: 'runtime:mini' }
+  it.each<[string, StoreWorktree[], unknown[][]]>([
+    [
+      "opens that machine's worktree on its execution host, even when this machine has the same id",
+      [LOCAL_X, MINI_SAME_ID],
+      [
+        ['a', onMini],
+        ['a', onMini]
+      ]
+    ],
+    ['stays plain text when only this machine has the path', [LOCAL_X], []]
+  ])(
+    "a remote section's worktree name %s, never this machine's",
+    async (_case, worktrees, opened) => {
+      registerPilotStore(storeWith(worktrees, true))
+      pilotRpc.mockImplementation(
+        byHost({
+          local: machineWith(LOCAL_NAMED, []),
+          mini: machineWith(MINI, [card({ id: 'm', title: 'Mini card', worktreePath: '/w/x' })])
+        })
+      )
+      render(<InboxPage />)
+      await screen.findByRole('heading', { name: 'Mini card' })
+      const nav = within(screen.getByRole('navigation', { name: 'Cards' }))
+      // The heading's name and the list's open button: both, or neither.
+      const openers = [
+        ...within(heading('x')).queryAllByRole('button'),
+        ...nav.queryAllByRole('button', { name: 'Open x in Pilot' })
+      ]
+      // One at a time: each click loads the activation module before it opens.
+      for (const [at, button] of openers.entries()) {
+        fireEvent.click(button)
+        await waitFor(() => expect(activate).toHaveBeenCalledTimes(at + 1))
+      }
+      expect(activate.mock.calls).toEqual(opened)
+      expect(openers).toHaveLength(opened.length)
+    }
+  )
 })

@@ -1,3 +1,4 @@
+import type { ExecutionHostId } from '../../../../shared/execution-host'
 import type { RuntimeEnvironmentStatus } from '../../../../shared/runtime-host-status'
 
 // The slice of Orca's app store that Pilot reads. Pilot's renderer behavior stays inert until
@@ -15,10 +16,10 @@ export type PilotStoreState = {
   activeView?: string
   openAutomationsPage?(): void
   settings?: { showAutomationsButton?: boolean } | null
-  // Read by the Inbox to open a worktree from its section.
+  // Read by the Inbox to open a worktree from its section, on the machine that owns it.
   worktreesByRepo?: Record<
     string,
-    { id: string; path: string; runtimeOwnerEnvironmentId?: string }[]
+    { id: string; path: string; hostId?: ExecutionHostId; runtimeOwnerEnvironmentId?: string }[]
   >
   // Read by the host list to find paired machines running Pilot.
   runtimeEnvironments?: readonly { id: string; name: string }[]
