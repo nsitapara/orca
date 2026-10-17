@@ -1,5 +1,5 @@
 // The job code at the front of a vault job name: "05 · Fix failed CI on my MRs" → "05", "M01 · …" → "M01".
-const CODE = /^(M?\d{2}) · / // the same rule as collect.py's CODE_NAME (Task 33)
+const CODE = /^(M?\d{2}) · /
 
 export function jobCode(jobName: string): string | null {
   return CODE.exec(jobName)?.[1] ?? null
