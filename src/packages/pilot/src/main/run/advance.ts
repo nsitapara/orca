@@ -2,59 +2,22 @@ import type { ItemFields, RunRow, StepRow } from '../../shared/api-types'
 import type { AutomationDefinition, StepDef } from '../../shared/definition/types'
 import { decideStep, runEnd, type RunEnd } from '../../shared/run/step-plan'
 import { usesHandled } from '../../shared/tick/decide'
-import type { EnvPreparer } from '../envs/prepare'
 import { UnrecordedLaunchError, type LaunchRequest } from '../scheduler/tick-runner'
-import type { PilotStore } from '../store/store'
 import { stepKindOf } from '../store/store-advance'
 import { envHooks, type OpeningWalk } from './advance-env'
-import { endedSteps, nextIdx, rowFor, runFieldsOf, stepInputFields } from './advance-fields'
-import { addRunEvent, closeRun, type CloseOptions, type RunEndHandover } from './run-close'
-import { resolveWorkspace, type WorkspaceDeps } from './workspace'
+import { endedSteps, firstIdx, rowFor, runFieldsOf, stepInputFields } from './advance-fields'
+import { addRunEvent, closeRun, type CloseOptions } from './run-close'
+import type { ResumeStep, RunEngine, RunEngineDeps } from './run-engine-types'
+import { resolveWorkspace } from './workspace'
 
 export { ANSWER_STEP_TIMEOUT_MS, runStepTimeoutMs, stepTimeoutMs } from './step-timeouts'
-
-export type StepStartRequest = {
-  run: RunRow
-  definition: AutomationDefinition
-  idx: number
-  // The item's fields, then the run's workspace, run.* and steps.*/previous.*: what templates read.
-  fields: ItemFields
-}
-// Starts one step and returns once it is under way. It writes the step's row ('starting', then
-// 'running'), or takes over the 'pending' row the engine wrote, and throws when the step couldn't
-// start. The step's end reaches RunEngine.advance.
-export type StepStarter = (req: StepStartRequest) => Promise<void>
-export type RunEngineDeps = {
-  store: PilotStore
-  now(): number
-  definitionFor(automationId: string): AutomationDefinition | null
-  startStep: StepStarter
-  // What startRun hands Task 8b's resolveWorkspace.
-  workspace: WorkspaceDeps
-  log(message: string): void
-  // Called once when a run reaches its end status (Task 24c applies answer runs' outputs here).
-  onRunEnd?(run: RunRow, end: RunEnd): void
-  // What a stage's run hands the next stage, written in the transaction that ends it (main/handover).
-  handover?: RunEndHandover
-  // The answer text for {run.answer}: set for runs an answer starts, '' for a plain Approve, null
-  // for any other run (Task 25 wires it).
-  runAnswer?(run: RunRow): string | null
-  // The label of the option that started an ask-first run, for {run.choice}; '' for any other run.
-  runChoice?(run: RunRow): string
-  // Env workspaces (main/envs): records the run as preparing and makes its env off the tick.
-  envs?: EnvPreparer
-}
-export type RunEngine = {
-  // The tick runner's launch. Writes step 0 as pending, resolves and records the workspace, then
-  // starts the steps. Throws when no step could start, so the tick runner releases the item's
-  // once_per key (or keeps it for an UnrecordedLaunchError). An env workspace is made off the tick:
-  // startRun returns once it is under way, and the run's env hooks start or end it (advance-env.ts).
-  startRun(req: LaunchRequest): Promise<void>
-  // After a step ended: skip or start the next steps, or end the run. Never throws.
-  advance(runId: string): Promise<void>
-  // Running runs whose steps have all ended (Pilot quit between two steps, an advance that failed).
-  advanceIdle(): Promise<void>
-}
+export type {
+  ResumeStep,
+  RunEngine,
+  RunEngineDeps,
+  StepStarter,
+  StepStartRequest
+} from './run-engine-types'
 
 const OPEN_STEP: ReadonlySet<StepRow['status']> = new Set(['pending', 'starting', 'running'])
 
@@ -70,6 +33,8 @@ export function createRunEngine(deps: RunEngineDeps): RunEngine {
   // (tick_items) only once every run it starts has launched, so a run reads that record only after a
   // restart; the key isn't recorded on the run at all.
   const items = new Map<string, { fields: ItemFields; onceKey: string }>()
+  // Runs continueRun reopened, until their next walk takes them, with the step to resume.
+  const continued = new Map<string, ResumeStep | null>()
 
   function close(run: RunRow, end: RunEnd, opts: CloseOptions = {}): void {
     items.delete(run.id)
@@ -134,10 +99,11 @@ export function createRunEngine(deps: RunEngineDeps): RunEngine {
     def: AutomationDefinition,
     idx: number,
     fields: ItemFields,
-    opening: boolean
+    opening: boolean,
+    resume: ResumeStep | null = null
   ): Promise<boolean> {
     try {
-      await deps.startStep({ run, definition: def, idx, fields })
+      await deps.startStep({ run, definition: def, idx, fields, ...(resume ? { resume } : {}) })
       return false
     } catch (error) {
       store.advance.ensureFailedStep(
@@ -171,8 +137,15 @@ export function createRunEngine(deps: RunEngineDeps): RunEngine {
       return
     }
     let rows = store.runs.steps(runId)
-    // No step yet: startRun hasn't written step 0, and only it resolves the run's workspace.
-    if (!opening && (rows.length === 0 || rows.some((r) => OPEN_STEP.has(r.status)))) {
+    const resume = continued.get(runId) ?? null
+    const continuing = continued.delete(runId)
+    // No step yet: startRun hasn't written step 0, and only it resolves the run's workspace. A continued run's pending
+    // step is its own, and its workspace is already recorded.
+    if (
+      !opening &&
+      !continuing &&
+      (rows.length === 0 || rows.some((r) => OPEN_STEP.has(r.status)))
+    ) {
       return
     }
     const spent = store.advance.rollupCost(runId)
@@ -199,15 +172,16 @@ export function createRunEngine(deps: RunEngineDeps): RunEngine {
       return
     }
     const item = itemFieldsOf(run)
-    for (let idx = opening ? 0 : nextIdx(rows); idx < def.steps.length; idx += 1) {
+    for (let idx = firstIdx(rows, opening, continuing); idx < def.steps.length; idx += 1) {
       const step = def.steps[idx]
       const answer = deps.runAnswer?.(run) ?? null
       const choice = deps.runChoice?.(run) ?? ''
       const fields = stepInputFields({ run, def, item, rows, idx, answer, choice })
       const verdict = decideStep(step, endedSteps(rows, def), fields)
+      const resumed = resume?.idx === idx ? resume : null
       if (!verdict.run) {
         skipStep(runId, idx, step, verdict.reason)
-      } else if (!(await start(run, def, idx, fields, opening))) {
+      } else if (!(await start(run, def, idx, fields, opening, resumed))) {
         return
       }
       rows = store.runs.steps(runId)
@@ -350,6 +324,10 @@ export function createRunEngine(deps: RunEngineDeps): RunEngine {
           deps.log(`[pilot] couldn't advance run ${runId}: ${messageOf(error)}`)
         }
       }),
+    continueRun(runId, resume) {
+      continued.set(runId, resume)
+      return engine.advance(runId)
+    },
     async advanceIdle() {
       let runs: RunRow[]
       try {

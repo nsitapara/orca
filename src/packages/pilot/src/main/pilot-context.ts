@@ -1,4 +1,9 @@
-import type { PilotStatus, SessionResumeResult, UsageReportResult } from '../shared/api-types'
+import type {
+  ContinueRunResult,
+  PilotStatus,
+  SessionResumeResult,
+  UsageReportResult
+} from '../shared/api-types'
 import type { AgentKind } from '../shared/definition/types'
 import type { ActionCatalog } from './actions/types'
 import type { AnswerDispatcher } from './answers/dispatcher'
@@ -29,6 +34,8 @@ export type PilotContext = {
   engineEnv?: EngineEnv
   // Opens or focuses a step's agent session (pilot.session.resume); absent where there is no runtime.
   resumeSession?: (req: { runId: string; stepIdx: number }) => Promise<SessionResumeResult>
+  // Continues a failed run where it broke (run/run-continue.ts); absent where the run engine isn't.
+  continueRun?: (runId: string) => Promise<ContinueRunResult>
   // The Automations folder every card's Details bundle must live in; null reads no bundle.
   detailsRoot?: string | null
   // pilotcli's playground (main/playground); absent in orcad, which has no launcher folder for View source.

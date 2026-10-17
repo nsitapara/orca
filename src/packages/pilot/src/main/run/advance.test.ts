@@ -710,3 +710,63 @@ describe('runStepTimeoutMs', () => {
     expect(runStepTimeoutMs(def, { trigger }, 0)).toBe(ms)
   })
 })
+
+describe('continueRun', () => {
+  const REASON = 'The terminal closed before the agent finished'
+  const stepsOf = (store: PilotStore) => store.runs.steps('run-1').map((s) => [s.name, s.status])
+
+  it('walks a reopened run from the step that broke, hands that step its old session, and ends the run as usual', async () => {
+    const { store, engine, started, end, db } = setup()
+    await startRun(engine)
+    store.advance.mergeStepOutputs('run-1', 0, { changed: true })
+    end(0, 'done')
+    await engine.advance('run-1')
+    end(1, 'failed', { error: REASON })
+    await engine.advance('run-1')
+    end(2, 'done')
+    await engine.advance('run-1')
+    expect(store.runs.get('run-1')?.status).toBe('failed')
+    store.advance.reopenFrom('run-1', 1, true, 1000)
+    const resume = { idx: 1, sessionId: '00000000-0000-4000-8000-0000000000f1', reason: REASON }
+    await engine.continueRun('run-1', resume)
+    expect(started.map((s) => [s.definition.steps[s.idx].name, s.resume ?? null])).toEqual([
+      ['review', null],
+      ['fix', null],
+      ['cleanup', null],
+      ['fix', resume]
+    ])
+    expect(started[3].fields['steps.review.changed']).toBe(true)
+    expect(stepsOf(store)).toEqual([
+      ['review', 'done'],
+      ['fix', 'running']
+    ])
+    end(1, 'done')
+    await engine.advance('run-1')
+    end(2, 'done')
+    await engine.advance('run-1')
+    expect(store.runs.get('run-1')).toMatchObject({ status: 'done', finishedAt: 1000 })
+    expect(handledOf(db)).toMatchObject({ status: 'done' })
+  })
+
+  it('walks a run reopened from its first step, which leaves it no row', async () => {
+    const { store, engine, started, end } = setup()
+    await startRun(engine)
+    end(0, 'failed', { error: REASON })
+    await engine.advance('run-1')
+    end(2, 'done')
+    await engine.advance('run-1')
+    store.advance.reopenFrom('run-1', 0, false, 1000)
+    expect(store.runs.get('run-1')).toMatchObject({
+      status: 'running',
+      outcome: null,
+      finishedAt: null
+    })
+    await engine.continueRun('run-1', null)
+    expect(started.map((s) => s.definition.steps[s.idx].name)).toEqual([
+      'review',
+      'cleanup',
+      'review'
+    ])
+    expect(stepsOf(store)).toEqual([['review', 'running']])
+  })
+})
