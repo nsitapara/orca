@@ -118,7 +118,11 @@ describe('makeLauncher', () => {
             PILOT_POWERS: 'commit,push',
             AGENT_RUN: 'run-1'
           },
-          argv: ['--session-id', '00000000-0000-4000-8000-000000000013']
+          argv: [
+            '--prompt-suggestions=false',
+            '--session-id',
+            '00000000-0000-4000-8000-000000000013'
+          ]
         }
       }
     ])
@@ -497,7 +501,7 @@ describe('openAgentTerminal', () => {
       'a new Claude session is pinned',
       'claude',
       { kind: 'new' },
-      ['--session-id', '00000000-0000-4000-8000-000000000019'],
+      ['--prompt-suggestions=false', '--session-id', '00000000-0000-4000-8000-000000000019'],
       '00000000-0000-4000-8000-000000000019'
     ],
     ['a new Codex session is learned from its hooks', 'codex', { kind: 'new' }, [], null],
@@ -505,14 +509,19 @@ describe('openAgentTerminal', () => {
       'resume',
       'claude',
       { kind: 'resume', sessionId: '00000000-0000-4000-8000-000000000011' },
-      ['--resume', '00000000-0000-4000-8000-000000000011'],
+      ['--prompt-suggestions=false', '--resume', '00000000-0000-4000-8000-000000000011'],
       '00000000-0000-4000-8000-000000000011'
     ],
     [
       'a Claude fork',
       'claude',
       { kind: 'fork', sessionId: '00000000-0000-4000-8000-000000000011' },
-      ['--resume', '00000000-0000-4000-8000-000000000011', '--fork-session'],
+      [
+        '--prompt-suggestions=false',
+        '--resume',
+        '00000000-0000-4000-8000-000000000011',
+        '--fork-session'
+      ],
       null
     ],
     [
