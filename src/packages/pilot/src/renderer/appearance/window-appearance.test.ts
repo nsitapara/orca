@@ -113,4 +113,17 @@ describe('window-appearance.css', () => {
       expect(primitives, target).toContain(target)
     }
   })
+
+  it.each([
+    ['assets/main.css', '.titlebar-left {'],
+    ['assets/main.css', '.titlebar-left-floating {'],
+    ['components/sidebar/index.tsx', 'data-sidebar-resize-handle'],
+    ['lib/left-sidebar-appearance.ts', "'--worktree-sidebar-border'"]
+  ])(
+    'draws borders and the sidebar seam from hooks upstream still has: %s has %s',
+    (file, hook) => {
+      const source = readFileSync(join(__dirname, '../../../../../renderer/src', file), 'utf8')
+      expect(source).toContain(hook)
+    }
+  )
 })
