@@ -112,7 +112,7 @@ describe('action RPC', () => {
     ])
   })
 
-  const OUTSIDE = 'Outside a Pilot run, approve actions in Pilot (Inbox), or run act.py directly.'
+  const OUTSIDE = 'Outside a Pilot run, approve actions in Pilot (Inbox).'
   const NO_CALLER = "Pilot can't tell who is calling; nothing runs"
   const DESKTOP: RpcCallerIdentity = { kind: 'desktop' }
   const PHONE: RpcCallerIdentity = { kind: 'paired-device', deviceId: 'ipad' }

@@ -36,7 +36,7 @@ export const INBOX_COMMAND_SPECS: CommandSpec[] = [
     notes: [
       'Inside a step Pilot started, the card belongs to that run. Outside one, give --automation and --item.',
       'Prints the new card\'s id (with --json, {"id": …}).',
-      "--details-file is markdown. --details-bundle is a Details bundle (details.py build --for-pilot) inside the Automations folder; Pilot reads and checks it, and its bytes join the card's digest.",
+      "--details-file is markdown. --details-bundle is a Details bundle (pilotcli inbox create-details writes one) inside the Automations folder; Pilot reads and checks it, and its bytes join the card's digest.",
       'Never wait for the answer in your tab: Pilot brings it back.'
     ]
   },
