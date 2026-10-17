@@ -1,8 +1,6 @@
 import { existsSync } from 'node:fs'
-import { join } from 'node:path'
 import type { OrcaRuntimeService } from '../../../../../main/runtime/orca-runtime'
 import type { EngineEnv } from '../engine-env'
-import { pilotDetailsRoot } from '../env'
 import { pilotcliPath, pilotcliRunner } from '../envs/pilotcli'
 import { listedRepoPath } from '../fields/runtime-facts'
 import { createLinearWriter } from '../linear-connector/linear-writer'
@@ -11,14 +9,13 @@ import { callerFolder } from './caller-folder'
 import { markReadyEntry } from './mark-ready'
 import { storeBranchOf, worktreeOn } from './mr-branch'
 import { openCardsOn } from './mr-open-cards'
-import { postReviewEntry, REVIEWS_JOB_FOLDER } from './post-review'
 import { pushBranchEntry } from './push-branch'
 import { startRunEntry } from './start-run-entry'
 import type { ActionCaller, ActionCatalog } from './types'
 
-// The one catalog Pilot's services build: pilotcli's push, mark_ready and post_review, the Linear writes and start_run.
-// Built once; nothing runs until an action is attempted. start_run reaches the engine lazily. mark_ready and
-// post_review read the card or run that asks from Pilot's store: its folder, and the MR's branch and open cards there.
+// The one catalog Pilot's services build: pilotcli's push and mark_ready, the Linear writes and start_run.
+// Built once; nothing runs until an action is attempted. start_run reaches the engine lazily. mark_ready reads the
+// card or run that asks from Pilot's store: its folder, and the MR's branch and open cards there.
 export function pilotActionCatalog(deps: {
   engineEnv: EngineEnv
   runtime: OrcaRuntimeService
@@ -48,12 +45,6 @@ export function pilotActionCatalog(deps: {
         worktreeOn: (branch) => worktreeOn(mrDeps, branch),
         openOn: (iid, branch, caller) => openCardsOn(mrDeps, iid, branch, caller)
       }
-    }),
-    postReview: postReviewEntry({
-      pilotcli,
-      binary,
-      reviewsDir: () => join(pilotDetailsRoot(), REVIEWS_JOB_FOLDER),
-      folder
     }),
     linear: createLinearWriter(deps.runtime),
     extra: [startRunEntry(deps.startRun)]

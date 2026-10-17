@@ -39,7 +39,7 @@ describe("the preparation request's head", () => {
       '9c1e2f0'
     ],
     ['a push card pinning no commit', 'push', { argv: ['/wt/a', 'web-1'] }, undefined],
-    ['any other card: none', 'post_review', { iid: 7 }, undefined]
+    ['any other card: none', 'mark_ready', { argv: ['1577', '430f7e68'] }, undefined]
   ])('Pilot-built request, %s', (_name, action, actionArgs, head) => {
     expect(evidenceRequest(card({ action, actionArgs })).head).toBe(head)
   })

@@ -65,11 +65,7 @@ function setup(
     checkArgs: (args) => (Array.isArray(args.argv) ? null : 'usage: x'),
     describe: async () => 'x',
     run: vi.fn().mockResolvedValue(result),
-    refresh: vi.fn(refresh),
-    exceptArgs: (args, leftOut) => ({
-      ...args,
-      argv: [...(args.argv as string[]), '--except', leftOut.join(',')]
-    })
+    refresh: vi.fn(refresh)
   }
   let clock = 100
   const inbox: InboxDeps = {
@@ -289,20 +285,21 @@ describe('applyScript', () => {
     expect(item().outcome).toBe('failed: push refused · log /l')
   })
 
-  it('passes the parts left out and counts each part', async () => {
-    const post = {
-      ...PUSH,
-      action: 'post_review',
-      actionArgs: { argv: ['1579', 'f.json', 'abc'] },
-      parts: { F1: 'Null check', F2: 'Naming' }
-    }
-    const { entry, deps, item, approve } = setup(DONE, post)
-    approve('approve except: F2')
-    await applyScript(deps, item(), ['F2'])
-    expect(entry.run).toHaveBeenCalledWith(
-      { argv: ['1579', 'f.json', 'abc', '--except', 'F2'] },
-      { dryRun: false, runId: 'run-1', inboxItemId: ID }
-    )
-    expect(item().outcome).toBe('done: 1 done · 1 left out')
+  it('counts each part, and runs nothing when parts are left out', async () => {
+    const parts = { ...PUSH, parts: { F1: 'Null check', F2: 'Naming' } }
+    const all = setup(DONE, parts)
+    all.approve()
+    await applyScript(all.deps, all.item(), [])
+    expect(all.entry.run).toHaveBeenCalledWith(PUSH.actionArgs, {
+      dryRun: false,
+      runId: 'run-1',
+      inboxItemId: ID
+    })
+    expect(all.item().outcome).toBe('done: 2 done')
+    const some = setup(DONE, parts)
+    some.approve('approve except: F2')
+    await applyScript(some.deps, some.item(), ['F2'])
+    expect(some.entry.run).not.toHaveBeenCalled()
+    expect(some.item().outcome).toBe('failed: 1 failed · 1 left out')
   })
 })

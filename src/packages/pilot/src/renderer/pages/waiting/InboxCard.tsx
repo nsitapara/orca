@@ -31,7 +31,7 @@ function RunLineBlock({
 }: {
   line: RunLine | null
   digest: string
-  // The label of the button that runs it ("Post review").
+  // The label of the button that runs it ("Push to origin").
   button: string
 }): React.JSX.Element | null {
   if (!line || line.digest !== digest) {
@@ -138,7 +138,7 @@ export function InboxCard({
   onSave: (answer: Answer) => Promise<string | null>
   // Retry on a blocked preparation: null once requeued, else why not.
   onRetryPreparation: () => Promise<string | null>
-  // Prepare evidence on a never-prepared push, Post or drafted card: null once queued, else why not.
+  // Prepare evidence on a never-prepared push or drafted card: null once queued, else why not.
   onPrepareEvidence: () => Promise<string | null>
 }): React.JSX.Element {
   const [unsaved, setUnsaved] = useState(false)

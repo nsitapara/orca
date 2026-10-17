@@ -9,11 +9,11 @@ import { SAME_CARD_OPEN } from './inbox-add'
 import { splitCommand } from './split-command'
 import type { VaultRow } from './vault-reader'
 
-// act.py script → Pilot catalog entry (the bridged entries of Task 22a).
+// act.py script → Pilot catalog entry (the bridged entries of Task 22a). post-review is gone with its entry, so an
+// old Post card imports as any unknown script's card does.
 export const SCRIPT_ENTRIES: Record<string, string> = {
   push: 'push',
-  'mark-ready': 'mark_ready',
-  'post-review': 'post_review'
+  'mark-ready': 'mark_ready'
 }
 
 const MAX_ANSWER_CHARS = 4000

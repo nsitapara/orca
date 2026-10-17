@@ -19,17 +19,17 @@ const CARD = {
   worktreePath: null,
   person: 'nish',
   type: 'action',
-  title: 'Post your review of !1579?',
+  title: 'Mark !1579 ready?',
   context: '',
   options: [
-    { label: 'Approve', meaning: 'post' },
+    { label: 'Approve', meaning: 'mark it ready' },
     { label: 'Skip', meaning: 'leave it' }
   ],
   suggested: null,
   detailsMd: null,
   details: null,
-  action: 'post_review',
-  actionArgs: { argv: ['1579'] },
+  action: 'mark_ready',
+  actionArgs: { argv: ['1579', '430f7e68'] },
   parts: {},
   switchWords: [],
   digest: 'dig1',
@@ -61,7 +61,7 @@ const entry = (over: Partial<QueueEntry>): QueueEntry =>
     holdDetail: null,
     readyAt: NOW + 179_000,
     how: 'script',
-    fires: 'Run post_review; no agent',
+    fires: 'Run mark_ready; no agent',
     updatedAt: NOW,
     ...over
   }) as QueueEntry
@@ -108,13 +108,13 @@ describe('an answered card', () => {
   it('is one line counting down to the settle time, with Undo; it does not count as waiting', async () => {
     serve(CARD, [entry({})], state({}))
     const { container } = render(<InboxPage />)
-    expect(await screen.findByText('Post review in 2:59')).toBeTruthy()
+    expect(await screen.findByText('Mark ready in 2:59')).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Undo' })).toBeTruthy()
     expect(screen.getByText('answered')).toBeTruthy()
     expect(container.textContent).toContain('0 waiting')
-    expect(screen.queryByRole('button', { name: 'Post review' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Mark ready' })).toBeNull()
     await vi.advanceTimersByTimeAsync(3_000)
-    expect(screen.getByText('Post review in 2:56')).toBeTruthy()
+    expect(screen.getByText('Mark ready in 2:56')).toBeTruthy()
   })
 
   it('Undo clears the answer through the same save, with no words and the card’s digest', async () => {
@@ -132,7 +132,7 @@ describe('an answered card', () => {
   it('says what is being done, with no Undo and the applying pill, only when the server says it is locked', async () => {
     serve(CARD, [], state({ locked: true, state: 'ready', readyAt: NOW - 1000 }))
     render(<InboxPage />)
-    expect(await screen.findByText('Posting review…')).toBeTruthy()
+    expect(await screen.findByText('Marking ready…')).toBeTruthy()
     expect(screen.queryByRole('button', { name: 'Undo' })).toBeNull()
     expect(screen.getByText('applying')).toBeTruthy()
   })
@@ -156,7 +156,7 @@ describe('an answered card', () => {
     await vi.advanceTimersByTimeAsync(2_500)
     expect(screen.getByRole('status').textContent).toContain('Waiting for Pilot to carry it out')
     expect(screen.getByRole('button', { name: 'Undo' })).toBeTruthy()
-    expect(screen.queryByText('Posting review…')).toBeNull()
+    expect(screen.queryByText('Marking ready…')).toBeNull()
   })
 
   it('shows a failed row’s reason with Change answer, which clears the answer', async () => {
@@ -228,7 +228,7 @@ describe('an answered card', () => {
       return { imported: 0, skipped: [] }
     })
     render(<InboxPage />)
-    fireEvent.click(await screen.findByRole('button', { name: 'Post review' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Mark ready' }))
     const undo = await screen.findByRole('button', { name: 'Undo' })
     expect(undo.closest('[role="status"]')).not.toBeNull()
     await waitFor(() => expect(document.activeElement).toBe(undo))
@@ -354,7 +354,7 @@ describe('one click sends what the old radio + Save sent', () => {
   it('a review card with one part switched off sends "approve except: 1" with no option', async () => {
     serve(
       open({
-        action: 'post_review',
+        action: null,
         parts: { '1': 'one', '2': 'two' },
         switchWords: ['Post', 'Skip']
       }),
@@ -362,7 +362,7 @@ describe('one click sends what the old radio + Save sent', () => {
     )
     render(<InboxPage />)
     fireEvent.click(await screen.findByLabelText('Post 1'))
-    fireEvent.click(screen.getByRole('button', { name: 'Post review' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Approve' }))
     await waitFor(() =>
       expect(pilotRpc).toHaveBeenCalledWith(
         'pilot.inbox.answer',
