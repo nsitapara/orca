@@ -12,6 +12,7 @@ import { ActivityThreadOptionsMenu } from '@/components/activity/activity-thread
 import type { ActivityGroupBy, ThreadReadFilter } from '@/components/activity/activity-thread-types'
 import { useActivityTabsThreads } from '../../../../packages/pilot/src/renderer/activity-tabs/activity-tabs-threads' // pilot-hook: activity-tabs-threads
 import { ActivityTabsPanel } from '../../../../packages/pilot/src/renderer/activity-tabs/ActivityTabsPanel' // pilot-hook: activity-tabs-panel
+import { withActivityTabsCount } from '../../../../packages/pilot/src/renderer/activity-tabs/activity-tabs-rows' // pilot-hook: activity-tabs-count
 
 /**
  * The Activity thread list, hosted in the sidebar as a navigator: selecting a
@@ -72,7 +73,8 @@ export default function SidebarAgentsList({
     markAllReadThreads,
     visibleThreadGroups
   } = useActivityTabsThreads(
-    useAgentPaneThreads({ query, readFilter, groupBy, selectedPaneKey, showChildAgents })
+    useAgentPaneThreads({ query, readFilter, groupBy, selectedPaneKey, showChildAgents }),
+    { query, readFilter, groupBy }
   ) // pilot-hook: activity-tabs-threads
 
   useEffect(() => {
@@ -143,7 +145,7 @@ export default function SidebarAgentsList({
           />
         </div>
       ) : null}
-      <ActivityTabsPanel query={query} /> {/* pilot-hook: activity-tabs-panel */}
+      <ActivityTabsPanel /> {/* pilot-hook: activity-tabs-panel */}
       <ActivityThreadListPane
         activityFilterInputRef={activityFilterInputRef}
         query={query}
@@ -161,7 +163,7 @@ export default function SidebarAgentsList({
         hasCompletedThreads={hasCompletedThreads}
         onClearCompleted={handleClearCompleted}
         visibleThreadGroups={visibleThreadGroups}
-        visibleThreadCount={visibleThreads.length}
+        visibleThreadCount={withActivityTabsCount(visibleThreads.length, visibleThreadGroups)} // pilot-hook: activity-tabs-count
         selectedPaneKey={effectiveSelectedPaneKey}
         onSelectThread={selectThread}
         onJumpToWorkspace={jumpToWorkspace}

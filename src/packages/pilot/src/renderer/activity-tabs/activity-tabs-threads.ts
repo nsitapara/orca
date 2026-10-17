@@ -1,20 +1,21 @@
-import { useEffect } from 'react'
-import { create } from 'zustand'
+import { useMemo } from 'react'
 import { useAppStore } from '@/store'
 import { isPaletteCurrentWorktree } from '@/lib/palette-repo-resolution'
 import {
   isClientHostedBrowserRowSelectionLive,
   useClientHostedBrowserRowSelection
 } from '@/lib/pane-manager/client-hosted-browser-row-state'
-import type { AgentPaneThread } from '@/components/activity/activity-thread-types'
-import { useActivityTabsVisible } from './activity-tabs-setting'
-
-const NO_THREADS: readonly AgentPaneThread[] = []
-
-// The panel skips terminals Activity already lists as agents; it reads them here.
-export const useActivityTabsThreadSnapshot = create<{ threads: readonly AgentPaneThread[] }>(
-  () => ({ threads: NO_THREADS })
-)
+import type {
+  ActivityGroupBy,
+  ActivityThreadGroup,
+  AgentPaneThread,
+  ThreadReadFilter
+} from '@/components/activity/activity-thread-types'
+import { mergeRowsIntoGroups } from './activity-tabs-groups'
+import type { ActivityTabsRow } from './activity-tabs-rows'
+import { useActivityRecentWorktreesVisible, useActivityTabsVisible } from './activity-tabs-setting'
+import { useOpenTabItems } from './use-open-tab-items'
+import { useRecentWorktreeItems } from './use-recent-worktree-items'
 
 // The agent thread behind the active workspace tab, so its row reads as current.
 export function useActiveWorkspaceThread(
@@ -53,14 +54,47 @@ export function useActiveWorkspaceThread(
   })
 }
 
-// pilot-hook: activity-tabs-threads. Wraps useAgentPaneThreads in the Activity sidebar.
+export type ActivityTabsView = {
+  query: string
+  readFilter: ThreadReadFilter
+  groupBy: ActivityGroupBy
+}
+
+// pilot-hook: activity-tabs-threads. Wraps useAgentPaneThreads in the Activity sidebar: while
+// "Show all tabs" is on, every other open tab joins the agents' groups and the active tab's agent
+// reads as current; while "Show recently active worktrees" is on, each such worktree with no row
+// gets one to start a session from.
 export function useActivityTabsThreads<
-  T extends { allThreads: AgentPaneThread[]; effectiveSelectedPaneKey: string | null }
->(result: T): T {
-  const visible = useActivityTabsVisible()
+  T extends {
+    allThreads: AgentPaneThread[]
+    effectiveSelectedPaneKey: string | null
+    visibleThreadGroups: ActivityThreadGroup[]
+  }
+>(result: T, view: ActivityTabsView): T {
+  const tabsVisible = useActivityTabsVisible()
+  const recentVisible = useActivityRecentWorktreesVisible()
   const activePaneKey = useActiveWorkspaceThread(result.allThreads, result.effectiveSelectedPaneKey)
-  useEffect(() => {
-    useActivityTabsThreadSnapshot.setState({ threads: visible ? result.allThreads : NO_THREADS })
-  }, [visible, result.allThreads])
-  return visible ? { ...result, effectiveSelectedPaneKey: activePaneKey } : result
+  // A tab or a worktree is never unread, so "Show unread only" leaves them out.
+  const listsAll = view.readFilter === 'all'
+  const tabs = useOpenTabItems(tabsVisible && listsAll, view.query, result.allThreads)
+  const visibleThreads = useMemo(
+    () => result.visibleThreadGroups.flatMap((group) => group.threads),
+    [result.visibleThreadGroups]
+  )
+  const recent = useRecentWorktreeItems(recentVisible && listsAll, view.query, visibleThreads, tabs)
+  const visibleThreadGroups = useMemo(() => {
+    const rows: ActivityTabsRow[] = [
+      ...tabs.map((tab): ActivityTabsRow => ({ kind: 'tab', tab })),
+      ...recent.map((item): ActivityTabsRow => ({ kind: 'recent-worktree', recent: item }))
+    ]
+    return mergeRowsIntoGroups(result.visibleThreadGroups, rows, view.groupBy)
+  }, [result.visibleThreadGroups, tabs, recent, view.groupBy])
+  if (!tabsVisible && !recentVisible) {
+    return result
+  }
+  return {
+    ...result,
+    ...(tabsVisible ? { effectiveSelectedPaneKey: activePaneKey } : {}),
+    visibleThreadGroups
+  }
 }

@@ -17,7 +17,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { translate } from '@/i18n/i18n'
-import { ShowAllTabsMenuItem } from '../../../../packages/pilot/src/renderer/activity-tabs/ShowAllTabsMenuItem' // pilot-hook: activity-tabs-menu
+import { ActivityTabsMenuItems } from '../../../../packages/pilot/src/renderer/activity-tabs/ActivityTabsMenuItems' // pilot-hook: activity-tabs-menu
 import {
   formatActiveFilterLabel,
   OptionsFilterCountBadge
@@ -175,7 +175,7 @@ export function ActivityThreadOptionsMenu({
         <DropdownMenuLabel>
           {translate('auto.components.activity.ActivityPrototypePage.viewSection', 'View')}
         </DropdownMenuLabel>
-        <ShowAllTabsMenuItem /> {/* pilot-hook: activity-tabs-menu */}
+        <ActivityTabsMenuItems /> {/* pilot-hook: activity-tabs-menu */}
         {groupBy && onGroupByChange ? (
           <DropdownMenuSub>
             <DropdownMenuSubTrigger>

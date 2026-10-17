@@ -3,7 +3,7 @@ import {
   agentPickerBlankTerminalMatches,
   searchAgentPickerEntries
 } from '@/lib/agent-picker-search'
-import type { TuiAgent } from '../../../../shared/tui-agent'
+import type { TuiAgent } from '../../../../../shared/tui-agent'
 
 export const BLANK_TERMINAL_OPTION_ID = '__blank-terminal__'
 

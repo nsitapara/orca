@@ -1,9 +1,15 @@
 import type { ActivityGroupBy, ActivityThreadGroup, AgentPaneThread } from './activity-thread-types'
+import {
+  activityTabsGroupRows,
+  activityTabsRowKey,
+  type ActivityTabsVirtualItem
+} from '../../../../packages/pilot/src/renderer/activity-tabs/activity-tabs-rows' // pilot-hook: activity-tabs-rows
 
 /** One row of the virtualized Activity list: a group header or a thread. */
 export type ActivityVirtualItemDescriptor =
   | { type: 'header'; group: ActivityThreadGroup }
   | { type: 'thread'; thread: AgentPaneThread; groupKey: string }
+  | ActivityTabsVirtualItem // pilot-hook: activity-tabs-row-type
 
 export const ACTIVITY_HEADER_ROW_ESTIMATE = 32
 export const ACTIVITY_THREAD_ROW_COMPACT_ESTIMATE = 96
@@ -29,12 +35,16 @@ export function buildActivityVirtualItems(args: {
     for (const thread of group.threads) {
       items.push({ type: 'thread', thread, groupKey: group.key })
     }
+    items.push(...activityTabsGroupRows(group)) // pilot-hook: activity-tabs-rows
   }
   return items
 }
 
 /** Stable per-row key: group key for headers, paneKey for threads. */
 export function getActivityVirtualItemKey(item: ActivityVirtualItemDescriptor): string {
+  if (item.type === 'workspace-tab') {
+    return activityTabsRowKey(item) // pilot-hook: activity-tabs-row-key
+  }
   return item.type === 'header' ? `h:${item.group.key}` : `t:${item.thread.paneKey}`
 }
 

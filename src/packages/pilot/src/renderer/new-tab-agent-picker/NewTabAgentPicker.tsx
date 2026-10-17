@@ -1,5 +1,6 @@
 import React, { useCallback, useMemo, useState } from 'react'
 import { TerminalSquare } from 'lucide-react'
+import { toast } from 'sonner'
 import {
   CommandDialog,
   CommandEmpty,
@@ -8,44 +9,73 @@ import {
   CommandItem,
   CommandList
 } from '@/components/ui/command'
+import { orderTabLaunchAgents } from '@/components/tab-bar/tab-agent-launch-options'
+import type { TerminalController } from '@/components/use-terminal-controller'
+import { FooterKey } from '@/components/worktree-jump-palette-primitives'
 import { AgentIcon, getAgentCatalog } from '@/lib/agent-catalog'
+import { newAgentLaunchRequestId } from '@/lib/agent-launch-request-id'
 import { focusTerminalTabSurface } from '@/lib/focus-terminal-tab-surface'
-import type { LaunchAgentInNewTabResult } from '@/lib/launch-agent-in-new-tab'
+import { launchAgentInNewTab } from '@/lib/launch-agent-in-new-tab'
 import { useAgentDetectionTargetForWorktree } from '@/hooks/useAgentDetectionTarget'
 import { useDetectedAgents } from '@/hooks/useDetectedAgents'
 import { useModalReturnFocus } from '@/hooks/useModalReturnFocus'
-import { translate } from '@/i18n/i18n'
 import { useAppStore } from '@/store'
 import { useActiveWorktree } from '@/store/selectors'
-import { DEFAULT_DISABLED_TUI_AGENTS } from '../../../../shared/tui-agent-selection'
-import type { TuiAgent } from '../../../../shared/tui-agent'
-import { orderTabLaunchAgents } from '../tab-bar/tab-agent-launch-options'
-import { FooterKey } from '../worktree-jump-palette-primitives'
+import { DEFAULT_DISABLED_TUI_AGENTS } from '../../../../../shared/tui-agent-selection'
+import type { TuiAgent } from '../../../../../shared/tui-agent'
+import { pilotStore } from '../store'
 import {
   buildNewTabAgentPickerOptions,
   type NewTabAgentPickerOption
 } from './new-tab-agent-picker-options'
+import {
+  setNewTabAgentPickerOpen,
+  useNewTabAgentPickerOpen
+} from './new-tab-agent-picker-open-state'
 
-type NewTabAgentPickerProps = {
-  worktreeId: string | null
-  onLaunchAgent: (agent: TuiAgent) => LaunchAgentInNewTabResult | undefined
-  onOpenBlankTerminal: () => void
+type PickerController = Pick<TerminalController, 'activeWorktreeId' | 'handleNewTab'>
+
+// Mirrors the tab bar's quick launch: launch, then focus a local terminal tab.
+function launchAgent(worktreeId: string, agent: TuiAgent): void {
+  const state = useAppStore.getState()
+  const result = launchAgentInNewTab({
+    requestId: newAgentLaunchRequestId(),
+    agent,
+    worktreeId,
+    groupId:
+      state.activeGroupIdByWorktree[worktreeId] ?? state.groupsByWorktree[worktreeId]?.[0]?.id,
+    launchSource: 'shortcut'
+  })
+  if (!result) {
+    toast.error(`Could not build launch command for ${agent}.`)
+    return
+  }
+  if (result.surface.kind === 'local-terminal') {
+    focusTerminalTabSurface(result.surface.tabId)
+  }
 }
 
 export function NewTabAgentPicker({
-  worktreeId,
-  onLaunchAgent,
-  onOpenBlankTerminal
-}: NewTabAgentPickerProps): React.JSX.Element {
-  const visible = useAppStore((s) => s.activeModal === 'new-tab-agent-picker')
-  const closeModal = useAppStore((s) => s.closeModal)
+  controller
+}: {
+  controller: PickerController
+}): React.JSX.Element | null {
+  return pilotStore() ? <NewTabAgentPickerDialog controller={controller} /> : null
+}
+
+function NewTabAgentPickerDialog({
+  controller: { activeWorktreeId, handleNewTab }
+}: {
+  controller: PickerController
+}): React.JSX.Element {
+  const visible = useNewTabAgentPickerOpen((s) => s.open)
   const defaultAgent = useAppStore((s) => s.settings?.defaultTuiAgent)
   const disabledTuiAgents = useAppStore(
     (s) => s.settings?.disabledTuiAgents ?? DEFAULT_DISABLED_TUI_AGENTS
   )
   const workspaceName = useActiveWorktree()?.displayName ?? null
   const { detectedIds, isLoading } = useDetectedAgents(
-    useAgentDetectionTargetForWorktree(worktreeId)
+    useAgentDetectionTargetForWorktree(activeWorktreeId)
   )
   const [query, setQuery] = useState('')
   const [selectedId, setSelectedId] = useState('')
@@ -78,28 +108,24 @@ export function NewTabAgentPicker({
 
   const launch = (option: NewTabAgentPickerOption): void => {
     skipReturnFocus()
-    closeModal()
+    setNewTabAgentPickerOpen(false)
     // Why: run after the dialog releases its focus trap so the new tab keeps focus.
     requestAnimationFrame(() => {
       if (option.kind === 'blank') {
-        onOpenBlankTerminal()
+        handleNewTab()
         return
       }
-      const result = onLaunchAgent(option.id)
-      if (result?.surface.kind === 'local-terminal') {
-        focusTerminalTabSurface(result.surface.tabId)
+      if (activeWorktreeId) {
+        launchAgent(activeWorktreeId, option.id)
       }
     })
   }
 
-  const handleOpenChange = useCallback(
-    (open: boolean) => {
-      if (!open) {
-        closeModal()
-      }
-    },
-    [closeModal]
-  )
+  const handleOpenChange = useCallback((open: boolean) => {
+    if (!open) {
+      setNewTabAgentPickerOpen(false)
+    }
+  }, [])
 
   return (
     <CommandDialog
@@ -109,16 +135,13 @@ export function NewTabAgentPicker({
       onOpenAutoFocus={captureReturnFocus}
       // Why: Radix would refocus the old tab after the exit animation, stealing it from the new one.
       onCloseAutoFocus={(event) => event.preventDefault()}
-      title={translate('newTabAgentPicker.title', 'New tab')}
-      description={translate(
-        'newTabAgentPicker.description',
-        'Choose an agent to open in a new tab'
-      )}
+      title="New tab"
+      description="Choose an agent to open in a new tab"
       contentClassName="w-[480px]"
       commandProps={{ loop: true, value: commandValue, onValueChange: setSelectedId }}
     >
       <CommandInput
-        placeholder={translate('newTabAgentPicker.placeholder', 'Open a new tab with...')}
+        placeholder="Open a new tab with..."
         value={query}
         onValueChange={(value) => {
           setQuery(value)
@@ -126,9 +149,7 @@ export function NewTabAgentPicker({
         }}
       />
       <CommandList>
-        <CommandEmpty>
-          {translate('newTabAgentPicker.empty', 'No agents match your search.')}
-        </CommandEmpty>
+        <CommandEmpty>No agents match your search.</CommandEmpty>
         <CommandGroup>
           {options.map((option) => (
             <CommandItem
@@ -143,36 +164,30 @@ export function NewTabAgentPicker({
                 <TerminalSquare className="text-muted-foreground" />
               )}
               <span className="min-w-0 flex-1 truncate">
-                {option.kind === 'agent'
-                  ? option.entry.label
-                  : translate('newTabAgentPicker.blankTerminal', 'Blank Terminal')}
+                {option.kind === 'agent' ? option.entry.label : 'Blank Terminal'}
               </span>
               {option.isDefault ? (
-                <span className="text-2xs text-muted-foreground">
-                  {translate('newTabAgentPicker.default', 'Default')}
-                </span>
+                <span className="text-2xs text-muted-foreground">Default</span>
               ) : null}
             </CommandItem>
           ))}
         </CommandGroup>
         {isLoading && detectedIds === null ? (
           <div className="px-3 py-2 text-xs text-muted-foreground">
-            {translate('newTabAgentPicker.detecting', 'Looking for installed agents...')}
+            Looking for installed agents...
           </div>
         ) : null}
       </CommandList>
       <div className="flex items-center gap-2 border-t border-border/60 px-3.5 py-2.5 text-2xs text-muted-foreground">
         <span className="min-w-0 flex-1 truncate">
-          {workspaceName
-            ? translate('newTabAgentPicker.workspace', 'In {{value0}}', { value0: workspaceName })
-            : null}
+          {workspaceName ? `In ${workspaceName}` : null}
         </span>
-        <FooterKey>{translate('newTabAgentPicker.enterKey', 'Enter')}</FooterKey>
-        <span>{translate('newTabAgentPicker.open', 'Open')}</span>
+        <FooterKey>Enter</FooterKey>
+        <span>Open</span>
         <FooterKey>↑↓</FooterKey>
-        <span>{translate('newTabAgentPicker.move', 'Move')}</span>
-        <FooterKey>{translate('newTabAgentPicker.escKey', 'Esc')}</FooterKey>
-        <span>{translate('newTabAgentPicker.close', 'Close')}</span>
+        <span>Move</span>
+        <FooterKey>Esc</FooterKey>
+        <span>Close</span>
       </div>
     </CommandDialog>
   )

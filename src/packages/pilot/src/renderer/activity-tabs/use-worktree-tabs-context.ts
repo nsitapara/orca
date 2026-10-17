@@ -15,13 +15,15 @@ import {
   findAmbiguousWorktreeIds,
   getPaletteOwnershipWorktreeIds
 } from '@/lib/unified-tab-host-ownership'
+import type { AgentPaneThread } from '@/components/activity/activity-thread-types'
 import { useAppStore } from '@/store'
-import { useActivityTabsThreadSnapshot } from './activity-tabs-threads'
 import { agentTabKey, type WorktreeTabsContext } from './workspace-tab-items'
 
 // The same host/project/origin scope Activity applies to its agent threads.
-export function useWorktreeTabsContext(query: string): WorktreeTabsContext {
-  const threads = useActivityTabsThreadSnapshot((s) => s.threads)
+export function useWorktreeTabsContext(
+  query: string,
+  threads: readonly AgentPaneThread[]
+): WorktreeTabsContext {
   const data = useAppStore(
     useShallow((s) => ({
       repos: s.repos,

@@ -194,6 +194,20 @@ export class RunStore {
       .map((r) => String((r as { handle: string }).handle))
   }
 
+  // Every step, of any run and status, recorded on one of these terminals or panes: which open tabs are Pilot's, and whose.
+  stepsOnTerminals(handles: readonly string[], paneKeys: readonly string[]): StepRow[] {
+    if (handles.length === 0 && paneKeys.length === 0) {
+      return []
+    }
+    return this.db
+      .prepare(
+        `SELECT * FROM steps WHERE terminal_handle IN (SELECT value FROM json_each(?))
+           OR pane_key IN (SELECT value FROM json_each(?)) ORDER BY started_at, idx`
+      )
+      .all(JSON.stringify(handles), JSON.stringify(paneKeys))
+      .map((r) => toStep(r as never))
+  }
+
   runningSteps(): StepRow[] {
     return this.db
       .prepare("SELECT * FROM steps WHERE status IN ('starting', 'running')")

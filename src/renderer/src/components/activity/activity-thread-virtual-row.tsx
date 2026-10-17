@@ -6,6 +6,9 @@ import { ActivityThreadContextMenu } from './activity-thread-context-menu'
 import { ActivityThreadRow } from './activity-thread-row'
 import type { AgentPaneThread } from './activity-thread-types'
 import type { ActivityVirtualItemDescriptor } from './activity-thread-virtual-items'
+import { ActivityTabsVirtualRow } from '../../../../packages/pilot/src/renderer/activity-tabs/WorkspaceTabRow' // pilot-hook: activity-tabs-row
+import { ActivityTabsGroupHeader } from '../../../../packages/pilot/src/renderer/activity-tabs/ActivityTabsGroupHeader' // pilot-hook: activity-tabs-group-header
+import { ActivityTabsNest } from '../../../../packages/pilot/src/renderer/activity-tabs/ActivityTabsNest' // pilot-hook: activity-tabs-nest
 
 type ContextMenuProps = Parameters<typeof ActivityThreadContextMenu>[0]
 
@@ -57,13 +60,23 @@ export function ActivityThreadVirtualRow({
         )}
         className="pb-1"
       >
-        <ActivityStatusGroupHeader
+        <ActivityTabsGroupHeader
           group={item.group}
           collapsed={collapsed}
           onToggle={() => onToggleGroup(item.group.key)}
-        />
+        >
+          {/* pilot-hook: activity-tabs-group-header */}
+          <ActivityStatusGroupHeader
+            group={item.group}
+            collapsed={collapsed}
+            onToggle={() => onToggleGroup(item.group.key)}
+          />
+        </ActivityTabsGroupHeader>
       </div>
     )
+  }
+  if (item.type === 'workspace-tab') {
+    return <ActivityTabsVirtualRow item={item} compactMode={compactMode} /> // pilot-hook: activity-tabs-row
   }
   const canJump = canJumpToWorkspace(item.thread)
   const isOpen = item.thread.paneKey === selectedPaneKey
@@ -84,21 +97,24 @@ export function ActivityThreadVirtualRow({
         // Why the menu wraps this wrapper, not the row: the row is already the hover-card
         // trigger, and stacking two Radix triggers on one node composes their refs.
         <div className="pb-0.5">
-          <ActivityThreadRow
-            thread={item.thread}
-            selected={isOpen}
-            multiSelected={!isOpen && multiSelectedKeys.has(item.thread.paneKey)}
-            onSelect={onSelectThread}
-            onJump={onJumpToWorkspace}
-            onMarkRead={onMarkThreadRead}
-            onMarkUnread={onMarkThreadUnread}
-            onClear={isClearableActivityThread(item.thread) ? clearActivityThread : undefined}
-            canJump={canJump}
-            compactMode={compactMode}
-            disableMarkUnread={!canMarkThreadUnread(item.thread)}
-            showJumpAction={showJumpAction}
-            previewSuppressed={menuOpen}
-          />
+          <ActivityTabsNest groupKey={item.groupKey}>
+            {/* pilot-hook: activity-tabs-nest */}
+            <ActivityThreadRow
+              thread={item.thread}
+              selected={isOpen}
+              multiSelected={!isOpen && multiSelectedKeys.has(item.thread.paneKey)}
+              onSelect={onSelectThread}
+              onJump={onJumpToWorkspace}
+              onMarkRead={onMarkThreadRead}
+              onMarkUnread={onMarkThreadUnread}
+              onClear={isClearableActivityThread(item.thread) ? clearActivityThread : undefined}
+              canJump={canJump}
+              compactMode={compactMode}
+              disableMarkUnread={!canMarkThreadUnread(item.thread)}
+              showJumpAction={showJumpAction}
+              previewSuppressed={menuOpen}
+            />
+          </ActivityTabsNest>
         </div>
       )}
     </ActivityThreadContextMenu>
