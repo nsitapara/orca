@@ -52,10 +52,10 @@ export const VERDICTS_06: VerdictTable = {
   whenOldMissing: []
 }
 
-// due.sh, 06's script check (commits that wait to be pushed hold the MR back), has no counterpart in the sweep, and a
+// 06's inline script check (commits that wait to be pushed hold the MR back), has no counterpart in the sweep, and a
 // case holds no branch to ask about: every MR passes it, so the verdicts are the sweep's own gates.
 export const answerDue: ScriptRunner = async (req) => {
-  if (!req.command.endsWith('/scripts/due.sh')) {
+  if (!req.command.includes('pilotcli git get-branch --format value --field unpushed')) {
     throw new Error(`parity: no answer for the script ${req.command}`)
   }
   return { code: 0, stdout: 'nothing waits to be pushed\n', stderr: '', timedOut: false }
