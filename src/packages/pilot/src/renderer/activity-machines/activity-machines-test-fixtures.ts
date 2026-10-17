@@ -2,8 +2,10 @@ import type React from 'react'
 import { vi } from 'vitest'
 import {
   getLocalExecutionHostLabel,
+  LOCAL_EXECUTION_HOST_ID,
   type ExecutionHostId
 } from '../../../../../shared/execution-host'
+import type { GitRemoteIdentity } from '../../../../../shared/git-remote-identity'
 import { createGlobalSettingsFixture } from '../../../../../shared/global-settings-test-fixture'
 import type { Repo } from '../../../../../shared/repo-types'
 import type { Worktree } from '../../../../../shared/worktree/types'
@@ -29,9 +31,33 @@ export function attach(): void {
   registerPilotStore(useAppStore)
 }
 
-function projectRepo(id: string, hostId: ExecutionHostId): Repo {
-  return { ...makeRepo(), id, path: `/${id}`, displayName: id, executionHostId: hostId }
+export const REMOTE: GitRemoteIdentity = {
+  canonicalKey: 'example.com/acme/sample',
+  remoteName: 'origin',
+  remoteUrl: 'https://example.com/acme/sample.git'
 }
+
+export function projectRepo(id: string, hostId: ExecutionHostId, extra: Partial<Repo> = {}): Repo {
+  return {
+    ...makeRepo(),
+    id,
+    path: `/${id}`,
+    displayName: id,
+    executionHostId: hostId,
+    ...extra
+  }
+}
+
+/** One project on two machines, plus a remote-less project on each. */
+export const PROJECT_REPOS: Repo[] = [
+  projectRepo('a-local', LOCAL_EXECUTION_HOST_ID, { gitRemoteIdentity: REMOTE }),
+  projectRepo('a-mini', MINI, { gitRemoteIdentity: REMOTE }),
+  projectRepo('scratch-local', LOCAL_EXECUTION_HOST_ID, {
+    gitRemoteIdentity: null,
+    displayName: 'scratch'
+  }),
+  projectRepo('scratch-mini', MINI, { gitRemoteIdentity: null, displayName: 'scratch' })
+]
 
 /** This Mac plus a runtime named "Mac mini" that a project lives on. */
 export function arrangeMachines(): void {
