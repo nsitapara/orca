@@ -84,7 +84,7 @@ export function getAutomation(ctx: PilotContext, id: string): AutomationDetailPa
 }
 
 // Newest first. An id with no ticks (or no such automation) gives an empty list. Each run carries its steps and
-// what it asked (open and answered inbox items), for Activity and the Agent Console; each tick, what triggered it and
+// what it asked (open and answered inbox items), for Activity; each tick, what triggered it and
 // the handed-over ids it read. `skipQuiet`: only the ticks that had something to do (the store's QUIET_TICK).
 export function activity(
   ctx: PilotContext,

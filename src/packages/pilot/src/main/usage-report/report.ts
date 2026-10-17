@@ -2,7 +2,8 @@ import { basename } from 'node:path'
 import { vaultJobName } from '../../shared/job-name'
 import type { ReportBucketRow, SessionlessStep } from '../store/store-spend'
 
-// usage.json's shapes, field for field (usage.py rows(), tally()). The console reads these names.
+// usage.json's shapes, field for field (usage.py rows(), tally()). The report page (resources/usage_report.html) reads
+// these names.
 export type UsageRow = {
   day: string
   job: string

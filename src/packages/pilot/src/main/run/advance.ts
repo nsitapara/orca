@@ -281,7 +281,7 @@ export function createRunEngine(deps: RunEngineDeps): RunEngine {
     settleUnstarted(runId)
   }
 
-  // Step 0 is written as pending first, so the stale-start sweep and the Agent Console see the run
+  // Step 0 is written as pending first, so the stale-start sweep and Activity see the run
   // while a slow new_worktree is being made (B8). The workspace is recorded on the run before any
   // step starts. The run must already be running: a new worktree's claim only sees running runs.
   async function open(req: LaunchRequest): Promise<void> {
