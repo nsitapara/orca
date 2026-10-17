@@ -131,7 +131,7 @@ describe.skipIf(!existsSync(skillsDir()))(
         'This mode returns a candidate; it never attaches Details or clears an answer.'
       )
       expect(text).toContain(
-        'Do not run `extend-card`, `set-details` or `inbox update-preparation --complete`, post a card (`inbox-card`), or run action commands.'
+        'Do not run `inbox update-preparation --complete`, post a card (`inbox-card`), or run action commands.'
       )
       expect(text).toContain('Never commit or push.')
       expect(text).not.toMatch(/draftApproved/)
@@ -180,8 +180,7 @@ describe.skipIf(!existsSync(skillsDir()))(
         [
           'never read as a copy of the card I answered',
           '`Revised with your notes — `',
-          '`Changed since you approved — `',
-          'Never use `extend-card`, `set-details` or `redrafted`'
+          '`Changed since you approved — `'
         ]
       ],
       [

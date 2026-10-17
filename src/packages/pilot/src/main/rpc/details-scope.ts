@@ -10,8 +10,8 @@ export const DETAILS_NO_CALLER_CHANGE = "Pilot can't tell who is calling; nothin
 // Who may give a card a bundle (ruling 4), from the transport's stamp only: the desktop, or the local CLI
 // bound to a run (the step on its terminal, else the env's active step) of the card's own automation. A
 // binding that can't be resolved fails closed; a paired device, an unnamed or unknown caller is refused.
-// set-details and an add with --details-bundle (which can change an open card) both ask it. Returns the run
-// the call is bound to (null for the desktop), so the change can tell the card's own answer run from another.
+// An add with --details-bundle (which can change an open card) asks it. Returns the run the call is bound to
+// (null for the desktop), so the change can tell the card's own answer run from another.
 export function refuseOutsideScope(
   c: PilotContext,
   caller: RpcCallerIdentity | undefined,

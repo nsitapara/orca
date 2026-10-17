@@ -299,52 +299,6 @@ describe('pilot inbox show', () => {
   })
 })
 
-describe('pilot inbox set-details', () => {
-  const SET = ['inbox', 'set-details', '--id', 'in_x', '--bundle', 'rel/F2.json']
-
-  it("sends the bundle's absolute path, the head and the step the call runs in", async () => {
-    insideStep()
-    vi.stubEnv('ORCA_TERMINAL_HANDLE', 'term-A')
-    const { context, call } = contextFor([...SET, '--head', '1234abcd'], {
-      id: 'in_x',
-      version: 3,
-      changed: true,
-      cleared: false
-    })
-    vi.spyOn(console, 'log').mockImplementation(() => {})
-    await INBOX_HANDLERS['inbox set-details'](context)
-    expect(call).toHaveBeenCalledWith('pilot.inbox.setDetails', {
-      id: 'in_x',
-      bundlePath: resolve(process.cwd(), 'rel/F2.json'),
-      head: '1234abcd',
-      terminal: 'term-A',
-      runId: 'run-1',
-      stepIdx: 2
-    })
-  })
-
-  it.each([
-    [
-      { changed: true, cleared: false },
-      `Attached ${resolve(process.cwd(), 'rel/F2.json')} to in_x (version 3)`
-    ],
-    [
-      { changed: true, cleared: true },
-      `Attached ${resolve(process.cwd(), 'rel/F2.json')} to in_x (version 3); your answer was cleared`
-    ],
-    [
-      { changed: false, cleared: false },
-      `No change: in_x already shows ${resolve(process.cwd(), 'rel/F2.json')}`
-    ]
-  ])('says what it did (%j)', async (outcome, line) => {
-    outsideRuns()
-    const { context } = contextFor(SET, { id: 'in_x', version: 3, ...outcome })
-    const log = vi.spyOn(console, 'log').mockImplementation(() => {})
-    await INBOX_HANDLERS['inbox set-details'](context)
-    expect(log).toHaveBeenCalledWith(line)
-  })
-})
-
 describe('pilot inbox list', () => {
   it('asks for one person and prints each card with its numbered options', async () => {
     const item: InboxItemRow = {

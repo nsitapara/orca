@@ -57,21 +57,6 @@ export const INBOX_COMMAND_SPECS: CommandSpec[] = [
     ]
   },
   {
-    path: ['inbox', 'set-details'],
-    summary:
-      "Replace a waiting card's Details with a bundle; its answer is cleared and it asks again",
-    usage: 'pilot inbox set-details --id <id> --bundle <path> [--head <sha>] [--json]',
-    allowedFlags: [...GLOBAL_FLAGS, 'id', 'bundle', 'head'],
-    examples: [
-      'pilot inbox set-details --id in_0123456789abcdef --bundle "$BUNDLE" --head 7cc153d0'
-    ],
-    notes: [
-      "Run it from a step of a Pilot run of the card's own automation (the desktop may too): Pilot refuses any other caller.",
-      'The bundle must be inside the Automations folder. --head names the commit the patch was drafted against; the cleared answer gets a reply saying so.',
-      "While an answer run other than the caller is still applying the card's answer, Pilot refuses (its answer is being applied). That answer run itself may re-attach it, which clears the answer."
-    ]
-  },
-  {
     path: ['inbox', 'answer'],
     summary:
       "Answer a card from a paired device (--host); on this Mac answers go through Pilot's Inbox",

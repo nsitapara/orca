@@ -23,7 +23,7 @@ import type {
   InboxListPayload
 } from '../shared/api-types'
 import { DETAILS_EITHER } from '../shared/details'
-import { bindingFromEnv, invalid, jsonObjectFlag, readTextFile } from './cli-values'
+import { invalid, jsonObjectFlag, readTextFile } from './cli-values'
 import { formatInboxList, formatInboxShow } from './format-inbox'
 import {
   checkInboxOption,
@@ -147,16 +147,6 @@ function addParams(flags: Flags): InboxAddParams {
   }
 }
 
-type SetDetailsResult = { id: string; version: number; changed: boolean; cleared: boolean }
-
-function setDetailsLine(path: string, r: SetDetailsResult): string {
-  if (!r.changed) {
-    return `No change: ${r.id} already shows ${path}`
-  }
-  const cleared = r.cleared ? '; your answer was cleared' : ''
-  return `Attached ${path} to ${r.id} (version ${r.version})${cleared}`
-}
-
 // --option <n> is 1-based, as `inbox list` numbers the options; the RPC's option is 0-based.
 function answerParams(flags: Flags): InboxAnswerParams {
   const id = getRequiredStringFlag(flags, 'id')
@@ -193,20 +183,6 @@ export const INBOX_HANDLERS: Record<string, CommandHandler> = {
   'inbox show': async ({ flags, client, json }) => {
     const id = getRequiredStringFlag(flags, 'id')
     printResult(await client.call<InboxItemRow>('pilot.inbox.get', { id }), json, formatInboxShow)
-  },
-  // Pilot reads the bundle itself, and decides from the transport's stamp and the run this call is bound
-  // to (the terminal, else the env's step) whether this caller may change the card.
-  'inbox set-details': async ({ flags, client, json }) => {
-    const id = getRequiredStringFlag(flags, 'id')
-    const bundlePath = resolve(process.cwd(), getRequiredStringFlag(flags, 'bundle'))
-    const params = {
-      id,
-      bundlePath,
-      ...given('head', getOptionalStringFlag(flags, 'head')),
-      ...bindingFromEnv(process.env)
-    }
-    const response = await client.call<SetDetailsResult>('pilot.inbox.setDetails', params)
-    printResult(response, json, (r) => setDetailsLine(bundlePath, r))
   },
   'inbox answer': async ({ flags, client, json }) => {
     const response = await client.call<InboxItemRow>('pilot.inbox.answer', answerParams(flags))

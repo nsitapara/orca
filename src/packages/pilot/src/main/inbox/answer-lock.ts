@@ -19,7 +19,7 @@ export function ownsLiveAnswer(store: PilotStore, item: InboxItemRow, runId: str
   })
 }
 
-// THE rule for when an answer may no longer be taken back or replaced (Undo, a new answer, set-details, a
+// THE rule for when an answer may no longer be taken back or replaced (Undo, a new answer, a
 // changed re-add): it may be being carried out. That is a ready row past its settle time (a pass picked it
 // up, and a script action may be running), or a dispatched row whose answer run is still live. A row still
 // settling, held, or failed stays changeable. `liveRuns` are the ids of the runs still asking or running.

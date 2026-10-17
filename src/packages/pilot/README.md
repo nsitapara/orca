@@ -313,8 +313,7 @@ A card carries its Details as markdown (`--details-file`) or as a structured **D
 - **Commands:**
   - `pilot inbox add --details-bundle <file>` sends the absolute path; Pilot's main process reads and checks the file itself.
   - `pilot inbox show --id <id>` prints one card, with its Details.
-  - `pilot inbox set-details --id <id> --bundle <file> [--head <sha>]` replaces a waiting card's bundle. An answer it had is cleared, with Pilot's reply asking again. While an answer run other than the caller is still applying that answer, it is refused (`its answer is being applied; Details not attached`). That answer run itself may re-attach it (a re-draft), which clears the answer the same way.
-- **Who may attach a bundle** (`add --details-bundle` and `set-details` ask the same rule): the desktop, or the local CLI inside a Pilot run's step of the card's own automation. An unbound CLI and a paired device are refused. Only a desktop Approve applies a drafted patch.
+- **Who may attach a bundle** (`add --details-bundle`): the desktop, or the local CLI inside a Pilot run's step of the card's own automation. An unbound CLI and a paired device are refused. Adding an open card again with a changed bundle clears its answer, with Pilot's reply asking again; while an answer run other than the caller is applying that answer, the add is refused. Only a desktop Approve applies a drafted patch.
 - **Drafting:** job 14 (`14 · Prepare inbox item context`) drafts and verifies prepared cards, through item-details' `candidate` mode (R-P2). 03 and 04 no longer draft at the end of their runs.
 
 ### Context preparation
@@ -332,7 +331,7 @@ A card carries its Details as markdown (`--details-file`) or as a structured **D
 - **The list** carries a light preparation ref (state, attempt, progress, error, needs); the request comes with `pilot inbox show` and the manifest with the Details.
 
 Rulings:
-- **R-P1.** Preparation has its own scoped write path: the `pilot.inbox.prepare*` RPCs (claim, progress, complete, fail), for a `local-cli` caller bound to a live run of an `inbox_preparation` automation whose item key is the card's id, at the matching revision, holding the claim. It is the one exception to "a run-bound caller may change only its own automation's cards". `set-details` refuses prepared cards from every caller. (`prepareRetry` is a person's, not the worker's.)
+- **R-P1.** Preparation has its own scoped write path: the `pilot.inbox.prepare*` RPCs (claim, progress, complete, fail), for a `local-cli` caller bound to a live run of an `inbox_preparation` automation whose item key is the card's id, at the matching revision, holding the claim. It is the one exception to "a run-bound caller may change only its own automation's cards". (`prepareRetry` is a person's, not the worker's.)
 - **R-P2.** Drafting and evidence moved out of 03 and 04 into job 14 plus item-details' `candidate` mode. This replaces plan Ruling 5.
 - **R-P3.** Images and patches are hashed in prepared bundles, and a changed image is refused. This replaces plan Ruling 3 for prepared bundles; plain bundles keep Ruling 3.
 - **R-P4.** Preparation is opt-in (D1), and a refused request never loses the card (D2, after Ruling 8): it becomes a flagged "Not prepared" notice that runs nothing, never a plain action card.
