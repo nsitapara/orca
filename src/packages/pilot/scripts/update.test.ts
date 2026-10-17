@@ -94,7 +94,8 @@ describe('hookTestTargets', () => {
       'src/renderer/src/components/terminal-workspace-keydown.test',
       'src/renderer/src/hooks/ipc-events/tab-lifecycle-ipc-bridge.test',
       'src/renderer/src/main.test',
-      'src/renderer/src/store/right-sidebar-route.test'
+      'src/renderer/src/store/right-sidebar-route.test',
+      'src/renderer/src/web/main.test'
     ])
   })
 
