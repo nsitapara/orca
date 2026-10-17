@@ -6,17 +6,10 @@ import { cardOf, inboxDigest } from './card'
 import { loadDetails } from './details-bundle'
 import { getInboxItem, inboxEvent, syncRunWaiting, WAITING, type InboxDeps } from './inbox-service'
 
-export const ANSWERED_SINCE = 'answered since; Details not attached'
-export const HAS_DETAILS_SINCE = 'has Details since; Details not attached'
-
 export type SetDetailsResult = { id: string; version: number; changed: boolean; cleared: boolean }
 export type SetDetailsOptions = {
   // The commit a drafted patch was drafted against, named in the reply under a cleared answer.
   head: string | null
-  // Refuse a card that has an answer (the vault import's backfill).
-  onlyUnanswered: boolean
-  // Refuse a card that has a bundle (the backfill: a draft attached meanwhile is kept).
-  onlyWithoutDetails?: boolean
   // The run the call is bound to (refuseOutsideScope): its own dispatched answer is not in the way.
   callerRunId?: string | null
 }
@@ -29,8 +22,8 @@ function waitingItem(deps: InboxDeps, id: string): InboxItemRow {
   return item
 }
 
-// Under the write lock: the card is read again, so what is checked (still waiting, unanswered when asked)
-// is what is written over. Markdown Details give way to the bundle (ruling 6).
+// Under the write lock: the card is read again, so what is checked (still waiting) is what is written over.
+// Markdown Details give way to the bundle (ruling 6).
 function attach(
   deps: InboxDeps,
   id: string,
@@ -41,18 +34,12 @@ function attach(
   if (item.preparation) {
     throw new Error('Managed context must be attached with prepare-complete')
   }
-  if (opts.onlyWithoutDetails && item.details !== null) {
-    throw new Error(HAS_DETAILS_SINCE)
-  }
   const card = { ...cardOf(item), details: loaded.ref, detailsMd: null }
   const digest = inboxDigest(card)
   if (digest === item.digest) {
     return { item, result: { id, version: item.version, changed: false, cleared: false } }
   }
   const answered = item.status === 'answered' || item.answer !== null
-  if (opts.onlyUnanswered && answered) {
-    throw new Error(ANSWERED_SINCE)
-  }
   const at = deps.now()
   if (answerLocked(deps.store, item, at, opts.callerRunId ?? null)) {
     throw new Error(ANSWER_LOCKED)
@@ -69,7 +56,7 @@ function attach(
   return { item, result: { id, version: item.version + 1, changed: true, cleared: answered } }
 }
 
-// Replaces a card's Details with a bundle (pilot inbox set-details, the vault import's backfill): a new
+// Replaces a card's Details with a bundle (pilot inbox set-details): a new
 // version of the card, its snapshot replaced in the same transaction. An answer given to the old version
 // is cleared with Pilot's reply, and its pending queue row goes, since it approved what was shown before.
 export function setInboxDetails(

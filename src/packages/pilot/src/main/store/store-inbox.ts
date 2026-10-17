@@ -215,12 +215,6 @@ export class InboxStore {
     return readCurrentDetails(this.db, id)
   }
 
-  // The import corrects the ask date of a card it wrote with the import time. Only the date: not a new
-  // version, no digest change (createdAt is not part of it), nothing else touched.
-  setCreatedAt(id: string, at: number): void {
-    this.db.prepare('UPDATE inbox_items SET created_at = ? WHERE id = ?').run(at, id)
-  }
-
   fillSummaries(): void {
     fillSummaries(this.db)
   }

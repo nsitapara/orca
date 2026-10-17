@@ -11,7 +11,6 @@ import { FilterBadges } from './FilterBadges'
 import { setAllDetailsOpen, useAllDetailsOpen } from './details-open'
 import { ALL, InboxHeader } from './InboxHeader'
 import { InboxCard } from './InboxCard'
-import { ImportNotice } from './ImportNotice'
 import { InboxStyle } from './inbox-style'
 import { InMotionPanel } from './InMotionPanel'
 import { WorktreeName } from './WorktreeLink'
@@ -166,7 +165,6 @@ export function InboxPage(): React.JSX.Element {
       />
       <InMotionPanel running={running} entries={queue} onApplyNow={applyNow} />
       {error ? <p className="text-sm text-destructive">{error}</p> : null}
-      <ImportNotice onImported={() => void reload()} />
       {showList ? null : (
         <FilterBadges
           sections={sections}

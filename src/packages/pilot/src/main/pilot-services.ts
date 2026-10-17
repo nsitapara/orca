@@ -69,7 +69,7 @@ export type PilotContext = {
   // This process runs the scheduler: only here does a real tick or an ask-first start launch anything.
   schedulerOn: boolean
   writeUsageReport?: (dir?: string) => UsageReportResult
-  // How engine children reach Pilot's CLI and data (H9): the vault import's vault.py too.
+  // How engine children reach Pilot's CLI and data (H9).
   engineEnv?: EngineEnv
   // Opens or focuses a step's agent session (pilot.session.resume); absent where there is no runtime.
   resumeSession?: (req: { runId: string; stepIdx: number }) => Promise<SessionResumeResult>

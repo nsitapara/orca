@@ -7,9 +7,10 @@ import { fsStateReader, sweepStatePaths } from '../importer/sweep-state/fs-reade
 import { MAPPERS, sweepStateIds, sweepStateMapper } from '../importer/sweep-state/registry'
 import type { StateWorktree, SweepStateMapper } from '../importer/sweep-state/types'
 import type { PilotHost } from '../pilot-services'
-import { IMPORT_NO_CALLER } from './methods-answers'
 
 const ImportParams = z.object({ id: z.string().min(1), apply: z.boolean().optional() })
+
+export const IMPORT_NO_CALLER = "Pilot can't tell who is calling; nothing was imported"
 
 export const IMPORT_STATE_APPLY_ON_MAC =
   'Apply the state import on the Mac Pilot runs on (pilot automations import-state --apply); a paired device only previews it'

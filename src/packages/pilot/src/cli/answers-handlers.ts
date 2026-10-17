@@ -16,8 +16,6 @@ const ACTION_EXIT: Record<string, number> = {
 }
 // Generous: act.py's run allows 10 min (RUN_TIMEOUT_MS) and the call needs a little more.
 const ACTION_TIMEOUT_MS = 660_000
-// The export asks GitLab for each branch's MR.
-const LONG_IMPORT_MS = 180_000
 
 type ActionReply = { outcome: string; detail: string; link?: string | null }
 
@@ -40,45 +38,7 @@ export function inboxItemLine(
   return [i.id, i.status, i.outcome, i.title].filter(Boolean).join(' · ')
 }
 
-const IMPORT_ON_PAGE = 'Apply the vault import in Pilot (Inbox)'
-
-type ImportReport = {
-  applied: boolean
-  imported: number
-  answers: number
-  runs: number
-  // Cards already imported that would get their Details bundle (absent from an older Pilot).
-  backfilled?: number
-  skipped: { summary: string; reason: string }[]
-  notes: { id: string; note: string }[]
-}
-
-function previewLine(r: ImportReport): string {
-  const backfilled = r.backfilled ?? 0
-  const details = backfilled > 0 ? `, and Details for ${backfilled} already-imported card(s)` : ''
-  return `Would import ${r.imported} card(s), ${r.answers} with an answer, and ${r.runs} asking session(s)${details}.`
-}
-
 export const ANSWERS_HANDLERS: Record<string, CommandHandler> = {
-  'inbox import-vault': async ({ flags, client, json }) => {
-    // Applying is the desktop's alone; the CLI previews and points to the page.
-    if (flags.get('apply') === true) {
-      throw invalid(IMPORT_ON_PAGE)
-    }
-    const response = await client.call<ImportReport>(
-      'pilot.inbox.importVault',
-      { apply: false },
-      { timeoutMs: LONG_IMPORT_MS }
-    )
-    printResult(response, json, (r) =>
-      [
-        previewLine(r),
-        ...r.notes.map((n) => `  note ${n.id}: ${n.note}`),
-        ...r.skipped.map((s) => `  skip "${s.summary}": ${s.reason}`),
-        IMPORT_ON_PAGE
-      ].join('\n')
-    )
-  },
   'inbox tick': async ({ flags, client, json }) => {
     const params = {
       id: getRequiredStringFlag(flags, 'id'),

@@ -241,7 +241,7 @@ export function detailsLine(listPayload, failure = '') {
       typeof item.detailsMd === 'string' &&
       item.detailsMd.startsWith(VAULT_BUNDLE_NOTE)
   ).length
-  return `Card details: ${items.length} waiting cards, ${withBundle} with a Details bundle, ${legacy} imported cards still pointing at a vault bundle (re-run "Import open vault cards" in Pilot's window).`
+  return `Card details: ${items.length} waiting cards, ${withBundle} with a Details bundle, ${legacy} imported cards still pointing at a vault bundle.`
 }
 
 function problemLines(rows, parity) {

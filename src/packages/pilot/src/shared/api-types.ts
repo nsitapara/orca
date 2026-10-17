@@ -88,7 +88,7 @@ export type RunStatus =
   | 'timed_out'
   | 'cancelled'
 // What started a run (contract §9): the schedule, Run now, a saved answer, a yes to an ask-first
-// card, or the one-shot vault import.
+// card, or an import (the old sweeps' state, or the vault cards imported once on 2026-10-12).
 export type RunTrigger = 'schedule' | 'manual' | 'answer' | 'ask_first' | 'import'
 export type RunRow = {
   id: string
@@ -168,7 +168,7 @@ export type InboxType = 'question' | 'flagged' | 'default' | 'action' | 'bug' | 
 export type InboxStatus = 'open' | 'answered' | 'done' | 'obsolete' | 'stale' | 'dismissed'
 export type InboxOption = { label: string; meaning: string }
 // An answer carries the digest of the card version it was given against (contract §10), and where
-// it was given: the page, `pilot inbox answer`, or the vault import.
+// it was given: the page, `pilot inbox answer`, or the vault import of 2026-10-12.
 export type InboxAnswer = {
   option: number | null
   text: string | null
