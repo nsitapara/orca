@@ -5,7 +5,7 @@ import { formatDuration } from '../../../shared/run/format-duration'
 import { openRun } from '../../run-views/run-panel-state'
 import { useNow } from '../waiting/use-now'
 import { RunLimitPicker } from './RunLimitPicker'
-import { runMemoryText, suggestionText, usageText } from './running-text'
+import { memoryText, runMemoryText, suggestionText, usageText } from './running-text'
 import { useCapacity } from './use-capacity'
 
 function LimitPanel({
@@ -18,6 +18,7 @@ function LimitPanel({
   onChange(limit: number | null): void
 }): React.JSX.Element {
   const suggested = payload.suggestion.limit
+  const memory = memoryText(payload)
   return (
     <section
       aria-label="Run limit"
@@ -42,6 +43,7 @@ function LimitPanel({
             Use {suggested}
           </Button>
         )}
+        {memory ? <p className="basis-full text-xs tabular-nums">{memory}</p> : null}
         <p className="basis-full text-xs text-muted-foreground">
           {suggestionText(payload)} Memory counts each job&apos;s processes on this Mac, not
           Docker&apos;s containers.
@@ -54,19 +56,20 @@ function LimitPanel({
 function RunningRow({ run, now }: { run: CapacityRun; now: number }): React.JSX.Element {
   return (
     <li className="flex min-w-0 items-center gap-2 px-3 py-2 text-sm">
-      <span className="font-medium">{run.automationName}</span>
+      <span className="shrink-0 font-medium">{run.automationName}</span>
       <span
-        className="min-w-0 truncate font-mono text-xs text-muted-foreground"
+        className="min-w-0 flex-1 truncate font-mono text-xs text-muted-foreground"
         title={run.itemLabel}
       >
         {run.itemLabel}
       </span>
-      <span className="text-xs tabular-nums text-muted-foreground">
+      <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
         {formatDuration(now - run.startedAt)}
       </span>
-      <span className="flex-1" />
-      <span className="text-xs tabular-nums text-muted-foreground">{runMemoryText(run)}</span>
-      <button type="button" className="text-xs underline" onClick={() => openRun(run.id)}>
+      <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
+        {runMemoryText(run)}
+      </span>
+      <button type="button" className="shrink-0 text-xs underline" onClick={() => openRun(run.id)}>
         Open run
       </button>
     </li>
@@ -87,16 +90,15 @@ function QueuedRow({
       <span className="w-5 shrink-0 text-right text-xs tabular-nums text-muted-foreground">
         {place}
       </span>
-      <span className="font-medium">{item.automationName}</span>
+      <span className="shrink-0 font-medium">{item.automationName}</span>
       <span
-        className="min-w-0 truncate font-mono text-xs text-muted-foreground"
+        className="min-w-0 flex-1 truncate font-mono text-xs text-muted-foreground"
         title={item.itemLabel}
       >
         {item.itemLabel}
       </span>
       {item.byHand ? <Badge variant="outline">Run now</Badge> : null}
-      <span className="flex-1" />
-      <span className="text-xs tabular-nums text-muted-foreground">
+      <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
         waiting {formatDuration(now - item.queuedAt)}
       </span>
     </li>
@@ -135,7 +137,7 @@ export function RunningPage(): React.JSX.Element {
   const { payload, error, saving, setLimit } = useCapacity()
   const now = useNow(true)
   return (
-    <section className="flex flex-col gap-4 px-5 pb-6 pt-4">
+    <section className="flex max-w-4xl flex-col gap-4 px-5 pb-6 pt-4">
       <div>
         <h2 className="text-sm font-semibold leading-6">Running</h2>
         <p className="text-xs text-muted-foreground">
