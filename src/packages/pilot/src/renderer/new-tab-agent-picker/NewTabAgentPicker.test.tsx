@@ -72,7 +72,11 @@ const ON_SECOND_MAC: NewTabMachineStep = {
 // Why re-query: each step mounts its own search box.
 const searchBox = (): HTMLElement => screen.getByRole('combobox')
 const enter = (): boolean => fireEvent.keyDown(searchBox(), { key: 'Enter' })
-const type = (value: string): boolean => fireEvent.change(searchBox(), { target: { value } })
+// Why the keydown: a real keystroke reaches the dialog before the change does.
+const type = (value: string): boolean => {
+  fireEvent.keyDown(searchBox(), { key: value.at(-1) ?? 'Backspace' })
+  return fireEvent.change(searchBox(), { target: { value } })
+}
 const arrowDown = (times: number): void => {
   for (let i = 0; i < times; i++) {
     fireEvent.keyDown(searchBox(), { key: 'ArrowDown' })
@@ -231,6 +235,63 @@ describe('NewTabAgentPicker', () => {
       ])
     }
   )
+
+  const pointAt = (label: RegExp) => (): boolean =>
+    fireEvent.pointerMove(screen.getByRole('option', { name: label }))
+  it.each([
+    {
+      name: 'keeps the remembered machine while it still matches',
+      step: TWO,
+      remembered: 'runtime:env-b' as const,
+      typed: 'mac',
+      worktreeId: 'repo-b::/b/feat'
+    },
+    {
+      name: 'keeps the current machine while it still matches',
+      step: ON_SECOND_MAC,
+      remembered: null,
+      typed: 'mac',
+      worktreeId: 'wt-1'
+    },
+    {
+      name: 'moves to the first enabled match once the remembered machine is filtered out',
+      step: TWO,
+      remembered: 'runtime:env-b' as const,
+      typed: 'local',
+      worktreeId: 'wt-1'
+    },
+    {
+      name: 'follows an arrow key after the search',
+      step: TWO,
+      remembered: 'runtime:env-b' as const,
+      typed: 'mac',
+      move: (): void => arrowDown(1),
+      worktreeId: 'wt-1'
+    },
+    {
+      name: 'follows the pointer after the search',
+      step: TWO,
+      remembered: 'runtime:env-b' as const,
+      typed: 'mac',
+      move: pointAt(/Local Mac/),
+      worktreeId: 'wt-1'
+    }
+  ])('a machine search $name', async ({ step, remembered, typed, move, worktreeId }) => {
+    machineStep.value = step
+    detections['repo-b::/b/feat'] = ['codex']
+    detections['repo-a::/a/feat'] = ['codex']
+    if (remembered) {
+      rememberNewTabMachine(PROJECT, remembered)
+    }
+    openPicker()
+    enter()
+    type(typed)
+    await nextFrame()
+    move?.()
+    enter()
+    await nextFrame()
+    expect(launches).toEqual([expect.objectContaining({ agent: 'codex', worktreeId })])
+  })
 
   it('disables a machine without the agent and starts on the current one', () => {
     machineStep.value = TWO
