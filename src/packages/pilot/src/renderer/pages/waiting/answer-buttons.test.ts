@@ -15,6 +15,12 @@ const CARDS: Record<string, InboxItemRow> = {
   push: { ...base, type: 'action', action: 'push', options: opts('Approve', 'Skip') },
   postReview: { ...base, type: 'action', action: 'post_review', options: opts('Approve', 'Skip') },
   startRun: { ...base, type: 'action', action: 'start_run', options: opts('Approve', 'Skip') },
+  multiStart: {
+    ...base,
+    type: 'action',
+    action: 'start_run',
+    options: opts('Backend', 'Full stack + UI', 'Skip')
+  },
   leftNoDraft: { ...base, type: 'left_for_you', options: opts('Approve', 'Skip') },
   bugDrafted: {
     ...base,
@@ -49,6 +55,12 @@ const OLD: Record<string, [string, string, number | null, string][]> = {
     ['Approve', 'primary', 0, 'Approve'],
     ['With notes…', 'notes', null, 'approve: some notes'],
     ['Skip', 'skip', 1, 'Skip']
+  ],
+  // Not an old radio card: each start option takes optional notes and keeps its index.
+  multiStart: [
+    ['Backend', 'notes', 0, 'approve: some notes'],
+    ['Full stack + UI', 'notes', 1, 'approve: some notes'],
+    ['Skip', 'skip', 2, 'Skip']
   ],
   leftNoDraft: [
     ['Fix it', 'primary', 0, 'approve'],
@@ -96,6 +108,11 @@ describe('buttonsFor', () => {
     expect(buttons[0]).toMatchObject({ hint: 'Install in the job m', recommended: true })
     expect(buttons[1]).toMatchObject({ recommended: false })
     expect(buttonsFor(CARDS.default).some((b) => b.recommended)).toBe(false)
+  })
+
+  it("highlights a multi-start card's first start option, and nothing on a single-start card", () => {
+    expect(buttonsFor(CARDS.multiStart).map((b) => b.recommended)).toEqual([true, false, false])
+    expect(buttonsFor(CARDS.startRun).some((b) => b.recommended)).toBe(false)
   })
 
   it('has no Save button among them', () => {

@@ -54,6 +54,7 @@ function hasExtension(paths: string[], allowed: (ext: string) => boolean): boole
 }
 const isImage = (ext: string): boolean => Object.hasOwn(IMAGE_TYPES, ext)
 const isJson = (ext: string): boolean => ext === '.json'
+const isHtml = (ext: string): boolean => ext === '.html'
 
 // An unknown block type is refused by name (ruling 9), before the shape is checked.
 function refuseUnknownTypes(raw: unknown): void {
@@ -98,6 +99,8 @@ function bundleRefs(bundle: DetailsBundle): { kind: RefKind; ref: string }[] {
       )
     } else if (block.type === 'review') {
       refs.push({ kind: 'review', ref: block.file })
+    } else if (block.type === 'report') {
+      refs.push({ kind: 'report', ref: block.file })
     } else if (block.type === 'screens') {
       for (const pair of block.pairs) {
         refs.push({ kind: 'before', ref: pair.before }, { kind: 'after', ref: pair.after })
@@ -110,7 +113,7 @@ function bundleRefs(bundle: DetailsBundle): { kind: RefKind; ref: string }[] {
 }
 
 // A ref resolved (absolute as is, relative against the bundle's real folder): a regular file inside the
-// root, of an image type for screens and shots, and JSON for a review.
+// root, of an image type for screens and shots, JSON for a review, and HTML for a report.
 function refFile(root: string, dir: string, kind: RefKind, ref: string): string {
   const label = `${kind} ref "${ref}"`
   const real = realInside(root, isAbsolute(ref) ? ref : resolve(dir, ref), label)
@@ -120,6 +123,9 @@ function refFile(root: string, dir: string, kind: RefKind, ref: string): string 
   }
   if (kind === 'review' && !hasExtension([ref, real], isJson)) {
     throw new DetailsRefused(`${label} is not a .json file`)
+  }
+  if (kind === 'report' && !hasExtension([ref, real], isHtml)) {
+    throw new DetailsRefused(`${label} is not an .html file`)
   }
   if (!statSync(real).isFile()) {
     throw new DetailsRefused(`${label} is not a file`)
@@ -280,4 +286,15 @@ export function readDetailsImage(
     base64: bytes.toString('base64'),
     bytes: bytes.length
   }
+}
+
+// The real path of a report a card's bundle names, checked again before Open hands it to the OS: a report ref of
+// this card's Details, inside the Automations folder, an .html regular file.
+export function reportPath(root: string | null, snapshot: DetailsSnapshot, file: string): string {
+  const top = realRoot(root)
+  const named = snapshot.bundle.blocks.some((b) => b.type === 'report' && b.file === file)
+  if (!named) {
+    throw new DetailsRefused(`report "${file}" is not a report of this card's Details`)
+  }
+  return refFile(top, dirname(snapshot.ref.path), 'report', file)
 }

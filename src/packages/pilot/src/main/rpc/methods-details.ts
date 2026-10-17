@@ -3,7 +3,7 @@ import { defineMethod } from '../../../../../main/runtime/rpc/core'
 import type { RpcCallerIdentity } from '../../../../../main/runtime/rpc/rpc-caller-identity'
 import type { DetailsSnapshot } from '../../shared/details'
 import { CARD_CHANGED_ON_SAVE } from '../answers/save'
-import { readDetailsImage } from '../inbox/details-bundle'
+import { readDetailsImage, reportPath } from '../inbox/details-bundle'
 import { setInboxDetails } from '../inbox/inbox-details'
 import { getInboxItem } from '../inbox/inbox-service'
 import type { PilotContext } from '../pilot-services'
@@ -17,6 +17,7 @@ export { DETAILS_NO_CALLER_CHANGE, DETAILS_OWN_AUTOMATION, DETAILS_RUN_ONLY } fr
 const Digest = z.string().regex(/^[0-9a-f]{64}$/)
 const Details = z.object({ id: z.string().min(1), digest: Digest.optional() })
 const Image = z.object({ id: z.string().min(1), digest: Digest, file: z.string().min(1).max(1024) })
+const Report = Image
 const SetDetails = z.object({
   id: z.string().min(1),
   bundlePath: z.string().min(1).max(4096),
@@ -81,6 +82,19 @@ export function buildDetailsMethods(ctx: () => PilotContext) {
         const c = ctx()
         const { snapshot } = currentSnapshot(c, p.id, p.digest)
         return readDetailsImage(c.detailsRoot ?? null, snapshot, p.file)
+      }
+    }),
+    // A report's real path, for Open to hand the OS: checked again now (a report of this card's Details, inside the
+    // Automations folder, an .html file), never a path the caller chose.
+    defineMethod({
+      name: 'pilot.inbox.report',
+      permission: 'workspace',
+      params: Report,
+      handler: (p, rpc) => {
+        requireCaller(rpc.caller)
+        const c = ctx()
+        const { snapshot } = currentSnapshot(c, p.id, p.digest)
+        return { path: reportPath(c.detailsRoot ?? null, snapshot, p.file) }
       }
     }),
     // pilot inbox set-details: a new bundle for a waiting card, which clears the answer it had. A card whose

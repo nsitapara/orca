@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 import type { ItemDecision } from '../../shared/api-types'
+import type { AutomationDefinition } from '../../shared/definition/types'
 import { parseAutomationYaml } from '../../shared/definition/parse'
 import { parsePeopleYaml } from '../../shared/people'
 import { argsDigest } from '../actions/powers'
@@ -17,6 +18,7 @@ import {
   askFirstCard,
   cancelUnstartedRun,
   runAnswerOf,
+  runChoiceOf,
   type AskDeps
 } from './ask-first'
 
@@ -265,6 +267,69 @@ describe('runAnswerOf ({run.answer}, G7)', () => {
       runAnswerOf(store, store.runs.get('ans-1')!),
       runAnswerOf(store, store.runs.get('plain-1')!)
     ]).toEqual(['e2e', null])
+  })
+})
+
+describe('runChoiceOf ({run.choice})', () => {
+  const multi = parseAutomationYaml(
+    [
+      'name: Prepare reviews requested of me',
+      'repo: web-platform',
+      'schedule: manual',
+      'items: { kind: merge_request }',
+      'once_per: "{mr.iid}:{mr.head_sha}"',
+      'start: ask_first',
+      'ask_first:',
+      '  title: "Prepare a review of !{mr.iid}?"',
+      '  context: x',
+      '  options: ["Backend — a backend stack", "Full stack + UI — the frontends too", "Skip — not now"]',
+      'steps: [ { agent: claude, skill: review-mr, prompt: x } ]',
+      'inbox: nish',
+      ''
+    ].join('\n'),
+    '/a/rev.yaml'
+  )
+  if (!multi.ok) {
+    throw new Error('setup')
+  }
+
+  function answered(definition: AutomationDefinition, option: number | null, text: string) {
+    const s = setup([definition])
+    askDecisions(s.deps, definition, [decision('cd00c0fd')], new Map(), {
+      tickId: 7,
+      runIdFor: () => 'rev-ask'
+    })
+    const card = s.store.inbox.list({ runId: 'rev-ask' })[0]
+    s.store.inbox.update(
+      card.id,
+      { status: 'answered', answer: { option, text, digest: card.digest, via: 'page' } },
+      1_001
+    )
+    return runChoiceOf(s.store, s.store.runs.get('rev-ask')!)
+  }
+
+  it.each<[string, number | null, string, string]>([
+    ['the first option', 0, 'Backend', 'Backend'],
+    ['the second start option', 1, 'Full stack + UI', 'Full stack + UI'],
+    ['the second start option, with notes', 1, 'approve: check the migration', 'Full stack + UI'],
+    ['words, no option', null, 'approve', 'Backend']
+  ])('a card with two start options, answered with %s', (_, option, text, choice) => {
+    expect(answered(multi.definition, option, text)).toBe(choice)
+  })
+
+  it("is the first option's label on a single-start card, and '' for any run that didn't ask first", () => {
+    expect(answered(def, null, 'approve: use the second fix')).toBe('Approve')
+    const s = setup()
+    s.store.runs.create({
+      id: 'plain-1',
+      automationId: 'rev',
+      tickId: null,
+      itemKey: 'mr:1',
+      itemLabel: '!1',
+      worktreePath: null,
+      startedAt: 3
+    })
+    expect(runChoiceOf(s.store, s.store.runs.get('plain-1')!)).toBe('')
   })
 })
 

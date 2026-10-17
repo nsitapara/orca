@@ -56,6 +56,7 @@ export type EngineWiringInput = {
   // Wired by Tasks 24c (answer runs' outputs) and 25 ({run.answer}); see RunEngineDeps.
   onRunEnd?: RunEngineDeps['onRunEnd']
   runAnswer?: RunEngineDeps['runAnswer']
+  runChoice?: RunEngineDeps['runChoice']
   handover?: RunEngineDeps['handover']
   // Env workspaces (main/envs): made off the tick; the sweep never closes the pending step of a run being prepared.
   envs?: EnvPreparer
@@ -99,6 +100,7 @@ export function wireRunEngine(input: EngineWiringInput): WiredEngine {
     log,
     onRunEnd: input.onRunEnd,
     runAnswer: input.runAnswer,
+    runChoice: input.runChoice,
     handover: input.handover,
     envs: input.envs
   })
