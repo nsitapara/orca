@@ -51,16 +51,16 @@ function build(worktrees: Worktree[], opts: BuildOpts = {}) {
 
 describe('buildRecentWorktreeItems', () => {
   const recent = worktree('recent', 60_000)
-  const pinnedOld = worktree('pinned', RECENT_WORKTREE_WINDOW_MS + 1, { isPinned: true })
+  const pinnedOld = worktree('zz-pinned', RECENT_WORKTREE_WINDOW_MS + 1, { isPinned: true })
   type Case = [string, Worktree[], BuildOpts, [string, number][]]
   it.each<Case>([
     [
-      'active within the window, newest first',
-      [worktree('older', 7_200_000), recent],
+      'active within the window, by name whatever their activity',
+      [recent, worktree('older', 7_200_000)],
       {},
       [
-        ['recent', 0],
-        ['older', 0]
+        ['older', 0],
+        ['recent', 0]
       ]
     ],
     [
@@ -68,7 +68,7 @@ describe('buildRecentWorktreeItems', () => {
       [recent, pinnedOld],
       {},
       [
-        ['pinned', 0],
+        ['zz-pinned', 0],
         ['recent', 0]
       ]
     ],
@@ -76,7 +76,7 @@ describe('buildRecentWorktreeItems', () => {
       'only pinned ones without includeRecent',
       [recent, pinnedOld],
       { includeRecent: false },
-      [['pinned', 0]]
+      [['zz-pinned', 0]]
     ],
     ['carries its open tab count', [worktree('tabs', 1)], {}, [['tabs', 2]]],
     [

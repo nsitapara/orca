@@ -12,6 +12,7 @@ import type { AppState } from '@/store/types'
 import { useWorktreeTabsContext } from './use-worktree-tabs-context'
 import {
   buildWorktreeTabItems,
+  compareWorktreeNames,
   type WorkspaceTabItem,
   type WorktreeTabsContext
 } from './workspace-tab-items'
@@ -61,18 +62,14 @@ function worktreeItems(
   return items
 }
 
-function compareWorktrees(activeId: string | null, nameOf: (id: string) => string) {
-  return (a: string, b: string): number => {
-    if (a === activeId || b === activeId) {
-      return a === activeId ? -1 : 1
-    }
-    return nameOf(a).localeCompare(nameOf(b))
-  }
+// By name alone: selecting a workspace never moves its tabs in the list.
+function byName(nameOf: (id: string) => string) {
+  return (a: string, b: string): number => compareWorktreeNames(nameOf(a), nameOf(b))
 }
 
 /**
- * Every workspace's tabs that Activity doesn't already list as agents: the active workspace
- * first, then by name, each in tab order. Empty while `enabled` is false.
+ * Every workspace's tabs that Activity doesn't already list as agents, by workspace name, each in
+ * tab order. Empty while `enabled` is false.
  */
 export function useOpenTabItems(
   enabled: boolean,
@@ -98,7 +95,7 @@ export function useOpenTabItems(
   return stable(
     Object.keys(groupsByWorktree)
       .filter((id) => id !== FLOATING_TERMINAL_WORKTREE_ID)
-      .sort(compareWorktrees(activeWorktreeId, nameOf))
+      .sort(byName(nameOf))
       .flatMap((id) =>
         worktreeItems(
           id,

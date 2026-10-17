@@ -167,4 +167,36 @@ describe('useActivityTabsThreads', () => {
     ).result.current.visibleThreadGroups
     expect(groups.flatMap(activityTabsGroupRows).map(rowLabel)).toEqual(rows)
   })
+
+  // The active workspace (wt-1, "feature") sorts after "alpha" (wt-2): selecting it moves nothing.
+  it('lists open tabs by workspace name, not with the active workspace first', () => {
+    arrange({ attached: true, on: true, body: 'agents' })
+    const tabIn = (worktreeId: string, id: string) => ({
+      ...unifiedTab(id, `${id}-entity`, id),
+      worktreeId
+    })
+    const group = (worktreeId: string, tabId: string) => [
+      { id: `g-${worktreeId}`, worktreeId, activeTabId: tabId, tabOrder: [tabId] }
+    ]
+    useAppStore.setState({
+      repos: [makeRepo()],
+      worktreesByRepo: {
+        'repo-1': [makeWorktree(), makeWorktreeWithId('wt-2', 'repo-1', 'alpha')]
+      },
+      activeWorktreeId: 'wt-1',
+      groupsByWorktree: {
+        'wt-1': group('wt-1', 'feature-tab'),
+        'wt-2': group('wt-2', 'alpha-tab')
+      },
+      unifiedTabsByWorktree: {
+        'wt-1': [{ ...tabIn('wt-1', 'feature-tab'), groupId: 'g-wt-1' }],
+        'wt-2': [{ ...tabIn('wt-2', 'alpha-tab'), groupId: 'g-wt-2' }]
+      }
+    })
+    const groups = renderThreads().visibleThreadGroups
+    expect(groups.flatMap(activityTabsGroupRows).map(rowLabel)).toEqual([
+      'alpha-tab',
+      'feature-tab'
+    ])
+  })
 })

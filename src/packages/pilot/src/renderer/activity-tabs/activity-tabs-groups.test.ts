@@ -170,4 +170,13 @@ describe('mergeRowsIntoGroups', () => {
     }
     expect(groupKeys('status', [pinnedRow])).toEqual(['done', 'pilot:pinned-worktrees'])
   })
+  it('orders worktree groups by pin and name only, whatever order upstream gave them', () => {
+    const group = (id: string) => ({ key: `worktree:${id}`, label: id, threads: [] })
+    const upstream = [group('wt-z'), group('WT-m'), group('wt-a')]
+    const keys = (groupBy: ActivityGroupBy, pinned: string[]) =>
+      mergeRowsIntoGroups(upstream, [], groupBy, pinned).map((g) => g.key)
+    expect(keys('worktree', [])).toEqual(['worktree:wt-a', 'worktree:WT-m', 'worktree:wt-z'])
+    expect(keys('worktree', ['wt-z'])).toEqual(['worktree:wt-z', 'worktree:wt-a', 'worktree:WT-m'])
+    expect(keys('status', ['wt-z'])).toEqual(['worktree:wt-z', 'worktree:WT-m', 'worktree:wt-a'])
+  })
 })
