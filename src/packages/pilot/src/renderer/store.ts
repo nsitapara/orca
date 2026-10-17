@@ -1,3 +1,5 @@
+import type { RuntimeEnvironmentStatus } from '../../../../shared/runtime-host-status'
+
 // The slice of Orca's app store that Pilot reads. Pilot's renderer behavior stays inert until
 // attachPilotRenderer() registers the real store, so upstream tests and unattached runs see pure upstream behavior.
 export type PilotStoreState = {
@@ -14,7 +16,13 @@ export type PilotStoreState = {
   openAutomationsPage?(): void
   settings?: { showAutomationsButton?: boolean } | null
   // Read by the Inbox to open a worktree from its section.
-  worktreesByRepo?: Record<string, { id: string; path: string }[]>
+  worktreesByRepo?: Record<
+    string,
+    { id: string; path: string; runtimeOwnerEnvironmentId?: string }[]
+  >
+  // Read by the host list to find paired machines running Pilot.
+  runtimeEnvironments?: readonly { id: string; name: string }[]
+  runtimeStatusByEnvironmentId?: ReadonlyMap<string, RuntimeEnvironmentStatus>
 }
 export type PilotStore = {
   getState(): PilotStoreState
