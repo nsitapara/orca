@@ -1,6 +1,3 @@
-import { mkdtempSync, writeFileSync } from 'node:fs'
-import { tmpdir } from 'node:os'
-import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { gitInFlight, quotaHold, worktreeHold, type HoldDeps } from '../../src/main/answers/holds'
 import { chooseSession, type SessionProbe } from '../../src/main/answers/sessions'
@@ -9,8 +6,6 @@ import { PilotStore } from '../../src/main/store/store'
 import { routeAnswer, type Route } from '../../src/shared/answers/route'
 import type { InboxItemRow, InboxType } from '../../src/shared/api-types'
 import { parseAutomationYaml } from '../../src/shared/definition/parse'
-import { canRunOldSide, runOldPlan } from './old-side'
-import { parityFixture } from './overrides'
 
 type Part = { id: string; label: string; run?: string }
 type RouteCase = { kind: InboxType; answer: string; run?: string; parts?: Part[] }
@@ -289,90 +284,123 @@ const KNOWN_ROUTES = [
   }
 ]
 
-const ready = canRunOldSide('worktree-gate', 'apply.py')
+// apply.py's answers for ROUTES, HOLDS, SESSIONS and KNOWN_ROUTES (in order): run_old_plan.py 12 (worktree-gate/apply.py
+// route, busy and session_route) on those cases, recorded with /opt/homebrew/bin/python3 3.15.0 on 2026-10-16, before
+// apply.py was deleted.
+const FROZEN_ROUTES = [
+  'agent', // 0: question "Keep it"
+  'agent', // 1: question "no"
+  'tick:kept', // 2: default "keep"
+  'tick:kept', // 3: flagged "OK."
+  'agent', // 4: flagged "revert it"
+  'script:', // 5: action "approve"
+  'script:', // 6: action "Do it"
+  'tick:skipped', // 7: action "skip"
+  'tick:skipped', // 8: action "don't"
+  'agent:revise', // 9: action "revise: drop finding 2"
+  'agent:revise', // 10: action "drop finding 2"
+  'agent', // 11: action "approve" with nothing to run
+  'agent', // 12: bug "approve"
+  'agent', // 13: left_for_you, a note
+  'tick:skipped', // 14: bug "skip"
+  'script:', // 15: parts "approve"
+  'script:3', // 16: parts "keep: web-1513"
+  'script:2,3', // 17: parts "keep: !1499, 3"
+  'tick:skipped', // 18: parts "keep: 1 2 3"
+  'agent:revise', // 19: parts "keep: web-9999"
+  'agent:revise', // 20: parts "keep: web" (two parts match)
+  'script:F2', // 21: parts "approve except: F2"
+  'agent:revise', // 22: parts "part F2: …"
+  'agent:revise' // 23: parts "revise: …; part F2: …"
+]
+const FROZEN_HOLDS = [
+  'go', // 0: nothing holds it
+  'uncommitted changes', // 1: uncommitted changes
+  'MERGE_HEAD present', // 2: a merge in progress
+  'someone is typing in Review cycle · claude', // 3: someone typing in an agent tab
+  'Review cycle · claude is working', // 4: an agent working
+  'Review cycle · claude is asking for input', // 5: an agent asking for input
+  'Review cycle · claude is asking for input', // 6: an agent blocked on a prompt
+  'QUOTA', // 7: quota out
+  'claimed', // 8: another job holds the claim
+  'uncommitted changes', // 9: work in flight is reported before typing
+  'QUOTA', // 10: quota is checked before the claim
+  'go' // 11: job-wide items skip the worktree checks
+]
+const FROZEN_SESSIONS = [
+  'resume', // 0: the asking session is open and idle
+  'fork', // 1: busy or closed, small fresh transcript
+  'new', // 2: a transcript over 8,000,000 bytes
+  'new', // 3: a transcript older than 3 days
+  'new', // 4: no transcript
+  'new' // 5: no asking session on the card
+]
+const FROZEN_KNOWN = ['script:', 'script:']
+// apply.py resumed the asking session even without its launch arguments (SESSIONS[0] with none).
+const FROZEN_KNOWN_SESSION = 'resume'
 
-// Skips where ~/.agents (or PARITY_SKILLS_DIR) or python3 isn't there.
-describe.skipIf(!ready)(
-  '12 · Apply my answers is retired: Pilot routes answers as apply.py did',
-  () => {
-    const old = new Map<string, string>()
-    if (ready) {
-      const file = join(mkdtempSync(join(tmpdir(), 'parity-12-')), 'case.json')
-      writeFileSync(
-        file,
-        JSON.stringify(
-          parityFixture('12', 'apply-answers', NOW, {
-            state: {
-              'parity/case.json': {
-                routes: ROUTES,
-                holds: HOLDS,
-                sessions: SESSIONS,
-                known: KNOWN_ROUTES.map(({ n, kind, answer, parts }) => ({
-                  n,
-                  kind,
-                  answer,
-                  parts,
-                  run: 'x 1'
-                }))
-              }
-            }
-          })
-        )
-      )
-      for (const d of runOldPlan('12', file)) {
-        old.set(d.key, d.decision)
-      }
+function frozenOld(): Map<string, string> {
+  return new Map([
+    ...FROZEN_ROUTES.map((w, n) => [`route:${n}`, w] as const),
+    ...FROZEN_HOLDS.map((w, n) => [`hold:${n}`, w] as const),
+    ...FROZEN_SESSIONS.map((w, n) => [`session:${n}`, w] as const),
+    ...FROZEN_KNOWN.map((w, n) => [`known:${n}`, w] as const),
+    ['known-session:0', FROZEN_KNOWN_SESSION]
+  ])
+}
+
+// apply.py's answers are frozen above, so neither python3 nor apply.py is needed and nothing skips.
+describe('12 · Apply my answers is retired: Pilot routes answers as apply.py did (frozen)', () => {
+  const old = frozenOld()
+
+  it.each(ROUTES.map((c, n) => [n, c] as const))('route %i: %j', (n, c) => {
+    const parts = Object.fromEntries((c.parts ?? []).map((p) => [p.id, p.label]))
+    const runnable = Boolean(c.run) || (c.parts ?? []).some((p) => p.run)
+    const route = routeAnswer({
+      type: c.kind,
+      action: c.run ? c.run.split(' ')[0] : null,
+      runnable,
+      parts,
+      text: c.answer
+    })
+    expect(routeWord(route)).toBe(old.get(`route:${n}`))
+  })
+
+  // Codes always agree; the plain words agree too for worktree holds, except where KNOWN_HOLD_WORDS says why not.
+  it.each(HOLDS.map((c, n) => [n, c] as const))('hold %i', async (n, c) => {
+    const word = old.get(`hold:${n}`) ?? 'missing'
+    const hold = await pilotHoldFor(c)
+    expect(hold?.code ?? null).toBe(holdOf(word))
+    // apply.py's QUOTA and claimed holds are bare words (its log line carries the quota text from gate.QuotaOut, not a
+    // reason string the card shows), so only Pilot's own wording is pinned for them.
+    if (hold?.code === 'quota') {
+      expect(hold.detail).toMatch(/^claude (weekly|session) limit at \d+%/)
     }
+    if (hold && ['in_flight', 'typing', 'worktree_busy'].includes(hold.code)) {
+      expect(hold.detail).toBe(KNOWN_HOLD_WORDS[word] ?? word)
+    }
+  })
 
-    it.each(ROUTES.map((c, n) => [n, c] as const))('route %i: %j', (n, c) => {
-      const parts = Object.fromEntries((c.parts ?? []).map((p) => [p.id, p.label]))
-      const runnable = Boolean(c.run) || (c.parts ?? []).some((p) => p.run)
-      const route = routeAnswer({
-        type: c.kind,
-        action: c.run ? c.run.split(' ')[0] : null,
-        runnable,
-        parts,
-        text: c.answer
-      })
-      expect(routeWord(route)).toBe(old.get(`route:${n}`))
+  // DELIBERATE differences from apply.py (Tasks 23-24), each with its reason. Pilot is never changed to match.
+  it.each(KNOWN_ROUTES)('known route difference: $why', (c) => {
+    const parts = Object.fromEntries((c.parts ?? []).map((p) => [p.id, p.label]))
+    const route = routeAnswer({
+      type: c.kind,
+      action: null,
+      runnable: true,
+      parts,
+      text: c.answer
     })
+    expect(routeWord(route)).toBe(c.pilot)
+    expect(old.get(`known:${c.n}`)).toBe(c.apply)
+  })
 
-    // Codes always agree; the plain words agree too for worktree holds, except where KNOWN_HOLD_WORDS says why not.
-    it.each(HOLDS.map((c, n) => [n, c] as const))('hold %i', async (n, c) => {
-      const word = old.get(`hold:${n}`) ?? 'missing'
-      const hold = await pilotHoldFor(c)
-      expect(hold?.code ?? null).toBe(holdOf(word))
-      // apply.py's QUOTA and claimed holds are bare words (its log line carries the quota text from gate.QuotaOut, not a
-      // reason string the card shows), so only Pilot's own wording is pinned for them.
-      if (hold?.code === 'quota') {
-        expect(hold.detail).toMatch(/^claude (weekly|session) limit at \d+%/)
-      }
-      if (hold && ['in_flight', 'typing', 'worktree_busy'].includes(hold.code)) {
-        expect(hold.detail).toBe(KNOWN_HOLD_WORDS[word] ?? word)
-      }
-    })
+  it('known session difference: a resume needs the asking process args (one process per session)', async () => {
+    expect(await sessionKind({ ...SESSIONS[0], launchArgs: null })).toBe('fork')
+    expect(old.get('known-session:0')).toBe('resume')
+  })
 
-    // DELIBERATE differences from apply.py (Tasks 23-24), each with its reason. Pilot is never changed to match.
-    it.each(KNOWN_ROUTES)('known route difference: $why', (c) => {
-      const parts = Object.fromEntries((c.parts ?? []).map((p) => [p.id, p.label]))
-      const route = routeAnswer({
-        type: c.kind,
-        action: null,
-        runnable: true,
-        parts,
-        text: c.answer
-      })
-      expect(routeWord(route)).toBe(c.pilot)
-      expect(old.get(`known:${c.n}`)).toBe(c.apply)
-    })
-
-    it('known session difference: a resume needs the asking process args (one process per session)', async () => {
-      expect(await sessionKind({ ...SESSIONS[0], launchArgs: null })).toBe('fork')
-      expect(old.get('known-session:0')).toBe('resume')
-    })
-
-    it.each(SESSIONS.map((c, n) => [n, c] as const))('session %i', async (n, c) => {
-      expect(await sessionKind(c)).toBe(old.get(`session:${n}`))
-    })
-  }
-)
+  it.each(SESSIONS.map((c, n) => [n, c] as const))('session %i', async (n, c) => {
+    expect(await sessionKind(c)).toBe(old.get(`session:${n}`))
+  })
+})
