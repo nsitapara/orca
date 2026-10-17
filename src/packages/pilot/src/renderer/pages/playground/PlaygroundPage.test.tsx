@@ -122,7 +122,10 @@ describe('PlaygroundPage', () => {
   it('in the browser version says the playground runs where Pilot runs, and calls nothing', () => {
     vi.stubGlobal('__ORCA_WEB_CLIENT__', true)
     render(<PlaygroundPage />)
+    expect(screen.getByRole('heading', { name: 'Playground' })).toBeTruthy()
     expect(screen.getByText(/runs only on the machine Pilot runs on/)).toBeTruthy()
+    // Try-it and View source are the running playground's; the browser has neither.
+    expect(screen.queryByText(/Try-it|View source/)).toBeNull()
     expect(screen.queryByRole('button', { name: 'Start' })).toBeNull()
     expect(pilotRpc).not.toHaveBeenCalled()
   })

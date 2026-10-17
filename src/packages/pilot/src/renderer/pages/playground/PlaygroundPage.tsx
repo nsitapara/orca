@@ -59,14 +59,18 @@ function Idle({
   )
 }
 
-function PlaygroundHeader(): React.JSX.Element {
+const HERE_SUBTITLE =
+  "pilotcli's commands, each with a Try-it panel that runs it in one of the project's worktrees (an action as a " +
+  "dry run). View source opens a command's code here."
+// Try-it and View source belong to the running playground, so the browser's header says only where it runs.
+const ELSEWHERE_SUBTITLE =
+  'The playground runs only on the machine Pilot runs on. Start it in Pilot there.'
+
+function PlaygroundHeader({ subtitle }: { subtitle: string }): React.JSX.Element {
   return (
     <div>
       <h2 className="text-sm font-semibold leading-6">Playground</h2>
-      <p className="text-xs text-muted-foreground">
-        pilotcli&apos;s commands, each with a Try-it panel that runs it in one of the project&apos;s
-        worktrees (an action as a dry run). View source opens a command&apos;s code here.
-      </p>
+      <p className="text-xs text-muted-foreground">{subtitle}</p>
     </div>
   )
 }
@@ -75,10 +79,7 @@ function PlaygroundHeader(): React.JSX.Element {
 function PlaygroundElsewhere(): React.JSX.Element {
   return (
     <section className="flex h-full flex-col gap-3 px-5 pb-4 pt-4">
-      <PlaygroundHeader />
-      <p className="text-sm text-muted-foreground">
-        The playground runs only on the machine Pilot runs on. Start it in Pilot there.
-      </p>
+      <PlaygroundHeader subtitle={ELSEWHERE_SUBTITLE} />
     </section>
   )
 }
@@ -131,7 +132,7 @@ function PlaygroundHere(): React.JSX.Element {
 
   return (
     <section className="flex h-full flex-col gap-3 px-5 pb-4 pt-4">
-      <PlaygroundHeader />
+      <PlaygroundHeader subtitle={HERE_SUBTITLE} />
       <div className="flex flex-wrap items-center gap-2">
         <Select
           label="Project"

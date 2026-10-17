@@ -459,7 +459,7 @@ Pilot keeps Orca's pairing, WebSocket server, web client and `orcad` protocols u
 
 ### Verified (automated): Pilot's pages in the browser
 
-- **Browser check: pass (4 tests).** `ORCA_BACKGROUND_LAUNCH=1 pnpm exec playwright test --config src/packages/pilot/test/web/playwright.config.ts --workers=1` (run `pnpm run build:web` first). It starts an isolated `serve` on a random loopback port with a temp data folder, the scheduler and vault export off, and one seeded card and automation. It pairs through the `#pairing=` link in `webClientUrl` (a runtime-scope link, so no connect screen shows) and opens it in headless Chromium. It checks:
+- **Browser check: pass (4 tests).** `ORCA_BACKGROUND_LAUNCH=1 pnpm exec playwright test --config src/packages/pilot/test/web/playwright.config.ts --workers=1`. Build first with `pnpm run build:electron-vite && pnpm run build:cli && pnpm run build:web && pnpm run ensure:electron-runtime`: the helper launches `out/main/index.js`, and after a Vitest run the native modules are built for Node, so `ensure:electron-runtime` rebuilds them for Electron. It starts an isolated `serve` on a random loopback port with a temp data folder, the scheduler and vault export off, and one seeded card and automation. It pairs through the `#pairing=` link in `webClientUrl` (a runtime-scope link, so no connect screen shows) and opens it in headless Chromium. It checks:
   - Inbox shows the seeded card, in the list and open beside it.
   - Running shows the run limit panel and "Nothing is running."
   - Automations lists the seeded automation, and its switch flips as a paired device.

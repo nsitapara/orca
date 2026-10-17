@@ -131,7 +131,7 @@ function BundleBody({
     <DetailsView
       snapshot={loaded.snapshot}
       loadImage={loadImage}
-      // Why: the report would open on the server machine's screen, not the browser's.
+      // Why: the browser's shell.openFilePath always returns false (web-shell-api.ts), so Open could only fail.
       openReport={isWebClientLocation() ? undefined : openReport}
       parts={parts}
     />
