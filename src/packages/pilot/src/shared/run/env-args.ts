@@ -93,7 +93,7 @@ function subjectArgs(subject: EnvSubject): string[] {
   if (subject.kind === 'branch') {
     return ['--branch', subject.branch, '--at', subject.at]
   }
-  const keep = subject.keep ? ['--keep'] : []
+  const keep = subject.keep ? ['--keep', 'true'] : []
   return ['--new-branch', subject.newBranch, '--from', subject.from, ...keep]
 }
 
@@ -117,7 +117,7 @@ export function envCreateArgs(a: {
   const { subject } = a.env
   const args = ['env', 'create', '--run', a.runId, ...subjectArgs(subject)]
   if (a.env.writes) {
-    args.push('--writes')
+    args.push('--writes', 'true')
   }
   args.push('--stack', STACK_FLAG[a.env.stack])
   if (a.throwaway !== null && holdsWorktree(subject)) {
@@ -131,7 +131,7 @@ export function envCreateArgs(a: {
 }
 
 export function envDeleteArgs(runId: string, keepFolder: boolean): string[] {
-  const keep = keepFolder ? ['--keep-folder'] : []
+  const keep = keepFolder ? ['--keep-folder', 'true'] : []
   return ['env', 'delete', runId, ...keep, '--format', 'json']
 }
 
