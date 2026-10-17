@@ -29,11 +29,6 @@ export const MAPPERS: SweepStateMapper[] = [
   applyAnswersMapper,
   reviewBranchCodeMapper,
   uiQaOvernightMapper,
-  noStateMapper('mr-next-steps', 'M02 keeps no state: every run writes a fresh report'),
-  noStateMapper(
-    'close-idle-sessions',
-    'M03 keeps no state: every run lists the open sessions again'
-  ),
   noStateMapper(
     'manual-memo',
     'M04 keeps its state in the repo (agent-loops/manual-memo), where its precheck reads it'

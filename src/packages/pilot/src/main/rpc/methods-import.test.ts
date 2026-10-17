@@ -118,12 +118,10 @@ describe('pilot.automations.importState', () => {
 
   // The manual jobs keep nothing the engine needs, so importing them says so instead of failing.
   it.each([
-    ['close-idle-sessions', 'M03 keeps no state: every run lists the open sessions again'],
     [
       'manual-memo',
       'M04 keeps its state in the repo (agent-loops/manual-memo), where its precheck reads it'
-    ],
-    ['mr-next-steps', 'M02 keeps no state: every run writes a fresh report']
+    ]
   ])('%s has nothing to import', async (id, note) => {
     const dir = mkdtempSync(join(tmpdir(), 'pilot-import-state-none-'))
     const host = {
