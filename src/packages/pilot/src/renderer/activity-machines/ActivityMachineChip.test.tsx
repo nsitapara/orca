@@ -1,8 +1,9 @@
 // @vitest-environment happy-dom
 import { cleanup, render } from '@testing-library/react'
-import { afterEach, expect, it } from 'vitest'
+import { afterEach, expect, it, vi } from 'vitest'
 import type { ActivityThreadGroup } from '@/components/activity/activity-thread-types'
 import { TooltipProvider } from '@/components/ui/tooltip'
+import { withGroupRows } from '../activity-tabs/activity-tabs-rows'
 import { registerPilotStore } from '../store'
 import {
   LOCAL_LABEL,
@@ -11,9 +12,12 @@ import {
   attach,
   listPaneProps,
   machineGroups,
-  machineThread
+  machineThread,
+  pilotRow
 } from './activity-machines-test-fixtures'
 import { ActivityMachinesListPane } from './ActivityMachinesListPane'
+
+vi.mock('../activity-tabs/NewAgentMenu', () => ({ NewAgentMenu: () => null }))
 
 afterEach(() => {
   cleanup()
@@ -47,3 +51,13 @@ it.each([
   arrangeMachines()
   expect(chipLabels(machineGroups(...threads))).toEqual(chips)
 })
+
+it.each(['tab', 'recent-worktree'] as const)(
+  'a Pilot %s row on another machine names it',
+  (kind) => {
+    attach()
+    arrangeMachines()
+    const group = withGroupRows(machineGroups(machineThread('a'))[0], [pilotRow(kind, MINI)])
+    expect(chipLabels([group])).toEqual([LOCAL_LABEL, 'Mac mini'])
+  }
+)
