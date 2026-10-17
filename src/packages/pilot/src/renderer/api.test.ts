@@ -29,4 +29,15 @@ describe('pilotRpc', () => {
       { timeoutMs: 180_000 }
     )
   })
+
+  it('sends a call to the environment it names', async () => {
+    const target = { kind: 'environment', environmentId: 'mini' } as const
+    await pilotRpc('pilot.inbox.list', {}, { target })
+    expect(callRuntimeRpc).toHaveBeenCalledWith(
+      target,
+      'pilot.inbox.list',
+      {},
+      { timeoutMs: 15_000 }
+    )
+  })
 })
