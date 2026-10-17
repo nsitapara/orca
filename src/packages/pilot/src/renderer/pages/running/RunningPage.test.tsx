@@ -8,6 +8,7 @@ import { openRunPanel } from '../../run-views/run-panel-state'
 const pilotRpc = vi.fn()
 vi.mock('../../api', () => ({ pilotRpc: (...args: unknown[]) => pilotRpc(...args) }))
 
+import { FINISHED_WIDTHS_KEY } from './FinishedRuns'
 import { RunningPage } from './RunningPage'
 
 const GIB = 1024 ** 3
@@ -126,6 +127,7 @@ async function click(name: string): Promise<void> {
 afterEach(() => {
   cleanup()
   pilotRpc.mockReset()
+  window.localStorage.clear()
   vi.unstubAllGlobals()
 })
 
@@ -187,6 +189,21 @@ describe('RunningPage', () => {
     const finished = within(screen.getByRole('region', { name: 'Recently finished' }))
     expect(finished.queryByRole('table')).toBeNull()
     await click('Recently finished · 1')
+    // Result leads and Ended closes.
+    expect(finished.getAllByRole('columnheader').map((th) => th.textContent)).toEqual([
+      'Details',
+      'Result',
+      'Job',
+      'Item',
+      'Worktree',
+      'Waited',
+      'Ran',
+      'Peak memory',
+      'Cost',
+      'Session',
+      'Run',
+      'Ended'
+    ])
     const row = within(finished.getAllByRole('row')[1])
     expect(row.getByText('03 Review and fix')).toBeTruthy()
     expect(row.getByRole('link', { name: '!1 web-1' }).getAttribute('href')).toBe(
@@ -204,6 +221,21 @@ describe('RunningPage', () => {
     expect(screen.getByText('Resolve the conflict?')).toBeTruthy()
     await click('Open')
     expect(openRunPanel()).toEqual({ runId: 'f1', part: null })
+  })
+
+  it('widens a finished column by dragging its header edge, and remembers the width', async () => {
+    serve(capacity({ finished: [finishedRun()] }))
+    await shown()
+    await click('Recently finished · 1')
+    fireEvent.mouseDown(screen.getByRole('separator', { name: 'Resize Job column' }), {
+      clientX: 100
+    })
+    fireEvent.mouseUp(window, { clientX: 160 })
+    // The Job column is the third, after the row toggle and Result.
+    expect(document.querySelectorAll('col')[2].style.width).toBe('204px')
+    expect(JSON.parse(window.localStorage.getItem(FINISHED_WIDTHS_KEY) ?? '{}')).toEqual({
+      job: 204
+    })
   })
 
   it.each([

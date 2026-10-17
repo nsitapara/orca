@@ -21,10 +21,52 @@ import { WaitingRow } from '../../timeline/WaitingRow'
 import { clockTime, itemUrl, runStatusLabel } from '../format'
 import { worktreeName } from '../waiting/answer-text'
 import { openWorktree, repoNameForPath, worktreeIdForPath } from '../waiting/WorktreeLink'
+import { ResizableHeaderCell } from '../ResizableHeaderCell'
+import { useColumnWidths, type ColumnSpec } from '../use-column-widths'
 import { endedText } from './running-text'
 
-const CELL = 'py-1.5 pr-3'
-const NUMBER = 'py-1.5 pr-3 text-xs tabular-nums text-muted-foreground'
+// Widths are remembered per viewer, by column id.
+export const FINISHED_WIDTHS_KEY = 'pilot.running.finished.widths'
+
+const RESULT: ColumnSpec = { id: 'result', label: 'Result', defaultWidth: 96, minWidth: 96 }
+const JOB: ColumnSpec = { id: 'job', label: 'Job', defaultWidth: 144, minWidth: 96 }
+const ITEM: ColumnSpec = { id: 'item', label: 'Item', defaultWidth: 160, minWidth: 96 }
+const WORKTREE: ColumnSpec = { id: 'worktree', label: 'Worktree', defaultWidth: 176, minWidth: 112 }
+const WAITED: ColumnSpec = { id: 'waited', label: 'Waited', defaultWidth: 72, minWidth: 64 }
+const RAN: ColumnSpec = { id: 'ran', label: 'Ran', defaultWidth: 56, minWidth: 56 }
+const PEAK: ColumnSpec = { id: 'peak', label: 'Peak memory', defaultWidth: 104, minWidth: 104 }
+const COST: ColumnSpec = { id: 'cost', label: 'Cost', defaultWidth: 64, minWidth: 64 }
+const SESSION: ColumnSpec = { id: 'session', label: 'Session', defaultWidth: 96, minWidth: 88 }
+const ENDED: ColumnSpec = { id: 'ended', label: 'Ended', defaultWidth: 128, minWidth: 80 }
+
+// The row toggle and Open keep their width; their headers are for screen readers.
+type FixedColumn = { id: string; label: string; width: number }
+const TOGGLE: FixedColumn = { id: 'toggle', label: 'Details', width: 36 }
+const OPEN: FixedColumn = { id: 'open', label: 'Run', width: 56 }
+
+// Result leads and Ended closes; FinishedRow's cells follow this order.
+const COLUMNS: (ColumnSpec | FixedColumn)[] = [
+  TOGGLE,
+  RESULT,
+  JOB,
+  ITEM,
+  WORKTREE,
+  WAITED,
+  RAN,
+  PEAK,
+  COST,
+  SESSION,
+  OPEN,
+  ENDED
+]
+
+function isFixed(col: ColumnSpec | FixedColumn): col is FixedColumn {
+  return 'width' in col
+}
+
+// Cells wrap rather than cut text off; a narrow column grows taller.
+const CELL = 'break-words px-3 py-1.5'
+const NUMBER = 'px-3 py-1.5 tabular-nums text-muted-foreground'
 
 function ItemCell({ run }: { run: FinishedRun }): React.JSX.Element {
   const url = itemUrl(run.fields)
@@ -55,7 +97,11 @@ function WorktreeCell({ path }: { path: string | null }): React.JSX.Element {
   return (
     <span title={path}>
       {id ? (
-        <button type="button" className="hover:underline" onClick={() => openWorktree(id)}>
+        <button
+          type="button"
+          className="text-left hover:underline"
+          onClick={() => openWorktree(id)}
+        >
           {name}
         </button>
       ) : (
@@ -113,8 +159,8 @@ function FinishedRow({
   const ended = run.finishedAt ?? now
   return (
     <>
-      <tr className="border-t border-border/50">
-        <td className="py-1 pl-2">
+      <tr className="border-t border-border/50 align-top">
+        <td className="py-0.5 pl-2">
           <button
             type="button"
             aria-expanded={open}
@@ -128,22 +174,17 @@ function FinishedRow({
             />
           </button>
         </td>
-        <td className={NUMBER} title={new Date(ended).toLocaleString()}>
-          {endedText(ended, now)}
-        </td>
-        <td className={cn(CELL, 'truncate font-medium')} title={run.automationName}>
-          {run.automationName}
-        </td>
-        <td className={cn(CELL, 'truncate text-xs')}>
-          <ItemCell run={run} />
-        </td>
-        <td className={cn(CELL, 'truncate text-xs')}>
-          <WorktreeCell path={homeOf(run)} />
-        </td>
-        <td className={cn(CELL, 'text-xs')}>
-          <span className={cn('rounded px-1.5 whitespace-nowrap', RUN_TONE[run.status])}>
+        <td className={CELL}>
+          <span className={cn('rounded px-1.5', RUN_TONE[run.status])}>
             {runStatusWord(run, runStatusLabel)}
           </span>
+        </td>
+        <td className={cn(CELL, 'font-medium')}>{run.automationName}</td>
+        <td className={CELL}>
+          <ItemCell run={run} />
+        </td>
+        <td className={CELL}>
+          <WorktreeCell path={homeOf(run)} />
         </td>
         <td className={cn(NUMBER, 'text-status-warning')}>
           {run.queuedAt ? formatDuration(run.startedAt - run.queuedAt) : ''}
@@ -151,18 +192,21 @@ function FinishedRow({
         <td className={NUMBER}>{formatDuration(ended - run.startedAt)}</td>
         <td className={NUMBER}>{run.peakBytes === null ? '–' : formatMemory(run.peakBytes)}</td>
         <td className={NUMBER}>{run.costUsd === null ? '–' : money(run.costUsd)}</td>
-        <td className={cn(CELL, 'truncate text-xs')}>
+        <td className={CELL}>
           <SessionCell run={run} />
         </td>
-        <td className="py-1.5 pr-3 text-right text-xs">
+        <td className="px-3 py-1.5">
           <button type="button" className="underline" onClick={() => openRun(run.id)}>
             Open
           </button>
         </td>
+        <td className={NUMBER} title={new Date(ended).toLocaleString()}>
+          {endedText(ended, now)}
+        </td>
       </tr>
       {open ? (
         <tr>
-          <td colSpan={12} className="pb-3 pl-10 pr-3">
+          <td colSpan={COLUMNS.length} className="pb-3 pl-10 pr-3">
             <FinishedDetails run={run} />
           </td>
         </tr>
@@ -181,6 +225,10 @@ export function FinishedRuns({
 }): React.JSX.Element {
   const [open, setOpen] = useState(false)
   const [expanded, setExpanded] = useState<string | null>(null)
+  const columns = useColumnWidths(FINISHED_WIDTHS_KEY)
+  const widthOf = (col: ColumnSpec | FixedColumn): number =>
+    isFixed(col) ? col.width : columns.widthOf(col)
+  const total = COLUMNS.reduce((sum, col) => sum + widthOf(col), 0)
   return (
     <Collapsible open={open} onOpenChange={setOpen} role="region" aria-label="Recently finished">
       <CollapsibleTrigger asChild>
@@ -200,25 +248,23 @@ export function FinishedRuns({
           <p className="mt-1 text-sm text-muted-foreground">Nothing has finished yet.</p>
         ) : (
           <div className="mt-1 overflow-x-auto rounded-lg border border-border/50">
-            <table className="w-full min-w-240 table-fixed text-left text-sm">
-              <thead className="bg-muted/40 text-xs text-muted-foreground">
+            <table className="text-left text-xs" style={{ tableLayout: 'fixed', width: total }}>
+              <colgroup>
+                {COLUMNS.map((col) => (
+                  <col key={col.id} style={{ width: widthOf(col) }} />
+                ))}
+              </colgroup>
+              <thead className="bg-muted/40 text-muted-foreground">
                 <tr>
-                  <th className="w-9">
-                    <span className="sr-only">Details</span>
-                  </th>
-                  <th className="w-24 py-1.5 pr-3 font-medium">Ended</th>
-                  <th className="py-1.5 pr-3 font-medium">Job</th>
-                  <th className="py-1.5 pr-3 font-medium">Item</th>
-                  <th className="py-1.5 pr-3 font-medium">Worktree</th>
-                  <th className="w-24 py-1.5 pr-3 font-medium">Result</th>
-                  <th className="w-16 py-1.5 pr-3 font-medium">Waited</th>
-                  <th className="w-16 py-1.5 pr-3 font-medium">Ran</th>
-                  <th className="w-24 py-1.5 pr-3 font-medium">Peak memory</th>
-                  <th className="w-16 py-1.5 pr-3 font-medium">Cost</th>
-                  <th className="w-24 py-1.5 pr-3 font-medium">Session</th>
-                  <th className="w-14">
-                    <span className="sr-only">Run</span>
-                  </th>
+                  {COLUMNS.map((col) =>
+                    isFixed(col) ? (
+                      <th key={col.id}>
+                        <span className="sr-only">{col.label}</span>
+                      </th>
+                    ) : (
+                      <ResizableHeaderCell key={col.id} col={col} columns={columns} />
+                    )
+                  )}
                 </tr>
               </thead>
               <tbody>
