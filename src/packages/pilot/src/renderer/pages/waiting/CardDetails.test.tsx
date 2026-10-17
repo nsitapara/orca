@@ -44,6 +44,7 @@ describe('CardDetails', () => {
   afterEach(() => {
     cleanup()
     pilotRpc.mockReset()
+    vi.unstubAllGlobals()
   })
 
   it('shows the Details toggle as a disclosure button with an arrow, as the console did', () => {
@@ -67,4 +68,27 @@ describe('CardDetails', () => {
     expect(pilotRpc).toHaveBeenCalledTimes(2)
     expect(screen.queryByRole('button', { name: 'Retry' })).toBeNull()
   })
+
+  const reportSnapshot = {
+    ...snapshot,
+    bundle: {
+      version: 1,
+      item: 'R',
+      blocks: [{ type: 'report', title: 'Your review guide', file: 'reviews/1579-v1.html' }]
+    }
+  }
+  it.each([
+    ['the desktop', false, 1],
+    ['the browser version', true, 0]
+  ])(
+    "offers a report's Open on %s only where the system can open it",
+    async (_where, browser, opens) => {
+      vi.stubGlobal('__ORCA_WEB_CLIENT__', browser)
+      pilotRpc.mockResolvedValue({ snapshot: reportSnapshot })
+      render(<CardDetails item={item(`report-${String(browser)}`)} parts={null} />)
+      fireEvent.click(screen.getByText('Details'))
+      expect(await screen.findByText('1579-v1.html')).toBeTruthy()
+      expect(screen.queryAllByRole('button', { name: 'Open' })).toHaveLength(opens)
+    }
+  )
 })

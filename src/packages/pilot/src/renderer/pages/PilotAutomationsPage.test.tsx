@@ -69,6 +69,7 @@ function serve(payload: AutomationListPayload): void {
         limit: null,
         running: [],
         queued: [],
+        finished: [],
         memory: null,
         suggestion: { limit: 2, budgetBytes: 0, perJobBytes: 1, measured: false },
         heaviest: null

@@ -40,6 +40,7 @@ afterEach(() => {
   pilotRpc.mockReset()
   openFloating.mockClear()
   resetSourceIndex()
+  vi.unstubAllGlobals()
 })
 
 describe('SourceLink', () => {
@@ -88,7 +89,7 @@ describe('SourceLink', () => {
     expect(openFloating).toHaveBeenCalledWith('/home/.agents/skills/fix-gitlab-ci/SKILL.md')
   })
 
-  it('is not there for a step without known code, or without an index', async () => {
+  it('is not there for a step without known code, or without an index, or in the browser version', async () => {
     serve(async () => ({}))
     render(<SourceLink part={{ skill: null, runs: 'python3 sweep_envs.py' }} />)
     await act(async () => {})
@@ -99,5 +100,14 @@ describe('SourceLink', () => {
     render(<SourceLink part={{ skill: 'fix-gitlab-ci', runs: '' }} />)
     await act(async () => {})
     expect(screen.queryByRole('button', { name: 'Source' })).toBeNull()
+    cleanup()
+    resetSourceIndex()
+    pilotRpc.mockReset()
+    serve(async () => ({}))
+    vi.stubGlobal('__ORCA_WEB_CLIENT__', true)
+    render(<SourceLink part={{ skill: null, runs: 'pilotcli git push-branch' }} />)
+    await act(async () => {})
+    expect(screen.queryByRole('button', { name: 'Source' })).toBeNull()
+    expect(pilotRpc).not.toHaveBeenCalled()
   })
 })

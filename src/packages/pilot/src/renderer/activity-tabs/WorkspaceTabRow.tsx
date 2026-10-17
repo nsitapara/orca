@@ -18,6 +18,7 @@ import { cn } from '@/lib/utils'
 import { dispatchWorkspaceTabCommand } from '@/lib/workspace-tab-commands'
 import { closeClientHostedBrowserRow } from '@/runtime/client-hosted-browser-row-close'
 import { useAppStore } from '@/store'
+import { ActivityMachineChip } from '../activity-machines/ActivityMachineChip'
 import { activateWorkspaceTab } from './activate-workspace-tab'
 import { ActivityTabsNest } from './ActivityTabsNest'
 import type { ActivityTabsVirtualItem } from './activity-tabs-rows'
@@ -142,6 +143,7 @@ export function WorkspaceTabRow({
                 {item.label}
               </button>
               <div className="flex min-w-0 items-center gap-1.5 pt-0.5 text-[11px] text-muted-foreground">
+                <ActivityMachineChip worktree={item.worktree} repo={item.repo} />
                 <span className="min-w-0 flex-1 truncate" title={workspaceLabel}>
                   {workspaceLabel}
                 </span>

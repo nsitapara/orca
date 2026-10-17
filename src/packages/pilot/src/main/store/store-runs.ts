@@ -17,7 +17,9 @@ export type NewRun = Pick<
   RunRow,
   'id' | 'automationId' | 'tickId' | 'itemKey' | 'itemLabel' | 'worktreePath' | 'startedAt'
 > &
-  Partial<Pick<RunRow, 'status' | 'worktreeId' | 'trigger' | 'parentRunId' | 'imported'>>
+  Partial<
+    Pick<RunRow, 'status' | 'worktreeId' | 'trigger' | 'parentRunId' | 'imported' | 'queuedAt'>
+  >
 // M1 creates a step as it starts; a multi-step run may lay its steps out first as 'pending', unstarted.
 export type NewStep = {
   runId: string
@@ -46,7 +48,7 @@ export class RunStore {
   create(run: NewRun): void {
     this.db
       .prepare(
-        'INSERT INTO runs (id, automation_id, tick_id, item_key, item_label, worktree_path, worktree_id, status, trigger, parent_run_id, imported, started_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+        'INSERT INTO runs (id, automation_id, tick_id, item_key, item_label, worktree_path, worktree_id, status, trigger, parent_run_id, imported, started_at, queued_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
       )
       .run(
         run.id,
@@ -60,7 +62,8 @@ export class RunStore {
         run.trigger ?? 'schedule',
         run.parentRunId ?? null,
         run.imported ? 1 : 0,
-        run.startedAt
+        run.startedAt,
+        run.queuedAt ?? null
       )
   }
 

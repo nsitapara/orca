@@ -17,6 +17,7 @@ describe('FromRun', () => {
     resetAutomationsFeed()
     closeRunPanel()
     pilotRpc.mockReset()
+    vi.unstubAllGlobals()
   })
 
   it("shows the run's state and the steps that ran, lights the one that asked, and opens it there", async () => {
@@ -83,6 +84,58 @@ describe('FromRun', () => {
     render(<FromRun item={{ automationId: 'fix-ci', stepIdx: 0 }} run={run} />)
     fireEvent.click(await screen.findByRole('button', { name: 'Open run' }))
     expect(openRunPanel()).toEqual({ runId: 'r2', part: 'answer:0' })
+  })
+
+  describe('Continue run', () => {
+    const FEED = { automations: [summary], errors: [], peopleError: null, missingDirs: [] }
+    const failed = (over: Partial<Parameters<typeof testRun>[0]> = {}) =>
+      testRun({
+        id: 'r1',
+        automationId: 'fix-ci',
+        status: 'failed',
+        finishedAt: 9,
+        steps: [stepAt(0, 'fix', 'failed')],
+        inbox: [testCard({ automationId: 'fix-ci', stepIdx: 0 })],
+        ...over
+      })
+    const serve = (continued: () => Promise<unknown>) =>
+      pilotRpc.mockImplementation(async (method: string) =>
+        method === 'pilot.runs.continue' ? continued() : FEED
+      )
+
+    it.each([
+      [true, 'Continuing from step fix, in its own session'],
+      [false, 'Continuing from step fix, started over']
+    ])('continues a failed run from its card (session resumed: %s)', async (resumed, note) => {
+      serve(async () => ({ step: 'fix', resumed }))
+      render(<FromRun item={{ automationId: 'fix-ci', stepIdx: 0 }} run={failed()} />)
+      fireEvent.click(await screen.findByRole('button', { name: 'Continue run' }))
+      expect(await screen.findByText(note)).toBeTruthy()
+      expect(pilotRpc).toHaveBeenCalledWith('pilot.runs.continue', { runId: 'r1' })
+    })
+
+    it("says why when Pilot won't continue it", async () => {
+      serve(async () => {
+        throw new Error('Every run slot is taken: continue this run once one frees')
+      })
+      render(<FromRun item={{ automationId: 'fix-ci', stepIdx: 0 }} run={failed()} />)
+      fireEvent.click(await screen.findByRole('button', { name: 'Continue run' }))
+      expect(await screen.findByText(/Every run slot is taken/)).toBeTruthy()
+    })
+
+    it.each([
+      ['a run still going', failed({ status: 'running', finishedAt: null }), false],
+      ['a run waiting on you', failed({ status: 'needs_you' }), false],
+      ['a run that ended done', failed({ status: 'done' }), false],
+      ['an answer run', failed({ trigger: 'answer', parentRunId: 'r0' }), false],
+      ['a failed run in the browser version', failed(), true]
+    ])('offers nothing for %s', async (_name, run, browser) => {
+      vi.stubGlobal('__ORCA_WEB_CLIENT__', browser)
+      serve(async () => ({ step: 'fix', resumed: true }))
+      render(<FromRun item={{ automationId: 'fix-ci', stepIdx: 0 }} run={run} />)
+      await screen.findByRole('button', { name: 'Open run' })
+      expect(screen.queryByRole('button', { name: 'Continue run' })).toBeNull()
+    })
   })
 
   it('shows nothing for a card whose run is gone', () => {

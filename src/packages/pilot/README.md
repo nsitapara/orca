@@ -393,6 +393,23 @@ A run costs the sum of its steps. A Claude step's session id is pinned at launch
 - An enabled job not measured yet counts as 2.5 GB, as web-platform's `e2e-parallel.sh` budgets a stack, so a light job measured first can't raise the suggestion before the heavy ones have run.
 - It is a suggestion only; nothing changes until you pick a number.
 
+## Activity across machines
+
+Activity lists the sessions of every machine you are connected to.
+
+- **Machine chip:** while the listed rows come from more than one machine, each row shows a chip with its machine's name. This covers agent rows, Pilot's tab rows and recent-worktree rows, and the worktree headers under Group by > Worktree. With one machine, no chip shows. It is the same chip the sidebar uses for a host. Machines are compared by host id, after an SSH host is merged with its managed server, so those two count as one machine.
+- **Machines filter:** Activity's existing Options > Hosts filter is the machine filter. It already lists this Mac, every paired machine and every SSH host.
+- **Projects filter:** a project picked here includes that project's copy on every machine, and it is listed once. The saved filter is still stored as repo ids; it is widened to every machine's copy when Activity reads it. A repo with no git remote can't be matched across machines, so it stays per machine.
+
+Known gaps:
+
+- A Projects filter saved before this change can hold two machines' copies of one project. The Options badge counts it as two until you change the filter once.
+- Repos without a git remote that share a name get separate Projects rows that look the same.
+- Group by > Project still makes one group per repo, so each machine's copy gets its own group.
+- Two clones of the same remote on one machine, or a fork and the repo it came from, share one Projects row. That is how the sidebar decides what one project is.
+
+The hooks are `activity-machines-*` and `activity-project-*` (see `HOOKS.md`).
+
 ## Agent Console
 
 The console (`~/.agents/skills/agent-console`) reads `pilot automations list-yaml --json` and maps each automation to its job by name:
@@ -457,17 +474,38 @@ Pilot keeps Orca's pairing, WebSocket server, web client and `orcad` protocols u
 
   The flag is `--environment <id or name>`; this CLI has no `--host`. The environment was removed afterwards (`pilot environment rm --environment local-orcad`).
 
+### Verified (automated): Pilot's pages in the browser
+
+- **Browser check: pass (4 tests).** `ORCA_BACKGROUND_LAUNCH=1 pnpm exec playwright test --config src/packages/pilot/test/web/playwright.config.ts --workers=1`. Build first with `pnpm run build:electron-vite && pnpm run build:cli && pnpm run build:web && pnpm run ensure:electron-runtime`: the helper launches `out/main/index.js`, and after a Vitest run the native modules are built for Node, so `ensure:electron-runtime` rebuilds them for Electron. It starts an isolated `serve` on a random loopback port with a temp data folder, the scheduler and vault export off, and one seeded card and automation. It pairs through the `#pairing=` link in `webClientUrl` (a runtime-scope link, so no connect screen shows) and opens it in headless Chromium. It checks:
+  - Inbox shows the seeded card, in the list and open beside it.
+  - Running shows the run limit panel and "Nothing is running."
+  - Automations lists the seeded automation, and its switch flips as a paired device.
+  - Playground shows a note that it runs only on the machine Pilot runs on, with no Start button.
+
+  Screenshots (`inbox.png`, `running.png`, `playground.png`) land in `${TMPDIR}/pilot-web-pages-results/`.
+
 ### Pending, Nish to verify (2026-10-10)
 
 These need a phone, a second Mac and an iPad on Tailscale. Open Pilot (`dist/mac-arm64/Pilot.app`) first. Do not use real Orca's `orca` CLI for these: it would save the environment in Orca's data.
 
 - [ ] **Phone.** In Pilot, open the "Orca Mobile" nav entry (the name stays). Scan the QR code with the Orca mobile app on a phone that is on Tailscale. Expect Pilot's worktrees listed and a terminal that opens. The link is `orca://pair?code=...` and its endpoint is this Mac's address on port 6868.
 - [ ] **Another Mac.** On a second Mac with Orca installed, run `orca environment add --name pilot-mac --pairing-code <code from Pilot's pairing screen>`, then `orca worktree list --host runtime:<environment id>` (if `--host` is rejected, use `--environment <id>`). Expect Pilot's worktrees.
-- [ ] **Browser web client.** Open Pilot's web client URL (from the same pairing screen, pairing in the URL fragment) on an iPad or another machine, using this Mac's Tailscale address on port 6868. Expect the full UI, with **Automations** showing Pilot's page.
+- [ ] **Browser web client.** Open Pilot's web client URL (from the same pairing screen, pairing in the URL fragment) on an iPad or another machine, using this Mac's Tailscale address on port 6868. Expect the full UI, with **Inbox**, **Running** and **Automations** showing Pilot's pages. To try it without touching Pilot's real data, start a scratch server (use this Mac's Tailscale IP) and open the `pairing.webClientUrl` from the printed `orca_server_ready` line:
+
+      DATA="$(mktemp -d)/pilot-web-dev"; mkdir -p "$DATA/automations"
+      ORCA_DEV_USER_DATA_PATH="$DATA" ORCA_CLI_INSTALL_PATH="$DATA/cli/pilot" ORCA_BROWSER_EXECUTABLE= ORCA_BACKGROUND_LAUNCH=1 \
+      PILOT_SCHEDULER=off PILOT_VAULT_EXPORT=off PILOT_AUTOMATION_DIRS="$DATA/automations" \
+      pnpm exec electron . --use-mock-keychain --password-store=basic --serve --serve-json --serve-port 6979 --serve-pairing-address <this Mac's Tailscale IP>
 - Pilot's WebSocket listener binds loopback until a device is paired (upstream STA-2370), so the network bind appears only after the first pairing. If a Tailscale address refuses the connection before pairing, that is expected.
 
 ## Known gaps
 
+- In the browser version, the controls that act on the Mac that runs Pilot, not on your device, are hidden:
+  - Run controls: a step's Resume and Source, a finished run's Resume (Running), and Continue run (a card's From run and the run panel).
+  - A report's Open and a skill's Open.
+  - The Playground's Start, replaced by a note that it runs only on that Mac.
+
+  Approve works only on the desktop, and nothing pops up there when you try it in the browser: the browser's Approve is refused with "Approve actions in Pilot on this Mac", and the card stays open in the Inbox for you to approve in Pilot on that Mac.
 - Computer Use is unavailable in packaged Pilot. Enabling it needs a Pilot bundle id for the helper plus a trust-list entry in its Swift peer check.
 - After closing the right sidebar while on the Automations tab, Orca's main-side persistence allowlist drops `plugin:pilot` and resets the stored tab to Explorer (the UI hydrates it back via `hydratePersistedUI`), so reopening or restarting lands on Explorer, not Automations.
 - "Install CLI" links `/usr/local/bin/pilot` (never `orca`) to Pilot's `Contents/Resources/bin/orca`: upstream's `bundled-cli-launcher-path.ts` always installs the `bin/orca` launcher, and `applyPilotEnvDefaults` (`src/packages/pilot/src/main/env.ts`) sets `ORCA_CLI_INSTALL_PATH` to `/usr/local/bin/pilot`, which `cli-install-location.ts` uses ahead of its own `orca` default. That launcher pins Pilot's data folder and install path, so the installed `pilot` command and `pilot serve` (which re-installs the CLI on start) act on Pilot, never on real Orca. Checked in code and by `build/bin/launchers.test.ts`, not clicked.
@@ -520,4 +558,4 @@ A job counts as ported only when its parity test passes (R17): the old sweep's o
     node src/packages/pilot/scripts/update.mjs --build    # …and build Pilot.app and install it (quits and relaunches Pilot)
     node src/packages/pilot/scripts/update.mjs --dry-run  # show the steps only
 
-Verifying means the hook guard, the typecheck, Pilot's tests, and the upstream tests next to each hooked file in `HOOKS.md` (whole folders for startup, orcad, updater, CLI specs, app-shell and the right sidebar; otherwise the file's own `*.test.ts(x)`). `main` is always an exact copy of `upstream/main`. GitHub's "Sync fork" button does the same fast-forward. `pilot` merges `main`. Pilot's code is all in this folder, so a merge conflict can only be in one of the hook lines in `HOOKS.md`. Fix that line, commit it with `git commit --no-verify`, and run the command again. Without `--no-verify`, the pre-commit hook's `oxfmt --write` reformats every upstream file the merge brings in, and the hook guard then fails on each one (2026-10-17). Pushing is opt-in (`--push`). `--build` runs `build-mac.mjs`, so it installs into `/Applications` the same way (use `build-mac.mjs --no-install` on its own for a build only). The command refuses to start with uncommitted changes to tracked files.
+Verifying means the hook guard, the typecheck, Pilot's tests, and the upstream tests next to each hooked file in `HOOKS.md` (whole folders for startup, orcad, updater, CLI specs, app-shell, Activity and the right sidebar; otherwise the file's own `*.test.ts(x)`). `main` is always an exact copy of `upstream/main`. GitHub's "Sync fork" button does the same fast-forward. `pilot` merges `main`. Pilot's code is all in this folder, so a merge conflict can only be in one of the hook lines in `HOOKS.md`. Fix that line, commit it with `git commit --no-verify`, and run the command again. Without `--no-verify`, the pre-commit hook's `oxfmt --write` reformats every upstream file the merge brings in, and the hook guard then fails on each one (2026-10-17). Pushing is opt-in (`--push`). `--build` runs `build-mac.mjs`, so it installs into `/Applications` the same way (use `build-mac.mjs --no-install` on its own for a build only). The command refuses to start with uncommitted changes to tracked files.

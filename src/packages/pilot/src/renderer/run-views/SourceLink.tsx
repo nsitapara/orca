@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { isWebClientLocation } from '@/lib/web-client-location'
 import type { SourceIndex, StepSource } from '../../shared/source-types'
 import { stepSource } from '../../shared/run-views/step-source'
 import type { ChainPart } from '../../shared/run-views/chain'
@@ -62,6 +63,18 @@ async function openStepSource(source: StepSource): Promise<void> {
 
 // A chain row's Source: the skill an agent step uses, or the pilotcli command a shell step runs.
 export function SourceLink({
+  part
+}: {
+  part: Pick<ChainPart, 'skill' | 'runs'>
+}): React.JSX.Element | null {
+  // Why: files.open would act on the server Mac's window, and the browser never reads the index.
+  if (isWebClientLocation()) {
+    return null
+  }
+  return <ServerSourceLink part={part} />
+}
+
+function ServerSourceLink({
   part
 }: {
   part: Pick<ChainPart, 'skill' | 'runs'>

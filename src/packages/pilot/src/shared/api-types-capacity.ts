@@ -1,3 +1,4 @@
+import type { ListedRun } from './api-types'
 import type { LimitSuggestion } from './capacity/limit-suggestion'
 
 // A running run on the Running page. Memory is the summed RSS of its processes on this machine (Docker
@@ -24,6 +25,9 @@ export type QueuedRun = {
   byHand: boolean
 }
 
+// An ended run of a job that holds a slot, as Activity lists it; queuedAt on it says when it joined the line.
+export type FinishedRun = ListedRun & { automationName: string; peakBytes: number | null }
+
 // The job the suggestion budgets for. Unmeasured: an enabled job that hasn't run since memory was sampled, counted
 // at UNMEASURED_JOB_BYTES.
 export type HeaviestJob = {
@@ -38,6 +42,8 @@ export type CapacityPayload = {
   limit: number | null
   running: CapacityRun[]
   queued: QueuedRun[]
+  // Newest first, at most MAX_FINISHED_RUNS.
+  finished: FinishedRun[]
   memory: { totalBytes: number; availableBytes: number } | null
   suggestion: LimitSuggestion
   heaviest: HeaviestJob | null

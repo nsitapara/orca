@@ -27,6 +27,7 @@ import { cancelUnstartedRun, runAnswerSources } from './run/ask-first'
 import { createEndedRunTabs, runtimeOpenTerminals } from './run/ended-run-tabs'
 import { runtimeLauncherDeps, runtimeSessionTerminals } from './run/launch'
 import { resumeStepSession, runtimeResumeDeps } from './run/resume-session'
+import { continueRun } from './run/run-continue'
 import { modeTextFor, readMode } from './run/modes'
 import { sweepStaleStarts } from './run/stale-starts'
 import { terminalRelister } from './run/terminal-relist'
@@ -264,7 +265,9 @@ function openPilot(
     playground,
     memory,
     writeUsageReport: (dir) => usageReports.write(dir),
-    resumeSession: (req) => resumeStepSession(runtimeResumeDeps(runtime, store, fieldDeps), req)
+    resumeSession: (req) => resumeStepSession(runtimeResumeDeps(runtime, store, fieldDeps), req),
+    continueRun: (runId) =>
+      continueRun({ store, now, definitionFor, capacity, launcherDeps, wired }, runId)
   }
 }
 
