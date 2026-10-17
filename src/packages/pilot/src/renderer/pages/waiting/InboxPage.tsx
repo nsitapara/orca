@@ -54,6 +54,7 @@ export function InboxPage(): React.JSX.Element {
     inbox,
     queue,
     reads,
+    queueReads,
     error,
     loadedAt,
     save,
@@ -178,7 +179,14 @@ export function InboxPage(): React.JSX.Element {
       />
       <InMotionPanel running={running} entries={queue} onApplyNow={applyNow} />
       {error ? <p className="text-sm text-destructive">{error}</p> : null}
-      <HostsNotice reads={reads} what="cards" />
+      <HostsNotice
+        reads={reads}
+        what="cards"
+        also={[
+          { reads: queueReads, what: 'queued answers' },
+          { reads: done.reads, what: 'Done for you runs' }
+        ]}
+      />
       {showList ? null : (
         <FilterBadges
           sections={sections}

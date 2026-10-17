@@ -1,4 +1,4 @@
-import { useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useLayoutEffect, useRef, useState } from 'react'
 import type { InboxListRow } from '../../../shared/api-types'
 import type {
   DispatchReport,
@@ -6,6 +6,7 @@ import type {
   QueueListPayload
 } from '../../../shared/inbox-types'
 import { pilotRpc } from '../../api'
+import { useHeldMerge } from '../../hosts/held-merge'
 import { useHostPoll, type HostRead } from '../../hosts/host-poll'
 import { mergedError, mergeInbox, mergeQueue } from '../../hosts/merge-inbox'
 import { errorText } from '../format'
@@ -43,9 +44,10 @@ export function useWaiting(person: string | null) {
     params,
     REFRESH_MS
   )
-  const inbox = useMemo(() => mergeInbox(reads), [reads])
-  const queue = useMemo(() => mergeQueue(queueReads), [queueReads])
-  const error = mergedError([...reads, ...queueReads])
+  const inbox = useHeldMerge(reads, mergeInbox)
+  const queue = useHeldMerge(queueReads, mergeQueue) ?? []
+  // Each kind says its own failure; HostsNotice names the machines when only some failed.
+  const error = mergedError(reads) ?? mergedError(queueReads)
   const loadedAt = useLoadedAt(reads)
   const reload = useCallback(async () => {
     await Promise.all([reloadInbox(), reloadQueue()])
@@ -125,6 +127,7 @@ export function useWaiting(person: string | null) {
     inbox,
     queue,
     reads,
+    queueReads,
     error,
     loadedAt,
     reload,

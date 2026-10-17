@@ -1,8 +1,9 @@
-import { useCallback, useMemo } from 'react'
+import { useCallback } from 'react'
 import type { ListedRun } from '../../../shared/api-types-runs'
 import type { DoneRun } from '../../../shared/visibility-types'
 import { pilotRpc } from '../../api'
-import { useHostPoll } from '../../hosts/host-poll'
+import { useHeldMerge } from '../../hosts/held-merge'
+import { useHostPoll, type HostRead } from '../../hosts/host-poll'
 import { mergedError, mergeDoneForYou } from '../../hosts/merge-inbox'
 import type { Hosted } from '../../hosts/pilot-host'
 import { errorText } from '../format'
@@ -13,6 +14,7 @@ export const DONE_POLL_MS = 10_000
 // every 10 s; Got it acknowledges them and reads the list again.
 export function useDoneForYou(person: string | null): {
   runs: (DoneRun & { run: Hosted<ListedRun> })[]
+  reads: readonly HostRead<unknown>[]
   error: string | null
   acknowledge: (runIds: string[]) => Promise<string | null>
 } {
@@ -21,7 +23,7 @@ export function useDoneForYou(person: string | null): {
     person ? { person } : {},
     DONE_POLL_MS
   )
-  const runs = useMemo(() => mergeDoneForYou(reads), [reads])
+  const runs = useHeldMerge(reads, mergeDoneForYou) ?? []
   const error = mergedError(reads)
   const acknowledge = useCallback(
     async (runIds: string[]): Promise<string | null> => {
@@ -36,5 +38,5 @@ export function useDoneForYou(person: string | null): {
     },
     [reload]
   )
-  return { runs, error, acknowledge }
+  return { runs, reads, error, acknowledge }
 }

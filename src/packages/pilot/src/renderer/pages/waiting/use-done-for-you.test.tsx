@@ -51,13 +51,16 @@ describe('useDoneForYou', () => {
     const { result } = renderHook(() => useDoneForYou('nish'))
     await act(async () => {})
     let acknowledged: Promise<string | null> = Promise.resolve(null)
+    let settled = false
     act(() => {
       acknowledged = result.current.acknowledge(['old'])
+      void acknowledged.then(() => (settled = true))
     })
     await act(async () => {})
     expect(reads).toHaveLength(1)
     await act(async () => reads[0]([done('old'), done('new')]))
     expect(reads).toHaveLength(2)
+    expect(settled).toBe(false)
     await act(async () => reads[1]([done('new')]))
     expect(await acknowledged).toBeNull()
     expect(result.current.runs.map((d) => d.run.id)).toEqual(['new'])
