@@ -13,7 +13,10 @@ describe('agentUsageState', () => {
       automationId: 'agent-usage',
       handled: [],
       sessions: [],
-      files: [{ from: `/vault/${FOLDER}/usage.json`, to: `/vault/${FOLDER}/usage-legacy.json` }]
+      files: [{ from: `/vault/${FOLDER}/usage.json`, to: `/vault/${FOLDER}/usage-legacy.json` }],
+      notes: [
+        "After --apply Pilot writes this folder's usage.json itself, so apply it only at go-live"
+      ]
     })
   })
 

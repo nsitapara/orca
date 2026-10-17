@@ -277,9 +277,8 @@ export function renderSummary({ stamp, sha, rows, parity, cardDetails }) {
     '',
     '**Before you switch them on (Task 50)**',
     "1. Bring each job's state into Pilot's own data, one automation at a time: preview with `pilot automations import-state --id <id>`, then run it again with `--apply`.",
-    '2. Hand the token report over: with job 08 off, run `python3 ~/.agents/skills/worktree-gate/usage.py report` once more, then copy `usage.json` to `usage-legacy.json` in its folder (Pilot\'s README, "Spend and token usage").',
-    "3. Leave the Orca-style copies disabled in Orca (`orca automations list` there shows them all off). Pilot's desktop app no longer runs Orca's engine.",
-    '4. Switch each automation on with `pilot automations enable --id <id>`, then watch its first tick in its Activity and in the worktree panel.',
+    "2. Leave the Orca-style copies disabled in Orca (`orca automations list` there shows them all off). Pilot's desktop app no longer runs Orca's engine.",
+    '3. Switch each automation on with `pilot automations enable --id <id>`, then watch its first tick in its Activity and in the worktree panel.',
     ''
   ].join('\n')
 }
