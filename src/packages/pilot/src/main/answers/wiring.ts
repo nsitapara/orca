@@ -15,6 +15,7 @@ import { currentAnswer } from './answer-run'
 import { AnswerDispatcher, answersUnfollowed } from './dispatcher'
 import { gitInFlight, passActivity } from './holds'
 import { sessionPromptSender, sessionTerminalProbe } from './session-probe'
+import type { RunCapacity } from '../capacity/run-capacity'
 
 export type AnswerWiring = {
   runtime: OrcaRuntimeService
@@ -30,6 +31,7 @@ export type AnswerWiring = {
   facts: WorktreeFactDeps
   // The env service's preparer and run close (envs/service.ts answerHooks): an env automation's answers run in its env.
   envs?: Pick<AnswerEnvHooks, 'preparer' | 'close'>
+  capacity?: Pick<RunCapacity, 'hasFreeSlot'>
   log(message: string): void
 }
 
@@ -86,7 +88,8 @@ export function wireAnswerDispatcher(w: AnswerWiring): AnswerDispatcher {
       send: sessionPromptSender({ terminals, draft }),
       mainCheckout: repoPath,
       current: (item) => currentAnswer(store, item),
-      envs: answerEnvHooks(w)
+      envs: answerEnvHooks(w),
+      capacity: w.capacity
     },
     log
   })

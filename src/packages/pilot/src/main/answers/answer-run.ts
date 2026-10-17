@@ -8,6 +8,7 @@ import { agentOf, answersStepOf, askingRunOf, launchAnswerRun } from './answer-s
 import { hold, quotaHold, type Hold } from './holds'
 import { answersText, type AgentAnswer } from './prompt'
 import { chooseSession, type SessionProbe, type SessionTarget } from './sessions'
+import type { RunCapacity } from '../capacity/run-capacity'
 
 // gate.py CLAIM_MINUTES: one automation's answers session has the worktree to itself this long.
 export const CLAIM_MS = 15 * 60_000
@@ -34,6 +35,8 @@ export type AgentDispatchDeps = {
   warn?(message: string): void
   // An env automation's answers run in its env (answer-env.ts); absent, they run in the worktree as before.
   envs?: AnswerEnvHooks
+  // The run limit (main/capacity): an answer run waits only for a free slot, ahead of the queue.
+  capacity?: Pick<RunCapacity, 'hasFreeSlot'>
 }
 export type AgentGroup = {
   def: AutomationDefinition
@@ -198,6 +201,9 @@ export async function dispatchToAgent(
   })
   if (answers.length === 0) {
     return { kind: 'nothing' }
+  }
+  if (deps.capacity && !deps.capacity.hasFreeSlot(group.def)) {
+    return { kind: 'held', hold: hold('capacity', 'every run slot is taken') }
   }
   const claimKey = group.worktreePath ?? `${path}#${group.def.id}`
   if (!deps.store.queue.claim(claimKey, group.def.id, now + CLAIM_MS, now)) {

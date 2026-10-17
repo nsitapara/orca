@@ -64,6 +64,16 @@ function serve(payload: AutomationListPayload): void {
     if (method === 'pilot.playground.status') {
       return { state: 'stopped', repoPath: null, reason: null }
     }
+    if (method === 'pilot.capacity.get') {
+      return {
+        limit: null,
+        running: [],
+        queued: [],
+        memory: null,
+        suggestion: { limit: 2, budgetBytes: 0, perJobBytes: 1, measured: false },
+        heaviest: null
+      }
+    }
     return status
   })
 }
@@ -134,13 +144,15 @@ describe('PilotAutomationsPage', () => {
     expect(await screen.findByRole('tab', { name: 'How it runs', selected: true })).toBeTruthy()
   })
 
-  it('shows no Inbox or Playground tab; the sub-views render them', async () => {
+  it('shows no Inbox, Running or Playground tab; the sub-views render them', async () => {
     serve(list)
     render(<PilotAutomationsPage />)
     await screen.findByRole('button', { name: /Fix failed CI/ })
     expect(screen.queryByText('Inbox')).toBeNull()
     act(() => setPilotAutomationsView('inbox'))
     expect(await screen.findByRole('heading', { name: 'Inbox' })).toBeTruthy()
+    act(() => setPilotAutomationsView('running'))
+    expect(await screen.findByRole('heading', { name: 'Running' })).toBeTruthy()
     act(() => setPilotAutomationsView('playground'))
     expect(await screen.findByRole('heading', { name: 'Playground' })).toBeTruthy()
     act(() => setPilotAutomationsView('automations'))

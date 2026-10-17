@@ -39,6 +39,8 @@ export function startRunEntry(deps: {
   schedulerOn(): boolean
   // Automations whose file is invalid, shown from their last valid version only (loader displayOnly).
   displayOnly(): readonly string[]
+  // The run limit (main/capacity): an approved run waits for a free slot, its card's answer held until one frees.
+  hasFreeSlot?(definition: AutomationDefinition): boolean
 }): ActionEntry {
   return {
     name: 'start_run',
@@ -91,6 +93,15 @@ export function startRunEntry(deps: {
       // Only the run's own card starts it: a card an agent filed naming another run never does.
       if (opts.runId !== run.id) {
         return actionFailed(`start_run only runs from the card of run ${run.id}`)
+      }
+      if (deps.hasFreeSlot && !deps.hasFreeSlot(definition)) {
+        return {
+          outcome: 'not_yet',
+          detail: 'every run slot is taken',
+          link: null,
+          log: null,
+          onYou: false
+        }
       }
       deps.store.runs.update(run.id, { status: 'running' })
       try {
