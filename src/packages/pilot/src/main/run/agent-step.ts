@@ -5,6 +5,7 @@ import type { PilotStore } from '../store/store'
 import type { PilotAgentLaunchOptions } from './agent-launch-hook'
 import {
   buildStepPrompt,
+  continuePrompt,
   planSession,
   stepTitle,
   terminalLaunchOptions,
@@ -24,6 +25,8 @@ export type AgentStepRequest = {
   label: string
   fields: ItemFields
   workspace: Workspace
+  // A continued run's broken step: its own session to resume, and why it broke.
+  resume?: { sessionId: string; reason: string }
 }
 export type KnownTerminal = { handle: string; paneKey: string | null }
 // H10, the terminal a resumed session last ran in. free: an idle agent running that session, nobody
@@ -94,9 +97,12 @@ function launchOptions(
   const { definition, stepIdx, runId } = req
   const step = definition.steps[stepIdx]
   const { label, fields } = req
+  const prompt = req.resume
+    ? continuePrompt(step.name, req.resume.reason)
+    : buildStepPrompt({ definition, step, runId, label, fields, modeText })
   return terminalLaunchOptions({
     agent,
-    prompt: buildStepPrompt({ definition, step, runId, label, fields, modeText }),
+    prompt,
     title: stepTitle(definition, step, label),
     env: {
       runId,
@@ -202,7 +208,9 @@ export async function launchAgentStep(
       : null
   const priorSteps = store.runs.steps(runId)
   const newId = deps.newSessionId
-  const session = planSession({ step, agent, priorSteps, worktreeSession, newId })
+  const session: SessionPlan = req.resume
+    ? { kind: 'resume', sessionId: req.resume.sessionId }
+    : planSession({ step, agent, priorSteps, worktreeSession, newId })
   const sessionId = session.kind === 'missing' ? null : session.sessionId
   openStepRow(store, req, agent, sessionId, deps.now())
   if (session.kind === 'missing') {

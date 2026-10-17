@@ -38,6 +38,17 @@ export function nextIdx(rows: StepRow[]): number {
   return rows.reduce((max, r) => Math.max(max, r.idx + 1), 0)
 }
 
+// Where a walk begins: step 0 when opening, a continued run's pending step, else the first step without a row.
+export function firstIdx(rows: StepRow[], opening: boolean, continuing: boolean): number {
+  if (opening) {
+    return 0
+  }
+  if (continuing) {
+    return rows.find((r) => r.status === 'pending')?.idx ?? nextIdx(rows)
+  }
+  return nextIdx(rows)
+}
+
 export function broke(status: StepRow['status'] | RunEnd['status']): boolean {
   return status === 'failed' || status === 'timed_out'
 }

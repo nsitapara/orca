@@ -39,6 +39,7 @@ const payload: CapacityPayload = {
       byHand: true
     }
   ],
+  finished: [],
   memory: { totalBytes: 24 * GIB, availableBytes: 9.5 * GIB },
   suggestion: { limit: 3, budgetBytes: 7 * GIB, perJobBytes: 2 * GIB, measured: true },
   heaviest: {

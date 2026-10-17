@@ -127,7 +127,8 @@ export function toRun(r: Record<string, unknown>): RunRow {
     imported: Number(r.imported) === 1,
     homePath: (r.home_path as string | null) ?? null,
     env: envOfRow(r),
-    acknowledgedAt: (r.acknowledged_at as number | null) ?? null
+    acknowledgedAt: (r.acknowledged_at as number | null) ?? null,
+    queuedAt: (r.queued_at as number | null) ?? null
   }
 }
 

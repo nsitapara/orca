@@ -100,6 +100,18 @@ export class CapacityStore {
       .map((r) => toRun(r))
   }
 
+  // These automations' newest ended runs; imported runs never went through the line.
+  finished(automationIds: readonly string[], limit: number): RunRow[] {
+    return this.db
+      .prepare(
+        `SELECT * FROM runs WHERE finished_at IS NOT NULL AND imported = 0
+           AND automation_id IN (SELECT value FROM json_each(?))
+         ORDER BY finished_at DESC, id DESC LIMIT ?`
+      )
+      .all(JSON.stringify(automationIds), limit)
+      .map((r) => toRun(r))
+  }
+
   recordPeak(runId: string, bytes: number): void {
     this.db
       .prepare('UPDATE runs SET peak_rss_bytes = MAX(COALESCE(peak_rss_bytes, 0), ?) WHERE id = ?')

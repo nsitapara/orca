@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { CapacityPayload, CapacityRun } from '../../../shared/api-types-capacity'
-import { memoryText, runMemoryText, suggestionText, usageText } from './running-text'
+import { endedText, memoryText, runMemoryText, suggestionText, usageText } from './running-text'
 
 const GIB = 1024 ** 3
 
@@ -20,6 +20,7 @@ const payload = (over: Partial<CapacityPayload> = {}): CapacityPayload => ({
   limit: 3,
   running: [run(), run({ id: 'r2', counted: false })],
   queued: [],
+  finished: [],
   memory: { totalBytes: 24 * GIB, availableBytes: 10 * GIB },
   suggestion: { limit: 3, budgetBytes: 6.5 * GIB, perJobBytes: 2 * GIB, measured: true },
   heaviest: {
@@ -120,5 +121,19 @@ describe('runMemoryText', () => {
     ['a run sampled now', run({ memoryBytes: 0.5 * GIB, peakBytes: GIB }), '512 MB · peak 1.0 GB']
   ])('shows %s', (_name, r, expected) => {
     expect(runMemoryText(r)).toBe(expected)
+  })
+})
+
+describe('endedText', () => {
+  const now = new Date(2026, 9, 17, 15, 0).getTime()
+  const time = (ms: number): string =>
+    new Date(ms).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+  it.each([
+    ['earlier today', new Date(2026, 9, 17, 14, 41).getTime(), false],
+    ['yesterday', new Date(2026, 9, 16, 23, 5).getTime(), true]
+  ])('shows a run that ended %s with the date only before today', (_name, ended, dated) => {
+    const text = endedText(ended, now)
+    expect(text.endsWith(time(ended))).toBe(true)
+    expect(text === time(ended)).toBe(!dated)
   })
 })

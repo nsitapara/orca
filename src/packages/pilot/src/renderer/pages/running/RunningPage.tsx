@@ -4,6 +4,7 @@ import type { CapacityPayload, CapacityRun, QueuedRun } from '../../../shared/ap
 import { formatDuration } from '../../../shared/run/format-duration'
 import { openRun } from '../../run-views/run-panel-state'
 import { useNow } from '../waiting/use-now'
+import { FinishedRuns } from './FinishedRuns'
 import { RunLimitPicker } from './RunLimitPicker'
 import { memoryText, runMemoryText, suggestionText, usageText } from './running-text'
 import { useCapacity } from './use-capacity'
@@ -137,7 +138,7 @@ export function RunningPage(): React.JSX.Element {
   const { payload, error, saving, setLimit } = useCapacity()
   const now = useNow(true)
   return (
-    <section className="flex max-w-4xl flex-col gap-4 px-5 pb-6 pt-4">
+    <section className="flex max-w-6xl flex-col gap-4 px-5 pb-6 pt-4">
       <div>
         <h2 className="text-sm font-semibold leading-6">Running</h2>
         <p className="text-xs text-muted-foreground">
@@ -175,6 +176,7 @@ export function RunningPage(): React.JSX.Element {
               />
             ))}
           </ListSection>
+          <FinishedRuns runs={payload.finished} now={now} />
         </>
       ) : null}
     </section>

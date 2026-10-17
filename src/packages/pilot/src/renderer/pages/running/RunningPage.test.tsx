@@ -1,7 +1,8 @@
 // @vitest-environment happy-dom
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import type { CapacityPayload } from '../../../shared/api-types-capacity'
+import type { CapacityPayload, FinishedRun } from '../../../shared/api-types-capacity'
+import { openRunPanel } from '../../run-views/run-panel-state'
 
 const pilotRpc = vi.fn()
 vi.mock('../../api', () => ({ pilotRpc: (...args: unknown[]) => pilotRpc(...args) }))
@@ -36,6 +37,7 @@ function capacity(over: Partial<CapacityPayload> = {}): CapacityPayload {
         byHand: true
       }
     ],
+    finished: [],
     memory: { totalBytes: 24 * GIB, availableBytes: 9 * GIB },
     suggestion: { limit: 3, budgetBytes: 6.5 * GIB, perJobBytes: 2 * GIB, measured: true },
     heaviest: {
@@ -48,14 +50,65 @@ function capacity(over: Partial<CapacityPayload> = {}): CapacityPayload {
   }
 }
 
-// The page's poll answers `current`; a change answers what was set.
+// The page's poll answers `current`; a change answers what was set. An opened finished run reads its effects and the
+// automations' chains.
 function serve(current: CapacityPayload): void {
   pilotRpc.mockImplementation(async (method: string, params?: { limit: number | null }) => {
     if (method === 'pilot.capacity.setLimit') {
       return { ...current, limit: params?.limit ?? null }
     }
+    if (method === 'pilot.runs.effects') {
+      return {}
+    }
+    if (method === 'pilot.automations.list') {
+      return { automations: [], errors: [], peopleError: null, missingDirs: [] }
+    }
     return current
   })
+}
+
+function finishedRun(over: Partial<FinishedRun> = {}): FinishedRun {
+  const now = Date.now()
+  return {
+    id: 'f1',
+    automationId: 'review',
+    automationName: '03 Review and fix',
+    tickId: null,
+    itemKey: 'mr:1',
+    itemLabel: '!1 web-1',
+    worktreePath: '/wt/web-1',
+    status: 'failed',
+    outcome: 'Merge conflict in api/models.py',
+    startedAt: now - 10 * 60_000,
+    finishedAt: now - 60_000,
+    costUsd: 0.4,
+    tokens: null,
+    worktreeId: null,
+    trigger: 'schedule',
+    parentRunId: null,
+    imported: false,
+    queuedAt: now - 14 * 60_000,
+    steps: [],
+    inbox: [
+      {
+        id: 'c1',
+        automationId: 'review',
+        runId: 'f1',
+        stepIdx: 0,
+        itemKey: 'mr:1',
+        worktreePath: '/wt/web-1',
+        person: 'nish',
+        type: 'question',
+        title: 'Resolve the conflict?',
+        context: '',
+        status: 'open',
+        createdAt: now - 60_000
+      }
+    ],
+    fields: { 'mr.web_url': 'https://gitlab.example/mr/1' },
+    peakBytes: 2 * GIB,
+    ...over
+  }
 }
 
 async function shown(): Promise<void> {
@@ -124,6 +177,31 @@ describe('RunningPage', () => {
     await click('More jobs at once')
     expect(screen.getByText("Pilot isn't running")).toBeTruthy()
     expect(screen.getByRole('status', { name: 'Jobs at once' }).textContent).toBe('2')
+  })
+
+  it('folds the recently finished runs, and a row opens to how it ended and the cards it made', async () => {
+    serve(capacity({ finished: [finishedRun()] }))
+    await shown()
+    const finished = within(screen.getByRole('region', { name: 'Recently finished' }))
+    expect(finished.queryByRole('table')).toBeNull()
+    await click('Recently finished · 1')
+    const row = within(finished.getAllByRole('row')[1])
+    expect(row.getByText('03 Review and fix')).toBeTruthy()
+    expect(row.getByRole('link', { name: '!1 web-1' }).getAttribute('href')).toBe(
+      'https://gitlab.example/mr/1'
+    )
+    expect(row.getByText('web-1')).toBeTruthy()
+    expect(row.getByText('Failed')).toBeTruthy()
+    // Waited 4 minutes in line (yellow), ran 9.
+    expect(row.getByText('4m').className).toContain('text-status-warning')
+    expect(row.getByText('9m')).toBeTruthy()
+    expect(row.getByText('2.0 GB')).toBeTruthy()
+    expect(screen.queryByText('Merge conflict in api/models.py')).toBeNull()
+    await click('Show details of 03 Review and fix')
+    expect(screen.getByText('Merge conflict in api/models.py')).toBeTruthy()
+    expect(screen.getByText('Resolve the conflict?')).toBeTruthy()
+    await click('Open')
+    expect(openRunPanel()).toEqual({ runId: 'f1', part: null })
   })
 
   it('says when nothing runs or waits', async () => {

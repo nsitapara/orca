@@ -178,6 +178,15 @@ export function buildStepPrompt(input: PromptInput): string {
   return lines.join('\n')
 }
 
+// A continued run's step, resumed in its own session (run-continue.ts): the session already holds the step's
+// instructions, so it is told only why it stopped and to carry on.
+export function continuePrompt(stepName: string, reason: string): string {
+  return [
+    `Pilot is continuing step "${stepName}" in this session: it stopped before it finished (${reason}).`,
+    'Carry on from where you left off. Check what is already done before doing any of it again, then finish the step as its instructions say, outputs included.'
+  ].join(' ')
+}
+
 export function stepTitle(definition: AutomationDefinition, step: StepDef, label: string): string {
   if (definition.steps.length > 1) {
     return `${definition.name} · ${label} · ${step.name}`

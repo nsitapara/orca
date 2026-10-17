@@ -12,6 +12,7 @@ import { pilotRpc } from '../api'
 import { showAutomationsPage, showInboxCard, showPilotAutomation } from '../pages/automations-view'
 import { errorText, itemUrl, runStatusLabel } from '../pages/format'
 import { openWorktree, worktreeIdForPath } from '../pages/waiting/WorktreeLink'
+import { ContinueRun } from './ContinueRun'
 import { useRunEffects } from './effects-feed'
 import { WhatItChanged } from './EffectsLine'
 import { envLines } from './env-lines'
@@ -152,6 +153,7 @@ function Header({
             {`Answers run ${parent}`}
           </button>
         ) : null}
+        <ContinueRun run={run} />
       </div>
     </header>
   )

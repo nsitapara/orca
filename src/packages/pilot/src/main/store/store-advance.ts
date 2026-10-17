@@ -16,6 +16,12 @@ export type AdvancedStep = {
 }
 export type Spent = { costUsd: number | null; tokens: number | null }
 
+const REOPEN_STEP = `UPDATE steps SET status = 'pending', started_at = ?, terminal_handle = NULL, pane_key = NULL,
+  finished_at = NULL, error = NULL, outputs_json = '{}', exit_code = NULL, output_tail = NULL, launch_args_json = NULL,
+  result_json = NULL WHERE run_id = ? AND idx = ?`
+const FORGET_SESSION = `UPDATE steps SET session_id = NULL, transcript_path = NULL, session_pinned = 0
+  WHERE run_id = ? AND idx = ?`
+
 const INSERT_STEP = `INSERT INTO steps (run_id, idx, name, agent, skill, kind, mode, when_expr, status, started_at, finished_at, error)
   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 
@@ -96,6 +102,22 @@ export class AdvanceStore {
       costUsd: Number(row.priced) > 0 ? Number(row.cost) : null,
       tokens: Number(row.counted) > 0 ? Number(row.tokens) : null
     }
+  }
+
+  // A run continued from step `idx` (run/run-continue.ts) is open again. Later steps go. That step's row stays, as
+  // pending for its starter, so its cost and usage stay (a delete would cascade its step_usage away), and so does its
+  // session when it is resumed.
+  reopenFrom(runId: string, idx: number, keepSession: boolean, at: number): void {
+    this.db.prepare('DELETE FROM steps WHERE run_id = ? AND idx > ?').run(runId, idx)
+    this.db.prepare(REOPEN_STEP).run(at, runId, idx)
+    if (!keepSession) {
+      this.db.prepare(FORGET_SESSION).run(runId, idx)
+    }
+    this.db
+      .prepare(
+        "UPDATE runs SET status = 'running', outcome = NULL, finished_at = NULL WHERE id = ?"
+      )
+      .run(runId)
   }
 
   // Running runs with at least one step and none still open: between two steps, or never advanced.

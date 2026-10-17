@@ -1,14 +1,8 @@
-import type {
-  ActivityPayload,
-  ListedRun,
-  RunDetail,
-  RunRow,
-  TickItemRow
-} from '../../shared/api-types'
+import type { ActivityPayload, RunDetail } from '../../shared/api-types'
 import { chainOf } from '../../shared/run-views/chain'
 import { toInboxSummary } from '../inbox/card'
 import type { PilotContext } from '../pilot-services'
-import { withDetail } from '../timeline/run-detail'
+import { listedRuns, tickItemOf } from '../timeline/run-detail'
 import { activityTicks } from './activity-ticks'
 
 export type ActivityListParams = {
@@ -20,21 +14,6 @@ export type ActivityListParams = {
   skipQuiet: boolean
 }
 
-// The item a run came from, as its tick recorded it; null when it had no tick or the tick was pruned (30 days).
-function tickItemOf(ctx: PilotContext, run: RunRow): TickItemRow | null {
-  if (run.tickId === null) {
-    return null
-  }
-  return ctx.store.tickItems(run.tickId).find((i) => i.runId === run.id) ?? null
-}
-
-function listed(ctx: PilotContext, runs: readonly RunRow[]): ListedRun[] {
-  return withDetail(ctx.store, runs).map((run) => ({
-    ...run,
-    fields: tickItemOf(ctx, run)?.fields ?? {}
-  }))
-}
-
 // Activity across automations (spec §3, §4): every live run, the ticks since `since` (or the newest `limit`), and the
 // runs no tick started in the same span.
 export function activityList(ctx: PilotContext, p: ActivityListParams): ActivityPayload {
@@ -44,9 +23,9 @@ export function activityList(ctx: PilotContext, p: ActivityListParams): Activity
   const cut = ticks.length === p.limit && oldest !== undefined
   const floor = Math.max(p.since ?? 0, cut ? oldest.startedAt : 0)
   return {
-    live: listed(ctx, ctx.store.activity.live(ids)),
+    live: listedRuns(ctx.store, ctx.store.activity.live(ids)),
     ticks: activityTicks(ctx, ticks, floor),
-    loose: listed(ctx, ctx.store.activity.unticked(ids, floor, p.limit)),
+    loose: listedRuns(ctx.store, ctx.store.activity.unticked(ids, floor, p.limit)),
     // The page of ticks was full: the list was cut back to here.
     reach: cut ? floor : null
   }
@@ -61,7 +40,7 @@ export function runDetail(ctx: PilotContext, runId: string): RunDetail {
   }
   const definitions = ctx.loaded().definitions
   const def = definitions.find((d) => d.id === row.automationId) ?? null
-  const tickItem = tickItemOf(ctx, row)
+  const tickItem = tickItemOf(ctx.store, row)
   const trigger =
     row.tickId === null
       ? null

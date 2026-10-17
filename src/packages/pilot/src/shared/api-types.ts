@@ -113,6 +113,8 @@ export type RunRow = {
   env?: RunEnv | null
   // When Nish acknowledged it in Done for you (Run visibility); null or absent: not yet.
   acknowledgedAt?: number | null
+  // When it joined the line for a slot (main/capacity); null or absent: it never waited.
+  queuedAt?: number | null
 }
 export type StepStatus =
   | 'pending'
