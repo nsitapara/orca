@@ -2,19 +2,43 @@ import type { CapacityPayload, CapacityRun } from '../../../shared/api-types-cap
 import { formatMemory } from '../../../shared/capacity/format-memory'
 import { HEADROOM_BYTES } from '../../../shared/capacity/limit-suggestion'
 
+function slotsText(running: number, limit: number | null): string {
+  if (limit === null) {
+    return `${running} running, no limit`
+  }
+  // A lowered limit stops nothing: the runs past it finish, and new ones wait until they do.
+  return running > limit
+    ? `${running} running, over the limit of ${limit}`
+    : `${running} of ${limit} in use`
+}
+
 export function usageText(p: CapacityPayload): string {
-  const running = p.running.filter((r) => r.counted).length
-  const slots =
-    p.limit === null ? `${running} running, no limit` : `${running} of ${p.limit} in use`
+  const slots = slotsText(p.running.filter((r) => r.counted).length, p.limit)
   return p.queued.length === 0 ? slots : `${slots} · ${p.queued.length} waiting`
+}
+
+// What the machine has now, and what the measured running jobs hold of it; null when memory can't be read.
+export function memoryText(p: CapacityPayload): string | null {
+  if (!p.memory) {
+    return null
+  }
+  const free = `${formatMemory(p.memory.availableBytes)} available of ${formatMemory(p.memory.totalBytes)}`
+  const held = p.running.reduce((sum, r) => sum + (r.counted ? (r.memoryBytes ?? 0) : 0), 0)
+  return held === 0
+    ? `Memory: ${free}`
+    : `Memory: ${free} · running jobs hold ${formatMemory(held)}`
 }
 
 // Why the suggestion is the number it is, in the page's words (a suggestion only: nothing changes until Nish picks).
 export function suggestionText(p: CapacityPayload): string {
   const { suggestion, heaviest } = p
-  const perJob = heaviest
-    ? `The heaviest job, ${heaviest.automationName}, peaked at ${formatMemory(heaviest.peakBytes)}`
-    : `No job has been measured yet, so each counts as ${formatMemory(suggestion.perJobBytes)}`
+  const each = formatMemory(suggestion.perJobBytes)
+  let perJob = `No job has been measured yet, so each counts as ${each}`
+  if (heaviest?.measured) {
+    perJob = `The heaviest job, ${heaviest.automationName}, peaked at ${formatMemory(heaviest.peakBytes)}`
+  } else if (heaviest) {
+    perJob = `${heaviest.automationName} hasn't been measured yet, so each job counts as ${each}`
+  }
   const budget = `${formatMemory(suggestion.budgetBytes)} can go to jobs: what's available plus what running jobs hold, less ${formatMemory(HEADROOM_BYTES)} kept free`
   return `${perJob}, and ${budget}.`
 }
