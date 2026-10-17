@@ -2,53 +2,17 @@
 import { act } from 'react'
 import { cleanup, render } from '@testing-library/react'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
-import type { Tab } from '../../../../../shared/tab-types'
-import { makeWorktree } from '@/components/activity/ActivityPrototypePage-test-fixtures'
 import { DropdownMenu, DropdownMenuContent } from '@/components/ui/dropdown-menu'
-import { TooltipProvider } from '@/components/ui/tooltip'
 import { useAppStore } from '@/store'
 import { registerPilotStore } from '../store'
 import { ActivityTabsPanel } from './ActivityTabsPanel'
 import { setActivityShowAllTabs, useActivityShowAllTabs } from './activity-tabs-setting'
 import { ShowAllTabsMenuItem } from './ShowAllTabsMenuItem'
 
-vi.mock('./WorkspaceActions', () => ({ WorkspaceActions: () => null }))
-
-function tab(id: string, worktreeId: string): Tab {
-  return {
-    id,
-    entityId: id,
-    worktreeId,
-    groupId: `g-${worktreeId}`,
-    contentType: 'terminal',
-    label: id,
-    customLabel: null,
-    color: null,
-    sortOrder: 0,
-    createdAt: 1
-  }
-}
+vi.mock('./WorkspaceActions', () => ({ WorkspaceActions: () => <div>workspace actions</div> }))
 
 beforeEach(() => {
   registerPilotStore(useAppStore)
-  const worktrees = ['wt-a', 'wt-b', 'wt-c'].map((id) => ({
-    ...makeWorktree(),
-    id,
-    displayName: id
-  }))
-  useAppStore.setState({
-    activeWorktreeId: 'wt-c',
-    worktreesByRepo: { 'repo-1': worktrees },
-    groupsByWorktree: Object.fromEntries(
-      worktrees.map((wt) => [
-        wt.id,
-        [{ id: `g-${wt.id}`, worktreeId: wt.id, activeTabId: null, tabOrder: [`${wt.id}-shell`] }]
-      ])
-    ),
-    unifiedTabsByWorktree: Object.fromEntries(
-      worktrees.map((wt) => [wt.id, [tab(`${wt.id}-shell`, wt.id)]])
-    )
-  })
 })
 
 afterEach(() => {
@@ -58,31 +22,11 @@ afterEach(() => {
   window.localStorage.clear()
 })
 
-function renderPanel() {
-  return render(
-    <TooltipProvider>
-      <ActivityTabsPanel query="" />
-    </TooltipProvider>
-  )
-}
-
-it('lists every workspace’s tabs as cards naming their workspace, the active one first, only while the setting is on', () => {
-  expect(renderPanel().container.innerHTML).toBe('')
+it('shows the workspace actions only while the setting is on', () => {
+  expect(render(<ActivityTabsPanel />).container.innerHTML).toBe('')
   cleanup()
   act(() => setActivityShowAllTabs(true))
-  const view = renderPanel()
-  const cards = view.getAllByRole('listitem')
-  expect(cards.map((card) => card.getAttribute('aria-label'))).toEqual([
-    'wt-c-shell',
-    'wt-a-shell',
-    'wt-b-shell'
-  ])
-  expect(cards.map((card) => card.querySelector('[title]')?.textContent)).toEqual([
-    'wt-c',
-    'wt-a',
-    'wt-b'
-  ])
-  expect(view.getByRole('button', { name: 'Open tabs 3' })).toBeTruthy()
+  expect(render(<ActivityTabsPanel />).getByText('workspace actions')).toBeTruthy()
 })
 
 it('the options menu item turns the setting on and off', () => {

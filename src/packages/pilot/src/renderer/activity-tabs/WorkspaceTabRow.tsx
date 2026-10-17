@@ -15,6 +15,7 @@ import { dispatchWorkspaceTabCommand } from '@/lib/workspace-tab-commands'
 import { closeClientHostedBrowserRow } from '@/runtime/client-hosted-browser-row-close'
 import { useAppStore } from '@/store'
 import { activateWorkspaceTab } from './activate-workspace-tab'
+import type { ActivityTabsVirtualItem } from './activity-tabs-rows'
 import type { WorkspaceTabItem } from './workspace-tab-items'
 
 const icons = {
@@ -162,5 +163,20 @@ export function WorkspaceTabRow({
         <ContextMenuItem onSelect={close}>Close tab</ContextMenuItem>
       </ContextMenuContent>
     </ContextMenu>
+  )
+}
+
+// pilot-hook: activity-tabs-row. A tab's row in Activity's list, spaced like a thread row.
+export function ActivityTabsVirtualRow({
+  item,
+  compactMode
+}: {
+  item: ActivityTabsVirtualItem
+  compactMode: boolean
+}): React.JSX.Element {
+  return (
+    <div className="pb-0.5">
+      <WorkspaceTabRow item={item.tab} compactMode={compactMode} />
+    </div>
   )
 }
