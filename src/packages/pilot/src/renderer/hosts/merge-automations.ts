@@ -110,11 +110,12 @@ function listsOf(
   return answered(reads).filter((r) => isListPayload(r.value))
 }
 
-function failedHostsOf(
+// Every listed machine whose list can't be relied on right now: offline, not yet read, or its latest read failed.
+export function failedHostsOf(
   reads: readonly HostRead<AutomationListPayload>[],
   hosts: readonly PilotHostEntry[]
 ): PilotHostRef[] {
-  const got = new Set(listsOf(reads).map((r) => r.host.key))
+  const got = new Set(listsOf(reads.filter((r) => r.error === null)).map((r) => r.host.key))
   const failed = new Map<string, PilotHostEntry>()
   for (const host of [...reads.map((r) => r.host), ...hosts]) {
     if (!got.has(host.key) && !failed.has(host.key)) {

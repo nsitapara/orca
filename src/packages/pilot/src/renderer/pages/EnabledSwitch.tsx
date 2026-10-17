@@ -26,16 +26,18 @@ export async function setEnabledAll(
 }
 
 // The list's Status cell: flips the automation (or a job's stages) on or off in its YAML. A click here doesn't open
-// the row. While the call runs it shows the state asked for.
+// the row. While the call runs it shows the state asked for. With a refusal it stays put and says why on hover.
 export function EnabledSwitch({
   name,
   on,
   text,
+  refusal = null,
   onToggle
 }: {
   name: string
   on: boolean
   text: string
+  refusal?: string | null
   onToggle: () => Promise<void>
 }): React.JSX.Element {
   const [busy, setBusy] = useState(false)
@@ -56,7 +58,8 @@ export function EnabledSwitch({
         role="switch"
         aria-checked={shown}
         aria-label={`${name}: ${on ? 'turn off' : 'turn on'}`}
-        disabled={busy}
+        title={refusal ?? undefined}
+        disabled={busy || refusal !== null}
         onClick={() => void flip()}
         className="flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground disabled:opacity-50"
       >

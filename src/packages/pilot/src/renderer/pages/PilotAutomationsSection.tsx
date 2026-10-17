@@ -4,8 +4,9 @@ import { pilotRpc } from '../api'
 import { useHostPoll, type HostRead } from '../hosts/host-poll'
 import { HostsNotice } from '../hosts/HostsNotice'
 import { useLoadedAt } from '../hosts/loaded-at'
-import { AUTOMATIONS_LIST, mergeAutomationLists } from '../hosts/merge-automations'
+import { AUTOMATIONS_LIST, failedHostsOf, mergeAutomationLists } from '../hosts/merge-automations'
 import { mergedError } from '../hosts/merge-inbox'
+import { usePilotHosts } from '../hosts/pilot-hosts-feed'
 import { AUTOMATIONS_POLL_MS } from '../run-views/automations-feed'
 import { AutomationsTable } from './AutomationsTable'
 import { setEnabledAll, type Toggle } from './EnabledSwitch'
@@ -46,6 +47,12 @@ export function PilotAutomationsSection({
     AUTOMATIONS_POLL_MS
   )
   const payload = useMemo(() => mergeAutomationLists(reads), [reads])
+  const hosts = usePilotHosts()
+  // One machine switches as it always has; with several, a row whose machine isn't answering won't switch here.
+  const failedHosts = useMemo(
+    () => (hosts.length > 1 ? failedHostsOf(reads, hosts) : []),
+    [reads, hosts]
+  )
   const error = mergedError(reads)
   const startError = useStartError(reads)
   const now = useLoadedAt(reads)
@@ -87,6 +94,7 @@ export function PilotAutomationsSection({
         <AutomationsTable
           payload={payload}
           now={now}
+          failedHosts={failedHosts}
           onOpen={onOpen}
           onOpenJob={onOpenJob}
           onToggle={toggle}

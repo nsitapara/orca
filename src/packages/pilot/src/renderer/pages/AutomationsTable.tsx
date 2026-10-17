@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { createContext, useContext, useState } from 'react'
 import { ChevronDown, ChevronRight } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import type { ActivityRun, AutomationSummary } from '../../shared/api-types'
@@ -20,6 +20,7 @@ import {
   type SortState
 } from './automations-sort'
 import { lastTickText } from './format'
+import { jobRefusal, rowRefusal } from '../hosts/automation-home'
 import { MachineChips } from '../hosts/MachineChip'
 import { hostedRunKey } from '../hosts/merge-activity'
 import { hostOf, type PilotHostRef } from '../hosts/pilot-host'
@@ -37,6 +38,9 @@ const TABLE_MIN = 'min-w-[40.5rem]'
 const ROW = 'min-h-11 w-full border-t border-border/50 px-3 py-3 text-left text-sm hover:bg-accent'
 // Same padding as ROW so the stage's cells line up with the headers; the indent is inside its name cell.
 const STAGE_ROW = 'min-h-9 w-full bg-muted/30 px-3 py-2 text-left text-sm hover:bg-accent'
+
+// The machines not answering right now: a row whose runs_on names one won't switch here.
+const FailedHostsContext = createContext<readonly PilotHostRef[]>([])
 
 // A row of the merged list names its home and every machine it is loaded on; a list from one machine has neither.
 type ListedAutomation = AutomationSummary & { host?: PilotHostRef; hosts?: readonly PilotHostRef[] }
@@ -129,11 +133,13 @@ function JobSwitch({
 }): React.JSX.Element {
   const on = jobEnabled(job)
   const rows = job.stages.filter((s) => s.enabled === on).map(toggleRow)
+  const failed = useContext(FailedHostsContext)
   return (
     <EnabledSwitch
       name={`Job ${jobTitle(job)}`}
       on={on}
       text={jobStatusText(job)}
+      refusal={jobRefusal(job, failed).reason}
       onToggle={() => onToggle(rows, !on)}
     />
   )
@@ -148,11 +154,13 @@ function AutomationSwitch({
   name: string
   onToggle: Toggle
 }): React.JSX.Element {
+  const failed = useContext(FailedHostsContext)
   return (
     <EnabledSwitch
       name={name}
       on={a.enabled}
       text={statusText(a.enabled)}
+      refusal={rowRefusal(a, failed)}
       onToggle={() => onToggle([toggleRow(a)], !a.enabled)}
     />
   )
@@ -311,15 +319,19 @@ function sortMark(sort: SortState, column: SortColumn): string {
   return sort.direction === 'asc' ? ' ↑' : ' ↓'
 }
 
+const NONE_FAILED: readonly PilotHostRef[] = []
+
 export function AutomationsTable({
   payload,
   now,
+  failedHosts = NONE_FAILED,
   onOpen,
   onOpenJob,
   onToggle
 }: {
   payload: { automations: ListedAutomation[] }
   now: number
+  failedHosts?: readonly PilotHostRef[]
   onOpen: (id: string) => void
   onOpenJob: (jobId: string) => void
   onToggle: Toggle
@@ -334,46 +346,48 @@ export function AutomationsTable({
     return <p className="text-sm text-muted-foreground">No automations found.</p>
   }
   return (
-    <div className="overflow-x-auto rounded-md border border-border/50 bg-muted/20">
-      <div className={TABLE_MIN}>
-        <div
-          role="row"
-          className={`${COLS} h-8 items-center px-3 text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground`}
-        >
-          {HEADERS.map(([column, label]) => (
-            <span key={column} role="columnheader" aria-sort={ariaSort(sort, column)}>
-              <button
-                type="button"
-                onClick={() => choose(column)}
-                className="uppercase hover:text-foreground"
-              >
-                {label}
-                {sortMark(sort, column)}
-              </button>
-            </span>
-          ))}
+    <FailedHostsContext value={failedHosts}>
+      <div className="overflow-x-auto rounded-md border border-border/50 bg-muted/20">
+        <div className={TABLE_MIN}>
+          <div
+            role="row"
+            className={`${COLS} h-8 items-center px-3 text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground`}
+          >
+            {HEADERS.map(([column, label]) => (
+              <span key={column} role="columnheader" aria-sort={ariaSort(sort, column)}>
+                <button
+                  type="button"
+                  onClick={() => choose(column)}
+                  className="uppercase hover:text-foreground"
+                >
+                  {label}
+                  {sortMark(sort, column)}
+                </button>
+              </span>
+            ))}
+          </div>
+          {sortEntries(listEntries(payload.automations), sort).map((entry) =>
+            entry.kind === 'job' ? (
+              <JobRows
+                key={`job:${entry.id}`}
+                job={entry}
+                now={now}
+                onOpen={onOpen}
+                onOpenJob={onOpenJob}
+                onToggle={onToggle}
+              />
+            ) : (
+              <Row
+                key={entry.automation.id}
+                a={entry.automation}
+                now={now}
+                onOpen={onOpen}
+                onToggle={onToggle}
+              />
+            )
+          )}
         </div>
-        {sortEntries(listEntries(payload.automations), sort).map((entry) =>
-          entry.kind === 'job' ? (
-            <JobRows
-              key={`job:${entry.id}`}
-              job={entry}
-              now={now}
-              onOpen={onOpen}
-              onOpenJob={onOpenJob}
-              onToggle={onToggle}
-            />
-          ) : (
-            <Row
-              key={entry.automation.id}
-              a={entry.automation}
-              now={now}
-              onOpen={onOpen}
-              onToggle={onToggle}
-            />
-          )
-        )}
       </div>
-    </div>
+    </FailedHostsContext>
   )
 }

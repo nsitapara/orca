@@ -37,6 +37,15 @@ export function waitsOn(
   return name ? failed.filter((host) => sameName(host.machineName, name)) : []
 }
 
+// Why a row's own actions are refused right now, or null.
+export function rowRefusal(
+  row: Pick<AutomationSummary, 'runsOn'> | undefined,
+  failed: readonly PilotHostRef[]
+): string | null {
+  const down = waitsOn(row, failed)
+  return down.length > 0 ? notAnsweringText(down, 'automation') : null
+}
+
 // The machine an automation's actions go to, or why they can't go anywhere right now.
 export function automationHome(id: string): Promise<AutomationHome> {
   return withPilotHosts(async (hosts) => {
@@ -46,9 +55,9 @@ export function automationHome(id: string): Promise<AutomationHome> {
     }
     const loaded = await loadMergedAutomations()
     const row = loaded.automations.find((a) => a.id === id)
-    const down = waitsOn(row, loaded.failedHosts)
-    if (down.length > 0) {
-      return { kind: 'refused', reason: notAnsweringText(down, 'automation') }
+    const reason = rowRefusal(row, loaded.failedHosts)
+    if (reason) {
+      return { kind: 'refused', reason }
     }
     return { kind: 'home', host: row?.host ?? LOCAL_PILOT_HOST, automations: loaded.automations }
   })
@@ -56,7 +65,7 @@ export function automationHome(id: string): Promise<AutomationHome> {
 
 // A job's stages that wait on a machine, and why its buttons are refused; null when nothing waits.
 export function jobRefusal(
-  job: JobGroup<MergedAutomation> | null,
+  job: JobGroup | null,
   failed: readonly PilotHostRef[]
 ): { waiting: ReadonlySet<string>; reason: string | null } {
   const stages = job?.stages.map((s) => ({ id: s.id, down: waitsOn(s, failed) })) ?? []

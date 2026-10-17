@@ -344,6 +344,37 @@ describe('PilotAutomationsPage on more than one machine', () => {
     )
   })
 
+  it.each<[string, PilotHostEntry[], string | null]>([
+    [
+      "won't switch a row here while its runs_on machine's list fails",
+      [LOCAL_NAMED, MINI],
+      "Mac mini isn't answering, so this automation can't be changed from here right now."
+    ],
+    [
+      "won't switch a row here while its runs_on machine is offline",
+      [LOCAL_NAMED, MINI_OFFLINE],
+      "Mac mini isn't answering, so this automation can't be changed from here right now."
+    ],
+    ['switches as before on one machine', [LOCAL_NAMED], null]
+  ])('%s', async (_w, hosts, reason) => {
+    setPilotHostsForTests(hosts)
+    const row = { ...summary, runsOn: 'Mac mini' }
+    pilotRpc.mockImplementation(
+      byHost({ local: machine({ ...list, automations: [row] }), mini: machine('timed out') })
+    )
+    render(<PilotAutomationsPage />)
+    const toggle = await screen.findByRole('switch', { name: 'Fix failed CI: turn off' })
+    expect([toggle.hasAttribute('disabled'), toggle.getAttribute('title')]).toEqual([
+      reason !== null,
+      reason
+    ])
+    fireEvent.click(toggle)
+    const sent = pilotRpc.mock.calls.filter((c) => c[0] === 'pilot.automations.setEnabled')
+    expect(sent).toEqual(
+      reason ? [] : [['pilot.automations.setEnabled', { id: 'fix-ci', enabled: false }]]
+    )
+  })
+
   it('says only the page error when every machine failed', async () => {
     setPilotHostsForTests([LOCAL_NAMED, MINI])
     pilotRpc.mockImplementation(byHost({ local: machine('down'), mini: machine('timed out') }))
