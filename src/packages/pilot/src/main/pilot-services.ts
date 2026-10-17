@@ -4,13 +4,10 @@ import { join } from 'node:path'
 import type { OrcaRuntimeService } from '../../../../main/runtime/orca-runtime'
 import { ALL_RPC_METHODS } from '../../../../main/runtime/rpc/methods/index'
 import { getAppEnvironment } from '../../../../shared/app-environment'
-import type { PilotStatus, SessionResumeResult, UsageReportResult } from '../shared/api-types'
-import type { AgentKind } from '../shared/definition/types'
+import type { PilotStatus } from '../shared/api-types'
 import { answerRunEnded } from './answers/answer-run-end'
-import type { AnswerDispatcher } from './answers/dispatcher'
 import { wireAnswerDispatcher } from './answers/wiring'
 import { pilotActionCatalog } from './actions/wiring'
-import type { ActionCatalog } from './actions/types'
 import { definitionIo, liveDefinitions } from './definitions/live'
 import { createEnvService } from './envs/service'
 import { handoverService } from './handover/service'
@@ -23,9 +20,9 @@ import {
   pilotDetailsRoot,
   pilotVaultAutomationsDir
 } from './env'
-import { resolveEngineEnv, type EngineEnv } from './engine-env'
+import { resolveEngineEnv } from './engine-env'
 import { runtimeActivity } from './fields/activity-facts'
-import { cachedQuotas, type QuotaReader } from './fields/quota'
+import { cachedQuotas } from './fields/quota'
 import { reposListed, resolveRepoPath } from './fields/runtime-facts'
 import { runtimeFieldDeps } from './fields/runtime-field-deps'
 import { runShellScript } from './fields/script-runner'
@@ -40,7 +37,7 @@ import { sweepStaleStarts } from './run/stale-starts'
 import { terminalRelister } from './run/terminal-relist'
 import { agentStepStarter } from './run/step-starters'
 import { runtimeStepProbe } from './run/watcher'
-import { openPlayground, type PlaygroundService } from './playground/create'
+import { openPlayground } from './playground/create'
 import { buildPilotMethods } from './rpc/methods'
 import { registerPilotRpcMethods } from './rpc/register'
 import { PilotScheduler } from './scheduler/scheduler'
@@ -54,46 +51,10 @@ import { VaultExporter } from './vault/export'
 import { housekeepStore } from './store/housekeep'
 import { usageReporter } from './usage-report/reporter'
 import { closeAll, softly } from './pilot-lifecycle'
+import { wireRunCapacity } from './capacity/capacity-wiring'
+import type { PilotContext, PilotHost, PilotServiceOptions, PilotServices } from './pilot-context'
 
-export type PilotContext = {
-  processKind: PilotStatus['process']
-  store: PilotStore
-  dirs: string[]
-  loaded(): LoadedDefinitions
-  reload(): LoadedDefinitions
-  scheduler: PilotScheduler
-  // Every outside effect goes through it (contract §10).
-  actions: ActionCatalog
-  // Saved answers' dispatcher (Task 24c); null in a process that doesn't run the scheduler.
-  dispatcher: AnswerDispatcher | null
-  // This process runs the scheduler: only here does a real tick or an ask-first start launch anything.
-  schedulerOn: boolean
-  writeUsageReport?: (dir?: string) => UsageReportResult
-  // How engine children reach Pilot's CLI and data (H9): the vault import's vault.py too.
-  engineEnv?: EngineEnv
-  // Opens or focuses a step's agent session (pilot.session.resume); absent where there is no runtime.
-  resumeSession?: (req: { runId: string; stepIdx: number }) => Promise<SessionResumeResult>
-  // The Automations folder every card's Details bundle must live in; null reads no bundle.
-  detailsRoot?: string | null
-  // pilotcli's playground (main/playground); absent in orcad, which has no launcher folder for View source.
-  playground?: PlaygroundService
-}
-export type PilotServices = { stop: () => void; context: PilotContext }
-// What pilot.status reads. It is registered before anything opens, so status still answers (with
-// `error`) when Pilot couldn't start.
-export type PilotHost = {
-  processKind: PilotStatus['process']
-  dirs: string[]
-  dataDir: string
-  context: PilotContext | null
-  error: string | null
-}
-export type PilotServiceOptions = {
-  quotas?: Partial<Record<AgentKind, QuotaReader>>
-  // Where the engine's child processes find Pilot's CLI and data (H9). Absent in orcad.
-  engineEnv?: EngineEnv
-  schedulerEnabled?: boolean
-}
+export type { PilotContext, PilotHost, PilotServiceOptions, PilotServices } from './pilot-context'
 
 const log = (message: string): void => console.log(message)
 
@@ -132,6 +93,12 @@ function openPilot(
   }
   const definitionFor = (id: string) =>
     definitions.current().definitions.find((d) => d.id === id) ?? null
+  const { capacity, memory } = wireRunCapacity({
+    runtime,
+    store,
+    now,
+    definitions: () => definitions.current().definitions
+  })
   // Job environments (pilotcli env): prepared off the tick, removed when runs end (main/envs).
   const envs = createEnvService({
     runtime,
@@ -177,7 +144,8 @@ function openPilot(
       definitions: () => definitions.current().definitions,
       start: (req) => wired.engine.startRun(req),
       schedulerOn: () => schedulerOn,
-      displayOnly: () => definitions.current().displayOnly ?? []
+      displayOnly: () => definitions.current().displayOnly ?? [],
+      hasFreeSlot: (def) => capacity.hasFreeSlot(def)
     }
   })
   // The tick's asks and the answers pass share it: a card closed without starting its run (Skip, stale,
@@ -209,7 +177,8 @@ function openPilot(
     activity: runtimeActivity(runtime, fieldDeps.terminalAlive),
     launch: (req) => wired.engine.startRun(req),
     ask: { store, now, inbox },
-    previewEnvs: (def, decisions) => envs.preview(def, decisions)
+    previewEnvs: (def, decisions) => envs.preview(def, decisions),
+    capacity
   }
   const repoProblems = new Map<string, RepoProblem>()
   const withRepoProblems = (loaded: LoadedDefinitions): LoadedDefinitions =>
@@ -236,6 +205,7 @@ function openPilot(
         quotas,
         facts: fieldDeps,
         envs: envs.answerHooks,
+        capacity,
         log
       })
     : null
@@ -248,6 +218,7 @@ function openPilot(
     lastTickAt: (id) => store.lastTick(id)?.startedAt ?? null,
     poll: async () => {
       await wired.poll()
+      await softly('memory', () => memory.sample(), log)
       await softly('usage', () => measureFinishedSteps(store, readUsage, now, log), log)
       await softly('usage report', () => usageReports.refreshIfDue(), log)
       await softly('answers', () => dispatcher?.pass(), log)
@@ -259,6 +230,7 @@ function openPilot(
     repoProblem: (def, message) =>
       repoProblems.set(def.id, { file: def.file, repo: def.repo, message }),
     newPass: () => createPassFetchCache(`pass-${now()}`, glabApiForRepo),
+    queuedToTick: (defs) => capacity.toTick(defs),
     log
   })
   handover.deps.trigger = (id, cause) => scheduler.trigger(id, cause)
@@ -285,6 +257,7 @@ function openPilot(
     engineEnv,
     detailsRoot,
     playground,
+    memory,
     writeUsageReport: (dir) => usageReports.write(dir),
     resumeSession: (req) => resumeStepSession(runtimeResumeDeps(runtime, store, fieldDeps), req)
   }

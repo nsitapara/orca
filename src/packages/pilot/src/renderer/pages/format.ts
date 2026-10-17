@@ -16,6 +16,7 @@ const VERDICT: Record<Verdict, string> = {
   notdue: 'Not due',
   out_of_scope: 'Not in scope',
   over_limit: 'Next tick',
+  queued: 'Waiting for a slot',
   baselined: 'Baselined',
   asked: 'Asked first'
 }
@@ -27,6 +28,7 @@ const DRY_VERDICT: Partial<Record<Verdict, string>> = {
 }
 const COUNT_ORDER: [Verdict, string][] = [
   ['started', 'started'],
+  ['queued', 'waiting for a slot'],
   ['asked', 'asked first'],
   ['skipped', 'skipped'],
   ['notdue', 'not due'],

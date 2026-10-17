@@ -90,20 +90,26 @@ describe('waiting nav', () => {
     expect(renderHook(() => useAutomationsActive(true)).result.current).toBe(false)
   })
 
-  it('has a Playground item that opens the playground view, where neither Inbox nor Automations is current', async () => {
-    const openAutomationsPage = vi.fn()
-    useStore({ activeView: 'automations', openAutomationsPage })
-    pilotRpc.mockResolvedValue({ items: [] })
-    render(<WaitingNavItem />)
-    const playground = screen.getByRole('button', { name: 'Playground' })
-    expect(playground.getAttribute('aria-current')).toBeNull()
-    act(() => fireEvent.click(playground))
-    expect(pilotAutomationsView()).toBe('playground')
-    expect(openAutomationsPage).toHaveBeenCalledTimes(1)
-    expect(playground.getAttribute('aria-current')).toBe('page')
-    expect(screen.getByRole('button', { name: /Inbox/ }).getAttribute('aria-current')).toBeNull()
-    expect(renderHook(() => useAutomationsActive(true)).result.current).toBe(false)
-  })
+  it.each([
+    ['Playground', 'playground'],
+    ['Running', 'running']
+  ] as const)(
+    'has a %s item that opens its view, where neither Inbox nor Automations is current',
+    async (label, view) => {
+      const openAutomationsPage = vi.fn()
+      useStore({ activeView: 'automations', openAutomationsPage })
+      pilotRpc.mockResolvedValue({ items: [] })
+      render(<WaitingNavItem />)
+      const item = screen.getByRole('button', { name: label })
+      expect(item.getAttribute('aria-current')).toBeNull()
+      act(() => fireEvent.click(item))
+      expect(pilotAutomationsView()).toBe(view)
+      expect(openAutomationsPage).toHaveBeenCalledTimes(1)
+      expect(item.getAttribute('aria-current')).toBe('page')
+      expect(screen.getByRole('button', { name: /Inbox/ }).getAttribute('aria-current')).toBeNull()
+      expect(renderHook(() => useAutomationsActive(true)).result.current).toBe(false)
+    }
+  )
 
   it('the wrapped open leaves the waiting view first', () => {
     setPilotAutomationsView('inbox')

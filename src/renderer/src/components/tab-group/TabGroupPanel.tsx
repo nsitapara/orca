@@ -3,6 +3,7 @@ import { lazyWithRetry as lazy } from '@/lib/lazy-with-retry'
 import { useDroppable } from '@dnd-kit/core'
 import { Ellipsis, X } from 'lucide-react'
 import { useAppStore } from '../../store'
+import { useActivityTabsTabStrip } from '../../../../packages/pilot/src/renderer/activity-tabs/activity-tabs-strips' // pilot-hook: activity-tabs-strip
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -276,7 +277,8 @@ export default function TabGroupPanel({
       {/* Why: macOS hiddenInset titleBarStyle makes -webkit-app-region: drag the only way to move the window from this tab row. */}
       {/* Why absent (not hidden) for an 'external' host: the floating panel's titlebar owns the one
           strip, and a mounted second strip would register duplicate sortables in the drag scope. */}
-      {tabStrip !== 'attached' ? null : (
+      {/* pilot-hook: activity-tabs-strip */}
+      {useActivityTabsTabStrip(tabStrip, worktreeId) !== 'attached' ? null : (
         <div
           className="h-[32px] shrink-0 border-b border-border bg-card"
           data-tab-group-strip-id={groupId}
