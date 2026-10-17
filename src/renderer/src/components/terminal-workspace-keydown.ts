@@ -36,7 +36,6 @@ export function handleTerminalWorkspaceKeyDown(
     handleNewBrowserTab,
     handleNewFile,
     handleNewSimulatorTab,
-    handleNewTab,
     keybindings,
     mobileEmulatorEnabled,
     terminalShortcutPolicy
@@ -68,7 +67,7 @@ export function handleTerminalWorkspaceKeyDown(
       void createFloatingWorkspaceTerminalTab(useAppStore.getState())
       return
     }
-    handleNewTab()
+    useAppStore.getState().openModal('new-tab-agent-picker')
     return
   }
 
