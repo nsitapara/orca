@@ -1,7 +1,10 @@
 // @vitest-environment happy-dom
 import { cleanup, render } from '@testing-library/react'
 import { afterEach, expect, it, vi } from 'vitest'
-import type { ActivityThreadGroup } from '@/components/activity/activity-thread-types'
+import type {
+  ActivityGroupBy,
+  ActivityThreadGroup
+} from '@/components/activity/activity-thread-types'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { withGroupRows } from '../activity-tabs/activity-tabs-rows'
 import { registerPilotStore } from '../store'
@@ -24,10 +27,13 @@ afterEach(() => {
   registerPilotStore(null)
 })
 
-function chipLabels(groups: ActivityThreadGroup[]): (string | null)[] {
+function chipLabels(
+  groups: ActivityThreadGroup[],
+  groupBy: ActivityGroupBy = 'none'
+): (string | null)[] {
   render(
     <TooltipProvider>
-      <ActivityMachinesListPane {...listPaneProps(groups)} />
+      <ActivityMachinesListPane {...listPaneProps(groups)} groupBy={groupBy} />
     </TooltipProvider>
   )
   return [...document.querySelectorAll('[data-variant="hostContext"]')].map(
@@ -61,3 +67,15 @@ it.each(['tab', 'recent-worktree'] as const)(
     expect(chipLabels([group])).toEqual([LOCAL_LABEL, 'Mac mini'])
   }
 )
+
+// Grouped by worktree, a recent or pinned worktree is its group's header, not a row under it.
+it('grouped by worktree, a header-only worktree on another machine names it', () => {
+  attach()
+  arrangeMachines()
+  const local = { key: 'worktree:wt-a', label: 'main', threads: [machineThread('a')] }
+  const remote = withGroupRows({ key: 'worktree:wt-recent-worktree', label: 'main', threads: [] }, [
+    pilotRow('recent-worktree', MINI)
+  ])
+  // The local header, its session, then the remote header.
+  expect(chipLabels([local, remote], 'worktree')).toEqual([LOCAL_LABEL, LOCAL_LABEL, 'Mac mini'])
+})

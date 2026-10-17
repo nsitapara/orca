@@ -5,17 +5,17 @@ import { getHostDisplayLabelOverrides } from '../../../../../shared/host-setting
 import type { ActivityThreadGroup } from '@/components/activity/activity-thread-types'
 import { buildSidebarHostOptions } from '@/components/sidebar/sidebar-host-options'
 import { useAppStore } from '@/store'
-import { activityTabsGroupRows } from '../activity-tabs/activity-tabs-rows'
+import { groupRows } from '../activity-tabs/activity-tabs-rows'
 import { pilotStore } from '../store'
 import { buildActivityMachineLabels, type ActivityMachineRow } from './activity-machine-labels'
 import type { ActivityMachineChips } from './activity-machine-chips-context'
 
-// Every row in the list's groups, collapsed ones included: the agents, then Pilot's rows.
-function activityMachineRows(groups: readonly ActivityThreadGroup[]): ActivityMachineRow[] {
-  return groups.flatMap((group) => [
+/** A group's agents, then its Pilot rows, a worktree header's own row included. */
+export function activityGroupMachineRows(group: ActivityThreadGroup): ActivityMachineRow[] {
+  return [
     ...group.threads,
-    ...activityTabsGroupRows(group).map(({ row }) => (row.kind === 'tab' ? row.tab : row.recent))
-  ])
+    ...groupRows(group).map((row) => (row.kind === 'tab' ? row.tab : row.recent))
+  ]
 }
 
 const sameLabels = (labels: ReadonlyMap<string, string> | null) => labels
@@ -42,7 +42,13 @@ export function useActivityMachineChips(
   )
   const defaultHostId = getSettingsFocusedExecutionHostId(settings)
   const builtLabels = useMemo(
-    () => buildActivityMachineLabels({ rows: activityMachineRows(groups), defaultHostId, hosts }),
+    // Collapsed groups count too, so folding one never drops the chips.
+    () =>
+      buildActivityMachineLabels({
+        rows: groups.flatMap(activityGroupMachineRows),
+        defaultHostId,
+        hosts
+      }),
     [groups, defaultHostId, hosts]
   )
   // Why: the same Map comes back while the labels are equal, so the chips skip a re-render.
