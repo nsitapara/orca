@@ -19,15 +19,41 @@ type Sources = Pick<AppState, 'worktreesByRepo' | 'folderWorkspaces' | 'unifiedT
 const NO_SOURCES: Sources = { worktreesByRepo: {}, folderWorkspaces: [], unifiedTabsByWorktree: {} }
 const MINUTE_MS = 60_000
 
-/** Recently active worktrees with no agent or tab row in Activity. Empty while `enabled` is false. */
+const NO_IDS: readonly string[] = []
+
+function allWorktrees(sources: Pick<Sources, 'worktreesByRepo' | 'folderWorkspaces'>) {
+  return [
+    ...Object.values(sources.worktreesByRepo).flat(),
+    ...sources.folderWorkspaces.map(folderWorkspaceToWorktree)
+  ]
+}
+
+/** The ids of pinned worktrees, whose groups lead Activity's worktree grouping. Empty while `enabled` is false. */
+export function usePinnedWorktreeIds(enabled: boolean): readonly string[] {
+  return useAppStore(
+    useShallow((s) =>
+      enabled
+        ? allWorktrees(s)
+            .filter((worktree) => worktree.isPinned)
+            .map((worktree) => worktree.id)
+        : NO_IDS
+    )
+  )
+}
+
+/**
+ * Pinned worktrees, and with `includeRecent` recently active ones, that have no agent or tab row in
+ * Activity. Empty while `enabled` is false.
+ */
 export function useRecentWorktreeItems(
   enabled: boolean,
+  includeRecent: boolean,
   query: string,
   threads: readonly AgentPaneThread[],
   tabs: readonly WorkspaceTabItem[]
 ): readonly RecentWorktreeItem[] {
   const ctx = useWorktreeTabsContext(query, enabled ? threads : NO_THREADS)
-  const now = useNow(MINUTE_MS, enabled)
+  const now = useNow(MINUTE_MS, enabled && includeRecent)
   const sources = useAppStore(
     useShallow((s): Sources =>
       enabled
@@ -48,14 +74,12 @@ export function useRecentWorktreeItems(
       ...tabs.map((tab) => worktreeRowKey(tab.worktree))
     ])
     return buildRecentWorktreeItems({
-      worktrees: [
-        ...Object.values(sources.worktreesByRepo).flat(),
-        ...sources.folderWorkspaces.map(folderWorkspaceToWorktree)
-      ],
+      worktrees: allWorktrees(sources),
+      includeRecent,
       listed,
       openTabCount: (id) => sources.unifiedTabsByWorktree[id]?.length ?? 0,
       now,
       ctx
     })
-  }, [enabled, threads, tabs, sources, now, ctx])
+  }, [enabled, includeRecent, threads, tabs, sources, now, ctx])
 }

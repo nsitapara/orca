@@ -11,21 +11,26 @@ import {
 
 export const RECENT_WORKTREE_WINDOW_MS = 3 * 24 * 60 * 60 * 1000
 
-/** A recently active worktree Activity lists nothing for: a row to start a session from. */
+/** A pinned or recently active worktree Activity lists nothing for: a row to start a session from. */
 export type RecentWorktreeItem = {
   key: string
   worktree: Worktree
   repo: Repo | null
   openTabCount: number
+  pinned: boolean
 }
 
 export function worktreeRowKey(worktree: Worktree): string {
   return getPaletteWorktreeIdentity(worktree)
 }
 
-/** Worktrees active within the window and in Activity's scope, with no row there yet; newest first. */
+/**
+ * Worktrees in Activity's scope with no row there yet: every pinned one, and with `includeRecent` those
+ * active within the window. Pinned first, then newest first.
+ */
 export function buildRecentWorktreeItems(input: {
   worktrees: readonly Worktree[]
+  includeRecent: boolean
   // worktreeRowKey of every worktree Activity already has a row for.
   listed: ReadonlySet<string>
   openTabCount(worktreeId: string): number
@@ -40,10 +45,12 @@ export function buildRecentWorktreeItems(input: {
   const items: RecentWorktreeItem[] = []
   for (const worktree of input.worktrees) {
     const key = worktreeRowKey(worktree)
+    const recent =
+      input.includeRecent && input.now - worktree.lastActivityAt <= RECENT_WORKTREE_WINDOW_MS
     if (
       worktree.id === FLOATING_TERMINAL_WORKTREE_ID ||
       worktree.isArchived ||
-      input.now - worktree.lastActivityAt > RECENT_WORKTREE_WINDOW_MS ||
+      !(worktree.isPinned || recent) ||
       input.listed.has(key)
     ) {
       continue
@@ -55,7 +62,11 @@ export function buildRecentWorktreeItems(input: {
     if (!matchesQuery(search, [worktree.displayName, worktree.branch, repo?.displayName ?? ''])) {
       continue
     }
-    items.push({ key, worktree, repo, openTabCount: input.openTabCount(worktree.id) })
+    const openTabCount = input.openTabCount(worktree.id)
+    items.push({ key, worktree, repo, openTabCount, pinned: worktree.isPinned })
   }
-  return items.sort((a, b) => b.worktree.lastActivityAt - a.worktree.lastActivityAt)
+  return items.sort(
+    (a, b) =>
+      Number(b.pinned) - Number(a.pinned) || b.worktree.lastActivityAt - a.worktree.lastActivityAt
+  )
 }

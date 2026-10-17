@@ -27,11 +27,17 @@ function worktree(id: string, ageMs: number, overrides: Partial<Worktree> = {}):
   return { ...makeWorktreeWithId(id), lastActivityAt: NOW - ageMs, ...overrides }
 }
 
-type BuildOpts = { listed?: Worktree[]; query?: string; scope?: Partial<ActivityScopeFilter> }
+type BuildOpts = {
+  includeRecent?: boolean
+  listed?: Worktree[]
+  query?: string
+  scope?: Partial<ActivityScopeFilter>
+}
 
 function build(worktrees: Worktree[], opts: BuildOpts = {}) {
   return buildRecentWorktreeItems({
     worktrees,
+    includeRecent: opts.includeRecent ?? true,
     listed: new Set((opts.listed ?? []).map(worktreeRowKey)),
     openTabCount: (id) => (id === 'tabs' ? 2 : 0),
     now: NOW,
@@ -45,6 +51,7 @@ function build(worktrees: Worktree[], opts: BuildOpts = {}) {
 
 describe('buildRecentWorktreeItems', () => {
   const recent = worktree('recent', 60_000)
+  const pinnedOld = worktree('pinned', RECENT_WORKTREE_WINDOW_MS + 1, { isPinned: true })
   type Case = [string, Worktree[], BuildOpts, [string, number][]]
   it.each<Case>([
     [
@@ -55,6 +62,21 @@ describe('buildRecentWorktreeItems', () => {
         ['recent', 0],
         ['older', 0]
       ]
+    ],
+    [
+      'pinned, however long ago it was active, and ahead of the rest',
+      [recent, pinnedOld],
+      {},
+      [
+        ['pinned', 0],
+        ['recent', 0]
+      ]
+    ],
+    [
+      'only pinned ones without includeRecent',
+      [recent, pinnedOld],
+      { includeRecent: false },
+      [['pinned', 0]]
     ],
     ['carries its open tab count', [worktree('tabs', 1)], {}, [['tabs', 2]]],
     [

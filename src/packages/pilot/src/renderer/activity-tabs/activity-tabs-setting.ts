@@ -72,8 +72,3 @@ export function useActivityTabsVisible(): boolean {
   const on = useActivityShowAllTabs()
   return useActivitySidebarAttached() && on
 }
-
-export function useActivityRecentWorktreesVisible(): boolean {
-  const on = useActivityShowRecentWorktrees()
-  return useActivitySidebarAttached() && on
-}

@@ -134,11 +134,11 @@ describe('useActivityTabsThreads', () => {
       expect(groups.flatMap(activityTabsGroupRows).map(rowLabel)).toEqual(rows)
     }
   )
-  // wt-1 holds the agent; wt-2 was active a minute ago; wt-3 four days ago.
+  // wt-1 holds the agent; wt-2 was active a minute ago; wt-3 four days ago; wt-4 is pinned, from long ago.
   it.each([
-    { on: true, rows: ['recent:wt-2'] },
-    { on: false, rows: [] }
-  ])('adds recently active worktrees with no row only while on (on=$on)', ({ on, rows }) => {
+    { on: true, rows: ['recent:wt-4', 'recent:wt-2'] },
+    { on: false, rows: ['recent:wt-4'] }
+  ])('adds pinned worktrees, and recent ones only while on (on=$on)', ({ on, rows }) => {
     arrange({ attached: true, on: false, body: 'agents' })
     act(() => setActivityShowRecentWorktrees(on))
     const now = Date.now()
@@ -150,7 +150,8 @@ describe('useActivityTabsThreads', () => {
         'repo-1': [
           { ...makeWorktree(), lastActivityAt: now },
           { ...makeWorktreeWithId('wt-2'), lastActivityAt: now - 60_000 },
-          { ...makeWorktreeWithId('wt-3'), lastActivityAt: now - 4 * 24 * 60 * 60 * 1000 }
+          { ...makeWorktreeWithId('wt-3'), lastActivityAt: now - 4 * 24 * 60 * 60 * 1000 },
+          { ...makeWorktreeWithId('wt-4'), lastActivityAt: 1, isPinned: true }
         ]
       }
     })
