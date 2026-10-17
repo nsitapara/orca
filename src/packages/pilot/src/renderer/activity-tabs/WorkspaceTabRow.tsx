@@ -1,6 +1,5 @@
 import { File, FileDiff, Globe, Pin, Smartphone, Terminal, X } from 'lucide-react'
 import { toast } from 'sonner'
-import { Button } from '@/components/ui/button'
 import {
   ContextMenu,
   ContextMenuContent,
@@ -8,6 +7,7 @@ import {
   ContextMenuTrigger
 } from '@/components/ui/context-menu'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import { getActivityThreadWorkspaceTitle } from '@/lib/activity-thread-display'
 import { useActiveClientHostedBrowserRowId } from '@/lib/pane-manager/client-hosted-browser-row-state'
 import { isPaletteCurrentWorktree } from '@/lib/palette-repo-resolution'
 import { cn } from '@/lib/utils'
@@ -15,6 +15,7 @@ import { dispatchWorkspaceTabCommand } from '@/lib/workspace-tab-commands'
 import { closeClientHostedBrowserRow } from '@/runtime/client-hosted-browser-row-close'
 import { useAppStore } from '@/store'
 import { activateWorkspaceTab } from './activate-workspace-tab'
+import type { ActivityTabsVirtualItem } from './activity-tabs-rows'
 import type { WorkspaceTabItem } from './workspace-tab-items'
 
 const icons = {
@@ -32,7 +33,14 @@ function errorText(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
 }
 
-export function WorkspaceTabRow({ item }: { item: WorkspaceTabItem }): React.JSX.Element {
+// Laid out like Activity's ActivityThreadRow card: the tab is the title, its workspace the footer.
+export function WorkspaceTabRow({
+  item,
+  compactMode
+}: {
+  item: WorkspaceTabItem
+  compactMode: boolean
+}): React.JSX.Element {
   const { tab } = item
   const groupActiveTabId = useAppStore(
     (s) =>
@@ -58,6 +66,7 @@ export function WorkspaceTabRow({ item }: { item: WorkspaceTabItem }): React.JSX
     : !activeClientRowId && groupActiveTabId === tab.id
   const active = workspaceActive && rowActive
   const Icon = icons[tab.contentType]
+  const workspaceLabel = getActivityThreadWorkspaceTitle(item.worktree)
   const close = () => {
     if (item.clientHostedRow) {
       void closeClientHostedBrowserRow({ worktreeId: tab.worktreeId, browserPageId: tab.id }).catch(
@@ -79,36 +88,61 @@ export function WorkspaceTabRow({ item }: { item: WorkspaceTabItem }): React.JSX
     <ContextMenu>
       <ContextMenuTrigger asChild>
         <div
-          className={cn(
-            'group flex items-center gap-1 rounded-md text-sidebar-foreground hover:bg-sidebar-accent',
-            active && 'bg-sidebar-accent'
-          )}
-          data-current={active}
+          data-current={active ? 'true' : undefined}
+          data-worktree-card-surface="true"
+          data-worktree-card-active={active ? 'primary' : undefined}
           data-activity-workspace-tab={item.key}
+          onClick={activate}
+          role="listitem"
+          aria-label={item.label}
+          aria-current={active ? 'true' : undefined}
+          className="group relative flex w-full cursor-pointer flex-col gap-1 rounded-lg border border-transparent px-1.5 py-1.5 text-left transition-[background-color,border-color,opacity,box-shadow] duration-200 outline-none select-none worktree-sidebar-card-hover focus-visible:ring-1 focus-visible:ring-ring"
         >
-          <button
-            type="button"
-            onClick={activate}
-            aria-current={active ? 'page' : undefined}
-            className="flex min-w-0 flex-1 items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring"
-          >
-            <Icon className="size-3.5 shrink-0" />
-            <span className={cn('truncate', tab.isPreview && 'italic')}>{item.label}</span>
-            {tab.isPinned ? <Pin className="size-3 shrink-0" /> : null}
-          </button>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon-xs"
-                onClick={close}
-                aria-label={`Close ${item.label}`}
+          <div className="flex min-w-0 items-start gap-1.5">
+            <span className="mt-0.5 inline-flex size-4 shrink-0 items-center justify-center text-muted-foreground">
+              <Icon className="size-3.5" />
+            </span>
+            <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+              <button
+                type="button"
+                aria-label={item.label}
+                onClick={(event) => {
+                  event.stopPropagation()
+                  activate()
+                }}
+                className={cn(
+                  'block w-full min-w-0 cursor-pointer text-left text-[13px] font-medium leading-5 text-foreground outline-none focus-visible:ring-1 focus-visible:ring-ring',
+                  compactMode ? 'truncate' : 'line-clamp-2 break-words',
+                  tab.isPreview && 'italic'
+                )}
               >
-                <X className="size-3" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>Close tab</TooltipContent>
-          </Tooltip>
+                {item.label}
+              </button>
+              <div className="flex min-w-0 items-center gap-1.5 pt-0.5 text-[11px] text-muted-foreground">
+                <span className="min-w-0 flex-1 truncate" title={workspaceLabel}>
+                  {workspaceLabel}
+                </span>
+                {tab.isPinned ? <Pin className="size-2.5 shrink-0" aria-label="Pinned" /> : null}
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button
+                      type="button"
+                      onClick={(event) => {
+                        event.stopPropagation()
+                        close()
+                      }}
+                      onMouseDown={(event) => event.stopPropagation()}
+                      aria-label={`Close ${item.label}`}
+                      className="flex size-3.5 shrink-0 cursor-pointer items-center justify-center rounded transition-opacity hover:bg-accent/80 hover:text-foreground can-hover:opacity-0 can-hover:group-hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                    >
+                      <X className="size-2.5" />
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent side="left">Close tab</TooltipContent>
+                </Tooltip>
+              </div>
+            </div>
+          </div>
         </div>
       </ContextMenuTrigger>
       <ContextMenuContent>
@@ -129,5 +163,20 @@ export function WorkspaceTabRow({ item }: { item: WorkspaceTabItem }): React.JSX
         <ContextMenuItem onSelect={close}>Close tab</ContextMenuItem>
       </ContextMenuContent>
     </ContextMenu>
+  )
+}
+
+// pilot-hook: activity-tabs-row. A tab's row in Activity's list, spaced like a thread row.
+export function ActivityTabsVirtualRow({
+  item,
+  compactMode
+}: {
+  item: ActivityTabsVirtualItem
+  compactMode: boolean
+}): React.JSX.Element {
+  return (
+    <div className="pb-0.5">
+      <WorkspaceTabRow item={item.tab} compactMode={compactMode} />
+    </div>
   )
 }
