@@ -6,6 +6,7 @@ import { runStrip } from '../../shared/run-views/strip'
 import { runHeadline, runTimeline } from '../../shared/run-views/timeline'
 import { clockTime, runStatusLabel } from '../pages/format'
 import { useAutomationsFeed } from './automations-feed'
+import { ContinueRun } from './ContinueRun'
 import { RunStrip } from './RunStrip'
 import { openRun } from './run-panel-state'
 import { RUN_TONE } from './tokens'
@@ -62,6 +63,7 @@ export function FromRun({
           {run.itemLabel}
         </span>
         <span className="flex-1" />
+        <ContinueRun run={run} />
         <button type="button" className="underline" onClick={() => openRun(run.id, asked)}>
           Open run
         </button>

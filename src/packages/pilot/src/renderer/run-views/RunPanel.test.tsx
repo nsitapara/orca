@@ -75,6 +75,21 @@ describe('the run panel', () => {
     ])
   })
 
+  it('offers Continue run in the header of a failed run, and continues it from there', async () => {
+    const broken: RunDetail = {
+      ...detail,
+      run: { ...detail.run, status: 'failed', finishedAt: 9, steps: [stepAt(0, 'fix', 'failed')] }
+    }
+    pilotRpc.mockImplementation(async (method: string) =>
+      method === 'pilot.runs.continue' ? { step: 'fix', resumed: true } : broken
+    )
+    openRun('r1')
+    render(<RunPanelHost />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Continue run' }))
+    expect(await screen.findByText('Continuing from step fix, in its own session')).toBeTruthy()
+    expect(pilotRpc).toHaveBeenCalledWith('pilot.runs.continue', { runId: 'r1' })
+  })
+
   it("opens the automation's How it runs from its crumb, and closes on Escape", async () => {
     pilotRpc.mockResolvedValue(detail)
     openRun('r1')

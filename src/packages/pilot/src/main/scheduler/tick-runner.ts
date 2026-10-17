@@ -152,6 +152,7 @@ async function startRuns(
       itemLabel: decision.label,
       worktreePath,
       startedAt: at,
+      queuedAt: admission.queuedAt ?? null,
       ...(admission.byHand ? { trigger: 'manual' as const } : {})
     })
     runIds.set(decision.key, runId)

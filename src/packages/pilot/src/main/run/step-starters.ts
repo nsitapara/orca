@@ -39,7 +39,8 @@ export function agentStepStarter(launch: AgentStepLauncher): StepStarter {
       itemKey: req.run.itemKey,
       label: req.run.itemLabel,
       fields: req.fields,
-      workspace: recordedWorkspace(req)
+      workspace: recordedWorkspace(req),
+      ...(req.resume ? { resume: req.resume } : {})
     })
   }
 }

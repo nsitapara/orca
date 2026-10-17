@@ -779,14 +779,17 @@ describe('runTick with a run limit', () => {
       ['mr:1574', 'queued', 'Waiting for a slot: 1 of 1 running']
     ])
     expect(d.store.capacity.queued().map((q) => [q.itemKey, q.byHand])).toEqual([['mr:1574', true]])
+    const joined = d.store.capacity.queued()[0].queuedAt
     for (const run of d.store.runs.forTick(first.tickId)) {
       d.store.runs.update(run.id, { status: 'done', finishedAt: d.now() })
     }
     const second = await runTick(def, people, { ...d, capacity }, { dryRun: false })
     expect(d.launched).toEqual(['mr:1561', 'mr:1574'])
-    expect(d.store.runs.forTick(second.tickId).map((r) => [r.itemKey, r.trigger])).toEqual([
-      ['mr:1574', 'manual']
-    ])
+    // Its run keeps when it joined the line; one that never waited has none.
+    expect(d.store.runs.forTick(first.tickId).map((r) => r.queuedAt)).toEqual([null])
+    expect(
+      d.store.runs.forTick(second.tickId).map((r) => [r.itemKey, r.trigger, r.queuedAt])
+    ).toEqual([['mr:1574', 'manual', joined]])
     expect(d.store.capacity.queued()).toEqual([])
   })
 

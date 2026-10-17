@@ -92,6 +92,23 @@ describe('launchAgentStep', () => {
     ])
   })
 
+  it('resumes the session of a continued run with a prompt to carry on, not the step from the start', async () => {
+    const def = testDefinition({
+      steps: [testStep({ name: 'review', prompt: 'Review it', args: ['--model', 'opus'] })]
+    })
+    const { store, request, launchTerminal, deps } = setup(def)
+    const sessionId = '00000000-0000-4000-8000-0000000000f1'
+    const reason = 'The terminal closed before the agent finished'
+    await launchAgentStep(store, { ...request(0), resume: { sessionId, reason } }, deps)
+    expect(argvOf(launchTerminal.mock.calls[0])).toEqual(['--resume', sessionId, '--model', 'opus'])
+    const prompt = launchTerminal.mock.calls[0][1].prompt
+    expect(prompt).toContain(reason)
+    expect(prompt).not.toContain('Review it')
+    expect(store.runs.steps('run-1').map((s) => [s.name, s.status, s.sessionId])).toEqual([
+      ['review', 'running', sessionId]
+    ])
+  })
+
   it("fails the step without launching when the session to continue isn't there", async () => {
     const def = testDefinition({
       steps: [

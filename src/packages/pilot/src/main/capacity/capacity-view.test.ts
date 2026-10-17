@@ -36,6 +36,8 @@ describe('capacityView', () => {
     store.runs.update('old-review', { status: 'done', finishedAt: 2 })
     run('r1', 'review', 10)
     run('p1', 'pull', 11)
+    run('p0', 'pull', 3)
+    store.runs.update('p0', { status: 'done', finishedAt: 4 })
     store.capacity.recordPeak('r1', 2 * GIB)
     store.capacity.setRunLimit(2, 0)
     store.capacity.enqueue({
@@ -61,6 +63,17 @@ describe('capacityView', () => {
     })
 
     expect(view.limit).toBe(2)
+    // The shell-only job's runs never wait for a slot, so they aren't listed; old-review is, with its peak and detail.
+    expect(view.finished).toEqual([
+      expect.objectContaining({
+        id: 'old-review',
+        automationName: '03 Review and fix',
+        peakBytes: 3 * GIB,
+        steps: [],
+        inbox: [],
+        fields: {}
+      })
+    ])
     expect(view.running).toEqual([
       {
         id: 'r1',

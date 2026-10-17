@@ -15,7 +15,7 @@ const RESUMED: Record<SessionResumeResult['action'], string> = {
   opened: 'Opened in a new tab'
 }
 
-function canResume(step: StepRow): boolean {
+export function canResume(step: StepRow): boolean {
   return step.sessionId !== null && (step.agent === 'claude' || step.agent === 'codex')
 }
 
@@ -49,7 +49,7 @@ function outputsText(step: StepRow): string | null {
   return entries.map(([k, v]) => `${k}=${String(v)}`).join(' · ')
 }
 
-function ResumeButton({
+export function ResumeButton({
   runId,
   worktreePath,
   step
