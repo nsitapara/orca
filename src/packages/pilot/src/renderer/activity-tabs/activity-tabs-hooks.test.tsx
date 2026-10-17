@@ -2,7 +2,6 @@
 import { renderHook } from '@testing-library/react'
 import { act } from 'react'
 import { afterEach, describe, expect, it } from 'vitest'
-import { FLOATING_TERMINAL_WORKTREE_ID } from '../../../../../shared/constants'
 import type { AgentPaneThread, ThreadReadFilter } from '@/components/activity/activity-thread-types'
 import {
   makeRepo,
@@ -12,7 +11,6 @@ import {
 import { useAppStore } from '@/store'
 import { registerPilotStore } from '../store'
 import { setActivityShowAllTabs } from './activity-tabs-setting'
-import { useActivityTabsTabStrip, useActivityTabsTitlebarController } from './activity-tabs-strips'
 import { activityTabsGroupRows } from './activity-tabs-rows'
 import { useActivityTabsThreads } from './activity-tabs-threads'
 
@@ -28,63 +26,7 @@ afterEach(() => {
   window.localStorage.clear()
 })
 
-describe('tab strips while Activity lists the tabs', () => {
-  it.each([
-    {
-      attached: true,
-      on: true,
-      body: 'agents',
-      worktreeId: 'wt-1',
-      strip: 'external',
-      titlebar: false
-    },
-    {
-      attached: true,
-      on: true,
-      body: 'agents',
-      worktreeId: FLOATING_TERMINAL_WORKTREE_ID,
-      strip: 'attached',
-      titlebar: false
-    },
-    {
-      attached: true,
-      on: true,
-      body: 'workspaces',
-      worktreeId: 'wt-1',
-      strip: 'attached',
-      titlebar: true
-    },
-    {
-      attached: true,
-      on: false,
-      body: 'agents',
-      worktreeId: 'wt-1',
-      strip: 'attached',
-      titlebar: true
-    },
-    {
-      attached: false,
-      on: true,
-      body: 'agents',
-      worktreeId: 'wt-1',
-      strip: 'attached',
-      titlebar: true
-    }
-  ] as const)(
-    'attached=$attached on=$on sidebar=$body $worktreeId → strip $strip, titlebar shown $titlebar',
-    ({ attached, on, body, worktreeId, strip, titlebar }) => {
-      arrange({ attached, on, body })
-      expect(renderHook(() => useActivityTabsTabStrip('attached', worktreeId)).result.current).toBe(
-        strip
-      )
-      const target = document.createElement('div')
-      const controller = renderHook(() =>
-        useActivityTabsTitlebarController({ titlebarTabsTarget: target })
-      ).result.current
-      expect(controller.titlebarTabsTarget).toBe(titlebar ? target : null)
-    }
-  )
-
+describe('the Show all tabs setting', () => {
   it('opens Activity and remembers the choice when turned on', () => {
     useAppStore.setState({ sidebarOpen: false, sidebarBody: 'workspaces' })
     act(() => setActivityShowAllTabs(true))

@@ -80,7 +80,6 @@ describe('hookTestTargets', () => {
       'src/main/startup',
       'src/main/updater',
       'src/renderer/src/app-shell',
-      'src/renderer/src/components/TerminalTitlebarTabs.test',
       'src/renderer/src/components/activity/activity-thread-controls.test',
       'src/renderer/src/components/activity/activity-thread-options-menu.test',
       'src/renderer/src/components/activity/activity-thread-virtual-items.test',
@@ -89,7 +88,6 @@ describe('hookTestTargets', () => {
       'src/renderer/src/components/sidebar/SidebarAgentsList.test',
       'src/renderer/src/components/sidebar/SidebarNav.test',
       'src/renderer/src/components/skills',
-      'src/renderer/src/components/tab-group/TabGroupPanel.test',
       'src/renderer/src/main.test',
       'src/renderer/src/store/right-sidebar-route.test'
     ])
