@@ -10,7 +10,7 @@ import {
   usePilotAutomationsView,
   type PilotAutomationsView
 } from '../pages/automations-view'
-import { useCapacity } from '../pages/running/use-capacity'
+import { useCapacityTotals } from '../pages/running/use-capacity'
 import { pilotStore } from '../store'
 
 const WAITING_TOTAL_MS = 20_000
@@ -124,15 +124,15 @@ function WaitingNavButton(): React.JSX.Element {
 
 // The Running page's own counts: runs going now, and in yellow the ones waiting for a slot.
 function RunningNavButton(): React.JSX.Element {
-  const { payload } = useCapacity()
+  const { running, queued } = useCapacityTotals()
   const pills: NavPill[] = [
     {
-      count: payload?.running.length ?? 0,
+      count: running,
       tone: 'quiet',
       title: 'Running now'
     },
     {
-      count: payload?.queued.length ?? 0,
+      count: queued,
       tone: 'waiting',
       title: 'Waiting for a slot'
     }

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import type { CapacityPayload } from '../../../shared/api-types-capacity'
-import { pilotRpc } from '../../api'
+import { answered } from '../../hosts/answered-reads'
 import { useHostPoll, type HostRead } from '../../hosts/host-poll'
 import { hostRpc } from '../../hosts/host-rpc'
 import type { PilotHostEntry, PilotHostRef } from '../../hosts/pilot-host'
@@ -16,28 +16,31 @@ export type MachineCapacity = {
   error: string | null
 }
 
-// This machine's figures alone: the sidebar's Running count.
-export function useCapacity(): { payload: CapacityPayload | null } {
-  const [payload, setPayload] = useState<CapacityPayload | null>(null)
-  useEffect(() => {
-    let alive = true
-    const load = (): void => {
-      if (document.hidden) {
-        return
-      }
-      pilotRpc<CapacityPayload>('pilot.capacity.get').then(
-        (p) => alive && setPayload(p),
-        () => {}
-      )
+// Runs going and waiting for a slot across every machine that answered; a failed read keeps its machine's last figures.
+export function capacityTotals(reads: readonly HostRead<CapacityPayload>[]): {
+  running: number
+  queued: number
+} {
+  return answered(reads).reduce(
+    (sum, { value }) => ({
+      running: sum.running + value.running.length,
+      queued: sum.queued + value.queued.length
+    }),
+    { running: 0, queued: 0 }
+  )
+}
+
+// The sidebar's Running count.
+export function useCapacityTotals(): { running: number; queued: number } {
+  const { reads } = useHostPoll<CapacityPayload>(
+    'pilot.capacity.get',
+    undefined,
+    CAPACITY_POLL_MS,
+    {
+      skipHidden: true
     }
-    load()
-    const timer = setInterval(load, CAPACITY_POLL_MS)
-    return () => {
-      alive = false
-      clearInterval(timer)
-    }
-  }, [])
-  return { payload }
+  )
+  return capacityTotals(reads)
 }
 
 // What a limit change shows until a read started after `boundary` lands: the figures it answered, or why it failed.

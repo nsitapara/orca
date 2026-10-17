@@ -9,7 +9,7 @@ import {
   waitFor
 } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { byHost, LOCAL_NAMED, MINI } from '../hosts/__fixtures__/hosts'
+import { byHost, LOCAL_NAMED, MINI, MINI_OFFLINE } from '../hosts/__fixtures__/hosts'
 import { resetPilotHostsFeed, setPilotHostsForTests } from '../hosts/pilot-hosts-feed'
 import {
   pilotAutomationsView,
@@ -24,6 +24,7 @@ vi.mock('../api', () => ({
   pilotRpc: (...args: unknown[]) => pilotRpc(...args)
 }))
 
+import { useCapacityTotals } from '../pages/running/use-capacity'
 import {
   useAutomationsActive,
   useOpenAutomations,
@@ -179,6 +180,70 @@ describe('waiting nav', () => {
     expect(pills.map((p) => p.textContent)).toEqual(shown)
     const waiting = item.querySelector('span[title="Waiting for a slot"]')
     expect(waiting?.className.includes('text-status-warning') ?? false).toBe(queued > 0)
+  })
+
+  const runs = (n: number): unknown[] => Array.from({ length: n }, (_, i) => ({ id: `r${i}` }))
+  // Each machine answers the inbox list empty, and capacity as given.
+  const capacityBy = (answers: Record<string, () => unknown>): void => {
+    pilotRpc.mockImplementation(
+      byHost(
+        Object.fromEntries(
+          Object.entries(answers).map(([key, cap]) => [
+            key,
+            (method: string) => (method === 'pilot.capacity.get' ? cap() : { items: [] })
+          ])
+        )
+      )
+    )
+  }
+  const pillTexts = (): (string | null)[] => {
+    const item = screen.getByRole('button', { name: /^Running/ })
+    return [...item.querySelectorAll('span[title]')].map((p) => p.textContent)
+  }
+
+  it("sums every machine's running and waiting runs", async () => {
+    setPilotHostsForTests([LOCAL_NAMED, MINI])
+    capacityBy({
+      local: () => ({ running: runs(1), queued: [] }),
+      mini: () => ({ running: runs(2), queued: runs(1) })
+    })
+    const { result } = renderHook(() => useCapacityTotals())
+    await waitFor(() => expect(result.current).toEqual({ running: 3, queued: 1 }))
+  })
+
+  it('an offline machine counts nothing', async () => {
+    setPilotHostsForTests([LOCAL_NAMED, MINI_OFFLINE])
+    capacityBy({ local: () => ({ running: runs(1), queued: [] }) })
+    const { result } = renderHook(() => useCapacityTotals())
+    await waitFor(() => expect(result.current).toEqual({ running: 1, queued: 0 }))
+  })
+
+  it("a failed read keeps that machine's last figures", async () => {
+    vi.useFakeTimers()
+    try {
+      useStore({ activeView: 'mobile' })
+      let calls = 0
+      pilotRpc.mockImplementation(async (method: string) => {
+        if (method !== 'pilot.capacity.get') {
+          return { items: [] }
+        }
+        calls += 1
+        if (calls > 1) {
+          throw new Error('down')
+        }
+        return { running: runs(2), queued: [] }
+      })
+      render(<WaitingNavItem />)
+      await act(async () => {})
+      expect(pillTexts()).toEqual(['2'])
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(5_100)
+      })
+      expect(calls).toBeGreaterThan(1)
+      expect(pillTexts()).toEqual(['2'])
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('hides the pill when the list fails', async () => {
