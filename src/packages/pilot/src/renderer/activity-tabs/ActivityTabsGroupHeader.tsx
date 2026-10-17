@@ -4,6 +4,8 @@ import type { ActivityThreadGroup } from '@/components/activity/activity-thread-
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
 import { useAppStore } from '@/store'
+import { ActivityMachineChip } from '../activity-machines/ActivityMachineChip'
+import { activityGroupMachineRows } from '../activity-machines/use-activity-machine-chips'
 import { pilotStore } from '../store'
 import { activityTabsGroupCount } from './activity-tabs-rows'
 import { NewAgentMenu } from './NewAgentMenu'
@@ -72,6 +74,8 @@ export function ActivityTabsGroupHeader({
   }
   const count = group.threads.length + activityTabsGroupCount(group)
   const foldable = count > 0
+  // Why: the header stands in for a recent worktree's row, so it names that row's machine.
+  const [machineRow] = activityGroupMachineRows(group)
   return (
     <div
       role={foldable ? 'button' : undefined}
@@ -100,6 +104,9 @@ export function ActivityTabsGroupHeader({
         <span className="size-3 shrink-0" aria-hidden />
       )}
       <FolderGit2 className="size-3.5 shrink-0 text-muted-foreground" />
+      {machineRow ? (
+        <ActivityMachineChip worktree={machineRow.worktree} repo={machineRow.repo} />
+      ) : null}
       <span className="min-w-0 shrink truncate text-[13px] font-semibold" title={group.label}>
         {group.label}
       </span>

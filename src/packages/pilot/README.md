@@ -393,6 +393,23 @@ A run costs the sum of its steps. A Claude step's session id is pinned at launch
 - An enabled job not measured yet counts as 2.5 GB, as web-platform's `e2e-parallel.sh` budgets a stack, so a light job measured first can't raise the suggestion before the heavy ones have run.
 - It is a suggestion only; nothing changes until you pick a number.
 
+## Activity across machines
+
+Activity lists the sessions of every machine you are connected to.
+
+- **Machine chip:** while the listed rows come from more than one machine, each row shows a chip with its machine's name. This covers agent rows, Pilot's tab rows and recent-worktree rows, and the worktree headers under Group by > Worktree. With one machine, no chip shows. It is the same chip the sidebar uses for a host. Machines are compared by host id, after an SSH host is merged with its managed server, so those two count as one machine.
+- **Machines filter:** Activity's existing Options > Hosts filter is the machine filter. It already lists this Mac, every paired machine and every SSH host.
+- **Projects filter:** a project picked here includes that project's copy on every machine, and it is listed once. The saved filter is still stored as repo ids; it is widened to every machine's copy when Activity reads it. A repo with no git remote can't be matched across machines, so it stays per machine.
+
+Known gaps:
+
+- A Projects filter saved before this change can hold two machines' copies of one project. The Options badge counts it as two until you change the filter once.
+- Repos without a git remote that share a name get separate Projects rows that look the same.
+- Group by > Project still makes one group per repo, so each machine's copy gets its own group.
+- Two clones of the same remote on one machine, or a fork and the repo it came from, share one Projects row. That is how the sidebar decides what one project is.
+
+The hooks are `activity-machines-*` and `activity-project-*` (see `HOOKS.md`).
+
 ## Agent Console
 
 The console (`~/.agents/skills/agent-console`) reads `pilot automations list-yaml --json` and maps each automation to its job by name:
@@ -541,4 +558,4 @@ A job counts as ported only when its parity test passes (R17): the old sweep's o
     node src/packages/pilot/scripts/update.mjs --build    # …and build Pilot.app and install it (quits and relaunches Pilot)
     node src/packages/pilot/scripts/update.mjs --dry-run  # show the steps only
 
-Verifying means the hook guard, the typecheck, Pilot's tests, and the upstream tests next to each hooked file in `HOOKS.md` (whole folders for startup, orcad, updater, CLI specs, app-shell and the right sidebar; otherwise the file's own `*.test.ts(x)`). `main` is always an exact copy of `upstream/main`. GitHub's "Sync fork" button does the same fast-forward. `pilot` merges `main`. Pilot's code is all in this folder, so a merge conflict can only be in one of the hook lines in `HOOKS.md`. Fix that line, commit it with `git commit --no-verify`, and run the command again. Without `--no-verify`, the pre-commit hook's `oxfmt --write` reformats every upstream file the merge brings in, and the hook guard then fails on each one (2026-10-17). Pushing is opt-in (`--push`). `--build` runs `build-mac.mjs`, so it installs into `/Applications` the same way (use `build-mac.mjs --no-install` on its own for a build only). The command refuses to start with uncommitted changes to tracked files.
+Verifying means the hook guard, the typecheck, Pilot's tests, and the upstream tests next to each hooked file in `HOOKS.md` (whole folders for startup, orcad, updater, CLI specs, app-shell, Activity and the right sidebar; otherwise the file's own `*.test.ts(x)`). `main` is always an exact copy of `upstream/main`. GitHub's "Sync fork" button does the same fast-forward. `pilot` merges `main`. Pilot's code is all in this folder, so a merge conflict can only be in one of the hook lines in `HOOKS.md`. Fix that line, commit it with `git commit --no-verify`, and run the command again. Without `--no-verify`, the pre-commit hook's `oxfmt --write` reformats every upstream file the merge brings in, and the hook guard then fails on each one (2026-10-17). Pushing is opt-in (`--push`). `--build` runs `build-mac.mjs`, so it installs into `/Applications` the same way (use `build-mac.mjs --no-install` on its own for a build only). The command refuses to start with uncommitted changes to tracked files.
