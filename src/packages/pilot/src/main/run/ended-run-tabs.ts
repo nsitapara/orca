@@ -3,7 +3,7 @@ import type { StepRow } from '../../shared/api-types'
 import type { PilotStore } from '../store/store'
 import type { AgentRow } from './agent-rows'
 import type { SessionTerminals } from './agent-step'
-import { LIST_LIMIT } from './terminal-relist'
+import { LIST_LIMIT, type Listed } from './terminal-relist'
 
 // Once every run on a tab has ended, however it ended, the tab closes: Resume reopens its session
 // (`claude --resume`, `codex resume`), and an open one only holds `session: none_open` shut. A tab stays while it may be
@@ -12,14 +12,19 @@ import { LIST_LIMIT } from './terminal-relist'
 export type EndedRunTabsDeps = {
   store: PilotStore
   // The connected terminals (a fresh PTY listing); null when the listing was cut short.
-  openHandles(): Promise<ReadonlySet<string> | null>
+  openTerminals(): Promise<OpenTerminal[] | null>
   rowsOf(paneKey: string): readonly TurnRow[]
   terminals: Pick<SessionTerminals, 'state' | 'close' | 'claims'>
   log(message: string): void
 }
 export type EndedRunTabs = { pass(): Promise<void> }
+// A restart can give a pane's terminal a new handle, so a step's tab is found by its handle or its pane.
+export type OpenTerminal = { handle: string; paneKeys: readonly string[] }
 
-type TurnRow = Pick<AgentRow, 'turnStartedAt' | 'stateStartedAt'>
+export type TurnRow = Pick<
+  AgentRow,
+  'turnStartedAt' | 'stateStartedAt' | 'state' | 'sessionBoundary'
+>
 type Resumable = StepRow & { sessionId: string; paneKey: string; finishedAt: number }
 
 const STEP_LIVE: ReadonlySet<StepRow['status']> = new Set(['starting', 'running'])
@@ -32,19 +37,20 @@ function resumable(step: StepRow): step is Resumable {
   return step.sessionId !== null && step.paneKey !== null && step.finishedAt !== null
 }
 
-// A turn begun after the tab's last step ended: someone took the tab over, so it is theirs now.
+// A turn begun after the tab's last step ended: someone took the tab over, so it is theirs now. A session boundary (a
+// resume or reconnect landing idle, as after a restart) is no turn.
 function usedSince(rows: readonly TurnRow[], at: number): boolean {
-  return rows.some((row) => (row.turnStartedAt ?? row.stateStartedAt) > at)
+  return rows.some(
+    (row) =>
+      !(row.state === 'done' && row.sessionBoundary === true) &&
+      (row.turnStartedAt ?? row.stateStartedAt) > at
+  )
 }
 
-function byHandle(steps: readonly StepRow[]): Map<string, StepRow[]> {
-  const out = new Map<string, StepRow[]>()
-  for (const step of steps) {
-    if (step.terminalHandle) {
-      out.set(step.terminalHandle, [...(out.get(step.terminalHandle) ?? []), step])
-    }
-  }
-  return out
+function stepsOn(t: OpenTerminal, steps: readonly StepRow[]): StepRow[] {
+  return steps.filter(
+    (s) => s.terminalHandle === t.handle || (s.paneKey !== null && t.paneKeys.includes(s.paneKey))
+  )
 }
 
 export function createEndedRunTabs(deps: EndedRunTabsDeps): EndedRunTabs {
@@ -79,13 +85,22 @@ export function createEndedRunTabs(deps: EndedRunTabsDeps): EndedRunTabs {
 
   return {
     async pass() {
-      const open = await deps.openHandles()
-      if (!open) {
+      const listed = await deps.openTerminals()
+      if (!listed) {
         return
       }
-      const steps = store.runs.stepsOnTerminals([...open].filter((h) => !kept.has(h)))
+      const open = listed.filter((t) => !kept.has(t.handle))
+      const steps = store.runs.stepsOnTerminals(
+        open.map((t) => t.handle),
+        open.flatMap((t) => t.paneKeys)
+      )
       const live = store.runs.liveAmong([...new Set(steps.map((s) => s.runId))])
-      for (const [handle, onTab] of byHandle(steps)) {
+      for (const t of open) {
+        const { handle } = t
+        const onTab = stepsOn(t, steps)
+        if (onTab.length === 0) {
+          continue
+        }
         if (onTab.some((s) => live.has(s.runId) || STEP_LIVE.has(s.status))) {
           continue
         }
@@ -107,9 +122,15 @@ export function createEndedRunTabs(deps: EndedRunTabsDeps): EndedRunTabs {
   }
 }
 
-export function runtimeOpenHandles(
+// The panes a listed terminal sits in, as terminal-relist.ts's inPane reads them.
+function paneKeysOf(t: Listed): string[] {
+  const keys = t.tabId && t.leafId ? [`${t.tabId}:${t.leafId}`] : []
+  return t.recordedPaneKey ? [...keys, t.recordedPaneKey] : keys
+}
+
+export function runtimeOpenTerminals(
   runtime: OrcaRuntimeService
-): () => Promise<ReadonlySet<string> | null> {
+): () => Promise<OpenTerminal[] | null> {
   return async () => {
     const listing = await runtime.listTerminals(undefined, LIST_LIMIT, {
       requireFreshPtyLiveness: true,
@@ -118,6 +139,8 @@ export function runtimeOpenHandles(
     if (listing.truncated) {
       return null
     }
-    return new Set(listing.terminals.filter((t) => t.connected).map((t) => t.handle))
+    return listing.terminals
+      .filter((t) => t.connected)
+      .map((t) => ({ handle: t.handle, paneKeys: paneKeysOf(t) }))
   }
 }

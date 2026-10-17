@@ -30,7 +30,7 @@ import { launchAgentStep } from './run/agent-step'
 import { wireRunEngine } from './run/engine-wiring'
 import { pilotShellWiring } from './run/shell-wiring'
 import { cancelUnstartedRun, runAnswerSources } from './run/ask-first'
-import { createEndedRunTabs, runtimeOpenHandles } from './run/ended-run-tabs'
+import { createEndedRunTabs, runtimeOpenTerminals } from './run/ended-run-tabs'
 import { runtimeLauncherDeps, runtimeSessionTerminals } from './run/launch'
 import { resumeStepSession, runtimeResumeDeps } from './run/resume-session'
 import { modeTextFor, readMode } from './run/modes'
@@ -214,7 +214,7 @@ function openPilot(
   const usageReports = usageReporter(store, definitions, now, log, options.resourcesDir)
   const endedTabs = createEndedRunTabs({
     store,
-    openHandles: runtimeOpenHandles(runtime),
+    openTerminals: runtimeOpenTerminals(runtime),
     rowsOf: (paneKey) => runtime.getAgentStatusRowsForPane(paneKey),
     terminals: runtimeSessionTerminals(runtime, fieldDeps),
     log
