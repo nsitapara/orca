@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto'
-import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, readFileSync, realpathSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
@@ -84,9 +84,9 @@ function detailsSetup() {
 }
 
 describe("a card's Details over RPC", () => {
-  it('registers pilot.inbox.details and pilot.inbox.image as workspace methods', () => {
+  it('registers pilot.inbox.details, pilot.inbox.image and pilot.inbox.report as workspace methods', () => {
     const { find } = detailsSetup()
-    for (const name of ['pilot.inbox.details', 'pilot.inbox.image']) {
+    for (const name of ['pilot.inbox.details', 'pilot.inbox.image', 'pilot.inbox.report']) {
       expect(find(name)).toMatchObject({ permission: 'workspace', pilot: true })
     }
   })
@@ -112,9 +112,27 @@ describe("a card's Details over RPC", () => {
     })
   })
 
+  it("gives a report's checked real path, and refuses a file no report block names", () => {
+    const { f, store, add, callAs } = detailsSetup()
+    writeFileSync(join(f.dir, 'guide.html'), '<!doctype html><title>g</title>')
+    rewriteBundle(f.bundle, (b) => b.blocks.push({ type: 'report', file: 'guide.html' }))
+    const id = add(f.bundle)
+    const digest = store.inbox.get(id)?.digest
+    expect(callAs(DESKTOP, 'pilot.inbox.report', { id, digest, file: 'guide.html' })).toEqual({
+      path: realpathSync(join(f.dir, 'guide.html'))
+    })
+    expect(() => callAs(DESKTOP, 'pilot.inbox.report', { id, digest, file: 'F2-qa.png' })).toThrow(
+      /^Details bundle refused: report "F2-qa.png" is not a report/
+    )
+    expect(() =>
+      callAs(undefined, 'pilot.inbox.report', { id, digest, file: 'guide.html' })
+    ).toThrow("Pilot can't tell who is calling; nothing was read")
+  })
+
   it.each([
     ['details', { file: undefined }],
-    ['image', { file: 'F2-qa.png' }]
+    ['image', { file: 'F2-qa.png' }],
+    ['report', { file: 'guide.html' }]
   ])('refuses a digest that is not the current one (%s)', (method, extra) => {
     const { f, add, callAs } = detailsSetup()
     const id = add(f.bundle)

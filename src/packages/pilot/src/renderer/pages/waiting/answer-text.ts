@@ -1,5 +1,6 @@
 import type { InboxListRow, InboxType } from '../../../shared/api-types'
 import type { DispatchReport, QueueEntry } from '../../../shared/inbox-types'
+import { startsRun } from '../../../shared/answers/route'
 
 const ACTION_TYPES = new Set<InboxType>(['action', 'bug', 'left_for_you'])
 
@@ -11,7 +12,7 @@ const DEFAULT_ASK = [
 export type Choice = {
   label: string
   meaning: string
-  // 'optional': notes may follow but aren't needed (Approve with notes… on an ask-first card).
+  // 'optional': notes may follow but aren't needed (Approve with notes…, or a start option of a multi-start card).
   notes: 'none' | 'optional' | 'required'
   // The card's option this choice is, or null for one the page adds (Revise…, Keep, Something else…).
   option: number | null
@@ -27,10 +28,31 @@ function meaningAt(item: InboxListRow, at: number | null): string {
   return at === null ? '' : item.options[at].meaning
 }
 
+// A card with more than one start option (Backend, Full stack + UI, Skip): each start option takes optional notes,
+// saved as "approve: <notes>" with its own index, so the run gets both {run.choice} and {run.answer}.
+function multiStartChoices(options: InboxListRow['options'], labels: string[]): Choice[] {
+  return options.map((o, i) => {
+    if (!startsRun(i, labels)) {
+      return { label: o.label, meaning: o.meaning, notes: 'none', option: i, text: () => o.label }
+    }
+    return {
+      label: o.label,
+      meaning: o.meaning,
+      notes: 'optional',
+      option: i,
+      text: (n: string) => (n.trim() ? `approve: ${n.trim()}` : o.label)
+    }
+  })
+}
+
 // An ask-first card (G4): its options are the choices, the first one starts the run. Approve with notes…
 // starts it too, and the notes become the run's {run.answer} ("approve: <notes>", R-2).
 function askFirstChoices(item: InboxListRow): Choice[] {
   const options = item.options.length > 0 ? item.options : DEFAULT_ASK
+  const labels = options.map((o) => o.label)
+  if (labels.filter((_, i) => startsRun(i, labels)).length > 1) {
+    return multiStartChoices(options, labels)
+  }
   const choices: Choice[] = options.map((o, i) => ({
     label: o.label,
     meaning: o.meaning,

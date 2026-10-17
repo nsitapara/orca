@@ -1,6 +1,6 @@
 import type { Power } from '../../shared/definition/types'
 
-// act.py's outcomes (act.py:34): done 0, failed 1, stale 3, needs_agent 4, not_yet 5.
+// The catalog's outcomes (act.py's, act.py:34): done 0, failed 1, stale 3, needs_agent 4, not_yet 5.
 export type ActionOutcome = 'done' | 'failed' | 'stale' | 'needs_agent' | 'not_yet'
 export type ActionResult = {
   outcome: ActionOutcome
@@ -15,7 +15,9 @@ export type ActionResult = {
   data?: Record<string, string>
 }
 export type Refreshed = { args: Record<string, unknown>; changed: string }
-export type ActionRunOpts = { dryRun: boolean; runId: string | null }
+export type ActionRunOpts = { dryRun: boolean; runId: string | null; inboxItemId?: string | null }
+// Who asks for an action: a run's own attempt (its run), or a card's Approve (the card, and the run it belongs to).
+export type ActionCaller = { runId: string | null; inboxItemId: string | null }
 
 export type ActionEntry = {
   name: string
@@ -35,10 +37,10 @@ export type ActionEntry = {
   pin?(args: Record<string, unknown>, key: string): Record<string, unknown>
   // The exact argv this entry spawns for these args (program first), built by the code run() spawns with,
   // so a card's Run line is what runs. Absent for an entry that runs inside Pilot (its args are what runs).
-  command?(args: Record<string, unknown>): string[] | null
+  command?(args: Record<string, unknown>, caller?: ActionCaller): string[] | null
   // A stale action that still makes sense at the new state: the args that pin it, and what changed.
   refresh?(args: Record<string, unknown>): Promise<Refreshed | null>
-  // How parts a person left out are passed (post-review's --except).
+  // How parts a person left out are passed (post_review's --except).
   exceptArgs?(args: Record<string, unknown>, leftOut: string[]): Record<string, unknown>
 }
 
@@ -50,6 +52,10 @@ export function actionDone(
   data?: Record<string, string>
 ): ActionResult {
   return { outcome: 'done', detail, link, log: null, onYou: false, ...(data ? { data } : {}) }
+}
+
+export function callerOf(opts: ActionRunOpts): ActionCaller {
+  return { runId: opts.runId, inboxItemId: opts.inboxItemId ?? null }
 }
 
 export function actionFailed(detail: string): ActionResult {

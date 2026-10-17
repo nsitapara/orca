@@ -242,5 +242,16 @@
     "/parity-gitdirs/wt/web-341/rebase-apply": false,
     "/parity-gitdirs/wt/web-341/rebase-merge": false,
     "/wt/web-341": true
+  },
+  "old": {
+    "from": "run_old_plan.py 03 (review-cycles/loop.py sweep) with /opt/homebrew/bin/python3 3.15, 2026-10-16, before milestone 8 deleted it",
+    "decisions": [
+      {
+        "key": "wt:400fee61-a463-4f76-894a-39861e906007::/wt/web-341",
+        "label": "web-341-work",
+        "decision": "QUOTA",
+        "reason": "codex weekly limit at 95% (automations stop at 90%); resets Wed 14 Oct 10:20 AM"
+      }
+    ]
   }
 }

@@ -61,6 +61,17 @@ const PUSH = card({
 })
 const labels = (item: InboxItemRow) => choicesFor(item).map((c) => c.label)
 
+const MULTI = card({
+  type: 'action',
+  action: 'start_run',
+  actionArgs: { run_id: 'r' },
+  options: [
+    { label: 'Backend', meaning: 'a backend stack' },
+    { label: 'Full stack + UI', meaning: 'the frontends too' },
+    { label: 'Skip', meaning: 'not this head' }
+  ]
+})
+
 describe('choicesFor', () => {
   it.each([
     ['an action with an action to run', PUSH, ['Approve', 'Revise…', 'Skip']],
@@ -87,6 +98,7 @@ describe('choicesFor', () => {
       }),
       ['Review', 'Approve with notes…', 'Skip']
     ],
+    ['an ask-first card with two start options', MULTI, ['Backend', 'Full stack + UI', 'Skip']],
     [
       'a question',
       card({
@@ -135,6 +147,31 @@ describe('composeAnswer', () => {
       expect(startNotes(answer!.text)).toBe(notes.trim())
     }
   )
+
+  it.each<[string, string, unknown]>([
+    ['Backend', '', { option: 0, text: 'Backend' }],
+    ['Full stack + UI', '', { option: 1, text: 'Full stack + UI' }],
+    [
+      'Full stack + UI',
+      ' check the migration ',
+      { option: 1, text: 'approve: check the migration' }
+    ]
+  ])(
+    'a multi-start card: %s with notes %j keeps its option, and the notes are its {run.answer}',
+    (label, notes, expected) => {
+      const choice = choicesFor(MULTI).find((c) => c.label === label)!
+      expect(choice.notes).toBe('optional')
+      expect(composeAnswer(MULTI, choice, notes, [])).toEqual(expected)
+    }
+  )
+
+  it("a multi-start card's Skip takes no notes", () => {
+    const skip = choicesFor(MULTI).find((c) => c.label === 'Skip')!
+    expect([skip.notes, composeAnswer(MULTI, skip, '', [])]).toEqual([
+      'none',
+      { option: 2, text: 'Skip' }
+    ])
+  })
 
   const pick = (item: InboxItemRow, label: string) =>
     choicesFor(item).find((c) => c.label === label)!

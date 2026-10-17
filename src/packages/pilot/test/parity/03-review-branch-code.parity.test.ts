@@ -4,8 +4,8 @@ import { join } from 'node:path'
 import { expect, it } from 'vitest'
 import type { ItemDecision } from '../../src/shared/api-types'
 import { loadFixture } from './fixture'
-import { JOB_03, PARITY_03, seed03, VERDICTS_03 } from './jobs/job-03'
-import { PARITY_DIR, runOldPlan, type OldDecision } from './old-side'
+import { JOB_03, PARITY_03_FROZEN, seed03, VERDICTS_03 } from './jobs/job-03'
+import { frozenOldPlan, PARITY_DIR, type OldDecision } from './old-side'
 import { describeParity, expectParity, parityReport } from './parity-case'
 import { caseFile, dryTick, failedCheck, loadPortedAutomation } from './ported'
 import { withWorktrees } from './worktree-fixture'
@@ -85,21 +85,22 @@ function reasonAgrees(o: OldDecision, n: ItemDecision): boolean {
   }
 }
 
-// Skipped, with what's missing in its title and on stderr, where ~/.agents (or PARITY_SKILLS_DIR /
-// PARITY_AUTOMATIONS_DIR) or python3 isn't there.
+// loop.py sweep's decisions are frozen in each case (its old block), so neither python3 nor loop.py is needed; skipped,
+// with what's missing in its title and on stderr, only where ~/.agents/automations (or PARITY_AUTOMATIONS_DIR) isn't
+// there. A case without its old block fails.
 describeParity(
-  PARITY_03,
-  '03 · Review and fix branch code: Pilot decides each worktree as loop.py sweep does',
+  PARITY_03_FROZEN,
+  '03 · Review and fix branch code: Pilot decides each worktree as loop.py sweep did (frozen)',
   () => {
     it.each(cases)(
       '%s: the same decision for every worktree, from reads the case holds',
       async (name) => {
-        await expectParity(PARITY_03, join(CASES, name))
+        await expectParity(PARITY_03_FROZEN, join(CASES, name))
       }
     )
 
     it.each(cases)('%s: each worktree is held for the reason the sweep gave', async (name) => {
-      const old = runOldPlan(JOB_03.job, join(CASES, name))
+      const old = frozenOldPlan(join(CASES, name))
       const fresh = await decide(name.replace(/\.json$/, ''))
       for (const o of old) {
         if (VERDICTS_03.known?.some((k) => k.key === o.key && k.word === o.decision)) {
@@ -163,8 +164,8 @@ describeParity(
     // The ruling for 03: the one deliberate difference is real, and the harness reports it once its entry is gone.
     it('fails the other-agent quota case without its known entry', async () => {
       const file = join(CASES, 'quota-out-other-agent.json')
-      const strict = { ...PARITY_03, table: { ...VERDICTS_03, known: [] } }
-      expect(await parityReport(strict, loadFixture(file), runOldPlan(JOB_03.job, file))).toBe(
+      const strict = { ...PARITY_03_FROZEN, table: { ...VERDICTS_03, known: [] } }
+      expect(await parityReport(strict, loadFixture(file), frozenOldPlan(file))).toBe(
         `${key(342)}: old start: 1 new commit(s) since aaaaaaaaa, claude leads | new skipped: Codex is at 95% of its weekly limit (stops at 90%)`
       )
     })
@@ -177,7 +178,7 @@ describeParity(
       fixture.reads = fixture.reads.filter((r) => !(r.argv.at(-1) ?? '').endsWith('/311/approvals'))
       const file = join(mkdtempSync(join(tmpdir(), 'pilot-parity-03-')), 'missing-approvals.json')
       writeFileSync(file, JSON.stringify(fixture))
-      expect(await parityReport(PARITY_03, loadFixture(file), runOldPlan(JOB_03.job, file))).toBe(
+      expect(await parityReport(PARITY_03_FROZEN, loadFixture(file), frozenOldPlan(file))).toBe(
         `missed read: ${approvals}`
       )
     })

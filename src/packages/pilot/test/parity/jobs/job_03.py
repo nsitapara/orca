@@ -8,17 +8,10 @@ kept here or dropped. Quota is the case's: Claude's saved reading (quota/claude.
 (base, skip, start after stale, defer, QUOTA), or nothing_new when it was listed and had no new commits, or parked when
 its parked hand-off held it. A teammate's worktree, which gate.worktrees() never lists, gets no decision.
 
-Round sequences (Task 45d): a case whose state carries parity/case.json with `scenarios` ([{lead, script}]) drives
-loop.py's own Orca `handoff` through each scenario and returns one decision per scenario (scenario:<n>): how the cycle
-ended (complete, stopped, abandoned), and the JSON list of [round, agent] that ran as its reason. A script item is the
-round's `handoff --changed` (yes | no), none (the round ended without a hand-off) or timeout, optionally prefixed
-blocked- (a review block holds when it hands off).
-
 review-cycles has no sweep.py, so SWEEP is None and this adapter imports loop.py from review-cycles itself.
 """
 
 import io
-import json
 import os
 import subprocess
 import sys
@@ -29,12 +22,11 @@ from pathlib import Path
 from unittest import mock
 
 from jobs.common import codex_over, quota_over, repo_extras
-from parity_io import NotInFixture, is_read
+from parity_io import is_read
 
 SWEEP = None  # no sweep.py: old_decisions imports review-cycles' loop.py itself
 LOOP = "standards"
 MAX = 2  # loop.py sweep --max default
-BLOCK = "!1577 approved by alex1craig"
 LOG_FORMAT = "--format=%H%x00%ct%x00%B%x1e"  # Pilot's worktree source reads the commits since the marker this way
 
 
@@ -46,51 +38,6 @@ def _loop():
     import loop  # noqa: E402
 
     return loop
-
-
-def _scenarios(gate):
-    try:
-        return (gate.load("parity", "case.json") or {}).get("scenarios")
-    except NotInFixture:
-        return None
-
-
-def rounds(loop, gate, lead, script):
-    """loop.py's own Orca hand-offs through one scenario: (the [round, agent] that ran, how the cycle ended)."""
-    path, branch = "/parity/wt", "parity-branch"
-    state = {"cycles.json": {path: {"lead": lead, "round": 1, "base": "b" * 40, "head": "c" * 40}}}
-    opened, marked, block = [], [], [None]
-    ran, round_no = [], 1
-    with ExitStack() as stack:
-        def patch(target, name, value):
-            stack.enter_context(mock.patch.object(target, name, value))
-
-        patch(gate, "git", lambda p, *args: path if "--show-toplevel" in args else branch)
-        patch(gate, "load", lambda loop_name, name: deepcopy(state.get(name, {})))
-        patch(gate, "save", lambda loop_name, name, data: state.__setitem__(name, deepcopy(data)))
-        patch(gate, "finished", lambda *a, **k: None)
-        patch(gate, "worktree", lambda p, **k: {"id": "wt", "path": path, "branch": branch})
-        patch(gate, "review_block", lambda b: block[0])
-        patch(gate, "mr_block", lambda b: None)
-        patch(gate, "mark", lambda loop_name, p, sha=None: marked.append(sha) or sha)
-        patch(gate, "orca", lambda *a: {})
-        patch(loop, "start", lambda wt, agent, text, terminals=None: opened.append(agent))
-        patch(loop, "dispatch_drafts", lambda *a: None)
-        stack.enter_context(redirect_stdout(io.StringIO()))
-        agent = loop.agent_for({"lead": lead}, 1)
-        for result in script:
-            ran.append([round_no, agent])
-            changed = result.removeprefix("blocked-")
-            if changed in ("none", "timeout"):
-                return ran, "abandoned"  # no hand-off: the next sweep restarts these commits
-            block[0] = BLOCK if result.startswith("blocked-") else None
-            loop.handoff(changed == "yes")
-            if marked:
-                return ran, "complete"
-            if path not in state["cycles.json"]:
-                return ran, "stopped"  # the hand-off dropped the cycle
-            round_no, agent = state["cycles.json"][path]["round"], opened[-1]
-    return ran, "abandoned"
 
 
 def _sweep(loop, gate):
@@ -138,16 +85,7 @@ def _sweep(loop, gate):
 
 
 def old_decisions(sweep, gate):
-    loop = _loop()
-    scenarios = _scenarios(gate)
-    if scenarios:
-        out = []
-        for n, s in enumerate(scenarios):
-            ran, end = rounds(loop, gate, s["lead"], s["script"])
-            out.append({"key": f"scenario:{n}", "label": f"{s['lead']} {' '.join(s['script'])}", "decision": end,
-                        "reason": json.dumps(ran)})
-        return out
-    return _sweep(loop, gate)
+    return _sweep(_loop(), gate)
 
 
 def _try(read):

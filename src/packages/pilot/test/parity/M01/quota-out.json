@@ -257,5 +257,58 @@
     "linear-todo/tabs.json": {},
     "quota/claude.json": { "weekly": 95, "session": 30 }
   },
-  "exists": {}
+  "exists": {},
+  "old": {
+    "from": "run_old_plan.py M01 (linear-todo-sweep/sweep.py) with /opt/homebrew/bin/python3 3.15, 2026-10-16, before milestone 8 deleted it",
+    "decisions": [
+      {
+        "key": "linear:WEB-3",
+        "label": "WEB-3",
+        "decision": "QUOTA",
+        "reason": "claude weekly limit at 95% (automations stop at 90%); resets at an unknown time"
+      },
+      {
+        "key": "linear:WEB-4",
+        "label": "WEB-4",
+        "decision": "QUOTA",
+        "reason": "claude weekly limit at 95% (automations stop at 90%); resets at an unknown time"
+      },
+      {
+        "key": "linear:WEB-2",
+        "label": "WEB-2",
+        "decision": "QUOTA",
+        "reason": "claude weekly limit at 95% (automations stop at 90%); resets at an unknown time"
+      },
+      {
+        "key": "linear:WEB-1",
+        "label": "WEB-1",
+        "decision": "defer",
+        "reason": "--max 3 reached"
+      },
+      {
+        "key": "linear:WEB-3",
+        "label": "WEB-3",
+        "decision": "script_check",
+        "reason": ""
+      },
+      {
+        "key": "linear:WEB-4",
+        "label": "WEB-4",
+        "decision": "script_check",
+        "reason": ""
+      },
+      {
+        "key": "linear:WEB-2",
+        "label": "WEB-2",
+        "decision": "script_check",
+        "reason": ""
+      },
+      {
+        "key": "linear:WEB-1",
+        "label": "WEB-1",
+        "decision": "script_check",
+        "reason": ""
+      }
+    ]
+  }
 }

@@ -9,12 +9,25 @@ export function stripRefsHeads(branch: string): string {
   return branch.replace(/^refs\/heads\//, '')
 }
 
+function findRepo(runtime: OrcaRuntimeService, repo: string) {
+  return runtime.listRepos().find((r) => r.displayName === repo || basename(r.path) === repo)
+}
+
+// The repo's main checkout, as resolveRepoPath finds it, or null when the runtime doesn't list it (yet).
+export function listedRepoPath(runtime: OrcaRuntimeService, repo: string): string | null {
+  try {
+    return findRepo(runtime, repo)?.path ?? null
+  } catch {
+    return null
+  }
+}
+
 // The repo as the automation names it: Orca's display name or the checkout's folder name.
 export async function resolveRepoPath(
   runtime: OrcaRuntimeService,
   repo: string
 ): Promise<RepoFacts> {
-  const match = runtime.listRepos().find((r) => r.displayName === repo || basename(r.path) === repo)
+  const match = findRepo(runtime, repo)
   if (!match) {
     throw new Error(
       `Repo "${repo}" isn't added to Pilot. Add it in the sidebar, or fix "repo:" in the automation file.`

@@ -4,9 +4,16 @@ import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { loadDefinitions } from '../../src/main/definitions/loader'
 import { loadFixture } from './fixture'
-import { JOB_M01, PARITY_M01, VERDICTS_M01, answerScripts, seedM01 } from './jobs/job-m01'
+import {
+  COMMANDS_M01,
+  JOB_M01,
+  PARITY_M01,
+  VERDICTS_M01,
+  answerScripts,
+  seedM01
+} from './jobs/job-m01'
 import { withLinearTickets } from './linear-fixture'
-import { PARITY_DIR, runOldPlan, type OldDecision } from './old-side'
+import { frozenOldPlan, frozenOldSide, PARITY_DIR, type OldDecision } from './old-side'
 import { describeParity, expectParity } from './parity-case'
 import { caseFile, dryTick, loadPortedAutomation, portedAutomationsDir } from './ported'
 
@@ -48,10 +55,7 @@ describe('M01 · Start my Todo Linear tickets: the definition (old job: orca aut
     expect(definition.items).toMatchObject({ kind: 'linear_ticket' })
     expect(definition.items?.where).toEqual({ state_type: ['unstarted'], has_branch: true })
     expect(definition.checks.map((c) => c.kind)).toEqual(['script', 'quota'])
-    expect(definition.checks[0]).toMatchObject({
-      run: 'python3 /Users/nishsitapara/.agents/skills/linear-todo-sweep/sweep.py --check-item',
-      timeoutMs: 60_000
-    })
+    expect(definition.checks[0]).toMatchObject({ run: COMMANDS_M01.checkItem, timeoutMs: 60_000 })
   })
 
   it('routes prepared kickoff decisions to a fresh answer worker after the original session ends', () => {
@@ -83,7 +87,7 @@ type Fresh = { key: string; verdict: string; reason: string }
 
 async function decide(name: string): Promise<{ old: OldDecision[]; fresh: Fresh[] }> {
   const file = join(CASES, `${name}.json`)
-  const old = runOldPlan(JOB_M01.job, file)
+  const old = frozenOldPlan(file)
   const fixture = loadFixture(caseFile(JOB_M01.job, name))
   const fresh = await dryTick({
     definition,
@@ -118,6 +122,7 @@ function reasonAgrees(o: OldDecision, n: Fresh): boolean {
   return true
 }
 
+// sweep.py's decisions are frozen in each case (its old block): a case without them fails, and no python3 is needed.
 describeParity(PARITY_M01, 'M01 · Start my Todo Linear tickets: parity with sweep.py', () => {
   it.each(cases)(
     '%s: every ticket gets the verdict the sweep gave it, from reads the case holds',
@@ -163,7 +168,7 @@ describeParity(PARITY_M01, 'M01 · Start my Todo Linear tickets: parity with swe
 
   it('an incomplete Linear listing fails the tick, as it stops the old sweep', async () => {
     const file = caseFile(JOB_M01.job, 'incomplete-listing')
-    expect(() => runOldPlan(JOB_M01.job, file)).toThrow(/incomplete Linear listing/)
+    expect(frozenOldSide(loadFixture(file)).stopped).toMatch(/incomplete Linear listing/)
     await expect(
       dryTick({
         definition,

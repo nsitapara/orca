@@ -55,6 +55,17 @@ function labelOf(item: InboxListRow, choice: Choice, role: ButtonRole): string {
   return choice.label === 'Approve with notes…' ? 'With notes…' : choice.label
 }
 
+// The filled button: a question's first option, or the first start option of a multi-start ask-first card.
+function recommendedOf(item: InboxListRow, choice: Choice, role: ButtonRole): boolean {
+  if (choice.option !== 0) {
+    return false
+  }
+  if (item.type === 'question') {
+    return role === 'option'
+  }
+  return item.action === 'start_run' && role === 'notes'
+}
+
 // One button per choice of the old radio list (choicesFor), so each saves exactly the answer that choice
 // always saved: the same option index and words, through composeAnswer.
 // A card nothing may run from yet: preparing, or (R-P5) a push, Post or drafted card that was never prepared.
@@ -66,36 +77,57 @@ function heldForEvidence(item: InboxListRow): boolean {
   return state !== undefined && state !== 'ready' && state !== 'cancelled'
 }
 
+type HeldWords = { answer: string; answerMeaning: string; answerHint: string; skip: string }
+
+const PREPARING: HeldWords = {
+  answer: 'Answer before context is ready…',
+  answerMeaning: 'Stop context preparation and send your answer',
+  answerHint: 'Stops preparation; does not approve an unseen change',
+  skip: 'Skip this item and stop preparation'
+}
+// A never-prepared card has nothing preparing until Prepare evidence queues it, so no context is on its way.
+const NEVER_PREPARED: HeldWords = {
+  answer: 'Answer without evidence…',
+  answerMeaning: 'Send your answer without prepared evidence',
+  answerHint: 'Does not approve the change; use Prepare evidence for that',
+  skip: 'Skip this item'
+}
+
+function heldButtons(item: InboxListRow): AnswerButton[] {
+  const words = item.needsEvidence ? NEVER_PREPARED : PREPARING
+  return [
+    {
+      choice: {
+        label: 'Answer early',
+        meaning: words.answerMeaning,
+        notes: 'required',
+        option: null,
+        text: (notes) => notes.trim()
+      },
+      label: words.answer,
+      hint: words.answerHint,
+      role: 'notes',
+      recommended: false
+    },
+    {
+      choice: {
+        label: 'Skip',
+        meaning: words.skip,
+        notes: 'none',
+        option: null,
+        text: () => 'skip'
+      },
+      label: 'Skip',
+      hint: words.skip,
+      role: 'skip',
+      recommended: false
+    }
+  ]
+}
+
 export function buttonsFor(item: InboxListRow): AnswerButton[] {
   if (heldForEvidence(item)) {
-    return [
-      {
-        choice: {
-          label: 'Answer early',
-          meaning: 'Stop context preparation and send your answer',
-          notes: 'required',
-          option: null,
-          text: (notes) => notes.trim()
-        },
-        label: 'Answer before context is ready…',
-        hint: 'Stops preparation; does not approve an unseen change',
-        role: 'notes',
-        recommended: false
-      },
-      {
-        choice: {
-          label: 'Skip',
-          meaning: 'Skip this item and stop preparation',
-          notes: 'none',
-          option: null,
-          text: () => 'skip'
-        },
-        label: 'Skip',
-        hint: 'Skip this item and stop preparation',
-        role: 'skip',
-        recommended: false
-      }
-    ]
+    return heldButtons(item)
   }
   return choicesFor(item).map((choice) => {
     const role = roleOf(choice)
@@ -104,7 +136,7 @@ export function buttonsFor(item: InboxListRow): AnswerButton[] {
       label: labelOf(item, choice, role),
       hint: choice.meaning,
       role,
-      recommended: item.type === 'question' && role === 'option' && choice.option === 0
+      recommended: recommendedOf(item, choice, role)
     }
   })
 }
