@@ -55,6 +55,17 @@ function labelOf(item: InboxListRow, choice: Choice, role: ButtonRole): string {
   return choice.label === 'Approve with notes…' ? 'With notes…' : choice.label
 }
 
+// The filled button: a question's first option, or the first start option of a multi-start ask-first card.
+function recommendedOf(item: InboxListRow, choice: Choice, role: ButtonRole): boolean {
+  if (choice.option !== 0) {
+    return false
+  }
+  if (item.type === 'question') {
+    return role === 'option'
+  }
+  return item.action === 'start_run' && role === 'notes'
+}
+
 // One button per choice of the old radio list (choicesFor), so each saves exactly the answer that choice
 // always saved: the same option index and words, through composeAnswer.
 // A card nothing may run from yet: preparing, or (R-P5) a push, Post or drafted card that was never prepared.
@@ -125,7 +136,7 @@ export function buttonsFor(item: InboxListRow): AnswerButton[] {
       label: labelOf(item, choice, role),
       hint: choice.meaning,
       role,
-      recommended: item.type === 'question' && role === 'option' && choice.option === 0
+      recommended: recommendedOf(item, choice, role)
     }
   })
 }

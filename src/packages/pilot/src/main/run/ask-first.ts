@@ -1,5 +1,5 @@
 import type { InboxItemRow, ItemDecision, RunRow } from '../../shared/api-types'
-import { startNotes } from '../../shared/answers/route'
+import { startNotes, startsRun } from '../../shared/answers/route'
 import type { AutomationDefinition } from '../../shared/definition/types'
 import { renderTemplate } from '../../shared/template'
 import { usesHandled } from '../../shared/tick/decide'
@@ -7,6 +7,7 @@ import { recordPilotAsk } from '../actions/refuse'
 import { addInboxItem } from '../inbox/inbox-add'
 import { resolveInboxItem, WAITING, type InboxDeps } from '../inbox/inbox-service'
 import type { PilotStore } from '../store/store'
+import type { RunEngineDeps } from './advance'
 
 export type AskDeps = { store: PilotStore; now(): number; inbox: InboxDeps }
 
@@ -187,4 +188,29 @@ export function runAnswerOf(store: PilotStore, run: RunRow): string | null {
     return startNotes(card?.answer?.text ?? '')
   }
   return null
+}
+
+// {run.choice}, wired as RunEngineDeps.runChoice: the label of the option that started an ask-first run. Words
+// ("approve", Approve with notes… on a single-start card) start the first option. '' for any other run.
+export function runChoiceOf(store: PilotStore, run: RunRow): string {
+  if (run.trigger !== 'ask_first') {
+    return ''
+  }
+  const card = store.inbox.list({ runId: run.id }).find((i) => i.action === 'start_run')
+  const labels = card?.options.map((o) => o.label) ?? []
+  const picked = card?.answer?.option
+  if (typeof picked === 'number' && startsRun(picked, labels)) {
+    return labels[picked]
+  }
+  return labels[0] ?? ''
+}
+
+// The run engine's {run.answer} and {run.choice} sources, read from the store.
+export function runAnswerSources(
+  store: PilotStore
+): Pick<RunEngineDeps, 'runAnswer' | 'runChoice'> {
+  return {
+    runAnswer: (run) => runAnswerOf(store, run),
+    runChoice: (run) => runChoiceOf(store, run)
+  }
 }

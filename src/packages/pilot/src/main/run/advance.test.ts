@@ -211,6 +211,15 @@ describe('createRunEngine', () => {
     expect(started[0].fields['run.answer']).toBe('use the second fix')
   })
 
+  it("renders run.choice from the engine's runChoice source, '' without one", async () => {
+    const chose = setup(DEF, { runChoice: () => 'Full stack + UI' })
+    await startRun(chose.engine)
+    expect(chose.started[0].fields['run.choice']).toBe('Full stack + UI')
+    const plain = setup()
+    await startRun(plain.engine)
+    expect(plain.started[0].fields['run.choice']).toBe('')
+  })
+
   it('starts nothing while a step still runs', async () => {
     const { engine, started } = setup()
     await startRun(engine)
