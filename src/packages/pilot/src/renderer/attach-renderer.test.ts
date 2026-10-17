@@ -13,6 +13,20 @@ describe('attachPilotRenderer', () => {
     expect(i18n.t('missing', { defaultValue: 'About Orca' })).toBe('About Pilot')
   })
 
+  it('drops "left" from the sidebar appearance setting, which styles both sidebars', async () => {
+    const i18n = i18next.createInstance()
+    await i18n.init({ lng: 'en', resources: { en: { translation: {} } } })
+    attachPilotRenderer({ i18n, doc: document })
+    expect(i18n.t('a', { defaultValue: 'Left Sidebar Appearance' })).toBe('Sidebar Appearance')
+    expect(
+      i18n.t('b', {
+        defaultValue: 'Make the left sidebar match your terminal, stay default, or use a tint.'
+      })
+    ).toBe('Make both sidebars match your terminal, stay default, or use a tint.')
+    const elsewhere = 'Show the Tasks button at the top of the left sidebar.'
+    expect(i18n.t('c', { defaultValue: elsewhere })).toBe(elsewhere)
+  })
+
   it('does not throw on object resources and keeps their shape', async () => {
     const i18n = i18next.createInstance()
     const obj = { n: 1, x: 'Orca' }

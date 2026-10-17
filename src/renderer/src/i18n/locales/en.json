@@ -20122,5 +20122,20 @@
       "clear": "Clear Jira favourite",
       "activeLabel": "Jira favourites: {{name}}"
     }
+  },
+  "newTabAgentPicker": {
+    "title": "New tab",
+    "description": "Choose an agent to open in a new tab",
+    "placeholder": "Open a new tab with...",
+    "empty": "No agents match your search.",
+    "blankTerminal": "Blank Terminal",
+    "default": "Default",
+    "detecting": "Looking for installed agents...",
+    "workspace": "In {{value0}}",
+    "enterKey": "Enter",
+    "open": "Open",
+    "move": "Move",
+    "escKey": "Esc",
+    "close": "Close"
   }
 }

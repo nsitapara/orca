@@ -67,10 +67,11 @@ export const KEYBINDING_DEFINITION_CORE_2: readonly KeybindingDefinition[] = [
   },
   {
     id: 'tab.newTerminal',
-    title: 'New terminal tab',
+    // Why: the id stays for saved overrides; the chord now opens the new-tab agent picker.
+    title: 'New tab (pick agent or terminal)',
     group: 'Tabs',
     scope: 'tabs',
-    searchKeywords: ['shortcut', 'tab', 'terminal', 'new'],
+    searchKeywords: ['shortcut', 'tab', 'terminal', 'new', 'agent', 'picker'],
     defaultBindings: platformBindings(['Mod+T'])
   },
   {
