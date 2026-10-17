@@ -85,8 +85,10 @@ describe('03 · Review and fix branch code: the definition (old job: orca automa
       ['flag_dirty', 'shell', true],
       ['flag_failed', 'shell', true]
     ])
+    // A shell step gets no item on stdin (only a check does), so the item's fields come as env.
     expect(step('context')).toMatchObject({
-      run: 'pilotcli skills get-context review-cycles --pilot-item -',
+      run: 'pilotcli skills get-context review-cycles "$DIR" --base "${MARKER##*@}" --head "${AT_HEAD##*@}"',
+      env: { DIR: '{worktree.path}', MARKER: '{worktree.marker}', AT_HEAD: '{worktree.at_head}' },
       exitCodes: { ok: [0], stop: [3] },
       timeoutMs: 2 * MINUTE
     })
