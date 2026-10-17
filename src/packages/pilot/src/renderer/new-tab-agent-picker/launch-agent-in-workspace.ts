@@ -6,6 +6,7 @@ import { activateAndRevealWorktree } from '@/lib/worktree-activation'
 import { useAppStore } from '@/store'
 import type { ExecutionHostId } from '../../../../../shared/execution-host'
 import type { TuiAgent } from '../../../../../shared/tui-agent'
+import { holdRemoteFirstShell } from './remote-first-shell-hold'
 
 /** Another machine's workspace the launch opens in, switched to only once its surface opens. */
 export type WorkspaceLaunchSwitch = { executionHostId: ExecutionHostId; machineLabel: string }
@@ -18,12 +19,19 @@ function switchBeforeSurfaceOpen(
   if (!switchTo) {
     return undefined
   }
-  // The launcher opens the agent's surface itself, so revealing must not seed a sibling shell.
-  return () =>
-    activateAndRevealWorktree(worktreeId, {
-      executionHostId: switchTo.executionHostId,
-      providesInitialSurface: true
-    }) !== false
+  // The launcher opens the agent's surface itself, so neither revealing nor the host's first empty answer may seed a sibling shell.
+  return () => {
+    const release = holdRemoteFirstShell(worktreeId, switchTo.executionHostId)
+    const switched =
+      activateAndRevealWorktree(worktreeId, {
+        executionHostId: switchTo.executionHostId,
+        providesInitialSurface: true
+      }) !== false
+    if (!switched) {
+      release()
+    }
+    return switched
+  }
 }
 
 function launchFailureMessage(

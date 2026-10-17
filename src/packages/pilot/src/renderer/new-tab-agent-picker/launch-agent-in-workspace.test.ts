@@ -1,7 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { toast } from 'sonner'
 import type { LaunchAgentInNewTabArgs } from '@/lib/launch-agent-in-new-tab'
+import {
+  isWebRuntimeInitialTerminalBootstrapInFlight,
+  resetWebRuntimeInitialTerminalBootstrapForTests
+} from '@/runtime/web-runtime-initial-terminal-bootstrap'
 import { useAppStore } from '@/store'
+import { makeTab } from '@/store/slices/store-session-test-harness'
 import type { Worktree } from '../../../../../shared/worktree/types'
 import { launchAgentInWorkspace, type WorkspaceLaunchSwitch } from './launch-agent-in-workspace'
 import { machineWorktree } from './new-tab-machine-test-fixtures'
@@ -43,6 +48,41 @@ describe('launchAgentInWorkspace', () => {
     useAppStore.setState(initial, true)
     launches.length = 0
     vi.mocked(toast.error).mockClear()
+    resetWebRuntimeInitialTerminalBootstrapForTests()
+    vi.useRealTimers()
+  })
+
+  const toSecondMac: WorkspaceLaunchSwitch = {
+    executionHostId: 'runtime:env-b',
+    machineLabel: 'Second Mac'
+  }
+  const firstShellHeld = (): boolean =>
+    isWebRuntimeInitialTerminalBootstrapInFlight('env-b', remoteFeat.id)
+
+  // Why: the host's first answer for a never-opened workspace is empty, which seeds a shell beside the agent.
+  it("holds the other machine's first shell from the switch until the agent's tab lands", () => {
+    let heldAtSwitch = false
+    useAppStore.setState({
+      worktreesByRepo: { [remoteFeat.repoId]: [remoteFeat] },
+      setActiveWorktree: vi.fn(() => {
+        heldAtSwitch = firstShellHeld()
+        return true
+      })
+    })
+    launchAgentInWorkspace({ worktreeId: remoteFeat.id, agent: 'codex', switchTo: toSecondMac })
+    expect(heldAtSwitch).toBe(true)
+    useAppStore.setState({
+      tabsByWorktree: { [remoteFeat.id]: [makeTab({ id: 'agent', worktreeId: remoteFeat.id })] }
+    })
+    expect(firstShellHeld()).toBe(false)
+  })
+
+  it("lets the first shell through when the agent's tab never lands", () => {
+    vi.useFakeTimers()
+    useAppStore.setState({ worktreesByRepo: { [remoteFeat.repoId]: [remoteFeat] } })
+    launchAgentInWorkspace({ worktreeId: remoteFeat.id, agent: 'codex', switchTo: toSecondMac })
+    vi.advanceTimersByTime(30_000)
+    expect(firstShellHeld()).toBe(false)
   })
 
   it('opens in the current workspace without switching', () => {
@@ -96,5 +136,6 @@ describe('launchAgentInWorkspace', () => {
     })
     expect(useAppStore.getState().setActiveWorktree).not.toHaveBeenCalled()
     expect(toast.error).toHaveBeenCalledWith('Could not open codex on Second Mac.')
+    expect(firstShellHeld()).toBe(false)
   })
 })
