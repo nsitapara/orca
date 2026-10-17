@@ -118,7 +118,11 @@ function setup() {
       },
       close: (run, end) => {
         closed.push(end)
-        store.runs.update(run.id, { status: end.status, outcome: end.outcome, finishedAt: NOW })
+        store.runs.update(run.id, {
+          status: end.status,
+          outcome: end.outcome,
+          finishedAt: NOW
+        })
       },
       handBack: (ids) => {
         handedBack.push(...ids)
@@ -184,7 +188,12 @@ describe("answerEnvOf: the job's env, with writes", () => {
   }
   const newBranch: EnvWorkspaceDef = {
     kind: 'env',
-    subject: { kind: 'new_branch', newBranch: '{ticket.branch}', from: 'origin/dev', keep: true },
+    subject: {
+      kind: 'new_branch',
+      newBranch: '{ticket.branch}',
+      from: 'origin/dev',
+      keep: true
+    },
     writes: false,
     stack: 'full'
   }
@@ -235,11 +244,48 @@ describe("answerEnvOf: the job's env, with writes", () => {
   })
 })
 
+describe('answerEnvOf: answers.stack never', () => {
+  const full: EnvWorkspaceDef = {
+    kind: 'env',
+    subject: {
+      kind: 'new_branch',
+      newBranch: '{t.branch}',
+      from: 'origin/dev',
+      keep: true
+    },
+    writes: false,
+    stack: 'full'
+  }
+  it.each([
+    [
+      'a free worktree',
+      { ...full, subject: { kind: 'worktree', worktree: '/wt/a', at: null } },
+      '/wt/a',
+      null
+    ],
+    ['a throwaway', full, '/repo', { homePath: '/repo', mode: 'throwaway' }],
+    ['a kept folder', full, '/wt/b', { homePath: '/wt/b', mode: 'kept' }]
+  ] as const)('%s keeps its env rules and starts no stack', (_n, env, home, asking) => {
+    const kept = answerEnvOf({ name: 'Job', workspace: env }, home, asking)
+    const never = answerEnvOf(
+      { name: 'Job', workspace: env, answers: { stack: 'never' } },
+      home,
+      asking
+    )
+    expect(kept.stack).toBe('full')
+    expect(never).toEqual({ ...kept, stack: 'never' })
+  })
+})
+
 describe('an answer run in an env', () => {
   it("is dispatched at once, then prepared once its rows read sent: the job's env with writes, in the card's worktree", async () => {
     const t = setup()
     const sent = await dispatched(t)
-    expect(sent).toMatchObject({ kind: 'dispatched', route: 'resume', sessionId: null })
+    expect(sent).toMatchObject({
+      kind: 'dispatched',
+      route: 'resume',
+      sessionId: null
+    })
     expect(t.begun[0].req.env).toEqual({
       kind: 'env',
       subject: { kind: 'worktree', worktree: '/wt/a', at: null },
@@ -297,13 +343,26 @@ describe('an answer run in an env', () => {
     [
       'deferred: held, waits, no try counted',
       { status: 'cancelled', outcome: 'Deferred: the stack cap is reached' },
-      { state: 'held', holdReason: 'waits', attempts: 0, dispatchedRunId: null },
+      {
+        state: 'held',
+        holdReason: 'waits',
+        attempts: 0,
+        dispatchedRunId: null
+      },
       'skipped'
     ],
     [
       'create failed: held, retry, a try counted',
-      { status: 'failed', outcome: "Couldn't prepare its workspace: git failed" },
-      { state: 'held', holdReason: 'retry', attempts: 1, dispatchedRunId: null },
+      {
+        status: 'failed',
+        outcome: "Couldn't prepare its workspace: git failed"
+      },
+      {
+        state: 'held',
+        holdReason: 'retry',
+        attempts: 1,
+        dispatchedRunId: null
+      },
       'failed'
     ]
   ] as const)('%s', async (_name, end, row, step0) => {
@@ -314,7 +373,10 @@ describe('an answer run in an env', () => {
     expect(t.closed).toEqual([end])
     expect(t.store.inbox.get('in_a')?.status).toBe('answered')
     // Ruling P10: step 0 settles as the engine's env runs' does (envHooks.end), never left pending.
-    expect(t.store.runs.steps(sent.runId)[0]).toMatchObject({ status: step0, error: end.outcome })
+    expect(t.store.runs.steps(sent.runId)[0]).toMatchObject({
+      status: step0,
+      error: end.outcome
+    })
   })
 
   it("an env that can't even be asked for fails the run and its step 0, and the answers retry", async () => {
@@ -324,7 +386,9 @@ describe('an answer run in an env', () => {
     }
     const sent = await dispatched(t)
     expect(t.closed.map((c) => c.status)).toEqual(['failed'])
-    expect(t.store.runs.steps(sent.runId)[0]).toMatchObject({ status: 'failed' })
+    expect(t.store.runs.steps(sent.runId)[0]).toMatchObject({
+      status: 'failed'
+    })
     expect(t.store.queue.get(t.rowId)).toMatchObject({
       state: 'held',
       holdReason: 'retry',

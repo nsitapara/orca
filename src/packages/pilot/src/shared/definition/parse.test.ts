@@ -39,7 +39,11 @@ const CI_05_DEFINITION = {
   missedRunGraceMs: 3_600_000,
   items: {
     kind: 'merge_request',
-    where: { state: 'open', author: { people: ['nish'] }, head_pipeline: 'failed' },
+    where: {
+      state: 'open',
+      author: { people: ['nish'] },
+      head_pipeline: 'failed'
+    },
     match: [],
     customFields: []
   },
@@ -188,10 +192,19 @@ describe('parseAutomationYaml', () => {
           { kind: 'mr', rule: 'not_approved' },
           { kind: 'window', start: '02:00', end: '05:59' },
           { kind: 'answers_none_pending' },
-          { kind: 'field', expr: '{worktree.new_commits} > 0', reason: 'No new commits' },
+          {
+            kind: 'field',
+            expr: '{worktree.new_commits} > 0',
+            reason: 'No new commits'
+          },
           { kind: 'script', run: './scripts/check.sh', timeoutMs: 30_000 }
         ],
-        limits: { perTick: 1, atOnce: 1, timeoutMs: 3_600_000, order: 'oldest_waiting_first' },
+        limits: {
+          perTick: 1,
+          atOnce: 1,
+          timeoutMs: 3_600_000,
+          order: 'oldest_waiting_first'
+        },
         start: 'ask_first',
         askFirst: {
           title: 'Review {worktree.branch}?',
@@ -329,6 +342,7 @@ describe('parseAutomationYaml', () => {
       CI_05.replace('    skill: fix-gitlab-ci\n', '    skill: fix-gitlab-ci\n    mode: fix\n')
     ],
     ['answers', `${CI_05}\nanswers: { resume: asking_session }\n`],
+    ['answers.stack: never', `${CI_05}\nanswers: { stack: never }\n`],
     ['ask_first', `${CI_05}\nstart: ask_first\nask_first: { title: "Fix !{mr.iid}?" }\n`],
     ['retry_after_failure', `${CI_05}\nretry_after_failure: 12h\n`],
     ['a file without items:', CI_05.replace(/items:\n( {2}.*\n)+/, '')]
@@ -339,12 +353,18 @@ describe('parseAutomationYaml', () => {
 
   it('rejects a misspelled key and names it and the file (Review Focus 1)', () => {
     const result = parseAutomationYaml(CI_05.replace('per_tick', 'per_tic'), '/a/ci.yaml')
-    expect(result).toEqual({ ok: false, errors: ['/a/ci.yaml: limits: unknown key "per_tic"'] })
+    expect(result).toEqual({
+      ok: false,
+      errors: ['/a/ci.yaml: limits: unknown key "per_tic"']
+    })
   })
 
   it('rejects an unknown top-level key', () => {
     const result = parseAutomationYaml(`${CI_05}\nonceper: x\n`, '/a/ci.yaml')
-    expect(result).toEqual({ ok: false, errors: ['/a/ci.yaml: unknown key "onceper"'] })
+    expect(result).toEqual({
+      ok: false,
+      errors: ['/a/ci.yaml: unknown key "onceper"']
+    })
   })
 
   it('reports YAML syntax errors with the file', () => {

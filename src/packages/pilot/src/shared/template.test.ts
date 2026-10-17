@@ -45,11 +45,17 @@ describe('renderTemplate', () => {
   })
 
   it('leaves an unclosed brace as is without reporting it', () => {
-    expect(renderTemplate('a {mr.iid', fields)).toEqual({ text: 'a {mr.iid', missing: [] })
+    expect(renderTemplate('a {mr.iid', fields)).toEqual({
+      text: 'a {mr.iid',
+      missing: []
+    })
   })
 
   it('leaves whitespace inside braces literal without reporting it', () => {
-    expect(renderTemplate('{ mr.iid }', fields)).toEqual({ text: '{ mr.iid }', missing: [] })
+    expect(renderTemplate('{ mr.iid }', fields)).toEqual({
+      text: '{ mr.iid }',
+      missing: []
+    })
   })
 })
 
@@ -81,12 +87,16 @@ describe('runFields', () => {
     ['America/Los_Angeles', '20261010'],
     ['Europe/London', '20261011']
   ])('dates a run at 06:30 UTC on 11 Oct in %s as %s', (timezone, date) => {
-    expect(runFields({ automationId: 'memo', at: Date.UTC(2026, 9, 11, 6, 30), timezone })).toEqual(
-      {
-        'run.automation': 'memo',
-        'run.date': date
-      }
-    )
+    expect(
+      runFields({
+        automationId: 'memo',
+        at: Date.UTC(2026, 9, 11, 6, 30),
+        timezone
+      })
+    ).toEqual({
+      'run.automation': 'memo',
+      'run.date': date
+    })
   })
 
   it('adds the tick id once the tick has started (G3)', () => {
@@ -99,7 +109,12 @@ describe('runFields', () => {
 
   it('adds the run id once there is a run', () => {
     expect(
-      runFields({ automationId: 'memo', at: 0, timezone: 'UTC', runId: 'memo-202610110630-t1-1' })
+      runFields({
+        automationId: 'memo',
+        at: 0,
+        timezone: 'UTC',
+        runId: 'memo-202610110630-t1-1'
+      })
     ).toMatchObject({ 'run.id': 'memo-202610110630-t1-1' })
   })
 })
@@ -129,9 +144,29 @@ describe('stepFields', () => {
     })
   })
 
+  it('keeps the outputs an agent step set before it timed out (spec 7.10.13 (a))', () => {
+    const timedOut: StepResult[] = [
+      {
+        name: 'test',
+        status: 'timed_out',
+        exitCode: null,
+        outputs: { outcome: 'bug', page: 'p1' }
+      },
+      { name: 'report', status: 'pending', exitCode: null, outputs: {} }
+    ]
+    expect(stepFields(timedOut, 1)).toMatchObject({
+      'steps.test.status': 'timed_out',
+      'steps.test.outcome': 'bug',
+      'steps.test.page': 'p1'
+    })
+  })
+
   it('reads the first step as previous for the second, and nothing later', () => {
     const fields = stepFields(steps, 1)
-    expect(fields).toMatchObject({ 'previous.changed': true, 'previous.status': 'done' })
+    expect(fields).toMatchObject({
+      'previous.changed': true,
+      'previous.status': 'done'
+    })
     expect(fields).not.toHaveProperty(['steps.lint.status'])
   })
 
@@ -154,7 +189,11 @@ describe('stepFields', () => {
         name: 'context',
         status: 'done',
         exitCode: 0,
-        outputs: { outcome: 'ok', remote: 'abc', result: 'from the outputs file' },
+        outputs: {
+          outcome: 'ok',
+          remote: 'abc',
+          result: 'from the outputs file'
+        },
         result: {
           command: 'skills get-context',
           outcome: 'ok',
@@ -188,7 +227,13 @@ describe('stepFields', () => {
     ],
     [
       'too large',
-      { command: 'c', outcome: 'ok', reason: 'r', meta: {}, data_omitted: 'too large (300 KB)' }
+      {
+        command: 'c',
+        outcome: 'ok',
+        reason: 'r',
+        meta: {},
+        data_omitted: 'too large (300 KB)'
+      }
     ]
   ])('reads a result whose data was not kept (%s) as missing', (_n, result) => {
     const fields = stepFields(

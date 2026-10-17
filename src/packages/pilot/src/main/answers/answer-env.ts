@@ -1,5 +1,9 @@
 import type { RunRow } from '../../shared/api-types'
-import type { AutomationDefinition, EnvWorkspaceDef } from '../../shared/definition/types'
+import type {
+  AnswersDef,
+  AutomationDefinition,
+  EnvWorkspaceDef
+} from '../../shared/definition/types'
 import type { RunEnd } from '../../shared/run/step-plan'
 import type { EnvPreparer } from '../envs/prepare'
 import { worktreePathKey } from '../fields/agent-activity'
@@ -30,6 +34,18 @@ function messageOf(error: unknown): string {
 // worktree. Otherwise, when the asking run worked in place or kept, its folder; else the job's own subject. create may
 // answer any mode for any subject (Contract answers 3), an existing branch included, so nothing else is decided here.
 export function answerEnvOf(
+  def: Pick<AutomationDefinition, 'name' | 'workspace'> & {
+    answers?: Pick<AnswersDef, 'stack'> | null
+  },
+  home: string | null,
+  asking: { homePath: string | null; mode: string | null } | null
+): EnvWorkspaceDef {
+  const env = answerEnvFolder(def, home, asking)
+  // answers: { stack: never } keeps the job's env rules but starts no stack.
+  return def.answers?.stack === 'never' ? { ...env, stack: 'never' } : env
+}
+
+function answerEnvFolder(
   def: Pick<AutomationDefinition, 'name' | 'workspace'>,
   home: string | null,
   asking: { homePath: string | null; mode: string | null } | null
@@ -39,7 +55,11 @@ export function answerEnvOf(
     throw new Error(`${def.name} has no env workspace`)
   }
   if (ws.subject.kind === 'worktree' && home) {
-    return { ...ws, writes: true, subject: { kind: 'worktree', worktree: home, at: null } }
+    return {
+      ...ws,
+      writes: true,
+      subject: { kind: 'worktree', worktree: home, at: null }
+    }
   }
   const stayed = asking?.mode === 'in_place' || asking?.mode === 'kept'
   if (stayed && asking?.homePath) {
@@ -127,7 +147,10 @@ export function prepareAnswerRun(
   const walk = async (): Promise<void> => {
     const ready = stored()
     const route = routeIn(deps.store, ready, target, group.def)
-    deps.store.runs.updateStep(run.id, 0, { status: 'starting', ...answersStepOf(route) })
+    deps.store.runs.updateStep(run.id, 0, {
+      status: 'starting',
+      ...answersStepOf(route)
+    })
     const sent = await launchAnswerRun(deps, group, route, run, ready.worktreePath ?? home)
     settleLaunch(deps, envs, group, run, sent)
   }
@@ -160,5 +183,11 @@ export function prepareAnswerRun(
       hooks.end({ status: 'failed', outcome: messageOf(error) }, {})
     }
   }
-  return { kind: 'dispatched', runId: run.id, route: target.kind, sessionId: null, afterSent }
+  return {
+    kind: 'dispatched',
+    runId: run.id,
+    route: target.kind,
+    sessionId: null,
+    afterSent
+  }
 }
