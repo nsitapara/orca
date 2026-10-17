@@ -34,7 +34,8 @@ Without --apply it is a dry run: it prints the counts and writes nothing.
 // the handovers table and a tick's trigger. All leave handled unchanged. V10 adds runs' env columns; handled is unchanged.
 // V11 deletes the stored dry-run ticks and drops ticks.dry_run; handled is unchanged.
 // V12 adds steps.result_json; handled is unchanged. V13 adds runs.acknowledged_at and its index; handled is unchanged.
-export const SEED_SCHEMA_VERSION = 13
+// V14 adds the settings and run_queue tables and runs.peak_rss_bytes; handled is unchanged.
+export const SEED_SCHEMA_VERSION = 14
 const HANDLED_COLUMNS = ['automation_id', 'once_key', 'run_id', 'at', 'status', 'failed_at']
 const BUSY_TIMEOUT_MS = 5000
 const MIGRATIONS_FILE = fileURLToPath(new URL('../src/main/store/migrations.ts', import.meta.url))

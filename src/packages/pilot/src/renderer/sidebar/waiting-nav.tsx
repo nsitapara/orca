@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, useSyncExternalStore } from 'react'
-import { FlaskConical, Inbox, type LucideIcon } from 'lucide-react'
+import { FlaskConical, Gauge, Inbox, type LucideIcon } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { InboxListPayload } from '../../shared/inbox-types'
 import { pilotRpc } from '../api'
@@ -36,7 +36,7 @@ export function useWaitingTotal(): number {
 // Automations is not highlighted while a view with its own sidebar item shows.
 export function useAutomationsActive(pageOpen: boolean): boolean {
   const view = usePilotAutomationsView()
-  return pageOpen && view !== 'inbox' && view !== 'playground'
+  return pageOpen && view !== 'inbox' && view !== 'running' && view !== 'playground'
 }
 
 // Clicking Automations leaves the Inbox view, and always lands on the list: an automation that was
@@ -122,6 +122,7 @@ export function WaitingNavItem(): React.JSX.Element | null {
   return (
     <>
       <WaitingNavButton />
+      <ViewNavButton view="running" icon={Gauge} label="Running" />
       <ViewNavButton view="playground" icon={FlaskConical} label="Playground" />
     </>
   )

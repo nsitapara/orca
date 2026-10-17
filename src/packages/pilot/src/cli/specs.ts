@@ -5,6 +5,7 @@ import { INBOX_COMMAND_SPECS } from './specs-inbox'
 import { LINEAR_COMMAND_SPECS } from './specs-linear'
 import { PILOT_SPEND_SPECS } from './spend-specs'
 import { RUN_COMMAND_SPECS } from './specs-run'
+import { CAPACITY_COMMAND_SPECS } from './specs-capacity'
 
 export const PILOT_COMMAND_SPECS: CommandSpec[] = [
   {
@@ -91,6 +92,7 @@ export const PILOT_COMMAND_SPECS: CommandSpec[] = [
     allowedFlags: [...GLOBAL_FLAGS, 'id']
   },
   ...RUN_COMMAND_SPECS,
+  ...CAPACITY_COMMAND_SPECS,
   ...INBOX_COMMAND_SPECS,
   ...ANSWERS_COMMAND_SPECS,
   ...PILOT_SPEND_SPECS,

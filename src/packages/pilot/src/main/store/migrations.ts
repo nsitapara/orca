@@ -1,6 +1,6 @@
 import type Database from '../../../../../main/sqlite/sync-database'
 
-export const PILOT_SCHEMA_VERSION = 13
+export const PILOT_SCHEMA_VERSION = 14
 
 const V1 = `
 CREATE TABLE ticks (id INTEGER PRIMARY KEY AUTOINCREMENT, automation_id TEXT NOT NULL, started_at INTEGER NOT NULL,
@@ -169,8 +169,17 @@ UPDATE runs SET acknowledged_at = COALESCE(finished_at, started_at)
 CREATE INDEX runs_unacknowledged ON runs (COALESCE(finished_at, started_at)) WHERE acknowledged_at IS NULL;
 `
 
+// Run capacity: Pilot's settings (the run limit), the items waiting for a slot, and the most memory each run's
+// processes held.
+const V14 = `
+CREATE TABLE settings (key TEXT PRIMARY KEY, value TEXT NOT NULL, updated_at INTEGER NOT NULL);
+CREATE TABLE run_queue (automation_id TEXT NOT NULL, item_key TEXT NOT NULL, item_label TEXT NOT NULL,
+  queued_at INTEGER NOT NULL, by_hand INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (automation_id, item_key));
+ALTER TABLE runs ADD COLUMN peak_rss_bytes INTEGER;
+`
+
 // MIGRATIONS[n - 1] takes a database from version n - 1 to n.
-const MIGRATIONS: readonly string[] = [V1, V2, V3, V4, V5, V6, V7, V8, V9, V10, V11, V12, V13]
+const MIGRATIONS: readonly string[] = [V1, V2, V3, V4, V5, V6, V7, V8, V9, V10, V11, V12, V13, V14]
 
 // Same pattern as Orca's orchestration.db (migrate.ts): user_version + one transaction, all or nothing.
 // `target` lets tests build a database at an older version.
