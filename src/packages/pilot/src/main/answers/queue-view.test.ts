@@ -27,7 +27,7 @@ const people = parsePeopleYaml(
 if (!def.ok || !people.ok) {
   throw new Error('setup')
 }
-const catalog = { get: (name: string) => (['push', 'post_review'].includes(name) ? {} : null) }
+const catalog = { get: (name: string) => (name === 'push' ? {} : null) }
 
 // runId null: a job-wide card, added outside any run.
 function queued(card: Omit<InboxAddParams, 'runId'>, text: string, runId: string | null) {
@@ -65,13 +65,7 @@ const PUSH = {
   action: 'push',
   actionArgs: { argv: ['/wt', 'b', 'a', 'o'] }
 }
-const POST = {
-  ...PUSH,
-  title: 'Post?',
-  action: 'post_review',
-  actionArgs: { argv: ['1579', 'f.json', 'abc'] },
-  parts: { F1: 'Null check', F2: 'Naming' }
-}
+const PARTS = { ...PUSH, parts: { F1: 'Null check', F2: 'Naming' } }
 const QUESTION = { type: 'question' as const, title: 'Which?', options: ['A', 'B'] }
 const BUG = { type: 'bug' as const, title: 'Guard the null?' }
 
@@ -81,11 +75,11 @@ describe('queueEntries', () => {
     ['Approve on a push', PUSH, 'approve', 'run-1', 'script', 'Run push; no agent'],
     [
       'parts left out',
-      POST,
+      PARTS,
       'approve except: F2',
       'run-1',
       'script',
-      'Run post_review without F2; no agent'
+      'Run push without F2; no agent'
     ],
     [
       'a revision',

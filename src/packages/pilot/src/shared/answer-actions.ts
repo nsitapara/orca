@@ -4,7 +4,6 @@
 type ActionButton = { label: string; doing: string }
 
 const ACTION_BUTTONS: Record<string, ActionButton> = {
-  post_review: { label: 'Post review', doing: 'Posting review…' },
   push: { label: 'Push to origin', doing: 'Pushing…' },
   mark_ready: { label: 'Mark ready', doing: 'Marking ready…' },
   linear_create: { label: 'Create ticket', doing: 'Creating ticket…' },

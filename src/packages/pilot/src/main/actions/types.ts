@@ -40,8 +40,6 @@ export type ActionEntry = {
   command?(args: Record<string, unknown>, caller?: ActionCaller): string[] | null
   // A stale action that still makes sense at the new state: the args that pin it, and what changed.
   refresh?(args: Record<string, unknown>): Promise<Refreshed | null>
-  // How parts a person left out are passed (post_review's --except).
-  exceptArgs?(args: Record<string, unknown>, leftOut: string[]): Record<string, unknown>
 }
 
 export type ActionCatalog = { entries(): ActionEntry[]; get(name: string): ActionEntry | null }

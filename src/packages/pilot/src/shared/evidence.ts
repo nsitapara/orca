@@ -4,7 +4,7 @@ import { PREPARATION_NOT_READY } from './preparation'
 // R-P5: an evidence-needing decision runs only from a prepared card whose preparation is ready and verified. The
 // decisions are the actions whose Approve runs with no agent in between, and applying a drafted code change. The
 // rule reads the card (its action and Details), never who added it or how its caller is bound.
-export const EVIDENCE_ACTIONS: ReadonlySet<string> = new Set(['push', 'post_review'])
+export const EVIDENCE_ACTIONS: ReadonlySet<string> = new Set(['push'])
 export const NEEDS_EVIDENCE =
   'This decision needs prepared evidence first: use Prepare evidence, then approve it once its context is ready'
 

@@ -63,13 +63,11 @@ const NOT_PREPARED: InboxAddParams = {
   notPrepared: { key: PREPARATION.key, reason: 'Context is over 64 KB' }
 }
 
-// Critical fix: an action that runs on Approve without a person (push, post_review) is only ever offered prepared.
+// Critical fix: an action that runs on Approve without a person (push) is only ever offered prepared.
 describe('an evidence-needing action from a run', () => {
-  it.each(['push', 'post_review'])('is refused without a preparation request: %s', (action) => {
+  it('is refused without a preparation request', () => {
     const { deps, store } = setup()
-    expect(() => addInboxItem(deps, { ...PUSH, action })).toThrow(
-      `${action} needs prepared evidence`
-    )
+    expect(() => addInboxItem(deps, PUSH)).toThrow('push needs prepared evidence')
     expect(store.inbox.list()).toEqual([])
   })
 

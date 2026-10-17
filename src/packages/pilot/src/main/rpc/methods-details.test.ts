@@ -1,4 +1,3 @@
-import { createHash } from 'node:crypto'
 import { mkdtempSync, readFileSync, realpathSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -6,8 +5,6 @@ import { describe, expect, it } from 'vitest'
 import type { RpcCallerIdentity } from '../../../../../main/runtime/rpc/rpc-caller-identity'
 import { loadDefinitions } from '../definitions/loader'
 import { copyBundle, detailsFixture, rewriteBundle } from '../inbox/__fixtures__/details-fixture'
-import { completePreparation } from '../inbox/preparation'
-import { ReviewFileSchema } from '../inbox/details-schema'
 import { loadDetails } from '../inbox/details-bundle'
 import { addInboxItem } from '../inbox/inbox-add'
 import type { PilotHost } from '../pilot-services'
@@ -435,67 +432,6 @@ describe("a card's own answer run re-attaches its Details", () => {
 })
 
 describe('managed preparation RPC scope and completion', () => {
-  it('refuses a valid review preview that differs from the exact review the action will post', async () => {
-    const { store, deps, f } = detailsSetup()
-    const reviewPath = join(f.dir, 'sample-review.json')
-    const original = readFileSync(reviewPath, 'utf8')
-    const review = ReviewFileSchema.parse(JSON.parse(original))
-    const digest = createHash('sha256').update(original).digest('hex')
-    const id = addInboxItem(deps, {
-      automationId: 'ci',
-      itemKey: 'mr:1',
-      type: 'action',
-      title: 'Post review',
-      action: 'post_review',
-      actionArgs: { argv: [String(review.iid), reviewPath, digest] },
-      parts: Object.fromEntries(review.parts.map((part) => [part.id, part.title])),
-      preparation: {
-        key: 'post',
-        context: 'Review the exact comments',
-        requirements: ['context', 'review']
-      }
-    }).id!
-    store.inboxPreparations.claim(id, 1, 'worker', 0, 100)
-    rewriteBundle(f.bundle, (bundle) => {
-      bundle.provenance = {
-        originatingRunId: null,
-        preparingRunId: 'worker',
-        itemId: id,
-        attempt: 1
-      }
-      bundle.blocks = [
-        { type: 'text', body: 'Exact comments for review' },
-        { type: 'review', file: 'sample-review.json' }
-      ]
-    })
-    const differentReview = {
-      ...review,
-      head_sha: 'f'.repeat(40),
-      parts: review.parts.map((part) => ({ ...part, comment: 'Different comment' }))
-    }
-    writeFileSync(reviewPath, JSON.stringify(differentReview))
-    await expect(
-      completePreparation(
-        deps,
-        id,
-        { runId: 'worker', stepIdx: 0, revision: 1, attempt: 1 },
-        f.bundle
-      )
-    ).rejects.toThrow('review')
-    expect(store.inbox.get(id)?.preparation?.state).toBe('generating')
-    writeFileSync(reviewPath, original)
-    expect(
-      (
-        await completePreparation(
-          deps,
-          id,
-          { runId: 'worker', stepIdx: 0, revision: 1, attempt: 1 },
-          f.bundle
-        )
-      )?.preparation?.state
-    ).toBe('ready')
-  })
-
   it('lets a scoped worker from another automation complete but rejects ordinary workers and late results', async () => {
     const { store, deps, f, callAs } = detailsSetup()
     const id = addInboxItem(deps, {

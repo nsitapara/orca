@@ -85,7 +85,7 @@ export function useWaiting(person: string | null) {
     [reload]
   )
 
-  // R-P5: a person's Prepare evidence on a never-prepared push, Post or drafted card.
+  // R-P5: a person's Prepare evidence on a never-prepared push or drafted card.
   const prepareEvidence = useCallback(
     async (item: InboxListRow) => {
       try {

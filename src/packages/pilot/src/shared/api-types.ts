@@ -226,7 +226,7 @@ export type InboxItemRow = {
 // The full card is pilot.inbox.get (`pilot inbox show`); the manifest comes with pilot.inbox.details.
 export type InboxListRow = Omit<InboxItemRow, 'preparation'> & {
   preparation?: PreparationRef | null
-  // R-P5: a push, Post or drafted card that was never prepared (imported, or stored by an older build). Nothing
+  // R-P5: a push or drafted card that was never prepared (imported, or stored by an older build). Nothing
   // runs from it; a person's Prepare evidence queues it for job 14.
   needsEvidence?: boolean
 }
