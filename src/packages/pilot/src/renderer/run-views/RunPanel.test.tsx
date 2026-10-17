@@ -1,12 +1,14 @@
 // @vitest-environment happy-dom
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { RunDetail, RunStatus } from '../../shared/api-types'
 import type { RunEnv } from '../../shared/api-types-env'
 import { testDefinition, testStep } from '../../shared/definition/__fixtures__/definition'
 import { stepAt, testCard, testRun } from '../../shared/run-views/__fixtures__/runs'
 import { chainOf } from '../../shared/run-views/chain'
-import { byHost, MINI } from '../hosts/__fixtures__/hosts'
+import { byHost, LOCAL_NAMED, MINI } from '../hosts/__fixtures__/hosts'
+import { LOCAL_PILOT_HOST, type PilotHostEntry } from '../hosts/pilot-host'
+import { resetPilotHostsFeed, setPilotHostsForTests } from '../hosts/pilot-hosts-feed'
 import {
   clearPendingInboxCard,
   pendingInboxCard,
@@ -231,6 +233,7 @@ describe("the run panel, for another machine's run", () => {
     clearPendingInboxCard()
     showAutomationsPage()
     resetEffectsFeed()
+    resetPilotHostsFeed()
     registerPilotStore(null)
     pilotRpc.mockReset()
     activate.mockReset()
@@ -265,6 +268,19 @@ describe("the run panel, for another machine's run", () => {
     )
     fireEvent.click(await screen.findByRole('button', { name: 'Answers run r0' }))
     expect(openRunPanel()?.host.key).toBe('env:mini')
+  })
+
+  it.each<[string, PilotHostEntry[], PilotHostEntry, boolean]>([
+    ['more than one machine listed', [LOCAL_NAMED, MINI], MINI, true],
+    ['one machine', [LOCAL_PILOT_HOST], LOCAL_PILOT_HOST, false]
+  ])("names the run's machine in its header: %s", async (_w, hosts, host, named) => {
+    setPilotHostsForTests(hosts)
+    const answer = (method: string) => (method === 'pilot.runs.get' ? detail : {})
+    pilotRpc.mockImplementation(byHost({ local: answer, mini: answer }))
+    openRun('r1', null, host)
+    render(<RunPanelHost />)
+    const crumbs = within(await screen.findByRole('navigation', { name: 'Crumbs' }))
+    expect(crumbs.queryByText(host.machineName) !== null).toBe(named)
   })
 
   it("opens a run its timeline links to on the panel's machine", async () => {

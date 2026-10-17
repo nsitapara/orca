@@ -9,6 +9,7 @@ import { paintRun, type PaintedRun } from '../../shared/run-views/paint'
 import { runHeadline, runTimeline } from '../../shared/run-views/timeline'
 import { formatDuration } from '../../shared/run/format-duration'
 import { hostRpc } from '../hosts/host-rpc'
+import { MachineChip } from '../hosts/MachineChip'
 import { usePilotHost } from '../hosts/PilotHostContext'
 import { showAutomationsPage, showInboxCard, showPilotAutomation } from '../pages/automations-view'
 import { errorText, itemUrl, runStatusLabel } from '../pages/format'
@@ -98,6 +99,7 @@ function Header({
         </button>
         <span>›</span>
         <span className="text-foreground">{`Run ${run.id}`}</span>
+        <MachineChip host={host} />
       </nav>
       <h3 className="text-sm font-semibold">
         {url ? (
@@ -163,8 +165,7 @@ function Header({
   )
 }
 
-// One run's timeline and its links (spec §2 Run panel), polled while it is open so a running run moves along. It reads
-// from, and its links open on, the machine the run is on.
+// One run's timeline and its links (spec §2 Run panel), on the run's machine, polled so a running run moves along.
 export function RunPanel({
   runId,
   part,
