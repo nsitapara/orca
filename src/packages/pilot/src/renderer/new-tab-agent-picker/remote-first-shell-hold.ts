@@ -2,10 +2,11 @@ import {
   beginWebRuntimeInitialTerminalBootstrap,
   endWebRuntimeInitialTerminalBootstrap
 } from '@/runtime/web-runtime-initial-terminal-bootstrap'
+import { getWebSessionTabsTrackingGeneration } from '@/runtime/web-session-tabs-sync/tracking-lifecycle'
 import { useAppStore } from '@/store'
 import { parseExecutionHostId, type ExecutionHostId } from '../../../../../shared/execution-host'
 
-// Why a limit: a launch that dies before its tab lands must not keep the workspace shell-less for good.
+// Why 30 s: outlasts the create's 15 s RPC timeout, as a timed-out create can still land its tab.
 const HOLD_LIMIT_MS = 30_000
 
 const NO_HOLD = (): void => {}
@@ -14,11 +15,7 @@ function hasTabs(worktreeId: string): boolean {
   return (useAppStore.getState().tabsByWorktree[worktreeId]?.length ?? 0) > 0
 }
 
-/**
- * Stops another machine's never-opened workspace from seeding a blank shell while the agent's tab is
- * on its way (the host's first answer for it is empty). Released when a tab lands, after
- * HOLD_LIMIT_MS, or by calling the returned function.
- */
+/** Why: a never-opened workspace's empty first host answer would seed a shell beside the agent. */
 export function holdRemoteFirstShell(
   worktreeId: string,
   executionHostId: ExecutionHostId
@@ -31,6 +28,7 @@ export function holdRemoteFirstShell(
   if (!beginWebRuntimeInitialTerminalBootstrap(environmentId, worktreeId)) {
     return NO_HOLD
   }
+  const generation = getWebSessionTabsTrackingGeneration(environmentId)
   let held = true
   let unsubscribe = NO_HOLD
   let timer: ReturnType<typeof setTimeout> | undefined
@@ -41,7 +39,10 @@ export function holdRemoteFirstShell(
     held = false
     unsubscribe()
     clearTimeout(timer)
-    endWebRuntimeInitialTerminalBootstrap(environmentId, worktreeId)
+    // Why: a teardown already freed our claim; a later claim belongs to the seeder.
+    if (getWebSessionTabsTrackingGeneration(environmentId) === generation) {
+      endWebRuntimeInitialTerminalBootstrap(environmentId, worktreeId)
+    }
   }
   unsubscribe = useAppStore.subscribe(() => {
     if (hasTabs(worktreeId)) {

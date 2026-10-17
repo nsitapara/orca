@@ -2,9 +2,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { toast } from 'sonner'
 import type { LaunchAgentInNewTabArgs } from '@/lib/launch-agent-in-new-tab'
 import {
+  beginWebRuntimeInitialTerminalBootstrap,
   isWebRuntimeInitialTerminalBootstrapInFlight,
   resetWebRuntimeInitialTerminalBootstrapForTests
 } from '@/runtime/web-runtime-initial-terminal-bootstrap'
+import { clearWebSessionTabsTrackingForEnvironment } from '@/runtime/web-session-tabs-sync/tracking-lifecycle'
 import { useAppStore } from '@/store'
 import { makeTab } from '@/store/slices/store-session-test-harness'
 import type { Worktree } from '../../../../../shared/worktree/types'
@@ -12,10 +14,12 @@ import { launchAgentInWorkspace, type WorkspaceLaunchSwitch } from './launch-age
 import { machineWorktree } from './new-tab-machine-test-fixtures'
 
 const launches = vi.hoisted((): LaunchAgentInNewTabArgs[] => [])
+// Why: a structured launch can still come back null after its surface switch succeeded.
+const failAfterSwitch = vi.hoisted(() => ({ value: false }))
 vi.mock('@/lib/launch-agent-in-new-tab', () => ({
   launchAgentInNewTab: (args: LaunchAgentInNewTabArgs) => {
     launches.push(args)
-    if (args.beforeSurfaceOpen?.({ kind: 'host-published' }) === false) {
+    if (args.beforeSurfaceOpen?.({ kind: 'host-published' }) === false || failAfterSwitch.value) {
       return null
     }
     return { surface: { kind: 'host-published' } }
@@ -49,6 +53,7 @@ describe('launchAgentInWorkspace', () => {
     launches.length = 0
     vi.mocked(toast.error).mockClear()
     resetWebRuntimeInitialTerminalBootstrapForTests()
+    failAfterSwitch.value = false
     vi.useRealTimers()
   })
 
@@ -77,13 +82,81 @@ describe('launchAgentInWorkspace', () => {
     expect(firstShellHeld()).toBe(false)
   })
 
-  it("lets the first shell through when the agent's tab never lands", () => {
+  it("releases the hold when the agent's tab never lands", () => {
     vi.useFakeTimers()
     useAppStore.setState({ worktreesByRepo: { [remoteFeat.repoId]: [remoteFeat] } })
     launchAgentInWorkspace({ worktreeId: remoteFeat.id, agent: 'codex', switchTo: toSecondMac })
     vi.advanceTimersByTime(30_000)
     expect(firstShellHeld()).toBe(false)
   })
+
+  it('releases the hold when the launch fails after the switch', () => {
+    failAfterSwitch.value = true
+    let heldAtSwitch = false
+    useAppStore.setState({
+      worktreesByRepo: { [remoteFeat.repoId]: [remoteFeat] },
+      setActiveWorktree: vi.fn(() => {
+        heldAtSwitch = firstShellHeld()
+        return true
+      })
+    })
+    launchAgentInWorkspace({ worktreeId: remoteFeat.id, agent: 'codex', switchTo: toSecondMac })
+    expect(heldAtSwitch).toBe(true)
+    expect(firstShellHeld()).toBe(false)
+    expect(toast.error).toHaveBeenCalledWith('Could not open codex on Second Mac.')
+  })
+
+  it("leaves the seeder's later claim alone once a teardown freed the hold's", () => {
+    vi.useFakeTimers()
+    useAppStore.setState({ worktreesByRepo: { [remoteFeat.repoId]: [remoteFeat] } })
+    launchAgentInWorkspace({ worktreeId: remoteFeat.id, agent: 'codex', switchTo: toSecondMac })
+    clearWebSessionTabsTrackingForEnvironment('env-b')
+    expect(beginWebRuntimeInitialTerminalBootstrap('env-b', remoteFeat.id)).toBe(true)
+    vi.advanceTimersByTime(30_000)
+    expect(firstShellHeld()).toBe(true)
+  })
+
+  // Why env-b: a hold keyed on the SSH target would show up as env-b's latch.
+  const sshFeat = machineWorktree('repo-c', '/c/feat', { hostId: 'ssh:env-b' })
+  const overSsh: WorkspaceLaunchSwitch = { executionHostId: 'ssh:env-b', machineLabel: 'Build Box' }
+  const noHolds = [
+    { name: 'a non-runtime host', worktree: sshFeat, switchTo: overSsh },
+    { name: 'a workspace with tabs', worktree: remoteFeat, switchTo: toSecondMac, tabs: true },
+    {
+      name: 'a latch held elsewhere',
+      worktree: remoteFeat,
+      switchTo: toSecondMac,
+      otherClaim: true
+    },
+    {
+      name: 'a latch held elsewhere when the switch fails',
+      worktree: remoteFeat,
+      switchTo: toSecondMac,
+      otherClaim: true,
+      switchFails: true
+    }
+  ]
+  it.each(noHolds)(
+    'takes no hold for $name',
+    ({ worktree, switchTo, tabs, otherClaim, switchFails }) => {
+      vi.useFakeTimers()
+      const held = (): boolean => isWebRuntimeInitialTerminalBootstrapInFlight('env-b', worktree.id)
+      useAppStore.setState({
+        worktreesByRepo: switchFails ? {} : { [worktree.repoId]: [worktree] },
+        tabsByWorktree: tabs
+          ? { [worktree.id]: [makeTab({ id: 'shell', worktreeId: worktree.id })] }
+          : {}
+      })
+      if (otherClaim) {
+        beginWebRuntimeInitialTerminalBootstrap('env-b', worktree.id)
+      }
+      launchAgentInWorkspace({ worktreeId: worktree.id, agent: 'codex', switchTo })
+      expect(useAppStore.getState().setActiveWorktree).toHaveBeenCalledTimes(switchFails ? 0 : 1)
+      expect(held()).toBe(otherClaim ?? false)
+      vi.advanceTimersByTime(30_000)
+      expect(held()).toBe(otherClaim ?? false)
+    }
+  )
 
   it('opens in the current workspace without switching', () => {
     useAppStore.setState({ activeGroupIdByWorktree: { 'wt-1': 'g' } })

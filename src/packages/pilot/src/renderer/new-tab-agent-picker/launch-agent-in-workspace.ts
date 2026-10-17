@@ -11,24 +11,28 @@ import { holdRemoteFirstShell } from './remote-first-shell-hold'
 /** Another machine's workspace the launch opens in, switched to only once its surface opens. */
 export type WorkspaceLaunchSwitch = { executionHostId: ExecutionHostId; machineLabel: string }
 
+/** The first-shell hold a switch takes; the launch releases it when no agent tab is coming. */
+type FirstShellHold = { release: () => void }
+
 // Why: activating here, not before the launch, keeps a launch that fails early from switching workspace.
 function switchBeforeSurfaceOpen(
   worktreeId: string,
-  switchTo: WorkspaceLaunchSwitch | undefined
+  switchTo: WorkspaceLaunchSwitch | undefined,
+  hold: FirstShellHold
 ): LaunchAgentInNewTabArgs['beforeSurfaceOpen'] {
   if (!switchTo) {
     return undefined
   }
   // The launcher opens the agent's surface itself, so neither revealing nor the host's first empty answer may seed a sibling shell.
   return () => {
-    const release = holdRemoteFirstShell(worktreeId, switchTo.executionHostId)
+    hold.release = holdRemoteFirstShell(worktreeId, switchTo.executionHostId)
     const switched =
       activateAndRevealWorktree(worktreeId, {
         executionHostId: switchTo.executionHostId,
         providesInitialSurface: true
       }) !== false
     if (!switched) {
-      release()
+      hold.release()
     }
     return switched
   }
@@ -55,6 +59,7 @@ export function launchAgentInWorkspace({
   switchTo?: WorkspaceLaunchSwitch
 }): void {
   const state = useAppStore.getState()
+  const hold: FirstShellHold = { release: () => {} }
   const result = launchAgentInNewTab({
     requestId: newAgentLaunchRequestId(),
     agent,
@@ -62,9 +67,11 @@ export function launchAgentInWorkspace({
     groupId:
       state.activeGroupIdByWorktree[worktreeId] ?? state.groupsByWorktree[worktreeId]?.[0]?.id,
     launchSource: 'shortcut',
-    beforeSurfaceOpen: switchBeforeSurfaceOpen(worktreeId, switchTo)
+    beforeSurfaceOpen: switchBeforeSurfaceOpen(worktreeId, switchTo, hold)
   })
   if (!result) {
+    // Why: a launch can still fail after its switch, and then no agent tab is coming.
+    hold.release()
     toast.error(launchFailureMessage(agent, switchTo))
     return
   }
