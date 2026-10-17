@@ -2204,5 +2204,82 @@
     "/wt/web-422": true,
     "/wt/web-423": true,
     "/wt/web-424": true
+  },
+  "old": {
+    "from": "run_old_plan.py 04 (ui-qa/scripts/loop.py sweep) with /opt/homebrew/bin/python3 3.15.0, 2026-10-16, before milestone 8b deleted it",
+    "decisions": [
+      {
+        "key": "wt:400fee61-a463-4f76-894a-39861e906007::/wt/web-424",
+        "label": "web-424-work",
+        "decision": "start",
+        "reason": ""
+      },
+      {
+        "key": "wt:400fee61-a463-4f76-894a-39861e906007::/wt/web-423",
+        "label": "web-423-work",
+        "decision": "queued",
+        "reason": ""
+      },
+      {
+        "key": "wt:400fee61-a463-4f76-894a-39861e906007::/wt/web-421",
+        "label": "web-421-work",
+        "decision": "queued",
+        "reason": ""
+      },
+      {
+        "key": "wt:400fee61-a463-4f76-894a-39861e906007::/wt/web-411",
+        "label": "web-411-work",
+        "decision": "idle",
+        "reason": "nothing new since aaaaaaaaa"
+      },
+      {
+        "key": "wt:400fee61-a463-4f76-894a-39861e906007::/wt/web-412",
+        "label": "web-412-work",
+        "decision": "idle",
+        "reason": "nothing new since aaaaaaaaa"
+      },
+      {
+        "key": "wt:400fee61-a463-4f76-894a-39861e906007::/wt/web-413",
+        "label": "web-413-work",
+        "decision": "skip",
+        "reason": "MERGE_HEAD present"
+      },
+      {
+        "key": "wt:400fee61-a463-4f76-894a-39861e906007::/wt/web-414",
+        "label": "web-414-work",
+        "decision": "skip",
+        "reason": "!414 merged"
+      },
+      {
+        "key": "wt:400fee61-a463-4f76-894a-39861e906007::/wt/web-415",
+        "label": "web-415-work",
+        "decision": "skip",
+        "reason": "!415 closed"
+      },
+      {
+        "key": "wt:400fee61-a463-4f76-894a-39861e906007::/wt/web-416",
+        "label": "web-416-work",
+        "decision": "skip",
+        "reason": "!416 approved by alex1craig"
+      },
+      {
+        "key": "wt:400fee61-a463-4f76-894a-39861e906007::/wt/web-417",
+        "label": "web-417-work",
+        "decision": "skip",
+        "reason": "MR approval unknown: Command '['glab', 'api', '--hostname', 'gitlab.com', 'projects/polygenx%2Fweb-platform/merge_requests/417/approvals']' returned non-zero exit status 1."
+      },
+      {
+        "key": "wt:400fee61-a463-4f76-894a-39861e906007::/wt/web-420",
+        "label": "web-420-work",
+        "decision": "idle",
+        "reason": "nothing new since aaaaaaaaa"
+      },
+      {
+        "key": "wt:400fee61-a463-4f76-894a-39861e906007::/wt/web-422",
+        "label": "web-422-work",
+        "decision": "skip",
+        "reason": "last run stack_failed at 2:00 AM; retry next night"
+      }
+    ]
   }
 }
