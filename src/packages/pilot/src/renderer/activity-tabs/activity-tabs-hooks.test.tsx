@@ -134,11 +134,11 @@ describe('useActivityTabsThreads', () => {
       expect(groups.flatMap(activityTabsGroupRows).map(rowLabel)).toEqual(rows)
     }
   )
-  // wt-1 holds the agent; wt-2 was active a minute ago; wt-3 four days ago.
+  // wt-1 holds the agent; wt-2 was active a minute ago; wt-3 four days ago; wt-4 is pinned, from long ago.
   it.each([
-    { on: true, rows: ['recent:wt-2'] },
-    { on: false, rows: [] }
-  ])('adds recently active worktrees with no row only while on (on=$on)', ({ on, rows }) => {
+    { on: true, rows: ['recent:wt-4', 'recent:wt-2'] },
+    { on: false, rows: ['recent:wt-4'] }
+  ])('adds pinned worktrees, and recent ones only while on (on=$on)', ({ on, rows }) => {
     arrange({ attached: true, on: false, body: 'agents' })
     act(() => setActivityShowRecentWorktrees(on))
     const now = Date.now()
@@ -150,7 +150,8 @@ describe('useActivityTabsThreads', () => {
         'repo-1': [
           { ...makeWorktree(), lastActivityAt: now },
           { ...makeWorktreeWithId('wt-2'), lastActivityAt: now - 60_000 },
-          { ...makeWorktreeWithId('wt-3'), lastActivityAt: now - 4 * 24 * 60 * 60 * 1000 }
+          { ...makeWorktreeWithId('wt-3'), lastActivityAt: now - 4 * 24 * 60 * 60 * 1000 },
+          { ...makeWorktreeWithId('wt-4'), lastActivityAt: 1, isPinned: true }
         ]
       }
     })
@@ -165,5 +166,37 @@ describe('useActivityTabsThreads', () => {
       )
     ).result.current.visibleThreadGroups
     expect(groups.flatMap(activityTabsGroupRows).map(rowLabel)).toEqual(rows)
+  })
+
+  // The active workspace (wt-1, "feature") sorts after "alpha" (wt-2): selecting it moves nothing.
+  it('lists open tabs by workspace name, not with the active workspace first', () => {
+    arrange({ attached: true, on: true, body: 'agents' })
+    const tabIn = (worktreeId: string, id: string) => ({
+      ...unifiedTab(id, `${id}-entity`, id),
+      worktreeId
+    })
+    const group = (worktreeId: string, tabId: string) => [
+      { id: `g-${worktreeId}`, worktreeId, activeTabId: tabId, tabOrder: [tabId] }
+    ]
+    useAppStore.setState({
+      repos: [makeRepo()],
+      worktreesByRepo: {
+        'repo-1': [makeWorktree(), makeWorktreeWithId('wt-2', 'repo-1', 'alpha')]
+      },
+      activeWorktreeId: 'wt-1',
+      groupsByWorktree: {
+        'wt-1': group('wt-1', 'feature-tab'),
+        'wt-2': group('wt-2', 'alpha-tab')
+      },
+      unifiedTabsByWorktree: {
+        'wt-1': [{ ...tabIn('wt-1', 'feature-tab'), groupId: 'g-wt-1' }],
+        'wt-2': [{ ...tabIn('wt-2', 'alpha-tab'), groupId: 'g-wt-2' }]
+      }
+    })
+    const groups = renderThreads().visibleThreadGroups
+    expect(groups.flatMap(activityTabsGroupRows).map(rowLabel)).toEqual([
+      'alpha-tab',
+      'feature-tab'
+    ])
   })
 })
