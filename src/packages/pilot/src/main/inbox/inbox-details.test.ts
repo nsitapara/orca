@@ -10,7 +10,7 @@ import { copyBundle, detailsFixture, rewriteBundle } from './__fixtures__/detail
 import { loadDetails } from './details-bundle'
 import { addInboxItem } from './inbox-add'
 import { ANSWER_LOCKED } from './answer-lock'
-import { HAS_DETAILS_SINCE, setInboxDetails } from './inbox-details'
+import { setInboxDetails } from './inbox-details'
 import { buildCard, inboxDigest } from './card'
 import { listInbox, replyToInboxItem, type InboxDeps } from './inbox-service'
 import type { RunStatus } from '../../shared/api-types'
@@ -23,7 +23,7 @@ const people = parsePeopleYaml('people:\n  - { id: nish, name: Nish, gitlab: nis
 if (!def.ok || !people.ok) {
   throw new Error('setup')
 }
-const OPEN = { head: null, onlyUnanswered: false }
+const OPEN = { head: null }
 
 function setup() {
   const f = detailsFixture()
@@ -116,7 +116,7 @@ describe('setInboxDetails', () => {
   ])('clears an answer, its queue row, and says why (head %s)', (head, reply) => {
     const { f, store, deps, id, answer } = setup()
     answer()
-    expect(setInboxDetails(deps, id, f.bundle, { head, onlyUnanswered: false })).toMatchObject({
+    expect(setInboxDetails(deps, id, f.bundle, { head })).toMatchObject({
       changed: true,
       cleared: true
     })
@@ -153,19 +153,6 @@ describe('setInboxDetails', () => {
     expect(s.store.inbox.get(s.id)).toMatchObject({ status: 'open', answer: null })
   })
 
-  it('leaves a bundle attached meanwhile when only a card without one may change', () => {
-    const { f, store, deps, id } = setup()
-    const drafted = copyBundle(f, 'F3.json')
-    rewriteBundle(drafted, (b) => (b.item = 'F3'))
-    setInboxDetails(deps, id, drafted, OPEN)
-    const before = store.inbox.get(id)
-    expect(() =>
-      setInboxDetails(deps, id, f.bundle, { ...OPEN, onlyWithoutDetails: true })
-    ).toThrow(HAS_DETAILS_SINCE)
-    expect(store.inbox.get(id)).toEqual(before)
-    expect(store.inbox.snapshot(id)?.bundle.item).toBe('F3')
-  })
-
   it('replaces one bundle with another', () => {
     const { f, store, deps, id } = setup()
     setInboxDetails(deps, id, f.bundle, OPEN)
@@ -192,14 +179,6 @@ describe('setInboxDetails', () => {
         return [s.f.bundle, OPEN]
       },
       /^Details bundle refused: /
-    ],
-    [
-      'an answered card, when only an unanswered one may change',
-      (s) => {
-        s.answer()
-        return [s.f.bundle, { head: null, onlyUnanswered: true }]
-      },
-      'answered since; Details not attached'
     ],
     [
       'an answered card whose answer run is still running',

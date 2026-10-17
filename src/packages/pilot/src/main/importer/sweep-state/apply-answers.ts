@@ -3,7 +3,8 @@ import { emptyPlan } from './plans'
 import type { SweepStateMapper } from './types'
 
 const SENT = 'answers/sent.json'
-// import-vault.ts stores an answer as oneLine(answer).slice(0, 4000); the match must see the same text.
+// The vault import (removed after it ran on 2026-10-12) stored an answer as oneLine(answer).slice(0, 4000); the match
+// must see the same text.
 const MAX_ANSWER_CHARS = 4000
 
 // 12's answers/sent.json, { "<note path>": [[key, answer], …] }: each answer apply.py already sent to a session is

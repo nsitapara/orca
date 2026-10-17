@@ -55,17 +55,6 @@ export const ANSWERS_COMMAND_SPECS: CommandSpec[] = [
     notes: [
       "From a terminal it hurries only answers that run no action: an approval keeps its 180 s settle unless Apply now is pressed in Pilot's app."
     ]
-  },
-  {
-    path: ['inbox', 'import-vault'],
-    summary:
-      "Preview importing the vault's open cards and saved answers into Pilot's inbox; the import itself is applied in Pilot's window (Inbox)",
-    usage: 'pilot inbox import-vault [--json]',
-    allowedFlags: [...GLOBAL_FLAGS, 'apply'],
-    examples: ['pilot inbox import-vault'],
-    notes: [
-      "--apply is refused from a terminal: only Pilot's window applies the import, so no agent can seed cards or answers."
-    ]
   }
 ]
 

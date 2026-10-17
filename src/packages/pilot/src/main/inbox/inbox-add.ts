@@ -21,7 +21,6 @@ import { fieldsForRun, latestFieldsFor } from './run-fields'
 
 export const SKIPPED_BEFORE =
   'Skipped before with the same arguments; not offered again until they change'
-export const SAME_CARD_OPEN = 'same card already open'
 export { CHANGED_AFTER_ANSWER }
 
 type Origin = {
@@ -195,10 +194,6 @@ function addInboxItemUnlocked(
   deps: InboxDeps,
   params: InboxAddParams,
   opts: {
-    source?: InboxItemRow['source']
-    vaultRef?: string
-    // The import never edits a card that is already open: it refuses instead.
-    noMerge?: boolean
     // Run every check, write nothing.
     dryRun?: boolean
     // The run a bundled add is bound to (refuseOutsideScope): its own dispatched answer is not in the way.
@@ -207,7 +202,7 @@ function addInboxItemUnlocked(
 ): InboxAddResult {
   checkPreparationRequest(params)
   checkNotPrepared(params)
-  refuseUnpreparedEvidence(params, opts.source)
+  refuseUnpreparedEvidence(params)
   const origin = { ...originOf(deps, params), noticeKey: params.notPrepared?.key ?? null }
   const def = deps.definitions().find((d) => d.id === origin.automationId)
   if (!def) {
@@ -251,9 +246,6 @@ function addInboxItemUnlocked(
   const open = params.preparation
     ? undefined
     : mine.find((i) => WAITING.includes(i.status) && sameCard(i, card, origin))
-  if (open && opts.noMerge) {
-    return { id: null, existing: true, refused: SAME_CARD_OPEN }
-  }
   if (open) {
     const merged = keepingBundle(card, open, loaded)
     const callerRunId = opts.callerRunId ?? null
@@ -286,8 +278,8 @@ function addInboxItemUnlocked(
       : [],
     outcome: null,
     createdAt: at,
-    source: opts.source ?? 'engine',
-    vaultRef: opts.vaultRef ?? null
+    source: 'engine',
+    vaultRef: null
   }
   deps.store.inbox.add(item, loaded)
   if (params.preparation) {

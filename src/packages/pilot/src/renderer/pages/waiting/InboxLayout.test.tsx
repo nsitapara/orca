@@ -362,32 +362,6 @@ describe('fix round 1', () => {
     fireEvent.click(within(article).getByRole('button', { name: 'Cancel' }))
     expect(pill()).not.toContain('unsaved')
   })
-
-  it('keeps an open import panel when the re-preview after an import fails', async () => {
-    let previews = 0
-    pilotRpc.mockImplementation(async (method: string, params: { apply?: boolean }) => {
-      if (method === 'pilot.inbox.importVault') {
-        if (params.apply) {
-          return { applied: true, imported: 1, answers: 0, runs: 0, skipped: [] }
-        }
-        previews += 1
-        if (previews > 1) {
-          throw new Error('GitLab is down')
-        }
-        return { applied: false, imported: 1, answers: 0, runs: 0, skipped: [] }
-      }
-      if (method === 'pilot.inbox.list') {
-        return LIST
-      }
-      return { entries: [] }
-    })
-    render(<InboxPage />)
-    fireEvent.click(await screen.findByRole('button', { name: 'Import' }))
-    fireEvent.click(await screen.findByRole('button', { name: 'Apply import' }))
-    expect(await screen.findByText(/^Imported 1 card/)).toBeTruthy()
-    await waitFor(() => expect(previews).toBe(2))
-    expect(screen.getByText(/^Imported 1 card/)).toBeTruthy()
-  })
 })
 
 let fireWidth: (w: number) => void = () => {}

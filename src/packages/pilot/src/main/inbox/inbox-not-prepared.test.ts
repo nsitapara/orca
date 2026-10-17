@@ -73,8 +73,8 @@ describe('an evidence-needing action from a run', () => {
     expect(store.inbox.list()).toEqual([])
   })
 
-  // R-P5: whoever adds it and however bound; an imported card is the one exception (it comes in as Needs evidence).
-  it('is taken with one, refused outside a run without one, and imported as it is', () => {
+  // R-P5: whoever adds it and however bound.
+  it('is taken with one, and refused outside a run without one', () => {
     const { deps } = setup()
     expect(addInboxItem(deps, { ...PUSH, preparation: PREPARATION })).toMatchObject({
       existing: false
@@ -82,7 +82,6 @@ describe('an evidence-needing action from a run', () => {
     const { runId: _run, ...card } = PUSH
     const named = { ...card, automationId: 'ci', itemKey: 'mr:2' }
     expect(() => addInboxItem(deps, named)).toThrow('push needs prepared evidence')
-    expect(addInboxItem(deps, named, { source: 'import' })).toMatchObject({ existing: false })
   })
 })
 

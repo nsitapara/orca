@@ -113,7 +113,6 @@ export function buildDetailsMethods(ctx: () => PilotContext) {
         const callerRunId = refuseOutsideScope(c, rpc.caller, p, automationId)
         return setInboxDetails(deps, p.id, p.bundlePath, {
           head: p.head ?? null,
-          onlyUnanswered: false,
           callerRunId
         })
       }

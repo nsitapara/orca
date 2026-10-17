@@ -433,7 +433,7 @@ The order, behaviour changes and follow-ups come from the build (`go-live-notes.
 
 **Order:**
 1. Close out what Orca still has open. Let a running Orca 03 review cycle finish. Close any open Orca 04 QA run or dispatched fix: a stale Orca `run.json` that isn't `done` blocks every Pilot 04 night at `stack`.
-2. Import the open vault cards: the Inbox shows an "Import" notice while there are vault cards to bring in or Details to add (applying needs Pilot's own window). After you rebuild Pilot, use the Import notice again: it fills Details into the open, unanswered imported cards, and the go-live check's "Card details" line shows what is left. From now on answer only in Pilot (Inbox): the old answers page is read-only on the Pilot backend.
+2. The open vault cards were imported once, on 2026-10-12, and the import (which ran `vault.py export-open`) was removed afterwards. The go-live check's "Card details" line still counts imported cards that only point at a vault bundle. Answer only in Pilot (Inbox).
 3. Import each job's old state before enabling it: `pilot automations import-state --id <id>` (preview), then `--apply`. 03 and 04 need their `seen.json` first. 08 must be imported before Pilot first writes its own `usage.json` (the hand-over above). 12's sent answers come in as dispatched.
 4. Connect Linear in Pilot (Settings) before enabling 13 and M01. Pilot can't read Orca's Linear credential (see the Known gaps).
 5. Enable the YAMLs one at a time: `pilot automations enable --id <id>`. Keep Orca's copies disabled. Enable job 14 (`prepare-inbox-item-context`) together with, or before, the first job that creates prepared cards (03, 04, 05, 09): until it runs, their prepared cards stay **Context queued** and can't be approved. Job 14 must run before any push, Post or drafted fix can be approved, imported ones included: those come in as **Needs evidence**, and Prepare evidence queues them for it (R-P5). Plain cards never wait for it.
@@ -530,7 +530,7 @@ These need a phone, a second Mac and an iPad on Tailscale. Open Pilot (`dist/mac
 - **Recommended follow-ups** (parked, not done):
   - Per-step or propose-only powers, so card approval is the only path for 09's `post` and 05's answers `push`. Today only the prompt keeps an agent from using its automation's power, as under Orca.
   - Sandbox agents. 04's Codex runs with `--dangerously-bypass-approvals-and-sandbox`, as Orca's launch did.
-  - The Inbox page has no "done" button (imported already-sent cards need `pilot inbox tick`), and the vault-import preview doesn't list the session ids it will resume.
+  - The Inbox page has no "done" button (imported already-sent cards need `pilot inbox tick`).
   - The Agent Console page doesn't yet display the `also_on` flag.
   - A paired device can't approve actions. `pilot.inbox.tick` and `reply` act on any card id (as the old vault did); they could be scoped to the caller's automation.
   - A `mr: mine` check on 05 would close the "teammate's newer MR from my branch" edge, which the old sweep also left open.

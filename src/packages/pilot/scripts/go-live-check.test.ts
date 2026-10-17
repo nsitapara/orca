@@ -216,7 +216,7 @@ describe('detailsLine', () => {
       card({ status: 'open', detailsMd: 'plain notes' })
     ]
     expect(detailsLine({ items })).toBe(
-      'Card details: 3 waiting cards, 1 with a Details bundle, 1 imported cards still pointing at a vault bundle (re-run "Import open vault cards" in Pilot\'s window).'
+      'Card details: 3 waiting cards, 1 with a Details bundle, 1 imported cards still pointing at a vault bundle.'
     )
   })
 

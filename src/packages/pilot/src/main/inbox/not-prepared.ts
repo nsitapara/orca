@@ -36,14 +36,10 @@ export function checkNotPrepared(params: InboxAddParams): void {
 }
 
 // R-P5 at add: an action whose Approve runs with no agent in between (push, post_review) is offered only with a
-// preparation request, whoever adds it and however the caller is bound. An imported card is the one exception: it
-// comes in as "Needs evidence", and nothing runs from it until a person prepares it.
-export function refuseUnpreparedEvidence(
-  params: InboxAddParams,
-  source: InboxItemRow['source'] | undefined
-): void {
+// preparation request, whoever adds it and however the caller is bound.
+export function refuseUnpreparedEvidence(params: InboxAddParams): void {
   const action = params.action
-  if (source !== 'import' && action && !params.preparation && EVIDENCE_ACTIONS.has(action)) {
+  if (action && !params.preparation && EVIDENCE_ACTIONS.has(action)) {
     throw new Error(
       `${action} needs prepared evidence: offer it with a preparation request (--preparation-file)`
     )
