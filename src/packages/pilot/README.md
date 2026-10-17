@@ -345,10 +345,10 @@ Rulings:
 
 ## New tab picker
 
-- After you pick an agent in the Cmd+T picker, a second step asks which machine to open it on. It appears only when the workspace's project is set up on 2 or more online machines; otherwise the agent launches straight away. Blank Terminal never gets this step.
-- Each machine opens the same branch's worktree if it has one, or else that machine's main checkout.
+- After you pick an agent in the Cmd/Ctrl+T picker, a second step asks which machine to open it on. It appears only when the workspace's project is set up on 2 or more online machines; otherwise the agent launches straight away. Blank Terminal never gets this step.
+- The current machine opens the current workspace. Other machines open their same-branch worktree, else their main checkout.
 - A machine that does not have the chosen agent installed is disabled and reads "<Agent> not found here".
-- The row that starts selected is the machine last picked for this project, or else the current machine, and it stays the default even after you type to filter. The choice is remembered per project in localStorage under `pilot.new-tab.machine-by-project`. Enter, Enter is the fast path.
+- The row that starts selected is the machine last picked for this project, or else the current machine. It stays selected while it still matches what you've typed. The choice is remembered per project in localStorage under `pilot.new-tab.machine-by-project`. Enter, Enter is the fast path.
 - Esc goes back to the agent list. It stops listening when the dialog closes.
 
 ## The worktree panel

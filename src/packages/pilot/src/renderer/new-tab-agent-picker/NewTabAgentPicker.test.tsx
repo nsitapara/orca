@@ -83,6 +83,7 @@ const arrowDown = (times: number): void => {
   }
 }
 const selected = (): string | null => screen.getByRole('option', { selected: true }).textContent
+const describedAs = (text: string): HTMLElement => screen.getByRole('dialog', { description: text })
 const nextFrame = (): Promise<void> =>
   act(() => new Promise<void>((resolve) => requestAnimationFrame(() => resolve())))
 
@@ -236,8 +237,6 @@ describe('NewTabAgentPicker', () => {
     }
   )
 
-  const pointAt = (label: RegExp) => (): boolean =>
-    fireEvent.pointerMove(screen.getByRole('option', { name: label }))
   it.each([
     {
       name: 'keeps the remembered machine while it still matches',
@@ -273,7 +272,7 @@ describe('NewTabAgentPicker', () => {
       step: TWO,
       remembered: 'runtime:env-b' as const,
       typed: 'mac',
-      move: pointAt(/Local Mac/),
+      move: (): boolean => fireEvent.pointerMove(screen.getByRole('option', { name: /Local Mac/ })),
       worktreeId: 'wt-1'
     }
   ])('a machine search $name', async ({ step, remembered, typed, move, worktreeId }) => {
@@ -367,13 +366,15 @@ describe('NewTabAgentPicker', () => {
     expect(escape.defaultPrevented).toBe(false)
   })
 
-  it('moves focus to the new search box on each step change', () => {
+  it('focuses and describes each step as it opens', () => {
     machineStep.value = TWO
     openPicker()
     enter()
     expect(document.activeElement).toBe(screen.getByPlaceholderText('Open Codex on...'))
+    expect(describedAs('Choose a machine to open Codex on')).toBeTruthy()
     fireEvent.keyDown(searchBox(), { key: 'Escape' })
     expect(document.activeElement).toBe(screen.getByPlaceholderText('Open a new tab with...'))
+    expect(describedAs('Choose an agent to open in a new tab')).toBeTruthy()
   })
 
   it.each([

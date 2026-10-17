@@ -203,10 +203,12 @@ function NewTabAgentPickerDialog({
 
   let footerText = workspaceName ? `In ${workspaceName}` : null
   let escLabel = 'Close'
+  let description = 'Choose an agent to open in a new tab'
   let stepView: React.JSX.Element
   if (step.kind === 'machine' && machines) {
     footerText = `${step.agentLabel} · choose a machine`
     escLabel = 'Back'
+    description = `Choose a machine to open ${step.agentLabel} on`
     const rows = buildNewTabMachineRows({
       targets: machines.targets,
       detected,
@@ -253,7 +255,7 @@ function NewTabAgentPickerDialog({
       // Why: Radix would refocus the old tab after the exit animation, stealing it from the new one.
       onCloseAutoFocus={(event) => event.preventDefault()}
       title="New tab"
-      description="Choose an agent to open in a new tab"
+      description={description}
       contentClassName="w-[480px]"
       commandProps={{ loop: true, value: agentValue, onValueChange: setSelectedId }}
     >

@@ -8,7 +8,7 @@ import type { ExecutionHostId } from '../../../../../shared/execution-host'
 import type { TuiAgent } from '../../../../../shared/tui-agent'
 import { holdRemoteFirstShell } from './remote-first-shell-hold'
 
-/** Another machine's workspace the launch opens in, switched to only once its surface opens. */
+/** Another machine's workspace, switched to just before its surface opens, even before the host answers. */
 export type WorkspaceLaunchSwitch = { executionHostId: ExecutionHostId; machineLabel: string }
 
 /** The first-shell hold a switch takes; the launch releases it when no agent tab is coming. */
