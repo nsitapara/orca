@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest'
+import type { ExecutionHostId } from '../../../../../shared/execution-host'
+import type { TuiAgent } from '../../../../../shared/tui-agent'
 import {
   agentAvailability,
   buildNewTabMachineRows,
@@ -57,7 +59,13 @@ describe('new tab machine rows', () => {
     expect(rows([null, null, null], 'SAME').map((r) => r.hostId)).toEqual(['runtime:env-b'])
   })
 
-  it.each([
+  type DefaultCase = {
+    name: string
+    detected: readonly (readonly TuiAgent[] | null)[]
+    last: ExecutionHostId | null
+    expected: ExecutionHostId
+  }
+  const defaultCases: DefaultCase[] = [
     {
       name: 'the last pick when it is listed and enabled',
       detected: [null, ['codex'], null],
@@ -82,7 +90,8 @@ describe('new tab machine rows', () => {
       last: null,
       expected: 'local'
     }
-  ])('defaultNewTabMachine picks $name', ({ detected, last, expected }) =>
+  ]
+  it.each(defaultCases)('defaultNewTabMachine picks $name', ({ detected, last, expected }) =>
     expect(defaultNewTabMachine(rows(detected), last)).toBe(expected)
   )
 
