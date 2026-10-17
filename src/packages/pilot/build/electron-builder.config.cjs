@@ -5,6 +5,8 @@ const { join } = require('node:path')
 const base = require('../../../../config/electron-builder.config.cjs')
 
 const PILOT_BIN = 'src/packages/pilot/build/bin'
+// Pilot's own static files (the token report's page), read from Contents/Resources/pilot (env.ts pilotResourcesDir).
+const PILOT_RESOURCES = 'src/packages/pilot/resources'
 const ORCA_LAUNCHER = 'resources/darwin/bin/orca'
 // Why: the helper keeps Orca's bundle id (shared TCC grants) and its peer check rejects Pilot.
 const COMPUTER_USE_HELPER = 'Orca Computer Use.app'
@@ -17,7 +19,8 @@ function pilotMacResources(list) {
   return [
     ...kept,
     { from: `${PILOT_BIN}/orca`, to: 'bin/orca' },
-    { from: `${PILOT_BIN}/pilot`, to: 'bin/pilot' }
+    { from: `${PILOT_BIN}/pilot`, to: 'bin/pilot' },
+    { from: PILOT_RESOURCES, to: 'pilot' }
   ]
 }
 

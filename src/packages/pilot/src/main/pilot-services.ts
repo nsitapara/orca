@@ -92,6 +92,8 @@ export type PilotServiceOptions = {
   quotas?: Partial<Record<AgentKind, QuotaReader>>
   // Where the engine's child processes find Pilot's CLI and data (H9). Absent in orcad.
   engineEnv?: EngineEnv
+  // Pilot's own static files (env.ts pilotResourcesDir). Absent in orcad, whose token report has no HTML page.
+  resourcesDir?: string
   schedulerEnabled?: boolean
 }
 
@@ -240,7 +242,7 @@ function openPilot(
       })
     : null
   const readUsage = stepUsageReader(defaultUsagePaths(), now)
-  const usageReports = usageReporter(store, () => definitions.current().definitions, now, log)
+  const usageReports = usageReporter(store, definitions, now, log, options.resourcesDir)
   const scheduler = new PilotScheduler({
     now,
     definitions: definitions.current,

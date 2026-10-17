@@ -60,6 +60,7 @@ describe('attachPilotMain', () => {
     expect(m.start).toHaveBeenCalledWith(runtime, 'main', {
       quotas: { claude: m.quota, codex: m.codexQuota },
       engineEnv: { binDir: '/Apps/Pilot.app/Contents/Resources/bin', dataDir: '/data/pilot' },
+      resourcesDir: '/Apps/Pilot.app/Contents/Resources/pilot',
       schedulerEnabled: true
     })
     expect(m.hold).toHaveBeenCalledWith(PATH_FOUND)

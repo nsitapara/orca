@@ -2,7 +2,12 @@ import { app } from 'electron'
 import type { OrcaRuntimeService } from '../../../../main/runtime/orca-runtime'
 import { mainProcessState } from '../../../../main/startup/main-process-state'
 import { getAppEnvironment } from '../../../../shared/app-environment'
-import { applyPilotEnvDefaults, pilotSchedulerEnabled, type PilotHostKind } from './env'
+import {
+  applyPilotEnvDefaults,
+  pilotResourcesDir,
+  pilotSchedulerEnabled,
+  type PilotHostKind
+} from './env'
 import { pilotBinDir } from './engine-env'
 import { claudeQuotaReader } from './fields/claude-quota'
 import { codexQuotaReader } from './fields/codex-quota'
@@ -48,17 +53,19 @@ export function attachPilotMain(runtime: OrcaRuntimeService): void {
   // A Pilot failure (e.g. its store won't open) must never stop Orca from starting.
   let services: PilotServices
   try {
+    const where = {
+      packaged: app.isPackaged,
+      resourcesPath: process.resourcesPath,
+      appPath: app.getAppPath()
+    }
     services = startup.run('services', () =>
       startPilotServices(runtime, 'main', {
         quotas: { claude: claudeQuotaReader(), codex: codexQuotaReader() },
         engineEnv: {
-          binDir: pilotBinDir({
-            packaged: app.isPackaged,
-            resourcesPath: process.resourcesPath,
-            appPath: app.getAppPath()
-          }),
+          binDir: pilotBinDir(where),
           dataDir: getAppEnvironment().getPath('userData')
         },
+        resourcesDir: pilotResourcesDir(where),
         schedulerEnabled: pilotSchedulerEnabled(kind)
       })
     )

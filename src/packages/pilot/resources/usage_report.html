@@ -1,0 +1,450 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="generator" content="08 · Tally token usage by job · skill agent-usage · ~/.agents/skills/worktree-gate/usage.py">
+<title>Token usage by job</title>
+<style>
+  :root {
+    color-scheme: light;
+    --page: #f9f9f7;
+    --surface: #fcfcfb;
+    --text-primary: #0b0b0b;
+    --text-secondary: #52514e;
+    --text-muted: #898781;
+    --grid: #e1e0d9;
+    --axis: #c3c2b7;
+    --border: rgba(11, 11, 11, 0.10);
+    --hover: rgba(11, 11, 11, 0.04);
+    --series-1: #2a78d6;
+    --accent-ink: #1c5cab;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:where(:not([data-theme="light"])) {
+      color-scheme: dark;
+      --page: #0d0d0d;
+      --surface: #1a1a19;
+      --text-primary: #ffffff;
+      --text-secondary: #c3c2b7;
+      --text-muted: #898781;
+      --grid: #2c2c2a;
+      --axis: #383835;
+      --border: rgba(255, 255, 255, 0.10);
+      --hover: rgba(255, 255, 255, 0.05);
+      --series-1: #3987e5;
+      --accent-ink: #86b6ef;
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --page: #0d0d0d;
+    --surface: #1a1a19;
+    --text-primary: #ffffff;
+    --text-secondary: #c3c2b7;
+    --text-muted: #898781;
+    --grid: #2c2c2a;
+    --axis: #383835;
+    --border: rgba(255, 255, 255, 0.10);
+    --hover: rgba(255, 255, 255, 0.05);
+    --series-1: #3987e5;
+    --accent-ink: #86b6ef;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--page);
+    color: var(--text-primary);
+    font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  main { max-width: 1120px; margin: 0 auto; padding: 24px 16px 48px; }
+  h1 { font-size: 22px; margin: 0 0 4px; font-weight: 650; }
+  h2 { font-size: 15px; margin: 0 0 12px; font-weight: 600; }
+  .sub { color: var(--text-secondary); margin: 0; }
+  .note { color: var(--text-muted); font-size: 12.5px; margin: 6px 0 0; }
+  .filters {
+    display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center;
+    margin: 20px 0 16px; padding: 10px 12px;
+    background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+  }
+  .seg { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  .seg button {
+    font: inherit; color: var(--text-secondary); background: transparent; border: 0;
+    padding: 6px 12px; cursor: pointer;
+  }
+  .seg button + button { border-left: 1px solid var(--border); }
+  .seg button:hover { background: var(--hover); }
+  .seg button[aria-pressed="true"] { color: var(--text-primary); font-weight: 600; background: var(--hover); }
+  label.filter { display: inline-flex; gap: 6px; align-items: center; color: var(--text-secondary); }
+  select {
+    font: inherit; color: var(--text-primary); background: var(--surface);
+    border: 1px solid var(--border); border-radius: 8px; padding: 5px 8px; max-width: 280px;
+  }
+  .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin-bottom: 16px; }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; }
+  .kpi .label { color: var(--text-secondary); font-size: 12.5px; }
+  .kpi .value { font-size: 28px; font-weight: 650; margin-top: 2px; }
+  .grid2 { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; margin-bottom: 16px; }
+  @media (max-width: 820px) { .grid2 { grid-template-columns: minmax(0, 1fr); } }
+  .chart svg { display: block; width: 100%; overflow: visible; }
+  .chart text { fill: var(--text-muted); font-size: 11.5px; font-variant-numeric: tabular-nums; }
+  .chart text.label { fill: var(--text-secondary); font-variant-numeric: normal; }
+  .chart text.value { fill: var(--text-primary); }
+  .chart .bar { fill: var(--series-1); }
+  .chart .hit { fill: transparent; cursor: default; }
+  .chart .hit:hover + .bar, .chart .hit:focus + .bar { opacity: 0.8; }
+  .chart line.grid { stroke: var(--grid); stroke-width: 1; }
+  .chart line.base { stroke: var(--axis); stroke-width: 1; }
+  .empty { color: var(--text-muted); padding: 24px 0; text-align: center; }
+  .table-wrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { padding: 7px 10px; text-align: left; border-bottom: 1px solid var(--grid); white-space: nowrap; }
+  th { color: var(--text-secondary); font-weight: 600; position: sticky; top: 0; background: var(--surface); }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  tbody tr:hover { background: var(--hover); }
+  tfoot td { font-weight: 600; border-bottom: 0; }
+  code { font: 12px ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--text-secondary); }
+  code.wt { display: inline-block; max-width: 220px; overflow: hidden; text-overflow: ellipsis; vertical-align: bottom; }
+  button.copy {
+    font: 12px ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--accent-ink);
+    background: transparent; border: 1px solid var(--border); border-radius: 6px; padding: 2px 6px; cursor: pointer;
+  }
+  button.copy:hover { background: var(--hover); }
+  .section { margin-bottom: 16px; }
+  ul.gaps { margin: 0; padding-left: 18px; color: var(--text-secondary); }
+  ul.gaps li + li { margin-top: 4px; }
+  .tooltip {
+    position: fixed; pointer-events: none; z-index: 10; display: none;
+    background: var(--surface); color: var(--text-primary); border: 1px solid var(--border);
+    border-radius: 8px; padding: 8px 10px; font-size: 12.5px; box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+  }
+  .tooltip .t-title { font-weight: 600; margin-bottom: 2px; }
+  .tooltip .t-row { color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+  footer { color: var(--text-muted); font-size: 12px; margin-top: 24px; }
+  .error { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 16px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Token usage by job</h1>
+  <p class="sub" id="generated"></p>
+  <p class="note" id="price-note"></p>
+
+  <div class="filters" role="group" aria-label="Filters">
+    <div class="seg" id="period" role="group" aria-label="Period">
+      <button type="button" data-days="0">Today</button>
+      <button type="button" data-days="6">7 days</button>
+      <button type="button" data-days="29">30 days</button>
+      <button type="button" data-days="all">All time</button>
+    </div>
+    <label class="filter">Job <select id="job"></select></label>
+    <label class="filter">Agent <select id="agent"><option value="">All agents</option><option value="claude">Claude</option><option value="codex">Codex</option></select></label>
+  </div>
+
+  <div id="content">
+    <div class="kpis">
+      <div class="card kpi"><div class="label">Estimated cost</div><div class="value" id="kpi-cost">—</div></div>
+      <div class="card kpi"><div class="label">Tokens</div><div class="value" id="kpi-tokens">—</div></div>
+      <div class="card kpi"><div class="label">Sessions</div><div class="value" id="kpi-sessions">—</div></div>
+      <div class="card kpi"><div class="label">API requests</div><div class="value" id="kpi-requests">—</div></div>
+    </div>
+
+    <div class="grid2">
+      <div class="card chart"><h2>Estimated cost by job</h2><div id="chart-jobs"></div></div>
+      <div class="card chart"><h2 id="daily-title">Estimated cost per day</h2><div id="chart-days"></div></div>
+    </div>
+
+    <div class="card section">
+      <h2>By job and model</h2>
+      <div class="table-wrap"><table id="table-models"></table></div>
+    </div>
+
+    <div class="card section">
+      <h2>Sessions</h2>
+      <div class="table-wrap"><table id="table-sessions"></table></div>
+    </div>
+
+    <div class="card section">
+      <h2>Gaps</h2>
+      <ul class="gaps" id="gaps"></ul>
+    </div>
+  </div>
+
+  <footer id="footer"></footer>
+</main>
+<div class="tooltip" id="tooltip" role="status"></div>
+
+<script src="usage-data.js"></script>
+<script>
+(() => {
+  const state = { days: "6", job: "", agent: "" };
+  const $ = (id) => document.getElementById(id);
+  const tooltip = $("tooltip");
+  let data = null;
+
+  function fmtTokens(n) {
+    if (n >= 1e9) return (n / 1e9).toFixed(1) + "B";
+    if (n >= 1e6) return (n / 1e6).toFixed(1) + "M";
+    if (n >= 1e3) return (n / 1e3).toFixed(1) + "k";
+    return String(Math.round(n));
+  }
+  function fmtCost(c) {
+    return "$" + c.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }
+  function fmtInt(n) { return n.toLocaleString(); }
+  function esc(s) {
+    return String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  }
+  function localDay(d) {
+    const pad = (n) => String(n).padStart(2, "0");
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  }
+  function sinceDay() {
+    if (state.days === "all") return "";
+    const d = new Date();
+    d.setDate(d.getDate() - Number(state.days));
+    return localDay(d);
+  }
+  function jobName(key) {
+    const job = data.jobs.find((j) => j.key === key);
+    return job ? job.name : key;
+  }
+  function jobOrder(key) {
+    const i = data.jobs.findIndex((j) => j.key === key);
+    return i === -1 ? data.jobs.length : i;
+  }
+
+  function filtered() {
+    const since = sinceDay();
+    return data.rows.filter((r) => r.day >= since && (!state.job || r.job === state.job) && (!state.agent || r.agent === state.agent));
+  }
+
+  function sum(rows) {
+    const t = { requests: 0, input: 0, cache_read: 0, cache_write: 0, output: 0, tokens: 0, cost: 0, sessions: new Set() };
+    for (const r of rows) {
+      t.requests += r.requests; t.input += r.input; t.cache_read += r.cache_read; t.cache_write += r.cache_write;
+      t.output += r.output; t.tokens += r.tokens; t.cost += r.cost_usd || 0; t.sessions.add(r.session);
+    }
+    return t;
+  }
+
+  function group(rows, keyFn) {
+    const groups = new Map();
+    for (const r of rows) {
+      const k = keyFn(r);
+      if (!groups.has(k)) groups.set(k, []);
+      groups.get(k).push(r);
+    }
+    return groups;
+  }
+
+  function showTip(evt, title, lines) {
+    tooltip.innerHTML = `<div class="t-title">${esc(title)}</div>` + lines.map((l) => `<div class="t-row">${esc(l)}</div>`).join("");
+    tooltip.style.display = "block";
+    const pad = 12;
+    const w = tooltip.offsetWidth, h = tooltip.offsetHeight;
+    let x = evt.clientX + pad, y = evt.clientY + pad;
+    if (x + w > window.innerWidth - 8) x = evt.clientX - w - pad;
+    if (y + h > window.innerHeight - 8) y = evt.clientY - h - pad;
+    tooltip.style.left = x + "px";
+    tooltip.style.top = y + "px";
+  }
+  function hideTip() { tooltip.style.display = "none"; }
+  function bindTips(container, items) {
+    container.querySelectorAll("[data-tip]").forEach((el) => {
+      const item = items[Number(el.dataset.tip)];
+      const show = (e) => showTip(e.clientX !== undefined ? e : { clientX: el.getBoundingClientRect().right, clientY: el.getBoundingClientRect().top }, item.title, item.lines);
+      el.addEventListener("mousemove", show);
+      el.addEventListener("focus", show);
+      el.addEventListener("mouseleave", hideTip);
+      el.addEventListener("blur", hideTip);
+    });
+  }
+
+  // Horizontal bar, square at the baseline, 4px rounded data end.
+  function hbarPath(x0, x1, y, h) {
+    const r = Math.min(4, (x1 - x0) / 2, h / 2);
+    if (x1 - x0 <= 0) return "";
+    return `M${x0},${y}H${x1 - r}Q${x1},${y} ${x1},${y + r}V${y + h - r}Q${x1},${y + h} ${x1 - r},${y + h}H${x0}Z`;
+  }
+  function vbarPath(x, w, y0, y1) {
+    const r = Math.min(4, w / 2, (y0 - y1) / 2);
+    if (y0 - y1 <= 0) return "";
+    return `M${x},${y0}V${y1 + r}Q${x},${y1} ${x + r},${y1}H${x + w - r}Q${x + w},${y1} ${x + w},${y1 + r}V${y0}Z`;
+  }
+
+  function renderJobs(rows) {
+    const el = $("chart-jobs");
+    const groups = [...group(rows, (r) => r.job)].map(([job, rs]) => ({ job, t: sum(rs) }))
+      .filter((g) => g.t.requests > 0).sort((a, b) => b.t.cost - a.t.cost || jobOrder(a.job) - jobOrder(b.job));
+    if (!groups.length) { el.innerHTML = `<div class="empty">No usage in this period.</div>`; return; }
+    const width = Math.max(el.clientWidth, 280), labelW = Math.min(230, width * 0.42), valueW = 64;
+    const band = 30, barH = 16, top = 4;
+    const height = top + groups.length * band;
+    const max = Math.max(...groups.map((g) => g.t.cost), 0.01);
+    const x0 = labelW, plotW = width - labelW - valueW;
+    const items = [];
+    let svg = `<svg viewBox="0 0 ${width} ${height}" height="${height}" role="img" aria-label="Estimated cost by job">`;
+    svg += `<line class="base" x1="${x0}" x2="${x0}" y1="0" y2="${height}"></line>`;
+    groups.forEach((g, i) => {
+      const y = top + i * band + (band - barH) / 2;
+      const x1 = x0 + (g.t.cost / max) * plotW;
+      const name = jobName(g.job);
+      const short = name.length > 34 ? name.slice(0, 33) + "…" : name;
+      items.push({ title: name, lines: [fmtCost(g.t.cost), `${fmtTokens(g.t.tokens)} tokens`, `${g.t.sessions.size} session(s), ${fmtInt(g.t.requests)} requests`] });
+      svg += `<text class="label" x="${x0 - 8}" y="${y + barH / 2 + 4}" text-anchor="end">${esc(short)}</text>`;
+      svg += `<rect class="hit" data-tip="${i}" tabindex="0" x="0" y="${top + i * band}" width="${width}" height="${band}"></rect>`;
+      svg += `<path class="bar" d="${hbarPath(x0, Math.max(x1, x0 + 2), y, barH)}"></path>`;
+      svg += `<text class="value" x="${Math.max(x1, x0 + 2) + 6}" y="${y + barH / 2 + 4}">${esc(fmtCost(g.t.cost))}</text>`;
+    });
+    svg += "</svg>";
+    el.innerHTML = svg;
+    bindTips(el, items);
+  }
+
+  function niceMax(v) {
+    if (v <= 0) return 1;
+    const p = Math.pow(10, Math.floor(Math.log10(v)));
+    for (const m of [1, 2, 2.5, 5, 10]) if (m * p >= v) return m * p;
+    return 10 * p;
+  }
+
+  function renderDays(rows) {
+    const el = $("chart-days");
+    if (state.days === "0") {
+      $("daily-title").textContent = "Estimated cost per day";
+      el.innerHTML = `<div class="empty">Pick 7 days or longer to see the daily trend.</div>`;
+      return;
+    }
+    const byDay = group(rows, (r) => r.day);
+    const first = state.days === "all" ? (data.rows.length ? data.rows[0].day : localDay(new Date())) : sinceDay();
+    const days = [];
+    for (let d = new Date(first + "T00:00:00"); localDay(d) <= localDay(new Date()); d.setDate(d.getDate() + 1)) days.push(localDay(d));
+    if (!rows.length) { el.innerHTML = `<div class="empty">No usage in this period.</div>`; return; }
+    $("daily-title").textContent = `Estimated cost per day (${days.length} days)`;
+    const totals = days.map((d) => sum(byDay.get(d) || []));
+    const width = Math.max(el.clientWidth, 280), height = 220, left = 48, right = 8, top = 10, bottom = 26;
+    const plotW = width - left - right, plotH = height - top - bottom;
+    const max = niceMax(Math.max(...totals.map((t) => t.cost)));
+    const step = plotW / days.length, barW = Math.max(2, Math.min(28, step - 2));
+    const items = [];
+    let svg = `<svg viewBox="0 0 ${width} ${height}" height="${height}" role="img" aria-label="Estimated cost per day">`;
+    for (let i = 0; i <= 4; i++) {
+      const v = (max / 4) * i, y = top + plotH - (v / max) * plotH;
+      svg += `<line class="${i === 0 ? "base" : "grid"}" x1="${left}" x2="${width - right}" y1="${y}" y2="${y}"></line>`;
+      svg += `<text x="${left - 6}" y="${y + 4}" text-anchor="end">${esc(fmtCost(v).replace(".00", ""))}</text>`;
+    }
+    const labelEvery = Math.ceil(days.length / Math.max(1, Math.floor(plotW / 56)));
+    days.forEach((d, i) => {
+      const t = totals[i], x = left + i * step + (step - barW) / 2;
+      const y1 = top + plotH - (t.cost / max) * plotH;
+      items.push({ title: d, lines: [fmtCost(t.cost), `${fmtTokens(t.tokens)} tokens`, `${t.sessions.size} session(s)`] });
+      svg += `<rect class="hit" data-tip="${i}" tabindex="0" x="${left + i * step}" y="${top}" width="${step}" height="${plotH}"></rect>`;
+      if (t.cost > 0) svg += `<path class="bar" d="${vbarPath(x, barW, top + plotH, Math.min(y1, top + plotH - 1))}"></path>`;
+      if (i % labelEvery === 0 || i === days.length - 1) {
+        svg += `<text x="${left + i * step + step / 2}" y="${height - 8}" text-anchor="middle">${esc(d.slice(5))}</text>`;
+      }
+    });
+    svg += "</svg>";
+    el.innerHTML = svg;
+    bindTips(el, items);
+  }
+
+  function renderModels(rows) {
+    const groups = [...group(rows, (r) => r.job + "|" + r.model)].map(([k, rs]) => ({ job: rs[0].job, model: rs[0].model, t: sum(rs) }))
+      .sort((a, b) => jobOrder(a.job) - jobOrder(b.job) || b.t.cost - a.t.cost);
+    const head = `<thead><tr><th>Job</th><th>Model</th><th class="num">Sessions</th><th class="num">Requests</th><th class="num">Input</th>
+      <th class="num">Cache read</th><th class="num">Cache write</th><th class="num">Output</th><th class="num">Tokens</th><th class="num">Est. cost</th></tr></thead>`;
+    if (!groups.length) { $("table-models").innerHTML = head + `<tbody><tr><td colspan="10" class="empty">No usage in this period.</td></tr></tbody>`; return; }
+    const line = (job, model, t) => `<td class="num">${t.sessions.size}</td><td class="num">${fmtInt(t.requests)}</td>
+      <td class="num">${fmtTokens(t.input)}</td><td class="num">${fmtTokens(t.cache_read)}</td><td class="num">${fmtTokens(t.cache_write)}</td>
+      <td class="num">${fmtTokens(t.output)}</td><td class="num">${fmtTokens(t.tokens)}</td><td class="num">${fmtCost(t.cost)}</td>`;
+    const body = groups.map((g) => `<tr><td>${esc(jobName(g.job))}</td><td><code>${esc(g.model)}</code></td>${line(g.job, g.model, g.t)}</tr>`).join("");
+    $("table-models").innerHTML = head + `<tbody>${body}</tbody><tfoot><tr><td>Total</td><td></td>${line("", "", sum(rows))}</tr></tfoot>`;
+  }
+
+  function renderSessions(rows) {
+    const groups = [...group(rows, (r) => r.session)].map(([session, rs]) => ({ r: rs[0], t: sum(rs), models: [...new Set(rs.map((x) => x.model))] }))
+      .sort((a, b) => b.t.cost - a.t.cost);
+    const head = `<thead><tr><th>Started</th><th>Job</th><th>Agent</th><th>Worktree</th><th>Models</th><th class="num">Tokens</th><th class="num">Est. cost</th><th>Resume</th></tr></thead>`;
+    if (!groups.length) { $("table-sessions").innerHTML = head + `<tbody><tr><td colspan="8" class="empty">No sessions in this period.</td></tr></tbody>`; return; }
+    const body = groups.map(({ r, t, models }) => {
+      const resume = r.agent === "claude" ? `claude --resume ${r.session}` : `codex resume ${r.session}`;
+      return `<tr title="${esc(r.title)}"><td>${esc(r.started.replace("T", " "))}</td><td>${esc(jobName(r.job))}</td><td>${esc(r.agent)}</td>
+        <td><code class="wt" title="${esc(r.worktree)}">${esc(r.worktree)}</code></td><td><code>${esc(models.join(", "))}</code></td>
+        <td class="num">${fmtTokens(t.tokens)}</td><td class="num">${fmtCost(t.cost)}</td>
+        <td><button type="button" class="copy" data-copy="${esc(resume)}" title="Copy: ${esc(resume)}">copy</button></td></tr>`;
+    }).join("");
+    $("table-sessions").innerHTML = head + `<tbody>${body}</tbody>`;
+  }
+
+  function renderGaps() {
+    const items = [`<li>${esc(data.not_counted).replace(/`([^`]+)`/g, "<code>$1</code>")}</li>`];
+    if (data.pending) items.push(`<li>${data.pending} tab(s) or run(s) still waiting for their session to appear.</li>`);
+    for (const g of data.gaps.slice(-20)) {
+      items.push(`<li>No session found for ${esc(g.job_name)} ${esc(g.source)} at ${esc(g.at.replace("T", " "))} in <code>${esc(g.worktree)}</code> (${esc(g.title || g.agent)}).</li>`);
+    }
+    if (data.unpriced_models.length) items.push(`<li>No price in Orca's table, so cost leaves them out: <code>${esc(data.unpriced_models.join(", "))}</code>.</li>`);
+    $("gaps").innerHTML = items.join("");
+  }
+
+  function render() {
+    hideTip();
+    document.querySelectorAll("#period button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.days === state.days)));
+    const rows = filtered();
+    const t = sum(rows);
+    $("kpi-cost").textContent = fmtCost(t.cost);
+    $("kpi-tokens").textContent = fmtTokens(t.tokens);
+    $("kpi-sessions").textContent = fmtInt(t.sessions.size);
+    $("kpi-requests").textContent = fmtInt(t.requests);
+    renderJobs(rows);
+    renderDays(rows);
+    renderModels(rows);
+    renderSessions(rows);
+  }
+
+  function start(loaded) {
+    data = loaded;
+    const generated = new Date(data.generated_at);
+    const first = data.rows.length ? data.rows[0].day : null;
+    $("generated").textContent = `Refreshed ${generated.toLocaleString()}` + (first ? ` · counting since ${first}` : "");
+    $("price-note").textContent = `Estimated cost is ${data.price_note}`;
+    $("job").innerHTML = `<option value="">All jobs</option>` + data.jobs.map((j) => `<option value="${esc(j.key)}">${esc(j.name)}</option>`).join("");
+    $("footer").textContent = "Generated by 08 · Tally token usage by job (skill agent-usage, usage.py report). Data: usage.csv and usage.json in this folder.";
+    renderGaps();
+    render();
+  }
+
+  $("period").addEventListener("click", (e) => {
+    const b = e.target.closest("button");
+    if (!b) return;
+    state.days = b.dataset.days;
+    render();
+  });
+  $("job").addEventListener("change", (e) => { state.job = e.target.value; render(); });
+  $("agent").addEventListener("change", (e) => { state.agent = e.target.value; render(); });
+  document.addEventListener("click", (e) => {
+    const b = e.target.closest("button.copy");
+    if (!b) return;
+    navigator.clipboard?.writeText(b.dataset.copy).then(() => {
+      b.textContent = "copied";
+      setTimeout(() => { b.textContent = "copy"; }, 1200);
+    });
+  });
+  let resizeTimer = null;
+  window.addEventListener("resize", () => {
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(() => { if (data) render(); }, 120);
+  });
+
+  if (window.USAGE_DATA) {
+    start(window.USAGE_DATA);
+  } else {
+    fetch("usage.json").then((r) => r.json()).then(start).catch(() => {
+      $("content").innerHTML = `<div class="error">No data yet: run <code>python3 ~/.agents/skills/worktree-gate/usage.py report</code>, which writes usage.json, usage.csv and usage-data.js next to this file.</div>`;
+    });
+  }
+})();
+</script>
+</body>
+</html>

@@ -409,7 +409,7 @@ A run costs the sum of its steps. A Claude step's session id is pinned at launch
 **Rollups.** `pilot automations spend [--by automation|skill|agent|mr] [--days n]` (default: 7 days, by automation), or the RPC `pilot.spend`. A step counts once it has ended.
 
 **The token usage report.** Pilot writes job 08's files: `usage.json`, `usage.csv`, `usage-data.js`, `Token usage.html` and `Token usage.md`. They use the same paths and schema, so the Agent Console and the vault note keep working.
-- Folder: `PILOT_USAGE_REPORT_DIR`, default `~/Documents/WebPortal/Agent Work/Automations/08 · Tally token usage by job`. HTML template: `PILOT_USAGE_TEMPLATE`, default `~/.agents/skills/worktree-gate/usage_report.html`.
+- Folder: `PILOT_USAGE_REPORT_DIR`, default `~/Documents/WebPortal/Agent Work/Automations/08 · Tally token usage by job`. HTML template: `PILOT_USAGE_TEMPLATE`, default Pilot's own `resources/usage_report.html` (shipped as `Contents/Resources/pilot/usage_report.html`; orcad writes the report without it).
 - **The hand-over from job 08.** Pilot writes into that folder only once `usage-legacy.json` is there. To hand it over:
   1. Leave job 08 disabled.
   2. Run `python3 ~/.agents/skills/worktree-gate/usage.py report` once more.
