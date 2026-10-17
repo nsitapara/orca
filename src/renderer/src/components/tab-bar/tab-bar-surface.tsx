@@ -68,7 +68,6 @@ export function renderTabBarSurface({
     windowsTerminalCapabilities,
     defaultWindowsPowerShellImplementation,
     agentLaunchOptions,
-    newTerminalShortcut,
     newBrowserShortcut,
     newSimulatorShortcut,
     newFileShortcut,
@@ -264,7 +263,6 @@ export function renderTabBarSurface({
               windowsShellEntries={windowsShellEntries}
               defaultWindowsPowerShellImplementation={defaultWindowsPowerShellImplementation}
               pwshAvailable={windowsTerminalCapabilities.pwshAvailable}
-              newTerminalShortcut={newTerminalShortcut}
               newBrowserShortcut={newBrowserShortcut}
               newSimulatorShortcut={newSimulatorShortcut}
               newFileShortcut={newFileShortcut}

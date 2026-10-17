@@ -1,6 +1,7 @@
 import { i18n as appI18n } from '@/i18n/i18n'
 import { useAppStore } from '@/store'
 import { pilotBrand } from '../shared/brand'
+import { pilotSidebarAppearanceLabel } from './sidebar/sidebar-appearance-labels'
 import { registerPilotStore, type PilotStore } from './store'
 
 export type PilotI18nPostProcessor = {
@@ -21,8 +22,9 @@ function asList(value: string | readonly string[] | false | undefined): string[]
   return value ? [...value] : []
 }
 
-// Hook target: src/renderer/src/main.tsx (pilot-hook: renderer). Rebrands every translated string
-// through one i18next post-processor, so none of Orca's 5,625 catalog strings is edited.
+// Hook target: src/renderer/src/main.tsx (pilot-hook: renderer). Rebrands every translated string, and
+// relabels the sidebar appearance setting, through one i18next post-processor, so none of Orca's 5,625
+// catalog strings is edited.
 // It runs at the top level of main.tsx, before React renders, so a throw here would blank the whole
 // app: Pilot fails soft (R13), logs, and Orca's UI keeps working.
 export function attachPilotRenderer(
@@ -34,7 +36,8 @@ export function attachPilotRenderer(
     i18n.use({
       type: 'postProcessor',
       name: 'pilot-brand',
-      process: (value: unknown) => (typeof value === 'string' ? pilotBrand(value) : value)
+      process: (value: unknown) =>
+        typeof value === 'string' ? pilotSidebarAppearanceLabel(pilotBrand(value)) : value
     })
     const list = asList(i18n.options.postProcess)
     if (!list.includes('pilot-brand')) {
