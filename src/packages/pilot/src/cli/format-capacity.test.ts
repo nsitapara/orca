@@ -41,7 +41,12 @@ const payload: CapacityPayload = {
   ],
   memory: { totalBytes: 24 * GIB, availableBytes: 9.5 * GIB },
   suggestion: { limit: 3, budgetBytes: 7 * GIB, perJobBytes: 2 * GIB, measured: true },
-  heaviest: { automationId: 'review', automationName: '03 Review and fix', peakBytes: 2 * GIB }
+  heaviest: {
+    automationId: 'review',
+    automationName: '03 Review and fix',
+    peakBytes: 2 * GIB,
+    measured: true
+  }
 }
 
 describe('formatCapacity', () => {
@@ -75,5 +80,19 @@ describe('formatCapacity', () => {
       'Running: 1'
     ])
     expect(text.split('\n').at(-1)).toBe('Suggestion: 3, no job measured yet, so 2.5 GB each')
+  })
+
+  it('names the job not measured yet that the suggestion budgets for', () => {
+    const text = formatCapacity(
+      {
+        ...payload,
+        heaviest: { ...payload.heaviest!, automationName: '04 Test UIs', measured: false },
+        suggestion: { ...payload.suggestion, perJobBytes: 2.5 * GIB, measured: false }
+      },
+      NOW
+    )
+    expect(text.split('\n').at(-1)).toBe(
+      'Suggestion: 3, 04 Test UIs not measured yet, so 2.5 GB each'
+    )
   })
 })

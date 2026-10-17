@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { testDefinition, testStep } from '../../shared/definition/__fixtures__/definition'
 import { PilotStore } from '../store/store'
+import { UNMEASURED_JOB_BYTES } from '../../shared/capacity/limit-suggestion'
 import { capacityView } from './capacity-view'
 
 const GIB = 1024 ** 3
@@ -95,7 +96,8 @@ describe('capacityView', () => {
     expect(view.heaviest).toEqual({
       automationId: 'review',
       automationName: '03 Review and fix',
-      peakBytes: 3 * GIB
+      peakBytes: 3 * GIB,
+      measured: true
     })
     // (11 free + 1.5 held by running jobs - 4 headroom) / 3 for the heaviest job = 2.8, so 2.
     expect(view.suggestion).toEqual({
@@ -104,5 +106,40 @@ describe('capacityView', () => {
       perJobBytes: 3 * GIB,
       measured: true
     })
+  })
+
+  it('budgets an enabled job never measured as unmeasured, so a light measured job cannot raise the suggestion', () => {
+    const store = PilotStore.open(
+      join(mkdtempSync(join(tmpdir(), 'pilot-capacity-view-')), 'db.sqlite')
+    )
+    const light = testDefinition({ id: 'light', name: '14 Prepare context' })
+    const heavy = testDefinition({ id: 'heavy', name: '04 Test UIs' })
+    const off = testDefinition({ id: 'off', name: 'M01 Start tickets', enabled: false })
+    store.runs.create({
+      id: 'l1',
+      automationId: 'light',
+      tickId: null,
+      itemKey: 'k',
+      itemLabel: 'k',
+      worktreePath: null,
+      startedAt: 1
+    })
+    store.capacity.recordPeak('l1', 0.4 * GIB)
+    const view = (defs: (typeof light)[]) =>
+      capacityView({
+        store,
+        definitions: defs,
+        memory: null,
+        system: { totalBytes: 24 * GIB, availableBytes: 14 * GIB }
+      })
+    expect(view([light, heavy, off]).heaviest).toEqual({
+      automationId: 'heavy',
+      automationName: '04 Test UIs',
+      peakBytes: UNMEASURED_JOB_BYTES,
+      measured: false
+    })
+    expect(view([light, heavy, off]).suggestion).toMatchObject({ limit: 4, measured: false })
+    // A turned-off job that never ran is left out.
+    expect(view([light, off]).heaviest).toMatchObject({ automationId: 'light', measured: true })
   })
 })

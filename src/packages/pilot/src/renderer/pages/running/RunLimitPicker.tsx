@@ -34,7 +34,7 @@ export function RunLimitPicker({
       <output
         aria-label="Jobs at once"
         aria-live="polite"
-        className="min-w-16 text-center text-sm font-medium tabular-nums"
+        className="w-16 text-center text-sm font-medium tabular-nums"
       >
         {limit ?? 'No limit'}
       </output>

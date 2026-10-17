@@ -24,7 +24,14 @@ export type QueuedRun = {
   byHand: boolean
 }
 
-export type HeaviestJob = { automationId: string; automationName: string; peakBytes: number }
+// The job the suggestion budgets for. Unmeasured: an enabled job that hasn't run since memory was sampled, counted
+// at UNMEASURED_JOB_BYTES.
+export type HeaviestJob = {
+  automationId: string
+  automationName: string
+  peakBytes: number
+  measured: boolean
+}
 
 export type CapacityPayload = {
   // Null: no limit.
