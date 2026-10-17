@@ -3,6 +3,7 @@ import { useAppStore } from '@/store'
 import { pilotBrand } from '../shared/brand'
 import { attachPilotWindowAppearance } from './appearance/window-appearance'
 import { pilotSidebarAppearanceLabel } from './sidebar/sidebar-appearance-labels'
+import { rememberSidebarBody, type SidebarBodyStore } from './sidebar/sidebar-body-memory'
 import { registerPilotStore, type PilotStore } from './store'
 
 export type PilotI18nPostProcessor = {
@@ -25,14 +26,16 @@ function asList(value: string | readonly string[] | false | undefined): string[]
 
 // Hook target: src/renderer/src/main.tsx (pilot-hook: renderer). Rebrands every translated string, and
 // relabels the sidebar appearance setting, through one i18next post-processor, so none of Orca's 5,625
-// catalog strings is edited. Also themes the whole window when that setting is Match Terminal.
+// catalog strings is edited. The sidebar opens on the view last used, Activity by default. Also themes
+// the whole window when the sidebar appearance setting is Match Terminal.
 // It runs at the top level of main.tsx, before React renders, so a throw here would blank the whole
 // app: Pilot fails soft (R13), logs, and Orca's UI keeps working.
 export function attachPilotRenderer(
-  deps: { i18n?: I18nLike; doc?: Document; store?: PilotStore } = {}
+  deps: { i18n?: I18nLike; doc?: Document; store?: PilotStore; sidebar?: SidebarBodyStore } = {}
 ): void {
   try {
     registerPilotStore(deps.store ?? useAppStore)
+    rememberSidebarBody(deps.sidebar ?? useAppStore)
     const i18n = deps.i18n ?? (appI18n as unknown as I18nLike)
     i18n.use({
       type: 'postProcessor',

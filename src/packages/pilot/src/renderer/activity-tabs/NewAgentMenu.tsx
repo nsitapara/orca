@@ -1,11 +1,12 @@
 import { useEffect, useRef, type RefObject } from 'react'
-import { Bot } from 'lucide-react'
+import { Plus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuTrigger
 } from '@/components/ui/dropdown-menu'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { QuickLaunchAgentMenuItems } from '@/components/tab-bar/QuickLaunchButton'
 import { focusTerminalTabSurface } from '@/lib/focus-terminal-tab-surface'
 import { useAppStore } from '@/store'
@@ -40,7 +41,7 @@ function FocusFirstItem({
   return null
 }
 
-/** The tab bar's agent picker for one worktree, which may have no tab group yet. */
+/** The tab bar's agent picker for one worktree, which may have no tab group yet, behind a + button. */
 export function NewAgentMenu({ worktreeId }: { worktreeId: string }): React.JSX.Element {
   const groupId = useAppStore(
     (s) => s.activeGroupIdByWorktree[worktreeId] ?? s.groupsByWorktree[worktreeId]?.[0]?.id ?? null
@@ -57,12 +58,23 @@ export function NewAgentMenu({ worktreeId }: { worktreeId: string }): React.JSX.
         }
       }}
     >
-      <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="xs" onClick={(event) => event.stopPropagation()}>
-          <Bot />
-          New agent
-        </Button>
-      </DropdownMenuTrigger>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <DropdownMenuTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon-xs"
+              aria-label="New agent"
+              // The row or header around it opens or folds on click and Enter: this button only opens the menu.
+              onClick={(event) => event.stopPropagation()}
+              onKeyDown={(event) => event.stopPropagation()}
+            >
+              <Plus />
+            </Button>
+          </DropdownMenuTrigger>
+        </TooltipTrigger>
+        <TooltipContent side="top">New agent</TooltipContent>
+      </Tooltip>
       <DropdownMenuContent
         ref={menuRef}
         side="right"
