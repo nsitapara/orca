@@ -115,6 +115,8 @@ export type RunRow = {
   acknowledgedAt?: number | null
   // When it joined the line for a slot (main/capacity); null or absent: it never waited.
   queuedAt?: number | null
+  // How long it sat ended before Continue run reopened it (shared/run/worked-time.ts); absent: never.
+  idleMs?: number
 }
 export type StepStatus =
   | 'pending'

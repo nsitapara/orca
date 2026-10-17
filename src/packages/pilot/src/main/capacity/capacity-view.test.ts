@@ -81,6 +81,7 @@ describe('capacityView', () => {
         automationName: '03 Review and fix',
         itemLabel: '!r1',
         startedAt: 10,
+        idleMs: 0,
         memoryBytes: 1.5 * GIB,
         peakBytes: 2 * GIB,
         counted: true
@@ -91,6 +92,7 @@ describe('capacityView', () => {
         automationName: '01 Pull dev',
         itemLabel: '!p1',
         startedAt: 11,
+        idleMs: 0,
         memoryBytes: null,
         peakBytes: null,
         counted: false

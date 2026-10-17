@@ -2,6 +2,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import type { CapacityPayload, CapacityRun, QueuedRun } from '../../../shared/api-types-capacity'
 import { formatDuration } from '../../../shared/run/format-duration'
+import { workedMs } from '../../../shared/run/worked-time'
 import { openRun } from '../../run-views/run-panel-state'
 import { useNow } from '../waiting/use-now'
 import { FinishedRuns } from './FinishedRuns'
@@ -65,7 +66,7 @@ function RunningRow({ run, now }: { run: CapacityRun; now: number }): React.JSX.
         {run.itemLabel}
       </span>
       <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
-        {formatDuration(now - run.startedAt)}
+        {formatDuration(workedMs(run, now))}
       </span>
       <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
         {runMemoryText(run)}

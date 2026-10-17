@@ -9,6 +9,8 @@ export type CapacityRun = {
   automationName: string
   itemLabel: string
   startedAt: number
+  // As on its run (RunRow.idleMs): the time it sat ended before Continue run reopened it.
+  idleMs?: number
   memoryBytes: number | null
   peakBytes: number | null
   // False for a job without an agent step: it never waits for a slot and holds none.

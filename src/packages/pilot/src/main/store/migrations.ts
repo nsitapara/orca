@@ -1,6 +1,6 @@
 import type Database from '../../../../../main/sqlite/sync-database'
 
-export const PILOT_SCHEMA_VERSION = 15
+export const PILOT_SCHEMA_VERSION = 16
 
 const V1 = `
 CREATE TABLE ticks (id INTEGER PRIMARY KEY AUTOINCREMENT, automation_id TEXT NOT NULL, started_at INTEGER NOT NULL,
@@ -185,6 +185,11 @@ ALTER TABLE runs ADD COLUMN queued_at INTEGER;
 CREATE INDEX runs_finished ON runs (finished_at) WHERE finished_at IS NOT NULL;
 `
 
+// How long a run sat ended before Continue run reopened it: its time worked leaves those spans out.
+const V16 = `
+ALTER TABLE runs ADD COLUMN idle_ms INTEGER NOT NULL DEFAULT 0;
+`
+
 // MIGRATIONS[n - 1] takes a database from version n - 1 to n.
 const MIGRATIONS: readonly string[] = [
   V1,
@@ -201,7 +206,8 @@ const MIGRATIONS: readonly string[] = [
   V12,
   V13,
   V14,
-  V15
+  V15,
+  V16
 ]
 
 // Same pattern as Orca's orchestration.db (migrate.ts): user_version + one transaction, all or nothing.

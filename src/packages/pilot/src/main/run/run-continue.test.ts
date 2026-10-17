@@ -86,10 +86,12 @@ describe('continueRun', () => {
   it("reopens a failed run at the step that broke, keeps the steps before it, and resumes that step's session", async () => {
     const { store, deps, continued } = setup()
     await expect(continueRun(deps, 'run-1')).resolves.toEqual({ step: 'review', resumed: true })
+    // It ended at 4 and goes on at 10: those 6 ms count as idle, not worked.
     expect(store.runs.get('run-1')).toMatchObject({
       status: 'running',
       outcome: null,
-      finishedAt: null
+      finishedAt: null,
+      idleMs: 6
     })
     expect(store.runs.steps('run-1').map((s) => [s.name, s.status, s.sessionId])).toEqual([
       ['context', 'done', null],

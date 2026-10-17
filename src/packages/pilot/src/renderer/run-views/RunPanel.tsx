@@ -8,6 +8,7 @@ import { money } from '../../shared/money'
 import { paintRun, type PaintedRun } from '../../shared/run-views/paint'
 import { runHeadline, runTimeline } from '../../shared/run-views/timeline'
 import { formatDuration } from '../../shared/run/format-duration'
+import { workedMs } from '../../shared/run/worked-time'
 import { pilotRpc } from '../api'
 import { showAutomationsPage, showInboxCard, showPilotAutomation } from '../pages/automations-view'
 import { errorText, itemUrl, runStatusLabel } from '../pages/format'
@@ -120,7 +121,7 @@ function Header({
         ) : null}
         <Fact name="Started">{new Date(run.startedAt).toLocaleString()}</Fact>
         {run.finishedAt !== null ? (
-          <Fact name="Took">{formatDuration(run.finishedAt - run.startedAt)}</Fact>
+          <Fact name="Took">{formatDuration(workedMs(run, run.finishedAt))}</Fact>
         ) : null}
         {run.costUsd !== null ? <Fact name="Spent">{money(run.costUsd)}</Fact> : null}
         {run.tickId !== null ? <Fact name="Tick">{`Tick ${run.tickId}`}</Fact> : null}

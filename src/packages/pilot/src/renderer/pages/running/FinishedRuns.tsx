@@ -8,6 +8,7 @@ import { formatMemory } from '../../../shared/capacity/format-memory'
 import { runStatusWord } from '../../../shared/env-text'
 import { money } from '../../../shared/money'
 import { formatDuration } from '../../../shared/run/format-duration'
+import { workedMs } from '../../../shared/run/worked-time'
 import { paintRun } from '../../../shared/run-views/paint'
 import { runStrip } from '../../../shared/run-views/strip'
 import { useAutomationsFeed } from '../../run-views/automations-feed'
@@ -189,7 +190,7 @@ function FinishedRow({
         <td className={cn(NUMBER, 'text-status-warning')}>
           {run.queuedAt ? formatDuration(run.startedAt - run.queuedAt) : ''}
         </td>
-        <td className={NUMBER}>{formatDuration(ended - run.startedAt)}</td>
+        <td className={NUMBER}>{formatDuration(workedMs(run, ended))}</td>
         <td className={NUMBER}>{run.peakBytes === null ? '–' : formatMemory(run.peakBytes)}</td>
         <td className={NUMBER}>{run.costUsd === null ? '–' : money(run.costUsd)}</td>
         <td className={CELL}>
