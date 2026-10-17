@@ -2,15 +2,16 @@ import { describe, expect, it } from 'vitest'
 import type { RunStatus } from '../../shared/api-types'
 import { PilotStore } from '../store/store'
 import type { SessionTerminalState } from './agent-step'
-import { createEndedRunTabs } from './ended-run-tabs'
+import { createEndedRunTabs, type TurnRow } from './ended-run-tabs'
 import { SessionClaims } from './session-claims'
 
 type StepOpts = { status?: RunStatus; sessionId?: string | null; idx?: number; startedAt?: number }
 
 function harness() {
   const store = PilotStore.open(':memory:')
-  const open = new Set<string>()
-  const rows = new Map<string, { turnStartedAt?: number; stateStartedAt: number }[]>()
+  // Each connected terminal's handle and the pane it sits in.
+  const open = new Map<string, string>()
+  const rows = new Map<string, TurnRow[]>()
   const states = new Map<string, SessionTerminalState>()
   const looked: string[] = []
   const closed: string[] = []
@@ -18,7 +19,8 @@ function harness() {
   const listing = { cutShort: false }
   const tabs = createEndedRunTabs({
     store,
-    openHandles: async () => (listing.cutShort ? null : open),
+    openTerminals: async () =>
+      listing.cutShort ? null : [...open].map(([handle, pane]) => ({ handle, paneKeys: [pane] })),
     rowsOf: (paneKey) => rows.get(paneKey) ?? [],
     terminals: {
       state: async (t, sessionId) => {
@@ -65,7 +67,7 @@ function harness() {
       finishedAt: startedAt + 9
     })
     store.runs.update(runId, { status: o.status ?? 'done', finishedAt: startedAt + 10 })
-    open.add(handle)
+    open.set(handle, `${handle}:pane`)
   }
   return { store, open, rows, states, looked, closed, claims, listing, tabs, step }
 }
@@ -95,7 +97,10 @@ describe('closing ended runs’ tabs', () => {
       'a turn began after its last step ended (taken over)',
       (h) => {
         h.step('r1', 'h1')
-        h.rows.set('h1:pane', [{ turnStartedAt: 2, stateStartedAt: 5 }, { stateStartedAt: 30 }])
+        h.rows.set('h1:pane', [
+          { state: 'done', turnStartedAt: 2, stateStartedAt: 5 },
+          { state: 'working', stateStartedAt: 30 }
+        ])
       }
     ],
     [
@@ -136,7 +141,7 @@ describe('closing ended runs’ tabs', () => {
   ])('a tab stays when %s', async (_name, arrange) => {
     const h = harness()
     arrange(h)
-    h.open.add('not-pilots')
+    h.open.set('not-pilots', 'not-pilots:pane')
     await h.tabs.pass()
     expect(h.closed).toEqual([])
   })
@@ -144,7 +149,7 @@ describe('closing ended runs’ tabs', () => {
   it('closes under the session’s claim and lets it go after', async () => {
     const h = harness()
     h.step('r1', 'h1')
-    h.rows.set('h1:pane', [{ turnStartedAt: 2, stateStartedAt: 10 }])
+    h.rows.set('h1:pane', [{ state: 'done', turnStartedAt: 2, stateStartedAt: 10 }])
     await h.tabs.pass()
     expect(h.looked).toEqual(['h1:close-ended:h1'])
     expect(h.closed).toEqual(['h1'])
@@ -165,13 +170,26 @@ describe('closing ended runs’ tabs', () => {
     expect(h.closed).toEqual(['busy-tab'])
   })
 
+  it('finds a tab by its pane when a restart gave its terminal a new handle', async () => {
+    const h = harness()
+    h.step('r1', 'before-restart')
+    h.open.delete('before-restart')
+    h.open.set('after-restart', 'before-restart:pane')
+    // The session resumed in its pane after the restart: a boundary, not a turn.
+    h.rows.set('before-restart:pane', [
+      { state: 'done', stateStartedAt: 50, sessionBoundary: true }
+    ])
+    await h.tabs.pass()
+    expect(h.closed).toEqual(['after-restart'])
+  })
+
   // r2 is an answer run that typed its answers into the asking run's tab: the tab closes once both runs ended, judged by
   // the answer step's end.
   it('a tab two runs used closes once both ended', async () => {
     const h = harness()
     h.step('r1', 'h1', { status: 'needs_you' })
     h.step('r2', 'h1', { status: 'running', startedAt: 30 })
-    h.rows.set('h1:pane', [{ turnStartedAt: 30, stateStartedAt: 35 }])
+    h.rows.set('h1:pane', [{ state: 'done', turnStartedAt: 30, stateStartedAt: 35 }])
     await h.tabs.pass()
     expect(h.closed).toEqual([])
     h.store.runs.update('r2', { status: 'done' })
