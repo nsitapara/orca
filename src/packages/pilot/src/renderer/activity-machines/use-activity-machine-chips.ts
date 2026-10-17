@@ -18,7 +18,7 @@ export function activityGroupMachineRows(group: ActivityThreadGroup): ActivityMa
   ]
 }
 
-const sameLabels = (labels: ReadonlyMap<string, string> | null) => labels
+const selectLabels = (labels: ReadonlyMap<string, string> | null) => labels
 
 /** Whether an Activity list's rows span machines, decided once for the whole list; null until Pilot attaches. */
 export function useActivityMachineChips(
@@ -26,7 +26,13 @@ export function useActivityMachineChips(
 ): ActivityMachineChips | null {
   const repos = useAppStore((s) => s.repos)
   const sshTargetLabels = useAppStore((s) => s.sshTargetLabels)
-  const settings = useAppStore((s) => s.settings)
+  // Why: only the fields the host registry reads, so other settings writes leave the list alone.
+  const hostSettings = useAppStore(
+    useShallow((s) => ({
+      activeRuntimeEnvironmentId: s.settings?.activeRuntimeEnvironmentId,
+      hostSettingOverrides: s.settings?.hostSettingOverrides
+    }))
+  )
   const runtimeEnvironments = useAppStore((s) => s.runtimeEnvironments)
   // Why: no live status here; it would re-render the whole list on every tick.
   const hosts = useMemo(
@@ -34,13 +40,13 @@ export function useActivityMachineChips(
       buildSidebarHostOptions({
         repos,
         sshTargetLabels,
-        settings,
+        settings: hostSettings,
         runtimeEnvironments,
-        hostLabelOverrides: getHostDisplayLabelOverrides(settings)
+        hostLabelOverrides: getHostDisplayLabelOverrides(hostSettings)
       }),
-    [repos, sshTargetLabels, settings, runtimeEnvironments]
+    [repos, sshTargetLabels, hostSettings, runtimeEnvironments]
   )
-  const defaultHostId = getSettingsFocusedExecutionHostId(settings)
+  const defaultHostId = getSettingsFocusedExecutionHostId(hostSettings)
   const builtLabels = useMemo(
     // Collapsed groups count too, so folding one never drops the chips.
     () =>
@@ -52,7 +58,7 @@ export function useActivityMachineChips(
     [groups, defaultHostId, hosts]
   )
   // Why: the same Map comes back while the labels are equal, so the chips skip a re-render.
-  const labels = useShallow(sameLabels)(builtLabels)
+  const labels = useShallow(selectLabels)(builtLabels)
   const chips = useMemo(() => (labels ? { labels, defaultHostId } : null), [labels, defaultHostId])
   return pilotStore() ? chips : null
 }

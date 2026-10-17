@@ -27,7 +27,19 @@ afterEach(() => {
   registerPilotStore(null)
 })
 
-it('leaves the list alone when only host status changes', () => {
+it.each([
+  {
+    name: 'host status changes',
+    write: () => useAppStore.setState({ runtimeStatusByEnvironmentId: new Map() })
+  },
+  {
+    name: 'a setting the hosts don’t read changes',
+    write: () =>
+      useAppStore.setState(({ settings }) => ({
+        settings: settings && { ...settings, editorPreviewTabsEnabled: false }
+      }))
+  }
+])('leaves the list alone when only $name', ({ write }) => {
   attach()
   arrangeMachines()
   render(
@@ -36,6 +48,6 @@ it('leaves the list alone when only host status changes', () => {
     />
   )
   const before = pane.renders
-  act(() => useAppStore.setState({ runtimeStatusByEnvironmentId: new Map() }))
+  act(write)
   expect(pane.renders).toBe(before)
 })
