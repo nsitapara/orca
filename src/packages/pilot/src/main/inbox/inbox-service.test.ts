@@ -412,6 +412,18 @@ describe('listInbox', () => {
     expect(lines.in_0000000000000002.text).toBe('run in_0000000000000002')
   })
 
+  it("gives each card its Message history: the run that asked it and an agent's reply", () => {
+    const { deps } = setup()
+    addInboxItem(deps, QUESTION)
+    replyToInboxItem(deps, 'in_0000000000000001', 'e2e or unit?')
+    expect(listInbox(deps, {}).history).toEqual({
+      in_0000000000000001: [
+        { kind: 'asked', at: 100, run: { id: 'run-1', status: 'running' } },
+        { kind: 'reply', at: 100, by: 'agent', text: 'e2e or unit?', run: null }
+      ]
+    })
+  })
+
   // One card whose Run line can't be built still shows (without it); the rest keep theirs, and it is logged once.
   it("lists every card when one card's Run line can't be built", () => {
     const { deps } = setup()

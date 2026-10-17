@@ -68,6 +68,16 @@ export class EventStore {
       .map((r) => toEvent(r as never))
   }
 
+  // These cards' events (inboxEvent names the card as payload.id) of these kinds, oldest first.
+  forCards(ids: readonly string[], kinds: readonly string[]): EventRow[] {
+    return this.db
+      .prepare(
+        "SELECT * FROM events WHERE kind IN (SELECT value FROM json_each(?)) AND json_extract(payload_json, '$.id') IN (SELECT value FROM json_each(?)) ORDER BY at, id"
+      )
+      .all(JSON.stringify(kinds), JSON.stringify(ids))
+      .map((r) => toEvent(r as never))
+  }
+
   // Oldest first. Every filter given must hold; `kinds` matches any kind it lists.
   list(filter: EventFilter): EventRow[] {
     const where: string[] = []
