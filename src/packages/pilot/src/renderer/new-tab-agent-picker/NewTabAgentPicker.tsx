@@ -1,6 +1,5 @@
 import React, { useCallback, useMemo, useState } from 'react'
 import { TerminalSquare } from 'lucide-react'
-import { toast } from 'sonner'
 import {
   CommandDialog,
   CommandEmpty,
@@ -13,16 +12,12 @@ import { orderTabLaunchAgents } from '@/components/tab-bar/tab-agent-launch-opti
 import type { TerminalController } from '@/components/use-terminal-controller'
 import { FooterKey } from '@/components/worktree-jump-palette-primitives'
 import { AgentIcon, getAgentCatalog } from '@/lib/agent-catalog'
-import { newAgentLaunchRequestId } from '@/lib/agent-launch-request-id'
-import { focusTerminalTabSurface } from '@/lib/focus-terminal-tab-surface'
-import { launchAgentInNewTab } from '@/lib/launch-agent-in-new-tab'
 import { useAgentDetectionTargetForWorktree } from '@/hooks/useAgentDetectionTarget'
 import { useDetectedAgents } from '@/hooks/useDetectedAgents'
 import { useModalReturnFocus } from '@/hooks/useModalReturnFocus'
 import { useAppStore } from '@/store'
 import { useActiveWorktree } from '@/store/selectors'
 import { DEFAULT_DISABLED_TUI_AGENTS } from '../../../../../shared/tui-agent-selection'
-import type { TuiAgent } from '../../../../../shared/tui-agent'
 import { pilotStore } from '../store'
 import {
   buildNewTabAgentPickerOptions,
@@ -32,28 +27,9 @@ import {
   setNewTabAgentPickerOpen,
   useNewTabAgentPickerOpen
 } from './new-tab-agent-picker-open-state'
+import { launchAgentInWorkspace } from './launch-agent-in-workspace'
 
 type PickerController = Pick<TerminalController, 'activeWorktreeId' | 'handleNewTab'>
-
-// Mirrors the tab bar's quick launch: launch, then focus a local terminal tab.
-function launchAgent(worktreeId: string, agent: TuiAgent): void {
-  const state = useAppStore.getState()
-  const result = launchAgentInNewTab({
-    requestId: newAgentLaunchRequestId(),
-    agent,
-    worktreeId,
-    groupId:
-      state.activeGroupIdByWorktree[worktreeId] ?? state.groupsByWorktree[worktreeId]?.[0]?.id,
-    launchSource: 'shortcut'
-  })
-  if (!result) {
-    toast.error(`Could not build launch command for ${agent}.`)
-    return
-  }
-  if (result.surface.kind === 'local-terminal') {
-    focusTerminalTabSurface(result.surface.tabId)
-  }
-}
 
 export function NewTabAgentPicker({
   controller
@@ -116,7 +92,7 @@ function NewTabAgentPickerDialog({
         return
       }
       if (activeWorktreeId) {
-        launchAgent(activeWorktreeId, option.id)
+        launchAgentInWorkspace({ worktreeId: activeWorktreeId, agent: option.id })
       }
     })
   }
