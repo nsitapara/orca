@@ -117,7 +117,10 @@ function YourAnswer({
         {button ? answerWords(item, entry.text).label : entry.text}
       </p>
       {entry.run ? (
-        <span className="font-mono text-xs text-muted-foreground">
+        <span
+          className="max-w-full truncate font-mono text-xs text-muted-foreground"
+          title={others ? `with ${others}` : undefined}
+        >
           sent to answer run {shortRun(entry.run.id)}
           {others ? ` with ${others}` : null}
         </span>
