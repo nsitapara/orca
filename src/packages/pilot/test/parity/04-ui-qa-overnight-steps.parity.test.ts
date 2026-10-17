@@ -1,7 +1,4 @@
 import { spawnSync } from 'node:child_process'
-import { mkdtempSync, writeFileSync } from 'node:fs'
-import { tmpdir } from 'node:os'
-import { join } from 'node:path'
 import { expect, it } from 'vitest'
 import type { ItemFields, StepStatus } from '../../src/shared/api-types'
 import type { AutomationDefinition, StepDef } from '../../src/shared/definition/types'
@@ -9,8 +6,6 @@ import { renderShellEnv } from '../../src/shared/run/shell-template'
 import { decideStep, runEnd, type EndedStep } from '../../src/shared/run/step-plan'
 import { stepFields, type StepResult } from '../../src/shared/template'
 import { JOB_04, PARITY_04 } from './jobs/job-04'
-import { runOldPlan } from './old-side'
-import { parityFixture } from './overrides'
 import { describeParity, parityMissing } from './parity-case'
 import { loadPortedAutomation } from './ported'
 
@@ -243,36 +238,34 @@ const NIGHTS: Night[] = [
   }
 ]
 
-// close_out's outcome and count for each night, from ui-qa's own pilot_mode.classify and loop.counts_as_tested.
-function oldEnds(): OldEnd[] {
-  const file = join(mkdtempSync(join(tmpdir(), 'parity-04-nights-')), 'case.json')
-  const nights = NIGHTS.map((n) => ({
-    name: n.name,
-    stack: n.stack,
-    test: n.test,
-    finished: n.finished,
-    nothing: n.nothing,
-    renderFailed: Boolean(n.renderFailed)
-  }))
-  const now = Date.parse('2026-10-11T10:00:00Z')
-  writeFileSync(
-    file,
-    JSON.stringify(
-      parityFixture(JOB_04.job, 'nights', now, { state: { 'parity/case.json': { nights } } })
-    )
-  )
-  return runOldPlan(JOB_04.job, file).map((d) => ({
-    outcome: d.decision,
-    tested: d.reason === 'tested'
-  }))
-}
+// close_out's outcome and count for each night (NIGHTS, in order), from ui-qa's own pilot_mode.classify and
+// loop.counts_as_tested: run_old_plan.py 04 on the nights, recorded with /opt/homebrew/bin/python3 3.15.0 on 2026-10-16,
+// before milestone 8b deleted them.
+const FROZEN_ENDS: OldEnd[] = [
+  { outcome: 'start_failed', tested: false }, // 0: the stack never started
+  { outcome: 'start_failed', tested: false }, // 1: the stack step timed out
+  { outcome: 'complete', tested: true }, // 2: a complete session with a bug to fix
+  { outcome: 'complete', tested: true }, // 3: a complete session with nothing to fix
+  { outcome: 'stack_failed', tested: false }, // 4: the session found the stack dead
+  { outcome: 'timed_out', tested: true }, // 5: timed out after writing findings
+  { outcome: 'timed_out', tested: false }, // 6: timed out having written nothing
+  { outcome: 'complete', tested: true }, // 7: finished, then cut off at 60 minutes
+  { outcome: 'stopped', tested: false }, // 8: stopped having written nothing
+  { outcome: 'stopped', tested: true }, // 9: its terminal closed after it wrote a charter
+  { outcome: 'render_failed', tested: false }, // 10: the report failed to render
+  { outcome: 'complete', tested: true }, // 11: the teardown failed
+  { outcome: 'complete', tested: true }, // 12: the report step crashed
+  { outcome: 'complete', tested: true }, // 13: the report step timed out
+  { outcome: 'complete', tested: true }, // 14: the fixer failed
+  { outcome: 'complete', tested: true } // 15: the fixer timed out
+]
 
 const ready = parityMissing(PARITY_04).length === 0
-const old = ready ? oldEnds() : []
+const old = FROZEN_ENDS
 const def = ready ? loadPortedAutomation(JOB_04.automationId).definition : null
 
-// Skipped, with what's missing in its title and on stderr, where ~/.agents (or PARITY_SKILLS_DIR /
-// PARITY_AUTOMATIONS_DIR) or python3 isn't there.
+// The nights' old ends are frozen above, so neither python3 nor ui-qa's code is needed; skipped, with what's missing in
+// its title and on stderr, only where ~/.agents/automations (or PARITY_AUTOMATIONS_DIR) isn't there.
 describeParity(PARITY_04, '04 · a night run ends as close_out would have counted it', () => {
   it.each(NIGHTS.map((n, i) => [i, n.name, n] as const))('night %i: %s', (i, _name, n) => {
     const expected = old[i]

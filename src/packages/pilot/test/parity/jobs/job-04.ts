@@ -11,7 +11,8 @@ import type { ParityJob } from '../parity-case'
 import { loadPortedAutomation, portedAutomationsDir } from '../ported'
 import { withWorktrees } from '../worktree-fixture'
 
-// The old side's code is ui-qa/scripts/loop.py (no sweep.py: jobs/job_04.py sets SWEEP = None).
+// The old side's code was ui-qa/scripts/loop.py (no sweep.py: jobs/job_04.py sets SWEEP = None); its decisions are frozen
+// in each case's old block until milestone 8b deletes it.
 export const JOB_04 = {
   job: '04',
   folder: 'ui-qa',
@@ -156,6 +157,7 @@ export const PARITY_04: ParityJob = {
   job: JOB_04.job,
   folder: JOB_04.folder,
   script: JOB_04.script,
+  frozen: true,
   files: [
     join(portedAutomationsDir(), 'ui-qa-overnight.yaml'),
     join(portedAutomationsDir(), 'people.yaml')

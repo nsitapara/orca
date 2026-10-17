@@ -992,5 +992,40 @@
     "/wt/web-433": true,
     "/wt/web-434": true,
     "/wt/web-435": true
+  },
+  "old": {
+    "from": "run_old_plan.py 04 (ui-qa/scripts/loop.py sweep) with /opt/homebrew/bin/python3 3.15.0, 2026-10-16, before milestone 8b deleted it",
+    "decisions": [
+      {
+        "key": "wt:400fee61-a463-4f76-894a-39861e906007::/wt/web-435",
+        "label": "web-435-work",
+        "decision": "start",
+        "reason": ""
+      },
+      {
+        "key": "wt:400fee61-a463-4f76-894a-39861e906007::/wt/web-431",
+        "label": "web-431-work",
+        "decision": "skip",
+        "reason": "answers are being applied or an agent is working there; QA waits"
+      },
+      {
+        "key": "wt:400fee61-a463-4f76-894a-39861e906007::/wt/web-432",
+        "label": "web-432-work",
+        "decision": "skip",
+        "reason": "answers are being applied or an agent is working there; QA waits"
+      },
+      {
+        "key": "wt:400fee61-a463-4f76-894a-39861e906007::/wt/web-433",
+        "label": "web-433-work",
+        "decision": "skip",
+        "reason": "answers are being applied or an agent is working there; QA waits"
+      },
+      {
+        "key": "wt:400fee61-a463-4f76-894a-39861e906007::/wt/web-434",
+        "label": "web-434-work",
+        "decision": "skip",
+        "reason": "answers are being applied or an agent is working there; QA waits"
+      }
+    ]
   }
 }
