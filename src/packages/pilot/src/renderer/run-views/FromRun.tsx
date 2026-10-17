@@ -81,7 +81,7 @@ function FromRunBlock({
           {run.itemLabel}
         </span>
         <span className="flex-1" />
-        <ContinueRun run={run} />
+        <ContinueRun run={run} host={host} />
         <button type="button" className="underline" onClick={() => openRun(run.id, asked, host)}>
           Open run
         </button>

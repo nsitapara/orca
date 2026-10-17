@@ -154,6 +154,20 @@ describe('FromRun', () => {
       expect(pilotRpc).toHaveBeenCalledWith('pilot.runs.continue', { runId: 'r1' })
     })
 
+    it("continues another machine's card's run on that machine, as its Open run does", async () => {
+      serve(async () => ({ step: 'fix', resumed: true }))
+      render(
+        <FromRun item={{ automationId: 'fix-ci', stepIdx: 0 }} run={{ ...failed(), host: MINI }} />
+      )
+      fireEvent.click(await screen.findByRole('button', { name: 'Continue run' }))
+      expect(await screen.findByText('Continuing from step fix, in its own session')).toBeTruthy()
+      expect(pilotRpc).toHaveBeenCalledWith(
+        'pilot.runs.continue',
+        { runId: 'r1' },
+        { target: MINI.target }
+      )
+    })
+
     it("says why when Pilot won't continue it", async () => {
       serve(async () => {
         throw new Error('Every run slot is taken: continue this run once one frees')
