@@ -457,17 +457,33 @@ Pilot keeps Orca's pairing, WebSocket server, web client and `orcad` protocols u
 
   The flag is `--environment <id or name>`; this CLI has no `--host`. The environment was removed afterwards (`pilot environment rm --environment local-orcad`).
 
+### Verified (automated): Pilot's pages in the browser
+
+- **Browser check: pass (4 tests).** `ORCA_BACKGROUND_LAUNCH=1 pnpm exec playwright test --config src/packages/pilot/test/web/playwright.config.ts --workers=1` (run `pnpm run build:web` first). It starts an isolated `serve` on a random loopback port with a temp data folder, the scheduler and vault export off, and one seeded card and automation. It pairs through the `#pairing=` link in `webClientUrl` (a runtime-scope link, so no connect screen shows) and opens it in headless Chromium. It checks:
+  - Inbox shows the seeded card, in the list and open beside it.
+  - Running shows the run limit panel and "Nothing is running."
+  - Automations lists the seeded automation, and its switch flips as a paired device.
+  - Playground shows a note that it runs only on the machine Pilot runs on, with no Start button.
+
+  Screenshots (`inbox.png`, `running.png`, `playground.png`) land in `${TMPDIR}/pilot-web-pages-results/`.
+
 ### Pending, Nish to verify (2026-10-10)
 
 These need a phone, a second Mac and an iPad on Tailscale. Open Pilot (`dist/mac-arm64/Pilot.app`) first. Do not use real Orca's `orca` CLI for these: it would save the environment in Orca's data.
 
 - [ ] **Phone.** In Pilot, open the "Orca Mobile" nav entry (the name stays). Scan the QR code with the Orca mobile app on a phone that is on Tailscale. Expect Pilot's worktrees listed and a terminal that opens. The link is `orca://pair?code=...` and its endpoint is this Mac's address on port 6868.
 - [ ] **Another Mac.** On a second Mac with Orca installed, run `orca environment add --name pilot-mac --pairing-code <code from Pilot's pairing screen>`, then `orca worktree list --host runtime:<environment id>` (if `--host` is rejected, use `--environment <id>`). Expect Pilot's worktrees.
-- [ ] **Browser web client.** Open Pilot's web client URL (from the same pairing screen, pairing in the URL fragment) on an iPad or another machine, using this Mac's Tailscale address on port 6868. Expect the full UI, with **Automations** showing Pilot's page.
+- [ ] **Browser web client.** Open Pilot's web client URL (from the same pairing screen, pairing in the URL fragment) on an iPad or another machine, using this Mac's Tailscale address on port 6868. Expect the full UI, with **Inbox**, **Running** and **Automations** showing Pilot's pages. To try it without touching Pilot's real data, start a scratch server (use this Mac's Tailscale IP) and open the `pairing.webClientUrl` from the printed `orca_server_ready` line:
+
+      DATA="$(mktemp -d)/pilot-web-dev"; mkdir -p "$DATA/automations"
+      ORCA_DEV_USER_DATA_PATH="$DATA" ORCA_CLI_INSTALL_PATH="$DATA/cli/pilot" ORCA_BROWSER_EXECUTABLE= ORCA_BACKGROUND_LAUNCH=1 \
+      PILOT_SCHEDULER=off PILOT_VAULT_EXPORT=off PILOT_AUTOMATION_DIRS="$DATA/automations" \
+      pnpm exec electron . --use-mock-keychain --password-store=basic --serve --serve-json --serve-port 6979 --serve-pairing-address <this Mac's Tailscale IP>
 - Pilot's WebSocket listener binds loopback until a device is paired (upstream STA-2370), so the network bind appears only after the first pairing. If a Tailscale address refuses the connection before pairing, that is expected.
 
 ## Known gaps
 
+- In the browser version, some buttons are hidden because they act on the Mac that runs Pilot, not on your device: a report's Open, Resume and Source, and a skill's Open. The Playground's Start is replaced by a note that it runs only on that Mac. Approve asks again on the desktop.
 - Computer Use is unavailable in packaged Pilot. Enabling it needs a Pilot bundle id for the helper plus a trust-list entry in its Swift peer check.
 - After closing the right sidebar while on the Automations tab, Orca's main-side persistence allowlist drops `plugin:pilot` and resets the stored tab to Explorer (the UI hydrates it back via `hydratePersistedUI`), so reopening or restarting lands on Explorer, not Automations.
 - "Install CLI" links `/usr/local/bin/pilot` (never `orca`) to Pilot's `Contents/Resources/bin/orca`: upstream's `bundled-cli-launcher-path.ts` always installs the `bin/orca` launcher, and `applyPilotEnvDefaults` (`src/packages/pilot/src/main/env.ts`) sets `ORCA_CLI_INSTALL_PATH` to `/usr/local/bin/pilot`, which `cli-install-location.ts` uses ahead of its own `orca` default. That launcher pins Pilot's data folder and install path, so the installed `pilot` command and `pilot serve` (which re-installs the CLI on start) act on Pilot, never on real Orca. Checked in code and by `build/bin/launchers.test.ts`, not clicked.
