@@ -1,6 +1,7 @@
 import { i18n as appI18n } from '@/i18n/i18n'
 import { useAppStore } from '@/store'
 import { pilotBrand } from '../shared/brand'
+import { attachPilotWindowAppearance } from './appearance/window-appearance'
 import { pilotSidebarAppearanceLabel } from './sidebar/sidebar-appearance-labels'
 import { registerPilotStore, type PilotStore } from './store'
 
@@ -24,7 +25,7 @@ function asList(value: string | readonly string[] | false | undefined): string[]
 
 // Hook target: src/renderer/src/main.tsx (pilot-hook: renderer). Rebrands every translated string, and
 // relabels the sidebar appearance setting, through one i18next post-processor, so none of Orca's 5,625
-// catalog strings is edited.
+// catalog strings is edited. Also themes the whole window when that setting is Match Terminal.
 // It runs at the top level of main.tsx, before React renders, so a throw here would blank the whole
 // app: Pilot fails soft (R13), logs, and Orca's UI keeps working.
 export function attachPilotRenderer(
@@ -46,6 +47,7 @@ export function attachPilotRenderer(
     const doc = deps.doc ?? globalThis.document
     if (doc) {
       doc.title = pilotBrand(doc.title || 'Orca')
+      attachPilotWindowAppearance(useAppStore, doc.documentElement)
     }
   } catch (error) {
     console.error(

@@ -1,10 +1,11 @@
-// Pilot's sidebar appearance setting styles both sidebars (hook right-sidebar-appearance), so its English
-// labels drop "left". Exact strings only: other text about the left sidebar still means that one.
+// Pilot's sidebar appearance setting styles both sidebars (hook right-sidebar-appearance), and Match Terminal
+// themes the whole window (window-appearance), so its English labels drop "left". Exact strings only: other
+// text about the left sidebar still means that one.
 const LABELS = new Map([
   ['Left Sidebar Appearance', 'Sidebar Appearance'],
   [
     'Make the left sidebar match your terminal, stay default, or use a tint.',
-    'Make both sidebars match your terminal, stay default, or use a tint.'
+    'Match your terminal across the whole window, stay default, or tint both sidebars.'
   ],
   ['The color mixed into the left sidebar surface.', 'The color mixed into both sidebar surfaces.'],
   [
