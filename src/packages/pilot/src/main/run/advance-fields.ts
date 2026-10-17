@@ -15,6 +15,8 @@ export type StepInput = {
   idx: number
   // {run.answer}: the answer text for runs an answer starts, else null (R-2).
   answer: string | null
+  // {run.choice}: the label of the option that started an ask-first run, '' for any other.
+  choice?: string
 }
 
 // A step's row as the run engine writes it (pending, skipped or failed).
@@ -98,8 +100,8 @@ export function runFieldsOf(run: RunRow, def: AutomationDefinition): ItemFields 
   })
 }
 
-// The item's fields, then the run's workspace, run.*, steps.*/previous.*, {run.failed} and
-// {run.answer}.
+// The item's fields, then the run's workspace, run.*, steps.*/previous.*, {run.failed}, {run.answer} and
+// {run.choice}.
 export function stepInputFields(input: StepInput): ItemFields {
   const { run, def, rows, idx } = input
   return {
@@ -108,6 +110,7 @@ export function stepInputFields(input: StepInput): ItemFields {
     ...runFieldsOf(run, def),
     ...stepFields(rows, idx),
     'run.failed': runFailed(endedSteps(rows, def)),
-    'run.answer': input.answer
+    'run.answer': input.answer,
+    'run.choice': input.choice ?? ''
   }
 }
