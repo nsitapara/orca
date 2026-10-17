@@ -25,7 +25,7 @@ export type GroupableItem = Pick<InboxListRow, 'itemKey' | 'worktreePath' | 'aut
 export type Section = { group: InboxGroup; items: InboxListRow[] }
 
 const RANK = { worktree: 0, mr: 1, pipeline: 2, ticket: 3, job: 4, cleanup: 5 } as const
-const CLEAN_UP = new Set(['docker-prune', 'close-idle-sessions'])
+const CLEAN_UP = new Set(['docker-prune'])
 const DEV_PIPELINE = 'dev'
 
 function folderName(path: string): string {

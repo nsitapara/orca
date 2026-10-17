@@ -4,8 +4,7 @@ import { groupItems, groupOf, KIND_ORDER } from './inbox-groups'
 
 const AUTOMATIONS = [
   { id: 'review-requests', name: '09 · Prepare reviews requested of me' },
-  { id: 'docker-prune', name: 'Docker prune' },
-  { id: 'close-idle-sessions', name: 'Close idle sessions' }
+  { id: 'docker-prune', name: 'Docker prune' }
 ]
 type Key = Pick<InboxItemRow, 'itemKey' | 'worktreePath' | 'automationId'>
 const of = (
@@ -45,7 +44,6 @@ describe('groupOf', () => {
     ],
     ['no item: an unknown job’s id', of(null, null, 'mystery'), 'job:mystery', 'mystery'],
     ['docker-prune', of(null, null, 'docker-prune'), 'cleanup', 'Clean up'],
-    ['close-idle-sessions', of(null, null, 'close-idle-sessions'), 'cleanup', 'Clean up'],
     [
       'a wt: key without a path, to the job',
       of('wt:repo-1', null),
