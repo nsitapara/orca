@@ -1,4 +1,3 @@
-import { spawnSync } from 'node:child_process'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
@@ -59,15 +58,10 @@ type CaseSession = {
   files: [string, string | null][]
 }
 
+// usage.py's own rows for the case's sessions (its parse_claude, parse_codex and rows), frozen in old-rows.json before
+// usage.py was deleted, so neither python3 nor usage.py is needed.
 function old(): { rows: UsageRow[]; csv_fields: string[] } {
-  const r = spawnSync('python3', [join(PARITY_DIR, '08', 'old_rows.py'), CASE], {
-    env: { ...process.env, TZ },
-    encoding: 'utf8'
-  })
-  if (r.status !== 0) {
-    throw new Error(r.stderr)
-  }
-  return JSON.parse(r.stdout)
+  return JSON.parse(readFileSync(join(CASE, 'old-rows.json'), 'utf8'))
 }
 
 // What Task 28 measures from each session's transcripts, as the rows Task 29b reads from the store.
