@@ -139,6 +139,7 @@ const step = z.strictObject({
 
 const answers = z.strictObject({
   resume: z.enum(['asking_session', 'never']).optional(),
+  stack: z.literal('never', { error: 'expected never' }).optional(),
   else: z
     .strictObject({
       agent: z.enum(AGENTS),

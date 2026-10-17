@@ -429,5 +429,22 @@
     "/parity-gitdirs/wt/web-462/rebase-merge": false,
     "/wt/web-461": true,
     "/wt/web-462": true
+  },
+  "old": {
+    "from": "run_old_plan.py 04 (ui-qa/scripts/loop.py sweep) with /opt/homebrew/bin/python3 3.15.0, 2026-10-16, before milestone 8b deleted it",
+    "decisions": [
+      {
+        "key": "wt:400fee61-a463-4f76-894a-39861e906007::/wt/web-462",
+        "label": "web-462-work",
+        "decision": "held",
+        "reason": ""
+      },
+      {
+        "key": "wt:400fee61-a463-4f76-894a-39861e906007::/wt/web-461",
+        "label": "web-461-work",
+        "decision": "held_active",
+        "reason": ""
+      }
+    ]
   }
 }

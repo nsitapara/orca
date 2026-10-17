@@ -1,4 +1,5 @@
 import { exprPlaceholders, parseExpr } from '../expr'
+import { envPlaceholders } from '../run/shell-template'
 import { placeholderNames } from '../template'
 import { stepNames } from './normalize'
 import type { RawAutomation } from './schema'
@@ -46,12 +47,13 @@ function templateErrors(
   template: string | undefined,
   where: string,
   step: number | null,
-  steps: string[]
+  steps: string[],
+  namesOf: (template: string) => string[] = placeholderNames
 ): string[] {
   if (!template) {
     return []
   }
-  return refErrors(placeholderNames(template), where, step, steps)
+  return refErrors(namesOf(template), where, step, steps)
 }
 
 function exprErrorsAt(src: string, where: string, step: number | null, steps: string[]): string[] {
@@ -95,7 +97,7 @@ export function exprErrors(raw: RawAutomation): string[] {
     }
     errors.push(...templateErrors(s.prompt, `steps[${i}].prompt`, i, steps))
     for (const [name, value] of Object.entries(s.env ?? {})) {
-      errors.push(...templateErrors(value, `steps[${i}].env.${name}`, i, steps))
+      errors.push(...templateErrors(value, `steps[${i}].env.${name}`, i, steps, envPlaceholders))
     }
   }
   return errors

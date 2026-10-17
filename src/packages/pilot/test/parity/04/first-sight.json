@@ -1046,5 +1046,40 @@
     "/wt/web-403": true,
     "/wt/web-404": true,
     "/wt/web-405": true
+  },
+  "old": {
+    "from": "run_old_plan.py 04 (ui-qa/scripts/loop.py sweep) with /opt/homebrew/bin/python3 3.15.0, 2026-10-16, before milestone 8b deleted it",
+    "decisions": [
+      {
+        "key": "wt:400fee61-a463-4f76-894a-39861e906007::/wt/web-401",
+        "label": "web-401-work",
+        "decision": "start",
+        "reason": ""
+      },
+      {
+        "key": "wt:400fee61-a463-4f76-894a-39861e906007::/wt/web-404",
+        "label": "web-404-work",
+        "decision": "queued",
+        "reason": ""
+      },
+      {
+        "key": "wt:400fee61-a463-4f76-894a-39861e906007::/wt/web-402",
+        "label": "web-402-work",
+        "decision": "baseline",
+        "reason": "c402000000000000000000000000000000000000"
+      },
+      {
+        "key": "wt:400fee61-a463-4f76-894a-39861e906007::/wt/web-403",
+        "label": "web-403-work",
+        "decision": "baseline",
+        "reason": "d403000000000000000000000000000000000000"
+      },
+      {
+        "key": "wt:400fee61-a463-4f76-894a-39861e906007::/wt/web-405",
+        "label": "web-405-work",
+        "decision": "baseline",
+        "reason": "f405000000000000000000000000000000000000"
+      }
+    ]
   }
 }

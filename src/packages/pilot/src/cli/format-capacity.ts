@@ -35,9 +35,13 @@ export function formatCapacity(c: CapacityPayload, now: number): string {
       `Memory: ${formatMemory(c.memory.availableBytes)} available of ${formatMemory(c.memory.totalBytes)}`
     )
   }
-  const per = c.heaviest
-    ? `heaviest job ${c.heaviest.automationName} peaked at ${formatMemory(c.heaviest.peakBytes)}`
-    : `no job measured yet, so ${formatMemory(c.suggestion.perJobBytes)} each`
+  const each = formatMemory(c.suggestion.perJobBytes)
+  let per = `no job measured yet, so ${each} each`
+  if (c.heaviest?.measured) {
+    per = `heaviest job ${c.heaviest.automationName} peaked at ${formatMemory(c.heaviest.peakBytes)}`
+  } else if (c.heaviest) {
+    per = `${c.heaviest.automationName} not measured yet, so ${each} each`
+  }
   lines.push(`Suggestion: ${c.suggestion.limit}, ${per}`)
   return lines.join('\n')
 }

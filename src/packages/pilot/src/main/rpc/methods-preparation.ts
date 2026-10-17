@@ -53,7 +53,7 @@ const byPerson = (caller: RpcCallerIdentity | undefined): boolean =>
 
 export function buildPreparationMethods(ctx: () => PilotContext) {
   return [
-    // A person's Prepare evidence on an imported or legacy push, Post or drafted card (R-P5): it queues the card for
+    // A person's Prepare evidence on an imported or legacy push or drafted card (R-P5): it queues the card for
     // job 14 with a request built from the card. The desktop or a paired device only, never the local CLI.
     defineMethod({
       name: 'pilot.inbox.prepareEvidence',

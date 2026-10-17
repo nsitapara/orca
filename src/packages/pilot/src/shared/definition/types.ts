@@ -148,6 +148,8 @@ export type StepDef = {
 
 export type AnswersDef = {
   resume: 'asking_session' | 'never'
+  // never: an answer run keeps the job's env rules but starts no stack. Absent otherwise.
+  stack?: 'never'
   else: { agent: AgentKind; skill: string | null; mode: string | null } | null
 }
 

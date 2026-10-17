@@ -56,7 +56,7 @@ function RequestView({ id }: { id: string }): React.JSX.Element {
   )
 }
 
-// R-P5: a push, Post or drafted card that was never prepared (imported, or from an older build) runs nothing until a
+// R-P5: a push or drafted card that was never prepared (imported, or from an older build) runs nothing until a
 // person queues it for job 14.
 function NeedsEvidence({
   onPrepare

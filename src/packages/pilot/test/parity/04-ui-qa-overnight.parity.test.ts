@@ -4,7 +4,7 @@ import { expect, it } from 'vitest'
 import type { ItemDecision } from '../../src/shared/api-types'
 import { loadFixture } from './fixture'
 import { JOB_04, PARITY_04, seed04, VERDICTS_04 } from './jobs/job-04'
-import { PARITY_DIR, runOldPlan, type OldDecision } from './old-side'
+import { frozenOldPlan, PARITY_DIR, type OldDecision } from './old-side'
 import { describeParity, expectParity, parityReport } from './parity-case'
 import { caseFile, dryTick, failedCheck, loadPortedAutomation } from './ported'
 
@@ -105,11 +105,12 @@ function reasonAgrees(o: OldDecision, n: ItemDecision): boolean {
   }
 }
 
-// Skipped, with what's missing in its title and on stderr, where ~/.agents (or PARITY_SKILLS_DIR /
-// PARITY_AUTOMATIONS_DIR) or python3 isn't there.
+// loop.py sweep's decisions are frozen in each case (its old block), so neither python3 nor loop.py is needed; skipped,
+// with what's missing in its title and on stderr, only where ~/.agents/automations (or PARITY_AUTOMATIONS_DIR) isn't
+// there. A case without its old block fails.
 describeParity(
   PARITY_04,
-  '04 · Test branch UIs overnight: Pilot decides each worktree as loop.py sweep does',
+  '04 · Test branch UIs overnight: Pilot decides each worktree as loop.py sweep did (frozen)',
   () => {
     it('has its cases', () => {
       expect(cases()).toEqual([
@@ -133,7 +134,7 @@ describeParity(
     )
 
     it.each(cases())('%s: each worktree is held for the reason the sweep gave', async (name) => {
-      const old = runOldPlan(JOB_04.job, join(CASES, name))
+      const old = frozenOldPlan(join(CASES, name))
       const fresh = await decide(name.replace(/\.json$/, ''))
       for (const o of old) {
         if (VERDICTS_04.known?.some((k) => k.key === o.key && k.word === o.decision)) {
@@ -218,7 +219,7 @@ describeParity(
           ...PARITY_04,
           table: { ...VERDICTS_04, known: VERDICTS_04.known!.filter((k) => k !== known) }
         }
-        const report = await parityReport(strict, loadFixture(file), runOldPlan(JOB_04.job, file))
+        const report = await parityReport(strict, loadFixture(file), frozenOldPlan(file))
         expect(report.split('\n').map((line) => line.slice(0, line.indexOf(': old ')))).toEqual([
           known.key
         ])

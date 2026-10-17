@@ -9,6 +9,7 @@ describe('runPlaceholders', () => {
   it.each([
     ['a dotted name', './x.sh {mr.title}', ['mr.title']],
     ['a step output', 'echo {steps.a.b} {steps.a.b}', ['steps.a.b']],
+    ['an optional name, without its ?', 'echo {steps.a.b?}', ['steps.a.b']],
     ['${HOME}', 'echo "${HOME}" ${x}', []],
     ["awk '{print}'", "awk '{print}' file", []],
     ["jq '{title}'", "jq '{title}'", []],
@@ -57,6 +58,21 @@ describe('renderShellEnv', () => {
         { 'mr.iid': 12, 'mr.title': 'x' }
       )
     ).toEqual({ ok: true, env: { A: 'MR 12: x ${HOME} {print}' } })
+  })
+
+  it.each<[string, Record<string, string | number | null>, string]>([
+    ['missing', {}, ''],
+    ['null', { 'steps.test.outcome': null }, ''],
+    ['present', { 'steps.test.outcome': 'done' }, 'done']
+  ])('{field?} with a %s value', (_n, fields, said) => {
+    expect(renderShellEnv({ SAID: '{steps.test.outcome?}' }, fields)).toEqual({
+      ok: true,
+      env: { SAID: said }
+    })
+  })
+
+  it('keeps failing a missing value without the ?, next to an optional one', () => {
+    expect(renderShellEnv({ A: '{a.b} {c.d?}' }, {})).toEqual({ ok: false, missing: ['a.b'] })
   })
 
   it('fails naming every missing value', () => {

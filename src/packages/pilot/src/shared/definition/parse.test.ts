@@ -329,6 +329,7 @@ describe('parseAutomationYaml', () => {
       CI_05.replace('    skill: fix-gitlab-ci\n', '    skill: fix-gitlab-ci\n    mode: fix\n')
     ],
     ['answers', `${CI_05}\nanswers: { resume: asking_session }\n`],
+    ['answers.stack: never', `${CI_05}\nanswers: { stack: never }\n`],
     ['ask_first', `${CI_05}\nstart: ask_first\nask_first: { title: "Fix !{mr.iid}?" }\n`],
     ['retry_after_failure', `${CI_05}\nretry_after_failure: 12h\n`],
     ['a file without items:', CI_05.replace(/items:\n( {2}.*\n)+/, '')]
