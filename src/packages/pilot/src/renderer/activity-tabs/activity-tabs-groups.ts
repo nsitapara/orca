@@ -3,20 +3,21 @@ import type {
   ActivityThreadGroup
 } from '@/components/activity/activity-thread-types'
 import { translate } from '@/i18n/i18n'
-import { withGroupTabs } from './activity-tabs-rows'
-import type { WorkspaceTabItem } from './workspace-tab-items'
+import { withGroupRows, type ActivityTabsRow } from './activity-tabs-rows'
 
 export const OPEN_TABS_GROUP_KEY = 'pilot:open-tabs'
+export const RECENT_WORKTREES_GROUP_KEY = 'pilot:recent-worktrees'
 
-// Mirrors getActivityThreadGroup, which takes an agent thread. A tab has no status or agent type,
-// so those groupings put it under Open tabs.
-function tabGroup(tab: WorkspaceTabItem, groupBy: ActivityGroupBy): { key: string; label: string } {
+// Mirrors getActivityThreadGroup, which takes an agent thread. A Pilot row has no status or agent
+// type, so those groupings put it under Open tabs or Recently active.
+function rowGroup(row: ActivityTabsRow, groupBy: ActivityGroupBy): { key: string; label: string } {
+  const { worktree, repo } = row.kind === 'tab' ? row.tab : row.recent
   if (groupBy === 'none') {
     return { key: 'all', label: '' }
   }
   if (groupBy === 'project') {
-    return tab.repo
-      ? { key: `project:${tab.repo.id}`, label: tab.repo.displayName }
+    return repo
+      ? { key: `project:${repo.id}`, label: repo.displayName }
       : {
           key: 'project:unknown',
           label: translate(
@@ -26,28 +27,30 @@ function tabGroup(tab: WorkspaceTabItem, groupBy: ActivityGroupBy): { key: strin
         }
   }
   if (groupBy === 'worktree') {
-    return { key: `worktree:${tab.worktree.id}`, label: tab.worktree.displayName }
+    return { key: `worktree:${worktree.id}`, label: worktree.displayName }
   }
-  return { key: OPEN_TABS_GROUP_KEY, label: 'Open tabs' }
+  return row.kind === 'tab'
+    ? { key: OPEN_TABS_GROUP_KEY, label: 'Open tabs' }
+    : { key: RECENT_WORKTREES_GROUP_KEY, label: 'Recently active' }
 }
 
-/** Puts each tab in its Group by group, after the agents; groups with only tabs go last. */
-export function mergeTabsIntoGroups(
+/** Puts each row in its Group by group, after the agents; groups with only Pilot rows go last. */
+export function mergeRowsIntoGroups(
   groups: ActivityThreadGroup[],
-  tabs: readonly WorkspaceTabItem[],
+  rows: readonly ActivityTabsRow[],
   groupBy: ActivityGroupBy
 ): ActivityThreadGroup[] {
-  if (tabs.length === 0) {
+  if (rows.length === 0) {
     return groups
   }
-  const pending = new Map<string, { label: string; tabs: WorkspaceTabItem[] }>()
-  for (const tab of tabs) {
-    const { key, label } = tabGroup(tab, groupBy)
+  const pending = new Map<string, { label: string; rows: ActivityTabsRow[] }>()
+  for (const row of rows) {
+    const { key, label } = rowGroup(row, groupBy)
     const entry = pending.get(key)
     if (entry) {
-      entry.tabs.push(tab)
+      entry.rows.push(row)
     } else {
-      pending.set(key, { label, tabs: [tab] })
+      pending.set(key, { label, rows: [row] })
     }
   }
   const merged = groups.map((group) => {
@@ -56,10 +59,10 @@ export function mergeTabsIntoGroups(
       return group
     }
     pending.delete(group.key)
-    return withGroupTabs(group, entry.tabs)
+    return withGroupRows(group, entry.rows)
   })
   for (const [key, entry] of pending) {
-    merged.push(withGroupTabs({ key, label: entry.label, threads: [] }, entry.tabs))
+    merged.push(withGroupRows({ key, label: entry.label, threads: [] }, entry.rows))
   }
   return merged
 }

@@ -11,9 +11,11 @@ import type {
   AgentPaneThread,
   ThreadReadFilter
 } from '@/components/activity/activity-thread-types'
-import { mergeTabsIntoGroups } from './activity-tabs-groups'
-import { useActivityTabsVisible } from './activity-tabs-setting'
+import { mergeRowsIntoGroups } from './activity-tabs-groups'
+import type { ActivityTabsRow } from './activity-tabs-rows'
+import { useActivityRecentWorktreesVisible, useActivityTabsVisible } from './activity-tabs-setting'
 import { useOpenTabItems } from './use-open-tab-items'
+import { useRecentWorktreeItems } from './use-recent-worktree-items'
 
 // The agent thread behind the active workspace tab, so its row reads as current.
 export function useActiveWorkspaceThread(
@@ -60,7 +62,8 @@ export type ActivityTabsView = {
 
 // pilot-hook: activity-tabs-threads. Wraps useAgentPaneThreads in the Activity sidebar: while
 // "Show all tabs" is on, every other open tab joins the agents' groups and the active tab's agent
-// reads as current.
+// reads as current; while "Show recently active worktrees" is on, each such worktree with no row
+// gets one to start a session from.
 export function useActivityTabsThreads<
   T extends {
     allThreads: AgentPaneThread[]
@@ -68,15 +71,30 @@ export function useActivityTabsThreads<
     visibleThreadGroups: ActivityThreadGroup[]
   }
 >(result: T, view: ActivityTabsView): T {
-  const visible = useActivityTabsVisible()
+  const tabsVisible = useActivityTabsVisible()
+  const recentVisible = useActivityRecentWorktreesVisible()
   const activePaneKey = useActiveWorkspaceThread(result.allThreads, result.effectiveSelectedPaneKey)
-  // A tab is never unread, so "Show unread only" leaves it out.
-  const tabs = useOpenTabItems(visible && view.readFilter === 'all', view.query, result.allThreads)
-  const visibleThreadGroups = useMemo(
-    () => mergeTabsIntoGroups(result.visibleThreadGroups, tabs, view.groupBy),
-    [result.visibleThreadGroups, tabs, view.groupBy]
+  // A tab or a worktree is never unread, so "Show unread only" leaves them out.
+  const listsAll = view.readFilter === 'all'
+  const tabs = useOpenTabItems(tabsVisible && listsAll, view.query, result.allThreads)
+  const visibleThreads = useMemo(
+    () => result.visibleThreadGroups.flatMap((group) => group.threads),
+    [result.visibleThreadGroups]
   )
-  return visible
-    ? { ...result, effectiveSelectedPaneKey: activePaneKey, visibleThreadGroups }
-    : result
+  const recent = useRecentWorktreeItems(recentVisible && listsAll, view.query, visibleThreads, tabs)
+  const visibleThreadGroups = useMemo(() => {
+    const rows: ActivityTabsRow[] = [
+      ...tabs.map((tab): ActivityTabsRow => ({ kind: 'tab', tab })),
+      ...recent.map((item): ActivityTabsRow => ({ kind: 'recent-worktree', recent: item }))
+    ]
+    return mergeRowsIntoGroups(result.visibleThreadGroups, rows, view.groupBy)
+  }, [result.visibleThreadGroups, tabs, recent, view.groupBy])
+  if (!tabsVisible && !recentVisible) {
+    return result
+  }
+  return {
+    ...result,
+    ...(tabsVisible ? { effectiveSelectedPaneKey: activePaneKey } : {}),
+    visibleThreadGroups
+  }
 }

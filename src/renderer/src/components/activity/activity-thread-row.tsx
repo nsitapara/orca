@@ -10,6 +10,10 @@ import { FilledBellIcon } from '../sidebar/WorktreeCardHelpers'
 import CommentMarkdown from '../sidebar/CommentMarkdown'
 import { EventTime, ThreadAgentStateIndicator } from './activity-thread-controls'
 import { ActivityThreadHoverCard } from './activity-thread-hover-card'
+import {
+  ActivityTabsThreadFooterIcon,
+  ActivityTabsThreadLeadingIcon
+} from '../../../../packages/pilot/src/renderer/activity-tabs/ActivityTabsThreadIcons' // pilot-hook: activity-tabs-thread-icons
 import { activityThreadRowCopy } from './activity-thread-presentation'
 import type { AgentPaneThread } from './activity-thread-types'
 import type { ActivityThreadClickEvent } from './use-activity-thread-selection'
@@ -109,9 +113,12 @@ export const ActivityThreadRow = React.memo(function ActivityThreadRow({
         className="group relative flex w-full cursor-pointer flex-col gap-1 rounded-lg border border-transparent px-1.5 py-1.5 text-left transition-[background-color,border-color,opacity,box-shadow] duration-200 outline-none select-none worktree-sidebar-card-hover focus-visible:ring-1 focus-visible:ring-ring"
       >
         <div className="flex min-w-0 items-start gap-1.5">
-          <span className="mt-0.5 inline-flex shrink-0">
-            <ThreadAgentStateIndicator thread={thread} />
-          </span>
+          <ActivityTabsThreadLeadingIcon thread={thread}>
+            {/* pilot-hook: activity-tabs-thread-icons */}
+            <span className="mt-0.5 inline-flex shrink-0">
+              <ThreadAgentStateIndicator thread={thread} />
+            </span>
+          </ActivityTabsThreadLeadingIcon>
           <div className="flex min-w-0 flex-1 flex-col gap-0.5">
             {/* Keep the activation target separate from markdown links and row actions. */}
             <button
@@ -158,9 +165,12 @@ export const ActivityThreadRow = React.memo(function ActivityThreadRow({
             ) : null}
 
             <div className="flex min-w-0 items-center gap-1.5 pt-0.5 text-[11px] text-muted-foreground">
-              <span className="inline-flex shrink-0" title={agentLabel}>
-                <AgentIcon agent={agentTypeToIconAgent(thread.agentType)} size={13} />
-              </span>
+              <ActivityTabsThreadFooterIcon thread={thread}>
+                {/* pilot-hook: activity-tabs-thread-icons */}
+                <span className="inline-flex shrink-0" title={agentLabel}>
+                  <AgentIcon agent={agentTypeToIconAgent(thread.agentType)} size={13} />
+                </span>
+              </ActivityTabsThreadFooterIcon>
               <span className="min-w-0 flex-1 truncate" title={workspaceLabel}>
                 {workspaceLabel}
               </span>
