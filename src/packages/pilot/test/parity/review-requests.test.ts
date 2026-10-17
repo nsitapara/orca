@@ -1,8 +1,10 @@
-import { readdirSync, readFileSync } from 'node:fs'
-import { homedir } from 'node:os'
+import { execFileSync } from 'node:child_process'
+import { mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { decideStep } from '../../src/shared/run/step-plan'
+import type { StepDef } from '../../src/shared/definition/types'
+import { decideStep, type EndedStep } from '../../src/shared/run/step-plan'
 import type { PilotContext } from '../../src/main/pilot-services'
 import { recordRunOutput } from '../../src/main/rpc/run-channel'
 import { readMode } from '../../src/main/run/modes'
@@ -16,12 +18,13 @@ import { caseFile, dryTick, loadPortedAutomation } from './ported'
 
 const SKILLS = join(homedir(), '.agents', 'skills')
 const { definition, people } = loadPortedAutomation(JOB_09.automationId)
-// The findings file the agent writes, the card step reads and forget_findings removes, under the run's own folder.
-const FINDINGS_DIR = '/Users/nishsitapara/Library/Caches/pilot-reviews/{run.id}'
-const FINDINGS = `${FINDINGS_DIR}/findings.json`
-// sweep.py's PREPARE_OPTIONS, which the Prepare card showed, pinned as literals now that sweep.py is gone.
+// The guide file the agent writes, the guide step reads and forget_guide removes, under the run's own folder.
+const GUIDE_DIR = '/Users/nishsitapara/Library/Caches/pilot-reviews/{run.id}'
+const GUIDE = `${GUIDE_DIR}/guide.json`
+// The Prepare card's options: every one but Skip starts the run, and {run.choice} says which (the env step's stack).
 const PREPARE_OPTIONS = [
-  'Approve — check the branch out in a worktree and prepare the review there; nothing posts yet',
+  'Backend — review and test it, on a backend stack when the branch changes api/; nothing posts',
+  'Full stack + UI — also bring up the frontends and drive the changed screens; nothing posts',
   "Skip — don't review this head"
 ]
 
@@ -38,8 +41,23 @@ function modeOutputs(skill: string, mode: string): string[] {
     .filter(Boolean)
 }
 
+function stepNamed(name: string): StepDef {
+  const step = definition.steps.find((s) => s.name === name)
+  if (!step) {
+    throw new Error(`no step ${name}`)
+  }
+  return step
+}
+
+const ended = (name: string, status: EndedStep['status'], always = false): EndedStep => ({
+  name,
+  status,
+  always,
+  error: null
+})
+
 describe('09 · Prepare reviews requested of me: the definition', () => {
-  it('asks first, once per MR and 8-character head, in the main checkout, spending no quota to ask', () => {
+  it('asks first, once per MR and 8-character head, in the main checkout, and may post nothing', () => {
     expect(definition).toMatchObject({
       name: '09 · Prepare reviews requested of me',
       schedule: '30 * * * *',
@@ -53,9 +71,10 @@ describe('09 · Prepare reviews requested of me: the definition', () => {
       },
       workspace: { kind: 'main_checkout' },
       checks: [],
-      powers: ['post'],
+      powers: [],
       inbox: 'nish'
     })
+    expect(definition.limits).toMatchObject({ atOnce: 1, timeoutMs: 100 * 60_000 })
     expect(definition.items?.customFields.map((f) => [f.name, f.cache])).toEqual([
       ['head8', 'per_head'],
       ['card_context', 'per_tick']
@@ -76,72 +95,138 @@ describe('09 · Prepare reviews requested of me: the definition', () => {
         env: head,
         exitCodes: { ok: [0], skip: [4, 5], stop: [3] }
       },
+      {
+        name: 'env',
+        agent: 'shell',
+        env: {
+          RUN: '{run.id}',
+          BRANCH: '{mr.branch}',
+          HEAD_SHA: '{mr.head_sha}',
+          CHOICE: '{run.choice}'
+        },
+        exitCodes: { ok: [0], skip: [1], stop: [] }
+      },
       { name: 'prepare', agent: 'claude', skill: 'review-mr', mode: 'prepare', always: false },
       {
-        name: 'card',
+        name: 'guide',
         agent: 'shell',
-        when: '{steps.prepare.findings} != null',
-        run: 'pilotcli automations run-item review-requests "$IID" --findings "$FINDINGS"',
-        env: { IID: '{mr.iid}', FINDINGS: FINDINGS },
-        exitCodes: { ok: [0], skip: [3], stop: [] }
+        when: "{steps.prepare.guide} == 'written'",
+        run: 'pilotcli automations run-item review-requests "$IID" --guide "$GUIDE"',
+        env: { IID: '{mr.iid}', GUIDE },
+        exitCodes: { ok: [0], skip: [], stop: [] }
       },
       {
-        name: 'forget_findings',
+        name: 'teardown',
+        agent: 'shell',
+        always: true,
+        when: "{steps.env.outcome} == 'ok'",
+        run: 'pilotcli env delete "$RUN"',
+        env: { RUN: '{run.id}' }
+      },
+      {
+        name: 'forget_guide',
         agent: 'shell',
         always: true,
         run: 'rm -rf "$DIR"',
-        env: { DIR: FINDINGS_DIR }
+        env: { DIR: GUIDE_DIR }
       }
     ])
-    expect(definition.steps).toHaveLength(5)
+    expect(definition.steps).toHaveLength(7)
   })
 
-  it("the agent's prompt names the review worktree, how its checkout went and the findings file the card step reads", () => {
-    const prompt = definition.steps.find((s) => s.name === 'prepare')?.prompt ?? ''
+  // The env step's script, run in a shell: Full stack + UI is a full stack, anything else a backend one when the
+  // branch changes api/ (pilotcli's own rule).
+  it.each([
+    ['Full stack + UI', 'full'],
+    ['Backend', 'when-backend'],
+    ['', 'when-backend']
+  ])('the env step makes a test env for the choice %j: --stack %s', (choice, stack) => {
+    const bin = mkdtempSync(join(tmpdir(), 'pilot-09-env-'))
+    const log = join(bin, 'argv')
+    writeFileSync(join(bin, 'pilotcli'), `#!/bin/sh\nprintf '%s\\n' "$@" > "${log}"\n`, {
+      mode: 0o755
+    })
+    execFileSync('/bin/sh', ['-c', stepNamed('env').run ?? ''], {
+      env: {
+        PATH: `${bin}:/usr/bin:/bin`,
+        RUN: 'r1',
+        BRANCH: 'web-2115',
+        HEAD_SHA: 'a'.repeat(40),
+        CHOICE: choice
+      }
+    })
+    expect(readFileSync(log, 'utf8').trim().split('\n')).toEqual([
+      'env',
+      'create',
+      '--run',
+      'r1',
+      '--branch',
+      'web-2115',
+      '--at',
+      'a'.repeat(40),
+      '--stack',
+      stack
+    ])
+  })
+
+  it("the agent's prompt names the choice, the test env, the review worktree, the guide file and my notes", () => {
+    const prompt = stepNamed('prepare').prompt ?? ''
     for (const part of [
+      '{run.choice}',
+      '{steps.env.path}',
+      '{steps.env.outcome}',
+      '{steps.env.reason}',
       '{steps.checkout.path}',
       '{steps.checkout.outcome}',
       '{steps.checkout.reason}',
-      FINDINGS,
+      GUIDE,
       '{run.answer}'
     ]) {
       expect([part, prompt.includes(part)]).toEqual([part, true])
     }
   })
 
-  it('a head that moved, a closed MR, a dropped request or an approval since my Approve ends the run before the agent', () => {
-    const [stillDue, checkout, prepare, card, forget] = definition.steps
-    const stopped = [
-      { name: stillDue.name, status: 'stopped' as const, always: false, error: 'sha moved' }
-    ]
-    for (const step of [checkout, prepare, card]) {
-      expect([step.name, decideStep(step, stopped, {}).run]).toEqual([step.name, false])
+  it('a head that moved, a closed MR, a dropped request or an approval since my Approve ends the run before anything is made', () => {
+    const stopped = [ended('still_due', 'stopped')]
+    for (const name of ['checkout', 'env', 'prepare', 'guide', 'teardown']) {
+      expect([name, decideStep(stepNamed(name), stopped, {}).run]).toEqual([name, false])
     }
-    expect(decideStep(forget, stopped, {})).toEqual({ run: true })
-    const due = [{ name: stillDue.name, status: 'done' as const, always: false, error: null }]
-    expect(decideStep(prepare, due, {})).toEqual({ run: true })
+    expect(decideStep(stepNamed('forget_guide'), stopped, {})).toEqual({ run: true })
+    expect(decideStep(stepNamed('env'), [ended('still_due', 'done')], {})).toEqual({ run: true })
   })
 
-  it("the checkout moving ends the run; a fork or a busy worktree still reaches the agent, in review-mr's own checkout", () => {
-    const [stillDue, checkout, prepare] = definition.steps
-    const due = { name: stillDue.name, status: 'done' as const, always: false, error: null }
-    const ended = (status: 'stopped' | 'skipped') => [
-      due,
-      { name: checkout.name, status, always: false, error: null }
-    ]
-    expect(decideStep(prepare, ended('stopped'), {})).toMatchObject({ run: false })
-    expect(decideStep(prepare, ended('skipped'), {})).toEqual({ run: true })
+  it('the checkout moving ends the run; a fork or a busy worktree still gets its test env and reaches the agent', () => {
+    const due = ended('still_due', 'done')
+    expect(decideStep(stepNamed('env'), [due, ended('checkout', 'stopped')], {})).toMatchObject({
+      run: false
+    })
+    const skipped = [due, ended('checkout', 'skipped')]
+    expect(decideStep(stepNamed('env'), skipped, {})).toEqual({ run: true })
+    expect(decideStep(stepNamed('prepare'), [...skipped, ended('env', 'done')], {})).toEqual({
+      run: true
+    })
   })
 
-  it('the card step posts only when the agent recorded its findings, and the findings file goes however the run ended', () => {
-    const [, , prepare, card, forget] = definition.steps
-    const ran = [{ name: prepare.name, status: 'done' as const, always: false, error: null }]
-    expect(decideStep(card, ran, { 'steps.prepare.findings': 3 })).toEqual({ run: true })
-    expect(decideStep(card, ran, { 'steps.prepare.findings': 0 })).toEqual({ run: true })
-    expect(decideStep(card, ran, {})).toMatchObject({ run: false })
-    const broke = [{ name: prepare.name, status: 'failed' as const, always: false, error: 'x' }]
-    expect(decideStep(card, broke, { 'steps.prepare.findings': 3 })).toMatchObject({ run: false })
-    expect(decideStep(forget, broke, {})).toEqual({ run: true })
+  it('a stack that failed (env skipped) still reaches the agent, and leaves nothing to tear down', () => {
+    const run = [ended('still_due', 'done'), ended('checkout', 'done'), ended('env', 'skipped')]
+    expect(decideStep(stepNamed('prepare'), run, {})).toEqual({ run: true })
+    const after = [...run, ended('prepare', 'done'), ended('guide', 'done')]
+    expect(
+      decideStep(stepNamed('teardown'), after, { 'steps.env.outcome': 'failed' })
+    ).toMatchObject({ run: false })
+  })
+
+  it('the guide step runs only when the agent wrote the guide; the env and the guide file go however the run ended', () => {
+    const ran = [ended('env', 'done'), ended('prepare', 'done')]
+    expect(decideStep(stepNamed('guide'), ran, { 'steps.prepare.guide': 'written' })).toEqual({
+      run: true
+    })
+    expect(decideStep(stepNamed('guide'), ran, {})).toMatchObject({ run: false })
+    const broke = [ended('env', 'done'), { ...ended('prepare', 'failed'), error: 'x' }]
+    const fields = { 'steps.prepare.guide': 'written', 'steps.env.outcome': 'ok' }
+    expect(decideStep(stepNamed('guide'), broke, fields)).toMatchObject({ run: false })
+    expect(decideStep(stepNamed('teardown'), broke, fields)).toEqual({ run: true })
+    expect(decideStep(stepNamed('forget_guide'), broke, {})).toEqual({ run: true })
   })
 
   it('reviews only requests of mine nobody approved: reviewer, not author, no approvals (unknown approvals fail closed)', () => {
@@ -153,17 +238,17 @@ describe('09 · Prepare reviews requested of me: the definition', () => {
     })
   })
 
-  it("sends a revised Post card back to the asking session, else to review-mr's answers mode", () => {
+  it("sends a follow-up on the guide card back to the asking session, else to review-mr's answers mode", () => {
     expect(definition.answers).toEqual({
       resume: 'asking_session',
       else: { agent: 'claude', skill: 'review-mr', mode: 'answers' }
     })
-    // prepare records the findings count the card step's `when` reads; the card step posts the Post card. answers
-    // declares post_card: an approved Prepare card imported from the vault runs prepare.md from its step 2 inside the
-    // answer run, whose `pilot run output post_card=…` lands on that run.
+    // prepare records guide=written, which the guide step's `when` reads; the guide step posts the guide card. answers
+    // declares guide_card: a follow-up writes the next version itself, and an approved Prepare card imported from the
+    // vault runs prepare.md from its step 2 inside the answer run, whose `pilot run output guide_card=…` lands there.
     expect([modeOutputs('review-mr', 'prepare'), modeOutputs('review-mr', 'answers')]).toEqual([
-      ['outcome', 'findings'],
-      ['outcome', 'item_status', 'reply', 'post_card']
+      ['outcome', 'guide'],
+      ['outcome', 'item_status', 'reply', 'guide_card']
     ])
     expect(modeText('review-mr', 'prepare')).toContain(
       '~/.agents/skills/review-mr/modes/answers.md'
@@ -176,9 +261,9 @@ describe('09 · Prepare reviews requested of me: the definition', () => {
     )
   })
 
-  // What the declaration buys: Pilot takes post_card from an answers-mode run (read from the skill's real mode
+  // What the declaration buys: Pilot takes guide_card from an answers-mode run (read from the skill's real mode
   // file), and still refuses a name no mode declares.
-  it('takes post_card from an answer run in review-mr answers mode, and refuses an undeclared output', () => {
+  it('takes guide_card from an answer run in review-mr answers mode, and refuses an undeclared output', () => {
     const store = PilotStore.open(':memory:')
     store.runs.create({
       id: 'ans-1',
@@ -202,13 +287,13 @@ describe('09 · Prepare reviews requested of me: the definition', () => {
     const ctx = { store } as unknown as PilotContext
     const read = (skill: string, mode: string, path: string | null) =>
       readMode(skill, mode, path, homedir())
-    const card = { post_card: 'in_0000000000000009', item_status: 'done', outcome: 'prepared' }
+    const card = { guide_card: 'in_0000000000000009', item_status: 'done', outcome: 'prepared' }
     expect(
       recordRunOutput(ctx, { runId: 'ans-1', stepIdx: 0, outputs: card }, read).outputs
     ).toEqual(card)
     expect(() =>
-      recordRunOutput(ctx, { runId: 'ans-1', stepIdx: 0, outputs: { posted: 'yes' } }, read)
-    ).toThrow("posted isn't one of them")
+      recordRunOutput(ctx, { runId: 'ans-1', stepIdx: 0, outputs: { post_card: 'x' } }, read)
+    ).toThrow("post_card isn't one of them")
   })
 
   it('names no placeholder in a script, and every field script is pilotcli’s get-field', () => {
