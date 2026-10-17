@@ -3,6 +3,7 @@ import { CodeBlock, FactsBlock, MissingBlock, TextBlock, ThreadBlock } from './b
 import { DiffBlock } from './diff-block'
 import { DetailsStyle } from './details-css'
 import { ScreensBlockView, ShotsBlockView } from './media'
+import { ReportBlock } from './ReportBlock'
 import { ReviewBlock, type PartSwitches } from './ReviewBlock'
 import { SectionBar } from './SectionBar'
 import { useOffSections } from './section-filter'
@@ -14,11 +15,13 @@ function BlockView({
   block,
   snapshot,
   loadImage,
+  openReport,
   parts
 }: {
   block: DetailsBlock
   snapshot: DetailsSnapshot
   loadImage: (file: string) => Promise<string>
+  openReport?: (file: string) => Promise<void>
   parts: PartSwitches | null
 }): React.JSX.Element | null {
   switch (block.type) {
@@ -45,6 +48,8 @@ function BlockView({
       return <MissingBlock block={block} />
     case 'review':
       return <ReviewBlock block={block} texts={snapshot.texts} parts={parts} />
+    case 'report':
+      return <ReportBlock block={block} open={openReport} />
   }
   // A block type this build doesn't know (the bundle check refuses one) shows nothing.
   return null
@@ -53,10 +58,13 @@ function BlockView({
 export function DetailsView({
   snapshot,
   loadImage,
+  openReport,
   parts
 }: {
   snapshot: DetailsSnapshot
   loadImage: (file: string) => Promise<string>
+  // Opens a report block's file outside Pilot; without it a report shows its name only.
+  openReport?: (file: string) => Promise<void>
   parts: PartSwitches | null
 }): React.JSX.Element {
   const off = useOffSections()
@@ -79,7 +87,14 @@ export function DetailsView({
         <p className="dt-missing">No sections switched on. Pick one above.</p>
       ) : null}
       {shown.map((block, i) => (
-        <BlockView key={i} block={block} snapshot={snapshot} loadImage={loadImage} parts={parts} />
+        <BlockView
+          key={i}
+          block={block}
+          snapshot={snapshot}
+          loadImage={loadImage}
+          openReport={openReport}
+          parts={parts}
+        />
       ))}
     </div>
   )
