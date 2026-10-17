@@ -113,7 +113,7 @@ describe('09 · Prepare reviews requested of me: the definition', () => {
         when: "{steps.prepare.guide} == 'written'",
         run: 'pilotcli automations run-item review-requests "$IID" --guide "$GUIDE"',
         env: { IID: '{mr.iid}', GUIDE },
-        exitCodes: { ok: [0], skip: [], stop: [] }
+        exitCodes: { ok: [0], skip: [3], stop: [] }
       },
       {
         name: 'teardown',
