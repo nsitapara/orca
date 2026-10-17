@@ -11,7 +11,6 @@ import {
   createClaudeProviderFrameFallback,
   isClaudeProgressFrame
 } from './claude-structured-provider-fallback'
-import { taskFrameSentence } from './claude-background-task-frames'
 import { ClaudeBackgroundTaskRows } from './claude-background-task-rows'
 import { ClaudeToolOriginRegistry } from './claude-tool-origin-registry'
 import { ClaudeProvisionalRowCorrections } from './claude-provisional-row-corrections'
@@ -203,6 +202,7 @@ export function createClaudeJournalTranslator(
         turn.suppressReopen()
         return
       }
+      turn.observeStartedSend(event.type === 'message' ? (event.startedSend ?? null) : null)
       if (event.type === 'message') {
         context.observe(event.message, event.observedAt ?? Date.now())
         // A root init is the CLI starting a new request cycle (measured per turn,
@@ -248,10 +248,7 @@ export function createClaudeJournalTranslator(
       } else if (event.type === 'message' && event.message.type === 'result') {
         journalClaudeResult(resultContext, event.message, event.observedAt ?? Date.now())
       } else if (event.type === 'message') {
-        const backgroundTaskCovered = backgroundTasks.observe(
-          event.message,
-          event.observedAt ?? Date.now()
-        )
+        backgroundTasks.observe(event.message, event.observedAt ?? Date.now())
         const kind = claudeProviderFrameKind(event.message)
         if (
           !handleMessage(
@@ -264,9 +261,9 @@ export function createClaudeJournalTranslator(
           providerFallback.append(
             kind,
             event.message,
-            taskFrameSentence(event.message),
             undefined,
-            { coveredByTypedTranslator: backgroundTaskCovered },
+            undefined,
+            undefined,
             corrections.stampFor(claudeFrameParentRef(event.message))
           )
         }

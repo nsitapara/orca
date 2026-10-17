@@ -2,7 +2,7 @@ import { useRef, useState } from 'react'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { cn } from '@/lib/utils'
 import type { ActivityRun, InboxListRow, InboxReply } from '../../../shared/api-types'
-import type { AnswerState, RunLine } from '../../../shared/inbox-types'
+import type { AnswerState, CardHistoryEntry, RunLine } from '../../../shared/inbox-types'
 import type { PartSwitches } from '../../details/ReviewBlock'
 import { FromRun } from '../../run-views/FromRun'
 import { PreparationProgress } from './PreparationProgress'
@@ -10,8 +10,9 @@ import { AnsweredLine } from './AnsweredLine'
 import { AnswerRow } from './AnswerRow'
 import type { Answer } from './answer-types'
 import { approveWords } from './answer-buttons'
-import { askedLabel, runLineView } from './answer-text'
+import { runLineView } from './answer-text'
 import { CardDetails } from './CardDetails'
+import { CardTimes, contentKeys, MessageHistory } from './MessageHistory'
 import { DRAFTED_PILL_CLASS, type StatusPill, statusOf, statusPillClass } from './chips'
 
 // Who wrote a reply is stored with it (by), set by the path that wrote it; never guessed from its words.
@@ -20,6 +21,18 @@ function Reply({ reply }: { reply: InboxReply }): React.JSX.Element {
     return <p className="text-sm text-primary">Pilot: {reply.text}</p>
   }
   return <p className="text-sm">Agent asked: {reply.text}</p>
+}
+
+// The replies as lines, for an older Pilot that sends no Message history.
+function BareReplies({ replies }: { replies: InboxReply[] }): React.JSX.Element {
+  const keys = contentKeys(replies, (r) => `${r.by}:${r.text}`)
+  return (
+    <>
+      {replies.map((r, i) => (
+        <Reply key={keys[i]} reply={r} />
+      ))}
+    </>
+  )
 }
 
 // What approving an action card runs, as Pilot wrote it from the stored card: a Pilot block of its own,
@@ -79,28 +92,24 @@ function partSwitches(
   return { off, toggle, words }
 }
 
-// The line above the title: job code and name, when it was asked and how long ago, small and muted, on one
-// line; on its right only what differs from plain waiting (drafted, the countdown state, applying, failed).
+// The line above the title: job code and name, small and muted, on one line (its times are on CardTimes'
+// line); on its right only what differs from plain waiting (drafted, the countdown state, applying, failed).
 function Eyebrow({
   job,
-  asked,
   drafted,
   status
 }: {
   job: string
-  asked: ReturnType<typeof askedLabel>
   drafted: boolean
   status: StatusPill
 }): React.JSX.Element {
-  const full = `${job} · ${asked.when}${asked.relative ? ` · ${asked.relative}` : ''}`
   return (
     <div
       data-eyebrow=""
       className="flex items-center gap-2 text-[11.5px] tracking-[0.04em] text-muted-foreground uppercase"
     >
-      <span className="min-w-0 flex-1 truncate" title={full}>
-        {job} · <span title={asked.full}>{asked.when}</span>
-        {asked.relative ? ` · ${asked.relative}` : null}
+      <span className="min-w-0 flex-1 truncate" title={job}>
+        {job}
       </span>
       {drafted ? <span className={DRAFTED_PILL_CLASS}>drafted</span> : null}
       {status === 'waiting' ? null : <span className={statusPillClass(status)}>{status}</span>}
@@ -114,6 +123,7 @@ export function InboxCard({
   run,
   runLine,
   answerState,
+  history,
   error,
   selected,
   now,
@@ -129,6 +139,8 @@ export function InboxCard({
   runLine: RunLine | null
   // The server's lock and queue row for an answered card (InboxListPayload.answerStates).
   answerState: AnswerState | null
+  // The card's Message history (InboxListPayload.history); null from an older Pilot, which shows the bare replies.
+  history: CardHistoryEntry[] | null
   // Why the last save failed; held by the page so it survives the card remounting as a new version.
   error: string | null
   // The card picked in the list: a lighter border.
@@ -153,7 +165,6 @@ export function InboxCard({
     justAnswered.current = true
   }
   const parts = editing ? partSwitches(item, off, toggle) : null
-  const asked = askedLabel(item.createdAt, now)
   const status = statusOf(item, answerState, unsaved && editing)
   const frame = cn(
     'flex min-w-0 scroll-mt-14 flex-col gap-2 rounded-[10px] border bg-card px-3.5 py-3 text-card-foreground',
@@ -183,12 +194,8 @@ export function InboxCard({
   }
   return (
     <article id={`card-${item.id}`} data-selected={selected ? '' : undefined} className={frame}>
-      <Eyebrow
-        job={automationName}
-        asked={asked}
-        drafted={item.details?.drafted === true}
-        status={status}
-      />
+      <Eyebrow job={automationName} drafted={item.details?.drafted === true} status={status} />
+      <CardTimes createdAt={item.createdAt} history={history} now={now} />
       <FromRun item={item} run={run} />
       <PreparationProgress
         item={item}
@@ -204,9 +211,8 @@ export function InboxCard({
       ) : null}
       <RunLineBlock line={runLine} digest={item.digest} button={approveWords(item).label} />
       <CardDetails item={item} parts={parts} />
-      {item.replies.map((r, i) => (
-        <Reply key={i} reply={r} />
-      ))}
+      {history ? <MessageHistory item={item} entries={history} now={now} /> : null}
+      {history ? null : <BareReplies replies={item.replies} />}
       <AnswerRow item={item} off={off} onToggle={toggle} onSave={onSave} onPick={setUnsaved} />
       {error ? <p className="text-sm text-destructive">{error}</p> : null}
     </article>

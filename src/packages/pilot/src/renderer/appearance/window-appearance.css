@@ -1,0 +1,12 @@
+/* Match Terminal: Orca's popovers, menus and dialogs hard-code a black (dark) or white (light) glass
+   surface instead of a token. Swap that exact recipe for the terminal-derived popover token, keeping
+   its translucency. Unlayered, so it beats Tailwind's utilities. */
+:root[data-pilot-window-appearance='match-terminal'].dark [class*='dark:bg-[rgba(0,0,0,0.72)]'],
+:root[data-pilot-window-appearance='match-terminal']:not(.dark)
+  [class*='bg-[rgba(255,255,255,0.82)]'] {
+  background-color: color-mix(in srgb, var(--popover) 92%, transparent);
+}
+
+:root[data-pilot-window-appearance='match-terminal'].dark [class*='dark:bg-[rgba(23,23,23,0.96)]'] {
+  background-color: color-mix(in srgb, var(--popover) 96%, transparent);
+}

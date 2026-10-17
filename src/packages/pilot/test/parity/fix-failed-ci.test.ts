@@ -167,7 +167,7 @@ describe('05 · Fix failed CI v2: the definition', () => {
     })
     expect(mergeBack.run).toContain('pilotcli git update-branch')
     expect(mergeBack.run).toContain(
-      '--merge --to "$(git rev-parse HEAD)" --busy "$PILOT_HOME_BUSY"'
+      '--merge true --to "$(git rev-parse HEAD)" --busy "$PILOT_HOME_BUSY"'
     )
   })
 

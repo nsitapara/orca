@@ -3,7 +3,6 @@ import type { RuntimeConstructionBindings as HostBindings } from './runtime-cons
 
 import type { RuntimeRepositoryCommandSurface } from '../runtime-repository-command-surface'
 
-import type { ExecutionHostId } from '../../../shared/execution-host'
 import type { LegacyWorkerRecoveryCandidate } from '../runtime-legacy-worker-terminal-recovery-types'
 
 import type { LegacyWorkerTerminalRecoveryPlan } from '../orchestration/orchestration-legacy-worker-terminal-recovery'
@@ -12,7 +11,7 @@ import { OrcaRuntimeWithTerminalDrivers } from '../terminal/driver/terminal-driv
 import type { FolderWorkspace } from '../../../shared/folder-workspace-types'
 import type { ResolvedWorktree } from '../runtime-worktree-path-identity'
 import { confirmRunTerminalShellAlone, readRunTerminalClientUse } from '../run-terminal-client-use'
-import { ALL_EXECUTION_HOSTS_SCOPE } from '../../../shared/execution-host'
+import { ALL_EXECUTION_HOSTS_SCOPE, type ExecutionHostId } from '../../../shared/execution-host'
 import { RuntimePreservedBranchCleanup } from '../runtime-preserved-branch-cleanup'
 import type {
   AgentSessionCreateOperation,
@@ -156,6 +155,8 @@ export abstract class OrcaRuntimeWithPreservedBranchCleanup extends OrcaRuntimeW
   protected readonly reconcileAgentStatusForEndedProcessFn!:
     | HostBindings['reconcileAgentStatusForEndedProcess']
     | null
+
+  protected readonly forgetHookAgentExitFn!: HostBindings['forgetHookAgentExit'] | null
 
   protected readonly dropAgentStatusForRemovedWorktreeFn!:
     | HostBindings['dropAgentStatusForRemovedWorktree']
@@ -313,31 +314,28 @@ export abstract class OrcaRuntimeWithPreservedBranchCleanup extends OrcaRuntimeW
     }
   })
 
-  protected readonly nestedRepoImport = new RuntimeNestedRepoImport({
+  private readonly repositoryCatalogDeps = {
     getStore: () => this.store,
     invalidateResolvedWorktrees: () => this.invalidateResolvedWorktreeCache(),
-    invalidateWorktreeScan: (repoId) => this.invalidateWorktreeScanCacheForRepo(repoId),
+    invalidateWorktreeScan: (repoId: string) => this.invalidateWorktreeScanCacheForRepo(repoId),
     notifyReposChanged: () => this.notifyReposChanged()
-  })
+  }
 
-  protected readonly repositoryRegistrations = new RuntimeRepositoryRegistrationController({
-    getStore: () => this.store,
-    invalidateResolvedWorktrees: () => this.invalidateResolvedWorktreeCache(),
-    invalidateWorktreeScan: (repoId) => this.invalidateWorktreeScanCacheForRepo(repoId),
-    notifyReposChanged: () => this.notifyReposChanged()
-  })
+  protected readonly nestedRepoImport = new RuntimeNestedRepoImport(this.repositoryCatalogDeps)
 
-  protected readonly repositoryClones = new RuntimeRepositoryCloneController({
-    getStore: () => this.store,
-    invalidateResolvedWorktrees: () => this.invalidateResolvedWorktreeCache(),
-    invalidateWorktreeScan: (repoId) => this.invalidateWorktreeScanCacheForRepo(repoId),
-    notifyReposChanged: () => this.notifyReposChanged()
-  })
+  protected readonly repositoryRegistrations = new RuntimeRepositoryRegistrationController(
+    this.repositoryCatalogDeps
+  )
+
+  protected readonly repositoryClones = new RuntimeRepositoryCloneController(
+    this.repositoryCatalogDeps
+  )
 
   protected readonly repositorySettings = new RuntimeRepositorySettingsController({
     getStore: () => this.store,
     resolveRepo: (selector) => this.resolveRepoSelector(selector),
     forgetTerminalTopology: (repoId) => this.terminalTopologyRevisionByRepoId.delete(repoId),
+    stopProjectTerminals: (repo, deadline) => this.stopTerminalsForProject(repo, { deadline }),
     invalidateResolvedWorktrees: () => this.invalidateResolvedWorktreeCache(),
     invalidateWorktreeScan: (repoId) => this.invalidateWorktreeScanCacheForRepo(repoId),
     notifyReposChanged: () => this.notifyReposChanged()

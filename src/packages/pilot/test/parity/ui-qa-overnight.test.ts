@@ -175,7 +175,8 @@ describe.skipIf(!existsSync(SKILL))(
         resume: 'asking_session',
         else: { agent: 'claude', skill: 'ui-qa', mode: 'answers' }
       })
-      expect(modeOutputs('run')).toEqual(['outcome'])
+      // `page` names the browser page create-page made, so Pilot closes it after the turn.
+      expect(modeOutputs('run')).toEqual(['outcome', 'page'])
       expect(modeOutputs('fix')).toEqual([])
       expect(modeOutputs('answers')).toEqual(['outcome', 'item_status', 'reply'])
       expect(readFileSync(join(SKILL, 'SKILL.md'), 'utf8')).toContain(

@@ -27,36 +27,50 @@ function worktree(id: string, ageMs: number, overrides: Partial<Worktree> = {}):
   return { ...makeWorktreeWithId(id), lastActivityAt: NOW - ageMs, ...overrides }
 }
 
-type BuildOpts = { listed?: Worktree[]; query?: string; scope?: Partial<ActivityScopeFilter> }
+type BuildOpts = {
+  includeRecent?: boolean
+  listed?: Worktree[]
+  query?: string
+  scope?: Partial<ActivityScopeFilter>
+}
 
 function build(worktrees: Worktree[], opts: BuildOpts = {}) {
   return buildRecentWorktreeItems({
     worktrees,
+    includeRecent: opts.includeRecent ?? true,
     listed: new Set((opts.listed ?? []).map(worktreeRowKey)),
-    openTabCount: (id) => (id === 'tabs' ? 2 : 0),
     now: NOW,
     ctx: {
       resolveRepo: () => makeRepo(),
       scope: { ...SCOPE, ...opts.scope },
       query: opts.query ?? ''
     }
-  }).map((item) => [item.worktree.id, item.openTabCount])
+  }).map((item) => item.worktree.id)
 }
 
 describe('buildRecentWorktreeItems', () => {
   const recent = worktree('recent', 60_000)
-  type Case = [string, Worktree[], BuildOpts, [string, number][]]
+  const pinnedOld = worktree('zz-pinned', RECENT_WORKTREE_WINDOW_MS + 1, { isPinned: true })
+  type Case = [string, Worktree[], BuildOpts, string[]]
   it.each<Case>([
     [
-      'active within the window, newest first',
-      [worktree('older', 7_200_000), recent],
+      'active within the window, by name whatever their activity',
+      [recent, worktree('older', 7_200_000)],
       {},
-      [
-        ['recent', 0],
-        ['older', 0]
-      ]
+      ['older', 'recent']
     ],
-    ['carries its open tab count', [worktree('tabs', 1)], {}, [['tabs', 2]]],
+    [
+      'pinned, however long ago it was active, and ahead of the rest',
+      [recent, pinnedOld],
+      {},
+      ['zz-pinned', 'recent']
+    ],
+    [
+      'only pinned ones without includeRecent',
+      [recent, pinnedOld],
+      { includeRecent: false },
+      ['zz-pinned']
+    ],
     [
       'not active for longer than the window',
       [worktree('stale', RECENT_WORKTREE_WINDOW_MS + 1)],
@@ -66,7 +80,7 @@ describe('buildRecentWorktreeItems', () => {
     ['archived', [worktree('archived', 1, { isArchived: true })], {}, []],
     ['the floating workspace', [worktree(FLOATING_TERMINAL_WORKTREE_ID, 1)], {}, []],
     ['already has a row in Activity', [recent], { listed: [recent] }, []],
-    ['matched by branch', [recent], { query: 'FEAT' }, [['recent', 0]]],
+    ['matched by branch', [recent], { query: 'FEAT' }, ['recent']],
     ['not matched by the search', [recent], { query: 'nothing' }, []],
     ['outside the project filter', [recent], { scope: { filterRepoIds: ['other'] } }, []]
   ])('%s', (_name, worktrees, opts, expected) => {

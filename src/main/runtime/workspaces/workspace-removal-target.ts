@@ -1,3 +1,4 @@
+import { applyClaudeTerminalImageViewerEnv } from '../terminal-image-viewer-env'
 import type { ResolvedWorktree } from '../runtime-worktree-path-identity'
 import { OrcaRuntimeWithRemoveManagedWorktree } from './workspace-removal'
 import type {
@@ -230,6 +231,18 @@ export abstract class OrcaRuntimeWithResolveWorktreeRemovalTarget extends OrcaRu
       // lost on restart. Persist customTitle so a headless rebuild keeps it.
       if (!this.notifier?.renameTerminal && pty.pty.tabId) {
         this.persistHeadlessTerminalTitle(pty.pty.worktreeId, pty.pty.tabId, title)
+        // Why: paired desktops rank their own saved-session title above the live one, so the
+        // name has to be published as manual or a resumed session hides it (#29975).
+        const customTitle = title?.trim() || null
+        this.applyHeadlessSessionTabPropsToSnapshot(pty.pty.worktreeId, pty.pty.tabId, {
+          customTitle,
+          // Why: a name set while the pane slept lives in the snapshot title; a reset must drop it.
+          ...(customTitle === null
+            ? {
+                title: this.headlessTerminalFallbackTitle(pty.pty.worktreeId, pty.pty.tabId)
+              }
+            : {})
+        })
       }
       for (const leaf of this.leaves.values()) {
         if (leaf.ptyId === pty.pty.ptyId) {
@@ -255,11 +268,15 @@ export abstract class OrcaRuntimeWithResolveWorktreeRemovalTarget extends OrcaRu
     workspace: TerminalWorkspaceLaunchScope,
     opts: TerminalCreateOptions
   ): Promise<TerminalCreateOptions> {
-    const launch = await resolveAgentTerminalCreateOptions(workspace, opts, {
+    const resolvedLaunch = await resolveAgentTerminalCreateOptions(workspace, opts, {
       store: this.store,
       hostIdentity: this.runtimeId,
       toSessionOptions: (preferences) => this.toAgentSessionOptions(preferences)
     })
+    const launch = applyClaudeTerminalImageViewerEnv(
+      resolvedLaunch,
+      opts.terminalImageViewerSupported
+    )
     // An SSH workspace's shell runs on that machine, where this distro's account paths mean nothing.
     return workspace.connectionId
       ? launch

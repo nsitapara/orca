@@ -28,6 +28,16 @@ const card = (id: string, type: string): Record<string, unknown> => ({
   title: id
 })
 
+// Each method gets its own answer; capacity defaults to nothing running or waiting.
+function answer(
+  inbox: unknown[],
+  capacity: { running?: unknown[]; queued?: unknown[] } = {}
+): void {
+  pilotRpc.mockImplementation(async (method: string) =>
+    method === 'pilot.capacity.get' ? { running: [], queued: [], ...capacity } : { items: inbox }
+  )
+}
+
 function useStore(state: Partial<PilotStoreState>): void {
   registerPilotStore({ getState: () => state as PilotStoreState })
 }
@@ -65,9 +75,7 @@ describe('waiting nav', () => {
   it('shows the count, and click opens the waiting view', async () => {
     const openAutomationsPage = vi.fn()
     useStore({ activeView: 'mobile', openAutomationsPage })
-    pilotRpc.mockResolvedValue({
-      items: [card('a', 'question'), card('b', 'question'), card('c', 'default')]
-    })
+    answer([card('a', 'question'), card('b', 'question'), card('c', 'default')])
     render(<WaitingNavItem />)
     const button = await screen.findByRole('button', {
       name: /Inbox/
@@ -81,7 +89,7 @@ describe('waiting nav', () => {
 
   it('is current only on the automations page in the waiting view', async () => {
     useStore({ activeView: 'automations' })
-    pilotRpc.mockResolvedValue({ items: [] })
+    answer([])
     render(<WaitingNavItem />)
     const button = screen.getByRole('button', { name: /Inbox/ })
     expect(button.getAttribute('aria-current')).toBeNull()
@@ -98,9 +106,11 @@ describe('waiting nav', () => {
     async (label, view) => {
       const openAutomationsPage = vi.fn()
       useStore({ activeView: 'automations', openAutomationsPage })
-      pilotRpc.mockResolvedValue({ items: [] })
+      answer([])
       render(<WaitingNavItem />)
-      const item = screen.getByRole('button', { name: label })
+      const item = screen.getByRole('button', {
+        name: new RegExp(`^${label}`)
+      })
       expect(item.getAttribute('aria-current')).toBeNull()
       act(() => fireEvent.click(item))
       expect(pilotAutomationsView()).toBe(view)
@@ -124,6 +134,27 @@ describe('waiting nav', () => {
     const { container } = render(<WaitingNavItem />)
     expect(container.innerHTML).toBe('')
     expect(pilotRpc).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    ['nothing running or waiting', 0, 0, []],
+    ['only running', 2, 0, ['2']],
+    ['running and waiting, waiting in yellow', 1, 3, ['1', '3']]
+  ] as const)('the Running item shows %s', async (_case, running, queued, shown) => {
+    useStore({ activeView: 'mobile' })
+    answer([], {
+      running: Array.from({ length: running }, (_, i) => ({ id: `r${i}` })),
+      queued: Array.from({ length: queued }, (_, i) => ({
+        itemKey: `q${i}`
+      }))
+    })
+    render(<WaitingNavItem />)
+    const item = screen.getByRole('button', { name: /^Running/ })
+    await act(async () => {})
+    const pills = [...item.querySelectorAll('span[title]')]
+    expect(pills.map((p) => p.textContent)).toEqual(shown)
+    const waiting = item.querySelector('span[title="Waiting for a slot"]')
+    expect(waiting?.className.includes('text-status-warning') ?? false).toBe(queued > 0)
   })
 
   it('hides the pill when the list fails', async () => {

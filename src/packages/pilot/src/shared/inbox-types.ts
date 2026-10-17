@@ -4,9 +4,11 @@ import type {
   HoldReason,
   InboxItemRow,
   InboxListRow,
+  InboxReply,
   InboxStatus,
   InboxType,
-  QueueState
+  QueueState,
+  RunStatus
 } from './api-types'
 
 // Inbox (contract §9-§10): the payloads of the inbox RPCs. Row types (InboxItemRow,
@@ -61,6 +63,22 @@ export type AnswerState = {
   readyAt: number | null
   reason: string | null
 }
+// A run a Message history line opens, and how it stands (null once the run is gone).
+export type HistoryRun = { id: string; status: RunStatus | null }
+// One line of a card's Message history (main/inbox/card-history.ts), oldest first. A reply with no event
+// behind it (an imported card's) has no time.
+export type CardHistoryEntry =
+  | { kind: 'asked' | 'prepared'; at: number; run: HistoryRun | null }
+  | {
+      kind: 'answer'
+      at: number
+      text: string
+      option: number | null
+      run: HistoryRun | null
+      // The titles of the other cards answered in the same run.
+      with: string[]
+    }
+  | { kind: 'reply'; at: number | null; by: InboxReply['by']; text: string; run: HistoryRun | null }
 export type InboxListPayload = {
   items: InboxListRow[]
   // An action card's Run line by card id (main/inbox/run-line.ts); none for other cards.
@@ -69,6 +87,8 @@ export type InboxListPayload = {
   answerStates: Record<string, AnswerState>
   // Each card's run by run id, with its steps and cards, for the card's "From run" strip. Absent from older builds.
   runs?: Record<string, ActivityRun>
+  // Each card's Message history by card id. Absent from older builds.
+  history?: Record<string, CardHistoryEntry[]>
   people: { id: string; name: string }[]
   groups: { id: string; name: string; members: string[] }[]
   automations: { id: string; name: string }[]
