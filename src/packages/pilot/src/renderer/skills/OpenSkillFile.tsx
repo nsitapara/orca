@@ -1,5 +1,6 @@
 import { FileText } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { isWebClientLocation } from '@/lib/web-client-location'
 import { pilotStore } from '../store'
 
 // A skill's file as a floating-workspace document: its tab reads <skill>/SKILL.md.
@@ -35,7 +36,8 @@ export function OpenSkillFile({
   onOpened: () => void
   open?: (filePath: string) => Promise<void>
 }): React.JSX.Element | null {
-  if (!pilotStore()) {
+  // Why: the browser version reads no files outside a worktree.
+  if (!pilotStore() || isWebClientLocation()) {
     return null
   }
   const click = (): void => {

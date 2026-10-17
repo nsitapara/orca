@@ -53,3 +53,17 @@ export function runMemoryText(run: CapacityRun): string {
   const peak = run.peakBytes === null ? '' : ` · peak ${formatMemory(run.peakBytes)}`
   return `${formatMemory(run.memoryBytes)}${peak}`
 }
+
+// When a finished run ended: the time of day today, the date as well before today.
+export function endedText(ms: number, now: number): string {
+  const ended = new Date(ms)
+  if (ended.toDateString() === new Date(now).toDateString()) {
+    return ended.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+  }
+  return ended.toLocaleString([], {
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit'
+  })
+}

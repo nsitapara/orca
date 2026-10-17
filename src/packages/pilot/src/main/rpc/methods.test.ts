@@ -3,6 +3,8 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 import type { RpcCallerIdentity } from '../../../../../main/runtime/rpc/rpc-caller-identity'
+import { denyRpcMethodForCaller } from '../../../../../main/runtime/rpc/rpc-caller-scope'
+import type { RpcMethodPermission } from '../../../../../main/runtime/rpc/rpc-method-permission'
 import type { PilotStatus } from '../../shared/api-types'
 import { loadDefinitions } from '../definitions/loader'
 import type { PilotHost } from '../pilot-services'
@@ -17,6 +19,7 @@ vi.mock('../orca-automations-off', () => ({
 
 type Callable = {
   name: string
+  permission: RpcMethodPermission
   params: { safeParse(v: unknown): { success: boolean } } | null
   handler(p: unknown, rpc?: { caller?: RpcCallerIdentity }): unknown
 }
@@ -64,12 +67,27 @@ function setupWithStore(
   const methods = buildPilotMethods(host) as unknown as Callable[]
   return {
     find: (name: string) => methods.find((m) => m.name === name)!,
+    methods,
     store,
     dir
   }
 }
 
 describe('Pilot RPC methods', () => {
+  it('lets a paired web client call every Pilot method', () => {
+    const { methods } = setupWithStore()
+    const refused = methods.flatMap((m) => {
+      const why = denyRpcMethodForCaller(
+        { kind: 'runtime-paired', grants: [] },
+        m.name,
+        m.permission
+      )
+      return why ? [`${m.name}: ${why}`] : []
+    })
+    expect(methods.length).toBeGreaterThan(40)
+    expect(refused).toEqual([])
+  })
+
   it('registers every method as pilot.* with a workspace permission', () => {
     const find = setup()
     const names = [

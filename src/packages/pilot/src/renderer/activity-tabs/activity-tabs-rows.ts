@@ -28,7 +28,8 @@ export function withGroupRows(
   return next
 }
 
-function groupRows(group: ActivityThreadGroup): readonly ActivityTabsRow[] {
+/** Every Pilot row a group carries, a worktree header's own row included. */
+export function groupRows(group: ActivityThreadGroup): readonly ActivityTabsRow[] {
   return rowsByGroup.get(group) ?? NO_ROWS
 }
 

@@ -69,6 +69,33 @@ describe('CapacityStore', () => {
     expect(store.capacity.queued().map((q) => q.itemKey)).toEqual(['z'])
   })
 
+  it("lists the given jobs' newest ended runs, leaving out running, imported and other jobs' runs", () => {
+    const store = open()
+    for (const [id, automationId, finishedAt] of [
+      ['old', 'a', 10],
+      ['new', 'a', 30],
+      ['mid', 'b', 20],
+      ['other', 'c', 40]
+    ] as const) {
+      addRun(store, id, automationId, 1)
+      store.runs.update(id, { status: 'done', finishedAt })
+    }
+    addRun(store, 'live', 'a', 50)
+    store.runs.create({
+      id: 'imported',
+      automationId: 'a',
+      tickId: null,
+      itemKey: 'imported',
+      itemLabel: 'imported',
+      worktreePath: null,
+      startedAt: 1,
+      imported: true
+    })
+    store.runs.update('imported', { status: 'done', finishedAt: 60 })
+    expect(store.capacity.finished(['a', 'b'], 10).map((r) => r.id)).toEqual(['new', 'mid', 'old'])
+    expect(store.capacity.finished(['a', 'b'], 2).map((r) => r.id)).toEqual(['new', 'mid'])
+  })
+
   it('records a run peak only upward, and lists running runs oldest first', () => {
     const store = open()
     addRun(store, 'r2', 'a', 20)

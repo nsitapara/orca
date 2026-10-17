@@ -56,7 +56,10 @@ export function planSession(input: SessionInput): SessionPlan {
     }
   }
   if (!earlier.sessionId) {
-    return { kind: 'missing', reason: `Step "${session.step}" has no session id to continue` }
+    return {
+      kind: 'missing',
+      reason: `Step "${session.step}" has no session id to continue`
+    }
   }
   if (!isSessionId(earlier.sessionId)) {
     return {
@@ -76,8 +79,22 @@ function idArg(sessionId: string): string {
   return sessionId
 }
 
+// Claude Code greys a suggested next prompt into its input box after each turn; Orca's draft detection
+// counts dim text as typed, so env teardown refused ("someone is typing") on a draft nobody wrote.
+// `=` form: the flag's value is optional, so a space-separated value could swallow the prompt.
+export const CLAUDE_NO_PROMPT_SUGGESTIONS = '--prompt-suggestions=false'
+
 // Goes before the prompt in the launch command (pilot-hook: agent-launch-env).
 export function agentArgv(
+  agent: AgentKind,
+  session: SessionPlan,
+  args: readonly string[]
+): string[] {
+  const sessionArgv = agentSessionArgv(agent, session, args)
+  return agent === 'claude' ? [CLAUDE_NO_PROMPT_SUGGESTIONS, ...sessionArgv] : sessionArgv
+}
+
+function agentSessionArgv(
   agent: AgentKind,
   session: SessionPlan,
   args: readonly string[]
@@ -176,6 +193,15 @@ export function buildStepPrompt(input: PromptInput): string {
     lines.push('', rendered)
   }
   return lines.join('\n')
+}
+
+// A continued run's step, resumed in its own session (run-continue.ts): the session already holds the step's
+// instructions, so it is told only why it stopped and to carry on.
+export function continuePrompt(stepName: string, reason: string): string {
+  return [
+    `Pilot is continuing step "${stepName}" in this session: it stopped before it finished (${reason}).`,
+    'Carry on from where you left off. Check what is already done before doing any of it again, then finish the step as its instructions say, outputs included.'
+  ].join(' ')
 }
 
 export function stepTitle(definition: AutomationDefinition, step: StepDef, label: string): string {

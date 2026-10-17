@@ -29,6 +29,18 @@ export function worktreeIdForPath(path: string): string | null {
   return all.find((w) => trimmed(w.path) === trimmed(path))?.id ?? null
 }
 
+// The display name of the project the app lists this worktree under, or null when the app does not have it.
+export function repoNameForPath(path: string): string | null {
+  const state = pilotStore()?.getState()
+  const listed = Object.entries(state?.worktreesByRepo ?? {}).find(([, worktrees]) =>
+    worktrees.some((w) => trimmed(w.path) === trimmed(path))
+  )
+  if (!listed) {
+    return null
+  }
+  return state?.repos?.find((r) => r.id === listed[0])?.displayName ?? null
+}
+
 // The same activation the worktree palette makes, loaded when used so the page does not pull the app in.
 export function openWorktree(id: string): void {
   void import('@/lib/worktree-activation').then((m) => m.activateAndRevealWorktree(id))

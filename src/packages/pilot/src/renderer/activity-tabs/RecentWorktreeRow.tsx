@@ -3,6 +3,7 @@ import { toast } from 'sonner'
 import { getActivityThreadWorkspaceTitle } from '@/lib/activity-thread-display'
 import { getPaletteWorktreeExecutionHostId } from '@/lib/palette-repo-resolution'
 import { activateAndRevealWorkspace } from '@/lib/worktree-activation'
+import { ActivityMachineChip } from '../activity-machines/ActivityMachineChip'
 import { NewAgentMenu } from './NewAgentMenu'
 import type { RecentWorktreeItem } from './recent-worktree-items'
 
@@ -30,6 +31,7 @@ export function RecentWorktreeRow({ item }: { item: RecentWorktreeItem }): React
       className="group relative flex w-full cursor-pointer items-center gap-1.5 rounded-lg border border-transparent px-1.5 py-1 text-left transition-[background-color,border-color,opacity,box-shadow] duration-200 outline-none select-none worktree-sidebar-card-hover focus-visible:ring-1 focus-visible:ring-ring"
     >
       <FolderGit2 className="size-3.5 shrink-0 text-muted-foreground" />
+      <ActivityMachineChip worktree={item.worktree} repo={item.repo} />
       <span
         className="min-w-0 flex-1 truncate text-[13px] leading-5 text-muted-foreground"
         title={workspaceLabel}

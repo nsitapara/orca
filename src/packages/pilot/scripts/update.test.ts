@@ -81,11 +81,7 @@ describe('hookTestTargets', () => {
       'src/main/updater',
       'src/renderer/src/app-shell',
       'src/renderer/src/components/TerminalWorkspaceDialogs.test',
-      'src/renderer/src/components/activity/activity-thread-controls.test',
-      'src/renderer/src/components/activity/activity-thread-options-menu.test',
-      'src/renderer/src/components/activity/activity-thread-row.test',
-      'src/renderer/src/components/activity/activity-thread-virtual-items.test',
-      'src/renderer/src/components/activity/activity-thread-virtual-row.test',
+      'src/renderer/src/components/activity',
       'src/renderer/src/components/right-sidebar',
       'src/renderer/src/components/sidebar/SidebarAgentsList.test',
       'src/renderer/src/components/sidebar/SidebarNav.test',
@@ -94,7 +90,8 @@ describe('hookTestTargets', () => {
       'src/renderer/src/components/terminal-workspace-keydown.test',
       'src/renderer/src/hooks/ipc-events/tab-lifecycle-ipc-bridge.test',
       'src/renderer/src/main.test',
-      'src/renderer/src/store/right-sidebar-route.test'
+      'src/renderer/src/store/right-sidebar-route.test',
+      'src/renderer/src/web/main.test'
     ])
   })
 

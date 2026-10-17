@@ -78,10 +78,12 @@ describe('launchAgentStep', () => {
     finish(store, 'run-1', 0)
     await launchAgentStep(store, request(1), deps)
     expect(argvOf(launchTerminal.mock.calls[0])).toEqual([
+      '--prompt-suggestions=false',
       '--session-id',
       '00000000-0000-4000-8000-00000000000a'
     ])
     expect(argvOf(launchTerminal.mock.calls[1])).toEqual([
+      '--prompt-suggestions=false',
       '--resume',
       '00000000-0000-4000-8000-00000000000a',
       '--dangerously-skip-permissions'
@@ -89,6 +91,29 @@ describe('launchAgentStep', () => {
     expect(store.runs.steps('run-1').map((s) => [s.name, s.status, s.sessionId])).toEqual([
       ['review', 'done', '00000000-0000-4000-8000-00000000000a'],
       ['fix', 'running', '00000000-0000-4000-8000-00000000000a']
+    ])
+  })
+
+  it('resumes the session of a continued run with a prompt to carry on, not the step from the start', async () => {
+    const def = testDefinition({
+      steps: [testStep({ name: 'review', prompt: 'Review it', args: ['--model', 'opus'] })]
+    })
+    const { store, request, launchTerminal, deps } = setup(def)
+    const sessionId = '00000000-0000-4000-8000-0000000000f1'
+    const reason = 'The terminal closed before the agent finished'
+    await launchAgentStep(store, { ...request(0), resume: { sessionId, reason } }, deps)
+    expect(argvOf(launchTerminal.mock.calls[0])).toEqual([
+      '--prompt-suggestions=false',
+      '--resume',
+      sessionId,
+      '--model',
+      'opus'
+    ])
+    const prompt = launchTerminal.mock.calls[0][1].prompt
+    expect(prompt).toContain(reason)
+    expect(prompt).not.toContain('Review it')
+    expect(store.runs.steps('run-1').map((s) => [s.name, s.status, s.sessionId])).toEqual([
+      ['review', 'running', sessionId]
     ])
   })
 
@@ -136,6 +161,7 @@ describe('launchAgentStep', () => {
       newSessionId: () => '00000000-0000-4000-8000-00000000000b'
     })
     expect(argvOf(launchTerminal.mock.calls[1])).toEqual([
+      '--prompt-suggestions=false',
       '--resume',
       '00000000-0000-4000-8000-00000000000a'
     ])
@@ -147,13 +173,13 @@ describe('launchAgentStep', () => {
     [
       'claude',
       false,
-      ['--session-id', '00000000-0000-4000-8000-00000000000a'],
+      ['--prompt-suggestions=false', '--session-id', '00000000-0000-4000-8000-00000000000a'],
       '00000000-0000-4000-8000-00000000000a'
     ],
     [
       'claude',
       true,
-      ['--resume', '00000000-0000-4000-8000-00000000000c'],
+      ['--prompt-suggestions=false', '--resume', '00000000-0000-4000-8000-00000000000c'],
       '00000000-0000-4000-8000-00000000000c'
     ],
     ['codex', false, [], null],
@@ -340,7 +366,7 @@ describe('launchAgentStep for a session whose terminal may still be open', () =>
       ['--x'],
       false,
       true,
-      ['--resume', '00000000-0000-4000-8000-00000000000a', '--x']
+      ['--prompt-suggestions=false', '--resume', '00000000-0000-4000-8000-00000000000a', '--x']
     ],
     [
       'running another session: closed, then resumed',
@@ -348,7 +374,7 @@ describe('launchAgentStep for a session whose terminal may still be open', () =>
       [],
       false,
       true,
-      ['--resume', '00000000-0000-4000-8000-00000000000a']
+      ['--prompt-suggestions=false', '--resume', '00000000-0000-4000-8000-00000000000a']
     ],
     [
       'gone: resumed in a new terminal',
@@ -356,7 +382,7 @@ describe('launchAgentStep for a session whose terminal may still be open', () =>
       [],
       false,
       false,
-      ['--resume', '00000000-0000-4000-8000-00000000000a']
+      ['--prompt-suggestions=false', '--resume', '00000000-0000-4000-8000-00000000000a']
     ]
   ])('%s', async (_name, state, fixArgs, sent, closed, argv) => {
     const terminals = terminalsIn(state)
@@ -415,7 +441,16 @@ describe('launchAgentStep for a session whose terminal may still be open', () =>
     expect(terminals.close.mock.calls).toEqual(sent ? [] : [['term_1']])
     const resumed = launchTerminal.mock.calls.slice(1).map(argvOf)
     expect(resumed).toEqual(
-      sent ? [] : [['--resume', '00000000-0000-4000-8000-00000000000a', ...nextArgs]]
+      sent
+        ? []
+        : [
+            [
+              '--prompt-suggestions=false',
+              '--resume',
+              '00000000-0000-4000-8000-00000000000a',
+              ...nextArgs
+            ]
+          ]
     )
     expect(store.runs.steps('run-2')[0]).toMatchObject({
       terminalHandle: sent ? 'term_1' : 'term_2',

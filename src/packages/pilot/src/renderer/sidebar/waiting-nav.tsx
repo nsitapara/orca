@@ -9,6 +9,7 @@ import {
   usePilotAutomationsView,
   type PilotAutomationsView
 } from '../pages/automations-view'
+import { useCapacity } from '../pages/running/use-capacity'
 import { waitingCount } from '../pages/waiting/answer-text'
 import { pilotStore } from '../store'
 
@@ -65,17 +66,26 @@ function useActiveView(): string | undefined {
   return useSyncExternalStore(subscribe, () => store?.getState().activeView)
 }
 
-// A sidebar item under Automations that opens one of its views.
+const PILL_TONES = {
+  // Cards that need Nish.
+  attention: 'bg-primary text-primary-foreground',
+  quiet: 'bg-worktree-sidebar-foreground/10 text-worktree-sidebar-foreground/70',
+  waiting: 'bg-status-warning-background text-status-warning'
+} as const
+
+type NavPill = { count: number; tone: keyof typeof PILL_TONES; title?: string }
+
+// A sidebar item under Automations that opens one of its views. A pill whose count is 0 is not shown.
 function ViewNavButton({
   view: target,
   icon: Icon,
   label,
-  count = 0
+  pills
 }: {
   view: PilotAutomationsView
   icon: LucideIcon
   label: string
-  count?: number
+  pills?: NavPill[]
 }): React.JSX.Element {
   const view = usePilotAutomationsView()
   const activeView = useActiveView()
@@ -101,17 +111,45 @@ function ViewNavButton({
         strokeWidth={active ? 2.25 : 1.75}
       />
       <span className="flex-1">{label}</span>
-      {count > 0 ? (
-        <span className="shrink-0 rounded-full bg-primary px-1.5 py-px text-[10px] font-semibold text-primary-foreground">
-          {count}
-        </span>
-      ) : null}
+      {pills
+        ?.filter((pill) => pill.count > 0)
+        .map((pill) => (
+          <span
+            key={pill.tone}
+            title={pill.title}
+            className={cn(
+              'shrink-0 rounded-full px-1.5 py-px text-3xs font-semibold tabular-nums',
+              PILL_TONES[pill.tone]
+            )}
+          >
+            {pill.count}
+          </span>
+        ))}
     </button>
   )
 }
 
 function WaitingNavButton(): React.JSX.Element {
-  return <ViewNavButton view="inbox" icon={Inbox} label="Inbox" count={useWaitingTotal()} />
+  const pills: NavPill[] = [{ count: useWaitingTotal(), tone: 'attention' }]
+  return <ViewNavButton view="inbox" icon={Inbox} label="Inbox" pills={pills} />
+}
+
+// The Running page's own counts: runs going now, and in yellow the ones waiting for a slot.
+function RunningNavButton(): React.JSX.Element {
+  const { payload } = useCapacity()
+  const pills: NavPill[] = [
+    {
+      count: payload?.running.length ?? 0,
+      tone: 'quiet',
+      title: 'Running now'
+    },
+    {
+      count: payload?.queued.length ?? 0,
+      tone: 'waiting',
+      title: 'Waiting for a slot'
+    }
+  ]
+  return <ViewNavButton view="running" icon={Gauge} label="Running" pills={pills} />
 }
 
 export function WaitingNavItem(): React.JSX.Element | null {
@@ -122,7 +160,7 @@ export function WaitingNavItem(): React.JSX.Element | null {
   return (
     <>
       <WaitingNavButton />
-      <ViewNavButton view="running" icon={Gauge} label="Running" />
+      <RunningNavButton />
       <ViewNavButton view="playground" icon={FlaskConical} label="Playground" />
     </>
   )

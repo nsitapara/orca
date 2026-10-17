@@ -17,6 +17,7 @@ import {
 } from '@/lib/unified-tab-host-ownership'
 import type { AgentPaneThread } from '@/components/activity/activity-thread-types'
 import { useAppStore } from '@/store'
+import { useActivityProjectRepoIds } from '../activity-machines/use-activity-project-scope'
 import { agentTabKey, type WorktreeTabsContext } from './workspace-tab-items'
 
 // The same host/project/origin scope Activity applies to its agent threads.
@@ -44,6 +45,7 @@ export function useWorktreeTabsContext(
         : null
     }))
   )
+  const filterRepoIds = useActivityProjectRepoIds(data.filterRepoIds)
   return useMemo(() => {
     const repoMap = new Map(data.repos.map((repo) => [repo.id, repo]))
     const hostRepos = new Map(
@@ -59,7 +61,7 @@ export function useWorktreeTabsContext(
       ambiguous: findAmbiguousWorktreeIds(getPaletteOwnershipWorktreeIds(data)),
       scope: {
         visibleHostIds: data.visibleHostIds,
-        filterRepoIds: resolveActivityScopeRepoIds(data.filterRepoIds, repoMap),
+        filterRepoIds: resolveActivityScopeRepoIds(filterRepoIds, repoMap),
         defaultHostId: data.defaultHostId,
         hideWorkspacesFromOtherDevices: data.hideWorkspacesFromOtherDevices,
         pairedDeviceIdsByEnvironment:
@@ -76,5 +78,5 @@ export function useWorktreeTabsContext(
       query,
       generatedTitlesEnabled: data.generatedTitlesEnabled
     }
-  }, [data, threads, query])
+  }, [data, filterRepoIds, threads, query])
 }

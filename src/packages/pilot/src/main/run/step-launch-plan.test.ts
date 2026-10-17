@@ -12,7 +12,11 @@ import {
 } from './step-launch-plan'
 
 const prior = [
-  { name: 'review', agent: 'claude', sessionId: '00000000-0000-4000-8000-000000000043' },
+  {
+    name: 'review',
+    agent: 'claude',
+    sessionId: '00000000-0000-4000-8000-000000000043'
+  },
   { name: 'lint', agent: 'codex', sessionId: null }
 ]
 const newId = () => '00000000-0000-4000-8000-000000000041'
@@ -55,7 +59,10 @@ describe('planSession', () => {
       { kind: 'continue', step: 'review' },
       'codex',
       null,
-      { kind: 'missing', reason: 'Step "review" ran claude; step "next" runs codex' }
+      {
+        kind: 'missing',
+        reason: 'Step "review" ran claude; step "next" runs codex'
+      }
     ],
     [
       'continue a step without a session id',
@@ -90,13 +97,18 @@ describe('agentArgv', () => {
       'claude',
       { kind: 'fresh', sessionId: '00000000-0000-4000-8000-000000000042' },
       ['--dangerously-skip-permissions'],
-      ['--session-id', '00000000-0000-4000-8000-000000000042', '--dangerously-skip-permissions']
+      [
+        '--prompt-suggestions=false',
+        '--session-id',
+        '00000000-0000-4000-8000-000000000042',
+        '--dangerously-skip-permissions'
+      ]
     ],
     [
       'claude',
       { kind: 'resume', sessionId: '00000000-0000-4000-8000-000000000045' },
       [],
-      ['--resume', '00000000-0000-4000-8000-000000000045']
+      ['--prompt-suggestions=false', '--resume', '00000000-0000-4000-8000-000000000045']
     ],
     [
       'codex',
@@ -115,6 +127,7 @@ describe('agentArgv', () => {
       { kind: 'fork', sessionId: '00000000-0000-4000-8000-000000000047' },
       ['--dangerously-skip-permissions'],
       [
+        '--prompt-suggestions=false',
         '--resume',
         '00000000-0000-4000-8000-000000000047',
         '--fork-session',
@@ -127,7 +140,12 @@ describe('agentArgv', () => {
       [],
       ['fork', '00000000-0000-4000-8000-000000000048']
     ],
-    ['claude', { kind: 'missing', reason: 'x' }, ['--model', 'opus'], ['--model', 'opus']]
+    [
+      'claude',
+      { kind: 'missing', reason: 'x' },
+      ['--model', 'opus'],
+      ['--prompt-suggestions=false', '--model', 'opus']
+    ]
   ])('%s %j', (agent, session, args, argv) => {
     expect(agentArgv(agent, session, args)).toEqual(argv)
   })
@@ -176,7 +194,10 @@ describe('terminalLaunchOptions', () => {
       session: { kind: 'fresh', sessionId: null },
       runEnv: { API_URL: 'http://a', PILOT_RUN_ID: 'forged' }
     })
-    expect(opts.pilot.env).toMatchObject({ API_URL: 'http://a', PILOT_RUN_ID: STEP_ENV.runId })
+    expect(opts.pilot.env).toMatchObject({
+      API_URL: 'http://a',
+      PILOT_RUN_ID: STEP_ENV.runId
+    })
   })
 
   it("combines the step env, the session's argv then the step args, the title and the prompt", () => {
@@ -194,7 +215,10 @@ describe('terminalLaunchOptions', () => {
           powers: ['commit']
         },
         args: ['--dangerously-skip-permissions'],
-        session: { kind: 'fresh', sessionId: '00000000-0000-4000-8000-000000000042' }
+        session: {
+          kind: 'fresh',
+          sessionId: '00000000-0000-4000-8000-000000000042'
+        }
       })
     ).toEqual({
       agent: 'claude',
@@ -211,6 +235,7 @@ describe('terminalLaunchOptions', () => {
           AGENT_RUN: 'r-1'
         },
         argv: [
+          '--prompt-suggestions=false',
           '--session-id',
           '00000000-0000-4000-8000-000000000042',
           '--dangerously-skip-permissions'
@@ -224,20 +249,34 @@ describe('buildStepPrompt', () => {
   const definition = testDefinition({ name: 'Fix failed CI on my MRs' })
   const fields = { 'mr.iid': 1561, 'mr.pipeline': 99 }
   const prompt = (step: StepDef, modeText: string | null = null) =>
-    buildStepPrompt({ definition, step, runId: 'r-1', label: '!1561 web-1493', fields, modeText })
+    buildStepPrompt({
+      definition,
+      step,
+      runId: 'r-1',
+      label: '!1561 web-1493',
+      fields,
+      modeText
+    })
   const preamble =
     'Started by the Pilot automation "Fix failed CI on my MRs" (run r-1) for !1561 web-1493.'
 
   it.each<[string, StepDef, string | null, string]>([
     [
       'wrapped, as M1',
-      testStep({ skill: 'fix-gitlab-ci', prompt: 'Fix pipeline {mr.pipeline} on !{mr.iid}.' }),
+      testStep({
+        skill: 'fix-gitlab-ci',
+        prompt: 'Fix pipeline {mr.pipeline} on !{mr.iid}.'
+      }),
       null,
       [preamble, 'Use the fix-gitlab-ci skill.', '', 'Fix pipeline 99 on !1561.'].join('\n')
     ],
     [
       "wrapped with the mode's text before the prompt",
-      testStep({ skill: 'fix-gitlab-ci', mode: 'answers', prompt: 'Apply the answer.' }),
+      testStep({
+        skill: 'fix-gitlab-ci',
+        mode: 'answers',
+        prompt: 'Apply the answer.'
+      }),
       '  Read the card first.\n',
       [
         preamble,
@@ -256,7 +295,11 @@ describe('buildStepPrompt', () => {
     ],
     [
       'raw: the rendered prompt only',
-      testStep({ prompt: '/remove-manual-memo {mr.iid}\n', promptStyle: 'raw', skill: 'x' }),
+      testStep({
+        prompt: '/remove-manual-memo {mr.iid}\n',
+        promptStyle: 'raw',
+        skill: 'x'
+      }),
       'ignored',
       '/remove-manual-memo 1561'
     ],
@@ -273,7 +316,10 @@ describe('buildStepPrompt', () => {
 
 describe('stepTitle', () => {
   it('adds the step name only when the automation has several steps', () => {
-    const one = testDefinition({ name: 'Fix CI', steps: [testStep({ name: 'fix' })] })
+    const one = testDefinition({
+      name: 'Fix CI',
+      steps: [testStep({ name: 'fix' })]
+    })
     const two = testDefinition({
       name: 'Review',
       steps: [testStep({ name: 'review' }), testStep({ name: 'fix' })]

@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { RotateCcw } from 'lucide-react'
+import { isWebClientLocation } from '@/lib/web-client-location'
 import type { SessionResumeResult, StepRow } from '../../shared/api-types'
 import { money } from '../../shared/money'
 import { pilotRpc } from '../api'
@@ -14,8 +15,13 @@ const RESUMED: Record<SessionResumeResult['action'], string> = {
   opened: 'Opened in a new tab'
 }
 
-function canResume(step: StepRow): boolean {
-  return step.sessionId !== null && (step.agent === 'claude' || step.agent === 'codex')
+// Why the browser gate: the server refuses a resume from a paired device (methods-timeline.ts).
+export function canResume(step: StepRow): boolean {
+  return (
+    !isWebClientLocation() &&
+    step.sessionId !== null &&
+    (step.agent === 'claude' || step.agent === 'codex')
+  )
 }
 
 function stepFacts(step: StepRow): string {
@@ -48,7 +54,7 @@ function outputsText(step: StepRow): string | null {
   return entries.map(([k, v]) => `${k}=${String(v)}`).join(' · ')
 }
 
-function ResumeButton({
+export function ResumeButton({
   runId,
   worktreePath,
   step
@@ -109,14 +115,15 @@ export function StepDetail({
   step: StepRow
 }): React.JSX.Element {
   const outputs = outputsText(step)
+  const resumable = canResume(step)
   return (
     <div className="mt-1 flex flex-col gap-0.5 text-xs">
       <div className="flex flex-wrap items-center gap-2">
         <span className="text-muted-foreground">{stepFacts(step)}</span>
-        {canResume(step) && !checkoutRemoved ? (
+        {resumable && !checkoutRemoved ? (
           <ResumeButton runId={runId} worktreePath={worktreePath} step={step} />
         ) : null}
-        {canResume(step) && checkoutRemoved ? (
+        {resumable && checkoutRemoved ? (
           <span className="text-muted-foreground">Checkout removed</span>
         ) : null}
       </div>

@@ -12,6 +12,7 @@ vi.mock('@/lib/worktree-activation', () => ({
 }))
 
 import { InboxPage } from './InboxPage'
+import { repoNameForPath } from './WorktreeLink'
 
 function card(over: Partial<InboxItemRow>): InboxItemRow {
   return {
@@ -83,7 +84,8 @@ describe('opening a worktree from its section', () => {
           worktreesByRepo: {
             'repo-1': [{ id: 'repo-1::/w/web-1', path: '/w/web-1' }],
             'repo-9': [{ id: 'repo-9::/w/web-2', path: '/w/web-2' }]
-          }
+          },
+          repos: [{ id: 'repo-1', displayName: 'web-platform' }]
         }) as never
     })
   })
@@ -110,6 +112,14 @@ describe('opening a worktree from its section', () => {
     await screen.findByRole('heading', { name: 'By key' })
     fireEvent.click(within(heading('web-2')).getByRole('button', { name: /web-2/ }))
     await waitFor(() => expect(activate).toHaveBeenCalledWith('repo-9::/w/web-2'))
+  })
+
+  it.each([
+    ['a listed worktree', '/w/web-1/', 'web-platform'],
+    ['a worktree whose project the app does not list', '/w/web-2', null],
+    ['a worktree the app does not have', '/w/gone', null]
+  ])('names the project of %s', (_case, path, project) => {
+    expect(repoNameForPath(path)).toBe(project)
   })
 
   it('renders plain text for a worktree the app does not have open', async () => {
