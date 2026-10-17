@@ -397,9 +397,16 @@ A run costs the sum of its steps. A Claude step's session id is pinned at launch
 
 Activity lists the sessions of every machine you are connected to.
 
-- **Machine chip:** while the listed rows come from more than one machine, each row shows a chip with its machine's name. This covers agent rows, Pilot's tab rows and recent-worktree rows. With one machine, no chip shows. It is the same chip the sidebar uses for a host. Machines are compared by host id, after an SSH host is merged with its managed server, so those two count as one machine.
+- **Machine chip:** while the listed rows come from more than one machine, each row shows a chip with its machine's name. This covers agent rows, Pilot's tab rows and recent-worktree rows, and the worktree headers under Group by > Worktree. With one machine, no chip shows. It is the same chip the sidebar uses for a host. Machines are compared by host id, after an SSH host is merged with its managed server, so those two count as one machine.
 - **Machines filter:** Activity's existing Options > Hosts filter is the machine filter. It already lists this Mac, every paired machine and every SSH host.
 - **Projects filter:** a project picked here includes that project's copy on every machine, and it is listed once. The saved filter is still stored as repo ids; it is widened to every machine's copy when Activity reads it. A repo with no git remote can't be matched across machines, so it stays per machine.
+
+Known gaps:
+
+- A Projects filter saved before this change can hold two machines' copies of one project. The Options badge counts it as two until you change the filter once.
+- Repos without a git remote that share a name get separate Projects rows that look the same.
+- Group by > Project still makes one group per repo, so each machine's copy gets its own group.
+- Two clones of the same remote on one machine, or a fork and the repo it came from, share one Projects row. That is how the sidebar decides what one project is.
 
 The hooks are `activity-machines-*` and `activity-project-*` (see `HOOKS.md`).
 
