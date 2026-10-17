@@ -10,27 +10,9 @@ import { loadPortedAutomation } from './ported'
 const PRECHECK =
   'node /Users/nishsitapara/Documents/web-platform/scripts/agent-loops/manual-memo.mjs precheck'
 
-// The saved Orca definitions (`orca automations list --json`: 59153cb9, 9e5d98c3, 0afed57c), field by field. M02 and M03
-// carry Orca's placeholder rrule "0 3 1 1 *" (a yearly date nobody waits for), which is `manual` here.
+// The saved Orca definition (`orca automations list --json`: 0afed57c), field by field. M02 and M03 were retired, not
+// ported, on 2026-10-16.
 const SAVED = [
-  {
-    id: 'mr-next-steps',
-    name: 'M02 · Report next steps for my MRs',
-    schedule: 'manual',
-    agent: 'codex',
-    prompt: '$mr-next-step generate a fresh live report',
-    workspace: { kind: 'main_checkout' },
-    checks: []
-  },
-  {
-    id: 'close-idle-sessions',
-    name: 'M03 · Close finished and idle sessions',
-    schedule: 'manual',
-    agent: 'claude',
-    prompt: 'Follow ~/.agents/automations/close-idle-sessions/INSTRUCTIONS.md exactly.',
-    workspace: { kind: 'main_checkout' },
-    checks: []
-  },
   {
     id: 'manual-memo',
     name: 'M04 · Remove manual React memoization',
@@ -42,7 +24,7 @@ const SAVED = [
   }
 ]
 
-describe('M02, M03, M04 carry their Orca definitions over', () => {
+describe('M04 carries its Orca definition over', () => {
   it.each(SAVED)('$name', (saved) => {
     const def = loadPortedAutomation(saved.id).definition
     expect({
@@ -69,8 +51,8 @@ describe('M02, M03, M04 carry their Orca definitions over', () => {
       timeoutMs: null,
       args: []
     })
-    expect(def.limits.timeoutMs).toBeNull() // M03 waits on Nish in its tab; nothing may time it out
-    expect(def.answers ?? null).toBeNull() // none of the three asks a question the dispatcher routes
+    expect(def.limits.timeoutMs).toBeNull()
+    expect(def.answers ?? null).toBeNull() // it asks no question the dispatcher routes
   })
 })
 
@@ -91,8 +73,6 @@ const TABLE: VerdictTable = {
 }
 
 const RUNS: { name: string; id: string; precheck: Precheck | null; reason?: string }[] = [
-  { name: 'M02 always starts', id: 'mr-next-steps', precheck: null },
-  { name: 'M03 always starts', id: 'close-idle-sessions', precheck: null },
   {
     name: 'M04 starts when its precheck names a file',
     id: 'manual-memo',
@@ -121,7 +101,7 @@ const RUNS: { name: string; id: string; precheck: Precheck | null; reason?: stri
   }
 ]
 
-describe('M02, M03, M04 start when Orca would have', () => {
+describe('M04 starts when Orca would have', () => {
   it.each(RUNS)('$name', async (run) => {
     const fixture = parityFixture(
       'M04',
