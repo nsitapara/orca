@@ -23,6 +23,7 @@ import { getKeybindingContext } from './terminal-workspace-model'
 import { resolveTerminalAgentTabShortcut } from './terminal-agent-tab-shortcut'
 import { handleTerminalWorkspaceEditorShortcut } from './terminal-workspace-editor-shortcuts'
 import type { TerminalActivationController } from './use-terminal-activation-actions'
+import { openNewTabAgentPickerOr } from '../../../packages/pilot/src/renderer/new-tab-agent-picker/new-tab-agent-picker-open-state' // pilot-hook: new-tab-picker-keydown
 
 export function handleTerminalWorkspaceKeyDown(
   event: KeyboardEvent,
@@ -36,6 +37,7 @@ export function handleTerminalWorkspaceKeyDown(
     handleNewBrowserTab,
     handleNewFile,
     handleNewSimulatorTab,
+    handleNewTab,
     keybindings,
     mobileEmulatorEnabled,
     terminalShortcutPolicy
@@ -67,7 +69,7 @@ export function handleTerminalWorkspaceKeyDown(
       void createFloatingWorkspaceTerminalTab(useAppStore.getState())
       return
     }
-    useAppStore.getState().openModal('new-tab-agent-picker')
+    openNewTabAgentPickerOr(handleNewTab) // pilot-hook: new-tab-picker-keydown
     return
   }
 
