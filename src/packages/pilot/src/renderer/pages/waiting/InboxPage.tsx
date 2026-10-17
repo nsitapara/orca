@@ -124,6 +124,7 @@ export function InboxPage(): React.JSX.Element {
       run={i.runId ? (inbox?.runs?.[i.runId] ?? null) : null}
       runLine={inbox?.runLines[i.id] ?? null}
       answerState={inbox?.answerStates?.[i.id] ?? null}
+      history={inbox?.history?.[i.id] ?? null}
       error={errors[i.id] ?? null}
       selected={selected === i.id}
       now={loadedAt}
