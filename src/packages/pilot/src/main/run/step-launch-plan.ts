@@ -56,7 +56,10 @@ export function planSession(input: SessionInput): SessionPlan {
     }
   }
   if (!earlier.sessionId) {
-    return { kind: 'missing', reason: `Step "${session.step}" has no session id to continue` }
+    return {
+      kind: 'missing',
+      reason: `Step "${session.step}" has no session id to continue`
+    }
   }
   if (!isSessionId(earlier.sessionId)) {
     return {
@@ -76,8 +79,22 @@ function idArg(sessionId: string): string {
   return sessionId
 }
 
+// Claude Code greys a suggested next prompt into its input box after each turn; Orca's draft detection
+// counts dim text as typed, so env teardown refused ("someone is typing") on a draft nobody wrote.
+// `=` form: the flag's value is optional, so a space-separated value could swallow the prompt.
+export const CLAUDE_NO_PROMPT_SUGGESTIONS = '--prompt-suggestions=false'
+
 // Goes before the prompt in the launch command (pilot-hook: agent-launch-env).
 export function agentArgv(
+  agent: AgentKind,
+  session: SessionPlan,
+  args: readonly string[]
+): string[] {
+  const sessionArgv = agentSessionArgv(agent, session, args)
+  return agent === 'claude' ? [CLAUDE_NO_PROMPT_SUGGESTIONS, ...sessionArgv] : sessionArgv
+}
+
+function agentSessionArgv(
   agent: AgentKind,
   session: SessionPlan,
   args: readonly string[]
