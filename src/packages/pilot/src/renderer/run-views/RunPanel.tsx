@@ -8,6 +8,7 @@ import { money } from '../../shared/money'
 import { paintRun, type PaintedRun } from '../../shared/run-views/paint'
 import { runHeadline, runTimeline } from '../../shared/run-views/timeline'
 import { formatDuration } from '../../shared/run/format-duration'
+import { workedMs } from '../../shared/run/worked-time'
 import { hostRpc } from '../hosts/host-rpc'
 import { MachineChip } from '../hosts/MachineChip'
 import { usePilotHost } from '../hosts/PilotHostContext'
@@ -20,7 +21,7 @@ import { WhatItChanged } from './EffectsLine'
 import { envLines } from './env-lines'
 import { RunTimeline } from './RunTimeline'
 import { closeRunPanel, openRun } from './run-panel-state'
-import { RUN_TONE } from './tokens'
+import { runTone } from './tokens'
 
 export const RUN_PANEL_POLL_MS = 10_000
 const LIVE: ReadonlySet<string> = new Set(['running', 'asking'])
@@ -117,9 +118,7 @@ function Header({
       </h3>
       <dl className="grid grid-cols-[5.5rem_minmax(0,1fr)] gap-y-0.5 text-xs">
         <Fact name="State">
-          <span className={cn('rounded px-1.5', RUN_TONE[run.status])}>
-            {stateWord(detail, painted)}
-          </span>
+          <span className={cn('rounded px-1.5', runTone(run))}>{stateWord(detail, painted)}</span>
         </Fact>
         {home ? (
           <Fact name="Worktree">
@@ -128,7 +127,7 @@ function Header({
         ) : null}
         <Fact name="Started">{new Date(run.startedAt).toLocaleString()}</Fact>
         {run.finishedAt !== null ? (
-          <Fact name="Took">{formatDuration(run.finishedAt - run.startedAt)}</Fact>
+          <Fact name="Took">{formatDuration(workedMs(run, run.finishedAt))}</Fact>
         ) : null}
         {run.costUsd !== null ? <Fact name="Spent">{money(run.costUsd)}</Fact> : null}
         {run.tickId !== null ? <Fact name="Tick">{`Tick ${run.tickId}`}</Fact> : null}

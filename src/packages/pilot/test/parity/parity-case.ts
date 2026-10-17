@@ -14,17 +14,11 @@ import {
   loadFixture,
   type ParityFixture
 } from './fixture'
-import { frozenOldPlan, oldSideMissing, runOldPlan, type OldDecision } from './old-side'
+import { frozenOldPlan, type OldDecision } from './old-side'
 
 // What a job's parity test hands the shared runner (jobs/job-<code>.ts).
 export type ParityJob = {
   job: string
-  // The old side's own code: <skills>/<folder>/<script> (script defaults to sweep.py).
-  folder: string
-  script?: string
-  // The old code is gone: its verdicts are frozen in each case file (old-side.ts frozenOldSide), python3 and the
-  // folder are never looked for, and a case without them fails.
-  frozen?: boolean
   // The files the new side reads: the automation's YAML and people.yaml.
   files: string[]
   table: VerdictTable
@@ -45,13 +39,11 @@ export type ParityJob = {
 }
 
 export function parityMissing(job: ParityJob): string[] {
-  const old = job.frozen ? [] : oldSideMissing(job.folder, job.script)
-  return [...old, ...job.files.filter((p) => !existsSync(p))]
+  return job.files.filter((p) => !existsSync(p))
 }
 
-// A job's parity suite. Where python3, the old code or the YAML is missing it is skipped, and its
-// title and stderr say what's missing, so a green run without them reads as a skip. A frozen job needs neither
-// python3 nor its old code, so only a missing YAML skips it.
+// A job's parity suite. Where the YAML is missing it is skipped, and its title and stderr say what's missing, so a
+// green run without it reads as a skip. The old side is frozen in each case file, so no old code is looked for.
 export function describeParity(job: ParityJob, title: string, body: () => void): void {
   const missing = parityMissing(job)
   if (missing.length === 0) {
@@ -120,9 +112,9 @@ export async function parityReport(
   }
 }
 
-// The old side's decisions on a case: frozen in the case file, or replayed by the job's old code.
-export function oldPlanOf(job: ParityJob, file: string): OldDecision[] {
-  return job.frozen ? frozenOldPlan(file) : runOldPlan(job.job, file)
+// The old side's decisions on a case, as frozen in the case file.
+export function oldPlanOf(_job: ParityJob, file: string): OldDecision[] {
+  return frozenOldPlan(file)
 }
 
 // Both sides on one recorded case: nothing may keep it from passing.

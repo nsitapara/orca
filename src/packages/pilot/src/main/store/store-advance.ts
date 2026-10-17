@@ -63,13 +63,22 @@ export class AdvanceStore {
   // The starter threw. Its row, if it wrote one and left it open, becomes failed; a row it never
   // wrote is added failed. A row it already closed keeps its own error.
   ensureFailedStep(step: AdvancedStep, error: string): void {
+    this.endOpenStep(step, 'failed', error)
+  }
+
+  // The starter found nothing for the step to do (run/nothing-to-do.ts): as ensureFailedStep, but stopped.
+  ensureStoppedStep(step: AdvancedStep, reason: string): void {
+    this.endOpenStep(step, 'stopped', reason)
+  }
+
+  private endOpenStep(step: AdvancedStep, status: 'failed' | 'stopped', error: string): void {
     this.db
       .prepare(
         `${INSERT_STEP}
-         ON CONFLICT (run_id, idx) DO UPDATE SET status = 'failed', finished_at = excluded.finished_at, error = excluded.error
+         ON CONFLICT (run_id, idx) DO UPDATE SET status = excluded.status, finished_at = excluded.finished_at, error = excluded.error
          WHERE steps.status IN ('pending', 'starting', 'running')`
       )
-      .run(...(stepValues(step, 'failed', error) as never[]))
+      .run(...(stepValues(step, status, error) as never[]))
   }
 
   mergeStepOutputs(runId: string, idx: number, outputs: ItemFields): ItemFields {
@@ -106,7 +115,7 @@ export class AdvanceStore {
 
   // A run continued from step `idx` (run/run-continue.ts) is open again. Later steps go. That step's row stays, as
   // pending for its starter, so its cost and usage stay (a delete would cascade its step_usage away), and so does its
-  // session when it is resumed.
+  // session when it is resumed. The time it sat ended counts as idle, not worked.
   reopenFrom(runId: string, idx: number, keepSession: boolean, at: number): void {
     this.db.prepare('DELETE FROM steps WHERE run_id = ? AND idx > ?').run(runId, idx)
     this.db.prepare(REOPEN_STEP).run(at, runId, idx)
@@ -115,9 +124,10 @@ export class AdvanceStore {
     }
     this.db
       .prepare(
-        "UPDATE runs SET status = 'running', outcome = NULL, finished_at = NULL WHERE id = ?"
+        `UPDATE runs SET status = 'running', outcome = NULL,
+           idle_ms = idle_ms + MAX(0, ? - COALESCE(finished_at, ?)), finished_at = NULL WHERE id = ?`
       )
-      .run(runId)
+      .run(at, at, runId)
   }
 
   // Running runs with at least one step and none still open: between two steps, or never advanced.

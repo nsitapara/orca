@@ -1,5 +1,6 @@
 import type { RunRow, RunStatus, TickOutcome } from './api-types'
 import type { RunEnv } from './api-types-env'
+import { hadNothingToDo, NOTHING_TO_DO } from './run/step-plan'
 
 function withReason(words: string, reason: string | null): string {
   return reason ? `${words}: ${reason}` : words
@@ -55,9 +56,12 @@ export function envCleanupLine(env: RunEnv, ended: boolean): string | null {
 
 // Reads the kept env outcome (Ruling P4): a deferred env stays "deferred" after its removal.
 export function runStatusWord(
-  run: Pick<RunRow, 'status' | 'env'>,
+  run: Pick<RunRow, 'status' | 'env' | 'outcome'>,
   label: (status: RunStatus) => string
 ): string {
+  if (hadNothingToDo(run)) {
+    return NOTHING_TO_DO
+  }
   if (run.status === 'running' && run.env?.state === 'preparing') {
     return 'Preparing workspace'
   }

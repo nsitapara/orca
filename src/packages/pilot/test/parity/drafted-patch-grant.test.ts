@@ -136,5 +136,64 @@ describe.skipIf(!existsSync(skillsDir()))(
       expect(text).toContain('Never commit or push.')
       expect(text).not.toMatch(/draftApproved/)
     })
+
+    // One scrubbed env per draft (pilotcli), its patch from the env's working tree; no shared checkout, and no draft mode.
+    it('drafts in one scrubbed env per draft, and modes/draft.md is gone', () => {
+      const dir = join(skillsDir(), 'item-details')
+      expect(existsSync(join(dir, 'modes', 'draft.md'))).toBe(false)
+      const text = readFileSync(join(dir, 'modes', 'candidate.md'), 'utf8')
+      for (const needed of [
+        'env create --run "$PILOT_RUN_ID-draft"',
+        '--stack never --scrub true',
+        'git get-diff -C <env path> --uncommitted true',
+        'env delete "$PILOT_RUN_ID-draft"'
+      ]) {
+        expect(text).toContain(needed)
+      }
+    })
+  }
+)
+
+// What apply.md and SKILL.md still say about re-drafting, a later head and a card that needs evidence.
+describe.skipIf(!existsSync(skillsDir()))(
+  'item-details apply.md keeps its re-draft and evidence rules',
+  () => {
+    const read = (...path: string[]): string =>
+      readFileSync(join(skillsDir(), 'item-details', ...path), 'utf8')
+    const apply = (): string => read('references', 'apply.md')
+    const step = (from: string, to?: string): string =>
+      apply().slice(apply().indexOf(from), to ? apply().indexOf(to) : undefined)
+
+    it.each([
+      [
+        'a later head that left the patch files alone applies',
+        () => step('3. **Apply only when', '4. **Verify'),
+        [
+          'merge-base --is-ancestor <base> HEAD',
+          'diff --quiet <base> HEAD --',
+          'commits elsewhere on the branch are no reason to ask me again'
+        ]
+      ],
+      [
+        'a re-draft is a new prepared proposal, never a copy',
+        () => step('5. **When step 1, 2 or 3 says re-draft**'),
+        [
+          'never read as a copy of the card I answered',
+          '`Revised with your notes — `',
+          '`Changed since you approved — `',
+          'Never use `extend-card`, `set-details` or `redrafted`'
+        ]
+      ],
+      [
+        'a card needing evidence is prepared before it is approved',
+        apply,
+        ['**Needs evidence**', '**Prepare evidence**', 'job 14']
+      ],
+      ['a Pilot run points at candidate mode', () => read('SKILL.md'), ['modes/candidate.md']]
+    ])('%s', (_name, text, needed) => {
+      for (const phrase of needed) {
+        expect(text()).toContain(phrase)
+      }
+    })
   }
 )

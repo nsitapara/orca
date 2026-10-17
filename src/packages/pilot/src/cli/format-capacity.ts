@@ -1,6 +1,7 @@
 import type { CapacityPayload } from '../shared/api-types-capacity'
 import { formatMemory } from '../shared/capacity/format-memory'
 import { formatDuration } from '../shared/run/format-duration'
+import { workedMs } from '../shared/run/worked-time'
 
 function memoryOf(memoryBytes: number | null, peakBytes: number | null): string {
   if (memoryBytes === null) {
@@ -20,7 +21,7 @@ export function formatCapacity(c: CapacityPayload, now: number): string {
   for (const r of c.running) {
     const slot = r.counted ? memoryOf(r.memoryBytes, r.peakBytes) : 'takes no slot'
     lines.push(
-      `  ${r.automationName}  ${r.itemLabel}  ${formatDuration(now - r.startedAt)}  ${slot}`
+      `  ${r.automationName}  ${r.itemLabel}  ${formatDuration(workedMs(r, now))}  ${slot}`
     )
   }
   lines.push(`Waiting: ${c.queued.length}`)

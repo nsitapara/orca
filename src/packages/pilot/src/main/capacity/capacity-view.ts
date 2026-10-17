@@ -57,6 +57,7 @@ export function capacityView(input: CapacityViewInput): CapacityPayload {
       automationName: nameOf(run.automationId),
       itemLabel: run.itemLabel,
       startedAt: run.startedAt,
+      idleMs: run.idleMs ?? 0,
       memoryBytes: input.memory?.runs.get(run.id) ?? null,
       peakBytes: peaks.get(run.id) ?? null,
       counted: def !== undefined && holdsSlot(def)

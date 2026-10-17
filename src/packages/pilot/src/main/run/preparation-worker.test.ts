@@ -3,6 +3,7 @@ import { testDefinition, testStep } from '../../shared/definition/__fixtures__/d
 import { queuedPreparation, PREPARATION_LEASE_MS } from '../../shared/preparation'
 import { PilotStore } from '../store/store'
 import { launchAgentStep, type AgentStepDeps, type AgentStepRequest } from './agent-step'
+import { NothingToDoError } from './nothing-to-do'
 import { stopCancelledPreparations } from './preparation-worker'
 
 const definition = testDefinition({
@@ -74,15 +75,19 @@ function setup() {
 }
 
 describe('preparation worker launch and cancellation', () => {
+  // The run had nothing to do: its step stops rather than fails (the engine ends the run "Nothing to do").
   it('does not launch if answered during asynchronous launch preparation', async () => {
     const { store, req, deps, launchTerminal } = setup()
     deps.modeText = async () => {
       store.inbox.update('item', { status: 'answered' }, 9)
       return null
     }
-    await expect(launchAgentStep(store, req, deps)).rejects.toThrow('stale')
+    await expect(launchAgentStep(store, req, deps)).rejects.toThrow(NothingToDoError)
     expect(launchTerminal).not.toHaveBeenCalled()
     expect(store.inbox.get('item')?.preparation?.attempt).toBe(0)
+    expect(store.runs.steps('worker')).toMatchObject([
+      { status: 'stopped', error: 'the card was already answered' }
+    ])
     store.close()
   })
 

@@ -1,5 +1,6 @@
 import type { Who } from '../../shared/run-views/chain'
-import type { RunStatus } from '../../shared/api-types'
+import type { RunRow, RunStatus } from '../../shared/api-types'
+import { hadNothingToDo } from '../../shared/run/step-plan'
 import type { PartState } from '../../shared/run-views/paint'
 
 export const WHO_LABEL: Record<Who, string> = {
@@ -55,4 +56,12 @@ export const RUN_TONE: Record<RunStatus, string> = {
   failed: 'bg-destructive/10 text-destructive',
   timed_out: 'bg-destructive/10 text-destructive',
   cancelled: 'bg-muted text-muted-foreground'
+}
+
+// A run that had nothing to do reads quiet, as a cancelled one does, rather than as work done.
+export function runTone(run: Pick<RunRow, 'status' | 'outcome'>): string {
+  if (hadNothingToDo(run)) {
+    return RUN_TONE.cancelled
+  }
+  return RUN_TONE[run.status]
 }

@@ -43,7 +43,7 @@ describe('06 · Address reviewer feedback: the definition', () => {
       match: ['{mr.waiting_threads} > 0']
     })
     // A dirty worktree is no gate: the env's busy check puts the run in a throwaway (pilotcli M4 §8). Commits that
-    // wait to be pushed are one (due.sh): the run's push would publish them, so it could only leave another card.
+    // wait to be pushed are one (an inline pilotcli check): the run's push would publish them, so it could only leave another card.
     expect(definition.workspace).toEqual({
       kind: 'env',
       subject: { kind: 'worktree', worktree: '{worktree.path}', at: null },
@@ -55,11 +55,16 @@ describe('06 · Address reviewer feedback: the definition', () => {
       { kind: 'session_none_open', scope: 'automation' },
       {
         kind: 'script',
-        run: '/Users/nishsitapara/.agents/skills/global-command-address-mr-feedback/scripts/due.sh',
+        run: expect.stringContaining('pilotcli git get-branch --format value --field unpushed'),
         timeoutMs: 60_000
       },
       { kind: 'quota', agent: 'claude', weekly: 90, session: 95 }
     ])
+    // Exit 0 is due; unpushed commits and an unreadable branch each print their reason and exit 1.
+    const due = definition.checks.find((c) => c.kind === 'script')
+    expect(due).toMatchObject({ run: expect.stringContaining('wait to be pushed first') })
+    expect(due).toMatchObject({ run: expect.stringContaining("can't read the branch's unpushed commits") })
+    expect((due as { run: string }).run.match(/exit 1/g)).toHaveLength(2)
   })
 
   it('runs the chain: context, flag, catch-up, the agent, push, merge back, replies, card, and two always steps', () => {
@@ -234,7 +239,7 @@ describe('06 · Address reviewer feedback: the definition', () => {
   })
 })
 
-// mr-feedback-sweep's words (jobs/job_06.py) and the verdicts that agree with them, through the shared parity runner
+// mr-feedback-sweep's words (frozen in the test data) and the verdicts that agree with them, through the shared parity runner
 // (parity-case.ts): a missed read, a tick error or a verdict mismatch fails a case. The sweep's decisions are frozen in
 // each case (its old block), so neither python3 nor the sweep is needed; a case without its old block fails.
 const CASES = join(PARITY_DIR, '06')

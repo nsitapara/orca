@@ -1,5 +1,6 @@
 import type { RunStatus } from '../api-types'
 import type { ActivityRun } from '../api-types-runs'
+import { hadNothingToDo, NOTHING_TO_DO } from '../run/step-plan'
 import type { PaintedPart } from './paint'
 
 // A step that ran, numbered from 1 in the order the steps started.
@@ -61,10 +62,13 @@ export function runTimeline(
 
 // The run's state with the step it is at: "Running step 2", "Failed at step 4"; otherwise the run's own label.
 export function runHeadline(
-  run: Pick<ActivityRun, 'status'>,
+  run: Pick<ActivityRun, 'status' | 'outcome'>,
   timeline: RunTimeline,
   label: (status: RunStatus) => string
 ): string {
+  if (hadNothingToDo(run)) {
+    return NOTHING_TO_DO
+  }
   if (run.status === 'running') {
     const at = timeline.ran.find((s) => s.part.state === 'running')
     return at ? `Running step ${at.n}` : label(run.status)

@@ -18,6 +18,7 @@ import {
   type StepStartRequest
 } from './advance'
 import { STALE_START_OUTCOME } from './stale-starts'
+import { NothingToDoError } from './nothing-to-do'
 import type { WorkspaceDeps } from './workspace'
 
 const YAML = `name: Review and fix
@@ -350,6 +351,25 @@ describe('createRunEngine', () => {
     expect(store.runs.steps('run-1').map((s) => [s.status, s.error])).toEqual([
       ['failed', 'terminal refused']
     ])
+  })
+
+  // A context-preparation card answered or prepared before the claim at launch: nothing to do, not a failure.
+  it('stops a first step whose starter found nothing to do, and ends the run done with Nothing to do', async () => {
+    const { store, engine, started, end, failures } = setup()
+    failures.push(new NothingToDoError('the card was already answered'))
+    await startRun(engine)
+    expect(store.runs.steps('run-1').map((s) => [s.name, s.status, s.error])).toEqual([
+      ['review', 'stopped', 'the card was already answered'],
+      ['fix', 'skipped', 'Step review had nothing to do'],
+      ['cleanup', 'running', null]
+    ])
+    expect(started.map((s) => s.idx)).toEqual([2])
+    end(2, 'done')
+    await engine.advance('run-1')
+    expect(store.runs.get('run-1')).toMatchObject({
+      status: 'done',
+      outcome: 'Nothing to do: the card was already answered'
+    })
   })
 
   it('does not replay an advance that came in while a failed startRun was going: the tick fails that run', async () => {

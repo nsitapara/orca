@@ -34,6 +34,38 @@ function startIdx(rows: StepRow[], def: AutomationDefinition): number | null {
   return next < def.steps.length ? next : null
 }
 
+// A context-preparation run goes on only while the card's preparation is still its to take, as at its launch.
+function preparationRefusal(
+  deps: ContinueRunDeps,
+  run: RunRow,
+  def: AutomationDefinition,
+  from: number
+): string | null {
+  if (def.items?.kind !== 'inbox_preparation' || run.tickId === null) {
+    return null
+  }
+  const revision = deps.store.advance.tickItemFields(run.tickId, run.itemKey)?.[
+    'preparation.revision'
+  ]
+  if (typeof revision !== 'number') {
+    return null
+  }
+  const refused = deps.store.inboxPreparations.claimRefusal(
+    run.itemKey,
+    revision,
+    run.id,
+    from,
+    deps.now()
+  )
+  if (!refused) {
+    return null
+  }
+  if (refused.nothingToDo) {
+    return `Nothing to continue: ${refused.reason}`
+  }
+  return `Can't continue: ${refused.reason}`
+}
+
 // Why the run can't go on, or null. Nothing is written until every check passed.
 function refusal(
   deps: ContinueRunDeps,
@@ -62,6 +94,10 @@ function refusal(
   }
   if (from === null) {
     return 'There is nothing left to continue: every step of this run finished'
+  }
+  const preparing = preparationRefusal(deps, run, def, from)
+  if (preparing) {
+    return preparing
   }
   const path = run.worktreePath
   const other = path ? deps.store.runs.runningInWorktree(path).find((r) => r.id !== run.id) : null

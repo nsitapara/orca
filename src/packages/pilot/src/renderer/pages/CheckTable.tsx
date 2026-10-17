@@ -1,5 +1,6 @@
 import type { ItemDecision } from '../../shared/api-types'
 import { itemUrl, verdictLabel } from './format'
+import { ResizableHeaderCell } from './ResizableHeaderCell'
 import { CHECKS_WIDTHS_KEY, useColumnWidths, type ColumnSpec } from './use-column-widths'
 
 // One checked item: a stored tick's item or a dry run's decision.
@@ -47,29 +48,6 @@ function ItemCell({ item }: { item: CheckRow }): React.JSX.Element {
   )
 }
 
-function HeaderCell({
-  col,
-  columns
-}: {
-  col: ColumnSpec
-  columns: ReturnType<typeof useColumnWidths>
-}): React.JSX.Element {
-  return (
-    <th className="relative px-3 py-2 text-left font-medium">
-      <span className="block truncate">{col.label}</span>
-      <div
-        role="separator"
-        aria-orientation="vertical"
-        aria-label={`Resize ${col.label} column`}
-        title="Drag to resize, double-click to reset"
-        className="absolute right-0 top-0 h-full w-1.5 cursor-col-resize hover:bg-border"
-        onMouseDown={(e) => columns.startDrag(col, e)}
-        onDoubleClick={() => columns.reset(col)}
-      />
-    </th>
-  )
-}
-
 // `dryRun`: the verdicts are what a tick would do.
 export function CheckTable({
   items,
@@ -94,7 +72,7 @@ export function CheckTable({
         <thead className="text-[11px] uppercase tracking-[0.08em] text-muted-foreground">
           <tr>
             {specs.map((col) => (
-              <HeaderCell key={col.id} col={col} columns={columns} />
+              <ResizableHeaderCell key={col.id} col={col} columns={columns} />
             ))}
           </tr>
         </thead>

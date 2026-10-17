@@ -6,6 +6,7 @@ import { UnrecordedLaunchError, type LaunchRequest } from '../scheduler/tick-run
 import { stepKindOf } from '../store/store-advance'
 import { envHooks, type OpeningWalk } from './advance-env'
 import { endedSteps, firstIdx, rowFor, runFieldsOf, stepInputFields } from './advance-fields'
+import { NothingToDoError } from './nothing-to-do'
 import { addRunEvent, closeRun, type CloseOptions } from './run-close'
 import type { ResumeStep, RunEngine, RunEngineDeps } from './run-engine-types'
 import { resolveWorkspace } from './workspace'
@@ -106,10 +107,13 @@ export function createRunEngine(deps: RunEngineDeps): RunEngine {
       await deps.startStep({ run, definition: def, idx, fields, ...(resume ? { resume } : {}) })
       return false
     } catch (error) {
-      store.advance.ensureFailedStep(
-        rowFor(run.id, idx, def.steps[idx], deps.now()),
-        messageOf(error)
-      )
+      const row = rowFor(run.id, idx, def.steps[idx], deps.now())
+      if (error instanceof NothingToDoError) {
+        // The walk goes on: what the stopped step holds back is skipped, and the run ends with nothing to do.
+        store.advance.ensureStoppedStep(row, error.message)
+        return store.runs.get(run.id)?.status === 'running'
+      }
+      store.advance.ensureFailedStep(row, messageOf(error))
       if (error instanceof UnrecordedLaunchError) {
         orphaned(run.id, def, idx, error)
       }
