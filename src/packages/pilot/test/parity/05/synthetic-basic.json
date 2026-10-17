@@ -912,5 +912,40 @@
     "/tmp/parity-05/wt-103": true,
     "/tmp/parity-05/wt-104": true,
     "/tmp/parity-05/wt-105": true
+  },
+  "old": {
+    "from": "run_old_plan.py 05 (ci-fix-sweep/sweep.py) with /opt/homebrew/bin/python3 3.15.0, 2026-10-16, before it was deleted",
+    "decisions": [
+      {
+        "key": "mr:101",
+        "label": "!101 web-101-a",
+        "decision": "due",
+        "reason": ""
+      },
+      {
+        "key": "mr:102",
+        "label": "!102 web-102-b",
+        "decision": "skip",
+        "reason": "no Orca worktree"
+      },
+      {
+        "key": "mr:103",
+        "label": "!103 web-103-c",
+        "decision": "absent",
+        "reason": "head pipeline success"
+      },
+      {
+        "key": "mr:104",
+        "label": "!104 web-104-d",
+        "decision": "absent",
+        "reason": "already handled pipeline 9104"
+      },
+      {
+        "key": "mr:105",
+        "label": "!105 web-105-e",
+        "decision": "skip",
+        "reason": "uncommitted changes; retry next round"
+      }
+    ]
   }
 }

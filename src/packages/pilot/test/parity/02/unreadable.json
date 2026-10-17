@@ -25,5 +25,16 @@
   "state": {
     "quota/codex-rate-limits.json": null
   },
-  "exists": {}
+  "exists": {},
+  "old": {
+    "from": "run_old_plan.py 02 (worktree-gate/quota.py check codex) with /opt/homebrew/bin/python3 3.15.0, 2026-10-16, before it was deleted",
+    "decisions": [
+      {
+        "key": "repo:web-platform",
+        "label": "web-platform",
+        "decision": "due",
+        "reason": "limits unreadable, running anyway"
+      }
+    ]
+  }
 }

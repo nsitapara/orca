@@ -7,7 +7,7 @@ import { compareDecisions, formatMismatches } from './compare'
 import { loadFixture } from './fixture'
 import { seedByImport } from './fixture-reader'
 import { JOB_05, PARITY_05, VERDICTS_05, load05 } from './jobs/job-05'
-import { PARITY_DIR, runOldPlan } from './old-side'
+import { frozenOldPlan, PARITY_DIR } from './old-side'
 import { caseFile, dryTick, failedCheck } from './ported'
 import { describeParity, expectParity, parityReport } from './parity-case'
 
@@ -17,11 +17,12 @@ const cases = readdirSync(CASES)
   .filter((f) => f.endsWith('.json'))
   .sort()
 
-// Skipped, with what's missing in its title and on stderr, where ~/.agents (or PARITY_SKILLS_DIR /
-// PARITY_AUTOMATIONS_DIR) or python3 isn't there.
-describeParity(PARITY_05, '05 · Fix failed CI: Pilot decides each MR as ci-fix-sweep does', () => {
-  it('replays ci-fix-sweep on the synthetic case without running anything', () => {
-    const decided = runOldPlan('05', SYNTHETIC).map((d) => [d.key, d.decision, d.reason])
+// ci-fix-sweep's decisions are frozen in each case (its old block), so neither python3 nor the sweep is needed; skipped,
+// with what's missing in its title and on stderr, only where ~/.agents/automations (or PARITY_AUTOMATIONS_DIR) isn't
+// there. A case without its old block fails.
+describeParity(PARITY_05, '05 · Fix failed CI: Pilot decides each MR as ci-fix-sweep did', () => {
+  it("holds ci-fix-sweep's decisions on the synthetic case", () => {
+    const decided = frozenOldPlan(SYNTHETIC).map((d) => [d.key, d.decision, d.reason])
     expect(decided).toEqual([
       ['mr:101', 'due', ''],
       ['mr:102', 'skip', 'no Orca worktree'],
@@ -44,7 +45,7 @@ describeParity(PARITY_05, '05 · Fix failed CI: Pilot decides each MR as ci-fix-
     fixture.reads = fixture.reads.filter((r) => r.argv.join(' ') !== marker.join(' '))
     const file = join(mkdtempSync(join(tmpdir(), 'pilot-parity-')), 'missing-marker.json')
     writeFileSync(file, JSON.stringify(fixture))
-    expect(await parityReport(PARITY_05, loadFixture(file), runOldPlan('05', file))).toBe(
+    expect(await parityReport(PARITY_05, loadFixture(file), frozenOldPlan(file))).toBe(
       `missed read: ${marker.join(' ')}`
     )
     await expect(expectParity(PARITY_05, file)).rejects.toMatchObject({
@@ -69,9 +70,7 @@ describeParity(PARITY_05, "05 · Fix failed CI v2: the sweep's state, imported",
   it('decides as the sweep did with the state imported through the mapper', async () => {
     const neu = await decide(IMPORTED)
     expect(
-      formatMismatches(
-        compareDecisions(runOldPlan('05', caseFile('05', IMPORTED)), neu, VERDICTS_05)
-      )
+      formatMismatches(compareDecisions(frozenOldPlan(caseFile('05', IMPORTED)), neu, VERDICTS_05))
     ).toBe('')
   })
 
@@ -115,7 +114,7 @@ describeParity(PARITY_05, "05 · Fix failed CI v2: the sweep's state, imported",
         [/^claude .*(weekly|session)/, 'Quota']
       ]
       const neu = await decide(name.replace(/\.json$/, ''))
-      const old = runOldPlan('05', join(CASES, name)).filter(
+      const old = frozenOldPlan(join(CASES, name)).filter(
         (d) => d.decision === 'skip' || d.decision === 'quota'
       )
       const busy =
@@ -141,7 +140,7 @@ describeParity(PARITY_05, "05 · Fix failed CI v2: the sweep's state, imported",
   // The sweep tested the open tab first, then the dirty worktree. The env's busy check replaces both gates
   // (pilotcli M4 §8): the MR is started, in a throwaway when something is working there.
   it('starts an MR with an open tab and a dirty worktree, where the sweep skipped it for the open tab', async () => {
-    const old = runOldPlan('05', caseFile(JOB_05.job, 'tab-and-dirty'))
+    const old = frozenOldPlan(caseFile(JOB_05.job, 'tab-and-dirty'))
     expect(old).toMatchObject([
       { key: 'mr:1610', decision: 'skip', reason: 'previous CI-fix session still open' }
     ])

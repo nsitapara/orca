@@ -1312,5 +1312,52 @@
     "/wt/web-1714": true,
     "/wt/web-1715": true,
     "/wt/web-1716": true
+  },
+  "old": {
+    "from": "run_old_plan.py 06 (mr-feedback-sweep/sweep.py) with /opt/homebrew/bin/python3 3.15.0, 2026-10-16, before it was deleted",
+    "decisions": [
+      {
+        "key": "mr:1710",
+        "label": "!1710 web-1710 (1 waiting)",
+        "decision": "skip",
+        "reason": "no Orca worktree"
+      },
+      {
+        "key": "mr:1711",
+        "label": "!1711 web-1711 (1 waiting)",
+        "decision": "skip",
+        "reason": "previous feedback session still open (no comment)"
+      },
+      {
+        "key": "mr:1712",
+        "label": "!1712 web-1712 (1 waiting)",
+        "decision": "skip",
+        "reason": "uncommitted changes; retry next round"
+      },
+      {
+        "key": "mr:1713",
+        "label": "!1713 web-1713 (1 waiting)",
+        "decision": "due",
+        "reason": ""
+      },
+      {
+        "key": "mr:1714",
+        "label": "!1714 web-1714 (1 waiting)",
+        "decision": "due",
+        "reason": ""
+      },
+      {
+        "key": "mr:1715",
+        "label": "!1715 web-1715 (1 waiting)",
+        "decision": "due",
+        "reason": ""
+      },
+      {
+        "key": "mr:1716",
+        "label": "!1716 web-1716 (1 waiting)",
+        "decision": "defer",
+        "reason": "--max 3 reached"
+      }
+    ]
   }
 }

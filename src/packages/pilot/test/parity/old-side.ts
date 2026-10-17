@@ -46,7 +46,8 @@ export function runOldPlan(job: string, fixturePath: string): OldDecision[] {
 
 // The old side of a job whose code is gone, frozen into each case file's `old` block while it still ran (13 and 09, on
 // 2026-10-16, before milestone 7 deleted dev-e2e-fix's sweep.py and pilot_mode.py and review-requests' sweep.py; M01 and
-// 03, the same day, before milestone 8 deleted linear-todo-sweep's sweep.py and review-cycles' loop.py):
+// 03, the same day, before milestone 8 deleted linear-todo-sweep's sweep.py and review-cycles' loop.py; 02, 05 and 06,
+// the same day, before ~/.agents' Python went: worktree-gate's quota.py, ci-fix-sweep and mr-feedback-sweep):
 // run_old_plan.py's decisions, and what the job's own scripts printed for the case.
 export type FrozenOldSide = {
   // How it was recorded.

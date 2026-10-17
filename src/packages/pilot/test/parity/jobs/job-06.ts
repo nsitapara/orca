@@ -77,10 +77,12 @@ export function load06(): { def: AutomationDefinition; people: PeopleDirectory }
   return { def: parsed.definition, people: people.directory }
 }
 
-// What the shared parity runner (parity-case.ts) needs for 06.
+// What the shared parity runner (parity-case.ts) needs for 06. mr-feedback-sweep's decisions are frozen in each case's
+// old block, recorded before the sweep was deleted.
 export const PARITY_06: ParityJob = {
   job: JOB_06.job,
   folder: JOB_06.sweep,
+  frozen: true,
   files: [JOB_06.yaml, join(dirname(JOB_06.yaml), 'people.yaml')],
   table: VERDICTS_06,
   runScript: answerDue,

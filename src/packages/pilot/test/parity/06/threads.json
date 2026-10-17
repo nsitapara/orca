@@ -1406,5 +1406,52 @@
     "/wt/web-1704": true,
     "/wt/web-1705": true,
     "/wt/web-1706": true
+  },
+  "old": {
+    "from": "run_old_plan.py 06 (mr-feedback-sweep/sweep.py) with /opt/homebrew/bin/python3 3.15.0, 2026-10-16, before it was deleted",
+    "decisions": [
+      {
+        "key": "mr:1700",
+        "label": "!1700 web-1700 (1 waiting)",
+        "decision": "due",
+        "reason": ""
+      },
+      {
+        "key": "mr:1701",
+        "label": "!1701 web-1701",
+        "decision": "absent",
+        "reason": "no thread waiting on me"
+      },
+      {
+        "key": "mr:1702",
+        "label": "!1702 web-1702",
+        "decision": "absent",
+        "reason": "no thread waiting on me"
+      },
+      {
+        "key": "mr:1703",
+        "label": "!1703 web-1703",
+        "decision": "absent",
+        "reason": "no thread waiting on me"
+      },
+      {
+        "key": "mr:1704",
+        "label": "!1704 web-1704 (1 waiting)",
+        "decision": "due",
+        "reason": ""
+      },
+      {
+        "key": "mr:1705",
+        "label": "!1705 web-1705",
+        "decision": "absent",
+        "reason": "no thread waiting on me"
+      },
+      {
+        "key": "mr:1706",
+        "label": "!1706 web-1706",
+        "decision": "absent",
+        "reason": "no thread waiting on me"
+      }
+    ]
   }
 }
