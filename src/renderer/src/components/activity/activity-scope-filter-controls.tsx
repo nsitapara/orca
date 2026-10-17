@@ -89,6 +89,7 @@ export function ActivityScopeFilterMenuItems(): React.JSX.Element {
           setVisibleWorkspaceHostIds={setAgentsVisibleHostIds}
         />
       ) : null}
+      {/* pilot-hook: activity-project-filter */}
       <ActivityProjectFilterSection
         filterRepoIds={agentsFilterRepoIds}
         setFilterRepoIds={setAgentsFilterRepoIds}
