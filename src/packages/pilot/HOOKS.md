@@ -68,6 +68,6 @@ Which hook was added for reading skills, and why:
 
 Which hook was added for sidebar theming, and why:
 
-- `right-sidebar-appearance`: upstream's appearance setting (Default, Match Terminal, Tinted) styles only the left sidebar, so with Match Terminal the right sidebar kept the app's default surface. Nish wants both sidebars to match the terminal theme (2026-10-16). The hook is the import and one call; it puts the variables from upstream's `resolveLeftSidebarStyleVariables` on the right sidebar's root and does nothing until `attachPilotRenderer()` registers the store.
+- `right-sidebar-appearance`: upstream's appearance setting (Default, Match Terminal, Tinted) styles only the left sidebar, so with Match Terminal the right sidebar kept the app's default surface. Nish wants both sidebars to match the terminal theme (2026-10-16). The hook is the import and one call; it puts the variables from upstream's `resolveLeftSidebarStyleVariables` on the right sidebar's root and does nothing until `attachPilotRenderer()` registers the store. The same attach relabels the setting "Sidebar Appearance" (English only) through its i18n post-processor, so no catalog string is edited.
 
 The table says which of these are in place.
