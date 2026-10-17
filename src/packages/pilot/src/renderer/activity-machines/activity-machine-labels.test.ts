@@ -11,7 +11,7 @@ const HOSTS: ActivityMachineHost[] = [
   { id: 'runtime:mini', label: 'Mac mini' },
   { id: 'runtime:twin', label: 'Mac mini' },
   { id: 'ssh:box', label: 'box', aliasHostIds: ['runtime:box-orcad'] },
-  { id: 'runtime:box-orcad', label: 'box', mergedIntoHostId: 'ssh:box' }
+  { id: 'runtime:box-orcad', label: 'box-orcad', mergedIntoHostId: 'ssh:box' }
 ]
 
 const row = (hostId?: ExecutionHostId, repoHostId?: ExecutionHostId): ActivityMachineRow => ({
