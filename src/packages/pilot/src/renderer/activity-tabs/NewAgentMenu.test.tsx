@@ -4,6 +4,7 @@ import { cleanup, render, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { useAppStore } from '@/store'
 import { createGlobalSettingsFixture } from '../../../../../shared/global-settings-test-fixture'
+import { TooltipProvider } from '@/components/ui/tooltip'
 import { NewAgentMenu } from './NewAgentMenu'
 import { launchAgentInNewTab } from '@/lib/launch-agent-in-new-tab'
 
@@ -24,6 +25,12 @@ vi.mock('@/lib/structured-agent-session-launch', () => ({
 vi.mock('@/lib/launch-agent-in-new-tab', () => ({
   launchAgentInNewTab: vi.fn(() => ({ surface: { kind: 'remote-terminal' } }))
 }))
+
+const menu = () => (
+  <TooltipProvider>
+    <NewAgentMenu worktreeId="wt-1" />
+  </TooltipProvider>
+)
 
 beforeEach(() => {
   detection.ids = ['claude', 'codex']
@@ -60,7 +67,7 @@ it.each([
       }
     })
     const user = userEvent.setup()
-    const view = render(<NewAgentMenu worktreeId="wt-1" />)
+    const view = render(menu())
     await user.click(view.getByRole('button', { name: 'New agent' }))
     await waitFor(() => expect(document.activeElement?.getAttribute('role')).toBe('menuitem'))
     await user.keyboard(keys)
@@ -73,10 +80,10 @@ it.each([
 it('selects the default when agent detection finishes after opening the menu', async () => {
   detection.ids = null
   const user = userEvent.setup()
-  const view = render(<NewAgentMenu worktreeId="wt-1" />)
+  const view = render(menu())
   await user.click(view.getByRole('button', { name: 'New agent' }))
   detection.ids = ['claude', 'codex']
-  view.rerender(<NewAgentMenu worktreeId="wt-1" />)
+  view.rerender(menu())
   await waitFor(() => expect(view.getByRole('menuitem', { name: /Claude/ })).toBeTruthy())
   await user.keyboard('{Enter}')
   expect(launchAgentInNewTab).toHaveBeenCalledWith(expect.objectContaining({ agent: 'claude' }))
@@ -86,7 +93,7 @@ it('selects the default when agent detection finishes after opening the menu', a
 it('a worktree with no tab group gets one when the menu opens, and the agent launches there', async () => {
   useAppStore.setState({ activeGroupIdByWorktree: {}, groupsByWorktree: {} })
   const user = userEvent.setup()
-  const view = render(<NewAgentMenu worktreeId="wt-1" />)
+  const view = render(menu())
   await user.click(view.getByRole('button', { name: 'New agent' }))
   await waitFor(() => expect(document.activeElement?.getAttribute('role')).toBe('menuitem'))
   await user.keyboard('{Enter}')

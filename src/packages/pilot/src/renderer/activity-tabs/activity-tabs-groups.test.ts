@@ -67,7 +67,6 @@ const ROWS: ActivityTabsRow[] = [
       key: 'c-key',
       worktree: makeWorktreeWithId('wt-c'),
       repo: makeRepo(),
-      openTabCount: 0,
       pinned: false
     }
   }
@@ -100,7 +99,7 @@ describe('mergeRowsIntoGroups', () => {
       groups: [
         ['worktree:wt-a', 1, 1, 1],
         ['worktree:wt-b', 0, 1, 1],
-        ['worktree:wt-c', 0, 0, 1]
+        ['worktree:wt-c', 0, 0, 0]
       ]
     },
     {
@@ -125,7 +124,7 @@ describe('mergeRowsIntoGroups', () => {
     }
   )
 
-  it('lists each group’s Pilot rows after its agents, collapses them with it, and counts them', () => {
+  it('lists each group’s Pilot rows after its agents (a worktree’s header stands in for its recent row), collapses them with it, and counts them', () => {
     const groups = merged('worktree')
     const keys = (collapsed: string[]) =>
       buildActivityVirtualItems({
@@ -139,15 +138,13 @@ describe('mergeRowsIntoGroups', () => {
       'w:a-tab',
       'h:worktree:wt-b',
       'w:b-tab',
-      'h:worktree:wt-c',
-      'r:c-key'
+      'h:worktree:wt-c'
     ])
     expect(keys(['worktree:wt-a'])).toEqual([
       'h:worktree:wt-a',
       'h:worktree:wt-b',
       'w:b-tab',
-      'h:worktree:wt-c',
-      'r:c-key'
+      'h:worktree:wt-c'
     ])
     expect(withActivityTabsCount(1, groups)).toBe(4)
   })
@@ -164,7 +161,6 @@ describe('mergeRowsIntoGroups', () => {
         key: 'c-key',
         worktree: makeWorktreeWithId('wt-c'),
         repo: makeRepo(),
-        openTabCount: 0,
         pinned: true
       }
     }
