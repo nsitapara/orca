@@ -15,7 +15,7 @@ import { envCleanup } from '../run-views/env-lines'
 import { openRunFromSidebar } from '../run-views/run-panel-state'
 import { RunStrip } from '../run-views/RunStrip'
 import { WaitingRow } from '../timeline/WaitingRow'
-import { useActiveWorktreePath } from './active-worktree'
+import { useActiveWorktreeNames, useActiveWorktreePath } from './active-worktree'
 import { useWorktreeTimeline } from './timeline-feed'
 
 // Verdicts that only say "nothing to do here": folded away until asked for.
@@ -177,19 +177,46 @@ function Body({
   return <p className="text-muted-foreground">Loading…</p>
 }
 
+// Names the worktree and project the panel is for, since it follows Orca's active worktree.
+function PanelHeader({
+  path,
+  data
+}: {
+  path: string | null
+  data: WorktreeTimeline | null
+}): React.JSX.Element {
+  const { worktree, project } = useActiveWorktreeNames()
+  const spent =
+    data && path ? (
+      <span className="shrink-0 text-xs text-muted-foreground">{`${spentLabel(data.spentTodayUsd, data.unpricedBuckets)} spent here today`}</span>
+    ) : null
+  if (!path || !worktree) {
+    return (
+      <div className="flex items-center justify-between">
+        <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+          Automations
+        </div>
+        {spent}
+      </div>
+    )
+  }
+  return (
+    <div title={path}>
+      <div className="line-clamp-2 break-words font-medium">{worktree}</div>
+      <div className="flex items-center justify-between gap-2">
+        <span className="truncate text-xs text-muted-foreground">{project ?? path}</span>
+        {spent}
+      </div>
+    </div>
+  )
+}
+
 export function WorktreeTimelinePanel(): React.JSX.Element {
   const path = useActiveWorktreePath()
   const { data, error } = useWorktreeTimeline(path)
   return (
     <div className="flex min-h-0 flex-col gap-1 overflow-y-auto p-3 text-sm">
-      <div className="flex items-center justify-between">
-        <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-          Automations
-        </div>
-        {data && path ? (
-          <span className="text-xs text-muted-foreground">{`${spentLabel(data.spentTodayUsd, data.unpricedBuckets)} spent here today`}</span>
-        ) : null}
-      </div>
+      <PanelHeader path={path} data={data} />
       <Body path={path} data={data} error={error} />
       {data && error ? <p className="text-xs text-destructive">{error}</p> : null}
     </div>
