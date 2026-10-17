@@ -3,7 +3,6 @@ import { mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 import type { OrcaRuntimeService } from '../../../../main/runtime/orca-runtime'
 import { ALL_RPC_METHODS } from '../../../../main/runtime/rpc/methods/index'
-import { getAppEnvironment } from '../../../../shared/app-environment'
 import type { PilotStatus } from '../shared/api-types'
 import { answerRunEnded } from './answers/answer-run-end'
 import { wireAnswerDispatcher } from './answers/wiring'
@@ -14,12 +13,7 @@ import { handoverService } from './handover/service'
 import { buildInboxDeps } from './inbox/inbox-service'
 import type { LoadedDefinitions } from './definitions/loader'
 import { mergeRepoProblems, type RepoProblem } from './definitions/repo-problems'
-import {
-  pilotAutomationDirs,
-  pilotDataDir,
-  pilotDetailsRoot,
-  pilotVaultAutomationsDir
-} from './env'
+import { pilotDetailsRoot, pilotVaultAutomationsDir } from './env'
 import { resolveEngineEnv } from './engine-env'
 import { runtimeActivity } from './fields/activity-facts'
 import { cachedQuotas } from './fields/quota'
@@ -53,6 +47,7 @@ import { housekeepStore } from './store/housekeep'
 import { usageReporter } from './usage-report/reporter'
 import { closeAll, softly } from './pilot-lifecycle'
 import { wireRunCapacity } from './capacity/capacity-wiring'
+import { pilotHostFor } from './pilot-host'
 import type { PilotContext, PilotHost, PilotServiceOptions, PilotServices } from './pilot-context'
 
 export type { PilotContext, PilotHost, PilotServiceOptions, PilotServices } from './pilot-context'
@@ -281,13 +276,7 @@ export function startPilotServices(
   processKind: PilotStatus['process'],
   options: PilotServiceOptions = {}
 ): PilotServices {
-  const host: PilotHost = {
-    processKind,
-    dirs: pilotAutomationDirs(),
-    dataDir: pilotDataDir(processKind, getAppEnvironment().getPath('userData')),
-    context: null,
-    error: null
-  }
+  const host = pilotHostFor(runtime, processKind)
   registerPilotRpcMethods(ALL_RPC_METHODS as unknown[], buildPilotMethods(host))
   const opened: (() => void)[] = []
   let context: PilotContext

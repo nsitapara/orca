@@ -45,6 +45,8 @@ export type PilotHost = {
   dataDir: string
   context: PilotContext | null
   error: string | null
+  // The machine's name as the runtime publishes it; absent in test hosts.
+  machineName?: () => string
 }
 export type PilotServiceOptions = {
   quotas?: Partial<Record<AgentKind, QuotaReader>>

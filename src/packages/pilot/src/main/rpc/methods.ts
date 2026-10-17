@@ -57,6 +57,8 @@ function pilotStatus(host: PilotHost): PilotStatus {
     version: PILOT_VERSION,
     process: host.processKind,
     dataPath: host.dataDir,
+    ...(host.machineName ? { machineName: host.machineName() } : {}),
+    schedulerOn: host.context?.schedulerOn === true,
     automationDirs: host.dirs,
     missingDirs: host.dirs.filter((d) => !existsSync(d)),
     peopleError: host.context?.loaded().peopleError ?? null,

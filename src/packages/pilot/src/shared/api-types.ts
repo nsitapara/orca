@@ -11,6 +11,9 @@ export type PilotStatus = {
   version: string
   process: 'main' | 'orcad'
   dataPath: string
+  // Older engines omit both; read a missing schedulerOn as unknown.
+  machineName?: string
+  schedulerOn?: boolean
   automationDirs: string[]
   missingDirs: string[]
   // A people.yaml problem or notice (e.g. people.yaml and people.yml both exist). Never blocks loading.

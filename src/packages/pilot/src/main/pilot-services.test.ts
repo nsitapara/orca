@@ -1,9 +1,10 @@
 import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
-import { tmpdir } from 'node:os'
+import { hostname, tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { OrcaRuntimeService } from '../../../../main/runtime/orca-runtime'
 import { setAppEnvironment, type AppEnvironment } from '../../../../shared/app-environment'
+import { normalizeMachineName } from '../../../../shared/machine-name'
 import type { PilotStatus } from '../shared/api-types'
 import type * as Live from './definitions/live'
 import { fakePilotcli, type FakePilotcli } from './envs/__fixtures__/fake-pilotcli'
@@ -178,6 +179,7 @@ describe('startPilotServices', () => {
     const status = registry.find((m) => m.name === 'pilot.status')!.handler() as PilotStatus
     expect(status).toMatchObject({ process: 'main', automationDirs: [dir], peopleError: null })
     expect(status.error).toMatch(/not a database/)
+    expect(status.machineName).toBe(normalizeMachineName(hostname()))
     expect(logs.some((m) => m.startsWith('[pilot] attached'))).toBe(false)
   })
 
