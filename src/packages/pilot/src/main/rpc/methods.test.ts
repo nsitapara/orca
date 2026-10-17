@@ -71,15 +71,12 @@ function setupWithStore(
 
 describe('Pilot RPC methods', () => {
   it('says which machine it is and whether it runs the scheduler, in pilot.status', () => {
-    const on = setup({ machineName: () => 'Mac mini' })('pilot.status').handler(null) as PilotStatus
+    const on = setup({ machineName: () => 'Mac mini' })('pilot.status').handler(null)
     expect(on).toMatchObject({ machineName: 'Mac mini', schedulerOn: true })
-    expect((setup({}, null, false)('pilot.status').handler(null) as PilotStatus).schedulerOn).toBe(
-      false
-    )
-    const failed = setup({ context: null, error: 'boom' })('pilot.status').handler(
-      null
-    ) as PilotStatus
-    expect(failed.schedulerOn).toBe(false)
+    const off = setup({}, null, false)('pilot.status').handler(null)
+    expect(off).toMatchObject({ schedulerOn: false })
+    const failed = setup({ context: null, error: 'boom' })('pilot.status').handler(null)
+    expect(failed).toMatchObject({ schedulerOn: false })
   })
 
   it('registers every method as pilot.* with a workspace permission', () => {

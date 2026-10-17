@@ -30,10 +30,14 @@ function snap(overrides: Partial<Snapshot>): { snapshot: Snapshot; status: null;
 }
 
 function fakeStore(initial: Partial<PilotStoreState>) {
-  let state = initial
+  let state: PilotStoreState = {
+    rightSidebarOpen: false,
+    setRightSidebarOpen: () => {},
+    ...initial
+  }
   const listeners = new Set<() => void>()
   return {
-    getState: () => state as PilotStoreState,
+    getState: () => state,
     subscribe(listener: () => void) {
       listeners.add(listener)
       return () => void listeners.delete(listener)
