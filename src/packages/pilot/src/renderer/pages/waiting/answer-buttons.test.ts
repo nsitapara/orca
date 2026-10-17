@@ -13,7 +13,7 @@ const base = {
 const opts = (...l: string[]) => l.map((label) => ({ label, meaning: `${label} m` }))
 const CARDS: Record<string, InboxItemRow> = {
   push: { ...base, type: 'action', action: 'push', options: opts('Approve', 'Skip') },
-  postReview: { ...base, type: 'action', action: 'post_review', options: opts('Approve', 'Skip') },
+  markReady: { ...base, type: 'action', action: 'mark_ready', options: opts('Approve', 'Skip') },
   startRun: { ...base, type: 'action', action: 'start_run', options: opts('Approve', 'Skip') },
   multiStart: {
     ...base,
@@ -46,8 +46,8 @@ const OLD: Record<string, [string, string, number | null, string][]> = {
     ['Revise…', 'notes', null, 'revise: some notes'],
     ['Skip', 'skip', 1, 'skip']
   ],
-  postReview: [
-    ['Post review', 'primary', 0, 'approve'],
+  markReady: [
+    ['Mark ready', 'primary', 0, 'approve'],
     ['Revise…', 'notes', null, 'revise: some notes'],
     ['Skip', 'skip', 1, 'skip']
   ],
@@ -126,10 +126,10 @@ describe('answeredLine', () => {
   const answered = (item: InboxItemRow, text: string) =>
     ({ ...item, answer: { text } }) as unknown as InboxItemRow
   it.each([
-    ['postReview', 'approve', 'Post review', 'Posting review…'],
+    ['markReady', 'approve', 'Mark ready', 'Marking ready…'],
     ['bugDrafted', 'approve', 'Apply fix', 'Applying fix…'],
     ['leftNoDraft', 'approve', 'Fix it', 'Starting the fix…'],
-    ['postReview', 'skip', 'Skipped', 'Skipped'],
+    ['markReady', 'skip', 'Skipped', 'Skipped'],
     ['startRun', 'Skip', 'Skipped', 'Skipped'],
     ['question', 'Bake it', 'Bake it', 'Applying…']
   ])('%s answered "%s"', (name, text, what, doing) => {
@@ -151,14 +151,11 @@ describe('countdown', () => {
 
 // R-P5: a card that needs evidence offers no button that would run it; Prepare evidence sits above the answers.
 describe('a card that needs evidence', () => {
-  it.each(['push', 'postReview', 'bugDrafted'])(
-    'offers only an answer with notes and Skip: %s',
-    (name) => {
-      const buttons = buttonsFor({ ...CARDS[name], needsEvidence: true } as never)
-      expect(buttons.map((b) => b.role)).toEqual(['notes', 'skip'])
-      expect(buttons.some((b) => /approve|post|push/i.test(b.label))).toBe(false)
-    }
-  )
+  it.each(['push', 'bugDrafted'])('offers only an answer with notes and Skip: %s', (name) => {
+    const buttons = buttonsFor({ ...CARDS[name], needsEvidence: true } as never)
+    expect(buttons.map((b) => b.role)).toEqual(['notes', 'skip'])
+    expect(buttons.some((b) => /approve|push/i.test(b.label))).toBe(false)
+  })
 
   // Nothing is preparing until Prepare evidence queues it, so its words never talk of context on its way.
   it.each([

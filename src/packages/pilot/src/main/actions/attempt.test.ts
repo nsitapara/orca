@@ -332,17 +332,12 @@ describe('attemptAction on an approved card', () => {
   })
 
   // Display = execution: the Run line (run-line.ts) shows approvedArgs, and the approval runs exactly them.
-  it("runs exactly approvedArgs: the card's args less the parts left out, pinned with the card's key", async () => {
+  it("runs exactly approvedArgs: the card's args, pinned with the card's key", async () => {
     const { push, deps, inbox } = setup(['push'])
-    push.exceptArgs = (args, leftOut) => ({
-      argv: [...(args.argv as string[]), '--except', leftOut.join(',')]
-    })
     push.pin = (args, key) => ({ ...args, write_id: key })
     const card = file(inbox, { parts: { F1: 'Null check', F2: 'Naming' } })
-    const shown = approvedArgs(push, card, ['F2'])
-    expect(await attemptAction(deps, approve(card, { leftOut: ['F2'] }))).toMatchObject({
-      outcome: 'done'
-    })
+    const shown = approvedArgs(push, card, [])
+    expect(await attemptAction(deps, approve(card))).toMatchObject({ outcome: 'done' })
     expect(push.run).toHaveBeenCalledWith('args' in shown ? shown.args : null, {
       dryRun: false,
       runId: 'run-1',
@@ -350,26 +345,7 @@ describe('attemptAction on an approved card', () => {
     })
   })
 
-  it("passes the parts left out the entry's way, and only parts the card has", async () => {
-    const { push, deps, inbox } = setup(['push'])
-    push.exceptArgs = (args, leftOut) => ({
-      argv: [...(args.argv as string[]), '--except', leftOut.join(',')]
-    })
-    const card = file(inbox, { parts: { F1: 'Null check', F2: 'Naming' } })
-    expect(await attemptAction(deps, approve(card, { leftOut: ['F9'] }))).toMatchObject({
-      outcome: 'failed',
-      detail: 'Card in_0000000000000001 has no part F9'
-    })
-    expect(await attemptAction(deps, approve(card, { leftOut: ['F2'] }))).toMatchObject({
-      outcome: 'done'
-    })
-    expect(push.run).toHaveBeenCalledWith(
-      { argv: [...(REQ.args.argv as string[]), '--except', 'F2'] },
-      { dryRun: false, runId: 'run-1', inboxItemId: card.id }
-    )
-  })
-
-  it("refuses parts left out by an entry that can't leave any out", async () => {
+  it('refuses parts left out: no entry can leave any out', async () => {
     const { push, deps, inbox } = setup(['push'])
     const card = file(inbox, { parts: { F1: 'Null check' } })
     expect(await attemptAction(deps, approve(card, { leftOut: ['F1'] }))).toMatchObject({
@@ -521,23 +497,25 @@ describe('attemptAction on an approved card', () => {
   })
 })
 
-// R-P5: push and post_review are only ever offered prepared, so a run without the power can't be asked about
-// first. attemptAction never throws: the refusal is returned and recorded, and no card is filed.
+// R-P5: push is only ever offered prepared, so a run without the power can't be asked about first.
+// attemptAction never throws: the refusal is returned and recorded, and no card is filed.
 describe('a run without the power trying an evidence-needing action', () => {
-  it.each(['push', 'post_review'])('gets a recorded refusal for %s, and no card', async (name) => {
+  it('gets a recorded refusal for push, and no card', async () => {
     const { push, deps, inbox } = setup(['commit'])
-    const evidence: ActionEntry = { ...push, name, power: 'push', run: vi.fn() }
+    const evidence: ActionEntry = { ...push, name: 'push', power: 'push', run: vi.fn() }
     const catalog: ActionCatalog = {
       entries: () => [evidence],
-      get: (n) => (n === name ? evidence : null)
+      get: (n) => (n === 'push' ? evidence : null)
     }
-    const result = await attemptAction({ ...deps, catalog }, { ...REQ, action: name })
+    const result = await attemptAction({ ...deps, catalog }, { ...REQ, action: 'push' })
     expect(result).toMatchObject({
       outcome: 'failed',
-      detail: expect.stringContaining(`${name} needs prepared evidence`)
+      detail: expect.stringContaining('push needs prepared evidence')
     })
     expect(evidence.run).not.toHaveBeenCalled()
-    expect(deps.store.actions.forRun('run-1')).toMatchObject([{ action: name, status: 'refused' }])
+    expect(deps.store.actions.forRun('run-1')).toMatchObject([
+      { action: 'push', status: 'refused' }
+    ])
     expect(inbox.store.inbox.list()).toEqual([])
   })
 })

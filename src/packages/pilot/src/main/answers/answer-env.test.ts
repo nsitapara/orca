@@ -235,6 +235,33 @@ describe("answerEnvOf: the job's env, with writes", () => {
   })
 })
 
+describe('answerEnvOf: answers.stack never', () => {
+  const full: EnvWorkspaceDef = {
+    kind: 'env',
+    subject: { kind: 'new_branch', newBranch: '{t.branch}', from: 'origin/dev', keep: true },
+    writes: false,
+    stack: 'full'
+  }
+  const onWorktree: EnvWorkspaceDef = {
+    ...full,
+    subject: { kind: 'worktree', worktree: '/wt/a', at: null }
+  }
+  it.each([
+    ['a free worktree', onWorktree, '/wt/a', null],
+    ['a throwaway', full, '/repo', { homePath: '/repo', mode: 'throwaway' }],
+    ['a kept folder', full, '/wt/b', { homePath: '/wt/b', mode: 'kept' }]
+  ] as const)('%s keeps its env rules and starts no stack', (_n, env, home, asking) => {
+    const kept = answerEnvOf({ name: 'Job', workspace: env }, home, asking)
+    const never = answerEnvOf(
+      { name: 'Job', workspace: env, answers: { stack: 'never' } },
+      home,
+      asking
+    )
+    expect(kept.stack).toBe('full')
+    expect(never).toEqual({ ...kept, stack: 'never' })
+  })
+})
+
 describe('an answer run in an env', () => {
   it("is dispatched at once, then prepared once its rows read sent: the job's env with writes, in the card's worktree", async () => {
     const t = setup()

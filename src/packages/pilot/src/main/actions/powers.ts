@@ -112,30 +112,19 @@ function askedByPilot(store: PilotStore, card: InboxItemRow): boolean {
   return made.has(argsDigest(action, card.actionArgs ?? {}))
 }
 
-// Parts a person left out, passed the entry's way (post-review's --except), or why they can't be.
+// No catalog entry can leave parts out, so an approval that leaves any out is refused.
 function leaveOut(
   entry: ActionEntry,
-  card: InboxItemRow,
   args: Record<string, unknown>,
   leftOut: string[]
 ): { args: Record<string, unknown> } | { problem: string } {
-  if (leftOut.length === 0) {
-    return { args }
-  }
-  if (!entry.exceptArgs) {
-    return { problem: `${entry.name} can't leave parts out` }
-  }
-  const unknown = leftOut.filter((id) => !Object.hasOwn(card.parts, id))
-  if (unknown.length > 0) {
-    return { problem: `Card ${card.id} has no part ${unknown.join(', ')}` }
-  }
-  return { args: entry.exceptArgs(args, leftOut) }
+  return leftOut.length === 0 ? { args } : { problem: `${entry.name} can't leave parts out` }
 }
 
 // A stored card is only a claim. Before its approval runs anything, the card must still be waiting, be for
 // this action, run and version, not have run already, carry args that fit, and either come from an
 // automation that has the power (re-read now: a power removed since takes the card's right with it) or be
-// one Pilot asked about itself. What runs is the card's own args, less the parts left out.
+// one Pilot asked about itself. What runs is the card's own args; an approval that leaves parts out is refused.
 export function cardToRun(
   deps: PowersDeps,
   entry: ActionEntry,
@@ -193,7 +182,7 @@ export function cardToRun(
   return worse ? { problem: worse } : out
 }
 
-// What a card's Approve runs: its stored args less the parts left out, pinned (a Linear write id) with the
+// What a card's Approve runs: its stored args (no parts left out), pinned (a Linear write id) with the
 // card attempt's key (its run, no step, the card, the action and those args). cardToRun runs exactly this,
 // and the card's Run line (inbox/run-line.ts) shows exactly this: one function, so they can't disagree.
 export function approvedArgs(
@@ -201,7 +190,7 @@ export function approvedArgs(
   card: InboxItemRow,
   leftOut: string[]
 ): { args: Record<string, unknown> } | { problem: string } {
-  const out = leaveOut(entry, card, card.actionArgs ?? {}, leftOut)
+  const out = leaveOut(entry, card.actionArgs ?? {}, leftOut)
   if ('problem' in out || !entry.pin) {
     return out
   }

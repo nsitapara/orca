@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { CapacityPayload, CapacityRun } from '../../../shared/api-types-capacity'
-import { runMemoryText, suggestionText, usageText } from './running-text'
+import { memoryText, runMemoryText, suggestionText, usageText } from './running-text'
 
 const GIB = 1024 ** 3
 
@@ -22,7 +22,12 @@ const payload = (over: Partial<CapacityPayload> = {}): CapacityPayload => ({
   queued: [],
   memory: { totalBytes: 24 * GIB, availableBytes: 10 * GIB },
   suggestion: { limit: 3, budgetBytes: 6.5 * GIB, perJobBytes: 2 * GIB, measured: true },
-  heaviest: { automationId: 'a', automationName: '03 Review and fix', peakBytes: 2 * GIB },
+  heaviest: {
+    automationId: 'a',
+    automationName: '03 Review and fix',
+    peakBytes: 2 * GIB,
+    measured: true
+  },
   ...over
 })
 
@@ -39,9 +44,34 @@ describe('usageText', () => {
   it.each([
     ['slots in use, counting only runs that hold one', payload(), '1 of 3 in use'],
     ['no limit', payload({ limit: null }), '1 running, no limit'],
-    ['the waiting items', payload({ queued: [waiting, waiting] }), '1 of 3 in use · 2 waiting']
+    ['the waiting items', payload({ queued: [waiting, waiting] }), '1 of 3 in use · 2 waiting'],
+    [
+      'runs past a lowered limit',
+      payload({ limit: 1, running: [run(), run({ id: 'r3' })] }),
+      '2 running, over the limit of 1'
+    ]
   ])('says %s', (_name, p, expected) => {
     expect(usageText(p)).toBe(expected)
+  })
+})
+
+describe('memoryText', () => {
+  it.each([
+    ['what is available', payload(), 'Memory: 10.0 GB available of 24.0 GB'],
+    [
+      'what measured running jobs hold, never a run that takes no slot',
+      payload({
+        running: [
+          run({ memoryBytes: 1.5 * GIB }),
+          run({ id: 'r2', memoryBytes: 0.5 * GIB }),
+          run({ id: 'r3', counted: false, memoryBytes: 4 * GIB })
+        ]
+      }),
+      'Memory: 10.0 GB available of 24.0 GB · running jobs hold 2.0 GB'
+    ],
+    ['nothing when memory cannot be read', payload({ memory: null }), null]
+  ])('says %s', (_name, p, expected) => {
+    expect(memoryText(p)).toBe(expected)
   })
 })
 
@@ -49,6 +79,21 @@ describe('suggestionText', () => {
   it('names the heaviest job and the memory jobs can use', () => {
     expect(suggestionText(payload())).toBe(
       "The heaviest job, 03 Review and fix, peaked at 2.0 GB, and 6.5 GB can go to jobs: what's available plus what running jobs hold, less 4.0 GB kept free."
+    )
+  })
+
+  it('names a job not measured yet when it is the one budgeted for', () => {
+    const p = payload({
+      heaviest: {
+        automationId: 'b',
+        automationName: '04 Test UIs',
+        peakBytes: 2.5 * GIB,
+        measured: false
+      },
+      suggestion: { limit: 4, budgetBytes: 10 * GIB, perJobBytes: 2.5 * GIB, measured: false }
+    })
+    expect(suggestionText(p)).toMatch(
+      /^04 Test UIs hasn't been measured yet, so each job counts as 2\.5 GB, and 10\.0 GB/
     )
   })
 

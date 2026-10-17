@@ -1,5 +1,5 @@
 import type { CapacityPayload, CapacityRun, HeaviestJob } from '../../shared/api-types-capacity'
-import { suggestRunLimit } from '../../shared/capacity/limit-suggestion'
+import { suggestRunLimit, UNMEASURED_JOB_BYTES } from '../../shared/capacity/limit-suggestion'
 import type { AutomationDefinition } from '../../shared/definition/types'
 import type { PilotStore } from '../store/store'
 import { holdsSlot } from './run-capacity'
@@ -13,15 +13,26 @@ export type CapacityViewInput = {
   system: SystemMemory
 }
 
+// The heaviest of the jobs that hold a slot: a measured one at its peak, an enabled one never measured at the
+// unmeasured budget, so a light job measured first can't talk the suggestion up before the heavy ones have run.
 function heaviestJob(
   peaks: ReadonlyMap<string, number>,
-  byId: ReadonlyMap<string, AutomationDefinition>
+  definitions: readonly AutomationDefinition[]
 ): HeaviestJob | null {
   let heaviest: HeaviestJob | null = null
-  for (const [automationId, peakBytes] of peaks) {
-    const def = byId.get(automationId)
-    if (def && holdsSlot(def) && (heaviest === null || peakBytes > heaviest.peakBytes)) {
-      heaviest = { automationId, automationName: def.name, peakBytes }
+  for (const def of definitions) {
+    const peak = peaks.get(def.id)
+    if (!holdsSlot(def) || (peak === undefined && !def.enabled)) {
+      continue
+    }
+    const job = {
+      automationId: def.id,
+      automationName: def.name,
+      peakBytes: peak ?? UNMEASURED_JOB_BYTES,
+      measured: peak !== undefined
+    }
+    if (heaviest === null || job.peakBytes > heaviest.peakBytes) {
+      heaviest = job
     }
   }
   return heaviest
@@ -47,7 +58,7 @@ export function capacityView(input: CapacityViewInput): CapacityPayload {
       counted: def !== undefined && holdsSlot(def)
     }
   })
-  const heaviest = heaviestJob(store.capacity.heaviestPeaks(), byId)
+  const heaviest = heaviestJob(store.capacity.heaviestPeaks(), input.definitions)
   const runningJobsBytes = running
     .filter((r) => r.counted)
     .reduce((sum, r) => sum + (r.memoryBytes ?? 0), 0)
@@ -62,7 +73,7 @@ export function capacityView(input: CapacityViewInput): CapacityPayload {
     suggestion: suggestRunLimit({
       availableBytes: input.system.availableBytes,
       runningJobsBytes,
-      worstJobBytes: heaviest?.peakBytes ?? null
+      worstJobBytes: heaviest?.measured ? heaviest.peakBytes : null
     }),
     heaviest
   }

@@ -1416,5 +1416,52 @@
     "/wt/web-486": true,
     "/wt/web-487": true,
     "/wt/web-488": true
+  },
+  "old": {
+    "from": "run_old_plan.py 04 (ui-qa/scripts/loop.py sweep) with /opt/homebrew/bin/python3 3.15.0, 2026-10-16, before milestone 8b deleted it",
+    "decisions": [
+      {
+        "key": "wt:400fee61-a463-4f76-894a-39861e906007::/wt/web-481",
+        "label": "web-481-work",
+        "decision": "skip",
+        "reason": "MERGE_HEAD present"
+      },
+      {
+        "key": "wt:400fee61-a463-4f76-894a-39861e906007::/wt/web-482",
+        "label": "web-482-work",
+        "decision": "skip",
+        "reason": "!482 merged"
+      },
+      {
+        "key": "wt:400fee61-a463-4f76-894a-39861e906007::/wt/web-483",
+        "label": "web-483-work",
+        "decision": "skip",
+        "reason": "!483 approved by alex1craig"
+      },
+      {
+        "key": "wt:400fee61-a463-4f76-894a-39861e906007::/wt/web-484",
+        "label": "web-484-work",
+        "decision": "skip",
+        "reason": "answers are being applied or an agent is working there; QA waits"
+      },
+      {
+        "key": "wt:400fee61-a463-4f76-894a-39861e906007::/wt/web-485",
+        "label": "web-485-work",
+        "decision": "skip",
+        "reason": "MERGE_HEAD present"
+      },
+      {
+        "key": "wt:400fee61-a463-4f76-894a-39861e906007::/wt/web-486",
+        "label": "web-486-work",
+        "decision": "skip",
+        "reason": "MERGE_HEAD present"
+      },
+      {
+        "key": "wt:400fee61-a463-4f76-894a-39861e906007::/wt/web-488",
+        "label": "web-488-work",
+        "decision": "skip",
+        "reason": "answers are being applied or an agent is working there; QA waits"
+      }
+    ]
   }
 }

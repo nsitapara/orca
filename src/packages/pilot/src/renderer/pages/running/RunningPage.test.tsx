@@ -38,7 +38,12 @@ function capacity(over: Partial<CapacityPayload> = {}): CapacityPayload {
     ],
     memory: { totalBytes: 24 * GIB, availableBytes: 9 * GIB },
     suggestion: { limit: 3, budgetBytes: 6.5 * GIB, perJobBytes: 2 * GIB, measured: true },
-    heaviest: { automationId: 'review', automationName: '03 Review and fix', peakBytes: 2 * GIB },
+    heaviest: {
+      automationId: 'review',
+      automationName: '03 Review and fix',
+      peakBytes: 2 * GIB,
+      measured: true
+    },
     ...over
   }
 }

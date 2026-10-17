@@ -1,5 +1,9 @@
 import type { RunRow } from '../../shared/api-types'
-import type { AutomationDefinition, EnvWorkspaceDef } from '../../shared/definition/types'
+import type {
+  AnswersDef,
+  AutomationDefinition,
+  EnvWorkspaceDef
+} from '../../shared/definition/types'
 import type { RunEnd } from '../../shared/run/step-plan'
 import type { EnvPreparer } from '../envs/prepare'
 import { worktreePathKey } from '../fields/agent-activity'
@@ -30,6 +34,18 @@ function messageOf(error: unknown): string {
 // worktree. Otherwise, when the asking run worked in place or kept, its folder; else the job's own subject. create may
 // answer any mode for any subject (Contract answers 3), an existing branch included, so nothing else is decided here.
 export function answerEnvOf(
+  def: Pick<AutomationDefinition, 'name' | 'workspace'> & {
+    answers?: Pick<AnswersDef, 'stack'> | null
+  },
+  home: string | null,
+  asking: { homePath: string | null; mode: string | null } | null
+): EnvWorkspaceDef {
+  const env = answerEnvFolder(def, home, asking)
+  // answers: { stack: never } keeps the job's env rules but starts no stack.
+  return def.answers?.stack === 'never' ? { ...env, stack: 'never' } : env
+}
+
+function answerEnvFolder(
   def: Pick<AutomationDefinition, 'name' | 'workspace'>,
   home: string | null,
   asking: { homePath: string | null; mode: string | null } | null

@@ -35,8 +35,8 @@ export function checkNotPrepared(params: InboxAddParams): void {
   }
 }
 
-// R-P5 at add: an action whose Approve runs with no agent in between (push, post_review) is offered only with a
-// preparation request, whoever adds it and however the caller is bound.
+// R-P5 at add: an action whose Approve runs with no agent in between (push) is offered only with a preparation
+// request, whoever adds it and however the caller is bound.
 export function refuseUnpreparedEvidence(params: InboxAddParams): void {
   const action = params.action
   if (action && !params.preparation && EVIDENCE_ACTIONS.has(action)) {

@@ -2,7 +2,6 @@ import { describe, expect, it, vi } from 'vitest'
 import type { InboxItemRow } from '../../shared/api-types'
 import { buildActionCatalog } from '../actions/catalog'
 import { markReadyEntry } from '../actions/mark-ready'
-import { postReviewEntry } from '../actions/post-review'
 import { pushBranchEntry } from '../actions/push-branch'
 import type { ActionEntry } from '../actions/types'
 import type { Pilotcli } from '../envs/pilotcli'
@@ -12,7 +11,6 @@ import { cardRunLine, shellWord } from './run-line'
 const PRINTABLE_ASCII = /^[\x20-\x7e]*$/
 const HEAD = '9c1e2f04'.padEnd(40, 'a')
 const BASE = '1a2b3c4d'.padEnd(40, 'b')
-const SHA256 = 'f00d'.padEnd(64, '0')
 
 // An entry whose Run line is its args as they are, for the escaping rules alone.
 const echo: ActionEntry = {
@@ -44,9 +42,8 @@ function catalog() {
   const push = pushBranchEntry({ pilotcli, binary })
   const cards = { branchOf: () => null, worktreeOn: () => null, openOn: () => null }
   const markReady = markReadyEntry({ pilotcli, binary, folder, cards })
-  const postReview = postReviewEntry({ pilotcli, binary, reviewsDir: () => '/vault/09', folder })
   return {
-    catalog: buildActionCatalog({ push, markReady, postReview, linear: null, extra: [echo] }),
+    catalog: buildActionCatalog({ push, markReady, linear: null, extra: [echo] }),
     spawned,
     folder
   }
@@ -103,11 +100,9 @@ describe("an action card's Run line", () => {
     expect(line?.text).toBe(ran.map(shellWord).join(' '))
   })
 
-  it('shows the args after the parts left out, as the approval runs them', async () => {
-    const { catalog: c, spawned } = catalog()
+  it("says Approve can't run when it leaves parts out, as the approval refuses it", () => {
+    const { catalog: c } = catalog()
     const item = card({
-      action: 'post_review',
-      actionArgs: { argv: ['1588', 'reviews/1588-1.json', SHA256] },
       parts: { a: 'Nit on line 3', b: 'Rename' },
       answer: {
         option: null,
@@ -118,22 +113,7 @@ describe("an action card's Run line", () => {
       },
       status: 'answered'
     })
-    const line = cardRunLine(c, item)
-    expect(line?.text).toBe(
-      `/bin/pilotcli gitlab create-thread 1588 --review=/vault/09/reviews/1588-1.json --expect-sha256=${SHA256} --except=a --dir=/wt --dry-run=false --format=json`
-    )
-    const args = approvedArgs(c.get('post_review')!, item, ['a'])
-    if ('problem' in args) {
-      throw new Error(args.problem)
-    }
-    await c.get('post_review')!.run(args.args, {
-      dryRun: false,
-      runId: 'run-1',
-      inboxItemId: item.id
-    })
-    for (const word of spawned[0].args) {
-      expect(line?.text).toContain(shellWord(word))
-    }
+    expect(cardRunLine(c, item)?.text).toBe("Approve can't run: push can't leave parts out")
   })
 
   it("shows a mark_ready card's write, in the folder the card's own action acts in", () => {
