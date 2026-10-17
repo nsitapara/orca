@@ -2,18 +2,9 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import type { DoneRun } from '../../../shared/visibility-types'
 import { pilotRpc } from '../../api'
 import { errorText } from '../format'
+import { isDoneRun } from '../../hosts/merge-inbox'
 
 export const DONE_POLL_MS = 10_000
-
-// A well-formed row: an object whose run has a string id, with effects and defaults lists.
-function isDoneRun(value: unknown): value is DoneRun {
-  if (!value || typeof value !== 'object') {
-    return false
-  }
-  const { run, effects, defaults } = value as Partial<Record<keyof DoneRun, unknown>>
-  const id = run && typeof run === 'object' ? (run as { id?: unknown }).id : undefined
-  return typeof id === 'string' && Array.isArray(effects) && Array.isArray(defaults)
-}
 
 // Done for you (Run visibility spec §3): the person's finished runs that changed something, read every 10 s; Got it
 // acknowledges them and reads the list again.
