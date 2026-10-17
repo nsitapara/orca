@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import type { ActivityPayload, ActivityTick, ListedRun } from '../../shared/api-types'
 import { stepAt, testCard, testRun } from '../../shared/run-views/__fixtures__/runs'
+import { LOCAL_NAMED, MINI } from '../hosts/__fixtures__/hosts'
+import { hostedRunKey } from '../hosts/merge-activity'
 import {
   dayLabel,
   defaultRun,
@@ -82,6 +84,20 @@ describe('run picking', () => {
     expect(defaultRun(runs)).toBe('running')
     expect(defaultRun(runs.slice(2))).toBe('old')
     expect(defaultRun([])).toBeNull()
+  })
+
+  it("offers two machines' runs that share an id, each once, and picks the running one by its machine", () => {
+    const local = { ...listed({ id: 'r1', status: 'done', startedAt: 20 }), host: LOCAL_NAMED }
+    const mini = { ...listed({ id: 'r1', status: 'running', startedAt: 10 }), host: MINI }
+    const p: ActivityPayload = {
+      live: [mini],
+      ticks: [tick(1, 10, [mini])],
+      loose: [local],
+      reach: null
+    }
+    const runs = runCandidates(p, 10, hostedRunKey)
+    expect(runs.map(hostedRunKey)).toEqual(['r1', 'env:mini/r1'])
+    expect(defaultRun(runs, hostedRunKey)).toBe('env:mini/r1')
   })
 
   it("takes a job's code from its name", () => {

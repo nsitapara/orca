@@ -73,7 +73,6 @@ export function DoneForYou({
           <ActivityRunRow
             key={runKey(d)}
             run={d.run}
-            host={hostOf(d.run)}
             fields={d.run.fields}
             summary={byId.get(d.run.automationId)}
             effects={d.effects}

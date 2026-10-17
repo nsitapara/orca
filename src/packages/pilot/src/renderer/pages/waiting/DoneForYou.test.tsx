@@ -3,6 +3,9 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { testCard, testRun } from '../../../shared/run-views/__fixtures__/runs'
 import type { DoneRun } from '../../../shared/visibility-types'
+import { LOCAL_NAMED, MINI } from '../../hosts/__fixtures__/hosts'
+import type { PilotHostEntry } from '../../hosts/pilot-host'
+import { resetPilotHostsFeed, setPilotHostsForTests } from '../../hosts/pilot-hosts-feed'
 
 const pilotRpc = vi.fn()
 vi.mock('../../api', () => ({ pilotRpc: (...args: unknown[]) => pilotRpc(...args) }))
@@ -23,6 +26,7 @@ describe('DoneForYou', () => {
     cleanup()
     resetAutomationsFeed()
     resetEffectsFeed()
+    resetPilotHostsFeed()
     pilotRpc.mockReset()
   })
 
@@ -92,5 +96,24 @@ describe('DoneForYou', () => {
     expect(await screen.findByText('rpc down')).toBeTruthy()
     fireEvent.click(button)
     expect(onAcknowledge).toHaveBeenCalledTimes(2)
+  })
+
+  it("names each run's machine once on its row", () => {
+    setPilotHostsForTests([LOCAL_NAMED, MINI])
+    pilotRpc.mockResolvedValue([])
+    const on = (host: PilotHostEntry, id: string) => {
+      const d = done(id)
+      return { ...d, run: { ...d.run, host } }
+    }
+    render(
+      <DoneForYou
+        runs={[on(LOCAL_NAMED, '1'), on(MINI, '2')]}
+        cardFor={() => null}
+        onAcknowledge={async () => null}
+      />
+    )
+    expect([screen.getAllByText('MacBook').length, screen.getAllByText('Mac mini').length]).toEqual(
+      [1, 1]
+    )
   })
 })

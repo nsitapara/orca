@@ -3,6 +3,9 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-li
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { ActivityPayload, ListedRun } from '../../shared/api-types'
 import { stepAt, testCard, testRun } from '../../shared/run-views/__fixtures__/runs'
+import { byHost, LOCAL_NAMED, MINI, MINI_OFFLINE } from '../hosts/__fixtures__/hosts'
+import { resetPilotHostsFeed, setPilotHostsForTests } from '../hosts/pilot-hosts-feed'
+import type { PilotHostEntry } from '../hosts/pilot-host'
 import { summary } from '../pages/fixtures'
 
 const pilotRpc = vi.fn()
@@ -84,9 +87,7 @@ describe('ActivityView', () => {
     ).toBeTruthy()
     const today = screen.getByRole('region', { name: 'Earlier today' })
     expect(within(today).getByText("Couldn't start: no such repo")).toBeTruthy()
-    fireEvent.click(
-      await within(running).findByRole('button', { name: /1 fix · Running/ })
-    )
+    fireEvent.click(await within(running).findByRole('button', { name: /1 fix · Running/ }))
     expect(openRunPanel()).toEqual({ runId: 'run-a', part: 'step:0' })
   })
 
@@ -152,5 +153,77 @@ describe('ActivityView', () => {
     render(<ActivityView automationIds={null} since={0} limit={300} />)
     await screen.findByRole('region', { name: 'Running now' })
     expect(screen.queryByText(/^Showing back to /)).toBeNull()
+  })
+})
+
+describe('ActivityView on more than one machine', () => {
+  afterEach(() => {
+    cleanup()
+    resetAutomationsFeed()
+    resetEffectsFeed()
+    resetPilotHostsFeed()
+    pilotRpc.mockReset()
+    localStorage.clear()
+  })
+
+  // A machine's answers; a string is the error its Activity read fails with.
+  const machine =
+    (activity: ActivityPayload | string, effects = {}) =>
+    (method: string) => {
+      if (method === 'pilot.automations.list') {
+        return { automations: [summary], errors: [], peopleError: null, missingDirs: [] }
+      }
+      if (method === 'pilot.runs.effects') {
+        return effects
+      }
+      if (typeof activity === 'string') {
+        throw new Error(activity)
+      }
+      return activity
+    }
+  const rowOf = (text: string) => within(screen.getByText(text).closest('li')!)
+
+  it("shows every machine's runs, each with its machine and only its own effects, though a run's id is the same on both", async () => {
+    setPilotHostsForTests([LOCAL_NAMED, MINI])
+    const ranOnMini = testRun({
+      id: 'run-a',
+      automationId: 'fix-ci',
+      status: 'done',
+      outcome: 'Fixed on the mini'
+    })
+    const mini: ActivityPayload = {
+      ...payload,
+      live: [],
+      ticks: [{ ...payload.ticks[0], runs: [ranOnMini] }]
+    }
+    const pushed = { kind: 'pushed', target: 'web-1', url: null, count: 1, stepIdx: 0, at: 1 }
+    pilotRpc.mockImplementation(
+      byHost({ local: machine(payload, { 'run-a': [pushed] }), mini: machine(mini) })
+    )
+    render(<ActivityView automationIds={null} since={0} limit={100} />)
+    const today = await screen.findByRole('region', { name: 'Earlier today' })
+    expect(await within(today).findByText('Fixed on the mini')).toBeTruthy()
+    expect(rowOf('Fixed on the mini').getByText('Mac mini')).toBeTruthy()
+    expect(rowOf('!1561 web-1').getByText('MacBook')).toBeTruthy()
+    expect(rowOf("Couldn't start: no such repo").getByText('MacBook')).toBeTruthy()
+    expect(await rowOf('!1561 web-1').findByText('pushed web-1')).toBeTruthy()
+    expect(rowOf('Fixed on the mini').queryByText('pushed web-1')).toBeNull()
+  })
+
+  it.each<[string, PilotHostEntry, string]>([
+    ['whose read failed', MINI, "Couldn't refresh Mac mini's runs: timed out"],
+    [
+      "that can't be reached",
+      MINI_OFFLINE,
+      "Mac mini can't be reached: its runs aren't shown here."
+    ]
+  ])('names a machine %s, and still shows the rest', async (_w, mini, line) => {
+    setPilotHostsForTests([LOCAL_NAMED, mini])
+    pilotRpc.mockImplementation(byHost({ local: machine(payload), mini: machine('timed out') }))
+    render(<ActivityView automationIds={null} since={0} limit={100} />)
+    expect(await screen.findByText(line)).toBeTruthy()
+    const running = screen.getByRole('region', { name: 'Running now' })
+    expect(within(running).getByText('!1561 web-1')).toBeTruthy()
+    expect(screen.queryByText('timed out')).toBeNull()
   })
 })

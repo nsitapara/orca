@@ -6,7 +6,7 @@ import { money } from '../../shared/money'
 import { paintRun } from '../../shared/run-views/paint'
 import { runStrip } from '../../shared/run-views/strip'
 import { MachineChip } from '../hosts/MachineChip'
-import type { PilotHostRef } from '../hosts/pilot-host'
+import { hostOf, type PilotHostRef } from '../hosts/pilot-host'
 import { clockTime, itemUrl, runStatusLabel } from '../pages/format'
 import { jobCode } from './activity-groups'
 import { useRunEffects } from './effects-feed'
@@ -19,6 +19,18 @@ function baseName(path: string): string {
   return path.replace(/\/+$/, '').split('/').pop() ?? path
 }
 
+// The effects feed reads this machine only, where another machine's run id may name a different run.
+function shownEffects(
+  given: readonly Effect[] | null | undefined,
+  fetched: readonly Effect[] | null,
+  ownRun: boolean
+): readonly Effect[] | null {
+  if (given !== undefined) {
+    return given
+  }
+  return ownRun ? fetched : null
+}
+
 // One run on Activity (spec §3): job tag, item (linked out), worktree, cost, state and the steps that ran, numbered in the
 // order they ran. The chips and "Open run" open the run panel. A run whose automation isn't loaded shows no steps.
 export function ActivityRunRow({
@@ -26,26 +38,25 @@ export function ActivityRunRow({
   fields,
   summary,
   effects,
-  host,
   children
 }: {
-  run: ActivityRun
+  // An untagged run is this machine's.
+  run: ActivityRun & { host?: PilotHostRef }
   fields: ItemFields
   summary: AutomationSummary | undefined
   effects?: readonly Effect[] | null
-  // The run's machine, for its chip; none while the caller's runs aren't tagged yet.
-  host?: PilotHostRef
   children?: React.ReactNode
 }): React.JSX.Element {
   const url = itemUrl(fields)
   const home = homeOf(run)
   const cleanup = envCleanup(run)
+  const ownRun = hostOf(run).local
   const fetched = useRunEffects(
     run.id,
     run.status === 'running' || run.status === 'asking',
-    effects === undefined
+    effects === undefined && ownRun
   )
-  const shown = effects === undefined ? fetched : effects
+  const shown = shownEffects(effects, fetched, ownRun)
   const items = summary ? runStrip(paintRun(summary.chain, { run }).parts, run) : []
   return (
     <li className="flex flex-col gap-1 border-t border-border/50 py-2">
@@ -75,7 +86,7 @@ export function ActivityRunRow({
         <span className="rounded bg-muted px-1.5 text-foreground">
           {runStatusWord(run, runStatusLabel)}
         </span>
-        {host ? <MachineChip host={host} /> : null}
+        <MachineChip host={hostOf(run)} />
         <span className="flex-1" />
         <button type="button" className="underline" onClick={() => openRun(run.id)}>
           Open run

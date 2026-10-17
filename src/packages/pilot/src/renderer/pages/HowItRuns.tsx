@@ -1,18 +1,20 @@
-import { useEffect, useState } from 'react'
 import { cn } from '@/lib/utils'
 import type { ActivityPayload, ActivityRun, AutomationSummary } from '../../shared/api-types'
 import { paintRun } from '../../shared/run-views/paint'
 import { runHeadline, runTimeline } from '../../shared/run-views/timeline'
-import { pilotRpc } from '../api'
+import { useHeldMerge } from '../hosts/held-merge'
+import { useHostPoll } from '../hosts/host-poll'
+import { MachineChip } from '../hosts/MachineChip'
+import { hostedRunKey, mergeActivity } from '../hosts/merge-activity'
+import { hostOf, type PilotHostRef } from '../hosts/pilot-host'
 import { defaultRun, runCandidates } from '../run-views/activity-groups'
+import { ACTIVITY_POLL_MS } from '../run-views/ActivityView'
 import { RunRail } from '../run-views/RunRail'
 import { openRun } from '../run-views/run-panel-state'
 import { RUN_TONE } from '../run-views/tokens'
 import { scheduleText } from './AutomationsTable'
 import { showPilotAutomation } from './automations-view'
 import { clockTime, formatInZone, runStatusLabel } from './format'
-
-export const HOW_POLL_MS = 20_000
 
 function Facts({ summary: s }: { summary: AutomationSummary }): React.JSX.Element {
   const next = s.nextTickAt === null ? 'None' : formatInZone(s.nextTickAt, s.timezone)
@@ -42,7 +44,7 @@ function LatestRun({
   run
 }: {
   summary: AutomationSummary
-  run: ActivityRun | null
+  run: (ActivityRun & { host?: PilotHostRef }) | null
 }): React.JSX.Element {
   if (!run) {
     return <p className="text-xs text-muted-foreground">No runs yet</p>
@@ -58,6 +60,7 @@ function LatestRun({
       <span className={cn('rounded px-1.5', RUN_TONE[run.status])}>
         {runHeadline(run, runTimeline(parts, run), runStatusLabel)}
       </span>
+      <MachineChip host={hostOf(run)} />
       <span className="flex-1" />
       <button type="button" className="underline" onClick={() => openRun(run.id)}>
         Open run
@@ -76,30 +79,19 @@ function LatestRun({
 // An automation's plan: its facts, the run it points at, and its chain with the steps numbered. No run is painted on
 // it (spec revision 2026-10-16): a run shows as a timeline in the run panel.
 export function HowItRuns({ summary }: { summary: AutomationSummary }): React.JSX.Element {
-  const [runs, setRuns] = useState<ActivityRun[]>([])
-  useEffect(() => {
-    let alive = true
-    const load = (): void => {
-      pilotRpc<ActivityPayload>('pilot.activity.list', {
-        automationIds: [summary.id],
-        limit: 10,
-        skipQuiet: true
-      }).then(
-        (p) => alive && setRuns(runCandidates(p)),
-        () => {}
-      )
-    }
-    load()
-    const timer = setInterval(load, HOW_POLL_MS)
-    return () => {
-      alive = false
-      clearInterval(timer)
-    }
-  }, [summary.id])
+  const { reads } = useHostPoll<ActivityPayload>(
+    'pilot.activity.list',
+    { automationIds: [summary.id], limit: 10, skipQuiet: true },
+    ACTIVITY_POLL_MS
+  )
+  // Every machine's runs of it: the latest may be on any of them.
+  const merged = useHeldMerge(reads, mergeActivity)
+  const runs = merged ? runCandidates(merged, 10, hostedRunKey) : []
+  const latest = defaultRun(runs, hostedRunKey)
   return (
     <div className="flex flex-col gap-3">
       <Facts summary={summary} />
-      <LatestRun summary={summary} run={runs.find((r) => r.id === defaultRun(runs)) ?? null} />
+      <LatestRun summary={summary} run={runs.find((r) => hostedRunKey(r) === latest) ?? null} />
       <RunRail parts={summary.chain} />
     </div>
   )
