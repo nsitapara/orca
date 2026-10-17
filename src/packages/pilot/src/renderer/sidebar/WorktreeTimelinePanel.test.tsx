@@ -9,10 +9,14 @@ import { closeRunPanel, openRunPanel } from '../run-views/run-panel-state'
 import { inboxItem, stepRow, timelineRun, worktreeTimeline } from '../timeline/timeline.fixtures'
 
 let path: string | null = '/wt/a'
+let names: { worktree: string | null; project: string | null } = { worktree: null, project: null }
 let feed: { data: WorktreeTimeline | null; error: string | null } = { data: null, error: null }
 const pilotRpc = vi.fn()
 vi.mock('../api', () => ({ pilotRpc: (...args: unknown[]) => pilotRpc(...args) }))
-vi.mock('./active-worktree', () => ({ useActiveWorktreePath: () => path }))
+vi.mock('./active-worktree', () => ({
+  useActiveWorktreePath: () => path,
+  useActiveWorktreeNames: () => names
+}))
 vi.mock('./timeline-feed', () => ({ useWorktreeTimeline: () => feed }))
 
 import { WorktreeTimelinePanel } from './WorktreeTimelinePanel'
@@ -34,6 +38,7 @@ describe('WorktreeTimelinePanel', () => {
     closeRunPanel()
     showAutomationsPage()
     path = '/wt/a'
+    names = { worktree: null, project: null }
     feed = { data: null, error: null }
   })
 
@@ -41,6 +46,19 @@ describe('WorktreeTimelinePanel', () => {
     path = null
     render(<WorktreeTimelinePanel />)
     expect(screen.getByText('Open a worktree to see its automations.')).toBeTruthy()
+  })
+
+  it.each([
+    ['its worktree and project', 'vite-plus-spike', 'web-platform', 'web-platform'],
+    ['its path when the project is unknown', 'vite-plus-spike', null, '/wt/a']
+  ])('heads the panel with %s', (_name, worktree, project, subtitle) => {
+    names = { worktree, project }
+    feed = { error: null, data: worktreeTimeline({ spentTodayUsd: 0.84 }) }
+    render(<WorktreeTimelinePanel />)
+    expect(screen.getByText('vite-plus-spike')).toBeTruthy()
+    expect(screen.getByText(subtitle)).toBeTruthy()
+    expect(screen.getByText('$0.84 spent here today')).toBeTruthy()
+    expect(screen.queryByText('Automations')).toBeNull()
   })
 
   it('shows the error when there is no timeline yet', () => {
@@ -133,9 +151,7 @@ describe('WorktreeTimelinePanel', () => {
       })
     }
     render(<WorktreeTimelinePanel />)
-    fireEvent.click(
-      await screen.findByRole('button', { name: 'Agent · 1 fix · Running' })
-    )
+    fireEvent.click(await screen.findByRole('button', { name: 'Agent · 1 fix · Running' }))
     expect([openRunPanel(), pilotAutomationsView()]).toEqual([
       { runId: 'r2', part: 'step:0' },
       'activity'
