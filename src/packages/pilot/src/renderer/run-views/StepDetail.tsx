@@ -15,8 +15,13 @@ const RESUMED: Record<SessionResumeResult['action'], string> = {
   opened: 'Opened in a new tab'
 }
 
+// Why the browser gate: the server refuses a resume from a paired device (methods-timeline.ts).
 export function canResume(step: StepRow): boolean {
-  return step.sessionId !== null && (step.agent === 'claude' || step.agent === 'codex')
+  return (
+    !isWebClientLocation() &&
+    step.sessionId !== null &&
+    (step.agent === 'claude' || step.agent === 'codex')
+  )
 }
 
 function stepFacts(step: StepRow): string {
@@ -110,8 +115,7 @@ export function StepDetail({
   step: StepRow
 }): React.JSX.Element {
   const outputs = outputsText(step)
-  // Why: the server refuses a resume from a paired device, so the browser has nothing to offer.
-  const resumable = canResume(step) && !isWebClientLocation()
+  const resumable = canResume(step)
   return (
     <div className="mt-1 flex flex-col gap-0.5 text-xs">
       <div className="flex flex-wrap items-center gap-2">

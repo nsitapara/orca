@@ -17,6 +17,7 @@ describe('FromRun', () => {
     resetAutomationsFeed()
     closeRunPanel()
     pilotRpc.mockReset()
+    vi.unstubAllGlobals()
   })
 
   it("shows the run's state and the steps that ran, lights the one that asked, and opens it there", async () => {
@@ -123,11 +124,13 @@ describe('FromRun', () => {
     })
 
     it.each([
-      ['a run still going', failed({ status: 'running', finishedAt: null })],
-      ['a run waiting on you', failed({ status: 'needs_you' })],
-      ['a run that ended done', failed({ status: 'done' })],
-      ['an answer run', failed({ trigger: 'answer', parentRunId: 'r0' })]
-    ])('offers nothing for %s', async (_name, run) => {
+      ['a run still going', failed({ status: 'running', finishedAt: null }), false],
+      ['a run waiting on you', failed({ status: 'needs_you' }), false],
+      ['a run that ended done', failed({ status: 'done' }), false],
+      ['an answer run', failed({ trigger: 'answer', parentRunId: 'r0' }), false],
+      ['a failed run in the browser version', failed(), true]
+    ])('offers nothing for %s', async (_name, run, browser) => {
+      vi.stubGlobal('__ORCA_WEB_CLIENT__', browser)
       serve(async () => ({ step: 'fix', resumed: true }))
       render(<FromRun item={{ automationId: 'fix-ci', stepIdx: 0 }} run={run} />)
       await screen.findByRole('button', { name: 'Open run' })

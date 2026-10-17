@@ -483,7 +483,12 @@ These need a phone, a second Mac and an iPad on Tailscale. Open Pilot (`dist/mac
 
 ## Known gaps
 
-- In the browser version, some buttons are hidden because they act on the Mac that runs Pilot, not on your device: a report's Open, Resume and Source, and a skill's Open. The Playground's Start is replaced by a note that it runs only on that Mac. Approve asks again on the desktop.
+- In the browser version, the controls that act on the Mac that runs Pilot, not on your device, are hidden:
+  - Run controls: a step's Resume and Source, a finished run's Resume (Running), and Continue run (a card's From run and the run panel).
+  - A report's Open and a skill's Open.
+  - The Playground's Start, replaced by a note that it runs only on that Mac.
+
+  Approve works only on the desktop, and nothing pops up there when you try it in the browser: the browser's Approve is refused with "Approve actions in Pilot on this Mac", and the card stays open in the Inbox for you to approve in Pilot on that Mac.
 - Computer Use is unavailable in packaged Pilot. Enabling it needs a Pilot bundle id for the helper plus a trust-list entry in its Swift peer check.
 - After closing the right sidebar while on the Automations tab, Orca's main-side persistence allowlist drops `plugin:pilot` and resets the stored tab to Explorer (the UI hydrates it back via `hydratePersistedUI`), so reopening or restarting lands on Explorer, not Automations.
 - "Install CLI" links `/usr/local/bin/pilot` (never `orca`) to Pilot's `Contents/Resources/bin/orca`: upstream's `bundled-cli-launcher-path.ts` always installs the `bin/orca` launcher, and `applyPilotEnvDefaults` (`src/packages/pilot/src/main/env.ts`) sets `ORCA_CLI_INSTALL_PATH` to `/usr/local/bin/pilot`, which `cli-install-location.ts` uses ahead of its own `orca` default. That launcher pins Pilot's data folder and install path, so the installed `pilot` command and `pilot serve` (which re-installs the CLI on start) act on Pilot, never on real Orca. Checked in code and by `build/bin/launchers.test.ts`, not clicked.

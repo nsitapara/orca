@@ -110,9 +110,13 @@ describe('StepDetail', () => {
     expect(refreshWorktreeTimeline).not.toHaveBeenCalled()
   })
 
-  it('a removed checkout shows a note in place of Resume', () => {
+  it.each([
+    ['the desktop', false, 1],
+    ['the browser version', true, 0]
+  ])('a removed checkout shows a note in place of Resume on %s', (_where, browser, notes) => {
+    vi.stubGlobal('__ORCA_WEB_CLIENT__', browser)
     render(<Steps runId="r1" checkoutRemoved />)
-    expect(screen.getByText('Checkout removed')).toBeTruthy()
+    expect(screen.queryAllByText('Checkout removed')).toHaveLength(notes)
     expect(screen.queryByRole('button', { name: /resume/i })).toBeNull()
   })
 

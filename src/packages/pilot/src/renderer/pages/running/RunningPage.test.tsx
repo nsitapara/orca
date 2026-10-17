@@ -2,6 +2,7 @@
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { CapacityPayload, FinishedRun } from '../../../shared/api-types-capacity'
+import { testStepRow } from '../../../shared/run-views/__fixtures__/runs'
 import { openRunPanel } from '../../run-views/run-panel-state'
 
 const pilotRpc = vi.fn()
@@ -125,6 +126,7 @@ async function click(name: string): Promise<void> {
 afterEach(() => {
   cleanup()
   pilotRpc.mockReset()
+  vi.unstubAllGlobals()
 })
 
 describe('RunningPage', () => {
@@ -202,6 +204,20 @@ describe('RunningPage', () => {
     expect(screen.getByText('Resolve the conflict?')).toBeTruthy()
     await click('Open')
     expect(openRunPanel()).toEqual({ runId: 'f1', part: null })
+  })
+
+  it.each([
+    ['the desktop', false, 1],
+    ['the browser version', true, 0]
+  ])("offers Resume for a finished run's agent session on %s", async (_where, browser, resumes) => {
+    vi.stubGlobal('__ORCA_WEB_CLIENT__', browser)
+    serve(capacity({ finished: [finishedRun({ steps: [testStepRow({ runId: 'f1' })] })] }))
+    await shown()
+    await click('Recently finished · 1')
+    const row = within(
+      within(screen.getByRole('region', { name: 'Recently finished' })).getAllByRole('row')[1]
+    )
+    expect(row.queryAllByRole('button', { name: /resume/i })).toHaveLength(resumes)
   })
 
   it('says when nothing runs or waits', async () => {

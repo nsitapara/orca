@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { StepForward } from 'lucide-react'
+import { isWebClientLocation } from '@/lib/web-client-location'
 import type { ContinueRunResult, RunRow } from '../../shared/api-types'
 import { pilotRpc } from '../api'
 import { errorText } from '../pages/format'
@@ -7,9 +8,9 @@ import { errorText } from '../pages/format'
 const BROKEN: ReadonlySet<RunRow['status']> = new Set(['failed', 'timed_out', 'cancelled'])
 
 // A run that broke goes on from where it stopped (main/run/run-continue.ts); an answer run's card is answered again
-// instead.
+// instead. Only the desktop may continue one (methods-runs.ts), so the browser version offers nothing.
 export function canContinue(run: Pick<RunRow, 'status' | 'trigger'>): boolean {
-  return BROKEN.has(run.status) && run.trigger !== 'answer'
+  return !isWebClientLocation() && BROKEN.has(run.status) && run.trigger !== 'answer'
 }
 
 function continuedNote(result: ContinueRunResult): string {
