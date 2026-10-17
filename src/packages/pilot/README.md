@@ -397,9 +397,9 @@ A run costs the sum of its steps. A Claude step's session id is pinned at launch
 
 Activity lists the sessions of every machine you are connected to.
 
-- **Machine chip:** while the listed rows come from more than one machine, each row shows a chip with its machine's name. This covers agent rows, Pilot's tab rows and recent-worktree rows. With one machine, no chip shows. It is the same chip the sidebar uses for a host.
-- **Machines filter:** Options > Hosts filters by machine, and now covers every machine.
-- **Projects filter:** a project picked here includes that project's copy on every machine, and it is listed once. A repo with no git remote can't be matched across machines, so it stays per machine.
+- **Machine chip:** while the listed rows come from more than one machine, each row shows a chip with its machine's name. This covers agent rows, Pilot's tab rows and recent-worktree rows. With one machine, no chip shows. It is the same chip the sidebar uses for a host. Machines are compared by host id, after an SSH host is merged with its managed server, so those two count as one machine.
+- **Machines filter:** Activity's existing Options > Hosts filter is the machine filter. It already lists this Mac, every paired machine and every SSH host.
+- **Projects filter:** a project picked here includes that project's copy on every machine, and it is listed once. The saved filter is still stored as repo ids; it is widened to every machine's copy when Activity reads it. A repo with no git remote can't be matched across machines, so it stays per machine.
 
 The hooks are `activity-machines-*` and `activity-project-*` (see `HOOKS.md`).
 

@@ -65,7 +65,7 @@ Which hooks were added for "Show all tabs in Activity", and why:
 Which hooks were added for machine tags, and why:
 
 - `activity-machines-list`, `activity-machines-page` and `activity-machines-chip`: Activity lists every machine's sessions, so a row says where it runs (Nish, 2026-10-17). A drop-in for `ActivityThreadListPane` decides once per list whether its rows span machines, and provides a context that the footer chip reads. Upstream's types and the memoized rows are unchanged, and nothing renders until Pilot attaches.
-- `activity-project-scope` and `activity-project-filter`: a project filter used one machine's repo id. The saved filter stays repo ids; Pilot widens it by project identity when it reads it, and lists each project once. Repos without a remote stay per machine.
+- `activity-project-scope` and `activity-project-filter`: a project filter used one machine's repo id. The saved filter stays repo ids; Pilot widens it by project identity when it reads it, and lists each project once. Repos without a remote stay per machine. Both are inert until Pilot attaches: `useActivityProjectRepoIds` returns its input untouched, and `ActivityProjectFilterSection` renders upstream's own section while `pilotStore()` is null.
 
 Which hook was added for the startup hang, and why:
 
