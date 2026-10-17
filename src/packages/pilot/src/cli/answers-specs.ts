@@ -28,7 +28,7 @@ export const ANSWERS_COMMAND_SPECS: CommandSpec[] = [
       'pilot action run --name push --args-json \'{"argv":["/wt/web-1493","web-1493-a","9c1e2f0","1a2b3c4"]}\' --dry-run'
     ],
     notes: [
-      "Inside a Pilot step, the step running in this terminal is the caller (PILOT_RUN_ID and PILOT_STEP_IDX are the fallback, only while that step is active); its run's powers apply. Outside a Pilot run it only dry-runs: approve actions in Pilot (Inbox), or run act.py directly.",
+      "Inside a Pilot step, the step running in this terminal is the caller (PILOT_RUN_ID and PILOT_STEP_IDX are the fallback, only while that step is active); its run's powers apply. Outside a Pilot run it only dry-runs: approve actions in Pilot (Inbox).",
       'Exit codes: done 0, failed 1, stale 3, needs_agent 4, not_yet 5, asked 6.'
     ]
   },

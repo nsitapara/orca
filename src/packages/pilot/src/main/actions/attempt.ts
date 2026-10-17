@@ -70,8 +70,7 @@ export const EXIT_CODES: Record<AttemptResult['outcome'], number> = {
   asked: 6
 }
 
-export const OUTSIDE_A_RUN =
-  'Outside a Pilot run, approve actions in Pilot (Inbox), or run act.py directly.'
+export const OUTSIDE_A_RUN = 'Outside a Pilot run, approve actions in Pilot (Inbox).'
 const NO_CARD = "An approval needs its card and the card's digest"
 
 function rowOf(req: AttemptRequest): Row {

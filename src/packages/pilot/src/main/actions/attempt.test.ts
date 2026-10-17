@@ -220,7 +220,7 @@ describe('attemptAction', () => {
     [
       'no run behind an unapproved attempt',
       { runId: null },
-      'Outside a Pilot run, approve actions in Pilot (Inbox), or run act.py directly.'
+      'Outside a Pilot run, approve actions in Pilot (Inbox).'
     ],
     ['a run Pilot has no record of', { runId: 'run-9' }, 'No run run-9']
   ])('refuses %s and runs nothing', async (_name, change, detail) => {
