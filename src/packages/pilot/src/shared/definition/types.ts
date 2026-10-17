@@ -19,7 +19,10 @@ export type MergeRequestWhere = {
   approved_by?: 'none' | PeopleRef
   target_branch?: string
 }
-export type WorktreeCommits = { ignore_trailer?: string; first_sight?: 'baseline' | 'test_recent' }
+export type WorktreeCommits = {
+  ignore_trailer?: string
+  first_sight?: 'baseline' | 'test_recent'
+}
 export type WorktreeWhere = {
   has_mr?: boolean
   mr_author?: PeopleRef
@@ -148,6 +151,8 @@ export type StepDef = {
 
 export type AnswersDef = {
   resume: 'asking_session' | 'never'
+  // never: an answer run keeps the job's env rules but starts no stack. Absent otherwise.
+  stack?: 'never'
   else: { agent: AgentKind; skill: string | null; mode: string | null } | null
 }
 

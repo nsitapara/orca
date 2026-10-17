@@ -68,6 +68,16 @@ describe('expression and step-reference validation', () => {
       ["steps[0].env.X: {steps.b.found} doesn't name an earlier step"]
     ],
     [
+      'an optional env placeholder on a later step',
+      `${BASE}steps:\n  - { name: a, agent: shell, run: ./x.sh, env: { X: "{steps.b.found?}" } }\n  - { name: b, agent: claude, prompt: y }\n`,
+      ["steps[0].env.X: {steps.b.found} doesn't name an earlier step"]
+    ],
+    [
+      'an optional env placeholder on an earlier step',
+      `${BASE}steps:\n  - { name: a, agent: claude, prompt: y }\n  - { name: b, agent: shell, run: ./x.sh, env: { X: "{steps.a.outcome?}" } }\n`,
+      []
+    ],
+    [
       'a when, a prompt and a run that read earlier steps',
       `${BASE}steps:\n  - { name: review, agent: claude, prompt: x }\n  - { name: fix, agent: claude, prompt: "Fix {steps.review.findings}", when: "{previous.changed} == true and {steps.review.exit_code} == null" }\n  - { agent: shell, run: ./notify.sh, env: { S: "{steps.fix.status} {run.id}" } }\n`,
       []
