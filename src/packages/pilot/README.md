@@ -347,6 +347,7 @@ Rulings:
 
 The calendar-clock icon in the right sidebar shows the active worktree's automations (`pilot.worktree.timeline`, polled every 15 s while shown):
 
+- **Header:** the worktree's name and its project, so it's clear which one the panel follows, and what was spent here today.
 - **Next:** each automation's last check on this worktree, with its reason and when it ticks again. The ones with nothing due fold away.
 - **Now** and **Earlier today:** the runs here. Each shows its status, cost and outcome, what it asked, and its steps on demand: agent or shell, mode, status, cost, outputs.
 - **Resume** on an agent step switches to its tab while it's open. Otherwise it reopens the session (`claude --resume <id>`, `codex resume <id>`) in a new tab in the worktree.
