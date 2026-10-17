@@ -11,7 +11,7 @@ export type CallerFolderDeps = {
   exists(path: string): boolean
 }
 
-// The repo when every automation names the same one (mark-ready.py and post-review.py had one fixed project).
+// The repo when every automation names the same one (mark-ready.py had one fixed project).
 function onlyRepo(definitions: readonly AutomationDefinition[]): string | null {
   const repos = new Set(definitions.map((d) => d.repo))
   return repos.size === 1 ? [...repos][0] : null
@@ -46,7 +46,7 @@ export function callerFolder(deps: CallerFolderDeps, caller: ActionCaller): stri
 }
 
 // Why an action can't run when callerFolder finds nothing: pilotcli would refuse the numeric iid, and that refusal must
-// not read as the card's own (post_review's invalid is stale), so the entry fails first.
+// not read as the card's own, so the entry fails first.
 export function noFolder(iid: string): string {
   return `no folder to run pilotcli in for !${iid}: the card's worktree is gone and Pilot lists no checkout of its repo`
 }

@@ -102,11 +102,10 @@ function pinnedHead(card: InboxItemRow): string | undefined {
   return typeof head === 'string' && /^[0-9a-f]{7,40}$/.test(head) ? head : undefined
 }
 
-// The preparation request for a card that needs evidence but was never prepared (an imported or legacy push, Post
-// or drafted card), built from the card itself in the intake's shape (pilot_bridge.preparation_request).
+// The preparation request for a card that needs evidence but was never prepared (an imported or legacy push or
+// drafted card), built from the card itself in the intake's shape (pilot_bridge.preparation_request).
 export function evidenceRequest(card: InboxItemRow): PreparationInput {
-  const requirements: PreparationInput['requirements'] =
-    card.action === 'post_review' ? ['context', 'review'] : ['context', 'diff', 'checks']
+  const requirements: PreparationInput['requirements'] = ['context', 'diff', 'checks']
   const request = {
     version: 1,
     ask: card.title,

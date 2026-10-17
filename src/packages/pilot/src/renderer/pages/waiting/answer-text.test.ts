@@ -172,7 +172,7 @@ describe('composeAnswer', () => {
 
   const pick = (item: InboxItemRow, label: string) =>
     choicesFor(item).find((c) => c.label === label)!
-  const POST = { ...PUSH, action: 'post_review', parts: { F1: 'Null check', F2: 'Naming' } }
+  const PARTS = { ...PUSH, parts: { F1: 'Null check', F2: 'Naming' } }
 
   it.each<[string, InboxItemRow, string, string, string[], unknown]>([
     ['Approve', PUSH, 'Approve', '', [], { option: 0, text: 'approve' }],
@@ -204,7 +204,7 @@ describe('composeAnswer', () => {
     ],
     [
       'some parts left out',
-      POST,
+      PARTS,
       'Approve',
       '',
       ['F2'],
@@ -212,13 +212,13 @@ describe('composeAnswer', () => {
     ],
     [
       'parts kept with a Keep switch',
-      { ...POST, switchWords: ['Delete', 'Keep'] },
+      { ...PARTS, switchWords: ['Delete', 'Keep'] },
       'Approve',
       '',
       ['F1'],
       { option: null, text: 'keep: F1' }
     ],
-    ['every part left out', POST, 'Approve', '', ['F1', 'F2'], { option: null, text: 'skip' }]
+    ['every part left out', PARTS, 'Approve', '', ['F1', 'F2'], { option: null, text: 'skip' }]
   ])('%s', (_name, item, label, notes, off, expected) => {
     expect(composeAnswer(item, pick(item, label), notes, off)).toEqual(expected)
   })

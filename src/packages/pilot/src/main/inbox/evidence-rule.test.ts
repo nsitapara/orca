@@ -19,19 +19,19 @@ import type { NewInboxItem } from '../store/store-inbox'
 import { addInboxItem } from './inbox-add'
 import { buildInboxDeps, listInbox } from './inbox-service'
 
-// R-P5: an evidence-needing decision (push, post_review, applying a drafted change) runs only from a prepared card
+// R-P5: an evidence-needing decision (push, applying a drafted change) runs only from a prepared card
 // whose preparation is ready. The rule reads the card, never who added it or how the caller is bound.
 type Callable = { name: string; handler(p: unknown, ctx?: { caller?: RpcCallerIdentity }): unknown }
 const ARGV = ['/wt', 'web-1', 'a'.repeat(40), 'b'.repeat(40)]
 
-function entry(name: string, power: 'push' | 'post'): ActionEntry {
+function pushEntry(): ActionEntry {
   return {
-    name,
-    power,
-    label: name,
-    usage: name,
+    name: 'push',
+    power: 'push',
+    label: 'push',
+    usage: 'push',
     checkArgs: () => null,
-    describe: async () => name,
+    describe: async () => 'push',
     run: vi.fn(async () => ({
       outcome: 'done' as const,
       detail: 'ran',
@@ -47,7 +47,7 @@ function setup() {
   writeFileSync(join(dir, 'people.yaml'), 'people:\n  - { id: nish, name: Nish }\n')
   writeFileSync(
     join(dir, 'ci.yaml'),
-    'name: ci\nrepo: r\nschedule: manual\nitems: { kind: merge_request }\nsteps: [ { agent: claude, prompt: x } ]\npowers: [push, post]\ninbox: nish\n'
+    'name: ci\nrepo: r\nschedule: manual\nitems: { kind: merge_request }\nsteps: [ { agent: claude, prompt: x } ]\npowers: [push]\ninbox: nish\n'
   )
   const loaded = loadDefinitions([dir])
   const store = PilotStore.open(join(dir, 'db.sqlite'))
@@ -60,7 +60,7 @@ function setup() {
     worktreePath: '/wt',
     startedAt: 1
   })
-  const entries = [entry('push', 'push'), entry('post_review', 'post')]
+  const entries = [pushEntry()]
   const actions = {
     entries: () => entries,
     get: (n: string) => entries.find((e) => e.name === n) ?? null
@@ -149,11 +149,9 @@ describe('R-P5 at add: a push or Post card comes with a preparation request, who
     ['a run-bound CLI', { kind: 'local-cli' }, { runId: 'run-1' }]
   ])('refuses %s', (_who, caller, target) => {
     const { store, callAs } = setup()
-    for (const action of ['push', 'post_review']) {
-      expect(() => callAs(caller, 'pilot.inbox.add', { ...PUSH, ...target, action })).toThrow(
-        `${action} needs prepared evidence`
-      )
-    }
+    expect(() => callAs(caller, 'pilot.inbox.add', { ...PUSH, ...target })).toThrow(
+      'push needs prepared evidence'
+    )
     expect(store.inbox.list()).toEqual([])
   })
 })
@@ -290,11 +288,6 @@ describe('a legacy evidence-needing card', () => {
 
   it.each<[string, Partial<NewInboxItem>, string[]]>([
     ['a push', {}, ['context', 'diff', 'checks']],
-    [
-      'a Post',
-      { action: 'post_review', actionArgs: { argv: ['1579', 'r.json', 'ab'] } },
-      ['context', 'review']
-    ],
     [
       'a drafted change',
       { type: 'bug', action: null, actionArgs: null, details: DRAFTED },

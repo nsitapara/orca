@@ -122,7 +122,7 @@ async function askFirst(
     const detail = `Would ask ${person ?? 'its person'} first: ${why}`
     return refused(deps, rowOf(req), args, { outcome: 'asked', detail, inboxItemId: null })
   }
-  // R-P5: push and post_review are only ever offered prepared, never as a card Pilot asks about itself.
+  // R-P5: push is only ever offered prepared, never as a card Pilot asks about itself.
   if (EVIDENCE_ACTIONS.has(entry.name)) {
     const detail = `${entry.name} needs prepared evidence: ${why}, and it is only ever offered as a prepared card`
     return refused(deps, rowOf(req), args, actionFailed(detail))

@@ -144,6 +144,8 @@ describe('planVaultImport', () => {
     expect(planVaultImport([row(over)], ctx()).items[0].answer).toMatchObject(answer as object)
   })
 
+  // post-review left the catalog (review-mr posts nothing since 2026-10-16): an old Post card imports as any unknown
+  // script's does.
   it("pins a push card's catalog action and arguments, and keeps an unknown script's card for the agent", () => {
     const plan = planVaultImport(
       [
@@ -153,18 +155,29 @@ describe('planVaultImport', () => {
           key: 'b'.repeat(16),
           summary: 'Remove?',
           run_command: 'remove-worktree /wt/x abc'
+        }),
+        row({
+          ...PUSH_ROW,
+          key: 'c'.repeat(16),
+          summary: 'Post?',
+          run_command: 'post-review 1579 r.json abc'
         })
       ],
       ctx()
     )
     expect(plan.items.map((i) => [i.params.action, i.params.actionArgs])).toEqual([
       ['push', { argv: ['/wt/a b', 'web-1', 'aaa', 'bbb'] }],
+      [undefined, undefined],
       [undefined, undefined]
     ])
     expect(plan.notes).toEqual([
       {
         id: vaultItemId(NOTE, 'b'.repeat(16)),
         note: "remove-worktree isn't in Pilot's catalog: Approve goes to the agent"
+      },
+      {
+        id: vaultItemId(NOTE, 'c'.repeat(16)),
+        note: "post-review isn't in Pilot's catalog: Approve goes to the agent"
       }
     ])
   })

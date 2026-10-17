@@ -102,7 +102,7 @@ const LIST: InboxListPayload = {
 const HELD: QueueEntry = {
   rowId: 1,
   itemId: 'in_x',
-  title: 'Post your review of !1588?',
+  title: 'Mark !1588 ready?',
   type: 'action',
   automationId: 'ci',
   automationName: 'Fix failed CI on my MRs',
@@ -114,7 +114,7 @@ const HELD: QueueEntry = {
   holdDetail: 'someone is typing in Claude · review',
   readyAt: 0,
   how: 'script',
-  fires: 'Run post_review; no agent',
+  fires: 'Run mark_ready; no agent',
   updatedAt: 0
 }
 
@@ -692,8 +692,6 @@ describe('Details on a card', () => {
             card({
               id: 'in_g',
               type: 'action',
-              action: 'post_review',
-              actionArgs: { argv: ['a'] },
               title: 'G',
               digest: 'dg1',
               details: REF,
