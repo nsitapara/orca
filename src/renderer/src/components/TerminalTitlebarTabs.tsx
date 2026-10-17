@@ -1,6 +1,7 @@
 import { createPortal } from 'react-dom'
 import type { TerminalTab } from '../../../shared/terminal-tab-types'
 import { useAppStore } from '../store'
+import { useActivityTabsTitlebarController } from '../../../packages/pilot/src/renderer/activity-tabs/activity-tabs-strips' // pilot-hook: activity-tabs-titlebar
 import TabBar from './tab-bar/TabBar'
 import type { TerminalController } from './use-terminal-controller'
 
@@ -57,7 +58,7 @@ export function TerminalTitlebarTabs({
     worktreeBrowserTabs,
     worktreeClientHostedBrowserRows,
     worktreeFiles
-  } = controller
+  } = useActivityTabsTitlebarController(controller) // pilot-hook: activity-tabs-titlebar
   if (!renderedActiveWorktreeId || effectiveActiveLayout || !titlebarTabsTarget) {
     return null
   }
