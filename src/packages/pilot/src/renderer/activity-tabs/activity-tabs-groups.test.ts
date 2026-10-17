@@ -67,7 +67,8 @@ const ROWS: ActivityTabsRow[] = [
       key: 'c-key',
       worktree: makeWorktreeWithId('wt-c'),
       repo: makeRepo(),
-      openTabCount: 0
+      openTabCount: 0,
+      pinned: false
     }
   }
 ]
@@ -149,5 +150,33 @@ describe('mergeRowsIntoGroups', () => {
       'r:c-key'
     ])
     expect(withActivityTabsCount(1, groups)).toBe(4)
+  })
+  it('puts pinned worktrees’ groups first, and a pinned worktree’s row under Pinned', () => {
+    const groupKeys = (groupBy: ActivityGroupBy, rows: ActivityTabsRow[]) =>
+      mergeRowsIntoGroups(buildActivityThreadGroups([agent], groupBy), rows, groupBy, ['wt-c']).map(
+        (group) => group.key
+      )
+    expect(groupKeys('worktree', ROWS)).toEqual(['worktree:wt-c', 'worktree:wt-a', 'worktree:wt-b'])
+    expect(groupKeys('worktree', [])).toEqual(['worktree:wt-a'])
+    const pinnedRow: ActivityTabsRow = {
+      kind: 'recent-worktree',
+      recent: {
+        key: 'c-key',
+        worktree: makeWorktreeWithId('wt-c'),
+        repo: makeRepo(),
+        openTabCount: 0,
+        pinned: true
+      }
+    }
+    expect(groupKeys('status', [pinnedRow])).toEqual(['done', 'pilot:pinned-worktrees'])
+  })
+  it('orders worktree groups by pin and name only, whatever order upstream gave them', () => {
+    const group = (id: string) => ({ key: `worktree:${id}`, label: id, threads: [] })
+    const upstream = [group('wt-z'), group('WT-m'), group('wt-a')]
+    const keys = (groupBy: ActivityGroupBy, pinned: string[]) =>
+      mergeRowsIntoGroups(upstream, [], groupBy, pinned).map((g) => g.key)
+    expect(keys('worktree', [])).toEqual(['worktree:wt-a', 'worktree:WT-m', 'worktree:wt-z'])
+    expect(keys('worktree', ['wt-z'])).toEqual(['worktree:wt-z', 'worktree:wt-a', 'worktree:WT-m'])
+    expect(keys('status', ['wt-z'])).toEqual(['worktree:wt-z', 'worktree:WT-m', 'worktree:wt-a'])
   })
 })

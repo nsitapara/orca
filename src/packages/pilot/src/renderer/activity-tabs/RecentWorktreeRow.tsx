@@ -1,4 +1,4 @@
-import { FolderGit2 } from 'lucide-react'
+import { FolderGit2, Pin } from 'lucide-react'
 import { toast } from 'sonner'
 import { formatRelativeTime } from '@/components/activity/activity-thread-presentation'
 import { getActivityThreadWorkspaceTitle } from '@/lib/activity-thread-display'
@@ -44,8 +44,11 @@ export function RecentWorktreeRow({ item }: { item: RecentWorktreeItem }): React
         <span className="truncate text-[13px] font-medium leading-5 text-muted-foreground">
           {label}
         </span>
-        <span className="truncate text-2xs text-muted-foreground" title={workspaceLabel}>
-          {workspaceLabel} · active {formatRelativeTime(item.worktree.lastActivityAt)}
+        <span className="flex min-w-0 items-center gap-1 text-2xs text-muted-foreground">
+          <span className="min-w-0 truncate" title={workspaceLabel}>
+            {workspaceLabel} · active {formatRelativeTime(item.worktree.lastActivityAt)}
+          </span>
+          {item.pinned ? <Pin className="size-2.5 shrink-0" aria-label="Pinned" /> : null}
         </span>
       </div>
       <NewAgentMenu worktreeId={item.worktree.id} />
