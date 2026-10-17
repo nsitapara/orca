@@ -89,6 +89,7 @@ async function probeLocal(
     return {
       entry: {
         ...LOCAL_PILOT_HOST,
+        machineName: status.machineName ?? LOCAL_PILOT_HOST.machineName,
         schedulerOn: status.schedulerOn ?? null,
         dataPath: status.dataPath ?? null
       },

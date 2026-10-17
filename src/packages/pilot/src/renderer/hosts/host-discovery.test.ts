@@ -166,6 +166,18 @@ describe('discoverPilotHosts', () => {
     expect(hosts.map((h) => h.key)).toEqual(['local', 'env:mini', 'env:self'])
   })
 
+  it("gives this machine's entry its real name once its probe answers", async () => {
+    const { value } = deps([MINI_ENV], { mini: status('Mac mini') }, {})
+    const [local] = await discoverPilotHosts(value)
+    expect(local.machineName).toBe('MacBook')
+    expect(local.local).toBe(true)
+  })
+
+  it('keeps the fallback name when this machine is not probed', async () => {
+    const { value } = deps([], {}, {})
+    expect((await discoverPilotHosts(value))[0].machineName).toBe('This machine')
+  })
+
   it('keeps environments in store order', async () => {
     const { value } = deps(
       [MINI_ENV, SELF_ENV],
