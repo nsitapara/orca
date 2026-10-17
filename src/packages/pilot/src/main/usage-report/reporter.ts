@@ -13,7 +13,7 @@ export type ReporterDeps = {
   store: PilotStore
   automations: () => { id: string; name: string }[]
   dir: string
-  templatePath: string
+  templatePath: string | null
   now: () => number
   log: (message: string) => void
 }
@@ -47,19 +47,20 @@ function messageOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
 }
 
-// The reporter as Pilot runs it: job 08's folder and its HTML template.
+// The reporter as Pilot runs it: job 08's folder and the HTML page in Pilot's resources (none in orcad).
 export function usageReporter(
   store: PilotStore,
-  automations: ReporterDeps['automations'],
+  definitions: { current(): { definitions: { id: string; name: string }[] } },
   now: () => number,
-  log: (message: string) => void
+  log: (message: string) => void,
+  resourcesDir: string | undefined
 ): UsageReporter {
   const dir = pilotUsageReportDir()
   return createUsageReporter({
     store,
-    automations,
+    automations: () => definitions.current().definitions,
     dir,
-    templatePath: pilotUsageTemplate(),
+    templatePath: pilotUsageTemplate(process.env, resourcesDir ?? null),
     now,
     log
   })

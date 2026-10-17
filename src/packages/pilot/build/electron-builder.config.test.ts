@@ -29,6 +29,13 @@ describe('Pilot electron-builder wrapper', () => {
     expect(resources.some((r: string) => r.startsWith('resources/darwin/bin/orca '))).toBe(false)
   })
 
+  it("ships Pilot's resources folder where pilotResourcesDir reads it", () => {
+    expect(config.mac.extraResources).toContainEqual({
+      from: 'src/packages/pilot/resources',
+      to: 'pilot'
+    })
+  })
+
   it("ships no Computer Use helper, which would share Orca's bundle id", () => {
     const entries = config.mac.extraResources.map((r: { from?: string; to?: string } | string) =>
       JSON.stringify(r)

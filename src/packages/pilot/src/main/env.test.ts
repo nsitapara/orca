@@ -1,7 +1,10 @@
+import { existsSync } from 'node:fs'
+import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import {
   pilotDataDir,
   pilotDetailsRoot,
+  pilotResourcesDir,
   pilotSchedulerEnabled,
   pilotUsageReportDir,
   pilotUsageTemplate,
@@ -81,15 +84,48 @@ describe('pilotDetailsRoot', () => {
 })
 
 describe('usage report locations', () => {
-  it.each([
+  it.each<[NodeJS.ProcessEnv, string | null, string, string | null]>([
     [
       {},
+      '/res/pilot',
       '/h/Documents/WebPortal/Agent Work/Automations/08 · Tally token usage by job',
-      '/h/.agents/skills/worktree-gate/usage_report.html'
+      '/res/pilot/usage_report.html'
     ],
-    [{ PILOT_USAGE_REPORT_DIR: '~/r', PILOT_USAGE_TEMPLATE: '/t.html' }, '/h/r', '/t.html']
-  ])('%o', (env, dir, template) => {
+    [{}, null, '/h/Documents/WebPortal/Agent Work/Automations/08 · Tally token usage by job', null],
+    [
+      { PILOT_USAGE_REPORT_DIR: '~/r', PILOT_USAGE_TEMPLATE: '~/t.html' },
+      '/res/pilot',
+      '/h/r',
+      '/h/t.html'
+    ]
+  ])('%o with resources %s', (env, resources, dir, template) => {
     expect(pilotUsageReportDir(env, '/h')).toBe(dir)
-    expect(pilotUsageTemplate(env, '/h')).toBe(template)
+    expect(pilotUsageTemplate(env, resources, '/h')).toBe(template)
+  })
+})
+
+describe('pilotResourcesDir', () => {
+  it.each([
+    [
+      { packaged: true, resourcesPath: '/P.app/Contents/Resources', appPath: '/x' },
+      '/P.app/Contents/Resources/pilot'
+    ],
+    [
+      { packaged: false, resourcesPath: '/r', appPath: '/repo' },
+      '/repo/src/packages/pilot/resources'
+    ],
+    [
+      { packaged: true, resourcesPath: undefined, appPath: '/repo' },
+      '/repo/src/packages/pilot/resources'
+    ]
+  ])('%j → %s', (opts, expected) => expect(pilotResourcesDir(opts)).toBe(expected))
+
+  it('holds the token report page in the repo', () => {
+    const dir = pilotResourcesDir({
+      packaged: false,
+      resourcesPath: undefined,
+      appPath: process.cwd()
+    })
+    expect(existsSync(join(dir, 'usage_report.html'))).toBe(true)
   })
 })

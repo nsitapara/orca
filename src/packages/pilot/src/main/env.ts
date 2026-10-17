@@ -120,14 +120,31 @@ export function pilotUsageReportDir(
   )
 }
 
-// usage.py's HTML report, copied beside the data as Token usage.html.
+const DEV_RESOURCES = 'src/packages/pilot/resources'
+
+// Pilot's own static files: Contents/Resources/pilot when packaged (electron-builder.config.cjs ships them there),
+// else the repo's src/packages/pilot/resources.
+export function pilotResourcesDir(opts: {
+  packaged: boolean
+  resourcesPath: string | undefined
+  appPath: string
+}): string {
+  if (opts.packaged && typeof opts.resourcesPath === 'string') {
+    return join(opts.resourcesPath, 'pilot')
+  }
+  return join(opts.appPath, DEV_RESOURCES)
+}
+
+// The token report's HTML page, copied beside the data as Token usage.html. Null where Pilot has no resources folder
+// (orcad) and PILOT_USAGE_TEMPLATE names none: the report is then written without its page.
 export function pilotUsageTemplate(
   env: NodeJS.ProcessEnv = process.env,
+  resourcesDir: string | null = null,
   home: string = homedir()
-): string {
+): string | null {
   const raw = env.PILOT_USAGE_TEMPLATE?.trim()
   if (raw) {
     return expandHome(raw, home)
   }
-  return join(home, '.agents', 'skills', 'worktree-gate', 'usage_report.html')
+  return resourcesDir === null ? null : join(resourcesDir, 'usage_report.html')
 }

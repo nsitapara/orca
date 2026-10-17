@@ -88,8 +88,12 @@ function assertReportFolder(dir: string): void {
 }
 
 // usage.py write_data: usage.json (indent 1), the same JSON as usage-data.js for the page opened from disk,
-// usage.csv, and the HTML report copied from its template.
-export function writeReportFiles(dir: string, report: UsageReport, templatePath: string): string[] {
+// usage.csv, and the HTML report copied from its template (none without one).
+export function writeReportFiles(
+  dir: string,
+  report: UsageReport,
+  templatePath: string | null
+): string[] {
   assertReportFolder(dir)
   mkdirSync(dir, { recursive: true })
   const text = JSON.stringify(report, null, 1)
@@ -100,7 +104,7 @@ export function writeReportFiles(dir: string, report: UsageReport, templatePath:
   writeTextAtomic(js, `window.USAGE_DATA = ${text};\n`)
   writeTextAtomic(csv, usageCsv(report.rows))
   const written = [json, js, csv]
-  if (existsSync(templatePath)) {
+  if (templatePath !== null && existsSync(templatePath)) {
     const html = join(dir, REPORT_FILES.html)
     writeAtomic(html, (tmp) => copyFileSync(templatePath, tmp))
     written.push(html)
