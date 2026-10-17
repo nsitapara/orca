@@ -7,7 +7,7 @@ import { resetPilotHostsFeed, setPilotHostsForTests } from './pilot-hosts-feed'
 const pilotRpc = vi.fn()
 vi.mock('../api', () => ({ pilotRpc: (...args: unknown[]) => pilotRpc(...args) }))
 
-import { createHostPoller, useHostPoll, type HostPoller } from './host-poll'
+import { createHostPoller, useHostPoll, type HostPoller, type HostRead } from './host-poll'
 
 const POLL_MS = 10_000
 let poller: HostPoller<unknown> | null = null
@@ -24,6 +24,9 @@ function poll(opts: { skipHidden?: boolean } = {}): HostPoller<unknown> {
 
 const readOf = (p: HostPoller<unknown>, key: string) => p.reads().find((r) => r.host.key === key)
 const flush = () => vi.advanceTimersByTimeAsync(0)
+// The caller's rule from HostRead: boundary = startedSeq when the caller made its change.
+const freshPast = (read: HostRead<unknown> | undefined, boundary: number) =>
+  read !== undefined && read.seq > boundary && read.error === null
 
 function asked(hostKey: string): number {
   return pilotRpc.mock.calls.filter(
@@ -139,6 +142,48 @@ describe('createHostPoller', () => {
     expect(p.reads()).toMatchObject([{ value: 'second', error: null, seq: 2 }])
   })
 
+  it('a read in flight at a change is never fresh past it, and the next read is', async () => {
+    setPilotHostsForTests([LOCAL_NAMED])
+    const inFlight = deferred<string>()
+    const answers = [Promise.resolve('before'), inFlight.promise, Promise.resolve('after')]
+    pilotRpc.mockImplementation(() => answers.shift())
+    const p = poll()
+    await p.refresh()
+    await vi.advanceTimersByTimeAsync(POLL_MS)
+    const boundary = p.reads()[0]?.startedSeq ?? 0
+    inFlight.resolve('old limit')
+    await flush()
+    expect(p.reads()[0]).toMatchObject({ value: 'old limit', seq: 2, startedSeq: 2 })
+    expect(freshPast(p.reads()[0], boundary)).toBe(false)
+    await vi.advanceTimersByTimeAsync(POLL_MS)
+    expect(p.reads()[0]?.value).toBe('after')
+    expect(freshPast(p.reads()[0], boundary)).toBe(true)
+  })
+
+  it('a failed read is never fresh past a change', async () => {
+    setPilotHostsForTests([LOCAL_NAMED])
+    pilotRpc.mockResolvedValueOnce('before').mockRejectedValueOnce(new Error('timeout'))
+    const p = poll()
+    await p.refresh()
+    const boundary = p.reads()[0]?.startedSeq ?? 0
+    await p.refresh()
+    expect(p.reads()[0]).toMatchObject({ value: 'before', error: 'timeout', seq: 2 })
+    expect(freshPast(p.reads()[0], boundary)).toBe(false)
+  })
+
+  it('a host that drops and comes back continues its read numbers', async () => {
+    setPilotHostsForTests([LOCAL_NAMED, MINI])
+    pilotRpc.mockImplementation(byHost({ local: () => 'l', mini: () => 'm' }))
+    const p = poll()
+    await p.refresh()
+    await p.refresh()
+    setPilotHostsForTests([LOCAL_NAMED, MINI_OFFLINE])
+    setPilotHostsForTests([LOCAL_NAMED, MINI])
+    expect(readOf(p, 'env:mini')).toMatchObject({ value: null, seq: 2, startedSeq: 3 })
+    await flush()
+    expect(readOf(p, 'env:mini')).toMatchObject({ value: 'm', seq: 3, startedSeq: 3 })
+  })
+
   it.each([
     ['skips', true, 0],
     ['keeps', false, 1]
@@ -153,7 +198,7 @@ describe('createHostPoller', () => {
 })
 
 describe('useHostPoll', () => {
-  it('polls while mounted, and again only when the params change', async () => {
+  it("polls while mounted, and again only when the params change, showing the new poll's pending reads at once", async () => {
     setPilotHostsForTests([LOCAL_NAMED])
     pilotRpc.mockImplementation(
       async (_method: string, params: { person: string }) => params.person
@@ -168,6 +213,7 @@ describe('useHostPoll', () => {
     await act(() => flush())
     expect(hook.result.current.reads.map((r) => r.value)).toEqual(['nish'])
     hook.rerender({ person: 'emil' })
+    expect(hook.result.current.reads.map((r) => r.value)).toEqual([null])
     await act(() => flush())
     expect(hook.result.current.reads.map((r) => r.value)).toEqual(['emil'])
     expect(pilotRpc.mock.calls).toStrictEqual([

@@ -4,13 +4,13 @@ import { hostRpc } from './host-rpc'
 import type { PilotHostEntry } from './pilot-host'
 import { currentPilotHosts, subscribePilotHosts } from './pilot-hosts-feed'
 
-// seq numbers a host's reads at their start and names the one that last settled (0: none yet).
-// A failed read keeps the older value, so `error` set means `value` predates read `seq`.
+// Numbered at start; a value is fresh past a change only if seq > startedSeq-at-change && error === null.
 export type HostRead<T> = {
   host: PilotHostEntry
   value: T | null
   error: string | null
   seq: number
+  startedSeq: number
 }
 
 export type HostPoller<T> = {
@@ -84,15 +84,14 @@ export function createHostPoller<T>(opts: HostPollerOptions): HostPoller<T> {
 
   function settle(slot: Slot<T>, seq: number, answer: Answer<T>): void {
     slot.inFlight = null
-    // A dropped host's late answer is never shown as current.
+    // Keeps onChange quiet after stop(); a dropped slot is already out of the snapshot.
     if (!isCurrent(slot)) {
       return
     }
-    const { host, value } = slot.read
     slot.read =
       'error' in answer
-        ? { host, value, error: answer.error, seq }
-        : { host, value: answer.value, error: null, seq }
+        ? { ...slot.read, error: answer.error, seq }
+        : { ...slot.read, value: answer.value, error: null, seq }
     notify()
   }
 
@@ -100,6 +99,7 @@ export function createHostPoller<T>(opts: HostPollerOptions): HostPoller<T> {
     const key = slot.read.host.key
     const seq = (seqs.get(key) ?? 0) + 1
     seqs.set(key, seq)
+    slot.read = { ...slot.read, startedSeq: seq }
     const done = answerOf(slot.read.host).then((answer) => settle(slot, seq, answer))
     slot.inFlight = done
     return done
@@ -113,7 +113,11 @@ export function createHostPoller<T>(opts: HostPollerOptions): HostPoller<T> {
       return
     }
     // A read started since this refresh was asked (another refresh's) answers it too.
-    await (slot.inFlight ?? read(slot))
+    if (!slot.inFlight) {
+      void read(slot)
+      notify()
+    }
+    await slot.inFlight
   }
 
   function sync(): Slot<T>[] {
@@ -128,7 +132,9 @@ export function createHostPoller<T>(opts: HostPollerOptions): HostPoller<T> {
     for (const host of online) {
       const slot = slots.get(host.key)
       if (!slot) {
-        const fresh: Slot<T> = { read: { host, value: null, error: null, seq: 0 }, inFlight: null }
+        const last = seqs.get(host.key) ?? 0
+        const pending: HostRead<T> = { host, value: null, error: null, seq: last, startedSeq: last }
+        const fresh: Slot<T> = { read: pending, inFlight: null }
         slots.set(host.key, fresh)
         added.push(fresh)
       } else if (!sameHost(slot.read.host, host)) {
@@ -148,6 +154,7 @@ export function createHostPoller<T>(opts: HostPollerOptions): HostPoller<T> {
         void read(slot)
       }
     }
+    notify()
   }
 
   // Construction stays silent: the caller reads reads() itself, and its first refresh() asks.
