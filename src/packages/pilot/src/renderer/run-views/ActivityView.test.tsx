@@ -226,4 +226,15 @@ describe('ActivityView on more than one machine', () => {
     expect(within(running).getByText('!1561 web-1')).toBeTruthy()
     expect(screen.queryByText('timed out')).toBeNull()
   })
+
+  it('names the machine on a tick line that started no runs', async () => {
+    setPilotHostsForTests([LOCAL_NAMED, MINI])
+    const quiet = { ...payload.ticks[0], id: 12, counts: {}, runs: [] }
+    pilotRpc.mockImplementation(
+      byHost({ local: machine(payload), mini: machine({ ...payload, live: [], ticks: [quiet] }) })
+    )
+    render(<ActivityView automationIds={null} since={0} limit={100} />)
+    const line = within((await screen.findByText('Tick 12')).closest('li')!)
+    expect(line.getByText('Mac mini')).toBeTruthy()
+  })
 })

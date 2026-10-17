@@ -3,6 +3,8 @@ import { Badge } from '@/components/ui/badge'
 import type { ActivityTick, AutomationSummary } from '../../shared/api-types'
 import { handoverActivityLines } from '../../shared/handover-text'
 import { checkNamesOf } from '../../shared/run-views/chain'
+import { MachineChip } from '../hosts/MachineChip'
+import { hostOf, type PilotHostRef } from '../hosts/pilot-host'
 import { CheckTable } from '../pages/CheckTable'
 import { checkedItems, clockTime, tickLine } from '../pages/format'
 import { fieldsOf, jobCode } from './activity-groups'
@@ -61,7 +63,8 @@ export function TickLine({
   tag,
   onTag
 }: {
-  tick: ActivityTick
+  // An untagged tick is this machine's.
+  tick: ActivityTick & { host?: PilotHostRef }
   byId: Map<string, AutomationSummary>
   tag?: string
   onTag?: () => void
@@ -79,6 +82,7 @@ export function TickLine({
         </span>
         {tag ? <StageTag tag={tag} onOpen={onTag} /> : null}
         <span>{`Tick ${tick.id}`}</span>
+        <MachineChip host={hostOf(tick)} />
       </div>
       <div className="text-sm">{tickLine(tick)}</div>
       {handoverActivityLines(tick).map((line) => (
