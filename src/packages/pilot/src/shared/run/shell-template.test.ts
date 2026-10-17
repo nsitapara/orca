@@ -72,10 +72,7 @@ describe('renderShellEnv', () => {
   })
 
   it('keeps failing a missing value without the ?, next to an optional one', () => {
-    expect(renderShellEnv({ A: '{a.b} {c.d?}' }, {})).toEqual({
-      ok: false,
-      missing: ['a.b']
-    })
+    expect(renderShellEnv({ A: '{a.b} {c.d?}' }, {})).toEqual({ ok: false, missing: ['a.b'] })
   })
 
   it('fails naming every missing value', () => {

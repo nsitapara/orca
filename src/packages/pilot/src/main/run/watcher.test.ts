@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 import type { OrcaRuntimeService } from '../../../../../main/runtime/orca-runtime'
+import { stepFields } from '../../shared/template'
 import { PilotStore } from '../store/store'
 import {
   pollRunningSteps,
@@ -170,6 +171,25 @@ describe('pollRunningSteps', () => {
     await pollRunningSteps(store, probe(state), noCost, () => 1 + elapsed, h)
     expect(store.runs.steps('run-1')[0]).toMatchObject({ status, ...(error ? { error } : {}) })
     expect(h.closeTerminal).toHaveBeenCalledTimes(status === 'timed_out' ? 1 : 0)
+  })
+
+  it('keeps the outputs set with pilot run output when the step times out, and a later step reads them', async () => {
+    const store = storeWithRunningStep()
+    store.advance.mergeStepOutputs('run-1', 0, { outcome: 'bug', page: 'p1' })
+    await pollRunningSteps(
+      store,
+      probe('working'),
+      noCost,
+      () => 1 + HOUR,
+      hooks({ timeoutOf: () => HOUR })
+    )
+    const rows = store.runs.steps('run-1')
+    expect(rows[0]).toMatchObject({ status: 'timed_out', outputs: { outcome: 'bug', page: 'p1' } })
+    expect(stepFields(rows, 1)).toMatchObject({
+      'steps.step1.status': 'timed_out',
+      'steps.step1.outcome': 'bug',
+      'steps.step1.page': 'p1'
+    })
   })
 
   it('never times out a step that has no timeout', async () => {

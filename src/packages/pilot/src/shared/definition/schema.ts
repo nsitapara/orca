@@ -46,24 +46,14 @@ const check = z.union(
         session: percent.optional()
       })
     }),
-    z.strictObject({
-      mr: z.enum(['not_approved', 'not_merged', 'mine', 'not_draft'])
-    }),
-    z.strictObject({
-      window: z.string().regex(/^\d\d:\d\d-\d\d:\d\d$/, 'expected "HH:MM-HH:MM"')
-    }),
+    z.strictObject({ mr: z.enum(['not_approved', 'not_merged', 'mine', 'not_draft']) }),
+    z.strictObject({ window: z.string().regex(/^\d\d:\d\d-\d\d:\d\d$/, 'expected "HH:MM-HH:MM"') }),
     z.strictObject({ answers: z.literal('none_pending') }),
     z.strictObject({
-      field: z.strictObject({
-        expr: z.string().min(1),
-        reason: z.string().min(1)
-      })
+      field: z.strictObject({ expr: z.string().min(1), reason: z.string().min(1) })
     }),
     z.strictObject({
-      check: z.strictObject({
-        run: z.string().min(1),
-        timeout: durationSchema.optional()
-      })
+      check: z.strictObject({ run: z.string().min(1), timeout: durationSchema.optional() })
     })
   ],
   {
