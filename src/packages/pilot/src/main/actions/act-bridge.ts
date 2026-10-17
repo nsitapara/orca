@@ -2,7 +2,7 @@ import { runProcess } from '@orca/process-host'
 import { engineChildEnv, type EngineEnv } from '../engine-env'
 
 // What is left of the act.py bridge since its catalog entries moved to pilotcli (milestone 8): the action timeout
-// push, mark_ready and post_review share, and the vault reader's way to spawn Pilot's Python helpers.
+// push and mark_ready share, and the vault reader's way to spawn Pilot's Python helpers.
 
 export type ProcessResultLike = {
   code: number | null

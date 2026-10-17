@@ -26,7 +26,6 @@ export type FakeVerb =
   | 'gitlab-get-mr'
   | 'gitlab-check-mr'
   | 'gitlab-update-mr'
-  | 'gitlab-create-thread'
 export type FakePilotcli = {
   bin: string
   dir: string

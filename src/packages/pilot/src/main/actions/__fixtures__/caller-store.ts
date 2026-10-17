@@ -6,7 +6,7 @@ import { addInboxItem } from '../../inbox/inbox-add'
 import type { InboxDeps } from '../../inbox/inbox-service'
 import { PilotStore } from '../../store/store'
 
-// Tests only: a store with the automations a mark_ready or post_review card can sit beside, and their runs and cards.
+// Tests only: a store with the automations a mark_ready card can sit beside, and their runs and cards.
 function definition(id: string, name: string, kind: string): AutomationDefinition {
   const parsed = parseAutomationYaml(
     `name: "${name}"\nrepo: web-platform\nschedule: manual\nitems: { kind: ${kind} }\nsteps: [ { agent: claude, prompt: x } ]\ninbox: nish\n`,

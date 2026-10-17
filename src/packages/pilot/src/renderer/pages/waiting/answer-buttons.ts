@@ -68,7 +68,7 @@ function recommendedOf(item: InboxListRow, choice: Choice, role: ButtonRole): bo
 
 // One button per choice of the old radio list (choicesFor), so each saves exactly the answer that choice
 // always saved: the same option index and words, through composeAnswer.
-// A card nothing may run from yet: preparing, or (R-P5) a push, Post or drafted card that was never prepared.
+// A card nothing may run from yet: preparing, or (R-P5) a push or drafted card that was never prepared.
 function heldForEvidence(item: InboxListRow): boolean {
   if (item.needsEvidence) {
     return true
