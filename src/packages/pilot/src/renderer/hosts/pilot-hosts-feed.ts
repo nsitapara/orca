@@ -47,8 +47,17 @@ function signatureOf(): string {
     .join('|')
 }
 
+function sameEntry(a: PilotHostEntry, b: PilotHostEntry): boolean {
+  return a.key === b.key && JSON.stringify(a) === JSON.stringify(b)
+}
+
+// An unchanged machine keeps its entry object, so what is keyed on a host doesn't redo its work on every probe.
 function publish(next: readonly PilotHostEntry[]): void {
-  hosts = next
+  const kept = next.map((entry) => hosts.find((h) => sameEntry(h, entry)) ?? entry)
+  if (kept.length === hosts.length && kept.every((entry, i) => entry === hosts[i])) {
+    return
+  }
+  hosts = kept
   listeners.forEach((listener) => listener())
 }
 

@@ -7,6 +7,7 @@ import { LOCAL_PILOT_HOST } from './pilot-host'
 import {
   contactOf,
   currentPilotHosts,
+  HOSTS_POLL_MS,
   resetPilotHostsFeed,
   subscribePilotHosts
 } from './pilot-hosts-feed'
@@ -110,6 +111,54 @@ describe('pilot hosts feed', () => {
       target: { kind: 'environment', environmentId: 'b' },
       timeoutMs: 5_000
     })
+    unsubscribe()
+  })
+})
+
+describe('pilot hosts feed refreshes', () => {
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  const engine = (machineName: string): PilotStatus => ({
+    version: '1',
+    process: 'main',
+    dataPath: `/data/${machineName}`,
+    machineName,
+    schedulerOn: true,
+    automationDirs: [],
+    missingDirs: [],
+    peopleError: null,
+    error: null,
+    loopStartedAt: null,
+    lastLoopFinishedAt: null,
+    orcaAutomationsOff: true
+  })
+
+  it.each([
+    ['finds nothing changed: the same entries, and no one told', 'mini', false],
+    ['finds a machine renamed: a new entry for it alone, and listeners told', 'Mac mini', true]
+  ])('a refresh that %s', async (_w, renamed, changed) => {
+    vi.useFakeTimers()
+    // Each probe asks this machine first, then environment a.
+    vi.mocked(pilotRpc)
+      .mockResolvedValueOnce(engine('MacBook'))
+      .mockResolvedValueOnce(engine('mini'))
+      .mockResolvedValueOnce(engine('MacBook'))
+      .mockResolvedValueOnce(engine(renamed))
+    registerPilotStore(fakeStore({ runtimeEnvironments: [{ id: 'a', name: 'A' }] }))
+    const listener = vi.fn()
+    const unsubscribe = subscribePilotHosts(listener)
+    await vi.advanceTimersByTimeAsync(0)
+    const before = currentPilotHosts()
+    listener.mockClear()
+    await vi.advanceTimersByTimeAsync(HOSTS_POLL_MS)
+    const after = currentPilotHosts()
+    expect(pilotRpc).toHaveBeenCalledTimes(4)
+    expect(listener).toHaveBeenCalledTimes(Number(changed))
+    expect(after[0]).toBe(before[0])
+    expect(after[1] === before[1]).toBe(!changed)
+    expect(after.map((h) => h.machineName)).toEqual(['MacBook', renamed])
     unsubscribe()
   })
 })

@@ -2,8 +2,13 @@
 import { act, cleanup, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { Effect } from '../../shared/visibility-types'
-import { byHost, MINI } from '../hosts/__fixtures__/hosts'
+import { byHost, LOCAL_NAMED, MINI } from '../hosts/__fixtures__/hosts'
 import type { PilotHostRef } from '../hosts/pilot-host'
+import {
+  resetPilotHostsFeed,
+  setPilotHostsForTests,
+  usePilotHosts
+} from '../hosts/pilot-hosts-feed'
 
 const pilotRpc = vi.fn()
 vi.mock('../api', () => ({ pilotRpc: (...args: unknown[]) => pilotRpc(...args) }))
@@ -32,10 +37,17 @@ function Probe({
   return <span data-testid={name}>{effects === null ? 'none' : String(effects.length)}</span>
 }
 
+// A run on the last listed machine, as the Running page shows each machine's runs.
+function ListedProbe(): React.JSX.Element {
+  const hosts = usePilotHosts()
+  return <Probe id="r1" host={hosts.at(-1)} />
+}
+
 describe('useRunEffects', () => {
   afterEach(() => {
     cleanup()
     resetEffectsFeed()
+    resetPilotHostsFeed()
     pilotRpc.mockReset()
     vi.useRealTimers()
   })
@@ -139,5 +151,16 @@ describe('useRunEffects', () => {
       '1',
       'none'
     ])
+  })
+
+  it('asks no machine again when the listed machines refresh unchanged', async () => {
+    // Each refresh brings new objects with the same data, as a hosts probe does.
+    setPilotHostsForTests([{ ...LOCAL_NAMED }, { ...MINI }])
+    pilotRpc.mockResolvedValue({})
+    render(<ListedProbe />)
+    await act(async () => {})
+    act(() => setPilotHostsForTests([{ ...LOCAL_NAMED }, { ...MINI }]))
+    await act(async () => {})
+    expect(pilotRpc).toHaveBeenCalledTimes(1)
   })
 })
