@@ -24,7 +24,17 @@ describe('envCreateArgs', () => {
       wt(),
       null,
       false,
-      [...head, '--worktree', '/wt/a', '--writes', '--stack', 'when-backend', '--format', 'json']
+      [
+        ...head,
+        '--worktree',
+        '/wt/a',
+        '--writes',
+        'true',
+        '--stack',
+        'when-backend',
+        '--format',
+        'json'
+      ]
     ],
     [
       'held: --throwaway with the reason',
@@ -36,6 +46,7 @@ describe('envCreateArgs', () => {
         '--worktree',
         '/wt/a',
         '--writes',
+        'true',
         '--stack',
         'when-backend',
         '--throwaway',
@@ -56,6 +67,7 @@ describe('envCreateArgs', () => {
         '--at',
         'abc',
         '--writes',
+        'true',
         '--stack',
         'when-backend',
         '--format',
@@ -91,6 +103,7 @@ describe('envCreateArgs', () => {
         '--from',
         'origin/dev',
         '--keep',
+        'true',
         '--stack',
         'full',
         '--format',
@@ -107,6 +120,7 @@ describe('envCreateArgs', () => {
         '--worktree',
         '/wt/a',
         '--writes',
+        'true',
         '--stack',
         'when-backend',
         '--dry-run',
@@ -126,6 +140,7 @@ describe('envCreateArgs', () => {
       'delete',
       'r-1',
       '--keep-folder',
+      'true',
       '--format',
       'json'
     ])

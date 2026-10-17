@@ -312,6 +312,7 @@ describe('the hold on the item’s worktree', () => {
       '--worktree',
       '/wt/a',
       '--writes',
+      'true',
       '--stack',
       'when-backend',
       '--format',
