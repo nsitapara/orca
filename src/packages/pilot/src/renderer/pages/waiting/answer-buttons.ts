@@ -143,7 +143,12 @@ export function buttonsFor(item: InboxListRow): AnswerButton[] {
 
 // What a saved answer will do, and the words for while it is being applied.
 export function answeredLine(item: InboxListRow): Words {
-  const text = (item.answer?.text ?? '').trim()
+  return answerWords(item, item.answer?.text ?? '')
+}
+
+// What an answer's words do on this card ("approve" is its Approve button's label).
+export function answerWords(item: InboxListRow, said: string): Words {
+  const text = said.trim()
   const lower = text.toLowerCase()
   if (lower === 'skip') {
     return { label: 'Skipped', doing: 'Skipped' }

@@ -499,35 +499,67 @@ describe('when the ask was made', () => {
     pilotRpc.mockReset()
   })
   const asked = new Date(2026, 9, 11, 2, 0).getTime()
-  const eyebrowOf = async (item: InboxItemRow) => {
-    serve({ ...LIST, items: [item] })
+  const eyebrowOf = async (item: InboxItemRow, history?: InboxListPayload['history']) => {
+    serve({ ...LIST, items: [item], history })
     vi.useFakeTimers({ shouldAdvanceTime: true })
     vi.setSystemTime(new Date(2026, 9, 12, 12, 0))
     render(<InboxPage />)
     const article = (await screen.findByRole('heading', { name: item.title })).closest('article')!
-    return { article, eyebrow: article.querySelector('[data-eyebrow]')! }
+    const times = article.querySelector<HTMLElement>('[data-card-times]')!
+    return { article, eyebrow: article.querySelector('[data-eyebrow]')!, times }
   }
 
-  it('is a muted upper-case line above the title: job code and name, the date, the age', async () => {
+  it('is a muted upper-case line above the title: job code and name', async () => {
     const { article, eyebrow } = await eyebrowOf({ ...F1, createdAt: asked })
-    expect(eyebrow.textContent).toBe('04 · Test branch UIs overnight · Oct 11, 2:00 AM · 1d ago')
+    expect(eyebrow.textContent).toBe('04 · Test branch UIs overnight')
     for (const c of ['uppercase', 'text-muted-foreground', 'text-[11.5px]', 'tracking-[0.04em]']) {
       expect(eyebrow.className).toContain(c)
     }
     const line = eyebrow.firstElementChild!
     expect(line.className).toContain('truncate')
     expect(line.getAttribute('title')).toBe(eyebrow.textContent)
-    expect(
-      within(eyebrow as HTMLElement)
-        .getByText('Oct 11, 2:00 AM')
-        .getAttribute('title')
-    ).toContain('2026')
     // Above the title, and nothing of it left in a chip row.
     const title = within(article).getByRole('heading', { name: 'F1 Fixture' })
     expect(eyebrow.compareDocumentPosition(title) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     expect(article.textContent).not.toContain('Asked')
     // The list keeps the short age.
     expect(screen.getByRole('navigation', { name: 'Cards' }).textContent).toContain('1d')
+    vi.useRealTimers()
+  })
+
+  it('says under it when the card was created and its age, the year in the date’s title', async () => {
+    const { eyebrow, times } = await eyebrowOf({ ...F1, createdAt: asked })
+    expect([...times.children].map((c) => c.textContent)).toEqual([
+      'Created Oct 11, 2:00 AM · 1d ago'
+    ])
+    expect(within(times).getByText('Oct 11, 2:00 AM').getAttribute('title')).toContain('2026')
+    expect(eyebrow.compareDocumentPosition(times) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    vi.useRealTimers()
+  })
+
+  it("adds when the agent last replied, not Pilot's later line", async () => {
+    const reply = (hour: number, by: 'agent' | 'pilot') => ({
+      kind: 'reply' as const,
+      at: new Date(2026, 9, 12, hour, 0).getTime(),
+      by,
+      text: `${by} at ${hour}`,
+      run: null
+    })
+    const { times } = await eyebrowOf(
+      { ...F1, createdAt: asked },
+      {
+        f1: [
+          { kind: 'asked', at: asked, run: null },
+          reply(9, 'agent'),
+          reply(11, 'agent'),
+          reply(11, 'pilot')
+        ]
+      }
+    )
+    expect([...times.children].map((c) => c.textContent)).toEqual([
+      'Created Oct 11, 2:00 AM · 1d ago',
+      'Agent replied Oct 12, 11:00 AM · 1h ago'
+    ])
     vi.useRealTimers()
   })
 
@@ -538,13 +570,10 @@ describe('when the ask was made', () => {
       details: { drafted: true } as never
     })
     const pills = [...eyebrow.querySelectorAll('span')].filter((s) => s.parentElement === eyebrow)
-    expect(pills.map((p) => p.textContent)).toEqual([
-      '04 · Test branch UIs overnight · Oct 11, 2:00 AM · 1d ago',
-      'drafted'
-    ])
+    expect(pills.map((p) => p.textContent)).toEqual(['04 · Test branch UIs overnight', 'drafted'])
     expect(pills[1].className).toContain('normal-case')
     expect(screen.queryByText('waiting')).toBeNull()
-    expect(screen.queryAllByText('04 · Test branch UIs overnight')).toHaveLength(0)
+    expect(screen.queryAllByText('04 · Test branch UIs overnight')).toEqual([pills[0]])
     vi.useRealTimers()
   })
 

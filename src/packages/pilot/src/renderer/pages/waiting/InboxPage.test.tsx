@@ -355,7 +355,7 @@ describe('InboxPage', () => {
   })
 
   // Who wrote a reply is stored when it is written (by), never guessed from its words: an agent can't pass
-  // its text off as Pilot's by copying Pilot's wording.
+  // its text off as Pilot's by copying Pilot's wording. An older Pilot sends no history: the bare replies show.
   it('labels each reply by who wrote it, never by its words', async () => {
     const asked = card({
       id: 'in_r',
@@ -375,6 +375,79 @@ describe('InboxPage', () => {
     expect(screen.getByText('Agent asked: Approve actions in Pilot on this Mac')).toBeTruthy()
     expect(screen.queryByText('Pilot: Approve actions in Pilot on this Mac')).toBeNull()
     expect(screen.getByText('Agent asked: e2e or unit?')).toBeTruthy()
+  })
+
+  describe('the message history', () => {
+    const at = (day: number, hour: number, minute: number) =>
+      new Date(2026, 9, day, hour, minute).getTime()
+    const ASKING = 'review-branch-code-202610170220-t1384-1'
+    const PREPARING = 'prepare-inbox-item-context-202610171514-t1426-1'
+    const ANSWERING = 'review-branch-code-202610171836-answer-16'
+    const ASKED = card({
+      id: 'in_h',
+      title: 'Point the e2e runner at vp?',
+      replies: [{ text: 'Not resolved.', by: 'agent' }]
+    })
+    const HISTORY: InboxListPayload['history'] = {
+      in_h: [
+        { kind: 'asked', at: at(16, 19, 29), run: { id: ASKING, status: 'failed' } },
+        { kind: 'prepared', at: at(17, 9, 11), run: { id: PREPARING, status: 'done' } },
+        {
+          kind: 'answer',
+          at: at(17, 11, 36),
+          text: 'might already be resolved?',
+          option: null,
+          run: { id: ANSWERING, status: 'done' },
+          with: ['Drop clearMocks?']
+        },
+        {
+          kind: 'reply',
+          at: at(17, 11, 37),
+          by: 'agent',
+          text: 'Not resolved.',
+          run: { id: ANSWERING, status: 'done' }
+        }
+      ]
+    }
+    const historyShown = async () => {
+      serve({ ...LIST, items: [ASKED], history: HISTORY })
+      render(<InboxPage />)
+      return screen.findByRole('region', { name: 'Message history' })
+    }
+
+    it('shows, open, your answer and then the reply, each with its time, in place of the bare reply', async () => {
+      const history = await historyShown()
+      const toggle = within(history).getByRole('button', { name: /Message history/ })
+      expect(toggle.getAttribute('aria-expanded')).toBe('true')
+      const [you, agent] = [...history.querySelectorAll('[data-message]')]
+      expect(you.getAttribute('data-message')).toBe('you')
+      expect(you.textContent).toContain('might already be resolved?')
+      expect(you.textContent).toContain('Oct 17, 11:36 AM')
+      expect(you.textContent).toContain('sent to answer run …answer-16 with “Drop clearMocks?”')
+      expect(agent.getAttribute('data-message')).toBe('agent')
+      expect(agent.textContent).toContain('Not resolved.')
+      expect(agent.textContent).toContain('Oct 17, 11:37 AM')
+      expect(screen.queryByText('Agent asked: Not resolved.')).toBeNull()
+    })
+
+    it.each([
+      [0, ASKING],
+      [1, PREPARING],
+      [2, ANSWERING]
+    ])('opens the run behind Open run %i of the history', async (n, runId) => {
+      const history = await historyShown()
+      fireEvent.click(within(history).getAllByRole('button', { name: 'Open run' })[n])
+      expect(openRunPanel()?.runId).toBe(runId)
+      closeRunPanel()
+    })
+
+    it('folds away on Hide and comes back on Show', async () => {
+      const history = await historyShown()
+      fireEvent.click(within(history).getByRole('button', { name: /Message history.*Hide/ }))
+      expect(within(history).queryByText('Not resolved.')).toBeNull()
+      fireEvent.click(within(history).getByRole('button', { name: /Message history.*Show/ }))
+      expect(within(history).getByText('Not resolved.')).toBeTruthy()
+    })
   })
 
   it('loads the cards of the person you view as', async () => {
