@@ -10,3 +10,29 @@
 :root[data-pilot-window-appearance='match-terminal'].dark [class*='dark:bg-[rgba(23,23,23,0.96)]'] {
   background-color: color-mix(in srgb, var(--popover) 96%, transparent);
 }
+
+/* Match Terminal: Orca's 7% dividers all but vanish on a terminal theme; draw every divider at the
+   strength of the sidebar resize line's hover state. !important beats the sidebars' inline copies. */
+:root[data-pilot-window-appearance='match-terminal'],
+:root[data-pilot-window-appearance='match-terminal'] [style*='--worktree-sidebar-border'] {
+  --border: color-mix(in srgb, var(--foreground) 22%, var(--background)) !important;
+  --sidebar-border: var(--border) !important;
+  --worktree-sidebar-border: var(--border) !important;
+}
+
+/* Match Terminal: the sidebar and the page beside it share one surface, so the seam between them shows only
+   where the workbench paints its border-l, and never through the titlebar strip. Paint it from the sidebar
+   column, top to bottom, on that same pixel; z-index lifts it over the page's background. */
+:root[data-pilot-window-appearance='match-terminal'] :has(> [data-sidebar-resize-handle]) {
+  position: relative;
+  z-index: 1;
+  box-shadow: 1px 0 0 var(--border);
+}
+
+:root[data-pilot-window-appearance='match-terminal'] .titlebar-left:not(.titlebar-left-floating) {
+  position: relative;
+  z-index: 1;
+  box-shadow:
+    inset 0 -1px 0 var(--border),
+    1px 0 0 var(--border);
+}
