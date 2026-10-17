@@ -2,6 +2,7 @@ import { useDeferredValue, useMemo, useRef } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import { useAppStore } from '@/store'
 import { getRepoMapFromState, getWorktreeMapFromState } from '@/store/selectors'
+import { useActivityProjectRepoIds } from '../../../../packages/pilot/src/renderer/activity-machines/use-activity-project-scope' // pilot-hook: activity-project-scope
 import type { AppState } from '@/store/types'
 import {
   getSettingsFocusedExecutionHostId,
@@ -81,7 +82,9 @@ export function useAgentPaneThreads(args: {
 } {
   const { query, readFilter, groupBy, selectedPaneKey, showChildAgents = false } = args
   const agentsVisibleHostIds = useAppStore((s) => s.agentsVisibleHostIds)
-  const agentsFilterRepoIds = useAppStore((s) => s.agentsFilterRepoIds)
+  const agentsFilterRepoIds = useActivityProjectRepoIds(
+    useAppStore((s) => s.agentsFilterRepoIds)
+  ) /* pilot-hook: activity-project-scope */
   const hideWorkspacesFromOtherDevices = useAppStore((s) => s.agentsHideWorkspacesFromOtherDevices)
   const hideAutomationGeneratedWorkspaces = useAppStore(
     (s) => s.agentsHideAutomationGeneratedWorkspaces
