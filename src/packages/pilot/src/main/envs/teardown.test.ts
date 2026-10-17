@@ -92,7 +92,7 @@ describe('teardown at run end', () => {
       'kept: tabs stay, the folder stays',
       'kept',
       [],
-      ['env', 'delete', 'r1', '--keep-folder', '--format', 'json']
+      ['env', 'delete', 'r1', '--keep-folder', 'true', '--format', 'json']
     ],
     [
       'in place: tabs stay, the record goes',
