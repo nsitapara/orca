@@ -1,18 +1,10 @@
 import React, { useCallback, useMemo, useState } from 'react'
-import { TerminalSquare } from 'lucide-react'
 import { useShallow } from 'zustand/react/shallow'
-import {
-  CommandDialog,
-  CommandEmpty,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-  CommandList
-} from '@/components/ui/command'
+import { CommandDialog } from '@/components/ui/command'
 import { orderTabLaunchAgents } from '@/components/tab-bar/tab-agent-launch-options'
 import type { TerminalController } from '@/components/use-terminal-controller'
 import { FooterKey } from '@/components/worktree-jump-palette-primitives'
-import { AgentIcon, getAgentCatalog } from '@/lib/agent-catalog'
+import { getAgentCatalog } from '@/lib/agent-catalog'
 import { readDetectedAgentsForWorktree } from '@/lib/agent-detection-target-inventory'
 import { useAgentDetectionTargetForWorktree } from '@/hooks/useAgentDetectionTarget'
 import { useDetectedAgents } from '@/hooks/useDetectedAgents'
@@ -39,6 +31,7 @@ import {
   type NewTabMachineRow
 } from './new-tab-machine-rows'
 import type { NewTabMachineStep } from './new-tab-machine-step'
+import { NewTabAgentStep } from './NewTabAgentStep'
 import { NewTabMachineCommand } from './NewTabMachineCommand'
 import { useEscapeBack } from './use-escape-back'
 import { useNewTabMachineStep } from './use-new-tab-machine-step'
@@ -58,6 +51,21 @@ type PickerStep =
 
 const AGENT_STEP: PickerStep = { kind: 'agent' }
 const NO_DETECTIONS: readonly (TuiAgent[] | null)[] = []
+
+// Why: live while open so an offline machine drops out; the snapshot only covers the fade-out.
+function shownMachines(
+  step: PickerStep,
+  live: NewTabMachineStep | null,
+  visible: boolean
+): NewTabMachineStep | null {
+  if (step.kind !== 'machine') {
+    return null
+  }
+  if (visible && live) {
+    return live
+  }
+  return step.machines
+}
 
 export function NewTabAgentPicker({
   controller
@@ -120,24 +128,15 @@ function NewTabAgentPickerDialog({
     ? selectedId
     : (options[0]?.id ?? '')
 
+  const machines = shownMachines(step, machineStep, visible)
   const detected = useAppStore(
     useShallow((s) => {
-      if (step.kind !== 'machine') {
+      if (!machines) {
         return NO_DETECTIONS
       }
-      return step.machines.targets.map((t) => readDetectedAgentsForWorktree(s, t.worktreeId))
+      return machines.targets.map((t) => readDetectedAgentsForWorktree(s, t.worktreeId))
     })
   )
-  const machineRows =
-    step.kind === 'machine'
-      ? buildNewTabMachineRows({
-          targets: step.machines.targets,
-          detected,
-          agent: step.agent,
-          agentLabel: step.agentLabel,
-          query: machineQuery
-        })
-      : []
 
   const closeThen = (run: () => void): void => {
     skipReturnFocus()
@@ -172,11 +171,11 @@ function NewTabAgentPickerDialog({
   }
 
   const pickMachine = (row: NewTabMachineRow): void => {
-    if (step.kind !== 'machine') {
+    if (step.kind !== 'machine' || !machines) {
       return
     }
     const { agent } = step
-    rememberNewTabMachine(step.machines.projectId, row.hostId)
+    rememberNewTabMachine(machines.projectId, row.hostId)
     const switchTo = row.isCurrent
       ? undefined
       : { executionHostId: row.hostId, machineLabel: row.machineLabel }
@@ -189,7 +188,8 @@ function NewTabAgentPickerDialog({
     }
     setStep(AGENT_STEP)
   }
-  useEscapeBack(step.kind === 'machine', back)
+  // Why visible: step 2's state outlives a close, but its Esc must not outlive the dialog.
+  useEscapeBack(visible && step.kind === 'machine', back)
 
   const handleOpenChange = useCallback((open: boolean) => {
     if (!open) {
@@ -199,9 +199,45 @@ function NewTabAgentPickerDialog({
 
   let footerText = workspaceName ? `In ${workspaceName}` : null
   let escLabel = 'Close'
-  if (step.kind === 'machine') {
+  let stepView: React.JSX.Element
+  if (step.kind === 'machine' && machines) {
     footerText = `${step.agentLabel} · choose a machine`
     escLabel = 'Back'
+    const rows = buildNewTabMachineRows({
+      targets: machines.targets,
+      detected,
+      agent: step.agent,
+      agentLabel: step.agentLabel,
+      query: machineQuery
+    })
+    stepView = (
+      <NewTabMachineCommand
+        agentLabel={step.agentLabel}
+        query={machineQuery}
+        onQueryChange={(value) => {
+          setMachineQuery(value)
+          setSelectedMachine('')
+        }}
+        value={highlightedNewTabMachine(rows, selectedMachine, step.lastHostId)}
+        onValueChange={setSelectedMachine}
+        rows={rows}
+        onPick={pickMachine}
+      />
+    )
+  } else {
+    stepView = (
+      <NewTabAgentStep
+        autoFocus={movedBetweenSteps}
+        query={query}
+        onQueryChange={(value) => {
+          setQuery(value)
+          setSelectedId('')
+        }}
+        options={options}
+        onPick={pickAgent}
+        lookingForAgents={isLoading && detectedIds === null}
+      />
+    )
   }
 
   return (
@@ -217,62 +253,7 @@ function NewTabAgentPickerDialog({
       contentClassName="w-[480px]"
       commandProps={{ loop: true, value: agentValue, onValueChange: setSelectedId }}
     >
-      {step.kind === 'machine' ? (
-        <NewTabMachineCommand
-          agentLabel={step.agentLabel}
-          query={machineQuery}
-          onQueryChange={(value) => {
-            setMachineQuery(value)
-            setSelectedMachine('')
-          }}
-          value={highlightedNewTabMachine(machineRows, selectedMachine, step.lastHostId)}
-          onValueChange={setSelectedMachine}
-          rows={machineRows}
-          onPick={pickMachine}
-        />
-      ) : (
-        <>
-          <CommandInput
-            autoFocus={movedBetweenSteps}
-            placeholder="Open a new tab with..."
-            value={query}
-            onValueChange={(value) => {
-              setQuery(value)
-              setSelectedId('')
-            }}
-          />
-          <CommandList>
-            <CommandEmpty>No agents match your search.</CommandEmpty>
-            <CommandGroup>
-              {options.map((option) => (
-                <CommandItem
-                  key={option.id}
-                  value={option.id}
-                  selection="palette"
-                  onSelect={() => pickAgent(option)}
-                >
-                  {option.kind === 'agent' ? (
-                    <AgentIcon agent={option.id} size={16} />
-                  ) : (
-                    <TerminalSquare className="text-muted-foreground" />
-                  )}
-                  <span className="min-w-0 flex-1 truncate">
-                    {option.kind === 'agent' ? option.entry.label : 'Blank Terminal'}
-                  </span>
-                  {option.isDefault ? (
-                    <span className="text-2xs text-muted-foreground">Default</span>
-                  ) : null}
-                </CommandItem>
-              ))}
-            </CommandGroup>
-            {isLoading && detectedIds === null ? (
-              <div className="px-3 py-2 text-xs text-muted-foreground">
-                Looking for installed agents...
-              </div>
-            ) : null}
-          </CommandList>
-        </>
-      )}
+      {stepView}
       <div className="flex items-center gap-2 border-t border-border/60 px-3.5 py-2.5 text-2xs text-muted-foreground">
         <span className="min-w-0 flex-1 truncate">{footerText}</span>
         <FooterKey>Enter</FooterKey>

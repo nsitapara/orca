@@ -50,6 +50,10 @@ const there = machineTarget('runtime:env-b', 'repo-b::/b/feat', {
   worktreeName: 'feat',
   machineLabel: 'Second Mac'
 })
+const box = machineTarget('ssh:box', 'repo-c::/c/feat', {
+  worktreeName: 'feat',
+  machineLabel: 'Build Box'
+})
 const TWO: NewTabMachineStep = { projectId: PROJECT, targets: [here, there] }
 // The current workspace is on Second Mac, so the current machine isn't the first row.
 const ON_SECOND_MAC: NewTabMachineStep = {
@@ -115,12 +119,16 @@ describe('NewTabAgentPicker', () => {
     })
   })
 
-  function openPicker(): { handleNewTab: () => void } {
+  function openPicker(): { handleNewTab: () => void; rerender: () => void } {
     const handleNewTab = vi.fn()
-    render(<NewTabAgentPicker controller={{ activeWorktreeId: 'wt-1', handleNewTab }} />)
+    const controller = { activeWorktreeId: 'wt-1', handleNewTab }
+    const view = render(<NewTabAgentPicker controller={controller} />)
     act(() => useNewTabAgentPickerOpen.setState({ open: true }))
     expect(screen.getByPlaceholderText('Open a new tab with...')).toBe(searchBox())
-    return { handleNewTab }
+    return {
+      handleNewTab,
+      rerender: () => view.rerender(<NewTabAgentPicker controller={{ ...controller }} />)
+    }
   }
 
   it('lists the default agent first and selected, then the others, then Blank Terminal', () => {
@@ -164,7 +172,9 @@ describe('NewTabAgentPicker', () => {
     ])
     enter()
     await nextFrame()
-    expect(launches).toEqual([expect.objectContaining({ agent: 'codex', worktreeId: 'wt-1' })])
+    expect(launches).toEqual([
+      expect.objectContaining({ agent: 'codex', worktreeId: 'wt-1', beforeSurfaceOpen: undefined })
+    ])
     expect(readLastNewTabMachine(PROJECT)).toBe('local')
   })
 
@@ -178,7 +188,11 @@ describe('NewTabAgentPicker', () => {
     enter()
     await nextFrame()
     expect(launches).toEqual([
-      expect.objectContaining({ agent: 'codex', worktreeId: 'repo-b::/b/feat' })
+      expect.objectContaining({
+        agent: 'codex',
+        worktreeId: 'repo-b::/b/feat',
+        beforeSurfaceOpen: expect.any(Function)
+      })
     ])
   })
 
@@ -188,18 +202,20 @@ describe('NewTabAgentPicker', () => {
       step: TWO,
       remembered: 'runtime:env-b' as const,
       highlighted: 'Second Mac',
-      worktreeId: 'repo-b::/b/feat'
+      worktreeId: 'repo-b::/b/feat',
+      beforeSurfaceOpen: expect.any(Function)
     },
     {
       name: 'the current machine',
       step: ON_SECOND_MAC,
       remembered: null,
       highlighted: 'Second Mac',
-      worktreeId: 'wt-1'
+      worktreeId: 'wt-1',
+      beforeSurfaceOpen: undefined
     }
   ])(
     'after an agent search, step 2 still starts on $name',
-    async ({ step, remembered, highlighted, worktreeId }) => {
+    async ({ step, remembered, highlighted, worktreeId, beforeSurfaceOpen }) => {
       machineStep.value = step
       if (remembered) {
         rememberNewTabMachine(PROJECT, remembered)
@@ -210,7 +226,9 @@ describe('NewTabAgentPicker', () => {
       expect(selected()).toContain(highlighted)
       enter()
       await nextFrame()
-      expect(launches).toEqual([expect.objectContaining({ agent: 'codex', worktreeId })])
+      expect(launches).toEqual([
+        expect.objectContaining({ agent: 'codex', worktreeId, beforeSurfaceOpen })
+      ])
     }
   )
 
@@ -240,7 +258,38 @@ describe('NewTabAgentPicker', () => {
     expect(selected()).toContain('Local Mac')
     enter()
     await nextFrame()
-    expect(launches).toEqual([expect.objectContaining({ worktreeId: 'wt-1' })])
+    expect(launches).toEqual([
+      expect.objectContaining({ worktreeId: 'wt-1', beforeSurfaceOpen: undefined })
+    ])
+  })
+
+  it('drops a machine that goes offline while step 2 is open', () => {
+    machineStep.value = { projectId: PROJECT, targets: [here, there, box] }
+    const { rerender } = openPicker()
+    enter()
+    machineStep.value = { projectId: PROJECT, targets: [here, box] }
+    rerender()
+    expect(screen.getAllByRole('option').map((o) => o.textContent)).toEqual([
+      'Local Macfeat · this workspaceCurrent',
+      'Build Boxfeat · same branch'
+    ])
+  })
+
+  it.each([
+    { name: 'a machine pick', close: (): boolean => enter() },
+    {
+      name: 'a close from step 2',
+      close: (): void => act(() => useNewTabAgentPickerOpen.setState({ open: false }))
+    }
+  ])('after $name, an Esc elsewhere in the app is left alone', async ({ close }) => {
+    machineStep.value = TWO
+    openPicker()
+    enter()
+    close()
+    await nextFrame()
+    const escape = new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })
+    document.body.dispatchEvent(escape)
+    expect(escape.defaultPrevented).toBe(false)
   })
 
   it('moves focus to the new search box on each step change', () => {
