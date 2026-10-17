@@ -284,7 +284,7 @@ const KNOWN_ROUTES = [
   }
 ]
 
-// apply.py's answers for ROUTES, HOLDS, SESSIONS and KNOWN_ROUTES (in order): run_old_plan.py 12 (worktree-gate/apply.py
+// apply.py's answers for ROUTES, HOLDS, SESSIONS and KNOWN_ROUTES (in order): the old plan (worktree-gate/apply.py
 // route, busy and session_route) on those cases, recorded with /opt/homebrew/bin/python3 3.15.0 on 2026-10-16, before
 // apply.py was deleted.
 const FROZEN_ROUTES = [

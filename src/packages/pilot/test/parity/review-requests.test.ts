@@ -311,7 +311,7 @@ describe('09 · Prepare reviews requested of me: the definition', () => {
   })
 })
 
-// review-requests' words (jobs/job_09.py, frozen in each case's old block with what `sweep.py field` printed) and the
+// review-requests' words (frozen in each case's old block with what `sweep.py field` printed) and the
 // verdicts that agree with them, through the shared parity runner (parity-case.ts): a missed read, a tick error, a verdict
 // mismatch or a case without frozen verdicts fails a case.
 const CASES = join(PARITY_DIR, '09')

@@ -234,7 +234,7 @@ describe('06 · Address reviewer feedback: the definition', () => {
   })
 })
 
-// mr-feedback-sweep's words (jobs/job_06.py) and the verdicts that agree with them, through the shared parity runner
+// mr-feedback-sweep's words (frozen in the test data) and the verdicts that agree with them, through the shared parity runner
 // (parity-case.ts): a missed read, a tick error or a verdict mismatch fails a case. The sweep's decisions are frozen in
 // each case (its old block), so neither python3 nor the sweep is needed; a case without its old block fails.
 const CASES = join(PARITY_DIR, '06')

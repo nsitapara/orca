@@ -324,7 +324,7 @@ A card carries its Details as markdown (`--details-file`) or as a structured **D
 
 ### Context preparation
 
-- **Opt-in (D1):** only a card whose decision needs evidence is prepared: a code change to approve (04's `bug` and `left_for_you` findings, 03's `left_for_you`), 05's push card, or a card that asks for evidence. Its producer passes `--preparation-file` (`pilotcli inbox create-card`, or `pilot_bridge.add_item(..., preparation=…)` from Python). Every other card (questions, defaults, flagged items, answer-run follow-ups) is a plain card, answerable at once.
+- **Opt-in (D1):** only a card whose decision needs evidence is prepared: a code change to approve (04's `bug` and `left_for_you` findings, 03's `left_for_you`), 05's push card, or a card that asks for evidence. Its producer passes `--preparation-file` (`pilotcli inbox create-card`). Every other card (questions, defaults, flagged items, answer-run follow-ups) is a plain card, answerable at once.
 - **A prepared card** starts **Context queued**. Job 14 claims it, generates and verifies its evidence, and completes it as **Ready for your decision**. Until then Approve, a drafted-option pick and its action are refused; any other answer stops preparation. A blocked card has **Retry preparation** (`pilot.inbox.prepareRetry`: the desktop or a paired device only), which requeues it with a new revision.
 - **Evidence:** a diff must match its hashed patch exactly. A diff that `details.py` trimmed (an `omitted` file, `more_files`) passes when every shown file, omitted count and `more_files` matches the patch, and its Details say plainly what only the patch file has.
 - **The lease** is a liveness hint: a claim has expired only once its 10-minute lease lapsed and its claiming step no longer runs, and always 3 hours after it was claimed (`PREPARATION_HOLD_MAX_MS`).
@@ -436,11 +436,11 @@ The order, behaviour changes and follow-ups come from the build (`go-live-notes.
 
 **Order:**
 1. Close out what Orca still has open. Let a running Orca 03 review cycle finish. Close any open Orca 04 QA run or dispatched fix: a stale Orca `run.json` that isn't `done` blocks every Pilot 04 night at `stack`.
-2. The open vault cards were imported once, on 2026-10-12, and the import (which ran `vault.py export-open`) was removed afterwards. The go-live check's "Card details" line still counts imported cards that only point at a vault bundle. Answer only in Pilot (Inbox).
+2. The open vault cards were imported once, on 2026-10-12, and the import was removed afterwards (its `vault.py` is deleted). The go-live check's "Card details" line still counts imported cards that only point at a vault bundle. Answer only in Pilot (Inbox).
 3. Import each job's old state before enabling it: `pilot automations import-state --id <id>` (preview), then `--apply`. 03 and 04 need their `seen.json` first. 08 must be imported before Pilot first writes its own `usage.json` (the hand-over above). 12's sent answers come in as dispatched.
 4. Connect Linear in Pilot (Settings) before enabling 13 and M01. Pilot can't read Orca's Linear credential (see the Known gaps).
 5. Enable the YAMLs one at a time: `pilot automations enable --id <id>`. Keep Orca's copies disabled. Enable job 14 (`prepare-inbox-item-context`) together with, or before, the first job that creates prepared cards (03, 04, 05, 09): until it runs, their prepared cards stay **Context queued** and can't be approved. Job 14 must run before any push or drafted fix can be approved, imported ones included: those come in as **Needs evidence**, and Prepare evidence queues them for it (R-P5). Plain cards never wait for it.
-6. Retire `apply.py` (job 12) only once Pilot is dispatching answers. Write `<STATE_ROOT>/apply/retired` last. Nothing writes it for you.
+6. Job 12 (`apply.py`) is retired and its Python deleted: Pilot dispatches answers.
 
 **Not checkable in a dry run** (watch the first real run):
 - Linear accepts the uuid5 write ids that 13 uses for ticket creates and fold comments.
@@ -556,11 +556,9 @@ When you run `pnpm test` or orcad yourself from an Orca terminal, first `export 
 
 ## Parity tests
 
-A job counts as ported only when its parity test passes (R17): the old sweep's own `plan()` (Python, `test/parity/run_old_plan.py`) and Pilot's dry-run tick read the same recorded inputs, and every item must get an agreeing decision (each job's table maps the old words to verdicts). Every job's old side except 04's is now frozen: its decisions were recorded into each case's `old` block (12's and 08's into their tests) before its Python was deleted, so those tests need neither `python3` nor `~/.agents/skills`, and a case without its frozen old side fails.
+A job counts as ported only when its parity test passes (R17): the old sweep's `plan()` (recorded while its Python still existed) and Pilot's dry-run tick read the same recorded inputs, and every item must get an agreeing decision (each job's table maps the old words to verdicts). Every job's old side is frozen: its decisions were recorded into each case's `old` block (12's and 08's into their tests) before its Python was deleted, so the tests need neither `python3` nor the old code, and a case without its frozen old side fails. The harness's Python (`run_old_plan.py`, the job adapters, the recorder) is gone; a new case is written by hand or copied from a recorded one.
 
-- Record a case from live data, GET-only (anything that could write stops the recording before it runs), for a job whose old code still exists: `node src/packages/pilot/scripts/record-parity-fixture.mjs --job 04 --case <name>`. It writes `test/parity/04/live-<name>.json`, which git ignores: recorded cases hold real MR titles, branches and usernames, so they stay on this machine. Synthetic cases are committed.
-- Run the parity tests: `pnpm exec vitest run --config config/vitest.config.ts src/packages/pilot/test/parity`. They skip when the automation's YAML is missing (`PARITY_AUTOMATIONS_DIR` points elsewhere), and 04's also when `python3` or its old code is (`PARITY_SKILLS_DIR`), and say what's missing on stderr and in the suite's title. A case fails on any read the new side made that it lacks (`missed read: …`), not only on a disagreeing verdict: re-record it, or add the read to the adapter's `record_extras`.
-- The harness's own tests: `cd src/packages/pilot/test/parity && PYTHONDONTWRITEBYTECODE=1 python3 -m unittest test_parity_io test_jobs`.
+- Run the parity tests: `pnpm exec vitest run --config config/vitest.config.ts src/packages/pilot/test/parity`. They skip when the automation's YAML is missing (`PARITY_AUTOMATIONS_DIR` points elsewhere), and say what's missing on stderr and in the suite's title. A case fails on any read the new side made that it lacks (`missed read: …`), not only on a disagreeing verdict: add the read to the case.
 - A mismatch line names the item and both sides' reasons. Fix the engine, never the table.
 
 ## Updating from upstream

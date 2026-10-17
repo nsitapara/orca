@@ -24,7 +24,7 @@ export const JOB_13 = {
   starts: 'dev-e2e-fix-start'
 }
 
-// 13's words (jobs/job_13.py, frozen in each case's old block) and the verdicts that agree with them. pipeline:<id>:
+// 13's words (frozen in each case's old block) and the verdicts that agree with them. pipeline:<id>:
 // green and seen (not due), act (started), QUOTA; linear:<ID>: start (started), QUOTA, FAIL (a start the sweep refused,
 // "...; retried next run": a failed check), has_session (not due), closed. A ticket that is not this job's is never read
 // (where.ids_from), on either side.
@@ -73,7 +73,7 @@ export const COMMANDS_13 = {
 }
 
 // The script check the start automation runs (check-item), answered from the case: the old adapter's frozen verdict on
-// the same inputs (jobs/job_13.py ran pilot_mode.check_worktree under the case's reads, `script_check` in the case's
+// the same inputs (the old adapter ran pilot_mode.check_worktree under the case's reads, `script_check` in the case's
 // old block), so the check's refusal is compared with the old start()'s. A ticket the old side never checked is a
 // missed read, which fails the case.
 export function answerScripts(old: OldDecision[], f: ParityFixture): ScriptRunner {
@@ -116,8 +116,6 @@ function yamlOf(id: string): string {
 function parityJob(id: string, prefix: string, extra: Partial<ParityJob>): ParityJob {
   return {
     job: JOB_13.job,
-    folder: JOB_13.sweep,
-    frozen: true,
     files: [yamlOf(id), join(portedAutomationsDir(), 'people.yaml')],
     table: VERDICTS_13,
     ownsKey: (key) => key.startsWith(prefix),
