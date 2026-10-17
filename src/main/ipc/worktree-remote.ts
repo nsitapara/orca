@@ -8,11 +8,12 @@ import { existsSync } from 'node:fs'
 import { randomUUID } from 'node:crypto'
 import type { Store } from '../persistence'
 import type { GitAdmissionTier } from '../../shared/rpc-contract/git-admission-tier-params'
-import type { GlobalSettings } from '../../shared/global-settings-types'
 import type { Repo } from '../../shared/repo-types'
 import type {
   CreateWorktreeArgs,
+  CreateWorktreeProgressEvent,
   CreateWorktreeResult,
+  WorktreeCheckoutProgress,
   WorktreeCreateBaseFallback
 } from '../../shared/worktree/create-types'
 import type { WorktreeMeta } from '../../shared/worktree/meta-types'
@@ -299,10 +300,9 @@ async function spawnLocalStartupAndSetupTerminals(args: {
   startup: CreateWorktreeArgs['startup']
   setup: CreateWorktreeResult['setup']
   defaultTabs: CreateWorktreeResult['defaultTabs']
-  settings: GlobalSettings
   createdWithAgent: CreateWorktreeArgs['createdWithAgent']
 }): Promise<StagedStartupResult> {
-  const { runtime, worktree, startup, setup, defaultTabs, settings, createdWithAgent } = args
+  const { runtime, worktree, startup, setup, defaultTabs, createdWithAgent } = args
   if (!startup || defaultTabs?.tabs.length) {
     return { didSpawnSetup: false }
   }
@@ -375,37 +375,17 @@ async function spawnLocalStartupAndSetupTerminals(args: {
           ),
           setup.shell
         )
-      const setupLaunchMode =
-        (settings as Partial<Pick<GlobalSettings, 'setupScriptLaunchMode'>>)
-          .setupScriptLaunchMode ?? 'new-tab'
-      if (setupLaunchMode === 'split-vertical' || setupLaunchMode === 'split-horizontal') {
-        if (!startupTerminalHandle) {
-          throw new Error('startup_terminal_missing')
-        }
-        await runtime.splitTerminal(
-          startupTerminalHandle,
-          {
-            direction: setupLaunchMode === 'split-horizontal' ? 'horizontal' : 'vertical',
-            command: setupCommand,
-            env: setup.envVars,
-            activate: false,
-            surfaceOwner: false
-          },
-          worktree
-        )
-      } else {
-        await runtime.createTerminal(
-          `id:${worktree.id}`,
-          {
-            title: 'Setup',
-            command: setupCommand,
-            env: setup.envVars,
-            activate: false,
-            surfaceOwner: false
-          },
-          worktree
-        )
-      }
+      await runtime.createTerminal(
+        `id:${worktree.id}`,
+        {
+          title: 'Setup',
+          command: setupCommand,
+          env: setup.envVars,
+          activate: false,
+          surfaceOwner: false
+        },
+        worktree
+      )
       didSpawnSetup = true
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
@@ -935,13 +915,20 @@ export function notifyWorktreeHeadIdentitiesChanged(
 }
 
 // Why: two-phase spinner — fire 'fetching' before pre-create fetch and 'creating' before git worktree add so the renderer can swap its label.
+// `checkout` carries git's checkout meter during 'creating'; null means the checkout finished.
 export function emitCreateWorktreeProgress(
   mainWindow: BrowserWindow,
   phase: 'fetching' | 'creating',
-  creationId?: string
+  creationId?: string,
+  checkout?: WorktreeCheckoutProgress | null
 ): void {
   if (!mainWindow.isDestroyed()) {
-    mainWindow.webContents.send('createWorktree:progress', { creationId, phase })
+    const event: CreateWorktreeProgressEvent = {
+      creationId,
+      phase,
+      ...(checkout !== undefined ? { checkout } : {})
+    }
+    mainWindow.webContents.send('createWorktree:progress', event)
   }
 }
 
@@ -988,9 +975,17 @@ async function performLocalWorktreeCreate(
   const localWorktreeGitOptionArgs: [] | [{ wslDistro?: string }] = hasLocalWorktreeGitOptions
     ? [localWorktreeGitOptions]
     : []
+  const creationId = args.creationId
+  // Why: only `git worktree add` reads onCheckoutProgress; a prepared-checkout claim never reports.
   const addProjectGitOptions = (options?: AddWorktreeOptions): AddWorktreeOptions => ({
     ...options,
-    ...localWorktreeGitOptions
+    ...localWorktreeGitOptions,
+    ...(creationId
+      ? {
+          onCheckoutProgress: (checkout: WorktreeCheckoutProgress | null) =>
+            emitCreateWorktreeProgress(mainWindow, 'creating', creationId, checkout)
+        }
+      : {})
   })
 
   const requestedName = args.name
@@ -1683,7 +1678,6 @@ async function performLocalWorktreeCreate(
       startup: args.startup,
       setup,
       defaultTabs,
-      settings,
       createdWithAgent: args.createdWithAgent
     })
   )

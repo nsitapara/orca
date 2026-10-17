@@ -8,6 +8,7 @@
  * can't be reached, the pane stays bound and reattaches once it can: loss of contact is never exit.
  */
 import type { PtyConnectResult, PtyTransport } from './pty-transport-types'
+import type { RemoteRuntimeSnapshotRequestOptions } from '../../runtime/remote-runtime-terminal-multiplexer-types'
 import { SSH_SESSION_EXPIRED_ERROR } from './pty-connection/pty-connect-limits'
 import {
   legacyRelayBridgedPane,
@@ -29,14 +30,32 @@ export function createLegacyRelayBridgeTransport(ptyId: string, inner: PtyTransp
   let reattachQueued = false
   let showingUnreachable = false
   let lastState: 'live' | 'unverifiable' | null = null
+  /** Bumped by release, so an attach answered after the pane left hands its viewer back. */
+  let epoch = 0
 
-  const release = (): void => {
-    unsubscribe.forEach((dispose) => dispose())
-    unsubscribe = []
+  const dropViewer = (): void => {
     if (attached) {
       api?.detach({ ptyId })
     }
     attached = false
+  }
+
+  const release = (): void => {
+    epoch += 1
+    unsubscribe.forEach((dispose) => dispose())
+    unsubscribe = []
+    dropViewer()
+  }
+
+  /** False when the pane left while the attach was in flight; a late success is released. */
+  const stillWanted = (at: number, status: string): boolean => {
+    if (at === epoch && mode === 'bridge') {
+      return true
+    }
+    if (status === 'attached') {
+      api?.detach({ ptyId })
+    }
+    return false
   }
 
   const showUnreachable = (): void => {
@@ -54,7 +73,7 @@ export function createLegacyRelayBridgeTransport(ptyId: string, inner: PtyTransp
   }
 
   const reattach = async (): Promise<void> => {
-    if (!api || mode !== 'bridge') {
+    if (!api || mode !== 'bridge' || unsubscribe.length === 0) {
       return
     }
     if (reattaching) {
@@ -63,15 +82,17 @@ export function createLegacyRelayBridgeTransport(ptyId: string, inner: PtyTransp
       return
     }
     reattaching = true
+    const at = epoch
     try {
-      const result = await api.attach({ ptyId })
-      if (mode !== 'bridge') {
+      // The screen comes through onReplay in output order: applied from this reply instead, its
+      // clear would erase output the relay printed after it.
+      const result = await api.attach({ ptyId, replayInStream: true })
+      if (!stillWanted(at, result.status)) {
         return
       }
       if (result.status === 'attached') {
         attached = true
         clearUnreachable()
-        callbacks?.onReplayData?.(result.replay, { clearBeforeReplay: true })
       } else if (result.status === 'exited' || result.status === 'not-bridged') {
         clearUnreachable()
         callbacks?.onExit?.(-1)
@@ -80,7 +101,7 @@ export function createLegacyRelayBridgeTransport(ptyId: string, inner: PtyTransp
       reattaching = false
       if (reattachQueued) {
         reattachQueued = false
-        if (!attached) {
+        if (!attached && at === epoch) {
           void reattach()
         }
       }
@@ -95,6 +116,12 @@ export function createLegacyRelayBridgeTransport(ptyId: string, inner: PtyTransp
       api.onData((event) => {
         if (mode === 'bridge' && event.ptyId === ptyId) {
           callbacks?.onData?.(event.data)
+        }
+      }),
+      api.onReplay((event) => {
+        // Main fetched this after dropping the pane's hidden output; it replaces the stale screen.
+        if (mode === 'bridge' && (attached || reattaching) && event.ptyId === ptyId) {
+          callbacks?.onReplayData?.(event.replay, { clearBeforeReplay: true })
         }
       }),
       api.onExit((event) => {
@@ -113,14 +140,14 @@ export function createLegacyRelayBridgeTransport(ptyId: string, inner: PtyTransp
           lastState = null
           // A disconnect hangs the bridge up without an exit, and the next bridge serves only panes
           // that attach to it. Ask again; it answers exited once the terminal is proven gone.
-          attached = false
+          dropViewer()
           void reattach()
           return
         }
         const previous = lastState
         lastState = pane.state
         if (pane.state === 'unverifiable') {
-          attached = false
+          dropViewer()
           showUnreachable()
         } else if (!attached && previous !== 'live') {
           // Only on the change to live: a terminal that refuses to attach waits for the next one.
@@ -138,8 +165,9 @@ export function createLegacyRelayBridgeTransport(ptyId: string, inner: PtyTransp
     }
     mode = 'bridge'
     subscribe()
+    const at = epoch
     const result = await api.attach({ ptyId })
-    if (mode !== 'bridge') {
+    if (!stillWanted(at, result.status)) {
       return undefined
     }
     if (result.status === 'exited' || result.status === 'not-bridged') {
@@ -173,7 +201,7 @@ export function createLegacyRelayBridgeTransport(ptyId: string, inner: PtyTransp
       : {}),
     ...(innerSnapshotOutcome
       ? {
-          serializeBufferOutcome: (opts?: { scrollbackRows?: number }) =>
+          serializeBufferOutcome: (opts?: RemoteRuntimeSnapshotRequestOptions) =>
             bridged()
               ? Promise.resolve({
                   availability: { kind: 'unknown-legacy-host' as const },
@@ -185,7 +213,16 @@ export function createLegacyRelayBridgeTransport(ptyId: string, inner: PtyTransp
     getConnectionId: () => (bridged() ? null : inner.getConnectionId?.()),
     ownsRecovery: () => (bridged() ? false : (inner.ownsRecovery?.() ?? false)),
     retryRecovery: () => (bridged() ? false : (inner.retryRecovery?.() ?? false)),
-    setOutputPaused: (paused) => (bridged() ? false : (inner.setOutputPaused?.(paused) ?? false)),
+    setOutputPaused: (paused) => {
+      if (!bridged()) {
+        return inner.setOutputPaused?.(paused) ?? false
+      }
+      if (!api) {
+        return false
+      }
+      api.setOutputPaused({ ptyId, paused })
+      return true
+    },
     connect: (options) => {
       if (options.sessionId === ptyId) {
         return connectBridged(options.callbacks)
@@ -262,6 +299,10 @@ export function createLegacyRelayBridgeTransport(ptyId: string, inner: PtyTransp
       inner.detach?.(options)
     },
     destroy: (options) => {
+      if (bridged()) {
+        // An explicit pane close: stop the shell, as the other transports' destroy does.
+        void api?.close({ ptyId }).catch(() => {})
+      }
       if (bridged() || mode === 'pending') {
         release()
         mode = 'pending'

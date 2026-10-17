@@ -18,10 +18,8 @@ import {
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { translate } from '@/i18n/i18n'
 import { ActivityTabsMenuItems } from '../../../../packages/pilot/src/renderer/activity-tabs/ActivityTabsMenuItems' // pilot-hook: activity-tabs-menu
-import {
-  formatActiveFilterLabel,
-  OptionsFilterCountBadge
-} from '@/components/sidebar/options-filter-count-badge'
+import { OptionsFilterCountBadge } from '@/components/sidebar/options-filter-count-badge'
+import { formatActiveFilterLabel } from '../../../../shared/workspace-view/workspace-row-filters'
 import {
   ActivityScopeFilterMenuItems,
   useActivityScopeFilterCount

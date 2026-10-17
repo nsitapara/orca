@@ -44,9 +44,12 @@ const { resolveOrcadMachineHome } = await import('./orcad-remote-context')
 const {
   decideOrcadMachineHome,
   orcadMachineIdentity,
+  orcadMachineOwnershipUnresolvedMessage,
+  parseOrcadMachineHomeProbe,
   ORCAD_MACHINE_CLAIM_FILENAME,
   ORCAD_MACHINE_HOMES_DIRNAME
 } = await import('./orcad-machine-home')
+const { ORCAD_MACHINE_CLAIM_ARBITER_DIRNAME } = await import('./orcad-machine-claim-command')
 const { computeRemoteInstallDir } = await import('./remote-versioned-install')
 const { ORCAD_INSTALL_MODEL } = await import('./remote-install-model')
 const { orcadLivenessProbeCommand, ORCAD_PID_FILENAME } = await import('./orcad-remote-launch')
@@ -72,20 +75,62 @@ afterEach(() => {
   rmSync(scratch, { recursive: true, force: true })
 })
 
-/** The fake machine's hardware UUID, as `sysctl -n kern.hostuuid` answers it. */
+/** The fake machine's hardware UUID, as `ioreg` answers its `IOPlatformUUID`. */
 function uuidOf(name: string): string {
   const hex = Buffer.from(name.padEnd(16, '-')).toString('hex').slice(0, 32)
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20, 32)}`
 }
 
+function ioregOutput(name: string): string {
+  return `+-o J316sAP  <class IOPlatformExpertDevice>\n    "IOPlatformUUID" = "${uuidOf(name).toUpperCase()}"\n`
+}
+
+type MachineOptions = {
+  /** A filesystem without hard links: every `ln` fails. */
+  noHardLinks?: boolean
+  /** Holds each machine's write of the claim until both arrive, then delays this one's. */
+  claimWriteDelay?: number
+  /** What `df -P` names as the home's source, e.g. an NFS export or a local disk. */
+  homeSource?: string
+}
+
 /** A (macOS-flavored) machine sharing `home`, as on an NFS-mounted cluster home. */
-function machine(name: string, hostname = name) {
+function machine(name: string, hostname = name, options: MachineOptions = {}) {
   const bin = join(scratch, `bin-${name}-${hostname}`)
   mkdirSync(bin, { recursive: true })
-  writeFileSync(join(bin, 'uname'), `#!/bin/sh\necho ${hostname}\n`)
-  writeFileSync(join(bin, 'sysctl'), `#!/bin/sh\necho ${uuidOf(name)}\n`)
-  chmodSync(join(bin, 'uname'), 0o755)
-  chmodSync(join(bin, 'sysctl'), 0o755)
+  const tool = (tool: string, script: string): void => {
+    writeFileSync(join(bin, tool), `#!/bin/sh\n${script}\n`)
+    chmodSync(join(bin, tool), 0o755)
+  }
+  tool('uname', `echo ${hostname}`)
+  tool('ioreg', `printf '%s' '${ioregOutput(name)}'`)
+  // As on macOS, which has no such OID.
+  tool('sysctl', `echo "sysctl: unknown oid '$2'" >&2; exit 1`)
+  if (options.homeSource !== undefined) {
+    tool(
+      'df',
+      `printf 'Filesystem 1024-blocks Used Available Capacity Mounted on\\n%s 100 1 99 1%% /home\\n' '${options.homeSource}'`
+    )
+  }
+  if (options.noHardLinks) {
+    tool('ln', 'echo "ln: Operation not supported" >&2; exit 1')
+  }
+  if (options.claimWriteDelay !== undefined) {
+    const barrier = join(scratch, 'claim-write-barrier')
+    mkdirSync(barrier, { recursive: true })
+    tool(
+      'mv',
+      [
+        'for last; do :; done',
+        `case "$last" in */${ORCAD_MACHINE_CLAIM_FILENAME})`,
+        `  : > '${barrier}/'$$; i=0`,
+        `  while [ "$(ls '${barrier}' | wc -l)" -lt 2 ] && [ $i -lt 40 ]; do sleep 0.05; i=$((i + 1)); done`,
+        `  sleep ${options.claimWriteDelay};;`,
+        'esac',
+        'exec /bin/mv "$@"'
+      ].join('\n')
+    )
+  }
   const env = {
     ...process.env,
     HOME: home,
@@ -106,7 +151,7 @@ function claimPath(): string {
   return join(home, '.orca-remote', ORCAD_MACHINE_CLAIM_FILENAME)
 }
 
-function legacyOwner(name: string): void {
+function legacyOwner(name: string, machineIdentity: string | null = uuidOf(name)): void {
   const dir = join(home, '.orca', '.profile-state-access', 'participants', 'token')
   mkdirSync(dir, { recursive: true })
   writeFileSync(
@@ -116,7 +161,7 @@ function legacyOwner(name: string): void {
       pid: 4242,
       host: name,
       platform: 'darwin',
-      machineIdentity: uuidOf(name)
+      ...(machineIdentity === null ? {} : { machineIdentity })
     })
   )
 }
@@ -209,6 +254,80 @@ describe.runIf(POSIX)('resolveOrcadMachineHome on a home several machines share'
     )
   })
 
+  it('keeps a Mac whose orcad predates macOS machine identity on its running install', async () => {
+    const a = machine('node-a')
+    mkdirSync(join(home, '.orca-remote', 'orcad-0.1.0+abc'), { recursive: true })
+    // Older orcads on macOS recorded no machine identity at all.
+    legacyOwner('node-a', null)
+    expect(await resolveOrcadMachineHome(a, true)).toEqual(loginHomeResult())
+    expect(await resolveOrcadMachineHome(a, true)).toEqual(loginHomeResult())
+  })
+
+  it('never lets another Mac claim a live install whose owner recorded no machine identity', async () => {
+    const nfs = { homeSource: 'filer:/export/home' }
+    const b = machine('node-b', 'node-b', nfs)
+    mkdirSync(join(home, '.orca-remote', 'orcad-0.1.0+abc'), { recursive: true })
+    writeFileSync(join(home, '.orca-remote', 'orcad-active.json'), '{"schemaVersion":1}')
+    // node-a's older orcad is running: its owner names only node-a's hostname.
+    legacyOwner('node-a', null)
+
+    await expect(resolveOrcadMachineHome(b, true)).rejects.toThrow(
+      /recorded only a hostname[\s\S]*If node-b set it up/
+    )
+    expect(existsSync(claimPath())).toBe(false)
+    // The same Mac under a drifted hostname is just as unprovable, so it is not claimed either.
+    await expect(
+      resolveOrcadMachineHome(machine('node-a', 'cafe-wifi', nfs), true)
+    ).rejects.toThrow(/recorded only a hostname/)
+    // node-a, still under the name its owner recorded, keeps its own install.
+    expect(await resolveOrcadMachineHome(machine('node-a', 'node-a', nfs), true)).toEqual(
+      loginHomeResult()
+    )
+  })
+
+  it('lets exactly one machine claim a home on a filesystem without hard links', async () => {
+    const a = machine('node-a', 'node-a', { noHardLinks: true, claimWriteDelay: 0 })
+    const b = machine('node-b', 'node-b', { noHardLinks: true, claimWriteDelay: 0.5 })
+    const homes = await Promise.all([
+      resolveOrcadMachineHome(a, true),
+      resolveOrcadMachineHome(b, true)
+    ])
+    expect(homes.filter((resolved) => resolved.orcadHome === home)).toHaveLength(1)
+    expect(readdirNames(join(home, '.orca-remote'))).toEqual(
+      [
+        ORCAD_MACHINE_CLAIM_ARBITER_DIRNAME,
+        ORCAD_MACHINE_CLAIM_FILENAME,
+        ORCAD_MACHINE_HOMES_DIRNAME
+      ].sort()
+    )
+    expect(readdirNames(join(home, '.orca-remote', ORCAD_MACHINE_CLAIM_ARBITER_DIRNAME))).toEqual([
+      ORCAD_MACHINE_CLAIM_FILENAME
+    ])
+    // Stable on later connects.
+    expect(
+      await Promise.all([resolveOrcadMachineHome(a, true), resolveOrcadMachineHome(b, true)])
+    ).toEqual(homes)
+  })
+
+  it('lets exactly one of two machines replace an empty claim', async () => {
+    mkdirSync(join(home, '.orca-remote'))
+    writeFileSync(claimPath(), '')
+    const homes = await Promise.all([
+      resolveOrcadMachineHome(machine('node-a', 'node-a', { claimWriteDelay: 0 }), true),
+      resolveOrcadMachineHome(machine('node-b', 'node-b', { claimWriteDelay: 0.5 }), true)
+    ])
+    expect(homes.filter((resolved) => resolved.orcadHome === home)).toHaveLength(1)
+  })
+
+  it('restores an emptied claim to the machine the arbiter already chose', async () => {
+    const a = machine('node-a', 'node-a', { noHardLinks: true })
+    const b = machine('node-b', 'node-b', { noHardLinks: true })
+    expect(await resolveOrcadMachineHome(a, true)).toEqual(loginHomeResult())
+    writeFileSync(claimPath(), '')
+    expect((await resolveOrcadMachineHome(b, true)).orcadHome).not.toBe(home)
+    expect(await resolveOrcadMachineHome(a, true)).toEqual(loginHomeResult())
+  })
+
   it('keeps a renamed machine on its own install', async () => {
     expect(await resolveOrcadMachineHome(machine('node-a'), true)).toEqual(loginHomeResult())
     expect(await resolveOrcadMachineHome(machine('node-a', 'renamed'), true)).toEqual(
@@ -231,11 +350,59 @@ describe.runIf(POSIX)('resolveOrcadMachineHome on a home several machines share'
     )
   })
 
+  it('names no owner for a stopped pre-claim install on a shared home until the user does', async () => {
+    const nfs = { homeSource: 'filer:/export/home' }
+    const a = machine('node-a', 'node-a', nfs)
+    const b = machine('node-b', 'node-b', nfs)
+    // node-a's pre-claim orcad shut down cleanly, which removes its data-root owner.
+    writeFileSync(join(mkdirp(home, '.orca-remote'), 'orcad-active.json'), '{"schemaVersion":1}')
+    mkdirp(home, '.orca', '.profile-state-access', 'participants')
+
+    await expect(resolveOrcadMachineHome(b, true)).rejects.toThrow(/can't tell which machine/)
+    expect(existsSync(claimPath())).toBe(false)
+    expect(existsSync(join(home, '.orca-remote', ORCAD_MACHINE_HOMES_DIRNAME))).toBe(false)
+
+    // The user runs the claim node-a's message names, on node-a.
+    const message = await resolveOrcadMachineHome(a, true).then(
+      () => '',
+      (error: unknown) => String(error)
+    )
+    expect(message).toContain('If node-a set it up')
+    await execOrcadRemote(a, message.slice(message.indexOf('reconnect: ') + 'reconnect: '.length))
+    expect(await resolveOrcadMachineHome(a, true)).toEqual(loginHomeResult())
+    expect((await resolveOrcadMachineHome(b, true)).orcadHome).not.toBe(home)
+  })
+
+  it('claims a shared home whose data root no orcad ever activated, and its fix runs anywhere', async () => {
+    const a = machine('node-a', 'node-a', { homeSource: 'filer:/export/home' })
+    // Another Orca process (a CLI, say) used the data root; no managed server ever ran here.
+    mkdirp(home, '.orca', '.profile-state-access', 'participants')
+    expect(await resolveOrcadMachineHome(a, true)).toEqual(loginHomeResult())
+
+    // The printed fix also works on a home that has no `~/.orca-remote` yet.
+    rmSync(join(home, '.orca-remote'), { recursive: true })
+    const fix = orcadMachineOwnershipUnresolvedMessage('a'.repeat(16), null)
+    await execOrcadRemote(a, fix.slice(fix.indexOf('reconnect: ') + 'reconnect: '.length))
+    expect(readFileSync(claimPath(), 'utf8')).toContain('a'.repeat(16))
+  })
+
+  it('claims a stopped pre-claim install on a local disk, which no other machine can share', async () => {
+    const a = machine('node-a', 'node-a', { homeSource: '/dev/disk3s5' })
+    writeFileSync(join(mkdirp(home, '.orca-remote'), 'orcad-active.json'), '{"schemaVersion":1}')
+    expect(await resolveOrcadMachineHome(a, true)).toEqual(loginHomeResult())
+  })
+
   it('keeps WSL on the login home without probing or claiming', async () => {
     expect(await resolveOrcadMachineHome(machine('node-a'), false)).toEqual(loginHomeResult())
     expect(existsSync(join(home, '.orca-remote'))).toBe(false)
   })
 })
+
+function mkdirp(...parts: string[]): string {
+  const dir = join(...parts)
+  mkdirSync(dir, { recursive: true })
+  return dir
+}
 
 function readdirNames(dir: string): string[] {
   return readdirSync(dir).sort()
@@ -248,6 +415,8 @@ function probe(host: Host, overrides: Partial<Probe> = {}): Probe {
     claim: { state: 'absent' },
     dataRootOwners: [],
     machineHomeKeys: [],
+    loginHomeInstalled: false,
+    homeOnLocalDisk: false,
     ...overrides
   }
 }
@@ -265,12 +434,18 @@ describe('decideOrcadMachineHome', () => {
 
   it('keys macOS by hardware UUID alone, since its hostname follows the network', () => {
     const uuid = '12345678-1234-1234-1234-123456789ABC'
-    expect(orcadMachineIdentity(darwin, uuid, 'cafe-wifi')?.key).toBe(
-      orcadMachineIdentity(darwin, uuid, 'home-wifi')?.key
+    const ioreg = `    "IOPlatformUUID" = "${uuid}"`
+    expect(orcadMachineIdentity(darwin, ioreg, 'cafe-wifi')?.key).toBe(
+      orcadMachineIdentity(darwin, ioreg, 'home-wifi')?.key
     )
+    expect(orcadMachineIdentity(darwin, ioreg, 'cafe-wifi')?.machineIdentity).toBe(
+      uuid.toLowerCase()
+    )
+    // What `sysctl -n kern.hostuuid` printed on macOS: nothing.
+    expect(orcadMachineIdentity(darwin, '', 'cafe-wifi')).toBeNull()
     const renamed = probe(darwin, {
-      identity: orcadMachineIdentity(darwin, uuid, 'cafe-wifi'),
-      dataRootOwners: [{ host: 'home-wifi', machineIdentity: uuid }]
+      identity: orcadMachineIdentity(darwin, ioreg, 'cafe-wifi'),
+      dataRootOwners: [{ host: 'home-wifi', machineIdentity: uuid.toLowerCase() }]
     })
     expect(decideOrcadMachineHome(renamed, darwin).kind).toBe('claim')
   })
@@ -288,6 +463,64 @@ describe('decideOrcadMachineHome', () => {
       dataRootOwners: [{ host: 'node-b', machineIdentity: null }]
     })
     expect(decideOrcadMachineHome(unrecorded, linux).kind).toBe('machine-home')
+  })
+
+  it('claims no install whose owner names neither its machine nor a matching hostname', () => {
+    const uuid = '12345678-1234-1234-1234-123456789abc'
+    const mac = orcadMachineIdentity(darwin, `"IOPlatformUUID" = "${uuid}"`, 'mac-b')
+    const otherMac = { host: 'mac-a', machineIdentity: null }
+    expect(
+      decideOrcadMachineHome(probe(darwin, { identity: mac, dataRootOwners: [otherMac] }), darwin)
+    ).toEqual({ kind: 'unresolved', machineKey: mac?.key, cause: 'unattributed-owner' })
+    // A local disk cannot be another machine's.
+    expect(
+      decideOrcadMachineHome(
+        probe(darwin, { identity: mac, dataRootOwners: [otherMac], homeOnLocalDisk: true }),
+        darwin
+      ).kind
+    ).toBe('claim')
+    const nameless = probe(linux, { dataRootOwners: [{ host: null, machineIdentity: null }] })
+    expect(decideOrcadMachineHome(nameless, linux).kind).toBe('unresolved')
+  })
+
+  it('reads a Linux home’s filesystem type before its df source', () => {
+    const output = (installed: string, type: string, source: string): string =>
+      [
+        '/home/u',
+        'a'.repeat(32),
+        'node-a',
+        'ABSENT',
+        '',
+        '',
+        installed,
+        type,
+        `${source} 100 1 99 1% /home`
+      ].join('\n__ORCA_MACHINE_HOME_SECTION__\n')
+    const decide = (installed: string, type: string, source: string) =>
+      decideOrcadMachineHome(
+        parseOrcadMachineHomeProbe(output(installed, type, source), linux),
+        linux
+      )
+    expect(decide('INSTALLED', 'nfs', '/dev/sda1').kind).toBe('unresolved')
+    expect(decide('INSTALLED', 'ext2/ext3', 'filer:/export').kind).toBe('claim')
+    // No filesystem type (an old busybox): only a device source counts as a local disk.
+    expect(decide('INSTALLED', '', '/dev/sda1').kind).toBe('claim')
+    expect(decide('INSTALLED', '', 'filer:/export').kind).toBe('unresolved')
+    // Nothing ran from the login home yet, so claiming it strands no one.
+    expect(decide('', 'nfs', 'filer:/export').kind).toBe('claim')
+  })
+
+  it('claims a stopped install only with evidence of whose it is', () => {
+    const stopped = { loginHomeInstalled: true }
+    expect(decideOrcadMachineHome(probe(linux, stopped), linux).kind).toBe('unresolved')
+    expect(
+      decideOrcadMachineHome(probe(linux, { ...stopped, homeOnLocalDisk: true }), linux).kind
+    ).toBe('claim')
+    const ownRunning = probe(linux, {
+      ...stopped,
+      dataRootOwners: [{ host: 'node-a', machineIdentity: 'a'.repeat(32) }]
+    })
+    expect(decideOrcadMachineHome(ownRunning, linux).kind).toBe('claim')
   })
 
   it('keeps the login home when the machine cannot be identified', () => {
