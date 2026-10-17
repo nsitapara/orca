@@ -101,3 +101,10 @@ test("Automations lists the server's automation and flips it as a paired device"
   await toggle.click()
   await expect(toggle).not.toHaveAttribute('aria-checked', before ?? '')
 })
+
+test('Playground says it runs where Pilot runs', async () => {
+  await page.getByRole('button', { name: 'Playground', exact: true }).click()
+  await expect(page.getByText(/runs only on the machine Pilot runs on/)).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Start' })).toHaveCount(0)
+  await page.screenshot({ path: test.info().outputPath('playground.png') })
+})

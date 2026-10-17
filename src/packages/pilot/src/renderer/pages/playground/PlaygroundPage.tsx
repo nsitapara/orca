@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
+import { isWebClientLocation } from '@/lib/web-client-location'
 import type { PlaygroundProject, PlaygroundStatus } from '../../../shared/playground-types'
 import { pilotRpc } from '../../api'
 import { Select } from '../waiting/InboxHeader'
@@ -58,8 +59,32 @@ function Idle({
   )
 }
 
+function PlaygroundHeader(): React.JSX.Element {
+  return (
+    <div>
+      <h2 className="text-sm font-semibold leading-6">Playground</h2>
+      <p className="text-xs text-muted-foreground">
+        pilotcli&apos;s commands, each with a Try-it panel that runs it in one of the project&apos;s
+        worktrees (an action as a dry run). View source opens a command&apos;s code here.
+      </p>
+    </div>
+  )
+}
+
+// Its page is a loopback address on Pilot's machine, which a browser elsewhere can't open.
+function PlaygroundElsewhere(): React.JSX.Element {
+  return (
+    <section className="flex h-full flex-col gap-3 px-5 pb-4 pt-4">
+      <PlaygroundHeader />
+      <p className="text-sm text-muted-foreground">
+        The playground runs only on the machine Pilot runs on. Start it in Pilot there.
+      </p>
+    </section>
+  )
+}
+
 // pilotcli's playground (main/playground): pick a project, Start, use its page here, Stop.
-export function PlaygroundPage(): React.JSX.Element {
+function PlaygroundHere(): React.JSX.Element {
   const [projects, setProjects] = useState<PlaygroundProject[] | null>(null)
   const [status, setStatus] = useState<PlaygroundStatus | null>(null)
   const [chosen, setChosen] = useState('')
@@ -106,14 +131,7 @@ export function PlaygroundPage(): React.JSX.Element {
 
   return (
     <section className="flex h-full flex-col gap-3 px-5 pb-4 pt-4">
-      <div>
-        <h2 className="text-sm font-semibold leading-6">Playground</h2>
-        <p className="text-xs text-muted-foreground">
-          pilotcli&apos;s commands, each with a Try-it panel that runs it in one of the
-          project&apos;s worktrees (an action as a dry run). View source opens a command&apos;s code
-          here.
-        </p>
-      </div>
+      <PlaygroundHeader />
       <div className="flex flex-wrap items-center gap-2">
         <Select
           label="Project"
@@ -151,4 +169,8 @@ export function PlaygroundPage(): React.JSX.Element {
       )}
     </section>
   )
+}
+
+export function PlaygroundPage(): React.JSX.Element {
+  return isWebClientLocation() ? <PlaygroundElsewhere /> : <PlaygroundHere />
 }
