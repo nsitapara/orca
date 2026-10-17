@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import type { InboxListRow } from '../../../shared/api-types'
 import { groupHostedItems, type HostedSection } from '../../hosts/hosted-sections'
@@ -70,6 +70,8 @@ export function InboxPage(): React.JSX.Element {
   )
   // A card the run panel's "asks you" link named: picked and scrolled to once the list has it, then forgotten.
   const pending = usePendingInboxCard()
+  // The pending card the person picked another card over while it loaded: it is then dropped, not selected.
+  const pickedOver = useRef<string | null>(null)
   useEffect(() => {
     if (!pending || !inbox) {
       return
@@ -79,8 +81,10 @@ export function InboxPage(): React.JSX.Element {
     if (!found && reads.some((r) => r.value === null && r.error === null)) {
       return
     }
+    const picked = pickedOver.current === pending
+    pickedOver.current = null
     clearPendingInboxCard()
-    if (found) {
+    if (found && !picked) {
       setSelected(pending)
       document.getElementById(`card-${pending}`)?.scrollIntoView?.({ block: 'start' })
     }
@@ -128,6 +132,7 @@ export function InboxPage(): React.JSX.Element {
   const viewerName = people.find((p) => p.id === viewer)?.name.split(' ')[0] ?? 'you'
   const select = (item: Hosted<InboxListRow>) => {
     const key = hostedKey(item.host, item.id)
+    pickedOver.current = pending
     setSelected(key)
     document.getElementById(`card-${key}`)?.scrollIntoView?.({ block: 'start' })
   }

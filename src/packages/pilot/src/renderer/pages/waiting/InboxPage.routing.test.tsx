@@ -15,7 +15,7 @@ import { inboxRow } from '../../hosts/__fixtures__/inbox-row'
 import type { PilotHostEntry } from '../../hosts/pilot-host'
 import { resetPilotHostsFeed, setPilotHostsForTests } from '../../hosts/pilot-hosts-feed'
 import { resetAutomationsFeed } from '../../run-views/automations-feed'
-import { setPilotAutomationsView, showInboxCard } from '../automations-view'
+import { pendingInboxCard, setPilotAutomationsView, showInboxCard } from '../automations-view'
 import { InboxPage } from './InboxPage'
 
 const question = (worktreePath: string, title: string): InboxListRow =>
@@ -276,6 +276,21 @@ describe('InboxPage card actions, by machine', () => {
       )
     )
     expect(document.getElementById('card-in_1')?.hasAttribute('data-selected')).toBe(false)
+    setPilotAutomationsView('automations')
+  })
+
+  it("keeps the card you picked when the run panel's card arrives later from its machine", async () => {
+    setPilotHostsForTests([LOCAL_NAMED, MINI])
+    const answerMini = serveMiniLate()
+    showInboxCard('in_1', MINI)
+    render(<InboxPage />)
+    await cardTitled('Local question')
+    fireEvent.click(document.querySelector('[data-row="in_1"]')!)
+    answerMini(listOf([question('/wt/web-2', 'Mini question')]))
+    await cardTitled('Mini question')
+    await waitFor(() => expect(pendingInboxCard()).toBeNull())
+    expect(document.getElementById('card-in_1')?.hasAttribute('data-selected')).toBe(true)
+    expect(document.getElementById('card-env:mini/in_1')?.hasAttribute('data-selected')).toBe(false)
     setPilotAutomationsView('automations')
   })
 
