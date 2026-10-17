@@ -13,7 +13,7 @@ import { useAgentPaneThreads } from './use-agent-pane-threads'
 import { handleActivityFilterFocusShortcut } from './activity-filter-focus-shortcut'
 import { hasActivityThreadWorkspace } from './activity-thread-actions'
 import { useActivityThreadActionBindings } from './use-activity-thread-action-bindings'
-import { ActivityThreadListPane } from './activity-thread-list-pane'
+import { ActivityMachinesListPane } from '../../../../packages/pilot/src/renderer/activity-machines/ActivityMachinesListPane' // pilot-hook: activity-machines-page
 import { ActivityThreadDetailPane } from './activity-thread-detail-pane'
 import {
   otherActivityTerminalSlot,
@@ -316,7 +316,8 @@ export default function ActivityPrototypePage(): React.JSX.Element {
   return (
     <div ref={setActivityPageRef} className="flex h-full min-h-0 flex-col bg-background pb-3">
       <main className="flex min-h-0 flex-1 overflow-hidden">
-        <ActivityThreadListPane
+        {/* pilot-hook: activity-machines-page */}
+        <ActivityMachinesListPane
           threadListRef={threadListRef}
           threadListWidth={threadListWidth}
           activityFilterInputRef={activityFilterInputRef}

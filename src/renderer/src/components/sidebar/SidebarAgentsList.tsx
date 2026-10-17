@@ -6,7 +6,7 @@ import { useAppStore } from '@/store'
 import { translate } from '@/i18n/i18n'
 import { hasActivityThreadWorkspace } from '@/components/activity/activity-thread-actions'
 import { useActivityThreadActionBindings } from '@/components/activity/use-activity-thread-action-bindings'
-import { ActivityThreadListPane } from '@/components/activity/activity-thread-list-pane'
+import { ActivityMachinesListPane } from '../../../../packages/pilot/src/renderer/activity-machines/ActivityMachinesListPane' // pilot-hook: activity-machines-list
 import { useAgentPaneThreads } from '@/components/activity/use-agent-pane-threads'
 import { ActivityThreadOptionsMenu } from '@/components/activity/activity-thread-controls'
 import type { ActivityGroupBy, ThreadReadFilter } from '@/components/activity/activity-thread-types'
@@ -146,7 +146,8 @@ export default function SidebarAgentsList({
         </div>
       ) : null}
       <ActivityTabsPanel /> {/* pilot-hook: activity-tabs-panel */}
-      <ActivityThreadListPane
+      {/* pilot-hook: activity-machines-list */}
+      <ActivityMachinesListPane
         activityFilterInputRef={activityFilterInputRef}
         query={query}
         onQueryChange={setQuery}
