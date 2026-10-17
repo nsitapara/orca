@@ -24,6 +24,7 @@ export function TabBarStaticCreateMenu({
   windowsShellEntries,
   defaultWindowsPowerShellImplementation,
   pwshAvailable,
+  newTerminalShortcut,
   newBrowserShortcut,
   newSimulatorShortcut,
   newFileShortcut,
@@ -42,6 +43,7 @@ export function TabBarStaticCreateMenu({
     typeof resolveWindowsPowerShellImplementationSetting
   >
   pwshAvailable: boolean
+  newTerminalShortcut: string
   newBrowserShortcut: string
   newSimulatorShortcut: string
   newFileShortcut: string
@@ -59,7 +61,8 @@ export function TabBarStaticCreateMenu({
   } = props
   const defaultTerminalMenuItems =
     windowsShellEntries && onNewTerminalWithShell ? (
-      windowsShellEntries.map((entry) => {
+      windowsShellEntries.map((entry, index) => {
+        const isDefault = index === 0
         return (
           <DropdownMenuItem
             key={entry.shell}
@@ -81,6 +84,7 @@ export function TabBarStaticCreateMenu({
               {translate('auto.components.tab.bar.TabBar.7c1313d237', 'New Terminal:')}{' '}
               {entry.label}
             </span>
+            {isDefault ? <DropdownMenuShortcut>{newTerminalShortcut}</DropdownMenuShortcut> : null}
           </DropdownMenuItem>
         )
       })
@@ -94,6 +98,7 @@ export function TabBarStaticCreateMenu({
       >
         <TerminalSquare className="size-4 text-muted-foreground" />
         {translate('auto.components.tab.bar.TabBar.d364f3c8d4', 'New Terminal')}
+        <DropdownMenuShortcut>{newTerminalShortcut}</DropdownMenuShortcut>
       </DropdownMenuItem>
     )
   const newBrowserMenuItem =
