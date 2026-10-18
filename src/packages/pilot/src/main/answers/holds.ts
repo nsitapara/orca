@@ -110,7 +110,12 @@ export function passActivity(
   return async (path) => {
     terminals ??= listBusyTerminals(runtime)
     const listed = await terminals
-    return worktreeBusy(path, listed, reads, store && endedRunTerminals(store, listed))
+    return worktreeBusy(
+      path,
+      listed,
+      reads,
+      store && endedRunTerminals(store, listed, (key) => runtime.getAgentStatusRowsForPane(key))
+    )
   }
 }
 

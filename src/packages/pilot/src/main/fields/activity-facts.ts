@@ -90,7 +90,8 @@ export function runtimeActivity(
   return {
     terminals: () => listBusyTerminals(runtime),
     reads: () => runtimeBusyReads(runtime),
-    endedRunTerminal: (terminals) => endedRunTerminals(store, terminals),
+    endedRunTerminal: (terminals) =>
+      endedRunTerminals(store, terminals, (key) => runtime.getAgentStatusRowsForPane(key)),
     terminalAlive
   }
 }

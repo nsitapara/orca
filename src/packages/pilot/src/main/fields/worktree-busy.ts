@@ -11,6 +11,7 @@ export type BusyTerminal = {
   worktreePath: string
   tabId: string
   leafId: string
+  recordedPaneKey?: string
 }
 export type BusyReads = {
   draft(handle: string): Promise<string>
@@ -24,7 +25,12 @@ export type TabReads = {
 }
 export type BusyRuntime = Pick<
   OrcaRuntimeService,
-  'listTerminals' | 'readTerminal' | 'getWorktreePs' | 'waitForTerminal' | 'showTerminal'
+  | 'listTerminals'
+  | 'readTerminal'
+  | 'getWorktreePs'
+  | 'waitForTerminal'
+  | 'showTerminal'
+  | 'getAgentStatusRowsForPane'
 >
 
 const UNFINISHED: Record<string, string> = {
@@ -106,7 +112,8 @@ export async function listBusyTerminals(runtime: BusyRuntime): Promise<BusyTermi
     agentIdentity: t.agentIdentity ?? null,
     worktreePath: t.worktreePath,
     tabId: t.tabId,
-    leafId: t.leafId
+    leafId: t.leafId,
+    recordedPaneKey: t.recordedPaneKey
   }))
 }
 
