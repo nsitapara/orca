@@ -314,7 +314,11 @@ export function InboxPage(): React.JSX.Element {
           sort={prefs.sort}
           view={prefs.view}
           onFilters={setFilters}
-          onGroup={(group) => setPrefs({ group })}
+          onGroup={(group) => {
+            // A section picked under another grouping would come back when this one returns.
+            setPrefs({ group })
+            setSection(ALL)
+          }}
           onSort={(sort) => setPrefs({ sort })}
           onView={(view) => setPrefs({ view })}
         />

@@ -112,3 +112,23 @@ describe('a card the run panel names', () => {
     setPilotAutomationsView('automations')
   })
 })
+
+describe('Group by', () => {
+  const nav = () => within(screen.getByRole('navigation', { name: 'Cards' }))
+  const titles = () =>
+    screen.queryAllByRole('article').map((a) => a.querySelector('h3')?.textContent)
+  const groupBy = (value: string) =>
+    fireEvent.change(screen.getByRole('combobox', { name: 'Group by' }), { target: { value } })
+
+  it('drops the picked section when it changes, so switching back shows every card', async () => {
+    serve()
+    render(<InboxPage />)
+    await screen.findByRole('heading', { name: 'First' })
+    fireEvent.click(nav().getByRole('button', { name: 'web-1 · 2' }))
+    expect(titles()).toEqual(['First', 'Second'])
+    groupBy('job')
+    groupBy('worktree')
+    expect(titles()).toEqual(['First', 'Second', 'Third'])
+    expect(nav().getByRole('button', { name: 'All · 3' }).getAttribute('aria-pressed')).toBe('true')
+  })
+})
