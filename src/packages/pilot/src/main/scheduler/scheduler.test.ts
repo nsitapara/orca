@@ -529,6 +529,29 @@ describe('PilotScheduler run queue', () => {
     expect(asked).toEqual([[['ci', 'review', 'manual-job'], at1012]])
   })
 
+  it("ticks at most four queued automations at once, so one slow tick doesn't hold up the rest", async () => {
+    const ids = ['a', 'b', 'c', 'd', 'e', 'f']
+    const d = deps(
+      ids.map((id) => def(id, 'manual')),
+      at1012,
+      null
+    )
+    d.queuedToTick = () => ids
+    let inFlight = 0
+    let peak = 0
+    d.runTick = async (x) => {
+      inFlight += 1
+      peak = Math.max(peak, inFlight)
+      await new Promise((resolve) => setTimeout(resolve, 5))
+      inFlight -= 1
+      d.ran.push(x.id)
+      return OK
+    }
+    await new PilotScheduler(d).tickAll()
+    expect(peak).toBe(MAX_CONCURRENT_TICKS)
+    expect([...d.ran].sort()).toEqual(ids)
+  })
+
   it('still ticks the due automations when the run queue cannot be read', async () => {
     const d = deps([def('ci', '10 * * * *')], at1012, Date.UTC(2026, 9, 10, 18, 10))
     d.queuedToTick = () => {

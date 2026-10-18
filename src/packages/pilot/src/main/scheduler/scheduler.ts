@@ -217,7 +217,8 @@ export class PilotScheduler {
     await tickQueued(this.deps, definitions, {
       stopped: () => this.stopped,
       busy: (id) => this.running.has(id),
-      tick: (id) => this.tickNow(id, { dryRun: false, pass })
+      tick: (id) => this.tickNow(id, { dryRun: false, pass }),
+      concurrency: MAX_CONCURRENT_TICKS
     })
     await mapLimit(definitions, MAX_CONCURRENT_TICKS, async (def) => {
       if (!this.stopped) {
