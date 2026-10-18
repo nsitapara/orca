@@ -119,6 +119,7 @@ describe('an answered card', () => {
     expect(await screen.findByText('Mark ready in 2:59')).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Undo' })).toBeTruthy()
     expect(screen.getByText('answered')).toBeTruthy()
+    expect(tabs().getByRole('button', { name: 'Needs you · 0' })).toBeTruthy()
     expect(screen.queryByRole('button', { name: 'Mark ready' })).toBeNull()
     await vi.advanceTimersByTimeAsync(3_000)
     expect(screen.getByText('Mark ready in 2:56')).toBeTruthy()
