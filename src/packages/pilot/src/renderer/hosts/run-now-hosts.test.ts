@@ -61,16 +61,25 @@ describe('runNowChoices', () => {
       [LOCAL_NAMED, MINI_OFFLINE],
       "Mac mini isn't answering, so this automation can't be changed from here right now."
     ],
-    [
-      'is no longer connected',
-      [LOCAL_NAMED, LINUX],
-      "No connected Pilot is named Mac mini, so this automation can't be changed from here."
-    ]
-  ])('disables a machine that loaded the job but %s, in the shared wording', (_w, hosts, why) => {
+    ['is no longer connected', [LOCAL_NAMED, LINUX], "Mac mini isn't connected any more"]
+  ])('disables a machine that loaded the job but %s', (_w, hosts, why) => {
     const { choices } = runNowChoices({ runsOn: null, hosts: [LOCAL_NAMED, MINI] }, hosts)
     expect(offered(choices)).toEqual([
       ['local', 'MacBook', null],
       ['env:mini', 'Mac mini', why]
+    ])
+  })
+
+  it('refuses a machine gone from the hosts by its key, though another is named the same', () => {
+    const other: PilotHostEntry = { ...MINI, key: 'env:mini2', target: { kind: 'local' } }
+    const { choices } = runNowChoices({ runsOn: null, hosts: [LOCAL_NAMED, MINI, other] }, [
+      LOCAL_NAMED,
+      other
+    ])
+    expect(offered(choices)).toEqual([
+      ['local', 'MacBook', null],
+      ['env:mini', 'Mac mini', "Mac mini isn't connected any more"],
+      ['env:mini2', 'Mac mini', null]
     ])
   })
 

@@ -16,13 +16,17 @@ function schedulerOffText(name: string): string {
 // A run started on a machine waits on it as a row pinned there does, so the shared predicate words why.
 function whyNot(host: PilotHostRef, hosts: readonly PilotHostEntry[]): string | null {
   const entry = hosts.find((h) => h.key === host.key)
-  const down = entry && entry.state !== 'online' ? [entry] : []
+  // By key first: the name predicate would let a same-named machine stand in for it.
+  if (!entry) {
+    return `${host.machineName} isn't connected any more`
+  }
+  const down = entry.state !== 'online' ? [entry] : []
   const held = rowRefusal({ runsOn: host.machineName }, { listedHosts: hosts, failedHosts: down })
   if (held) {
     return held
   }
   // tickNow refuses where the scheduler is off; null (not reported) is left for that machine to answer.
-  return entry?.schedulerOn === false ? schedulerOffText(host.machineName) : null
+  return entry.schedulerOn === false ? schedulerOffText(host.machineName) : null
 }
 
 function enabledKey(
