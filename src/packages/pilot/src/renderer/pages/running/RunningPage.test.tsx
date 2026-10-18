@@ -339,7 +339,7 @@ describe('RunningPage on more than one machine', () => {
     expect([limitOf('MacBook'), limitOf('Mac mini')]).toEqual(['2', '3'])
   })
 
-  it('says an unreachable machine is not shown, and that its runs go on there', async () => {
+  it("says an unreachable machine's runs are not shown, without claiming they still run", async () => {
     setPilotHostsForTests([LOCAL_NAMED, MINI_OFFLINE])
     pilotRpc.mockImplementation(byHost({ local: machine({}) }))
     render(<RunningPage />)
@@ -347,7 +347,7 @@ describe('RunningPage on more than one machine', () => {
     const mini = region('Mac mini')
     expect(
       mini.getByText(
-        "Mac mini can't be reached, so its runs aren't shown here. They go on running there."
+        "Mac mini can't be reached. Losing contact doesn't stop its runs; they just aren't visible from here."
       )
     ).toBeTruthy()
     expect(mini.queryByRole('region', { name: 'Run limit' })).toBeNull()

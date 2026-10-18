@@ -216,8 +216,8 @@ function MachineSection({ machine, named, ...rest }: MachineProps): React.JSX.El
       <section aria-label={host.machineName} className="flex flex-col gap-4">
         {heading}
         <p className="text-sm text-muted-foreground">
-          {host.machineName} can&apos;t be reached, so its runs aren&apos;t shown here. They go on
-          running there.
+          {host.machineName} can&apos;t be reached. Losing contact doesn&apos;t stop its runs; they
+          just aren&apos;t visible from here.
         </p>
       </section>
     )

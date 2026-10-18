@@ -9,8 +9,10 @@ import {
 } from '@/components/ui/select'
 import type { TickOutcome } from '../../shared/api-types'
 import { hostRpc } from '../hosts/host-rpc'
+import type { MergedAutomation } from '../hosts/merge-automations'
 import type { PilotHostRef } from '../hosts/pilot-host'
 import {
+  runNowAway,
   runNowHeld,
   runNowPick,
   type RunNowChoice,
@@ -29,12 +31,14 @@ export function RunControls({
   id,
   host,
   choices,
+  row,
   onDone,
   onDryRun
 }: {
   id: string
   host: PilotHostRef
   choices?: RunNowChoices
+  row?: Pick<MergedAutomation, 'name' | 'runsOn'> | null
   onDone: () => void
   onDryRun: (outcome: TickOutcome) => void
 }): React.JSX.Element {
@@ -51,6 +55,7 @@ export function RunControls({
     }
   }, [])
   const picked = choices ? runNowPick(choices, chosen) : null
+  const away = phase === 'confirm' ? runNowAway(row, choices, picked) : null
 
   const run = async (method: Method, target: PilotHostRef): Promise<void> => {
     if (inFlight.current) {
@@ -112,6 +117,7 @@ export function RunControls({
   return (
     <div className="flex flex-col items-end gap-1">
       <div className="flex items-center gap-2">{bar}</div>
+      {away ? <p className="text-xs text-muted-foreground">{away}</p> : null}
       {message ? <p className="text-sm text-muted-foreground">{message}</p> : null}
     </div>
   )

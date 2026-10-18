@@ -184,6 +184,7 @@ export function AutomationView({
             id={id}
             host={home}
             choices={choices}
+            row={row}
             onDone={() => void refresh()}
             onDryRun={setDryRun}
           />

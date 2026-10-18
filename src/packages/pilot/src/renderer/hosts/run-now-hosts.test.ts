@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { LOCAL_NAMED, MINI, MINI_OFFLINE } from './__fixtures__/hosts'
 import type { PilotHostEntry } from './pilot-host'
-import { runNowBlocked, runNowChoices, runNowHeld, runNowPick } from './run-now-hosts'
+import { runNowAway, runNowBlocked, runNowChoices, runNowHeld, runNowPick } from './run-now-hosts'
 
 const LINUX: PilotHostEntry = {
   ...MINI,
@@ -151,4 +151,29 @@ describe('runNowBlocked', () => {
   ])('says %s', (_w, loaded, hosts, why) =>
     expect(runNowBlocked(runNowChoices({ runsOn: null, hosts: loaded }, hosts))).toBe(why)
   )
+})
+
+describe('runNowAway', () => {
+  const AWAY =
+    "Fix CI runs on Mac mini; a run on MacBook can't hand over to it and may redo items it handled."
+  it.each<[string, string | null, PilotHostEntry[], string, string | null]>([
+    [
+      'warns when the pick is not the runs_on machine',
+      ' mac MINI ',
+      [LOCAL_NAMED, MINI],
+      'local',
+      AWAY
+    ],
+    ['says nothing on the runs_on machine', 'Mac mini', [LOCAL_NAMED, MINI], 'env:mini', null],
+    ['says nothing for a job without runs_on', null, [LOCAL_NAMED, MINI], 'local', null],
+    ['says nothing with one machine to start it on', 'Mac mini', [LOCAL_NAMED], 'local', null]
+  ])('%s', (_w, runsOn, loaded, chosen, line) => {
+    const choices = runNowChoices({ runsOn, hosts: loaded }, [LOCAL_NAMED, MINI])
+    const picked = runNowPick(choices, chosen)
+    expect(runNowAway({ name: 'Fix CI', runsOn }, choices, picked)).toBe(line)
+  })
+
+  it('says nothing in a window with no machine to pick', () => {
+    expect(runNowAway({ name: 'Fix CI', runsOn: 'Mac mini' }, undefined, null)).toBeNull()
+  })
 })

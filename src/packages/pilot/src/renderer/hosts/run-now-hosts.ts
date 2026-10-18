@@ -99,3 +99,20 @@ export function runNowBlocked(choices: RunNowChoices): string | null {
 export function runNowHeld(choices: RunNowChoices, chosen: string | null): string {
   return chosenChoice(choices, chosen)?.disabled ?? runNowBlocked(choices) ?? NOT_PICKED
 }
+
+// Off its runs_on machine a pinned job's handover strands there, and that machine's handled table lacks the owner's items.
+export function runNowAway(
+  row: Pick<MergedAutomation, 'name' | 'runsOn'> | null | undefined,
+  choices: RunNowChoices | undefined,
+  picked: RunNowChoice | null
+): string | null {
+  const name = row?.runsOn?.trim()
+  if (!row || !name || !choices || choices.choices.length <= 1 || !picked) {
+    return null
+  }
+  if (sameMachine(picked.label, name)) {
+    return null
+  }
+  const home = choices.choices.find((c) => sameMachine(c.label, name))?.label ?? name
+  return `${row.name} runs on ${home}; a run on ${picked.label} can't hand over to it and may redo items it handled.`
+}

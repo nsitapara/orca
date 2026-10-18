@@ -75,6 +75,19 @@ describe('Run now on more than one machine', () => {
     ])
   })
 
+  it('notes, under the bar, what a pinned job loses when started off its runs_on machine', async () => {
+    const pinned = [{ ...summary, runsOn: 'Mac mini' }]
+    await openRunNow([LOCAL_NAMED, MINI], {
+      local: answersFrom(pinned),
+      mini: answersFrom(pinned)
+    })
+    const away =
+      "Fix failed CI runs on Mac mini; a run on MacBook can't hand over to it and may redo items it handled."
+    expect(screen.queryByText(away)).toBeNull()
+    await pick('MacBook')
+    expect(screen.getByText(away)).toBeTruthy()
+  })
+
   it('starts it on the machine picked instead of the default', async () => {
     await openRunNow([LOCAL_NAMED, MINI], {
       local: answersFrom([summary]),
