@@ -208,9 +208,6 @@ setup_ensure_agents() {
   else
     setup_ensure_checkout "$SETUP_AGENTS_REPO" "$dir" main "$dir"
   fi
-  if [ -f "$dir/sync-skills.sh" ] || [ "$SETUP_DRY_RUN" = 1 ]; then
-    run bash "$dir/sync-skills.sh"
-  fi
   setup_link_automations
 }
 
@@ -328,4 +325,19 @@ setup_install_pilotcli() {
     return 0
   fi
   warn "pilotcli isn't installed, so jobs that call it will fail. Re-run with --pilotcli-repo https://github.com/nsitapara/pilotCLI.git, or cross-build it on the main Mac (pilotcli-cross-build.sh), copy it here, and re-run with --pilotcli-binary <file>."
+}
+
+# Links each skill in ~/.agents/skills into the agent dirs that need a link (~/.claude/skills), once pilotcli is
+# installed. It links only into dirs whose parent exists, so re-run `pilotcli skills update-links` after Claude Code is.
+setup_link_skills() {
+  step "Skill links (pilotcli skills update-links)"
+  local pilotcli=$SETUP_BIN_DIR/pilotcli
+  if [ ! -x "$pilotcli" ] && [ "$SETUP_DRY_RUN" != 1 ]; then
+    if ! pilotcli=$(command -v pilotcli); then
+      warn "pilotcli isn't installed, so the skills aren't linked. Install it, then run pilotcli skills update-links."
+      return 0
+    fi
+  fi
+  # Exit 3 is a skip: every skill is linked already.
+  run "$pilotcli" skills update-links --format text || [ $? -eq 3 ] || warn "pilotcli skills update-links failed; run it again once its error is fixed."
 }

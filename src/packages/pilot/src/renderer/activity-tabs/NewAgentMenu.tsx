@@ -9,7 +9,9 @@ import {
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { QuickLaunchAgentMenuItems } from '@/components/tab-bar/QuickLaunchButton'
 import { focusTerminalTabSurface } from '@/lib/focus-terminal-tab-surface'
+import { getPaletteWorktreeExecutionHostId } from '@/lib/palette-repo-resolution'
 import { useAppStore } from '@/store'
+import { switchToWorkspaceForLaunch } from '../new-tab-agent-picker/launch-agent-in-workspace'
 
 const FIRST_ITEM = '[role="menuitem"]:not([data-disabled])'
 
@@ -39,6 +41,13 @@ function FocusFirstItem({
     return () => observer.disconnect()
   }, [menuRef, autoFocused])
   return null
+}
+
+// Activity lists worktrees other than the open one, so the new tab's worktree comes into view with it.
+function switchToWorktree(worktreeId: string): boolean {
+  const worktree = useAppStore.getState().getKnownWorktreeById(worktreeId)
+  const executionHostId = worktree ? getPaletteWorktreeExecutionHostId(worktree) : undefined
+  return switchToWorkspaceForLaunch(worktreeId, executionHostId, { revealInSidebar: false })
 }
 
 /** The tab bar's agent picker for one worktree, which may have no tab group yet, behind a + button. */
@@ -101,6 +110,7 @@ export function NewAgentMenu({ worktreeId }: { worktreeId: string }): React.JSX.
           <QuickLaunchAgentMenuItems
             worktreeId={worktreeId}
             groupId={groupId}
+            beforeSurfaceOpen={() => switchToWorktree(worktreeId)}
             onFocusTerminal={(tabId) => {
               pendingFocus.current = tabId
             }}

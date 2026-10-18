@@ -64,8 +64,8 @@ Run it with `--dry-run` first to see every command.
 ### What it does
 
 1. Checks Xcode's tools, `swiftc`, git and Node 24.
-2. Fast-forwards the checkout to `origin/pilot`. It clones the checkout if it is missing, and leaves it alone if it has uncommitted changes. A clean checkout on another branch is switched to `--branch` (default `pilot`). It does the same for `~/.agents` (on `main`), runs `~/.agents/sync-skills.sh`, and links `~/.pilot/automations` to `~/.agents/automations`, as on the main Mac.
-3. Installs pilotcli at `~/.local/bin/pilotcli`. With `--pilotcli-repo`, it clones or fast-forwards `~/Documents/GitHub/pilotCLI` and runs pilotCLI's own installer. A `--pilotcli-binary` is tried under a temporary name first: if it doesn't run here, it is deleted, the installed pilotcli stays, and the setup stops.
+2. Fast-forwards the checkout to `origin/pilot`. It clones the checkout if it is missing, and leaves it alone if it has uncommitted changes. A clean checkout on another branch is switched to `--branch` (default `pilot`). It does the same for `~/.agents` (on `main`), and links `~/.pilot/automations` to `~/.agents/automations`, as on the main Mac.
+3. Installs pilotcli at `~/.local/bin/pilotcli`. With `--pilotcli-repo`, it clones or fast-forwards `~/Documents/GitHub/pilotCLI` and runs pilotCLI's own installer. A `--pilotcli-binary` is tried under a temporary name first: if it doesn't run here, it is deleted, the installed pilotcli stays, and the setup stops. Then `pilotcli skills update-links` links the skills in `~/.agents/skills` into `~/.claude/skills`.
 4. Sets Pilot's settings for this login session with `launchctl setenv`:
    - `PILOT_SCHEDULER=pinned` by default (`--scheduler all|pinned|off`): this Mac ticks only the jobs pinned to it;
    - `PILOT_VAULT_EXPORT=off` (unless `--vault-export on`): one machine exports to the vault;
@@ -170,7 +170,7 @@ On every new machine:
   - GitLab: `glab auth login`.
   - GitHub: `gh auth login`.
 
-  Then re-run `~/.agents/sync-skills.sh`, which links skills into `~/.claude/skills` once Claude Code exists.
+  Then re-run `pilotcli skills update-links`, which links skills into `~/.claude/skills` once Claude Code exists.
 
 - **Linear.** Connect it in Pilot's Settings on a Mac. A headless engine has no Settings window, and Pilot's orcad keeps Linear's credential in `~/.orca` (README, Known gaps). Keep Linear jobs (13, M01) pinned to a Mac.
 - **pilotcli's config.** pilotcli always reads `$HOME/.config/pilotcli/config.toml`, whatever `XDG_CONFIG_HOME` says (pilotCLI `internal/config/config.go`). Copy it from the main Mac. On Linux, give `[paths]` this machine's paths. Its defaults are macOS paths, and Pilot strips `PILOT_*` from pilotcli's environment, so `PILOT_CLI` can't stand in:
