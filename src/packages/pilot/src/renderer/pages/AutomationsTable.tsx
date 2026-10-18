@@ -251,6 +251,21 @@ function sortMark(sort: SortState, column: SortColumn): string {
   return sort.direction === 'asc' ? ' ↑' : ' ↓'
 }
 
+function RefusalLine({
+  refused
+}: {
+  refused: ReturnType<typeof listRefusal>
+}): React.JSX.Element | null {
+  if (!refused) {
+    return null
+  }
+  return (
+    <p className={cn('text-xs', refused.warn ? 'text-destructive' : 'text-muted-foreground')}>
+      {refused.text}
+    </p>
+  )
+}
+
 const NO_MACHINES: ListedMachines = { listedHosts: [], failedHosts: [] }
 
 export function AutomationsTable({
@@ -281,11 +296,7 @@ export function AutomationsTable({
   const refused = listRefusal(payload.automations, machines)
   return (
     <MachinesContext value={machines}>
-      {refused ? (
-        <p className={cn('text-xs', refused.warn ? 'text-destructive' : 'text-muted-foreground')}>
-          {refused.text}
-        </p>
-      ) : null}
+      <RefusalLine refused={refused} />
       <div className="overflow-x-auto rounded-md border border-border/50 bg-muted/20">
         <div className={TABLE_MIN}>
           <div

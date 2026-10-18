@@ -189,14 +189,28 @@ function MachineRuns({
   )
 }
 
-function MachineSection({ machine, named, ...rest }: MachineProps): React.JSX.Element {
-  const { host, payload, error } = machine
-  const heading = named ? (
+function MachineHeading({
+  machine: { host, payload },
+  named
+}: Pick<MachineProps, 'machine' | 'named'>): React.JSX.Element | null {
+  if (!named) {
+    return null
+  }
+  return (
     <div>
       <h3 className="text-sm font-semibold leading-6">{host.machineName}</h3>
       {payload ? <p className="text-xs text-muted-foreground">{usageText(payload)}</p> : null}
     </div>
-  ) : null
+  )
+}
+
+function MachineSection({ machine, named, ...rest }: MachineProps): React.JSX.Element {
+  const { host, payload, error } = machine
+  const heading = <MachineHeading machine={machine} named={named} />
+  let where = 'this Mac'
+  if (named) {
+    where = host.machineName
+  }
   if (host.state === 'offline') {
     return (
       <section aria-label={host.machineName} className="flex flex-col gap-4">
@@ -214,9 +228,7 @@ function MachineSection({ machine, named, ...rest }: MachineProps): React.JSX.El
       <section aria-label={host.machineName} className="flex flex-col gap-4">
         {heading}
         {error ? <p className="text-sm text-destructive">{error}</p> : null}
-        {payload ? (
-          <MachineRuns payload={payload} where={named ? host.machineName : 'this Mac'} {...rest} />
-        ) : null}
+        {payload ? <MachineRuns payload={payload} where={where} {...rest} /> : null}
       </section>
     </PilotHostProvider>
   )

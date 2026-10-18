@@ -18,6 +18,17 @@ import { scheduleText } from './ScheduleCell'
 import { showPilotAutomation } from './automations-view'
 import { clockTime, formatInZone, runStatusLabel } from './format'
 
+function RunsOnNote({ line }: { line: ReturnType<typeof runsOnLine> }): React.JSX.Element | null {
+  if (!line) {
+    return null
+  }
+  return (
+    <span className={cn('block', line.warn ? 'text-destructive' : 'text-muted-foreground')}>
+      {line.text}
+    </span>
+  )
+}
+
 function Facts({ summary: s }: { summary: AutomationSummary }): React.JSX.Element {
   const next = s.nextTickAt === null ? 'None' : formatInZone(s.nextTickAt, s.timezone)
   const runsOn = runsOnLine(s, usePilotHosts())
@@ -25,11 +36,7 @@ function Facts({ summary: s }: { summary: AutomationSummary }): React.JSX.Elemen
   const schedule = (
     <>
       {`${scheduleText(s)} (${s.timezone})`}
-      {runsOn ? (
-        <span className={cn('block', runsOn.warn ? 'text-destructive' : 'text-muted-foreground')}>
-          {runsOn.text}
-        </span>
-      ) : null}
+      <RunsOnNote line={runsOn} />
     </>
   )
   const facts: [string, React.ReactNode][] = [
