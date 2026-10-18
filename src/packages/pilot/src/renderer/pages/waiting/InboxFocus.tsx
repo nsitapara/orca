@@ -1,4 +1,4 @@
-import { useRef } from 'react'
+import { useEffect, useRef } from 'react'
 import { ShortcutKeyCombo } from '@/components/ShortcutKeyCombo'
 import type { InboxListRow } from '../../../shared/api-types'
 import { hostedKey, type Hosted } from '../../hosts/pilot-host'
@@ -6,7 +6,7 @@ import { useInboxFocusKeys } from './use-inbox-focus-keys'
 
 type Card = Hosted<InboxListRow>
 
-const UP_NEXT = 3
+const UP_NEXT = 4
 
 function clickAt(card: HTMLElement | null, selector: string, index: number): void {
   card?.querySelectorAll<HTMLElement>(selector)[index]?.click()
@@ -40,6 +40,12 @@ export function InboxFocus({
   const cardRef = useRef<HTMLDivElement>(null)
   // The list shrinks as cards are answered: clamp so the current card is always a real one.
   const current = Math.max(0, Math.min(at, cards.length - 1))
+  // Store the clamped position, so a refilled list can't jump to a stale index.
+  useEffect(() => {
+    if (cards.length > 0 && at !== current) {
+      onAt(current)
+    }
+  }, [at, current, cards.length, onAt])
   const go = (next: number) => onAt(Math.max(0, Math.min(next, cards.length - 1)))
   useInboxFocusKeys(rootRef, {
     onNext: () => go(current + 1),

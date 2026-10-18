@@ -75,8 +75,8 @@ export function InboxPage(): React.JSX.Element {
   const [selected, setSelected] = useState<string | null>(null)
   // The card Rows' Open named: scrolled to once the Cards view has mounted it.
   const [scrollTo, setScrollTo] = useState<string | null>(null)
-  // The card One at a time shows, by position; InboxFocus clamps it as cards leave the list.
-  const [focusAt, setFocusAt] = useState(0)
+  // The card One at a time shows, by position, kept with the tab/filters/grouping it was picked under.
+  const [focus, setFocus] = useState({ scope: '', at: 0 })
   const [listOpen, toggleList] = useListOpen()
   const [rootRef, width] = useElementWidth()
   const {
@@ -263,11 +263,12 @@ export function InboxPage(): React.JSX.Element {
       onOpen={openInCards}
     />
   )
+  const focusScope = [tab, filters.kinds.join(), filters.query, prefs.group, prefs.sort].join('|')
   const focusBody = (
     <InboxFocus
       cards={shown.flatMap((s) => s.items)}
-      at={focusAt}
-      onAt={setFocusAt}
+      at={focus.scope === focusScope ? focus.at : 0}
+      onAt={(at) => setFocus({ scope: focusScope, at })}
       renderCard={cardOf}
       tabLabel={tabLabel(tab)}
       onExit={() => setPrefs({ view: 'cards' })}
