@@ -105,11 +105,10 @@ describe('an answered card', () => {
 
   it('is one line counting down to the settle time, with Undo; it does not count as waiting', async () => {
     serve(CARD, [entry({})], state({}))
-    const { container } = render(<InboxPage />)
+    render(<InboxPage />)
     expect(await screen.findByText('Mark ready in 2:59')).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Undo' })).toBeTruthy()
     expect(screen.getByText('answered')).toBeTruthy()
-    expect(container.textContent).toContain('0 waiting')
     expect(screen.queryByRole('button', { name: 'Mark ready' })).toBeNull()
     await vi.advanceTimersByTimeAsync(3_000)
     expect(screen.getByText('Mark ready in 2:56')).toBeTruthy()

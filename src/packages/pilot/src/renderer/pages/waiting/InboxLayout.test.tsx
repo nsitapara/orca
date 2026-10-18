@@ -108,7 +108,6 @@ describe('the Inbox layout', () => {
         .getAttribute('aria-expanded')
     ).toBe('true')
     expect(within(header).getByRole('heading', { name: 'Inbox' })).toBeTruthy()
-    expect(within(header).getByText('4 waiting')).toBeTruthy()
     expect(within(header).getByRole('combobox', { name: 'Viewing as' })).toBeTruthy()
     expect(within(header).queryByRole('combobox', { name: 'Worktree filter' })).toBeNull()
     expect(header.textContent).not.toContain('Every automation leaves')

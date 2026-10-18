@@ -4,7 +4,6 @@ import type { InboxListRow } from '../../../shared/api-types'
 import { groupHostedItems, type HostedSection } from '../../hosts/hosted-sections'
 import { HostsNotice } from '../../hosts/HostsNotice'
 import { hostedKey, type Hosted } from '../../hosts/pilot-host'
-import { waitingCount, preparingCount, preparationBlockedCount } from './answer-text'
 import { useAutomationsFeed } from '../../run-views/automations-feed'
 import { clearPendingInboxCard, usePendingInboxCard } from '../automations-view'
 import { CardList } from './CardList'
@@ -176,9 +175,6 @@ export function InboxPage(): React.JSX.Element {
       <InboxHeader
         listOpen={listOpen}
         onToggleList={toggleList}
-        waiting={waitingCount(items)}
-        preparing={preparingCount(items)}
-        blocked={preparationBlockedCount(items)}
         people={people}
         viewer={viewer}
         onViewer={setViewer}

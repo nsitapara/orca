@@ -137,9 +137,9 @@ describe('colours on the page', () => {
       return { entries: [] }
     })
     render(<InboxPage />)
-    expect(await screen.findByText('1 preparing context')).toBeTruthy()
-    expect(screen.getByText('0 waiting')).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Answer before context is ready…' })).toBeTruthy()
+    expect(
+      await screen.findByRole('button', { name: 'Answer before context is ready…' })
+    ).toBeTruthy()
     expect(screen.queryByRole('button', { name: 'Fix it' })).toBeNull()
     expect(
       screen.getByText(

@@ -38,9 +38,6 @@ export function Select({
 export function InboxHeader({
   listOpen,
   onToggleList,
-  waiting,
-  preparing = 0,
-  blocked = 0,
   people,
   viewer,
   onViewer,
@@ -51,9 +48,6 @@ export function InboxHeader({
 }: {
   listOpen: boolean
   onToggleList: () => void
-  waiting: number
-  preparing?: number
-  blocked?: number
   people: { id: string; name: string }[]
   viewer: string | null
   onViewer: (id: string) => void
@@ -79,15 +73,6 @@ export function InboxHeader({
       ) : null}
       <div className="flex flex-1 items-center gap-2">
         <h2 className="text-lg font-semibold">Inbox</h2>
-        <span className="rounded-full bg-muted px-2 font-mono text-xs font-semibold leading-5 text-muted-foreground">
-          {waiting} waiting
-        </span>
-        {preparing > 0 ? (
-          <span className="text-xs text-muted-foreground">{preparing} preparing context</span>
-        ) : null}
-        {blocked > 0 ? (
-          <span className="text-xs text-muted-foreground">{blocked} preparation blocked</span>
-        ) : null}
       </div>
       {canExpand ? (
         <button
