@@ -11,11 +11,11 @@ const GROUP_OPTIONS: readonly { value: InboxGroupBy; label: string }[] = [
   { value: 'job', label: 'Job' },
   { value: 'kind', label: 'Kind' },
   { value: 'age', label: 'Age' },
-  { value: 'none', label: 'None' }
+  { value: 'none', label: 'Nothing' }
 ]
 
 const SORT_OPTIONS: readonly { value: InboxSort; label: string }[] = [
-  { value: 'kind', label: 'Kind' },
+  { value: 'kind', label: 'Kind, then oldest' },
   { value: 'oldest', label: 'Oldest first' },
   { value: 'newest', label: 'Newest first' }
 ]
@@ -27,7 +27,7 @@ const VIEW_OPTIONS: readonly {
 }[] = [
   { value: 'cards', label: 'Cards', icon: LayoutGrid },
   { value: 'rows', label: 'Rows', icon: List },
-  { value: 'focus', label: 'Focus', icon: Maximize2 }
+  { value: 'focus', label: 'One at a time', icon: Maximize2 }
 ]
 
 export function InboxFilters({
@@ -73,7 +73,9 @@ export function InboxFilters({
         className="w-56"
       />
       <div role="group" aria-label="Kind" className="flex flex-wrap items-center gap-1.5">
-        {INBOX_KINDS.filter(({ type }) => (kindCounts[type] ?? 0) > 0).map(({ type, label }) => {
+        {INBOX_KINDS.filter(
+          ({ type }) => (kindCounts[type] ?? 0) > 0 || filters.kinds.includes(type)
+        ).map(({ type, label }) => {
           const on = filters.kinds.includes(type)
           return (
             <button
@@ -88,7 +90,7 @@ export function InboxFilters({
                   : 'border-border bg-card text-muted-foreground hover:text-foreground'
               )}
             >
-              {label} · {kindCounts[type]}
+              {label} · {kindCounts[type] ?? 0}
             </button>
           )
         })}

@@ -93,6 +93,27 @@ describe('InboxFilters', () => {
     expect(screen.getByRole('button', { name: 'Clear · 3 of 8 shown' })).toBeTruthy()
   })
 
+  it('keeps a pressed kind chip visible at zero and unpresses it on click', () => {
+    const { onFilters } = filters({ filters: { kinds: ['bug'], query: '' }, kindCounts: {} })
+    const chip = screen.getByRole('button', { name: 'Bugs · 0' })
+    expect(chip.getAttribute('aria-pressed')).toBe('true')
+    fireEvent.click(chip)
+    expect(onFilters).toHaveBeenCalledWith({ kinds: [], query: '' })
+  })
+
+  it('offers the agreed group, sort and view labels', () => {
+    filters()
+    const names = (label: string) =>
+      Array.from(screen.getByRole('combobox', { name: label }).querySelectorAll('option')).map(
+        (o) => o.textContent
+      )
+    expect(names('Group by')).toEqual(['Worktree', 'Job', 'Kind', 'Age', 'Nothing'])
+    expect(names('Sort')).toEqual(['Kind, then oldest', 'Oldest first', 'Newest first'])
+    for (const name of ['Cards', 'Rows', 'One at a time']) {
+      expect(screen.getByRole('button', { name })).toBeTruthy()
+    }
+  })
+
   it('changes search, group, sort and view', () => {
     const h = filters()
     fireEvent.change(screen.getByRole('searchbox', { name: 'Search cards' }), {
