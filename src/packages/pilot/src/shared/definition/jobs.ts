@@ -1,4 +1,5 @@
 import type { AutomationDefinition, FeedDef } from './types'
+import { sameMachine } from '../machine-match'
 import { idsFromSchema } from './where'
 
 type Staged = AutomationDefinition & { job: NonNullable<AutomationDefinition['job']> }
@@ -86,8 +87,26 @@ export function readsFed(def: AutomationDefinition): boolean {
   return parsed.success && parsed.data.feed === true
 }
 
+function sameRunsOn(a: string | null, b: string | null): boolean {
+  if (a === null || b === null) {
+    return a === b
+  }
+  return sameMachine(a, b)
+}
+
+// The problem text for stages on different machines: the pinned one first, the sender first when both are.
+function machineSplit(from: Staged, to: AutomationDefinition): string {
+  if (from.runsOn !== null && to.runsOn !== null) {
+    return `${from.id} runs on ${from.runsOn} and ${to.id} runs on ${to.runsOn}`
+  }
+  if (from.runsOn !== null) {
+    return `${from.id} runs on ${from.runsOn} and ${to.id} has no runs_on`
+  }
+  return `${to.id} runs on ${to.runsOn} and ${from.id} has no runs_on`
+}
+
 // A feed that passes ids or runs now must reach a stage of the same job, and one that passes ids must reach a stage
-// that reads them; else the ids would wait for ever. The problem is the sender's.
+// that reads them; else the ids would wait for ever. It also stays on the sender's machine. The problem is the sender's.
 function feedRules(defs: readonly AutomationDefinition[], from: Staged, problems: JobProblems) {
   for (const feed of from.job.feeds.filter(activeFeed)) {
     const why = unreachable(defs, from, feed.to)
@@ -97,6 +116,11 @@ function feedRules(defs: readonly AutomationDefinition[], from: Staged, problems
       continue
     }
     const to = defs.find((d) => d.id === feed.to)
+    if (to && !sameRunsOn(from.runsOn, to.runsOn)) {
+      const must = 'a feed that passes ids or runs now must stay on one machine'
+      const why = 'a handover stays in the database of the machine whose run wrote it'
+      add(problems, from.id, `job.feeds: ${machineSplit(from, to)}; ${must}, since ${why}`)
+    }
     if (feed.pass !== null && to && !readsFed(to)) {
       add(
         problems,

@@ -1,6 +1,7 @@
 import type { ActivityRun } from '../../shared/api-types-runs'
 import type { AutomationListPayload, AutomationSummary } from '../../shared/api-types'
 import { newestTick } from '../../shared/job-stages'
+import { sameMachine } from '../../shared/machine-match'
 import { answered, refOf, type AnsweredRead } from './answered-reads'
 import { createHostPoller, type HostRead } from './host-poll'
 import { LOCAL_PILOT_HOST, type Hosted, type PilotHostEntry, type PilotHostRef } from './pilot-host'
@@ -25,15 +26,10 @@ export type LoadedAutomations = MergedAutomationList & {
 type HostedSummary = { host: PilotHostEntry; summary: AutomationSummary }
 type Problems = Omit<AutomationListPayload, 'automations'>
 
-// runs_on matches a machine's name trimmed and in any case.
-export function sameName(a: string, b: string): boolean {
-  return a.trim().toLowerCase() === b.trim().toLowerCase()
-}
-
 function namedRow(rows: readonly HostedSummary[]): HostedSummary | undefined {
   for (const { summary } of rows) {
     const name = summary.runsOn
-    const named = name ? rows.find((r) => sameName(r.host.machineName, name)) : undefined
+    const named = name ? rows.find((r) => sameMachine(r.host.machineName, name)) : undefined
     if (named) {
       return named
     }

@@ -1,6 +1,7 @@
 import type { AutomationSummary } from '../../shared/api-types'
 import type { JobGroup } from '../../shared/job-stages'
-import { loadMergedAutomations, sameName, type MergedAutomation } from './merge-automations'
+import { sameMachine } from '../../shared/machine-match'
+import { loadMergedAutomations, type MergedAutomation } from './merge-automations'
 import { LOCAL_PILOT_HOST, type PilotHostRef } from './pilot-host'
 import { withPilotHosts } from './pilot-hosts-feed'
 
@@ -34,7 +35,7 @@ export function waitsOn(
     return [...failed]
   }
   const name = row.runsOn
-  return name ? failed.filter((host) => sameName(host.machineName, name)) : []
+  return name ? failed.filter((host) => sameMachine(host.machineName, name)) : []
 }
 
 // Why a row's own actions are refused right now, or null.

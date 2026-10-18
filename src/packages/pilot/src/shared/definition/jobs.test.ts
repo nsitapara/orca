@@ -251,11 +251,41 @@ describe('jobProblems: rules across every loaded definition', () => {
         'dev-e2e-fix-start':
           'job 13: its stages name it differently ("Fix red hourly e2e on dev", "Fix e2e")'
       }
+    ],
+    [
+      'a handover from a pinned stage to an unpinned one',
+      [{ ...HANDING, runsOn: 'Mac mini' }, fed()],
+      {
+        'dev-e2e-fix':
+          'job.feeds: dev-e2e-fix runs on Mac mini and dev-e2e-fix-start has no runs_on; a feed that passes ids or runs now must stay on one machine, since a handover stays in the database of the machine whose run wrote it'
+      }
+    ],
+    [
+      'a handover to a stage pinned when the sender is not',
+      [HANDING, fed({ runsOn: 'Mac mini' })],
+      {
+        'dev-e2e-fix':
+          'job.feeds: dev-e2e-fix-start runs on Mac mini and dev-e2e-fix has no runs_on; a feed that passes ids or runs now must stay on one machine, since a handover stays in the database of the machine whose run wrote it'
+      }
+    ],
+    [
+      'a handover between stages pinned to different machines',
+      [{ ...HANDING, runsOn: 'Studio' }, fed({ runsOn: 'Mac mini' })],
+      {
+        'dev-e2e-fix':
+          'job.feeds: dev-e2e-fix runs on Studio and dev-e2e-fix-start runs on Mac mini; a feed that passes ids or runs now must stay on one machine, since a handover stays in the database of the machine whose run wrote it'
+      }
     ]
   ])('refuses %s, on every definition involved', (_name, defs, problems) => {
     const found = jobProblems(defs)
     expect(Object.fromEntries([...found].map(([id, list]) => [id, list.join('\n')]))).toEqual(
       problems
+    )
+  })
+
+  it('accepts stages pinned to the same machine, whatever the case', () => {
+    expect(jobProblems([{ ...HANDING, runsOn: 'mac mini' }, fed({ runsOn: 'Mac Mini' })])).toEqual(
+      new Map()
     )
   })
 
