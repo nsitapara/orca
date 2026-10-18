@@ -22,8 +22,10 @@ Builds pilotcli for other machines into <pilotcli-dir>/bin (gitignored), one fil
 bin/pilotcli-linux-amd64. Then, for example:
 
   scp ~/Documents/GitHub/pilotCLI/bin/pilotcli-linux-amd64 debian-box:~/
-  ssh debian-box '~/Documents/GitHub/pilot/src/packages/pilot/scripts/machine-setup/debian.sh \
+  ssh -t debian-box '~/Documents/GitHub/pilot/src/packages/pilot/scripts/machine-setup/debian.sh \
     --machine-name "Debian box" --pilotcli-binary ~/pilotcli-linux-amd64'
+
+(-t gives the setup a terminal for its sudo prompts.)
 
 Options:
   --pilotcli-dir <dir>  pilotcli's checkout (default ~/Documents/GitHub/pilotCLI).
@@ -53,7 +55,7 @@ cross_check_tree() {
 }
 
 main() {
-  local version target os arch out name
+  local version target os arch out name script
   while [ $# -gt 0 ]; do
     case $1 in
       -h | --help)
@@ -118,11 +120,15 @@ main() {
   done
   step "Copy a build to its machine, then pass it to the setup script"
   for target in "${CROSS_TARGETS[@]}"; do
-    say "  $out/pilotcli-${target%%/*}-${target#*/}"
+    name=pilotcli-${target%%/*}-${target#*/}
+    case ${target%%/*} in
+      darwin) script=macos.sh ;;
+      *) script='debian.sh or arch.sh' ;;
+    esac
+    say "  $name, for $script:"
+    say "    scp $out/$name <machine>:~/"
+    say "    then on <machine>: $script ... --pilotcli-binary ~/$name"
   done
-  say ""
-  say "  scp $out/pilotcli-linux-amd64 <machine>:~/"
-  say "  then on <machine>: debian.sh (or arch.sh, macos.sh) ... --pilotcli-binary ~/pilotcli-linux-amd64"
 }
 
 main "$@"
