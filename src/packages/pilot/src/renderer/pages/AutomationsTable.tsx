@@ -1,14 +1,8 @@
-import { createContext, useContext, useState } from 'react'
+import { useState } from 'react'
 import { ChevronDown, ChevronRight } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import type { ActivityRun, AutomationSummary } from '../../shared/api-types'
-import {
-  jobEnabled,
-  jobLastTick,
-  jobTitle,
-  listEntries,
-  type JobGroup
-} from '../../shared/job-stages'
+import { jobLastTick, jobTitle, listEntries, type JobGroup } from '../../shared/job-stages'
 import {
   loadFolded,
   loadSort,
@@ -20,7 +14,6 @@ import {
   type SortState
 } from './automations-sort'
 import { lastTickText } from './format'
-import { jobRefusal, rowRefusal } from '../hosts/automation-home'
 import { MachineChips } from '../hosts/MachineChip'
 import { hostedRunKey } from '../hosts/merge-activity'
 import { hostOf, type PilotHostRef } from '../hosts/pilot-host'
@@ -28,7 +21,9 @@ import { foldStrip, liveStrip, type StripChip, type StripItem } from '../../shar
 import { RunStrip } from '../run-views/RunStrip'
 import { openRun } from '../run-views/run-panel-state'
 import { showActivity, showPilotAutomation } from './automations-view'
-import { EnabledSwitch, type Toggle, type ToggleRow } from './EnabledSwitch'
+import type { Toggle } from './EnabledSwitch'
+import { AutomationSwitch, FailedHostsContext, JobSwitch } from './RowSwitches'
+import { ScheduleCell } from './ScheduleCell'
 
 // Names and ticks truncate, so the columns can be narrow. Below the sum of their minimums (TABLE_MIN) the table
 // scrolls inside its own box instead of pushing the page sideways.
@@ -39,15 +34,8 @@ const ROW = 'min-h-11 w-full border-t border-border/50 px-3 py-3 text-left text-
 // Same padding as ROW so the stage's cells line up with the headers; the indent is inside its name cell.
 const STAGE_ROW = 'min-h-9 w-full bg-muted/30 px-3 py-2 text-left text-sm hover:bg-accent'
 
-// The machines not answering right now: a row whose runs_on names one won't switch here.
-const FailedHostsContext = createContext<readonly PilotHostRef[]>([])
-
 // A row of the merged list names its home and every machine it is loaded on; a list from one machine has neither.
 type ListedAutomation = AutomationSummary & { host?: PilotHostRef; hosts?: readonly PilotHostRef[] }
-
-export function scheduleText(a: AutomationSummary): string {
-  return a.schedule === 'manual' ? 'Run by hand' : a.schedule
-}
 
 export function stagesText(count: number): string {
   return count === 1 ? '1 stage' : `${count} stages`
@@ -107,65 +95,6 @@ function JobRunsCell({ job }: { job: JobGroup }): React.JSX.Element {
   )
 }
 
-function toggleRow(a: ListedAutomation): ToggleRow {
-  return { id: a.id, host: hostOf(a) }
-}
-
-function statusText(enabled: boolean): string {
-  return enabled ? 'Enabled' : 'Paused'
-}
-
-function jobStatusText(job: JobGroup): string {
-  const on = job.stages.filter((s) => s.enabled).length
-  if (on > 0 && on < job.stages.length) {
-    return 'Partly on'
-  }
-  return statusText(on > 0)
-}
-
-// A job's switch is on while any stage is: flipping it off turns every stage off, flipping it on turns every one on.
-function JobSwitch({
-  job,
-  onToggle
-}: {
-  job: JobGroup<ListedAutomation>
-  onToggle: Toggle
-}): React.JSX.Element {
-  const on = jobEnabled(job)
-  const rows = job.stages.filter((s) => s.enabled === on).map(toggleRow)
-  const failed = useContext(FailedHostsContext)
-  return (
-    <EnabledSwitch
-      name={`Job ${jobTitle(job)}`}
-      on={on}
-      text={jobStatusText(job)}
-      refusal={jobRefusal(job, failed).reason}
-      onToggle={() => onToggle(rows, !on)}
-    />
-  )
-}
-
-function AutomationSwitch({
-  a,
-  name,
-  onToggle
-}: {
-  a: ListedAutomation
-  name: string
-  onToggle: Toggle
-}): React.JSX.Element {
-  const failed = useContext(FailedHostsContext)
-  return (
-    <EnabledSwitch
-      name={name}
-      on={a.enabled}
-      text={statusText(a.enabled)}
-      refusal={rowRefusal(a, failed)}
-      onToggle={() => onToggle([toggleRow(a)], !a.enabled)}
-    />
-  )
-}
-
 function lastText(a: Pick<AutomationSummary, 'lastTick'>, now: number): string {
   return a.lastTick ? lastTickText(a.lastTick, now) : 'Never'
 }
@@ -190,7 +119,7 @@ function Row({
         <MachineChips hosts={a.hosts ?? []} />
       </span>
       <RunsCell a={a} />
-      <span className="truncate text-muted-foreground">{scheduleText(a)}</span>
+      <ScheduleCell a={a} />
       <span className="truncate text-muted-foreground">{lastText(a, now)}</span>
       <AutomationSwitch a={a} name={a.name} onToggle={onToggle} />
     </div>
@@ -223,7 +152,7 @@ function StageRow({
         <MachineChips hosts={a.hosts ?? []} />
       </span>
       <RunsCell a={a} />
-      <span className="truncate text-muted-foreground">{scheduleText(a)}</span>
+      <ScheduleCell a={a} />
       <span className="truncate text-muted-foreground">{lastText(a, now)}</span>
       <AutomationSwitch a={a} name={`Stage ${a.job?.stage ?? ''} ${label}`} onToggle={onToggle} />
     </div>

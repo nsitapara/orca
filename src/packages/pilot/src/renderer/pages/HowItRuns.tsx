@@ -12,7 +12,7 @@ import { ACTIVITY_POLL_MS } from '../run-views/ActivityView'
 import { RunRail } from '../run-views/RunRail'
 import { openRun } from '../run-views/run-panel-state'
 import { runTone } from '../run-views/tokens'
-import { scheduleText } from './AutomationsTable'
+import { scheduleText } from './ScheduleCell'
 import { showPilotAutomation } from './automations-view'
 import { clockTime, formatInZone, runStatusLabel } from './format'
 
