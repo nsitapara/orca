@@ -1,69 +1,20 @@
-import { useEffect, useState } from 'react'
-import { Button } from '@/components/ui/button'
+import { useCallback, useRef, useState } from 'react'
 import { isWebClientLocation } from '@/lib/web-client-location'
-import type { PlaygroundProject, PlaygroundStatus } from '../../../shared/playground-types'
-import { pilotRpc } from '../../api'
-import { Select } from '../waiting/InboxHeader'
+import { CommandsHere } from './CommandsTab'
+import { TelemetryPanel } from './telemetry/TelemetryPanel'
 
-// The page notices a playground its own Stop ended, or one that exited.
-const POLL_MS = 3_000
+type PlaygroundTab = 'telemetry' | 'commands'
+const TABS: { id: PlaygroundTab; label: string }[] = [
+  { id: 'telemetry', label: 'Telemetry' },
+  { id: 'commands', label: 'Commands' }
+]
 
-function messageOf(error: unknown): string {
-  return error instanceof Error ? error.message : String(error)
-}
-
-// What the line beside Start says: nothing while stopped cleanly.
-function statusText(status: PlaygroundStatus | null, busy: boolean): string | null {
-  if (status?.state === 'starting' || (busy && status?.state !== 'running')) {
-    return 'Starting…'
-  }
-  if (status?.state === 'running') {
-    return `Running at ${new URL(status.url).host}`
-  }
-  return null
-}
-
-function ProjectOptions({ projects }: { projects: PlaygroundProject[] }): React.JSX.Element {
-  return (
-    <>
-      {projects.map((p) => (
-        <option key={p.path} value={p.path}>
-          {p.name}
-        </option>
-      ))}
-    </>
-  )
-}
-
-function Idle({
-  projects,
-  status
-}: {
-  projects: PlaygroundProject[] | null
-  status: PlaygroundStatus | null
-}): React.JSX.Element {
-  if (status?.state === 'stopped' && status.reason) {
-    return <p className="text-sm text-destructive">{status.reason}</p>
-  }
-  if (projects?.length === 0) {
-    return (
-      <p className="text-sm text-muted-foreground">
-        None of the repos in Pilot is a project pilotcli knows.
-      </p>
-    )
-  }
-  return (
-    <p className="text-sm text-muted-foreground">
-      Pick a project and Start. It stops when you press Stop, or when Pilot quits.
-    </p>
-  )
-}
-
-const HERE_SUBTITLE =
-  "pilotcli's commands, each with a Try-it panel that runs it in one of the project's worktrees (an action as a " +
-  "dry run). View source opens a command's code here."
-// Try-it and View source belong to the running playground, so the browser's header says only where it runs.
-const ELSEWHERE_SUBTITLE =
+const SUBTITLE =
+  'pilotcli on this Mac: which commands get called and how they fail, and each command with a Try-it panel.'
+// The browser's Commands tab has no Try-it panel: the playground's page is a loopback address on Pilot's machine.
+const WEB_SUBTITLE =
+  'pilotcli on the Mac Pilot runs on: which commands get called and how they fail.'
+const ELSEWHERE_TEXT =
   'The playground runs only on the machine Pilot runs on. Start it in Pilot there.'
 
 function PlaygroundHeader({ subtitle }: { subtitle: string }): React.JSX.Element {
@@ -75,103 +26,79 @@ function PlaygroundHeader({ subtitle }: { subtitle: string }): React.JSX.Element
   )
 }
 
-// Its page is a loopback address on Pilot's machine, which a browser elsewhere can't open.
-function PlaygroundElsewhere(): React.JSX.Element {
+function tabClass(selected: boolean): string {
+  return selected ? 'border-b-2 border-foreground pb-1' : 'pb-1 text-muted-foreground'
+}
+
+function PlaygroundTabs({
+  tab,
+  onPick
+}: {
+  tab: PlaygroundTab
+  onPick: (tab: PlaygroundTab) => void
+}): React.JSX.Element {
   return (
-    <section className="flex h-full flex-col gap-3 px-5 pb-4 pt-4">
-      <PlaygroundHeader subtitle={ELSEWHERE_SUBTITLE} />
-    </section>
+    <div
+      role="tablist"
+      aria-label="Playground"
+      className="flex gap-4 border-b border-border/50 text-sm"
+    >
+      {TABS.map((t) => (
+        <button
+          key={t.id}
+          type="button"
+          role="tab"
+          aria-selected={tab === t.id}
+          className={tabClass(tab === t.id)}
+          onClick={() => onPick(t.id)}
+        >
+          {t.label}
+        </button>
+      ))}
+    </div>
   )
 }
 
-// pilotcli's playground (main/playground): pick a project, Start, use its page here, Stop.
-function PlaygroundHere(): React.JSX.Element {
-  const [projects, setProjects] = useState<PlaygroundProject[] | null>(null)
-  const [status, setStatus] = useState<PlaygroundStatus | null>(null)
-  const [chosen, setChosen] = useState('')
-  const [error, setError] = useState<string | null>(null)
-  const [busy, setBusy] = useState(false)
-
-  useEffect(() => {
-    let alive = true
-    pilotRpc<PlaygroundProject[]>('pilot.playground.projects').then(
-      (p) => alive && setProjects(p),
-      (e) => alive && setError(messageOf(e))
-    )
-    const load = (): void => {
-      pilotRpc<PlaygroundStatus>('pilot.playground.status').then(
-        (s) => alive && setStatus(s),
-        () => {}
-      )
-    }
-    load()
-    const timer = setInterval(load, POLL_MS)
-    return () => {
-      alive = false
-      clearInterval(timer)
+// Two tabs: Telemetry (pilotcli's calls on this Mac) and Commands (pilotcli's playground). Both stay mounted, so a
+// switch never stops or reloads a running playground.
+export function PlaygroundPage(): React.JSX.Element {
+  const web = isWebClientLocation()
+  const [tab, setTab] = useState<PlaygroundTab>('telemetry')
+  const picked = useRef(false)
+  // A playground already running opens on Commands, unless Nish has picked a tab.
+  const onRunning = useCallback(() => {
+    if (!picked.current) {
+      setTab('commands')
     }
   }, [])
-
-  const live = status !== null && status.state !== 'stopped' ? status : null
-  const repoPath = live?.repoPath ?? (chosen || projects?.[0]?.path || '')
-  const act = async (call: () => Promise<PlaygroundStatus>): Promise<void> => {
-    setBusy(true)
-    setError(null)
-    try {
-      setStatus(await call())
-    } catch (e) {
-      setError(messageOf(e))
-    } finally {
-      setBusy(false)
-    }
+  const pick = (next: PlaygroundTab): void => {
+    picked.current = true
+    setTab(next)
   }
-  const start = (): Promise<void> =>
-    act(() => pilotRpc<PlaygroundStatus>('pilot.playground.start', { repoPath }))
-  const stop = (): Promise<void> => act(() => pilotRpc<PlaygroundStatus>('pilot.playground.stop'))
-  const text = statusText(status, busy)
-
   return (
     <section className="flex h-full flex-col gap-3 px-5 pb-4 pt-4">
-      <PlaygroundHeader subtitle={HERE_SUBTITLE} />
-      <div className="flex flex-wrap items-center gap-2">
-        <Select
-          label="Project"
-          value={repoPath}
-          onChange={setChosen}
-          disabled={live !== null || busy || !projects?.length}
-        >
-          <ProjectOptions projects={projects ?? []} />
-        </Select>
-        {live ? (
-          <Button variant="outline" size="sm" disabled={busy} onClick={() => void stop()}>
-            Stop
-          </Button>
-        ) : (
-          <Button size="sm" disabled={busy || repoPath === ''} onClick={() => void start()}>
-            Start
-          </Button>
-        )}
-        {text ? <span className="text-xs text-muted-foreground">{text}</span> : null}
-        {status?.state === 'running' ? (
-          <a className="text-xs underline" href={status.url} target="_blank" rel="noreferrer">
-            Open in browser
-          </a>
-        ) : null}
+      <PlaygroundHeader subtitle={web ? WEB_SUBTITLE : SUBTITLE} />
+      <PlaygroundTabs tab={tab} onPick={pick} />
+      <div
+        role="tabpanel"
+        aria-label="Telemetry"
+        hidden={tab !== 'telemetry'}
+        className="min-h-0 flex-1 overflow-y-auto scrollbar-sleek"
+      >
+        <TelemetryPanel active={tab === 'telemetry'} />
       </div>
-      {error ? <p className="text-sm text-destructive">{error}</p> : null}
-      {status?.state === 'running' ? (
-        <iframe
-          title="pilotcli playground"
-          src={status.url}
-          className="min-h-0 w-full flex-1 rounded-md border border-border bg-background"
-        />
-      ) : (
-        <Idle projects={projects} status={status} />
-      )}
+      <div
+        role="tabpanel"
+        aria-label="Commands"
+        hidden={tab !== 'commands'}
+        className="flex min-h-0 flex-1 flex-col gap-3"
+      >
+        {web ? (
+          <p className="text-xs text-muted-foreground">{ELSEWHERE_TEXT}</p>
+        ) : (
+          <CommandsHere onRunning={onRunning} />
+        )}
+      </div>
     </section>
   )
-}
-
-export function PlaygroundPage(): React.JSX.Element {
-  return isWebClientLocation() ? <PlaygroundElsewhere /> : <PlaygroundHere />
 }
