@@ -111,6 +111,7 @@ main() {
   setup_ensure_pilot_repo
   setup_ensure_agents
   setup_install_pilotcli
+  setup_link_skills
   engine_main
 }
 
