@@ -12,10 +12,19 @@ SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 # shellcheck source=checkouts-and-toolchain.sh
 . "$SCRIPT_DIR/checkouts-and-toolchain.sh"
 
-MAC_PINNED=0
-MAC_VAULT_EXPORT=off
-MAC_USAGE_REPORT_DIR="$HOME/Library/Application Support/Pilot/usage-report"
+# Flag values. Empty means: keep what the LaunchAgent (else launchd) has, else the default.
+MAC_FLAG_SCHEDULER=
+MAC_FLAG_VAULT_EXPORT=
+MAC_FLAG_USAGE_REPORT_DIR=
+MAC_FLAG_OPEN_AT_LOGIN=
+MAC_DEFAULT_USAGE_REPORT_DIR="$HOME/Library/Application Support/Pilot/usage-report"
+# The resolved settings; an empty value is unset.
+MAC_SCHEDULER=
+MAC_VAULT_EXPORT=
+MAC_USAGE_REPORT_DIR=
 MAC_OPEN_AT_LOGIN=0
+MAC_CURRENT=
+MAC_SOURCE=
 MAC_SKIP_BUILD=0
 MAC_ENV_CHANGED=0
 MAC_AGENT_LABEL=dev.nsitapara.pilot.environment
@@ -31,25 +40,28 @@ Usage: macos.sh --machine-name <name> [options]
 Sets up this Mac to run Pilot's desktop app beside the main Mac's, then prints how to pair it.
 Re-run it to update the Mac. Example:
 
-  macos.sh --machine-name "Mac mini" --pinned --pilotcli-binary ~/pilotcli-darwin-arm64
+  macos.sh --machine-name "Mac mini" --open-at-login --pilotcli-binary ~/pilotcli-darwin-arm64
 
 Options:
 EOF
   setup_common_help
   cat <<'EOF'
-  --pinned                  Tick only the jobs whose runs_on names this Mac (PILOT_SCHEDULER=pinned).
-                            Without it this Mac ticks every unpinned job too, repeating the main
+  --scheduler all|pinned|off  PILOT_SCHEDULER (default pinned): pinned ticks only the jobs whose runs_on
+                            names this Mac; all also ticks every unpinned job, repeating the main
                             Mac's runs.
   --vault-export on|off     PILOT_VAULT_EXPORT (default off: one machine exports to the vault).
   --usage-report-dir <dir>  PILOT_USAGE_REPORT_DIR (default ~/Library/Application Support/Pilot/
                             usage-report, so this Mac never overwrites the main Mac's token report).
                             "default" leaves Pilot's own default, the vault's 08 folder.
-  --open-at-login           The LaunchAgent also opens Pilot at login, after it sets the settings.
-                            Use it instead of a Login Item, which can start Pilot before them.
+  --open-at-login / --no-open-at-login
+                            Whether the LaunchAgent also opens Pilot at login, after it sets the
+                            settings (default off). Use it instead of a Login Item, which can start
+                            Pilot before them.
   --no-build                Skip pnpm install and build-mac.mjs (settings, name and pairing only).
 
 The settings live in a LaunchAgent (~/Library/LaunchAgents/dev.nsitapara.pilot.environment.plist)
-that runs launchctl setenv at every login; the script also sets them for this session.
+that runs launchctl setenv at every login; the script also sets them for this session. A setting
+you leave out keeps what the LaunchAgent has (else launchd's current value), else its default.
 EOF
 }
 
@@ -100,15 +112,84 @@ mac_check_prerequisites() {
   mac_ensure_node24
 }
 
-mac_scheduler_value() {
-  if [ "$MAC_PINNED" = 1 ]; then
-    printf pinned
-  fi
+# What the existing LaunchAgent does with <key>: "set:<value>", "unset", or nothing.
+mac_agent_setting() {
+  local script value
+  [ -f "$MAC_AGENT_PLIST" ] || return 0
+  script=$(/usr/libexec/PlistBuddy -c 'Print :ProgramArguments:2' "$MAC_AGENT_PLIST" 2>/dev/null) || return 0
+  case $script in
+    *"launchctl unsetenv $1"*) echo unset ;;
+    *"launchctl setenv $1 '"*)
+      value=${script#*"launchctl setenv $1 '"}
+      echo "set:${value%%\'*}"
+      ;;
+  esac
 }
 
-mac_vault_export_value() {
-  if [ "$MAC_VAULT_EXPORT" = off ]; then
-    printf off
+# <key> <default>: sets MAC_CURRENT to the LaunchAgent's value, else launchd's, else <default>, and
+# MAC_SOURCE to where it came from.
+mac_current() {
+  local agent launchd
+  agent=$(mac_agent_setting "$1")
+  MAC_SOURCE='kept from the LaunchAgent'
+  case $agent in
+    set:*)
+      MAC_CURRENT=${agent#set:}
+      return 0
+      ;;
+    unset)
+      MAC_CURRENT=
+      return 0
+      ;;
+  esac
+  launchd=$(launchctl getenv "$1" 2>/dev/null || true)
+  if [ -n "$launchd" ]; then
+    MAC_SOURCE='kept from launchd'
+    MAC_CURRENT=$launchd
+    return 0
+  fi
+  MAC_SOURCE=default
+  MAC_CURRENT=$2
+}
+
+mac_resolve_settings() {
+  local source
+  step "Pilot's settings"
+  case $MAC_FLAG_SCHEDULER in
+    all) MAC_SCHEDULER=on source=--scheduler ;;
+    pinned | off) MAC_SCHEDULER=$MAC_FLAG_SCHEDULER source=--scheduler ;;
+    *)
+      mac_current PILOT_SCHEDULER pinned
+      MAC_SCHEDULER=$MAC_CURRENT source=$MAC_SOURCE
+      ;;
+  esac
+  say "  PILOT_SCHEDULER=${MAC_SCHEDULER:-(unset: every job)}  ($source)"
+  case $MAC_FLAG_VAULT_EXPORT in
+    on) MAC_VAULT_EXPORT='' source=--vault-export ;;
+    off) MAC_VAULT_EXPORT=off source=--vault-export ;;
+    *)
+      mac_current PILOT_VAULT_EXPORT off
+      MAC_VAULT_EXPORT=$MAC_CURRENT source=$MAC_SOURCE
+      ;;
+  esac
+  say "  PILOT_VAULT_EXPORT=${MAC_VAULT_EXPORT:-(unset: on)}  ($source)"
+  case $MAC_FLAG_USAGE_REPORT_DIR in
+    default) MAC_USAGE_REPORT_DIR='' source=--usage-report-dir ;;
+    '')
+      mac_current PILOT_USAGE_REPORT_DIR "$MAC_DEFAULT_USAGE_REPORT_DIR"
+      MAC_USAGE_REPORT_DIR=$MAC_CURRENT source=$MAC_SOURCE
+      ;;
+    *) MAC_USAGE_REPORT_DIR=$MAC_FLAG_USAGE_REPORT_DIR source=--usage-report-dir ;;
+  esac
+  say "  PILOT_USAGE_REPORT_DIR=${MAC_USAGE_REPORT_DIR:-(unset: Pilot uses the vault 08 folder)}  ($source)"
+  if [ -n "$MAC_FLAG_OPEN_AT_LOGIN" ]; then
+    MAC_OPEN_AT_LOGIN=$MAC_FLAG_OPEN_AT_LOGIN
+  elif [ -f "$MAC_AGENT_PLIST" ] && grep -q '/usr/bin/open' "$MAC_AGENT_PLIST"; then
+    MAC_OPEN_AT_LOGIN=1
+  fi
+  say "  open Pilot at login: $([ "$MAC_OPEN_AT_LOGIN" = 1 ] && echo yes || echo no)"
+  if [ "$MAC_SCHEDULER" != pinned ]; then
+    warn "PILOT_SCHEDULER isn't pinned, so this Mac also ticks every job that has no runs_on, repeating the main Mac's runs"
   fi
 }
 
@@ -145,20 +226,44 @@ mac_session_env() {
   step "Pilot's settings for this login session (launchctl)"
   say "  build-mac.mjs relaunches Pilot with \`env -i ... open\` (install-mac.mjs launchApp), so your"
   say "  shell's exports never reach the app; \`open\` starts it through launchd, which hands it these."
-  mac_set_session_env PILOT_SCHEDULER "$(mac_scheduler_value)"
-  mac_set_session_env PILOT_VAULT_EXPORT "$(mac_vault_export_value)"
+  mac_set_session_env PILOT_SCHEDULER "$MAC_SCHEDULER"
+  mac_set_session_env PILOT_VAULT_EXPORT "$MAC_VAULT_EXPORT"
   mac_set_session_env PILOT_USAGE_REPORT_DIR "$MAC_USAGE_REPORT_DIR"
-  if [ "$MAC_PINNED" != 1 ]; then
-    warn "without --pinned this Mac ticks every job that has no runs_on, repeating the main Mac's runs"
+}
+
+# bootout returns before launchd lets go of the label, and a bootstrap then fails.
+mac_wait_agent_gone() {
+  local waited=0
+  if [ "$SETUP_DRY_RUN" = 1 ]; then
+    return 0
   fi
+  while launchctl print "$1" >/dev/null 2>&1; do
+    if [ "$waited" -ge 10 ]; then
+      warn "launchd still lists $1 after 5 s"
+      return 0
+    fi
+    sleep 0.5
+    waited=$((waited + 1))
+  done
+}
+
+mac_bootstrap_agent() {
+  local tries=1
+  until run launchctl bootstrap "$1" "$MAC_AGENT_PLIST"; do
+    if [ "$tries" -ge 3 ]; then
+      die "launchctl bootstrap failed 3 times. Try it yourself: launchctl bootstrap $1 $MAC_AGENT_PLIST"
+    fi
+    sleep 1
+    tries=$((tries + 1))
+  done
 }
 
 mac_write_agent() {
   local script domain
   domain=gui/$(id -u)
   step "LaunchAgent ($MAC_AGENT_PLIST)"
-  script="$(mac_agent_line PILOT_SCHEDULER "$(mac_scheduler_value)")"
-  script="$script && $(mac_agent_line PILOT_VAULT_EXPORT "$(mac_vault_export_value)")"
+  script="$(mac_agent_line PILOT_SCHEDULER "$MAC_SCHEDULER")"
+  script="$script && $(mac_agent_line PILOT_VAULT_EXPORT "$MAC_VAULT_EXPORT")"
   script="$script && $(mac_agent_line PILOT_USAGE_REPORT_DIR "$MAC_USAGE_REPORT_DIR")"
   if [ "$MAC_OPEN_AT_LOGIN" = 1 ]; then
     script="$script && /usr/bin/open -g $MAC_APP"
@@ -190,8 +295,9 @@ EOF
       return 0
     fi
     run launchctl bootout "$domain/$MAC_AGENT_LABEL"
+    mac_wait_agent_gone "$domain/$MAC_AGENT_LABEL"
   fi
-  run launchctl bootstrap "$domain" "$MAC_AGENT_PLIST"
+  mac_bootstrap_agent "$domain"
 }
 
 mac_build() {
@@ -248,30 +354,32 @@ main() {
         usage
         exit 0
         ;;
-      --pinned)
-        MAC_PINNED=1
-        shift
+      --scheduler)
+        setup_need_value "$@"
+        case $2 in all | pinned | off) ;; *) die "--scheduler takes all, pinned or off" ;; esac
+        MAC_FLAG_SCHEDULER=$2
+        shift 2
         continue
         ;;
       --vault-export)
         setup_need_value "$@"
         case $2 in on | off) ;; *) die "--vault-export takes on or off" ;; esac
-        MAC_VAULT_EXPORT=$2
+        MAC_FLAG_VAULT_EXPORT=$2
         shift 2
         continue
         ;;
       --usage-report-dir)
         setup_need_value "$@"
         if [ "$2" = default ]; then
-          MAC_USAGE_REPORT_DIR=
+          MAC_FLAG_USAGE_REPORT_DIR=default
         else
-          MAC_USAGE_REPORT_DIR=$(setup_expand_home "$2")
+          MAC_FLAG_USAGE_REPORT_DIR=$(setup_expand_home "$2")
         fi
         shift 2
         continue
         ;;
-      --open-at-login)
-        MAC_OPEN_AT_LOGIN=1
+      --open-at-login | --no-open-at-login)
+        MAC_FLAG_OPEN_AT_LOGIN=$([ "$1" = --open-at-login ] && echo 1 || echo 0)
         shift
         continue
         ;;
@@ -290,6 +398,7 @@ main() {
   setup_require_os macos
   setup_check_common
   setup_banner
+  mac_resolve_settings
   mac_check_prerequisites
   setup_ensure_pilot_repo
   setup_ensure_agents
