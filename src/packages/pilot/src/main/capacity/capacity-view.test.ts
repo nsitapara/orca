@@ -45,14 +45,22 @@ describe('capacityView', () => {
       itemKey: 'mr:9',
       itemLabel: '!9',
       queuedAt: 5,
-      byHand: true
+      byHand: true,
+      dueAt: 5,
+      holdCode: 'capacity',
+      holdDetail: 'Waiting for a slot',
+      checkedAt: 5
     })
     store.capacity.enqueue({
       automationId: 'gone',
       itemKey: 'x',
       itemLabel: 'x',
       queuedAt: 1,
-      byHand: false
+      byHand: false,
+      dueAt: 1,
+      holdCode: 'capacity',
+      holdDetail: 'Waiting for a slot',
+      checkedAt: 1
     })
 
     const view = capacityView({
@@ -105,7 +113,11 @@ describe('capacityView', () => {
         itemKey: 'mr:9',
         itemLabel: '!9',
         queuedAt: 5,
-        byHand: true
+        byHand: true,
+        dueAt: 5,
+        holdCode: 'capacity',
+        holdDetail: 'Waiting for a slot',
+        checkedAt: 5
       }
     ])
     expect(view.heaviest).toEqual({

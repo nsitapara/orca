@@ -800,7 +800,11 @@ describe('runTick with a run limit', () => {
       itemKey: 'mr:1561',
       itemLabel: '!1561',
       queuedAt: 1,
-      byHand: false
+      byHand: false,
+      dueAt: 1,
+      holdCode: 'capacity',
+      holdDetail: 'Waiting for a slot',
+      checkedAt: 1
     })
     const capacity = runCapacity({ store: d.store, definitions: () => [def], now: d.now })
     const result = await runTick(def, people, { ...d, capacity }, { dryRun: false })

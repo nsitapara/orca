@@ -1,5 +1,5 @@
 import type Database from '../../../../../main/sqlite/sync-database'
-import type { RunRow } from '../../shared/api-types'
+import type { HoldReason, RunRow } from '../../shared/api-types'
 import { toRun } from './run-rows'
 
 export type QueuedItem = {
@@ -8,11 +8,37 @@ export type QueuedItem = {
   itemLabel: string
   queuedAt: number
   byHand: boolean
+  dueAt: number
+  holdCode: HoldReason
+  holdDetail: string
+  checkedAt: number
 }
 
 const RUN_LIMIT_KEY = 'run_limit'
 // The heaviest job is judged on its recent runs, so a job that got lighter stops counting its old peaks.
 export const RECENT_RUNS_FOR_PEAK = 20
+
+const HOLD_REASONS: readonly HoldReason[] = [
+  'worktree_busy',
+  'typing',
+  'claimed',
+  'quota',
+  'no_worktree',
+  'mr_unknown',
+  'in_flight',
+  'waits',
+  'retry',
+  'capacity',
+  'window',
+  'session_open',
+  'answers_pending',
+  'job_limit'
+]
+
+// A newer process may store a code this one doesn't know; it still waits for a slot here.
+function toHoldReason(stored: unknown): HoldReason {
+  return HOLD_REASONS.find((code) => code === stored) ?? 'capacity'
+}
 
 function toQueued(r: Record<string, unknown>): QueuedItem {
   return {
@@ -20,7 +46,12 @@ function toQueued(r: Record<string, unknown>): QueuedItem {
     itemKey: String(r.item_key),
     itemLabel: String(r.item_label),
     queuedAt: Number(r.queued_at),
-    byHand: Number(r.by_hand) === 1
+    byHand: Number(r.by_hand) === 1,
+    // Null on rows an older process wrote.
+    dueAt: Number(r.due_at ?? r.queued_at),
+    holdCode: toHoldReason(r.hold_code),
+    holdDetail: String(r.hold_detail ?? ''),
+    checkedAt: Number(r.checked_at ?? r.queued_at)
   }
 }
 
@@ -48,22 +79,55 @@ export class CapacityStore {
       .run(RUN_LIMIT_KEY, String(limit), at)
   }
 
-  // Oldest first: an item keeps the place it took the first time it had to wait.
+  // Earliest due first: an item keeps the place its due time earned, whenever it joined.
   queued(): QueuedItem[] {
     return this.db
-      .prepare('SELECT * FROM run_queue ORDER BY queued_at, rowid')
+      .prepare('SELECT * FROM run_queue ORDER BY due_at, queued_at, rowid')
       .all()
       .map((r) => toQueued(r))
   }
 
-  enqueue(item: QueuedItem): void {
+  queuedFor(keys: readonly string[]): QueuedItem[] {
+    return this.db
+      .prepare(
+        `SELECT * FROM run_queue WHERE item_key IN (SELECT value FROM json_each(?))
+         ORDER BY due_at, queued_at, rowid`
+      )
+      .all(JSON.stringify(keys))
+      .map((r) => toQueued(r))
+  }
+
+  // changed: the row is new or its reason differs, so callers write a line only when something moved.
+  enqueue(item: QueuedItem): { changed: boolean } {
+    const before = this.db
+      .prepare(
+        'SELECT hold_code, hold_detail FROM run_queue WHERE automation_id = ? AND item_key = ?'
+      )
+      .get(item.automationId, item.itemKey)
     this.db
       .prepare(
-        `INSERT INTO run_queue (automation_id, item_key, item_label, queued_at, by_hand) VALUES (?, ?, ?, ?, ?)
+        `INSERT INTO run_queue (automation_id, item_key, item_label, queued_at, by_hand, due_at, hold_code, hold_detail, checked_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT (automation_id, item_key) DO UPDATE SET item_label = excluded.item_label,
-           by_hand = MAX(by_hand, excluded.by_hand)`
+           by_hand = MAX(by_hand, excluded.by_hand),
+           due_at = MIN(COALESCE(due_at, queued_at), excluded.due_at),
+           hold_code = excluded.hold_code, hold_detail = excluded.hold_detail, checked_at = excluded.checked_at`
       )
-      .run(item.automationId, item.itemKey, item.itemLabel, item.queuedAt, item.byHand ? 1 : 0)
+      .run(
+        item.automationId,
+        item.itemKey,
+        item.itemLabel,
+        item.queuedAt,
+        item.byHand ? 1 : 0,
+        item.dueAt,
+        item.holdCode,
+        item.holdDetail,
+        item.checkedAt
+      )
+    return {
+      changed:
+        !before || before.hold_code !== item.holdCode || before.hold_detail !== item.holdDetail
+    }
   }
 
   // The row it removed, so a start knows whether Run now queued it.

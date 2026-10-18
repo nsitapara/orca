@@ -1,6 +1,6 @@
 import type Database from '../../../../../main/sqlite/sync-database'
 
-export const PILOT_SCHEMA_VERSION = 16
+export const PILOT_SCHEMA_VERSION = 17
 
 const V1 = `
 CREATE TABLE ticks (id INTEGER PRIMARY KEY AUTOINCREMENT, automation_id TEXT NOT NULL, started_at INTEGER NOT NULL,
@@ -190,6 +190,15 @@ const V16 = `
 ALTER TABLE runs ADD COLUMN idle_ms INTEGER NOT NULL DEFAULT 0;
 `
 
+// Additive only: an older process still opens this database and ignores the new columns.
+const V17 = `
+ALTER TABLE run_queue ADD COLUMN due_at INTEGER;
+ALTER TABLE run_queue ADD COLUMN hold_code TEXT;
+ALTER TABLE run_queue ADD COLUMN hold_detail TEXT;
+ALTER TABLE run_queue ADD COLUMN checked_at INTEGER;
+UPDATE run_queue SET due_at = queued_at, hold_code = 'capacity', hold_detail = 'Waiting for a slot', checked_at = queued_at;
+`
+
 // MIGRATIONS[n - 1] takes a database from version n - 1 to n.
 const MIGRATIONS: readonly string[] = [
   V1,
@@ -207,7 +216,8 @@ const MIGRATIONS: readonly string[] = [
   V13,
   V14,
   V15,
-  V16
+  V16,
+  V17
 ]
 
 // Same pattern as Orca's orchestration.db (migrate.ts): user_version + one transaction, all or nothing.

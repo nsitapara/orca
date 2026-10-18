@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { PilotStore } from './store'
-import { RECENT_RUNS_FOR_PEAK } from './store-capacity'
+import { RECENT_RUNS_FOR_PEAK, type QueuedItem } from './store-capacity'
 
 function open(): PilotStore {
   return PilotStore.open(join(mkdtempSync(join(tmpdir(), 'pilot-capacity-')), 'db.sqlite'))
@@ -21,12 +21,21 @@ function addRun(store: PilotStore, id: string, automationId: string, startedAt: 
   })
 }
 
-const item = (automationId: string, itemKey: string, queuedAt: number, byHand = false) => ({
+const item = (
+  automationId: string,
+  itemKey: string,
+  queuedAt: number,
+  byHand = false
+): QueuedItem => ({
   automationId,
   itemKey,
   itemLabel: `label ${itemKey}`,
   queuedAt,
-  byHand
+  byHand,
+  dueAt: queuedAt,
+  holdCode: 'capacity',
+  holdDetail: 'Waiting for a slot',
+  checkedAt: queuedAt
 })
 
 describe('CapacityStore', () => {
@@ -46,8 +55,42 @@ describe('CapacityStore', () => {
     store.capacity.enqueue(item('b', 'y', 20))
     store.capacity.enqueue({ ...item('a', 'x', 30), itemLabel: 'renamed' })
     expect(store.capacity.queued()).toEqual([
-      { ...item('a', 'x', 10, true), itemLabel: 'renamed' },
+      { ...item('a', 'x', 10, true), itemLabel: 'renamed', checkedAt: 30 },
       item('b', 'y', 20)
+    ])
+  })
+
+  it('orders by due time, not join time', () => {
+    const store = open()
+    store.capacity.enqueue({ ...item('a', 'B', 10), dueAt: 200 })
+    store.capacity.enqueue({ ...item('a', 'A', 20), dueAt: 100 })
+    expect(store.capacity.queued().map((q) => q.itemKey)).toEqual(['A', 'B'])
+  })
+
+  it('re-enqueue keeps the earliest due time and replaces the hold', () => {
+    const store = open()
+    expect(store.capacity.enqueue(item('a', 'x', 10))).toEqual({ changed: true })
+    const later = {
+      ...item('a', 'x', 50),
+      dueAt: 50,
+      holdCode: 'window' as const,
+      holdDetail: 'Opens at 9',
+      checkedAt: 60
+    }
+    expect(store.capacity.enqueue(later)).toEqual({ changed: true })
+    expect(store.capacity.queued()).toEqual([{ ...later, queuedAt: 10, dueAt: 10 }])
+    expect(store.capacity.enqueue({ ...later, checkedAt: 70 })).toEqual({ changed: false })
+    expect(store.capacity.queued()[0].checkedAt).toBe(70)
+  })
+
+  it('queuedFor returns only those keys', () => {
+    const store = open()
+    store.capacity.enqueue(item('a', 'x', 1))
+    store.capacity.enqueue(item('a', 'y', 2))
+    store.capacity.enqueue(item('b', 'x', 3))
+    expect(store.capacity.queuedFor(['x']).map((q) => `${q.automationId}/${q.itemKey}`)).toEqual([
+      'a/x',
+      'b/x'
     ])
   })
 

@@ -76,14 +76,20 @@ export function runCapacity(deps: RunCapacityDeps): RunCapacity {
       if (used + ahead < limit) {
         return started(def, item.key, byHand)
       }
+      const now = deps.now()
+      const reason = waitingReason(used, limit, ahead)
       capacity.enqueue({
         automationId: def.id,
         itemKey: item.key,
         itemLabel: item.label,
-        queuedAt: deps.now(),
-        byHand
+        queuedAt: now,
+        byHand,
+        dueAt: now,
+        holdCode: 'capacity',
+        holdDetail: reason,
+        checkedAt: now
       })
-      return { start: false, reason: waitingReason(used, limit, ahead) }
+      return { start: false, reason }
     },
 
     settle(def, decisions) {
