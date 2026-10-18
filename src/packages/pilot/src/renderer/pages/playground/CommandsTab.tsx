@@ -46,16 +46,16 @@ function Idle({
   if (status?.state === 'stopped' && status.reason) {
     return <p className="text-sm text-destructive">{status.reason}</p>
   }
-  if (tryCommand) {
-    return (
-      <p className="text-sm text-muted-foreground">{`Start the playground to try pilotcli ${tryCommand}.`}</p>
-    )
-  }
   if (projects?.length === 0) {
     return (
       <p className="text-sm text-muted-foreground">
         None of the repos in Pilot is a project pilotcli knows.
       </p>
+    )
+  }
+  if (tryCommand) {
+    return (
+      <p className="text-sm text-muted-foreground">{`Start the playground to try pilotcli ${tryCommand}.`}</p>
     )
   }
   return (
@@ -65,22 +65,31 @@ function Idle({
   )
 }
 
+// A Try it from Telemetry: the command, its anchor on the playground's page, and a nonce that is new each time.
+export type TryIt = { command: string; anchor: string; nonce: number }
+
 // pilotcli's playground (main/playground): pick a project, Start, use its page here, Stop. `onRunning` hears
-// that a playground runs, so the page can show this tab.
+// that a playground runs, so the page can show this tab. `tryIt` is the Try it asked for, null once Nish picks a tab.
 export function CommandsHere({
   onRunning,
-  anchor = null,
-  tryCommand = null
+  tryIt = null
 }: {
   onRunning: () => void
-  anchor?: string | null
-  tryCommand?: string | null
+  tryIt?: TryIt | null
 }): React.JSX.Element {
   const [projects, setProjects] = useState<PlaygroundProject[] | null>(null)
   const [status, setStatus] = useState<PlaygroundStatus | null>(null)
   const [chosen, setChosen] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  // Where the page goes: each new Try it remounts it at its command, even the same command again. A cleared tryIt
+  // (a tab switch) leaves it where it is, so a switch never reloads it; Stop forgets it.
+  const [jump, setJump] = useState<TryIt | null>(null)
+  const [seen, setSeen] = useState(0)
+  if (tryIt && tryIt.nonce !== seen) {
+    setSeen(tryIt.nonce)
+    setJump(tryIt)
+  }
 
   useEffect(() => {
     let alive = true
@@ -124,7 +133,10 @@ export function CommandsHere({
   }
   const start = (): Promise<void> =>
     act(() => pilotRpc<PlaygroundStatus>('pilot.playground.start', { repoPath }))
-  const stop = (): Promise<void> => act(() => pilotRpc<PlaygroundStatus>('pilot.playground.stop'))
+  const stop = (): Promise<void> => {
+    setJump(null)
+    return act(() => pilotRpc<PlaygroundStatus>('pilot.playground.stop'))
+  }
   const text = statusText(status, busy)
 
   return (
@@ -157,12 +169,13 @@ export function CommandsHere({
       {error ? <p className="text-sm text-destructive">{error}</p> : null}
       {status?.state === 'running' ? (
         <iframe
+          key={jump?.nonce ?? 0}
           title="pilotcli playground"
-          src={anchor ? `${status.url}#${anchor}` : status.url}
+          src={jump ? `${status.url}#${jump.anchor}` : status.url}
           className="min-h-0 w-full flex-1 rounded-md border border-border bg-background"
         />
       ) : (
-        <Idle projects={projects} status={status} tryCommand={tryCommand} />
+        <Idle projects={projects} status={status} tryCommand={tryIt?.command ?? null} />
       )}
     </>
   )

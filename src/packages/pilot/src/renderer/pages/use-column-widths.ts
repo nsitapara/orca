@@ -1,7 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { MouseEvent as ReactMouseEvent } from 'react'
 
-export type ColumnSpec = { id: string; label: string; defaultWidth: number; minWidth: number }
+// `align: 'right'` right-aligns a column of numbers, its header with it.
+export type ColumnSpec = {
+  id: string
+  label: string
+  defaultWidth: number
+  minWidth: number
+  align?: 'right'
+}
 type Widths = Record<string, number>
 
 // Widths are remembered per viewer, by column id, so a changed set of checks keeps the others.

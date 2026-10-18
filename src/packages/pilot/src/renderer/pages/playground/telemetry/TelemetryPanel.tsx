@@ -35,6 +35,7 @@ function TelemetryHeader({
   includeDev,
   onDev,
   fetchedAt,
+  staleBecause,
   loading,
   onRefresh
 }: {
@@ -43,6 +44,7 @@ function TelemetryHeader({
   includeDev: boolean
   onDev: (on: boolean) => void
   fetchedAt: number | null
+  staleBecause: string | null
   loading: boolean
   onRefresh: () => void
 }): React.JSX.Element {
@@ -77,6 +79,9 @@ function TelemetryHeader({
         Refresh
       </Button>
       <span className="text-xs text-muted-foreground">{updated}</span>
+      {staleBecause ? (
+        <span className="text-xs text-destructive">{`Couldn't refresh: ${staleBecause}`}</span>
+      ) : null}
     </div>
   )
 }
@@ -123,35 +128,37 @@ const LEGEND: { kind: keyof typeof BAR_SWATCH; label: string }[] = [
   { kind: 'invalid', label: 'invalid' }
 ]
 
-// The bars, or why there are none: a pilotcli from before 2026-10-17 sends no per-day counts.
-function PerDayChart({ usage }: { usage: TelemetryUsage }): React.JSX.Element {
-  if (usage.buckets?.length && usage.series) {
-    return <DayBars buckets={usage.buckets} series={usage.series} />
-  }
-  return <p className="text-xs text-muted-foreground">Per-day counts need a newer pilotcli.</p>
+function Legend({ oldest }: { oldest: string | undefined }): React.JSX.Element {
+  const since = oldest ? `Data since ${dayText(oldest)} · kept 90 days` : 'Kept 90 days'
+  return (
+    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
+      {LEGEND.map((l) => (
+        <span key={l.kind} className="inline-flex items-center gap-1.5">
+          <span aria-hidden className={`inline-block size-2.5 rounded-sm ${BAR_SWATCH[l.kind]}`} />
+          {l.label}
+        </span>
+      ))}
+      <span>{since}</span>
+    </div>
+  )
 }
 
+// The bars with their legend, or why there are none: a pilotcli from before 2026-10-17 sends no per-day counts.
 function PerDay({ usage }: { usage: TelemetryUsage }): React.JSX.Element {
-  const since = usage.oldest ? `Data since ${dayText(usage.oldest)} · kept 90 days` : 'Kept 90 days'
+  const { buckets, series } = usage
+  const charted = buckets?.length && series ? { buckets, series } : null
   return (
     <section className={SECTION_CLASS}>
       <div className={SECTION_HEAD_CLASS}>
         <h3 className="text-sm font-semibold">Calls per day</h3>
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
-          {LEGEND.map((l) => (
-            <span key={l.kind} className="inline-flex items-center gap-1.5">
-              <span
-                aria-hidden
-                className={`inline-block size-2.5 rounded-sm ${BAR_SWATCH[l.kind]}`}
-              />
-              {l.label}
-            </span>
-          ))}
-          <span>{since}</span>
-        </div>
+        {charted ? <Legend oldest={usage.oldest} /> : null}
       </div>
       <div className="px-4">
-        <PerDayChart usage={usage} />
+        {charted ? (
+          <DayBars buckets={charted.buckets} series={charted.series} />
+        ) : (
+          <p className="text-xs text-muted-foreground">Per-day counts need a newer pilotcli.</p>
+        )}
       </div>
     </section>
   )
@@ -183,7 +190,8 @@ function Usage({
       <Tiles usage={usage} since={since} />
       <PerDay usage={usage} />
       <TelemetryCommands usage={usage} since={since} picked={picked} onPick={onPick} />
-      <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,30rem),1fr))] gap-3">
+      {/* Side by side only when each gets 46rem: the failures table needs it for Command and Who · where. */}
+      <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,46rem),1fr))] gap-3">
         <TelemetryJobs jobs={usage.jobs} />
         <TelemetryFailures
           failures={failures}
@@ -216,26 +224,29 @@ function NoCalls({
   )
 }
 
+// Before any data: reading, or why the read failed. With data, a later failure sits in the header beside it.
 function TelemetryBody({
   shown,
+  error,
   picked,
   onPick,
   onTryIt,
   onClear
 }: {
   shown: TelemetryShown | null
+  error: string | null
   picked: string | null
   onPick: (command: string) => void
   onTryIt?: (command: string) => void
   onClear: () => void
 }): React.JSX.Element {
+  if (shown === null && error !== null) {
+    return <p className="text-sm text-destructive">{error}</p>
+  }
   if (shown === null) {
     return <p className="text-sm text-muted-foreground">{READING}</p>
   }
   const { payload, ask } = shown
-  if ('error' in payload) {
-    return <p className="text-sm text-destructive">{payload.error}</p>
-  }
   if (payload.usage.calls === 0) {
     return <NoCalls usage={payload.usage} since={ask.since} />
   }
@@ -265,7 +276,7 @@ export function TelemetryPanel({
   const [since, setSince] = useState<TelemetryWindow>('7d')
   const [includeDev, setIncludeDev] = useState(false)
   const [command, setCommand] = useState<string | null>(null)
-  const { shown, loading, refresh } = useTelemetry({ since, includeDev, command, active })
+  const { shown, error, loading, refresh } = useTelemetry({ since, includeDev, command, active })
   const pick = (next: string): void => setCommand((was) => (was === next ? null : next))
   return (
     <div className="flex flex-col gap-3 pb-4">
@@ -275,11 +286,13 @@ export function TelemetryPanel({
         includeDev={includeDev}
         onDev={setIncludeDev}
         fetchedAt={shown?.payload.fetchedAt ?? null}
+        staleBecause={shown ? error : null}
         loading={loading}
         onRefresh={refresh}
       />
       <TelemetryBody
         shown={shown}
+        error={error}
         picked={command}
         onPick={pick}
         onTryIt={onTryIt}

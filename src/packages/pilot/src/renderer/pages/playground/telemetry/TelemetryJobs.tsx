@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useId, useState } from 'react'
 import { showActivity } from '../../automations-view'
 import type { TelemetryJob } from '../../../../shared/api-types-telemetry'
 import { badClass, countText, SECTION_CLASS, SECTION_HEAD_CLASS } from './telemetry-view'
@@ -40,40 +40,45 @@ function JobRows({
   onToggle: () => void
 }): React.JSX.Element {
   const caret = open ? '▾' : '▸'
+  const stepsId = useId()
   return (
     <>
-      <tr className="border-t border-border/50">
-        <td className="min-w-0 px-3 py-1.5">
-          <div className="flex min-w-0 gap-1" title={job.name}>
-            <button
-              type="button"
-              aria-expanded={open}
-              aria-label={`Steps of ${job.name}`}
-              className="shrink-0"
-              onClick={onToggle}
-            >
-              {caret}
-            </button>{' '}
-            <AutomationName job={job} />
-          </div>
-        </td>
-        <td className={NUMBER}>{countText(job.runs)}</td>
-        <td className={NUMBER}>{countText(job.calls)}</td>
-        <td className={`${NUMBER} ${badClass('failed', job.failed)}`}>{countText(job.failed)}</td>
-        <td className={`${NUMBER} ${badClass('invalid', job.invalid)}`}>
-          {countText(job.invalid)}
-        </td>
-      </tr>
-      {open
-        ? job.steps.map((s) => (
-            <tr key={s.step} className="text-xs text-muted-foreground">
-              <td className="truncate py-1 pl-8 pr-3">{s.step || '(no step)'}</td>
-              <td colSpan={4} className="break-words px-3 py-1 font-mono text-foreground/80">
-                {stepCommandsText(s.commands)}
-              </td>
-            </tr>
-          ))
-        : null}
+      <tbody>
+        <tr className="border-t border-border/50">
+          <td className="min-w-0 px-3 py-1.5">
+            <div className="flex min-w-0 gap-1" title={job.name}>
+              <button
+                type="button"
+                aria-expanded={open}
+                aria-controls={stepsId}
+                aria-label={`Steps of ${job.name}`}
+                className="shrink-0"
+                onClick={onToggle}
+              >
+                {caret}
+              </button>{' '}
+              <AutomationName job={job} />
+            </div>
+          </td>
+          <td className={NUMBER}>{countText(job.runs)}</td>
+          <td className={NUMBER}>{countText(job.calls)}</td>
+          <td className={`${NUMBER} ${badClass('failed', job.failed)}`}>{countText(job.failed)}</td>
+          <td className={`${NUMBER} ${badClass('invalid', job.invalid)}`}>
+            {countText(job.invalid)}
+          </td>
+        </tr>
+      </tbody>
+      {/* Each job is its own tbody pair, so the caret controls one element: its steps, hidden while closed. */}
+      <tbody id={stepsId} hidden={!open}>
+        {job.steps.map((s) => (
+          <tr key={s.step} className="text-xs text-muted-foreground">
+            <td className="truncate py-1 pl-8 pr-3">{s.step || '(no step)'}</td>
+            <td colSpan={4} className="break-words px-3 py-1 font-mono text-foreground/80">
+              {stepCommandsText(s.commands)}
+            </td>
+          </tr>
+        ))}
+      </tbody>
     </>
   )
 }
@@ -120,16 +125,14 @@ export function TelemetryJobs({ jobs }: { jobs: TelemetryJob[] }): React.JSX.Ele
                 <th className="px-3 py-2 text-right font-medium">Invalid</th>
               </tr>
             </thead>
-            <tbody>
-              {jobs.map((job) => (
-                <JobRows
-                  key={keyOf(job)}
-                  job={job}
-                  open={open.has(keyOf(job))}
-                  onToggle={() => toggle(keyOf(job))}
-                />
-              ))}
-            </tbody>
+            {jobs.map((job) => (
+              <JobRows
+                key={keyOf(job)}
+                job={job}
+                open={open.has(keyOf(job))}
+                onToggle={() => toggle(keyOf(job))}
+              />
+            ))}
           </table>
         </div>
       )}

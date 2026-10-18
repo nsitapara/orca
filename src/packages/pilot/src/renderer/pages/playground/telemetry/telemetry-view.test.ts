@@ -62,6 +62,16 @@ describe('telemetry-view', () => {
     expect(barSegments(0, 0, 0, 10, 60)).toEqual([])
   })
 
+  it.each([
+    ['one failure at the peak', 1000, 1, 0],
+    ['a failure and an invalid call at the peak', 1000, 1, 1],
+    ['almost all failed at the peak', 1000, 999, 1]
+  ])('keeps the peak bar inside the chart: %s', (_name, calls, failed, invalid) => {
+    const bar = barSegments(calls, failed, invalid, 1000, 60)
+    expect(Math.min(...bar.map((s) => s.y))).toBeGreaterThanOrEqual(0)
+    expect(bar.reduce((h, s) => h + s.height, 0)).toBeCloseTo(60)
+  })
+
   it('draws a sparkline across the width', () => {
     expect(sparkPoints([0, 2, 1])).toBe('0,19 50,1 100,10')
   })
@@ -77,7 +87,8 @@ describe('telemetry-view', () => {
 describe('anchorOf', () => {
   it.each([
     ['gitlab check-mr', 'pilotcli-gitlab-check-mr'],
-    ['Inbox create_card', 'pilotcli-inbox-create_card']
+    ['Inbox create_card', 'pilotcli-inbox-create_card'],
+    ['self get.version/x', 'pilotcli-self-getversionx']
   ])('%s is %s', (command, anchor) => {
     expect(anchorOf(command)).toBe(anchor)
   })

@@ -1,6 +1,6 @@
 import { useCallback, useRef, useState } from 'react'
 import { isWebClientLocation } from '@/lib/web-client-location'
-import { CommandsHere } from './CommandsTab'
+import { CommandsHere, type TryIt } from './CommandsTab'
 import { anchorOf } from './telemetry/telemetry-view'
 import { TelemetryPanel } from './telemetry/TelemetryPanel'
 
@@ -31,6 +31,24 @@ function tabClass(selected: boolean): string {
   return selected ? 'border-b-2 border-foreground pb-1' : 'pb-1 text-muted-foreground'
 }
 
+const tabId = (t: PlaygroundTab): string => `playground-tab-${t}`
+const panelId = (t: PlaygroundTab): string => `playground-panel-${t}`
+
+const ARROW_STEP = new Map([
+  ['ArrowRight', 1],
+  ['ArrowLeft', -1]
+])
+
+// Left and Right move along the tabs, wrapping at the ends (WAI-ARIA tabs); the tab picked takes the focus.
+function tabAfter(tab: PlaygroundTab, key: string): PlaygroundTab | null {
+  const step = ARROW_STEP.get(key)
+  if (step === undefined) {
+    return null
+  }
+  const at = TABS.findIndex((t) => t.id === tab)
+  return TABS[(at + step + TABS.length) % TABS.length].id
+}
+
 function PlaygroundTabs({
   tab,
   onPick
@@ -47,11 +65,22 @@ function PlaygroundTabs({
       {TABS.map((t) => (
         <button
           key={t.id}
+          id={tabId(t.id)}
           type="button"
           role="tab"
           aria-selected={tab === t.id}
+          aria-controls={panelId(t.id)}
+          tabIndex={tab === t.id ? 0 : -1}
           className={tabClass(tab === t.id)}
           onClick={() => onPick(t.id)}
+          onKeyDown={(e) => {
+            const next = tabAfter(t.id, e.key)
+            if (next) {
+              e.preventDefault()
+              onPick(next)
+              document.getElementById(tabId(next))?.focus()
+            }
+          }}
         >
           {t.label}
         </button>
@@ -66,20 +95,28 @@ export function PlaygroundPage(): React.JSX.Element {
   const web = isWebClientLocation()
   const [tab, setTab] = useState<PlaygroundTab>('telemetry')
   const picked = useRef(false)
-  const [tryIt, setTryIt] = useState<string | null>(null)
+  // The Try it asked for: a new nonce each time, so the same command asked again goes there again. A tab Nish picks
+  // himself forgets it.
+  const [tryIt, setTryIt] = useState<TryIt | null>(null)
+  const tries = useRef(0)
   // A playground already running opens on Commands, unless Nish has picked a tab.
   const onRunning = useCallback(() => {
     if (!picked.current) {
       setTab('commands')
     }
   }, [])
-  const pick = (next: PlaygroundTab): void => {
+  const show = (next: PlaygroundTab): void => {
     picked.current = true
     setTab(next)
   }
+  const pick = (next: PlaygroundTab): void => {
+    setTryIt(null)
+    show(next)
+  }
   const onTryIt = (command: string): void => {
-    setTryIt(command)
-    pick('commands')
+    tries.current += 1
+    setTryIt({ command, anchor: anchorOf(command), nonce: tries.current })
+    show('commands')
   }
   return (
     <section className="flex h-full flex-col gap-3 px-5 pb-4 pt-4">
@@ -87,7 +124,8 @@ export function PlaygroundPage(): React.JSX.Element {
       <PlaygroundTabs tab={tab} onPick={pick} />
       <div
         role="tabpanel"
-        aria-label="Telemetry"
+        id={panelId('telemetry')}
+        aria-labelledby={tabId('telemetry')}
         hidden={tab !== 'telemetry'}
         className="min-h-0 flex-1 overflow-y-auto scrollbar-sleek"
       >
@@ -95,18 +133,15 @@ export function PlaygroundPage(): React.JSX.Element {
       </div>
       <div
         role="tabpanel"
-        aria-label="Commands"
+        id={panelId('commands')}
+        aria-labelledby={tabId('commands')}
         hidden={tab !== 'commands'}
         className="flex min-h-0 flex-1 flex-col gap-3"
       >
         {web ? (
           <p className="text-xs text-muted-foreground">{ELSEWHERE_TEXT}</p>
         ) : (
-          <CommandsHere
-            onRunning={onRunning}
-            anchor={tryIt === null ? null : anchorOf(tryIt)}
-            tryCommand={tryIt}
-          />
+          <CommandsHere onRunning={onRunning} tryIt={tryIt} />
         )}
       </div>
     </section>

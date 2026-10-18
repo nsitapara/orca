@@ -146,7 +146,10 @@ describe('PlaygroundPage', () => {
       'pilot.telemetry.get': PAYLOAD
     })
     await shown()
-    expect(screen.getByRole('tab', { name: 'Telemetry', selected: true })).toBeTruthy()
+    const telemetry = screen.getByRole('tab', { name: 'Telemetry', selected: true })
+    expect(screen.getByRole('tabpanel', { name: 'Telemetry' }).id).toBe(
+      telemetry.getAttribute('aria-controls')
+    )
     fireEvent.click(screen.getByRole('tab', { name: 'Commands' }))
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: 'Start' }))
@@ -175,12 +178,69 @@ describe('PlaygroundPage', () => {
     )
   })
 
-  it('says to start the playground when Try it finds none running', async () => {
+  it('Try it again goes to the command again, and a tab switch leaves the page where it is', async () => {
+    answer({ 'pilot.playground.projects': PROJECTS, 'pilot.playground.status': RUNNING })
+    await shown()
+    const tryIt = async (): Promise<void> => {
+      fireEvent.click(screen.getByRole('tab', { name: 'Telemetry' }))
+      fireEvent.click(screen.getByRole('button', { name: 'Try it' }))
+      await act(async () => {})
+    }
+    fireEvent.click(screen.getByRole('tab', { name: 'Telemetry' }))
+    fireEvent.click(screen.getByRole('button', { name: 'gitlab check-mr' }))
+    await act(async () => {})
+    await tryIt()
+    const first = screen.getByTitle('pilotcli playground')
+    await tryIt()
+    const again = screen.getByTitle('pilotcli playground')
+    expect(again).not.toBe(first)
+    expect(again.getAttribute('src')).toBe(`${URL}#pilotcli-gitlab-check-mr`)
+    fireEvent.click(screen.getByRole('tab', { name: 'Telemetry' }))
+    fireEvent.click(screen.getByRole('tab', { name: 'Commands' }))
+    expect(screen.getByTitle('pilotcli playground')).toBe(again)
+    expect(again.getAttribute('src')).toBe(`${URL}#pilotcli-gitlab-check-mr`)
+  })
+
+  it.each([
+    [
+      'says to start the playground',
+      PROJECTS,
+      'Start the playground to try pilotcli gitlab check-mr.'
+    ],
+    [
+      'still says no repo is a pilotcli project',
+      [],
+      'None of the repos in Pilot is a project pilotcli knows.'
+    ]
+  ])('when Try it finds none running, %s', async (_name, projects, text) => {
+    answer({ 'pilot.playground.projects': projects, 'pilot.playground.status': STOPPED })
+    await shown()
+    fireEvent.click(screen.getByRole('button', { name: 'gitlab check-mr' }))
+    await act(async () => {})
+    fireEvent.click(screen.getByRole('button', { name: 'Try it' }))
+    expect(screen.getByRole('tab', { name: 'Commands', selected: true })).toBeTruthy()
+    expect(screen.getByText(text)).toBeTruthy()
+  })
+
+  it('forgets a Try it once Nish picks a tab himself', async () => {
     answer({ 'pilot.playground.projects': PROJECTS, 'pilot.playground.status': STOPPED })
     await shown()
     fireEvent.click(screen.getByRole('button', { name: 'gitlab check-mr' }))
     await act(async () => {})
     fireEvent.click(screen.getByRole('button', { name: 'Try it' }))
-    expect(screen.getByText('Start the playground to try pilotcli gitlab check-mr.')).toBeTruthy()
+    fireEvent.click(screen.getByRole('tab', { name: 'Telemetry' }))
+    fireEvent.click(screen.getByRole('tab', { name: 'Commands' }))
+    expect(screen.queryByText(/Start the playground to try/)).toBeNull()
+    expect(screen.getByText(/Pick a project and Start/)).toBeTruthy()
+  })
+
+  it('moves between the tabs with the arrow keys', async () => {
+    answer({ 'pilot.playground.projects': PROJECTS, 'pilot.playground.status': STOPPED })
+    await shown()
+    fireEvent.keyDown(screen.getByRole('tab', { name: 'Telemetry' }), { key: 'ArrowRight' })
+    const commands = screen.getByRole('tab', { name: 'Commands', selected: true })
+    expect(document.activeElement).toBe(commands)
+    fireEvent.keyDown(commands, { key: 'ArrowLeft' })
+    expect(screen.getByRole('tab', { name: 'Telemetry', selected: true })).toBeTruthy()
   })
 })

@@ -25,8 +25,9 @@ import {
 // Widths are remembered per viewer, by column id.
 export const COMMANDS_WIDTHS_KEY = 'pilot.playground.telemetry.commands.widths'
 
+// A column of numbers, right-aligned as By automation's are.
 function count(id: string, label: string): ColumnSpec {
-  return { id, label, defaultWidth: 68, minWidth: 48 }
+  return { id, label, defaultWidth: 68, minWidth: 48, align: 'right' }
 }
 
 // The commands table's columns; CommandRow's cells follow this order. The series column's label is the window.
@@ -44,7 +45,7 @@ function columnsFor(since: TelemetryWindow): ColumnSpec[] {
     count('invalid', 'Invalid'),
     count('p50', 'p50'),
     count('p95', 'p95'),
-    { id: 'last', label: 'Last', defaultWidth: 68, minWidth: 56 }
+    { id: 'last', label: 'Last', defaultWidth: 68, minWidth: 56, align: 'right' }
   ]
 }
 
@@ -56,7 +57,7 @@ const SORTS: { id: CommandSort; label: string }[] = [
 ]
 
 const CELL = 'truncate px-3 py-1.5'
-const NUMBER = 'truncate px-3 py-1.5 font-mono tabular-nums'
+const NUMBER = 'truncate px-3 py-1.5 text-right font-mono tabular-nums'
 
 function nameClass(c: TelemetryCommand, picked: boolean): string {
   const tone = c.removed ? 'text-muted-foreground' : ''

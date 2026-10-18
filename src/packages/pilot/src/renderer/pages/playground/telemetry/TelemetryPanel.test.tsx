@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { NEW_USAGE, PAYLOAD, TODAY_PAYLOAD } from '../../../../shared/__fixtures__/telemetry'
+import { CALLS, NEW_USAGE, PAYLOAD, TODAY_PAYLOAD } from '../../../../shared/__fixtures__/telemetry'
 
 const pilotRpc = vi.fn()
 vi.mock('../../../api', () => ({ pilotRpc: (...args: unknown[]) => pilotRpc(...args) }))
@@ -15,7 +15,20 @@ vi.mock('../../../run-views/run-panel-state', () => ({
   openRun: (...args: unknown[]) => openRun(...args)
 }))
 
+import { resetSourceIndex } from '../../../run-views/SourceLink'
 import { TelemetryPanel } from './TelemetryPanel'
+import { TELEMETRY_REFRESH_MS } from './use-telemetry'
+
+// pilotcli's source index, with one command's code.
+const INDEX = {
+  skillsDir: '/skills',
+  pilotcli: { root: '/pilotcli', commands: { 'gitlab check-mr': { file: 'gitlab.go', line: 12 } } }
+}
+
+// The params of each telemetry read, in order.
+function reads(): unknown[] {
+  return pilotRpc.mock.calls.filter(([m]) => m === 'pilot.telemetry.get').map(([, p]) => p)
+}
 
 async function shown(answer: unknown): Promise<void> {
   pilotRpc.mockImplementation(async () => {
@@ -40,6 +53,10 @@ afterEach(() => {
   pilotRpc.mockReset()
   showActivity.mockReset()
   openRun.mockReset()
+  resetSourceIndex()
+  vi.unstubAllGlobals()
+  vi.useRealTimers()
+  Reflect.deleteProperty(document, 'hidden')
 })
 
 describe('TelemetryPanel', () => {
@@ -100,6 +117,12 @@ describe('TelemetryPanel', () => {
       'a window with no calls',
       { ...PAYLOAD, usage: { ...NEW_USAGE, calls: 0, commands: [] } },
       'No calls in 7 days.'
+    ],
+    ['the read still running', new Promise(() => {}), "Reading pilotcli's telemetry…"],
+    [
+      'more failed calls than shown',
+      { ...PAYLOAD, failures: { calls: CALLS, more: true } },
+      'Showing the newest 50.'
     ]
   ])('shows %s', async (_name, answer, text) => {
     await shown(answer)
@@ -114,12 +137,113 @@ describe('TelemetryPanel', () => {
     await act(async () => {})
     fireEvent.click(screen.getByRole('button', { name: 'gitlab check-mr' }))
     await act(async () => {})
-    expect(pilotRpc.mock.calls.map(([, p]) => p)).toEqual([
+    fireEvent.click(screen.getByRole('button', { name: 'gitlab check-mr' }))
+    await act(async () => {})
+    expect(reads()).toEqual([
       { since: '7d', includeDev: false },
       { since: '30d', includeDev: false },
       { since: '30d', includeDev: true },
-      { since: '30d', includeDev: true, command: 'gitlab check-mr' }
+      { since: '30d', includeDev: true, command: 'gitlab check-mr' },
+      { since: '30d', includeDev: true }
     ])
+  })
+
+  it('reads every 2 minutes while the window shows, again when it shows, and stops when inactive or gone', async () => {
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] })
+    let hidden = false
+    Object.defineProperty(document, 'hidden', { configurable: true, get: () => hidden })
+    pilotRpc.mockImplementation(async () => PAYLOAD)
+    const view = render(<TelemetryPanel />)
+    await act(async () => {})
+    expect(reads()).toHaveLength(1)
+    await act(async () => {
+      vi.advanceTimersByTime(TELEMETRY_REFRESH_MS)
+    })
+    expect(reads()).toHaveLength(2)
+    hidden = true
+    await act(async () => {
+      vi.advanceTimersByTime(2 * TELEMETRY_REFRESH_MS)
+    })
+    expect(reads()).toHaveLength(2)
+    hidden = false
+    await act(async () => {
+      document.dispatchEvent(new Event('visibilitychange'))
+    })
+    expect(reads()).toHaveLength(3)
+    view.rerender(<TelemetryPanel active={false} />)
+    expect(vi.getTimerCount()).toBe(0)
+    await act(async () => {
+      document.dispatchEvent(new Event('visibilitychange'))
+    })
+    expect(reads()).toHaveLength(3)
+    view.rerender(<TelemetryPanel />)
+    await act(async () => {})
+    expect(reads()).toHaveLength(4)
+    expect(vi.getTimerCount()).toBe(1)
+    view.unmount()
+    expect(vi.getTimerCount()).toBe(0)
+  })
+
+  it('keeps the last data when a refresh fails, and says why beside it', async () => {
+    await shown(PAYLOAD)
+    pilotRpc.mockImplementation(async () => {
+      throw new Error('pilotcli self get-telemetry timed out after 10s')
+    })
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Refresh' }))
+    })
+    expect(screen.getByText(/timed out after 10s/)).toBeTruthy()
+    expect(firstCells('Commands')).toEqual([
+      'gitlab check-mr',
+      'git get-branch',
+      'worktree checkremoved'
+    ])
+    expect(screen.getByText(/This Mac · updated \d\d:\d\d/)).toBeTruthy()
+  })
+
+  it('labels each day of a short window under its bar, with its calls above it', async () => {
+    await shown(PAYLOAD)
+    const days = within(screen.getByRole('list', { name: 'Calls each day' }))
+    expect(days.getAllByRole('listitem').map((li) => li.textContent)).toEqual([
+      'Oct 11: -',
+      'Oct 12: -',
+      'Oct 13: -',
+      'Oct 14: -',
+      'Oct 15: 2',
+      'Oct 16: 2',
+      'Oct 17: 2'
+    ])
+  })
+
+  it('shows no legend without a chart', async () => {
+    await shown(TODAY_PAYLOAD)
+    expect(screen.queryByText('ok or skip')).toBeNull()
+  })
+
+  it('opens an automation row to the commands each step called', async () => {
+    await shown(PAYLOAD)
+    const caret = screen.getByRole('button', { name: 'Steps of 05 · Fix failed CI on my MRs' })
+    expect(caret.getAttribute('aria-expanded')).toBe('false')
+    fireEvent.click(caret)
+    expect(caret.getAttribute('aria-expanded')).toBe('true')
+    const steps = document.getElementById(caret.getAttribute('aria-controls') ?? '')
+    expect(steps?.textContent).toBe('contextgitlab check-mr ×3')
+    expect(
+      within(screen.getByRole('table', { name: 'By automation' })).getByText('gitlab check-mr ×3')
+    ).toBeTruthy()
+  })
+
+  it("names a job that isn't recorded without a link to Activity", async () => {
+    const unrecorded = {
+      automation: '',
+      name: 'Pilot run (job not recorded)',
+      runs: 4,
+      calls: 8,
+      steps: []
+    }
+    await shown({ ...PAYLOAD, usage: { ...NEW_USAGE, jobs: [unrecorded] } })
+    expect(screen.getByText('Pilot run (job not recorded)')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Pilot run (job not recorded)' })).toBeNull()
   })
 
   it('opens Activity for an automation, and the run panel for a call with a run', async () => {
@@ -135,11 +259,22 @@ describe('TelemetryPanel', () => {
     expect(openRun).toHaveBeenCalledWith('fix-failed-ci-202610171420-t1-1')
   })
 
-  it('shows the run as plain text when it is no longer there', async () => {
+  it.each([
+    [
+      'is no longer there: plain text',
+      new Error('No run "fix-failed-ci-202610171420-t1-1"'),
+      false
+    ],
+    [
+      "can't be read just now: the link stays",
+      new Error('pilot.runs.get timed out after 15s'),
+      true
+    ]
+  ])('when the run %s', async (_name, error, linked) => {
     await shown(PAYLOAD)
     pilotRpc.mockImplementation(async (method: string) => {
       if (method === 'pilot.runs.get') {
-        throw new Error('no such run')
+        throw error
       }
       return PAYLOAD
     })
@@ -147,8 +282,8 @@ describe('TelemetryPanel', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Open run' }))
     })
     expect(openRun).not.toHaveBeenCalled()
-    expect(screen.queryByRole('button', { name: 'Open run' })).toBeNull()
-    expect(screen.getByText('fix-failed-ci-202610171420-t1-1')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Open run' }) !== null).toBe(linked)
+    expect(screen.queryByText('fix-failed-ci-202610171420-t1-1') !== null).toBe(!linked)
   })
 
   it('offers Try it for the picked command', async () => {
@@ -160,5 +295,23 @@ describe('TelemetryPanel', () => {
     await act(async () => {})
     fireEvent.click(screen.getByRole('button', { name: 'Try it' }))
     expect(onTryIt).toHaveBeenCalledWith('gitlab check-mr')
+  })
+
+  it.each([
+    ['the desktop', false, 1],
+    ['the browser version', true, 0]
+  ])('in %s, a picked command has Try it and Source: %s', async (_name, web, offered) => {
+    if (web) {
+      vi.stubGlobal('__ORCA_WEB_CLIENT__', true)
+    }
+    pilotRpc.mockImplementation(async (method: string) =>
+      method === 'pilot.sourceIndex.get' ? INDEX : PAYLOAD
+    )
+    render(<TelemetryPanel onTryIt={vi.fn()} />)
+    await act(async () => {})
+    fireEvent.click(screen.getByRole('button', { name: 'gitlab check-mr' }))
+    await act(async () => {})
+    expect(screen.queryAllByRole('button', { name: 'Try it' })).toHaveLength(offered)
+    expect(screen.queryAllByRole('button', { name: 'Source' })).toHaveLength(offered)
   })
 })

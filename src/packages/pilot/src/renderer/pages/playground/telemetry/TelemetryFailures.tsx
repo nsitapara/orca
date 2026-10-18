@@ -32,20 +32,23 @@ function outcomeClass(outcome: string): string {
   return 'text-muted-foreground'
 }
 
+// pilot.runs.get's answer for a run this Mac doesn't have (main/rpc/run-views' runDetail).
+function isNoRun(error: unknown): boolean {
+  return error instanceof Error && error.message.startsWith('No run')
+}
+
 // "Open run" for a call that has a run. The telemetry is this Mac's, so the run is read here; a run that isn't on this
-// Mac (or was deleted) turns into its id as plain text, never a link that opens an error.
-function RunCell({ run }: { run: string | undefined }): React.JSX.Element {
+// Mac (or was deleted) turns into its id as plain text, never a link that opens an error. Any other failure (a
+// timeout) leaves the link to try again. FailureRow keys it on the run, so `gone` never outlives its run.
+function RunCell({ run }: { run: string }): React.JSX.Element {
   const [gone, setGone] = useState(false)
-  if (!run) {
-    return <>-</>
-  }
   if (gone) {
-    return <>{run}</>
+    return <span className="block max-w-40 truncate">{run}</span>
   }
   const open = (): void => {
     pilotRpc('pilot.runs.get', { runId: run }).then(
       () => openRun(run),
-      () => setGone(true)
+      (error: unknown) => setGone(isNoRun(error))
     )
   }
   return (
@@ -69,16 +72,19 @@ function FailureRow({
       <td className={`${CELL} whitespace-nowrap font-mono text-muted-foreground`} title={call.ts}>
         {callTimeText(call.ts, now)}
       </td>
-      <td className={`${CELL} break-words font-mono`}>{call.command}</td>
-      <td className={`${CELL} ${outcomeClass(call.outcome)}`}>{call.outcome}</td>
+      <td className={`${CELL} whitespace-nowrap font-mono`}>{call.command}</td>
+      <td className={`${CELL} whitespace-nowrap ${outcomeClass(call.outcome)}`}>{call.outcome}</td>
       <td className={`${CELL} whitespace-nowrap`}>
         <span className="rounded border border-border px-1.5 py-0.5 text-xs">
           {causeText(call)}
         </span>
       </td>
       <td className={`${CELL} break-words text-muted-foreground`}>{whoText(call, names)}</td>
-      <td className={`${CELL} truncate font-mono text-xs text-muted-foreground`} title={call.run}>
-        <RunCell run={call.run} />
+      <td
+        className={`${CELL} whitespace-nowrap font-mono text-xs text-muted-foreground`}
+        title={call.run}
+      >
+        {call.run ? <RunCell key={call.run} run={call.run} /> : '-'}
       </td>
     </tr>
   )
@@ -111,18 +117,11 @@ function FailuresBody({
   return (
     <>
       <div className="overflow-x-auto">
+        {/* Auto layout: the short columns keep their text on one line, and Who · where takes the rest and wraps. */}
         <table
           aria-label="Recent failed and invalid calls"
-          className="w-full min-w-[36rem] table-fixed text-[13px]"
+          className="w-full min-w-[36rem] text-[13px]"
         >
-          <colgroup>
-            <col className="w-28" />
-            <col />
-            <col className="w-20" />
-            <col className="w-28" />
-            <col />
-            <col className="w-36" />
-          </colgroup>
           <thead className="text-[11px] uppercase tracking-[0.08em] text-muted-foreground">
             <tr>
               <th className="px-3 py-2 text-left font-medium">Time</th>

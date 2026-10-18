@@ -171,14 +171,20 @@ export function badClass(kind: 'failed' | 'invalid', n: number | undefined): str
   if (kind === 'failed') {
     return 'font-semibold text-destructive'
   }
-  return 'font-semibold text-amber-600 dark:text-amber-300'
+  return 'font-semibold text-status-warning'
 }
 
 export type BarSegment = { kind: 'rest' | 'failed' | 'invalid'; y: number; height: number }
 const MIN_MARK = 2
 
+// A failed or invalid count's mark: never thinner than MIN_MARK, so one failure among a thousand calls shows.
+function markOf(n: number, peak: number, height: number): number {
+  return n > 0 ? Math.max(MIN_MARK, (n / peak) * height) : 0
+}
+
 // One bucket's stacked bar in a chart `height` high, scaled to `peak`: ok or skip at the bottom, then failed, then
-// invalid. A failed or invalid count never draws thinner than MIN_MARK, so one failure among a thousand calls shows.
+// invalid. The bar is as tall as its calls (or as its marks, when MIN_MARK raised them above that) and never taller
+// than the chart: the marks are carved out of it, shrunk together if they'd overflow, and the rest gets what's left.
 // The rest is calls less failed and invalid, never a sum of outcomes: a call with no known outcome counts in calls.
 export function barSegments(
   calls: number,
@@ -187,21 +193,25 @@ export function barSegments(
   peak: number,
   height: number
 ): BarSegment[] {
+  if (peak <= 0) {
+    return []
+  }
+  const raised = markOf(failed, peak, height) + markOf(invalid, peak, height)
+  const bar = Math.min(height, Math.max((Math.min(calls, peak) / peak) * height, raised))
+  const shrink = raised > bar ? bar / raised : 1
   const parts: [BarSegment['kind'], number][] = [
-    ['rest', Math.max(0, calls - failed - invalid)],
-    ['failed', failed],
-    ['invalid', invalid]
+    ['rest', calls - failed - invalid > 0 ? bar - raised * shrink : 0],
+    ['failed', markOf(failed, peak, height) * shrink],
+    ['invalid', markOf(invalid, peak, height) * shrink]
   ]
   const out: BarSegment[] = []
   let top = height
-  for (const [kind, n] of parts) {
-    if (n <= 0 || peak <= 0) {
+  for (const [kind, h] of parts) {
+    if (h <= 0) {
       continue
     }
-    const scaled = (n / peak) * height
-    const h = kind === 'rest' ? scaled : Math.max(MIN_MARK, scaled)
     top -= h
-    out.push({ kind, y: top, height: h })
+    out.push({ kind, y: Math.max(0, top), height: h })
   }
   return out
 }
