@@ -2,6 +2,7 @@ import type { ReactNode } from 'react'
 import { ChevronDown, FolderGit2, Pin } from 'lucide-react'
 import type { ActivityThreadGroup } from '@/components/activity/activity-thread-types'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import { isPortaledRowMenuClick, isRowActivationKey } from '@/lib/list-row-interaction'
 import { cn } from '@/lib/utils'
 import { useAppStore } from '@/store'
 import { ActivityMachineChip } from '../activity-machines/ActivityMachineChip'
@@ -9,6 +10,7 @@ import { activityGroupMachineRows } from '../activity-machines/use-activity-mach
 import { pilotStore } from '../store'
 import { activityTabsGroupCount } from './activity-tabs-rows'
 import { NewAgentMenu } from './NewAgentMenu'
+import { openActivityWorktree } from './open-activity-worktree'
 
 const WORKTREE_GROUP = 'worktree:'
 
@@ -49,10 +51,38 @@ function PinButton({ worktreeId, pinned }: { worktreeId: string; pinned: boolean
   )
 }
 
+function FoldButton({ collapsed, onToggle }: { collapsed: boolean; onToggle?: () => void }) {
+  const label = collapsed ? 'Show sessions' : 'Hide sessions'
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      aria-expanded={!collapsed}
+      onClick={(event) => {
+        event.stopPropagation()
+        onToggle?.()
+      }}
+      onKeyDown={(event) => event.stopPropagation()}
+      className="flex size-4 shrink-0 cursor-pointer items-center justify-center rounded text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+    >
+      <ChevronDown
+        className={cn('size-3 transition-transform duration-150', collapsed && '-rotate-90')}
+      />
+    </button>
+  )
+}
+
+function openWorktree(worktreeId: string): void {
+  const worktree = useAppStore.getState().getKnownWorktreeById(worktreeId)
+  if (worktree) {
+    openActivityWorktree(worktree)
+  }
+}
+
 // pilot-hook: activity-tabs-group-header. A worktree group's header reads as a title over its
 // sessions, not as one more caption: the worktree in row type, its project beside it, New agent
-// and the Workspaces sidebar's pin (a pinned worktree always shows in Activity, first). With no
-// sessions there is nothing to fold, so it has no chevron and doesn't toggle.
+// and the Workspaces sidebar's pin (a pinned worktree always shows in Activity, first). Clicking it
+// opens the worktree, as in Projects; its chevron folds the sessions, and with none it has no chevron.
 export function ActivityTabsGroupHeader({
   group,
   collapsed = false,
@@ -78,30 +108,26 @@ export function ActivityTabsGroupHeader({
   const [machineRow] = activityGroupMachineRows(group)
   return (
     <div
-      role={foldable ? 'button' : undefined}
-      tabIndex={foldable ? 0 : undefined}
-      aria-expanded={foldable ? !collapsed : undefined}
-      onClick={foldable ? onToggle : undefined}
-      onKeyDown={(event) => {
-        if (foldable && (event.key === 'Enter' || event.key === ' ')) {
-          event.preventDefault()
-          onToggle?.()
+      role="button"
+      tabIndex={0}
+      onClick={(event) => {
+        // The New agent menu's pick bubbles here through its portal; it opens its own tab.
+        if (!isPortaledRowMenuClick(event)) {
+          openWorktree(worktreeId)
         }
       }}
-      className={cn(
-        'group flex h-8 select-none items-center gap-1.5 rounded-md px-1.5 text-foreground transition-colors',
-        foldable && 'cursor-pointer hover:bg-accent/60'
-      )}
+      onKeyDown={(event) => {
+        if (isRowActivationKey(event)) {
+          event.preventDefault()
+          openWorktree(worktreeId)
+        }
+      }}
+      className="group flex h-8 cursor-pointer select-none items-center gap-1.5 rounded-md px-1.5 text-foreground transition-colors hover:bg-accent/60"
     >
       {foldable ? (
-        <ChevronDown
-          className={cn(
-            'size-3 shrink-0 text-muted-foreground transition-transform duration-150 group-hover:text-foreground',
-            collapsed && '-rotate-90'
-          )}
-        />
+        <FoldButton collapsed={collapsed} onToggle={onToggle} />
       ) : (
-        <span className="size-3 shrink-0" aria-hidden />
+        <span className="size-4 shrink-0" aria-hidden />
       )}
       <FolderGit2 className="size-3.5 shrink-0 text-muted-foreground" />
       {machineRow ? (

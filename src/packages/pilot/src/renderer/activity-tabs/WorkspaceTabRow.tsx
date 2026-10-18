@@ -1,4 +1,4 @@
-import { File, FileDiff, Globe, Pin, Smartphone, Terminal, X } from 'lucide-react'
+import { File, FileDiff, Globe, Pin, Smartphone, Terminal, X, type LucideIcon } from 'lucide-react'
 import { toast } from 'sonner'
 import {
   ContextMenu,
@@ -9,8 +9,10 @@ import {
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import type { TerminalAgent } from '../../../../../shared/terminal-agent'
 import type { Tab } from '../../../../../shared/tab-types'
+import type { TerminalTab } from '../../../../../shared/terminal-tab-types'
 import { AgentIcon } from '@/lib/agent-catalog'
 import { agentTypeToIconAgent, formatAgentTypeLabel } from '@/lib/agent-status'
+import { useTabAgent } from '@/lib/use-tab-agent'
 import { getActivityThreadWorkspaceTitle } from '@/lib/activity-thread-display'
 import { useActiveClientHostedBrowserRowId } from '@/lib/pane-manager/client-hosted-browser-row-state'
 import { isPaletteCurrentWorktree } from '@/lib/palette-repo-resolution'
@@ -36,17 +38,40 @@ const icons = {
   'check-details': File
 }
 
-// The agent a tab runs, when the tab itself says: a chat's provider, or the agent Orca launched in a terminal.
-function useTabAgent(tab: Tab): TerminalAgent | null {
-  const launchAgent = useAppStore((s) =>
+function TabRowIconFace({
+  agent,
+  Icon
+}: {
+  agent: TerminalAgent | null
+  Icon: LucideIcon
+}): React.JSX.Element {
+  return (
+    <span
+      className="mt-0.5 inline-flex size-4 shrink-0 items-center justify-center text-muted-foreground"
+      title={agent ? formatAgentTypeLabel(agent) : undefined}
+    >
+      {agent ? <AgentIcon agent={agent} size={14} /> : <Icon className="size-3.5" />}
+    </span>
+  )
+}
+
+// Same agent as the tab bar shows: hooks, process and title, not only what Orca launched there.
+function TerminalTabRowIcon({ terminalTab }: { terminalTab: TerminalTab }): React.JSX.Element {
+  return <TabRowIconFace agent={useTabAgent(terminalTab)} Icon={Terminal} />
+}
+
+function TabRowIcon({ tab }: { tab: Tab }): React.JSX.Element {
+  const terminalTab = useAppStore((s) =>
     tab.contentType === 'terminal'
-      ? (s.tabsByWorktree[tab.worktreeId]?.find((t) => t.id === tab.entityId)?.launchAgent ?? null)
+      ? (s.tabsByWorktree[tab.worktreeId]?.find((t) => t.id === tab.entityId) ?? null)
       : null
   )
-  if (tab.contentType === 'agent-session') {
-    return agentTypeToIconAgent(tab.agentSessionAgent)
+  if (terminalTab) {
+    return <TerminalTabRowIcon terminalTab={terminalTab} />
   }
-  return launchAgent
+  const agent =
+    tab.contentType === 'agent-session' ? agentTypeToIconAgent(tab.agentSessionAgent) : null
+  return <TabRowIconFace agent={agent} Icon={icons[tab.contentType]} />
 }
 
 function errorText(error: unknown): string {
@@ -85,8 +110,6 @@ export function WorkspaceTabRow({
     ? activeClientRowId === tab.id
     : !activeClientRowId && groupActiveTabId === tab.id
   const active = workspaceActive && rowActive
-  const Icon = icons[tab.contentType]
-  const agent = useTabAgent(tab)
   const workspaceLabel = getActivityThreadWorkspaceTitle(item.worktree)
   const close = () => {
     if (item.clientHostedRow) {
@@ -120,12 +143,7 @@ export function WorkspaceTabRow({
           className="group relative flex w-full cursor-pointer flex-col gap-1 rounded-lg border border-transparent px-1.5 py-1.5 text-left transition-[background-color,border-color,opacity,box-shadow] duration-200 outline-none select-none worktree-sidebar-card-hover focus-visible:ring-1 focus-visible:ring-ring"
         >
           <div className="flex min-w-0 items-start gap-1.5">
-            <span
-              className="mt-0.5 inline-flex size-4 shrink-0 items-center justify-center text-muted-foreground"
-              title={agent ? formatAgentTypeLabel(agent) : undefined}
-            >
-              {agent ? <AgentIcon agent={agent} size={14} /> : <Icon className="size-3.5" />}
-            </span>
+            <TabRowIcon tab={tab} />
             <div className="flex min-w-0 flex-1 flex-col gap-0.5">
               <button
                 type="button"

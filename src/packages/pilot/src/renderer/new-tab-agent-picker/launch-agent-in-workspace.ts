@@ -2,7 +2,7 @@ import { toast } from 'sonner'
 import { newAgentLaunchRequestId } from '@/lib/agent-launch-request-id'
 import { focusTerminalTabSurface } from '@/lib/focus-terminal-tab-surface'
 import { launchAgentInNewTab, type LaunchAgentInNewTabArgs } from '@/lib/launch-agent-in-new-tab'
-import { activateAndRevealWorktree } from '@/lib/worktree-activation'
+import { activateAndRevealWorkspace } from '@/lib/worktree-activation'
 import { useAppStore } from '@/store'
 import type { ExecutionHostId } from '../../../../../shared/execution-host'
 import type { TuiAgent } from '../../../../../shared/tui-agent'
@@ -14,6 +14,31 @@ export type WorkspaceLaunchSwitch = { executionHostId: ExecutionHostId; machineL
 /** The first-shell hold a switch takes; the launch releases it when no agent tab is coming. */
 type FirstShellHold = { release: () => void }
 
+/**
+ * Switches to a workspace as a launch's surface is about to open there. The launcher opens that
+ * surface itself, so neither revealing nor the host's first empty answer may seed a sibling shell.
+ */
+export function switchToWorkspaceForLaunch(
+  worktreeId: string,
+  executionHostId: ExecutionHostId | undefined,
+  options: { hold?: FirstShellHold; revealInSidebar?: boolean } = {}
+): boolean {
+  const hold = options.hold ?? { release: () => {} }
+  if (executionHostId) {
+    hold.release = holdRemoteFirstShell(worktreeId, executionHostId)
+  }
+  const switched =
+    activateAndRevealWorkspace(worktreeId, {
+      providesInitialSurface: true,
+      ...(executionHostId ? { executionHostId } : {}),
+      ...(options.revealInSidebar === false ? { revealInSidebar: false } : {})
+    }) !== false
+  if (!switched) {
+    hold.release()
+  }
+  return switched
+}
+
 // Why: activating here, not before the launch, keeps a launch that fails early from switching workspace.
 function switchBeforeSurfaceOpen(
   worktreeId: string,
@@ -23,19 +48,7 @@ function switchBeforeSurfaceOpen(
   if (!switchTo) {
     return undefined
   }
-  // The launcher opens the agent's surface itself, so neither revealing nor the host's first empty answer may seed a sibling shell.
-  return () => {
-    hold.release = holdRemoteFirstShell(worktreeId, switchTo.executionHostId)
-    const switched =
-      activateAndRevealWorktree(worktreeId, {
-        executionHostId: switchTo.executionHostId,
-        providesInitialSurface: true
-      }) !== false
-    if (!switched) {
-      hold.release()
-    }
-    return switched
-  }
+  return () => switchToWorkspaceForLaunch(worktreeId, switchTo.executionHostId, { hold })
 }
 
 function launchFailureMessage(

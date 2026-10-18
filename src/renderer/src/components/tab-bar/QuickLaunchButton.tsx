@@ -7,7 +7,7 @@ import { useAppStore } from '@/store'
 import { useAgentDetectionTargetForWorktree } from '@/hooks/useAgentDetectionTarget'
 import { useDetectedAgents } from '@/hooks/useDetectedAgents'
 import { useOptionalShortcutLabel } from '@/hooks/useShortcutLabel'
-import { launchAgentInNewTab } from '@/lib/launch-agent-in-new-tab'
+import { launchAgentInNewTab, type LaunchAgentInNewTabArgs } from '@/lib/launch-agent-in-new-tab'
 import { newAgentLaunchRequestId } from '@/lib/agent-launch-request-id'
 import { captureNativeChatComposerFocusIntent } from '@/components/native-chat/use-native-chat-composer-reveal-focus'
 import type { TuiAgent } from '../../../../shared/tui-agent'
@@ -43,6 +43,8 @@ export type QuickLaunchAgentMenuItemsProps = {
   onPromptHandedOff?: (delivered: Promise<unknown>) => void
   /** Nothing to send: e.g. every note is already on its way, so no agent is started. */
   disabled?: boolean
+  /** Lets a menu outside the worktree's own tab bar switch to it before the new tab opens. */
+  beforeSurfaceOpen?: LaunchAgentInNewTabArgs['beforeSurfaceOpen']
 }
 
 function getCatalogEntry(agent: TuiAgent): { id: TuiAgent; label: string } | null {
@@ -73,7 +75,8 @@ function QuickLaunchAgentMenuItemsInner({
   launchSource,
   onPromptDelivered,
   onPromptHandedOff,
-  disabled = false
+  disabled = false,
+  beforeSurfaceOpen
 }: QuickLaunchAgentMenuItemsProps): React.JSX.Element | null {
   // Why: resolving only the SSH connectionId here made paired-runtime
   // worktrees fall back to LOCAL detection, listing the client's agents
@@ -112,6 +115,7 @@ function QuickLaunchAgentMenuItemsInner({
         ...(promptDelivery !== undefined ? { promptDelivery } : {}),
         ...(launchSource !== undefined ? { launchSource } : {}),
         ...(onPromptDelivered !== undefined ? { onPromptDelivered } : {}),
+        ...(beforeSurfaceOpen ? { beforeSurfaceOpen } : {}),
         // Notes keep their text until it goes out, so the new chat's composer never gets a copy.
         ...(onPromptHandedOff ? { promptKeptByCaller: true as const } : {})
       })
@@ -159,7 +163,8 @@ function QuickLaunchAgentMenuItemsInner({
       launchSource,
       onPromptDelivered,
       onPromptHandedOff,
-      disabled
+      disabled,
+      beforeSurfaceOpen
     ]
   )
 
