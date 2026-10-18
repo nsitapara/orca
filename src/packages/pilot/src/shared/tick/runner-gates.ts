@@ -119,10 +119,17 @@ export function inTickGate(
   return { code: 'worktree_busy', detail: `Another run starts in ${path} this tick` }
 }
 
+// A per-tick overflow is re-decided at its job's next tick; a manual or turned-off job ticks only by Run now.
+function tickLimitDetail(def: AutomationDefinition, perTick: number): string {
+  const when =
+    def.schedule === 'manual' || !def.enabled ? 'the next Run now' : "the job's next tick"
+  return `Over the limit of ${perTick} per tick; starts at ${when}`
+}
+
 export function limitGate(def: AutomationDefinition, taken: number, active: number): Hold | null {
   const { perTick, atOnce } = def.limits
   if (perTick !== null && taken >= perTick) {
-    return { code: 'tick_limit', detail: `Over the limit of ${perTick} per tick` }
+    return { code: 'tick_limit', detail: tickLimitDetail(def, perTick) }
   }
   if (atOnce !== null && active >= atOnce) {
     return { code: 'job_limit', detail: `At most ${atOnce} at once` }

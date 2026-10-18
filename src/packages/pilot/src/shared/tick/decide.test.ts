@@ -373,14 +373,19 @@ describe('decideTick: checks and the worktree rule', () => {
 })
 
 describe('decideTick: limits, order and ask_first', () => {
-  it('holds past the per-tick limit', () => {
+  it.each<[string, Partial<AutomationDefinition>, string]>([
+    ['a scheduled job', { schedule: '10 * * * *' }, "starts at the job's next tick"],
+    ['a manual job', { schedule: 'manual' }, 'starts at the next Run now'],
+    ['a turned-off job', { schedule: '10 * * * *', enabled: false }, 'starts at the next Run now']
+  ])('holds past the per-tick limit of %s, saying when it starts', (_name, over, when) => {
     const perTick = testDefinition({
+      ...over,
       limits: { perTick: 1, atOnce: null, timeoutMs: null, order: 'listed' }
     })
     const out = decideTick(input(perTick, [item(1), item(2)]))
     expect(out.map((d) => [d.verdict, d.hold])).toEqual([
       ['started', undefined],
-      ['held', { code: 'tick_limit', detail: 'Over the limit of 1 per tick' }]
+      ['held', { code: 'tick_limit', detail: `Over the limit of 1 per tick; ${when}` }]
     ])
   })
 
@@ -422,7 +427,7 @@ describe('decideTick: limits, order and ask_first', () => {
     expect(verdicts(input(def, items))).toEqual([
       ['mr:1', 'asked', 'Asks first: Prepare a review of !1?'],
       ['mr:2', 'asked', 'Asks first: Prepare a review of !2?'],
-      ['mr:3', 'held', 'Over the limit of 2 per tick']
+      ['mr:3', 'held', 'Over the limit of 2 per tick; starts at the next Run now']
     ])
   })
 })
