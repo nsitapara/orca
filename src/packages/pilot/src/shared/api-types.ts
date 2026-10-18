@@ -42,6 +42,7 @@ export type Verdict =
   | 'queued'
   | 'baselined'
   | 'asked'
+  | 'held'
 export type CheckOutcome = { check: string; ok: boolean; reason: string }
 export type TickItem = { key: string; label: string; fields: ItemFields }
 export type ItemDecision = {
@@ -55,6 +56,9 @@ export type ItemDecision = {
   // A dry run of an env automation: where a real run would work (main/envs/preview.ts). Not stored apart; its words are
   // in reason.
   workspace?: string
+  // A held item waits in line: why, and when a time-based hold lifts.
+  hold?: { code: HoldReason; detail: string }
+  dueAt?: number
 }
 
 // An item source's verdict on one item's where clauses (contract §3), before once_per and checks.
@@ -246,6 +250,10 @@ export type HoldReason =
   | 'waits'
   | 'retry'
   | 'capacity'
+  | 'window'
+  | 'session_open'
+  | 'answers_pending'
+  | 'job_limit'
 export type QueueRoute = 'resume' | 'fork' | 'new' | 'action'
 export type QueueRow = {
   id: number

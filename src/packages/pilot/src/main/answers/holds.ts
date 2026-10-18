@@ -1,4 +1,5 @@
 import type { HoldReason } from '../../shared/api-types'
+import { QUOTA_CEILING } from '../../shared/quota-ceiling'
 import type { AgentKind, AutomationDefinition } from '../../shared/definition/types'
 import type { QuotaReading } from '../fields/quota'
 import {
@@ -108,7 +109,6 @@ export function passActivity(runtime: BusyRuntime): (path: string) => Promise<Wo
 }
 
 // quota.py CEILING: automations leave the rest of each window for Nish's own sessions. Unknown passes.
-export const QUOTA_CEILING = { weekly: 90, session: 95 }
 
 export function quotaHold(agent: AgentKind, reading: QuotaReading): Hold | null {
   if (reading.weekly !== null && reading.weekly >= QUOTA_CEILING.weekly) {
