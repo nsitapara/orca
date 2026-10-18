@@ -69,6 +69,32 @@ describe('sweepStaleStarts', () => {
     expect(logs).toEqual([`[pilot] run stuck: ${STALE_START_OUTCOME}`])
   })
 
+  it("frees an ask-first job's key, counting no failure, so its item is asked again", () => {
+    const store = newStore()
+    const now = 10 * MIN
+    startRun(store, 'asked', now - 3 * MIN)
+    store.runs.create({
+      id: 'bare',
+      automationId: 'a',
+      tickId: null,
+      itemKey: 'bare',
+      itemLabel: 'bare',
+      worktreePath: '/wt',
+      startedAt: now - 3 * MIN
+    })
+    store.markHandled('a', 'bare:1', 'bare', now - 3 * MIN)
+    const counted: string[] = []
+    sweepStaleStarts(
+      store,
+      () => now,
+      () => {},
+      { asksFirst: (id) => id === 'a', failureCounted: (run) => counted.push(run.id) }
+    )
+    expect(['asked', 'bare'].map((id) => store.runs.get(id)?.status)).toEqual(['failed', 'failed'])
+    expect(store.handledRows('a')).toEqual([])
+    expect(counted).toEqual([])
+  })
+
   it("closes the step but keeps a run's own outcome when the run already ended", () => {
     const store = newStore()
     startRun(store, 'r', 0)

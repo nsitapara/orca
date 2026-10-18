@@ -22,10 +22,32 @@ function ranBefore(store: PilotStore, step: StepRow): boolean {
   return store.runs.steps(step.runId).some((s) => s.idx < step.idx && s.status !== 'skipped')
 }
 
-// The run fails and its key counts a failure, together, so a sweep that stops part way never counts it twice.
-function failStart(store: PilotStore, run: RunRow, at: number, outcome: string): number {
+export type SweepOptions = {
+  olderThanMs?: number
+  // The runs this process is still opening (wireRunEngine's startRun): their pending steps are never closed.
+  opening?(runId: string): boolean
+  // A swept start counted a failure on its key (the give-up card).
+  failureCounted?: FailureCounted
+  // An ask-first job's swept start frees its key, as the job is never retried on its own.
+  asksFirst?(automationId: string): boolean
+}
+
+// The run fails and its key counts a failure, together, so a sweep that stops part way never counts it twice. An
+// ask-first job's key is freed instead, so its item is asked again.
+function failStart(
+  store: PilotStore,
+  run: RunRow,
+  at: number,
+  outcome: string,
+  opts: SweepOptions
+): number {
   return store.transaction(() => {
-    const failures = store.setHandledStatus(run.automationId, run.id, 'failed', at)
+    let failures = 0
+    if (opts.asksFirst?.(run.automationId)) {
+      store.unmarkHandledForRun(run.automationId, run.id)
+    } else {
+      failures = store.setHandledStatus(run.automationId, run.id, 'failed', at)
+    }
     store.runs.update(run.id, { status: 'failed', outcome, finishedAt: at })
     repend(store, run.id)
     return failures
@@ -39,7 +61,7 @@ function closeStaleStart(
   step: StepRow,
   at: number,
   outcome: string,
-  counted: FailureCounted | undefined
+  opts: SweepOptions
 ): boolean {
   if (ranBefore(store, step)) {
     store.runs.updateStep(step.runId, step.idx, {
@@ -51,10 +73,10 @@ function closeStaleStart(
   }
   const run = store.runs.get(step.runId)
   const failRun = run?.status === 'running'
-  const failures = run && failRun ? failStart(store, run, at, outcome) : 0
+  const failures = run && failRun ? failStart(store, run, at, outcome, opts) : 0
   store.runs.updateStep(step.runId, step.idx, { status: 'failed', error: outcome, finishedAt: at })
   if (run && failures > 0) {
-    counted?.(store.runs.get(run.id) ?? run, failures)
+    opts.failureCounted?.(store.runs.get(run.id) ?? run, failures)
   }
   return failRun
 }
@@ -71,24 +93,11 @@ function findStale(store: PilotStore, at: number, olderThanMs: number): Stale {
 }
 
 // A run that never got a step: the process stopped between creating it and starting its agent.
-function closeStepless(
-  store: PilotStore,
-  run: RunRow,
-  at: number,
-  counted: FailureCounted | undefined
-): void {
-  const failures = failStart(store, run, at, STALE_START_OUTCOME)
+function closeStepless(store: PilotStore, run: RunRow, at: number, opts: SweepOptions): void {
+  const failures = failStart(store, run, at, STALE_START_OUTCOME, opts)
   if (failures > 0) {
-    counted?.(store.runs.get(run.id) ?? run, failures)
+    opts.failureCounted?.(store.runs.get(run.id) ?? run, failures)
   }
-}
-
-export type SweepOptions = {
-  olderThanMs?: number
-  // The runs this process is still opening (wireRunEngine's startRun): their pending steps are never closed.
-  opening?(runId: string): boolean
-  // A swept start counted a failure on its key (the give-up card).
-  failureCounted?: FailureCounted
 }
 
 // A step is 'starting' with no terminal only while launchAgentTerminal is in flight, 'pending' only while
@@ -114,7 +123,7 @@ export function sweepStaleStarts(
   }
   for (const run of stale.runs) {
     try {
-      closeStepless(store, run, at, opts.failureCounted)
+      closeStepless(store, run, at, opts)
       log(`[pilot] run ${run.id}: ${STALE_START_OUTCOME}`)
     } catch (error) {
       log(`[pilot] couldn't close stale run ${run.id}: ${messageOf(error)}`)
@@ -128,7 +137,7 @@ export function sweepStaleStarts(
   ]
   for (const [step, outcome] of closing) {
     try {
-      if (closeStaleStart(store, step, at, outcome, opts.failureCounted)) {
+      if (closeStaleStart(store, step, at, outcome, opts)) {
         log(`[pilot] run ${step.runId}: ${outcome}`)
       }
     } catch (error) {

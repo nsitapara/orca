@@ -29,7 +29,6 @@ import { runtimeLauncherDeps, runtimeSessionTerminals } from './run/launch'
 import { resumeStepSession, runtimeResumeDeps } from './run/resume-session'
 import { continueRun } from './run/run-continue'
 import { modeTextFor, readMode } from './run/modes'
-import { sweepStaleStarts } from './run/stale-starts'
 import { terminalRelister } from './run/terminal-relist'
 import { agentStepStarter } from './run/step-starters'
 import { runtimeStepProbe } from './run/watcher'
@@ -261,7 +260,7 @@ function openPilot(
   // The attach hooks decide (pilotSchedulerEnabled); a caller that doesn't say gets no scheduler.
   if (schedulerOn) {
     void softly('envs at start', () => envs.startup(), log)
-    sweepStaleStarts(store, now, log, { failureCounted: giveUp })
+    wired.sweep()
     scheduler.start()
   } else {
     log(`[pilot] scheduler off in ${host.processKind} (PILOT_SCHEDULER=on runs it here)`)
