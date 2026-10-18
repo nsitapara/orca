@@ -276,8 +276,7 @@ describe('launchAgentStep', () => {
         env: expect.objectContaining({
           PILOT_STEP: 'fix',
           PILOT_STEP_IDX: '0',
-          PILOT_POWERS: 'commit',
-          AGENT_RUN: 'run-1'
+          PILOT_POWERS: 'commit'
         })
       }
     })

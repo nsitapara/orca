@@ -126,7 +126,7 @@ export type StepEnvInput = {
   powers: readonly string[]
 }
 
-// Spec §8: every step's env (agent terminals and shell steps). AGENT_RUN for skills that already read it.
+// Spec §8: every step's env (agent terminals and shell steps).
 export function pilotStepEnv(input: StepEnvInput): Record<string, string> {
   return {
     PILOT_RUN_ID: input.runId,
@@ -134,8 +134,7 @@ export function pilotStepEnv(input: StepEnvInput): Record<string, string> {
     PILOT_STEP_IDX: String(input.stepIdx),
     PILOT_AUTOMATION_ID: input.automationId,
     PILOT_ITEM_KEY: input.itemKey,
-    PILOT_POWERS: input.powers.join(','),
-    AGENT_RUN: input.runId
+    PILOT_POWERS: input.powers.join(',')
   }
 }
 

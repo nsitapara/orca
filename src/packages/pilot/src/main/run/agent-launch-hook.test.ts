@@ -116,11 +116,11 @@ describe('launchAgentTerminal with the agent-launch-env hook', () => {
       agent: 'claude',
       prompt: 'fix the flaky test',
       title: 'Fix CI · !1561',
-      pilot: { env: { PILOT_RUN_ID: 'r1', AGENT_RUN: 'r1' }, argv: ['--session-id', 'u-1'] }
+      pilot: { env: { PILOT_RUN_ID: 'r1', PILOT_STEP_IDX: '0' }, argv: ['--session-id', 'u-1'] }
     }
     await runtime.launchAgentTerminal('id:repo-1::/home/me/app-feature', opts)
     const [, terminal] = createTerminal.mock.calls[0] as [string, TerminalOpts]
-    expect(terminal.env).toMatchObject({ PILOT_RUN_ID: 'r1', AGENT_RUN: 'r1' })
+    expect(terminal.env).toMatchObject({ PILOT_RUN_ID: 'r1', PILOT_STEP_IDX: '0' })
     expect(terminal.command).toMatch(/'--session-id' 'u-1' 'fix the flaky test'$/)
     expect(terminal.title).toBe('Fix CI · !1561')
   })

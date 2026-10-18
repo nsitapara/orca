@@ -115,8 +115,7 @@ describe('makeLauncher', () => {
             PILOT_STEP_IDX: '0',
             PILOT_AUTOMATION_ID: 'fix-failed-ci',
             PILOT_ITEM_KEY: 'mr:1561',
-            PILOT_POWERS: 'commit,push',
-            AGENT_RUN: 'run-1'
+            PILOT_POWERS: 'commit,push'
           },
           argv: [
             '--prompt-suggestions=false',
@@ -550,8 +549,7 @@ describe('openAgentTerminal', () => {
           PILOT_STEP_IDX: '0',
           PILOT_AUTOMATION_ID: 'apply',
           PILOT_ITEM_KEY: 'mr:1561',
-          PILOT_POWERS: 'commit',
-          AGENT_RUN: 'ans-1'
+          PILOT_POWERS: 'commit'
         },
         argv
       }

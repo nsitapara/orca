@@ -152,7 +152,7 @@ describe('agentArgv', () => {
 })
 
 describe('pilotStepEnv', () => {
-  it('names the run, step, automation, item and powers, and sets AGENT_RUN for the skills that read it', () => {
+  it('names the run, step, automation, item and powers', () => {
     expect(
       pilotStepEnv({
         runId: 'r-1',
@@ -168,8 +168,7 @@ describe('pilotStepEnv', () => {
       PILOT_STEP_IDX: '1',
       PILOT_AUTOMATION_ID: 'fix-ci',
       PILOT_ITEM_KEY: 'mr:1561',
-      PILOT_POWERS: 'commit,push',
-      AGENT_RUN: 'r-1'
+      PILOT_POWERS: 'commit,push'
     })
   })
 })
@@ -231,8 +230,7 @@ describe('terminalLaunchOptions', () => {
           PILOT_STEP_IDX: '0',
           PILOT_AUTOMATION_ID: 'fix-ci',
           PILOT_ITEM_KEY: 'mr:1561',
-          PILOT_POWERS: 'commit',
-          AGENT_RUN: 'r-1'
+          PILOT_POWERS: 'commit'
         },
         argv: [
           '--prompt-suggestions=false',
