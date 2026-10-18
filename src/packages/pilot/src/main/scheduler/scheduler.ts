@@ -4,6 +4,7 @@ import { nextTickAfter } from '../../shared/schedule/cron'
 import type { LoadedDefinitions } from '../definitions/loader'
 import { mapLimit } from '../map-limit'
 import type { PassFetchCache } from '../sources/fetch-cache'
+import { REPO_WAIT_MS, RepoReadiness } from './repo-readiness'
 import { tickQueued, type QueuedTickDeps } from './queued-ticks'
 import type { TickOptions, TickResult } from './tick-runner'
 
@@ -33,9 +34,7 @@ export const SCHEDULER_OFF = "Pilot's scheduler isn't running in this process"
 export const SCHEDULER_INTERVAL_MS = 15_000
 export const SCHEDULER_START_DELAY_MS = 60_000
 export const MAX_CONCURRENT_TICKS = 4
-// The first pass waits at most this long for the runtime to list the repos, then ticks anyway, so a
-// misspelled repo still shows up as a failed tick.
-export const REPO_WAIT_MS = 5 * 60_000
+export { REPO_WAIT_MS }
 // A feed's run: now ticks its receiving stage at most this often a minute; past it the ids wait for its schedule. The
 // loader already refuses feeds that go round in a cycle: this bounds a burst of sender runs ending together.
 export const MAX_TRIGGERS_PER_MINUTE = 4
@@ -68,9 +67,9 @@ export class PilotScheduler {
   private loop: Promise<void> | null = null
   private stopped = false
   private firstLoopDone = false
-  private waitLogged = false
   private times: LoopTimes = { loopStartedAt: null, lastLoopFinishedAt: null }
   private readonly startedAt: number
+  private readonly repos: RepoReadiness
   // When each stage was last triggered (within the minute), and the trigger that came while its tick ran.
   private readonly triggeredAt = new Map<string, number[]>()
   private readonly retrigger = new Map<string, TickTrigger>()
@@ -82,6 +81,7 @@ export class PilotScheduler {
     private readonly startDelayMs = SCHEDULER_START_DELAY_MS
   ) {
     this.startedAt = deps.now()
+    this.repos = new RepoReadiness(deps, this.startedAt, isScheduled)
   }
 
   // Why the delay: PTYs register after the window opens (desktop) or serve launch, so agents can't
@@ -177,30 +177,6 @@ export class PilotScheduler {
     return this.loop
   }
 
-  // Before the first pass, the runtime must list the scheduled automations' repos (or the wait ran out).
-  private reposReady(definitions: AutomationDefinition[]): boolean {
-    if (this.firstLoopDone) {
-      return true
-    }
-    const repos = [...new Set(definitions.filter(isScheduled).map((d) => d.repo))]
-    let listed = repos.length === 0
-    if (!listed) {
-      try {
-        listed = this.deps.reposListed(repos)
-      } catch {
-        listed = false
-      }
-    }
-    if (listed || this.deps.now() - this.startedAt >= REPO_WAIT_MS) {
-      return true
-    }
-    if (!this.waitLogged) {
-      this.waitLogged = true
-      this.deps.log(`[pilot] waiting for Orca to list ${repos.join(', ')} before the first tick`)
-    }
-    return false
-  }
-
   // Poll first, so runs that ended (or never started) free their at_once slots and worktrees before
   // this loop's decisions. Every step is isolated: one failure never skips the rest.
   private async runLoop(): Promise<void> {
@@ -222,7 +198,7 @@ export class PilotScheduler {
       this.deps.log(`[pilot] couldn't read automations: ${messageOf(error)}`)
       return
     }
-    if (!this.reposReady(definitions)) {
+    if (!this.repos.ready(definitions, this.firstLoopDone)) {
       return
     }
     const pass = this.deps.newPass()
@@ -239,27 +215,9 @@ export class PilotScheduler {
     this.firstLoopDone = true
   }
 
-  // A4: once the runtime lists repos (or the first pass's wait ran out), a scheduled automation naming an
-  // unlisted repo is reported, not ticked. A manual automation still fails its tick with the same words.
-  private repoMissing(def: AutomationDefinition): boolean {
-    if (!isScheduled(def)) {
-      return false
-    }
-    let listed: boolean
-    try {
-      listed = this.deps.reposListed([def.repo])
-    } catch {
-      listed = false
-    }
-    if (!listed) {
-      this.deps.repoProblem(def, `repo "${def.repo}" isn't added to Pilot`)
-    }
-    return !listed
-  }
-
   private async tickIfDue(def: AutomationDefinition, pass: PassFetchCache): Promise<void> {
     try {
-      if (this.repoMissing(def)) {
+      if (this.repos.missing(def)) {
         return
       }
       if (!this.isDue(def)) {
