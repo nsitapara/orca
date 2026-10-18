@@ -31,7 +31,10 @@ test.beforeAll(async () => {
     PILOT_VAULT_EXPORT: 'off',
     ORCA_CLI_INSTALL_PATH: path.join(automations, 'cli', 'pilot'),
     ORCA_BROWSER_EXECUTABLE: '',
-    ORCA_BACKGROUND_LAUNCH: '1'
+    ORCA_BACKGROUND_LAUNCH: '1',
+    // The Playground's Telemetry tab reads through pilotcli: a missing one keeps Nish's real pilotcli (and its
+    // telemetry file) out of the check.
+    PILOT_PILOTCLI: path.join(automations, 'no-pilotcli')
   })
   host = await launchHeadlessPairedRuntimeHost()
   await host.client.call('pilot.inbox.add', {
@@ -106,8 +109,10 @@ test("Automations lists the server's automation and flips it as a paired device"
   await expect(toggle).not.toHaveAttribute('aria-checked', before ?? '')
 })
 
-test('Playground says it runs where Pilot runs', async () => {
+test('Playground opens on Telemetry, and its Commands tab says it runs where Pilot runs', async () => {
   await page.getByRole('button', { name: 'Playground', exact: true }).click()
+  await expect(page.getByRole('tab', { name: 'Telemetry', selected: true })).toBeVisible()
+  await page.getByRole('tab', { name: 'Commands' }).click()
   await expect(page.getByText(/runs only on the machine Pilot runs on/)).toBeVisible()
   await expect(page.getByRole('button', { name: 'Start' })).toHaveCount(0)
   await page.screenshot({ path: test.info().outputPath('playground.png') })

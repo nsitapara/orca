@@ -4,6 +4,7 @@ import {
   anchorOf,
   barSegments,
   causeText,
+  commandText,
   durationText,
   isPayload,
   sortCommands,
@@ -40,16 +41,22 @@ describe('telemetry-view', () => {
     [125_000, '2m05s']
   ])('durationText %d is %s', (ms, text) => expect(durationText(ms)).toBe(text))
 
+  it.each([
+    ['', '(no command)'],
+    ['gitlab check-mr', 'gitlab check-mr']
+  ])('commandText %j is %s', (command, text) => expect(commandText(command)).toBe(text))
+
   it('sorts commands by the column picked, then by calls', () => {
     expect(sortCommands(NEW_USAGE.commands, 'invalid').map((c) => c.command)).toEqual([
       'git get-branch',
+      '',
       'gitlab check-mr',
       'worktree check'
     ])
   })
 
   it("totals come from pilotcli, else from the commands (today's pilotcli)", () => {
-    expect(totalsOf(NEW_USAGE)).toEqual({ failed: 1, invalid: 2 })
+    expect(totalsOf(NEW_USAGE)).toEqual({ failed: 1, invalid: 3 })
     expect(totalsOf(TODAY_USAGE)).toEqual({ failed: 1, invalid: 0 })
   })
 

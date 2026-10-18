@@ -23,7 +23,9 @@ describe('pilot.telemetry.get', () => {
     [{ since: '24h', includeDev: false }, false],
     [{ since: '7d' }, false],
     [{ since: '7d', includeDev: false, command: 'gitlab check-mr; rm -rf ~' }, false],
-    [{ since: '7d', includeDev: false, command: 'jane.patient@clinic.test' }, false]
+    [{ since: '7d', includeDev: false, command: 'jane.patient@clinic.test' }, false],
+    [{ since: '7d', includeDev: false, command: '' }, false],
+    [{ since: '7d', includeDev: false, command: 'inbox' }, false]
   ])('params %o valid: %s', (params, ok) => {
     expect(TelemetryGet.safeParse(params).success).toBe(ok)
   })

@@ -21,8 +21,9 @@ function messageOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
 }
 
-// pilotcli's telemetry through Pilot: read on mount, on a change, on refresh(), when the window shows again, and every
-// TELEMETRY_REFRESH_MS while it shows. `active` false (the tab is hidden) stops reading; turning it on reads again.
+// pilotcli's telemetry through Pilot: read on mount, on a change, on refresh(), when the window shows or gains focus
+// again, and every TELEMETRY_REFRESH_MS while it shows and has focus. `active` false (the tab is hidden) stops
+// reading; turning it on reads again.
 // A failed read keeps the last data and sets `error` beside it.
 export function useTelemetry(p: TelemetryAsk & { active?: boolean }) {
   const [shown, setShown] = useState<TelemetryShown | null>(null)
@@ -67,13 +68,22 @@ export function useTelemetry(p: TelemetryAsk & { active?: boolean }) {
         load()
       }
     }
+    // The timed read waits for focus too: a window left showing on another screen would otherwise read every 2
+    // minutes all day, and those reads (app calls) would come to outnumber the calls the panel reports.
+    const tick = (): void => {
+      if (document.hasFocus()) {
+        load()
+      }
+    }
     load()
-    const timer = setInterval(load, TELEMETRY_REFRESH_MS)
+    const timer = setInterval(tick, TELEMETRY_REFRESH_MS)
     document.addEventListener('visibilitychange', onVisible)
+    window.addEventListener('focus', load)
     return () => {
       alive = false
       clearInterval(timer)
       document.removeEventListener('visibilitychange', onVisible)
+      window.removeEventListener('focus', load)
       setLoading(false)
     }
   }, [since, includeDev, command, active, asked])

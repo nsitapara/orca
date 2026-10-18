@@ -1,7 +1,13 @@
 import { useId, useState } from 'react'
 import { showActivity } from '../../automations-view'
 import type { TelemetryJob } from '../../../../shared/api-types-telemetry'
-import { badClass, countText, SECTION_CLASS, SECTION_HEAD_CLASS } from './telemetry-view'
+import {
+  badClass,
+  commandText,
+  countText,
+  SECTION_CLASS,
+  SECTION_HEAD_CLASS
+} from './telemetry-view'
 
 const NUMBER = 'px-3 py-1.5 text-right font-mono tabular-nums'
 
@@ -11,7 +17,7 @@ function keyOf(job: TelemetryJob): string {
 
 // One step's commands: "gitlab check-mr ×3 · inbox create-card ×1".
 function stepCommandsText(commands: TelemetryJob['steps'][number]['commands']): string {
-  return commands.map((c) => `${c.command} ×${c.calls}`).join(' · ')
+  return commands.map((c) => `${commandText(c.command)} ×${c.calls}`).join(' · ')
 }
 
 // The name opens Activity filtered to the automation; the "job not recorded" row has none to open.

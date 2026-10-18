@@ -11,6 +11,15 @@ export function isTelemetryWindow(value: string): value is TelemetryWindow {
   return (TELEMETRY_WINDOWS as readonly string[]).includes(value)
 }
 
+// A command name as pilotcli prints it ("gitlab check-mr"): the only name pilot.telemetry.get passes on as a
+// condition. pilotcli's row for calls it couldn't name ("") and one-word names from before modules had verbs don't
+// pass, so the panel doesn't offer them to pick.
+export const TELEMETRY_COMMAND = /^[a-z]+ [a-z]+(?:-[a-z]+)*$/
+export const TELEMETRY_COMMAND_MAX = 80
+export function isTelemetryCommandName(name: string): boolean {
+  return name.length <= TELEMETRY_COMMAND_MAX && TELEMETRY_COMMAND.test(name)
+}
+
 const Callers = z.object({
   claude: z.number(),
   codex: z.number(),

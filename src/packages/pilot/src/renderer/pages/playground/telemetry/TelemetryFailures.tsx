@@ -12,6 +12,7 @@ import {
   badClass,
   callTimeText,
   causeText,
+  commandText,
   keyedCalls,
   SECTION_CLASS,
   SECTION_HEAD_CLASS,
@@ -72,7 +73,11 @@ function FailureRow({
       <td className={`${CELL} whitespace-nowrap font-mono text-muted-foreground`} title={call.ts}>
         {callTimeText(call.ts, now)}
       </td>
-      <td className={`${CELL} whitespace-nowrap font-mono`}>{call.command}</td>
+      <td
+        className={`${CELL} whitespace-nowrap font-mono ${call.command ? '' : 'text-muted-foreground'}`}
+      >
+        {commandText(call.command)}
+      </td>
       <td className={`${CELL} whitespace-nowrap ${outcomeClass(call.outcome)}`}>{call.outcome}</td>
       <td className={`${CELL} whitespace-nowrap`}>
         <span className="rounded border border-border px-1.5 py-0.5 text-xs">

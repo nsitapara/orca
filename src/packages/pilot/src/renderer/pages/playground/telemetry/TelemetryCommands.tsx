@@ -1,8 +1,9 @@
 import { useState } from 'react'
-import type {
-  TelemetryCommand,
-  TelemetryUsage,
-  TelemetryWindow
+import {
+  isTelemetryCommandName,
+  type TelemetryCommand,
+  type TelemetryUsage,
+  type TelemetryWindow
 } from '../../../../shared/api-types-telemetry'
 import { SourceLink } from '../../../run-views/SourceLink'
 import { ResizableHeaderCell } from '../../ResizableHeaderCell'
@@ -11,6 +12,7 @@ import { Select } from '../../waiting/InboxHeader'
 import { Sparkline } from './telemetry-charts'
 import {
   badClass,
+  commandText,
   countText,
   durationText,
   isCommandSort,
@@ -65,6 +67,33 @@ function nameClass(c: TelemetryCommand, picked: boolean): string {
   return `font-mono hover:underline ${tone} ${on}`
 }
 
+// A name pilot.telemetry.get accepts is a button that picks it; any other (pilotcli's row with no command, a one-word
+// name from before modules had verbs) is plain text, so a pick can never ask for a refused name.
+function CommandName({
+  c,
+  picked,
+  onPick
+}: {
+  c: TelemetryCommand
+  picked: boolean
+  onPick: (command: string) => void
+}): React.JSX.Element {
+  if (!isTelemetryCommandName(c.command)) {
+    const tone = c.command ? '' : 'text-muted-foreground'
+    return <span className={`font-mono ${tone}`}>{commandText(c.command)}</span>
+  }
+  return (
+    <button
+      type="button"
+      aria-pressed={picked}
+      className={nameClass(c, picked)}
+      onClick={() => onPick(c.command)}
+    >
+      {c.command}
+    </button>
+  )
+}
+
 function CommandRow({
   c,
   now,
@@ -78,15 +107,8 @@ function CommandRow({
 }): React.JSX.Element {
   return (
     <tr className={picked ? 'border-t border-border/50 bg-muted/40' : 'border-t border-border/50'}>
-      <td className={CELL} title={c.command}>
-        <button
-          type="button"
-          aria-pressed={picked}
-          className={nameClass(c, picked)}
-          onClick={() => onPick(c.command)}
-        >
-          {c.command}
-        </button>
+      <td className={CELL} title={commandText(c.command)}>
+        <CommandName c={c} picked={picked} onPick={onPick} />
         {c.removed ? (
           <span className="ml-2 rounded border border-border px-1.5 text-[11px] text-muted-foreground">
             removed

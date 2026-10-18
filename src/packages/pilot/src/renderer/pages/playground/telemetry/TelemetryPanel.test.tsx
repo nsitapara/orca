@@ -57,6 +57,7 @@ afterEach(() => {
   vi.unstubAllGlobals()
   vi.useRealTimers()
   Reflect.deleteProperty(document, 'hidden')
+  Reflect.deleteProperty(document, 'hasFocus')
 })
 
 describe('TelemetryPanel', () => {
@@ -68,13 +69,14 @@ describe('TelemetryPanel', () => {
       expect.anything()
     )
     const tiles = within(screen.getByRole('list', { name: 'Totals' }))
-    expect(tiles.getByText('calls in 7 days').previousSibling?.textContent).toBe('6')
-    expect(tiles.getByText('invalid (bad flags or values)').previousSibling?.textContent).toBe('2')
+    expect(tiles.getByText('calls in 7 days').previousSibling?.textContent).toBe('7')
+    expect(tiles.getByText('invalid (bad flags or values)').previousSibling?.textContent).toBe('3')
     expect(screen.getByRole('img', { name: /Calls per day/ })).toBeTruthy()
     expect(screen.getByText(/Data since Oct 12 · kept 90 days/)).toBeTruthy()
     expect(firstCells('Commands')).toEqual([
       'gitlab check-mr',
       'git get-branch',
+      '(no command)',
       'worktree checkremoved'
     ])
     expect(screen.getByText(/Never called in 7 days/).parentElement?.textContent).toContain(
@@ -84,7 +86,8 @@ describe('TelemetryPanel', () => {
     const failures = within(screen.getByRole('table', { name: 'Recent failed and invalid calls' }))
     expect(failures.getByText('HTTP 502')).toBeTruthy()
     expect(failures.getByText('Pilot (claude) · 05 context')).toBeTruthy()
-    expect(failures.getByText('invalid flag')).toBeTruthy()
+    expect(failures.getAllByText('invalid flag')).toHaveLength(2)
+    expect(failures.getByText('(no command)')).toBeTruthy()
     expect(screen.getByText(/Free-text reasons are never stored/)).toBeTruthy()
     expect(screen.getByText(/This Mac · updated \d\d:\d\d/)).toBeTruthy()
   })
@@ -148,10 +151,12 @@ describe('TelemetryPanel', () => {
     ])
   })
 
-  it('reads every 2 minutes while the window shows, again when it shows, and stops when inactive or gone', async () => {
+  it('reads every 2 minutes while the window shows and has focus, again on show or focus, and stops when inactive or gone', async () => {
     vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] })
     let hidden = false
+    let focused = true
     Object.defineProperty(document, 'hidden', { configurable: true, get: () => hidden })
+    Object.defineProperty(document, 'hasFocus', { configurable: true, value: () => focused })
     pilotRpc.mockImplementation(async () => PAYLOAD)
     const view = render(<TelemetryPanel />)
     await act(async () => {})
@@ -170,15 +175,27 @@ describe('TelemetryPanel', () => {
       document.dispatchEvent(new Event('visibilitychange'))
     })
     expect(reads()).toHaveLength(3)
+    // Shown on another screen without focus: no timed read until the window has focus again.
+    focused = false
+    await act(async () => {
+      vi.advanceTimersByTime(2 * TELEMETRY_REFRESH_MS)
+    })
+    expect(reads()).toHaveLength(3)
+    focused = true
+    await act(async () => {
+      window.dispatchEvent(new Event('focus'))
+    })
+    expect(reads()).toHaveLength(4)
     view.rerender(<TelemetryPanel active={false} />)
     expect(vi.getTimerCount()).toBe(0)
     await act(async () => {
       document.dispatchEvent(new Event('visibilitychange'))
+      window.dispatchEvent(new Event('focus'))
     })
-    expect(reads()).toHaveLength(3)
+    expect(reads()).toHaveLength(4)
     view.rerender(<TelemetryPanel />)
     await act(async () => {})
-    expect(reads()).toHaveLength(4)
+    expect(reads()).toHaveLength(5)
     expect(vi.getTimerCount()).toBe(1)
     view.unmount()
     expect(vi.getTimerCount()).toBe(0)
@@ -196,6 +213,7 @@ describe('TelemetryPanel', () => {
     expect(firstCells('Commands')).toEqual([
       'gitlab check-mr',
       'git get-branch',
+      '(no command)',
       'worktree checkremoved'
     ])
     expect(screen.getByText(/This Mac · updated \d\d:\d\d/)).toBeTruthy()
@@ -210,7 +228,7 @@ describe('TelemetryPanel', () => {
       'Oct 13: -',
       'Oct 14: -',
       'Oct 15: 2',
-      'Oct 16: 2',
+      'Oct 16: 3',
       'Oct 17: 2'
     ])
   })
@@ -231,6 +249,17 @@ describe('TelemetryPanel', () => {
     expect(
       within(screen.getByRole('table', { name: 'By automation' })).getByText('gitlab check-mr ×3')
     ).toBeTruthy()
+  })
+
+  it.each([
+    ['no command', '', '(no command)'],
+    ["a name Pilot can't filter by", 'inbox', 'inbox']
+  ])('names a row with %s as plain text, not a button to pick', async (_name, command, text) => {
+    const row = { ...NEW_USAGE.commands[1], command, removed: true }
+    await shown({ ...PAYLOAD, usage: { ...NEW_USAGE, commands: [row] } })
+    const commands = within(screen.getByRole('table', { name: 'Commands' }))
+    expect(commands.getByText(text)).toBeTruthy()
+    expect(commands.queryAllByRole('button')).toHaveLength(0)
   })
 
   it("names a job that isn't recorded without a link to Activity", async () => {

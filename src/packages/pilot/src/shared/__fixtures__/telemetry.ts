@@ -60,8 +60,8 @@ export const TODAY_USAGE: TelemetryUsage = {
 export const NEW_USAGE: TelemetryUsage = {
   ...TODAY_USAGE,
   oldest: '2026-10-12T09:14:03-07:00',
-  calls: 6,
-  totals: { failed: 1, invalid: 2, callers: callers({ claude: 2, pilot: 3, app: 1 }) },
+  calls: 7,
+  totals: { failed: 1, invalid: 3, callers: callers({ claude: 3, pilot: 3, app: 1 }) },
   buckets: [
     '2026-10-11',
     '2026-10-12',
@@ -72,9 +72,9 @@ export const NEW_USAGE: TelemetryUsage = {
     '2026-10-17'
   ],
   series: {
-    calls: [0, 0, 0, 0, 2, 2, 2],
+    calls: [0, 0, 0, 0, 2, 3, 2],
     failed: [0, 0, 0, 0, 0, 0, 1],
-    invalid: [0, 0, 0, 0, 0, 1, 1]
+    invalid: [0, 0, 0, 0, 0, 2, 1]
   },
   commands: [
     {
@@ -105,6 +105,18 @@ export const NEW_USAGE: TelemetryUsage = {
       p95_ms: 50,
       last: '2026-10-15T08:00:00-07:00',
       series: [0, 0, 0, 0, 1, 0, 0]
+    },
+    // pilotcli's row for calls it couldn't name: every parse error has command "".
+    {
+      command: '',
+      calls: 1,
+      failed: 0,
+      invalid: 1,
+      callers: callers({ claude: 1 }),
+      p50_ms: 5,
+      p95_ms: 5,
+      last: '2026-10-16T09:00:00-07:00',
+      series: [0, 0, 0, 0, 0, 1, 0]
     }
   ],
   jobs: [{ ...TODAY_USAGE.jobs[0], failed: 1, invalid: 0 }]
@@ -156,6 +168,16 @@ export const CALLS: TelemetryCall[] = [
     cause: 'invalid_flag',
     exit: 2,
     duration_ms: 20,
+    caller: 'claude',
+    agent: 'claude'
+  },
+  {
+    ts: '2026-10-16T09:00:00-07:00',
+    command: '',
+    outcome: 'invalid',
+    cause: 'invalid_flag',
+    exit: 2,
+    duration_ms: 5,
     caller: 'claude',
     agent: 'claude'
   }

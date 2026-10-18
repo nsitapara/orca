@@ -19,6 +19,11 @@ export function windowText(since: TelemetryWindow): string {
   return `${WINDOW_DAYS[since]} days`
 }
 
+// A command's name as shown: pilotcli's row for calls it couldn't name (every parse error) has "".
+export function commandText(command: string): string {
+  return command || '(no command)'
+}
+
 // A count as a table cell: - for none, so the counts that matter stand out.
 export function countText(n: number | undefined): string {
   return n ? n.toLocaleString('en-US') : '-'
