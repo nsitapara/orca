@@ -118,7 +118,10 @@ setup_ensure_pnpm() {
   PATH=$SETUP_BIN_DIR:$PATH
   export PATH
   want=$(sed -n 's/.*"packageManager": *"pnpm@\([^+"]*\).*/\1/p' "$repo/package.json" 2>/dev/null || true)
-  if [ -n "$want" ] && command -v pnpm >/dev/null 2>&1; then
+  # Not in a dry run: even offline, corepack writes its cache under ~/.cache to answer.
+  if [ "$SETUP_DRY_RUN" = 1 ]; then
+    say "  (dry run: pnpm's version isn't checked; corepack is enabled when it isn't ${want:-the pinned version})"
+  elif [ -n "$want" ] && command -v pnpm >/dev/null 2>&1; then
     have=$(cd "$repo" && COREPACK_ENABLE_NETWORK=0 pnpm --version 2>/dev/null || true)
   fi
   if [ -n "$want" ] && [ "$have" = "$want" ]; then
@@ -300,11 +303,17 @@ setup_install_pilotcli() {
     if [ ! -f "$SETUP_PILOTCLI_BINARY" ] && [ "$SETUP_DRY_RUN" != 1 ]; then
       die "--pilotcli-binary: no file at $SETUP_PILOTCLI_BINARY"
     fi
+    # Tried under a temporary name first, so a build for the wrong OS or architecture never replaces a
+    # pilotcli that works.
     run mkdir -p "$SETUP_BIN_DIR"
-    run install -m 755 "$SETUP_PILOTCLI_BINARY" "$SETUP_BIN_DIR/pilotcli"
-    if [ "$SETUP_DRY_RUN" != 1 ] && ! "$SETUP_BIN_DIR/pilotcli" self get-version; then
-      warn "the copied pilotcli doesn't run here (built for another OS or architecture?)"
+    run install -m 755 "$SETUP_PILOTCLI_BINARY" "$SETUP_BIN_DIR/pilotcli.new"
+    if [ "$SETUP_DRY_RUN" = 1 ]; then
+      say "+ $SETUP_BIN_DIR/pilotcli.new self get-version   # must run here, else it is deleted and the setup stops"
+    elif ! "$SETUP_BIN_DIR/pilotcli.new" self get-version; then
+      rm -f "$SETUP_BIN_DIR/pilotcli.new"
+      die "$SETUP_PILOTCLI_BINARY doesn't run on this machine (built for another OS or architecture?); the installed pilotcli is unchanged. Cross-build it with --target $(uname -s | tr '[:upper:]' '[:lower:]')/$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/')."
     fi
+    run mv -f "$SETUP_BIN_DIR/pilotcli.new" "$SETUP_BIN_DIR/pilotcli"
     return 0
   fi
   if [ -n "$SETUP_PILOTCLI_REPO" ]; then
