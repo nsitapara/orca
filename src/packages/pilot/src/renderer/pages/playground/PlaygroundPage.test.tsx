@@ -125,16 +125,17 @@ describe('PlaygroundPage', () => {
     expect(screen.getByText("/r/web isn't a project pilotcli knows")).toBeTruthy()
   })
 
-  it('in the browser version says the playground runs where Pilot runs, and calls nothing', () => {
+  it('in the browser version shows Telemetry, and says Commands run where Pilot runs', async () => {
     vi.stubGlobal('__ORCA_WEB_CLIENT__', true)
-    answer({})
-    render(<PlaygroundPage />)
+    answer({ 'pilot.telemetry.get': PAYLOAD })
+    await shown()
     expect(screen.getByRole('heading', { name: 'Playground' })).toBeTruthy()
+    expect(screen.getByRole('table', { name: 'Commands' })).toBeTruthy()
+    expect(pilotRpc.mock.calls.map(([m]) => m)).toEqual(['pilot.telemetry.get'])
+    fireEvent.click(screen.getByRole('tab', { name: 'Commands' }))
     expect(screen.getByText(/runs only on the machine Pilot runs on/)).toBeTruthy()
-    // Try-it and View source are the running playground's; the browser has neither.
-    expect(screen.queryByText(/Try-it|View source/)).toBeNull()
     expect(screen.queryByRole('button', { name: 'Start' })).toBeNull()
-    expect(pilotRpc).not.toHaveBeenCalledWith('pilot.playground.projects')
+    expect(screen.queryByText(/Try it|View source/)).toBeNull()
   })
 
   it('opens on Telemetry when no playground runs, and a running one survives a tab switch', async () => {
