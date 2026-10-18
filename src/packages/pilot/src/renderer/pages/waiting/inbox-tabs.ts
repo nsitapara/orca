@@ -73,7 +73,7 @@ export function matchesFilters(
   if (!query) {
     return true
   }
-  return [item.title, item.context, item.itemKey, groupLabel].some((text) =>
+  return [item.title, item.context, item.itemLabel, groupLabel].some((text) =>
     text?.toLowerCase().includes(query)
   )
 }

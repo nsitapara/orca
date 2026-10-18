@@ -116,12 +116,18 @@ describe('tabCounts', () => {
 
 describe('matchesFilters', () => {
   const none = { kinds: [], query: '' } as const
-  const item = card({ title: 'Which Carrier?', itemKey: 'mr:77', context: 'about shipping' })
+  const item = card({
+    title: 'Which Carrier?',
+    itemKey: 'mr:77',
+    itemLabel: 'MR !77',
+    context: 'about shipping'
+  })
 
   it.each([
     ['the title, any case', 'carrier', 'x', true],
     ['the context', 'SHIPPING', 'x', true],
-    ['the item label', 'mr:77', 'x', true],
+    ['the item label', 'mr !77', 'x', true],
+    ['nothing but the internal key', 'mr:77', 'x', false],
     ['the group label', 'web-1493', 'web-1493 / ci', true],
     ['nothing', 'zzz', 'web', false]
   ])('query matches %s', (_name, query, group, want) => {
