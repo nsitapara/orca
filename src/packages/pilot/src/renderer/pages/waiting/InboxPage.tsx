@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import type { InboxListRow } from '../../../shared/api-types'
 import { groupHostedItems, type HostedSection } from '../../hosts/hosted-sections'
 import { groupHostedItemsBy } from '../../hosts/inbox-grouping'
@@ -8,11 +7,11 @@ import { hostedKey, type Hosted } from '../../hosts/pilot-host'
 import { useAutomationsFeed } from '../../run-views/automations-feed'
 import { clearPendingInboxCard, usePendingInboxCard } from '../automations-view'
 import { CardList } from './CardList'
-import { DoneForYou, runsOfKeys } from './DoneForYou'
 import { FilterBadges } from './FilterBadges'
 import { setAllDetailsOpen, useAllDetailsOpen } from './details-open'
 import { ALL, InboxHeader } from './InboxHeader'
 import { InboxCard } from './InboxCard'
+import { InboxDoneTab } from './InboxDoneTab'
 import { InboxFilters } from './InboxFilters'
 import { InboxTabs } from './InboxTabs'
 import { InboxStyle } from './inbox-style'
@@ -228,40 +227,18 @@ export function InboxPage(): React.JSX.Element {
   const emptyText = (
     <p className="text-sm text-muted-foreground">{emptyTabText(tab, filtered, viewerName)}</p>
   )
-  // Only once every machine's Done for you list has answered cleanly: an error or a first load isn't "nothing".
-  const doneSettled =
-    done.reads.length > 0 && done.reads.every((r) => r.value !== null && r.error === null)
   const cardsBody = shown.length ? shown.map(sectionOf) : emptyText
   const defaultSections = groupHostedItems(defaults, automations)
   const doneBody = (
-    <>
-      {done.error ? (
-        <p className="text-sm text-destructive">{`Done for you couldn't load: ${done.error}`}</p>
-      ) : null}
-      <DoneForYou
-        runs={done.runs}
-        cardFor={cardFor}
-        onAcknowledge={async (keys) => {
-          const failed = await done.acknowledge(runsOfKeys(done.runs, keys))
-          await reload()
-          return failed
-        }}
-      />
-      {defaults.length ? (
-        <Collapsible className="rounded-lg border border-border/50 px-3 py-2">
-          <CollapsibleTrigger className="flex w-full items-center gap-2 text-sm font-semibold">
-            <span>Defaults without a run · {defaults.length}</span>
-            <span className="text-xs font-normal text-muted-foreground">
-              never counted as waiting
-            </span>
-          </CollapsibleTrigger>
-          <CollapsibleContent className="mt-2 flex flex-col gap-3">
-            {defaultSections.map(sectionOf)}
-          </CollapsibleContent>
-        </Collapsible>
-      ) : null}
-      {doneSettled && done.runs.length === 0 && defaults.length === 0 ? emptyText : null}
-    </>
+    <InboxDoneTab
+      done={done}
+      defaults={defaults}
+      defaultSections={defaultSections}
+      cardFor={cardFor}
+      sectionOf={sectionOf}
+      emptyText={emptyText}
+      onAcknowledged={reload}
+    />
   )
   return (
     <div ref={rootRef} className="pilot-inbox flex flex-col gap-3 pt-6">
