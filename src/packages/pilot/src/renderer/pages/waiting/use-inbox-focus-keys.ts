@@ -1,4 +1,4 @@
-import { useEffect, useEffectEvent, type RefObject } from 'react'
+import { useEffect, useEffectEvent } from 'react'
 import { isEditableTarget } from '@/lib/editable-target'
 import { hasVisibleOverlay } from '@/lib/visible-overlay'
 import { useOpenRun } from '../../run-views/run-panel-state'
@@ -11,15 +11,16 @@ export type InboxFocusHandlers = {
   onExit: () => void
 }
 
-/** J/K, 1-9, S and Escape for the One at a time view, scoped to its root (or the bare page). */
-export function useInboxFocusKeys(
-  root: RefObject<HTMLElement | null>,
-  handlers: InboxFocusHandlers
-): void {
+// InboxPage's root: the view buttons and filters sit outside the One at a time panel.
+const INBOX_ROOT = '.pilot-inbox'
+
+/** J/K, 1-9, S and Escape for the One at a time view, scoped to the Inbox page (or the bare page). */
+export function useInboxFocusKeys(handlers: InboxFocusHandlers): void {
   const runOpen = useOpenRun() !== null
   const onKeyDown = useEffectEvent((event: KeyboardEvent): void => {
     const target = event.target instanceof Element ? event.target : null
-    const inScope = target === document.body || (target !== null && root.current?.contains(target))
+    const inScope =
+      target === document.body || (target !== null && target.closest(INBOX_ROOT) !== null)
     if (
       event.defaultPrevented ||
       event.repeat ||

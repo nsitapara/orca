@@ -46,7 +46,6 @@ export function InboxFocus({
   tabLabel: string
   onExit: () => void
 }): React.JSX.Element | null {
-  const rootRef = useRef<HTMLDivElement>(null)
   const cardRef = useRef<HTMLDivElement>(null)
   // Followed by key, so a card leaving or sorting in ahead never moves 1-9 onto a card you haven't seen.
   const current = currentIndex(cards, place)
@@ -63,7 +62,7 @@ export function InboxFocus({
       onPlace({ key: keyOf(cards[at]), at })
     }
   }
-  useInboxFocusKeys(rootRef, {
+  useInboxFocusKeys({
     onNext: () => go(current + 1),
     onPrev: () => go(current - 1),
     onPick: (index) => clickAt(cardRef.current, '[data-choice]:not([data-skip])', index),
@@ -76,7 +75,7 @@ export function InboxFocus({
   }
   const upNext = cards.slice(current + 1, current + 1 + UP_NEXT)
   return (
-    <div ref={rootRef} className="flex min-w-0 flex-col gap-3">
+    <div className="flex min-w-0 flex-col gap-3">
       <div className="flex flex-wrap items-center gap-2">
         <button
           type="button"
