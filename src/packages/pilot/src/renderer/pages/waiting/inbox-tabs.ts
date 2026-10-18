@@ -117,3 +117,12 @@ const TAB_LABELS: Record<InboxTab, string> = {
 export function tabLabel(tab: InboxTab): string {
   return TAB_LABELS[tab]
 }
+
+// Only preparing cards count; a wait on any other card is not the runner's line.
+export function preparingNote<T extends InboxListRow>(
+  items: T[],
+  isWaiting: (item: T) => boolean
+): string | null {
+  const n = items.filter((item) => inTab(item, 'preparing', null) && isWaiting(item)).length
+  return n > 0 ? `${n} waiting` : null
+}

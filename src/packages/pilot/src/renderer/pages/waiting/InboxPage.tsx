@@ -24,6 +24,7 @@ import {
   inTab,
   kindCounts,
   matchesFilters,
+  preparingNote,
   tabCounts,
   tabLabel,
   type CardFilters
@@ -307,7 +308,10 @@ export function InboxPage(): React.JSX.Element {
       <InboxTabs
         tab={tab}
         counts={tabCounts(items)}
-        preparingNote={null}
+        preparingNote={preparingNote(
+          items,
+          (i) => inbox?.preparationWaits.has(hostedKey(i.host, i.id)) ?? false
+        )}
         doneCount={done.runs.length}
         onTab={(next) => setPrefs({ tab: next })}
       />

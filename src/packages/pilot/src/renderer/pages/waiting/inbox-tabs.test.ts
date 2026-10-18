@@ -3,7 +3,14 @@ import type { InboxListRow } from '../../../shared/api-types'
 import type { AnswerState } from '../../../shared/inbox-types'
 import type { PreparationRef } from '../../../shared/preparation'
 import { waitingCount } from './answer-text'
-import { INBOX_KINDS, inTab, kindCounts, matchesFilters, tabCounts } from './inbox-tabs'
+import {
+  INBOX_KINDS,
+  inTab,
+  kindCounts,
+  matchesFilters,
+  preparingNote,
+  tabCounts
+} from './inbox-tabs'
 
 function card(over: Partial<InboxListRow> = {}): InboxListRow {
   return {
@@ -154,5 +161,17 @@ describe('kindCounts and INBOX_KINDS', () => {
       'Flagged',
       'Left for you'
     ])
+  })
+})
+
+describe('preparingNote', () => {
+  const queued = (id: string) => card({ id, ...prepared('queued') })
+  const items = [queued('a'), queued('b'), card({ id: 'c' })]
+
+  it.each([
+    ['one of two queued cards has a wait', new Set(['a', 'c']), '1 waiting'],
+    ['none has a wait (older host)', new Set<string>(), null]
+  ])('when %s', (_name, waiting, want) => {
+    expect(preparingNote(items, (item) => waiting.has(item.id))).toBe(want)
   })
 })
