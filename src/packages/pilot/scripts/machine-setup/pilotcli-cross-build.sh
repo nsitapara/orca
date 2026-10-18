@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Builds pilotcli on the main Mac for another machine (GOOS/GOARCH), since pilotcli has no git remote a
-# new machine could clone. Like pilotcli's scripts/install.sh it builds only a clean, tested main and
+# Builds pilotcli on the main Mac for a machine that can't clone the private nsitapara/pilotCLI repo
+# (GOOS/GOARCH). Like pilotcli's scripts/install.sh it builds only a clean, tested main and
 # stamps the commit in. Copy the result over and pass it to the setup script with --pilotcli-binary.
 set -euo pipefail
 

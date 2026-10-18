@@ -26,7 +26,7 @@ Sets up this Debian or Ubuntu machine to run Pilot's headless engine (orcad) as 
 service pilot-engine.service, then prints the command that pairs it from the main Mac. Re-run it to
 update the machine. Example:
 
-  debian.sh --machine-name "Debian box" --bind tailscale --pilotcli-binary ~/pilotcli-linux-amd64
+  debian.sh --machine-name "Debian box" --bind tailscale --pilotcli-repo https://github.com/nsitapara/pilotCLI.git
 
 Options:
 EOF

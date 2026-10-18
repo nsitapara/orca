@@ -26,7 +26,7 @@ Sets up this Arch machine to run Pilot's headless engine (orcad) as the systemd 
 pilot-engine.service, then prints the command that pairs it from the main Mac. Re-run it to update
 the machine. Example:
 
-  arch.sh --machine-name "Omarchy" --bind tailscale --pilotcli-binary ~/pilotcli-linux-amd64
+  arch.sh --machine-name "Omarchy" --bind tailscale --pilotcli-repo https://github.com/nsitapara/pilotCLI.git
 
 Options:
 EOF

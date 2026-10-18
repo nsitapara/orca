@@ -40,7 +40,7 @@ Usage: macos.sh --machine-name <name> [options]
 Sets up this Mac to run Pilot's desktop app beside the main Mac's, then prints how to pair it.
 Re-run it to update the Mac. Example:
 
-  macos.sh --machine-name "Mac mini" --open-at-login --pilotcli-binary ~/pilotcli-darwin-arm64
+  macos.sh --machine-name "Mac mini" --open-at-login --pilotcli-repo https://github.com/nsitapara/pilotCLI.git
 
 Options:
 EOF

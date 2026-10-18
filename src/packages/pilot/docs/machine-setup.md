@@ -26,19 +26,21 @@ On the main Mac:
 
 1. **Pilot is installed**, and the `pilot` CLI is at `~/.local/bin/pilot` (`build-mac.mjs` links it).
 2. **Tailscale is on**, on every machine, in the same tailnet. The scripts don't install it.
-3. **Build pilotcli for each new machine.** pilotcli has no git remote, so a new machine can't clone it. Like its own `scripts/install.sh`, the helper builds only a clean, tested `main`:
+3. **pilotcli comes from its private repo, `nsitapara/pilotCLI`.** Pass `--pilotcli-repo https://github.com/nsitapara/pilotCLI.git` to each setup script. It clones or fast-forwards `~/Documents/GitHub/pilotCLI` on `main` and puts a Go new enough for its `go.mod` on PATH. If none is installed, it downloads one, checks its checksum and keeps it under `~/.local/share/pilot-setup`. Then it runs pilotCLI's own `scripts/install.sh`, which builds only a clean, tested `main`.
+
+   For a machine without git access to it, cross-build pilotcli here, copy it over, and pass `--pilotcli-binary <file>` instead:
 
        src/packages/pilot/scripts/machine-setup/pilotcli-cross-build.sh --target linux/amd64 --target darwin/arm64
        scp ~/Documents/GitHub/pilotCLI/bin/pilotcli-linux-amd64 debian-box:~/
 
-   The builds land in `~/Documents/GitHub/pilotCLI/bin/` (gitignored), one per target: `pilotcli-<os>-<arch>`. Use `linux/arm64` for an ARM server and `darwin/amd64` for an Intel Mac mini. Once pilotcli has a remote, pass `--pilotcli-repo <url>` to the setup scripts instead.
+   The builds land in `~/Documents/GitHub/pilotCLI/bin/` (gitignored), one per target: `pilotcli-<os>-<arch>`. Use `linux/arm64` for an ARM server and `darwin/amd64` for an Intel Mac mini.
 
 4. **Pick each machine's name.** It is what `runs_on` matches, ignoring case and surrounding spaces, and nothing else: "Mac-mini" isn't "Mac mini". Every script requires `--machine-name`.
 5. **Update every engine before an automation gets `runs_on`.** An older engine reads `runs_on` as an unknown key, marks the file invalid and never ticks it (README, "Rollout").
 
 On each new machine:
 
-- **Git access to `nsitapara/agents`.** It is private, and the scripts clone it to `~/.agents`. Sign git in first (`gh auth login`, then `gh auth setup-git`), or add an SSH key and pass `--agents-repo git@github.com:nsitapara/agents.git`. Pilot's own repo, `nsitapara/orca`, is public.
+- **Git access to `nsitapara/agents` and `nsitapara/pilotCLI`.** Both are private. The scripts clone them to `~/.agents` and `~/Documents/GitHub/pilotCLI`. Sign git in first (`gh auth login`, then `gh auth setup-git`), or add an SSH key and pass the SSH URLs: `--agents-repo git@github.com:nsitapara/agents.git` and `--pilotcli-repo git@github.com:nsitapara/pilotCLI.git`. Pilot's own repo, `nsitapara/orca`, is public.
 
 ## macOS (the Mac mini)
 
@@ -52,7 +54,8 @@ On each new machine:
 
     git clone -b pilot https://github.com/nsitapara/orca.git ~/Documents/GitHub/pilot
     ~/Documents/GitHub/pilot/src/packages/pilot/scripts/machine-setup/macos.sh \
-      --machine-name "Mac mini" --open-at-login --pilotcli-binary ~/pilotcli-darwin-arm64
+      --machine-name "Mac mini" --open-at-login \
+      --pilotcli-repo https://github.com/nsitapara/pilotCLI.git
 
 Run it with `--dry-run` first to see every command.
 
@@ -60,7 +63,7 @@ Run it with `--dry-run` first to see every command.
 
 1. Checks Xcode's tools, `swiftc`, git and Node 24.
 2. Fast-forwards the checkout to `origin/pilot`. It clones the checkout if it is missing, and leaves it alone if it has uncommitted changes. A clean checkout on another branch is switched to `--branch` (default `pilot`). It does the same for `~/.agents` (on `main`), runs `~/.agents/sync-skills.sh`, and links `~/.pilot/automations` to `~/.agents/automations`, as on the main Mac.
-3. Installs pilotcli at `~/.local/bin/pilotcli`. A `--pilotcli-binary` is tried under a temporary name first: if it doesn't run here, it is deleted, the installed pilotcli stays, and the setup stops.
+3. Installs pilotcli at `~/.local/bin/pilotcli`. With `--pilotcli-repo`, it clones or fast-forwards `~/Documents/GitHub/pilotCLI` and runs pilotCLI's own installer. A `--pilotcli-binary` is tried under a temporary name first: if it doesn't run here, it is deleted, the installed pilotcli stays, and the setup stops.
 4. Sets Pilot's settings for this login session with `launchctl setenv`:
    - `PILOT_SCHEDULER=pinned` by default (`--scheduler all|pinned|off`): this Mac ticks only the jobs pinned to it;
    - `PILOT_VAULT_EXPORT=off` (unless `--vault-export on`): one machine exports to the vault;
@@ -93,7 +96,8 @@ The build is unsigned. On the first launch, macOS may ask you to allow the app.
     git clone -b pilot https://github.com/nsitapara/orca.git ~/Documents/GitHub/pilot
     ~/Documents/GitHub/pilot/src/packages/pilot/scripts/machine-setup/debian.sh \
       --machine-name "Debian box" --bind tailscale \
-      --pilotcli-binary ~/pilotcli-linux-amd64 --add-repo ~/Documents/GitHub/pilot
+      --pilotcli-repo https://github.com/nsitapara/pilotCLI.git \
+      --add-repo ~/Documents/GitHub/pilot
 
 ### What it does
 
@@ -146,7 +150,8 @@ The same as Debian, with pacman:
     git clone -b pilot https://github.com/nsitapara/orca.git ~/Documents/GitHub/pilot
     ~/Documents/GitHub/pilot/src/packages/pilot/scripts/machine-setup/arch.sh \
       --machine-name "Omarchy" --bind tailscale \
-      --pilotcli-binary ~/pilotcli-linux-amd64 --add-repo ~/Documents/GitHub/pilot
+      --pilotcli-repo https://github.com/nsitapara/pilotCLI.git \
+      --add-repo ~/Documents/GitHub/pilot
 
 - **Packages:** `git curl base-devel python unzip procps-ng iproute2`, plus `go` with `--pilotcli-repo`. It runs `pacman -S --needed` without `-y`, because refreshing the databases without upgrading is a partial upgrade. If pacman can't download a package, run `sudo pacman -Syu` and re-run.
 - **Node 24:** any Node 24 on PATH, such as one from mise. Otherwise pacman's Node 24 LTS, `nodejs-lts-krypton` (with `npm`), unless another `nodejs` is installed, which it would have to replace. Then pacman's `nodejs` if it is 24, else pacman's `fnm` and Node 24 under fnm's `pilot` alias.
@@ -254,7 +259,7 @@ A test job, pinned to the new machine, whose run starts no agent (shell steps on
 
   It keeps `engine.env`'s values, so `--machine-name` and `--bind` can be left out. It pulls and rebuilds. It restarts the service only when the build or a setting changed, and terminals survive the restart.
 
-- **pilotcli.** Cross-build again on the main Mac, copy it over, and re-run with `--pilotcli-binary`.
+- **pilotcli.** Re-run the setup with `--pilotcli-repo`. It fast-forwards the checkout and reinstalls. On a machine without git access, cross-build again on the main Mac, copy it over, and re-run with `--pilotcli-binary`.
 - **Order.** Update every engine before you add `runs_on` to a shared automation (Before you start, step 5).
 
 ## Uninstall

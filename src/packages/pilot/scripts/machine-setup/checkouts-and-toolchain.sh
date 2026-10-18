@@ -327,5 +327,5 @@ setup_install_pilotcli() {
     say "  already installed; pass --pilotcli-binary or --pilotcli-repo to replace it"
     return 0
   fi
-  warn "pilotcli isn't installed, so jobs that call it will fail. It has no git remote: cross-build it on the main Mac (pilotcli-cross-build.sh), copy it here, and re-run with --pilotcli-binary <file>."
+  warn "pilotcli isn't installed, so jobs that call it will fail. Re-run with --pilotcli-repo https://github.com/nsitapara/pilotCLI.git, or cross-build it on the main Mac (pilotcli-cross-build.sh), copy it here, and re-run with --pilotcli-binary <file>."
 }
