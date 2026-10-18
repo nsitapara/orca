@@ -28,6 +28,11 @@ ENGINE_CLI=$SETUP_BIN_DIR/pilot
 ENGINE_DEFAULT_PORT=6868
 LINUX_FNM_DIR=${FNM_DIR:-$HOME/.local/share/fnm}
 LINUX_FNM_NODE_BIN=$LINUX_FNM_DIR/aliases/pilot/bin
+# fnm publishes no checksum file. These are GitHub's sha256 digests of the release's assets
+# (gh api repos/Schniz/fnm/releases/tags/v1.39.0); bump the version and both digests together.
+LINUX_FNM_VERSION=v1.39.0
+LINUX_FNM_SHA256_X64=7807664f39d39fc518da1c35ba0181e4b3267603c4b1dedeb4b5fc6ae440a224
+LINUX_FNM_SHA256_ARM64=4eaff58b2c5bf30d0934027572dd0b5bbb60d2a1af309230b53662d4b1d45599
 
 # Flag values. Empty means: keep what engine.env already has, else the default.
 ENGINE_FLAG_SCHEDULER=
@@ -63,8 +68,9 @@ Engine options (a value you leave out keeps what ~/.config/pilot/engine.env has,
   --bind <ip>|tailscale     The address orcad listens on (default 127.0.0.1, this machine only).
                             "tailscale" uses `tailscale ip -4`. orcad binds exactly this address from
                             its first start (STA-2370's loopback-until-paired is the desktop app's rule).
-  --pairing-address <addr>  Address the pairing code advertises, when it isn't the bind address
-                            (needed with --bind 0.0.0.0). "none" clears it.
+  --pairing-address <addr>  Address the pairing code advertises. Default: the bind address when it is
+                            a specific IP (orcad alone would advertise 127.0.0.1). Required with
+                            --bind 0.0.0.0 or ::. "none" goes back to the default.
   --port <n>                WebSocket port (default 6868, as Pilot's desktop).
   --data-dir <dir>          ORCA_USER_DATA: orcad's profile and Pilot's store
                             (default ~/.local/share/pilot/engine-data).
@@ -169,26 +175,38 @@ linux_prefer_fnm_node() {
   fi
 }
 
-linux_pacman_nodejs_major() {
-  pacman -Si nodejs 2>/dev/null | sed -n 's/^Version *: *\([0-9][0-9]*\)\..*/\1/p' | head -n 1
+# The major version pacman's repos have for <package>, or nothing.
+linux_pacman_major() {
+  pacman -Si "$1" 2>/dev/null | sed -n 's/^Version *: *\([0-9][0-9]*\)\..*/\1/p' | head -n 1
 }
 
 linux_download_fnm() {
-  local asset
+  local asset sum
   case $(uname -m) in
-    x86_64 | amd64) asset='fnm-linux.zip' ;;
-    aarch64 | arm64) asset='fnm-arm64.zip' ;;
+    x86_64 | amd64)
+      asset='fnm-linux.zip'
+      sum=$LINUX_FNM_SHA256_X64
+      ;;
+    aarch64 | arm64)
+      asset='fnm-arm64.zip'
+      sum=$LINUX_FNM_SHA256_ARM64
+      ;;
     *) die "fnm has no build for $(uname -m); install Node 24 yourself, then re-run" ;;
   esac
   run mkdir -p "$SETUP_BIN_DIR" "$LINUX_FNM_DIR"
-  run curl -fsSL -o "$LINUX_FNM_DIR/$asset" "https://github.com/Schniz/fnm/releases/latest/download/$asset"
+  run curl -fsSL -o "$LINUX_FNM_DIR/$asset" "https://github.com/Schniz/fnm/releases/download/$LINUX_FNM_VERSION/$asset"
+  if [ "$SETUP_DRY_RUN" != 1 ] && [ "$(setup_sha256 "$LINUX_FNM_DIR/$asset")" != "$sum" ]; then
+    rm -f "$LINUX_FNM_DIR/$asset"
+    die "the fnm $LINUX_FNM_VERSION download's checksum doesn't match; nothing was installed"
+  fi
   run unzip -o "$LINUX_FNM_DIR/$asset" fnm -d "$SETUP_BIN_DIR"
   run chmod 755 "$SETUP_BIN_DIR/fnm"
   run rm -f "$LINUX_FNM_DIR/$asset"
 }
 
-# Any Node 24 already on PATH wins; else pacman's nodejs when it is 24 (Arch); else fnm, under an alias
-# of its own ("pilot") so your fnm default is left alone.
+# Any Node 24 already on PATH wins. On Arch, next comes pacman's Node 24 LTS (nodejs-lts-krypton), unless
+# another nodejs is installed, which it would have to replace; then nodejs itself if it is 24. Last, fnm,
+# under an alias of its own ("pilot"), so your fnm default is left alone.
 linux_ensure_node24() {
   local distro=$1 fnm=''
   step "Node 24 (package.json engines) and pnpm"
@@ -197,16 +215,25 @@ linux_ensure_node24() {
     say "  Node $(node --version) at $(command -v node)"
     return 0
   fi
-  if [ "$distro" = arch ] && engine_has pacman && [ "$(linux_pacman_nodejs_major)" = 24 ]; then
-    run_sudo "Install Node 24 from pacman (nodejs, npm)" pacman -S --needed --noconfirm nodejs npm
-    return 0
+  if [ "$distro" = arch ] && engine_has pacman; then
+    if [ "$(linux_pacman_major nodejs-lts-krypton)" = 24 ]; then
+      if pacman -Q nodejs >/dev/null 2>&1; then
+        say "  nodejs $(pacman -Q nodejs | cut -d' ' -f2) is installed, and nodejs-lts-krypton would replace it: using fnm"
+      else
+        run_sudo "Install Node 24 LTS from pacman (nodejs-lts-krypton, npm)" pacman -S --needed --noconfirm nodejs-lts-krypton npm
+        return 0
+      fi
+    elif [ "$(linux_pacman_major nodejs)" = 24 ]; then
+      run_sudo "Install Node 24 from pacman (nodejs, npm)" pacman -S --needed --noconfirm nodejs npm
+      return 0
+    fi
   fi
   if engine_has fnm; then
     fnm=$(command -v fnm)
   elif [ -x "$SETUP_BIN_DIR/fnm" ]; then
     fnm=$SETUP_BIN_DIR/fnm
   elif [ "$distro" = arch ]; then
-    run_sudo "Install fnm, which installs Node 24 for your user (pacman's nodejs isn't 24)" pacman -S --needed --noconfirm fnm
+    run_sudo "Install fnm, which installs Node 24 for your user (pacman has no Node 24 to use here)" pacman -S --needed --noconfirm fnm
     fnm=/usr/bin/fnm
   else
     linux_download_fnm
@@ -227,13 +254,33 @@ engine_is_managed() {
   return 1
 }
 
-# Reads engine.env without running it: managed keys into ENGINE_OLD_<KEY>, other lines kept verbatim.
+ENGINE_KEPT_MARKER='# Lines added by hand (comments too), kept as they are:'
+
+engine_env_header() {
+  cat <<'EOF'
+# Pilot engine settings, read by pilot-engine.service and ~/.local/bin/pilot-engine. Written by
+# src/packages/pilot/scripts/machine-setup/linux-engine.sh: a re-run keeps each value unless you pass
+# its flag. Lines it doesn't manage, comments included, move to the end and are kept. After an edit:
+#   systemctl --user restart pilot-engine
+EOF
+}
+
+# Reads engine.env without running it: managed keys into ENGINE_OLD_<KEY>; every other line, comments
+# included, kept verbatim. Only this script's own header and marker lines are dropped.
 engine_read_env_file() {
-  local line key value
+  local line key value own
   [ -f "$ENGINE_ENV_FILE" ] || return 0
   ENGINE_HAD_ENV_FILE=1
+  own=$'\n'$(engine_env_header)$'\n'$ENGINE_KEPT_MARKER$'\n'
   while IFS= read -r line || [ -n "$line" ]; do
-    case $line in '' | '#'*) continue ;; esac
+    case $line in '') continue ;; esac
+    case $own in *$'\n'"$line"$'\n'*) continue ;; esac
+    case $line in
+      '#'*)
+        ENGINE_KEPT_LINES="$ENGINE_KEPT_LINES$line"$'\n'
+        continue
+        ;;
+    esac
     key=${line%%=*}
     value=${line#*=}
     case $value in
@@ -297,16 +344,23 @@ engine_resolve_bind() {
   printf '%s' "$bind"
 }
 
-engine_resolve_settings() {
-  local scheduler='' default_path node_dir=''
-  step "Engine settings ($ENGINE_ENV_FILE)"
-  case $ENGINE_FLAG_SCHEDULER in all) scheduler=on ;; *) scheduler=$ENGINE_FLAG_SCHEDULER ;; esac
-  ENGINE_DATA_DIR=$(engine_pick "$ENGINE_FLAG_DATA_DIR" ORCA_USER_DATA "$ENGINE_SHARE_HOME/engine-data")
-  ENGINE_SCHEDULER=$(engine_pick "$scheduler" PILOT_SCHEDULER pinned)
-  ENGINE_AUTOMATION_DIRS=$(engine_pick "$ENGINE_FLAG_AUTOMATION_DIRS" PILOT_AUTOMATION_DIRS "$HOME/.agents/automations")
-  ENGINE_VAULT_EXPORT=$(engine_pick "$ENGINE_FLAG_VAULT_EXPORT" PILOT_VAULT_EXPORT off)
-  ENGINE_VAULT_DIR=$(engine_pick "$ENGINE_FLAG_VAULT_DIR" PILOT_VAULT_AUTOMATIONS "$HOME/Documents/WebPortal/Agent Work/Automations")
-  ENGINE_USAGE_REPORT_DIR=$(engine_pick "$ENGINE_FLAG_USAGE_REPORT_DIR" PILOT_USAGE_REPORT_DIR "$ENGINE_DATA_DIR/usage-report")
+# The address the pairing code advertises. Without --pairing-address orcad advertises 127.0.0.1 whatever
+# it binds (resolveAdvertisedPairingEndpoint, src/main/runtime/pairing-endpoint.ts), which would pair
+# the main Mac to itself, so a specific bind IP stands in for it. The launcher applies the same rule.
+engine_advertised_address() {
+  if [ -n "$ENGINE_PAIRING_ADDRESS" ]; then
+    printf '%s' "$ENGINE_PAIRING_ADDRESS"
+    return 0
+  fi
+  case $ENGINE_BIND in
+    0.0.0.0 | ::) return 1 ;;
+    *) printf '%s' "$ENGINE_BIND" ;;
+  esac
+}
+
+# Where orcad listens and what its pairing code advertises. Called before anything is installed, so a
+# setting that can't pair stops the setup first.
+engine_resolve_network() {
   ENGINE_PORT=$(engine_pick "$ENGINE_FLAG_PORT" PILOT_ENGINE_PORT "$ENGINE_DEFAULT_PORT")
   if [ -n "$ENGINE_FLAG_BIND" ]; then
     ENGINE_BIND=$(engine_resolve_bind "$ENGINE_FLAG_BIND")
@@ -318,6 +372,39 @@ engine_resolve_settings() {
   else
     ENGINE_PAIRING_ADDRESS=$(engine_pick "$ENGINE_FLAG_PAIRING_ADDRESS" PILOT_ENGINE_PAIRING_ADDRESS '')
   fi
+  engine_check_value --pairing-address "$ENGINE_PAIRING_ADDRESS"
+  if ! ENGINE_ADVERTISED=$(engine_advertised_address); then
+    die "--bind $ENGINE_BIND listens on every interface, and without --pairing-address the pairing code would advertise 127.0.0.1 (the main Mac itself). Pass --pairing-address <IP the main Mac reaches>, or --bind tailscale."
+  fi
+}
+
+# orcad writes an `orca` launcher pinned to its data folder into <data>/cli/bin at startup
+# (orcad-cli-launcher.ts). Under orcad Pilot's shell steps get no launcher folder (engine-env.ts), so
+# that folder goes first; it stays out of your shell's PATH.
+engine_path_with_orca_first() {
+  local cli=$ENGINE_DATA_DIR/cli/bin old_cli='' entry out='' parts=()
+  if [ -n "$ENGINE_OLD_ORCA_USER_DATA" ]; then
+    old_cli=$ENGINE_OLD_ORCA_USER_DATA/cli/bin
+  fi
+  IFS=: read -r -a parts <<<"$1"
+  for entry in ${parts[@]+"${parts[@]}"}; do
+    if [ -n "$entry" ] && [ "$entry" != "$cli" ] && [ "$entry" != "$old_cli" ]; then
+      out=$out:$entry
+    fi
+  done
+  printf '%s' "$cli$out"
+}
+
+engine_resolve_settings() {
+  local scheduler='' default_path node_dir=''
+  step "Engine settings ($ENGINE_ENV_FILE)"
+  case $ENGINE_FLAG_SCHEDULER in all) scheduler=on ;; *) scheduler=$ENGINE_FLAG_SCHEDULER ;; esac
+  ENGINE_DATA_DIR=$(engine_pick "$ENGINE_FLAG_DATA_DIR" ORCA_USER_DATA "$ENGINE_SHARE_HOME/engine-data")
+  ENGINE_SCHEDULER=$(engine_pick "$scheduler" PILOT_SCHEDULER pinned)
+  ENGINE_AUTOMATION_DIRS=$(engine_pick "$ENGINE_FLAG_AUTOMATION_DIRS" PILOT_AUTOMATION_DIRS "$HOME/.agents/automations")
+  ENGINE_VAULT_EXPORT=$(engine_pick "$ENGINE_FLAG_VAULT_EXPORT" PILOT_VAULT_EXPORT off)
+  ENGINE_VAULT_DIR=$(engine_pick "$ENGINE_FLAG_VAULT_DIR" PILOT_VAULT_AUTOMATIONS "$HOME/Documents/WebPortal/Agent Work/Automations")
+  ENGINE_USAGE_REPORT_DIR=$(engine_pick "$ENGINE_FLAG_USAGE_REPORT_DIR" PILOT_USAGE_REPORT_DIR "$ENGINE_DATA_DIR/usage-report")
   # A systemd user service gets a bare PATH, and orcad on plain Linux doesn't read the login shell's,
   # so shell steps and field scripts find tools only through this one.
   if [ -x "$LINUX_FNM_NODE_BIN/node" ]; then
@@ -326,14 +413,13 @@ engine_resolve_settings() {
     node_dir=$(dirname "$(command -v node)"):
   fi
   default_path=$SETUP_BIN_DIR:$node_dir/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-  ENGINE_PATH=$(engine_pick '' PATH "$default_path")
+  ENGINE_PATH=$(engine_path_with_orca_first "$(engine_pick '' PATH "$default_path")")
 
   engine_check_value --machine-name "$SETUP_MACHINE_NAME"
   engine_check_value --data-dir "$ENGINE_DATA_DIR"
   engine_check_value --automation-dirs "$ENGINE_AUTOMATION_DIRS"
   engine_check_value --vault-dir "$ENGINE_VAULT_DIR"
   engine_check_value --usage-report-dir "$ENGINE_USAGE_REPORT_DIR"
-  engine_check_value --pairing-address "$ENGINE_PAIRING_ADDRESS"
   engine_check_value PATH "$ENGINE_PATH"
   case "$ENGINE_ENV_FILE$ENGINE_LAUNCHER$ENGINE_SERVER_ROOT" in
     *[[:space:]%]*) die "these paths can't hold spaces or % (systemd reads them): $ENGINE_ENV_FILE, $ENGINE_LAUNCHER, $ENGINE_SERVER_ROOT" ;;
@@ -341,20 +427,16 @@ engine_resolve_settings() {
 
   say "  machine name      $SETUP_MACHINE_NAME"
   say "  scheduler         PILOT_SCHEDULER=$ENGINE_SCHEDULER"
-  say "  listens on        $ENGINE_BIND:$ENGINE_PORT${ENGINE_PAIRING_ADDRESS:+ (pairing advertises $ENGINE_PAIRING_ADDRESS)}"
+  say "  listens on        $ENGINE_BIND:$ENGINE_PORT; the pairing code advertises $ENGINE_ADVERTISED:$ENGINE_PORT"
   say "  data folder       $ENGINE_DATA_DIR"
   say "  automations       $ENGINE_AUTOMATION_DIRS"
   say "  vault             export $ENGINE_VAULT_EXPORT; Details bundles in $ENGINE_VAULT_DIR"
   say "  token report      $ENGINE_USAGE_REPORT_DIR"
   say "  server            $ENGINE_SERVER_ROOT (current: the build the service runs)"
+  say "  PATH              $ENGINE_PATH"
   case $ENGINE_BIND in
     127.* | ::1)
       warn "the engine listens on $ENGINE_BIND only, so the main Mac can't reach it. Re-run with --bind tailscale (or a LAN IP) to pair it."
-      ;;
-    0.0.0.0 | ::)
-      if [ -z "$ENGINE_PAIRING_ADDRESS" ]; then
-        warn "--bind $ENGINE_BIND listens on every interface; pass --pairing-address <IP the Mac reaches> so the code advertises a reachable address."
-      fi
       ;;
   esac
 }
@@ -395,6 +477,13 @@ engine_install_server() {
   else
     die "no orcad build in $out/orcad (did pnpm run build:orcad fail?)"
   fi
+  # Both name folders that get deleted below.
+  [ -n "$version" ] || die "$out/orcad/.version is empty; rebuild with pnpm run build:orcad"
+  [ -n "$sha" ] || die "$out/orcad/.runtime-node is empty; rebuild with pnpm run build:orcad"
+  case $root in
+    /?*/pilot/engine-server) ;;
+    *) die "unexpected engine folder: $root" ;;
+  esac
   dir=$root/versions/$version
   if [ -L "$root/current" ]; then
     current=$(readlink "$root/current")
@@ -425,6 +514,7 @@ engine_prune_versions() {
   local keep=$1 name dir others=0
   [ -d "$ENGINE_SERVER_ROOT/versions" ] || return 0
   while IFS= read -r name; do
+    case $name in '' | . | .. | */*) continue ;; esac
     dir=$ENGINE_SERVER_ROOT/versions/$name
     if [ "$name" = "$keep" ]; then
       continue
@@ -447,12 +537,7 @@ engine_env_line() {
 
 engine_env_content() {
   {
-    cat <<'EOF'
-# Pilot engine settings, read by pilot-engine.service and ~/.local/bin/pilot-engine. Written by
-# src/packages/pilot/scripts/machine-setup/linux-engine.sh: a re-run keeps each value unless you pass
-# its flag, and keeps lines it doesn't manage at the end. After an edit:
-#   systemctl --user restart pilot-engine
-EOF
+    engine_env_header
     engine_env_line ORCA_USER_DATA "$ENGINE_DATA_DIR"
     engine_env_line PILOT_SCHEDULER "$ENGINE_SCHEDULER"
     engine_env_line PILOT_AUTOMATION_DIRS "$ENGINE_AUTOMATION_DIRS"
@@ -467,7 +552,7 @@ EOF
     engine_env_line PILOT_ENGINE_PAIRING_ADDRESS "$ENGINE_PAIRING_ADDRESS"
     engine_env_line PILOT_ENGINE_MACHINE_NAME "$SETUP_MACHINE_NAME"
     if [ -n "$ENGINE_KEPT_LINES" ]; then
-      printf '\n# Lines added by hand, kept as they are:\n%s' "$ENGINE_KEPT_LINES"
+      printf '\n%s\n%s' "$ENGINE_KEPT_MARKER" "$ENGINE_KEPT_LINES"
     fi
   }
 }
@@ -501,10 +586,19 @@ if [ ! -x "\$node" ]; then
   echo "pilot-engine: no Node runtime at \$node; re-run the machine setup script" >&2
   exit 78
 fi
-args=(--port "\${PILOT_ENGINE_PORT:-$ENGINE_DEFAULT_PORT}" --bind "\${PILOT_ENGINE_BIND:-127.0.0.1}")
-if [ -n "\${PILOT_ENGINE_PAIRING_ADDRESS:-}" ]; then
-  args+=(--pairing-address "\$PILOT_ENGINE_PAIRING_ADDRESS")
+bind=\${PILOT_ENGINE_BIND:-127.0.0.1}
+# Without --pairing-address orcad advertises 127.0.0.1 whatever it binds (pairing-endpoint.ts).
+pairing=\${PILOT_ENGINE_PAIRING_ADDRESS:-}
+if [ -z "\$pairing" ]; then
+  case \$bind in
+    0.0.0.0 | ::)
+      echo "pilot-engine: PILOT_ENGINE_BIND=\$bind needs PILOT_ENGINE_PAIRING_ADDRESS in engine.env" >&2
+      exit 78
+      ;;
+    *) pairing=\$bind ;;
+  esac
 fi
+args=(--port "\${PILOT_ENGINE_PORT:-$ENGINE_DEFAULT_PORT}" --bind "\$bind" --pairing-address "\$pairing")
 if [ "\${PILOT_ENGINE_PAIRING:-}" = on ]; then
   # The one run that prints a pairing code never ticks.
   export PILOT_SCHEDULER=off
@@ -513,7 +607,6 @@ else
   args+=(--no-pairing)
 fi
 # At boot, Tailscale can bring its address up after this starts.
-bind=\${PILOT_ENGINE_BIND:-127.0.0.1}
 case \$bind in
   127.* | ::1 | 0.0.0.0 | ::) ;;
   *)
@@ -597,7 +690,12 @@ engine_write_files() {
 
 # --- Service ---------------------------------------------------------------------------------------
 
+# Before anything is installed: the engine is a systemd user service, so it needs a user manager and a
+# user that isn't root.
 engine_check_user_manager() {
+  if [ "$(id -u)" = 0 ]; then
+    die "run this as the user who will own the engine, not root: pilot-engine is a systemd user service. Each sudo step asks for itself."
+  fi
   if [ -z "${XDG_RUNTIME_DIR:-}" ] && [ -d "/run/user/$(id -u)" ]; then
     XDG_RUNTIME_DIR=/run/user/$(id -u)
     export XDG_RUNTIME_DIR
@@ -640,11 +738,30 @@ engine_should_pair() {
 # One run with a pairing offer, its stdout in a private file; the service never prints one. The offer's
 # token stays valid after this run stops (runtime/device-registry.ts validateToken), and a re-run hands
 # out the same unused token (getOrCreatePendingDevice).
+ENGINE_PAIRING_OUT=
+
+# Stops the pairing run and deletes its code file, however the setup ends.
+engine_pairing_cleanup() {
+  systemctl --user stop "$ENGINE_PAIRING_UNIT" >/dev/null 2>&1 || true
+  if [ -n "$ENGINE_PAIRING_OUT" ]; then
+    rm -f "$ENGINE_PAIRING_OUT"
+  fi
+}
+
 engine_pair() {
-  local out=${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/pilot-engine-pairing.txt waited=0
+  local out=${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/pilot-engine-pairing.txt waited=0 reason guidance
   step "Pairing code (one short run with a pairing offer)"
   engine_stop_service
+  # A run an interrupted setup left behind would hold the unit name.
+  run systemctl --user stop "$ENGINE_PAIRING_UNIT" || true
   run rm -f "$out"
+  if [ "$SETUP_DRY_RUN" != 1 ]; then
+    ENGINE_PAIRING_OUT=$out
+    trap engine_pairing_cleanup EXIT
+    trap 'engine_pairing_cleanup; exit 129' HUP
+    trap 'engine_pairing_cleanup; exit 130' INT
+    trap 'engine_pairing_cleanup; exit 143' TERM
+  fi
   run systemd-run --user --unit "$ENGINE_PAIRING_UNIT" --collect --quiet \
     --property=UMask=0077 --property="StandardOutput=file:$out" --property=StandardError=journal \
     --setenv=PILOT_ENGINE_PAIRING=on --setenv="PILOT_ENGINE_ENV_FILE=$ENGINE_ENV_FILE" "$ENGINE_LAUNCHER"
@@ -653,22 +770,26 @@ engine_pair() {
     ENGINE_PAIRING_URL='orca://pair?code=<printed here>'
     return 0
   fi
+  # The EXIT trap stops the run and deletes the file on every way out below.
   while ! grep -q '^Pairing URL: ' "$out" 2>/dev/null; do
+    if grep -q '^Pairing unavailable: ' "$out" 2>/dev/null; then
+      reason=$(sed -n 's/^Pairing unavailable: //p' "$out" | head -n 1)
+      guidance=$(sed -n 's/^Pairing guidance: //p' "$out" | head -n 1)
+      die "orcad made no pairing code ($reason). $guidance"
+    fi
     if ! systemctl --user is-active --quiet "$ENGINE_PAIRING_UNIT"; then
-      rm -f "$out"
       die "the pairing run stopped before it printed a code; see: journalctl --user -u $ENGINE_PAIRING_UNIT"
     fi
     if [ "$waited" -ge 180 ]; then
-      systemctl --user stop "$ENGINE_PAIRING_UNIT" || true
-      rm -f "$out"
       die "no pairing code after 180 s; see: journalctl --user -u $ENGINE_PAIRING_UNIT"
     fi
     sleep 1
     waited=$((waited + 1))
   done
   ENGINE_PAIRING_URL=$(sed -n 's/^Pairing URL: //p' "$out" | head -n 1)
-  run systemctl --user stop "$ENGINE_PAIRING_UNIT"
-  rm -f "$out"
+  engine_pairing_cleanup
+  trap - EXIT HUP INT TERM
+  ENGINE_PAIRING_OUT=
 }
 
 engine_start() {
@@ -726,12 +847,17 @@ engine_configure() {
 }
 
 engine_summary() {
-  local name config=$ENGINE_CONFIG_HOME/pilotcli/config.toml
+  # pilotcli reads $HOME/.config/pilotcli/config.toml, not XDG_CONFIG_HOME (pilotCLI internal/config/config.go).
+  local name config=$HOME/.config/pilotcli/config.toml
   name=$(setup_single_quote "$SETUP_MACHINE_NAME")
   step "Pair this engine from the main Mac"
   if [ -n "$ENGINE_PAIRING_URL" ]; then
     say "Run this on the main Mac. The code is a credential: paste it nowhere else."
+    say "It advertises $ENGINE_ADVERTISED:$ENGINE_PORT, which the main Mac must reach."
     say ""
+    if [ "$ENGINE_HAD_ENV_FILE" = 1 ]; then
+      say "  pilot environment rm --environment $name   # if the main Mac already has this machine"
+    fi
     say "  pilot environment add --name $name --pairing-code $(setup_single_quote "$ENGINE_PAIRING_URL")"
   else
     say "No new pairing code this run. Already paired? On the main Mac: pilot environment list."
@@ -752,13 +878,14 @@ engine_summary() {
     say "  glab_config = \"$ENGINE_CONFIG_HOME/glab-cli/config.yml\""
     say "  cache_dir = \"$HOME/.cache/pilotcli\""
     say "  telemetry_file = \"$HOME/.local/state/pilotcli/telemetry.jsonl\""
+    say "Leave paths.orca as it is: it names real Orca, which isn't on this machine, so pilotcli's"
+    say "real-Orca checks (is a worktree busy there) don't work here."
   fi
 }
 
 # The engine steps; debian.sh and arch.sh call it after packages, Node and the checkouts.
 engine_main() {
   engine_resolve_settings
-  engine_check_user_manager
   setup_ensure_pnpm "$SETUP_REPO_DIR"
   if [ "$ENGINE_SKIP_BUILD" = 1 ]; then
     say "  (--skip-build: using the last build in $SETUP_REPO_DIR/out)"
@@ -816,6 +943,8 @@ engine_standalone_main() {
   engine_default_machine_name
   setup_check_common
   setup_banner
+  engine_check_user_manager
+  engine_resolve_network
   linux_prefer_fnm_node
   if [ "$(setup_node_major)" != 24 ] && [ "$SETUP_DRY_RUN" != 1 ]; then
     die "Node 24 isn't on PATH. Run debian.sh or arch.sh first."

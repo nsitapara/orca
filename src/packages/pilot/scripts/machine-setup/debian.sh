@@ -79,6 +79,9 @@ main() {
   engine_default_machine_name
   setup_check_common
   setup_banner
+  # Before any package, Node or clone: refuse what can't end in a working, pairable engine.
+  engine_check_user_manager
+  engine_resolve_network
   if [ "$DEBIAN_SKIP_PACKAGES" = 0 ]; then
     debian_install_packages
   fi
