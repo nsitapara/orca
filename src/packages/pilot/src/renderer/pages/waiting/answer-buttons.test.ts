@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import type { InboxItemRow } from '../../../shared/api-types'
+import type { InboxItemRow, InboxListRow } from '../../../shared/api-types'
+import { queuedPreparation } from '../../../shared/preparation'
+import { inboxRow } from '../../hosts/__fixtures__/inbox-row'
 import { composeAnswer, countdown } from './answer-text'
 import { answeredLine, buttonsFor, quickAnswerFor } from './answer-buttons'
 
@@ -121,23 +123,34 @@ describe('buttonsFor', () => {
 })
 
 describe('quickAnswerFor', () => {
-  const open = (name: string, over: object = {}) =>
-    ({ ...CARDS[name], status: 'open', ...over }) as unknown as InboxItemRow
-  it.each<[string, InboxItemRow, ReturnType<typeof quickAnswerFor>]>([
+  const PUSH = inboxRow({ type: 'action', action: 'push', options: opts('Approve', 'Skip') })
+  it.each<[string, InboxListRow, ReturnType<typeof quickAnswerFor>]>([
     [
       'a ready push: its Approve',
-      open('push'),
+      PUSH,
       { label: 'Push to origin', answer: { option: 0, text: 'approve' } }
     ],
     [
       'a question: its first option',
-      open('question'),
+      inboxRow({ options: opts('Install in the job', 'Bake it') }),
       { label: 'Install in the job', answer: { option: 0, text: 'Install in the job' } }
     ],
-    ['a card that needs evidence', open('push', { needsEvidence: true }), null],
-    ['a card still preparing', open('push', { preparation: { state: 'queued' } }), null],
-    ['a card whose first choice opens notes', open('multiStart'), null],
-    ['an answered card', { ...open('push'), status: 'answered' }, null]
+    ['a card that needs evidence', { ...PUSH, needsEvidence: true }, null],
+    [
+      'a card still preparing',
+      { ...PUSH, preparation: queuedPreparation({ key: 'k', context: 'c', requirements: [] }, 1) },
+      null
+    ],
+    [
+      'a card whose first choice opens notes',
+      inboxRow({
+        type: 'action',
+        action: 'start_run',
+        options: opts('Backend', 'Full stack', 'Skip')
+      }),
+      null
+    ],
+    ['an answered card', { ...PUSH, status: 'answered' }, null]
   ])('%s', (_name, item, want) => {
     expect(quickAnswerFor(item)).toEqual(want)
   })
