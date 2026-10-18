@@ -96,7 +96,7 @@ function reasonAgrees(o: OldDecision, n: ItemDecision): boolean {
     // rest. Nothing starts either way.
     case 'queued':
       return (
-        n.reason === 'Over the limit of 1 per tick' ||
+        n.reason.startsWith('Over the limit of 1 per tick; starts at ') ||
         (failedCheck(n) === 'Codex quota' && QUOTA_NEW.test(n.reason))
       )
     case 'held':

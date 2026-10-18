@@ -77,7 +77,8 @@ function reasonAgrees(o: OldDecision, n: ItemDecision): boolean {
     case 'start':
       return n.reason === 'All checks pass'
     case 'defer':
-      return n.reason === 'Over the limit of 2 per tick'
+      // When it starts depends on the live file's switch, which parity doesn't pin.
+      return n.reason.startsWith('Over the limit of 2 per tick; starts at ')
     case 'parked':
       return n.reason === `Another run is active in ${String(n.fields['worktree.path'])}`
     default:

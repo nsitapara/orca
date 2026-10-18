@@ -83,12 +83,14 @@ describeParity(PARITY_05, "05 · Fix failed CI v2: with the sweep's state", () =
     expect(skipped).toEqual([['mr:1601', 'Worktree']])
     // The sweep skipped 1574 (dirty), 1592 (tab open), 1603 and 1604 (dirty, mid-rebase); the env's busy check
     // replaces those gates (pilotcli M4 §8), so 1574 and 1592 start and the rest wait for the limit.
+    // When an overflow starts depends on the live file's switch, which parity doesn't pin.
+    const overLimit = expect.stringMatching(/^Over the limit of 3 per tick; starts at /)
     expect(neu.filter((d) => d.verdict === 'held').map((d) => [d.key, d.reason])).toEqual([
-      ['mr:1603', 'Over the limit of 3 per tick'],
-      ['mr:1604', 'Over the limit of 3 per tick'],
-      ['mr:1605', 'Over the limit of 3 per tick'],
-      ['mr:1606', 'Over the limit of 3 per tick'],
-      ['mr:1607', 'Over the limit of 3 per tick']
+      ['mr:1603', overLimit],
+      ['mr:1604', overLimit],
+      ['mr:1605', overLimit],
+      ['mr:1606', overLimit],
+      ['mr:1607', overLimit]
     ])
   })
 

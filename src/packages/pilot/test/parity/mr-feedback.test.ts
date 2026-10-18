@@ -286,10 +286,12 @@ describeParity(PARITY_06, '06 · Address reviewer feedback: parity with mr-feedb
       'mr:1713',
       'mr:1714'
     ])
+    // When an overflow starts depends on the live file's switch, which parity doesn't pin.
+    const overLimit = expect.stringMatching(/^Over the limit of 3 per tick; starts at /)
     expect(neu.filter((d) => d.verdict === 'held').map((d) => [d.key, d.reason])).toEqual([
       ['mr:1711', 'A session from this automation is still open there'],
-      ['mr:1715', 'Over the limit of 3 per tick'],
-      ['mr:1716', 'Over the limit of 3 per tick']
+      ['mr:1715', overLimit],
+      ['mr:1716', overLimit]
     ])
     expect(neu.filter((d) => d.verdict === 'skipped').map((d) => [d.key, failedCheck(d)])).toEqual([
       ['mr:1710', 'Worktree']
