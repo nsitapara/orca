@@ -70,6 +70,7 @@ Every job is a YAML automation in `~/.agents/automations/` (one file per automat
   - `enable --id`, `disable --id`
   - `validate --file`, `dry-run --id`, `tick --id`, `activity --id`
   - `spend`, `usage-report`
+  - `capacity [--set <n>|none]`: the run limit, what runs and waits, and what the runner gave up on (Run limit and the Running page)
 - **Nothing runs until Nish switches it on** (build plan Task 50). An automation's first tick shows in its Activity and in the worktree panel.
 - **`runs_on: Mac mini`** pins an automation to one machine: only that machine's scheduler ticks it. Without it, every Pilot that ticks all jobs ticks it. One line, at most 255 characters. See "Pilot across machines" for what it gates and how it is checked.
 - **A run's tabs close when it ends**, however it ends (`main/run/ended-run-tabs.ts`). Once every run on an agent tab has ended, the scheduler's next poll (every 15 s) closes it, and Resume reopens the session. A tab is found by its handle or its pane, since a restart can give the terminal a new handle. A tab stays when:
@@ -78,6 +79,8 @@ Every job is a YAML automation in `~/.agents/automations/` (one file per automat
   - it runs another session now, or its agent exited;
   - someone is typing in it, or its agent is busy (looked at again next poll);
   - a launch, Resume or answer is opening its session.
+
+  A busy read (`worktree: idle`, and an answer run's hold) ignores the leftover draft of a tab whose runs have all ended, such as Claude's greyed prompt suggestion, unless someone took the tab over. Its agent working still counts.
 
 ### Shell steps
 
@@ -145,7 +148,7 @@ A job ported as several automations, such as 13's ticket step and its fix sessio
 
 **Guarantees.**
 - **Durable:** when a sending run ends and `when` holds, each id is written to the store's `handovers` table, once per (sending run, receiving stage, id), and a stage has at most one pending row per id: handing over an id that already waits refreshes that row (the latest sending run), and its 7 days still count from the first handover. A pending id survives a restart.
-- **Consumed only when settled:** each real tick of the receiving stage (triggered or scheduled) reads its pending ids. It consumes an id only when the tick started a run for the item (or recorded an ask-first card and its run), keeping that run's id, or the item definitely needs nothing: out of scope, already handled (its `once_per` key, or a baseline; the id keeps the run that holds the key, so that run failing re-pends it), or gone from its source (closed, or not found). Anything that can change by the next tick keeps the id pending, to be retried: quota, a failed check, a busy worktree, the per-tick limit, a failed run's `retry_after_failure` wait, a scope that says not yet. A failed tick consumes nothing. A run started for a fed id that fails or times out puts the id back to pending, so `retry_after_failure` picks it up.
+- **Consumed only when settled:** each real tick of the receiving stage (triggered or scheduled) reads its pending ids. It consumes an id only when the tick started a run for the item (or recorded an ask-first card and its run), keeping that run's id, or the item definitely needs nothing: out of scope, already handled (its `once_per` key, or a baseline; the id keeps the run that holds the key, so that run failing re-pends it), or gone from its source (closed, or not found). Anything that can change by the next tick keeps the id pending, to be retried: a hold in the runner's line (quota, a busy or dirty worktree, an open session, pending answers, a window, a limit, a retry's wait), a failed check, a scope that says not yet, or an item a re-check or Retry tick left for the job's next tick. A failed tick consumes nothing. A run started for a fed id that fails or times out puts the id back to pending, so the runner's retry picks it up. A failed key keeps its id pending even once the runner gives up on it, so Retry on Running still finds the item.
 - **Expiry and pruning:** an id still pending after 7 days expires. It is kept, marked expired, and Activity shows "Handover of WEB-2123 from stage 1 expired after 7 days" on the receiver's tick that found it (a receiver that is off has its ids expired by the scheduler pass instead, and its Activity shows the same line under its last tick, or as an entry of its own when it never ticked). Consumed and expired rows older than 30 days are pruned. The scheduler pass does both at most once an hour.
 - **The receiver's own rules apply:** a triggered tick is an ordinary tick of that stage, so its switch, checks, `once_per`, limits and quota apply unchanged. A stage that is off, invalid or missing is never triggered; its ids wait.
 - **`run: now`** ticks the receiver as soon as the sending run ends, but only after it handed over at least one id (a feed without `pass` always triggers). A receiver whose tick is already running gets one more tick after it ends. At most 4 triggered ticks of a stage a minute; past that, the ids wait for its schedule. Only the process that runs the scheduler triggers.
@@ -216,7 +219,7 @@ A job that changes code on Nish's work, or needs a stack, says what it needs. pi
   1. Pilot takes its claim on the item's worktree. If another Pilot run holds it, Pilot passes `--throwaway "<that job> is already working in it (Pilot run …)"`: Orca can't see Pilot's terminals.
   2. Pilot runs `pilotcli env create --run <run id> …` in its own process group, then reads its envelope (exit codes as backup).
   3. `ok`: Pilot's own runtime rescans the repo and finds the folder (60 s at most).
-     - `not_yet`: the run is **Deferred**. Its `once_per` key is freed, `retry_after_failure` doesn't apply, and handed-over ids stay pending.
+     - `not_yet`: the run is **Deferred**. Its `once_per` key is freed, it counts no failure, `retry_after_failure` doesn't apply, and handed-over ids stay pending.
      - `failed` or `invalid`: the run fails with pilotcli's reason.
 - **During the run:**
   - Every step runs in the env's folder, with its variables (`data.env`). Pilot's own `PILOT_*` and a step's `env:` win over them. A variable named like Pilot's own (`PILOT_*`, `ORCA_*`, `PATH`, …) fails the run.
@@ -336,13 +339,36 @@ A run costs the sum of its steps. A Claude step's session id is pinned at launch
 - A run waiting on you (asking, needs you) holds none, as with `limits.at_once`, which still applies on top.
 - Lowering the limit stops nothing that is running.
 
-**The queue.** An item a tick would start, past the limit, gets the verdict `queued` and waits in `run_queue`, oldest first. It keeps its place across ticks.
-- When a slot frees, the scheduler ticks the job of the oldest queued item at once, whatever its schedule, so the item starts on a fresh decision.
-- Run now waits in the same line, and its run is still recorded as by hand.
+**The line.** The job decides what is due; the runner decides when it starts, and makes sure each run finishes. An item that is due but can't start now waits in `run_queue` with its reason, instead of being skipped every tick.
+- **Held** (verdict `held`): a runtime gate stops it. These are the job's runtime checks (`quota`, `worktree: idle`, `worktree: clean`, `session: none_open`, `answers: none_pending`, `window`), the quota ceiling (below), another run in its worktree or one starting there this tick, `at_once`, `per_tick`, and a retry's wait (Retries after a failure).
+- **Waiting for a slot** (verdict `queued`): past the run limit.
+- **Still skipped:** eligibility checks (scope, `match`, `once_per`, `first_seen`, `mr`, `worktree: exists`, `field`, `check:` scripts, a field script's exit 3). They win over a runtime check declared before them.
+- **Order:** by due time. That is when the item began waiting, as its source says (a context card's request time), else when it first joined the line. A row keeps the earliest across ticks, so an item that drops out and comes back keeps its place, and an MR first seen weeks ago doesn't jump ahead of a card queued this morning. Within one tick, `limits.order` ranks a job's items (first sight counts for `oldest_waiting_first`), and a held item takes no per-tick slot, so the next one is tried.
+- **Held rows never take a slot.** They never count as ahead of an item waiting for one, so a held item at the head of the line can't block a later item of another job.
+- **Re-checks.** The scheduler loop (every 15 s) ticks a job when a slot frees for one of its waiting items, whatever its schedule, so the item starts on a fresh decision. It also ticks a job whose held row is due a re-check:
+  - after 60 s (a busy worktree, `at_once`);
+  - after 5 minutes for `quota`, `window`, `in_flight` (a dirty worktree), `session_open` and `answers_pending`;
+  - a `tick_limit` overflow only at the job's own next tick, or the next Run now for a manual or turned-off job (its detail says which);
+  - a retry when its wait ends.
+- **A re-check tick acts on the line's items only.** The job's other items read "Waits for its job's next tick": no facts are read or scripts run for them, nothing is stored, and a handed-over id stays pending. `per_tick` overflows wait for the job's own tick too, so `per_tick` keeps pacing the job. A re-check that lands on the job's due slot is its ordinary tick and decides everything.
+- **Re-checks stay quiet.** They are stored with `ticks.recheck = 1`, record only the line's items, and stay out of Activity unless they start a run or hand over; failed ones show. Quiet ones are pruned after a day (the loop prunes at most hourly); other ticks keep 30 days.
+- **By hand:** Run now waits in the same line. Its row keeps the by-hand exemption through every re-check, and its run is recorded as manual.
 - An answer run or an approved ask-first card waits only for a free slot (its answer is held), ahead of the line.
-- A queued item leaves the line when its job's next tick doesn't leave it waiting (it started, or isn't due), when the tick fails, or when the job is turned off (unless Run now queued it).
+- **Leaving the line:** a row goes when its item starts, stops being eligible or is no longer listed, and when its job is gone, turned off or runs elsewhere (unless Run now queued it). A failed tick drops the job's slot waiters but keeps its held rows: they hold no slot, and they count as checked, so a source that is down doesn't re-tick the job every loop.
+- **Where it shows:** Running lists every row under **Waiting · N** with its place (slot waiters only), job, item, why it waits, and how long since it became due. The count line reads "N waiting for a slot · M held". Activity counts held items as waiting.
 
-**Recently finished.** Under the queue, folded: the last 10 ended runs of jobs that hold a slot. Ran (and a run's Took) leave out the time a run sat ended before Continue run reopened it (`runs.idle_ms`). A run that ended "Nothing to do: …" reads **Nothing to do**, here and in Activity, not Done.
+**Quota.** One ceiling for every job with an agent step: 90% weekly or 95% session, for each agent its steps use. Running says "Jobs with an agent step wait while Claude or Codex is over 90% weekly or 95% session." A job's own `quota:` check for an agent replaces the ceiling for that agent. Ask-first jobs aren't held (asking costs nothing), and an unreadable quota lets a run start.
+
+**Retries after a failure.** Set it on Running under Jobs at once, or with the RPC `pilot.capacity.setRetryLimit {limit}`: default 2, from 0 to 5 (`settings.retry_limit`). An agent in a Pilot run can't change it.
+- **What counts:** a run that ends `failed` or `timed_out` counts one failure on its key (`handled.failures`), and so do a launch that couldn't start and a stale start swept after a restart (an ask-first job's frees its key, so it asks again). A run that ends done clears the count; a cancelled one doesn't count.
+- **Within the limit** the key is held as `retry`, "Retry N of M at HH:MM. Last run failed: <outcome>", until its wait from the failure is over: the job's `retry_after_failure`, else 10 minutes.
+- **Past the limit** the runner gives up: the key leaves the line, and the failure that crosses the limit leaves one flagged card, "<job> failed N times: <item>", whose context is the last outcome and "Retry it from Running."
+- **Gave up · N** on Running lists the keys given up on in the last 7 days, each with **Retry**, and a failed run under Finished has a **Retry** too. Retry (the RPC `pilot.capacity.retry {automationId, onceKey}`) clears the key's failures, frees it and ticks its job by hand with that key, so the item goes through the job's checks and the runner's gates again; the job's other items wait for its next tick. Run now on the job also starts its given-up keys.
+- **Not retried on their own:** ask-first jobs (you approve each run). Job 14 keeps its own 3 attempts (its `once_per` includes the attempt). Jobs that set `retry_after_failure` (03, 04, 13) now stop at the limit too.
+
+**`pilot automations capacity`** prints the run limit, the retry limit, what runs, the line and what the runner gave up on. The line's count reads "Waiting: 2 for a slot · 1 held". Slot waiters are numbered and held rows marked `-`, each with why it waits and how long since it became due. Each Gave up key shows its failures and last outcome.
+
+**Recently finished.** Under the line, folded: the last 10 ended runs of jobs that hold a slot. Ran (and a run's Took) leave out the time a run sat ended before Continue run reopened it (`runs.idle_ms`). A run that ended "Nothing to do: …" reads **Nothing to do**, here and in Activity, not Done.
 
 **Memory and the suggestion.** On each scheduler poll Pilot sums the RSS of every running agent step's terminal process tree and keeps each run's peak (`runs.peak_rss_bytes`). Shell steps and Docker's containers aren't counted.
 - The suggestion is what can go to jobs (available memory plus what running jobs hold, less 4 GB), divided by the heaviest job's peak over its last 20 measured runs. It is at least 1 and at most 10.
@@ -403,7 +429,7 @@ The scheduler reads the name on every pass, so a rename counts from the next one
 
 **`runs_on`.**
 - **What it gates:** scheduled ticks, the catch-up of a slot missed while Pilot was closed, the first pass's wait for repos, repo-problem reports (one recorded before the job was pinned elsewhere stops showing), and `run: now` triggers. A trigger for a job pinned elsewhere is refused and logged ("it runs on Mac mini, not Studio"), and its handed-over ids wait.
-- **Queued items:** a job pinned to another machine drops its scheduled rows from this machine's queue; its owner's own tick fetches those items again. Rows queued by Run now here still run here.
+- **Queued items:** a job pinned to another machine drops its rows from this machine's line, held or waiting for a slot; its owner's own tick fetches those items again. Rows queued by Run now here still run here.
 - **Run now by hand ignores it:** picking the machine is the choice.
 - **Names** match without regard to case or surrounding spaces, and nothing else: "Mac-mini" isn't "Mac mini". A blank or multi-line value is a parse error. An engine never refuses a name it doesn't know; the window warns.
 - **Handovers stay on one machine** (Multi-stage jobs, Validation).
@@ -447,9 +473,10 @@ The jobs moved from Orca's engine and the old sweeps to Pilot's YAML automations
 - **A definition file that turns invalid** is shown from its last valid version but never ticked until it is fixed.
 - **13 and M01** list the signed-in user's Linear tickets, with no assignee clause.
 - **07:** a timeout or crash is a failed run (it was a silent skip).
-- **03:** needs both agents' quota (it checked only the lead's).
-- **M01:** a quota-out tick skips every ticket (it deferred the fourth). A worktree linked to a ticket under another name isn't reused. A started ticket whose worktree was deleted isn't restarted.
-- **13:** a "Failed again" comment waits while quota is out. A canceled ticket is absent.
+- **Quota is implicit:** every job with an agent step is held in the runner's line while an agent it uses is over 90% weekly or 95% session. A job's own `quota:` check holds it the same way; it no longer skips.
+- **03:** is held while either agent's quota is out (it checked only the lead's).
+- **M01:** while quota is out, its tickets are held in line instead of skipped (it deferred the fourth). A worktree linked to a ticket under another name isn't reused. A started ticket whose worktree was deleted isn't restarted.
+- **13:** a "Failed again" comment is held while quota is out. A canceled ticket is absent.
 - **05, 06, 03, 04:** worktree flags point at "Inbox in Pilot", not the old localhost link.
 - **Leftovers:** M04 worktrees aren't cleaned up (as before).
 
@@ -538,6 +565,8 @@ These need a phone, a second Mac and an iPad on Tailscale. Open Pilot (`dist/mac
   - Engine internals: the per-session claim is in-process only (main and orcad share it only if configured to); the vault exporter writes `Runs.md` without a lock (the retired `vault.py` took one); terminal lists are cached for each answers pass.
 - **14's env waits on `head`.** `{preparation.head}` is empty until 14's producers send `head` in their preparation request (only a push card Pilot queues itself has one), so 14 doesn't switch before they do.
 - **A quit during env create** stops it at once, but its `env delete` runs at the next start.
+- **Older paired clients** don't know the `held` verdict: Activity shows its label blank, and Running lists held rows as waiting for a slot.
+- **Claude can still paint a prompt suggestion** in a run's tab despite `--prompt-suggestions=false`. A busy-worktree read ignores it once the tab's runs have ended (Automations on the YAML engine); stopping it is a follow-up.
 - **Pilot across machines, not done yet:**
   - A folded job row shows no "Runs on" line; its stage rows do.
   - Another machine's run panel reads, but its Resume and Continue run are owner-only, and so is Approve: approvals stay with the owner.
