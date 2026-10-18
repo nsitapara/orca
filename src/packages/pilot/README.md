@@ -5,7 +5,7 @@ Pilot is Nish's fork of Orca (`github.com/nsitapara/orca`), with Automations reb
 - **The drop-in rule:** everything Pilot adds lives in this folder. Upstream files only gain the hooks listed in `HOOKS.md`.
 - **Update from upstream:** `node src/packages/pilot/scripts/update.mjs` (see the script's `--help`).
 - **Dev:** `node src/packages/pilot/scripts/dev.mjs` runs `pnpm dev` with a separate `pilot-dev` data folder, its own automations folder (`pilot-dev/automations`) and the scheduler off. Set `PILOT_AUTOMATION_DIRS` or `PILOT_SCHEDULER` yourself to override either.
-- **Scheduler:** only one Pilot ticks automations, because each data folder has its own `handled` table. With `PILOT_SCHEDULER` unset, only the packaged desktop app ticks; dev, `--serve` and orcad don't. `PILOT_SCHEDULER=on` turns it on in any of them, and `off` turns it off everywhere.
+- **Scheduler:** only one Pilot ticks each automation, because each data folder has its own `handled` table. With `PILOT_SCHEDULER` unset, only the packaged desktop app ticks; dev, `--serve` and orcad don't. `PILOT_SCHEDULER=on` turns it on in any of them, `pinned` ticks only the jobs whose `runs_on` names this machine, and `off` turns it off everywhere. A job whose `runs_on` names another machine never ticks here, whatever the setting (see "Pilot across machines").
 - **Build for macOS:** `node src/packages/pilot/scripts/build-mac.mjs`. It installs by default, so Raycast and Spotlight find `/Applications/Pilot.app`:
   - After the build it quits the running Pilot (waits up to 30s for the main process to exit, never force-kills), replaces `/Applications/Pilot.app` with `ditto`, links `~/.local/bin/pilot` to the installed launcher, runs `lsregister -f`, and relaunches Pilot from a cleared environment (no `ORCA_*`). It then waits up to 60s for `pilot automations list-yaml` to answer (otherwise it exits non-zero with the log folder, `~/Library/Application Support/Pilot/logs`) and prints the build commit, the install path and the enabled automations.
   - `--no-install` builds only (the app stays in `dist/mac-arm64/Pilot.app`). `--no-launch` installs but doesn't relaunch.
@@ -71,6 +71,7 @@ Every job is a YAML automation in `~/.agents/automations/` (one file per automat
   - `validate --file`, `dry-run --id`, `tick --id`, `activity --id`
   - `spend`, `usage-report`
 - **Nothing runs until Nish switches it on** (build plan Task 50). An automation's first tick shows in its Activity and in the worktree panel.
+- **`runs_on: Mac mini`** pins an automation to one machine: only that machine's scheduler ticks it. Without it, every Pilot that ticks all jobs ticks it. One line, at most 255 characters. See "Pilot across machines" for what it gates and how it is checked.
 - **A run's tabs close when it ends**, however it ends (`main/run/ended-run-tabs.ts`). Once every run on an agent tab has ended, the scheduler's next poll (every 15 s) closes it, and Resume reopens the session. A tab is found by its handle or its pane, since a restart can give the terminal a new handle. A tab stays when:
   - its last step has no session id to resume;
   - a turn began there after that step ended (someone took it over);
@@ -155,6 +156,7 @@ A job ported as several automations, such as 13's ticket step and its fix sessio
 **Validation.** A broken rule marks the involved automation invalid (shown from its last valid version, never ticked), and the error names the rule.
 - In one file: a `pass` output must be declared by a step; a stage is fed once per connection; `ids_from.feed` needs `job:`.
 - Across files: a stage number is used once per job; the stages that set `name` agree; feeds never form a cycle; a feed that passes ids or runs now must reach a stage of the same job; a stage passed ids must read them (`ids_from: { feed: true }`); a stage that reads its feed must be the `to` of some passing feed.
+- One machine: a feed that passes ids or runs now joins stages with the same `runs_on`, or two stages with none, because a handover stays in the database of the machine whose run wrote it. Otherwise the sending stage is invalid. Arrow-only feeds aren't checked.
 - An arrow-only feed whose target is missing (renamed), in no job or in another job only loses its arrow: a warning, and the stage still ticks.
 - `pilot automations validate --file` checks one file, so a rule across files shows in the list's errors and in `reload`.
 
@@ -349,7 +351,7 @@ A run costs the sum of its steps. A Claude step's session id is pinned at launch
 
 ## Activity across machines
 
-Activity lists the sessions of every machine you are connected to.
+Activity lists the sessions of every machine you are connected to. (Pilot's own pages do the same for every Pilot engine: see "Pilot across machines", below.)
 
 - **Machine chip:** while the listed rows come from more than one machine, each row shows a chip with its machine's name. This covers agent rows, Pilot's tab rows and recent-worktree rows, and the worktree headers under Group by > Worktree. With one machine, no chip shows. It is the same chip the sidebar uses for a host. Machines are compared by host id, after an SSH host is merged with its managed server, so those two count as one machine.
 - **Machines filter:** Activity's existing Options > Hosts filter is the machine filter. It already lists this Mac, every paired machine and every SSH host.
@@ -363,6 +365,66 @@ Known gaps:
 - Two clones of the same remote on one machine, or a fork and the repo it came from, share one Projects row. That is how the sidebar decides what one project is.
 
 The hooks are `activity-machines-*` and `activity-project-*` (see `HOOKS.md`).
+
+## Pilot across machines
+
+One Pilot window shows the Inbox, Running, Automations and Activity of every machine that runs Pilot's engine: this Mac, another Mac's packaged app, or a headless orcad. Each item is tagged with its machine, and its actions go to that machine. Pair a machine as in "Remote use (D25)", below. All of it lives in this folder: `HOOKS.md` needed no new row.
+
+**Finding machines.**
+- This machine is always listed. Each paired environment whose pairing isn't revoked is asked `pilot.status` (5 s timeout): at the start, every 30 s while the window shows, and when an environment is added or its connection changes.
+- Stock Orca (no `pilot.status`) is left out, and so is a second pairing of an engine already listed (same machine name and data folder), such as this Mac paired to itself.
+- A machine that doesn't answer is listed as offline only if this window has seen it answer before (`pilot.knownHosts.v1` in localStorage); otherwise it is left out. A revoked pairing is forgotten.
+
+**Machine tags.** Only while more than one machine is listed; with one, every page is as before.
+- A chip with the machine's name (the sidebar's host chip) on Inbox cards and In motion rows, Automations rows (every machine that loaded the file; a job's row names every stage's), Activity's runs and ticks, How it runs' latest run, and the run panel's header.
+- Running has a section per machine, each with its own run limit. The sidebar's Inbox and Running counts add up every machine.
+
+**A machine that can't be reached.**
+- Its items leave the page, and a line says so: "Mac mini can't be reached: its cards aren't shown here." On Running: "… so its runs aren't shown here. They go on running there."
+- A read that fails keeps that machine's last items, with "Couldn't refresh Mac mini's cards: <error>". When every machine fails, the page shows its one error, as it does alone.
+
+**Actions go to the item's machine.**
+- **Inbox:** answers, Retry preparation, Prepare evidence, Got it and a card's Details go to the card's machine. Open worktree opens that machine's worktree. A report on another machine's card doesn't open here: "This report is on Mac mini; open it there". Apply now asks every machine whose scheduler runs.
+- **Running and Activity:** a run opens, reads its steps and logs, and Resumes or Continues on its own machine. Step Source is hidden for another machine's run.
+- **Automations:** the switch, Dry run and the YAML go to the row's home machine: the one that ticks it, else the one its `runs_on` names, else this machine, else the first that loaded it. The switch edits that machine's copy of the file only.
+- **Nothing falls back to this machine.** With several machines listed, when a row's `runs_on` machine isn't answering, hasn't sent its list yet ("Waiting for Mac mini's list…") or is named by no listed machine, the row's actions are refused with that reason, and the list says "Automations that run on Mac mini can't be changed from here."
+
+**Approvals stay with the owner (plan Question 1).** This window is a paired device to every other machine's engine. There, Approve (script routes and drafted changes), Resume and Continue run are refused, and the card or step shows that machine's own words ("Approve actions in Pilot on this Mac", where "this Mac" is the card's). Answering, skipping and revising work. A headless engine has no window, so its cards can be answered but never approved: keep jobs that need approval on a machine with a Pilot window.
+
+**Machine names.** A machine's name is the one its runtime publishes: the name set with `pilot host name`, else the macOS Computer Name, else the hostname. `runs_on`, the chips and Run now all use it.
+
+    pilot host name                                         # print this machine's name
+    pilot host name --name "Mac mini"                       # set it ("" goes back to the detected name)
+    pilot host name --name "Mac mini" --environment <env>   # set a paired machine's
+
+The scheduler reads the name on every pass, so a rename counts from the next one.
+
+**`runs_on`.**
+- **What it gates:** scheduled ticks, the catch-up of a slot missed while Pilot was closed, the first pass's wait for repos, repo-problem reports (one recorded before the job was pinned elsewhere stops showing), and `run: now` triggers. A trigger for a job pinned elsewhere is refused and logged ("it runs on Mac mini, not Studio"), and its handed-over ids wait.
+- **Queued items:** a job pinned to another machine drops its scheduled rows from this machine's queue; its owner's own tick fetches those items again. Rows queued by Run now here still run here.
+- **Run now by hand ignores it:** picking the machine is the choice.
+- **Names** match without regard to case or surrounding spaces, and nothing else: "Mac-mini" isn't "Mac mini". A blank or multi-line value is a parse error. An engine never refuses a name it doesn't know; the window warns.
+- **Handovers stay on one machine** (Multi-stage jobs, Validation).
+- **Where it shows:** "Runs on Mac mini" under the Schedule in the list and in How it runs. With one machine listed, that is all: this machine's own name isn't known then, so nothing is checked. With several, "Runs on Mac mini · can't be reached" or "· no connected Pilot has that name" warns. A folded job row shows none.
+
+**`PILOT_SCHEDULER=pinned`** ticks only the jobs whose `runs_on` names this machine. Give it to every engine but one, so each unpinned job runs once.
+- A headless orcad sets it in its environment (below).
+- A second packaged Mac ticks every unpinned job by default, which repeats the first Mac's runs. Run `launchctl setenv PILOT_SCHEDULER pinned`, then quit and reopen Pilot. It lasts until the Mac restarts.
+
+**Run now asks which machine** when more than one machine has the automation.
+- The confirm bar's machine menu lists the machines that have it. It starts on the `runs_on` machine, else this machine, else another one (when this machine's scheduler is off, or it doesn't have the automation). It changes only when you change it.
+- A machine that can't start it is disabled with a short reason: "· scheduler off", "· not answering", "· not connected". The outcome line names the machine ("On Mac mini: …").
+
+**Job 14 serves only its own machine (plan Question 3).** Context preparation reads its own engine's queue. A job pinned to another machine that posts prepared cards (a code change to approve, a push) leaves them **Context queued** until 14 runs there too. `runs_on` names one machine, so keep those jobs where 14 runs.
+
+**A headless engine.** Start Pilot's orcad as in "Remote use (D25)", with:
+- `ORCA_USER_DATA=<folder>`: its data folder, and Pilot's store. Without it orcad shares real Orca's `~/.orca` (Known gaps).
+- `PILOT_SCHEDULER=pinned`, and `PILOT_AUTOMATION_DIRS` when its automations aren't in `~/.pilot/automations`.
+- `PILOT_VAULT_EXPORT=off`: no vault export.
+- `PILOT_VAULT_AUTOMATIONS=<folder>`: where its cards' Details bundles must sit (read even with the export off).
+- `PILOT_USAGE_REPORT_DIR=<folder>`: its token report's folder. It writes there only once `usage-legacy.json` is in it (Spend and token usage).
+
+**Rollout.** An engine older than this reads `runs_on` as an unknown key: its strict parser marks the file invalid, shows its last valid version and never ticks it. Update every engine before a shared automations file gets `runs_on`.
 
 ## Going live (a record, 2026-10-17)
 
@@ -390,7 +452,7 @@ The jobs moved from Orca's engine and the old sweeps to Pilot's YAML automations
 
 ## Remote use (D25)
 
-Pilot keeps Orca's pairing, WebSocket server, web client and `orcad` protocols unchanged. Pilot's runtime listens on 6868 (override `PILOT_WS_PORT`), so it runs beside real Orca on 6768. Pairing links stay `orca://pair?code=...` and carry Pilot's endpoint.
+Pilot keeps Orca's pairing, WebSocket server, web client and `orcad` protocols unchanged. Pilot's runtime listens on 6868 (override `PILOT_WS_PORT`), so it runs beside real Orca on 6768. Pairing links stay `orca://pair?code=...` and carry Pilot's endpoint. A paired Pilot engine shows in this window's Pilot pages: see "Pilot across machines".
 
 ### Verified 2026-10-10 (automated)
 
@@ -473,6 +535,11 @@ These need a phone, a second Mac and an iPad on Tailscale. Open Pilot (`dist/mac
   - Engine internals: the per-session claim is in-process only (main and orcad share it only if configured to); the vault exporter writes `Runs.md` without a lock (the retired `vault.py` took one); terminal lists are cached for each answers pass.
 - **14's env waits on `head`.** `{preparation.head}` is empty until 14's producers send `head` in their preparation request (only a push card Pilot queues itself has one), so 14 doesn't switch before they do.
 - **A quit during env create** stops it at once, but its `env delete` runs at the next start.
+- **Pilot across machines, not done yet:**
+  - A folded job row shows no "Runs on" line; its stage rows do.
+  - Another machine's run panel reads, but its Resume and Continue run are owner-only, and so is Approve (plan Question 1).
+  - `runs_on` names one machine, not a list (plan Question 3).
+  - The worktree panel shows this machine's runs only.
 
 ## Running upstream tests
 
