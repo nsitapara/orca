@@ -560,6 +560,28 @@ describe('PilotScheduler run queue', () => {
     expect([...d.ran].sort()).toEqual(ids)
   })
 
+  it.each([
+    [
+      'on its due slot it is the scheduled tick, so stays visible',
+      Date.UTC(2026, 9, 10, 18, 10),
+      false
+    ],
+    ['between its slots it is a quiet re-check', Date.UTC(2026, 9, 10, 19, 10), true]
+  ])('ticks a queued job once a loop; %s', async (_name, last, recheck) => {
+    const d = deps([def('ci', '10 * * * *')], at1012, last)
+    d.queuedToTick = () => ['ci']
+    let lastAt = last
+    d.lastTickAt = () => lastAt
+    const rechecks: (boolean | undefined)[] = []
+    d.runTick = async (_x, opts) => {
+      rechecks.push(opts.recheck)
+      lastAt = at1012
+      return OK
+    }
+    await new PilotScheduler(d).tickAll()
+    expect(rechecks).toEqual([recheck])
+  })
+
   it('still ticks the due automations when the run queue cannot be read', async () => {
     const d = deps([def('ci', '10 * * * *')], at1012, Date.UTC(2026, 9, 10, 18, 10))
     d.queuedToTick = () => {

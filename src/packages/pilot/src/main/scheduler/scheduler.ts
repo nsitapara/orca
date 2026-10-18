@@ -214,10 +214,15 @@ export class PilotScheduler {
       return
     }
     const pass = this.deps.newPass()
+    const byId = new Map(definitions.map((d) => [d.id, d]))
     await tickQueued(this.deps, definitions, {
       stopped: () => this.stopped,
       busy: (id) => this.running.has(id),
-      tick: (id) => this.tickNow(id, { dryRun: false, pass, recheck: true }),
+      tick: (id) => {
+        // On the job's due slot this is its scheduled tick (tickIfDue then skips it), so Activity shows it.
+        const def = byId.get(id)
+        return this.tickNow(id, { dryRun: false, pass, recheck: !(def && this.isDue(def)) })
+      },
       concurrency: MAX_CONCURRENT_TICKS
     })
     await mapLimit(definitions, MAX_CONCURRENT_TICKS, async (def) => {
