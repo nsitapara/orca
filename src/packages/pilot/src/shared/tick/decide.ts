@@ -92,7 +92,8 @@ function handledGate(
     input.byHandKeys?.has(onceKey) === true
   if (state.failures > input.retryLimit && !byHand) {
     const failures = plural(state.failures, 'failure')
-    return { verdict: 'notdue', reason: `Gave up after ${failures}; Retry from Running` }
+    const reason = `Gave up after ${failures}; Run now or Retry from Running starts it again`
+    return { verdict: 'notdue', reason }
   }
   return null
 }

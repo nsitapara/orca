@@ -199,7 +199,7 @@ describe('runTick counting a failed launch', () => {
     ])
     const later = await tick(t2)
     expect(later.decisions.map((x) => [x.verdict, x.reason])).toEqual([
-      ['notdue', 'Gave up after 1 failure; Retry from Running']
+      ['notdue', 'Gave up after 1 failure; Run now or Retry from Running starts it again']
     ])
     const byHand = await tick(t2 + 60_000, { byHand: true })
     expect(byHand.decisions.map((x) => x.verdict)).toEqual(['started'])

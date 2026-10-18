@@ -126,7 +126,7 @@ describe('decideTick: scope, once_per and baseline', () => {
       failedAs(3, 13 * HOUR),
       {},
       'notdue',
-      'Gave up after 3 failures; Retry from Running'
+      'Gave up after 3 failures; Run now or Retry from Running starts it again'
     ],
     [
       'failed past the retry limit, by hand',
