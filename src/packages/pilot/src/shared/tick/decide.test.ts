@@ -99,6 +99,28 @@ describe('decideTick: scope, once_per and baseline', () => {
     ['handled and done', handledAs('done'), {}, 'notdue', 'Already handled 1'],
     // A seeded key (no run) or a run still going stays handled: only a failed run is retried.
     ['handled, seeded or still started', handledAs('started'), {}, 'notdue', 'Already handled 1'],
+    // A key that failed before failures were counted (0) keeps its old rule, so an upgrade retries nothing new.
+    [
+      'failed before counting, no retry_after_failure',
+      failedAs(0, 13 * HOUR),
+      {},
+      'notdue',
+      'Already handled 1'
+    ],
+    [
+      'failed before counting 1h ago, retry after 12h',
+      failedAs(0, HOUR),
+      { retry: 12 * HOUR },
+      'held',
+      'Retry 1 of 2 at 23:00. Last run failed: agent exited'
+    ],
+    [
+      'failed before counting 13h ago, retry after 12h',
+      failedAs(0, 13 * HOUR),
+      { retry: 12 * HOUR },
+      'started',
+      'All checks pass'
+    ],
     [
       'failed past the retry limit',
       failedAs(3, 13 * HOUR),

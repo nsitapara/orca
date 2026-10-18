@@ -75,7 +75,15 @@ function handledGate(
   if (!state) {
     return null
   }
-  if (state.status !== 'failed' || input.definition.start === 'ask_first') {
+  // Failed before failures were counted (0; a new failure counts 1): as before, only retry_after_failure retries it.
+  if (
+    state.status === 'failed' &&
+    state.failures === 0 &&
+    input.definition.retryAfterFailureMs !== null
+  ) {
+    return null
+  }
+  if (state.status !== 'failed' || state.failures === 0 || input.definition.start === 'ask_first') {
     return { verdict: 'notdue', reason: `Already handled ${onceKey}` }
   }
   const byHand =

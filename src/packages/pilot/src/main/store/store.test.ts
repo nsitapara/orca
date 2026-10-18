@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest'
 import Database from '../../../../../main/sqlite/sync-database'
 import type { ItemDecision } from '../../shared/api-types'
 import { PILOT_SCHEMA_VERSION } from './migrations'
+import { addImportedHandled } from './__fixtures__/imported-rows'
 import { INTERRUPTED, PilotStore, STUCK_TICK_MS, TICK_RETENTION_MS } from './store'
 
 function freshStore(): PilotStore {
@@ -151,6 +152,11 @@ describe('PilotStore', () => {
     fail('b', 'over', 4, 200)
     fail('a', 'within', 2, 100)
     fail('a', 'old', 3, 10)
+    // Failed before failures were counted: never given up.
+    addImportedHandled(store, 'a', [
+      { onceKey: 'legacy', status: 'failed', at: 100, failedAt: 100 }
+    ])
+    expect(store.gaveUp(0, 50).map((r) => r.onceKey)).not.toContain('legacy')
     expect(
       store
         .gaveUp(2, 50)
