@@ -55,12 +55,21 @@ function waitingReason(inUse: number, limit: number, ahead: number): string {
   return `Waiting for a slot: ${inUse} of ${limit} running${line}`
 }
 
-// Quota reads are cached for 5 minutes; a per-tick overflow waits for its job's own tick, so per_tick still throttles.
+// Quota reads are cached for 5 minutes, and a dirty worktree, an open session or pending answers last that long too.
+const SLOW_HOLDS: ReadonlySet<HoldReason> = new Set<HoldReason>([
+  'quota',
+  'window',
+  'in_flight',
+  'session_open',
+  'answers_pending'
+])
+
+// A per-tick overflow waits for its job's own tick, so per_tick still throttles; a busy worktree frees soon (job 14).
 export function recheckAfterMs(code: HoldReason): number {
   if (code === 'tick_limit') {
     return Number.POSITIVE_INFINITY
   }
-  return code === 'quota' || code === 'window' ? 300_000 : 60_000
+  return SLOW_HOLDS.has(code) ? 300_000 : 60_000
 }
 
 // A hold that knows when it ends is re-checked then; any other every recheckAfterMs from its last check.

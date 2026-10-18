@@ -327,10 +327,19 @@ describe("a re-check tick acts on its job's line only", () => {
       ['mr:3', 'notdue', WAITS]
     ])
     expect(store.runs.forTick(recheck.tickId).map((r) => r.itemKey)).toEqual(['mr:1'])
-    // No facts are read for an item the re-check leaves, and only the line item's decision is kept.
+    // No facts are read for an item the re-check leaves, and it isn't marked seen.
     expect(state.statusReads).toEqual(['/wt/1'])
-    expect(store.tickItems(recheck.tickId).map((i) => i.itemKey)).toEqual(['mr:1'])
     expect(store.seenKeys(cleanJob().id)).toEqual(new Set(['mr:1']))
+  })
+
+  it('records tick items only for the line keys', async () => {
+    const { store, state, tick } = lining(cleanJob())
+    await tick(t1)
+    state.listed = [1, 2, 3]
+    const recheck = await tick(t2, { recheck: true })
+    expect(store.tickItems(recheck.tickId).map((i) => [i.itemKey, i.verdict])).toEqual([
+      ['mr:1', 'held']
+    ])
   })
 
   it("still holds the line item, and a per-tick overflow keeps its row for the job's own tick", async () => {

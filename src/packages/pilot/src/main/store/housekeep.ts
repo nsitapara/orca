@@ -20,3 +20,25 @@ export function housekeepStore(
     )
   }
 }
+
+const HOUR_MS = 60 * 60_000
+
+// Re-check ticks pile up between starts, so the scheduler's loop prunes them at most once an hour.
+export function recheckPruner(
+  store: Pick<PilotStore, 'pruneRechecks'>,
+  now: () => number,
+  log: (message: string) => void
+): () => void {
+  let last = Number.NEGATIVE_INFINITY
+  return () => {
+    const at = now()
+    if (at - last < HOUR_MS) {
+      return
+    }
+    last = at
+    const pruned = store.pruneRechecks(at)
+    if (pruned > 0) {
+      log(`[pilot] store: ${pruned} re-check tick(s) older than a day removed`)
+    }
+  }
+}

@@ -33,6 +33,8 @@ import { HandledStore, type GaveUpRow } from './store-handled'
 const DAY = 24 * 60 * 60_000
 // Spec §7: ticks and their items are kept 30 days; runs and steps are kept indefinitely.
 export const TICK_RETENTION_MS = 30 * DAY
+// A quiet re-check tick (QUIET_TICK) comes as often as every minute a job has held items.
+export const RECHECK_RETENTION_MS = DAY
 // No tick runs this long: one still 'running' after an hour was cut off by a quit or a crash.
 export const STUCK_TICK_MS = 60 * 60_000
 export const INTERRUPTED = 'interrupted'
@@ -140,6 +142,17 @@ export class PilotStore {
       )
       .run(now - TICK_RETENTION_MS)
     return { interrupted: Number(interrupted.changes), pruned: Number(pruned.changes) }
+  }
+
+  // Quiet re-check ticks older than a day; one that started a run, handed over or failed is kept like any tick.
+  pruneRechecks(now: number): number {
+    const pruned = this.db
+      .prepare(
+        `DELETE FROM ticks WHERE recheck = 1 AND started_at < ? AND ${QUIET_TICK}
+         AND id NOT IN (SELECT MAX(id) FROM ticks GROUP BY automation_id)`
+      )
+      .run(now - RECHECK_RETENTION_MS)
+    return Number(pruned.changes)
   }
 
   schemaVersion(): number {

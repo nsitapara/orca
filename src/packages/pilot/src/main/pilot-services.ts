@@ -44,7 +44,7 @@ import { glabApiForRepo } from './sources/gitlab-api'
 import { registerPilotSources } from './sources/register-sources'
 import { PilotStore } from './store/store'
 import { VaultExporter } from './vault/export'
-import { housekeepStore } from './store/housekeep'
+import { housekeepStore, recheckPruner } from './store/housekeep'
 import { usageReporter } from './usage-report/reporter'
 import { closeAll, softly } from './pilot-lifecycle'
 import { wireRunCapacity } from './capacity/capacity-wiring'
@@ -229,6 +229,7 @@ function openPilot(
     terminals: runtimeSessionTerminals(runtime, fieldDeps),
     log
   })
+  const pruneRechecks = recheckPruner(store, now, log)
   const scheduler = new PilotScheduler({
     now,
     definitions: definitions.current,
@@ -245,6 +246,7 @@ function openPilot(
       await softly('vault export', () => exporter?.pass(), log)
       await softly('handovers', () => handover.housekeep(), log)
       await softly('envs', () => envs.housekeep(), log)
+      await softly('re-check ticks', pruneRechecks, log)
     },
     reposListed: (repos) => reposListed(runtime, repos),
     repoProblem: (def, message) =>
