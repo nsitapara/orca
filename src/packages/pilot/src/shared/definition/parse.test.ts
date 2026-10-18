@@ -79,6 +79,7 @@ const CI_05_DEFINITION = {
   answers: null,
   powers: ['commit', 'push'],
   inbox: '{mr.author}',
+  runsOn: null,
   job: null
 }
 
@@ -134,6 +135,7 @@ steps:
 answers: { resume: never, else: { agent: claude, skill: review-branch, mode: answers } }
 powers: [commit, push]
 inbox: nish
+runs_on: "  Mac mini "
 `
 
 describe('parseAutomationYaml', () => {
@@ -267,6 +269,7 @@ describe('parseAutomationYaml', () => {
         },
         powers: ['commit', 'push'],
         inbox: 'nish',
+        runsOn: 'Mac mini',
         job: null
       }
     })
@@ -366,6 +369,17 @@ describe('parseAutomationYaml', () => {
       ]
     })
   })
+
+  it.each([
+    ['an empty name', 'runs_on: ""'],
+    ['two lines', 'runs_on: "a\\nb"'],
+    ['a list', 'runs_on: [a, b]']
+  ])('rejects runs_on as %s', (_why, line) =>
+    expect(parseAutomationYaml(`${MINIMAL}${line}\n${STEP}`, '/a/ci.yaml')).toEqual({
+      ok: false,
+      errors: ['/a/ci.yaml: runs_on: expected a machine name (one line, at most 255 characters)']
+    })
+  )
 
   it('accepts manual schedules', () => {
     expect(parseAutomationYaml(CI_05.replace('"10 * * * *"', 'manual'), '/a/ci.yaml').ok).toBe(true)

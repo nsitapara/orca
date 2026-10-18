@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { MACHINE_NAME_MAX_LENGTH } from '../../../../../shared/machine-name'
 import { OUTPUT_KEY } from '../run/outputs'
 import { durationSchema } from './duration'
 import { envWorkspaceSchema } from './env-workspace'
@@ -187,6 +188,13 @@ const job = z.strictObject({
   hands_over: z.string().min(1).optional()
 })
 
+const MACHINE_NAME_ERROR = `expected a machine name (one line, at most ${MACHINE_NAME_MAX_LENGTH} characters)`
+const machineName = z
+  .string({ error: MACHINE_NAME_ERROR })
+  .trim()
+  .max(MACHINE_NAME_MAX_LENGTH, MACHINE_NAME_ERROR)
+  .regex(/^[^\r\n]+$/, MACHINE_NAME_ERROR)
+
 export const automationSchema = z.strictObject({
   name: z.string().min(1),
   repo: z.string().min(1),
@@ -220,6 +228,7 @@ export const automationSchema = z.strictObject({
   answers: answers.optional(),
   powers: z.array(z.enum(POWERS)).optional(),
   inbox: z.string().optional(),
+  runs_on: machineName.optional(),
   job: job.optional()
 })
 

@@ -208,6 +208,8 @@ export type AutomationDefinition = {
   answers: AnswersDef | null
   powers: Power[]
   inbox: string
+  // runs_on: the one machine this job runs on (its machine name); null: any machine.
+  runsOn: string | null
   job: JobDef | null
 }
 

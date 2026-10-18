@@ -215,6 +215,7 @@ export function normalize(
     answers: normalizeAnswers(raw),
     powers: raw.powers ?? [],
     inbox: raw.inbox ?? '{mr.author}',
+    runsOn: raw.runs_on ?? null,
     job: normalizeJob(raw)
   }
 }

@@ -44,6 +44,7 @@ export function testDefinition(over: Partial<AutomationDefinition> = {}): Automa
     answers: null,
     powers: [],
     inbox: '{mr.author}',
+    runsOn: null,
     job: null,
     ...over
   }
