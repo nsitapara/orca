@@ -98,13 +98,13 @@ describe('CardDetails', () => {
     pilotRpc.mockResolvedValue({ snapshot: reportSnapshot })
     const shared = item('on-both')
     // This machine's card with the same id and digest loads first, so a cache keyed by id alone would answer.
-    render(<CardDetails item={shared} parts={null} />)
+    render(<CardDetails item={shared} />)
     fireEvent.click(screen.getByText('Details'))
     await screen.findByText('1579-v1.html')
     cleanup()
     render(
       <PilotHostProvider host={MINI}>
-        <CardDetails item={shared} parts={null} />
+        <CardDetails item={shared} />
       </PilotHostProvider>
     )
     fireEvent.click(screen.getByText('Details'))

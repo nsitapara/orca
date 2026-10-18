@@ -18,8 +18,6 @@ export function inboxRow(over: Partial<InboxListRow> = {}): InboxListRow {
     details: null,
     action: null,
     actionArgs: null,
-    parts: {},
-    switchWords: [],
     digest: 'd1',
     version: 1,
     status: 'open',
