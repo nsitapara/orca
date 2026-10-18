@@ -29,7 +29,7 @@ export const VERDICTS_13: VerdictTable = {
     green: ['notdue'],
     seen: ['notdue'],
     act: ['started'],
-    QUOTA: ['skipped'],
+    QUOTA: ['held'],
     start: ['started'],
     has_session: ['notdue']
   },
@@ -39,8 +39,14 @@ export const VERDICTS_13: VerdictTable = {
     {
       key: 'pipeline:19',
       word: 'act',
-      verdict: 'skipped',
+      verdict: 'held',
       why: 'Pilot checks Claude quota before every 13 run; the old sweep checked it only before opening a ticket, so it still commented while Claude was out'
+    },
+    {
+      key: 'linear:WEB-2',
+      word: 'QUOTA',
+      verdict: 'skipped',
+      why: "Pilot decides eligibility before quota, so the start check's dirty worktree skips the ticket; the old start() checked quota first"
     },
     {
       key: 'linear:WEB-3',

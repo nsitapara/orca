@@ -2,7 +2,9 @@ import type { CheckOutcome, ItemDecision, ItemFields, Verdict } from '../api-typ
 import type { AutomationDefinition } from '../definition/types'
 import { evalExpr, parseExpr } from '../expr'
 import { oncePerKey, renderTemplate } from '../template'
+import { isRuntimeCheck } from './check-class'
 import { evaluateCheck, fieldLookup, type CheckResult } from './checks'
+import { inTickGate, itemGate, limitGate, type Hold } from './runner-gates'
 
 export type DecideItem = {
   key: string
@@ -137,22 +139,32 @@ export function workspacePathOf(def: AutomationDefinition, fields: ItemFields): 
   return typeof value === 'string' && value !== '' ? value : null
 }
 
-function runChecks(
-  input: DecideInput,
-  item: DecideItem
-): { checks: CheckOutcome[]; failed: CheckOutcome | null } {
+type ChecksRun = {
+  checks: CheckOutcome[]
+  failed: CheckOutcome | null
+  failedClass: 'eligibility' | 'runtime' | null
+}
+
+// Eligibility checks first, then runtime checks, each in declared order: an item that isn't eligible is
+// skipped even when a runtime check declared before its eligibility check fails.
+function runChecks(input: DecideInput, item: DecideItem): ChecksRun {
   const def = input.definition
   const ctx = { label: item.label, fields: item.fields, now: input.now, timeZone: def.timezone }
   const scripts = input.scriptChecks.get(item.key)
+  const indexed = [...def.checks.entries()]
+  const ordered = [
+    ...indexed.filter(([, c]) => !isRuntimeCheck(c)),
+    ...indexed.filter(([, c]) => isRuntimeCheck(c))
+  ]
   const checks: CheckOutcome[] = []
-  for (const [index, c] of def.checks.entries()) {
+  for (const [index, c] of ordered) {
     const result = evaluateCheck(c, ctx, scripts?.get(index))
     checks.push(result)
     if (!result.ok) {
-      return { checks, failed: result }
+      return { checks, failed: result, failedClass: isRuntimeCheck(c) ? 'runtime' : 'eligibility' }
     }
   }
-  return { checks, failed: null }
+  return { checks, failed: null, failedClass: null }
 }
 
 function sortValue(value: number | null | undefined): number {
@@ -171,32 +183,6 @@ function ranked(def: AutomationDefinition, candidates: Candidate[]): Candidate[]
   return [...candidates].sort((a, b) => key(a) - key(b) || a.index - b.index)
 }
 
-function inTickGate(
-  def: AutomationDefinition,
-  c: Candidate,
-  onceKeys: Set<string>,
-  paths: Set<string>
-): Gate | null {
-  if (usesHandled(def) && onceKeys.has(c.onceKey)) {
-    return { verdict: 'notdue', reason: `Already handled ${c.onceKey}` }
-  }
-  if (c.path !== null && paths.has(c.path)) {
-    return { verdict: 'skipped', reason: `Another run starts in ${c.path} this tick` }
-  }
-  return null
-}
-
-function limitGate(def: AutomationDefinition, taken: number, active: number): Gate | null {
-  const { perTick, atOnce } = def.limits
-  if (perTick !== null && taken >= perTick) {
-    return { verdict: 'over_limit', reason: `Over the limit of ${perTick} per tick` }
-  }
-  if (atOnce !== null && active >= atOnce) {
-    return { verdict: 'over_limit', reason: `At most ${atOnce} at once` }
-  }
-  return null
-}
-
 function askedReason(def: AutomationDefinition, fields: ItemFields): string {
   if (!def.askFirst) {
     return 'Asks before starting'
@@ -208,7 +194,22 @@ function base(item: DecideItem, onceKey: string) {
   return { key: item.key, label: item.label, onceKey, fields: item.fields }
 }
 
-// The per-tick slots go out in limits.order; decisions keep the source's order.
+// An item that reached the checks has a place in the runner's line: when it became due.
+function reachedChecks(
+  input: DecideInput,
+  item: DecideItem,
+  onceKey: string,
+  checks: CheckOutcome[]
+) {
+  return { ...base(item, onceKey), checks, dueAt: item.sortKeys?.waitingSince ?? input.now }
+}
+
+function held(decided: ReturnType<typeof reachedChecks>, hold: Hold): ItemDecision {
+  return { ...decided, verdict: 'held', reason: hold.detail, hold }
+}
+
+// The per-tick slots go out in limits.order; decisions keep the source's order. A held item takes no
+// slot, so the next one is tried.
 function allocate(input: DecideInput, candidates: Candidate[], out: ItemDecision[]): void {
   const def = input.definition
   const onceKeys = new Set<string>()
@@ -216,11 +217,15 @@ function allocate(input: DecideInput, candidates: Candidate[], out: ItemDecision
   let taken = 0
   let started = 0
   for (const c of ranked(def, candidates)) {
-    const decided = { ...base(c.item, c.onceKey), checks: c.checks }
-    const gate =
-      inTickGate(def, c, onceKeys, paths) ?? limitGate(def, taken, input.activeRuns + started)
-    if (gate) {
-      out[c.index] = { ...decided, ...gate }
+    const decided = reachedChecks(input, c.item, c.onceKey, c.checks)
+    if (usesHandled(def) && onceKeys.has(c.onceKey)) {
+      out[c.index] = { ...decided, verdict: 'notdue', reason: `Already handled ${c.onceKey}` }
+      continue
+    }
+    const hold =
+      inTickGate(c.path, c.item.fields, paths) ?? limitGate(def, taken, input.activeRuns + started)
+    if (hold) {
+      out[c.index] = held(decided, hold)
       continue
     }
     taken += 1
@@ -249,19 +254,17 @@ export function decideTick(input: DecideInput): ItemDecision[] {
       out[index] = { ...base(item, onceKey), checks: [], ...gate }
       return
     }
-    const { checks, failed } = runChecks(input, item)
-    if (failed) {
-      out[index] = { ...base(item, onceKey), checks, verdict: 'skipped', reason: failed.reason }
+    const { checks, failed, failedClass } = runChecks(input, item)
+    if (failed && failedClass === 'eligibility') {
+      const decided = reachedChecks(input, item, onceKey, checks)
+      out[index] = { ...decided, verdict: 'skipped', reason: failed.reason }
       return
     }
     const path = workspacePathOf(def, item.fields)
-    if (path !== null && input.busyWorktrees.has(path)) {
-      out[index] = {
-        ...base(item, onceKey),
-        checks,
-        verdict: 'skipped',
-        reason: `Another run is active in ${path}`
-      }
+    // The runner's gates own the hold; they re-read the runtime checks recorded above.
+    const hold = itemGate(input, item, path)
+    if (hold) {
+      out[index] = held(reachedChecks(input, item, onceKey, checks), hold)
       return
     }
     candidates.push({ index, item, onceKey, checks, path })

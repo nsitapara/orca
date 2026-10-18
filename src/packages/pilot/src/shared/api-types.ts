@@ -56,7 +56,7 @@ export type ItemDecision = {
   // A dry run of an env automation: where a real run would work (main/envs/preview.ts). Not stored apart; its words are
   // in reason.
   workspace?: string
-  // A held item waits in line: why, and when a time-based hold lifts.
+  // A held item waits in the runner's line: why, and its place there (when it became due, ms since epoch).
   hold?: { code: HoldReason; detail: string }
   dueAt?: number
 }

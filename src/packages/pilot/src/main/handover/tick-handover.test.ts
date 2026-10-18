@@ -119,7 +119,7 @@ describe('runTick: a stage fed ids by an earlier stage (job.feeds … pass)', ()
     expect(result.decisions.map((x) => [x.label, x.verdict])).toEqual([
       ['WEB-1', 'started'],
       ['WEB-2', 'started'],
-      ['WEB-3', 'over_limit']
+      ['WEB-3', 'held']
     ])
     expect(d.store.handovers.pending('starts', 10, 0).map((h) => h.itemId)).toEqual(['WEB-3'])
     const consumed = d.store.handovers.consumedBy([result.tickId]).get(result.tickId) ?? []
@@ -208,13 +208,13 @@ describe('settles: a fed id is consumed only when its tick started a run or the 
     ['waiting out retry_after_failure', decision('notdue'), handled(FAILED), RETRY, false],
     ['not due by its scope, never handled', decision('notdue'), new Map(), RETRY, false],
     [
-      "skipped by a check, a field script's not due, quota or a busy worktree",
+      "skipped by a check or a field script's not due",
       decision('skipped'),
       new Map(),
       RETRY,
       false
     ],
-    ['over the limit', decision('over_limit'), new Map(), RETRY, false]
+    ['held by quota, a busy worktree or a limit', decision('held'), new Map(), RETRY, false]
   ] as [string, ItemDecision | undefined, Map<string, HandledState>, number | null, boolean][])(
     '%s → %s',
     (_name, d, states, retry, settled) => {

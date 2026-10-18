@@ -87,8 +87,13 @@ function reasonAgrees(o: OldDecision, n: ItemDecision): boolean {
       return skipAgrees(o, n)
     case 'start':
       return n.reason === 'All checks pass'
+    // Pilot holds every due worktree on Codex's quota; the sweep tried only the first one it would start and queued the
+    // rest. Nothing starts either way.
     case 'queued':
-      return n.reason === 'Over the limit of 1 per tick'
+      return (
+        n.reason === 'Over the limit of 1 per tick' ||
+        (failedCheck(n) === 'Codex quota' && QUOTA_NEW.test(n.reason))
+      )
     case 'held':
       return n.reason === 'At most 1 at once'
     case 'held_active':
@@ -165,7 +170,7 @@ describeParity(
         [key(401), 'started'],
         [key(402), 'baselined'],
         [key(403), 'baselined'],
-        [key(404), 'over_limit'],
+        [key(404), 'held'],
         [key(405), 'baselined']
       ])
       expect(fresh[0].onceKey).toBe(`${REPO}::/wt/web-401@${'c401'.padEnd(40, '0')}`)
@@ -195,13 +200,13 @@ describeParity(
         [key(485), 'out_of_scope', null],
         [key(486), 'baselined', null],
         [key(487), 'out_of_scope', null],
-        [key(488), 'skipped', 'No pending answers']
+        [key(488), 'held', 'No pending answers']
       ])
       const late = await decide('outside-window')
       expect(late.map((d) => [d.key, d.verdict, failedCheck(d)])).toEqual([
-        [key(441), 'skipped', 'Window 02:00-05:59'],
-        [key(442), 'skipped', 'Window 02:00-05:59'],
-        [key(443), 'skipped', 'No pending answers']
+        [key(441), 'held', 'Window 02:00-05:59'],
+        [key(442), 'held', 'Window 02:00-05:59'],
+        [key(443), 'held', 'No pending answers']
       ])
     })
 

@@ -72,24 +72,23 @@ describeParity(PARITY_05, "05 · Fix failed CI v2: with the sweep's state", () =
     })
   })
 
-  it('starts the first three MRs the sweep started, skips with the check it named, and caps the fourth', async () => {
+  it('starts the first three MRs the sweep started, skips with the check it named, and holds the rest for the limit', async () => {
     const neu = await decide(RECORDED)
     expect(neu.filter((d) => d.verdict === 'started').map((d) => d.key)).toEqual([
       'mr:1561',
       'mr:1574',
       'mr:1592'
     ])
-    expect(neu.find((d) => d.key === 'mr:1607')?.verdict).toBe('over_limit')
     const skipped = neu.filter((d) => d.verdict === 'skipped').map((d) => [d.key, failedCheck(d)])
     expect(skipped).toEqual([['mr:1601', 'Worktree']])
     // The sweep skipped 1574 (dirty), 1592 (tab open), 1603 and 1604 (dirty, mid-rebase); the env's busy check
     // replaces those gates (pilotcli M4 §8), so 1574 and 1592 start and the rest wait for the limit.
-    expect(neu.filter((d) => d.verdict === 'over_limit').map((d) => d.key)).toEqual([
-      'mr:1603',
-      'mr:1604',
-      'mr:1605',
-      'mr:1606',
-      'mr:1607'
+    expect(neu.filter((d) => d.verdict === 'held').map((d) => [d.key, d.reason])).toEqual([
+      ['mr:1603', 'Over the limit of 3 per tick'],
+      ['mr:1604', 'Over the limit of 3 per tick'],
+      ['mr:1605', 'Over the limit of 3 per tick'],
+      ['mr:1606', 'Over the limit of 3 per tick'],
+      ['mr:1607', 'Over the limit of 3 per tick']
     ])
   })
 
@@ -112,12 +111,11 @@ describeParity(PARITY_05, "05 · Fix failed CI v2: with the sweep's state", () =
       for (const d of old) {
         const fresh = neu.find((n) => n.key === d.key)
         if (busy.test(d.reason)) {
-          // Never skipped for the sweep's reason: started, over the limit, or (quota-out) held by the quota check.
-          const held = fresh?.verdict === 'skipped'
-          expect([d.key, d.reason, held ? failedCheck(fresh) : fresh?.verdict]).toEqual([
+          // Never skipped for the sweep's reason: started, or held for the limit or (quota-out) by the quota check.
+          expect([d.key, d.reason, fresh?.verdict]).toEqual([
             d.key,
             d.reason,
-            held ? 'Quota' : expect.stringMatching(/^(started|over_limit)$/)
+            expect.stringMatching(/^(started|held)$/)
           ])
           continue
         }
@@ -140,11 +138,11 @@ describeParity(PARITY_05, "05 · Fix failed CI v2: with the sweep's state", () =
     ])
   })
 
-  it('stops what the sweep stopped at dispatch when Claude is out of quota', async () => {
+  it('holds what the sweep stopped at dispatch when Claude is out of quota', async () => {
     const neu = await decide('quota-out')
     expect(neu.map((d) => [d.key, d.verdict, failedCheck(d)])).toEqual([
-      ['mr:1561', 'skipped', 'Quota'],
-      ['mr:1574', 'skipped', 'Quota']
+      ['mr:1561', 'held', 'Quota'],
+      ['mr:1574', 'held', 'Quota']
     ])
   })
 })

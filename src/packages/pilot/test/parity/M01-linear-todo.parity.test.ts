@@ -143,15 +143,15 @@ describeParity(PARITY_M01, 'M01 · Start my Todo Linear tickets: parity with swe
     }
   })
 
-  it('starts the first three by priority then age, and the rest are over the limit', async () => {
+  it('starts the first three by priority then age, and holds the rest for the limit', async () => {
     const { fresh } = await decide('fresh-tickets-start-urgent-first-three-per-run')
     const verdicts = Object.fromEntries(fresh.map((d) => [d.key, d.verdict]))
     expect(verdicts).toEqual({
       'linear:WEB-3': 'started',
       'linear:WEB-5': 'started',
       'linear:WEB-4': 'started',
-      'linear:WEB-2': 'over_limit',
-      'linear:WEB-1': 'over_limit'
+      'linear:WEB-2': 'held',
+      'linear:WEB-1': 'held'
     })
   })
 

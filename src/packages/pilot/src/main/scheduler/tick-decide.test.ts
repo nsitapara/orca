@@ -190,7 +190,7 @@ describe('decideTickItems', () => {
     expect(checks.map(([r]) => r.env.PILOT_ITEM_KEY)).toEqual(['mr:2'])
   })
 
-  it("skips an item whose worktree has another automation's run", async () => {
+  it("holds an item whose worktree has another automation's run", async () => {
     const def = testDefinition({ id: 'a' })
     const { store, decide } = setup(def, { sources: { scope: () => null } })
     store.runs.create({
@@ -205,8 +205,9 @@ describe('decideTickItems', () => {
     const out = await decide()
     expect(out.decisions[0]).toMatchObject({
       key: 'mr:1',
-      verdict: 'skipped',
-      reason: 'Another run is active in /wt/1'
+      verdict: 'held',
+      reason: 'Another run is active in /wt/1',
+      hold: { code: 'worktree_busy', detail: 'Another run is active in /wt/1' }
     })
   })
 
@@ -298,7 +299,7 @@ describe('decideTickItems', () => {
     const pass = createPassFetchCache('pass-1', unusedGitlab)
     const out = await decideTickItems(def, EMPTY_PEOPLE, { ...deps, activity }, pass, 7)
     expect(summary(out)).toEqual([
-      ['mr:1', 'skipped', 'someone is typing in Fix'],
+      ['mr:1', 'held', 'someone is typing in Fix'],
       ['mr:2', 'started', 'All checks pass'],
       ['mr:3', 'out_of_scope', 'MR is closed']
     ])
@@ -310,6 +311,35 @@ describe('decideTickItems', () => {
       7
     )
     expect(terminals).toHaveBeenCalledTimes(1)
+  })
+
+  // A runtime failure holds the item, so its later eligibility scripts still decide whether it waits or is skipped.
+  it('a script check after a failing quota check still runs', async () => {
+    const def = testDefinition({
+      id: 'a',
+      checks: [
+        { kind: 'quota', agent: 'claude', weekly: 90, session: 95 },
+        { kind: 'script', run: './check.sh', timeoutMs: 5000 }
+      ]
+    })
+    const runScript = vi.fn(async (_req: ScriptRequest) => ok('ready'))
+    const { decide } = setup(def, {
+      sources: { list: async () => ({ items: [mr(1, 'b1')], warnings: [] }), scope: () => null },
+      fields: {
+        runScript,
+        quotas: {
+          claude: async () => ({ weekly: 99, session: 10 }),
+          codex: async () => ({ weekly: null, session: null })
+        }
+      }
+    })
+    const out = await decide()
+    expect(runScript).toHaveBeenCalledTimes(1)
+    expect(out.decisions[0]).toMatchObject({
+      key: 'mr:1',
+      verdict: 'held',
+      hold: { code: 'quota' }
+    })
   })
 
   it('fails when the source fails, so the tick is recorded failed', async () => {
@@ -603,8 +633,8 @@ describe('05 on 2026-10-10 12:10 through the merge-request source and decideTick
     expect(decisions.map((d) => [d.key, d.verdict, d.reason])).toEqual([
       ['!1561', 'started', 'All checks pass'],
       ['!1587', 'notdue', 'Already handled 1587:2933991087'],
-      ['!1574', 'skipped', '2 uncommitted files'],
-      ['!1592', 'skipped', 'A session from this automation is still open there'],
+      ['!1574', 'held', '2 uncommitted files'],
+      ['!1592', 'held', 'A session from this automation is still open there'],
       ['!1347', 'notdue', 'Head pipeline success'],
       ['!1590', 'notdue', 'Head pipeline running'],
       ['!1588', 'out_of_scope', 'Author is Shivan; this automation looks at Nish Sitapara'],

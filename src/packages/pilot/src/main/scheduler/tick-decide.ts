@@ -1,6 +1,7 @@
 import type { HandledRow, ItemDecision } from '../../shared/api-types'
 import type { AutomationDefinition, CheckDef } from '../../shared/definition/types'
 import type { PeopleDirectory } from '../../shared/people'
+import { isRuntimeCheck } from '../../shared/tick/check-class'
 import { evaluateCheck, type CheckResult } from '../../shared/tick/checks'
 import {
   decideTick,
@@ -126,8 +127,9 @@ export async function runScriptCheck(
   return { ok: false, reason: said || `The check exited ${result.code}` }
 }
 
-// Runs before the pure decision: only for items that reach the checks, in order, and only while
-// every earlier check passes, so no script runs for an item an earlier check already skips.
+// Runs before the pure decision: only for items that reach the checks, in order, and only while every
+// earlier eligibility check passes, so no script runs for an item an earlier check already skips. A
+// runtime check never stops them: its failure only holds the item, and a later script may still skip it.
 async function scriptChecks(
   input: Omit<DecideInput, 'scriptChecks'>,
   repo: RepoFacts,
@@ -146,6 +148,9 @@ async function scriptChecks(
     const ctx = { label: item.label, fields: item.fields, now: input.now, timeZone: def.timezone }
     const results = new Map<number, CheckResult>()
     for (const [index, check] of def.checks.entries()) {
+      if (isRuntimeCheck(check)) {
+        continue
+      }
       if (check.kind !== 'script') {
         if (!evaluateCheck(check, ctx).ok) {
           break
@@ -163,6 +168,7 @@ async function scriptChecks(
   return out
 }
 
+// waitingSince is also the item's due time, its place in the runner's line.
 function toDecideItem(item: Item, seenAt: ReadonlyMap<string, number>, now: number): DecideItem {
   return {
     key: item.key,

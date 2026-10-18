@@ -20,8 +20,8 @@ function decisionFor(decisions: readonly ItemDecision[], id: string): ItemDecisi
 
 // Whether a tick settles a fed id. Consumed: the tick started a run for the item (or holds one for an ask-first card),
 // or the item definitely needs nothing: out of scope, already handled (its once_per key; a baseline counts), or gone
-// from its source (closed, or not found). Anything that can change by the next tick keeps it pending: a check, quota
-// or busy worktree (skipped), the per-tick limit, a failed run's retry_after_failure wait, a scope that says not yet.
+// from its source (closed, or not found). Anything that can change by the next tick keeps it pending: a check (skipped),
+// quota, a busy worktree or a limit (held), a failed run's retry_after_failure wait, a scope that says not yet.
 export function settles(
   decision: ItemDecision | undefined,
   handled: ReadonlyMap<string, HandledState>,
