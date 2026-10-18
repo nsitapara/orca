@@ -6,6 +6,7 @@ import type {
   QueuedRun,
   RetryKey
 } from '../../../shared/api-types-capacity'
+import { waitsForSlot } from '../../../shared/capacity/waiting-rows'
 import { formatDuration } from '../../../shared/run/format-duration'
 import { workedMs } from '../../../shared/run/worked-time'
 import { PilotHostProvider, usePilotHost } from '../../hosts/PilotHostContext'
@@ -14,14 +15,7 @@ import { useNow } from '../waiting/use-now'
 import { FinishedRuns } from './FinishedRuns'
 import { RunLimitPicker } from './LimitPickers'
 import { GaveUpRow, RetryPanel } from './Retries'
-import {
-  memoryText,
-  quotaText,
-  runMemoryText,
-  suggestionText,
-  usageText,
-  waitsForSlot
-} from './running-text'
+import { memoryText, quotaText, runMemoryText, suggestionText, usageText } from './running-text'
 import { useCapacities, type CapacityChanges, type MachineCapacity } from './use-capacity'
 
 // A machine's changes, bound to it.

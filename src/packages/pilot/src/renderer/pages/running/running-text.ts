@@ -1,7 +1,8 @@
-import type { CapacityPayload, CapacityRun, QueuedRun } from '../../../shared/api-types-capacity'
+import type { CapacityPayload, CapacityRun } from '../../../shared/api-types-capacity'
 import { formatMemory } from '../../../shared/capacity/format-memory'
 import { HEADROOM_BYTES } from '../../../shared/capacity/limit-suggestion'
 import { DEFAULT_RETRY_AFTER_MS } from '../../../shared/capacity/retry-limit'
+import { waitsForSlot } from '../../../shared/capacity/waiting-rows'
 
 function slotsText(running: number, limit: number | null): string {
   if (limit === null) {
@@ -11,11 +12,6 @@ function slotsText(running: number, limit: number | null): string {
   return running > limit
     ? `${running} running, over the limit of ${limit}`
     : `${running} of ${limit} in use`
-}
-
-// Waiting on a slot: a capacity hold, or a row from an older Pilot that names none.
-export function waitsForSlot(item: QueuedRun): boolean {
-  return item.holdCode === undefined || item.holdCode === 'capacity'
 }
 
 export function usageText(p: CapacityPayload): string {
@@ -93,8 +89,4 @@ export function quotaText(ceiling: { weekly: number; session: number }): string 
 export function retryText(): string {
   const minutes = DEFAULT_RETRY_AFTER_MS / 60_000
   return `A failed run is tried again ${minutes} minutes later, or after its job's retry_after_failure. Past this many retries Pilot gives up on it and leaves you a card.`
-}
-
-export function failedTimesText(failures: number): string {
-  return failures === 1 ? 'failed 1 time' : `failed ${failures} times`
 }

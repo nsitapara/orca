@@ -1,7 +1,8 @@
 import { Button } from '@/components/ui/button'
 import type { CapacityPayload, GaveUpKey, RetryKey } from '../../../shared/api-types-capacity'
 import { RetryLimitPicker } from './LimitPickers'
-import { failedTimesText, retryText } from './running-text'
+import { failedTimesText } from '../../../shared/capacity/waiting-rows'
+import { retryText } from './running-text'
 
 // Older Pilots send no retry limit, so they show no stepper.
 export function RetryPanel({
