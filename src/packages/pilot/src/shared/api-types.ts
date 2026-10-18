@@ -57,7 +57,8 @@ export type ItemDecision = {
   // in reason.
   workspace?: string
   // A held item waits in the runner's line: why, and its place there (when it became due, ms since epoch).
-  hold?: { code: HoldReason; detail: string }
+  // until: when a hold that knows its end (a retry's wait) is over, for the line's re-check.
+  hold?: { code: HoldReason; detail: string; until?: number }
   dueAt?: number
 }
 

@@ -9,7 +9,7 @@ import type { DecideInput, DecideItem } from './decide'
 
 // The job decides what is due; these gates decide when it starts. A failing gate holds the item in the
 // runner's line with its reason instead of skipping it.
-export type Hold = { code: HoldReason; detail: string }
+export type Hold = { code: HoldReason; detail: string; until?: number }
 
 // A failed run's retry waits this long when its job sets no retry_after_failure.
 export const DEFAULT_RETRY_AFTER_MS = 600_000
@@ -28,7 +28,8 @@ function retryHold(input: DecideInput, onceKey: string): Hold | null {
   // A key that failed before failures were counted reads as its first retry.
   const retry = `Retry ${Math.max(state.failures, 1)} of ${input.retryLimit}`
   const last = state.lastOutcome ? `Last run failed: ${state.lastOutcome}` : 'Last run failed'
-  return { code: 'retry', detail: `${retry} at ${localTimeOfDay(dueAt, def.timezone)}. ${last}` }
+  const detail = `${retry} at ${localTimeOfDay(dueAt, def.timezone)}. ${last}`
+  return { code: 'retry', detail, until: dueAt }
 }
 
 function declaredHold(input: DecideInput, item: DecideItem): Hold | null {

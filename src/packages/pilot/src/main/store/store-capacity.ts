@@ -13,6 +13,8 @@ export type QueuedItem = {
   holdCode: HoldReason
   holdDetail: string
   checkedAt: number
+  // When a hold that knows its end is over (a retry's wait): it is re-checked then. Absent for any other.
+  recheckAt?: number
 }
 
 const RUN_LIMIT_KEY = 'run_limit'
@@ -63,7 +65,8 @@ function toQueued(r: Record<string, unknown>): QueuedItem {
     dueAt: Number(r.due_at ?? r.queued_at),
     holdCode: toHoldReason(r.hold_code),
     holdDetail: String(r.hold_detail ?? ''),
-    checkedAt: Number(r.checked_at ?? r.queued_at)
+    checkedAt: Number(r.checked_at ?? r.queued_at),
+    ...(typeof r.recheck_at === 'number' ? { recheckAt: r.recheck_at } : {})
   }
 }
 
@@ -133,12 +136,13 @@ export class CapacityStore {
       .get(item.automationId, item.itemKey)
     this.db
       .prepare(
-        `INSERT INTO run_queue (automation_id, item_key, item_label, queued_at, by_hand, due_at, hold_code, hold_detail, checked_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `INSERT INTO run_queue (automation_id, item_key, item_label, queued_at, by_hand, due_at, hold_code, hold_detail, checked_at, recheck_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT (automation_id, item_key) DO UPDATE SET item_label = excluded.item_label,
            by_hand = MAX(by_hand, excluded.by_hand),
            due_at = MIN(COALESCE(due_at, queued_at), excluded.due_at),
-           hold_code = excluded.hold_code, hold_detail = excluded.hold_detail, checked_at = excluded.checked_at`
+           hold_code = excluded.hold_code, hold_detail = excluded.hold_detail, checked_at = excluded.checked_at,
+           recheck_at = excluded.recheck_at`
       )
       .run(
         item.automationId,
@@ -149,7 +153,8 @@ export class CapacityStore {
         item.dueAt,
         item.holdCode,
         item.holdDetail,
-        item.checkedAt
+        item.checkedAt,
+        item.recheckAt ?? null
       )
     return {
       changed:
@@ -180,10 +185,15 @@ export class CapacityStore {
       .run(automationId, JSON.stringify(waiting))
   }
 
+  // A hold whose end has passed falls back to its interval, so a failing re-check isn't retried every loop.
   markChecked(automationId: string, at: number): void {
     this.db
-      .prepare('UPDATE run_queue SET checked_at = ? WHERE automation_id = ?')
-      .run(at, automationId)
+      .prepare(
+        `UPDATE run_queue SET checked_at = ?,
+           recheck_at = CASE WHEN recheck_at <= ? THEN NULL ELSE recheck_at END
+         WHERE automation_id = ?`
+      )
+      .run(at, at, automationId)
   }
 
   // A NULL code is an older process's row, which only ever waited for a slot.

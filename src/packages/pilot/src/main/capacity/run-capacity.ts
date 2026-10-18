@@ -15,18 +15,15 @@ export type Admission =
 
 // dueAt: when the item became due, its place in the line (ms since epoch).
 export type LineItem = { key: string; label: string; dueAt: number }
+// until: when the hold is over (a retry's wait); the line re-checks it then instead of every interval.
+export type LineHold = { code: HoldReason; detail: string; until?: number }
 
 export type RunCapacity = {
   // Synchronous, so the check and the run it lets start can't interleave with another tick. A waiting item is
   // queued, keeping its place if it already had one; a started one leaves the queue.
   admit(def: AutomationDefinition, item: LineItem, byHand: boolean): Admission
   // An item a runner gate holds waits in line too, with or without a run limit, until a re-check starts it.
-  hold(
-    def: AutomationDefinition,
-    item: LineItem,
-    hold: { code: HoldReason; detail: string },
-    byHand: boolean
-  ): void
+  hold(def: AutomationDefinition, item: LineItem, hold: LineHold, byHand: boolean): void
   // After a tick: its automation's waiting items that this tick didn't queue or hold are no longer in line.
   settle(def: AutomationDefinition, decisions: readonly ItemDecision[]): void
   // Drops a failing job's slot waiters; its held rows count as checked now, so they don't re-tick it every loop.
@@ -59,6 +56,14 @@ export function recheckAfterMs(code: HoldReason): number {
     return Number.POSITIVE_INFINITY
   }
   return code === 'quota' || code === 'window' ? 300_000 : 60_000
+}
+
+// A hold that knows when it ends is re-checked then; any other every recheckAfterMs from its last check.
+function recheckDue(q: QueuedItem, now: number): boolean {
+  if (q.recheckAt !== undefined) {
+    return now >= q.recheckAt
+  }
+  return now - q.checkedAt >= recheckAfterMs(q.holdCode)
 }
 
 // Slot-waiting rows before the item in line order (due, joined, then insertion; a new row sorts last among its ties).
@@ -105,7 +110,7 @@ export function runCapacity(deps: RunCapacityDeps): RunCapacity {
   const wait = (
     def: AutomationDefinition,
     item: LineItem,
-    hold: { code: HoldReason; detail: string },
+    hold: LineHold,
     byHand: boolean
   ): void => {
     const now = deps.now()
@@ -118,7 +123,8 @@ export function runCapacity(deps: RunCapacityDeps): RunCapacity {
       dueAt: item.dueAt,
       holdCode: hold.code,
       holdDetail: hold.detail,
-      checkedAt: now
+      checkedAt: now,
+      ...(hold.until === undefined ? {} : { recheckAt: hold.until })
     })
   }
 
@@ -172,7 +178,7 @@ export function runCapacity(deps: RunCapacityDeps): RunCapacity {
           continue
         }
         if (q.holdCode !== 'capacity') {
-          if (now - q.checkedAt >= recheckAfterMs(q.holdCode)) {
+          if (recheckDue(q, now)) {
             ids.add(def.id)
           }
           continue

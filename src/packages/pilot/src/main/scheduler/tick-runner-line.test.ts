@@ -167,13 +167,18 @@ const failing = async (): Promise<never> => {
 
 describe('runTick counting a failed launch', () => {
   it('leaves the key failed with one failure, not freed, so the runner retries it', async () => {
-    const { store, tick } = launching(failing)
+    const { store, deps, tick } = launching(failing)
+    deps.capacity = runCapacity({ store, definitions: () => [def], now: () => deps.now() })
     await tick(t1)
     expect(store.handledRows(def.id)).toMatchObject([
       { onceKey: '1', status: 'failed', failedAt: t1, failures: 1 }
     ])
     const again = await tick(t2)
     expect(again.decisions.map((x) => [x.verdict, x.hold?.code])).toEqual([['held', 'retry']])
+    // The line re-checks it when its 10-minute wait ends.
+    expect(store.capacity.queued().map((q) => [q.holdCode, q.recheckAt])).toEqual([
+      ['retry', t1 + 600_000]
+    ])
     expect(store.inbox.list({ automationId: def.id })).toEqual([])
   })
 

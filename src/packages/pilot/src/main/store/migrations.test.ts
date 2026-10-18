@@ -495,7 +495,8 @@ describe('migrate', () => {
       'due_at',
       'hold_code',
       'hold_detail',
-      'checked_at'
+      'checked_at',
+      'recheck_at'
     ])
   })
 })

@@ -247,6 +247,37 @@ describe('runCapacity.toTick', () => {
   })
 })
 
+describe('runCapacity.toTick for a hold that knows when it ends', () => {
+  const MIN = 60_000
+
+  it('re-checks a retry hold when its wait ends, not every interval', () => {
+    const job = agentJob('job')
+    const { capacity } = setup([job], null, () => 0)
+    capacity.hold(job, item('k'), { code: 'retry', detail: 'Retry 1 of 2', until: 11 * MIN }, false)
+    expect(capacity.toTick([job], everywhere, 10 * MIN)).toEqual([])
+    expect(capacity.toTick([job], everywhere, 11 * MIN)).toEqual(['job'])
+  })
+
+  it('re-checks a row without its end every interval, as before', () => {
+    const job = agentJob('job')
+    const { store, capacity } = setup([job], null)
+    inLine(store, job, 'k', { holdCode: 'retry', dueAt: 1, checkedAt: 0 })
+    expect(capacity.toTick([job], everywhere, MIN - 1)).toEqual([])
+    expect(capacity.toTick([job], everywhere, MIN)).toEqual(['job'])
+  })
+
+  it('falls back to the interval once a re-check at its end failed, so a down source is not re-ticked every loop', () => {
+    const job = agentJob('job')
+    let clock = 0
+    const { capacity } = setup([job], null, () => clock)
+    capacity.hold(job, item('k'), { code: 'retry', detail: 'Retry 1 of 2', until: 11 * MIN }, false)
+    clock = 11 * MIN
+    capacity.tickFailed('job')
+    expect(capacity.toTick([job], everywhere, 11 * MIN + 15_000)).toEqual([])
+    expect(capacity.toTick([job], everywhere, 12 * MIN)).toEqual(['job'])
+  })
+})
+
 describe('recheckAfterMs', () => {
   it.each<[HoldReason, number]>([
     ['quota', 300_000],

@@ -63,6 +63,12 @@ describe('itemGate: the retry gate', () => {
     expect(hold?.detail).toMatch(detail)
   })
 
+  it('says when its wait ends, so the line re-checks it then', () => {
+    expect(itemGate(input(failed(1, 5 * MIN)), ITEM, '1', null)?.until).toBe(
+      NOW - 5 * MIN + DEFAULT_RETRY_AFTER_MS
+    )
+  })
+
   it("names the time on the job's clock", () => {
     // 19:05 UTC is 12:05 in Los Angeles, the fixture's timezone.
     expect(itemGate(input(failed(1, 5 * MIN)), ITEM, '1', null)?.detail).toBe(
