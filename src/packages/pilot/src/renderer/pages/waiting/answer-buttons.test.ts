@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { InboxItemRow } from '../../../shared/api-types'
 import { composeAnswer, countdown } from './answer-text'
-import { answeredLine, buttonsFor } from './answer-buttons'
+import { answeredLine, buttonsFor, quickAnswerFor } from './answer-buttons'
 
 const base = {
   options: [],
@@ -117,6 +117,29 @@ describe('buttonsFor', () => {
     for (const item of Object.values(CARDS)) {
       expect(buttonsFor(item).map((b) => b.label)).not.toContain('Save answer')
     }
+  })
+})
+
+describe('quickAnswerFor', () => {
+  const open = (name: string, over: object = {}) =>
+    ({ ...CARDS[name], status: 'open', ...over }) as unknown as InboxItemRow
+  it.each<[string, InboxItemRow, ReturnType<typeof quickAnswerFor>]>([
+    [
+      'a ready push: its Approve',
+      open('push'),
+      { label: 'Push to origin', answer: { option: 0, text: 'approve' } }
+    ],
+    [
+      'a question: its first option',
+      open('question'),
+      { label: 'Install in the job', answer: { option: 0, text: 'Install in the job' } }
+    ],
+    ['a card that needs evidence', open('push', { needsEvidence: true }), null],
+    ['a card still preparing', open('push', { preparation: { state: 'queued' } }), null],
+    ['a card whose first choice opens notes', open('multiStart'), null],
+    ['an answered card', { ...open('push'), status: 'answered' }, null]
+  ])('%s', (_name, item, want) => {
+    expect(quickAnswerFor(item)).toEqual(want)
   })
 })
 
