@@ -15,6 +15,7 @@ type WhyNot = { disabled: string; short: string }
 export type RunNowChoices = { choices: RunNowChoice[]; preferred: string | null }
 
 const NO_MACHINE = 'No connected Pilot can start this automation right now.'
+const NOT_PICKED = 'Pick a machine to start it on.'
 
 function schedulerOffText(name: string): string {
   return `Pilot's scheduler is off on ${name}`
@@ -71,11 +72,18 @@ export function runNowChoices(
   return { choices, preferred }
 }
 
-// The machine a confirmed Run now goes to: the one chosen while it can still start it, else the default.
+// With one machine there is nothing to pick; with more, only the person moves the pick.
+function chosenChoice(choices: RunNowChoices, chosen: string | null): RunNowChoice | undefined {
+  if (choices.choices.length === 1) {
+    return choices.choices[0]
+  }
+  return choices.choices.find((c) => c.host.key === chosen)
+}
+
+// The machine a confirmed Run now goes to: the one chosen, only while it can start it.
 export function runNowPick(choices: RunNowChoices, chosen: string | null): RunNowChoice | null {
-  const usable = (key: string | null) =>
-    choices.choices.find((c) => c.host.key === key && c.disabled === null)
-  return usable(chosen) ?? usable(choices.preferred) ?? null
+  const choice = chosenChoice(choices, chosen)
+  return choice && choice.disabled === null ? choice : null
 }
 
 // Why Run now can't start anywhere, or null while some machine can.
@@ -85,4 +93,9 @@ export function runNowBlocked(choices: RunNowChoices): string | null {
   }
   const reasons = choices.choices.flatMap((c) => (c.disabled ? [c.disabled] : []))
   return reasons.length > 0 ? reasons.join(' · ') : NO_MACHINE
+}
+
+// Why the bar has nothing to confirm while runNowPick is null.
+export function runNowHeld(choices: RunNowChoices, chosen: string | null): string {
+  return chosenChoice(choices, chosen)?.disabled ?? runNowBlocked(choices) ?? NOT_PICKED
 }

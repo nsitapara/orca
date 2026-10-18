@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { LOCAL_NAMED, MINI, MINI_OFFLINE } from './__fixtures__/hosts'
 import type { PilotHostEntry } from './pilot-host'
-import { runNowBlocked, runNowChoices, runNowPick } from './run-now-hosts'
+import { runNowBlocked, runNowChoices, runNowHeld, runNowPick } from './run-now-hosts'
 
 const LINUX: PilotHostEntry = {
   ...MINI,
@@ -108,11 +108,23 @@ describe('runNowPick', () => {
 
   it.each<[string, string | null, string | null]>([
     ['the chosen machine', 'env:mini', 'env:mini'],
-    ['the default before anything is chosen', null, 'local'],
-    ['the default once the chosen machine can no longer start it', 'env:linux', 'local'],
-    ['the default once the chosen machine is gone', 'env:gone', 'local']
+    ['nothing before anything is chosen', null, null],
+    ['nothing once the chosen machine can no longer start it', 'env:linux', null],
+    ['nothing once the chosen machine is gone', 'env:gone', null]
   ])('starts it on %s', (_w, chosen, key) =>
     expect(runNowPick(choices, chosen)?.host.key ?? null).toBe(key)
+  )
+
+  it('starts it on the only machine that has it, chosen or not', () => {
+    const one = runNowChoices({ runsOn: null, hosts: [MINI] }, [LOCAL_NAMED, MINI])
+    expect(runNowPick(one, null)?.host.key).toBe('env:mini')
+  })
+
+  it.each<[string, string | null, string]>([
+    ["the chosen machine's reason", 'env:linux', "Pilot's scheduler is off on Linux box"],
+    ['to pick one once the chosen machine is gone', 'env:gone', 'Pick a machine to start it on.']
+  ])('says %s when it starts nowhere', (_w, chosen, why) =>
+    expect(runNowHeld(choices, chosen)).toBe(why)
   )
 })
 

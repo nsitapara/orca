@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { AutomationSummary } from '../../shared/api-types'
 import { byHost, LOCAL_NAMED, MINI } from '../hosts/__fixtures__/hosts'
@@ -36,6 +36,10 @@ const answersFrom =
   }
 const calls = (method: string) => pilotRpc.mock.calls.filter((c) => c[0] === method)
 const picker = () => screen.getByRole('combobox', { name: 'Machine' })
+const pick = async (name: string) => {
+  fireEvent.keyDown(picker(), { key: 'ArrowDown' })
+  fireEvent.click(await screen.findByRole('option', { name }))
+}
 
 async function openRunNow(hosts: PilotHostEntry[], answers: Parameters<typeof byHost>[0]) {
   setPilotHostsForTests(hosts)
@@ -97,6 +101,56 @@ describe('Run now on more than one machine', () => {
     fireEvent.keyDown(picker(), { key: 'ArrowDown' })
     const off = await screen.findByRole('option', { name: 'Mac mini · scheduler off' })
     expect(off.getAttribute('aria-disabled')).toBe('true')
+  })
+
+  it('opens on the default machine and stays there when the default changes', async () => {
+    const pinned = [{ ...summary, runsOn: 'Mac mini' }]
+    await openRunNow([LOCAL_NAMED, OFF(MINI)], {
+      local: answersFrom(pinned),
+      mini: answersFrom(pinned)
+    })
+    expect(picker().textContent).toContain('MacBook')
+    act(() => setPilotHostsForTests([LOCAL_NAMED, MINI]))
+    expect(picker().textContent).toContain('MacBook')
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm' }))
+    expect(await screen.findByText('On MacBook: Tick 12 · ok')).toBeTruthy()
+    expect(calls('pilot.automations.tickNow')).toEqual([
+      ['pilot.automations.tickNow', { id: 'fix-ci' }, { timeoutMs: 180_000 }]
+    ])
+  })
+
+  it('keeps a pick that can no longer start it, saying why, with nothing to confirm', async () => {
+    await openRunNow([LOCAL_NAMED, MINI], {
+      local: answersFrom([summary]),
+      mini: answersFrom([summary])
+    })
+    await pick('Mac mini')
+    act(() => setPilotHostsForTests([LOCAL_NAMED, OFF(MINI)]))
+    expect(picker().textContent).toContain('Mac mini')
+    expect(screen.getByText("Pilot's scheduler is off on Mac mini")).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Confirm' })).toBeNull()
+    expect(calls('pilot.automations.tickNow')).toEqual([])
+  })
+
+  it.each<[string, () => Promise<unknown>]>([
+    ['Cancel', async () => fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))],
+    [
+      'a finished run',
+      async () => {
+        fireEvent.click(screen.getByRole('button', { name: 'Confirm' }))
+        await screen.findByText('On Mac mini: Tick 12 · ok')
+      }
+    ]
+  ])('starts again from the default after %s', async (_w, close) => {
+    await openRunNow([LOCAL_NAMED, MINI], {
+      local: answersFrom([summary]),
+      mini: answersFrom([summary])
+    })
+    await pick('Mac mini')
+    await close()
+    fireEvent.click(screen.getByRole('button', { name: 'Run now' }))
+    expect(picker().textContent).toContain('MacBook')
+    expect(screen.getByText('Start agents on MacBook for items that pass the checks?')).toBeTruthy()
   })
 
   it('shows why, and sends nothing, when no machine can start it', async () => {

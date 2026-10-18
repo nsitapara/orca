@@ -11,7 +11,7 @@ import type { TickOutcome } from '../../shared/api-types'
 import { hostRpc } from '../hosts/host-rpc'
 import type { PilotHostRef } from '../hosts/pilot-host'
 import {
-  runNowBlocked,
+  runNowHeld,
   runNowPick,
   type RunNowChoice,
   type RunNowChoices
@@ -40,6 +40,7 @@ export function RunControls({
 }): React.JSX.Element {
   const [phase, setPhase] = useState<Phase>('idle')
   const [message, setMessage] = useState<string | null>(null)
+  // Set when the bar opens; after that only the person moves it, and closing the bar clears it.
   const [chosen, setChosen] = useState<string | null>(null)
   const inFlight = useRef(false)
   const mounted = useRef(true)
@@ -80,6 +81,7 @@ export function RunControls({
     setPhase('idle')
     // A dry run changed nothing to reload.
     if (method === 'pilot.automations.tickNow') {
+      setChosen(null)
       onDone()
     }
   }
@@ -88,16 +90,23 @@ export function RunControls({
     phase === 'confirm' ? (
       <RunConfirmBar
         choices={choices}
+        chosen={chosen}
         picked={picked}
         onPick={setChosen}
         onConfirm={() => void run('pilot.automations.tickNow', picked?.host ?? host)}
-        onCancel={() => setPhase('idle')}
+        onCancel={() => {
+          setChosen(null)
+          setPhase('idle')
+        }}
       />
     ) : (
       <RunButtons
         busy={phase === 'running'}
         onDryRun={() => void run('pilot.automations.dryRun', host)}
-        onRunNow={() => setPhase('confirm')}
+        onRunNow={() => {
+          setChosen(choices?.preferred ?? null)
+          setPhase('confirm')
+        }}
       />
     )
   return (
@@ -120,7 +129,7 @@ function MachineSelect({
   return (
     <Select value={value} onValueChange={onPick}>
       <SelectTrigger size="sm" aria-label="Machine">
-        <SelectValue />
+        <SelectValue placeholder="Pick a machine" />
       </SelectTrigger>
       <SelectContent>
         {choices.map((c) => (
@@ -133,24 +142,16 @@ function MachineSelect({
   )
 }
 
-// The picker shows only when there is more than one machine to start it on.
-function machineAsk(
-  choices: RunNowChoices | undefined,
-  picked: RunNowChoice | null
-): { options: readonly RunNowChoice[]; picked: RunNowChoice } | null {
-  return choices && picked && choices.choices.length > 1
-    ? { options: choices.choices, picked }
-    : null
-}
-
 function RunConfirmBar({
   choices,
+  chosen,
   picked,
   onPick,
   onConfirm,
   onCancel
 }: {
   choices: RunNowChoices | undefined
+  chosen: string | null
   picked: RunNowChoice | null
   onPick: (key: string) => void
   onConfirm: () => void
@@ -161,25 +162,26 @@ function RunConfirmBar({
       Cancel
     </Button>
   )
-  // No machine can start it: say why, and offer nothing to confirm.
-  const blocked = choices ? runNowBlocked(choices) : null
-  if (blocked) {
+  const picker =
+    choices && choices.choices.length > 1 ? (
+      <MachineSelect choices={choices.choices} value={chosen ?? ''} onPick={onPick} />
+    ) : null
+  // Nothing to start on: say why, and offer nothing to confirm.
+  if (choices && !picked) {
     return (
       <>
-        <span className="text-sm text-destructive">{blocked}</span>
+        {picker}
+        <span className="text-sm text-destructive">{runNowHeld(choices, chosen)}</span>
         {cancel}
       </>
     )
   }
-  const ask = machineAsk(choices, picked)
   return (
     <>
-      {ask ? (
-        <MachineSelect choices={ask.options} value={ask.picked.host.key} onPick={onPick} />
-      ) : null}
+      {picker}
       <span className="text-sm">
-        {ask
-          ? `Start agents on ${ask.picked.label} for items that pass the checks?`
+        {picker && picked
+          ? `Start agents on ${picked.label} for items that pass the checks?`
           : 'Start agents for items that pass the checks?'}
       </span>
       <Button size="sm" onClick={onConfirm}>
