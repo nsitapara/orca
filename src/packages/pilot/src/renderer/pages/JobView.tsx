@@ -138,13 +138,17 @@ export function JobView({
   )
   if (!job) {
     let note = 'Loading…'
+    let held = false
     if (loaded) {
+      held = refusal !== null || error !== null
       note = refusal ?? error ?? `No automation is part of job ${jobId}.`
     }
     return (
       <div className="flex flex-col gap-3">
         {crumbs}
-        <p className="text-sm text-muted-foreground">{note}</p>
+        <p className={held ? 'text-sm text-destructive' : 'text-sm text-muted-foreground'}>
+          {note}
+        </p>
       </div>
     )
   }

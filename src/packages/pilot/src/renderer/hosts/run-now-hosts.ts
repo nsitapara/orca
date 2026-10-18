@@ -100,7 +100,7 @@ export function runNowHeld(choices: RunNowChoices, chosen: string | null): strin
   return chosenChoice(choices, chosen)?.disabled ?? runNowBlocked(choices) ?? NOT_PICKED
 }
 
-// Off its runs_on machine a pinned job's handover strands there, and that machine's handled table lacks the owner's items.
+// Off its runs_on machine a pinned job's handover strands, and that machine's handled table lacks the owner's items.
 export function runNowAway(
   row: Pick<MergedAutomation, 'name' | 'runsOn'> | null | undefined,
   choices: RunNowChoices | undefined,

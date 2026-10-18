@@ -24,9 +24,7 @@ export const LONG_CALL_MS = 180_000
 type Phase = 'idle' | 'confirm' | 'running'
 type Method = 'pilot.automations.dryRun' | 'pilot.automations.tickNow'
 
-// Dry run is safe; Run now starts real agents, so it takes an explicit inline Confirm. Both go to the automation's
-// home machine, or Run now to the one picked from `choices`. A dry run's answer goes to onDryRun for the page to show
-// (it is stored nowhere); a real tick's outcome is the line under the buttons.
+// Run now starts real agents, so it takes an inline Confirm (Dry run doesn't) and goes to the machine `choices` picks.
 export function RunControls({
   id,
   host,

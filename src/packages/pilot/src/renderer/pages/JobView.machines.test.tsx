@@ -116,18 +116,17 @@ describe('JobView on more than one machine', () => {
     ],
     ['no answered list has the job while a machine failed', MINI, [], []]
   ])(
-    'sends no action, and reads no stage from the wrong machine, saying why, when %s',
+    'sends no action, and reads no stage from the wrong machine, saying why in red, when %s',
     async (_w, mini, here, read) => {
       setPilotHostsForTests([LOCAL_NAMED, mini])
       pilotRpc.mockImplementation(
         byHost({ local: answersFrom(here), mini: answersFrom('timed out') })
       )
       render(<JobView jobId="13" onBack={() => {}} onOpenStage={() => {}} />)
-      expect(
-        await screen.findByText(
-          "Mac mini isn't answering, so this job can't be changed from here right now."
-        )
-      ).toBeTruthy()
+      const why = await screen.findByText(
+        "Mac mini isn't answering, so this job can't be changed from here right now."
+      )
+      expect(why.className).toContain('text-destructive')
       expect(screen.queryByRole('button', { name: 'Dry run all' })).toBeNull()
       expect(calls('pilot.automations.get').map((c) => idOf(c[1]))).toEqual(read)
       expect(

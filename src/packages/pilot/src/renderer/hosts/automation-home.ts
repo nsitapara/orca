@@ -50,8 +50,7 @@ function missingText(names: readonly string[], what: What): string {
   return `No connected Pilot is named ${namesText(names, 'or')}, so this ${what} can't be changed from here.`
 }
 
-// Acting elsewhere would act on another machine's copy: a row whose runs_on machine isn't answering waits on it, and a
-// row no answered list has waits on every machine that isn't answering.
+// So nothing acts on another copy: a row waits on its runs_on machine while down, an unlisted row on any that's down.
 export function waitsOn(
   row: Pick<AutomationSummary, 'runsOn'> | undefined,
   failed: readonly PilotHostRef[]
