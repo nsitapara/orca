@@ -5,7 +5,9 @@ import { groupHostedItemsBy } from '../../hosts/inbox-grouping'
 import { HostsNotice } from '../../hosts/HostsNotice'
 import { hostedKey, type Hosted } from '../../hosts/pilot-host'
 import { useAutomationsFeed } from '../../run-views/automations-feed'
+import { motionSafeScrollBehavior } from '@/hooks/usePrefersReducedMotion'
 import { clearPendingInboxCard, usePendingInboxCard } from '../automations-view'
+import type { Answer } from './answer-types'
 import { CardList } from './CardList'
 import { FilterBadges } from './FilterBadges'
 import { setAllDetailsOpen, useAllDetailsOpen } from './details-open'
@@ -13,6 +15,7 @@ import { ALL, InboxHeader } from './InboxHeader'
 import { InboxCard } from './InboxCard'
 import { InboxDoneTab } from './InboxDoneTab'
 import { InboxFilters } from './InboxFilters'
+import { InboxRows } from './InboxRows'
 import { InboxTabs } from './InboxTabs'
 import { InboxStyle } from './inbox-style'
 import {
@@ -68,6 +71,8 @@ export function InboxPage(): React.JSX.Element {
   const [prefs, setPrefs] = useInboxViewPrefs()
   const [filters, setFilters] = useState<CardFilters>(NO_FILTERS)
   const [selected, setSelected] = useState<string | null>(null)
+  // The card Rows' Open named: scrolled to once the Cards view has mounted it.
+  const [scrollTo, setScrollTo] = useState<string | null>(null)
   const [listOpen, toggleList] = useListOpen()
   const [rootRef, width] = useElementWidth()
   const {
@@ -178,7 +183,7 @@ export function InboxPage(): React.JSX.Element {
   const allOpen = useAllDetailsOpen(detailIds)
   // The list sits beside the cards only on a wide page (measured on the page, not the window) while it is open.
   const wide = width === null || width >= WIDE_PX
-  const showList = wide && listOpen && !onDone
+  const showList = wide && listOpen && !onDone && prefs.view !== 'rows'
   const viewerName = people.find((p) => p.id === viewer)?.name.split(' ')[0] ?? 'you'
   const select = (item: Hosted<InboxListRow>) => {
     const key = hostedKey(item.host, item.id)
@@ -186,6 +191,26 @@ export function InboxPage(): React.JSX.Element {
     setSelected(key)
     document.getElementById(`card-${key}`)?.scrollIntoView?.({ block: 'start' })
   }
+  const onSave = async (i: Hosted<InboxListRow>, answer: Answer) => {
+    const key = hostedKey(i.host, i.id)
+    const failed = await save(i, answer, viewer)
+    setErrors((now) => withError(now, key, failed))
+    return failed
+  }
+  const openInCards = (item: Hosted<InboxListRow>) => {
+    setPrefs({ view: 'cards' })
+    setSelected(hostedKey(item.host, item.id))
+    setScrollTo(hostedKey(item.host, item.id))
+  }
+  useEffect(() => {
+    if (scrollTo === null || prefs.view !== 'cards') {
+      return
+    }
+    document
+      .getElementById(`card-${scrollTo}`)
+      ?.scrollIntoView?.({ block: 'start', behavior: motionSafeScrollBehavior() })
+    setScrollTo(null)
+  }, [scrollTo, prefs.view])
   const cardOf = (i: Hosted<InboxListRow>) => {
     const key = hostedKey(i.host, i.id)
     return (
@@ -200,11 +225,7 @@ export function InboxPage(): React.JSX.Element {
         error={errors[key] ?? null}
         selected={selected === key}
         now={loadedAt}
-        onSave={async (answer) => {
-          const failed = await save(i, answer, viewer)
-          setErrors((now) => withError(now, key, failed))
-          return failed
-        }}
+        onSave={(answer) => onSave(i, answer)}
         onRetryPreparation={() => retryPreparation(i)}
         onPrepareEvidence={() => prepareEvidence(i)}
       />
@@ -227,7 +248,19 @@ export function InboxPage(): React.JSX.Element {
   const emptyText = (
     <p className="text-sm text-muted-foreground">{emptyTabText(tab, filtered, viewerName)}</p>
   )
-  const cardsBody = shown.length ? shown.map(sectionOf) : emptyText
+  const rowsBody = (
+    <InboxRows
+      sections={shown}
+      answerStates={inbox?.answerStates ?? new Map()}
+      names={names}
+      errors={errors}
+      now={loadedAt}
+      onAnswer={(item, answer) => void onSave(item, answer)}
+      onOpen={openInCards}
+    />
+  )
+  const listBody = prefs.view === 'rows' ? rowsBody : shown.map(sectionOf)
+  const cardsBody = shown.length ? listBody : emptyText
   const defaultSections = groupHostedItems(defaults, automations)
   const doneBody = (
     <InboxDoneTab

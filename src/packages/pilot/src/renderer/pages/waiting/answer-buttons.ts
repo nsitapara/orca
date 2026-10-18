@@ -1,7 +1,8 @@
 import type { InboxListRow } from '../../../shared/api-types'
 import type { AnswerState } from '../../../shared/inbox-types'
 import { actionButton } from '../../../shared/answer-actions'
-import { type Choice, choicesFor } from './answer-text'
+import { type Choice, choicesFor, composeAnswer } from './answer-text'
+import type { Answer } from './answer-types'
 
 // 'primary' is the card's Approve; 'option' a question's or default's own option; 'notes' opens the notes box
 // (it has its own Send); 'skip' is the quiet one.
@@ -185,4 +186,18 @@ export function phaseOf(state: AnswerState | null, now: number): Phase {
     return 'settling'
   }
   return 'waiting'
+}
+
+// The one-click answer a dense row offers: the first choice that needs no words (never Skip), none on a held card.
+// It is composed by composeAnswer, as AnswerRow composes it.
+export function quickAnswerFor(item: InboxListRow): { label: string; answer: Answer } | null {
+  if (item.status !== 'open' || heldForEvidence(item)) {
+    return null
+  }
+  const first = buttonsFor(item).find((b) => b.role !== 'skip')
+  if (!first || first.choice.notes !== 'none') {
+    return null
+  }
+  const answer = composeAnswer(first.choice, '')
+  return answer ? { label: first.label, answer } : null
 }
