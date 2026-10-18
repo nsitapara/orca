@@ -15,7 +15,7 @@ import { ALL, InboxHeader } from './InboxHeader'
 import { InboxCard } from './InboxCard'
 import { InboxDoneTab } from './InboxDoneTab'
 import { InboxFilters } from './InboxFilters'
-import { InboxFocus } from './InboxFocus'
+import { type FocusPlace, InboxFocus } from './InboxFocus'
 import { InboxRows } from './InboxRows'
 import { InboxTabs } from './InboxTabs'
 import { InboxStyle } from './inbox-style'
@@ -40,6 +40,7 @@ import { useWaiting } from './use-waiting'
 // The page's own width from which the card list sits beside the cards.
 const WIDE_PX = 960
 const NO_FILTERS: CardFilters = { kinds: [], query: '' }
+const FIRST_CARD: FocusPlace = { key: null, at: 0 }
 // Group by Nothing makes one section with no label: its region still needs a name.
 const UNGROUPED_NAME = 'Cards'
 
@@ -76,8 +77,8 @@ export function InboxPage(): React.JSX.Element {
   const [selected, setSelected] = useState<string | null>(null)
   // The card Rows' Open named: scrolled to once the Cards view has mounted it.
   const [scrollTo, setScrollTo] = useState<string | null>(null)
-  // The card One at a time shows, by position, kept with the tab/filters/grouping it was picked under.
-  const [focus, setFocus] = useState({ scope: '', at: 0 })
+  // The card One at a time shows, kept with the tab/filters/grouping it was picked under.
+  const [focus, setFocus] = useState<FocusPlace & { scope: string }>({ ...FIRST_CARD, scope: '' })
   const [listOpen, toggleList] = useListOpen()
   const [rootRef, width] = useElementWidth()
   const {
@@ -269,8 +270,8 @@ export function InboxPage(): React.JSX.Element {
   const focusBody = (
     <InboxFocus
       cards={shown.flatMap((s) => s.items)}
-      at={focus.scope === focusScope ? focus.at : 0}
-      onAt={(at) => setFocus({ scope: focusScope, at })}
+      place={focus.scope === focusScope ? focus : FIRST_CARD}
+      onPlace={(place) => setFocus({ ...place, scope: focusScope })}
       renderCard={cardOf}
       tabLabel={tabLabel(tab)}
       onExit={() => setPrefs({ view: 'cards' })}

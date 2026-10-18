@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { closeRunPanel, openRun } from '../../run-views/run-panel-state'
 import { LOCAL_NAMED } from '../../hosts/__fixtures__/hosts'
 import { inboxRow } from '../../hosts/__fixtures__/inbox-row'
-import { InboxFocus } from './InboxFocus'
+import { type FocusPlace, InboxFocus } from './InboxFocus'
 
 afterEach(cleanup)
 
@@ -20,15 +20,18 @@ const many = (n: number) =>
     host: LOCAL_NAMED
   }))
 
+// Where a page starts: a position, before any card is known.
+const at = (n: number): FocusPlace => ({ key: null, at: n })
+
 function Harness({ onExit, onChoice }: { onExit: () => void; onChoice: (l: string) => void }) {
-  const [at, setAt] = useState(1)
+  const [place, setPlace] = useState(at(1))
   return (
     <>
       <textarea aria-label="notes" />
       <InboxFocus
         cards={cards}
-        at={at}
-        onAt={setAt}
+        place={place}
+        onPlace={setPlace}
         tabLabel="Needs you"
         onExit={onExit}
         renderCard={(c) => (
@@ -100,8 +103,8 @@ describe('InboxFocus', () => {
     render(
       <InboxFocus
         cards={six}
-        at={0}
-        onAt={() => {}}
+        place={at(0)}
+        onPlace={() => {}}
         tabLabel="All"
         onExit={() => {}}
         renderCard={(c) => <p>{c.title}</p>}
@@ -117,12 +120,12 @@ describe('InboxFocus', () => {
 
   it('keeps the clamped card when the list shrinks and refills', () => {
     function Shrinking({ n }: { n: number }) {
-      const [at, setAt] = useState(5)
+      const [place, setPlace] = useState(at(5))
       return (
         <InboxFocus
           cards={many(n)}
-          at={at}
-          onAt={setAt}
+          place={place}
+          onPlace={setPlace}
           tabLabel="All"
           onExit={() => {}}
           renderCard={(c) => <p>{c.title}</p>}
@@ -135,14 +138,45 @@ describe('InboxFocus', () => {
     expect(screen.getByText('2 of 6 in All')).toBeTruthy()
   })
 
+  it.each([
+    ['the answered card before it leaves the list', cards.slice(1)],
+    ['a new card sorts in ahead of it', [many(1)[0], ...cards]]
+  ])('keeps the card J moved to when %s', (_name, next) => {
+    function Live({ list }: { list: typeof cards }) {
+      const [place, setPlace] = useState(at(0))
+      return (
+        <InboxFocus
+          cards={list}
+          place={place}
+          onPlace={setPlace}
+          tabLabel="Needs you"
+          onExit={() => {}}
+          renderCard={(c) => (
+            <div>
+              <h3>current {c.title}</h3>
+              <button data-choice="Approve">Approve</button>
+            </div>
+          )}
+        />
+      )
+    }
+    const { rerender } = render(<Live list={cards} />)
+    fireEvent.keyDown(document.body, { key: '1' })
+    fireEvent.keyDown(document.body, { key: 'j' })
+    expect(screen.getByText('current Card 2')).toBeTruthy()
+    rerender(<Live list={next} />)
+    expect(screen.getByText('current Card 2')).toBeTruthy()
+    expect(within(screen.getByRole('region', { name: 'Up next' })).getByText('Card 3')).toBeTruthy()
+  })
+
   it('starts a new tab at its first card', () => {
     function Page({ tab }: { tab: string }) {
-      const [focus, setFocus] = useState({ scope: 'a', at: 2 })
+      const [focus, setFocus] = useState({ ...at(2), scope: 'a' })
       return (
         <InboxFocus
           cards={many(5)}
-          at={focus.scope === tab ? focus.at : 0}
-          onAt={(at) => setFocus({ scope: tab, at })}
+          place={focus.scope === tab ? focus : at(0)}
+          onPlace={(place) => setFocus({ ...place, scope: tab })}
           tabLabel={tab}
           onExit={() => {}}
           renderCard={(c) => <p>{c.title}</p>}

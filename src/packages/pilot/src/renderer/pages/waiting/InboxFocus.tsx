@@ -5,8 +5,18 @@ import { hostedKey, type Hosted } from '../../hosts/pilot-host'
 import { useInboxFocusKeys } from './use-inbox-focus-keys'
 
 type Card = Hosted<InboxListRow>
+// The current card by hostedKey, and its last position: used only once that card has left the list.
+export type FocusPlace = { key: string | null; at: number }
 
 const UP_NEXT = 4
+
+const keyOf = (card: Card): string => hostedKey(card.host, card.id)
+
+function currentIndex(cards: Card[], place: FocusPlace): number {
+  const found = cards.findIndex((card) => keyOf(card) === place.key)
+  // Gone (its answer locked, or it closed): the card now in its place, clamped to the list.
+  return found !== -1 ? found : Math.max(0, Math.min(place.at, cards.length - 1))
+}
 
 function clickAt(card: HTMLElement | null, selector: string, index: number): void {
   card?.querySelectorAll<HTMLElement>(selector)[index]?.click()
@@ -23,30 +33,36 @@ function KeyHint({ keys, label }: { keys: string[]; label: string }): React.JSX.
 
 export function InboxFocus({
   cards,
-  at,
-  onAt,
+  place,
+  onPlace,
   renderCard,
   tabLabel,
   onExit
 }: {
   cards: Card[]
-  at: number
-  onAt: (at: number) => void
+  place: FocusPlace
+  onPlace: (place: { key: string; at: number }) => void
   renderCard: (card: Card) => React.ReactNode
   tabLabel: string
   onExit: () => void
 }): React.JSX.Element | null {
   const rootRef = useRef<HTMLDivElement>(null)
   const cardRef = useRef<HTMLDivElement>(null)
-  // The list shrinks as cards are answered: clamp so the current card is always a real one.
-  const current = Math.max(0, Math.min(at, cards.length - 1))
-  // Store the clamped position, so a refilled list can't jump to a stale index.
+  // Followed by key, so a card leaving or sorting in ahead never moves 1-9 onto a card you haven't seen.
+  const current = currentIndex(cards, place)
+  const currentKey = cards[current] ? keyOf(cards[current]) : null
+  // Store the card shown and where it is now, so the fallback starts from its latest place.
   useEffect(() => {
-    if (cards.length > 0 && at !== current) {
-      onAt(current)
+    if (currentKey !== null && (currentKey !== place.key || current !== place.at)) {
+      onPlace({ key: currentKey, at: current })
     }
-  }, [at, current, cards.length, onAt])
-  const go = (next: number) => onAt(Math.max(0, Math.min(next, cards.length - 1)))
+  }, [currentKey, current, place.key, place.at, onPlace])
+  const go = (next: number) => {
+    const at = Math.max(0, Math.min(next, cards.length - 1))
+    if (cards[at]) {
+      onPlace({ key: keyOf(cards[at]), at })
+    }
+  }
   useInboxFocusKeys(rootRef, {
     onNext: () => go(current + 1),
     onPrev: () => go(current - 1),
@@ -95,7 +111,7 @@ export function InboxFocus({
           <h2 className="font-mono text-xs font-semibold text-muted-foreground">Up next</h2>
           {upNext.map((c, i) => (
             <button
-              key={hostedKey(c.host, c.id)}
+              key={keyOf(c)}
               type="button"
               onClick={() => go(current + 1 + i)}
               className="truncate rounded px-1.5 py-1 text-left text-[13px] text-muted-foreground hover:text-foreground"
