@@ -1,7 +1,7 @@
 import type { HoldReason } from '../api-types'
 import type { CheckDef } from '../definition/types'
 
-type RuntimeCheck = Extract<
+export type RuntimeCheck = Extract<
   CheckDef,
   {
     kind:
@@ -32,7 +32,7 @@ export function isRuntimeCheck(check: CheckDef): check is RuntimeCheck {
   }
 }
 
-export function holdCodeOf(check: CheckDef): HoldReason {
+export function holdCodeOf(check: RuntimeCheck): HoldReason {
   switch (check.kind) {
     case 'quota':
       return 'quota'
@@ -46,7 +46,5 @@ export function holdCodeOf(check: CheckDef): HoldReason {
       return 'answers_pending'
     case 'window':
       return 'window'
-    default:
-      throw new Error(`${check.kind} is not a runtime check`)
   }
 }

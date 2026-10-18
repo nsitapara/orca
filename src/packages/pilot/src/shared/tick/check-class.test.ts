@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest'
+import type { HoldReason } from '../api-types'
 import type { CheckDef } from '../definition/types'
-import { holdCodeOf, isRuntimeCheck } from './check-class'
+import { holdCodeOf, isRuntimeCheck, type RuntimeCheck } from './check-class'
 
-const RUNTIME: [CheckDef, string][] = [
+const RUNTIME: [RuntimeCheck, HoldReason][] = [
   [{ kind: 'quota', agent: 'claude', weekly: 90, session: 95 }, 'quota'],
   [{ kind: 'worktree_idle' }, 'worktree_busy'],
   [{ kind: 'worktree_clean' }, 'in_flight'],

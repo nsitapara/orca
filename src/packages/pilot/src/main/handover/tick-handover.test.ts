@@ -191,7 +191,7 @@ describe('settles: a fed id is consumed only when its tick started a run or the 
   const handled = (state: HandledState) => new Map([['WEB-1', state]])
   const DONE: HandledState = { status: 'done', failedAt: null }
   const FAILED: HandledState = { status: 'failed', failedAt: 1 }
-  it.each([
+  it.each<[string, ItemDecision | undefined, Map<string, HandledState>, number | null, boolean]>([
     ['a run started', decision('started'), new Map(), RETRY, true],
     ['a run held for an ask-first card', decision('asked'), new Map(), RETRY, true],
     ['out of scope', decision('out_of_scope'), new Map(), RETRY, true],
@@ -215,12 +215,9 @@ describe('settles: a fed id is consumed only when its tick started a run or the 
       false
     ],
     ['held by quota, a busy worktree or a limit', decision('held'), new Map(), RETRY, false]
-  ] as [string, ItemDecision | undefined, Map<string, HandledState>, number | null, boolean][])(
-    '%s → %s',
-    (_name, d, states, retry, settled) => {
-      expect(settles(d, states, retry)).toBe(settled)
-    }
-  )
+  ])('%s → %s', (_name, d, states, retry, settled) => {
+    expect(settles(d, states, retry)).toBe(settled)
+  })
 })
 
 describe('runTick: what a fed stage leaves pending', () => {
