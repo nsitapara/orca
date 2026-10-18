@@ -375,6 +375,18 @@ describe('PilotAutomationsPage on more than one machine', () => {
     )
   })
 
+  it("says it waits for a runs_on machine's first list, and won't switch the row meanwhile", async () => {
+    setPilotHostsForTests([LOCAL_NAMED, MINI])
+    const row = { ...summary, runsOn: 'Mac mini' }
+    const never = () => new Promise(() => {})
+    pilotRpc.mockImplementation(
+      byHost({ local: machine({ ...list, automations: [row] }), mini: never })
+    )
+    render(<PilotAutomationsPage />)
+    const toggle = await screen.findByRole('switch', { name: 'Fix failed CI: turn off' })
+    expect(toggle.getAttribute('title')).toBe("Waiting for Mac mini's list…")
+  })
+
   it('says only the page error when every machine failed', async () => {
     setPilotHostsForTests([LOCAL_NAMED, MINI])
     pilotRpc.mockImplementation(byHost({ local: machine('down'), mini: machine('timed out') }))

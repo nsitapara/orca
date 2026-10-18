@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { ChevronDown, ChevronRight } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
+import { cn } from '@/lib/utils'
 import type { ActivityRun, AutomationSummary } from '../../shared/api-types'
 import { jobLastTick, jobTitle, listEntries, type JobGroup } from '../../shared/job-stages'
 import {
@@ -14,7 +15,9 @@ import {
   type SortState
 } from './automations-sort'
 import { lastTickText } from './format'
+import { listRefusal } from '../hosts/automation-home'
 import { MachineChips } from '../hosts/MachineChip'
+import type { ListedMachines } from '../hosts/merge-automations'
 import { hostedRunKey } from '../hosts/merge-activity'
 import { hostOf, type PilotHostRef } from '../hosts/pilot-host'
 import { foldStrip, liveStrip, type StripChip, type StripItem } from '../../shared/run-views/strip'
@@ -22,7 +25,7 @@ import { RunStrip } from '../run-views/RunStrip'
 import { openRun } from '../run-views/run-panel-state'
 import { showActivity, showPilotAutomation } from './automations-view'
 import type { Toggle } from './EnabledSwitch'
-import { AutomationSwitch, FailedHostsContext, JobSwitch } from './RowSwitches'
+import { AutomationSwitch, JobSwitch, MachinesContext } from './RowSwitches'
 import { ScheduleCell } from './ScheduleCell'
 
 // Names and ticks truncate, so the columns can be narrow. Below the sum of their minimums (TABLE_MIN) the table
@@ -248,19 +251,19 @@ function sortMark(sort: SortState, column: SortColumn): string {
   return sort.direction === 'asc' ? ' ↑' : ' ↓'
 }
 
-const NONE_FAILED: readonly PilotHostRef[] = []
+const NO_MACHINES: ListedMachines = { listedHosts: [], failedHosts: [] }
 
 export function AutomationsTable({
   payload,
   now,
-  failedHosts = NONE_FAILED,
+  machines = NO_MACHINES,
   onOpen,
   onOpenJob,
   onToggle
 }: {
   payload: { automations: ListedAutomation[] }
   now: number
-  failedHosts?: readonly PilotHostRef[]
+  machines?: ListedMachines
   onOpen: (id: string) => void
   onOpenJob: (jobId: string) => void
   onToggle: Toggle
@@ -274,8 +277,15 @@ export function AutomationsTable({
   if (!payload.automations.length) {
     return <p className="text-sm text-muted-foreground">No automations found.</p>
   }
+  // Inline as well as on each switch's hover: a blocking warning is read before acting.
+  const refused = listRefusal(payload.automations, machines)
   return (
-    <FailedHostsContext value={failedHosts}>
+    <MachinesContext value={machines}>
+      {refused ? (
+        <p className={cn('text-xs', refused.warn ? 'text-destructive' : 'text-muted-foreground')}>
+          {refused.text}
+        </p>
+      ) : null}
       <div className="overflow-x-auto rounded-md border border-border/50 bg-muted/20">
         <div className={TABLE_MIN}>
           <div
@@ -317,6 +327,6 @@ export function AutomationsTable({
           )}
         </div>
       </div>
-    </FailedHostsContext>
+    </MachinesContext>
   )
 }

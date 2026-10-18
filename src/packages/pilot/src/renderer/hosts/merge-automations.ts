@@ -18,7 +18,15 @@ export type MergedAutomation = Omit<AutomationSummary, 'live'> & {
 export type MergedAutomationList = Omit<AutomationListPayload, 'automations'> & {
   automations: MergedAutomation[]
 }
+// The listed machines as a page last read their lists, for the rule that refuses a row's actions.
+export type ListedMachines = {
+  listedHosts: readonly PilotHostRef[]
+  failedHosts: readonly PilotHostRef[]
+  // Keys of the failed ones that haven't answered a list read yet.
+  pendingHosts?: ReadonlySet<string>
+}
 export type LoadedAutomations = MergedAutomationList & {
+  listedHosts: PilotHostRef[]
   // Every listed machine whose list isn't in it: offline, or its read failed.
   failedHosts: PilotHostRef[]
 }
@@ -121,6 +129,21 @@ export function failedHostsOf(
   return [...failed.values()].map(refOf)
 }
 
+// Listed machines online that haven't answered a list read yet: no error, no list.
+export function pendingHostsOf(
+  reads: readonly HostRead<AutomationListPayload>[],
+  hosts: readonly PilotHostEntry[]
+): Set<string> {
+  const byKey = new Map(reads.map((r) => [r.host.key, r]))
+  const pending = hosts.filter((host) => {
+    const read = byKey.get(host.key)
+    return (
+      host.state === 'online' && (read?.value ?? null) === null && (read?.error ?? null) === null
+    )
+  })
+  return new Set(pending.map((host) => host.key))
+}
+
 export function mergeAutomationLists(
   reads: readonly HostRead<AutomationListPayload>[]
 ): MergedAutomationList | null {
@@ -159,6 +182,6 @@ export function loadMergedAutomations(): Promise<LoadedAutomations> {
     if (!merged) {
       throw new Error(reads.find((r) => r.error !== null)?.error ?? 'No Pilot answered')
     }
-    return { ...merged, failedHosts: failedHostsOf(reads, hosts) }
+    return { ...merged, listedHosts: hosts.map(refOf), failedHosts: failedHostsOf(reads, hosts) }
   })
 }

@@ -7,6 +7,8 @@ import { useHostPoll } from '../hosts/host-poll'
 import { MachineChip } from '../hosts/MachineChip'
 import { hostedRunKey, mergeActivity } from '../hosts/merge-activity'
 import { hostOf, type PilotHostRef } from '../hosts/pilot-host'
+import { usePilotHosts } from '../hosts/pilot-hosts-feed'
+import { runsOnLine } from '../hosts/runs-on-text'
 import { defaultRun, runCandidates } from '../run-views/activity-groups'
 import { ACTIVITY_POLL_MS } from '../run-views/ActivityView'
 import { RunRail } from '../run-views/RunRail'
@@ -18,8 +20,20 @@ import { clockTime, formatInZone, runStatusLabel } from './format'
 
 function Facts({ summary: s }: { summary: AutomationSummary }): React.JSX.Element {
   const next = s.nextTickAt === null ? 'None' : formatInZone(s.nextTickAt, s.timezone)
-  const facts: [string, string][] = [
-    ['Schedule', `${scheduleText(s)} (${s.timezone})`],
+  const runsOn = runsOnLine(s, usePilotHosts())
+  // Where a pinned job runs, under its schedule as in the list.
+  const schedule = (
+    <>
+      {`${scheduleText(s)} (${s.timezone})`}
+      {runsOn ? (
+        <span className={cn('block', runsOn.warn ? 'text-destructive' : 'text-muted-foreground')}>
+          {runsOn.text}
+        </span>
+      ) : null}
+    </>
+  )
+  const facts: [string, React.ReactNode][] = [
+    ['Schedule', schedule],
     ['Next tick', next],
     ['Powers', s.powers.length ? s.powers.join(', ') : 'Nothing outside the worktree'],
     ['Inbox', s.inbox],

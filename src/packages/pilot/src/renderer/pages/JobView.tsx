@@ -98,7 +98,7 @@ export function JobView({
     try {
       const merged = await loadMergedAutomations()
       const found = findJob(merged.automations, jobId)
-      const refused = jobRefusal(found, merged.failedHosts)
+      const refused = jobRefusal(found, merged)
       const data = found ? await stageData(found, refused.waiting) : []
       if (!mounted.current) {
         return
