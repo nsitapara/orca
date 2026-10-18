@@ -524,9 +524,17 @@ describe('PilotScheduler run queue', () => {
       asked.push([defs.map((x) => x.id), now])
       return ['manual-job', 'review']
     }
+    const rechecks: (boolean | undefined)[] = []
+    d.runTick = async (x, opts) => {
+      d.ran.push(x.id)
+      rechecks.push(opts.recheck)
+      return OK
+    }
     await new PilotScheduler(d).tickAll()
     expect(d.ran).toEqual(['manual-job', 'review'])
     expect(asked).toEqual([[['ci', 'review', 'manual-job'], at1012]])
+    // Activity leaves out a re-check that starts nothing.
+    expect(rechecks).toEqual([true, true])
   })
 
   it("ticks at most four queued automations at once, so one slow tick doesn't hold up the rest", async () => {

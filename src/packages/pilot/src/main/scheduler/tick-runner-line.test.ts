@@ -58,9 +58,9 @@ function holding(moment: Moment) {
     launch: async () => ({ terminalHandle: 't', paneKey: 'p' }),
     capacity: runCapacity({ store, definitions: () => [def], now: () => clock })
   }
-  const tick = (at: number) => {
+  const tick = (at: number, recheck = false) => {
     clock = at
-    return runTick(def, EMPTY_PEOPLE, deps, { dryRun: false })
+    return runTick(def, EMPTY_PEOPLE, deps, { dryRun: false, recheck })
   }
   return { store, tick }
 }
@@ -91,5 +91,12 @@ describe("runTick holding an item in the runner's line", () => {
     const second = await tick(t2)
     expect(second.decisions.map((x) => x.verdict)).toEqual(['held'])
     expect(store.capacity.queued().map((q) => [q.dueAt, q.checkedAt])).toEqual([[50, t2]])
+  })
+
+  it('records a re-check tick, so Activity leaves it out though it skipped the item', async () => {
+    const { store, tick } = holding({ finished: 'Merged', waitingSince: null })
+    const scheduled = await tick(t1)
+    await tick(t2, true)
+    expect(store.listTicks(def.id, 10, true).map((t) => t.id)).toEqual([scheduled.tickId])
   })
 })

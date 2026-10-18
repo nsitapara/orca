@@ -434,13 +434,15 @@ describe('migrate', () => {
     expect(plan.map((p) => p.detail).join(' ')).toContain('runs_unacknowledged')
   })
 
-  it("V17 gives a V16 database's queued rows a capacity hold due when they joined", () => {
+  it("V17 gives a V16 database's queued rows a capacity hold due when they joined, and its ticks no re-check", () => {
     const db = openDb()
     migrate(db, 16)
     db.exec(
       "INSERT INTO run_queue (automation_id, item_key, item_label, queued_at, by_hand) VALUES ('a', 'k', 'k', 7, 0)"
     )
+    db.exec("INSERT INTO ticks (automation_id, started_at, status) VALUES ('a', 1, 'ok')")
     migrate(db)
+    expect(firstRow(db, 'SELECT recheck FROM ticks')).toEqual({ recheck: 0 })
     expect(
       firstRow(db, 'SELECT due_at, hold_code, hold_detail, checked_at FROM run_queue')
     ).toEqual({

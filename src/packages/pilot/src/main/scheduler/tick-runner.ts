@@ -47,12 +47,13 @@ export type TickDeps = DecideDeps & {
 }
 // `pass` is the scheduler pass's fetch cache, shared by every automation that ticks in that pass. `trigger`: the run
 // whose feed (run: now) asked for this tick, recorded on it for Activity. `byHand`: a Run now, whose runs are stored
-// with trigger `manual`.
+// with trigger `manual`. `recheck`: the runner's line asked for it; Activity leaves it out unless it starts a run.
 export type TickOptions = {
   dryRun: boolean
   pass?: PassFetchCache
   trigger?: TickTrigger
   byHand?: boolean
+  recheck?: boolean
 }
 
 const pad = (v: number) => String(v).padStart(2, '0')
@@ -282,7 +283,7 @@ export async function runTick(
   if (opts.dryRun) {
     return dryRunTick(def, people, deps, opts)
   }
-  const tickId = deps.store.startTick(def.id, deps.now())
+  const tickId = deps.store.startTick(def.id, deps.now(), opts.recheck === true)
   let decisions: ItemDecision[]
   let warnings: string[]
   let feeding: FedOutcome

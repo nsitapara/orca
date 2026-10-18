@@ -42,6 +42,20 @@ describe('ActivityStore', () => {
     expect(store.activity.ticks(null, 0, 2, false).map((t) => t.id)).toEqual([other, busy])
   })
 
+  it.each<[string, boolean, 'ok' | 'failed', boolean]>([
+    ['skipped, held and warned', true, 'ok', false],
+    ['started a run', false, 'ok', true],
+    ['failed', false, 'failed', false]
+  ])('counts a re-check tick that %s as quiet: %s', (_name, quiet, status, startedRun) => {
+    store = PilotStore.open(':memory:')
+    const id = store.startTick('a', 100, true)
+    store.finishTick(id, status, null, { skipped: 1, held: 1 }, 101, ['a source warned'])
+    if (startedRun) {
+      run('r', { tickId: id })
+    }
+    expect(store.activity.ticks(['a'], 0, 10, true).map((t) => t.id)).toEqual(quiet ? [] : [id])
+  })
+
   it('lists live runs of any age, the runs no tick started, and the runs answering a run', () => {
     store = PilotStore.open(':memory:')
     run('old-asking', { status: 'asking', startedAt: 1 })

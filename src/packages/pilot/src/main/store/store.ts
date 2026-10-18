@@ -157,10 +157,11 @@ export class PilotStore {
     }
   }
 
-  startTick(automationId: string, at: number): number {
+  // recheck: the runner ticked it to re-check its waiting items (QUIET_TICK).
+  startTick(automationId: string, at: number, recheck = false): number {
     const r = this.db
-      .prepare('INSERT INTO ticks (automation_id, started_at, status) VALUES (?, ?, ?)')
-      .run(automationId, at, 'running')
+      .prepare('INSERT INTO ticks (automation_id, started_at, status, recheck) VALUES (?, ?, ?, ?)')
+      .run(automationId, at, 'running', recheck ? 1 : 0)
     return Number(r.lastInsertRowid)
   }
 
