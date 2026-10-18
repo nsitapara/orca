@@ -30,6 +30,7 @@ const DRY_VERDICT: Partial<Record<Verdict, string>> = {
 const COUNT_ORDER: [Verdict, string][] = [
   ['started', 'started'],
   ['queued', 'waiting for a slot'],
+  ['held', 'waiting'],
   ['asked', 'asked first'],
   ['skipped', 'skipped'],
   ['notdue', 'not due'],
@@ -38,6 +39,7 @@ const COUNT_ORDER: [Verdict, string][] = [
 ]
 const DRY_COUNT: Partial<Record<Verdict, string>> = {
   started: 'would start',
+  held: 'would wait',
   asked: 'would ask first',
   baselined: 'would baseline'
 }
