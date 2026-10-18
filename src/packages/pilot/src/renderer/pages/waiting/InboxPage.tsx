@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import type { InboxListRow } from '../../../shared/api-types'
 import { groupHostedItems, type HostedSection } from '../../hosts/hosted-sections'
+import { groupHostedItemsBy } from '../../hosts/inbox-grouping'
 import { HostsNotice } from '../../hosts/HostsNotice'
 import { hostedKey, type Hosted } from '../../hosts/pilot-host'
 import { useAutomationsFeed } from '../../run-views/automations-feed'
@@ -12,7 +13,11 @@ import { FilterBadges } from './FilterBadges'
 import { setAllDetailsOpen, useAllDetailsOpen } from './details-open'
 import { ALL, InboxHeader } from './InboxHeader'
 import { InboxCard } from './InboxCard'
+import { InboxFilters } from './InboxFilters'
+import { InboxTabs } from './InboxTabs'
 import { InboxStyle } from './inbox-style'
+import { inTab, kindCounts, matchesFilters, tabCounts, type CardFilters } from './inbox-tabs'
+import { useInboxViewPrefs } from './inbox-view-prefs'
 import { InMotionPanel } from './InMotionPanel'
 import { WorktreeName } from './WorktreeLink'
 import { useElementWidth } from './use-element-width'
@@ -22,6 +27,9 @@ import { useWaiting } from './use-waiting'
 
 // The page's own width from which the card list sits beside the cards.
 const WIDE_PX = 960
+const NO_FILTERS: CardFilters = { kinds: [], query: '' }
+// Group by Nothing makes one section with no label: its region still needs a name.
+const UNGROUPED_NAME = 'Cards'
 
 function withError(
   errors: Record<string, string>,
@@ -30,6 +38,10 @@ function withError(
 ): Record<string, string> {
   const { [id]: _dropped, ...rest } = errors
   return failed ? { ...rest, [id]: failed } : rest
+}
+
+function keysOf(items: readonly Hosted<InboxListRow>[]): Set<string> {
+  return new Set(items.map((i) => hostedKey(i.host, i.id)))
 }
 
 function SectionHeading({ section }: { section: HostedSection }): React.JSX.Element {
@@ -45,7 +57,10 @@ function SectionHeading({ section }: { section: HostedSection }): React.JSX.Elem
 
 export function InboxPage(): React.JSX.Element {
   const [viewer, setViewer] = useState<string | null>(null)
-  const [group, setGroup] = useState<string>(ALL)
+  // The section picked in the list or the badges (a section key), apart from the Group by mode.
+  const [section, setSection] = useState<string>(ALL)
+  const [prefs, setPrefs] = useInboxViewPrefs()
+  const [filters, setFilters] = useState<CardFilters>(NO_FILTERS)
   const [selected, setSelected] = useState<string | null>(null)
   const [listOpen, toggleList] = useListOpen()
   const [rootRef, width] = useElementWidth()
@@ -71,23 +86,6 @@ export function InboxPage(): React.JSX.Element {
   const pending = usePendingInboxCard()
   // The pending card the person picked another card over while it loaded: it is then dropped, not selected.
   const pickedOver = useRef<string | null>(null)
-  useEffect(() => {
-    if (!pending || !inbox) {
-      return
-    }
-    // The pending card is a hostedKey; another machine's card can arrive in a later read than this machine's.
-    const found = inbox.items.some((i) => hostedKey(i.host, i.id) === pending)
-    if (!found && reads.some((r) => r.value === null && r.error === null)) {
-      return
-    }
-    const picked = pickedOver.current === pending
-    pickedOver.current = null
-    clearPendingInboxCard()
-    if (found && !picked) {
-      setSelected(pending)
-      document.getElementById(`card-${pending}`)?.scrollIntoView?.({ block: 'start' })
-    }
-  }, [pending, inbox, reads])
   // Save errors are kept here, by card hostedKey: a card remounts as a new version on every reload.
   const [errors, setErrors] = useState<Record<string, string>>({})
   const people = inbox?.people ?? []
@@ -101,24 +99,71 @@ export function InboxPage(): React.JSX.Element {
   const automations = useMemo(() => inbox?.automations ?? [], [inbox])
   const names = useMemo(() => new Map(automations.map((a) => [a.id, a.name])), [automations])
   const openItems = items.filter((i) => i.type !== 'default')
+  // Each card's Worktree heading by hostedKey: what search matches, and what a list row names under another grouping.
+  const places = new Map(
+    groupHostedItems(openItems, automations).flatMap((s) =>
+      s.items.map((i) => [hostedKey(i.host, i.id), s.group.label] as const)
+    )
+  )
+  const { tab } = prefs
+  const onDone = tab === 'done'
+  const inTabItems = onDone
+    ? []
+    : openItems.filter((i) =>
+        inTab(i, tab, inbox?.answerStates.get(hostedKey(i.host, i.id)) ?? null)
+      )
+  const filtered = filters.kinds.length > 0 || filters.query.trim() !== ''
+  const shownItems = inTabItems.filter((i) =>
+    matchesFilters(i, filters, places.get(hostedKey(i.host, i.id)) ?? '')
+  )
+  const sections = groupHostedItemsBy(shownItems, automations, prefs.group, prefs.sort, loadedAt)
+  // A picked section with no card left (its last one was answered, or the tab moved) counts as All.
+  const activeSection = sections.some((s) => s.key === section) ? section : ALL
+  const shown = sections.filter((s) => activeSection === ALL || s.key === activeSection)
   // Defaults show under their run in Done for you; only the rest (no run, or a run already seen) fold at the end.
-  const itemKeys = new Set(items.map((i) => hostedKey(i.host, i.id)))
+  const itemKeys = keysOf(items)
   const underRuns = new Set(
     done.runs
       .flatMap((d) => d.defaults.map((c) => hostedKey(d.run.host, c.id)))
       .filter((key) => itemKeys.has(key))
   )
-  const defaults = items.filter(
-    (i) => i.type === 'default' && !underRuns.has(hostedKey(i.host, i.id))
-  )
-  const sections = groupHostedItems(openItems, automations)
-  // A selected group with no card left (its last one was answered) counts as All.
-  const activeGroup = sections.some((s) => s.key === group) ? group : ALL
-  const shown = sections.filter((s) => activeGroup === ALL || s.key === activeGroup)
-  const defaultSections = groupHostedItems(defaults, automations).filter(
-    (s) => activeGroup === ALL || s.key === activeGroup
-  )
-  const defaultCount = defaultSections.reduce((n, s) => n + s.items.length, 0)
+  const allDefaults = items.filter((i) => i.type === 'default')
+  const defaults = allDefaults.filter((i) => !underRuns.has(hostedKey(i.host, i.id)))
+  // The cards on screen: every default on Done for you, else the shown sections' cards.
+  const visibleKeys = keysOf(onDone ? allDefaults : shown.flatMap((s) => s.items))
+  useEffect(() => {
+    if (!pending || !inbox) {
+      return
+    }
+    // The pending card is a hostedKey; another machine's card can arrive in a later read than this machine's.
+    const found = inbox.items.find((i) => hostedKey(i.host, i.id) === pending)
+    if (!found && reads.some((r) => r.value === null && r.error === null)) {
+      return
+    }
+    const picked = pickedOver.current === pending
+    if (found && !picked && !visibleKeys.has(pending)) {
+      const home = found.type === 'default' ? 'done' : 'all'
+      // Hidden by the tab, a filter or the picked section: show it unfiltered, and pick it on the next render.
+      if (tab !== home || filtered || activeSection !== ALL) {
+        setPrefs({ tab: home })
+        setFilters(NO_FILTERS)
+        setSection(ALL)
+        return
+      }
+    }
+    pickedOver.current = null
+    clearPendingInboxCard()
+    if (found && !picked) {
+      setSelected(pending)
+      document.getElementById(`card-${pending}`)?.scrollIntoView?.({ block: 'start' })
+    }
+  }, [pending, inbox, reads, visibleKeys, tab, filtered, activeSection, setPrefs])
+  // A pick the tab, filters or grouping now hide is dropped, so it doesn't come back with them.
+  useEffect(() => {
+    if (selected !== null && !visibleKeys.has(selected)) {
+      setSelected(null)
+    }
+  }, [selected, visibleKeys])
   // By hostedKey, as each card's Details keeps its open state.
   const detailIds = useMemo(
     () => items.filter((i) => i.details || i.detailsMd).map((i) => hostedKey(i.host, i.id)),
@@ -127,7 +172,7 @@ export function InboxPage(): React.JSX.Element {
   const allOpen = useAllDetailsOpen(detailIds)
   // The list sits beside the cards only on a wide page (measured on the page, not the window) while it is open.
   const wide = width === null || width >= WIDE_PX
-  const showList = wide && listOpen
+  const showList = wide && listOpen && !onDone
   const viewerName = people.find((p) => p.id === viewer)?.name.split(' ')[0] ?? 'you'
   const select = (item: Hosted<InboxListRow>) => {
     const key = hostedKey(item.host, item.id)
@@ -164,10 +209,52 @@ export function InboxPage(): React.JSX.Element {
     return item ? cardOf(item) : null
   }
   const sectionOf = (s: HostedSection) => (
-    <section key={s.key} aria-label={s.group.label} className="flex min-w-0 flex-col gap-3">
-      <SectionHeading section={s} />
+    <section
+      key={s.key}
+      aria-label={s.group.label || UNGROUPED_NAME}
+      className="flex min-w-0 flex-col gap-3"
+    >
+      {s.group.label ? <SectionHeading section={s} /> : null}
       {s.items.map(cardOf)}
     </section>
+  )
+  const cardsBody = shown.length ? (
+    shown.map(sectionOf)
+  ) : (
+    <p className="text-sm text-muted-foreground">Nothing waiting on {viewerName} here.</p>
+  )
+  const defaultSections = groupHostedItems(defaults, automations)
+  const doneBody = (
+    <>
+      {done.error ? (
+        <p className="text-sm text-destructive">{`Done for you couldn't load: ${done.error}`}</p>
+      ) : null}
+      <DoneForYou
+        runs={done.runs}
+        cardFor={cardFor}
+        onAcknowledge={async (keys) => {
+          const failed = await done.acknowledge(runsOfKeys(done.runs, keys))
+          await reload()
+          return failed
+        }}
+      />
+      {defaults.length ? (
+        <Collapsible className="rounded-lg border border-border/50 px-3 py-2">
+          <CollapsibleTrigger className="flex w-full items-center gap-2 text-sm font-semibold">
+            <span>Defaults without a run · {defaults.length}</span>
+            <span className="text-xs font-normal text-muted-foreground">
+              never counted as waiting
+            </span>
+          </CollapsibleTrigger>
+          <CollapsibleContent className="mt-2 flex flex-col gap-3">
+            {defaultSections.map(sectionOf)}
+          </CollapsibleContent>
+        </Collapsible>
+      ) : null}
+      {done.runs.length || defaults.length ? null : (
+        <p className="text-sm text-muted-foreground">Nothing done for {viewerName} here.</p>
+      )}
+    </>
   )
   return (
     <div ref={rootRef} className="pilot-inbox flex flex-col gap-3 pt-6">
@@ -183,6 +270,28 @@ export function InboxPage(): React.JSX.Element {
         allOpen={allOpen}
         onToggleAll={() => setAllDetailsOpen(detailIds, !allOpen)}
       />
+      <InboxTabs
+        tab={tab}
+        counts={tabCounts(items)}
+        preparingNote={null}
+        doneCount={done.runs.length}
+        onTab={(next) => setPrefs({ tab: next })}
+      />
+      {onDone ? null : (
+        <InboxFilters
+          filters={filters}
+          kindCounts={kindCounts(inTabItems)}
+          shown={shownItems.length}
+          total={inTabItems.length}
+          group={prefs.group}
+          sort={prefs.sort}
+          view={prefs.view}
+          onFilters={setFilters}
+          onGroup={(group) => setPrefs({ group })}
+          onSort={(sort) => setPrefs({ sort })}
+          onView={(view) => setPrefs({ view })}
+        />
+      )}
       <InMotionPanel running={running} entries={queue} onApplyNow={applyNow} />
       {error ? <p className="text-sm text-destructive">{error}</p> : null}
       <HostsNotice
@@ -193,58 +302,30 @@ export function InboxPage(): React.JSX.Element {
           { reads: done.reads, what: 'Done for you runs' }
         ]}
       />
-      {showList ? null : (
+      {showList || onDone ? null : (
         <FilterBadges
           sections={sections}
-          total={openItems.length}
-          group={activeGroup}
-          onGroup={setGroup}
+          total={shownItems.length}
+          group={activeSection}
+          onGroup={setSection}
         />
       )}
       <div className="flex flex-wrap items-start gap-4">
         {showList ? (
           <CardList
             sections={sections}
-            total={openItems.length}
-            group={activeGroup}
+            total={shownItems.length}
+            group={activeSection}
             selected={selected}
             names={names}
+            places={prefs.group === 'worktree' ? null : places}
             now={loadedAt}
-            onGroup={setGroup}
+            onGroup={setSection}
             onSelect={select}
           />
         ) : null}
         <main className="flex min-w-0 flex-[999_1_480px] flex-col gap-3">
-          {shown.length ? (
-            shown.map(sectionOf)
-          ) : (
-            <p className="text-sm text-muted-foreground">Nothing waiting on {viewerName} here.</p>
-          )}
-          {done.error ? (
-            <p className="text-sm text-destructive">{`Done for you couldn't load: ${done.error}`}</p>
-          ) : null}
-          <DoneForYou
-            runs={done.runs}
-            cardFor={cardFor}
-            onAcknowledge={async (keys) => {
-              const failed = await done.acknowledge(runsOfKeys(done.runs, keys))
-              await reload()
-              return failed
-            }}
-          />
-          {defaultCount ? (
-            <Collapsible className="rounded-lg border border-border/50 px-3 py-2">
-              <CollapsibleTrigger className="flex w-full items-center gap-2 text-sm font-semibold">
-                <span>Defaults without a run · {defaultCount}</span>
-                <span className="text-xs font-normal text-muted-foreground">
-                  never counted as waiting
-                </span>
-              </CollapsibleTrigger>
-              <CollapsibleContent className="mt-2 flex flex-col gap-3">
-                {defaultSections.map(sectionOf)}
-              </CollapsibleContent>
-            </Collapsible>
-          ) : null}
+          {onDone ? doneBody : cardsBody}
         </main>
       </div>
     </div>

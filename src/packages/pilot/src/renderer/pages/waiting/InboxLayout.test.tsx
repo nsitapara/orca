@@ -2,12 +2,17 @@
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { InboxItemRow } from '../../../shared/api-types'
-import type { InboxListPayload } from '../../../shared/inbox-types'
+import type { AnswerState, InboxListPayload } from '../../../shared/inbox-types'
+import { queuedPreparation } from '../../../shared/preparation'
+import { testRun } from '../../../shared/run-views/__fixtures__/runs'
+import type { DoneRun } from '../../../shared/visibility-types'
 
 const pilotRpc = vi.fn()
 vi.mock('../../api', () => ({ pilotRpc: (...args: unknown[]) => pilotRpc(...args) }))
 
+import { pendingInboxCard, setPilotAutomationsView, showInboxCard } from '../automations-view'
 import { InboxPage } from './InboxPage'
+import { resetInboxViewPrefs } from './inbox-view-prefs'
 
 function card(over: Partial<InboxItemRow>): InboxItemRow {
   return {
@@ -78,7 +83,7 @@ const LIST: InboxListPayload = {
   answerStates: {}
 }
 
-function serve(list = LIST) {
+function serve(list = LIST, done: DoneRun[] = []) {
   pilotRpc.mockImplementation(async (method: string) => {
     if (method === 'pilot.inbox.list') {
       return list
@@ -86,9 +91,18 @@ function serve(list = LIST) {
     if (method === 'pilot.queue.list') {
       return { entries: [] }
     }
+    if (method === 'pilot.runs.doneForYou') {
+      return done
+    }
     return { imported: 0, answers: 0, runs: 0, skipped: [], applied: false }
   })
 }
+
+// Tabs and grouping persist in a module cache and storage; each test starts from the defaults.
+beforeEach(() => {
+  window.localStorage.clear()
+  resetInboxViewPrefs()
+})
 
 describe('the Inbox layout', () => {
   beforeEach(() => window.localStorage.clear())
@@ -309,7 +323,7 @@ describe('fix round 1', () => {
     expect(screen.queryByText(/Nothing waiting/)).toBeNull()
   })
 
-  it('shows only the selected group’s defaults, or none', async () => {
+  it('folds the defaults without a run on the Done for you tab, each under its section', async () => {
     const dWt = card({
       id: 'dw',
       type: 'default',
@@ -330,13 +344,16 @@ describe('fix round 1', () => {
     })
     render(<InboxPage />)
     await screen.findByRole('heading', { name: 'F1 Fixture' })
-    fireEvent.click(screen.getByText(/Defaults without a run/))
-    expect(screen.getByRole('heading', { name: 'Default in job' })).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: 'web-2099-carrier · 1' }))
-    expect(screen.getByRole('heading', { name: 'Default in worktree' })).toBeTruthy()
-    expect(screen.queryByRole('heading', { name: 'Default in job' })).toBeNull()
-    fireEvent.click(screen.getByRole('button', { name: '!1579 · 1' }))
     expect(screen.queryByText(/Defaults without a run/)).toBeNull()
+    const tabs = within(screen.getByRole('toolbar', { name: 'Card status' }))
+    fireEvent.click(tabs.getByRole('button', { name: /^Done for you/ }))
+    fireEvent.click(screen.getByText('Defaults without a run · 2'))
+    expect(screen.getByRole('heading', { name: 'Default in job' })).toBeTruthy()
+    expect(screen.getByRole('heading', { name: 'Default in worktree' })).toBeTruthy()
+    expect(screen.getAllByRole('region').map((s) => s.getAttribute('aria-label'))).toEqual([
+      'web-2099-carrier',
+      '09 · Prepare reviews requested of me'
+    ])
   })
 
   it('nests the headings: sections h2 above the card titles h3', async () => {
@@ -485,7 +502,9 @@ describe('an MR group’s name on screen', () => {
     const nav = within(screen.getByRole('navigation', { name: 'Cards' }))
     expect(nav.getByRole('button', { name: `${full} · 1` }).getAttribute('title')).toBe(full)
     fireWidth(500)
-    expect(within(screen.getByRole('toolbar')).getByTitle(full)).toBeTruthy()
+    expect(
+      within(screen.getByRole('toolbar', { name: 'Filter by group' })).getByTitle(full)
+    ).toBeTruthy()
     vi.unstubAllGlobals()
   })
 })
@@ -606,5 +625,154 @@ describe('the unsaved pill after Send', () => {
         'unsaved'
       )
     )
+  })
+})
+
+describe('one status tab at a time', () => {
+  afterEach(() => {
+    cleanup()
+    pilotRpc.mockReset()
+  })
+  const QUEUED = card({
+    id: 'queued',
+    title: 'Still preparing',
+    worktreePath: '/w/web-3000',
+    preparation: queuedPreparation({ key: 'k', context: 'c', requirements: ['context'] }, 1)
+  })
+  const UNLOCKED: AnswerState = {
+    locked: false,
+    sentBeforePilot: false,
+    state: 'not_ready',
+    readyAt: null,
+    reason: null
+  }
+  const tabs = () => within(screen.getByRole('toolbar', { name: 'Card status' }))
+  const nav = () => screen.getByRole('navigation', { name: 'Cards' })
+  const row = (id: string) => nav().querySelector(`[data-row="${id}"]`)!
+  const cardTitles = () =>
+    screen.queryAllByRole('article').map((a) => a.querySelector('h3')?.textContent)
+  const groupBy = (value: string) =>
+    fireEvent.change(screen.getByRole('combobox', { name: 'Group by' }), { target: { value } })
+
+  it('lists the ready cards under Needs you and the queued one under Preparing; the list counts what is shown', async () => {
+    serve({ ...LIST, items: [F1, F2, QUEUED] })
+    render(<InboxPage />)
+    await screen.findByRole('heading', { name: 'F1 Fixture' })
+    expect(tabs().getByRole('button', { name: 'Needs you · 2' }).getAttribute('aria-pressed')).toBe(
+      'true'
+    )
+    expect(cardTitles()).toEqual(['F1 Fixture', 'F2 Rescind'])
+    expect(within(nav()).getByRole('button', { name: 'All · 2' })).toBeTruthy()
+    fireEvent.click(tabs().getByRole('button', { name: 'Preparing · 1' }))
+    expect(cardTitles()).toEqual(['Still preparing'])
+    expect(within(nav()).getByRole('button', { name: 'All · 1' })).toBeTruthy()
+  })
+
+  it('keeps a card just answered under Needs you, with its Undo, while the answer can be taken back', async () => {
+    let answered = false
+    pilotRpc.mockImplementation(async (method: string) => {
+      if (method === 'pilot.inbox.list') {
+        const f1: InboxItemRow = answered
+          ? {
+              ...F1,
+              status: 'answered',
+              answer: { option: 0, text: 'approve', digest: 'd1', via: 'page' }
+            }
+          : F1
+        return { ...LIST, items: [f1], answerStates: answered ? { f1: UNLOCKED } : {} }
+      }
+      if (method === 'pilot.inbox.answer') {
+        answered = true
+        return { status: 'answered' }
+      }
+      return method === 'pilot.queue.list' ? { entries: [] } : []
+    })
+    render(<InboxPage />)
+    const article = (await screen.findByRole('heading', { name: 'F1 Fixture' })).closest('article')!
+    fireEvent.click(within(article).getByRole('button', { name: 'Fix it' }))
+    expect(await screen.findByRole('button', { name: 'Undo' })).toBeTruthy()
+    expect(tabs().getByRole('button', { name: 'Needs you · 0' }).getAttribute('aria-pressed')).toBe(
+      'true'
+    )
+  })
+
+  it('shows Done for you only on its tab, without the cards, their list or their filters', async () => {
+    serve(LIST, [
+      {
+        run: { ...testRun({ id: 'r9', itemLabel: 'WEB-9', status: 'done' }), fields: {} },
+        effects: [],
+        defaults: []
+      }
+    ])
+    render(<InboxPage />)
+    await screen.findByRole('heading', { name: 'F1 Fixture' })
+    expect(screen.queryByRole('region', { name: 'Done for you' })).toBeNull()
+    fireEvent.click(await tabs().findByRole('button', { name: 'Done for you · 1' }))
+    expect(screen.getByRole('region', { name: 'Done for you' })).toBeTruthy()
+    expect(screen.queryByRole('heading', { name: 'F1 Fixture' })).toBeNull()
+    expect(screen.queryByRole('navigation', { name: 'Cards' })).toBeNull()
+    expect(screen.queryByRole('searchbox', { name: 'Search cards' })).toBeNull()
+  })
+
+  it('shows a card the run panel names but the tab and search hide under All, unfiltered, and picks it', async () => {
+    serve({ ...LIST, items: [F1, QUEUED] })
+    render(<InboxPage />)
+    await screen.findByRole('heading', { name: 'F1 Fixture' })
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Search cards' }), {
+      target: { value: 'F1' }
+    })
+    act(() => showInboxCard('queued'))
+    await waitFor(() =>
+      expect(document.getElementById('card-queued')?.hasAttribute('data-selected')).toBe(true)
+    )
+    expect(tabs().getByRole('button', { name: 'All · 2' }).getAttribute('aria-pressed')).toBe(
+      'true'
+    )
+    expect(screen.getByRole('searchbox', { name: 'Search cards' })).toHaveProperty('value', '')
+    expect(pendingInboxCard()).toBeNull()
+    setPilotAutomationsView('automations')
+  })
+
+  it('forgets the picked card once the tab hides it', async () => {
+    serve({ ...LIST, items: [F1, F2, QUEUED] })
+    render(<InboxPage />)
+    await screen.findByRole('heading', { name: 'F1 Fixture' })
+    fireEvent.click(row('f1'))
+    expect(document.getElementById('card-f1')?.hasAttribute('data-selected')).toBe(true)
+    fireEvent.click(tabs().getByRole('button', { name: 'Preparing · 1' }))
+    fireEvent.click(tabs().getByRole('button', { name: 'Needs you · 2' }))
+    expect(document.getElementById('card-f1')?.hasAttribute('data-selected')).toBe(false)
+    expect(row('f1').getAttribute('aria-current')).toBeNull()
+  })
+
+  it('groups by job: the headings name the jobs, and each list row names its worktree', async () => {
+    serve()
+    render(<InboxPage />)
+    await screen.findByRole('heading', { name: 'F1 Fixture' })
+    expect(row('f1').textContent).not.toContain('web-2099-carrier')
+    groupBy('job')
+    expect(screen.getAllByRole('region').map((s) => s.querySelector('h2')?.textContent)).toEqual([
+      '04 · Test branch UIs overnight · 2',
+      '09 · Prepare reviews requested of me · 2'
+    ])
+    expect(row('f1').textContent).toContain('web-2099-carrier')
+    expect(row('r1579').textContent).toContain('!1579')
+  })
+
+  it('groups by nothing: one section with no heading, and no blank group in the list', async () => {
+    serve()
+    render(<InboxPage />)
+    await screen.findByRole('heading', { name: 'F1 Fixture' })
+    groupBy('none')
+    expect(screen.getAllByRole('region').map((s) => s.getAttribute('aria-label'))).toEqual([
+      'Cards'
+    ])
+    expect(screen.getByRole('region', { name: 'Cards' }).querySelector('h2')).toBeNull()
+    expect(
+      within(nav())
+        .getAllByRole('button')
+        .filter((b) => !b.hasAttribute('data-row'))
+        .map((b) => b.textContent)
+    ).toEqual(['All · 4'])
   })
 })

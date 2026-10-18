@@ -8,6 +8,7 @@ const pilotRpc = vi.fn()
 vi.mock('../../api', () => ({ pilotRpc: (...args: unknown[]) => pilotRpc(...args) }))
 
 import { InboxPage } from './InboxPage'
+import { resetInboxViewPrefs } from './inbox-view-prefs'
 
 const NOW = 1_800_000_000_000
 const CARD = {
@@ -92,6 +93,15 @@ function serve(item: InboxItemRow, queue: QueueEntry[], answerState?: AnswerStat
   })
 }
 
+// Tabs persist in a module cache and storage; each test starts on Needs you.
+afterEach(() => {
+  window.localStorage.clear()
+  resetInboxViewPrefs()
+})
+const tabs = () => within(screen.getByRole('toolbar', { name: 'Card status' }))
+// A locked answer can't be undone, so its card leaves Needs you and shows under All.
+const openAll = async () => fireEvent.click(await tabs().findByRole('button', { name: 'All · 1' }))
+
 describe('an answered card', () => {
   beforeEach(() => {
     vi.useFakeTimers({ shouldAdvanceTime: true })
@@ -129,6 +139,7 @@ describe('an answered card', () => {
   it('says what is being done, with no Undo and the applying pill, only when the server says it is locked', async () => {
     serve(CARD, [], state({ locked: true, state: 'ready', readyAt: NOW - 1000 }))
     render(<InboxPage />)
+    await openAll()
     expect(await screen.findByText('Marking ready…')).toBeTruthy()
     expect(screen.queryByRole('button', { name: 'Undo' })).toBeNull()
     expect(screen.getByText('applying')).toBeTruthy()
@@ -190,6 +201,7 @@ describe('an answered card', () => {
   it('shows no Change answer for a sent-before-Pilot answer the server has locked', async () => {
     serve(CARD, [], state({ state: 'dispatched', sentBeforePilot: true, locked: true }))
     render(<InboxPage />)
+    await openAll()
     const line = await screen.findByRole('status')
     expect(within(line).queryByRole('button')).toBeNull()
   })
@@ -298,6 +310,7 @@ describe('one click sends what the old radio + Save sent', () => {
       []
     )
     render(<InboxPage />)
+    fireEvent.click(tabs().getByRole('button', { name: /^Done for you/ }))
     fireEvent.click(await screen.findByText(/Defaults without a run/))
     fireEvent.click(await screen.findByRole('button', { name: 'Revert' }))
     await waitFor(() =>

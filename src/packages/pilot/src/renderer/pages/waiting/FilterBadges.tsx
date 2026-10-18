@@ -39,7 +39,10 @@ export function FilterBadges({
   return (
     <div role="toolbar" aria-label="Filter by group" className="flex flex-wrap gap-1.5">
       {badge(ALL, 'All', total)}
-      {sections.map((s) => badge(s.key, s.group.label, s.items.length))}
+      {/* Group by Nothing's one section has no label to show. */}
+      {sections
+        .filter((s) => s.group.label)
+        .map((s) => badge(s.key, s.group.label, s.items.length))}
     </div>
   )
 }

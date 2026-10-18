@@ -14,6 +14,7 @@ export function CardList({
   group,
   selected,
   names,
+  places,
   now,
   onGroup,
   onSelect
@@ -24,6 +25,8 @@ export function CardList({
   // The picked card's hostedKey.
   selected: string | null
   names: Map<string, string>
+  // By hostedKey, the card's Worktree heading to name on its row; null while the sections are worktrees.
+  places: ReadonlyMap<string, string> | null
   now: number
   onGroup: (key: string) => void
   onSelect: (item: Hosted<InboxListRow>) => void
@@ -46,23 +49,27 @@ export function CardList({
       </button>
       {sections.map((s) => (
         <div key={s.key} className="flex flex-col gap-0.5">
-          <div className="flex items-center gap-1 pt-2.5 pb-1 pr-1">
-            <button
-              type="button"
-              aria-pressed={group === s.key}
-              title={s.group.label}
-              onClick={() => onGroup(s.key)}
-              className={cn(
-                'truncate min-w-0 flex-1 px-2 text-left font-mono text-[11.5px] font-semibold hover:text-foreground',
-                group === s.key ? 'text-foreground' : 'text-muted-foreground'
-              )}
-            >
-              {s.group.label} · {s.items.length}
-            </button>
-            <OpenWorktreeButton group={s.group} host={s.host} />
-          </div>
+          {/* Group by Nothing's one section has no label, so no heading to pick it by. */}
+          {s.group.label ? (
+            <div className="flex items-center gap-1 pt-2.5 pb-1 pr-1">
+              <button
+                type="button"
+                aria-pressed={group === s.key}
+                title={s.group.label}
+                onClick={() => onGroup(s.key)}
+                className={cn(
+                  'truncate min-w-0 flex-1 px-2 text-left font-mono text-[11.5px] font-semibold hover:text-foreground',
+                  group === s.key ? 'text-foreground' : 'text-muted-foreground'
+                )}
+              >
+                {s.group.label} · {s.items.length}
+              </button>
+              <OpenWorktreeButton group={s.group} host={s.host} />
+            </div>
+          ) : null}
           {s.items.map((i) => {
             const key = hostedKey(i.host, i.id)
+            const place = places?.get(key)
             return (
               <button
                 key={key}
@@ -87,6 +94,14 @@ export function CardList({
                 <span className="line-clamp-2 text-[13px] leading-snug font-semibold">
                   {i.title}
                 </span>
+                {place && place !== s.group.label ? (
+                  <span
+                    title={place}
+                    className="truncate font-mono text-[11.5px] text-muted-foreground"
+                  >
+                    {place}
+                  </span>
+                ) : null}
               </button>
             )
           })}

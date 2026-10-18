@@ -23,6 +23,7 @@ import {
 } from '../automations-view'
 import { summary } from '../fixtures'
 import { InboxPage } from './InboxPage'
+import { resetInboxViewPrefs } from './inbox-view-prefs'
 
 function card(over: Partial<InboxItemRow>): InboxItemRow {
   return {
@@ -137,6 +138,16 @@ function serve(list = LIST, queue: QueueEntry[] = [HELD]) {
   })
 }
 
+// Tabs persist in a module cache and storage; each test starts on Needs you.
+afterEach(() => {
+  window.localStorage.clear()
+  resetInboxViewPrefs()
+})
+const openTab = (name: RegExp) =>
+  fireEvent.click(
+    within(screen.getByRole('toolbar', { name: 'Card status' })).getByRole('button', { name })
+  )
+
 describe('InboxPage', () => {
   afterEach(() => {
     cleanup()
@@ -201,17 +212,19 @@ describe('InboxPage', () => {
     expect(within(article).getByText('From run')).toBeTruthy()
   })
 
-  it('shows the cards waiting, folds the defaults, and opens In motion by itself on an answer held 20+ minutes', async () => {
+  it('shows the cards waiting, folds the defaults under Done for you, and opens In motion by itself on an answer held 20+ minutes', async () => {
     serve()
     render(<InboxPage />)
     expect(
       await screen.findByRole('heading', { name: "Push !1561's 2 commits to origin?" })
     ).toBeTruthy()
     expect(screen.getByRole('heading', { name: 'Install LibreOffice in the job?' })).toBeTruthy()
-    expect(screen.getByText('Defaults without a run · 1')).toBeTruthy()
     expect(screen.getByText('Up next from your answers · 1')).toBeTruthy()
     expect(screen.getByText(/someone is typing in Claude · review/)).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'All · 2' })).toBeTruthy()
+    const list = within(screen.getByRole('navigation', { name: 'Cards' }))
+    expect(list.getByRole('button', { name: 'All · 2' })).toBeTruthy()
+    openTab(/^Done for you/)
+    expect(screen.getByText('Defaults without a run · 1')).toBeTruthy()
   })
 
   it("shows a run's default under it in Done for you, and Got it acknowledges the run", async () => {
@@ -242,6 +255,7 @@ describe('InboxPage', () => {
       return method === 'pilot.queue.list' ? { entries: [] } : []
     })
     render(<InboxPage />)
+    openTab(/^Done for you/)
     const section = await screen.findByRole('region', { name: 'Done for you' })
     expect(within(section).getByRole('heading', { name: def.title })).toBeTruthy()
     expect(screen.queryByText(/Defaults without a run/)).toBeNull()
@@ -268,6 +282,7 @@ describe('InboxPage', () => {
       return method === 'pilot.queue.list' ? { entries: [] } : []
     })
     render(<InboxPage />)
+    openTab(/^Done for you/)
     expect(await screen.findByText('Defaults without a run · 1')).toBeTruthy()
     expect(screen.getByRole('region', { name: 'Done for you' })).toBeTruthy()
   })

@@ -19,6 +19,7 @@ import { closeRunPanel, openRunPanel } from '../../run-views/run-panel-state'
 import { pendingInboxCard, setPilotAutomationsView, showInboxCard } from '../automations-view'
 import { summary } from '../fixtures'
 import { InboxPage } from './InboxPage'
+import { resetInboxViewPrefs } from './inbox-view-prefs'
 
 const question = (worktreePath: string, title: string): InboxListRow =>
   inboxRow({
@@ -115,6 +116,12 @@ const cardTitled = async (title: string) =>
 const choice = (from: ParentNode, value: string): Element =>
   from.querySelector(`[data-choice="${value}"]`)!
 const callsOf = (method: string) => pilotRpc.mock.calls.filter(([m]) => m === method)
+const openDoneForYou = () =>
+  fireEvent.click(
+    within(screen.getByRole('toolbar', { name: 'Card status' })).getByRole('button', {
+      name: /^Done for you/
+    })
+  )
 // A headless engine's Apply now refusal (APPLY_NOW_ELSEWHERE in main/rpc/methods-answers.ts).
 const ELSEWHERE =
   "Answers are applied by the Pilot app that runs the scheduler; this process doesn't run it"
@@ -137,6 +144,8 @@ function serveMiniLate(): (list: InboxListPayload) => void {
 
 describe('InboxPage card actions, by machine', () => {
   afterEach(() => {
+    window.localStorage.clear()
+    resetInboxViewPrefs()
     cleanup()
     resetAutomationsFeed()
     resetPilotHostsFeed()
@@ -193,6 +202,7 @@ describe('InboxPage card actions, by machine', () => {
       })
     )
     render(<InboxPage />)
+    openDoneForYou()
     fireEvent.click(await screen.findByRole('button', { name: 'Got it: WEB-2' }))
     await waitFor(() => expect(callsOf('pilot.runs.acknowledge')).toHaveLength(1))
     expect(callsOf('pilot.runs.acknowledge')).toEqual([
@@ -209,6 +219,7 @@ describe('InboxPage card actions, by machine', () => {
       })
     )
     render(<InboxPage />)
+    openDoneForYou()
     await screen.findByRole('button', { name: 'Got it: WEB-2' })
     fireEvent.click(screen.getByRole('button', { name: 'Got all' }))
     await waitFor(() => expect(callsOf('pilot.runs.acknowledge')).toHaveLength(2))

@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { cleanup, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { InboxItemRow } from '../../../shared/api-types'
 import type { AnswerState } from '../../../shared/inbox-types'
@@ -11,6 +11,7 @@ import { InboxPage } from './InboxPage'
 import { INBOX_CSS } from './inbox-style'
 import { queuedPreparation } from '../../../shared/preparation'
 import { statusOf, statusPillClass } from './chips'
+import { resetInboxViewPrefs } from './inbox-view-prefs'
 
 describe('chip colours (the console’s: answers.html)', () => {
   it.each([
@@ -111,6 +112,8 @@ describe('colours on the page', () => {
   afterEach(() => {
     cleanup()
     pilotRpc.mockReset()
+    window.localStorage.clear()
+    resetInboxViewPrefs()
   })
 
   it('shows preparation progress separately from waiting and offers an early answer without approval', async () => {
@@ -137,6 +140,9 @@ describe('colours on the page', () => {
       return { entries: [] }
     })
     render(<InboxPage />)
+    // A card still preparing its context is under Preparing, not Needs you.
+    const tabs = within(screen.getByRole('toolbar', { name: 'Card status' }))
+    fireEvent.click(await tabs.findByRole('button', { name: 'Preparing · 1' }))
     expect(
       await screen.findByRole('button', { name: 'Answer before context is ready…' })
     ).toBeTruthy()
@@ -176,8 +182,13 @@ describe('colours on the page', () => {
     const { container } = render(<InboxPage />)
     const bug = (await screen.findByRole('heading', { name: 'A bug' })).closest('article')!
     expect(bug.textContent).not.toContain('waiting')
-    // No kind chip: neither the card nor its list row says "Left for you" or "Question".
-    expect(container.textContent).not.toMatch(/Left for you|Question|Action\b/)
+    // No kind chip: neither a card nor its list row says "Left for you" or "Question" (the kind filters may).
+    for (const el of [
+      ...screen.getAllByRole('article'),
+      screen.getByRole('navigation', { name: 'Cards' })
+    ]) {
+      expect(el.textContent).not.toMatch(/Left for you|Question|Action\b/)
+    }
     const q = screen.getByRole('heading', { name: 'A question' }).closest('article')!
     expect(q.querySelector('[data-choice="Install"]')?.className).toContain('bg-[var(--ib-accent)]')
     expect(q.querySelector('[data-choice="Bake"]')?.className).not.toContain(
