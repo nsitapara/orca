@@ -17,6 +17,27 @@ export function projectIn(reply: PilotcliReply): string | null {
   return parsed?.success ? parsed.data.worktree.project : null
 }
 
+const PROJECT_CACHE_MS = 60_000
+
+// projectOf, remembered per repo for a minute: the page asks on every load, and each ask is a pilotcli call and a
+// telemetry line.
+export function rememberedProjectOf(
+  projectOf: (repoPath: string) => Promise<string | null>,
+  now: () => number = Date.now,
+  ttlMs = PROJECT_CACHE_MS
+): (repoPath: string) => Promise<string | null> {
+  const seen = new Map<string, { at: number; project: Promise<string | null> }>()
+  return (repoPath) => {
+    const hit = seen.get(repoPath)
+    if (hit && now() - hit.at < ttlMs) {
+      return hit.project
+    }
+    const project = projectOf(repoPath)
+    seen.set(repoPath, { at: now(), project })
+    return project
+  }
+}
+
 // The playground of the desktop app: the repos Pilot lists, pilotcli as installed, View source through Pilot's CLI.
 export function createPlayground(opts: {
   listRepos: () => { path: string; displayName: string }[]
@@ -25,13 +46,14 @@ export function createPlayground(opts: {
   const pilotcli = pilotcliRunner({ pilotBinDir: opts.pilotBinDir })
   return playgroundService({
     repos: opts.listRepos,
-    projectOf: async (repoPath) =>
+    projectOf: rememberedProjectOf(async (repoPath) =>
       projectIn(
         await pilotcli({
           args: ['self', 'get-config', '-C', repoPath, '--format', 'json'],
           timeoutMs: GET_CONFIG_TIMEOUT_MS
         })
-      ),
+      )
+    ),
     spawn: spawnPlayground({ binary: () => pilotcliPath(), pilotBinDir: opts.pilotBinDir })
   })
 }

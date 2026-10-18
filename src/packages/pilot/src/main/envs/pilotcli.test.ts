@@ -96,6 +96,19 @@ describe('pilotcliRunner reaches real Orca, never Pilot', () => {
   })
 })
 
+describe('pilotcliRunner marks its calls', () => {
+  it('as Pilot’s own, for pilotcli’s telemetry (caller app)', async () => {
+    const fake = fakePilotcli()
+    fake.answer('env-create', { json: envelope('ok'), code: 0 })
+    await runnerFor(fake, { ...fake.env, PILOT_RUN_ID: 'x', PILOTCLI_CALLER: 'someone-else' })({
+      args: CREATE,
+      timeoutMs: 10_000
+    })
+    expect(fake.read('caller.log').trim()).toBe('pilot-app')
+    expect(fake.read('env.log').trim()).toBe('')
+  })
+})
+
 describe('pilotcliRunner finds pilotcli', () => {
   // The app's own env names a pilotcli that doesn't exist, so a lookup that ignores baseEnv fails here and can never
   // reach a real ~/.local/bin/pilotcli.
