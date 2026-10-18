@@ -380,7 +380,7 @@ One Pilot window shows the Inbox, Running, Automations and Activity of every mac
 - Running has a section per machine, each with its own run limit. The sidebar's Inbox and Running counts add up every machine.
 
 **A machine that can't be reached.**
-- Its items leave the page, and a line says so: "Mac mini can't be reached: its cards aren't shown here." On Running: "… so its runs aren't shown here. They go on running there."
+- Its items leave the page, and a line says so: "Mac mini can't be reached: its cards aren't shown here." On Running: "Mac mini can't be reached. Losing contact doesn't stop its runs; they just aren't visible from here."
 - A read that fails keeps that machine's last items, with "Couldn't refresh Mac mini's cards: <error>". When every machine fails, the page shows its one error, as it does alone.
 
 **Actions go to the item's machine.**
@@ -389,9 +389,9 @@ One Pilot window shows the Inbox, Running, Automations and Activity of every mac
 - **Automations:** the switch, Dry run and the YAML go to the row's home machine: the one that ticks it, else the one its `runs_on` names, else this machine, else the first that loaded it. The switch edits that machine's copy of the file only.
 - **Nothing falls back to this machine.** With several machines listed, when a row's `runs_on` machine isn't answering, hasn't sent its list yet ("Waiting for Mac mini's list…") or is named by no listed machine, the row's actions are refused with that reason, and the list says "Automations that run on Mac mini can't be changed from here."
 
-**Approvals stay with the owner (plan Question 1).** This window is a paired device to every other machine's engine. There, Approve (script routes and drafted changes), Resume and Continue run are refused, and the card or step shows that machine's own words ("Approve actions in Pilot on this Mac", where "this Mac" is the card's). Answering, skipping and revising work. A headless engine has no window, so its cards can be answered but never approved: keep jobs that need approval on a machine with a Pilot window.
+**Approvals stay with the owner.** This window is a paired device to every other machine's engine. There, Approve (script routes and drafted changes), Resume and Continue run are refused, and the card or step shows that machine's own words ("Approve actions in Pilot on this Mac", where "this Mac" is the card's). Answering, skipping and revising work. A headless engine has no window, so its cards can be answered but never approved: keep jobs that need approval on a machine with a Pilot window.
 
-**Machine names.** A machine's name is the one its runtime publishes: the name set with `pilot host name`, else the macOS Computer Name, else the hostname. `runs_on`, the chips and Run now all use it.
+**Machine names.** A machine's name is the one its runtime publishes: the name set with `pilot host name`, else the macOS Computer Name, else the hostname. `runs_on`, the chips and Run now all use it. The chips show each engine's name from `pilot.status`, the name `runs_on` matches. Activity's machine tags are Orca's own and can label this Mac differently, such as "Local Mac" (Known gaps).
 
     pilot host name                                         # print this machine's name
     pilot host name --name "Mac mini"                       # set it ("" goes back to the detected name)
@@ -414,11 +414,12 @@ The scheduler reads the name on every pass, so a rename counts from the next one
 **Run now asks which machine** when more than one machine has the automation.
 - The confirm bar's machine menu lists the machines that have it. It starts on the `runs_on` machine, else this machine, else another one (when this machine's scheduler is off, or it doesn't have the automation). It changes only when you change it.
 - A machine that can't start it is disabled with a short reason: "· scheduler off", "· not answering", "· not connected". The outcome line names the machine ("On Mac mini: …").
+- Starting a pinned job on a machine other than its `runs_on` one costs two things, and the bar says so in one muted line: a sending stage's handover is stranded on that machine, because its receiver's `run: now` trigger is refused there and the ids wait, then expire after 7 days; and that machine's own `handled` table doesn't know the owner's items, so it can redo work already done.
 
-**Job 14 serves only its own machine (plan Question 3).** Context preparation reads its own engine's queue. A job pinned to another machine that posts prepared cards (a code change to approve, a push) leaves them **Context queued** until 14 runs there too. `runs_on` names one machine, so keep those jobs where 14 runs.
+**Job 14 serves only its own machine.** Context preparation reads its own engine's queue. A job pinned to another machine that posts prepared cards (a code change to approve, a push) leaves them **Context queued** until 14 runs there too. `runs_on` names one machine, so keep those jobs where 14 runs.
 
 **A headless engine.** Start Pilot's orcad as in "Remote use (D25)", with:
-- `ORCA_USER_DATA=<folder>`: its data folder, and Pilot's store. Without it orcad shares real Orca's `~/.orca` (Known gaps).
+- `ORCA_USER_DATA=<folder>`: its data folder, and Pilot's store. Without it orcad shares real Orca's `~/.orca` (Known gaps), and Pilot's store then uses `~/.pilot/orcad`.
 - `PILOT_SCHEDULER=pinned`, and `PILOT_AUTOMATION_DIRS` when its automations aren't in `~/.pilot/automations`.
 - `PILOT_VAULT_EXPORT=off`: no vault export.
 - `PILOT_VAULT_AUTOMATIONS=<folder>`: where its cards' Details bundles must sit (read even with the export off).
@@ -537,8 +538,9 @@ These need a phone, a second Mac and an iPad on Tailscale. Open Pilot (`dist/mac
 - **A quit during env create** stops it at once, but its `env delete` runs at the next start.
 - **Pilot across machines, not done yet:**
   - A folded job row shows no "Runs on" line; its stage rows do.
-  - Another machine's run panel reads, but its Resume and Continue run are owner-only, and so is Approve (plan Question 1).
-  - `runs_on` names one machine, not a list (plan Question 3).
+  - Another machine's run panel reads, but its Resume and Continue run are owner-only, and so is Approve: approvals stay with the owner.
+  - `runs_on` names one machine, not a list, and job 14 serves only its own machine.
+  - Machine names can differ between Pilot and Orca: Pilot's chips use each engine's `pilot.status` name, while Activity's machine tags use Orca's own labels, which can call this Mac "Local Mac". Aligning the two is a follow-up.
   - The worktree panel shows this machine's runs only.
 
 ## Running upstream tests
