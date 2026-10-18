@@ -272,7 +272,8 @@ describe('who may tick, enable or pause an automation', () => {
         ticks.push([id, o])
         return { status: 'busy' }
       },
-      nextTickAt: () => null
+      nextTickAt: () => null,
+      ticksHere: () => true
     }
     const { find, store, dir } = setupWithStore({}, scheduler)
     store.runs.create({

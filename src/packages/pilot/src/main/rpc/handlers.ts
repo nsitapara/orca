@@ -39,7 +39,9 @@ function summarize(
     lastTick: ctx.store.lastTick(def.id),
     job: def.job,
     chain: chainOf(def, ctx.loaded().definitions),
-    live
+    live,
+    runsOn: def.runsOn,
+    ticksHere: ctx.schedulerOn && ctx.scheduler.ticksHere(def)
   }
 }
 

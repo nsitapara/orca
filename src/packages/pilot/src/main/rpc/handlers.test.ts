@@ -4,11 +4,18 @@ import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import Database from '../../../../../main/sqlite/sync-database'
 import { loadDefinitions } from '../definitions/loader'
+import type { PilotContext } from '../pilot-context'
 import { PilotStore } from '../store/store'
 import { activity, getAutomation, listAutomations, validateYaml } from './handlers'
 
 const YAML =
   'name: Fix CI\nrepo: web-platform\nschedule: "10 * * * *"\nitems: { kind: merge_request }\nchecks: [ { worktree: clean } ]\nsteps: [ { agent: claude, prompt: x } ]\n'
+
+function schedulerStub(nextTickAt: number | null, ticksHere: boolean): PilotContext['scheduler'] {
+  const stub = { nextTickAt: () => nextTickAt, ticksHere: () => ticksHere }
+  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the handlers read only the scheduler's nextTickAt and ticksHere.
+  return stub as never
+}
 
 function context() {
   const dir = mkdtempSync(join(tmpdir(), 'pilot-rpc-'))
@@ -25,7 +32,7 @@ function context() {
       dirs: [dir],
       loaded: () => loaded,
       reload: () => loaded,
-      scheduler: { nextTickAt: () => Date.UTC(2026, 9, 10, 20, 10) } as never,
+      scheduler: schedulerStub(Date.UTC(2026, 9, 10, 20, 10), true),
       actions: { entries: () => [], get: () => null },
       dispatcher: null,
       schedulerOn: true
@@ -65,6 +72,16 @@ describe('Pilot API handlers', () => {
     const held = { ...ctx, loaded: () => ({ ...loaded, displayOnly: ['ci'] }) }
     expect(listAutomations(ctx).automations[0].nextTickAt).not.toBeNull()
     expect(listAutomations(held).automations[0].nextTickAt).toBeNull()
+  })
+
+  it('says where each automation runs and whether this machine ticks it', () => {
+    const { ctx } = context()
+    expect(listAutomations(ctx).automations.map((a) => [a.runsOn, a.ticksHere])).toEqual([
+      [null, true]
+    ])
+    expect(listAutomations({ ...ctx, schedulerOn: false }).automations[0].ticksHere).toBe(false)
+    const elsewhere = { ...ctx, scheduler: schedulerStub(null, false) }
+    expect(listAutomations(elsewhere).automations[0].ticksHere).toBe(false)
   })
 
   it('returns a definition with its YAML text and check names', () => {

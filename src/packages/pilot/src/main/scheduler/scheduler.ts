@@ -6,6 +6,7 @@ import { mapLimit } from '../map-limit'
 import type { PassFetchCache } from '../sources/fetch-cache'
 import { REPO_WAIT_MS, RepoReadiness } from './repo-readiness'
 import { tickQueued, type QueuedTickDeps } from './queued-ticks'
+import type { RunsOnGate } from './runs-on-gate'
 import type { TickOptions, TickResult } from './tick-runner'
 
 export type SchedulerDeps = {
@@ -22,6 +23,8 @@ export type SchedulerDeps = {
   // A scheduled automation whose repo the runtime doesn't list is not ticked; this is where that is
   // reported (A4), so it shows as a definition problem rather than a failed tick.
   repoProblem(def: AutomationDefinition, message: string): void
+  // Which jobs this machine ticks (runs_on, PILOT_SCHEDULER=pinned); absent: every job ticks here.
+  runsOn?: RunsOnGate
   log(message: string): void
 } & QueuedTickDeps
 
@@ -81,7 +84,16 @@ export class PilotScheduler {
     private readonly startDelayMs = SCHEDULER_START_DELAY_MS
   ) {
     this.startedAt = deps.now()
-    this.repos = new RepoReadiness(deps, this.startedAt, isScheduled)
+    this.repos = new RepoReadiness(deps, this.startedAt, (def) => this.scheduledHere(def))
+  }
+
+  // Whether this machine's scheduler ticks it. Run now by hand runs it here either way.
+  ticksHere(def: AutomationDefinition): boolean {
+    return this.deps.runsOn?.ticksHere(def) ?? true
+  }
+
+  private scheduledHere(def: AutomationDefinition): boolean {
+    return isScheduled(def) && this.ticksHere(def)
   }
 
   // Why the delay: PTYs register after the window opens (desktop) or serve launch, so agents can't
@@ -126,8 +138,8 @@ export class PilotScheduler {
   }
 
   nextTickAt(def: AutomationDefinition): number | null {
-    if (!isScheduled(def)) {
-      // Forgotten, so enabling it or giving it a schedule later counts as an edit (see walkFrom).
+    if (!this.scheduledHere(def)) {
+      // Forgotten, so enabling, scheduling or pinning it here later counts as an edit (see walkFrom).
       this.nextTicks.delete(def.id)
       return null
     }
@@ -244,6 +256,10 @@ export class PilotScheduler {
     }
     if (!def.enabled) {
       return 'it is turned off'
+    }
+    const elsewhere = this.deps.runsOn?.refusal(def)
+    if (elsewhere) {
+      return elsewhere
     }
     const recent = (this.triggeredAt.get(id) ?? []).filter((at) => this.deps.now() - at < MINUTE_MS)
     this.triggeredAt.set(id, recent)

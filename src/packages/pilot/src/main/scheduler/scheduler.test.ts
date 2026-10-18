@@ -12,6 +12,7 @@ import {
   REPO_WAIT_MS,
   type SchedulerDeps
 } from './scheduler'
+import { runsOnGate, type RunsOnGate } from './runs-on-gate'
 import type { TickOptions, TickResult } from './tick-runner'
 
 vi.mock('../../shared/schedule/cron', async (importOriginal) => {
@@ -19,9 +20,9 @@ vi.mock('../../shared/schedule/cron', async (importOriginal) => {
   return { ...actual, nextTickAfter: vi.fn(actual.nextTickAfter) }
 })
 
-function def(id: string, schedule: string, enabled = true) {
+function def(id: string, schedule: string, enabled = true, extra = '') {
   const r = parseAutomationYaml(
-    `name: ${id}\nrepo: r\nschedule: "${schedule}"\nenabled: ${enabled}\nitems: { kind: merge_request }\nsteps: [ { agent: claude, prompt: x } ]\n`,
+    `name: ${id}\nrepo: r\nschedule: "${schedule}"\nenabled: ${enabled}\n${extra}items: { kind: merge_request }\nsteps: [ { agent: claude, prompt: x } ]\n`,
     `/a/${id}.yaml`
   )
   if (!r.ok) {
@@ -41,7 +42,8 @@ function loadedOf(defs: ReturnType<typeof def>[]): LoadedDefinitions {
 function deps(
   defs: ReturnType<typeof def>[],
   now: number,
-  last: number | null
+  last: number | null,
+  runsOn?: RunsOnGate
 ): SchedulerDeps & { ran: string[]; logs: string[]; problems: string[] } {
   const ran: string[] = []
   const logs: string[] = []
@@ -62,7 +64,8 @@ function deps(
     runTick: async (d) => {
       ran.push(d.id)
       return OK
-    }
+    },
+    ...(runsOn ? { runsOn } : {})
   }
 }
 
@@ -534,5 +537,50 @@ describe('PilotScheduler run queue', () => {
     await new PilotScheduler(d).tickAll()
     expect(d.ran).toEqual(['ci'])
     expect(d.logs).toContain("[pilot] couldn't read the run queue: database is locked")
+  })
+})
+
+describe('PilotScheduler with runs_on', () => {
+  const at1012 = Date.UTC(2026, 9, 10, 19, 12) // 12:12 PDT
+  const CAUSE = { automationId: 'dev-e2e-fix', runId: 'run-1', stage: 1, ids: ['WEB-2123'] }
+  const gate = runsOnGate({ machineName: () => 'Mac mini', pinnedOnly: false })
+  const here = def('here', '10 * * * *', true, 'runs_on: Mac mini\n')
+  const there = def('there', '10 * * * *', true, 'runs_on: Linux box\n')
+
+  it('ticks a due job pinned here, never one pinned elsewhere, which has no next tick here', async () => {
+    const d = deps([here, there], at1012, Date.UTC(2026, 9, 10, 18, 10), gate)
+    const s = new PilotScheduler(d)
+    await s.tickAll()
+    expect(d.ran).toEqual(['here'])
+    expect(s.nextTickAt(there)).toBeNull()
+    expect([s.ticksHere(here), s.ticksHere(there)]).toEqual([true, false])
+  })
+
+  it('never waits for, or reports, the repo of a job pinned to another machine (Review Focus 5)', async () => {
+    const d = deps([here, { ...there, repo: 'mac-only' }], at1012, null, gate)
+    d.reposListed = (repos) => repos.every((repo) => repo === 'r')
+    await new PilotScheduler(d).tickAll()
+    expect(d.ran).toEqual(['here'])
+    expect(d.problems).toEqual([])
+    expect(d.logs).toEqual([])
+  })
+
+  it('refuses a run: now trigger for a stage pinned elsewhere; its ids wait', () => {
+    const d = deps([there], at1012, null, gate)
+    const s = new PilotScheduler(d)
+    s.start()
+    s.trigger('there', CAUSE)
+    s.stop()
+    expect(d.ran).toEqual([])
+    expect(d.logs).toContain(
+      '[pilot] there: not triggered by dev-e2e-fix run run-1: it runs on Linux box, not Mac mini; its handed-over ids wait'
+    )
+  })
+
+  it('still runs a job pinned elsewhere by hand (Run now on this machine)', async () => {
+    const d = deps([there], at1012, null, gate)
+    const s = new PilotScheduler(d)
+    await s.tickNow('there', { dryRun: false, byHand: true })
+    expect(d.ran).toEqual(['there'])
   })
 })

@@ -36,6 +36,7 @@ import { runtimeStepProbe } from './run/watcher'
 import { openPlayground } from './playground/create'
 import { buildPilotMethods } from './rpc/methods'
 import { registerPilotRpcMethods } from './rpc/register'
+import { runsOnGate } from './scheduler/runs-on-gate'
 import { PilotScheduler } from './scheduler/scheduler'
 import { registrySources } from './scheduler/tick-decide'
 import { runTick, type TickDeps } from './scheduler/tick-runner'
@@ -237,6 +238,10 @@ function openPilot(
       repoProblems.set(def.id, { file: def.file, repo: def.repo, message }),
     newPass: () => createPassFetchCache(`pass-${now()}`, glabApiForRepo),
     queuedToTick: (defs) => capacity.toTick(defs),
+    runsOn: runsOnGate({
+      machineName: host.machineName ?? (() => ''),
+      pinnedOnly: options.pinnedOnly === true
+    }),
     log
   })
   handover.deps.trigger = (id, cause) => scheduler.trigger(id, cause)
