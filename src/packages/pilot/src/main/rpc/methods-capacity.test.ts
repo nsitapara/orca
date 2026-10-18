@@ -152,7 +152,7 @@ describe('pilot.capacity', () => {
     ).toBe(ok)
   })
 
-  it('retry frees a failed key and ticks its job by hand once, as Run now does', async () => {
+  it('retry frees a failed key and ticks its job once with only that key by hand', async () => {
     const { store, method, tickNow } = setup(null)
     store.markHandled('review', '7', 'run-1', 1)
     store.setHandledStatus('review', 'run-1', 'failed', 2)
@@ -162,7 +162,7 @@ describe('pilot.capacity', () => {
     )
     expect(store.handledKeys('review')).toEqual(new Set())
     expect(tickNow).toHaveBeenCalledTimes(1)
-    expect(tickNow).toHaveBeenCalledWith('review', { dryRun: false, byHand: true })
+    expect(tickNow).toHaveBeenCalledWith('review', { dryRun: false, byHandKeys: new Set(['7']) })
     expect(view.gaveUp).toEqual([])
   })
 

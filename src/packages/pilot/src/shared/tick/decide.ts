@@ -37,8 +37,10 @@ export type DecideInput = {
   notDue?: ReadonlyMap<string, string>
   // Retries after a failure (the Running page); a key failed more often than this is given up.
   retryLimit: number
-  // Run now (or Retry): a given-up key is due again.
+  // Run now: every given-up key is due again.
   byHand: boolean
+  // Items (by item key or once key) Run now or Retry started by hand: their given-up key is due again.
+  byHandKeys?: ReadonlySet<string>
 }
 type Gate = { verdict: Verdict; reason: string }
 type Candidate = {
@@ -64,7 +66,11 @@ function matchGate(def: AutomationDefinition, item: DecideItem): Gate | null {
 
 // A failed key stays due while the runner retries it (its retry gate waits), and by hand past the retry limit.
 // An ask-first job's isn't retried: you approve each run.
-function handledGate(input: Omit<DecideInput, 'scriptChecks'>, onceKey: string): Gate | null {
+function handledGate(
+  input: Omit<DecideInput, 'scriptChecks'>,
+  item: DecideItem,
+  onceKey: string
+): Gate | null {
   const state = input.handled.get(onceKey)
   if (!state) {
     return null
@@ -72,7 +78,11 @@ function handledGate(input: Omit<DecideInput, 'scriptChecks'>, onceKey: string):
   if (state.status !== 'failed' || input.definition.start === 'ask_first') {
     return { verdict: 'notdue', reason: `Already handled ${onceKey}` }
   }
-  if (state.failures > input.retryLimit && !input.byHand) {
+  const byHand =
+    input.byHand ||
+    input.byHandKeys?.has(item.key) === true ||
+    input.byHandKeys?.has(onceKey) === true
+  if (state.failures > input.retryLimit && !byHand) {
     const failures = plural(state.failures, 'failure')
     return { verdict: 'notdue', reason: `Gave up after ${failures}; Retry from Running` }
   }
@@ -103,7 +113,7 @@ export function preCheckGate(
   const def = input.definition
   const onceKey = oncePerKey(def.oncePer, item.fields, item.key)
   if (def.items === null) {
-    return usesHandled(def) ? handledGate(input, onceKey) : null
+    return usesHandled(def) ? handledGate(input, item, onceKey) : null
   }
   // A not-due item's field may be null (its script stopped the later ones), so items.match would misread it as out of scope.
   const notDue = input.notDue?.get(item.key)
@@ -111,7 +121,7 @@ export function preCheckGate(
   if (scoped) {
     return scoped
   }
-  const handled = handledGate(input, onceKey)
+  const handled = handledGate(input, item, onceKey)
   if (handled) {
     return handled
   }

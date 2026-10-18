@@ -4,7 +4,7 @@ import { EMPTY_PEOPLE, parsePeopleYaml } from '../../shared/people'
 import { runCapacity } from '../capacity/run-capacity'
 import { fakeFieldDeps, testItem } from '../fields/__fixtures__/field-deps'
 import { PilotStore } from '../store/store'
-import { runTick, type TickDeps } from './tick-runner'
+import { runTick, type TickDeps, type TickOptions } from './tick-runner'
 
 // Not merged is eligibility; an uncommitted file fails Clean, a runtime gate, so the item is held.
 const def = testDefinition({
@@ -103,8 +103,8 @@ describe("runTick holding an item in the runner's line", () => {
 
 const people = parsePeopleYaml('people:\n  - { id: nish, name: Nish }\n')
 
-// One clean MR, launched by `launch`; the give-up card goes to the tick's inbox.
-function launching(launch: TickDeps['launch']) {
+// Clean MRs, launched by `launch`; the give-up card goes to the tick's inbox.
+function launching(launch: TickDeps['launch'], iids: readonly number[] = [1]) {
   const store = PilotStore.open(':memory:')
   if (!people.ok) {
     throw new Error('setup')
@@ -117,22 +117,27 @@ function launching(launch: TickDeps['launch']) {
     resolveRepo: async () => ({ name: 'r', id: 'r', path: '/repo', base: 'origin/dev' }),
     sources: {
       list: async () => ({
-        items: [
+        items: iids.map((n) =>
           testItem({
-            key: 'mr:1',
-            label: '!1',
-            fields: { 'mr.iid': 1, 'mr.branch': 'web-1', 'mr.finished_block': '' },
-            worktreeHint: { branch: 'web-1' }
+            key: `mr:${n}`,
+            label: `!${n}`,
+            fields: { 'mr.iid': n, 'mr.branch': `web-${n}`, 'mr.finished_block': '' },
+            worktreeHint: { branch: `web-${n}` }
           })
-        ],
+        ),
         warnings: []
       }),
       scope: () => null
     },
     fields: fakeFieldDeps({
-      listWorktrees: async () => [
-        { id: 'r::/wt/1', path: '/wt/1', branch: 'web-1', head: 'h', linkedLinearIssue: null }
-      ]
+      listWorktrees: async () =>
+        iids.map((n) => ({
+          id: `r::/wt/${n}`,
+          path: `/wt/${n}`,
+          branch: `web-${n}`,
+          head: 'h',
+          linkedLinearIssue: null
+        }))
     }),
     ask: {
       store,
@@ -141,11 +146,19 @@ function launching(launch: TickDeps['launch']) {
     },
     launch
   }
-  const tick = (at: number, byHand = false) => {
+  const tick = (at: number, opts: Omit<TickOptions, 'dryRun'> = {}) => {
     clock = at
-    return runTick(def, directory, deps, { dryRun: false, byHand })
+    return runTick(def, directory, deps, { dryRun: false, ...opts })
   }
-  return { store, tick }
+  return { store, deps, tick }
+}
+
+// Three failed runs on a key: past the default limit of 2.
+function giveUp(store: PilotStore, onceKey: string): void {
+  for (const n of [1, 2, 3]) {
+    store.markHandled(def.id, onceKey, `old-${onceKey}-${n}`, t1)
+    store.setHandledStatus(def.id, `old-${onceKey}-${n}`, 'failed', t1)
+  }
 }
 
 const failing = async (): Promise<never> => {
@@ -183,9 +196,45 @@ describe('runTick counting a failed launch', () => {
     expect(later.decisions.map((x) => [x.verdict, x.reason])).toEqual([
       ['notdue', 'Gave up after 1 failure; Retry from Running']
     ])
-    const byHand = await tick(t2 + 60_000, true)
+    const byHand = await tick(t2 + 60_000, { byHand: true })
     expect(byHand.decisions.map((x) => x.verdict)).toEqual(['started'])
     expect(store.handledRows(def.id)[0].failures).toBe(2)
     expect(store.inbox.list({ automationId: def.id })).toHaveLength(1)
+  })
+})
+
+describe('runTick starting a given-up key by hand', () => {
+  const started = async () => ({ terminalHandle: 't', paneKey: 'p' })
+
+  it("keeps Run now's given-up key in the line through a re-check while it waits for a slot", async () => {
+    const { store, deps, tick } = launching(started)
+    deps.capacity = runCapacity({ store, definitions: () => [def], now: () => deps.now() })
+    giveUp(store, '1')
+    store.capacity.setRunLimit(1, t1)
+    store.runs.create({
+      id: 'busy',
+      automationId: def.id,
+      tickId: null,
+      itemKey: 'mr:9',
+      itemLabel: '!9',
+      worktreePath: '/wt/9',
+      startedAt: t1
+    })
+    const runNow = await tick(t2, { byHand: true })
+    expect(runNow.decisions.map((x) => x.verdict)).toEqual(['queued'])
+    const recheck = await tick(t2 + 60_000, { recheck: true })
+    expect(recheck.decisions.map((x) => x.verdict)).toEqual(['queued'])
+    expect(store.capacity.queued().map((q) => [q.itemKey, q.byHand])).toEqual([['mr:1', true]])
+  })
+
+  it("starts only Retry's key of a job with two given-up keys", async () => {
+    const { store, tick } = launching(started, [1, 2])
+    giveUp(store, '1')
+    giveUp(store, '2')
+    const retried = await tick(t2, { byHandKeys: new Set(['1']) })
+    expect(retried.decisions.map((x) => [x.key, x.verdict])).toEqual([
+      ['mr:1', 'started'],
+      ['mr:2', 'notdue']
+    ])
   })
 })

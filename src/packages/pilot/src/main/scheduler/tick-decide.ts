@@ -175,6 +175,21 @@ async function scriptChecks(
   return out
 }
 
+export type ByHand = { byHand?: boolean; byHandKeys?: ReadonlySet<string> }
+
+// A row Run now queued keeps its exemption at every re-check, until its item starts.
+function byHandKeys(
+  store: PilotStore,
+  automationId: string,
+  asked: ReadonlySet<string> | undefined
+): Set<string> {
+  const queued = store.capacity
+    .queued()
+    .filter((q) => q.automationId === automationId && q.byHand)
+    .map((q) => q.itemKey)
+  return new Set([...(asked ?? []), ...queued])
+}
+
 // waitingSince is also the item's due time, its place in the runner's line.
 function toDecideItem(item: Item, seenAt: ReadonlyMap<string, number>, now: number): DecideItem {
   return {
@@ -228,14 +243,14 @@ export function worktreeTakenSinceDecide(
 // One automation's decision (spec §6): repo → items → built-in fields → scope → custom fields →
 // script checks → decideTick. A failing source or worktree listing throws; the tick runner records
 // the tick as failed and the next one retries. `tickId` is the tick row the runner started first (G3).
-// `byHand`: Run now or Retry, which start a key the runner gave up on.
+// `hand`: Run now (the whole job) or Retry (its keys), which start a key the runner gave up on.
 export async function decideTickItems(
   def: AutomationDefinition,
   people: PeopleDirectory,
   deps: DecideDeps,
   pass: PassFetchCache,
   tickId: number,
-  byHand = false
+  hand: ByHand = {}
 ): Promise<DecideOutcome> {
   const now = deps.now()
   const repo = await deps.resolveRepo(def.repo)
@@ -288,7 +303,8 @@ export async function decideTickItems(
     busyWorktrees: busyWorktrees(deps.store, repo),
     notDue: custom.notDue,
     retryLimit: deps.store.capacity.retryLimit(),
-    byHand
+    byHand: hand.byHand === true,
+    byHandKeys: byHandKeys(deps.store, def.id, hand.byHandKeys)
   }
   const decisions = decideTick({
     ...input,

@@ -91,7 +91,7 @@ describe('decideTick: scope, once_per and baseline', () => {
   type HandledCase = [
     string,
     HandledState,
-    { retry?: number | null; askFirst?: boolean; byHand?: boolean },
+    { retry?: number | null; askFirst?: boolean; byHand?: boolean; byHandKeys?: string[] },
     string,
     string
   ]
@@ -110,6 +110,20 @@ describe('decideTick: scope, once_per and baseline', () => {
       'failed past the retry limit, by hand',
       failedAs(3, 13 * HOUR),
       { byHand: true },
+      'started',
+      'All checks pass'
+    ],
+    [
+      'failed past the retry limit, its item by hand',
+      failedAs(3, 13 * HOUR),
+      { byHandKeys: ['mr:1'] },
+      'started',
+      'All checks pass'
+    ],
+    [
+      'failed past the retry limit, its key by hand',
+      failedAs(3, 13 * HOUR),
+      { byHandKeys: ['1'] },
       'started',
       'All checks pass'
     ],
@@ -149,7 +163,8 @@ describe('decideTick: scope, once_per and baseline', () => {
     })
     const given = input(def, [item(1)], {
       handled: new Map([['1', state]]),
-      byHand: opts.byHand ?? false
+      byHand: opts.byHand ?? false,
+      byHandKeys: new Set(opts.byHandKeys)
     })
     const [d] = decideTick(given)
     expect([d.verdict, d.reason]).toEqual([verdict, reason])

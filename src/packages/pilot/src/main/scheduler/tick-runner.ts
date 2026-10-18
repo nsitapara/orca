@@ -47,12 +47,14 @@ export type TickDeps = DecideDeps & {
 }
 // `pass` is the scheduler pass's fetch cache, shared by every automation that ticks in that pass. `trigger`: the run
 // whose feed (run: now) asked for this tick, recorded on it for Activity. `byHand`: a Run now, whose runs are stored
-// with trigger `manual`. `recheck`: the runner's line asked for it; Activity leaves it out unless it starts a run.
+// with trigger `manual`. `byHandKeys`: Retry's keys, due again though the runner gave up on them. `recheck`: the
+// runner's line asked for it; Activity leaves it out unless it starts a run.
 export type TickOptions = {
   dryRun: boolean
   pass?: PassFetchCache
   trigger?: TickTrigger
   byHand?: boolean
+  byHandKeys?: ReadonlySet<string>
   recheck?: boolean
 }
 

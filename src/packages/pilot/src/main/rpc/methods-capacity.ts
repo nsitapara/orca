@@ -6,7 +6,6 @@ import { MAX_RETRY_LIMIT } from '../../shared/capacity/retry-limit'
 import { capacityView } from '../capacity/capacity-view'
 import { readSystemMemory, type SystemMemory } from '../capacity/system-memory'
 import type { PilotContext } from '../pilot-services'
-import { tickNow } from './handlers'
 import { CallerBinding, refuseAgentCaller } from './run-binding'
 
 export const AGENT_SETS_LIMIT =
@@ -91,8 +90,8 @@ export function buildCapacityMethods(
         return payload(c, readSystem, now)
       }
     }),
-    // A key the runner gave up on, or a failed run's: freed, then its job ticks by hand as Run now does, so the item
-    // goes through the job's checks and the runner's gates again.
+    // A key the runner gave up on, or a failed run's: freed, then its job ticks with that key by hand, so the item goes
+    // through the job's checks and the runner's gates again and the job's other given-up keys stay given up.
     defineMethod({
       name: 'pilot.capacity.retry',
       permission: 'workspace',
@@ -105,7 +104,8 @@ export function buildCapacityMethods(
         }
         c.store.resetFailures(p.automationId, p.onceKey)
         if (c.schedulerOn) {
-          void tickNow(c, p.automationId).catch((error: unknown) => {
+          const tick = { dryRun: false, byHandKeys: new Set([p.onceKey]) }
+          void c.scheduler.tickNow(p.automationId, tick).catch((error: unknown) => {
             const message = error instanceof Error ? error.message : String(error)
             console.warn(`[pilot] ${p.automationId}: Retry's tick failed: ${message}`)
           })
