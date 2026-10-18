@@ -11,7 +11,6 @@ import type {
   ScreenPair
 } from '../../shared/details'
 import { DetailsRefused, readCapped } from './details-read'
-import { ReviewFileSchema } from './details-schema'
 import type { PreparationRequirement } from '../../shared/preparation'
 
 function recorded(
@@ -163,8 +162,7 @@ function validScreens(pairs: ScreenPair[], files: ArtifactFile[]): boolean {
 
 export function generatedArtifacts(
   bundle: DetailsBundle,
-  files: ArtifactFile[],
-  texts: Record<string, string> = {}
+  files: ArtifactFile[]
 ): PreparationRequirement[] {
   const generated: PreparationRequirement[] = []
   if (
@@ -187,13 +185,6 @@ export function generatedArtifacts(
   if (diffs.length && diffs.every((block) => validChecks(block, files))) {
     generated.push('checks')
   }
-  const reviews = bundle.blocks.filter((block) => block.type === 'review')
-  if (
-    reviews.length &&
-    reviews.every((block) => validReview(texts[block.file], block.file, files))
-  ) {
-    generated.push('review')
-  }
   return generated
 }
 
@@ -202,11 +193,7 @@ export function validatePreparationEvidence(
   snapshot: DetailsSnapshot,
   required: PreparationRequirement[]
 ): string[] {
-  const generated = generatedArtifacts(
-    snapshot.bundle,
-    snapshot.ref.artifacts?.files ?? [],
-    snapshot.texts
-  )
+  const generated = generatedArtifacts(snapshot.bundle, snapshot.ref.artifacts?.files ?? [])
   const errors = required
     .filter((kind) => !generated.includes(kind))
     .map((kind) => `Required ${kind} evidence is missing or invalid`)
@@ -222,9 +209,6 @@ export function validatePreparationEvidence(
     }
     if (block.type === 'screens' && !validScreens(block.pairs, files)) {
       errors.push('Attached screens evidence is invalid')
-    }
-    if (block.type === 'review' && !validReview(snapshot.texts[block.file], block.file, files)) {
-      errors.push('Attached review evidence is invalid')
     }
     if (block.type === 'missing' && required.some((kind) => kind === block.slot)) {
       errors.push(`Required ${block.slot} evidence is unavailable: ${block.why}`)
@@ -250,25 +234,6 @@ export function validImageBytes(bytes: Buffer, extension: string): boolean {
     )
   }
   return false
-}
-
-function validReview(text: string | undefined, ref: string, files: ArtifactFile[]): boolean {
-  if (!text) {
-    return false
-  }
-  try {
-    const parsed = ReviewFileSchema.safeParse(JSON.parse(text))
-    const hash = createHash('sha256').update(text).digest('hex')
-    return (
-      parsed.success &&
-      Boolean(parsed.data.head_sha.trim() && parsed.data.web_url.trim()) &&
-      parsed.data.parts.length > 0 &&
-      parsed.data.parts.every((part) => part.comment.trim()) &&
-      recorded(files, ref, hash)
-    )
-  } catch {
-    return false
-  }
 }
 
 // One file a prepared bundle names, read and hashed for its artifact manifest (an image must hold image bytes).

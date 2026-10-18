@@ -32,7 +32,6 @@ export function routeFor(
     type: item.type,
     action: item.action,
     runnable: item.action !== null && catalog.get(item.action) !== null,
-    parts: item.parts,
     text: answer.text,
     option: answer.option,
     options: item.options.map((o) => o.label)
@@ -80,8 +79,7 @@ function firesOf(item: InboxItemRow, route: Route): string {
     if (item.action === 'start_run') {
       return 'Start the run it asked about'
     }
-    const without = route.leaveOut.length ? ` without ${route.leaveOut.join(', ')}` : ''
-    return `Run ${item.action}${without}; no agent`
+    return `Run ${item.action}; no agent`
   }
   if (route.revise) {
     return 'Its agent revises the card and asks again'

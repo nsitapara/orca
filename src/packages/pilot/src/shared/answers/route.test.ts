@@ -2,22 +2,16 @@ import { describe, expect, it } from 'vitest'
 import type { InboxType } from '../api-types'
 import { answerWord, routeAnswer, START_RUN_ONLY, startNotes, startsRun, type Route } from './route'
 
-type Parts = Record<string, string>
-const CLEANUP: Parts = { '1': 'web-1474 !1402', '2': 'web-2077 !1499', '3': 'web-1513 !1513' }
-const REVIEW: Parts = { F1: 'Null check in TreeNode', F2: 'Naming in Filters' }
-
 function route(
   type: InboxType,
   text: string,
   runnable: boolean,
-  parts: Parts = {},
   action: string | null = null
 ): Route {
   return routeAnswer({
     type,
     text,
     runnable,
-    parts,
     action: action ?? (runnable ? 'remove-worktree' : null)
   })
 }
@@ -37,12 +31,13 @@ describe('routeAnswer (test_apply.py test_route)', () => {
     ['default', 'keep', false, { kind: 'tick', outcome: 'kept' }],
     ['flagged', 'OK.', false, { kind: 'tick', outcome: 'kept' }],
     ['flagged', 'revert it', false, { kind: 'agent', revise: false }],
-    ['action', 'approve', true, { kind: 'script', leaveOut: [] }],
-    ['action', 'Do it', true, { kind: 'script', leaveOut: [] }],
+    ['action', 'approve', true, { kind: 'script' }],
+    ['action', 'Do it', true, { kind: 'script' }],
     ['action', 'skip', true, { kind: 'tick', outcome: 'skipped' }],
     ['action', "don't", true, { kind: 'tick', outcome: 'skipped' }],
     ['action', 'revise: drop finding 2', true, { kind: 'agent', revise: true }],
     ['action', 'drop finding 2', true, { kind: 'agent', revise: true }],
+    ['action', 'approve except: F2', true, { kind: 'agent', revise: true }],
     ['action', 'approve', false, { kind: 'agent', revise: false }],
     ['bug', 'approve', false, { kind: 'agent', revise: false }],
     ['left_for_you', 'keep the old value on Escape too', false, { kind: 'agent', revise: false }],
@@ -51,39 +46,17 @@ describe('routeAnswer (test_apply.py test_route)', () => {
     expect(route(type, text, runnable)).toEqual(expected)
   })
 
-  it.each<[string, Parts, Route]>([
-    ['approve', CLEANUP, { kind: 'script', leaveOut: [] }],
-    ['keep: web-1513', CLEANUP, { kind: 'script', leaveOut: ['3'] }],
-    ['keep: !1499, 3', CLEANUP, { kind: 'script', leaveOut: ['2', '3'] }],
-    ['keep: 1 2 3', CLEANUP, { kind: 'tick', outcome: 'skipped' }],
-    ['keep: web-9999', CLEANUP, { kind: 'agent', revise: true }],
-    ['keep: web', { '1': 'web a', '2': 'web b' }, { kind: 'agent', revise: true }],
-    ['keep: ,', CLEANUP, { kind: 'agent', revise: true }],
-    ['approve except: ,', REVIEW, { kind: 'agent', revise: true }],
-    ['approve except: ;', REVIEW, { kind: 'agent', revise: true }],
-    ['approve except: F2', REVIEW, { kind: 'script', leaveOut: ['F2'] }],
-    [
-      'approve except: x; part ñ1: soften',
-      { x: 'x;', y: 'part ñ1: soften' },
-      { kind: 'agent', revise: true }
-    ],
-    ['part F2: make this a question', REVIEW, { kind: 'agent', revise: true }],
-    ['revise: leave out F1; part F2: soften it', REVIEW, { kind: 'agent', revise: true }]
-  ])('parts: %j', (text, parts, expected) => {
-    expect(route('action', text, true, parts)).toEqual(expected)
-  })
-
   it.each<[string, Route]>([
-    ['Approve', { kind: 'script', leaveOut: [] }],
+    ['Approve', { kind: 'script' }],
     ['skip', { kind: 'tick', outcome: 'skipped' }],
-    ['approve: use the second fix', { kind: 'script', leaveOut: [] }],
+    ['approve: use the second fix', { kind: 'script' }],
     ['start it after lunch', { kind: 'reask', reason: START_RUN_ONLY }]
   ])('an ask-first card answered %j', (text, expected) => {
-    expect(route('action', text, true, {}, 'start_run')).toEqual(expected)
+    expect(route('action', text, true, 'start_run')).toEqual(expected)
   })
 
   it.each<[number, Route]>([
-    [0, { kind: 'script', leaveOut: [] }],
+    [0, { kind: 'script' }],
     [1, { kind: 'tick', outcome: 'skipped' }]
   ])(
     'an ask-first card whose labels it was not given, answered with option %i',
@@ -93,7 +66,6 @@ describe('routeAnswer (test_apply.py test_route)', () => {
           type: 'action',
           action: 'start_run',
           runnable: true,
-          parts: {},
           text: 'Review',
           option
         })
@@ -101,7 +73,7 @@ describe('routeAnswer (test_apply.py test_route)', () => {
     }
   )
 
-  const START: Route = { kind: 'script', leaveOut: [] }
+  const START: Route = { kind: 'script' }
   const SKIPPED: Route = { kind: 'tick', outcome: 'skipped' }
   it.each<[string, number | null, string, Route]>([
     ['the first start option', 0, 'Backend', START],
@@ -116,7 +88,6 @@ describe('routeAnswer (test_apply.py test_route)', () => {
         type: 'action',
         action: 'start_run',
         runnable: true,
-        parts: {},
         text,
         option,
         options: ['Backend', 'Full stack + UI', 'Skip']
@@ -126,7 +97,7 @@ describe('routeAnswer (test_apply.py test_route)', () => {
 
   it('a two-option card with its labels routes as before: Approve starts, Skip skips', () => {
     const labels = ['Approve', 'Skip']
-    const answer = { type: 'action' as const, action: 'start_run', runnable: true, parts: {} }
+    const answer = { type: 'action' as const, action: 'start_run', runnable: true }
     expect(routeAnswer({ ...answer, text: 'Approve', option: 0, options: labels })).toEqual(START)
     expect(routeAnswer({ ...answer, text: 'Skip', option: 1, options: labels })).toEqual(SKIPPED)
   })

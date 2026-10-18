@@ -33,8 +33,6 @@ function card(over: Partial<InboxItemRow>): InboxItemRow {
     details: null,
     action: null,
     actionArgs: null,
-    parts: {},
-    switchWords: [],
     digest: 'd',
     version: 1,
     status: 'open',
@@ -142,7 +140,7 @@ describe('composeAnswer', () => {
     'an ask-first Approve with %s starts the run, and the notes are its {run.answer}',
     (_n, notes, text) => {
       const choice = choicesFor(ASK).find((c) => c.label === 'Approve with notes…')!
-      const answer = composeAnswer(ASK, choice, notes, [])
+      const answer = composeAnswer(choice, notes)
       expect(answer).toEqual({ option: null, text })
       expect(startNotes(answer!.text)).toBe(notes.trim())
     }
@@ -161,40 +159,34 @@ describe('composeAnswer', () => {
     (label, notes, expected) => {
       const choice = choicesFor(MULTI).find((c) => c.label === label)!
       expect(choice.notes).toBe('optional')
-      expect(composeAnswer(MULTI, choice, notes, [])).toEqual(expected)
+      expect(composeAnswer(choice, notes)).toEqual(expected)
     }
   )
 
   it("a multi-start card's Skip takes no notes", () => {
     const skip = choicesFor(MULTI).find((c) => c.label === 'Skip')!
-    expect([skip.notes, composeAnswer(MULTI, skip, '', [])]).toEqual([
-      'none',
-      { option: 2, text: 'Skip' }
-    ])
+    expect([skip.notes, composeAnswer(skip, '')]).toEqual(['none', { option: 2, text: 'Skip' }])
   })
 
   const pick = (item: InboxItemRow, label: string) =>
     choicesFor(item).find((c) => c.label === label)!
-  const PARTS = { ...PUSH, parts: { F1: 'Null check', F2: 'Naming' } }
 
-  it.each<[string, InboxItemRow, string, string, string[], unknown]>([
-    ['Approve', PUSH, 'Approve', '', [], { option: 0, text: 'approve' }],
-    ['Skip', PUSH, 'Skip', '', [], { option: 1, text: 'skip' }],
+  it.each<[string, InboxItemRow, string, string, unknown]>([
+    ['Approve', PUSH, 'Approve', '', { option: 0, text: 'approve' }],
+    ['Skip', PUSH, 'Skip', '', { option: 1, text: 'skip' }],
     [
       'Revise with notes',
       PUSH,
       'Revise…',
       ' push only the fix ',
-      [],
       { option: null, text: 'revise: push only the fix' }
     ],
-    ['Revise without notes', PUSH, 'Revise…', '  ', [], null],
+    ['Revise without notes', PUSH, 'Revise…', '  ', null],
     [
       'a question option',
       card({ options: [{ label: 'e2e', meaning: '' }] }),
       'e2e',
       '',
-      [],
       { option: 0, text: 'e2e' }
     ],
     [
@@ -202,28 +194,10 @@ describe('composeAnswer', () => {
       card({ type: 'default', options: [{ label: 'Change…', meaning: '' }] }),
       'Change…',
       'use PDF ids',
-      [],
       { option: 0, text: 'change: use PDF ids' }
-    ],
-    [
-      'some parts left out',
-      PARTS,
-      'Approve',
-      '',
-      ['F2'],
-      { option: null, text: 'approve except: F2' }
-    ],
-    [
-      'parts kept with a Keep switch',
-      { ...PARTS, switchWords: ['Delete', 'Keep'] },
-      'Approve',
-      '',
-      ['F1'],
-      { option: null, text: 'keep: F1' }
-    ],
-    ['every part left out', PARTS, 'Approve', '', ['F1', 'F2'], { option: null, text: 'skip' }]
-  ])('%s', (_name, item, label, notes, off, expected) => {
-    expect(composeAnswer(item, pick(item, label), notes, off)).toEqual(expected)
+    ]
+  ])('%s', (_name, item, label, notes, expected) => {
+    expect(composeAnswer(pick(item, label), notes)).toEqual(expected)
   })
 })
 

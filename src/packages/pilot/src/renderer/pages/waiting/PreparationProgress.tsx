@@ -8,8 +8,7 @@ const ARTIFACT_LABELS: Record<PreparationRequirement, string> = {
   context: 'decision context',
   diff: 'code diff',
   screens: 'before / after screenshots',
-  checks: 'verification results',
-  review: 'exact review comments'
+  checks: 'verification results'
 }
 
 // The request a job saved for its card, as readable text: pretty JSON when it is JSON.

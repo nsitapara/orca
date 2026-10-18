@@ -150,7 +150,6 @@ describe('inbox RPC', () => {
     [{ type: 'note', title: 'x' }],
     [{ type: 'question', title: '' }],
     [{ type: 'question', title: 'x', detailsMd: 'x'.repeat(64 * 1024 + 1) }],
-    [{ type: 'action', title: 'x', switchWords: ['Post'] }],
     [{ type: 'question', title: 'x', detailsMd: 'x', detailsBundlePath: '/v/F2.json' }],
     [{ type: 'question', title: 'x', detailsBundlePath: '' }]
   ])('refuses add params %j', (params) => {

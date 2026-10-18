@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { DETAILS_LIMITS as LIMITS, type DetailsBundle, type ReviewFile } from '../../shared/details'
+import { DETAILS_LIMITS as LIMITS, type DetailsBundle } from '../../shared/details'
 
 // The bundle's shape (details.py's docstring): the known fields and their types are checked, extra keys are
 // kept, and every list is capped, so what the page draws is bounded whatever a job wrote.
@@ -12,7 +12,6 @@ export const BLOCK_TYPES = [
   'thread',
   'text',
   'missing',
-  'review',
   'report'
 ] as const
 
@@ -113,68 +112,37 @@ const Missing = z.looseObject({
   slot: maybeText,
   base: maybeText
 })
-const Review = z.looseObject({ type: z.literal('review'), title: maybeText, file: Ref })
 const Report = z.looseObject({ type: z.literal('report'), title: maybeText, file: Ref })
 
-export const BundleSchema: z.ZodType<DetailsBundle> = z
-  .looseObject({
-    version: z.literal(1),
-    item: z
-      .string()
-      .max(200)
-      .regex(/^[\w.-]+$/, 'the item id must be letters, digits, . _ or -'),
-    built: maybeText,
-    by: maybeText,
-    provenance: z
-      .object({
-        originatingRunId: text.nullable(),
-        preparingRunId: text.min(1),
-        itemId: text.min(1),
-        attempt: z.number().int().positive()
-      })
-      .optional(),
-    blocks: list(
-      z.discriminatedUnion('type', [
-        Facts,
-        Diff,
-        Screens,
-        Shots,
-        Code,
-        Thread,
-        Text,
-        Missing,
-        Review,
-        Report
-      ]),
-      LIMITS.blocks
-    )
-  })
-  .refine(
-    (bundle) => bundle.blocks.filter((b) => b.type === 'review').length <= LIMITS.reviews,
-    `a bundle has at most ${LIMITS.reviews} review blocks`
-  )
-
-export const ReviewFileSchema: z.ZodType<ReviewFile> = z.looseObject({
-  iid: z.number().int(),
-  title: z.string().optional(),
-  web_url: text,
-  project: text,
-  head_sha: text,
-  reviewer: z.looseObject({ name: text, username: text }),
-  parts: list(
-    z.looseObject({
-      id: text,
-      hash: z.string().optional(),
-      file: text,
-      line: z.number().int().nullish(),
-      side: maybeText,
-      severity: maybeText,
-      title: text,
-      body: maybeText,
-      in_diff: z.boolean(),
-      comment: text,
-      context: z.array(DiffRow).max(LIMITS.diffRows)
+export const BundleSchema: z.ZodType<DetailsBundle> = z.looseObject({
+  version: z.literal(1),
+  item: z
+    .string()
+    .max(200)
+    .regex(/^[\w.-]+$/, 'the item id must be letters, digits, . _ or -'),
+  built: maybeText,
+  by: maybeText,
+  provenance: z
+    .object({
+      originatingRunId: text.nullable(),
+      preparingRunId: text.min(1),
+      itemId: text.min(1),
+      attempt: z.number().int().positive()
     })
+    .optional(),
+  blocks: list(
+    z.discriminatedUnion('type', [
+      Facts,
+      Diff,
+      Screens,
+      Shots,
+      Code,
+      Thread,
+      Text,
+      Missing,
+      Report
+    ]),
+    LIMITS.blocks
   )
 })
 

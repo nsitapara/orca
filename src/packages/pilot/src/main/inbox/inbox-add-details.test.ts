@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync, realpathSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, realpathSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
@@ -6,7 +6,7 @@ import { parseAutomationYaml } from '../../shared/definition/parse'
 import type { InboxAddParams } from '../../shared/inbox-types'
 import { parsePeopleYaml } from '../../shared/people'
 import { PilotStore } from '../store/store'
-import { detailsFixture, REVIEW_BLOCK, rewriteBundle } from './__fixtures__/details-fixture'
+import { detailsFixture, rewriteBundle } from './__fixtures__/details-fixture'
 import { cardOf, inboxDigest } from './card'
 import { loadDetails } from './details-bundle'
 import { addInboxItem, CHANGED_AFTER_ANSWER } from './inbox-add'
@@ -77,23 +77,6 @@ describe('addInboxItem with a Details bundle', () => {
     expect(store.inbox.snapshot(row?.id ?? '')).toEqual(loadDetails(f.root, f.bundle))
     expect(addInboxItem(deps, card)).toEqual({ id: added.id, existing: true, refused: null })
     expect(store.inbox.get(added.id ?? '')).toMatchObject({ version: 1, digest: row?.digest })
-  })
-
-  it('is a new version when an inlined review file changes, though the bundle bytes do not', () => {
-    const { f, store, deps, card } = setup()
-    rewriteBundle(f.bundle, (b) => b.blocks.push(REVIEW_BLOCK))
-    const id = addInboxItem(deps, card).id ?? ''
-    const before = store.inbox.get(id)
-    const reviewPath = join(f.dir, 'sample-review.json')
-    const review = JSON.parse(readFileSync(reviewPath, 'utf8'))
-    review.parts[0].comment = 'Another comment'
-    writeFileSync(reviewPath, JSON.stringify(review))
-    addInboxItem(deps, card)
-    const after = store.inbox.get(id)
-    expect(after?.details?.sha256).toBe(before?.details?.sha256)
-    expect(after?.digest).not.toBe(before?.digest)
-    expect(after?.version).toBe(2)
-    expect(store.inbox.snapshot(id)?.texts['sample-review.json']).toContain('Another comment')
   })
 
   it('clears an answer given to the old bundle and replaces the snapshot', () => {

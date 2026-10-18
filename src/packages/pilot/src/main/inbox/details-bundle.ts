@@ -13,7 +13,7 @@ import { subjectOf, summaryOf } from '../../shared/details-summary'
 import { artifactOf, generatedArtifacts } from './details-preparation'
 import { DetailsRefused, readCapped, sha256 } from './details-read'
 import { isPromptControl } from './card'
-import { BLOCK_TYPES, BundleSchema, firstIssue, ReviewFileSchema } from './details-schema'
+import { BLOCK_TYPES, BundleSchema, firstIssue } from './details-schema'
 
 export { DetailsRefused }
 
@@ -97,8 +97,6 @@ function bundleRefs(bundle: DetailsBundle): { kind: RefKind; ref: string }[] {
           ref: check.output
         }))
       )
-    } else if (block.type === 'review') {
-      refs.push({ kind: 'review', ref: block.file })
     } else if (block.type === 'report') {
       refs.push({ kind: 'report', ref: block.file })
     } else if (block.type === 'screens') {
@@ -113,16 +111,13 @@ function bundleRefs(bundle: DetailsBundle): { kind: RefKind; ref: string }[] {
 }
 
 // A ref resolved (absolute as is, relative against the bundle's real folder): a regular file inside the
-// root, of an image type for screens and shots, JSON for a review, and HTML for a report.
+// root, of an image type for screens and shots, and HTML for a report.
 function refFile(root: string, dir: string, kind: RefKind, ref: string): string {
   const label = `${kind} ref "${ref}"`
   const real = realInside(root, isAbsolute(ref) ? ref : resolve(dir, ref), label)
   const images = kind === 'before' || kind === 'after' || kind === 'screenshot'
   if (images && !hasExtension([ref, real], isImage)) {
     throw new DetailsRefused(`${label} is not an image (${Object.keys(IMAGE_TYPES).join(', ')})`)
-  }
-  if (kind === 'review' && !hasExtension([ref, real], isJson)) {
-    throw new DetailsRefused(`${label} is not a .json file`)
   }
   if (kind === 'report' && !hasExtension([ref, real], isHtml)) {
     throw new DetailsRefused(`${label} is not an .html file`)
@@ -131,22 +126,6 @@ function refFile(root: string, dir: string, kind: RefKind, ref: string): string 
     throw new DetailsRefused(`${label} is not a file`)
   }
   return real
-}
-
-function readReview(real: string, ref: string): string {
-  const label = `review ref "${ref}"`
-  const text = readCapped(real, DETAILS_LIMITS.reviewBytes, label).toString('utf8')
-  let raw: unknown
-  try {
-    raw = JSON.parse(text)
-  } catch {
-    throw new DetailsRefused(`${label} is not JSON`)
-  }
-  const parsed = ReviewFileSchema.safeParse(raw)
-  if (!parsed.success) {
-    throw new DetailsRefused(`${label}: ${firstIssue(parsed.error)}`)
-  }
-  return text
 }
 
 // The option a question's draft implements: the first facts block's Drafted row (item-details SKILL.md step 4).
@@ -197,8 +176,7 @@ function checkPromptSafe(path: string): void {
 }
 
 // A card's bundle, read from an absolute path inside the Automations folder and checked whole: its shape,
-// and every file it names. Review files are inlined (their text is part of what Approve binds to). A plain
-// card's patch and images are only checked to exist inside the root (ruling 3). A prepared bundle (a
+// and every file it names. A plain card's patch and images are only checked to exist inside the root (ruling 3). A prepared bundle (a
 // preparation's completion, R-P3) also hashes the patch, image and check bytes into its artifact manifest.
 export function loadDetails(
   root: string | null,
@@ -218,27 +196,22 @@ export function loadDetails(
   }
   const bytes = readCapped(real, DETAILS_LIMITS.bundleBytes, label)
   const bundle = parseBundle(bytes, label)
-  const texts: [string, string][] = []
   const files: ArtifactFile[] = []
   for (const { kind, ref } of bundleRefs(bundle)) {
     const file = refFile(top, dirname(real), kind, ref)
-    if (kind === 'review') {
-      texts.push([ref, readReview(file, ref)])
-    }
     if (opts.prepared) {
       files.push(artifactOf(file, kind, ref))
     }
   }
-  const textsByRef = Object.fromEntries(texts)
   const draft = draftOf(bundle)
-  const summary = summaryOf(bundle, textsByRef, draft.drafted, opts.prepared ? files : undefined)
+  const summary = summaryOf(bundle, draft.drafted, opts.prepared ? files : undefined)
   const artifacts = opts.prepared
     ? {
         artifacts: {
           files,
           ...(bundle.provenance ? { provenance: bundle.provenance } : {}),
           expected: [],
-          generated: generatedArtifacts(bundle, files, textsByRef),
+          generated: generatedArtifacts(bundle, files),
           tags: summary
         }
       }
@@ -247,7 +220,7 @@ export function loadDetails(
     ref: {
       path: real,
       sha256: sha256(bytes),
-      inlined: Object.fromEntries(texts.map(([ref, text]) => [ref, sha256(text)])),
+      inlined: {},
       blocks: bundle.blocks.length,
       ...draft,
       summary,
@@ -255,7 +228,7 @@ export function loadDetails(
       subject: subjectOf(bundle) ?? ''
     },
     bundle,
-    texts: textsByRef
+    texts: {}
   }
 }
 

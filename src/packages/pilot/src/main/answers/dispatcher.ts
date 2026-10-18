@@ -176,11 +176,7 @@ export class AnswerDispatcher {
     if (route.kind === 'agent') {
       return { item, revise: route.revise, needsAgent: null }
     }
-    const step = await applyScript(
-      { inbox: this.deps.inbox, attempt: this.deps.attempt },
-      item,
-      route.leaveOut
-    )
+    const step = await applyScript({ inbox: this.deps.inbox, attempt: this.deps.attempt }, item)
     if (step.kind === 'agent') {
       return { item, revise: false, needsAgent: step.note }
     }

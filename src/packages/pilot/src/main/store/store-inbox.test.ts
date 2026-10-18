@@ -59,8 +59,6 @@ describe('InboxStore', () => {
       updatedAt: 100,
       outcome: null,
       replies: [],
-      parts: {},
-      switchWords: [],
       details: null
     })
     expect(store.inbox.get('missing')).toBeNull()
@@ -88,19 +86,15 @@ describe('InboxStore', () => {
     })
   })
 
-  it('keeps the parts, switch words, outcome and replies a card is added with', () => {
+  it('keeps the outcome and replies a card is added with', () => {
     const store = PilotStore.open(':memory:')
     store.inbox.add(
       item('i1', {
-        parts: { a: 'Fix lint', b: 'Add test' },
-        switchWords: ['Post', 'Leave out'],
         outcome: 'Pushed',
         replies: [{ text: 'Done at 10:00', by: 'pilot' }]
       })
     )
     expect(store.inbox.get('i1')).toMatchObject({
-      parts: { a: 'Fix lint', b: 'Add test' },
-      switchWords: ['Post', 'Leave out'],
       outcome: 'Pushed',
       replies: [{ text: 'Done at 10:00', by: 'pilot' }]
     })
@@ -151,8 +145,6 @@ describe('InboxStore', () => {
       {
         title: 'Push the fix now?',
         options: [{ label: 'Push', meaning: 'push it' }],
-        parts: { a: 'Fix the lint' },
-        switchWords: ['Post', 'Leave out'],
         digest: 'd2'
       },
       150
@@ -160,8 +152,6 @@ describe('InboxStore', () => {
     expect(edited).toMatchObject({
       title: 'Push the fix now?',
       options: [{ label: 'Push', meaning: 'push it' }],
-      parts: { a: 'Fix the lint' },
-      switchWords: ['Post', 'Leave out'],
       context: 'The branch had local commits',
       digest: 'd2',
       version: 2,

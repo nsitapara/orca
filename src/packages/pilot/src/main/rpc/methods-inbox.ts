@@ -48,9 +48,6 @@ export const InboxAdd = z
     detailsBundlePath: z.string().min(1).max(4096).optional(),
     action: z.string().min(1).max(64).optional(),
     actionArgs: z.record(z.string(), z.unknown()).optional(),
-    parts: z.record(z.string().min(1).max(64), text(500)).optional(),
-    // The switch words, on then off (R-3).
-    switchWords: z.array(z.string().min(1).max(40)).length(2).optional(),
     worktreePath: z.string().min(1).optional()
   })
   .refine((p) => p.detailsMd === undefined || p.detailsBundlePath === undefined, DETAILS_EITHER)

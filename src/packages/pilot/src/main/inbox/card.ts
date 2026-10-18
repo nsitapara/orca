@@ -14,14 +14,10 @@ export type InboxCard = {
   details: DetailsRef | null
   action: string | null
   actionArgs: Record<string, unknown> | null
-  parts: Record<string, string>
-  switchWords: string[]
 }
 
-const PART_ID = /^[\w.-]+$/
 export const MAX_DETAILS_CHARS = 64 * 1024
 export const MAX_ACTION_ARGS_BYTES = 16 * 1024
-export const MAX_PARTS = 20
 export const MAX_OPTIONS = 10
 
 // One line, like vault.py's _clean: a card reads the same on the page, in the vault export and in a prompt.
@@ -69,16 +65,8 @@ function checkCard(params: InboxAddParams): void {
   if ((params.options?.length ?? 0) > MAX_OPTIONS) {
     throw new Error(`A card can have at most ${MAX_OPTIONS} options`)
   }
-  if (Object.keys(params.parts ?? {}).length > MAX_PARTS) {
-    throw new Error(`A card can have at most ${MAX_PARTS} parts`)
-  }
   if (params.actionArgs && JSON.stringify(params.actionArgs).length >= MAX_ACTION_ARGS_BYTES) {
     throw new Error('Action arguments are limited to 16 KB')
-  }
-  for (const id of Object.keys(params.parts ?? {})) {
-    if (!PART_ID.test(id)) {
-      throw new Error(`Part id "${id}" must be letters, digits, dots, dashes or underscores`)
-    }
   }
   if ((params.detailsMd?.length ?? 0) > MAX_DETAILS_CHARS) {
     throw new Error('Details are limited to 64 KB')
@@ -97,46 +85,17 @@ export function buildCard(params: InboxAddParams, details: DetailsRef | null = n
     detailsMd: params.detailsMd?.trim() ? params.detailsMd : null,
     details,
     action: params.action ?? null,
-    actionArgs: params.action ? (params.actionArgs ?? {}) : null,
-    parts: Object.fromEntries(
-      Object.entries(params.parts ?? {}).map(([id, label]) => [id, oneLine(label)])
-    ),
-    switchWords: (params.switchWords ?? []).map(oneLine)
+    actionArgs: params.action ? (params.actionArgs ?? {}) : null
   }
 }
 
 export function cardOf(item: InboxItemRow): InboxCard {
-  const {
-    type,
-    title,
-    context,
-    suggested,
-    options,
-    detailsMd,
-    details,
-    action,
-    actionArgs,
-    parts,
-    switchWords
-  } = item
-  return {
-    type,
-    title,
-    context,
-    suggested,
-    options,
-    detailsMd,
-    details,
-    action,
-    actionArgs,
-    parts,
-    switchWords
-  }
+  const { type, title, context, suggested, options, detailsMd, details, action, actionArgs } = item
+  return { type, title, context, suggested, options, detailsMd, details, action, actionArgs }
 }
 
 // What an answer approves (contract §10): type, title, context, options, action and its pinned args (an object).
-// Parts with their switch words, and details, join only when present (E3), so a plain card keeps the six-field
-// digest. A bundle joins as its path, its bytes' SHA-256 and each inlined review text's, so an approval binds to
+// Details join only when present (E3), so a plain card keeps the six-field digest. A bundle joins as its path, its bytes' SHA-256 and each inlined review text's, so an approval binds to
 // exactly what was shown; a card without one hashes as before. The suggestion and replies never count.
 export function inboxDigest(card: InboxCard): string {
   const fields: unknown[] = [
@@ -147,9 +106,6 @@ export function inboxDigest(card: InboxCard): string {
     card.action,
     card.actionArgs
   ]
-  if (Object.keys(card.parts).length > 0 || card.switchWords.length > 0) {
-    fields.push(card.parts, card.switchWords)
-  }
   if (card.detailsMd) {
     fields.push(card.detailsMd)
   }

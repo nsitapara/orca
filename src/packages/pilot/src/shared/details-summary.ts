@@ -52,6 +52,8 @@ function shotsChip(blocks: DetailsBlock[]): string | null {
   return shots === 0 ? null : plural(shots, 'screenshot', 'screenshots')
 }
 
+// The findings in a review block's inlined text. New bundles can't hold a review block; the Details of the cards
+// stored with one (job 09's old Post cards) still count theirs.
 export function partsIn(text: string | undefined): number {
   if (!text) {
     return 0
@@ -62,16 +64,6 @@ export function partsIn(text: string | undefined): number {
   } catch {
     return 0
   }
-}
-
-function findingsChip(blocks: DetailsBlock[], texts: Record<string, string>): string | null {
-  let findings = 0
-  for (const b of blocks) {
-    if (b.type === 'review') {
-      findings += partsIn(texts[b.file])
-    }
-  }
-  return findings === 0 ? null : plural(findings, 'finding', 'findings')
 }
 
 function factsChip(blocks: DetailsBlock[]): string | null {
@@ -91,7 +83,6 @@ function factsChip(blocks: DetailsBlock[]): string | null {
 // The short labels on a card's Details bar (derived from the bundle; never part of the card's digest).
 export function summaryOf(
   bundle: DetailsBundle,
-  texts: Record<string, string>,
   drafted: boolean,
   artifacts?: ArtifactFile[]
 ): string[] {
@@ -101,7 +92,6 @@ export function summaryOf(
     diffChip(blocks, artifacts),
     screensChip(blocks),
     shotsChip(blocks),
-    findingsChip(blocks, texts),
     factsChip(blocks)
   ]
   return chips

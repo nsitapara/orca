@@ -31,14 +31,13 @@ export type RunAttempt = AttemptBase & {
   inboxItemId: null
   args: Record<string, unknown>
 }
-// A card's Approve, and nothing else: what runs is the card's own pinned args, re-read here, less the
-// parts the person left out. Powers don't apply; the card's claim is re-checked (powers.ts cardToRun).
+// A card's Approve, and nothing else: what runs is the card's own pinned args, re-read here. Powers don't
+// apply; the card's claim is re-checked (powers.ts cardToRun).
 export type CardAttempt = AttemptBase & {
   approved: true
   inboxItemId: string
   // The digest the answer approved; a card that changed since is refused.
   digest: string
-  leftOut?: string[]
 }
 export type AttemptRequest = RunAttempt | CardAttempt
 export type AskedResult = { outcome: 'asked'; detail: string; inboxItemId: string | null }
@@ -253,7 +252,7 @@ async function attemptForRun(
 // (else its person is asked, and nothing runs); with no run, only a dry run goes ahead.
 // A person's approval exists only through a card: Task 24c's Approve / Apply now calls this with
 // { action: card.action, approved: true, inboxItemId: card.id, runId: card.runId, digest: <the digest the
-// answer approved>, leftOut, dryRun: false }, and only for an answer saved from Pilot's desktop app (the
+// answer approved>, dryRun: false }, and only for an answer saved from Pilot's desktop app (the
 // approving caller must be `desktop`, never the CLI). The card is re-read and its own args run.
 export async function attemptAction(
   deps: AttemptDeps,

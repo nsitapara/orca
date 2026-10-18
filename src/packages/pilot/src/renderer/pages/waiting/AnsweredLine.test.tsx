@@ -30,8 +30,6 @@ const CARD = {
   details: null,
   action: 'mark_ready',
   actionArgs: { argv: ['1579', '430f7e68'] },
-  parts: {},
-  switchWords: [],
   digest: 'dig1',
   version: 2,
   status: 'answered',
@@ -349,31 +347,5 @@ describe('one click sends what the old radio + Save sent', () => {
         expect.objectContaining({ id: 'in_a', digest: 'dig1', text: 'Bake it', option: 1 })
       )
     )
-  })
-
-  it('a review card with one part switched off sends "approve except: 1" with no option', async () => {
-    serve(
-      open({
-        action: null,
-        parts: { '1': 'one', '2': 'two' },
-        switchWords: ['Post', 'Skip']
-      }),
-      []
-    )
-    render(<InboxPage />)
-    fireEvent.click(await screen.findByLabelText('Post 1'))
-    fireEvent.click(screen.getByRole('button', { name: 'Approve' }))
-    await waitFor(() =>
-      expect(pilotRpc).toHaveBeenCalledWith(
-        'pilot.inbox.answer',
-        expect.objectContaining({
-          id: 'in_a',
-          digest: 'dig1',
-          text: 'approve except: 1'
-        })
-      )
-    )
-    const sent = pilotRpc.mock.calls.find((c) => c[0] === 'pilot.inbox.answer')![1]
-    expect(sent).not.toHaveProperty('option')
   })
 })

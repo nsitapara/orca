@@ -31,9 +31,7 @@ import {
   inboxTarget,
   isDetailsBundleText,
   isInboxType,
-  MAX_DETAILS_BYTES,
-  parseParts,
-  parseSwitchWords
+  MAX_DETAILS_BYTES
 } from './inbox-args'
 
 type Flags = Map<string, string | boolean>
@@ -127,8 +125,6 @@ function addParams(flags: Flags): InboxAddParams {
     })
   )
   const options = orInvalid(() => getRepeatedStringFlag(flags, 'option').map(checkInboxOption))
-  const parts = orInvalid(() => parseParts(getRepeatedStringFlag(flags, 'part')))
-  const switchWords = orInvalid(() => parseSwitchWords(getRepeatedStringFlag(flags, 'switch')))
   return {
     ...target,
     ...given('preparation', preparation),
@@ -141,8 +137,6 @@ function addParams(flags: Flags): InboxAddParams {
     ...details,
     ...given('action', action),
     ...given('actionArgs', jsonObjectFlag(argsJson, 'args-json')),
-    ...given('parts', Object.keys(parts).length > 0 ? parts : undefined),
-    ...given('switchWords', nonEmpty(switchWords)),
     ...given('worktreePath', getOptionalStringFlag(flags, 'worktree'))
   }
 }

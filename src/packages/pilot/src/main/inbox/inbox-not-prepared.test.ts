@@ -117,7 +117,6 @@ describe('a refused preparation request', () => {
 
   it.each<[string, Partial<InboxAddParams>]>([
     ['an action', { action: 'push', actionArgs: PUSH.actionArgs, type: 'action' }],
-    ['parts', { parts: { F1: 'A' } }],
     ['a preparation request', { preparation: PREPARATION }],
     ['a type other than flagged', { type: 'question' }],
     ['a Details bundle', { detailsBundlePath: '/v/Automations/b.json' }]

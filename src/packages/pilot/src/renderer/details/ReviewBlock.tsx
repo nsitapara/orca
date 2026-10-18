@@ -8,12 +8,6 @@ import type {
 import { DiffTable, FileHeader, Section } from './blocks'
 import { Markdown, SafeLink } from './markdown'
 
-export type PartSwitches = {
-  off: readonly string[]
-  toggle(id: string): void
-  words: [string, string]
-}
-
 // The row a finding is anchored to: its line on its side, as a context row or a change on that side.
 function anchored(part: ReviewPart): (row: DiffRow) => boolean {
   const col = part.side === 'old' ? 0 : 1
@@ -41,18 +35,9 @@ function plural(n: number): string {
   return `${n} comment${n === 1 ? '' : 's'}`
 }
 
-function Thread({
-  part,
-  review,
-  parts
-}: {
-  part: ReviewPart
-  review: ReviewFile
-  parts: PartSwitches | null
-}): React.JSX.Element {
-  const on = !parts?.off.includes(part.id)
+function Thread({ part, review }: { part: ReviewPart; review: ReviewFile }): React.JSX.Element {
   return (
-    <div className={on ? 'glr-thread' : 'glr-thread off'} data-part={part.id}>
+    <div className="glr-thread" data-part={part.id}>
       <div className="glr-note">
         <span className="glr-num">{part.id}</span>
         <span className="glr-avatar">{initials(review.reviewer.name)}</span>
@@ -63,18 +48,6 @@ function Thread({
           <Markdown source={part.comment} />
         </div>
       </div>
-      <div className="glr-ctl">
-        {parts ? (
-          <button
-            type="button"
-            aria-pressed={on}
-            className="rounded border border-border px-2 py-0.5 text-xs"
-            onClick={() => parts.toggle(part.id)}
-          >
-            {on ? parts.words[0] : parts.words[1]}
-          </button>
-        ) : null}
-      </div>
     </div>
   )
 }
@@ -84,14 +57,12 @@ function FileGroup({
   count,
   list,
   review,
-  parts,
   withDiff
 }: {
   title: string
   count: string
   list: ReviewPart[]
   review: ReviewFile
-  parts: PartSwitches | null
   withDiff: boolean
 }): React.JSX.Element {
   return (
@@ -101,7 +72,7 @@ function FileGroup({
           {withDiff && part.context.length ? (
             <DiffTable rows={part.context} isAnchor={anchored(part)} />
           ) : null}
-          <Thread part={part} review={review} parts={parts} />
+          <Thread part={part} review={review} />
         </Fragment>
       ))}
     </FileHeader>
@@ -125,14 +96,13 @@ function groupByFile(list: ReviewPart[]): [string, ReviewPart[]][] {
   return [...byFile]
 }
 
+// A review block, read only: the Details of job 09's old Post cards, stored before review blocks were retired.
 export function ReviewBlock({
   block,
-  texts,
-  parts
+  texts
 }: {
   block: ReviewData
   texts: Record<string, string>
-  parts: PartSwitches | null
 }): React.JSX.Element {
   const review = parseReview(texts[block.file])
   if (!review) {
@@ -153,8 +123,7 @@ export function ReviewBlock({
             {review.project} · !{review.iid}
           </SafeLink>
           <p>
-            {plural(review.parts.length)} on head {review.head_sha.slice(0, 8)}, posted as you.
-            Nothing reaches GitLab until you approve.
+            {plural(review.parts.length)} on head {review.head_sha.slice(0, 8)}.
           </p>
         </div>
         {groupByFile(review.parts.filter((p) => p.in_diff)).map(([file, list]) => (
@@ -164,7 +133,6 @@ export function ReviewBlock({
             count={plural(list.length)}
             list={list}
             review={review}
-            parts={parts}
             withDiff
           />
         ))}
@@ -174,7 +142,6 @@ export function ReviewBlock({
             count="not on a changed line"
             list={general}
             review={review}
-            parts={parts}
             withDiff={false}
           />
         ) : null}

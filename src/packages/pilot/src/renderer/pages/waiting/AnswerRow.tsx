@@ -13,38 +13,6 @@ function notesPlaceholder(choice: Choice): string {
   return 'What should happen instead?'
 }
 
-function Parts({
-  item,
-  off,
-  onToggle
-}: {
-  item: InboxListRow
-  off: string[]
-  onToggle: (id: string) => void
-}): React.JSX.Element {
-  const onWord = item.switchWords[0] ?? 'Include'
-  const offWord = item.switchWords[1] ?? 'Leave out'
-  return (
-    <ul className="flex flex-col gap-1 text-sm">
-      {Object.entries(item.parts).map(([id, label]) => (
-        <li key={id} className="flex items-center gap-2">
-          <input
-            type="checkbox"
-            checked={!off.includes(id)}
-            onChange={() => onToggle(id)}
-            aria-label={`${onWord} ${id}`}
-          />
-          <span className="font-mono text-xs text-muted-foreground">{id}</span>
-          <span>{label}</span>
-          {off.includes(id) ? (
-            <span className="rounded border px-1 text-xs text-muted-foreground">{offWord}</span>
-          ) : null}
-        </li>
-      ))}
-    </ul>
-  )
-}
-
 const PRIMARY = 'bg-[var(--ib-accent)] text-[var(--ib-accent-fg)]'
 const OUTLINE = 'border border-border bg-background text-foreground hover:bg-muted'
 
@@ -60,14 +28,10 @@ function buttonClass(b: AnswerButton): string {
 // Undo). Only the choices that need words open the notes box, which has its own Send and Cancel.
 export function AnswerRow({
   item,
-  off,
-  onToggle,
   onSave,
   onPick
 }: {
   item: InboxListRow
-  off: string[]
-  onToggle: (id: string) => void
   onSave: (answer: Answer) => Promise<string | null>
   // Whether words are being typed and not yet sent (the card's "unsaved" pill).
   onPick: (picked: boolean) => void
@@ -78,7 +42,7 @@ export function AnswerRow({
   const [saving, setSaving] = useState(false)
   const [hint, setHint] = useState('')
   const send = async (choice: Choice, words: string) => {
-    const answer = composeAnswer(item, choice, words, off)
+    const answer = composeAnswer(choice, words)
     if (!answer) {
       return
     }
@@ -107,12 +71,9 @@ export function AnswerRow({
   }
   const skip = buttons.find((b) => b.role === 'skip')
   const rest = buttons.filter((b) => b.role !== 'skip')
-  const ready = open ? composeAnswer(item, open.choice, notes, off) !== null : false
+  const ready = open ? composeAnswer(open.choice, notes) !== null : false
   return (
     <div className="flex flex-col gap-2 pt-1">
-      {Object.keys(item.parts).length > 0 ? (
-        <Parts item={item} off={off} onToggle={onToggle} />
-      ) : null}
       {open ? (
         <div className="flex flex-col gap-2">
           <Textarea

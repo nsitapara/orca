@@ -45,35 +45,6 @@ export function checkInboxOption(raw: string): string {
   return raw
 }
 
-// --part <id>=<label>, repeatable: the parts of a card that can be approved or left out one by one.
-export function parseParts(pairs: readonly string[]): Record<string, string> {
-  const parts: Record<string, string> = {}
-  for (const pair of pairs) {
-    const at = pair.indexOf('=')
-    const id = at === -1 ? '' : pair.slice(0, at).trim()
-    const label = at === -1 ? '' : pair.slice(at + 1).trim()
-    if (id === '' || label === '') {
-      throw new Error(`--part "${pair}" isn't <id>=<label>`)
-    }
-    if (Object.hasOwn(parts, id)) {
-      throw new Error(`--part ${id} is given twice`)
-    }
-    parts[id] = label
-  }
-  return parts
-}
-
-// --switch given twice: the word for on, then the word for off (R-3), kept in that order.
-export function parseSwitchWords(words: readonly string[]): string[] {
-  if (words.length === 0) {
-    return []
-  }
-  if (words.length !== 2 || words.some((w) => w.trim() === '')) {
-    throw new Error('Give --switch twice: the word for on, then the word for off')
-  }
-  return words.map((w) => w.trim())
-}
-
 export type InboxTarget = Pick<
   InboxAddParams,
   'terminal' | 'runId' | 'stepIdx' | 'automationId' | 'itemKey'

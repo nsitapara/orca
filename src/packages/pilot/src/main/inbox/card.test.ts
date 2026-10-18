@@ -28,10 +28,6 @@ describe('buildCard', () => {
     [{ ...PUSH, title: '  ' }, 'A card needs a title'],
     [{ ...PUSH, type: 'question' as const }, 'Only an action card can carry an action'],
     [{ ...PUSH, action: undefined }, 'Action arguments need an action'],
-    [
-      { ...PUSH, parts: { 'F 1': 'x' } },
-      'Part id "F 1" must be letters, digits, dots, dashes or underscores'
-    ],
     [{ ...PUSH, detailsMd: 'x'.repeat(64 * 1024 + 1) }, 'Details are limited to 64 KB'],
     [
       { ...PUSH, detailsMd: '## Why', detailsBundlePath: '/v/F2.json' },
@@ -40,10 +36,6 @@ describe('buildCard', () => {
     [
       { ...PUSH, actionArgs: { argv: ['x'.repeat(16 * 1024)] } },
       'Action arguments are limited to 16 KB'
-    ],
-    [
-      { ...PUSH, parts: Object.fromEntries(Array.from({ length: 21 }, (_, i) => [`p${i}`, 'x'])) },
-      'A card can have at most 20 parts'
     ],
     [
       { ...PUSH, options: Array.from({ length: 11 }, () => 'x') },
@@ -55,9 +47,7 @@ describe('buildCard', () => {
     const card = buildCard({ ...PUSH, context: 'line one\nline   two' })
     expect(card).toMatchObject({
       context: 'line one line two',
-      actionArgs: PUSH.actionArgs,
-      parts: {},
-      switchWords: []
+      actionArgs: PUSH.actionArgs
     })
   })
 })
@@ -86,8 +76,6 @@ describe('inboxDigest', () => {
     ['options', { options: ['Approve — push', 'Skip — keep them local'] }],
     ['action', { action: 'mark_ready' }],
     ['pinned args', { actionArgs: { argv: ['/wt/1493', 'web-1493-a', 'ffffff0', '1a2b3c4'] } }],
-    ['parts', { parts: { F1: 'Null check' } }],
-    ['switch words', { parts: { F1: 'Null check' }, switchWords: ['Post', 'Leave out'] }],
     ['details', { detailsMd: '```diff\n-a\n+b\n```' }]
   ])('changes with the %s', (_name, change) => {
     expect(inboxDigest(buildCard({ ...PUSH, ...change }))).not.toBe(base)
@@ -100,11 +88,6 @@ describe('inboxDigest', () => {
   // Pinned from the code before bundles: a card without one must keep its exact digest.
   it.each([
     ['a plain card', PUSH, '6ae9b6066ee89adc970fa8ed14f7926f918923f14c76564b025f2dc14eb4db18'],
-    [
-      'a card with parts and switch words',
-      { ...PUSH, parts: { F1: 'Null check' }, switchWords: ['Post', 'Leave out'] },
-      'fb4538db5ae6f6b0508fe9923973e4610e6fe2d6d60620c0c38e719457b24c7a'
-    ],
     [
       'a card with markdown Details',
       { ...PUSH, detailsMd: '```diff\n-a\n+b\n```' },

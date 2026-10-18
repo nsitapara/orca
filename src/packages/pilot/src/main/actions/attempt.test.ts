@@ -77,7 +77,7 @@ const REQ: RunAttempt = {
   approved: false
 }
 
-// A card's Approve, as Task 24c sends it: the card, the digest the answer approved, and parts left out.
+// A card's Approve, as Task 24c sends it: the card and the digest the answer approved.
 function approve(card: InboxItemRow, extra: Partial<CardAttempt> = {}): CardAttempt {
   return {
     action: card.action ?? '',
@@ -331,24 +331,14 @@ describe('attemptAction on an approved card', () => {
   it("runs exactly approvedArgs: the card's args, pinned with the card's key", async () => {
     const { push, deps, inbox } = setup(['push'])
     push.pin = (args, key) => ({ ...args, write_id: key })
-    const card = file(inbox, { parts: { F1: 'Null check', F2: 'Naming' } })
-    const shown = approvedArgs(push, card, [])
+    const card = file(inbox)
+    const shown = approvedArgs(push, card)
     expect(await attemptAction(deps, approve(card))).toMatchObject({ outcome: 'done' })
-    expect(push.run).toHaveBeenCalledWith('args' in shown ? shown.args : null, {
+    expect(push.run).toHaveBeenCalledWith(shown.args, {
       dryRun: false,
       runId: 'run-1',
       inboxItemId: card.id
     })
-  })
-
-  it('refuses parts left out: no entry can leave any out', async () => {
-    const { push, deps, inbox } = setup(['push'])
-    const card = file(inbox, { parts: { F1: 'Null check' } })
-    expect(await attemptAction(deps, approve(card, { leftOut: ['F1'] }))).toMatchObject({
-      outcome: 'failed',
-      detail: "publish can't leave parts out"
-    })
-    expect(push.run).not.toHaveBeenCalled()
   })
 
   it.each([

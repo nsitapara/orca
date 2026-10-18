@@ -22,15 +22,14 @@ export function checkPreparationRequest(params: InboxAddParams): void {
   }
 }
 
-// D2's fallback runs nothing: a flagged notice with no action, parts or switch, and no request of its own.
+// D2's fallback runs nothing: a flagged notice with no action and no request of its own.
 export function checkNotPrepared(params: InboxAddParams): void {
   if (!params.notPrepared) {
     return
   }
-  const { action, actionArgs, parts, switchWords, preparation, type, detailsBundlePath } = params
+  const { action, actionArgs, preparation, type, detailsBundlePath } = params
   const carries = [action, actionArgs, preparation, detailsBundlePath].some((x) => x !== undefined)
-  const extras = Object.keys(parts ?? {}).length > 0 || (switchWords ?? []).length > 0
-  if (type !== 'flagged' || carries || extras) {
+  if (type !== 'flagged' || carries) {
     throw new Error(NOT_PREPARED_NOTICE_ONLY)
   }
 }

@@ -12,10 +12,6 @@ const diff = (added: number, removed: number, patch?: string): DetailsBlock => (
 })
 const facts = (...rows: [string, string][]): DetailsBlock => ({ type: 'facts', rows })
 const pair = { before: 'b.png', after: 'a.png' }
-const review = (n: number): [string, Record<string, string>] => [
-  'r.json',
-  { 'r.json': JSON.stringify({ parts: Array.from({ length: n }, (_, i) => ({ id: `p${i}` })) }) }
-]
 
 describe('summaryOf', () => {
   it('lists the chips in order, from the blocks', () => {
@@ -26,7 +22,7 @@ describe('summaryOf', () => {
       { type: 'shots', shots: [{ file: '1.png' }, { file: '2.png' }] },
       facts(['Severity', 'Major'], ['Status', 'Unconfirmed'])
     )
-    expect(summaryOf(b, {}, true)).toEqual([
+    expect(summaryOf(b, true)).toEqual([
       'drafted fix',
       'diff +4 −2',
       'before / after',
@@ -48,33 +44,19 @@ describe('summaryOf', () => {
     ['severity alone', bundle(facts(['Severity', 'minor'])), []],
     ['text only', bundle({ type: 'text', body: 'x' }), []]
   ])('%s', (_name, b, want) => {
-    expect(summaryOf(b, {}, false)).toEqual(want)
-  })
-
-  it('counts a review block’s findings from its inlined text', () => {
-    const [ref, texts] = review(4)
-    expect(summaryOf(bundle({ type: 'review', file: ref }), texts, false)).toEqual(['4 findings'])
-    const [one, oneText] = review(1)
-    expect(summaryOf(bundle({ type: 'review', file: one }), oneText, false)).toEqual(['1 finding'])
-    expect(summaryOf(bundle({ type: 'review', file: 'gone.json' }), {}, false)).toEqual([])
+    expect(summaryOf(b, false)).toEqual(want)
   })
 
   it('keeps at most 4 chips of at most 40 characters', () => {
-    const [ref, texts] = review(2)
     const b = bundle(
       diff(1, 1, 'p'),
       { type: 'screens', pairs: [pair] },
       { type: 'shots', shots: [{ file: '1.png' }] },
-      { type: 'review', file: ref },
       facts(['Severity', 'x'.repeat(60)], ['Status', 'open'])
     )
-    const chips = summaryOf(b, texts, true)
+    const chips = summaryOf(b, true)
     expect(chips).toHaveLength(4)
-    const long = summaryOf(
-      bundle(facts(['Severity', 'x'.repeat(60)], ['Status', 'open'])),
-      {},
-      false
-    )
+    const long = summaryOf(bundle(facts(['Severity', 'x'.repeat(60)], ['Status', 'open'])), false)
     expect(long[0].length).toBeLessThanOrEqual(40)
   })
 })

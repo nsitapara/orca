@@ -26,17 +26,6 @@ export function outcomeText(result: ActionResult): string {
   return head + link + log
 }
 
-// apply.py off_outcome + _parts_summary: "done: 1 done · 1 left out" (a Keep switch records `kept`).
-export function partsOutcome(item: InboxItemRow, result: ActionResult, leaveOut: string[]): string {
-  const off = (item.switchWords[1] ?? 'Leave out').toLowerCase() === 'keep' ? 'kept' : 'left out'
-  const counts = new Map<string, number>()
-  for (const id of Object.keys(item.parts)) {
-    const word = leaveOut.includes(id) ? off : result.outcome
-    counts.set(word, (counts.get(word) ?? 0) + 1)
-  }
-  return `${result.outcome}: ${[...counts].map(([word, n]) => `${n} ${word}`).join(' · ')}`
-}
-
 function interruptedOutput(output: string | null): boolean {
   try {
     return (
@@ -80,12 +69,8 @@ function approvalProblem(deps: ScriptDeps, item: InboxItemRow): string | null {
 
 // An approved action (apply.py _apply_item's script branch), run only through the card path: the
 // catalog entry runs the card's own pinned args, re-read and re-checked by attemptAction (powers.ts
-// cardToRun), less the parts left out; the digest is the one the answer approved. Never any other args.
-export async function applyScript(
-  deps: ScriptDeps,
-  item: InboxItemRow,
-  leaveOut: string[]
-): Promise<ScriptStep> {
+// cardToRun); the digest is the one the answer approved. Never any other args.
+export async function applyScript(deps: ScriptDeps, item: InboxItemRow): Promise<ScriptStep> {
   const problem = approvalProblem(deps, item)
   if (problem || !item.answer) {
     reaskInboxItem(deps.inbox, item.id, problem ?? APPROVE_ON_DESKTOP)
@@ -98,24 +83,21 @@ export async function applyScript(
     inboxItemId: item.id,
     runId: item.runId,
     digest: item.answer.digest,
-    leftOut: leaveOut,
     dryRun: false
   })
   // A card attempt never asks; were it to, nothing ran.
   const result = attempted.outcome === 'asked' ? actionFailed(attempted.detail) : attempted
-  const parts = Object.keys(item.parts).length > 0
   // A push pilotcli skipped (spec E): the card stays open with why it wasn't pushed.
-  if (result.outcome === 'stale' && result.keepOpen && !parts) {
+  if (result.outcome === 'stale' && result.keepOpen) {
     reaskInboxItem(deps.inbox, item.id, result.detail)
     return { kind: 'reasked' }
   }
-  if (result.outcome === 'not_yet' && !parts) {
+  if (result.outcome === 'not_yet') {
     return { kind: 'waits', reason: result.detail + (result.onYou ? ' (waits on you)' : '') }
   }
   if (result.outcome === 'needs_agent') {
     return { kind: 'agent', note: result.detail }
   }
-  const outcome = parts ? partsOutcome(item, result, leaveOut) : outcomeText(result)
-  resolveInboxItem(deps.inbox, item.id, outcome)
+  resolveInboxItem(deps.inbox, item.id, outcomeText(result))
   return { kind: 'done' }
 }

@@ -40,8 +40,6 @@ function card(over: Partial<InboxItemRow>): InboxItemRow {
     details: null,
     action: null,
     actionArgs: null,
-    parts: {},
-    switchWords: [],
     digest: 'd1',
     version: 1,
     status: 'open',
@@ -675,53 +673,6 @@ describe('Details on a card', () => {
     render(<InboxPage />)
     await screen.findByRole('heading', { name: 'F' })
     expect(screen.queryByRole('button', { name: /^Details/ })).toBeNull()
-  })
-
-  it('keeps the review switches and the Parts list in step', async () => {
-    const review: DetailsBundle = {
-      version: 1,
-      item: 'R',
-      blocks: [{ type: 'review', title: 'Review', file: 'r.json' }]
-    }
-    const text = readFileSync(join(FIXTURES, 'sample-review.json'), 'utf8')
-    pilotRpc.mockImplementation(async (method: string) => {
-      if (method === 'pilot.inbox.details') {
-        return {
-          id: 'x',
-          digest: 'x',
-          snapshot: { ref: REF, bundle: review, texts: { 'r.json': text } }
-        }
-      }
-      if (method === 'pilot.inbox.list') {
-        const parts = { '1': 'one', '2': 'two', '3': 'three' }
-        return {
-          ...LIST,
-          items: [
-            card({
-              id: 'in_g',
-              type: 'action',
-              title: 'G',
-              digest: 'dg1',
-              details: REF,
-              parts,
-              switchWords: ['Post', 'Skip'],
-              options: [{ label: 'Approve', meaning: 'post' }]
-            })
-          ]
-        }
-      }
-      return { entries: [] }
-    })
-    const { container } = render(<InboxPage />)
-    fireEvent.click(await screen.findByRole('button', { name: /^Details/ }))
-    await screen.findByText('General comments')
-    const box = screen.getByLabelText('Post 1') as HTMLInputElement
-    fireEvent.click(container.querySelector('[data-part="1"] button')!)
-    expect(box.checked).toBe(false)
-    fireEvent.click(box)
-    expect(container.querySelector('[data-part="1"] button')?.getAttribute('aria-pressed')).toBe(
-      'true'
-    )
   })
 
   it('lets the column and the card shrink so a long line cannot widen the page', async () => {

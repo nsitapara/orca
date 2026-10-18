@@ -28,7 +28,7 @@ function snap(...blocks: DetailsBlock[]): DetailsSnapshot {
 const FACTS: DetailsBlock = { type: 'facts', title: 'Overview', rows: [['Then', 'one commit']] }
 const TEXT: DetailsBlock = { type: 'text', title: 'What QA saw', body: 'a toast' }
 const view = (s: DetailsSnapshot) =>
-  render(<DetailsView snapshot={s} loadImage={async () => 'blob:x'} parts={null} />)
+  render(<DetailsView snapshot={s} loadImage={async () => 'blob:x'} />)
 
 beforeEach(() => {
   window.localStorage.clear()

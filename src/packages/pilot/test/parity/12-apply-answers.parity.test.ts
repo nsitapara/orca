@@ -136,8 +136,9 @@ function routeWord(route: Route): string {
   if (route.kind === 'tick') {
     return `tick:${route.outcome}`
   }
+  // apply.py's word names the parts left out after the colon; Pilot's script leaves none out.
   if (route.kind === 'script') {
-    return `script:${route.leaveOut.join(',')}`
+    return 'script:'
   }
   if (route.kind === 'agent') {
     return route.revise ? 'agent:revise' : 'agent'
@@ -284,6 +285,15 @@ const KNOWN_ROUTES = [
   }
 ]
 
+// Card parts were retired on 2026-10-17 (no catalog entry could leave one out, and no producer made one): a leave-out
+// answer on these frozen routes is a revision now, where apply.py ran the rest or skipped. Pilot's word for each.
+const RETIRED_PARTS: Record<number, string> = {
+  16: 'agent:revise', // "keep: web-1513"
+  17: 'agent:revise', // "keep: !1499, 3"
+  18: 'agent:revise', // "keep: 1 2 3"
+  21: 'agent:revise' // "approve except: F2"
+}
+
 // apply.py's answers for ROUTES, HOLDS, SESSIONS and KNOWN_ROUTES (in order): the old plan (worktree-gate/apply.py
 // route, busy and session_route) on those cases, recorded with /opt/homebrew/bin/python3 3.15.0 on 2026-10-16, before
 // apply.py was deleted.
@@ -354,16 +364,14 @@ describe('12 · Apply my answers is retired: Pilot routes answers as apply.py di
   const old = frozenOld()
 
   it.each(ROUTES.map((c, n) => [n, c] as const))('route %i: %j', (n, c) => {
-    const parts = Object.fromEntries((c.parts ?? []).map((p) => [p.id, p.label]))
     const runnable = Boolean(c.run) || (c.parts ?? []).some((p) => p.run)
     const route = routeAnswer({
       type: c.kind,
       action: c.run ? c.run.split(' ')[0] : null,
       runnable,
-      parts,
       text: c.answer
     })
-    expect(routeWord(route)).toBe(old.get(`route:${n}`))
+    expect(routeWord(route)).toBe(RETIRED_PARTS[n] ?? old.get(`route:${n}`))
   })
 
   // Codes always agree; the plain words agree too for worktree holds, except where KNOWN_HOLD_WORDS says why not.
@@ -383,12 +391,10 @@ describe('12 · Apply my answers is retired: Pilot routes answers as apply.py di
 
   // DELIBERATE differences from apply.py (Tasks 23-24), each with its reason. Pilot is never changed to match.
   it.each(KNOWN_ROUTES)('known route difference: $why', (c) => {
-    const parts = Object.fromEntries((c.parts ?? []).map((p) => [p.id, p.label]))
     const route = routeAnswer({
       type: c.kind,
       action: null,
       runnable: true,
-      parts,
       text: c.answer
     })
     expect(routeWord(route)).toBe(c.pilot)

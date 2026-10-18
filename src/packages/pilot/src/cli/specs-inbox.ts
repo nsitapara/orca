@@ -8,7 +8,7 @@ export const INBOX_COMMAND_SPECS: CommandSpec[] = [
     path: ['inbox', 'add'],
     summary: 'Add a card to the Inbox: a question, a flag, or a proposed action',
     usage:
-      'pilot inbox add --type <question|flagged|default|action|bug|left_for_you> --title <text> [--context <text>] [--suggested <text>] [--option "<label> — <meaning>"]... [--details-file <path> | --details-bundle <path>] [--action <name> --args-json <json object>] [--preparation-file <path> | --not-prepared-key <key> --not-prepared-reason <text>] [--part <id>=<label>]... [--switch <on> --switch <off>] [--worktree <path>] [--automation <id> --item <key>] [--json]',
+      'pilot inbox add --type <question|flagged|default|action|bug|left_for_you> --title <text> [--context <text>] [--suggested <text>] [--option "<label> — <meaning>"]... [--details-file <path> | --details-bundle <path>] [--action <name> --args-json <json object>] [--preparation-file <path> | --not-prepared-key <key> --not-prepared-reason <text>] [--worktree <path>] [--automation <id> --item <key>] [--json]',
     allowedFlags: [
       ...GLOBAL_FLAGS,
       'preparation-file',
@@ -23,13 +23,11 @@ export const INBOX_COMMAND_SPECS: CommandSpec[] = [
       'details-bundle',
       'action',
       'args-json',
-      'part',
-      'switch',
       'worktree',
       'automation',
       'item'
     ],
-    repeatableFlags: ['option', 'part', 'switch'],
+    repeatableFlags: ['option'],
     examples: [
       'pilot inbox add --type question --title "Push the fix?" --suggested Push --option "Push — publish both commits" --option "Hold — leave them local"'
     ],

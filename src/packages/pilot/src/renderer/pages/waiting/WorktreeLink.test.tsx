@@ -32,8 +32,6 @@ function card(over: Partial<InboxItemRow>): InboxItemRow {
     details: null,
     action: null,
     actionArgs: null,
-    parts: {},
-    switchWords: [],
     digest: 'd',
     version: 1,
     status: 'open',

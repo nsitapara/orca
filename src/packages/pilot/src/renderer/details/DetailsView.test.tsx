@@ -36,9 +36,7 @@ const urlFor = (file: string) => Promise.resolve(`blob:test/${file}`)
 describe('DetailsView', () => {
   it("renders F2's titles, missing lines and images in bundle order", async () => {
     const loadImage = vi.fn(urlFor)
-    const { container } = render(
-      <DetailsView snapshot={snap(F2)} loadImage={loadImage} parts={null} />
-    )
+    const { container } = render(<DetailsView snapshot={snap(F2)} loadImage={loadImage} />)
     expect([...container.querySelectorAll('.dt-title')].map((n) => n.textContent)).toEqual([
       'What Approve does',
       'Proposed change',
@@ -69,9 +67,7 @@ describe('DetailsView', () => {
   it('shows one failed image without losing the others', async () => {
     const loadImage = (file: string) =>
       file === 'F2-qa.png' ? Promise.reject(new Error('no')) : urlFor(file)
-    const { container } = render(
-      <DetailsView snapshot={snap(F2)} loadImage={loadImage} parts={null} />
-    )
+    const { container } = render(<DetailsView snapshot={snap(F2)} loadImage={loadImage} />)
     await screen.findByText("couldn't load the image")
     await waitFor(() => expect(container.querySelectorAll('figure img[src]')).toHaveLength(2))
   })
@@ -90,7 +86,6 @@ describe('images', () => {
       <DetailsView
         snapshot={shots({ file: 'gone.png' })}
         loadImage={() => Promise.reject(new Error('no'))}
-        parts={null}
       />
     )
     await screen.findByText("couldn't load the image")
@@ -99,11 +94,7 @@ describe('images', () => {
 
   it('zooms a shot in the page, closed by Escape or a click, with no blob link', async () => {
     const { container } = render(
-      <DetailsView
-        snapshot={shots({ file: 'a.png', caption: 'QA' })}
-        loadImage={urlFor}
-        parts={null}
-      />
+      <DetailsView snapshot={shots({ file: 'a.png', caption: 'QA' })} loadImage={urlFor} />
     )
     await waitFor(() => expect(container.querySelector('img[src]')).not.toBeNull())
     expect(container.querySelector('a[href^="blob:"]')).toBeNull()
@@ -126,11 +117,7 @@ describe('images', () => {
     }
     document.addEventListener('keydown', listener)
     const { container } = render(
-      <DetailsView
-        snapshot={shots({ file: 'a.png', caption: 'QA' })}
-        loadImage={urlFor}
-        parts={null}
-      />
+      <DetailsView snapshot={shots({ file: 'a.png', caption: 'QA' })} loadImage={urlFor} />
     )
     await waitFor(() => expect(container.querySelector('img[src]')).not.toBeNull())
     const button = screen.getByRole('button', { name: 'Zoom QA' })
@@ -151,7 +138,7 @@ describe('images', () => {
   it('revokes a blob image URL when the view unmounts', async () => {
     const revoke = vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => undefined)
     const { container, unmount } = render(
-      <DetailsView snapshot={shots({ file: 'a.png' })} loadImage={urlFor} parts={null} />
+      <DetailsView snapshot={shots({ file: 'a.png' })} loadImage={urlFor} />
     )
     await waitFor(() => expect(container.querySelector('img[src]')).not.toBeNull())
     unmount()
@@ -160,9 +147,7 @@ describe('images', () => {
   })
 
   it('captions a screens pair Before and After', () => {
-    const { container } = render(
-      <DetailsView snapshot={snap(F2)} loadImage={urlFor} parts={null} />
-    )
+    const { container } = render(<DetailsView snapshot={snap(F2)} loadImage={urlFor} />)
     const pair = container.querySelector('.dt-pairs')
     expect([...(pair?.querySelectorAll('figcaption') ?? [])].map((n) => n.textContent)).toEqual([
       'Before',
@@ -173,53 +158,34 @@ describe('images', () => {
 
 describe('review block', () => {
   it('marks the row a finding is anchored to', () => {
-    const { container } = render(
-      <DetailsView snapshot={reviewSnap()} loadImage={urlFor} parts={null} />
-    )
+    const { container } = render(<DetailsView snapshot={reviewSnap()} loadImage={urlFor} />)
     const anchors = [...container.querySelectorAll('.glr-diff tr.anchor')]
     const first = anchors.find((tr) => tr.querySelectorAll('td.ln')[1]?.textContent === '210')
     expect(first?.classList.contains('add')).toBe(true)
   })
 
   it('groups threads by file, then general comments', () => {
-    const { container } = render(
-      <DetailsView snapshot={reviewSnap()} loadImage={urlFor} parts={null} />
-    )
+    const { container } = render(<DetailsView snapshot={reviewSnap()} loadImage={urlFor} />)
     expect(container.querySelectorAll('.glr-file')).toHaveLength(3)
     expect(screen.getByText('General comments')).toBeTruthy()
     expect(container.querySelector('.glr-avatar')?.textContent).toBe('NS')
   })
 
-  it('toggles a thread through the part switches', () => {
-    const toggle = vi.fn()
-    const words: [string, string] = ['Post', 'Skip']
-    const { container, rerender } = render(
-      <DetailsView snapshot={reviewSnap()} loadImage={urlFor} parts={{ off: [], toggle, words }} />
-    )
-    const button = container.querySelector('[data-part="1"] button') as HTMLElement
-    expect(button.getAttribute('aria-pressed')).toBe('true')
-    fireEvent.click(button)
-    expect(toggle).toHaveBeenCalledWith('1')
-    rerender(
-      <DetailsView
-        snapshot={reviewSnap()}
-        loadImage={urlFor}
-        parts={{ off: ['1'], toggle, words }}
-      />
-    )
-    const thread = container.querySelector('[data-part="1"]')
-    expect(thread?.classList.contains('off')).toBe(true)
-    expect(thread?.querySelector('button')?.getAttribute('aria-pressed')).toBe('false')
+  // Only job 09's old Post cards carry one; they are shown as they were stored, with nothing to switch.
+  it('shows a stored review read only, with no part switches', () => {
+    const { container } = render(<DetailsView snapshot={reviewSnap()} loadImage={urlFor} />)
+    expect(container.querySelectorAll('[data-part]').length).toBeGreaterThan(0)
+    expect(container.querySelector('[data-part] button')).toBeNull()
   })
 
   it('drops an unsafe MR link and names a missing review file', () => {
     const bad = JSON.stringify({ ...JSON.parse(REVIEW), web_url: 'javascript:x' })
     const { container } = render(
-      <DetailsView snapshot={reviewSnap('r.json', bad)} loadImage={urlFor} parts={null} />
+      <DetailsView snapshot={reviewSnap('r.json', bad)} loadImage={urlFor} />
     )
     expect(container.querySelector('.glr-mr a')).toBeNull()
     cleanup()
-    render(<DetailsView snapshot={reviewSnap('r.json', '{nope')} loadImage={urlFor} parts={null} />)
+    render(<DetailsView snapshot={reviewSnap('r.json', '{nope')} loadImage={urlFor} />)
     expect(screen.getByText("Couldn't load the review file r.json")).toBeTruthy()
   })
 })
