@@ -11,6 +11,8 @@ type PendingCardPage = {
   items: readonly Hosted<InboxListRow>[] | null
   // A machine's list hasn't answered yet: another machine's card can arrive in a later read than this machine's.
   loading: boolean
+  // The shown cards still trail the search box (its deferred render is pending): wait for them.
+  stale: boolean
   // The cards on screen, by hostedKey, whatever the view.
   visibleKeys: ReadonlySet<string>
   tab: InboxTab
@@ -32,10 +34,21 @@ export function usePendingInboxCardPick(page: PendingCardPage): () => void {
   const pending = usePendingInboxCard()
   // The pending card the person picked another card over while it loaded.
   const pickedOver = useRef<string | null>(null)
-  const { items, loading, visibleKeys, tab, filtered, section, view, setPrefs, unfilter, pick } =
-    page
+  const {
+    items,
+    loading,
+    stale,
+    visibleKeys,
+    tab,
+    filtered,
+    section,
+    view,
+    setPrefs,
+    unfilter,
+    pick
+  } = page
   useEffect(() => {
-    if (!pending || !items) {
+    if (!pending || !items || stale) {
       return
     }
     const found = items.find((i) => hostedKey(i.host, i.id) === pending)
@@ -62,7 +75,20 @@ export function usePendingInboxCardPick(page: PendingCardPage): () => void {
     if (found && !picked) {
       pick(pending)
     }
-  }, [pending, items, loading, visibleKeys, tab, filtered, section, view, setPrefs, unfilter, pick])
+  }, [
+    pending,
+    items,
+    loading,
+    stale,
+    visibleKeys,
+    tab,
+    filtered,
+    section,
+    view,
+    setPrefs,
+    unfilter,
+    pick
+  ])
   return () => {
     pickedOver.current = pending
   }

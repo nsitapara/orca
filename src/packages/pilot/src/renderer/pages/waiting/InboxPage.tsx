@@ -1,7 +1,6 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { InboxListRow } from '../../../shared/api-types'
 import { groupHostedItems, type HostedSection } from '../../hosts/hosted-sections'
-import { groupHostedItemsBy } from '../../hosts/inbox-grouping'
 import { HostsNotice } from '../../hosts/HostsNotice'
 import { hostedKey, type Hosted } from '../../hosts/pilot-host'
 import { useAutomationsFeed } from '../../run-views/automations-feed'
@@ -20,9 +19,7 @@ import { InboxTabs } from './InboxTabs'
 import { InboxStyle } from './inbox-style'
 import {
   emptyTabText,
-  inTab,
   kindCounts,
-  matchesFilters,
   preparingNote,
   tabCounts,
   tabLabel,
@@ -32,6 +29,7 @@ import { useInboxViewPrefs } from './inbox-view-prefs'
 import { InMotionPanel } from './InMotionPanel'
 import { WorktreeName } from './WorktreeLink'
 import { useElementWidth } from './use-element-width'
+import { useInboxSections } from './use-inbox-sections'
 import { useDoneForYou } from './use-done-for-you'
 import { useListOpen } from './use-list-open'
 import { usePendingInboxCardPick } from './use-pending-inbox-card'
@@ -111,28 +109,18 @@ export function InboxPage(): React.JSX.Element {
   const items = useMemo(() => inbox?.items ?? [], [inbox])
   const automations = useMemo(() => inbox?.automations ?? [], [inbox])
   const names = useMemo(() => new Map(automations.map((a) => [a.id, a.name])), [automations])
-  const openItems = items.filter((i) => i.type !== 'default')
-  // Each card's Worktree heading by hostedKey: what search matches, and what a list row names under another grouping.
-  const places = new Map(
-    groupHostedItems(openItems, automations).flatMap((s) =>
-      s.items.map((i) => [hostedKey(i.host, i.id), s.group.label] as const)
-    )
-  )
   const { tab } = prefs
   const onDone = tab === 'done'
-  const inTabItems = onDone
-    ? []
-    : openItems.filter((i) =>
-        inTab(i, tab, inbox?.answerStates.get(hostedKey(i.host, i.id)) ?? null)
-      )
-  const filtered = filters.kinds.length > 0 || filters.query.trim() !== ''
-  const shownItems = inTabItems.filter((i) =>
-    matchesFilters(i, filters, places.get(hostedKey(i.host, i.id)) ?? '')
-  )
-  const sections = groupHostedItemsBy(shownItems, automations, prefs.group, prefs.sort, loadedAt)
-  // A picked section with no card left (its last one was answered, or the tab moved) counts as All.
-  const activeSection = sections.some((s) => s.key === section) ? section : ALL
-  const shown = sections.filter((s) => activeSection === ALL || s.key === activeSection)
+  const { query, filtered, places, inTabItems, shownItems, sections, activeSection, shown } =
+    useInboxSections({
+      inbox,
+      tab,
+      filters,
+      group: prefs.group,
+      sort: prefs.sort,
+      section,
+      now: loadedAt
+    })
   // Defaults show under their run in Done for you; only the rest (no run, or a run already seen) fold at the end.
   const itemKeys = keysOf(items)
   const underRuns = new Set(
@@ -147,6 +135,7 @@ export function InboxPage(): React.JSX.Element {
   const notePick = usePendingInboxCardPick({
     items: inbox?.items ?? null,
     loading: reads.some((r) => r.value === null && r.error === null),
+    stale: query !== filters.query,
     visibleKeys,
     tab,
     filtered,
@@ -184,17 +173,24 @@ export function InboxPage(): React.JSX.Element {
     setSelected(key)
     document.getElementById(`card-${key}`)?.scrollIntoView?.({ block: 'start' })
   }
-  const onSave = async (i: Hosted<InboxListRow>, answer: Answer) => {
-    const key = hostedKey(i.host, i.id)
-    const failed = await save(i, answer, viewer)
-    setErrors((now) => withError(now, key, failed))
-    return failed
-  }
-  const openInCards = (item: Hosted<InboxListRow>) => {
-    setPrefs({ view: 'cards' })
-    setSelected(hostedKey(item.host, item.id))
-    setScrollTo(hostedKey(item.host, item.id))
-  }
+  // Stable, with the card renderers below, so the card bodies are kept while only the search box changes.
+  const onSave = useCallback(
+    async (i: Hosted<InboxListRow>, answer: Answer) => {
+      const key = hostedKey(i.host, i.id)
+      const failed = await save(i, answer, viewer)
+      setErrors((now) => withError(now, key, failed))
+      return failed
+    },
+    [save, viewer]
+  )
+  const openInCards = useCallback(
+    (item: Hosted<InboxListRow>) => {
+      setPrefs({ view: 'cards' })
+      setSelected(hostedKey(item.host, item.id))
+      setScrollTo(hostedKey(item.host, item.id))
+    },
+    [setPrefs]
+  )
   useEffect(() => {
     if (scrollTo === null || prefs.view !== 'cards') {
       return
@@ -204,69 +200,98 @@ export function InboxPage(): React.JSX.Element {
       ?.scrollIntoView?.({ block: 'start', behavior: motionSafeScrollBehavior() })
     setScrollTo(null)
   }, [scrollTo, prefs.view])
-  const cardOf = (i: Hosted<InboxListRow>) => {
-    const key = hostedKey(i.host, i.id)
-    return (
-      <InboxCard
-        key={`${key}@${i.version}`}
-        item={i}
-        automationName={names.get(i.automationId) ?? i.automationId}
-        run={i.runId ? (inbox?.runs.get(hostedKey(i.host, i.runId)) ?? null) : null}
-        runLine={inbox?.runLines.get(key) ?? null}
-        answerState={inbox?.answerStates.get(key) ?? null}
-        history={inbox?.history.get(key) ?? null}
-        preparationWait={inbox?.preparationWaits.get(key) ?? null}
-        error={errors[key] ?? null}
-        selected={selected === key}
-        now={loadedAt}
-        onSave={(answer) => onSave(i, answer)}
-        onRetryPreparation={() => retryPreparation(i)}
-        onPrepareEvidence={() => prepareEvidence(i)}
-      />
-    )
-  }
+  const cardOf = useCallback(
+    (i: Hosted<InboxListRow>) => {
+      const key = hostedKey(i.host, i.id)
+      return (
+        <InboxCard
+          key={`${key}@${i.version}`}
+          item={i}
+          automationName={names.get(i.automationId) ?? i.automationId}
+          run={i.runId ? (inbox?.runs.get(hostedKey(i.host, i.runId)) ?? null) : null}
+          runLine={inbox?.runLines.get(key) ?? null}
+          answerState={inbox?.answerStates.get(key) ?? null}
+          history={inbox?.history.get(key) ?? null}
+          preparationWait={inbox?.preparationWaits.get(key) ?? null}
+          error={errors[key] ?? null}
+          selected={selected === key}
+          now={loadedAt}
+          onSave={(answer) => onSave(i, answer)}
+          onRetryPreparation={() => retryPreparation(i)}
+          onPrepareEvidence={() => prepareEvidence(i)}
+        />
+      )
+    },
+    [names, inbox, errors, selected, loadedAt, onSave, retryPreparation, prepareEvidence]
+  )
   const cardFor = (key: string) => {
     const item = items.find((i) => hostedKey(i.host, i.id) === key)
     return item ? cardOf(item) : null
   }
-  const sectionOf = (s: HostedSection) => (
-    <section
-      key={s.key}
-      aria-label={s.group.label || UNGROUPED_NAME}
-      className="flex min-w-0 flex-col gap-3"
-    >
-      {s.group.label ? <SectionHeading section={s} /> : null}
-      {s.items.map(cardOf)}
-    </section>
+  const sectionOf = useCallback(
+    (s: HostedSection) => (
+      <section
+        key={s.key}
+        aria-label={s.group.label || UNGROUPED_NAME}
+        className="flex min-w-0 flex-col gap-3"
+      >
+        {s.group.label ? <SectionHeading section={s} /> : null}
+        {s.items.map(cardOf)}
+      </section>
+    ),
+    [cardOf]
   )
   const emptyText = (
     <p className="text-sm text-muted-foreground">{emptyTabText(tab, filtered, viewerName)}</p>
   )
-  const rowsBody = (
-    <InboxRows
-      sections={shown}
-      answerStates={inbox?.answerStates ?? new Map()}
-      names={names}
-      places={prefs.group === 'worktree' ? null : places}
-      errors={errors}
-      now={loadedAt}
-      onAnswer={onSave}
-      onOpen={openInCards}
-    />
-  )
-  const focusScope = [tab, filters.kinds.join(), filters.query, prefs.group, prefs.sort].join('|')
-  const focusBody = (
-    <InboxFocus
-      cards={shown.flatMap((s) => s.items)}
-      place={focus.scope === focusScope ? focus : FIRST_CARD}
-      onPlace={(place) => setFocus({ ...place, scope: focusScope })}
-      renderCard={cardOf}
-      tabLabel={tabLabel(tab)}
-      onExit={() => setPrefs({ view: 'cards' })}
-    />
-  )
-  const listBodies = { rows: rowsBody, focus: focusBody, cards: shown.map(sectionOf) }
-  const listBody = listBodies[prefs.view]
+  const focusScope = [tab, filters.kinds.join(), query, prefs.group, prefs.sort].join('|')
+  const { view, group } = prefs
+  const listBody = useMemo(() => {
+    if (view === 'rows') {
+      return (
+        <InboxRows
+          sections={shown}
+          answerStates={inbox?.answerStates ?? new Map()}
+          names={names}
+          places={group === 'worktree' ? null : places}
+          errors={errors}
+          now={loadedAt}
+          onAnswer={onSave}
+          onOpen={openInCards}
+        />
+      )
+    }
+    if (view === 'focus') {
+      return (
+        <InboxFocus
+          cards={shown.flatMap((s) => s.items)}
+          place={focus.scope === focusScope ? focus : FIRST_CARD}
+          onPlace={(place) => setFocus({ ...place, scope: focusScope })}
+          renderCard={cardOf}
+          tabLabel={tabLabel(tab)}
+          onExit={() => setPrefs({ view: 'cards' })}
+        />
+      )
+    }
+    return shown.map(sectionOf)
+  }, [
+    view,
+    group,
+    shown,
+    inbox,
+    names,
+    places,
+    errors,
+    loadedAt,
+    onSave,
+    openInCards,
+    focus,
+    focusScope,
+    cardOf,
+    tab,
+    setPrefs,
+    sectionOf
+  ])
   const cardsBody = shown.length ? listBody : emptyText
   const defaultSections = groupHostedItems(defaults, automations)
   const doneBody = (
