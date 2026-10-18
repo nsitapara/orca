@@ -163,8 +163,13 @@ export class CapacityStore {
       .run(automationId, JSON.stringify(waiting))
   }
 
-  forget(automationId: string): void {
-    this.db.prepare('DELETE FROM run_queue WHERE automation_id = ?').run(automationId)
+  // A NULL code is an older process's row, which only ever waited for a slot.
+  forgetSlotWaiters(automationId: string): void {
+    this.db
+      .prepare(
+        "DELETE FROM run_queue WHERE automation_id = ? AND COALESCE(hold_code, 'capacity') = 'capacity'"
+      )
+      .run(automationId)
   }
 
   running(): RunRow[] {

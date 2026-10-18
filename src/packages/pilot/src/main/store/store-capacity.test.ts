@@ -112,7 +112,7 @@ describe('CapacityStore', () => {
     ])
   })
 
-  it('dequeues the row it removes, and keeps only the items a tick left waiting', () => {
+  it("dequeues the row it removes, keeps only the items a tick left waiting, and forgets a job's slot waiters", () => {
     const store = open()
     for (const [key, at] of [
       ['x', 1],
@@ -122,12 +122,13 @@ describe('CapacityStore', () => {
       store.capacity.enqueue(item('a', key, at))
     }
     store.capacity.enqueue(item('b', 'w', 4))
+    store.capacity.enqueue({ ...item('b', 'held', 5), holdCode: 'quota' })
     expect(store.capacity.dequeue('a', 'x')).toEqual(item('a', 'x', 1))
     expect(store.capacity.dequeue('a', 'x')).toBeNull()
     store.capacity.keepOnly('a', ['z'])
-    expect(store.capacity.queued().map((q) => q.itemKey)).toEqual(['z', 'w'])
-    store.capacity.forget('b')
-    expect(store.capacity.queued().map((q) => q.itemKey)).toEqual(['z'])
+    expect(store.capacity.queued().map((q) => q.itemKey)).toEqual(['z', 'w', 'held'])
+    store.capacity.forgetSlotWaiters('b')
+    expect(store.capacity.queued().map((q) => q.itemKey)).toEqual(['z', 'held'])
   })
 
   it("lists the given jobs' newest ended runs, leaving out running, imported and other jobs' runs", () => {

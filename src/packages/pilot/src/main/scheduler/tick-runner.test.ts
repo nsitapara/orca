@@ -797,22 +797,27 @@ describe('runTick with a run limit', () => {
     expect(d.store.capacity.queued()).toEqual([])
   })
 
-  it("drops a job's queued items when its tick fails, so they can't hold the line", async () => {
+  it("drops a job's slot-waiting items when its tick fails, so they can't hold the line, and keeps its held ones", async () => {
     const d = deps({ sources: failingSources(new Error('glab is down')) })
-    d.store.capacity.enqueue({
-      automationId: def.id,
-      itemKey: 'mr:1561',
-      itemLabel: '!1561',
-      queuedAt: 1,
-      byHand: false,
-      dueAt: 1,
-      holdCode: 'capacity',
-      holdDetail: 'Waiting for a slot',
-      checkedAt: 1
-    })
+    for (const [itemKey, holdCode] of [
+      ['mr:1561', 'capacity'],
+      ['mr:1574', 'quota']
+    ] as const) {
+      d.store.capacity.enqueue({
+        automationId: def.id,
+        itemKey,
+        itemLabel: itemKey,
+        queuedAt: 1,
+        byHand: true,
+        dueAt: 1,
+        holdCode,
+        holdDetail: 'waiting',
+        checkedAt: 1
+      })
+    }
     const capacity = runCapacity({ store: d.store, definitions: () => [def], now: d.now })
     const result = await runTick(def, people, { ...d, capacity }, { dryRun: false })
     expect(result.status).toBe('failed')
-    expect(d.store.capacity.queued()).toEqual([])
+    expect(d.store.capacity.queued().map((q) => q.itemKey)).toEqual(['mr:1574'])
   })
 })

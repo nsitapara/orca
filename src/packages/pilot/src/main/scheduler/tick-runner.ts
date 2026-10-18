@@ -43,7 +43,7 @@ export type TickDeps = DecideDeps & {
   // A dry run of an env automation: where each started item would work (main/envs/preview.ts).
   previewEnvs?(def: AutomationDefinition, decisions: ItemDecision[]): Promise<void>
   // The runner's line: an item past the run limit (verdict queued) or held by a runner gate waits there.
-  capacity?: Pick<RunCapacity, 'admit' | 'hold' | 'settle' | 'forget'>
+  capacity?: Pick<RunCapacity, 'admit' | 'hold' | 'settle' | 'forgetSlotWaiters'>
 }
 // `pass` is the scheduler pass's fetch cache, shared by every automation that ticks in that pass. `trigger`: the run
 // whose feed (run: now) asked for this tick, recorded on it for Activity. `byHand`: a Run now, whose runs are stored
@@ -298,9 +298,9 @@ export async function runTick(
   } catch (error) {
     const message = errorMessage(error)
     finishFailed(tickId, message, {}, deps)
-    // Its queued items leave the line, so a job whose ticks keep failing can't hold the slot they wait for.
+    // Its slot-waiting items leave the line, so a job whose ticks keep failing can't hold the slot they wait for.
     try {
-      deps.capacity?.forget(def.id)
+      deps.capacity?.forgetSlotWaiters(def.id)
     } catch {}
     return { tickId, status: 'failed', error: message, decisions: [], warnings: [] }
   }
