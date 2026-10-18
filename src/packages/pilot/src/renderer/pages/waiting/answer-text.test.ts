@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { InboxItemRow } from '../../../shared/api-types'
+import type { InboxPreparation } from '../../../shared/preparation'
 import { startNotes } from '../../../shared/answers/route'
 import {
   ageLabel,
@@ -272,6 +273,23 @@ describe('queue and rail words', () => {
     expect(waitingCount([card({}), card({ type: 'default' }), card({ status: 'answered' })])).toBe(
       1
     )
+  })
+
+  it('counts a cancelled preparation as waiting, since the card can still be answered', () => {
+    const preparation: InboxPreparation = {
+      state: 'cancelled',
+      revision: 1,
+      attempt: 0,
+      maxAttempts: 3,
+      progress: '',
+      error: null,
+      updatedAt: 1,
+      runId: null,
+      stepIdx: null,
+      leaseUntil: null,
+      input: { key: 'k', context: '', requirements: [] }
+    }
+    expect(waitingCount([card({ preparation })])).toBe(1)
   })
 })
 

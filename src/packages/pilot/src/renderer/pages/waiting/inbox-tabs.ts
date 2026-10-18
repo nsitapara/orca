@@ -1,0 +1,87 @@
+import type { InboxListRow, InboxType } from '../../../shared/api-types'
+import type { AnswerState } from '../../../shared/inbox-types'
+
+export type InboxTab = 'needs_you' | 'preparing' | 'blocked' | 'all' | 'done'
+export type CardFilters = { kinds: readonly InboxType[]; query: string }
+
+export const INBOX_KINDS: readonly { type: InboxType; label: string }[] = [
+  { type: 'question', label: 'Questions' },
+  { type: 'action', label: 'Approvals' },
+  { type: 'bug', label: 'Bugs' },
+  { type: 'flagged', label: 'Flagged' },
+  { type: 'left_for_you', label: 'Left for you' }
+]
+
+function inNeedsYou(item: InboxListRow, answer: AnswerState | null): boolean {
+  if (item.status === 'open') {
+    const state = item.preparation?.state
+    return state === undefined || state === 'ready' || state === 'cancelled'
+  }
+  if (item.status === 'answered') {
+    // Unlocked keeps Undo on screen; a failed answer needs another go.
+    return answer !== null && (!answer.locked || answer.state === 'failed')
+  }
+  return false
+}
+
+export function inTab(
+  item: InboxListRow,
+  tab: Exclude<InboxTab, 'done'>,
+  answer: AnswerState | null
+): boolean {
+  if (item.type === 'default') {
+    return false
+  }
+  switch (tab) {
+    case 'all':
+      return true
+    case 'needs_you':
+      return inNeedsYou(item, answer)
+    case 'preparing':
+      return (
+        item.status === 'open' &&
+        (item.preparation?.state === 'queued' || item.preparation?.state === 'generating')
+      )
+    case 'blocked':
+      return item.status === 'open' && item.preparation?.state === 'blocked'
+  }
+}
+
+// Counts have no answer states, so they match waitingCount: only open cards count as Needs you.
+export function tabCounts(
+  items: InboxListRow[]
+): Record<'needs_you' | 'preparing' | 'blocked' | 'all', number> {
+  const count = (tab: Exclude<InboxTab, 'done'>): number =>
+    items.filter((item) => inTab(item, tab, null)).length
+  return {
+    needs_you: count('needs_you'),
+    preparing: count('preparing'),
+    blocked: count('blocked'),
+    all: count('all')
+  }
+}
+
+export function matchesFilters(
+  item: InboxListRow,
+  filters: CardFilters,
+  groupLabel: string
+): boolean {
+  if (filters.kinds.length > 0 && !filters.kinds.includes(item.type)) {
+    return false
+  }
+  const query = filters.query.trim().toLowerCase()
+  if (!query) {
+    return true
+  }
+  return [item.title, item.context, item.itemKey, groupLabel].some((text) =>
+    text?.toLowerCase().includes(query)
+  )
+}
+
+export function kindCounts(items: InboxListRow[]): Partial<Record<InboxType, number>> {
+  const counts: Partial<Record<InboxType, number>> = {}
+  for (const item of items) {
+    counts[item.type] = (counts[item.type] ?? 0) + 1
+  }
+  return counts
+}
