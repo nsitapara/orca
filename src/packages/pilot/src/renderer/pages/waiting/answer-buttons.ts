@@ -188,6 +188,14 @@ export function phaseOf(state: AnswerState | null, now: number): Phase {
   return 'waiting'
 }
 
+// The button an answered card offers: Change answer once failed or sent before Pilot, none while applying.
+export function undoLabel(phase: Phase): string | null {
+  if (phase === 'failed' || phase === 'sent') {
+    return 'Change answer'
+  }
+  return phase === 'applying' ? null : 'Undo'
+}
+
 // The one-click answer a dense row offers: the first choice that needs no words (never Skip), none on a held card.
 // It is composed by composeAnswer, as AnswerRow composes it.
 export function quickAnswerFor(item: InboxListRow): { label: string; answer: Answer } | null {

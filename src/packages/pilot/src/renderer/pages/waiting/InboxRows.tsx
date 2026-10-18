@@ -4,7 +4,7 @@ import type { InboxListRow, InboxType } from '../../../shared/api-types'
 import type { AnswerState } from '../../../shared/inbox-types'
 import type { HostedSection } from '../../hosts/hosted-sections'
 import { hostedKey, type Hosted } from '../../hosts/pilot-host'
-import { quickAnswerFor } from './answer-buttons'
+import { phaseOf, quickAnswerFor, undoLabel } from './answer-buttons'
 import { ageLabel, jobCode } from './answer-text'
 import type { Answer } from './answer-types'
 import { statusOf, type StatusPill } from './chips'
@@ -55,6 +55,9 @@ function InboxRow({
   const [saving, setSaving] = useState(false)
   const status = statusOf(item, answerState, false)
   const quick = quickAnswerFor(item)
+  // The card's own Undo (or Change answer), until the server locks the answer.
+  const undo =
+    item.status === 'open' || answerState === null ? null : undoLabel(phaseOf(answerState, now))
   const send = async (answer: Answer) => {
     setSaving(true)
     await onAnswer(item, answer)
@@ -87,6 +90,16 @@ function InboxRow({
           className="shrink-0 rounded-md bg-[var(--ib-accent)] px-3 py-0.5 text-[13px] font-semibold text-[var(--ib-accent-fg)] disabled:opacity-50"
         >
           {quick.label}
+        </button>
+      ) : null}
+      {undo ? (
+        <button
+          type="button"
+          disabled={saving}
+          onClick={() => void send({ option: null, text: '' })}
+          className="shrink-0 rounded px-1.5 py-0.5 text-[13px] font-semibold text-[var(--ib-accent)] hover:underline disabled:opacity-50"
+        >
+          {undo}
         </button>
       ) : null}
       <button

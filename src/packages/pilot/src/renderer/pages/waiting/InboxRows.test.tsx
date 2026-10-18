@@ -1,7 +1,8 @@
 // @vitest-environment happy-dom
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { InboxListRow } from '../../../shared/api-types'
+import type { AnswerState } from '../../../shared/inbox-types'
 import type { HostedSection } from '../../hosts/hosted-sections'
 import { LOCAL_NAMED } from '../../hosts/__fixtures__/hosts'
 import { inboxRow } from '../../hosts/__fixtures__/inbox-row'
@@ -36,10 +37,10 @@ function sectionOf(...items: InboxListRow[]): HostedSection[] {
 // The save never settles unless a test passes its own onAnswer: the row stays saving.
 function renderRows(items: InboxListRow[], onAnswer = vi.fn(() => new Promise<null>(() => {}))) {
   const onOpen = vi.fn()
-  render(
+  const rows = (shown: InboxListRow[], answerStates: ReadonlyMap<string, AnswerState>) => (
     <InboxRows
-      sections={sectionOf(...items)}
-      answerStates={new Map()}
+      sections={sectionOf(...shown)}
+      answerStates={answerStates}
       errors={{}}
       names={new Map([['ci', 'Fix failed CI']])}
       now={1000}
@@ -47,8 +48,24 @@ function renderRows(items: InboxListRow[], onAnswer = vi.fn(() => new Promise<nu
       onOpen={onOpen}
     />
   )
-  return { onAnswer, onOpen }
+  const { rerender } = render(rows(items, new Map()))
+  // The next reload: these cards, with these answer states by hostedKey.
+  const reload = (shown: InboxListRow[], answerStates: ReadonlyMap<string, AnswerState>) =>
+    rerender(rows(shown, answerStates))
+  return { onAnswer, onOpen, reload }
 }
+
+const answerState = (locked: boolean): AnswerState => ({
+  locked,
+  sentBeforePilot: false,
+  state: 'not_ready',
+  readyAt: 61_000,
+  reason: null
+})
+const ANSWERED = card({
+  status: 'answered',
+  answer: { option: 0, text: 'approve', digest: 'd1', via: 'page' }
+})
 
 describe('InboxRows', () => {
   it('a ready approval row answers Approve in one click, as AnswerRow would', () => {
@@ -66,6 +83,27 @@ describe('InboxRows', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Approve' }))
     fireEvent.click(screen.getByRole('button', { name: 'Approve' }))
     expect(onAnswer).toHaveBeenCalledOnce()
+  })
+
+  it("offers Undo after a quick answer while the answer is unlocked, sending what the card's Undo sends", async () => {
+    const { onAnswer, reload } = renderRows(
+      [card({})],
+      vi.fn(async () => null)
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Approve' }))
+    await waitFor(() => expect(onAnswer).toHaveBeenCalledOnce())
+    reload([ANSWERED], new Map([['in_1', answerState(false)]]))
+    fireEvent.click(await screen.findByRole('button', { name: 'Undo' }))
+    expect(onAnswer).toHaveBeenLastCalledWith(expect.objectContaining({ id: 'in_1' }), {
+      option: null,
+      text: ''
+    })
+  })
+
+  it('offers no Undo once the answer is locked', () => {
+    const { reload } = renderRows([card({})])
+    reload([ANSWERED], new Map([['in_1', answerState(true)]]))
+    expect(screen.queryByRole('button', { name: 'Undo' })).toBeNull()
   })
 
   it('a queued card has no quick answer', () => {

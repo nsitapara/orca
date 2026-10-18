@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react'
 import type { InboxListRow } from '../../../shared/api-types'
 import type { AnswerState } from '../../../shared/inbox-types'
-import { answeredLine, type Phase, phaseOf } from './answer-buttons'
+import { answeredLine, type Phase, phaseOf, undoLabel } from './answer-buttons'
 import { countdown } from './answer-text'
 import { useNow } from './use-now'
 
@@ -35,13 +35,6 @@ function lineText(
   return words.doing
 }
 
-function buttonFor(phase: Phase): string | null {
-  if (phase === 'failed' || phase === 'sent') {
-    return 'Change answer'
-  }
-  return phase === 'applying' ? null : 'Undo'
-}
-
 export function AnsweredLine({
   item,
   answerState,
@@ -57,7 +50,7 @@ export function AnsweredLine({
   const counting = answerState?.state === 'not_ready' && !answerState.locked
   const now = useNow(counting)
   const phase = phaseOf(answerState, now)
-  const button = buttonFor(phase)
+  const button = undoLabel(phase)
   const undo = useRef<HTMLButtonElement>(null)
   useEffect(() => {
     if (focusUndo && button) {
