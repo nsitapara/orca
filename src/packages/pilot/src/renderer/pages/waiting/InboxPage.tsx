@@ -42,7 +42,7 @@ const WIDE_PX = 960
 const NO_FILTERS: CardFilters = { kinds: [], query: '' }
 const FIRST_CARD: FocusPlace = { key: null, at: 0 }
 // Group by Nothing makes one section with no label: its region still needs a name.
-const UNGROUPED_NAME = 'Cards'
+const UNGROUPED_NAME = 'All cards'
 
 function withError(
   errors: Record<string, string>,

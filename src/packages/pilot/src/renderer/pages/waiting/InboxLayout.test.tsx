@@ -764,10 +764,11 @@ describe('one status tab at a time', () => {
     render(<InboxPage />)
     await screen.findByRole('heading', { name: 'F1 Fixture' })
     groupBy('none')
+    // Named apart from the "Cards" list beside it.
     expect(screen.getAllByRole('region').map((s) => s.getAttribute('aria-label'))).toEqual([
-      'Cards'
+      'All cards'
     ])
-    expect(screen.getByRole('region', { name: 'Cards' }).querySelector('h2')).toBeNull()
+    expect(screen.getByRole('region', { name: 'All cards' }).querySelector('h2')).toBeNull()
     expect(
       within(nav())
         .getAllByRole('button')
