@@ -312,7 +312,7 @@ describe('decideTick: limits, order and ask_first', () => {
     const out = decideTick(input(perTick, [item(1), item(2)]))
     expect(out.map((d) => [d.verdict, d.hold])).toEqual([
       ['started', undefined],
-      ['held', { code: 'job_limit', detail: 'Over the limit of 1 per tick' }]
+      ['held', { code: 'tick_limit', detail: 'Over the limit of 1 per tick' }]
     ])
   })
 

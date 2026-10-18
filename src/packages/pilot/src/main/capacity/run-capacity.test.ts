@@ -219,13 +219,17 @@ describe('runCapacity.toTick', () => {
   })
 
   it('re-checks a held row once its interval is over, and never spends a free slot on it', () => {
-    const [quota, busy, slot] = ['quota', 'busy', 'slot'].map((id) => agentJob(id))
-    const { store, capacity } = setup([quota, busy, slot], 1)
+    const [quota, perTick, busy, slot] = ['quota', 'per-tick', 'busy', 'slot'].map((id) =>
+      agentJob(id)
+    )
+    const { store, capacity } = setup([quota, perTick, busy, slot], 1)
     const now = 1_000_000
     inLine(store, quota, 'x', { holdCode: 'quota', dueAt: 1, checkedAt: now - 100_000 })
+    // A per-tick overflow waits for its job's own tick, however long ago it was checked.
+    inLine(store, perTick, 'p', { holdCode: 'tick_limit', dueAt: 1, checkedAt: 0 })
     inLine(store, busy, 'z', { holdCode: 'worktree_busy', dueAt: 2, checkedAt: now - 61_000 })
     inLine(store, slot, 'w', { holdCode: 'capacity', dueAt: 3 })
-    expect(capacity.toTick([quota, busy, slot], everywhere, now)).toEqual(['busy', 'slot'])
+    expect(capacity.toTick([quota, perTick, busy, slot], everywhere, now)).toEqual(['busy', 'slot'])
   })
 })
 
@@ -234,8 +238,9 @@ describe('recheckAfterMs', () => {
     ['quota', 300_000],
     ['window', 300_000],
     ['worktree_busy', 60_000],
-    ['job_limit', 60_000]
-  ])('re-checks a %s hold after %i ms', (code, ms) => {
+    ['job_limit', 60_000],
+    ['tick_limit', Number.POSITIVE_INFINITY]
+  ])('re-checks a %s hold after %s ms', (code, ms) => {
     expect(recheckAfterMs(code)).toBe(ms)
   })
 })

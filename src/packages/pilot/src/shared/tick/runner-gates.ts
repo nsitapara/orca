@@ -95,7 +95,7 @@ export function inTickGate(
 export function limitGate(def: AutomationDefinition, taken: number, active: number): Hold | null {
   const { perTick, atOnce } = def.limits
   if (perTick !== null && taken >= perTick) {
-    return { code: 'job_limit', detail: `Over the limit of ${perTick} per tick` }
+    return { code: 'tick_limit', detail: `Over the limit of ${perTick} per tick` }
   }
   if (atOnce !== null && active >= atOnce) {
     return { code: 'job_limit', detail: `At most ${atOnce} at once` }

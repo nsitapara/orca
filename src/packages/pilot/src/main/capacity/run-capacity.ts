@@ -52,8 +52,11 @@ function waitingReason(inUse: number, limit: number, ahead: number): string {
   return `Waiting for a slot: ${inUse} of ${limit} running${line}`
 }
 
-// Quota reads are cached for 5 minutes, and a time window needs no finer re-check than that.
+// Quota reads are cached for 5 minutes; a per-tick overflow waits for its job's own tick, so per_tick still throttles.
 export function recheckAfterMs(code: HoldReason): number {
+  if (code === 'tick_limit') {
+    return Number.POSITIVE_INFINITY
+  }
   return code === 'quota' || code === 'window' ? 300_000 : 60_000
 }
 

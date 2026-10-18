@@ -254,6 +254,7 @@ export type HoldReason =
   | 'session_open'
   | 'answers_pending'
   | 'job_limit'
+  | 'tick_limit'
 export type QueueRoute = 'resume' | 'fork' | 'new' | 'action'
 export type QueueRow = {
   id: number
