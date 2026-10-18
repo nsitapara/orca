@@ -17,7 +17,7 @@ function setup(present: string[] = []) {
 }
 
 describe("an MR's source branch, as Pilot's store knows it", () => {
-  it('is the newest item of jobs 03–06 or M02 that names the MR: an MR job’s mr.branch', () => {
+  it('is the newest item of jobs 03–06 that names the MR: an MR job’s mr.branch', () => {
     const { deps, tick } = setup()
     tick('fix-failed-ci', 10, [['mr:1577', { 'mr.iid': 1577, 'mr.branch': 'web-1577-old' }]])
     tick('mr-feedback', 20, [['mr:1577', { 'mr.iid': 1577, 'mr.branch': 'web-1577' }]])
@@ -25,15 +25,12 @@ describe("an MR's source branch, as Pilot's store knows it", () => {
     expect(storeBranchOf(deps, 1577, NO_CARD)).toBe('web-1577')
   })
 
-  it("is a worktree job's worktree.branch when its item carries the MR, and M02's", () => {
+  it("is a worktree job's worktree.branch when its item carries the MR", () => {
     const wt = setup()
     wt.tick('review-branch-code', 10, [
       ['wt:r::/wt/web-1577', { 'mr.iid': 1577, 'worktree.branch': 'web-1577', 'worktree.path': WT }]
     ])
     expect(storeBranchOf(wt.deps, 1577, NO_CARD)).toBe('web-1577')
-    const m02 = setup()
-    m02.tick('mr-next-steps', 10, [['mr:1577', { 'mr.iid': 1577, 'mr.branch': 'web-1577' }]])
-    expect(storeBranchOf(m02.deps, 1577, NO_CARD)).toBe('web-1577')
   })
 
   it("is the caller's run's branch when that run names the MR, else unknown", () => {

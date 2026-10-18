@@ -23,7 +23,6 @@ function setup() {
     'worktree.branch': 'web-1600'
   })
   s.run('m01-run', 'linear-todo', 'linear:WEB-1', WT, { 'worktree.path': WT })
-  s.run('m02-run', 'mr-next-steps', 'mr:1577', WT, { 'mr.iid': 1577 })
   const deps = { store: s.store, definitions: () => DEFINITIONS, exists: () => true }
   return { ...s, deps }
 }
@@ -98,8 +97,7 @@ describe("the open Pilot cards on an MR's branch (mark-ready.py's open items)", 
     ['a folded default (work already done)', (s) => s.card('wt-run', { type: 'default' })],
     ['a card on another MR', (s) => s.card('other-run')],
     ['a card on another branch with no MR', (s) => s.card('other-wt-run')],
-    ['a card from a job outside 03–06 (M01)', (s) => s.card('m01-run')],
-    ['a card from a job outside 03–06 (M02)', (s) => s.card('m02-run')]
+    ['a card from a job outside 03–06 (M01)', (s) => s.card('m01-run')]
   ])('leaves the MR free with %s', (_name, add) => {
     const s = setup()
     add(s)
