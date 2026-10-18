@@ -178,9 +178,19 @@ function openPilot(
     previewEnvs: (def, decisions) => envs.preview(def, decisions),
     capacity
   }
+  // Which jobs this machine ticks (runs_on); its repo problems and its scheduler both follow it.
+  const runsOn = runsOnGate({
+    machineName: host.machineName ?? (() => ''),
+    pinnedOnly: options.pinnedOnly === true
+  })
   const repoProblems = new Map<string, RepoProblem>()
   const withRepoProblems = (loaded: LoadedDefinitions): LoadedDefinitions =>
-    mergeRepoProblems(loaded, repoProblems, (repo) => reposListed(runtime, [repo]))
+    mergeRepoProblems(
+      loaded,
+      repoProblems,
+      (repo) => reposListed(runtime, [repo]),
+      runsOn.ticksHere
+    )
   const vaultDir = pilotVaultAutomationsDir()
   const exporter = vaultDir
     ? new VaultExporter({
@@ -238,10 +248,7 @@ function openPilot(
       repoProblems.set(def.id, { file: def.file, repo: def.repo, message }),
     newPass: () => createPassFetchCache(`pass-${now()}`, glabApiForRepo),
     queuedToTick: (defs) => capacity.toTick(defs),
-    runsOn: runsOnGate({
-      machineName: host.machineName ?? (() => ''),
-      pinnedOnly: options.pinnedOnly === true
-    }),
+    runsOn,
     log
   })
   handover.deps.trigger = (id, cause) => scheduler.trigger(id, cause)

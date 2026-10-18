@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { EMPTY_PEOPLE } from '../../shared/people'
 import { testDefinition } from '../../shared/definition/__fixtures__/definition'
+import { runsOnGate } from '../scheduler/runs-on-gate'
 import type { LoadedDefinitions } from './loader'
 import { mergeRepoProblems, type RepoProblem } from './repo-problems'
 
@@ -59,6 +60,19 @@ describe('mergeRepoProblems', () => {
       isListed
     )
     expect(out.errors).toHaveLength(1)
+  })
+
+  it('drops a problem once its job is pinned to another machine, and keeps it while the job ticks here', () => {
+    const problems = new Map([['ci', problem('nope')]])
+    const pinned = (runsOn: string): LoadedDefinitions => ({
+      ...loaded([]),
+      definitions: [testDefinition({ id: 'ci', repo: 'nope', schedule: '10 * * * *', runsOn })]
+    })
+    const gate = runsOnGate({ machineName: () => 'Linux box', pinnedOnly: false })
+    const errors = (runsOn: string) =>
+      mergeRepoProblems(pinned(runsOn), problems, () => false, gate.ticksHere).errors
+    expect(errors('Linux box')).toHaveLength(2)
+    expect(errors('Mac mini')).toHaveLength(1)
   })
 
   it('leaves everything else as loaded', () => {
