@@ -3,7 +3,8 @@ import { cn } from '@/lib/utils'
 import type { InboxListRow, InboxType } from '../../../shared/api-types'
 import type { AnswerState } from '../../../shared/inbox-types'
 import type { HostedSection } from '../../hosts/hosted-sections'
-import { hostedKey, type Hosted } from '../../hosts/pilot-host'
+import { MachineChip } from '../../hosts/MachineChip'
+import { hostedKey, hostOf, type Hosted } from '../../hosts/pilot-host'
 import { phaseOf, quickAnswerFor, undoLabel } from './answer-buttons'
 import { ageLabel, jobCode } from './answer-text'
 import type { Answer } from './answer-types'
@@ -34,8 +35,14 @@ const DOT_COLOUR: Record<StatusPill, string> = {
 // Group by Nothing makes one section with no label: its region still needs a name.
 const UNGROUPED_NAME = 'Rows'
 
+// A card's worktree, unless its section's heading already names it.
+function placeIn(section: HostedSection, place: string | undefined): string | null {
+  return place && place !== section.group.label ? place : null
+}
+
 function InboxRow({
   item,
+  place,
   names,
   answerState,
   error,
@@ -44,6 +51,8 @@ function InboxRow({
   onOpen
 }: {
   item: Hosted<InboxListRow>
+  // The card's worktree when its section doesn't name it.
+  place: string | null
   names: ReadonlyMap<string, string>
   answerState: AnswerState | null
   error: string | null
@@ -79,9 +88,15 @@ function InboxRow({
       <span title={item.title} className="min-w-0 flex-1 truncate text-[13px] font-semibold">
         {item.title}
       </span>
+      {place ? (
+        <span title={place} className="max-w-48 truncate font-mono text-xs text-muted-foreground">
+          {place}
+        </span>
+      ) : null}
       <span className="shrink-0 font-mono text-xs text-muted-foreground">
         {job} · {ageLabel(item.createdAt, now)}
       </span>
+      <MachineChip host={hostOf(item)} />
       {quick ? (
         <button
           type="button"
@@ -119,6 +134,7 @@ export function InboxRows({
   sections,
   answerStates,
   names,
+  places,
   errors,
   now,
   onAnswer,
@@ -128,6 +144,8 @@ export function InboxRows({
   // By hostedKey.
   answerStates: ReadonlyMap<string, AnswerState>
   names: ReadonlyMap<string, string>
+  // By hostedKey, the card's Worktree heading to name on its row; null while the sections are worktrees.
+  places: ReadonlyMap<string, string> | null
   // A failed save's message, by hostedKey.
   errors: Readonly<Record<string, string>>
   now: number
@@ -156,6 +174,7 @@ export function InboxRows({
               <InboxRow
                 key={hostedKey(i.host, i.id)}
                 item={i}
+                place={placeIn(s, places?.get(hostedKey(i.host, i.id)))}
                 names={names}
                 answerState={answerStates.get(hostedKey(i.host, i.id)) ?? null}
                 error={errors[hostedKey(i.host, i.id)] ?? null}

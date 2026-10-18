@@ -247,6 +247,7 @@ export function InboxPage(): React.JSX.Element {
       sections={shown}
       answerStates={inbox?.answerStates ?? new Map()}
       names={names}
+      places={prefs.group === 'worktree' ? null : places}
       errors={errors}
       now={loadedAt}
       onAnswer={onSave}

@@ -4,11 +4,15 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { InboxListRow } from '../../../shared/api-types'
 import type { AnswerState } from '../../../shared/inbox-types'
 import type { HostedSection } from '../../hosts/hosted-sections'
-import { LOCAL_NAMED } from '../../hosts/__fixtures__/hosts'
+import { LOCAL_NAMED, MINI } from '../../hosts/__fixtures__/hosts'
 import { inboxRow } from '../../hosts/__fixtures__/inbox-row'
+import { resetPilotHostsFeed, setPilotHostsForTests } from '../../hosts/pilot-hosts-feed'
 import { InboxRows } from './InboxRows'
 
-afterEach(cleanup)
+afterEach(() => {
+  cleanup()
+  resetPilotHostsFeed()
+})
 
 function card(over: Partial<InboxListRow>): InboxListRow {
   return inboxRow({
@@ -28,7 +32,7 @@ function sectionOf(...items: InboxListRow[]): HostedSection[] {
     {
       key: 'g',
       host,
-      group: { key: 'g', label: 'web-1', rank: 0 },
+      group: { key: 'wt:/w/web-1', label: 'web-1', rank: 0 },
       items: items.map((i) => ({ ...i, host }))
     }
   ]
@@ -43,6 +47,7 @@ function renderRows(items: InboxListRow[], onAnswer = vi.fn(() => new Promise<nu
       answerStates={answerStates}
       errors={{}}
       names={new Map([['ci', 'Fix failed CI']])}
+      places={new Map([['in_1', 'web-1']])}
       now={1000}
       onAnswer={onAnswer}
       onOpen={onOpen}
@@ -104,6 +109,35 @@ describe('InboxRows', () => {
     const { reload } = renderRows([card({})])
     reload([ANSWERED], new Map([['in_1', answerState(true)]]))
     expect(screen.queryByRole('button', { name: 'Undo' })).toBeNull()
+  })
+
+  it('names where the card is when the sections are not worktrees, and its machine', () => {
+    setPilotHostsForTests([LOCAL_NAMED, MINI])
+    render(
+      <InboxRows
+        sections={[
+          {
+            ...sectionOf(card({}))[0],
+            group: { key: 'kind:Approvals', label: 'Approvals', rank: 2 }
+          }
+        ]}
+        answerStates={new Map()}
+        errors={{}}
+        names={new Map()}
+        places={new Map([['in_1', 'web-2099-carrier']])}
+        now={1000}
+        onAnswer={vi.fn(async () => null)}
+        onOpen={vi.fn()}
+      />
+    )
+    const row = screen.getByRole('listitem')
+    expect(within(row).getByText('web-2099-carrier')).toBeTruthy()
+    expect(within(row).getByText('MacBook')).toBeTruthy()
+  })
+
+  it('does not repeat the worktree its section already names', () => {
+    renderRows([card({})])
+    expect(within(screen.getByRole('listitem')).queryByText('web-1')).toBeNull()
   })
 
   it('a queued card has no quick answer', () => {
