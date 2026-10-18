@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { cn } from '@/lib/utils'
 import type { InboxListRow, InboxType } from '../../../shared/api-types'
 import type { AnswerState } from '../../../shared/inbox-types'
@@ -47,11 +48,18 @@ function InboxRow({
   answerState: AnswerState | null
   error: string | null
   now: number
-  onAnswer: (item: Hosted<InboxListRow>, answer: Answer) => void
+  onAnswer: (item: Hosted<InboxListRow>, answer: Answer) => Promise<string | null>
   onOpen: (item: Hosted<InboxListRow>) => void
 }): React.JSX.Element {
+  // Disabled from the click until the save settles, so a second click can't send it again.
+  const [saving, setSaving] = useState(false)
   const status = statusOf(item, answerState, false)
   const quick = quickAnswerFor(item)
+  const send = async (answer: Answer) => {
+    setSaving(true)
+    await onAnswer(item, answer)
+    setSaving(false)
+  }
   const job = jobCode(names.get(item.automationId) ?? item.automationId, item.automationId)
   return (
     <li
@@ -74,8 +82,9 @@ function InboxRow({
       {quick ? (
         <button
           type="button"
-          onClick={() => onAnswer(item, quick.answer)}
-          className="shrink-0 rounded-md bg-[var(--ib-accent)] px-3 py-0.5 text-[13px] font-semibold text-[var(--ib-accent-fg)]"
+          disabled={saving}
+          onClick={() => void send(quick.answer)}
+          className="shrink-0 rounded-md bg-[var(--ib-accent)] px-3 py-0.5 text-[13px] font-semibold text-[var(--ib-accent-fg)] disabled:opacity-50"
         >
           {quick.label}
         </button>
@@ -109,7 +118,8 @@ export function InboxRows({
   // A failed save's message, by hostedKey.
   errors: Readonly<Record<string, string>>
   now: number
-  onAnswer: (item: Hosted<InboxListRow>, answer: Answer) => void
+  // Resolves to the save's error, or null once saved.
+  onAnswer: (item: Hosted<InboxListRow>, answer: Answer) => Promise<string | null>
   onOpen: (item: Hosted<InboxListRow>) => void
 }): React.JSX.Element {
   return (

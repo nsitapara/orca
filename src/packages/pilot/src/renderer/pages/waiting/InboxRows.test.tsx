@@ -33,8 +33,8 @@ function sectionOf(...items: InboxListRow[]): HostedSection[] {
   ]
 }
 
-function renderRows(items: InboxListRow[]) {
-  const onAnswer = vi.fn()
+// The save never settles unless a test passes its own onAnswer: the row stays saving.
+function renderRows(items: InboxListRow[], onAnswer = vi.fn(() => new Promise<null>(() => {}))) {
   const onOpen = vi.fn()
   render(
     <InboxRows
@@ -59,6 +59,13 @@ describe('InboxRows', () => {
       option: 0,
       text: 'approve'
     })
+  })
+
+  it('a quick answer sends once, however fast it is clicked twice', () => {
+    const { onAnswer } = renderRows([card({})])
+    fireEvent.click(screen.getByRole('button', { name: 'Approve' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Approve' }))
+    expect(onAnswer).toHaveBeenCalledOnce()
   })
 
   it('a queued card has no quick answer', () => {

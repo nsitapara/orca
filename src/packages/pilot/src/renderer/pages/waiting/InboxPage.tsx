@@ -249,7 +249,7 @@ export function InboxPage(): React.JSX.Element {
       names={names}
       errors={errors}
       now={loadedAt}
-      onAnswer={(item, answer) => void onSave(item, answer)}
+      onAnswer={onSave}
       onOpen={openInCards}
     />
   )
