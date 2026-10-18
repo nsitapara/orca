@@ -105,3 +105,15 @@ export function kindCounts(items: InboxListRow[]): Partial<Record<InboxType, num
   }
   return counts
 }
+
+const TAB_LABELS: Record<InboxTab, string> = {
+  needs_you: 'Needs you',
+  preparing: 'Preparing',
+  blocked: 'Blocked',
+  all: 'All',
+  done: 'Done for you'
+}
+
+export function tabLabel(tab: InboxTab): string {
+  return TAB_LABELS[tab]
+}

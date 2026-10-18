@@ -15,6 +15,7 @@ import { ALL, InboxHeader } from './InboxHeader'
 import { InboxCard } from './InboxCard'
 import { InboxDoneTab } from './InboxDoneTab'
 import { InboxFilters } from './InboxFilters'
+import { InboxFocus } from './InboxFocus'
 import { InboxRows } from './InboxRows'
 import { InboxTabs } from './InboxTabs'
 import { InboxStyle } from './inbox-style'
@@ -24,6 +25,7 @@ import {
   kindCounts,
   matchesFilters,
   tabCounts,
+  tabLabel,
   type CardFilters
 } from './inbox-tabs'
 import { useInboxViewPrefs } from './inbox-view-prefs'
@@ -73,6 +75,8 @@ export function InboxPage(): React.JSX.Element {
   const [selected, setSelected] = useState<string | null>(null)
   // The card Rows' Open named: scrolled to once the Cards view has mounted it.
   const [scrollTo, setScrollTo] = useState<string | null>(null)
+  // The card One at a time shows, by position; InboxFocus clamps it as cards leave the list.
+  const [focusAt, setFocusAt] = useState(0)
   const [listOpen, toggleList] = useListOpen()
   const [rootRef, width] = useElementWidth()
   const {
@@ -183,7 +187,7 @@ export function InboxPage(): React.JSX.Element {
   const allOpen = useAllDetailsOpen(detailIds)
   // The list sits beside the cards only on a wide page (measured on the page, not the window) while it is open.
   const wide = width === null || width >= WIDE_PX
-  const showList = wide && listOpen && !onDone && prefs.view !== 'rows'
+  const showList = wide && listOpen && !onDone && prefs.view === 'cards'
   const viewerName = people.find((p) => p.id === viewer)?.name.split(' ')[0] ?? 'you'
   const select = (item: Hosted<InboxListRow>) => {
     const key = hostedKey(item.host, item.id)
@@ -259,7 +263,18 @@ export function InboxPage(): React.JSX.Element {
       onOpen={openInCards}
     />
   )
-  const listBody = prefs.view === 'rows' ? rowsBody : shown.map(sectionOf)
+  const focusBody = (
+    <InboxFocus
+      cards={shown.flatMap((s) => s.items)}
+      at={focusAt}
+      onAt={setFocusAt}
+      renderCard={cardOf}
+      tabLabel={tabLabel(tab)}
+      onExit={() => setPrefs({ view: 'cards' })}
+    />
+  )
+  const listBodies = { rows: rowsBody, focus: focusBody, cards: shown.map(sectionOf) }
+  const listBody = listBodies[prefs.view]
   const cardsBody = shown.length ? listBody : emptyText
   const defaultSections = groupHostedItems(defaults, automations)
   const doneBody = (

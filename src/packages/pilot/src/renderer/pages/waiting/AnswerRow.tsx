@@ -108,6 +108,7 @@ export function AnswerRow({
           <button
             type="button"
             data-choice={skip.choice.label}
+            data-skip=""
             title={skip.hint || undefined}
             disabled={saving}
             onClick={() => click(skip)}
