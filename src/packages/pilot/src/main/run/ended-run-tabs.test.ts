@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { RunStatus } from '../../shared/api-types'
 import { PilotStore } from '../store/store'
 import type { SessionTerminalState } from './agent-step'
-import { createEndedRunTabs, type TurnRow } from './ended-run-tabs'
+import { createEndedRunTabs, endedRunTerminals, type TurnRow } from './ended-run-tabs'
 import { SessionClaims } from './session-claims'
 
 type StepOpts = { status?: RunStatus; sessionId?: string | null; idx?: number; startedAt?: number }
@@ -195,5 +195,37 @@ describe('closing ended runs’ tabs', () => {
     h.store.runs.update('r2', { status: 'done' })
     await h.tabs.pass()
     expect(h.closed).toEqual(['h1'])
+  })
+})
+
+describe('endedRunTerminals', () => {
+  const tab = (handle: string, paneKey = 'x:y') => {
+    const [tabId = '', leafId = ''] = paneKey.split(':')
+    return {
+      handle,
+      title: null,
+      connected: true,
+      agentIdentity: 'claude',
+      worktreePath: '/wt',
+      tabId,
+      leafId
+    }
+  }
+
+  it('a tab whose recorded run is still running isn’t ended', () => {
+    const h = harness()
+    h.step('r1', 'h1', { status: 'running' })
+    expect(endedRunTerminals(h.store, [tab('h1')])(tab('h1'))).toBe(false)
+  })
+
+  it('a tab whose runs all ended is, by handle or by pane; an unrecorded one isn’t', () => {
+    const h = harness()
+    h.step('r1', 'h1')
+    const ended = endedRunTerminals(h.store, [tab('h1'), tab('h2', 'h1:pane'), tab('person')])
+    expect([ended(tab('h1')), ended(tab('h2', 'h1:pane')), ended(tab('person'))]).toEqual([
+      true,
+      true,
+      false
+    ])
   })
 })

@@ -43,7 +43,8 @@ const IDLE_WAIT_MS = 1500
 export async function worktreeBusy(
   path: string,
   terminals: readonly BusyTerminal[],
-  reads: BusyReads
+  reads: BusyReads,
+  endedRunTerminal: (t: BusyTerminal) => boolean = () => false
 ): Promise<{ typing: boolean; reason: string } | null> {
   for (const t of terminals) {
     if (
@@ -55,7 +56,8 @@ export async function worktreeBusy(
     }
     const name = t.title || t.handle
     try {
-      if (await reads.draft(t.handle)) {
+      // A finished run's leftover prompt isn't someone typing; its agent can still be busy.
+      if (!endedRunTerminal(t) && (await reads.draft(t.handle))) {
         return { typing: true, reason: `someone is typing in ${name}` }
       }
       const state = (await reads.agentStates()).get(`${t.tabId}:${t.leafId}`)

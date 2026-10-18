@@ -3,6 +3,7 @@ import type { StepRow } from '../../shared/api-types'
 import type { PilotStore } from '../store/store'
 import type { AgentRow } from './agent-rows'
 import type { SessionTerminals } from './agent-step'
+import type { BusyTerminal } from '../fields/worktree-busy'
 import { LIST_LIMIT, type Listed } from './terminal-relist'
 
 // Once every run on a tab has ended, however it ended, the tab closes: Resume reopens its session
@@ -51,6 +52,29 @@ function stepsOn(t: OpenTerminal, steps: readonly StepRow[]): StepRow[] {
   return steps.filter(
     (s) => s.terminalHandle === t.handle || (s.paneKey !== null && t.paneKeys.includes(s.paneKey))
   )
+}
+
+// Whether a listed terminal is one of Pilot's whose every recorded run has ended, found as the closer finds it. Its
+// leftover draft is then no one's typing (a greyed suggestion), so the busy read ignores it.
+export function endedRunTerminals(
+  store: PilotStore,
+  terminals: readonly BusyTerminal[]
+): (t: BusyTerminal) => boolean {
+  const open = terminals.map((t) => ({ handle: t.handle, paneKeys: [`${t.tabId}:${t.leafId}`] }))
+  const steps = store.runs.stepsOnTerminals(
+    open.map((t) => t.handle),
+    open.flatMap((t) => t.paneKeys)
+  )
+  const live = store.runs.liveAmong([...new Set(steps.map((s) => s.runId))])
+  const ended = new Set(
+    open
+      .filter((t) => {
+        const onTab = stepsOn(t, steps)
+        return onTab.length > 0 && !onTab.some((s) => live.has(s.runId) || STEP_LIVE.has(s.status))
+      })
+      .map((t) => t.handle)
+  )
+  return (t) => ended.has(t.handle)
 }
 
 export function createEndedRunTabs(deps: EndedRunTabsDeps): EndedRunTabs {

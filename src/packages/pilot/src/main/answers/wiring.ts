@@ -72,7 +72,7 @@ export function wireAnswerDispatcher(w: AnswerWiring): AnswerDispatcher {
     holds: () => ({
       exists: existsSync,
       inFlight: gitInFlight(w.facts),
-      activity: passActivity(runtime),
+      activity: passActivity(runtime, store),
       runsIn: (path) => store.runs.runningInWorktree(path)
     }),
     agents: {

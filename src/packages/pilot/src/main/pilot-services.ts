@@ -172,7 +172,7 @@ function openPilot(
       engineEnv,
       now
     },
-    activity: runtimeActivity(runtime, fieldDeps.terminalAlive),
+    activity: runtimeActivity(runtime, fieldDeps.terminalAlive, store),
     launch: (req) => wired.engine.startRun(req),
     ask: { store, now, inbox },
     previewEnvs: (def, decisions) => envs.preview(def, decisions),

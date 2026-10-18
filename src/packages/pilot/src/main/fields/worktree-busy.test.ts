@@ -106,6 +106,33 @@ describe('worktreeBusy (gate.worktree_busy)', () => {
   })
 })
 
+describe('worktreeBusy on an ended run’s tab', () => {
+  const reads = (state: string): BusyReads => ({
+    draft: async () => 'greyed suggestion',
+    agentStates: async () => new Map([['t1:l1', state]]),
+    tabBusy: async () => false
+  })
+  const ended = () => true
+
+  it('an ended run’s tab with a draft and an idle agent isn’t busy', async () => {
+    expect(await worktreeBusy('/wt/x', [TAB], reads('done'), ended)).toBeNull()
+  })
+
+  it('an ended run’s tab whose agent is working is busy', async () => {
+    expect(await worktreeBusy('/wt/x', [TAB], reads('working'), ended)).toEqual({
+      typing: false,
+      reason: '✳ Fix is working'
+    })
+  })
+
+  it('a person’s tab with a draft is still typing', async () => {
+    expect(await worktreeBusy('/wt/x', [TAB], reads('done'), () => false)).toEqual({
+      typing: true,
+      reason: 'someone is typing in ✳ Fix'
+    })
+  })
+})
+
 describe('tabBusy (gate.tab_busy)', () => {
   const fail = async (): Promise<never> => {
     throw new Error('timeout')
