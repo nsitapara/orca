@@ -5,7 +5,7 @@ import { jobCode } from '../pages/waiting/answer-text'
 import { INBOX_KINDS } from '../pages/waiting/inbox-tabs'
 import type { InboxGroupBy, InboxSort } from '../pages/waiting/inbox-view-prefs'
 import { groupHostedItems, type HostedSection } from './hosted-sections'
-import { groupByHost, hostedKey, type Hosted } from './pilot-host'
+import type { Hosted } from './pilot-host'
 
 const HOUR = 3_600_000
 const AGE_BUCKETS = [
@@ -67,39 +67,29 @@ function byChosenSort(sort: InboxSort): (a: InboxListRow, b: InboxListRow) => nu
   return byCard
 }
 
-// Non-worktree groups use keys that don't start with `wt:`, so the headings render no worktree link.
+// Non-worktree groups use keys that don't start with `wt:`, so the headings render no worktree link. They span
+// machines: a job, kind or age is one heading however many machines have cards in it.
 function sectionsByBucket(
   items: readonly Hosted<InboxListRow>[],
   automations: InboxListPayload['automations'],
   group: Exclude<InboxGroupBy, 'worktree'>,
   now: number
 ): (HostedSection & { order: string })[] {
-  return groupByHost(items).flatMap(({ host, items: own }) => {
-    const buckets = new Map<string, Bucket & { items: Hosted<InboxListRow>[] }>()
-    for (const item of own) {
-      const bucket = bucketOf(item, automations, group, now)
-      const entry = buckets.get(bucket.key) ?? { ...bucket, items: [] }
-      entry.items.push(item)
-      buckets.set(bucket.key, entry)
-    }
-    return [...buckets.values()].map((b) => {
-      const inboxGroup: InboxGroup = {
-        key: b.key,
-        label: b.label,
-        rank: b.rank
-      }
-      return {
-        key: hostedKey(host, b.key),
-        host,
-        group: inboxGroup,
-        items: b.items,
-        order: b.order
-      }
-    })
+  const buckets = new Map<string, Bucket & { items: Hosted<InboxListRow>[] }>()
+  for (const item of items) {
+    const bucket = bucketOf(item, automations, group, now)
+    const entry = buckets.get(bucket.key) ?? { ...bucket, items: [] }
+    entry.items.push(item)
+    buckets.set(bucket.key, entry)
+  }
+  return [...buckets.values()].map((b) => {
+    const inboxGroup: InboxGroup = { key: b.key, label: b.label, rank: b.rank }
+    // Only a worktree heading reads its host; each card keeps its own.
+    return { key: b.key, host: b.items[0].host, group: inboxGroup, items: b.items, order: b.order }
   })
 }
 
-// Cards grouped per machine by the chosen mode, sections and cards in the chosen order.
+// Worktree sections per machine; the other modes across machines. Sections and cards in the chosen order.
 export function groupHostedItemsBy(
   items: Hosted<InboxListRow>[],
   automations: InboxListPayload['automations'],
@@ -114,14 +104,8 @@ export function groupHostedItemsBy(
       items: [...s.items].sort(compareCards)
     }))
   }
-  const hostOrder = new Map(groupByHost(items).map(({ host }, at) => [host.key, at]))
   return sectionsByBucket(items, automations, group, now)
-    .sort(
-      (a, b) =>
-        a.group.rank - b.group.rank ||
-        JOB_ORDER.compare(a.order, b.order) ||
-        (hostOrder.get(a.host.key) ?? 0) - (hostOrder.get(b.host.key) ?? 0)
-    )
+    .sort((a, b) => a.group.rank - b.group.rank || JOB_ORDER.compare(a.order, b.order))
     .map(({ order: _order, ...section }) => ({
       ...section,
       items: [...section.items].sort(compareCards)

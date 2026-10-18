@@ -124,19 +124,36 @@ describe('groupHostedItemsBy', () => {
     }
   })
 
-  it('keeps the same id on two machines as two cards in two sections', () => {
-    const twin = { ...card('a', '/w/x', 'ci', 'bug', MIN), host: MINI }
-    const sections = groupHostedItemsBy(
-      [card('a', '/w/x', 'ci', 'bug', MIN), twin],
-      AUTOMATIONS,
-      'kind',
-      'kind',
-      NOW
+  describe('on two machines', () => {
+    // The same card id on both machines, and this machine's cards on either side of Mac mini's in age.
+    const TWO = [
+      card('a', '/w/x', 'ci', 'bug', 3 * MIN),
+      { ...card('a', '/w/x', 'ci', 'bug', MIN), host: MINI },
+      card('c', '/w/x', 'ci', 'bug', 2 * MIN)
+    ]
+    const placed = (items: Hosted<InboxListRow>[]) => items.map((i) => `${i.host.key}:${i.id}`)
+
+    it.each([
+      ['job', 'job:ci', '2 Fix CI'],
+      ['kind', 'kind:Bugs', 'Bugs'],
+      ['age', 'age:Last hour', 'Last hour'],
+      ['none', 'all', '']
+    ] as const)(
+      'groups by %s across machines, one section sorted as one list',
+      (group, key, label) => {
+        const sections = groupHostedItemsBy(TWO, AUTOMATIONS, group, 'newest', NOW)
+        expect(sections.map((s) => [s.key, s.group.label, placed(s.items)])).toEqual([
+          [key, label, ['env:mini:a', 'local:c', 'local:a']]
+        ])
+      }
     )
-    expect(sections.map((s) => [s.host.key, s.items.map((i) => i.id)])).toEqual([
-      ['local', ['a']],
-      ['env:mini', ['a']]
-    ])
-    expect(new Set(sections.map((s) => s.key)).size).toBe(2)
+
+    it('keeps worktree sections per machine, so one path on two machines is two sections', () => {
+      const sections = groupHostedItemsBy(TWO, AUTOMATIONS, 'worktree', 'newest', NOW)
+      expect(sections.map((s) => [s.host.key, placed(s.items)])).toEqual([
+        ['local', ['local:c', 'local:a']],
+        ['env:mini', ['env:mini:a']]
+      ])
+    })
   })
 })
