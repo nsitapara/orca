@@ -479,6 +479,13 @@ describe("decideTick: the runner holds what can't start now", () => {
       'claude session limit at 96% (jobs stop at 95%)'
     ],
     [
+      'a fractional reading, rounded',
+      {},
+      { 'quota.claude.weekly_pct': 93.4567 },
+      'held',
+      'claude weekly limit at 93% (jobs stop at 90%)'
+    ],
+    [
       'a codex step at weekly 91',
       { steps: [testStep({ agent: 'shell' }), testStep({ agent: 'codex' })] },
       { 'quota.codex.weekly_pct': 91 },

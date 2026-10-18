@@ -71,7 +71,7 @@ function implicitQuotaHold(def: AutomationDefinition, fields: ItemFields): Hold 
       if (typeof used === 'number' && used >= ceiling) {
         return {
           code: 'quota',
-          detail: `${agent} ${window} limit at ${used}% (jobs stop at ${ceiling}%)`
+          detail: `${agent} ${window} limit at ${Math.round(used)}% (jobs stop at ${ceiling}%)`
         }
       }
     }
