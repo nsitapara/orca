@@ -196,8 +196,7 @@ export function undoLabel(phase: Phase): string | null {
   return phase === 'applying' ? null : 'Undo'
 }
 
-// The one-click answer a dense row offers: the first choice that needs no words (never Skip), none on a held card.
-// It is composed by composeAnswer, as AnswerRow composes it.
+// A row's one-click answer: the first wordless choice (never Skip), composed as AnswerRow does; none if held.
 export function quickAnswerFor(item: InboxListRow): { label: string; answer: Answer } | null {
   if (item.status !== 'open' || heldForEvidence(item)) {
     return null

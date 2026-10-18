@@ -252,8 +252,7 @@ export function worktreeName(path: string | null): string {
   return path.replace(/\/+$/, '').split('/').at(-1) || path
 }
 
-// What counts as waiting on you: open cards, never the defaults the agents took. A cancelled preparation still
-// leaves a card you can answer.
+// Waiting on you: open cards that aren't defaults; a cancelled preparation still leaves one you can answer.
 export function waitingCount(items: InboxListRow[]): number {
   return items.filter(
     (i) =>
