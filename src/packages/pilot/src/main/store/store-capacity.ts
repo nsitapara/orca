@@ -163,6 +163,12 @@ export class CapacityStore {
       .run(automationId, JSON.stringify(waiting))
   }
 
+  markChecked(automationId: string, at: number): void {
+    this.db
+      .prepare('UPDATE run_queue SET checked_at = ? WHERE automation_id = ?')
+      .run(at, automationId)
+  }
+
   // A NULL code is an older process's row, which only ever waited for a slot.
   forgetSlotWaiters(automationId: string): void {
     this.db

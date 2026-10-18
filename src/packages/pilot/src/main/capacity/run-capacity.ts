@@ -29,8 +29,8 @@ export type RunCapacity = {
   ): void
   // After a tick: its automation's waiting items that this tick didn't queue or hold are no longer in line.
   settle(def: AutomationDefinition, decisions: readonly ItemDecision[]): void
-  // Held rows hold no slot, so they outlast this; a Run now hold of a manual job would otherwise be lost.
-  forgetSlotWaiters(automationId: string): void
+  // Drops a failing job's slot waiters; its held rows count as checked now, so they don't re-tick it every loop.
+  tickFailed(automationId: string): void
   // An answer run goes ahead of the queue (Nish is waiting on it), so it needs only a free slot.
   hasFreeSlot(def: AutomationDefinition): boolean
   // Jobs to tick now, in line order: slot-waiting items that fit the free slots, held items due a re-check. Rows of
@@ -150,8 +150,9 @@ export function runCapacity(deps: RunCapacityDeps): RunCapacity {
       )
     },
 
-    forgetSlotWaiters(automationId) {
+    tickFailed(automationId) {
       capacity.forgetSlotWaiters(automationId)
+      capacity.markChecked(automationId, deps.now())
     },
 
     hasFreeSlot(def) {

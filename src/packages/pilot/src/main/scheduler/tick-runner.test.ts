@@ -818,6 +818,12 @@ describe('runTick with a run limit', () => {
     const capacity = runCapacity({ store: d.store, definitions: () => [def], now: d.now })
     const result = await runTick(def, people, { ...d, capacity }, { dryRun: false })
     expect(result.status).toBe('failed')
-    expect(d.store.capacity.queued().map((q) => q.itemKey)).toEqual(['mr:1574'])
+    const failedAt = d.now()
+    expect(d.store.capacity.queued().map((q) => [q.itemKey, q.checkedAt])).toEqual([
+      ['mr:1574', failedAt]
+    ])
+    // The held row waits out its quota interval before the next re-check, instead of coming round every loop.
+    expect(capacity.toTick([def], () => true, failedAt + 299_999)).toEqual([])
+    expect(capacity.toTick([def], () => true, failedAt + 300_000)).toEqual([def.id])
   })
 })
