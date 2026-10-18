@@ -43,7 +43,7 @@ describe('runNowChoices', () => {
     ).toMatchObject({ preferred: 'local' })
   })
 
-  it("offers only reachable machines that loaded the job, and says why one can't start it", () => {
+  it("offers only machines that loaded the job, and says why one can't start it", () => {
     const { choices } = runNowChoices({ runsOn: null, hosts: [LOCAL_NAMED, MINI_OFF] }, [
       LOCAL_NAMED,
       MINI_OFF,
