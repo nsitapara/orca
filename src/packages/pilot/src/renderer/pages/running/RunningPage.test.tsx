@@ -415,6 +415,18 @@ describe('RunningPage', () => {
     expect(row.queryAllByRole('button', { name: /resume/i })).toHaveLength(resumes)
   })
 
+  it("disables a finished run's Retry while a change is saving", async () => {
+    serve(capacity({ finished: [finishedRun({ onceKey: '1' })] }))
+    const served = pilotRpc.getMockImplementation()
+    pilotRpc.mockImplementation((method: string, params?: unknown) =>
+      method === 'pilot.capacity.retry' ? new Promise(() => {}) : served?.(method, params)
+    )
+    await shown()
+    await click('Recently finished · 1')
+    await click('Retry')
+    expect(screen.getByRole('button', { name: 'Retry' }).hasAttribute('disabled')).toBe(true)
+  })
+
   it('says when nothing runs or waits', async () => {
     serve(capacity({ running: [], queued: [], limit: null }))
     await shown()
@@ -727,7 +739,7 @@ describe("RunningPage: another machine's runs", () => {
     pilotRpc.mockResolvedValue({})
     render(
       <PilotHostProvider host={MINI}>
-        <FinishedRuns runs={[finishedRun()]} now={Date.now()} onRetry={() => {}} />
+        <FinishedRuns runs={[finishedRun()]} now={Date.now()} saving={false} onRetry={() => {}} />
       </PilotHostProvider>
     )
     await click('Recently finished · 1')

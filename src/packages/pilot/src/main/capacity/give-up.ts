@@ -24,7 +24,8 @@ export function leaveGiveUpCard(
     automationId: def.id,
     itemKey: run.itemKey,
     title: `${def.name} failed ${plural(failures, 'time')}: ${run.itemLabel}`,
-    context: `${run.outcome ?? 'It ended without an outcome'}\n\nRetry it from Running.`
+    // A card's context is one line, so the hint follows as a sentence.
+    context: `${(run.outcome ?? 'It ended without an outcome').replace(/\.$/, '')}. Retry it from Running.`
   })
 }
 

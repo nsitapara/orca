@@ -190,7 +190,7 @@ describe('closeRun: a failed run counts a failure on its key', () => {
         'flagged',
         'pipeline:7',
         '13 Open MR failed 3 times: #7',
-        'agent exited 3 Retry it from Running.'
+        'agent exited 3. Retry it from Running.'
       ]
     ])
     expect(logs).toEqual([])

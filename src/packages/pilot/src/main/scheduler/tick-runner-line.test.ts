@@ -186,7 +186,6 @@ describe('runTick counting a failed launch', () => {
     const { store, tick } = launching(failing)
     store.capacity.setRetryLimit(0, t1)
     await tick(t1)
-    // A card keeps its context on one line, so the blank line before the hint reads as a space.
     expect(
       store.inbox.list({ automationId: def.id }).map((i) => [i.type, i.itemKey, i.title, i.context])
     ).toEqual([
@@ -194,7 +193,7 @@ describe('runTick counting a failed launch', () => {
         'flagged',
         'mr:1',
         'Auto failed 1 time: !1',
-        "Couldn't start: worktree is gone Retry it from Running."
+        "Couldn't start: worktree is gone. Retry it from Running."
       ]
     ])
     const later = await tick(t2)

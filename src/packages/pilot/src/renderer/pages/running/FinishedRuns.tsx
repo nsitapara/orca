@@ -159,12 +159,14 @@ function FinishedRow({
   now,
   open,
   onToggle,
+  saving,
   onRetry
 }: {
   run: FinishedRun
   now: number
   open: boolean
   onToggle(): void
+  saving: boolean
   onRetry(key: RetryKey): void
 }): React.JSX.Element {
   const host = usePilotHost()
@@ -214,7 +216,12 @@ function FinishedRow({
               Open
             </button>
             {retryKey ? (
-              <button type="button" className="underline" onClick={() => onRetry(retryKey)}>
+              <button
+                type="button"
+                className="underline disabled:opacity-50"
+                disabled={saving}
+                onClick={() => onRetry(retryKey)}
+              >
                 Retry
               </button>
             ) : null}
@@ -239,10 +246,13 @@ function FinishedRow({
 export function FinishedRuns({
   runs,
   now,
+  saving,
   onRetry
 }: {
   runs: FinishedRun[]
   now: number
+  // A change on this machine is saving: Retry waits for it.
+  saving: boolean
   onRetry(key: RetryKey): void
 }): React.JSX.Element {
   const [open, setOpen] = useState(false)
@@ -297,6 +307,7 @@ export function FinishedRuns({
                     now={now}
                     open={expanded === run.id}
                     onToggle={() => setExpanded(expanded === run.id ? null : run.id)}
+                    saving={saving}
                     onRetry={onRetry}
                   />
                 ))}

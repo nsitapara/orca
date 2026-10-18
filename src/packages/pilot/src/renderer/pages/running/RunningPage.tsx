@@ -241,7 +241,7 @@ function MachineRuns({
           ))}
         </ListSection>
       ) : null}
-      <FinishedRuns runs={payload.finished} now={now} onRetry={onRetry} />
+      <FinishedRuns runs={payload.finished} now={now} saving={saving} onRetry={onRetry} />
     </>
   )
 }
