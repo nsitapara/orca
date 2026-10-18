@@ -28,6 +28,7 @@ import { HandoverStore } from './store-handovers'
 import { ActivityStore, QUIET_TICK, toTick } from './store-activity'
 import { VisibilityStore } from './store-visibility'
 import { CapacityStore } from './store-capacity'
+import { HandledStore, type GaveUpRow } from './store-handled'
 
 const DAY = 24 * 60 * 60_000
 // Spec §7: ticks and their items are kept 30 days; runs and steps are kept indefinitely.
@@ -75,6 +76,7 @@ export class PilotStore {
   readonly activity: ActivityStore
   readonly visibility: VisibilityStore
   readonly capacity: CapacityStore
+  private readonly handled: HandledStore
 
   private constructor(private readonly db: Database) {
     this.runs = new RunStore(db)
@@ -95,6 +97,7 @@ export class PilotStore {
     this.activity = new ActivityStore(db)
     this.visibility = new VisibilityStore(db)
     this.capacity = new CapacityStore(db)
+    this.handled = new HandledStore(db)
   }
 
   static open(path: string, options: { busyTimeoutMs?: number } = {}): PilotStore {
@@ -248,59 +251,44 @@ export class PilotStore {
   }
 
   handledKeys(automationId: string): Set<string> {
-    return new Set(
-      this.db
-        .prepare('SELECT once_key FROM handled WHERE automation_id = ?')
-        .all(automationId)
-        .map((r) => String((r as { once_key: string }).once_key))
-    )
+    return this.handled.keys(automationId)
   }
 
+  // An upsert: a key a new run takes starts over as 'started' and keeps its failures.
   markHandled(automationId: string, onceKey: string, runId: string | null, at: number): void {
-    this.db
-      .prepare(
-        'INSERT OR REPLACE INTO handled (automation_id, once_key, run_id, at) VALUES (?, ?, ?, ?)'
-      )
-      .run(automationId, onceKey, runId, at)
+    this.handled.mark(automationId, onceKey, runId, at)
   }
 
   unmarkHandled(automationId: string, onceKey: string): void {
-    this.db
-      .prepare('DELETE FROM handled WHERE automation_id = ? AND once_key = ?')
-      .run(automationId, onceKey)
+    this.handled.unmark(automationId, onceKey)
   }
 
   // Frees the once_per key a run holds without knowing the key; a later run's re-mark is untouched.
   unmarkHandledForRun(automationId: string, runId: string): void {
-    this.db
-      .prepare('DELETE FROM handled WHERE automation_id = ? AND run_id = ?')
-      .run(automationId, runId)
+    this.handled.unmarkForRun(automationId, runId)
   }
 
-  // retry_after_failure reads each key's status: a failed key is due again once its wait is over.
+  // The runner's retry reads each key's status, failures and last outcome.
   handledRows(automationId: string): HandledRow[] {
-    return this.db
-      .prepare('SELECT * FROM handled WHERE automation_id = ? ORDER BY once_key')
-      .all(automationId)
-      .map((raw) => {
-        const r = raw as Record<string, unknown>
-        return {
-          onceKey: String(r.once_key),
-          runId: (r.run_id as string | null) ?? null,
-          at: Number(r.at),
-          status: r.status as HandledStatus,
-          failedAt: (r.failed_at as number | null) ?? null
-        }
-      })
+    return this.handled.rows(automationId)
   }
 
-  // A run's end settles the key it holds; markHandled (INSERT OR REPLACE) starts a key over as 'started'.
-  setHandledStatus(automationId: string, runId: string, status: HandledStatus, at: number): void {
-    this.db
-      .prepare(
-        'UPDATE handled SET status = ?, failed_at = ? WHERE automation_id = ? AND run_id = ?'
-      )
-      .run(status, status === 'failed' ? at : null, automationId, runId)
+  // A run's end settles the key it holds: failed counts a failure, done clears the count. Returns the count.
+  setHandledStatus(automationId: string, runId: string, status: HandledStatus, at: number): number {
+    return this.handled.settle(automationId, runId, status, at)
+  }
+
+  // Manual Retry: the failed key's count is cleared and it is free, so it is due.
+  resetFailures(automationId: string, onceKey: string): void {
+    this.handled.resetFailures(automationId, onceKey)
+  }
+
+  gaveUp(limit: number, since: number): GaveUpRow[] {
+    return this.handled.gaveUp(limit, since)
+  }
+
+  failedKeysOf(runIds: readonly string[]): Map<string, string> {
+    return this.handled.failedKeysOf(runIds)
   }
 
   seenKeys(automationId: string): Set<string> {

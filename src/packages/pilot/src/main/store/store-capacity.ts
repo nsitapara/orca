@@ -1,5 +1,6 @@
 import type Database from '../../../../../main/sqlite/sync-database'
 import type { HoldReason, RunRow } from '../../shared/api-types'
+import { clampRetryLimit, DEFAULT_RETRY_LIMIT } from '../../shared/capacity/retry-limit'
 import { toRun } from './run-rows'
 
 export type QueuedItem = {
@@ -15,6 +16,7 @@ export type QueuedItem = {
 }
 
 const RUN_LIMIT_KEY = 'run_limit'
+const RETRY_LIMIT_KEY = 'retry_limit'
 // The heaviest job is judged on its recent runs, so a job that got lighter stops counting its old peaks.
 export const RECENT_RUNS_FOR_PEAK = 20
 
@@ -81,12 +83,27 @@ export class CapacityStore {
       this.db.prepare('DELETE FROM settings WHERE key = ?').run(RUN_LIMIT_KEY)
       return
     }
+    this.setSetting(RUN_LIMIT_KEY, limit, at)
+  }
+
+  // How many times a failed run is tried again before the runner gives up.
+  retryLimit(): number {
+    const row = this.db.prepare('SELECT value FROM settings WHERE key = ?').get(RETRY_LIMIT_KEY)
+    const limit = Number(row?.value)
+    return row && Number.isInteger(limit) ? clampRetryLimit(limit) : DEFAULT_RETRY_LIMIT
+  }
+
+  setRetryLimit(limit: number, at: number): void {
+    this.setSetting(RETRY_LIMIT_KEY, clampRetryLimit(limit), at)
+  }
+
+  private setSetting(key: string, value: number, at: number): void {
     this.db
       .prepare(
         `INSERT INTO settings (key, value, updated_at) VALUES (?, ?, ?)
          ON CONFLICT (key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`
       )
-      .run(RUN_LIMIT_KEY, String(limit), at)
+      .run(key, String(value), at)
   }
 
   // Earliest due first: an item keeps the place its due time earned, whenever it joined.

@@ -166,15 +166,6 @@ export type StepRow = {
   // A shell step's pilotcli result: the one envelope its whole stdout was, or null.
   result: StoredResult | null
 }
-// The run holding a once_per key settles it: done, or failed (retry_after_failure waits from failedAt).
-export type HandledStatus = 'started' | 'done' | 'failed'
-export type HandledRow = {
-  onceKey: string
-  runId: string | null
-  at: number
-  status: HandledStatus
-  failedAt: number | null
-}
 
 export type InboxType = 'question' | 'flagged' | 'default' | 'action' | 'bug' | 'left_for_you'
 export type InboxStatus = 'open' | 'answered' | 'done' | 'obsolete' | 'stale' | 'dismissed'
@@ -366,3 +357,4 @@ export * from './api-types-spend'
 export * from './api-types-timeline'
 export * from './api-types-handover'
 export * from './api-types-runs'
+export * from './api-types-handled'

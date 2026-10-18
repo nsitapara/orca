@@ -198,6 +198,7 @@ ALTER TABLE run_queue ADD COLUMN hold_detail TEXT;
 ALTER TABLE run_queue ADD COLUMN checked_at INTEGER;
 UPDATE run_queue SET due_at = queued_at, hold_code = 'capacity', hold_detail = 'Waiting for a slot', checked_at = queued_at;
 ALTER TABLE ticks ADD COLUMN recheck INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE handled ADD COLUMN failures INTEGER NOT NULL DEFAULT 0;
 `
 
 // MIGRATIONS[n - 1] takes a database from version n - 1 to n.

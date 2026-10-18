@@ -3,11 +3,12 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 import type { CapacityPayload } from '../../shared/api-types-capacity'
+import { testDefinition } from '../../shared/definition/__fixtures__/definition'
 import { EMPTY_PEOPLE } from '../../shared/people'
 import type { RunMemorySampler } from '../capacity/run-memory'
 import type { PilotContext } from '../pilot-services'
 import { PilotStore } from '../store/store'
-import { AGENT_SETS_LIMIT, buildCapacityMethods } from './methods-capacity'
+import { AGENT_SETS_LIMIT, AGENT_SETS_RETRIES, buildCapacityMethods } from './methods-capacity'
 import { NO_CALLER_CHANGE } from './run-binding'
 
 type Callable = {
@@ -25,9 +26,10 @@ function setup(sample: ReturnType<RunMemorySampler['snapshot']> | null) {
     join(mkdtempSync(join(tmpdir(), 'pilot-capacity-rpc-')), 'db.sqlite')
   )
   const tickAll = vi.fn(async () => {})
+  const tickNow = vi.fn(async () => ({ status: 'ok' }))
   const readSystem = vi.fn(async () => FRESH)
   const loaded = {
-    definitions: [],
+    definitions: [testDefinition({ id: 'review', oncePer: '{mr.iid}' })],
     errors: [],
     people: EMPTY_PEOPLE,
     peopleError: null,
@@ -37,18 +39,18 @@ function setup(sample: ReturnType<RunMemorySampler['snapshot']> | null) {
     store,
     loaded: () => loaded,
     schedulerOn: true,
-    scheduler: { tickAll },
+    scheduler: { tickAll, tickNow },
     memory: sample ? { snapshot: () => sample } : undefined
   }
   const list = buildCapacityMethods(
-    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the methods read only store, loaded, memory, scheduler.tickAll and schedulerOn.
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the methods read only store, loaded, memory, scheduler.tickAll/tickNow and schedulerOn.
     () => ctx as unknown as PilotContext,
     readSystem,
     () => NOW
   )
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: defineMethod's objects have name, params and handler; the tests call handlers with valid params.
   const methods = new Map((list as unknown as Callable[]).map((m) => [m.name, m]))
-  return { store, tickAll, readSystem, method: (name: string) => methods.get(name)! }
+  return { store, tickAll, tickNow, readSystem, method: (name: string) => methods.get(name)! }
 }
 
 const DESKTOP = { caller: { kind: 'desktop' } }
@@ -126,5 +128,52 @@ describe('pilot.capacity', () => {
     [{}, false]
   ])('setLimit params %o valid: %s', (params, ok) => {
     expect(setup(null).method('pilot.capacity.setLimit').params!.safeParse(params).success).toBe(ok)
+  })
+
+  it('sets the retries after a failure for a person, and refuses an agent in a run', async () => {
+    const { store, method } = setup(null)
+    const set = method('pilot.capacity.setRetryLimit')
+    expect((await set.handler({ limit: 4 }, DESKTOP)).retryLimit).toBe(4)
+    expect(store.capacity.retryLimit()).toBe(4)
+    expect(() => set.handler({ limit: 1 }, {})).toThrow(NO_CALLER_CHANGE)
+    expect(store.capacity.retryLimit()).toBe(4)
+    expect(AGENT_SETS_RETRIES).toMatch(/can't change how often/)
+  })
+
+  it.each([
+    [{ limit: 0 }, true],
+    [{ limit: 5 }, true],
+    [{ limit: -1 }, false],
+    [{ limit: 6 }, false],
+    [{ limit: null }, false]
+  ])('setRetryLimit params %o valid: %s', (params, ok) => {
+    expect(
+      setup(null).method('pilot.capacity.setRetryLimit').params!.safeParse(params).success
+    ).toBe(ok)
+  })
+
+  it('retry frees a failed key and ticks its job by hand once, as Run now does', async () => {
+    const { store, method, tickNow } = setup(null)
+    store.markHandled('review', '7', 'run-1', 1)
+    store.setHandledStatus('review', 'run-1', 'failed', 2)
+    const view = await method('pilot.capacity.retry').handler(
+      { automationId: 'review', onceKey: '7' },
+      DESKTOP
+    )
+    expect(store.handledKeys('review')).toEqual(new Set())
+    expect(tickNow).toHaveBeenCalledTimes(1)
+    expect(tickNow).toHaveBeenCalledWith('review', { dryRun: false, byHand: true })
+    expect(view.gaveUp).toEqual([])
+  })
+
+  it('retry refuses a job it does not know, freeing nothing', () => {
+    const { store, method, tickNow } = setup(null)
+    store.markHandled('gone', '7', 'run-1', 1)
+    store.setHandledStatus('gone', 'run-1', 'failed', 2)
+    expect(() =>
+      method('pilot.capacity.retry').handler({ automationId: 'gone', onceKey: '7' }, DESKTOP)
+    ).toThrow('No automation "gone"')
+    expect(store.handledKeys('gone')).toEqual(new Set(['7']))
+    expect(tickNow).not.toHaveBeenCalled()
   })
 })

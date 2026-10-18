@@ -323,7 +323,7 @@ describe('runTick', () => {
     })
   })
 
-  it('still frees the key when the launch-failure bookkeeping partly throws', async () => {
+  it('still counts the failure on the key when the launch-failure bookkeeping partly throws', async () => {
     const d = deps({
       launch: async () => {
         throw new Error('gone')
@@ -334,10 +334,10 @@ describe('runTick', () => {
     }
     const result = await runTick(def, people, d, { dryRun: false })
     expect(result.status).toBe('ok')
-    expect(d.store.handledKeys('fix-failed-ci').size).toBe(0)
+    expect(d.store.handledRows('fix-failed-ci').map((r) => r.failures)).toEqual([1, 1])
   })
 
-  it('fails only the run whose launch throws, and leaves its item due again (Review Focus 4)', async () => {
+  it('fails only the run whose launch throws, and counts a failure on its key (Review Focus 4)', async () => {
     const d = deps({
       launch: async (req) => {
         if (req.decision.key === 'mr:1561') {
@@ -349,7 +349,7 @@ describe('runTick', () => {
     const result = await runTick(def, people, d, { dryRun: false })
     expect(result.status).toBe('ok')
     expect(result.decisions.map((x) => x.verdict)).toEqual(['started', 'started'])
-    expect(d.store.handledKeys('fix-failed-ci')).toEqual(new Set(['1574:1574']))
+    expect(d.store.handledRows('fix-failed-ci').map((r) => r.failures)).toEqual([1, 0])
     expect(
       d.store.runs.forTick(result.tickId).map((r) => [r.itemKey, r.status, r.outcome])
     ).toEqual([
@@ -513,7 +513,7 @@ describe('runTick launching into each workspace (Task 8d)', () => {
     )
   })
 
-  it("fails the step and the run, and frees the item's key, when its new worktree can't be made", async () => {
+  it("fails the step and the run, and counts a failure on the item's key, when its new worktree can't be made", async () => {
     const run = launching(async () => {
       throw new Error('git worktree add failed')
     })
@@ -536,7 +536,7 @@ describe('runTick launching into each workspace (Task 8d)', () => {
       { status: 'failed', error: 'git worktree add failed' },
       { status: 'failed', error: 'git worktree add failed' }
     ])
-    expect(run.d.store.handledKeys('fix-failed-ci').size).toBe(0)
+    expect(run.d.store.handledRows('fix-failed-ci').map((r) => r.failures)).toEqual([1, 1])
   })
 
   // H10: per_worktree in the main checkout is one session for the repo. The second item would resume it
@@ -559,7 +559,7 @@ describe('runTick launching into each workspace (Task 8d)', () => {
       ['mr:1561', 'running', null],
       ['mr:1574', 'failed', busy]
     ])
-    expect(run.d.store.handledKeys('fix-failed-ci')).toEqual(new Set(['1561:1561']))
+    expect(run.d.store.handledRows('fix-failed-ci').map((r) => r.failures)).toEqual([0, 1])
   })
 })
 

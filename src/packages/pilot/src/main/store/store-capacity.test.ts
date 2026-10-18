@@ -50,6 +50,18 @@ describe('CapacityStore', () => {
     expect(store.capacity.runLimit()).toBeNull()
   })
 
+  it.each([
+    [9, 5],
+    [-1, 0],
+    [0, 0],
+    [3, 3]
+  ])('keeps 2 retries after a failure by default, and %s as %s', (set, kept) => {
+    const store = open()
+    expect(store.capacity.retryLimit()).toBe(2)
+    store.capacity.setRetryLimit(set, 1)
+    expect(store.capacity.retryLimit()).toBe(kept)
+  })
+
   it('queues oldest first, and a requeued item keeps its place and any Run now', () => {
     const store = open()
     store.capacity.enqueue(item('a', 'x', 10, true))

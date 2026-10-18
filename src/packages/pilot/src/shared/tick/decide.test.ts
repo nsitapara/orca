@@ -41,9 +41,23 @@ function input(
     activeRuns: 0,
     busyWorktrees: new Set(),
     scriptChecks: new Map(),
+    retryLimit: 2,
+    byHand: false,
     ...over
   }
 }
+const handledAs = (status: HandledState['status']): HandledState => ({
+  status,
+  failedAt: null,
+  failures: 0,
+  lastOutcome: null
+})
+const failedAs = (failures: number, ago: number): HandledState => ({
+  status: 'failed',
+  failedAt: NOW - ago,
+  failures,
+  lastOutcome: 'agent exited'
+})
 const verdicts = (i: DecideInput) => decideTick(i).map((d) => [d.key, d.verdict, d.reason])
 
 describe('decideTick: scope, once_per and baseline', () => {
@@ -74,53 +88,70 @@ describe('decideTick: scope, once_per and baseline', () => {
     ])
   })
 
-  it.each<[string, HandledState, number | null, string, string]>([
-    [
-      'handled and done',
-      { status: 'done', failedAt: null },
-      12 * HOUR,
-      'notdue',
-      'Already handled 1'
-    ],
+  type HandledCase = [
+    string,
+    HandledState,
+    { retry?: number | null; askFirst?: boolean; byHand?: boolean },
+    string,
+    string
+  ]
+  it.each<HandledCase>([
+    ['handled and done', handledAs('done'), {}, 'notdue', 'Already handled 1'],
     // A seeded key (no run) or a run still going stays handled: only a failed run is retried.
+    ['handled, seeded or still started', handledAs('started'), {}, 'notdue', 'Already handled 1'],
     [
-      'handled, seeded or still started',
-      { status: 'started', failedAt: null },
-      12 * HOUR,
+      'failed past the retry limit',
+      failedAs(3, 13 * HOUR),
+      {},
       'notdue',
-      'Already handled 1'
+      'Gave up after 3 failures; Retry from Running'
     ],
     [
-      'failed, no retry_after_failure',
-      { status: 'failed', failedAt: NOW - 13 * HOUR },
-      null,
+      'failed past the retry limit, by hand',
+      failedAs(3, 13 * HOUR),
+      { byHand: true },
+      'started',
+      'All checks pass'
+    ],
+    [
+      'failed, in an ask-first job',
+      failedAs(1, 13 * HOUR),
+      { askFirst: true },
       'notdue',
       'Already handled 1'
     ],
     [
       'failed 13h ago, retry after 12h',
-      { status: 'failed', failedAt: NOW - 13 * HOUR },
-      12 * HOUR,
+      failedAs(1, 13 * HOUR),
+      { retry: 12 * HOUR },
       'started',
       'All checks pass'
     ],
     [
       'failed 1h ago, retry after 12h',
-      { status: 'failed', failedAt: NOW - HOUR },
-      12 * HOUR,
-      'notdue',
-      'Its last run failed; due again in 11h'
+      failedAs(1, HOUR),
+      { retry: 12 * HOUR },
+      'held',
+      'Retry 1 of 2 at 23:00. Last run failed: agent exited'
     ],
     [
-      'failed 90 min ago, retry after 2h',
-      { status: 'failed', failedAt: NOW - 90 * 60_000 },
-      2 * HOUR,
-      'notdue',
-      'Its last run failed; due again in 30m'
+      'failed 5 min ago, no retry_after_failure',
+      failedAs(2, 5 * 60_000),
+      {},
+      'held',
+      'Retry 2 of 2 at 12:05. Last run failed: agent exited'
     ]
-  ])('once_per: %s', (_name, state, retry, verdict, reason) => {
-    const def = testDefinition({ oncePer: '{mr.iid}', retryAfterFailureMs: retry })
-    const [d] = decideTick(input(def, [item(1)], { handled: new Map([['1', state]]) }))
+  ])('once_per: %s', (_name, state, opts, verdict, reason) => {
+    const def = testDefinition({
+      oncePer: '{mr.iid}',
+      retryAfterFailureMs: opts.retry ?? null,
+      ...(opts.askFirst ? { start: 'ask_first' as const } : {})
+    })
+    const given = input(def, [item(1)], {
+      handled: new Map([['1', state]]),
+      byHand: opts.byHand ?? false
+    })
+    const [d] = decideTick(given)
     expect([d.verdict, d.reason]).toEqual([verdict, reason])
   })
 
@@ -142,7 +173,7 @@ describe('decideTick: scope, once_per and baseline', () => {
     const out = verdicts(
       input(def, [item(1), item(2), item(3), item(4)], {
         notDue,
-        handled: new Map([['2', { status: 'done', failedAt: null }]]),
+        handled: new Map([['2', handledAs('done')]]),
         seenKeys: new Set(['mr:1', 'mr:2', 'mr:4'])
       })
     )
@@ -192,7 +223,7 @@ describe('decideTick: scope, once_per and baseline', () => {
     }
     const out = decideTick(
       input(def, [repo], {
-        handled: new Map([['repo:web-platform', { status: 'done' as const, failedAt: null }]]),
+        handled: new Map([['repo:web-platform', handledAs('done')]]),
         scope: new Map([['repo:web-platform', { verdict: 'out_of_scope' as const, reason: 'x' }]])
       })
     )
@@ -211,7 +242,7 @@ describe('decideTick: scope, once_per and baseline', () => {
       label: 'web-platform',
       fields: { 'run.date': '20261010' }
     }
-    const handled = new Map([['20261010', { status: 'done' as const, failedAt: null }]])
+    const handled = new Map([['20261010', handledAs('done')]])
     const [d] = decideTick(input(def, [repo], { handled }))
     expect([d.verdict, d.reason]).toEqual(['notdue', 'Already handled 20261010'])
   })

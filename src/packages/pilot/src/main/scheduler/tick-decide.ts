@@ -68,16 +68,16 @@ export type DecideOutcome = FedOutcome & { decisions: ItemDecision[]; warnings: 
 type ScriptCheck = Extract<CheckDef, { kind: 'script' }>
 
 const SCRIPT_CHECK_CONCURRENCY = 4
-const HELD: HandledState = { status: 'started', failedAt: null }
+const HELD: HandledState = { status: 'started', failedAt: null, failures: 0, lastOutcome: null }
 
 function messageOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
 }
 
-// retry_after_failure's input. Only a run settles a key (setHandledStatus), so a key no run holds
+// The runner's retry input. Only a run settles a key (setHandledStatus), so a key no run holds
 // (baselined, or brought in by the retired sweep-state import) reads as started whatever its row says: never
 // retryable. The one exception is an old sweep's failure that import brought in with its time (04's failed.json): it
-// is due again retry_after_failure after that failure, as the sweep would have retried it.
+// is retried after that failure, as the sweep would have retried it.
 function importedFailure(r: HandledRow): boolean {
   return r.runId === null && r.status === 'failed' && r.failedAt !== null
 }
@@ -86,7 +86,14 @@ export function handledStates(rows: readonly HandledRow[]): Map<string, HandledS
   return new Map(
     rows.map((r) => [
       r.onceKey,
-      r.runId === null && !importedFailure(r) ? HELD : { status: r.status, failedAt: r.failedAt }
+      r.runId === null && !importedFailure(r)
+        ? HELD
+        : {
+            status: r.status,
+            failedAt: r.failedAt,
+            failures: r.failures,
+            lastOutcome: r.lastOutcome
+          }
     ])
   )
 }
@@ -221,12 +228,14 @@ export function worktreeTakenSinceDecide(
 // One automation's decision (spec §6): repo → items → built-in fields → scope → custom fields →
 // script checks → decideTick. A failing source or worktree listing throws; the tick runner records
 // the tick as failed and the next one retries. `tickId` is the tick row the runner started first (G3).
+// `byHand`: Run now or Retry, which start a key the runner gave up on.
 export async function decideTickItems(
   def: AutomationDefinition,
   people: PeopleDirectory,
   deps: DecideDeps,
   pass: PassFetchCache,
-  tickId: number
+  tickId: number,
+  byHand = false
 ): Promise<DecideOutcome> {
   const now = deps.now()
   const repo = await deps.resolveRepo(def.repo)
@@ -277,7 +286,9 @@ export async function decideTickItems(
     seenKeys: new Set(seenAt.keys()),
     activeRuns: deps.store.runs.runningCount(def.id),
     busyWorktrees: busyWorktrees(deps.store, repo),
-    notDue: custom.notDue
+    notDue: custom.notDue,
+    retryLimit: deps.store.capacity.retryLimit(),
+    byHand
   }
   const decisions = decideTick({
     ...input,

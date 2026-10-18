@@ -492,7 +492,13 @@ describe('handledStates', () => {
       runId: string | null,
       status: HandledRow['status'],
       failedAt: number | null
-    ): HandledRow => ({ onceKey, runId, at: 1, status, failedAt })
+    ): HandledRow => ({ onceKey, runId, at: 1, status, failedAt, failures: 0, lastOutcome: null })
+    const state = (status: HandledState['status'], failedAt: number | null): HandledState => ({
+      status,
+      failedAt,
+      failures: 0,
+      lastOutcome: null
+    })
     expect(
       handledStates([
         row('1', 'run-1', 'failed', 50),
@@ -505,15 +511,33 @@ describe('handledStates', () => {
       ])
     ).toEqual(
       new Map<string, HandledState>([
-        ['1', { status: 'failed', failedAt: 50 }],
-        ['2', { status: 'done', failedAt: null }],
-        ['3', { status: 'started', failedAt: null }],
-        ['4', { status: 'failed', failedAt: 50 }],
-        ['5', { status: 'started', failedAt: null }],
-        ['6', { status: 'started', failedAt: null }],
-        ['7', { status: 'started', failedAt: null }]
+        ['1', state('failed', 50)],
+        ['2', state('done', null)],
+        ['3', state('started', null)],
+        ['4', state('failed', 50)],
+        ['5', state('started', null)],
+        ['6', state('started', null)],
+        ['7', state('started', null)]
       ])
     )
+  })
+
+  it("carries a failed key's count and its last run's outcome", () => {
+    const failed: HandledRow = {
+      onceKey: '1',
+      runId: 'run-1',
+      at: 1,
+      status: 'failed',
+      failedAt: 50,
+      failures: 2,
+      lastOutcome: 'agent exited'
+    }
+    expect(handledStates([failed]).get('1')).toEqual({
+      status: 'failed',
+      failedAt: 50,
+      failures: 2,
+      lastOutcome: 'agent exited'
+    })
   })
 })
 
@@ -617,7 +641,10 @@ describe('05 on 2026-10-10 12:10 through the merge-request source and decideTick
       })
     )
     const handled = new Map<string, HandledState>(
-      fixture.handledKeys.map((k) => [k, { status: 'started', failedAt: null }])
+      fixture.handledKeys.map((k) => [
+        k,
+        { status: 'started', failedAt: null, failures: 0, lastOutcome: null }
+      ])
     )
     const decisions = decideTick({
       definition: def,
@@ -628,7 +655,9 @@ describe('05 on 2026-10-10 12:10 through the merge-request source and decideTick
       seenKeys: new Set(),
       activeRuns: 0,
       busyWorktrees: new Set(),
-      scriptChecks: new Map()
+      scriptChecks: new Map(),
+      retryLimit: 2,
+      byHand: false
     })
     expect(decisions.map((d) => [d.key, d.verdict, d.reason])).toEqual([
       ['!1561', 'started', 'All checks pass'],

@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import type { RunRow } from '../../shared/api-types'
+import { testDefinition } from '../../shared/definition/__fixtures__/definition'
+import type { AutomationDefinition } from '../../shared/definition/types'
+import { parsePeopleYaml } from '../../shared/people'
+import { giveUpOnFailure } from '../capacity/give-up'
 import { PilotStore } from '../store/store'
 import { closeRun, type RunEndHandover } from './run-close'
 
@@ -124,5 +128,87 @@ describe('closeRun: a run’s end and its handover commit together', () => {
     expect(store.runs.get('run-1')).toMatchObject({ status: 'cancelled', outcome: 'Deferred: cap' })
     expect(written).toEqual([])
     expect(store.handledRows('open')).toEqual([])
+  })
+})
+
+describe('closeRun: a failed run counts a failure on its key', () => {
+  const people = parsePeopleYaml('people:\n  - { id: nish, name: Nish }\n')
+  const job = testDefinition({ id: 'open', name: '13 Open MR' })
+
+  // Four runs of one key in a row, each failing; the hook gives up past the store's retry limit (2).
+  function failFourTimes(def: AutomationDefinition) {
+    if (!people.ok) {
+      throw new Error('setup')
+    }
+    const directory = people.directory
+    const store = PilotStore.open(':memory:')
+    const inbox = { store, now: () => AT, definitions: () => [def], people: () => directory }
+    const logs: string[] = []
+    const failureCounted = giveUpOnFailure(
+      inbox,
+      () => def,
+      (m) => logs.push(m)
+    )
+    const counts: number[] = []
+    for (let n = 1; n <= 4; n += 1) {
+      const id = `run-${n}`
+      store.runs.create({
+        id,
+        automationId: 'open',
+        tickId: 1,
+        itemKey: 'pipeline:7',
+        itemLabel: '#7',
+        worktreePath: null,
+        startedAt: AT
+      })
+      store.markHandled('open', '7', id, AT)
+      const deps = {
+        store,
+        now: () => AT,
+        log: (m: string) => logs.push(m),
+        failureCounted: (run: RunRow, failures: number) => {
+          counts.push(failures)
+          failureCounted(run, failures)
+        }
+      }
+      const run = store.runs.get(id)
+      if (!run) {
+        throw new Error('setup')
+      }
+      closeRun(deps, run, { status: 'failed', outcome: `agent exited ${n}` })
+    }
+    return { store, counts, logs }
+  }
+
+  it('posts one flagged card on the failure that first passes the retry limit, and none after', () => {
+    const { store, counts, logs } = failFourTimes(job)
+    expect(counts).toEqual([1, 2, 3, 4])
+    expect(
+      store.inbox.list({ automationId: 'open' }).map((i) => [i.type, i.itemKey, i.title, i.context])
+    ).toEqual([
+      [
+        'flagged',
+        'pipeline:7',
+        '13 Open MR failed 3 times: #7',
+        'agent exited 3 Retry it from Running.'
+      ]
+    ])
+    expect(logs).toEqual([])
+  })
+
+  it('never gives up on an ask-first job: you approve each run', () => {
+    const { store } = failFourTimes({ ...job, start: 'ask_first' })
+    expect(store.inbox.list({ automationId: 'open' })).toEqual([])
+  })
+
+  it('counts nothing for a done run', () => {
+    const { store, run, deps } = setup()
+    const counted: number[] = []
+    closeRun({ ...deps, failureCounted: (_run, failures) => counted.push(failures) }, run, {
+      status: 'done',
+      outcome: 'Done'
+    })
+    expect(counted).toEqual([])
+    expect(store.handledRows('open')[0]).toMatchObject({ status: 'done', failures: 0 })
   })
 })

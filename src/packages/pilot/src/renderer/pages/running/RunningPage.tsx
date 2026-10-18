@@ -1,13 +1,19 @@
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import type { CapacityPayload, CapacityRun, QueuedRun } from '../../../shared/api-types-capacity'
+import type {
+  CapacityPayload,
+  CapacityRun,
+  QueuedRun,
+  RetryKey
+} from '../../../shared/api-types-capacity'
 import { formatDuration } from '../../../shared/run/format-duration'
 import { workedMs } from '../../../shared/run/worked-time'
 import { PilotHostProvider, usePilotHost } from '../../hosts/PilotHostContext'
 import { openRun } from '../../run-views/run-panel-state'
 import { useNow } from '../waiting/use-now'
 import { FinishedRuns } from './FinishedRuns'
-import { RunLimitPicker } from './RunLimitPicker'
+import { RunLimitPicker } from './LimitPickers'
+import { GaveUpRow, RetryPanel } from './Retries'
 import {
   memoryText,
   quotaText,
@@ -16,18 +22,27 @@ import {
   usageText,
   waitsForSlot
 } from './running-text'
-import { useCapacities, type MachineCapacity } from './use-capacity'
+import { useCapacities, type CapacityChanges, type MachineCapacity } from './use-capacity'
+
+// A machine's changes, bound to it.
+type Changes = {
+  onLimit(limit: number | null): void
+  onRetryLimit(limit: number): void
+  onRetry(key: RetryKey): void
+}
 
 function LimitPanel({
   payload,
   where,
   saving,
-  onChange
+  onChange,
+  onRetryLimit
 }: {
   payload: CapacityPayload
   where: string
   saving: boolean
   onChange(limit: number | null): void
+  onRetryLimit(limit: number): void
 }): React.JSX.Element {
   const suggested = payload.suggestion.limit
   const memory = memoryText(payload)
@@ -66,6 +81,7 @@ function LimitPanel({
           </p>
         ) : null}
       </div>
+      <RetryPanel payload={payload} saving={saving} onChange={onRetryLimit} />
     </section>
   )
 }
@@ -167,29 +183,37 @@ function ListSection({
   )
 }
 
-type MachineProps = {
+type MachineProps = Changes & {
   machine: MachineCapacity
   // More than one machine: each section is named, and the page header says no figures of its own.
   named: boolean
   saving: boolean
   now: number
-  onLimit(limit: number | null): void
 }
 
-// Today's page for one machine: its run limit, what runs, what waits and what finished.
+// Today's page for one machine: its limits, what runs, what waits, what it gave up on and what finished.
 function MachineRuns({
   payload,
   where,
   saving,
   now,
-  onLimit
+  onLimit,
+  onRetryLimit,
+  onRetry
 }: Omit<MachineProps, 'machine' | 'named'> & {
   payload: CapacityPayload
   where: string
 }): React.JSX.Element {
+  const gaveUp = payload.gaveUp ?? []
   return (
     <>
-      <LimitPanel payload={payload} where={where} saving={saving} onChange={onLimit} />
+      <LimitPanel
+        payload={payload}
+        where={where}
+        saving={saving}
+        onChange={onLimit}
+        onRetryLimit={onRetryLimit}
+      />
       <ListSection title="Running now" empty="Nothing is running." count={payload.running.length}>
         {payload.running.map((run) => (
           <RunningRow key={run.id} run={run} now={now} />
@@ -205,7 +229,19 @@ function MachineRuns({
           />
         ))}
       </ListSection>
-      <FinishedRuns runs={payload.finished} now={now} />
+      {gaveUp.length > 0 ? (
+        <ListSection title="Gave up" empty="" count={gaveUp.length}>
+          {gaveUp.map((item) => (
+            <GaveUpRow
+              key={`${item.automationId}:${item.onceKey}`}
+              item={item}
+              saving={saving}
+              onRetry={onRetry}
+            />
+          ))}
+        </ListSection>
+      ) : null}
+      <FinishedRuns runs={payload.finished} now={now} onRetry={onRetry} />
     </>
   )
 }
@@ -255,9 +291,20 @@ function MachineSection({ machine, named, ...rest }: MachineProps): React.JSX.El
   )
 }
 
-// What runs now, what waits for a slot in line order, and how many jobs may run at once (main/capacity), per machine.
+// Each change a machine's section makes goes to that machine.
+function changesFor(changes: CapacityChanges, machine: MachineCapacity): Changes {
+  const { host } = machine
+  return {
+    onLimit: (limit) => void changes.setLimit(host, limit),
+    onRetryLimit: (limit) => void changes.setRetryLimit(host, limit),
+    onRetry: (key) => void changes.retry(host, key)
+  }
+}
+
+// What runs now, what waits in line order, what the runner gave up on, and how many jobs may run at once and how often
+// a failed one is retried (main/capacity), per machine.
 export function RunningPage(): React.JSX.Element {
-  const { machines, saving, setLimit } = useCapacities()
+  const { machines, saving, ...changes } = useCapacities()
   const now = useNow(true)
   const named = machines.length > 1
   const only = named ? null : machines[0]?.payload
@@ -277,7 +324,7 @@ export function RunningPage(): React.JSX.Element {
             named={named}
             saving={saving === machine.host.key}
             now={now}
-            onLimit={(limit) => void setLimit(machine.host, limit)}
+            {...changesFor(changes, machine)}
           />
         ))}
       </div>

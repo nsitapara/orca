@@ -44,10 +44,13 @@ function quotaAgrees(o: OldDecision, n: ItemDecision): boolean {
   return window !== undefined && window === newWindow && percent === newPercent
 }
 
+// The runner's retry gate holds a failed head before the job's checks.
+const RETRY = /^Retry \d+ of \d+ at \d\d:\d\d\. Last run failed/
+
 // due.decide's and plan()'s skip reasons, and the check that gives each in Pilot (the MR rules in gate.py's own words).
 function skipAgrees(o: OldDecision, n: ItemDecision): boolean {
   if (o.reason.endsWith('; retry next night')) {
-    return n.reason.startsWith('Its last run failed; due again in ')
+    return n.hold?.code === 'retry' && RETRY.test(n.reason)
   }
   if (/^\S+ present$/.test(o.reason)) {
     return failedCheck(n) === '{worktree.git_operation} == null' && n.reason === GIT_OPERATION
@@ -67,10 +70,12 @@ function skipAgrees(o: OldDecision, n: ItemDecision): boolean {
       n.reason === `Another run is active in ${String(n.fields['worktree.path'])}`
     )
   }
+  // A failed head waits out its retry first; the sweep looked at answers and agents first. Nothing starts either way.
   if (o.reason === 'answers are being applied or an agent is working there; QA waits') {
     return (
       (failedCheck(n) === 'No pending answers' && n.reason.endsWith(' waiting to be applied')) ||
-      (failedCheck(n) === 'Idle' && BUSY.test(n.reason))
+      (failedCheck(n) === 'Idle' && BUSY.test(n.reason)) ||
+      (n.hold?.code === 'retry' && RETRY.test(n.reason))
     )
   }
   return false
@@ -178,15 +183,15 @@ describeParity(
       expect(gates.filter((d) => d.verdict === 'started').map((d) => d.key)).toEqual([key(424)])
     })
 
-    // The import end to end: a first sight whose run failed in the old app holds its head 12 hours from that failure
-    // (not due), and is tested after; the failed head is never Pilot's marker, so it stays a first sight.
+    // The import end to end: a first sight whose run failed in the old app waits in the runner's line 12 hours from
+    // that failure, and is tested after; the failed head is never Pilot's marker, so it stays a first sight.
     it('holds an imported failed first sight for 12 hours, then starts it', async () => {
       const fresh = await decide('failed-first-sight')
       expect(fresh.map((d) => [d.key, d.verdict, d.fields['worktree.first_sight']])).toEqual([
-        [key(491), 'notdue', true],
+        [key(491), 'held', true],
         [key(492), 'started', true]
       ])
-      expect(fresh[0].reason).toBe('Its last run failed; due again in 11h')
+      expect(fresh[0].reason).toBe('Retry 1 of 2 at 14:00. Last run failed')
       expect(fresh[1].onceKey).toBe(`${REPO}::/wt/web-492@${'c492'.padEnd(40, '0')}`)
     })
 
@@ -196,7 +201,8 @@ describeParity(
         [key(481), 'skipped', '{worktree.git_operation} == null'],
         [key(482), 'skipped', 'Not merged'],
         [key(483), 'skipped', 'Not approved'],
-        [key(484), 'notdue', null],
+        // Held by its retry; the runtime check that would hold it next is still listed.
+        [key(484), 'held', 'No pending answers'],
         [key(485), 'out_of_scope', null],
         [key(486), 'baselined', null],
         [key(487), 'out_of_scope', null],

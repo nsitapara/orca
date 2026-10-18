@@ -67,7 +67,8 @@ describe('capacityView', () => {
       store,
       definitions: [review, ci, pull],
       memory: { runs: new Map([['r1', 1.5 * GIB]]), system: null, sampledAt: 1 },
-      system: { totalBytes: 24 * GIB, availableBytes: 11 * GIB }
+      system: { totalBytes: 24 * GIB, availableBytes: 11 * GIB },
+      now: 100
     })
 
     expect(view.limit).toBe(2)
@@ -158,7 +159,8 @@ describe('capacityView', () => {
         store,
         definitions: defs,
         memory: null,
-        system: { totalBytes: 24 * GIB, availableBytes: 14 * GIB }
+        system: { totalBytes: 24 * GIB, availableBytes: 14 * GIB },
+        now: 100
       })
     expect(view([light, heavy, off]).heaviest).toEqual({
       automationId: 'heavy',
@@ -169,5 +171,60 @@ describe('capacityView', () => {
     expect(view([light, heavy, off]).suggestion).toMatchObject({ limit: 4, measured: false })
     // A turned-off job that never ran is left out.
     expect(view([light, off]).heaviest).toMatchObject({ automationId: 'light', measured: true })
+  })
+
+  it('lists the keys given up on this week, with the retry limit, and names the failed key a finished run holds', () => {
+    const store = PilotStore.open(':memory:')
+    const review = testDefinition({ id: 'review', name: '03 Review and fix' })
+    const asks = testDefinition({ id: 'asks', name: '12 Answers', start: 'ask_first' })
+    const DAY = 24 * 60 * 60_000
+    const now = 30 * DAY
+    const fail = (id: string, automationId: string, key: string, times: number, at: number) => {
+      store.runs.create({
+        id,
+        automationId,
+        tickId: null,
+        itemKey: `mr:${key}`,
+        itemLabel: `!${key}`,
+        worktreePath: null,
+        startedAt: at
+      })
+      store.runs.update(id, { status: 'failed', outcome: 'agent exited', finishedAt: at })
+      store.markHandled(automationId, key, id, at)
+      for (let n = 0; n < times; n += 1) {
+        store.setHandledStatus(automationId, id, 'failed', at)
+      }
+    }
+    fail('gave-up', 'review', '1', 3, now - DAY)
+    fail('retrying', 'review', '2', 1, now - DAY)
+    fail('last-week', 'review', '3', 3, now - 8 * DAY)
+    fail('asked', 'asks', '4', 3, now - DAY)
+    store.capacity.setRetryLimit(2, 0)
+    const view = capacityView({
+      store,
+      definitions: [review, asks],
+      memory: null,
+      system: { totalBytes: 24 * GIB, availableBytes: 14 * GIB },
+      now
+    })
+    expect(view.retryLimit).toBe(2)
+    expect(view.gaveUp).toEqual([
+      {
+        automationId: 'review',
+        automationName: '03 Review and fix',
+        onceKey: '1',
+        itemLabel: '!1',
+        failures: 3,
+        failedAt: now - DAY,
+        outcome: 'agent exited'
+      }
+    ])
+    // Retry frees an ask-first job's key too: its next tick asks again.
+    expect(view.finished.map((r) => [r.id, r.onceKey])).toEqual([
+      ['retrying', '2'],
+      ['gave-up', '1'],
+      ['asked', '4'],
+      ['last-week', '3']
+    ])
   })
 })

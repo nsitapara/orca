@@ -2,7 +2,7 @@ import { ChevronRight } from 'lucide-react'
 import { useState } from 'react'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { cn } from '@/lib/utils'
-import type { FinishedRun } from '../../../shared/api-types-capacity'
+import type { FinishedRun, RetryKey } from '../../../shared/api-types-capacity'
 import { checkoutRemoved, homeOf } from '../../../shared/api-types-env'
 import { formatMemory } from '../../../shared/capacity/format-memory'
 import { runStatusWord } from '../../../shared/env-text'
@@ -146,19 +146,30 @@ function FinishedDetails({ run }: { run: FinishedRun }): React.JSX.Element {
   )
 }
 
+// A failed or timed-out run whose key is still failed: Retry frees the key and runs its job by hand.
+function retryKeyOf(run: FinishedRun): RetryKey | null {
+  if (run.onceKey === undefined || (run.status !== 'failed' && run.status !== 'timed_out')) {
+    return null
+  }
+  return { automationId: run.automationId, onceKey: run.onceKey }
+}
+
 function FinishedRow({
   run,
   now,
   open,
-  onToggle
+  onToggle,
+  onRetry
 }: {
   run: FinishedRun
   now: number
   open: boolean
   onToggle(): void
+  onRetry(key: RetryKey): void
 }): React.JSX.Element {
   const host = usePilotHost()
   const ended = run.finishedAt ?? now
+  const retryKey = retryKeyOf(run)
   return (
     <>
       <tr className="border-t border-border/50 align-top">
@@ -198,9 +209,16 @@ function FinishedRow({
           <SessionCell run={run} />
         </td>
         <td className="px-3 py-1.5">
-          <button type="button" className="underline" onClick={() => openRun(run.id, null, host)}>
-            Open
-          </button>
+          <div className="flex flex-col items-start gap-1">
+            <button type="button" className="underline" onClick={() => openRun(run.id, null, host)}>
+              Open
+            </button>
+            {retryKey ? (
+              <button type="button" className="underline" onClick={() => onRetry(retryKey)}>
+                Retry
+              </button>
+            ) : null}
+          </div>
         </td>
         <td className={NUMBER} title={new Date(ended).toLocaleString()}>
           {endedText(ended, now)}
@@ -220,10 +238,12 @@ function FinishedRow({
 // The slot-holding jobs' newest ended runs (main/capacity), folded until asked for; a row opens to its details.
 export function FinishedRuns({
   runs,
-  now
+  now,
+  onRetry
 }: {
   runs: FinishedRun[]
   now: number
+  onRetry(key: RetryKey): void
 }): React.JSX.Element {
   const [open, setOpen] = useState(false)
   const [expanded, setExpanded] = useState<string | null>(null)
@@ -277,6 +297,7 @@ export function FinishedRuns({
                     now={now}
                     open={expanded === run.id}
                     onToggle={() => setExpanded(expanded === run.id ? null : run.id)}
+                    onRetry={onRetry}
                   />
                 ))}
               </tbody>

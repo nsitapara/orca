@@ -3,7 +3,7 @@ import type { AutomationDefinition } from '../definition/types'
 import { evalExpr, parseExpr } from '../expr'
 import { oncePerKey, renderTemplate } from '../template'
 import { isRuntimeCheck } from './check-class'
-import { evaluateCheck, fieldLookup, type CheckResult } from './checks'
+import { evaluateCheck, fieldLookup, plural, type CheckResult } from './checks'
 import { inTickGate, itemGate, limitGate, type Hold } from './runner-gates'
 
 export type DecideItem = {
@@ -13,7 +13,13 @@ export type DecideItem = {
   sortKeys?: { waitingSince: number | null; priority: number | null }
 }
 export type ScopeGate = { verdict: 'out_of_scope' | 'notdue'; reason: string }
-export type HandledState = { status: 'started' | 'done' | 'failed'; failedAt: number | null }
+export type HandledState = {
+  status: 'started' | 'done' | 'failed'
+  failedAt: number | null
+  // Failed runs in a row on the key, and the last run's outcome: the runner's retry gate reads both.
+  failures: number
+  lastOutcome: string | null
+}
 // Item key → index in definition.checks → the script's result.
 export type ScriptCheckResults = ReadonlyMap<string, ReadonlyMap<number, CheckResult>>
 export type DecideInput = {
@@ -29,6 +35,10 @@ export type DecideInput = {
   // Items a field script said aren't due now (exit 3): item key → its reason. Skipped this tick, after scope, once_per
   // and first_seen; a fed id stays pending (main/handover/tick-handover.ts settles).
   notDue?: ReadonlyMap<string, string>
+  // Retries after a failure (the Running page); a key failed more often than this is given up.
+  retryLimit: number
+  // Run now (or Retry): a given-up key is due again.
+  byHand: boolean
 }
 type Gate = { verdict: Verdict; reason: string }
 type Candidate = {
@@ -37,16 +47,6 @@ type Candidate = {
   onceKey: string
   checks: CheckOutcome[]
   path: string | null
-}
-
-function formatWait(ms: number): string {
-  const minutes = Math.max(1, Math.ceil(ms / 60_000))
-  const hours = Math.floor(minutes / 60)
-  const rest = minutes % 60
-  if (hours === 0) {
-    return `${rest}m`
-  }
-  return rest === 0 ? `${hours}h` : `${hours}h ${rest}m`
 }
 
 function matchGate(def: AutomationDefinition, item: DecideItem): Gate | null {
@@ -62,21 +62,21 @@ function matchGate(def: AutomationDefinition, item: DecideItem): Gate | null {
   return null
 }
 
-// A key whose last run failed is due again retry_after_failure after the failure.
+// A failed key stays due while the runner retries it (its retry gate waits), and by hand past the retry limit.
+// An ask-first job's isn't retried: you approve each run.
 function handledGate(input: Omit<DecideInput, 'scriptChecks'>, onceKey: string): Gate | null {
   const state = input.handled.get(onceKey)
   if (!state) {
     return null
   }
-  const retry = input.definition.retryAfterFailureMs
-  if (state.status !== 'failed' || retry === null || state.failedAt === null) {
+  if (state.status !== 'failed' || input.definition.start === 'ask_first') {
     return { verdict: 'notdue', reason: `Already handled ${onceKey}` }
   }
-  const wait = state.failedAt + retry - input.now
-  if (wait <= 0) {
-    return null
+  if (state.failures > input.retryLimit && !input.byHand) {
+    const failures = plural(state.failures, 'failure')
+    return { verdict: 'notdue', reason: `Gave up after ${failures}; Retry from Running` }
   }
-  return { verdict: 'notdue', reason: `Its last run failed; due again in ${formatWait(wait)}` }
+  return null
 }
 
 // A source that tracks its items' progress itself (the worktree kind's `commits` clause) says whether
@@ -262,7 +262,7 @@ export function decideTick(input: DecideInput): ItemDecision[] {
     }
     const path = workspacePathOf(def, item.fields)
     // The runner's gates own the hold; they re-read the runtime checks recorded above.
-    const hold = itemGate(input, item, path)
+    const hold = itemGate(input, item, onceKey, path)
     if (hold) {
       out[index] = held(reachedChecks(input, item, onceKey, checks), hold)
       return

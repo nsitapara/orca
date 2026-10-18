@@ -53,7 +53,7 @@ export function fieldLookup(fields: ItemFields): (name: string) => FieldValue {
 const pass = (reason: string): CheckResult => ({ ok: true, reason })
 const fail = (reason: string): CheckResult => ({ ok: false, reason })
 
-function plural(n: number, word: string): string {
+export function plural(n: number, word: string): string {
   return n === 1 ? `${n} ${word}` : `${n} ${word}s`
 }
 

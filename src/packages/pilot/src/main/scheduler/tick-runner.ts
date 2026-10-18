@@ -1,5 +1,4 @@
 import type { ItemDecision, TickResult, TickTrigger, Verdict } from '../../shared/api-types'
-import { repend } from '../handover/repend'
 import { expireStale, handoverOf, settleFed } from '../handover/tick-handover'
 import type { AutomationDefinition } from '../../shared/definition/types'
 import type { PeopleDirectory } from '../../shared/people'
@@ -8,6 +7,7 @@ import type { Admission, LineItem, RunCapacity } from '../capacity/run-capacity'
 import { askDecisions, type AskDeps } from '../run/ask-first'
 import type { PassFetchCache } from '../sources/fetch-cache'
 import type { GlabApi } from '../sources/gitlab-api'
+import { keepOrphanHandled, releaseUnlaunched, type Unlaunched } from './launch-failure'
 import { worktreeTakenSinceDecide, type DecideDeps, type FedOutcome } from './tick-decide'
 import { decide, dryRunTick } from './tick-dry-run'
 
@@ -79,8 +79,6 @@ function countVerdicts(decisions: ItemDecision[]): Partial<Record<Verdict, numbe
 function remembersSeen(def: AutomationDefinition): boolean {
   return def.items !== null
 }
-
-type Unlaunched = { runId: string; onceKey: string }
 
 // Where the run is recorded: the item's worktree, or the repo's main checkout for main_checkout
 // (recorded, though G2 keeps it out of the one-agent-per-worktree rule); null for a new worktree,
@@ -169,8 +167,14 @@ async function startRuns(
       ...(admission.byHand ? { trigger: 'manual' as const } : {})
     })
     runIds.set(decision.key, runId)
-    unlaunched.current = { runId, onceKey: decision.onceKey }
-    // Marked 'started' at launch (re-marking a failed key starts it fresh); Task 9 settles it.
+    const run = {
+      runId,
+      onceKey: decision.onceKey,
+      itemKey: decision.key,
+      itemLabel: decision.label
+    }
+    unlaunched.current = run
+    // Marked 'started' at launch (a failed key starts over and keeps its failures); the run's end settles it.
     if (usesHandled(def)) {
       deps.store.markHandled(def.id, decision.onceKey, runId, at)
     }
@@ -178,7 +182,6 @@ async function startRuns(
       unlaunched.current = null
       await deps.launch({ runId, definition: def, decision })
     } catch (error) {
-      const run = { runId, onceKey: decision.onceKey }
       if (error instanceof UnrecordedLaunchError) {
         keepOrphanHandled(def, run, error.message, deps)
       } else {
@@ -186,48 +189,6 @@ async function startRuns(
       }
     }
   }
-}
-
-// Best effort: one failing cleanup call must not mask the others.
-function releaseUnlaunched(
-  def: AutomationDefinition,
-  u: Unlaunched,
-  message: string,
-  deps: TickDeps
-) {
-  const outcome = `Couldn't start: ${message}`
-  try {
-    deps.store.runs.update(u.runId, { status: 'failed', outcome, finishedAt: deps.now() })
-    repend(deps.store, u.runId)
-  } catch {}
-  if (!usesHandled(def)) {
-    return
-  }
-  try {
-    deps.store.unmarkHandled(def.id, u.onceKey)
-  } catch {}
-}
-
-// The agent is running in a terminal no step tracks, so its key stays handled (marked again, in case
-// the stale-start sweep freed it during a slow launch) and no later tick starts a second agent on the
-// item. The run is failed, and its outcome names the terminal.
-function keepOrphanHandled(
-  def: AutomationDefinition,
-  u: Unlaunched,
-  message: string,
-  deps: TickDeps
-): void {
-  const at = deps.now()
-  try {
-    deps.store.runs.update(u.runId, { status: 'failed', outcome: message, finishedAt: at })
-    repend(deps.store, u.runId)
-  } catch {}
-  if (!usesHandled(def)) {
-    return
-  }
-  try {
-    deps.store.markHandled(def.id, u.onceKey, u.runId, at)
-  } catch {}
 }
 
 function markDecisions(def: AutomationDefinition, decisions: ItemDecision[], deps: TickDeps): void {

@@ -1,6 +1,7 @@
 import type { CapacityPayload, CapacityRun, QueuedRun } from '../../../shared/api-types-capacity'
 import { formatMemory } from '../../../shared/capacity/format-memory'
 import { HEADROOM_BYTES } from '../../../shared/capacity/limit-suggestion'
+import { DEFAULT_RETRY_AFTER_MS } from '../../../shared/tick/runner-gates'
 
 function slotsText(running: number, limit: number | null): string {
   if (limit === null) {
@@ -86,4 +87,14 @@ export function endedText(ms: number, now: number): string {
 // Why a job with an agent step can wait on quota, from the one ceiling main enforces.
 export function quotaText(ceiling: { weekly: number; session: number }): string {
   return `Jobs with an agent step wait while Claude or Codex is over ${ceiling.weekly}% weekly or ${ceiling.session}% session.`
+}
+
+// What the retry limit does, with the runner's wait when a job sets none.
+export function retryText(): string {
+  const minutes = DEFAULT_RETRY_AFTER_MS / 60_000
+  return `A failed run is tried again ${minutes} minutes later, or after its job's retry_after_failure. Past this many retries Pilot gives up on it and leaves you a card.`
+}
+
+export function failedTimesText(failures: number): string {
+  return failures === 1 ? 'failed 1 time' : `failed ${failures} times`
 }

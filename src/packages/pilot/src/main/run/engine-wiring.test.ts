@@ -336,7 +336,10 @@ describe('wireRunEngine', () => {
       status: 'failed',
       outcome: STALE_PENDING_OUTCOME
     })
-    expect(store.handledKeys('test-uis')).toEqual(new Set(['slow:1']))
+    expect(store.handledRows('test-uis').map((r) => [r.onceKey, r.status, r.failures])).toEqual([
+      ['left:1', 'failed', 1],
+      ['slow:1', 'started', 0]
+    ])
     listed!()
     await opening
     expect(store.runs.steps('slow')[0].status).toBe('running')

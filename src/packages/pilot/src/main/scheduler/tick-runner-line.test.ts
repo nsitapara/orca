@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { testDefinition } from '../../shared/definition/__fixtures__/definition'
-import { EMPTY_PEOPLE } from '../../shared/people'
+import { EMPTY_PEOPLE, parsePeopleYaml } from '../../shared/people'
 import { runCapacity } from '../capacity/run-capacity'
 import { fakeFieldDeps, testItem } from '../fields/__fixtures__/field-deps'
 import { PilotStore } from '../store/store'
@@ -98,5 +98,94 @@ describe("runTick holding an item in the runner's line", () => {
     const scheduled = await tick(t1)
     await tick(t2, true)
     expect(store.listTicks(def.id, 10, true).map((t) => t.id)).toEqual([scheduled.tickId])
+  })
+})
+
+const people = parsePeopleYaml('people:\n  - { id: nish, name: Nish }\n')
+
+// One clean MR, launched by `launch`; the give-up card goes to the tick's inbox.
+function launching(launch: TickDeps['launch']) {
+  const store = PilotStore.open(':memory:')
+  if (!people.ok) {
+    throw new Error('setup')
+  }
+  const directory = people.directory
+  let clock = t1
+  const deps: TickDeps = {
+    store,
+    now: () => clock,
+    resolveRepo: async () => ({ name: 'r', id: 'r', path: '/repo', base: 'origin/dev' }),
+    sources: {
+      list: async () => ({
+        items: [
+          testItem({
+            key: 'mr:1',
+            label: '!1',
+            fields: { 'mr.iid': 1, 'mr.branch': 'web-1', 'mr.finished_block': '' },
+            worktreeHint: { branch: 'web-1' }
+          })
+        ],
+        warnings: []
+      }),
+      scope: () => null
+    },
+    fields: fakeFieldDeps({
+      listWorktrees: async () => [
+        { id: 'r::/wt/1', path: '/wt/1', branch: 'web-1', head: 'h', linkedLinearIssue: null }
+      ]
+    }),
+    ask: {
+      store,
+      now: () => clock,
+      inbox: { store, now: () => clock, definitions: () => [def], people: () => directory }
+    },
+    launch
+  }
+  const tick = (at: number, byHand = false) => {
+    clock = at
+    return runTick(def, directory, deps, { dryRun: false, byHand })
+  }
+  return { store, tick }
+}
+
+const failing = async (): Promise<never> => {
+  throw new Error('worktree is gone')
+}
+
+describe('runTick counting a failed launch', () => {
+  it('leaves the key failed with one failure, not freed, so the runner retries it', async () => {
+    const { store, tick } = launching(failing)
+    await tick(t1)
+    expect(store.handledRows(def.id)).toMatchObject([
+      { onceKey: '1', status: 'failed', failedAt: t1, failures: 1 }
+    ])
+    const again = await tick(t2)
+    expect(again.decisions.map((x) => [x.verdict, x.hold?.code])).toEqual([['held', 'retry']])
+    expect(store.inbox.list({ automationId: def.id })).toEqual([])
+  })
+
+  it('gives up past the retry limit with one flagged card, and Run now still starts it', async () => {
+    const { store, tick } = launching(failing)
+    store.capacity.setRetryLimit(0, t1)
+    await tick(t1)
+    // A card keeps its context on one line, so the blank line before the hint reads as a space.
+    expect(
+      store.inbox.list({ automationId: def.id }).map((i) => [i.type, i.itemKey, i.title, i.context])
+    ).toEqual([
+      [
+        'flagged',
+        'mr:1',
+        'Auto failed 1 time: !1',
+        "Couldn't start: worktree is gone Retry it from Running."
+      ]
+    ])
+    const later = await tick(t2)
+    expect(later.decisions.map((x) => [x.verdict, x.reason])).toEqual([
+      ['notdue', 'Gave up after 1 failure; Retry from Running']
+    ])
+    const byHand = await tick(t2 + 60_000, true)
+    expect(byHand.decisions.map((x) => x.verdict)).toEqual(['started'])
+    expect(store.handledRows(def.id)[0].failures).toBe(2)
+    expect(store.inbox.list({ automationId: def.id })).toHaveLength(1)
   })
 })

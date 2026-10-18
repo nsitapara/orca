@@ -58,6 +58,8 @@ export type EngineWiringInput = {
   runAnswer?: RunEngineDeps['runAnswer']
   runChoice?: RunEngineDeps['runChoice']
   handover?: RunEngineDeps['handover']
+  // A run's end or a swept start counted a failure on its key (the give-up card).
+  failureCounted?: RunEngineDeps['failureCounted']
   // Env workspaces (main/envs): made off the tick; the sweep never closes the pending step of a run being prepared.
   envs?: EnvPreparer
 }
@@ -102,6 +104,7 @@ export function wireRunEngine(input: EngineWiringInput): WiredEngine {
     runAnswer: input.runAnswer,
     runChoice: input.runChoice,
     handover: input.handover,
+    failureCounted: input.failureCounted,
     envs: input.envs
   })
   // Runs whose startRun is still going (B8: making the workspace): the sweep never closes their pending step.
@@ -165,7 +168,11 @@ export function wireRunEngine(input: EngineWiringInput): WiredEngine {
       store.transaction(() => store.inboxPreparations.recoverExpired(now()))
       const stillOpening = (runId: string) =>
         opening.has(runId) || (input.envs?.isPreparing(runId) ?? false)
-      sweepStaleStarts(store, now, log, STALE_START_MS, stillOpening)
+      sweepStaleStarts(store, now, log, {
+        olderThanMs: STALE_START_MS,
+        opening: stillOpening,
+        failureCounted: input.failureCounted
+      })
       sweepOrphanShellSteps(store, shell.isLive, now, log)
       await pollRunningSteps(store, input.probe, input.cost ?? claudeTranscriptCost, now, {
         timeoutOf,

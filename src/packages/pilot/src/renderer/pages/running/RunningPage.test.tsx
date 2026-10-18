@@ -72,6 +72,12 @@ function serve(current: CapacityPayload): void {
     if (method === 'pilot.capacity.setLimit') {
       return { ...current, limit: params?.limit ?? null }
     }
+    if (method === 'pilot.capacity.setRetryLimit') {
+      return { ...current, retryLimit: params?.limit }
+    }
+    if (method === 'pilot.capacity.retry') {
+      return { ...current, gaveUp: [] }
+    }
     if (method === 'pilot.runs.effects') {
       return {}
     }
@@ -216,11 +222,88 @@ describe('RunningPage', () => {
     expect(rows[1]?.textContent).toMatch(/^1/)
   })
 
-  it('renders an older payload without hold fields or the quota ceiling', async () => {
-    serve(capacity())
+  it('renders an older payload without hold fields, the quota ceiling or retries', async () => {
+    serve(capacity({ finished: [finishedRun({ onceKey: undefined })] }))
     await shown()
     expect(screen.queryByText(/over \d+% weekly/)).toBeNull()
+    expect(screen.queryByText('Retries after a failure')).toBeNull()
+    expect(screen.queryByRole('region', { name: 'Gave up' })).toBeNull()
+    await click('Recently finished · 1')
+    expect(screen.queryByRole('button', { name: 'Retry' })).toBeNull()
   })
+
+  it('steps the retries after a failure, 0 to 5', async () => {
+    serve(capacity({ retryLimit: 2 }))
+    await shown()
+    expect(screen.getByText('Retries after a failure')).toBeTruthy()
+    expect(screen.getByRole('status', { name: 'Retries after a failure' }).textContent).toBe('2')
+    await click('More retries after a failure')
+    expect(pilotRpc).toHaveBeenCalledWith('pilot.capacity.setRetryLimit', { limit: 3 })
+    expect(screen.getByRole('status', { name: 'Retries after a failure' }).textContent).toBe('3')
+  })
+
+  it('lists the keys it gave up on, and Retry runs one again', async () => {
+    const now = Date.now()
+    serve(
+      capacity({
+        retryLimit: 2,
+        gaveUp: [
+          {
+            automationId: 'review',
+            automationName: '03 Review and fix',
+            onceKey: '1655:abc',
+            itemLabel: '!1655 web-2235',
+            failures: 3,
+            failedAt: now - 60_000,
+            outcome: 'agent exited'
+          }
+        ]
+      })
+    )
+    await shown()
+    expect(screen.getByRole('heading', { name: 'Gave up \u00b7 1' })).toBeTruthy()
+    const gaveUp = within(screen.getByRole('region', { name: 'Gave up' }))
+    expect(gaveUp.getByText('03 Review and fix')).toBeTruthy()
+    expect(gaveUp.getByText('!1655 web-2235')).toBeTruthy()
+    expect(gaveUp.getByText('failed 3 times')).toBeTruthy()
+    expect(gaveUp.getByText('agent exited')).toBeTruthy()
+    await act(async () => {
+      fireEvent.click(gaveUp.getByRole('button', { name: 'Retry' }))
+    })
+    expect(pilotRpc).toHaveBeenCalledWith('pilot.capacity.retry', {
+      automationId: 'review',
+      onceKey: '1655:abc'
+    })
+    expect(screen.queryByRole('region', { name: 'Gave up' })).toBeNull()
+  })
+
+  it.each([
+    ['failed', 'a failed key', '1', 1],
+    ['timed_out', 'a failed key', '1', 1],
+    ['done', 'no key', undefined, 0],
+    ['failed', 'no failed key', undefined, 0]
+  ] as const)(
+    'offers Retry on a %s finished run with %s',
+    async (status, _key, onceKey, retries) => {
+      serve(capacity({ finished: [finishedRun({ status, onceKey })] }))
+      await shown()
+      await click('Recently finished · 1')
+      const row = within(
+        within(screen.getByRole('region', { name: 'Recently finished' })).getAllByRole('row')[1]
+      )
+      expect(row.queryAllByRole('button', { name: 'Retry' })).toHaveLength(retries)
+      if (retries === 0) {
+        return
+      }
+      await act(async () => {
+        fireEvent.click(row.getByRole('button', { name: 'Retry' }))
+      })
+      expect(pilotRpc).toHaveBeenCalledWith('pilot.capacity.retry', {
+        automationId: 'review',
+        onceKey: '1'
+      })
+    }
+  )
 
   it.each([
     ['More jobs at once', 2, 3],
@@ -644,7 +727,7 @@ describe("RunningPage: another machine's runs", () => {
     pilotRpc.mockResolvedValue({})
     render(
       <PilotHostProvider host={MINI}>
-        <FinishedRuns runs={[finishedRun()]} now={Date.now()} />
+        <FinishedRuns runs={[finishedRun()]} now={Date.now()} onRetry={() => {}} />
       </PilotHostProvider>
     )
     await click('Recently finished · 1')

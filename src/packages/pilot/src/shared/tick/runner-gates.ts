@@ -1,6 +1,7 @@
 import type { HoldReason, ItemFields } from '../api-types'
 import type { AgentKind, AutomationDefinition } from '../definition/types'
 import { QUOTA_CEILING } from '../quota-ceiling'
+import { localTimeOfDay } from '../schedule/cron'
 import { worktreePathKey } from '../worktree-path-key'
 import { holdCodeOf, isRuntimeCheck } from './check-class'
 import { evaluateCheck, fieldLookup } from './checks'
@@ -9,6 +10,26 @@ import type { DecideInput, DecideItem } from './decide'
 // The job decides what is due; these gates decide when it starts. A failing gate holds the item in the
 // runner's line with its reason instead of skipping it.
 export type Hold = { code: HoldReason; detail: string }
+
+// A failed run's retry waits this long when its job sets no retry_after_failure.
+export const DEFAULT_RETRY_AFTER_MS = 600_000
+
+// A failed key within the retry limit waits out its retry; past the limit only a run by hand reaches here.
+function retryHold(input: DecideInput, onceKey: string): Hold | null {
+  const state = input.handled.get(onceKey)
+  if (state?.status !== 'failed' || state.failedAt === null || state.failures > input.retryLimit) {
+    return null
+  }
+  const def = input.definition
+  const dueAt = state.failedAt + (def.retryAfterFailureMs ?? DEFAULT_RETRY_AFTER_MS)
+  if (dueAt <= input.now) {
+    return null
+  }
+  // A key that failed before failures were counted reads as its first retry.
+  const retry = `Retry ${Math.max(state.failures, 1)} of ${input.retryLimit}`
+  const last = state.lastOutcome ? `Last run failed: ${state.lastOutcome}` : 'Last run failed'
+  return { code: 'retry', detail: `${retry} at ${localTimeOfDay(dueAt, def.timezone)}. ${last}` }
+}
 
 function declaredHold(input: DecideInput, item: DecideItem): Hold | null {
   const def = input.definition
@@ -66,9 +87,16 @@ function busyHold(busy: ReadonlySet<string>, path: string | null): Hold | null {
   return { code: 'worktree_busy', detail: `Another run is active in ${path}` }
 }
 
-// The job's runtime checks in declared order, each agent's quota, then another run in the item's worktree.
-export function itemGate(input: DecideInput, item: DecideItem, path: string | null): Hold | null {
+// A failed run's retry, the job's runtime checks in declared order, each agent's quota, then another run in the
+// item's worktree.
+export function itemGate(
+  input: DecideInput,
+  item: DecideItem,
+  onceKey: string,
+  path: string | null
+): Hold | null {
   return (
+    retryHold(input, onceKey) ??
     declaredHold(input, item) ??
     implicitQuotaHold(input.definition, item.fields) ??
     busyHold(input.busyWorktrees, path)
