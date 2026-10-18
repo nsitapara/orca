@@ -4,6 +4,7 @@ import type {
   TelemetryUsage,
   TelemetryWindow
 } from '../../../../shared/api-types-telemetry'
+import { SourceLink } from '../../../run-views/SourceLink'
 import { ResizableHeaderCell } from '../../ResizableHeaderCell'
 import { useColumnWidths, type ColumnSpec } from '../../use-column-widths'
 import { Select } from '../../waiting/InboxHeader'
@@ -121,10 +122,17 @@ function NeverCalled({
     return null
   }
   return (
-    <p className="border-t border-border/50 px-4 pt-2 text-xs text-muted-foreground">
-      {`Never called in ${windowText(since)}: `}
-      <span className="font-mono text-foreground">{unused.join(' · ')}</span>
-    </p>
+    <div className="border-t border-border/50 px-4 pt-2 text-xs text-muted-foreground">
+      <p>{`Never called in ${windowText(since)}:`}</p>
+      <ul className="mt-1 flex flex-wrap gap-x-4 gap-y-1">
+        {unused.map((command) => (
+          <li key={command} className="inline-flex items-center gap-1.5">
+            <span className="font-mono text-foreground">{command}</span>
+            <SourceLink part={{ skill: null, runs: `pilotcli ${command}` }} />
+          </li>
+        ))}
+      </ul>
+    </div>
   )
 }
 

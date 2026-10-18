@@ -1,3 +1,8 @@
+import { useState } from 'react'
+import { isWebClientLocation } from '@/lib/web-client-location'
+import { pilotRpc } from '../../../api'
+import { openRun } from '../../../run-views/run-panel-state'
+import { SourceLink } from '../../../run-views/SourceLink'
 import type {
   TelemetryCall,
   TelemetryFailures as Failures,
@@ -27,6 +32,29 @@ function outcomeClass(outcome: string): string {
   return 'text-muted-foreground'
 }
 
+// "Open run" for a call that has a run. The telemetry is this Mac's, so the run is read here; a run that isn't on this
+// Mac (or was deleted) turns into its id as plain text, never a link that opens an error.
+function RunCell({ run }: { run: string | undefined }): React.JSX.Element {
+  const [gone, setGone] = useState(false)
+  if (!run) {
+    return <>-</>
+  }
+  if (gone) {
+    return <>{run}</>
+  }
+  const open = (): void => {
+    pilotRpc('pilot.runs.get', { runId: run }).then(
+      () => openRun(run),
+      () => setGone(true)
+    )
+  }
+  return (
+    <button type="button" className="underline" onClick={open}>
+      Open run
+    </button>
+  )
+}
+
 function FailureRow({
   call,
   now,
@@ -49,9 +77,8 @@ function FailureRow({
         </span>
       </td>
       <td className={`${CELL} break-words text-muted-foreground`}>{whoText(call, names)}</td>
-      {/* The run's id as text, until it links to the run panel. */}
       <td className={`${CELL} truncate font-mono text-xs text-muted-foreground`} title={call.run}>
-        {call.run ?? '-'}
+        <RunCell run={call.run} />
       </td>
     </tr>
   )
@@ -121,19 +148,52 @@ function FailuresBody({
   )
 }
 
+// The picked command with its Source and Try it (Try it needs the desktop's playground), and Clear.
+function PickedBar({
+  command,
+  onTryIt,
+  onClear
+}: {
+  command: string
+  onTryIt?: (command: string) => void
+  onClear?: () => void
+}): React.JSX.Element {
+  const web = isWebClientLocation()
+  return (
+    <div className="flex flex-wrap items-center gap-x-2 px-4 text-xs">
+      <span className="font-mono">{command}</span>
+      <SourceLink part={{ skill: null, runs: `pilotcli ${command}` }} />
+      {onTryIt && !web ? (
+        <button type="button" className="underline" onClick={() => onTryIt(command)}>
+          Try it
+        </button>
+      ) : null}
+      {onClear ? (
+        <button type="button" className="underline" onClick={onClear}>
+          Clear
+        </button>
+      ) : null}
+    </div>
+  )
+}
+
 // The window's newest failed and invalid calls, every command's or the one picked, with their causes.
 export function TelemetryFailures({
   failures,
   since,
   command,
   now,
-  names
+  names,
+  onTryIt,
+  onClear
 }: {
   failures: Failures
   since: TelemetryWindow
   command: string | null
   now: Date
   names: ReadonlyMap<string, string>
+  onTryIt?: (command: string) => void
+  onClear?: () => void
 }): React.JSX.Element {
   return (
     <section className={SECTION_CLASS}>
@@ -143,6 +203,7 @@ export function TelemetryFailures({
           {command ? <span className="font-mono font-normal">{` for ${command}`}</span> : null}
         </h3>
       </div>
+      {command ? <PickedBar command={command} onTryIt={onTryIt} onClear={onClear} /> : null}
       <FailuresBody failures={failures} since={since} command={command} now={now} names={names} />
     </section>
   )

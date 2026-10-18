@@ -6,6 +6,15 @@ import { NEW_USAGE, PAYLOAD, TODAY_PAYLOAD } from '../../../../shared/__fixtures
 const pilotRpc = vi.fn()
 vi.mock('../../../api', () => ({ pilotRpc: (...args: unknown[]) => pilotRpc(...args) }))
 
+const showActivity = vi.fn()
+vi.mock('../../automations-view', () => ({
+  showActivity: (...args: unknown[]) => showActivity(...args)
+}))
+const openRun = vi.fn()
+vi.mock('../../../run-views/run-panel-state', () => ({
+  openRun: (...args: unknown[]) => openRun(...args)
+}))
+
 import { TelemetryPanel } from './TelemetryPanel'
 
 async function shown(answer: unknown): Promise<void> {
@@ -29,6 +38,8 @@ function firstCells(table: string): string[] {
 afterEach(() => {
   cleanup()
   pilotRpc.mockReset()
+  showActivity.mockReset()
+  openRun.mockReset()
 })
 
 describe('TelemetryPanel', () => {
@@ -49,7 +60,9 @@ describe('TelemetryPanel', () => {
       'git get-branch',
       'worktree checkremoved'
     ])
-    expect(screen.getByText(/Never called in 7 days/).textContent).toContain('gitlab update-mr')
+    expect(screen.getByText(/Never called in 7 days/).parentElement?.textContent).toContain(
+      'gitlab update-mr'
+    )
     expect(firstCells('By automation')).toEqual(['▸ 05 · Fix failed CI on my MRs'])
     const failures = within(screen.getByRole('table', { name: 'Recent failed and invalid calls' }))
     expect(failures.getByText('HTTP 502')).toBeTruthy()
@@ -107,5 +120,45 @@ describe('TelemetryPanel', () => {
       { since: '30d', includeDev: true },
       { since: '30d', includeDev: true, command: 'gitlab check-mr' }
     ])
+  })
+
+  it('opens Activity for an automation, and the run panel for a call with a run', async () => {
+    await shown(PAYLOAD)
+    fireEvent.click(screen.getByRole('button', { name: '05 · Fix failed CI on my MRs' }))
+    expect(showActivity).toHaveBeenCalledWith(['fix-failed-ci'])
+    const failures = within(screen.getByRole('table', { name: 'Recent failed and invalid calls' }))
+    const links = failures.getAllByRole('button', { name: 'Open run' })
+    expect(links).toHaveLength(1)
+    await act(async () => {
+      fireEvent.click(links[0])
+    })
+    expect(openRun).toHaveBeenCalledWith('fix-failed-ci-202610171420-t1-1')
+  })
+
+  it('shows the run as plain text when it is no longer there', async () => {
+    await shown(PAYLOAD)
+    pilotRpc.mockImplementation(async (method: string) => {
+      if (method === 'pilot.runs.get') {
+        throw new Error('no such run')
+      }
+      return PAYLOAD
+    })
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Open run' }))
+    })
+    expect(openRun).not.toHaveBeenCalled()
+    expect(screen.queryByRole('button', { name: 'Open run' })).toBeNull()
+    expect(screen.getByText('fix-failed-ci-202610171420-t1-1')).toBeTruthy()
+  })
+
+  it('offers Try it for the picked command', async () => {
+    const onTryIt = vi.fn()
+    pilotRpc.mockImplementation(async () => PAYLOAD)
+    render(<TelemetryPanel onTryIt={onTryIt} />)
+    await act(async () => {})
+    fireEvent.click(screen.getByRole('button', { name: 'gitlab check-mr' }))
+    await act(async () => {})
+    fireEvent.click(screen.getByRole('button', { name: 'Try it' }))
+    expect(onTryIt).toHaveBeenCalledWith('gitlab check-mr')
   })
 })

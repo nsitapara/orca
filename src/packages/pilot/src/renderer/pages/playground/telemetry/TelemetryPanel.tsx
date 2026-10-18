@@ -164,7 +164,9 @@ function Usage({
   since,
   picked,
   failuresFor,
-  onPick
+  onPick,
+  onTryIt,
+  onClear
 }: {
   usage: TelemetryUsage
   failures: Failures
@@ -172,6 +174,8 @@ function Usage({
   picked: string | null
   failuresFor: string | null
   onPick: (command: string) => void
+  onTryIt?: (command: string) => void
+  onClear: () => void
 }): React.JSX.Element {
   const names = new Map(usage.jobs.map((j) => [j.automation, j.name]))
   return (
@@ -187,6 +191,8 @@ function Usage({
           command={failuresFor}
           now={new Date(usage.to)}
           names={names}
+          onTryIt={onTryIt}
+          onClear={onClear}
         />
       </div>
     </>
@@ -213,11 +219,15 @@ function NoCalls({
 function TelemetryBody({
   shown,
   picked,
-  onPick
+  onPick,
+  onTryIt,
+  onClear
 }: {
   shown: TelemetryShown | null
   picked: string | null
   onPick: (command: string) => void
+  onTryIt?: (command: string) => void
+  onClear: () => void
 }): React.JSX.Element {
   if (shown === null) {
     return <p className="text-sm text-muted-foreground">{READING}</p>
@@ -237,13 +247,21 @@ function TelemetryBody({
       picked={picked}
       failuresFor={ask.command}
       onPick={onPick}
+      onTryIt={onTryIt}
+      onClear={onClear}
     />
   )
 }
 
 // pilotcli's telemetry on this Mac: which commands get called, by whom, and how they fail. Pilot reads it through
 // pilotcli (pilot.telemetry.get), never the file, and shows its values as text only.
-export function TelemetryPanel({ active = true }: { active?: boolean }): React.JSX.Element {
+export function TelemetryPanel({
+  active = true,
+  onTryIt
+}: {
+  active?: boolean
+  onTryIt?: (command: string) => void
+}): React.JSX.Element {
   const [since, setSince] = useState<TelemetryWindow>('7d')
   const [includeDev, setIncludeDev] = useState(false)
   const [command, setCommand] = useState<string | null>(null)
@@ -260,7 +278,13 @@ export function TelemetryPanel({ active = true }: { active?: boolean }): React.J
         loading={loading}
         onRefresh={refresh}
       />
-      <TelemetryBody shown={shown} picked={command} onPick={pick} />
+      <TelemetryBody
+        shown={shown}
+        picked={command}
+        onPick={pick}
+        onTryIt={onTryIt}
+        onClear={() => setCommand(null)}
+      />
     </div>
   )
 }

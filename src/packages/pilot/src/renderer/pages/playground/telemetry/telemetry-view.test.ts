@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { CALLS, NEW_USAGE, TODAY_USAGE } from '../../../../shared/__fixtures__/telemetry'
 import {
+  anchorOf,
   barSegments,
   causeText,
   durationText,
@@ -71,4 +72,13 @@ describe('telemetry-view', () => {
     [{ process: 'main' }, false],
     [undefined, false]
   ])('isPayload %#', (value, ok) => expect(isPayload(value)).toBe(ok))
+})
+
+describe('anchorOf', () => {
+  it.each([
+    ['gitlab check-mr', 'pilotcli-gitlab-check-mr'],
+    ['Inbox create_card', 'pilotcli-inbox-create_card']
+  ])('%s is %s', (command, anchor) => {
+    expect(anchorOf(command)).toBe(anchor)
+  })
 })

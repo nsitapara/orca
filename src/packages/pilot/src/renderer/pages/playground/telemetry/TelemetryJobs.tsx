@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { showActivity } from '../../automations-view'
 import type { TelemetryJob } from '../../../../shared/api-types-telemetry'
 import { badClass, countText, SECTION_CLASS, SECTION_HEAD_CLASS } from './telemetry-view'
 
@@ -11,6 +12,22 @@ function keyOf(job: TelemetryJob): string {
 // One step's commands: "gitlab check-mr ×3 · inbox create-card ×1".
 function stepCommandsText(commands: TelemetryJob['steps'][number]['commands']): string {
   return commands.map((c) => `${c.command} ×${c.calls}`).join(' · ')
+}
+
+// The name opens Activity filtered to the automation; the "job not recorded" row has none to open.
+function AutomationName({ job }: { job: TelemetryJob }): React.JSX.Element {
+  if (job.automation === '') {
+    return <span className="truncate">{job.name}</span>
+  }
+  return (
+    <button
+      type="button"
+      className="truncate text-left hover:underline"
+      onClick={() => showActivity([job.automation])}
+    >
+      {job.name}
+    </button>
+  )
 }
 
 function JobRows({
@@ -27,15 +44,18 @@ function JobRows({
     <>
       <tr className="border-t border-border/50">
         <td className="min-w-0 px-3 py-1.5">
-          <button
-            type="button"
-            aria-expanded={open}
-            className="w-full truncate text-left hover:underline"
-            title={job.name}
-            onClick={onToggle}
-          >
-            {`${caret} ${job.name}`}
-          </button>
+          <div className="flex min-w-0 gap-1" title={job.name}>
+            <button
+              type="button"
+              aria-expanded={open}
+              aria-label={`Steps of ${job.name}`}
+              className="shrink-0"
+              onClick={onToggle}
+            >
+              {caret}
+            </button>{' '}
+            <AutomationName job={job} />
+          </div>
         </td>
         <td className={NUMBER}>{countText(job.runs)}</td>
         <td className={NUMBER}>{countText(job.calls)}</td>

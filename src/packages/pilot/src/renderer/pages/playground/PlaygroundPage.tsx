@@ -1,6 +1,7 @@
 import { useCallback, useRef, useState } from 'react'
 import { isWebClientLocation } from '@/lib/web-client-location'
 import { CommandsHere } from './CommandsTab'
+import { anchorOf } from './telemetry/telemetry-view'
 import { TelemetryPanel } from './telemetry/TelemetryPanel'
 
 type PlaygroundTab = 'telemetry' | 'commands'
@@ -65,6 +66,7 @@ export function PlaygroundPage(): React.JSX.Element {
   const web = isWebClientLocation()
   const [tab, setTab] = useState<PlaygroundTab>('telemetry')
   const picked = useRef(false)
+  const [tryIt, setTryIt] = useState<string | null>(null)
   // A playground already running opens on Commands, unless Nish has picked a tab.
   const onRunning = useCallback(() => {
     if (!picked.current) {
@@ -74,6 +76,10 @@ export function PlaygroundPage(): React.JSX.Element {
   const pick = (next: PlaygroundTab): void => {
     picked.current = true
     setTab(next)
+  }
+  const onTryIt = (command: string): void => {
+    setTryIt(command)
+    pick('commands')
   }
   return (
     <section className="flex h-full flex-col gap-3 px-5 pb-4 pt-4">
@@ -85,7 +91,7 @@ export function PlaygroundPage(): React.JSX.Element {
         hidden={tab !== 'telemetry'}
         className="min-h-0 flex-1 overflow-y-auto scrollbar-sleek"
       >
-        <TelemetryPanel active={tab === 'telemetry'} />
+        <TelemetryPanel active={tab === 'telemetry'} onTryIt={onTryIt} />
       </div>
       <div
         role="tabpanel"
@@ -96,7 +102,11 @@ export function PlaygroundPage(): React.JSX.Element {
         {web ? (
           <p className="text-xs text-muted-foreground">{ELSEWHERE_TEXT}</p>
         ) : (
-          <CommandsHere onRunning={onRunning} />
+          <CommandsHere
+            onRunning={onRunning}
+            anchor={tryIt === null ? null : anchorOf(tryIt)}
+            tryCommand={tryIt}
+          />
         )}
       </div>
     </section>

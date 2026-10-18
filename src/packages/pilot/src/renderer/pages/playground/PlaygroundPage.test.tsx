@@ -157,4 +157,29 @@ describe('PlaygroundPage', () => {
     expect(screen.getByTitle('pilotcli playground')).toBe(frame)
     expect(pilotRpc).not.toHaveBeenCalledWith('pilot.playground.stop')
   })
+
+  it('Try it from Telemetry selects Commands and points the playground at the command', async () => {
+    answer({
+      'pilot.playground.projects': PROJECTS,
+      'pilot.playground.status': RUNNING
+    })
+    await shown()
+    fireEvent.click(screen.getByRole('tab', { name: 'Telemetry' }))
+    fireEvent.click(screen.getByRole('button', { name: 'gitlab check-mr' }))
+    await act(async () => {})
+    fireEvent.click(screen.getByRole('button', { name: 'Try it' }))
+    expect(screen.getByRole('tab', { name: 'Commands', selected: true })).toBeTruthy()
+    expect(screen.getByTitle('pilotcli playground').getAttribute('src')).toBe(
+      `${URL}#pilotcli-gitlab-check-mr`
+    )
+  })
+
+  it('says to start the playground when Try it finds none running', async () => {
+    answer({ 'pilot.playground.projects': PROJECTS, 'pilot.playground.status': STOPPED })
+    await shown()
+    fireEvent.click(screen.getByRole('button', { name: 'gitlab check-mr' }))
+    await act(async () => {})
+    fireEvent.click(screen.getByRole('button', { name: 'Try it' }))
+    expect(screen.getByText('Start the playground to try pilotcli gitlab check-mr.')).toBeTruthy()
+  })
 })

@@ -36,13 +36,20 @@ function ProjectOptions({ projects }: { projects: PlaygroundProject[] }): React.
 
 function Idle({
   projects,
-  status
+  status,
+  tryCommand
 }: {
   projects: PlaygroundProject[] | null
   status: PlaygroundStatus | null
+  tryCommand: string | null
 }): React.JSX.Element {
   if (status?.state === 'stopped' && status.reason) {
     return <p className="text-sm text-destructive">{status.reason}</p>
+  }
+  if (tryCommand) {
+    return (
+      <p className="text-sm text-muted-foreground">{`Start the playground to try pilotcli ${tryCommand}.`}</p>
+    )
   }
   if (projects?.length === 0) {
     return (
@@ -60,7 +67,15 @@ function Idle({
 
 // pilotcli's playground (main/playground): pick a project, Start, use its page here, Stop. `onRunning` hears
 // that a playground runs, so the page can show this tab.
-export function CommandsHere({ onRunning }: { onRunning: () => void }): React.JSX.Element {
+export function CommandsHere({
+  onRunning,
+  anchor = null,
+  tryCommand = null
+}: {
+  onRunning: () => void
+  anchor?: string | null
+  tryCommand?: string | null
+}): React.JSX.Element {
   const [projects, setProjects] = useState<PlaygroundProject[] | null>(null)
   const [status, setStatus] = useState<PlaygroundStatus | null>(null)
   const [chosen, setChosen] = useState('')
@@ -143,11 +158,11 @@ export function CommandsHere({ onRunning }: { onRunning: () => void }): React.JS
       {status?.state === 'running' ? (
         <iframe
           title="pilotcli playground"
-          src={status.url}
+          src={anchor ? `${status.url}#${anchor}` : status.url}
           className="min-h-0 w-full flex-1 rounded-md border border-border bg-background"
         />
       ) : (
-        <Idle projects={projects} status={status} />
+        <Idle projects={projects} status={status} tryCommand={tryCommand} />
       )}
     </>
   )

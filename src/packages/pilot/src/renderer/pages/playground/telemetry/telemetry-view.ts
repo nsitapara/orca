@@ -237,3 +237,12 @@ export function isPayload(value: unknown): value is TelemetryPayload {
     ('usage' in value || 'error' in value)
   )
 }
+
+// pilotCLI's playground anchor for a command (internal/cli/markdown.go's anchor of "pilotcli <command>"): lower case,
+// spaces as hyphens, only letters, digits, _ and - kept.
+export function anchorOf(command: string): string {
+  return `pilotcli ${command}`
+    .toLowerCase()
+    .replace(/ /g, '-')
+    .replace(/[^a-z0-9_-]/g, '')
+}
