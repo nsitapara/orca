@@ -75,9 +75,14 @@ describe('InboxTabs', () => {
     expect(onTab).toHaveBeenCalledWith('preparing')
   })
 
-  it('shows the preparing note', () => {
-    tabs({ preparingNote: '8 waiting' })
-    expect(screen.getByText('8 waiting')).toBeTruthy()
+  it('shows the preparing note right after the Preparing tab, saying what it waits on', () => {
+    tabs({
+      preparingNote: '8 waiting',
+      counts: { needs_you: 1, preparing: 9, blocked: 2, all: 12 }
+    })
+    const note = screen.getByText('8 waiting')
+    expect(note.previousElementSibling).toBe(screen.getByRole('button', { name: 'Preparing · 9' }))
+    expect(note.getAttribute('title')).toBe('waiting for the runner')
   })
 })
 

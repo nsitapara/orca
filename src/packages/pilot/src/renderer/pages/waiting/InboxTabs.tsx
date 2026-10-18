@@ -12,7 +12,7 @@ export function InboxTabs({
 }: {
   tab: InboxTab
   counts: TabCounts
-  // Shown beside the tabs, e.g. how many waiting cards are still being prepared.
+  // Shown right after Preparing: how many of its cards wait on the runner.
   preparingNote: string | null
   doneCount: number
   onTab: (tab: InboxTab) => void
@@ -40,16 +40,19 @@ export function InboxTabs({
     <div role="toolbar" aria-label="Card status" className="flex flex-wrap items-center gap-1.5">
       {button('needs_you', 'Needs you', counts.needs_you)}
       {button('preparing', 'Preparing', counts.preparing)}
+      {preparingNote ? (
+        <span
+          title="waiting for the runner"
+          className="rounded-full bg-[var(--ib-bad-soft)] px-2 font-mono text-xs font-semibold leading-5 text-[var(--ib-bad)]"
+        >
+          {preparingNote}
+        </span>
+      ) : null}
       {/* Kept at 0 while it is the tab, so a Retry that empties it never leaves no tab pressed. */}
       {counts.blocked > 0 || tab === 'blocked'
         ? button('blocked', 'Blocked', counts.blocked)
         : null}
       {button('all', 'All', counts.all)}
-      {preparingNote ? (
-        <span className="rounded-full bg-[var(--ib-bad-soft)] px-2 font-mono text-xs font-semibold leading-5 text-[var(--ib-bad)]">
-          {preparingNote}
-        </span>
-      ) : null}
       <span aria-hidden className="mx-1 h-4 w-px bg-border" />
       {button('done', 'Done for you', doneCount)}
     </div>
