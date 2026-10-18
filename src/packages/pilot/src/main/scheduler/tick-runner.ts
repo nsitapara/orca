@@ -101,6 +101,14 @@ function lineItem(decision: ItemDecision, at: number): LineItem {
   return { key: decision.key, label: decision.label, dueAt: decision.dueAt ?? at }
 }
 
+// Run now, or Retry's key: its run is stored as manual and its line row keeps the by-hand exemption.
+function byHandFor(decision: ItemDecision, opts: TickOptions): boolean {
+  const keys = opts.byHandKeys
+  return (
+    opts.byHand === true || keys?.has(decision.key) === true || keys?.has(decision.onceKey) === true
+  )
+}
+
 // Only 'started' decisions start runs; 'asked' ones wait for an answer (askDecisions writes the card), and 'held'
 // ones wait in the runner's line. A launch failure keeps the decision's verdict 'started'; the RUN row is the record.
 async function startRuns(
@@ -110,11 +118,12 @@ async function startRuns(
   deps: TickDeps,
   runIds: Map<string, string>,
   unlaunched: { current: Unlaunched | null },
-  byHand: boolean
+  opts: TickOptions
 ): Promise<void> {
   const at = deps.now()
   let n = 0
   for (const decision of decisions) {
+    const byHand = byHandFor(decision, opts)
     if (decision.verdict === 'held' && decision.hold) {
       deps.capacity?.hold(def, lineItem(decision, at), decision.hold, byHand)
       continue
@@ -280,7 +289,7 @@ export async function runTick(
       tickId,
       runIdFor: (n) => `${makeRunId(def.id, at, n, tickId)}-ask`
     })
-    await startRuns(def, decisions, tickId, deps, runIds, unlaunched, opts.byHand === true)
+    await startRuns(def, decisions, tickId, deps, runIds, unlaunched, opts)
     deps.capacity?.settle(def, decisions)
     deps.store.recordDecisions(tickId, decisions, runIds)
     settleFed(deps.store, def, feeding, decisions, runIds, tickId, deps.now())

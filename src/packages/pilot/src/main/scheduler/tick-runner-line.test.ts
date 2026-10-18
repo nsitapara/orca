@@ -240,5 +240,9 @@ describe('runTick starting a given-up key by hand', () => {
       ['mr:1', 'started'],
       ['mr:2', 'notdue']
     ])
+    // Activity shows you started it, as Run now's runs.
+    expect(store.runs.forTick(retried.tickId).map((r) => [r.itemKey, r.trigger])).toEqual([
+      ['mr:1', 'manual']
+    ])
   })
 })
