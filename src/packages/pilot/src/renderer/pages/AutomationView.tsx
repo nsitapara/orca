@@ -8,7 +8,10 @@ import type {
 import { findJob, jobTitle, type JobGroup } from '../../shared/job-stages'
 import { automationHome } from '../hosts/automation-home'
 import { hostRpc } from '../hosts/host-rpc'
+import type { MergedAutomation } from '../hosts/merge-automations'
 import type { PilotHostRef } from '../hosts/pilot-host'
+import { usePilotHosts } from '../hosts/pilot-hosts-feed'
+import { runNowChoices } from '../hosts/run-now-hosts'
 import { ActivityView } from '../run-views/ActivityView'
 import {
   setPilotAutomationTab,
@@ -109,6 +112,9 @@ export function AutomationView({
   const [job, setJob] = useState<JobGroup | null>(null)
   // Where its buttons' calls go; null while they're refused.
   const [home, setHome] = useState<PilotHostRef | null>(null)
+  // Its row in every machine's list, for where Run now may start it; null with one machine.
+  const [row, setRow] = useState<MergedAutomation | null>(null)
+  const hosts = usePilotHosts()
   const [refusal, setRefusal] = useState<string | null>(null)
   const tab = usePilotAutomationTab()
   const [dryRun, setDryRun] = useState<TickOutcome | null>(null)
@@ -120,6 +126,7 @@ export function AutomationView({
       if (found.kind === 'refused') {
         if (mounted.current) {
           setHome(null)
+          setRow(null)
           setRefusal(found.reason)
           setError(null)
         }
@@ -133,6 +140,7 @@ export function AutomationView({
       setDetail(d)
       setJob(j)
       setHome(found.host)
+      setRow(found.automations?.find((a) => a.id === id) ?? null)
       setRefusal(null)
       setError(null)
     } catch (e) {
@@ -151,6 +159,8 @@ export function AutomationView({
     }
   }, [refresh])
 
+  // One machine runs it as before, with no picker.
+  const choices = row && hosts.length > 1 ? runNowChoices(row, hosts) : undefined
   const crumbs = <Crumbs detail={detail} job={job} onBack={onBack} onOpenJob={onOpenJob} />
   if (!detail) {
     const note = refusal ?? error
@@ -170,7 +180,13 @@ export function AutomationView({
         <h2 className="text-lg font-semibold">{heading(detail, job)}</h2>
         <span className="flex-1" />
         {home ? (
-          <RunControls id={id} host={home} onDone={() => void refresh()} onDryRun={setDryRun} />
+          <RunControls
+            id={id}
+            host={home}
+            choices={choices}
+            onDone={() => void refresh()}
+            onDryRun={setDryRun}
+          />
         ) : null}
       </div>
       {refusal ? <p className="text-sm text-destructive">{refusal}</p> : null}
