@@ -1,4 +1,5 @@
 import type { HoldReason, ItemFields } from '../api-types'
+import { DEFAULT_RETRY_AFTER_MS } from '../capacity/retry-limit'
 import type { AgentKind, AutomationDefinition } from '../definition/types'
 import { QUOTA_CEILING } from '../quota-ceiling'
 import { localTimeOfDay } from '../schedule/cron'
@@ -10,9 +11,6 @@ import type { DecideInput, DecideItem } from './decide'
 // The job decides what is due; these gates decide when it starts. A failing gate holds the item in the
 // runner's line with its reason instead of skipping it.
 export type Hold = { code: HoldReason; detail: string; until?: number }
-
-// A failed run's retry waits this long when its job sets no retry_after_failure.
-export const DEFAULT_RETRY_AFTER_MS = 600_000
 
 // A failed key within the retry limit waits out its retry; past the limit only a run by hand reaches here.
 function retryHold(input: DecideInput, onceKey: string): Hold | null {

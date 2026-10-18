@@ -1,7 +1,7 @@
 import type { CapacityPayload, CapacityRun, QueuedRun } from '../../../shared/api-types-capacity'
 import { formatMemory } from '../../../shared/capacity/format-memory'
 import { HEADROOM_BYTES } from '../../../shared/capacity/limit-suggestion'
-import { DEFAULT_RETRY_AFTER_MS } from '../../../shared/tick/runner-gates'
+import { DEFAULT_RETRY_AFTER_MS } from '../../../shared/capacity/retry-limit'
 
 function slotsText(running: number, limit: number | null): string {
   if (limit === null) {

@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import { testDefinition } from '../definition/__fixtures__/definition'
 import type { DecideInput, DecideItem, HandledState } from './decide'
-import { DEFAULT_RETRY_AFTER_MS, itemGate } from './runner-gates'
+import { DEFAULT_RETRY_AFTER_MS } from '../capacity/retry-limit'
+import { itemGate } from './runner-gates'
 
 const NOW = Date.UTC(2026, 9, 11, 19, 0)
 const MIN = 60_000
