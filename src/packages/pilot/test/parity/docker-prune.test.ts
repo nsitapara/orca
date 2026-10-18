@@ -1,21 +1,17 @@
-import { readFileSync } from 'node:fs'
-import { homedir } from 'node:os'
-import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { decideStep, runEnd, type EndedStep } from '../../src/shared/run/step-plan'
 import { nextTickAfter } from '../../src/shared/schedule/cron'
 import { loadPortedAutomation } from './ported'
 
-// Orca's saved precheck for 07 (scratchpad move/dry-07.txt), verbatim.
-const OLD_PRECHECK = '/Users/nishsitapara/.agents/skills/docker-prune/prune.sh 80; exit 1'
-const PRUNE = join(homedir(), '.agents', 'skills', 'docker-prune', 'prune.sh')
+// pilotCLI milestone 11 ported prune.sh: the same 80% threshold Orca's precheck passed it.
+const PRUNE = 'pilotcli docker delete-unused --threshold 80'
 // The env sweep that runs first (~/.agents bb75bf8): pilotcli's orphan envs only; Pilot tears down its own runs' envs.
 const SWEEP = 'pilotcli env delete orphan=true'
 const { definition } = loadPortedAutomation('docker-prune')
 
-// These tests only read prune.sh's text and the YAML: nothing here runs prune.sh, the sweep or docker.
+// These tests only read the YAML: nothing here runs the prune, the sweep or docker.
 describe('07 · Clean Docker when disk is 80% full: an env sweep, then the prune', () => {
-  it("sweeps leftover envs, then runs prune.sh with Orca's argument, timeout and grace, in the main checkout", () => {
+  it("sweeps leftover envs, then prunes at Orca's 80%, with its timeout and grace, in the main checkout", () => {
     expect(definition).toMatchObject({
       name: '07 · Clean Docker when disk is 80% full',
       schedule: '0 7 * * *',
@@ -47,16 +43,13 @@ describe('07 · Clean Docker when disk is 80% full: an env sweep, then the prune
         always: false,
         when: '{steps.stacks.count} == 0',
         agent: 'shell',
-        run: OLD_PRECHECK.replace(/; exit 1$/, ''),
+        run: PRUNE,
         timeoutMs: 600_000
       }
     ])
   })
 
-  it("maps prune.sh's own exit codes: 3 (Docker not running) is a skip, 2 (bad arguments) fails", () => {
-    const header = /^# Exit: (.*)$/m.exec(readFileSync(PRUNE, 'utf8'))?.[1] ?? ''
-    expect(header).toContain('3 = over threshold but Docker is not running')
-    expect(header).toContain('2 = bad arguments')
+  it('maps the prune\'s exit codes: 3 (below the threshold, or Docker not answering) is a skip, 2 (a bad threshold) fails', () => {
     expect(definition.steps[2].exitCodes).toEqual({ ok: [0], skip: [3], stop: [] })
   })
 
