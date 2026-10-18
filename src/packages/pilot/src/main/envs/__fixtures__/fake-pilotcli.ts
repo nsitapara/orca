@@ -5,7 +5,8 @@ import { join } from 'node:path'
 // Tests only: a stand-in for pilotcli; no test ever runs the real one. A call appends its argv to calls.log, the
 // ORCA_*/PILOT_* names it sees to env.log, its PATH to path.log and its PILOTCLI_CALLER to
 // caller.log. When <verb>.sleep exists, it writes its pid to <verb>.pid and sleeps that many seconds. Then it
-// prints <verb>.json (stdout) and <verb>.stderr, and exits <verb>.code (default 0). <verb> is its first two words (FakeVerb), such as env-create or gitlab-check-mr.
+// prints <verb>.json (stdout) and <verb>.stderr, and exits <verb>.code (default 0). <verb> is its first two words (FakeVerb),
+// such as env-create or gitlab-check-mr.
 const SCRIPT = `#!/bin/sh
 d="$FAKE_PILOTCLI_DIR"
 v="$1-$2"

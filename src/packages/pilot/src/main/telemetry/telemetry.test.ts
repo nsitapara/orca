@@ -10,7 +10,13 @@ import {
 } from '../../shared/__fixtures__/telemetry'
 import { fakePilotcli } from '../envs/__fixtures__/fake-pilotcli'
 import { pilotcliRunner } from '../envs/pilotcli'
-import { FAILURES_SHOWN, NEEDS_NEWER_PILOTCLI, telemetryService, UNREADABLE } from './telemetry'
+import {
+  BAD_COMMAND,
+  FAILURES_SHOWN,
+  NEEDS_NEWER_PILOTCLI,
+  telemetryService,
+  UNREADABLE
+} from './telemetry'
 
 const P = { since: '7d', includeDev: false } as const
 
@@ -138,5 +144,54 @@ describe('telemetryService', () => {
     reinstall()
     await service.get({ ...P, since: '90d' })
     expect(fake.calls().filter((c) => c.startsWith('self list-commands'))).toHaveLength(2)
+  })
+
+  it('shares one pilotcli call between concurrent callers', async () => {
+    const { fake, service } = setup(NEW_CATALOG, NEW_USAGE_CLEAN)
+    const [a, b] = await Promise.all([service.get(P), service.get(P)])
+    expect(a).toEqual(b)
+    expect(fake.calls().filter((c) => c.startsWith('self get-telemetry'))).toHaveLength(1)
+  })
+
+  it('does not keep an error: the next call asks pilotcli again', async () => {
+    const { fake, service } = setup(NEW_CATALOG, NEW_USAGE)
+    fake.answer('self-list-telemetry-calls', {
+      json: envelope('self list-telemetry-calls', [{ ts: 1 }])
+    })
+    expect(await service.get(P)).toMatchObject({ failures: { unavailable: UNREADABLE } })
+    fake.answer('self-list-telemetry-calls', { json: envelope('self list-telemetry-calls', CALLS) })
+    expect(await service.get(P)).toMatchObject({ failures: { calls: CALLS } })
+    const failed = { ...envelope('self get-telemetry', null), outcome: 'failed', reason: 'boom' }
+    fake.answer('self-get-telemetry', { json: failed, code: 1 })
+    expect(await service.get({ ...P, since: '30d' })).toMatchObject({
+      error: expect.stringMatching(/boom/)
+    })
+    fake.answer('self-get-telemetry', { json: envelope('self get-telemetry', NEW_USAGE_CLEAN) })
+    expect(await service.get({ ...P, since: '30d' })).toMatchObject({
+      usage: { calls: NEW_USAGE.calls }
+    })
+  })
+
+  it('answers a failed catalog read as an error and reads it again, not as "needs a newer pilotcli"', async () => {
+    const { fake, service } = setup(NEW_CATALOG, NEW_USAGE_CLEAN)
+    const failed = {
+      ...envelope('self list-commands', null),
+      outcome: 'failed',
+      reason: 'no catalog'
+    }
+    fake.answer('self-list-commands', { json: failed, code: 1 })
+    expect(await service.get(P)).toMatchObject({ error: expect.stringMatching(/no catalog/) })
+    fake.answer('self-list-commands', {
+      json: envelope('self list-commands', NEW_CATALOG),
+      code: 0
+    })
+    expect(await service.get(P)).toMatchObject({ failures: { calls: [], more: false } })
+  })
+
+  it('refuses a command name that could add to the quoted condition', async () => {
+    const { fake, service } = setup(NEW_CATALOG, NEW_USAGE)
+    const got = await service.get({ ...P, command: 'git get-branch" outcome=ok' })
+    expect(got).toMatchObject({ error: BAD_COMMAND })
+    expect(fake.calls()).toEqual([])
   })
 })

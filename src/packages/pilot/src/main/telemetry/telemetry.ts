@@ -15,6 +15,7 @@ export const TELEMETRY_CACHE_MS = 30_000
 export const FAILURES_SHOWN = 50
 export const NEEDS_NEWER_PILOTCLI =
   'This pilotcli lists no calls yet: install a newer one (self list-telemetry-calls)'
+export const BAD_COMMAND = 'That is not a command name'
 export const UNREADABLE = "pilotcli answered in a shape Pilot doesn't read"
 
 // What the installed pilotcli can do: --series on get-telemetry, and list-telemetry-calls.
@@ -53,10 +54,18 @@ export function usageArgs(p: TelemetryParams, series: boolean): string[] {
   return [...args, '--format', 'json']
 }
 
-// The command is a name only (pilot.telemetry.get's params check it), so the quoted condition can't carry more.
+// The condition quotes the command, so a quote, backslash or line break in it could add to the condition: such a
+// name is refused (the service answers an error) instead of quoted.
+export function isCommandName(command: string): boolean {
+  return !/["\\\r\n]/.test(command)
+}
+
 export function callsArgs(p: TelemetryParams): string[] {
   const args = ['self', 'list-telemetry-calls', 'outcome=failed,invalid']
   if (p.command) {
+    if (!isCommandName(p.command)) {
+      throw new Error(BAD_COMMAND)
+    }
     args.push(`command="${p.command}"`)
   }
   return [
@@ -122,22 +131,22 @@ export function telemetryService(deps: {
   const now = deps.now ?? Date.now
   const binary = deps.binary ?? installed
   const call = (args: string[]) => deps.pilotcli({ args, timeoutMs: TELEMETRY_TIMEOUT_MS })
-  let probe: { key: string; features: Promise<TelemetryFeatures> } | null = null
+  let probe: { key: string; features: Promise<TelemetryFeatures | string> } | null = null
   const usages = new Map<string, Entry<TelemetryUsage | string>>()
   const failures = new Map<string, Entry<TelemetryFailures>>()
 
   // Read once per installed binary: a new install (another path or mtime) is read again; a failed read isn't kept.
-  function features(): Promise<TelemetryFeatures> {
+  function features(): Promise<TelemetryFeatures | string> {
     const b = binary()
     const key = b ? `${b.path}:${b.mtimeMs}` : ''
     if (probe?.key !== key) {
       const read = call(['self', 'list-commands', '--format', 'json']).then((r) =>
-        r.outcome === 'ok' ? featuresOf(r.data) : null
+        r.outcome === 'ok' ? featuresOf(r.data) : reasonOf(r, 'self list-commands')
       )
-      const mine = { key, features: read.then((f) => f ?? NONE) }
+      const mine = { key, features: read }
       probe = mine
       void read.then((f) => {
-        if (f === null && probe === mine) {
+        if (typeof f === 'string' && probe === mine) {
           probe = null
         }
       })
@@ -146,7 +155,11 @@ export function telemetryService(deps: {
   }
 
   async function readUsage(p: TelemetryParams): Promise<TelemetryUsage | string> {
-    const reply = await call(usageArgs(p, (await features()).series))
+    const known = await features()
+    if (typeof known === 'string') {
+      return known
+    }
+    const reply = await call(usageArgs(p, known.series))
     if (reply.outcome !== 'ok') {
       return reasonOf(reply, 'self get-telemetry')
     }
@@ -158,7 +171,11 @@ export function telemetryService(deps: {
     p: TelemetryParams,
     usage: TelemetryUsage
   ): Promise<TelemetryFailures> {
-    if (!(await features()).calls) {
+    const known = await features()
+    if (typeof known === 'string') {
+      return { unavailable: known }
+    }
+    if (!known.calls) {
       return { unavailable: NEEDS_NEWER_PILOTCLI }
     }
     if (badCalls(usage, p.command) === 0) {
@@ -180,17 +197,30 @@ export function telemetryService(deps: {
 
   return {
     async get(p) {
+      if (p.command !== undefined && !isCommandName(p.command)) {
+        return { fetchedAt: now(), error: BAD_COMMAND }
+      }
       const window = `${p.since}|${p.includeDev}`
       const entry = cached(usages, window, now(), () => readUsage(p))
       const usage = await entry.value
       if (typeof usage === 'string') {
-        usages.delete(window)
+        if (usages.get(window) === entry) {
+          usages.delete(window)
+        }
         return { fetchedAt: entry.at, error: usage }
       }
-      const bad = cached(failures, `${window}|${p.command ?? ''}`, entry.at, () =>
-        readFailures(p, usage)
-      )
-      return { fetchedAt: entry.at, usage, failures: await bad.value }
+      const key = `${window}|${p.command ?? ''}`
+      const bad = cached(failures, key, entry.at, () => readFailures(p, usage))
+      const shown = await bad.value
+      // Only "this pilotcli can't list calls" is a lasting answer; any other unavailable is an error, so not kept.
+      if (
+        'unavailable' in shown &&
+        shown.unavailable !== NEEDS_NEWER_PILOTCLI &&
+        failures.get(key) === bad
+      ) {
+        failures.delete(key)
+      }
+      return { fetchedAt: entry.at, usage, failures: shown }
     }
   }
 }
