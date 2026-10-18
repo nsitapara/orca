@@ -43,7 +43,7 @@ afterEach(() => {
 })
 
 describe('the Preparing tab note', () => {
-  it.each([
+  it.each<[string, Pick<InboxListPayload, 'preparationWaits'>, boolean]>([
     [
       'one of two queued cards waits',
       { preparationWaits: { a: { code: 'typing', detail: 'x', since: 1 } } },
