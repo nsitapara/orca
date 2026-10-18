@@ -185,6 +185,8 @@ describe('an answered card', () => {
   it('says an answer sent before Pilot was sent, with no Undo and no waiting; Change answer only because the server allows it', async () => {
     serve(CARD, [], state({ state: 'dispatched', sentBeforePilot: true, readyAt: NOW - 5 }))
     render(<InboxPage />)
+    // It never locks, so it isn't in Needs you: it shows under All.
+    await openAll()
     const line = await screen.findByRole('status')
     expect(line.textContent).toContain('Answer sent before Pilot')
     expect(line.textContent).not.toContain('Waiting for Pilot')

@@ -18,8 +18,10 @@ function inNeedsYou(item: InboxListRow, answer: AnswerState | null): boolean {
     return state === undefined || state === 'ready' || state === 'cancelled'
   }
   if (item.status === 'answered') {
-    // Unlocked keeps Undo on screen; a failed answer needs another go.
-    return answer !== null && (!answer.locked || answer.state === 'failed')
+    // Unlocked keeps Undo on screen; a failed answer needs another go. Sent before Pilot never locks.
+    return (
+      answer !== null && ((!answer.locked && !answer.sentBeforePilot) || answer.state === 'failed')
+    )
   }
   return false
 }

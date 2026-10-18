@@ -85,6 +85,20 @@ describe('inTab', () => {
       answer({ locked: true, state: 'failed' }),
       ['needs_you', 'all']
     ],
+    [
+      'answered, sent before Pilot (never locks)',
+      'answered',
+      null,
+      answer({ locked: false, sentBeforePilot: true }),
+      ['all']
+    ],
+    [
+      'answered, sent before Pilot and failed',
+      'answered',
+      null,
+      answer({ locked: false, sentBeforePilot: true, state: 'failed' }),
+      ['needs_you', 'all']
+    ],
     ['answered, no answer state', 'answered', null, null, ['all']],
     ['done', 'done', null, null, ['all']]
   ] as const)('%s', (_name, status, prep, ans, want) => {
