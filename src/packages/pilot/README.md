@@ -370,6 +370,8 @@ The hooks are `activity-machines-*` and `activity-project-*` (see `HOOKS.md`).
 
 One Pilot window shows the Inbox, Running, Automations and Activity of every machine that runs Pilot's engine: this Mac, another Mac's packaged app, or a headless orcad. Each item is tagged with its machine, and its actions go to that machine. Pair a machine as in "Remote use (D25)", below. All of it lives in this folder: `HOOKS.md` needed no new row.
 
+To set up another machine (a Mac, a Debian server or an Arch box), see [docs/machine-setup.md](docs/machine-setup.md).
+
 **Finding machines.**
 - This machine is always listed. Each paired environment whose pairing isn't revoked is asked `pilot.status` (5 s timeout): at the start, every 30 s while the window shows, and when an environment is added or its connection changes.
 - Stock Orca (no `pilot.status`) is left out, and so is a second pairing of an engine already listed (same machine name and data folder), such as this Mac paired to itself.
