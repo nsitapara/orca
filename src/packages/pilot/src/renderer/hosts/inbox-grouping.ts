@@ -1,5 +1,5 @@
 import type { InboxListRow } from '../../shared/api-types'
-import { byCard, type InboxGroup } from '../../shared/inbox-groups'
+import { byCard, KIND_ORDER, type InboxGroup } from '../../shared/inbox-groups'
 import type { InboxListPayload } from '../../shared/inbox-types'
 import { jobCode } from '../pages/waiting/answer-text'
 import { INBOX_KINDS } from '../pages/waiting/inbox-tabs'
@@ -20,14 +20,10 @@ const JOB_ORDER = new Intl.Collator(undefined, { numeric: true })
 type Bucket = { key: string; label: string; rank: number; order: string }
 
 function kindBucket(item: InboxListRow): Bucket {
-  const at = INBOX_KINDS.findIndex((k) => k.type === item.type)
-  const label = INBOX_KINDS[at]?.label ?? OTHER_KIND
-  return {
-    key: `kind:${label}`,
-    label,
-    rank: at === -1 ? INBOX_KINDS.length : at,
-    order: ''
-  }
+  const label = INBOX_KINDS.find((k) => k.type === item.type)?.label ?? OTHER_KIND
+  const at = KIND_ORDER.indexOf(item.type)
+  const rank = at === -1 ? KIND_ORDER.length : at
+  return { key: `kind:${label}`, label, rank, order: '' }
 }
 
 function ageBucket(item: InboxListRow, now: number): Bucket {

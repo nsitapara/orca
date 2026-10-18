@@ -91,6 +91,23 @@ describe('groupHostedItemsBy', () => {
     expect(run('none', sort)).toEqual([['', ids]])
   })
 
+  it('orders kind sections like the inbox: question, flagged, action, bug, left for you', () => {
+    const kinds = [
+      card('l', '/w/x', 'ci', 'left_for_you', 1),
+      card('b', '/w/x', 'ci', 'bug', 2),
+      card('a', '/w/x', 'ci', 'action', 3),
+      card('f', '/w/x', 'ci', 'flagged', 4),
+      card('q', '/w/x', 'ci', 'question', 5)
+    ]
+    expect(run('kind', 'kind', kinds).map(([label]) => label)).toEqual([
+      'Questions',
+      'Flagged',
+      'Approvals',
+      'Bugs',
+      'Left for you'
+    ])
+  })
+
   it('breaks a created-at tie by id', () => {
     const tied = [card('q', '/w/x', 'ci', 'bug', 5), card('p', '/w/x', 'ci', 'bug', 5)]
     expect(run('none', 'newest', tied)).toEqual([['', ['p', 'q']]])
