@@ -1,0 +1,388 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<!-- Interactive companion to machine-setup.md: open in a browser. Ticks and names stay in that browser. -->
+<title>Pilot Machine Setup</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: one reading column; machine names on top feed every command; a tab per machine, each a ticked list of steps. */
+:root {
+  --paper: #f4f6f7;
+  --surface: #ffffff;
+  --ink: #17202a;
+  --muted: #586572;
+  --rule: #d9e0e5;
+  --accent: #0d6b74;
+  --accent-soft: #e2f0f1;
+  --accent-ink: #ffffff;
+  --code-bg: #edf1f3;
+  --warn-bg: #fff3dd;
+  --warn-fg: #6f4500;
+  --warn-rule: #f0d39a;
+  --done: #2e7a4c;
+  --focus: #0d6b74;
+  --font-display: "IBM Plex Sans Condensed", "Arial Narrow", system-ui, sans-serif;
+  --font-body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #0e1317; --surface: #151c22; --ink: #e4eaee; --muted: #93a0ab; --rule: #25303a;
+    --accent: #55b9c2; --accent-soft: #15292d; --accent-ink: #061113; --code-bg: #0a0f13;
+    --warn-bg: #2a2110; --warn-fg: #f1c36a; --warn-rule: #4d3b14; --done: #6cc28f; --focus: #55b9c2;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --paper: #0e1317; --surface: #151c22; --ink: #e4eaee; --muted: #93a0ab; --rule: #25303a;
+  --accent: #55b9c2; --accent-soft: #15292d; --accent-ink: #061113; --code-bg: #0a0f13;
+  --warn-bg: #2a2110; --warn-fg: #f1c36a; --warn-rule: #4d3b14; --done: #6cc28f; --focus: #55b9c2;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--paper); color: var(--ink); font-family: var(--font-body); font-size: 15px; line-height: 1.55;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 28px 56px;
+}
+.wrap { max-width: 920px; margin: 0 auto; display: flex; flex-direction: column; gap: 24px; }
+header { display: flex; flex-direction: column; gap: 6px; }
+h1 { font-family: var(--font-display); font-weight: 600; font-size: 32px; line-height: 1.1; margin: 0; letter-spacing: -0.01em; text-wrap: balance; }
+.lede { margin: 0; color: var(--muted); max-width: 66ch; }
+.lede code, .step code, .callout code { font-family: var(--font-mono); font-size: 0.88em; background: var(--code-bg); padding: 1px 5px; border-radius: 4px; }
+.eyebrow { font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--accent); }
+
+.names { background: var(--surface); border: 1px solid var(--rule); border-radius: 10px; padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+.names h2 { font-size: 13px; font-weight: 600; margin: 0; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); }
+.names-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.machine { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.machine-title { font-weight: 600; font-size: 14px; }
+.field { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.field label { font-size: 12px; color: var(--muted); }
+.field input { font-family: var(--font-mono); font-size: 13px; padding: 7px 9px; border: 1px solid var(--rule); border-radius: 6px; background: var(--paper); color: var(--ink); width: 100%; min-width: 0; }
+.field input:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+.names-note { margin: 0; font-size: 13px; color: var(--muted); }
+
+.tabs { display: flex; gap: 4px; overflow-x: auto; border-bottom: 1px solid var(--rule); scrollbar-width: thin; }
+.tab { flex: 0 0 auto; display: flex; align-items: center; gap: 8px; padding: 10px 12px; border: 0; border-bottom: 2px solid transparent; background: none; color: var(--muted); font: 500 14px var(--font-body); cursor: pointer; margin-bottom: -1px; }
+.tab:hover { color: var(--ink); }
+.tab[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--accent); }
+.tab:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+.count { font-family: var(--font-mono); font-size: 11px; font-variant-numeric: tabular-nums; padding: 1px 6px; border-radius: 999px; background: var(--code-bg); color: var(--muted); }
+.count.full { background: var(--accent-soft); color: var(--done); }
+
+.panel { display: flex; flex-direction: column; gap: 16px; }
+.panel-head { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.panel-head h2 { font-family: var(--font-display); font-weight: 600; font-size: 22px; margin: 0; }
+.chip { font-family: var(--font-mono); font-size: 11px; padding: 2px 7px; border-radius: 4px; border: 1px solid var(--rule); color: var(--muted); background: var(--surface); }
+.panel-intro { margin: 0; color: var(--muted); max-width: 70ch; }
+.callout { background: var(--warn-bg); color: var(--warn-fg); border: 1px solid var(--warn-rule); border-radius: 8px; padding: 12px 14px; font-size: 14px; }
+.callout strong { font-weight: 600; }
+
+ol.steps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; counter-reset: step; }
+.step { counter-increment: step; display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 4px 12px; padding: 14px; background: var(--surface); border: 1px solid var(--rule); border-radius: 10px; }
+.step.done { border-color: color-mix(in srgb, var(--done) 40%, var(--rule)); }
+.check { width: 20px; height: 20px; margin: 2px 0 0; accent-color: var(--done); cursor: pointer; }
+.check:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.step-body { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.step-title { font-weight: 600; margin: 0; display: flex; flex-wrap: wrap; gap: 8px; align-items: baseline; }
+.step-title::before { content: counter(step) "."; font-family: var(--font-mono); font-size: 13px; color: var(--muted); font-weight: 400; }
+.step.done .step-title { color: var(--muted); }
+.step-text { margin: 0; max-width: 72ch; }
+.where { font-family: var(--font-mono); font-size: 11px; font-weight: 400; padding: 1px 6px; border-radius: 4px; background: var(--accent-soft); color: var(--accent); }
+.note { margin: 0; font-size: 13px; color: var(--muted); }
+.warn { margin: 0; font-size: 13px; color: var(--warn-fg); background: var(--warn-bg); border-radius: 6px; padding: 6px 10px; }
+
+.cmd { position: relative; background: var(--code-bg); border-radius: 8px; border: 1px solid var(--rule); }
+.cmd pre { margin: 0; padding: 12px 84px 12px 12px; overflow-x: auto; font-family: var(--font-mono); font-size: 13px; line-height: 1.6; white-space: pre; }
+.copy { position: absolute; top: 8px; right: 8px; font: 500 12px var(--font-body); padding: 4px 10px; border-radius: 6px; border: 1px solid var(--rule); background: var(--surface); color: var(--ink); cursor: pointer; }
+.copy:hover { border-color: var(--accent); color: var(--accent); }
+.copy:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+
+.foot { display: flex; flex-wrap: wrap; gap: 12px; justify-content: space-between; align-items: center; font-size: 13px; color: var(--muted); border-top: 1px solid var(--rule); padding-top: 14px; }
+.foot a { color: var(--accent); }
+.reset { font: 500 13px var(--font-body); padding: 6px 12px; border-radius: 6px; border: 1px solid var(--rule); background: var(--surface); color: var(--ink); cursor: pointer; }
+.reset:hover { border-color: var(--accent); }
+.reset.arm { border-color: var(--warn-rule); background: var(--warn-bg); color: var(--warn-fg); }
+
+@media (max-width: 720px) {
+  .names-grid { grid-template-columns: minmax(0, 1fr); }
+  h1 { font-size: 27px; }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .step { transition: border-color 160ms ease; }
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <span class="eyebrow">Pilot across machines</span>
+    <h1>Pilot Machine Setup</h1>
+    <p class="lede">Set up the Mac mini, a Debian box and an Arch box so one Pilot window shows every machine's Inbox, Running, Automations and Activity. Every script takes <code>--dry-run</code> and is safe to re-run. Your ticks and names stay in this browser.</p>
+  </header>
+
+  <section class="names" aria-labelledby="names-h">
+    <h2 id="names-h">Machine names</h2>
+    <div class="names-grid" id="names"></div>
+    <p class="names-note"><code>runs_on</code> matches the name exactly, ignoring case and surrounding spaces: "Mac-mini" isn't "Mac mini". The SSH host is only used if you copy pilotcli over by hand.</p>
+  </section>
+
+  <nav class="tabs" role="tablist" id="tabs" aria-label="Setup stages"></nav>
+  <section class="panel" id="panel" role="tabpanel"></section>
+
+  <footer class="foot">
+    <span>Full guide, with what each script does, updating and uninstalling: <a href="https://github.com/nsitapara/orca/blob/pilot/src/packages/pilot/docs/machine-setup.md">docs/machine-setup.md</a></span>
+    <button class="reset" id="reset" type="button">Clear all ticks</button>
+  </footer>
+</div>
+
+<script>
+(function () {
+  var S = '~/Documents/GitHub/pilot/src/packages/pilot/scripts/machine-setup';
+  var CLONE = 'git clone -b pilot https://github.com/nsitapara/orca.git ~/Documents/GitHub/pilot';
+  var MACHINES = [
+    { key: 'mini', label: 'Mac mini', name: 'Mac mini', host: 'mac-mini' },
+    { key: 'debian', label: 'Debian box', name: 'Debian box', host: 'debian-box' },
+    { key: 'arch', label: 'Arch box', name: 'Omarchy', host: 'omarchy' }
+  ];
+
+  function read(key, fallback) {
+    try { var v = localStorage.getItem(key); return v ? JSON.parse(v) : fallback; } catch (e) { return fallback; }
+  }
+  function write(key, value) {
+    try { localStorage.setItem(key, JSON.stringify(value)); } catch (e) { /* storage is optional */ }
+  }
+
+  var saved = read('pms.names', {});
+  var n = {};
+  MACHINES.forEach(function (m) {
+    n[m.key] = (saved[m.key] && saved[m.key].name) || m.name;
+    n[m.key + 'Host'] = (saved[m.key] && saved[m.key].host) || m.host;
+  });
+  var done = read('pms.done', {});
+
+  function linuxSteps(p, script, name, prereq, extra) {
+    return [
+      { id: p + '-user', title: 'Log in as your own user', text: 'Over SSH or a console, as a user with sudo. <code>su</code> and <code>sudo -u</code> don\'t start a user manager, and the script refuses root.' },
+      { id: p + '-pre', title: 'git and Tailscale', cmd: function () { return prereq + '\nsudo tailscale up'; } },
+      { id: p + '-git', title: 'Git access to your private repos', text: '<code>nsitapara/agents</code> and <code>nsitapara/pilotCLI</code> are private. The script clones both, to <code>~/.agents</code> and <code>~/Documents/GitHub/pilotCLI</code>.', cmd: function () { return 'gh auth login\ngh auth setup-git'; } },
+      { id: p + '-clone', title: 'Get the scripts', cmd: function () { return CLONE; } },
+      { id: p + '-dry', title: 'Dry run first', text: 'Prints every command and changes nothing.', cmd: function () { return S + '/' + script + ' \\\n  --machine-name "' + name() + '" --bind tailscale \\\n  --pilotcli-repo https://github.com/nsitapara/pilotCLI.git \\\n  --add-repo ~/Documents/GitHub/pilot --dry-run'; } },
+      { id: p + '-run', title: 'Run it', text: 'Installs the missing packages (each sudo step is printed first), Node 24, the checkouts and pilotcli. It builds pilotcli from its repo and fetches Go if needed. It builds the engine, runs it as <code>pilot-engine.service</code> with linger so it survives logouts and reboots, names the machine, and prints the pairing command.', cmd: function () { return S + '/' + script + ' \\\n  --machine-name "' + name() + '" --bind tailscale \\\n  --pilotcli-repo https://github.com/nsitapara/pilotCLI.git \\\n  --add-repo ~/Documents/GitHub/pilot'; }, extra: extra },
+      { id: p + '-ufw', title: 'If a firewall is on', text: 'Let the engine\'s port in on Tailscale only.', cmd: function () { return 'sudo ufw allow in on tailscale0 to any port 6868 proto tcp'; } },
+      { id: p + '-pair', title: 'Pair it', where: 'main Mac', text: 'Run the command the script printed. It looks like this; keep the single quotes, since zsh reads <code>?</code> as a glob.', cmd: function () { return 'pilot environment add --name "' + name() + '" --pairing-code \'orca://pair?code=...\''; } },
+      { id: p + '-signin', title: 'Sign in to the agent CLIs', text: 'Only the ones the jobs pinned here use.', cmd: function () { return 'claude            # then /login\ncodex login\nglab auth login\n~/.agents/sync-skills.sh'; } },
+      { id: p + '-pilotcli', title: 'Give pilotcli this machine\'s paths', text: 'Copy <code>~/.config/pilotcli/config.toml</code> from the main Mac, then replace <code>[paths]</code> and fix each project\'s <code>main_checkout</code>. Leave <code>paths.orca</code> alone.', cmd: function () { return '[paths]\npilot = "/home/<you>/.local/bin/pilot"\nglab_config = "/home/<you>/.config/glab-cli/config.yml"\ncache_dir = "/home/<you>/.cache/pilotcli"\ntelemetry_file = "/home/<you>/.local/state/pilotcli/telemetry.jsonl"'; } },
+      { id: p + '-path', title: 'Tell the engine where your tools are', text: 'The service gets a bare PATH. Add the folders <code>claude</code>, <code>codex</code>, <code>glab</code> and <code>pilotcli</code> live in (for example <code>~/.local/share/mise/shims</code>) to <code>PATH</code> in <code>~/.config/pilot/engine.env</code>, then restart it.', cmd: function () { return 'systemctl --user restart pilot-engine'; } },
+      { id: p + '-reboot', title: 'Reboot check', text: 'Reboot without logging in, then check from SSH that the engine came back on its own.', cmd: function () { return 'systemctl --user status pilot-engine'; } }
+    ];
+  }
+
+  var TABS = [
+    { id: 'start', label: 'Before you start', where: 'main Mac', intro: 'Done once, on the Mac you use every day.', steps: [
+      { id: 'start-pilot', title: 'Check Pilot is installed', text: 'The CLI lives at <code>~/.local/bin/pilot</code>.', cmd: function () { return '~/.local/bin/pilot automations status'; } },
+      { id: 'start-tailscale', title: 'Tailscale on every machine', text: 'All of them signed in to the same tailnet. The scripts don\'t install it.' },
+      { id: 'start-names', title: 'Settle each machine\'s name', text: 'Set them in Machine names above. Every command on this page uses them, and they are what <code>runs_on</code> will match.' },
+      { id: 'start-build', title: 'Only without GitHub access: build pilotcli here', text: 'Normally each setup script clones the private <code>nsitapara/pilotCLI</code> repo and builds pilotcli on that machine. Skip this step and the next one unless a machine can\'t reach that repo. Then pass <code>--pilotcli-binary</code> instead of <code>--pilotcli-repo</code>.', cmd: function () { return S + '/pilotcli-cross-build.sh --target linux/amd64 --target darwin/arm64'; }, note: 'Use linux/arm64 for an ARM server and darwin/amd64 for an Intel Mac mini.' },
+      { id: 'start-copy', title: 'Only without GitHub access: copy the builds over', cmd: function () { return 'scp ~/Documents/GitHub/pilotCLI/bin/pilotcli-darwin-arm64 ' + n.miniHost + ':~/\nscp ~/Documents/GitHub/pilotCLI/bin/pilotcli-linux-amd64 ' + n.debianHost + ':~/\nscp ~/Documents/GitHub/pilotCLI/bin/pilotcli-linux-amd64 ' + n.archHost + ':~/'; } },
+      { id: 'start-order', title: 'Update every engine before a job gets runs_on', text: 'An older engine reads <code>runs_on</code> as an unknown key, marks the file invalid and never ticks it.' }
+    ] },
+    { id: 'mini', label: 'Mac mini', where: function () { return n.mini; }, intro: 'Runs the full desktop app, ticking only the jobs pinned to it.', steps: [
+      { id: 'mac-xcode', title: 'Xcode command line tools', text: 'The build compiles two Swift helpers.', cmd: function () { return 'xcode-select --install'; } },
+      { id: 'mac-node', title: 'Node 24', text: 'From fnm, nvm or Homebrew. The script uses whichever has it, and says how to install it if none does.', cmd: function () { return 'fnm install 24'; } },
+      { id: 'mac-git', title: 'Git access to your private repos', text: 'The script clones <code>nsitapara/agents</code> and <code>nsitapara/pilotCLI</code>.', cmd: function () { return 'gh auth login\ngh auth setup-git'; } },
+      { id: 'mac-clone', title: 'Get the scripts', cmd: function () { return CLONE; } },
+      { id: 'mac-dry', title: 'Dry run first', text: 'Prints every command and changes nothing.', cmd: function () { return S + '/macos.sh \\\n  --machine-name "' + n.mini + '" --open-at-login \\\n  --pilotcli-repo https://github.com/nsitapara/pilotCLI.git --dry-run'; } },
+      { id: 'mac-run', title: 'Run it', text: 'Updates the checkouts, builds and installs pilotcli from its repo, sets <code>PILOT_SCHEDULER=pinned</code> (a LaunchAgent keeps it across reboots), builds and installs Pilot.app, and names the Mac.', cmd: function () { return S + '/macos.sh \\\n  --machine-name "' + n.mini + '" --open-at-login \\\n  --pilotcli-repo https://github.com/nsitapara/pilotCLI.git'; }, warn: 'Don\'t add Pilot as a Login Item. It can start before PILOT_SCHEDULER is set and repeat the main Mac\'s jobs. --open-at-login opens it at the right moment.' },
+      { id: 'mac-allow', title: 'Allow the app', text: 'The build is unsigned, so macOS may ask the first time it opens.' },
+      { id: 'mac-check', title: 'Check it\'s pinned', text: 'Expect <code>pinned</code>, then <code>"schedulerOn":true</code>.', cmd: function () { return 'launchctl getenv PILOT_SCHEDULER\n~/.local/bin/pilot automations status --json'; } },
+      { id: 'mac-link', title: 'Make a pairing link', text: 'In Pilot on the Mac mini: Settings › Remote Hosts › Remote Orca Servers › Share this Orca server › New Link. Pick its Tailscale address and copy the <code>orca://pair?code=…</code> link.' },
+      { id: 'mac-pair', title: 'Pair it', where: 'main Mac', text: 'Paste the link in place of the placeholder, keeping the single quotes.', cmd: function () { return 'pilot environment add --name "' + n.mini + '" --pairing-code \'orca://pair?code=...\''; } }
+    ] },
+    { id: 'debian', label: 'Debian box', where: function () { return n.debian; }, intro: 'Runs Pilot\'s headless engine as a systemd user service. Debian 12 and Ubuntu 24.04 work the same way.',
+      steps: linuxSteps('deb', 'debian.sh', function () { return n.debian; }, 'sudo apt-get install -y git') },
+    { id: 'arch', label: 'Arch box', where: function () { return n.arch; }, intro: 'The same headless engine, installed with pacman. Pilot has no Linux desktop app yet.',
+      callout: '<strong>First Arch build.</strong> The engine build checks its native module against glibc 2.28. Arch\'s newer compiler may fail that check; if it does, keep the symbol names it prints and bring them back here.',
+      steps: linuxSteps('arch', 'arch.sh', function () { return n.arch; }, 'sudo pacman -S --needed git', 'If pacman can\'t download a package, run sudo pacman -Syu and re-run.') },
+    { id: 'verify', label: 'Verify', where: 'main Mac', intro: 'From the main Mac, once each machine is paired.', steps: [
+      { id: 'v-list', title: 'List the pairings', cmd: function () { return 'pilot environment list'; } },
+      { id: 'v-name', title: 'Check each name', text: 'These are the names <code>runs_on</code> matches.', cmd: function () { return 'pilot host name --environment "' + n.mini + '"\npilot host name --environment "' + n.debian + '"\npilot host name --environment "' + n.arch + '"'; } },
+      { id: 'v-status', title: 'Check each engine', text: 'Expect <code>"process":"orcad"</code> on Linux, plus <code>machineName</code> and <code>schedulerOn</code>.', cmd: function () { return 'pilot automations status --environment "' + n.debian + '" --json\npilot automations status --environment "' + n.arch + '" --json'; } },
+      { id: 'v-window', title: 'Look at the window', text: 'Each machine shows up in Pilot\'s window within 30 seconds.' }
+    ] },
+    { id: 'test', label: 'Test checklist', where: 'main Mac', intro: 'Check the features from the main Mac\'s Pilot window.',
+      callout: '<strong>Answering a card starts an agent session on that card\'s machine.</strong> Answer only cards from a throwaway test job, and expect a Claude session there. Got it and a card\'s Details start nothing.',
+      steps: [
+      { id: 't-job', title: 'Add a test job that starts no agent', where: function () { return n.debian; }, text: 'Save it as <code>~/.agents/automations/t1-machine-check.yaml</code> on the new machine, check it, then enable it. Its id is in <code>pilot automations list</code>.', cmd: function () { return 'name: "T1 · Machine check"\nrepo: pilot               # a project registered there (pilot repo list)\nschedule: "*/30 * * * *"\nenabled: false\nruns_on: ' + n.debian + '\nsteps:\n  - name: where\n    agent: shell\n    run: uname -a; hostname\n    timeout: 30s\npowers: []'; }, note: 'Then: pilot automations validate --file ~/.agents/automations/t1-machine-check.yaml, and pilot automations enable --id <id>.' },
+      { id: 't-activity', title: 'Activity chips', text: 'Rows show a machine chip once they come from two machines. Options › Hosts filters by machine, and a project in Projects covers its copy on every machine.' },
+      { id: 't-cmdt', title: 'Cmd+T step 2', text: 'Pick an agent in a workspace whose project is registered on both machines. Step 2 asks which machine to open it on. A machine without that agent reads "<Agent> not found here".' },
+      { id: 't-lists', title: 'Inbox, Running and Automations', text: 'Items from both machines, each with its chip. Running has a section per machine with its own run limit, and the sidebar counts add both up.' },
+      { id: 't-runson', title: 'runs_on', text: 'The test job ticks only on its machine and its row reads "Runs on ' + '<span class="js-debian"></span>". Change <code>runs_on</code> to a name no machine has, and the row warns "· no connected Pilot has that name".' },
+      { id: 't-runnow', title: 'Run now picker', text: 'The confirm bar\'s machine menu lists the machines that have the job, starting on the <code>runs_on</code> machine. A machine that can\'t start it is greyed out with a reason, such as "· scheduler off".' },
+      { id: 't-offline', title: 'Offline message', text: 'Stop the engine with <code>systemctl --user stop pilot-engine</code>. Within 30 seconds the Inbox says the machine can\'t be reached and its cards aren\'t shown here. Start it again and they come back.' }
+    ] },
+    { id: 'later', label: 'Updating later', where: 'each machine', intro: 'Settings you leave out keep their current values on every re-run.', steps: [
+      { id: 'u-order', title: 'Update every engine first', text: 'Before you add <code>runs_on</code> to a shared automation.' },
+      { id: 'u-mini', title: 'Mac mini', where: function () { return n.mini; }, text: 'Pulls, rebuilds, reinstalls and relaunches Pilot.', cmd: function () { return S + '/macos.sh --machine-name "' + n.mini + '"'; } },
+      { id: 'u-linux', title: 'A Linux engine', where: 'Debian / Arch', text: 'Installs no packages. Pulls and rebuilds, and restarts the service only when something changed. Terminals survive the restart.', cmd: function () { return S + '/linux-engine.sh'; } },
+      { id: 'u-pilotcli', title: 'pilotcli', where: 'each machine', text: 'Re-run that machine\'s setup script with <code>--pilotcli-repo https://github.com/nsitapara/pilotCLI.git</code>. It fast-forwards the checkout and reinstalls pilotcli. Settings you leave out keep their values.' }
+    ] }
+  ];
+
+  function esc(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+  function val(v) { return typeof v === 'function' ? v() : v; }
+
+  var namesEl = document.getElementById('names');
+  MACHINES.forEach(function (m) {
+    var box = document.createElement('div');
+    box.className = 'machine';
+    box.innerHTML = '<span class="machine-title">' + esc(m.label) + '</span>' +
+      '<div class="field"><label for="name-' + m.key + '">Name in Pilot</label><input id="name-' + m.key + '" type="text" spellcheck="false" value="' + esc(n[m.key]) + '"></div>' +
+      '<div class="field"><label for="host-' + m.key + '">SSH host</label><input id="host-' + m.key + '" type="text" spellcheck="false" value="' + esc(n[m.key + 'Host']) + '"></div>';
+    namesEl.appendChild(box);
+  });
+  function onNames() {
+    var store = {};
+    MACHINES.forEach(function (m) {
+      var name = document.getElementById('name-' + m.key).value.trim() || m.name;
+      var host = document.getElementById('host-' + m.key).value.trim() || m.host;
+      n[m.key] = name; n[m.key + 'Host'] = host;
+      store[m.key] = { name: name, host: host };
+    });
+    write('pms.names', store);
+    renderPanel();
+    renderTabs();
+  }
+  namesEl.addEventListener('input', onNames);
+
+  var current = read('pms.tab', 'start');
+  var hash = (location.hash || '').replace('#', '');
+  if (TABS.some(function (t) { return t.id === hash; })) { current = hash; }
+  if (!TABS.some(function (t) { return t.id === current; })) { current = 'start'; }
+
+  var tabsEl = document.getElementById('tabs');
+  var panelEl = document.getElementById('panel');
+
+  function countOf(tab) {
+    var c = 0;
+    tab.steps.forEach(function (s) { if (done[s.id]) { c += 1; } });
+    return c;
+  }
+
+  function renderTabs() {
+    tabsEl.innerHTML = '';
+    TABS.forEach(function (t) {
+      var b = document.createElement('button');
+      var c = countOf(t);
+      b.type = 'button';
+      b.className = 'tab';
+      b.id = 'tab-' + t.id;
+      b.setAttribute('role', 'tab');
+      b.setAttribute('aria-selected', t.id === current ? 'true' : 'false');
+      b.setAttribute('aria-controls', 'panel');
+      b.innerHTML = esc(t.label) + ' <span class="count' + (c === t.steps.length ? ' full' : '') + '">' + c + '/' + t.steps.length + '</span>';
+      b.addEventListener('click', function () { select(t.id); });
+      tabsEl.appendChild(b);
+    });
+  }
+
+  function select(id) {
+    current = id;
+    write('pms.tab', id);
+    renderTabs();
+    renderPanel();
+  }
+
+  tabsEl.addEventListener('keydown', function (e) {
+    if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') { return; }
+    var i = TABS.findIndex(function (t) { return t.id === current; });
+    var next = e.key === 'ArrowRight' ? (i + 1) % TABS.length : (i - 1 + TABS.length) % TABS.length;
+    select(TABS[next].id);
+    document.getElementById('tab-' + TABS[next].id).focus();
+  });
+
+  function renderPanel() {
+    var tab = TABS.filter(function (t) { return t.id === current; })[0];
+    panelEl.setAttribute('aria-labelledby', 'tab-' + tab.id);
+    var html = '<div class="panel-head"><h2>' + esc(tab.label) + '</h2><span class="chip">' + esc(val(tab.where)) + '</span></div>';
+    html += '<p class="panel-intro">' + tab.intro + '</p>';
+    if (tab.callout) { html += '<div class="callout">' + tab.callout + '</div>'; }
+    html += '<ol class="steps">';
+    tab.steps.forEach(function (s) {
+      var isDone = !!done[s.id];
+      html += '<li class="step' + (isDone ? ' done' : '') + '" data-step="' + s.id + '">';
+      html += '<input class="check" type="checkbox" id="chk-' + s.id + '" aria-label="Done: ' + esc(s.title) + '"' + (isDone ? ' checked' : '') + '>';
+      html += '<div class="step-body"><p class="step-title"><label for="chk-' + s.id + '">' + esc(s.title) + '</label>';
+      if (s.where) { html += '<span class="where">on ' + esc(val(s.where)) + '</span>'; }
+      html += '</p>';
+      if (s.text) { html += '<p class="step-text">' + s.text + '</p>'; }
+      if (s.cmd) { html += '<div class="cmd"><pre><code>' + esc(s.cmd()) + '</code></pre><button class="copy" type="button" data-copy="' + s.id + '">Copy</button></div>'; }
+      if (s.note) { html += '<p class="note">' + esc(s.note) + '</p>'; }
+      if (s.extra) { html += '<p class="note">' + esc(s.extra) + '</p>'; }
+      if (s.warn) { html += '<p class="warn">' + esc(s.warn) + '</p>'; }
+      html += '</div></li>';
+    });
+    html += '</ol>';
+    panelEl.innerHTML = html;
+    panelEl.querySelectorAll('.js-debian').forEach(function (el) { el.textContent = n.debian; });
+  }
+
+  panelEl.addEventListener('change', function (e) {
+    var box = e.target.closest('.check');
+    if (!box) { return; }
+    var id = box.id.replace('chk-', '');
+    if (box.checked) { done[id] = true; } else { delete done[id]; }
+    write('pms.done', done);
+    box.closest('.step').classList.toggle('done', box.checked);
+    renderTabs();
+  });
+
+  panelEl.addEventListener('click', function (e) {
+    var btn = e.target.closest('.copy');
+    if (!btn) { return; }
+    var pre = btn.parentElement.querySelector('pre');
+    var text = pre.textContent;
+    function selectText() {
+      var range = document.createRange();
+      range.selectNodeContents(pre);
+      var sel = window.getSelection();
+      sel.removeAllRanges();
+      sel.addRange(range);
+      btn.textContent = 'Press ⌘C';
+    }
+    try {
+      navigator.clipboard.writeText(text).then(function () { btn.textContent = 'Copied'; }, selectText);
+    } catch (err) { selectText(); }
+    setTimeout(function () { btn.textContent = 'Copy'; }, 1800);
+  });
+
+  var resetBtn = document.getElementById('reset');
+  var armed = false;
+  resetBtn.addEventListener('click', function () {
+    if (!armed) {
+      armed = true;
+      resetBtn.classList.add('arm');
+      resetBtn.textContent = 'Click again to clear every tick';
+      setTimeout(function () { armed = false; resetBtn.classList.remove('arm'); resetBtn.textContent = 'Clear all ticks'; }, 3000);
+      return;
+    }
+    armed = false;
+    done = {};
+    write('pms.done', done);
+    resetBtn.classList.remove('arm');
+    resetBtn.textContent = 'Clear all ticks';
+    renderTabs();
+    renderPanel();
+  });
+
+  renderTabs();
+  renderPanel();
+})();
+</script>
+</body>
+</html>

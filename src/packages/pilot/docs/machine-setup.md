@@ -6,6 +6,8 @@ One Pilot window shows the Inbox, Running, Automations and Activity of every pai
 - **A Debian or Ubuntu box**, most likely a headless server, runs Pilot's headless engine (orcad) as a systemd user service.
 - **An Arch box** (Omarchy) runs the same headless engine. Pilot has no Linux desktop app yet (see [Linux desktop app (follow-up)](#linux-desktop-app-follow-up)).
 
+For a tick-as-you-go version of this guide, open [`machine-setup-checklist.html`](./machine-setup-checklist.html) in a browser from a clone; GitHub shows only its source. Type your machine names at the top and every command uses them. Ticks stay in that browser.
+
 How machines, `runs_on` and pairing behave is in the README's "Pilot across machines" section. The scripts are in `src/packages/pilot/scripts/machine-setup/`. Each one takes `--help` and `--dry-run`, and is safe to re-run. A dry run prints every command that would change the machine, runs none of them, and writes nothing.
 
 The scripts install commands into `~/.local/bin` (`pilot`, `pilotcli`, `pnpm`'s corepack shim, and on Linux `pilot-engine` and maybe `fnm`). They put it on their own PATH, but your shell may not have it: run those commands by their full path, or add `~/.local/bin` to your PATH.
