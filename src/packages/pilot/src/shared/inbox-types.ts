@@ -41,10 +41,6 @@ export type InboxAddParams = {
   detailsBundlePath?: string
   action?: string
   actionArgs?: Record<string, unknown>
-  // Parts of the card the person can approve or leave out one by one: id → label (H5).
-  parts?: Record<string, string>
-  // The words for a card's on/off switch: [on, off] (R-3).
-  switchWords?: string[]
 }
 // id is null when the card was refused (the reason is in `refused`); existing = the same card was
 // already waiting.

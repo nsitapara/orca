@@ -3,7 +3,6 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import { cn } from '@/lib/utils'
 import type { ActivityRun, InboxListRow, InboxReply } from '../../../shared/api-types'
 import type { AnswerState, CardHistoryEntry, RunLine } from '../../../shared/inbox-types'
-import type { PartSwitches } from '../../details/ReviewBlock'
 import { MachineChip } from '../../hosts/MachineChip'
 import { PilotHostProvider } from '../../hosts/PilotHostContext'
 import { hostedKey, hostOf, type Hosted } from '../../hosts/pilot-host'
@@ -78,21 +77,6 @@ function RunLineRest({ text, more }: { text: string; more: number }): React.JSX.
       </CollapsibleContent>
     </Collapsible>
   )
-}
-
-function partSwitches(
-  item: InboxListRow,
-  off: string[],
-  toggle: (id: string) => void
-): PartSwitches | null {
-  if (Object.keys(item.parts).length === 0) {
-    return null
-  }
-  const words: [string, string] = [
-    item.switchWords[0] ?? 'Include',
-    item.switchWords[1] ?? 'Leave out'
-  ]
-  return { off, toggle, words }
 }
 
 // The line above the title: job code and name, small and muted, on one line (its times are on CardTimes'
@@ -170,15 +154,11 @@ function CardBody({
   const [unsaved, setUnsaved] = useState(false)
   // Set while the card is open: when it is answered from here the next line takes focus (not on page load).
   const justAnswered = useRef(item.status === 'open')
-  const [off, setOff] = useState<string[]>([])
-  const toggle = (id: string) =>
-    setOff((now) => (now.includes(id) ? now.filter((x) => x !== id) : [...now, id]))
   // An open card is answered with one click; an answered one is a line with its countdown and Undo.
   const editing = item.status === 'open'
   if (editing) {
     justAnswered.current = true
   }
-  const parts = editing ? partSwitches(item, off, toggle) : null
   const host = hostOf(item)
   const domId = `card-${hostedKey(host, item.id)}`
   const status = statusOf(item, answerState, unsaved && editing)
@@ -231,10 +211,10 @@ function CardBody({
         </p>
       ) : null}
       <RunLineBlock line={runLine} digest={item.digest} button={approveWords(item).label} />
-      <CardDetails item={item} parts={parts} />
+      <CardDetails item={item} />
       {history ? <MessageHistory item={item} entries={history} now={now} /> : null}
       {history ? null : <BareReplies replies={item.replies} />}
-      <AnswerRow item={item} off={off} onToggle={toggle} onSave={onSave} onPick={setUnsaved} />
+      <AnswerRow item={item} onSave={onSave} onPick={setUnsaved} />
       {error ? <p className="text-sm text-destructive">{error}</p> : null}
     </article>
   )

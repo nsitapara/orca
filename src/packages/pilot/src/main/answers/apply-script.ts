@@ -1,21 +1,15 @@
 import type { InboxItemRow } from '../../shared/api-types'
 import { evidenceGate } from '../../shared/evidence'
-import { attemptAction, refreshAction, type AttemptDeps } from '../actions/attempt'
+import { attemptAction, type AttemptDeps } from '../actions/attempt'
 import { actionFailed, type ActionResult } from '../actions/types'
-import {
-  reaskInboxItem,
-  resolveInboxItem,
-  reviseInboxItem,
-  type InboxDeps
-} from '../inbox/inbox-service'
+import { reaskInboxItem, resolveInboxItem, type InboxDeps } from '../inbox/inbox-service'
 import { CARD_CHANGED, INTERRUPTED_AGAIN } from '../../shared/pilot-replies'
 import { ACTION_INTERRUPTED } from '../store/store-actions'
 import { APPROVE_ON_DESKTOP } from './queue-view'
 
-// apply.py CARD_CHANGED / ASKED_AGAIN. An approval from anywhere but Pilot's desktop app is re-asked with
-// APPROVE_ON_DESKTOP (apply.py's PAGE_ONLY, under the desktop-only ruling).
+// apply.py CARD_CHANGED. An approval from anywhere but Pilot's desktop app is re-asked with APPROVE_ON_DESKTOP
+// (apply.py's PAGE_ONLY, under the desktop-only ruling).
 export { CARD_CHANGED, INTERRUPTED_AGAIN }
-export const ASKED_AGAIN = ' since you approved; approve this version to go ahead. '
 
 export type ScriptStep =
   | { kind: 'done' }
@@ -30,26 +24,6 @@ export function outcomeText(result: ActionResult): string {
   const link = result.link ? ` · ${result.link}` : ''
   const log = result.outcome === 'failed' && result.log ? ` · log ${result.log}` : ''
   return head + link + log
-}
-
-// apply.py off_outcome + _parts_summary: "done: 1 done · 1 left out" (a Keep switch records `kept`).
-export function partsOutcome(item: InboxItemRow, result: ActionResult, leaveOut: string[]): string {
-  const off = (item.switchWords[1] ?? 'Leave out').toLowerCase() === 'keep' ? 'kept' : 'left out'
-  const counts = new Map<string, number>()
-  for (const id of Object.keys(item.parts)) {
-    const word = leaveOut.includes(id) ? off : result.outcome
-    counts.set(word, (counts.get(word) ?? 0) + 1)
-  }
-  return `${result.outcome}: ${[...counts].map(([word, n]) => `${n} ${word}`).join(' · ')}`
-}
-
-// apply.py _ask_again: what changed, then the original context (an earlier round's note doesn't pile up).
-// The marker is searched trimmed: oneLine (Task 20a) collapses the whitespace around it.
-export function askedAgainContext(context: string, changed: string): string {
-  const marker = ASKED_AGAIN.trim()
-  const at = context.indexOf(marker)
-  const original = at === -1 ? context : context.slice(at + marker.length).trim()
-  return `${changed.charAt(0).toUpperCase()}${changed.slice(1)}${ASKED_AGAIN}${original || context}`
 }
 
 function interruptedOutput(output: string | null): boolean {
@@ -95,12 +69,8 @@ function approvalProblem(deps: ScriptDeps, item: InboxItemRow): string | null {
 
 // An approved action (apply.py _apply_item's script branch), run only through the card path: the
 // catalog entry runs the card's own pinned args, re-read and re-checked by attemptAction (powers.ts
-// cardToRun), less the parts left out; the digest is the one the answer approved. Never any other args.
-export async function applyScript(
-  deps: ScriptDeps,
-  item: InboxItemRow,
-  leaveOut: string[]
-): Promise<ScriptStep> {
+// cardToRun); the digest is the one the answer approved. Never any other args.
+export async function applyScript(deps: ScriptDeps, item: InboxItemRow): Promise<ScriptStep> {
   const problem = approvalProblem(deps, item)
   if (problem || !item.answer) {
     reaskInboxItem(deps.inbox, item.id, problem ?? APPROVE_ON_DESKTOP)
@@ -113,38 +83,21 @@ export async function applyScript(
     inboxItemId: item.id,
     runId: item.runId,
     digest: item.answer.digest,
-    leftOut: leaveOut,
     dryRun: false
   })
   // A card attempt never asks; were it to, nothing ran.
   const result = attempted.outcome === 'asked' ? actionFailed(attempted.detail) : attempted
-  const parts = Object.keys(item.parts).length > 0
   // A push pilotcli skipped (spec E): the card stays open with why it wasn't pushed.
-  if (result.outcome === 'stale' && result.keepOpen && !parts) {
+  if (result.outcome === 'stale' && result.keepOpen) {
     reaskInboxItem(deps.inbox, item.id, result.detail)
     return { kind: 'reasked' }
   }
-  if (result.outcome === 'not_yet' && !parts) {
+  if (result.outcome === 'not_yet') {
     return { kind: 'waits', reason: result.detail + (result.onYou ? ' (waits on you)' : '') }
-  }
-  if (result.outcome === 'stale' && !parts) {
-    // The card's own args, as attemptAction ran them (the approval was for this version).
-    const again = await refreshAction(deps.attempt, {
-      action,
-      args: item.actionArgs ?? {},
-      runId: item.runId,
-      inboxItemId: item.id
-    })
-    if (again) {
-      const context = askedAgainContext(item.context, again.changed)
-      reviseInboxItem(deps.inbox, item.id, { actionArgs: again.args, context })
-      return { kind: 'reasked' }
-    }
   }
   if (result.outcome === 'needs_agent') {
     return { kind: 'agent', note: result.detail }
   }
-  const outcome = parts ? partsOutcome(item, result, leaveOut) : outcomeText(result)
-  resolveInboxItem(deps.inbox, item.id, outcome)
+  resolveInboxItem(deps.inbox, item.id, outcomeText(result))
   return { kind: 'done' }
 }

@@ -8,7 +8,7 @@ export const INBOX_COMMAND_SPECS: CommandSpec[] = [
     path: ['inbox', 'add'],
     summary: 'Add a card to the Inbox: a question, a flag, or a proposed action',
     usage:
-      'pilot inbox add --type <question|flagged|default|action|bug|left_for_you> --title <text> [--context <text>] [--suggested <text>] [--option "<label> — <meaning>"]... [--details-file <path> | --details-bundle <path>] [--action <name> --args-json <json object>] [--preparation-file <path> | --not-prepared-key <key> --not-prepared-reason <text>] [--part <id>=<label>]... [--switch <on> --switch <off>] [--worktree <path>] [--automation <id> --item <key>] [--json]',
+      'pilot inbox add --type <question|flagged|default|action|bug|left_for_you> --title <text> [--context <text>] [--suggested <text>] [--option "<label> — <meaning>"]... [--details-file <path> | --details-bundle <path>] [--action <name> --args-json <json object>] [--preparation-file <path> | --not-prepared-key <key> --not-prepared-reason <text>] [--worktree <path>] [--automation <id> --item <key>] [--json]',
     allowedFlags: [
       ...GLOBAL_FLAGS,
       'preparation-file',
@@ -23,13 +23,11 @@ export const INBOX_COMMAND_SPECS: CommandSpec[] = [
       'details-bundle',
       'action',
       'args-json',
-      'part',
-      'switch',
       'worktree',
       'automation',
       'item'
     ],
-    repeatableFlags: ['option', 'part', 'switch'],
+    repeatableFlags: ['option'],
     examples: [
       'pilot inbox add --type question --title "Push the fix?" --suggested Push --option "Push — publish both commits" --option "Hold — leave them local"'
     ],
@@ -54,21 +52,6 @@ export const INBOX_COMMAND_SPECS: CommandSpec[] = [
     examples: ['pilot inbox show --id in_0123456789abcdef'],
     notes: [
       'With --json, the whole card, its Details ref included (path, sha256, blocks, drafted).'
-    ]
-  },
-  {
-    path: ['inbox', 'set-details'],
-    summary:
-      "Replace a waiting card's Details with a bundle; its answer is cleared and it asks again",
-    usage: 'pilot inbox set-details --id <id> --bundle <path> [--head <sha>] [--json]',
-    allowedFlags: [...GLOBAL_FLAGS, 'id', 'bundle', 'head'],
-    examples: [
-      'pilot inbox set-details --id in_0123456789abcdef --bundle "$BUNDLE" --head 7cc153d0'
-    ],
-    notes: [
-      "Run it from a step of a Pilot run of the card's own automation (the desktop may too): Pilot refuses any other caller.",
-      'The bundle must be inside the Automations folder. --head names the commit the patch was drafted against; the cleared answer gets a reply saying so.',
-      "While an answer run other than the caller is still applying the card's answer, Pilot refuses (its answer is being applied). That answer run itself may re-attach it, which clears the answer."
     ]
   },
   {

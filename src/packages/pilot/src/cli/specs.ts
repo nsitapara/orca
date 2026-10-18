@@ -44,19 +44,6 @@ export const PILOT_COMMAND_SPECS: CommandSpec[] = [
     examples: ['pilot automations activity --id fix-failed-ci --limit 5']
   },
   {
-    path: ['automations', 'import-state'],
-    summary: "Copy an old sweep's state (handled keys, open tabs, frozen files) into Pilot",
-    usage: 'pilot automations import-state --id <id> [--apply] [--json]',
-    allowedFlags: [...GLOBAL_FLAGS, 'id', 'apply'],
-    examples: [
-      'pilot automations import-state --id fix-failed-ci',
-      'pilot automations import-state --id fix-failed-ci --apply'
-    ],
-    notes: [
-      'Reads the old files, never changes them, and only adds rows Pilot lacks: run it again any time. A paired device can only preview.'
-    ]
-  },
-  {
     path: ['automations', 'list-yaml'],
     summary: "Pilot's YAML automations, with any file that didn't load",
     usage: 'pilot automations list-yaml [--json]',

@@ -12,7 +12,6 @@ import { PilotStore } from '../store/store'
 import { buildPilotMethods } from './methods'
 import { answerRunEnded } from '../answers/answer-run-end'
 import { ANSWER_LOCKED } from '../inbox/answer-lock'
-import { redraftedReply } from '../../shared/pilot-replies'
 
 type Callable = {
   name: string
@@ -201,73 +200,9 @@ function withRuns(store: PilotStore): void {
 const PAIRED: RpcCallerIdentity = { kind: 'paired-device', deviceId: 'phone' }
 const RUN_ONLY = "Attach Details from a Pilot run's step, for a card of that run's automation"
 
-describe('pilot.inbox.setDetails: who may replace a bundle', () => {
-  it.each<[string, RpcCallerIdentity, Record<string, unknown>]>([
-    ['the desktop', DESKTOP, {}],
-    ["a step of the card's automation, on its terminal", CLI, { terminal: 'term-1' }]
-  ])('lets %s attach it', (_name, caller, binding) => {
-    const { f, store, add, callAs } = detailsSetup()
-    withRuns(store)
-    const id = add(null)
-    expect(
-      callAs(caller, 'pilot.inbox.setDetails', { id, bundlePath: f.bundle, ...binding })
-    ).toEqual({ id, version: 2, changed: true, cleared: false })
-    expect(store.inbox.get(id)?.details?.sha256).toBe(store.inbox.snapshot(id)?.ref.sha256)
-  })
-
-  it.each<[string, RpcCallerIdentity | undefined, Record<string, unknown>, string]>([
-    [
-      "a step of another automation's run",
-      CLI,
-      { runId: 'run-2', stepIdx: 0 },
-      'This run belongs to another automation than the card'
-    ],
-    ['the local CLI bound to no run', CLI, {}, RUN_ONLY],
-    [
-      "an ended run's env binding",
-      CLI,
-      { runId: 'run-3', stepIdx: 0 },
-      `${RUN_ONLY} (Step 0 of run run-3 has ended`
-    ],
-    ['a paired device', PAIRED, {}, RUN_ONLY],
-    ['a caller Pilot cannot name', undefined, {}, "Pilot can't tell who is calling"]
-  ])('refuses %s and leaves the card alone', (_name, caller, binding, message) => {
-    const { f, store, add, callAs } = detailsSetup()
-    withRuns(store)
-    const id = add(null)
-    const before = store.inbox.get(id)
-    expect(() =>
-      callAs(caller, 'pilot.inbox.setDetails', { id, bundlePath: f.bundle, ...binding })
-    ).toThrow(message)
-    expect(store.inbox.get(id)).toEqual(before)
-    expect(store.inbox.snapshot(id)).toBeNull()
-  })
-
-  it('refuses a caller kind it does not know', () => {
-    const { f, add, callAs } = detailsSetup()
-    const id = add(null)
-    const odd = { kind: 'plugin' } as unknown as RpcCallerIdentity
-    expect(() => callAs(odd, 'pilot.inbox.setDetails', { id, bundlePath: f.bundle })).toThrow(
-      RUN_ONLY
-    )
-  })
-
-  it.each([
-    [{ id: 'in_x', bundlePath: '' }],
-    [{ id: 'in_x', bundlePath: '/v/F2.json', head: 'xyz' }],
-    [{ id: 'in_x', bundlePath: '/v/F2.json', head: '12345' }]
-  ])('refuses params %j', (params) => {
-    const { find } = detailsSetup()
-    const method = find('pilot.inbox.setDetails') as unknown as {
-      params: { safeParse(v: unknown): { success: boolean } }
-    }
-    expect(method.params.safeParse(params).success).toBe(false)
-  })
-})
-
-// pilot.inbox.add with a bundle can change an open card (and clear its answer), so it asks what
-// set-details asks: the desktop, or the local CLI bound to a run of the card's own automation.
-describe('pilot.inbox.add with a bundle: the scope of set-details', () => {
+// pilot.inbox.add with a bundle can change an open card (and clear its answer), so it asks who is calling: the
+// desktop, or the local CLI bound to a run of the card's own automation.
+describe('pilot.inbox.add with a bundle: who may attach it', () => {
   function answeredCiCard() {
     const s = detailsSetup()
     withRuns(s.store)
@@ -329,8 +264,8 @@ describe('pilot.inbox.add with a bundle: the scope of set-details', () => {
   })
 })
 
-// apply.md step 5: the answer run that is applying a card's answer re-drafts it (Approve with notes, the branch
-// moved) and re-attaches it. Its own dispatched answer is not in the way; another run's still is.
+// The answer run that is applying a card's answer may re-add it with a new bundle. Its own dispatched answer is not in
+// the way; another run's still is.
 describe("a card's own answer run re-attaches its Details", () => {
   function answerRun(store: PilotStore, id: string, terminal: string): void {
     store.runs.create({
@@ -373,36 +308,11 @@ describe("a card's own answer run re-attaches its Details", () => {
     return { ...s, id, redraft }
   }
 
-  it('attaches from the running answer run, clears the answer and asks again', () => {
-    const { f, store, id, redraft, callAs } = sentTo('ans-1')
-    const params = { id, bundlePath: redraft, head: '1234abcd99', terminal: 'term-a' }
-    expect(callAs(CLI, 'pilot.inbox.setDetails', params)).toEqual({
-      id,
-      version: 2,
-      changed: true,
-      cleared: true
-    })
-    expect(store.inbox.get(id)).toMatchObject({ status: 'open', answer: null, version: 2 })
-    expect(store.inbox.get(id)?.replies.at(-1)).toEqual({
-      text: redraftedReply('1234abcd99'),
-      by: 'pilot'
-    })
-    expect(store.inbox.snapshot(id)?.ref.sha256).toBe(loadDetails(f.root, redraft).ref.sha256)
-  })
-
   it('re-adds the card with its bundle from the running answer run, clearing the answer', () => {
     const { store, id, redraft, callAs } = sentTo('ans-1')
     const card = { type: 'bug', title: 'A ci card', detailsBundlePath: redraft, terminal: 'term-a' }
     expect(callAs(CLI, 'pilot.inbox.add', card)).toEqual({ id, existing: true, refused: null })
     expect(store.inbox.get(id)).toMatchObject({ status: 'open', answer: null, version: 2 })
-  })
-
-  it("still refuses set-details while another run's answer is being applied", () => {
-    const { store, id, redraft, callAs } = sentTo('ans-2')
-    const before = store.inbox.get(id)
-    const params = { id, bundlePath: redraft, terminal: 'term-a' }
-    expect(() => callAs(CLI, 'pilot.inbox.setDetails', params)).toThrow(ANSWER_LOCKED)
-    expect(store.inbox.get(id)).toEqual(before)
   })
 
   it("still refuses a bundled re-add while another run's answer is being applied", () => {
@@ -422,7 +332,8 @@ describe("a card's own answer run re-attaches its Details", () => {
     [{ outcome: 're-drafted', item_status: 'open', reply: 'Re-drafted with your notes' }]
   ])('leaves the new version alone when the answer run then ends (%j)', (outputs) => {
     const { store, id, redraft, callAs } = sentTo('ans-1')
-    callAs(CLI, 'pilot.inbox.setDetails', { id, bundlePath: redraft, terminal: 'term-a' })
+    const card = { type: 'bug', title: 'A ci card', detailsBundlePath: redraft, terminal: 'term-a' }
+    callAs(CLI, 'pilot.inbox.add', card)
     const reasked = store.inbox.get(id)
     store.runs.updateStep('ans-1', 0, { status: 'done', outputs })
     store.runs.update('ans-1', { status: 'done', finishedAt: 300 })

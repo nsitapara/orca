@@ -40,8 +40,6 @@ export const INBOX_ROW_COLUMNS = [
   'updated_at',
   'outcome',
   'replies_json',
-  'parts_json',
-  'switch_json',
   'source',
   'vault_ref'
 ].join(', ')
@@ -86,8 +84,6 @@ export function toItem(r: Record<string, unknown>): InboxItemRow {
     updatedAt: Number(r.updated_at),
     outcome: (r.outcome as string | null) ?? null,
     replies: repliesOf(r.replies_json),
-    parts: JSON.parse(String(r.parts_json)) as Record<string, string>,
-    switchWords: JSON.parse(String(r.switch_json)) as string[],
     source: r.source as InboxItemRow['source'],
     vaultRef: (r.vault_ref as string | null) ?? null
   }

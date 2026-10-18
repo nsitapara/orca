@@ -13,13 +13,3 @@ export const INTERRUPTED_AGAIN =
 export const CHANGED_AFTER_ANSWER = 'The card changed after you answered; answer this version.'
 export const ANSWER_RUN_STOPPED =
   'The answer run was stopped before it finished; answer again to send it.'
-// A card's Details bundle was replaced after it was answered (pilot inbox set-details).
-export const DETAILS_CHANGED =
-  'The Details changed after you answered; answer the version shown now.'
-// Why the answer was cleared: re-drafted against a head (item-details' draft step), or the Details changed.
-export function redraftedReply(head: string | null): string {
-  if (head === null) {
-    return DETAILS_CHANGED
-  }
-  return `Re-drafted against ${head.slice(0, 8)}: the branch moved, the patch changed, or your notes asked for changes. Approve the version shown now.`
-}

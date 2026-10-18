@@ -8,22 +8,13 @@ import { resolveInboxPerson } from '../inbox/person'
 import { fieldsForRun } from '../inbox/run-fields'
 import type { PilotStore } from '../store/store'
 import { recordPilotAsk, refuseCall, refused, startRow, type Row } from './refuse'
-import {
-  argsDigest,
-  cardToRun,
-  definitionOf,
-  hasPower,
-  missingWhat,
-  stableJson,
-  unknownAction
-} from './powers'
+import { cardToRun, definitionOf, hasPower, missingWhat, stableJson, unknownAction } from './powers'
 import {
   actionFailed,
   runSafely,
   type ActionCatalog,
   type ActionEntry,
-  type ActionResult,
-  type Refreshed
+  type ActionResult
 } from './types'
 
 type AttemptBase = {
@@ -40,14 +31,13 @@ export type RunAttempt = AttemptBase & {
   inboxItemId: null
   args: Record<string, unknown>
 }
-// A card's Approve, and nothing else: what runs is the card's own pinned args, re-read here, less the
-// parts the person left out. Powers don't apply; the card's claim is re-checked (powers.ts cardToRun).
+// A card's Approve, and nothing else: what runs is the card's own pinned args, re-read here. Powers don't
+// apply; the card's claim is re-checked (powers.ts cardToRun).
 export type CardAttempt = AttemptBase & {
   approved: true
   inboxItemId: string
   // The digest the answer approved; a card that changed since is refused.
   digest: string
-  leftOut?: string[]
 }
 export type AttemptRequest = RunAttempt | CardAttempt
 export type AskedResult = { outcome: 'asked'; detail: string; inboxItemId: string | null }
@@ -262,7 +252,7 @@ async function attemptForRun(
 // (else its person is asked, and nothing runs); with no run, only a dry run goes ahead.
 // A person's approval exists only through a card: Task 24c's Approve / Apply now calls this with
 // { action: card.action, approved: true, inboxItemId: card.id, runId: card.runId, digest: <the digest the
-// answer approved>, leftOut, dryRun: false }, and only for an answer saved from Pilot's desktop app (the
+// answer approved>, dryRun: false }, and only for an answer saved from Pilot's desktop app (the
 // approving caller must be `desktop`, never the CLI). The card is re-read and its own args run.
 export async function attemptAction(
   deps: AttemptDeps,
@@ -280,40 +270,4 @@ export async function attemptAction(
     return refused(deps, { ...rowOf(req), approved: false }, {}, actionFailed(NO_CARD))
   }
   return attemptForRun(deps, entry, req)
-}
-
-export async function refreshAction(
-  deps: AttemptDeps,
-  req: {
-    action: string
-    args: Record<string, unknown>
-    runId: string | null
-    inboxItemId: string | null
-  }
-): Promise<Refreshed | null> {
-  const entry = deps.catalog.get(req.action)
-  if (!entry?.refresh || entry.checkArgs(req.args)) {
-    return null
-  }
-  const rowId = deps.store.actions.start({
-    inboxItemId: req.inboxItemId,
-    runId: req.runId,
-    action: entry.name,
-    args: req.args,
-    digest: argsDigest(entry.name, req.args),
-    phase: 'refresh',
-    dryRun: false,
-    startedAt: deps.now()
-  })
-  const got = await entry.refresh(req.args)
-  // New args that don't fit the entry are no refresh: the card stays stale.
-  const kept = got && entry.checkArgs(got.args) === null ? got : null
-  // Nothing to re-pin is recorded as a failed refresh, with no output.
-  deps.store.actions.finish(
-    rowId,
-    kept ? 'done' : 'failed',
-    kept ? JSON.stringify(kept) : null,
-    deps.now()
-  )
-  return kept
 }

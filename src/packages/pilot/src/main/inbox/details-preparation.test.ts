@@ -4,7 +4,6 @@ import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { detailsFixture, rewriteBundle } from './__fixtures__/details-fixture'
 import { loadDetails, readDetailsImage } from './details-bundle'
-import { ReviewFileSchema } from './details-schema'
 import { validatePreparationEvidence } from './details-preparation'
 
 const hash = (bytes: string | Buffer) => createHash('sha256').update(bytes).digest('hex')
@@ -224,7 +223,7 @@ describe('preparation evidence', () => {
     }
   )
 
-  it.each(['diff', 'screens', 'checks', 'review'] as const)(
+  it.each(['diff', 'screens', 'checks'] as const)(
     'rejects invalid attached %s even when only context was required',
     (kind) => {
       const f = prepared()
@@ -240,39 +239,12 @@ describe('preparation evidence', () => {
         if (kind === 'checks') {
           bundle.blocks.find((block) => block.type === 'diff')!.check_records = []
         }
-        if (kind === 'review') {
-          bundle.blocks.push({ type: 'review', file: 'sample-review.json' })
-        }
       })
-      if (kind === 'review') {
-        const path = join(f.dir, 'sample-review.json')
-        const review = ReviewFileSchema.parse(JSON.parse(readFileSync(path, 'utf8')))
-        writeFileSync(
-          path,
-          JSON.stringify({
-            ...review,
-            parts: review.parts.map((part) => ({ ...part, comment: '' }))
-          })
-        )
-      }
       expect(
         validatePreparationEvidence(loadDetails(f.root, f.bundle, { prepared: true }), ['context'])
       ).not.toEqual([])
     }
   )
-
-  it('requires the exact validated review comments and rejects a narrative-only substitute', () => {
-    const f = prepared()
-    const narrative = loadDetails(f.root, f.bundle, { prepared: true })
-    expect(validatePreparationEvidence(narrative, ['review'])).not.toEqual([])
-    rewriteBundle(f.bundle, (bundle) =>
-      bundle.blocks.push({ type: 'review', file: 'sample-review.json' })
-    )
-    const snapshot = loadDetails(f.root, f.bundle, { prepared: true })
-    expect(validatePreparationEvidence(snapshot, ['review'])).toEqual([])
-    snapshot.texts['sample-review.json'] = '{}'
-    expect(validatePreparationEvidence(snapshot, ['review'])).not.toEqual([])
-  })
 
   it('reviews a committed range without granting approval to apply it again', () => {
     const f = prepared()

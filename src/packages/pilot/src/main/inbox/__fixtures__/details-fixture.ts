@@ -2,7 +2,7 @@ import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } fro
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
-// The byte copies of the ~/.agents samples (test/fixtures/details, kept equal by its sync test).
+// The Details fixtures in test/fixtures/details: Pilot owns them (they began as copies of ~/.agents samples).
 export const DETAILS_FIXTURES = join(import.meta.dirname, '../../../../test/fixtures/details')
 const FILES = [
   'F2.json',

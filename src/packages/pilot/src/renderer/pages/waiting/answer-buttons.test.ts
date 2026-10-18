@@ -5,8 +5,6 @@ import { answeredLine, buttonsFor } from './answer-buttons'
 
 const base = {
   options: [],
-  parts: {},
-  switchWords: [],
   details: null,
   action: null
 } as unknown as InboxItemRow
@@ -96,7 +94,7 @@ describe('buttonsFor', () => {
     const got = buttonsFor(item).map((b) => [
       b.label,
       b.role,
-      composeAnswer(item, b.choice, 'some notes', [])
+      composeAnswer(b.choice, 'some notes')
     ])
     expect(got).toEqual(
       OLD[name].map(([label, role, option, text]) => [label, role, { option, text }])

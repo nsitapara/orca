@@ -33,64 +33,14 @@ Quit Pilot, then:
 - It refuses, changing nothing, when Orca's database isn't the layout it was written for: a profile-state schema other than 3, a `domain_version` other than 1, or a whitelisted domain that is missing, `null` or the wrong JSON type (what upstream leaves behind when it moves a domain into its own table). Update the script from upstream's `src/main/persistence/profile-state/` code first.
 - **Pruning backups:** nothing deletes them. `--list` shows each set by stamp. Once Pilot has started cleanly on a newer import, delete an old set by hand, e.g. `rm ~/Library/Application\ Support/Pilot/profiles/local-default/*.pre-orca-import-<stamp>`. Keep the newest set until you're sure you won't need `--restore`.
 
-## Migrating an automation
+## Adding an automation
 
-This is how 05 moved onto the M1 engine, kept for its shadow-and-cut-over steps. Every job has since been ported by the build plan "Pilot: every job on the YAML engine" (Tasks 34–46). `go-live-check.mjs` checks them all together (see "Automations on the YAML engine").
+Every job has been ported (the build plan "Pilot: every job on the YAML engine", Tasks 34–46; 05 went first, on 2026-10-10), and the old sweeps, their state and the shadow-and-cut-over steps are gone. A new automation:
 
-How one of the old sweeps that real Orca schedules (`~/.agents/skills/<name>-sweep`) moves onto Pilot. Automation 05, "Fix failed CI on my MRs" (`ci-fix-sweep` → `fix-failed-ci`), went first. `pilot` below is `dist/mac-arm64/Pilot.app/Contents/Resources/bin/pilot`.
-
-1. **Write the YAML.**
-   - One file per automation in `~/.agents/automations/`. The file name is its id.
-   - Pilot reads the folder through a link: `mkdir -p ~/.pilot && ln -sfn ~/.agents/automations ~/.pilot/automations`.
-   - Start with `schedule: manual`, so it can't run on its own while it shadows the old sweep.
-   - People named in `author:` come from `people.yaml` in the same folder.
-   - Commit both files in `~/.agents` through a temporary index, because other sessions commit there too.
-2. **Validate.**
-   - Run `pilot automations validate --file <file>`. It prints `ok <id>` and exits 0, or prints each problem and exits 1.
-   - Parsing is strict: unknown keys fail, and so do features from later milestones.
-   - The command checks automation files only. `people.yaml` problems show in `pilot automations status`.
-   - Pilot doesn't watch a folder that was created after it started. Until there's a `reload` command, re-scan with the CLI's own client, or restart Pilot:
-
-         C="$PWD/dist/mac-arm64/Pilot.app/Contents"    # from the repo root; require() needs an absolute path
-         ORCA_USER_DATA_PATH="$HOME/Library/Application Support/Pilot" ELECTRON_RUN_AS_NODE=1 "$C/MacOS/Pilot" \
-           -e 'new (require(process.argv[1]).RuntimeClient)().call("pilot.automations.reload").then((r) => console.log(JSON.stringify(r.result, null, 2)))' \
-           "$C/Resources/app.asar.unpacked/out/cli/runtime/client.js"
-
-     The output lists the automations, with any definition or people errors. `pilot automations status` should show no folder marked "(missing)". A reload re-scans the folder but doesn't start watching it, so later edits need another reload, until Pilot restarts with the folder already in place.
-3. **Dry-run beside the old sweep.**
-   - Run `pilot automations dry-run --id <id>`. It checks every item and prints what a tick would do with each. Nothing starts and nothing is stored.
-   - Compare each item with the old sweep's latest tick in its `sweep.log`:
-     - old **due** ↔ **started**;
-     - old **skip** ↔ **skipped**, **not due** or **not in scope**, with the same reason in substance.
-   - Never run `pilot automations tick` or Run now while shadowing.
-   - The old sweeps' `--dry-run` isn't read-only: it records decision events and refreshes `mr-cache.json`. Compare against `sweep.log`, or against the inputs the sweep reads, gathered by hand.
-4. **Seed `handled`.** So Pilot doesn't retry what the old sweep already tried:
-
-       node src/packages/pilot/scripts/seed-handled-from-sweep.mjs            # dry run: counts only
-       node src/packages/pilot/scripts/seed-handled-from-sweep.mjs --apply    # insert the missing keys
-
-   - It maps 05's `handled.json` (`"<iid>": <pipeline id>`) to `<iid>:<pipeline>` keys for `fix-failed-ci`, with `run_id` null.
-   - It only adds keys, never replaces one, and is safe to re-run while Pilot runs.
-   - It refuses when Pilot's database or `main/store/migrations.ts` isn't at the schema it was written for.
-   - Other sweeps keep different state, so each needs its own mapping.
-
-5. **Shadow.**
-   - Keep `schedule: manual`.
-   - Across a working day, run the dry run just after a few of the old sweep's ticks (05 ticks at :10 each hour). Compare each run with `sweep.log`.
-   - Record every comparison in the vault note (`Agent Work/Automation platform.md`). A difference that isn't just wording is a Pilot bug to fix before cutover.
-6. **Cut over (Nish approves).**
-   1. Re-seed `handled` right before switching (`--apply` again), because the old sweep keeps adding entries until it's off.
-   2. Confirm no CI-fix tabs are open in real Orca before disabling 05. Pilot's session check sees only its own terminals, so it wouldn't hold back a worktree where an old sweep's agent is still open.
-   3. Disable the old automation in real Orca.
-   4. Set the schedule in the YAML (05: `"10 * * * *"`) and commit it in `~/.agents`. Validate the YAML before saving a schedule change (`pilot automations validate --file <file>`): an invalid file drops the automation until it's fixed.
-   5. Make sure Pilot has the edit: the Automations list shows the new schedule, and so does the reload above (its `schedule` and `nextTickAt`). Expect the first real tick at the **next** slot, not at once: a schedule set while Pilot runs is walked from now (Task 20's catch-up rule).
-      - If Pilot is restarted instead, an automation with no real tick yet walks from an hour before the start. A slot that fell in that hour then runs once, right at start.
-
-### Automation 05 (`fix-failed-ci`)
-
-- [x] 1–2, 2026-10-10: YAML and people written, validated and linked; one key seeded (`1587:2933991087`). The dry run agreed with the old sweep on all 7 of Nish's open MRs (all not due, head pipelines green). The 22 teammate MRs are not in scope, and the old sweep never lists them. Details are in the vault note's M1 entry.
-- [ ] 3. Shadow for a working day: **pending, Nish**.
-- [ ] 4. Cut over (disable Orca's 05, schedule `"10 * * * *"`): **pending, Nish**.
+1. **Write the YAML** in `~/.agents/automations/`, one file per automation (the file name is its id), with `schedule: manual` until it is checked. People named in `author:` come from `people.yaml` in the same folder. Pilot reads the folder through a link, `~/.pilot/automations`. Commit in `~/.agents` through a temporary index, because other sessions commit there too.
+2. **Validate:** `pilot automations validate --file <file>` prints `ok <id>` and exits 0, or prints each problem and exits 1. Parsing is strict: unknown keys fail. `people.yaml` problems show in `pilot automations status`. `pilot automations reload` re-scans the folder.
+3. **Dry-run:** `pilot automations dry-run --id <id>` checks every item and prints what a tick would do with each. Nothing starts and nothing is stored.
+4. **Switch it on:** set its schedule and run `pilot automations enable --id <id>`. Validate before saving a schedule change: an invalid file drops the automation until it is fixed. A schedule set while Pilot runs is walked from now, so the first real tick comes at the next slot.
 
 ## Pilot beside Orca
 
@@ -119,7 +69,6 @@ Every job is a YAML automation in `~/.agents/automations/` (one file per automat
   - `pilot automations list-yaml`, `show-yaml --id` (alias `get`), `reload` (`pilot automations list` is upstream's own command)
   - `enable --id`, `disable --id`
   - `validate --file`, `dry-run --id`, `tick --id`, `activity --id`
-  - `import-state --id [--apply]`
   - `spend`, `usage-report`
 - **Nothing runs until Nish switches it on** (build plan Task 50). An automation's first tick shows in its Activity and in the worktree panel.
 - **A run's tabs close when it ends**, however it ends (`main/run/ended-run-tabs.ts`). Once every run on an agent tab has ended, the scheduler's next poll (every 15 s) closes it, and Resume reopens the session. A tab is found by its handle or its pane, since a restart can give the terminal a new handle. A tab stays when:
@@ -128,10 +77,6 @@ Every job is a YAML automation in `~/.agents/automations/` (one file per automat
   - it runs another session now, or its agent exited;
   - someone is typing in it, or its agent is busy (looked at again next poll);
   - a launch, Resume or answer is opening its session.
-- **Go-live check:** `node src/packages/pilot/scripts/go-live-check.mjs --help`.
-  - It validates every file, dry-runs each automation in a scratch Pilot, and summarises the parity tests as a vault section.
-  - It also flags a Codex step whose args repeat an option of the configured Codex command, and refuses a `--data` link to the packaged app's folder.
-  - Build plan Task 47b has the steps for the scratch Pilot. It mirrors the packaged app's data, and `import-orca-settings.mjs` can fill it while the packaged app runs.
 
 ### Shell steps
 
@@ -304,45 +249,43 @@ A job that changes code on Nish's work, or needs a stack, says what it needs. pi
 - **Dry run:** `pilot automations dry-run` and "Dry run all" call `env create … --dry-run true`, which makes nothing, and say "would run in place" or "would run in a throwaway: <reason>".
 - **Where it shows:** each run card (Activity, the job page, the worktree panel) says where it worked, its stack and URLs, and a delete that hasn't succeeded.
 - **Finding pilotcli:** `PILOT_PILOTCLI`, else `~/.local/bin/pilotcli`, else PATH. pilotcli gets no `ORCA_*`/`PILOT_*` and not Pilot's launcher folder, so its checks see real Orca.
-- **Switching a job:** one at a time, after both Pilot and pilotcli are installed with env support, each checked first with `pilot automations dry-run`. Job 05's switch waits in `yaml-pending.patch`.
+- **Switching a job:** one at a time, after both Pilot and pilotcli are installed with env support, each checked first with `pilot automations dry-run`.
 
 ## Inbox and Details bundles
 
 The sidebar's **Inbox** item sits under Automations, with a count of the cards waiting on you. Clicking **Automations** leaves it, and the Inbox sub-view persists after you leave the page; the highlight always matches what is shown.
 
-A card carries its Details as markdown (`--details-file`) or as a structured **Details bundle** (`--details-bundle`), never both. The page renders a bundle as facts, diffs, reviews, screens and shots.
+A card carries its Details as markdown (`--details-file`) or as a structured **Details bundle** (`--details-bundle`), never both. The page renders a bundle as facts, diffs, screens and shots. Job 09's old Post cards also hold a review block, which the page shows read only; a new bundle with one is refused.
 
-- **Folder rule:** a bundle and its files (review JSON, images) must sit inside the Automations folder, `PILOT_VAULT_AUTOMATIONS`, else `~/Documents/WebPortal/Agent Work/Automations`. The skills' `vault.AUTOMATIONS` must be the same folder, or every bundle is refused (the card is still offered, without it).
-- **Limits:** a bundle is at most 2 MB, a review file 1 MB, an image 8 MB, and a bundle at most 40 blocks. An unknown block type is refused.
-- **What joins the digest:** the bundle's bytes and the review files it inlines. On a plain card, images and the patch do not: images are read live, and the patch is bound through its `patch_sha256` inside the bundle and checked when an approval applies it. So an image swapped on disk after the card was added shows the new image. A prepared bundle also hashes its patch, images and check logs into an artifact manifest that joins the digest, and a changed image is refused (R-P3).
+- **Folder rule:** a bundle and its files (patch, images, check logs, report) must sit inside the Automations folder, `PILOT_VAULT_AUTOMATIONS`, else `~/Documents/WebPortal/Agent Work/Automations`. pilotcli finds the same folder by the same rule (`details.Root`), so the bundles it writes sit inside it; a bundle outside it is refused (the card is still offered, without it).
+- **Limits:** a bundle is at most 2 MB, an image 8 MB, and a bundle at most 40 blocks. An unknown block type is refused.
+- **What joins the digest:** the bundle's bytes. On a plain card, images and the patch do not: images are read live, and the patch is bound through its `patch_sha256` inside the bundle and checked when an approval applies it. So an image swapped on disk after the card was added shows the new image. A prepared bundle also hashes its patch, images and check logs into an artifact manifest that joins the digest, and a changed image is refused (R-P3).
 - **Commands:**
   - `pilot inbox add --details-bundle <file>` sends the absolute path; Pilot's main process reads and checks the file itself.
   - `pilot inbox show --id <id>` prints one card, with its Details.
-  - `pilot inbox set-details --id <id> --bundle <file> [--head <sha>]` replaces a waiting card's bundle. An answer it had is cleared, with Pilot's reply asking again. While an answer run other than the caller is still applying that answer, it is refused (`its answer is being applied; Details not attached`). That answer run itself may re-attach it (a re-draft), which clears the answer the same way.
-- **Who may attach a bundle** (`add --details-bundle` and `set-details` ask the same rule): the desktop, or the local CLI inside a Pilot run's step of the card's own automation. An unbound CLI and a paired device are refused. Only a desktop Approve applies a drafted patch.
+- **Who may attach a bundle** (`add --details-bundle`): the desktop, or the local CLI inside a Pilot run's step of the card's own automation. An unbound CLI and a paired device are refused. Adding an open card again with a changed bundle clears its answer, with Pilot's reply asking again; while an answer run other than the caller is applying that answer, the add is refused. Only a desktop Approve applies a drafted patch.
 - **Drafting:** job 14 (`14 · Prepare inbox item context`) drafts and verifies prepared cards, through item-details' `candidate` mode (R-P2). 03 and 04 no longer draft at the end of their runs.
 
 ### Context preparation
 
 - **Opt-in (D1):** only a card whose decision needs evidence is prepared: a code change to approve (04's `bug` and `left_for_you` findings, 03's `left_for_you`), 05's push card, or a card that asks for evidence. Its producer passes `--preparation-file` (`pilotcli inbox create-card`). Every other card (questions, defaults, flagged items, answer-run follow-ups) is a plain card, answerable at once.
 - **A prepared card** starts **Context queued**. Job 14 claims it, generates and verifies its evidence, and completes it as **Ready for your decision**. Until then Approve, a drafted-option pick and its action are refused; any other answer stops preparation. A blocked card has **Retry preparation** (`pilot.inbox.prepareRetry`: the desktop or a paired device only), which requeues it with a new revision.
-- **Evidence:** a diff must match its hashed patch exactly. A diff that `details.py` trimmed (an `omitted` file, `more_files`) passes when every shown file, omitted count and `more_files` matches the patch, and its Details say plainly what only the patch file has.
+- **Evidence:** a diff must match its hashed patch exactly. A diff that `pilotcli inbox get-block diff` trimmed (an `omitted` file, `more_files`) passes when every shown file, omitted count and `more_files` matches the patch, and its Details say plainly what only the patch file has.
 - **The lease** is a liveness hint: a claim has expired only once its 10-minute lease lapsed and its claiming step no longer runs, and always 3 hours after it was claimed (`PREPARATION_HOLD_MAX_MS`).
 - **A refused claim** names its reason: `Preparation claim is stale: <reason>` (pilotcli reads that prefix as a skip). When the card was answered, prepared, queued again or taken by another run, the run has nothing to do: the claim at launch stops its step, and the run ends done, "Nothing to do: <reason>". A blocked card, or one out of attempts, fails the step: it waits on your Retry. Continue run refuses either kind before reopening the run.
-- **A refused request** (its shape or size: `Preparation request refused: …`) never loses the card and never offers its action: the bridge leaves a flagged **Not prepared** notice (`--not-prepared-key`, `--not-prepared-reason`) with no action, parts, switch or bundle. Pilot writes its reply `Not prepared: <reason>`, any answer closes it and runs nothing, and the run's prepared card for the same key retires it (D2). A refused seed bundle only drops the bundle. A run can't offer `push` (the catalog's `needsEvidence`) without a preparation request.
+- **A refused request** (its shape or size: `Preparation request refused: …`) never loses the card and never offers its action: the bridge leaves a flagged **Not prepared** notice (`--not-prepared-key`, `--not-prepared-reason`) with no action or bundle. Pilot writes its reply `Not prepared: <reason>`, any answer closes it and runs nothing, and the run's prepared card for the same key retires it (D2). A refused seed bundle only drops the bundle. A run can't offer `push` (the catalog's `needsEvidence`) without a preparation request.
 - **A prepared push** binds its evidence to its range: a committed diff from the pinned origin commit (argv[3]) to the pinned commit (argv[2]).
 - **The push itself** is one pilotcli call, `pilotcli git push-branch <branch> --expect-head=<commit> --expect-sha=<origin commit> --dir=<worktree>` (`main/actions/push-branch.ts`). pilotcli fetches, checks both pins, pushes only a fast-forward, never forces and verifies, so exactly the prepared range goes out. Already published is done. Any other skip (a pin moved, not a fast-forward, not yours, the MR finished) puts the card back to you with `not pushed: <reason>`. `not_yet` (any uncommitted or untracked file in the worktree, or a merge or rebase in progress) waits on you, and the wait names the branch and worktree: `uncommitted changes (<branch> in <worktree>)`. A card's Run line is that command.
 - **Mark ready** is a pilotcli call too (milestone 8; act.py no longer runs it). `mark_ready` (`main/actions/mark-ready.ts`) first learns the MR's branch (Pilot's store, else `pilotcli gitlab get-mr`; unknown waits on you) and waits on you while jobs 03–06 have open cards on that branch, then runs `pilotcli gitlab check-mr <iid> mine=true active=true author=me sha=<head> ready=true` and `pilotcli gitlab update-mr <iid> draft=false --expect-sha=<head>`: a blocker waits on you, a moved head or a finished MR is stale, and an MR already ready is done. It passes `--dir` (its checks: the worktree on the MR's branch when there is one): the card's worktree while it exists, else its repo's main checkout, since Pilot runs pilotcli from `~` (`main/actions/caller-folder.ts`); with neither, it fails before calling pilotcli. A mark_ready card's Run line is its update-mr.
-- **A refreshed action** (new pinned args) and an undone early answer put a prepared card's preparation back in the queue with a new revision.
+- **An undone early answer** puts a prepared card's preparation back in the queue with a new revision.
 - **The list** carries a light preparation ref (state, attempt, progress, error, needs); the request comes with `pilot inbox show` and the manifest with the Details.
 
 Rulings:
-- **R-P1.** Preparation has its own scoped write path: the `pilot.inbox.prepare*` RPCs (claim, progress, complete, fail), for a `local-cli` caller bound to a live run of an `inbox_preparation` automation whose item key is the card's id, at the matching revision, holding the claim. It is the one exception to "a run-bound caller may change only its own automation's cards". `set-details` refuses prepared cards from every caller. (`prepareRetry` is a person's, not the worker's.)
+- **R-P1.** Preparation has its own scoped write path: the `pilot.inbox.prepare*` RPCs (claim, progress, complete, fail), for a `local-cli` caller bound to a live run of an `inbox_preparation` automation whose item key is the card's id, at the matching revision, holding the claim. It is the one exception to "a run-bound caller may change only its own automation's cards". (`prepareRetry` is a person's, not the worker's.)
 - **R-P2.** Drafting and evidence moved out of 03 and 04 into job 14 plus item-details' `candidate` mode. This replaces plan Ruling 5.
 - **R-P3.** Images and patches are hashed in prepared bundles, and a changed image is refused. This replaces plan Ruling 3 for prepared bundles; plain bundles keep Ruling 3.
 - **R-P4.** Preparation is opt-in (D1), and a refused request never loses the card (D2, after Ruling 8): it becomes a flagged "Not prepared" notice that runs nothing, never a plain action card.
-- **R-P5.** An evidence-needing decision (the `push` action, applying a drafted change) runs only from a prepared card whose preparation is ready and verified. The rule reads the card, never who added it or how the caller is bound: such a card is refused at add without a preparation request (imports are the one exception), and save, `cardToRun`, `applyScript` and `draftApproved` refuse it until it is ready. An imported or legacy push or drafted card shows **Needs evidence** with **Prepare evidence** (`pilot.inbox.prepareEvidence`, the desktop or a paired device), which queues it for job 14 with a request built from the card. A prepared push's patch is recomputed by Pilot from its pinned range (`PUSH_DIFF_ARGS`, the same command as `pilotcli git get-diff --card`).
-- **Go-live:** the check's "Card details" line (read-only) counts waiting cards (open or answered), those with a bundle, and imported cards still pointing at a vault bundle.
+- **R-P5.** An evidence-needing decision (the `push` action, applying a drafted change) runs only from a prepared card whose preparation is ready and verified. The rule reads the card, never who added it or how the caller is bound: a push card is refused at add without a preparation request, and save, `cardToRun`, `applyScript` and `draftApproved` refuse such a card until it is ready. A card that needs evidence and was never prepared (a push card imported before go-live, or a card whose bundle holds a drafted patch, added without a preparation request) shows **Needs evidence** with **Prepare evidence** (`pilot.inbox.prepareEvidence`, the desktop or a paired device), which queues it for job 14 with a request built from the card. A prepared push's patch is recomputed by Pilot from its pinned range (`PUSH_DIFF_ARGS`, the same command as `pilotcli git get-diff --card`).
 
 ## New tab picker
 
@@ -421,31 +364,13 @@ Known gaps:
 
 The hooks are `activity-machines-*` and `activity-project-*` (see `HOOKS.md`).
 
-## Agent Console
+## Going live (a record, 2026-10-17)
 
-The console (`~/.agents/skills/agent-console`) reads `pilot automations list-yaml --json` and maps each automation to its job by name:
-- a name that starts with its code (`01 · …`), else
-- the vault job with the same name, else
-- its id.
+The jobs moved from Orca's engine and the old sweeps to Pilot's YAML automations between 2026-10-10 and 2026-10-16, one at a time (`pilot automations enable --id <id>`). Orca's copies stay disabled. The open vault cards and each job's old state were imported once, and the importer was then removed with the old Python; job 12 (`apply.py`) is retired, and Pilot dispatches answers. Job 14 (`prepare-inbox-item-context`) prepares the cards that need evidence: until it has run, a prepared card stays **Context queued** and can't be approved, and plain cards never wait for it. Connect Linear in Pilot (Settings) for 13 and M01: Pilot can't read Orca's credential (see the Known gaps).
 
-It reads each automation's `activity`. A job whose automation is switched on takes its schedule and Run by hand from Pilot: Preview runs `dry-run`, and Run now runs `tick`. Keep `ActivityTick`, `RunRow` and `StepRow` field names stable: add fields, never rename one. (`dryRun` was dropped on 2026-10-14: dry runs are no longer stored, so Activity holds real ticks only.)
-
-## Going live
-
-The order, behaviour changes and follow-ups come from the build (`go-live-notes.md` and `go-live-report.md` in the build plan folder). Run the go-live check first.
-
-**Order:**
-1. Close out what Orca still has open. Let a running Orca 03 review cycle finish. Close any open Orca 04 QA run or dispatched fix: a stale Orca `run.json` that isn't `done` blocks every Pilot 04 night at `stack`.
-2. The open vault cards were imported once, on 2026-10-12, and the import was removed afterwards (its `vault.py` is deleted). The go-live check's "Card details" line still counts imported cards that only point at a vault bundle. Answer only in Pilot (Inbox).
-3. Import each job's old state before enabling it: `pilot automations import-state --id <id>` (preview), then `--apply`. 03 and 04 need their `seen.json` first. 08 must be imported before Pilot first writes its own `usage.json` (the hand-over above). 12's sent answers come in as dispatched.
-4. Connect Linear in Pilot (Settings) before enabling 13 and M01. Pilot can't read Orca's Linear credential (see the Known gaps).
-5. Enable the YAMLs one at a time: `pilot automations enable --id <id>`. Keep Orca's copies disabled. Enable job 14 (`prepare-inbox-item-context`) together with, or before, the first job that creates prepared cards (03, 04, 05, 09): until it runs, their prepared cards stay **Context queued** and can't be approved. Job 14 must run before any push or drafted fix can be approved, imported ones included: those come in as **Needs evidence**, and Prepare evidence queues them for it (R-P5). Plain cards never wait for it.
-6. Job 12 (`apply.py`) is retired and its Python deleted: Pilot dispatches answers.
-
-**Not checkable in a dry run** (watch the first real run):
+**Not checkable in a dry run** (watch a real run):
 - Linear accepts the uuid5 write ids that 13 uses for ticket creates and fold comments.
 - `claude --resume <id>` keeps the same session id on the installed CLI. If it writes a new one, a Claude resume step reads the old transcript.
-- 13-start and M01 against live Linear in the packaged app (the scratch Pilot can't read its credential).
 
 **Behaviour that differs from the old jobs:**
 - **Answers** to sessions from the old system fork instead of resuming. Imported sessions have no recorded launch arguments.
@@ -461,7 +386,6 @@ The order, behaviour changes and follow-ups come from the build (`go-live-notes.
 - **M01:** a quota-out tick skips every ticket (it deferred the fourth). A worktree linked to a ticket under another name isn't reused. A started ticket whose worktree was deleted isn't restarted.
 - **13:** a "Failed again" comment waits while quota is out. A canceled ticket is absent.
 - **05, 06, 03, 04:** worktree flags point at "Inbox in Pilot", not the old localhost link.
-- **04:** the old `loop.py status` shows a Pilot run in progress as `start_failed`. The old sweep leaves the run alone until its deadline plus 10 minutes.
 - **Leftovers:** M04 worktrees aren't cleaned up (as before).
 
 ## Remote use (D25)
@@ -532,8 +456,8 @@ These need a phone, a second Mac and an iPad on Tailscale. Open Pilot (`dist/mac
 - Pilot's orcad still starts Orca's own automation engine (`src/main/orcad/orcad-automations.ts`): the `orca-automations-off` hook covers desktop and serve only. Pilot's own scheduler doesn't run in orcad unless `PILOT_SCHEDULER=on`.
 - No idle-night drafting drain: a card the 03 or 04 draft step left undrafted waits for that branch's next run.
 - Images in a Details bundle are not bound to the digest; they are read live.
-- Codex subagent rollouts (child threads) aren't added to their parent step's usage; `usage.py` added them.
-- Pilot's Claude price table differs from `usage.py`'s for Sonnet 4 and 4.5 long-context and for old models. That is intended.
+- Codex subagent rollouts (child threads) aren't added to their parent step's usage; the retired `usage.py` added them.
+- Pilot's Claude price table differs from the retired `usage.py`'s for Sonnet 4 and 4.5 long-context and for old models. That is intended.
 - Resume runs the agent's plain resume command, without the Settings default arguments a launch gets.
 - The badge shows on the Automations icon in the activity bar, not in its overflow menu.
 - Spend and the token report count a step once it has ended; a running step shows up after it ends.
@@ -546,7 +470,7 @@ These need a phone, a second Mac and an iPad on Tailscale. Open Pilot (`dist/mac
   - The Inbox page has no "done" button (imported already-sent cards need `pilot inbox tick`).
   - A paired device can't approve actions. `pilot.inbox.tick` and `reply` act on any card id (as the old vault did); they could be scoped to the caller's automation.
   - A `mr: mine` check on 05 would close the "teammate's newer MR from my branch" edge, which the old sweep also left open.
-  - Engine internals: the per-session claim is in-process only (main and orcad share it only if configured to); the vault exporter writes `Runs.md` without `vault.py`'s lock; terminal lists are cached for each answers pass.
+  - Engine internals: the per-session claim is in-process only (main and orcad share it only if configured to); the vault exporter writes `Runs.md` without a lock (the retired `vault.py` took one); terminal lists are cached for each answers pass.
 - **14's env waits on `head`.** `{preparation.head}` is empty until 14's producers send `head` in their preparation request (only a push card Pilot queues itself has one), so 14 doesn't switch before they do.
 - **A quit during env create** stops it at once, but its `env delete` runs at the next start.
 

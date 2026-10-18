@@ -1,9 +1,8 @@
 import { describe, expect, it, vi } from 'vitest'
 import { fakePilotcli } from '../envs/__fixtures__/fake-pilotcli'
 import { pilotcliRunner, type Pilotcli, type PilotcliReply } from '../envs/pilotcli'
-import { RUN_TIMEOUT_MS } from './act-bridge'
 import { checkReadyArgs, MARK_READY_USAGE, markReadyEntry, updateMrArgs } from './mark-ready'
-import type { ActionCaller, ActionResult } from './types'
+import { RUN_TIMEOUT_MS, type ActionCaller, type ActionResult } from './types'
 
 const SHA = '430f7e68'
 const ARGS = { argv: ['1577', SHA] }
@@ -289,7 +288,6 @@ describe('the mark_ready action (pilotcli gitlab check-mr ready=true, then updat
     const { entry } = entryAnswering([])
     expect([entry.name, entry.power]).toEqual(['mark_ready', 'mark_ready'])
     expect(await entry.describe(ARGS)).toBe('Mark !1577 ready for review on GitLab (head 430f7e68)')
-    expect(entry.refresh).toBeUndefined()
   })
 
   it('runs what its Run line shows, through the real pilotcli client', async () => {

@@ -1,16 +1,15 @@
 import { join } from 'node:path'
-import { applyImport } from '../../../src/main/importer/sweep-state/apply'
-import { linearTodoMapper } from '../../../src/main/importer/sweep-state/linear-todo'
 import type { ScriptRunner } from '../../../src/main/fields/script-runner'
+import { addImportedHandled } from '../../../src/main/store/__fixtures__/imported-rows'
 import type { PilotStore } from '../../../src/main/store/store'
 import type { VerdictTable } from '../compare'
 import type { ParityFixture } from '../fixture'
-import { fixtureStateReader } from '../fixture-reader'
 import { withLinearTickets } from '../linear-fixture'
 import type { OldDecision } from '../old-side'
 import { failed, ok } from '../overrides'
 import type { ParityJob } from '../parity-case'
 import { loadPortedAutomation, portedAutomationsDir } from '../ported'
+import { savedAt, stateObject } from '../sweep-state'
 
 export const JOB_M01 = {
   job: 'M01',
@@ -46,10 +45,17 @@ export const VERDICTS_M01: VerdictTable = {
   ]
 }
 
-// started.json as Pilot keeps it: the mapper's plan applied to the case, so every kicked-off ticket is
-// linear-todo.yaml's once_per "<ID>" (sweep-state/linear-todo.ts).
+// started.json ({ "<ID>": { path, handle, startedAt } }) as Pilot keeps it: every kicked-off ticket is linear-todo.yaml's
+// once_per "<ID>", from its start, so Pilot never kicks it off again.
 export function seedM01(store: PilotStore, f: ParityFixture): void {
-  applyImport(store, linearTodoMapper.plan(fixtureStateReader(f)), f.now)
+  const started = Object.entries(stateObject(f, `${JOB_M01.loop}/started.json`)).map(
+    ([ident, entry]) => ({
+      onceKey: ident,
+      status: 'done' as const,
+      at: savedAt(f, (entry as { startedAt?: unknown } | null)?.startedAt)
+    })
+  )
+  addImportedHandled(store, JOB_M01.automationId, started)
 }
 
 // The command M01's YAML checks each ticket with (pilotcli's since milestone 8), pinned as a literal: the definition test

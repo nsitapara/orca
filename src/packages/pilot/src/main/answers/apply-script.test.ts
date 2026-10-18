@@ -40,11 +40,7 @@ const PUSH: InboxAddParams = {
 }
 const ID = 'in_0000000000000001'
 
-function setup(
-  result: ActionResult = DONE,
-  card: InboxAddParams = PUSH,
-  refresh: ActionEntry['refresh'] = async () => null
-) {
+function setup(result: ActionResult = DONE, card: InboxAddParams = PUSH) {
   const store = PilotStore.open(
     join(mkdtempSync(join(tmpdir(), 'pilot-apply-script-')), 'db.sqlite')
   )
@@ -64,8 +60,7 @@ function setup(
     usage: 'x',
     checkArgs: (args) => (Array.isArray(args.argv) ? null : 'usage: x'),
     describe: async () => 'x',
-    run: vi.fn().mockResolvedValue(result),
-    refresh: vi.fn(refresh)
+    run: vi.fn().mockResolvedValue(result)
   }
   let clock = 100
   const inbox: InboxDeps = {
@@ -114,7 +109,7 @@ describe('applyScript', () => {
     const { store, entry, deps, item, approve } = setup()
     approve()
     const digest = item().digest
-    expect(await applyScript(deps, item(), [])).toEqual({ kind: 'done' })
+    expect(await applyScript(deps, item())).toEqual({ kind: 'done' })
     expect(entry.run).toHaveBeenCalledWith(PUSH.actionArgs, {
       dryRun: false,
       runId: 'run-1',
@@ -151,7 +146,7 @@ describe('applyScript', () => {
   ])('re-asks %s and runs nothing', async (_name, arrange, reply) => {
     const s = setup()
     arrange(s)
-    expect(await applyScript(s.deps, s.item(), [])).toEqual({ kind: 'reasked' })
+    expect(await applyScript(s.deps, s.item())).toEqual({ kind: 'reasked' })
     expect(s.entry.run).not.toHaveBeenCalled()
     expect(s.store.actions.forInboxItem(ID)).toEqual([])
     expect(s.item()).toMatchObject({
@@ -176,7 +171,7 @@ describe('applyScript', () => {
       startedAt: 110
     })
     s.store.actions.interruptRunning(200, 200, () => true)
-    expect(await applyScript(s.deps, s.item(), [])).toEqual({ kind: 'reasked' })
+    expect(await applyScript(s.deps, s.item())).toEqual({ kind: 'reasked' })
     expect(s.entry.run).not.toHaveBeenCalled()
     expect(s.item()).toMatchObject({
       status: 'open',
@@ -184,7 +179,7 @@ describe('applyScript', () => {
     })
     s.tick(1_000)
     s.approve()
-    expect(await applyScript(s.deps, s.item(), [])).toEqual({ kind: 'done' })
+    expect(await applyScript(s.deps, s.item())).toEqual({ kind: 'done' })
     expect(s.entry.run).toHaveBeenCalledTimes(1)
   })
 
@@ -196,36 +191,14 @@ describe('applyScript', () => {
       onYou: true
     })
     approve()
-    expect(await applyScript(deps, item(), [])).toEqual({
+    expect(await applyScript(deps, item())).toEqual({
       kind: 'waits',
       reason: '1 open thread (waits on you)'
     })
     expect(item().status).toBe('answered')
   })
 
-  it('asks again, pinned to the new state, when a stale action can be refreshed', async () => {
-    const { deps, entry, item, approve } = setup(
-      { ...DONE, outcome: 'stale', detail: 'head moved to ffff0000' },
-      PUSH,
-      async () => ({
-        args: { argv: ['/wt', 'web-1', 'ffff', 'bbbb'] },
-        changed: 'the head moved to ffff'
-      })
-    )
-    approve()
-    expect(await applyScript(deps, item(), [])).toEqual({ kind: 'reasked' })
-    expect(entry.refresh).toHaveBeenCalledWith(PUSH.actionArgs)
-    expect(item()).toMatchObject({
-      status: 'open',
-      version: 2,
-      answer: null,
-      actionArgs: { argv: ['/wt', 'web-1', 'ffff', 'bbbb'] },
-      context:
-        'The head moved to ffff since you approved; approve this version to go ahead. Fixed it.'
-    })
-  })
-
-  it('closes a stale action that cannot be refreshed', async () => {
+  it('closes a stale action', async () => {
     const { deps, item, approve } = setup({
       ...DONE,
       outcome: 'stale',
@@ -233,13 +206,13 @@ describe('applyScript', () => {
       link: null
     })
     approve()
-    await applyScript(deps, item(), [])
+    await applyScript(deps, item())
     expect(item()).toMatchObject({ status: 'stale', outcome: 'stale: head moved to ffff0000' })
   })
 
   // Spec E: a push pilotcli skipped (a pin moved, not a fast-forward, not mine) leaves its card open with why.
-  it('re-asks a stale action that keeps its card open, with why, and never refreshes it', async () => {
-    const { deps, entry, item, approve } = setup({
+  it('re-asks a stale action that keeps its card open, with why', async () => {
+    const { deps, item, approve } = setup({
       ...DONE,
       outcome: 'stale',
       detail: 'not pushed: stale: HEAD is now 7f00aa1',
@@ -247,8 +220,7 @@ describe('applyScript', () => {
       keepOpen: true
     })
     approve()
-    expect(await applyScript(deps, item(), [])).toEqual({ kind: 'reasked' })
-    expect(entry.refresh).not.toHaveBeenCalled()
+    expect(await applyScript(deps, item())).toEqual({ kind: 'reasked' })
     expect(item()).toMatchObject({ status: 'open', answer: null, outcome: null })
     expect(item().replies.at(-1)).toEqual({
       text: 'not pushed: stale: HEAD is now 7f00aa1',
@@ -259,7 +231,7 @@ describe('applyScript', () => {
   it('closes a done action that carries keepOpen, since only a stale result keeps its card open', async () => {
     const { deps, item, approve } = setup({ ...DONE, keepOpen: true })
     approve()
-    expect(await applyScript(deps, item(), [])).not.toEqual({ kind: 'reasked' })
+    expect(await applyScript(deps, item())).not.toEqual({ kind: 'reasked' })
     expect(item().status).not.toBe('open')
   })
 
@@ -270,7 +242,7 @@ describe('applyScript', () => {
       detail: 'it conflicts'
     })
     approve()
-    expect(await applyScript(deps, item(), [])).toEqual({ kind: 'agent', note: 'it conflicts' })
+    expect(await applyScript(deps, item())).toEqual({ kind: 'agent', note: 'it conflicts' })
   })
 
   it('names the log of a failed action', async () => {
@@ -281,25 +253,7 @@ describe('applyScript', () => {
       link: null
     })
     approve()
-    await applyScript(deps, item(), [])
+    await applyScript(deps, item())
     expect(item().outcome).toBe('failed: push refused · log /l')
-  })
-
-  it('counts each part, and runs nothing when parts are left out', async () => {
-    const parts = { ...PUSH, parts: { F1: 'Null check', F2: 'Naming' } }
-    const all = setup(DONE, parts)
-    all.approve()
-    await applyScript(all.deps, all.item(), [])
-    expect(all.entry.run).toHaveBeenCalledWith(PUSH.actionArgs, {
-      dryRun: false,
-      runId: 'run-1',
-      inboxItemId: ID
-    })
-    expect(all.item().outcome).toBe('done: 2 done')
-    const some = setup(DONE, parts)
-    some.approve('approve except: F2')
-    await applyScript(some.deps, some.item(), ['F2'])
-    expect(some.entry.run).not.toHaveBeenCalled()
-    expect(some.item().outcome).toBe('failed: 1 failed · 1 left out')
   })
 })

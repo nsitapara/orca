@@ -57,7 +57,7 @@ export type ReportInput = {
 export const PRICE_NOTE =
   'the API-equivalent at the price tables Pilot shares with Orca: what these tokens would cost on the API, not what the subscriptions bill.'
 export const NOT_COUNTED =
-  "Not counted: separate sessions that a job's agent or a hook starts on its own: `claude -p`, `codex exec` and Cursor runs (M02 can dispatch these) and the security-guidance plugin's `sdk-py` reviews. Anything typed by hand into a job's tab counts toward that job."
+  "Not counted: separate sessions that a job's agent or a hook starts on its own: `claude -p`, `codex exec` and Cursor runs (job 03's orchestrated phases run as these) and the security-guidance plugin's `sdk-py` reviews. Anything typed by hand into a job's tab counts toward that job."
 
 const pad2 = (n: number): string => String(n).padStart(2, '0')
 

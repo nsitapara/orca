@@ -48,9 +48,6 @@ export const InboxAdd = z
     detailsBundlePath: z.string().min(1).max(4096).optional(),
     action: z.string().min(1).max(64).optional(),
     actionArgs: z.record(z.string(), z.unknown()).optional(),
-    parts: z.record(z.string().min(1).max(64), text(500)).optional(),
-    // The switch words, on then off (R-3).
-    switchWords: z.array(z.string().min(1).max(40)).length(2).optional(),
     worktreePath: z.string().min(1).optional()
   })
   .refine((p) => p.detailsMd === undefined || p.detailsBundlePath === undefined, DETAILS_EITHER)
@@ -171,8 +168,8 @@ export function buildInboxMethods(ctx: () => PilotContext) {
         const c = ctx()
         const target = resolveAddTarget(c, p)
         refuseUnproposable(c, target)
-        // A bundle can change an open card and clear its answer: only set-details' callers may give one,
-        // and, like set-details, the card's own answer run may re-add it while it applies the answer.
+        // A bundle can change an open card and clear its answer: only a caller in scope may give one, and the
+        // card's own answer run may re-add it while it applies the answer.
         let callerRunId: string | null = null
         if (target.detailsBundlePath !== undefined) {
           callerRunId = refuseOutsideScope(c, rpc.caller, p, targetAutomation(c, target))

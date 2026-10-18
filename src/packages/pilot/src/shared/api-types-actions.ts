@@ -1,4 +1,4 @@
-export type ActionPhase = 'check' | 'ready' | 'do' | 'refresh'
+export type ActionPhase = 'check' | 'ready' | 'do'
 // act.py's outcome words are first-class statuses (R-4); 'refused' is an attempt the engine turned away.
 export type ActionRunStatus =
   | 'running'

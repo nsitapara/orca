@@ -23,8 +23,7 @@ export const DEFINITIONS: AutomationDefinition[] = [
   definition('ui-qa-overnight', '04 · Test branch UIs overnight', 'worktree'),
   definition('fix-failed-ci', '05 · Fix failed CI on my MRs', 'merge_request'),
   definition('mr-feedback', '06 · Address reviewer feedback on my MRs', 'merge_request'),
-  definition('linear-todo', 'M01 · Start my Todo Linear tickets', 'linear_ticket'),
-  definition('mr-next-steps', 'M02 · Report next steps for my MRs', 'merge_request')
+  definition('linear-todo', 'M01 · Start my Todo Linear tickets', 'linear_ticket')
 ]
 
 const people = parsePeopleYaml('people:\n  - { id: nish, name: Nish, gitlab: nish8 }\n')

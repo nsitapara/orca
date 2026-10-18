@@ -65,7 +65,6 @@ const PUSH = {
   action: 'push',
   actionArgs: { argv: ['/wt', 'b', 'a', 'o'] }
 }
-const PARTS = { ...PUSH, parts: { F1: 'Null check', F2: 'Naming' } }
 const QUESTION = { type: 'question' as const, title: 'Which?', options: ['A', 'B'] }
 const BUG = { type: 'bug' as const, title: 'Guard the null?' }
 
@@ -73,14 +72,6 @@ describe('queueEntries', () => {
   it.each([
     ['Skip on an action', PUSH, 'skip', 'run-1', 'tick', 'Mark it skipped'],
     ['Approve on a push', PUSH, 'approve', 'run-1', 'script', 'Run push; no agent'],
-    [
-      'parts left out',
-      PARTS,
-      'approve except: F2',
-      'run-1',
-      'script',
-      'Run push without F2; no agent'
-    ],
     [
       'a revision',
       PUSH,
@@ -139,7 +130,7 @@ describe('an answer never routes to a script for a caller other than the desktop
   }
 
   it.each<['desktop' | 'paired-device' | 'local-cli' | undefined, object]>([
-    ['desktop', { kind: 'script', leaveOut: [] }],
+    ['desktop', { kind: 'script' }],
     ['paired-device', { kind: 'reask', reason: APPROVE_ON_DESKTOP }],
     ['local-cli', { kind: 'reask', reason: APPROVE_ON_DESKTOP }],
     [undefined, { kind: 'reask', reason: APPROVE_ON_DESKTOP }]

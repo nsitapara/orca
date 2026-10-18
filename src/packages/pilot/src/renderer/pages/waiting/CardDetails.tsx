@@ -9,7 +9,6 @@ import { pilotRpc } from '../../api'
 import { DetailsStyle } from '../../details/details-css'
 import { DetailsView } from '../../details/DetailsView'
 import { Markdown } from '../../details/markdown'
-import type { PartSwitches } from '../../details/ReviewBlock'
 import { setAllSections, useOffSections } from '../../details/section-filter'
 import { sectionsOf } from '../../details/sections'
 import { hostRpc } from '../../hosts/host-rpc'
@@ -92,13 +91,11 @@ function base64Url(mime: string, base64: string): string {
 function BundleBody({
   item,
   loaded,
-  retry,
-  parts
+  retry
 }: {
   item: InboxListRow
   loaded: Loaded | null
   retry: () => void
-  parts: PartSwitches | null
 }): React.JSX.Element | null {
   const host = usePilotHost()
   if (!loaded) {
@@ -142,7 +139,6 @@ function BundleBody({
       loadImage={loadImage}
       // Why: the browser's shell.openFilePath always returns false (web-shell-api.ts), so Open could only fail.
       openReport={isWebClientLocation() ? undefined : openReport}
-      parts={parts}
     />
   )
 }
@@ -150,16 +146,14 @@ function BundleBody({
 function Body({
   item,
   loaded,
-  retry,
-  parts
+  retry
 }: {
   item: InboxListRow
   loaded: Loaded | null
   retry: () => void
-  parts: PartSwitches | null
 }): React.JSX.Element | null {
   if (item.details) {
-    return <BundleBody item={item} loaded={loaded} retry={retry} parts={parts} />
+    return <BundleBody item={item} loaded={loaded} retry={retry} />
   }
   return (
     <div className="glr glr-body min-w-0">
@@ -213,13 +207,7 @@ function AllNone({ keys, off }: { keys: string[]; off: ReadonlySet<string> }): R
 
 // The card's Details as a panel of its own: a bar (arrow, "Details", summary chips, Show or Hide) that is the
 // toggle, and the Details below it when open.
-export function CardDetails({
-  item,
-  parts
-}: {
-  item: InboxListRow
-  parts: PartSwitches | null
-}): React.JSX.Element | null {
+export function CardDetails({ item }: { item: InboxListRow }): React.JSX.Element | null {
   const host = usePilotHost()
   // Open state by hostedKey too, so another machine's card with the same id keeps its own.
   const openKey = hostedKey(host, item.id)
@@ -251,7 +239,7 @@ export function CardDetails({
         {open && keys.length > 0 ? <AllNone keys={keys} off={off} /> : null}
       </div>
       <CollapsibleContent className="min-w-0 border-t border-border p-3">
-        <Body item={item} loaded={loaded} retry={retry} parts={parts} />
+        <Body item={item} loaded={loaded} retry={retry} />
       </CollapsibleContent>
     </Collapsible>
   )

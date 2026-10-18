@@ -9,17 +9,11 @@ export const QUESTION_TYPES: ReadonlySet<InboxType> = new Set(['question', 'flag
 export const START_RUN_ONLY =
   'Answer Approve or Skip: this card only starts its run or leaves it unstarted.'
 
-const LEAVE_OUT = /^(?:approve except|keep):\s*(.+)$/
-// Unicode-aware like Python's \w.
-const PART_NOTE = /(?:^|;)\s*(?:revise:\s*)?part\s+[\p{L}\p{N}_.-]+\s*:/u
-
 export type RoutableAnswer = {
   type: InboxType
   action: string | null
   // The card's action is one Pilot's catalog can run (apply.py: it has a Run: line).
   runnable: boolean
-  // { "<part id>": "<label>" }, in the card's order (ids that are plain integers sort numerically).
-  parts: Record<string, string>
   text: string
   // The 0-based option the answer picked, when it picked one.
   option?: number | null
@@ -29,7 +23,7 @@ export type RoutableAnswer = {
 
 export type Route =
   | { kind: 'tick'; outcome: 'kept' | 'skipped' }
-  | { kind: 'script'; leaveOut: string[] }
+  | { kind: 'script' }
   | { kind: 'agent'; revise: boolean }
   | { kind: 'reask'; reason: string }
 
@@ -41,33 +35,6 @@ export function answerWord(text: string): string {
     .join(' ')
     .toLowerCase()
     .replace(/[.!]+$/, '')
-}
-
-// apply.py resolve: each ref (a part id, an MR number or a branch word) must name exactly one part.
-export function resolveParts(parts: Record<string, string>, refs: string): string[] | null {
-  const entries = Object.entries(parts)
-  const found: string[] = []
-  const named = refs
-    .trim()
-    .split(/[,\s]+/)
-    .filter(Boolean)
-  // Deliberately unlike apply.py: refs that are only punctuation ("keep: ,") name nothing, so the answer
-  // is a revision, never a full approval.
-  if (named.length === 0) {
-    return null
-  }
-  for (const ref of named) {
-    const wanted = ref.toLowerCase()
-    const match = entries.filter(
-      ([id, label]) =>
-        id.toLowerCase() === wanted || label.toLowerCase().split(/\s+/).includes(wanted)
-    )
-    if (match.length !== 1) {
-      return null
-    }
-    found.push(match[0][0])
-  }
-  return found
 }
 
 const START_NOTES = /^(?:approve|yes|ok|do it|start):\s*(\S.*)$/i
@@ -100,7 +67,7 @@ function routeStartRun(
     word === 'start' ||
     startNotes(text) !== ''
   ) {
-    return { kind: 'script', leaveOut: [] }
+    return { kind: 'script' }
   }
   if (picked || SKIP.has(word)) {
     return { kind: 'tick', outcome: 'skipped' }
@@ -116,19 +83,7 @@ function routeAction(answer: RoutableAnswer, word: string): Route {
     return { kind: 'agent', revise: false }
   }
   if (APPROVE.has(word)) {
-    return { kind: 'script', leaveOut: [] }
-  }
-  const leaveOut = LEAVE_OUT.exec(word)
-  const partIds = Object.keys(answer.parts)
-  if (partIds.length > 0 && leaveOut && !PART_NOTE.test(word)) {
-    const ids = resolveParts(answer.parts, leaveOut[1])
-    if (ids === null) {
-      return { kind: 'agent', revise: true }
-    }
-    if (partIds.every((id) => ids.includes(id))) {
-      return { kind: 'tick', outcome: 'skipped' }
-    }
-    return { kind: 'script', leaveOut: ids }
+    return { kind: 'script' }
   }
   return { kind: 'agent', revise: true }
 }

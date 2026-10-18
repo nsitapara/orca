@@ -13,7 +13,6 @@ export const PILOT_SQLITE_RUNTIME_INCLUDE = [
   'src/packages/pilot/src/main/run/engine-wiring.test.ts',
   'src/packages/pilot/src/main/run/shell-step.test.ts',
   'src/packages/pilot/src/main/rpc/methods.test.ts',
-  'src/packages/pilot/src/main/rpc/methods-import.test.ts',
   'src/packages/pilot/src/main/rpc/handlers.test.ts',
   'src/packages/pilot/src/main/pilot-services.test.ts',
   'src/packages/pilot/src/main/answers/save.test.ts',
@@ -31,7 +30,6 @@ export const PILOT_SQLITE_RUNTIME_INCLUDE = [
   'src/packages/pilot/src/main/run/ask-first.test.ts',
   'src/packages/pilot/src/main/actions/start-run-entry.test.ts',
   'src/packages/pilot/src/main/rpc/methods-actions.test.ts',
-  'src/packages/pilot/scripts/seed-handled-from-sweep.test.ts',
   'src/packages/pilot/scripts/import-orca-settings.test.ts',
   'src/packages/pilot/test/parity/05-fix-failed-ci.parity.test.ts',
   'src/packages/pilot/test/parity/merge-dev.test.ts',
@@ -43,7 +41,6 @@ export const PILOT_SQLITE_RUNTIME_INCLUDE = [
   'src/packages/pilot/test/parity/12-apply-answers.parity.test.ts',
   'src/packages/pilot/test/parity/03-review-branch-code.parity.test.ts',
   'src/packages/pilot/test/parity/03-review-branch-code-steps.parity.test.ts',
-  'src/packages/pilot/src/main/importer/sweep-state/ui-qa-overnight.test.ts',
   'src/packages/pilot/test/parity/04-ui-qa-overnight.parity.test.ts',
   'src/packages/pilot/test/parity/04-ui-qa-overnight-steps.parity.test.ts'
 ]

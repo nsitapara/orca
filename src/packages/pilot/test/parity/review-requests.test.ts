@@ -244,8 +244,7 @@ describe('09 · Prepare reviews requested of me: the definition', () => {
       else: { agent: 'claude', skill: 'review-mr', mode: 'answers' }
     })
     // prepare records guide=written, which the guide step's `when` reads; the guide step posts the guide card. answers
-    // declares guide_card: a follow-up writes the next version itself, and an approved Prepare card imported from the
-    // vault runs prepare.md from its step 2 inside the answer run, whose `pilot run output guide_card=…` lands there.
+    // declares guide_card: a follow-up writes the next version itself and records it with `pilot run output guide_card=…`.
     expect([modeOutputs('review-mr', 'prepare'), modeOutputs('review-mr', 'answers')]).toEqual([
       ['outcome', 'guide'],
       ['outcome', 'item_status', 'reply', 'guide_card']
@@ -255,10 +254,7 @@ describe('09 · Prepare reviews requested of me: the definition', () => {
     )
     const answers = modeText('review-mr', 'answers')
     expect(answers).toContain('item_status=stale')
-    expect(answers).toContain('An approved Prepare card (imported from the vault)')
-    expect(answers).toContain(
-      'Follow `~/.agents/skills/review-mr/modes/prepare.md` for !<iid> from its step 2'
-    )
+    expect(answers).toContain('pilot run output guide_card=<data.guide_card>')
   })
 
   // What the declaration buys: Pilot takes guide_card from an answers-mode run (read from the skill's real mode

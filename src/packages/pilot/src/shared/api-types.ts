@@ -221,10 +221,6 @@ export type InboxItemRow = {
   // How the work an answer started ended, and what was said back under the card (contract §10, G6).
   outcome: string | null
   replies: InboxReply[]
-  // Named parts of a card that can be approved or left out one by one (`approve except:` / `keep:`).
-  parts: Record<string, string>
-  // The two labels of a card's on/off switch (on first), empty when it has none.
-  switchWords: string[]
   source: 'engine' | 'import'
   vaultRef: string | null
   // Only on the inbox list: what the card's item is called (its run's or tick's label, or the Details MR row).
@@ -359,6 +355,5 @@ export type {
 } from './inbox-types'
 export * from './api-types-spend'
 export * from './api-types-timeline'
-export * from './api-types-import'
 export * from './api-types-handover'
 export * from './api-types-runs'

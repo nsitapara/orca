@@ -155,7 +155,6 @@ const PUSH = {
   action: 'push',
   actionArgs: { argv: ['/wt', 'b', 'a', 'o'] }
 }
-const PARTS = { ...PUSH, parts: { x: 'Part x', y: 'Part y' } }
 const START = {
   type: 'action',
   title: 'Start?',
@@ -173,7 +172,6 @@ describe('who may answer (caller kind x card)', () => {
   it.each<[string, string | null, Record<string, unknown>, string, string | null]>([
     ['desktop approves an action', 'desktop', PUSH, 'approve', null],
     ['desktop approves an ask-first card', 'desktop', START, 'Approve', null],
-    ['desktop approves except a part', 'desktop', PARTS, 'approve except: x', null],
     ['desktop skips', 'desktop', PUSH, 'skip', null],
     ['desktop answers a question', 'desktop', QUESTION, 'A', null],
     ['local-cli approves an action', 'local-cli', PUSH, 'approve', LOCAL_CLI_NO_ANSWER],
@@ -188,13 +186,6 @@ describe('who may answer (caller kind x card)', () => {
       'paired-device',
       START,
       'approve',
-      APPROVE_ON_DESKTOP
-    ],
-    [
-      'paired device approves except a part',
-      'paired-device',
-      PARTS,
-      'approve except: x',
       APPROVE_ON_DESKTOP
     ],
     ['paired device skips an action', 'paired-device', PUSH, 'skip', null],

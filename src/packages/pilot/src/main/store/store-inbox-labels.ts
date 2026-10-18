@@ -18,7 +18,7 @@ export function fillSummaries(db: Database): void {
     try {
       const ref = JSON.parse(row.r) as DetailsRef
       const snap = JSON.parse(row.s) as DetailsSnapshot
-      const summary = summaryOf(snap.bundle, snap.texts, ref.drafted)
+      const summary = summaryOf(snap.bundle, ref.drafted)
       db.prepare('UPDATE inbox_items SET details_ref_json = ? WHERE id = ?').run(
         JSON.stringify({ ...ref, summary, subject: subjectOf(snap.bundle) ?? '' }),
         row.id

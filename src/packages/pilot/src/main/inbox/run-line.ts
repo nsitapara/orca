@@ -2,11 +2,10 @@ import type { InboxItemRow } from '../../shared/api-types'
 import type { RunLine } from '../../shared/inbox-types'
 import { approvedArgs } from '../actions/powers'
 import type { ActionCatalog } from '../actions/types'
-import { routeOf } from '../answers/queue-view'
 
 // An action card's Run line: what its Approve runs, written by Pilot from the stored card version the
 // digest binds, never from the agent's words. The args are powers.ts approvedArgs (what cardToRun runs: the
-// parts left out applied, the write id pinned), and a pilotcli entry's line is its command() for this card, built
+// write id pinned), and a pilotcli entry's line is its command() for this card, built
 // by the code its run() spawns with. The text is printable ASCII only: anything else (bidi controls, zero-width
 // and other invisible or control characters, lookalike letters) shows as an escape, never raw.
 
@@ -57,12 +56,6 @@ function asciiJson(value: unknown): string {
   return visible(JSON.stringify(value))
 }
 
-// The parts a saved approval leaves out ("approve except: …"); none before it is answered.
-function leftOutOf(catalog: ActionCatalog, card: InboxItemRow): string[] {
-  const route = routeOf(card, catalog)
-  return route.kind === 'script' ? route.leaveOut : []
-}
-
 function cantRun(card: InboxItemRow, why: string): RunLine {
   return { digest: card.digest, text: `Approve can't run: ${visible(why)}` }
 }
@@ -79,10 +72,7 @@ export function cardRunLine(catalog: ActionCatalog, card: InboxItemRow): RunLine
   if (bad) {
     return cantRun(card, bad)
   }
-  const approved = approvedArgs(entry, card, leftOutOf(catalog, card))
-  if ('problem' in approved) {
-    return cantRun(card, approved.problem)
-  }
+  const approved = approvedArgs(entry, card)
   const command =
     entry.command?.(approved.args, { runId: card.runId, inboxItemId: card.id }) ?? null
   const text = command

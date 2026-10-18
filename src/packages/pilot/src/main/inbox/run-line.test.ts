@@ -67,8 +67,6 @@ function card(over: Partial<InboxItemRow>): InboxItemRow {
     details: null,
     action: 'push',
     actionArgs: { argv: ['/wt/web-1493', 'web-1493-a', HEAD, BASE] },
-    parts: {},
-    switchWords: [],
     digest: 'd1',
     version: 1,
     status: 'open',
@@ -98,22 +96,6 @@ describe("an action card's Run line", () => {
     await entry.run(item.actionArgs!, { dryRun: false, runId: 'run-1' })
     const ran = [spawned[0].program, ...spawned[0].args]
     expect(line?.text).toBe(ran.map(shellWord).join(' '))
-  })
-
-  it("says Approve can't run when it leaves parts out, as the approval refuses it", () => {
-    const { catalog: c } = catalog()
-    const item = card({
-      parts: { a: 'Nit on line 3', b: 'Rename' },
-      answer: {
-        option: null,
-        text: 'approve except: a',
-        digest: 'd1',
-        via: 'page',
-        callerKind: 'desktop'
-      },
-      status: 'answered'
-    })
-    expect(cardRunLine(c, item)?.text).toBe("Approve can't run: push can't leave parts out")
   })
 
   it("shows a mark_ready card's write, in the folder the card's own action acts in", () => {
@@ -162,8 +144,7 @@ describe("an action card's Run line", () => {
     const { catalog: c } = catalog()
     const item = card({ action: 'linear_comment', actionArgs: { issue: 'WEB-1', body: 'Hi' } })
     const shown = JSON.parse(cardRunLine(c, item)!.text.slice('linear_comment '.length))
-    const approved = approvedArgs(c.get('linear_comment')!, item, [])
-    expect(shown).toEqual('args' in approved ? approved.args : null)
+    expect(shown).toEqual(approvedArgs(c.get('linear_comment')!, item).args)
     expect(shown.write_id).toMatch(/^[0-9a-f-]{36}$/)
   })
 

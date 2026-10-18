@@ -4,25 +4,21 @@ import { DiffBlock } from './diff-block'
 import { DetailsStyle } from './details-css'
 import { ScreensBlockView, ShotsBlockView } from './media'
 import { ReportBlock } from './ReportBlock'
-import { ReviewBlock, type PartSwitches } from './ReviewBlock'
+import { ReviewBlock } from './ReviewBlock'
 import { SectionBar } from './SectionBar'
 import { useOffSections } from './section-filter'
 import { sectionKey, sectionsOf } from './sections'
-
-export type { PartSwitches }
 
 function BlockView({
   block,
   snapshot,
   loadImage,
-  openReport,
-  parts
+  openReport
 }: {
   block: DetailsBlock
   snapshot: DetailsSnapshot
   loadImage: (file: string) => Promise<string>
   openReport?: (file: string) => Promise<void>
-  parts: PartSwitches | null
 }): React.JSX.Element | null {
   switch (block.type) {
     case 'facts':
@@ -47,7 +43,7 @@ function BlockView({
     case 'missing':
       return <MissingBlock block={block} />
     case 'review':
-      return <ReviewBlock block={block} texts={snapshot.texts} parts={parts} />
+      return <ReviewBlock block={block} texts={snapshot.texts} />
     case 'report':
       return <ReportBlock block={block} open={openReport} />
   }
@@ -58,14 +54,12 @@ function BlockView({
 export function DetailsView({
   snapshot,
   loadImage,
-  openReport,
-  parts
+  openReport
 }: {
   snapshot: DetailsSnapshot
   loadImage: (file: string) => Promise<string>
   // Opens a report block's file outside Pilot; without it a report shows its name only.
   openReport?: (file: string) => Promise<void>
-  parts: PartSwitches | null
 }): React.JSX.Element {
   const off = useOffSections()
   const sections = sectionsOf(snapshot.bundle, snapshot.texts)
@@ -93,7 +87,6 @@ export function DetailsView({
           snapshot={snapshot}
           loadImage={loadImage}
           openReport={openReport}
-          parts={parts}
         />
       ))}
     </div>

@@ -8,14 +8,12 @@ export const DETAILS_EITHER =
   'Give Details as markdown (--details-file) or as a bundle (--details-bundle), not both'
 export const DETAILS_LIMITS = {
   bundleBytes: 2_000_000,
-  reviewBytes: 1_000_000,
   imageBytes: 8_000_000,
   blocks: 40,
   listItems: 60,
   diffFiles: 60,
   diffRows: 4000,
   codeRows: 400,
-  reviews: 2,
   refChars: 1024
 } as const
 // The images a bundle may name, by extension (answers.py IMAGE_TYPES).
@@ -70,7 +68,7 @@ export type ArtifactProvenance = {
 }
 export type ArtifactFile = {
   ref: string
-  role: 'patch' | 'review' | 'before' | 'after' | 'screenshot' | 'check' | 'report'
+  role: 'patch' | 'before' | 'after' | 'screenshot' | 'check' | 'report'
   sha256: string
   bytes: number
   // The patch's files, read from its bytes: rename source (null unless renamed), counts, and the hash of the rows.
@@ -122,6 +120,7 @@ export type MissingBlock = Titled & {
   slot?: string | null
   base?: string | null
 }
+// Job 09's old Post cards' review (inlined in the snapshot as `texts[file]`): read only. A new bundle can't hold one.
 export type ReviewBlock = Titled & { type: 'review'; file: string }
 // A page to read outside Pilot (job 09's review guide): an .html file in the Automations folder, opened by Open.
 export type ReportBlock = Titled & { type: 'report'; file: string }
@@ -145,7 +144,7 @@ export type DetailsBundle = {
   provenance?: ArtifactProvenance
 }
 
-// A review file (review-requests/preview.py): the comments as GitLab will show them.
+// A review file (review-requests/preview.py): the comments as GitLab would show them. Read only, as ReviewBlock.
 export type ReviewPart = {
   id: string
   hash?: string
@@ -170,7 +169,7 @@ export type ReviewFile = {
 }
 
 // What a card carries (the list's light ref): the bundle's real path and SHA-256, the SHA-256 of each
-// review file inlined into the snapshot, and whether it holds a drafted patch (and at which head).
+// review file inlined into the snapshot (none since review blocks were retired), and whether it holds a drafted patch (and at which head).
 export type DetailsRef = {
   path: string
   sha256: string

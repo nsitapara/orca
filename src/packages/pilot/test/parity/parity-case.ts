@@ -22,7 +22,7 @@ export type ParityJob = {
   // The files the new side reads: the automation's YAML and people.yaml.
   files: string[]
   table: VerdictTable
-  // Runs a custom field's script for real; 09's fields call the skill's own pure `sweep.py field`.
+  // Answers every script the same way, whatever the case: 06's inline due check.
   runScript?: ScriptRunner
   // The old side's own answers, for a script the new side can only run against the case: 13's worktree check (a decision
   // word `script_check` (key, reason: '' = passed) is no verdict, only the answer this returns for that key) and 09's

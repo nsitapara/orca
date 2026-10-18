@@ -15,11 +15,9 @@ export type NewInboxItem = Omit<
   | 'updatedAt'
   | 'outcome'
   | 'replies'
-  | 'parts'
-  | 'switchWords'
   | 'details'
 > &
-  Partial<Pick<InboxItemRow, 'outcome' | 'replies' | 'parts' | 'switchWords' | 'details'>>
+  Partial<Pick<InboxItemRow, 'outcome' | 'replies' | 'details'>>
 // An edit is a new version of the card, so it always brings the new digest (contract §10).
 export type InboxEdit = Partial<
   Pick<
@@ -33,8 +31,6 @@ export type InboxEdit = Partial<
     | 'details'
     | 'action'
     | 'actionArgs'
-    | 'parts'
-    | 'switchWords'
   >
 > & { digest: string }
 export type InboxFilter = Partial<{
@@ -96,8 +92,6 @@ const EDIT_COLUMNS: Record<keyof InboxEdit, string> = {
   details: 'details_ref_json',
   action: 'action',
   actionArgs: 'action_args_json',
-  parts: 'parts_json',
-  switchWords: 'switch_json',
   digest: 'digest'
 }
 
@@ -114,7 +108,7 @@ function encodeEdit(edit: InboxEdit): [string, unknown][] {
   return Object.entries(edit)
     .filter(([, value]) => value !== undefined)
     .map(([key, value]) => {
-      if (key === 'options' || key === 'parts' || key === 'switchWords') {
+      if (key === 'options') {
         return [key, JSON.stringify(value)]
       }
       if (key === 'actionArgs' || key === 'details') {
@@ -133,8 +127,8 @@ export class InboxStore {
       .prepare(
         `INSERT INTO inbox_items (id, automation_id, run_id, step_idx, item_key, worktree_path, person, type, title,
           context, options_json, suggested, details_md, action, action_args_json, digest, created_at, updated_at,
-          outcome, replies_json, parts_json, switch_json, source, vault_ref, details_ref_json, details_snapshot_json, preparation_json, not_prepared_key)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+          outcome, replies_json, source, vault_ref, details_ref_json, details_snapshot_json, preparation_json, not_prepared_key)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       )
       .run(
         item.id,
@@ -157,8 +151,6 @@ export class InboxStore {
         item.createdAt,
         item.outcome ?? null,
         JSON.stringify(item.replies ?? []),
-        JSON.stringify(item.parts ?? {}),
-        JSON.stringify(item.switchWords ?? []),
         item.source,
         item.vaultRef,
         jsonOrNull(item.details),

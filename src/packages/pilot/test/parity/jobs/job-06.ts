@@ -1,14 +1,15 @@
 import { readFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
-import { mrFeedbackState } from '../../../src/main/importer/sweep-state/mr-feedback'
 import { parseAutomationYaml } from '../../../src/shared/definition/parse'
 import type { AutomationDefinition } from '../../../src/shared/definition/types'
 import { parsePeopleYaml, type PeopleDirectory } from '../../../src/shared/people'
 import type { ScriptRunner } from '../../../src/main/fields/script-runner'
+import type { PilotStore } from '../../../src/main/store/store'
 import type { VerdictTable } from '../compare'
-import { seedByImport } from '../fixture-reader'
+import type { ParityFixture } from '../fixture'
 import type { ParityJob } from '../parity-case'
+import { seedTabSessions } from '../sweep-state'
 
 export const JOB_06 = {
   job: '06',
@@ -61,8 +62,11 @@ export const answerDue: ScriptRunner = async (req) => {
   return { code: 0, stdout: 'nothing waits to be pushed\n', stderr: '', timedOut: false }
 }
 
-// The sweep's open feedback tabs, brought in as import-state would.
-export const seed06 = seedByImport(mrFeedbackState)
+// The sweep kept no handled state (it re-checked every MR's threads each tick), only its feedback tabs: each one a
+// finished imported run whose step names its terminal.
+export function seed06(store: PilotStore, f: ParityFixture): void {
+  seedTabSessions(store, JOB_06.automationId, f, 'mr-feedback')
+}
 
 // The real YAML and people.yaml: parity is about the file that will run.
 export function load06(): { def: AutomationDefinition; people: PeopleDirectory } {

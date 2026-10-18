@@ -90,15 +90,6 @@ describe('loadDetails', () => {
     expect(snapshot.ref.inlined).toEqual({})
   })
 
-  it('inlines a review file the bundle names, and keeps its sha', () => {
-    const f = fixture()
-    rewrite(f, (b) => b.blocks.push(REVIEW))
-    const snapshot = loadDetails(f.root, f.bundle)
-    const text = readFileSync(join(f.dir, 'sample-review.json'), 'utf8')
-    expect(snapshot.texts).toEqual({ 'sample-review.json': text })
-    expect(snapshot.ref.inlined).toEqual({ 'sample-review.json': sha(text) })
-  })
-
   it.each<[string, (f: Fixture) => [string | null, string], string?]>([
     ['a relative path', (f) => [f.root, 'job/b/details/r/F2.json']],
     ['no Automations folder', (f) => [null, f.bundle]],
@@ -199,26 +190,9 @@ describe('loadDetails', () => {
       }
     ],
     [
-      'a review file over 1 MB',
-      (f) => {
-        const review = JSON.parse(readFileSync(join(f.dir, 'sample-review.json'), 'utf8'))
-        review.pad = 'x'.repeat(1_000_001)
-        writeFileSync(join(f.dir, 'sample-review.json'), JSON.stringify(review))
-        rewrite(f, (b) => b.blocks.push(REVIEW))
-        return [f.root, f.bundle]
-      },
-      'sample-review.json'
-    ],
-    [
-      'a review file without its reviewer',
-      (f) => {
-        const review = JSON.parse(readFileSync(join(f.dir, 'sample-review.json'), 'utf8'))
-        delete review.reviewer
-        writeFileSync(join(f.dir, 'sample-review.json'), JSON.stringify(review))
-        rewrite(f, (b) => b.blocks.push(REVIEW))
-        return [f.root, f.bundle]
-      },
-      'reviewer'
+      "a review block (only job 09's old Post cards carried one)",
+      (f) => (rewrite(f, (b) => b.blocks.push(REVIEW)), [f.root, f.bundle]),
+      'unknown type "review"'
     ],
     [
       'a report that is not an .html file',
@@ -241,10 +215,6 @@ describe('loadDetails', () => {
         return [f.root, f.bundle]
       },
       'guide.html'
-    ],
-    [
-      'three review blocks',
-      (f) => (rewrite(f, (b) => b.blocks.push(REVIEW, REVIEW, REVIEW)), [f.root, f.bundle])
     ]
   ])('refuses %s', (_name, arrange, names) => {
     const f = fixture()

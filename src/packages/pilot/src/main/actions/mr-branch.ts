@@ -12,8 +12,8 @@ export type StoreDeps = {
 }
 export type MrBranchDeps = StoreDeps & { exists(path: string): boolean }
 
-// The jobs whose items name an MR with its branch: mark-ready.py's 03–06, and M02's list of my MRs.
-const MR_JOBS: ReadonlySet<string> = new Set(['03', '04', '05', '06', 'M02'])
+// The jobs whose items name an MR with its branch: mark-ready.py's 03–06.
+const MR_JOBS: ReadonlySet<string> = new Set(['03', '04', '05', '06'])
 // The worktree jobs, whose items say which branch each worktree is on.
 const WORKTREE_JOBS: ReadonlySet<string> = new Set(['03', '04'])
 // Each automation's newest ticks read, so one failed or empty tick doesn't hide its items.
@@ -50,7 +50,7 @@ function callerRunId(store: PilotStore, caller: ActionCaller): string | null {
   return card ? card.runId : caller.runId
 }
 
-// MR !iid's source branch as Pilot's store knows it: the newest item of jobs 03–06 or M02 that names the MR, else the
+// MR !iid's source branch as Pilot's store knows it: the newest item of jobs 03–06 that names the MR, else the
 // asking card's (or run's) own item when it names the MR. Null when the store doesn't say.
 export function storeBranchOf(deps: StoreDeps, iid: number, caller: ActionCaller): string | null {
   for (const fields of recentItems(deps, MR_JOBS)) {

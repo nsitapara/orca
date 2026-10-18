@@ -1,10 +1,10 @@
 import type { Pilotcli, PilotcliReply } from '../envs/pilotcli'
-import { RUN_TIMEOUT_MS } from './act-bridge'
 import { noFolder } from './caller-folder'
 import {
   actionDone,
   actionFailed,
   callerOf,
+  RUN_TIMEOUT_MS,
   type ActionCaller,
   type ActionEntry,
   type ActionResult
@@ -132,7 +132,7 @@ function sourceBranch(reply: PilotcliReply): string | null {
 // The catalog's mark_ready (power mark_ready), mark-ready.py through pilotcli. It learns the MR's branch (Pilot's store,
 // else pilotcli get-mr) and waits while that branch has open cards from jobs 03–06; with no branch it fails closed.
 // Then check-mr ready=true and update-mr draft=false at the pinned head, from the worktree on the branch when there is
-// one, else the card's folder (caller-folder.ts). No refresh, as in Python: a stale card closes.
+// one, else the card's folder (caller-folder.ts). A stale card closes.
 export function markReadyEntry(deps: {
   pilotcli: Pilotcli
   binary: () => string | null

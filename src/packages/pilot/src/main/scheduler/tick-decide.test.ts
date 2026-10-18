@@ -454,7 +454,8 @@ describe('decideTickItems: where.ids_from', () => {
 
 describe('handledStates', () => {
   // Seeded and baselined keys (run_id NULL) never become retryable, whatever their row says, except an old sweep's
-  // failure the importer brought in with its time (04's failed.json): it waits retry_after_failure from that time.
+  // failure the retired sweep-state import brought in with its time (04's failed.json): it waits retry_after_failure
+  // from that time.
   it("reads each key's status, and a key no run holds as started unless it is an imported failure", () => {
     const row = (
       onceKey: string,

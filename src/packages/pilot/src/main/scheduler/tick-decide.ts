@@ -74,8 +74,8 @@ function messageOf(error: unknown): string {
 }
 
 // retry_after_failure's input. Only a run settles a key (setHandledStatus), so a key no run holds
-// (seeded by the importer, or baselined) reads as started whatever its row says: never retryable. The
-// one exception is an old sweep's failure the importer brought in with its time (04's failed.json): it
+// (baselined, or brought in by the retired sweep-state import) reads as started whatever its row says: never
+// retryable. The one exception is an old sweep's failure that import brought in with its time (04's failed.json): it
 // is due again retry_after_failure after that failure, as the sweep would have retried it.
 function importedFailure(r: HandledRow): boolean {
   return r.runId === null && r.status === 'failed' && r.failedAt !== null

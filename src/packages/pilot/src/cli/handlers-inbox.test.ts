@@ -99,33 +99,14 @@ describe('pilot inbox add', () => {
     )
   })
 
-  it('sends --part, --switch (on then off) and --worktree', async () => {
+  it('sends --worktree', async () => {
     insideStep()
-    const { context, call } = contextFor(
-      [
-        ...CARD,
-        '--part',
-        'a=First fix',
-        '--part',
-        'b=Second fix',
-        '--switch',
-        'Post',
-        '--switch',
-        'Leave out',
-        '--worktree',
-        '/wt/1493'
-      ],
-      ADDED
-    )
+    const { context, call } = contextFor([...CARD, '--worktree', '/wt/1493'], ADDED)
     vi.spyOn(console, 'log').mockImplementation(() => {})
     await INBOX_HANDLERS['inbox add'](context)
     expect(call).toHaveBeenCalledWith(
       'pilot.inbox.add',
-      expect.objectContaining({
-        parts: { a: 'First fix', b: 'Second fix' },
-        switchWords: ['Post', 'Leave out'],
-        worktreePath: '/wt/1493'
-      })
+      expect.objectContaining({ worktreePath: '/wt/1493' })
     )
   })
 
@@ -222,9 +203,7 @@ describe('pilot inbox add', () => {
       [...CARD, '--action', 'push', '--args-json', '[1]'],
       '--args-json must be a JSON object'
     ],
-    ['an option without a label', [...CARD, '--option', ' — meaning'], 'has no label'],
-    ['a --part without a label', [...CARD, '--part', 'a'], '--part "a" isn\'t <id>=<label>'],
-    ['one --switch word', [...CARD, '--switch', 'Post'], 'Give --switch twice']
+    ['an option without a label', [...CARD, '--option', ' — meaning'], 'has no label']
   ])('refuses %s before calling Pilot', async (_n, argv, message) => {
     insideStep()
     const { context, call } = contextFor(argv, ADDED)
@@ -299,52 +278,6 @@ describe('pilot inbox show', () => {
   })
 })
 
-describe('pilot inbox set-details', () => {
-  const SET = ['inbox', 'set-details', '--id', 'in_x', '--bundle', 'rel/F2.json']
-
-  it("sends the bundle's absolute path, the head and the step the call runs in", async () => {
-    insideStep()
-    vi.stubEnv('ORCA_TERMINAL_HANDLE', 'term-A')
-    const { context, call } = contextFor([...SET, '--head', '1234abcd'], {
-      id: 'in_x',
-      version: 3,
-      changed: true,
-      cleared: false
-    })
-    vi.spyOn(console, 'log').mockImplementation(() => {})
-    await INBOX_HANDLERS['inbox set-details'](context)
-    expect(call).toHaveBeenCalledWith('pilot.inbox.setDetails', {
-      id: 'in_x',
-      bundlePath: resolve(process.cwd(), 'rel/F2.json'),
-      head: '1234abcd',
-      terminal: 'term-A',
-      runId: 'run-1',
-      stepIdx: 2
-    })
-  })
-
-  it.each([
-    [
-      { changed: true, cleared: false },
-      `Attached ${resolve(process.cwd(), 'rel/F2.json')} to in_x (version 3)`
-    ],
-    [
-      { changed: true, cleared: true },
-      `Attached ${resolve(process.cwd(), 'rel/F2.json')} to in_x (version 3); your answer was cleared`
-    ],
-    [
-      { changed: false, cleared: false },
-      `No change: in_x already shows ${resolve(process.cwd(), 'rel/F2.json')}`
-    ]
-  ])('says what it did (%j)', async (outcome, line) => {
-    outsideRuns()
-    const { context } = contextFor(SET, { id: 'in_x', version: 3, ...outcome })
-    const log = vi.spyOn(console, 'log').mockImplementation(() => {})
-    await INBOX_HANDLERS['inbox set-details'](context)
-    expect(log).toHaveBeenCalledWith(line)
-  })
-})
-
 describe('pilot inbox list', () => {
   it('asks for one person and prints each card with its numbered options', async () => {
     const item: InboxItemRow = {
@@ -377,8 +310,6 @@ describe('pilot inbox list', () => {
       updatedAt: 1,
       outcome: null,
       replies: [],
-      parts: {},
-      switchWords: [],
       source: 'engine',
       vaultRef: null
     }

@@ -1,13 +1,11 @@
 import { join } from 'node:path'
-import { applyImport } from '../../../src/main/importer/sweep-state/apply'
-import { reviewBranchCodeMapper } from '../../../src/main/importer/sweep-state/review-branch-code'
 import type { PilotStore } from '../../../src/main/store/store'
 import type { VerdictTable } from '../compare'
 import { stdoutOf, type ParityFixture } from '../fixture'
-import { fixtureStateReader } from '../fixture-reader'
 import { seedRunning } from '../overrides'
 import type { ParityJob } from '../parity-case'
 import { loadPortedAutomation, portedAutomationsDir } from '../ported'
+import { listedWorktrees, seedSeenHeads } from '../sweep-state'
 import { withWorktrees } from '../worktree-fixture'
 
 // The old side's code is review-cycles/loop.py (no sweep.py: it had no sweep.py).
@@ -63,12 +61,11 @@ function tabsOf(f: ParityFixture): [string, string][] {
   return tabs.flatMap((t) => Object.entries(t))
 }
 
-// The sweep's state as Pilot keeps it: the mapper's plan applied to the case (each reviewed head is a done
-// `<worktree id>@<sha>` key, so the marker starts there). A cycle the sweep left running there, an agent's tab mid-turn
-// or a parked hand-off, is a run of this automation still active in that worktree.
+// The sweep's state as Pilot keeps it: each head seen.json names is a done `<worktree id>@<sha>` key, so the marker
+// starts there. A cycle the sweep left running there, an agent's tab mid-turn or a parked hand-off, is a run of this
+// automation still active in that worktree.
 export function seed03(store: PilotStore, f: ParityFixture): void {
-  const read = fixtureStateReader(f)
-  applyImport(store, reviewBranchCodeMapper.plan(read), f.now)
+  seedSeenHeads(store, JOB_03.automationId, f, `${JOB_03.loop}/seen.json`)
   const cycles = (f.state[`${JOB_03.loop}/cycles.json`] ?? {}) as Record<
     string,
     { pending?: unknown }
@@ -81,8 +78,7 @@ export function seed03(store: PilotStore, f: ParityFixture): void {
       .filter(([, c]) => c.pending)
       .map(([path]) => path)
   ])
-  const runs = read
-    .worktrees()
+  const runs = listedWorktrees(f)
     .filter((w) => held.has(w.path))
     .map((w) => ({
       id: `run-${w.id}`,

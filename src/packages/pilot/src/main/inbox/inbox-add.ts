@@ -165,8 +165,7 @@ function updateOpen(
   // A card that keeps its bundle (added again without one) keeps that bundle's snapshot too.
   const keepSnapshot = snapshot === null && card.details !== null
   const written = deps.store.transaction(() => {
-    // No change clears an answer that may be being carried out (set-details refuses the same), unless
-    // the caller is that answer run.
+    // No change clears an answer that may be being carried out, unless the caller is that answer run.
     if (answerLocked(deps.store, deps.store.inbox.get(open.id) ?? open, at, callerRunId)) {
       return false
     }

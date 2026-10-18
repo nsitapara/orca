@@ -17,8 +17,8 @@ describe('a Details bundle through the CLI, the store and the details RPCs', () 
     vi.restoreAllMocks()
   })
 
-  it('round-trips: add, list, details, image, then set-details from a run step', async () => {
-    // An add with a bundle needs the same scope as set-details (ruling 4): a step of the card's automation.
+  it('round-trips: add, list, details, image, then a re-add with a new bundle from a run step', async () => {
+    // An add with a bundle needs a step of the card's automation (ruling 4).
     vi.stubEnv('PILOT_RUN_ID', 'run-1')
     vi.stubEnv('PILOT_STEP_IDX', '0')
     vi.stubEnv('PILOT_AUTOMATION_ID', '')
@@ -69,7 +69,20 @@ describe('a Details bundle through the CLI, the store and the details RPCs', () 
     rewriteBundle(changed, (b) => {
       b.blocks[0].rows = [['Applies', 'a different fact']]
     })
-    await cli(['inbox', 'set-details', '--id', id, '--bundle', changed])
+    await cli([
+      'inbox',
+      'add',
+      '--type',
+      'question',
+      '--title',
+      'Keep the guard?',
+      '--details-bundle',
+      changed,
+      '--automation',
+      'ci',
+      '--item',
+      'mr:1'
+    ])
     const second = rpc('pilot.inbox.details', { id }) as {
       digest: string
       snapshot: {

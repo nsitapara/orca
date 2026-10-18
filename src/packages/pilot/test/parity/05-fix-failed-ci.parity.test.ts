@@ -2,11 +2,8 @@ import { mkdtempSync, readdirSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { expect, it } from 'vitest'
-import { fixFailedCiState } from '../../src/main/importer/sweep-state/fix-failed-ci'
-import { compareDecisions, formatMismatches } from './compare'
 import { loadFixture } from './fixture'
-import { seedByImport } from './fixture-reader'
-import { JOB_05, PARITY_05, VERDICTS_05, load05 } from './jobs/job-05'
+import { JOB_05, PARITY_05, load05, seed05 } from './jobs/job-05'
 import { frozenOldPlan, PARITY_DIR } from './old-side'
 import { caseFile, dryTick, failedCheck } from './ported'
 import { describeParity, expectParity, parityReport } from './parity-case'
@@ -54,28 +51,21 @@ describeParity(PARITY_05, '05 · Fix failed CI: Pilot decides each MR as ci-fix-
   })
 })
 
-const IMPORTED = '2026-10-10-1210'
+const RECORDED = '2026-10-10-1210'
 
-// Task 38b: the same cases with the sweep's state brought in through `fixFailedCiState`, as `import-state --apply` does.
-describeParity(PARITY_05, "05 · Fix failed CI v2: the sweep's state, imported", () => {
+// Task 38b: the same cases with the sweep's state in the store (seed05: its handled.json keys and its tabs).
+describeParity(PARITY_05, "05 · Fix failed CI v2: with the sweep's state", () => {
   const { def, people } = load05()
   const decide = (name: string) =>
     dryTick({
       definition: def,
       people,
       fixture: loadFixture(caseFile(JOB_05.job, name)),
-      seed: seedByImport(fixFailedCiState)
+      seed: seed05
     })
 
-  it('decides as the sweep did with the state imported through the mapper', async () => {
-    const neu = await decide(IMPORTED)
-    expect(
-      formatMismatches(compareDecisions(frozenOldPlan(caseFile('05', IMPORTED)), neu, VERDICTS_05))
-    ).toBe('')
-  })
-
-  it("never retries a pipeline the sweep's handled.json names, once imported", async () => {
-    const neu = await decide(IMPORTED)
+  it("never retries a pipeline the sweep's handled.json names", async () => {
+    const neu = await decide(RECORDED)
     expect(neu.find((d) => d.key === 'mr:1587')).toMatchObject({
       verdict: 'notdue',
       onceKey: '1587:2933991087'
@@ -83,7 +73,7 @@ describeParity(PARITY_05, "05 · Fix failed CI v2: the sweep's state, imported",
   })
 
   it('starts the first three MRs the sweep started, skips with the check it named, and caps the fourth', async () => {
-    const neu = await decide(IMPORTED)
+    const neu = await decide(RECORDED)
     expect(neu.filter((d) => d.verdict === 'started').map((d) => d.key)).toEqual([
       'mr:1561',
       'mr:1574',

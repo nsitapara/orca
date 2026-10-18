@@ -150,21 +150,11 @@ export function choicesFor(item: InboxListRow): Choice[] {
 
 // The text a saved answer carries (what apply.py's routing reads), or null while notes are missing.
 export function composeAnswer(
-  item: InboxListRow,
   choice: Choice,
-  notes: string,
-  partsOff: string[]
+  notes: string
 ): { option: number | null; text: string } | null {
   if (choice.notes === 'required' && !notes.trim()) {
     return null
-  }
-  const partCount = Object.keys(item.parts).length
-  if (choice.label === 'Approve' && partCount > 0 && partsOff.length > 0) {
-    if (partsOff.length === partCount) {
-      return { option: null, text: 'skip' }
-    }
-    const keep = (item.switchWords[1] ?? '').toLowerCase() === 'keep'
-    return { option: null, text: `${keep ? 'keep' : 'approve except'}: ${partsOff.join(', ')}` }
   }
   return { option: choice.option, text: choice.text(notes) }
 }

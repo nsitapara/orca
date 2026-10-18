@@ -1,7 +1,11 @@
 import { readFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
-import { reviewRequestsState } from '../../../src/main/importer/sweep-state/review-requests'
+import {
+  addImportedHandled,
+  type ImportedHandled
+} from '../../../src/main/store/__fixtures__/imported-rows'
+import type { PilotStore } from '../../../src/main/store/store'
 import type { ScriptRunner } from '../../../src/main/fields/script-runner'
 import { parseAutomationYaml } from '../../../src/shared/definition/parse'
 import type { AutomationDefinition } from '../../../src/shared/definition/types'
@@ -9,10 +13,10 @@ import { parsePeopleYaml, type PeopleDirectory } from '../../../src/shared/peopl
 import type { VerdictTable } from '../compare'
 import type { ParityFixture } from '../fixture'
 import { miss } from '../fixture-core'
-import { seedByImport } from '../fixture-reader'
 import { frozenOldSide } from '../old-side'
 import { ok } from '../overrides'
 import type { ParityJob } from '../parity-case'
+import { vaultNotes } from '../sweep-state'
 
 export const JOB_09 = {
   job: '09',
@@ -38,8 +42,37 @@ export const VERDICTS_09: VerdictTable = {
   whenOldMissing: []
 }
 
-// The heads the old notes offered, brought in as import-state would.
-export const seed09 = seedByImport(reviewRequestsState)
+const FOLDER = '09 · Prepare reviews requested of me'
+const NOT_CARD_NOTES = new Set([`${FOLDER}.md`, 'Runs.md', 'Closed sessions.md'])
+// vault.ITEM's head: "- [ ] **action** · <summary> — `<location>`"
+const ITEM = /^- \[([ xX])\] \*\*[a-z_]+(?: · [a-z]+)?\*\* · (.+?) — `([^`]*)`/
+const PREPARE = /^Prepare a review of !(\d+)\?$/
+const HEAD = /@([0-9a-f]{8})$/
+
+// The heads the old notes offered: every Prepare card in the job's notes is review-requests' once_per key
+// "<iid>:<head8>", done once ticked and started while open (a ticked one wins), so it is never offered again. Post cards
+// aren't keys.
+export function seed09(store: PilotStore, f: ParityFixture): void {
+  const notes = vaultNotes(f)
+  const keys = new Map<string, ImportedHandled>()
+  const names = Object.keys(notes)
+    .filter((k) => k.startsWith(`${FOLDER}/`) && k.endsWith('.md'))
+    .map((k) => k.slice(FOLDER.length + 1))
+    .filter((name) => !name.includes('/') && !NOT_CARD_NOTES.has(name))
+    .sort()
+  for (const name of names) {
+    for (const line of notes[`${FOLDER}/${name}`].split('\n')) {
+      const item = ITEM.exec(line)
+      const iid = item ? PREPARE.exec(item[2]) : null
+      const head = item ? HEAD.exec(item[3]) : null
+      const onceKey = iid && head ? `${iid[1]}:${head[1]}` : null
+      if (item && onceKey && keys.get(onceKey)?.status !== 'done') {
+        keys.set(onceKey, { onceKey, status: item[1] === ' ' ? 'started' : 'done', at: f.now })
+      }
+    }
+  }
+  addImportedHandled(store, JOB_09.automationId, [...keys.values()])
+}
 
 // The fields' scripts (pilotcli's since milestone 7), pinned as literals: review-requests.test.ts checks the YAML names
 // exactly these.

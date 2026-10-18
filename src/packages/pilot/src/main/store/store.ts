@@ -10,7 +10,6 @@ import type {
 } from '../../shared/api-types'
 import { worktreePathKey } from '../fields/agent-activity'
 import { migrate } from './migrations'
-import { ImportStore } from './store-import'
 import { TimelineStore } from './store-timeline'
 import { RunStore } from './store-runs'
 import { UsageStore } from './store-usage'
@@ -72,7 +71,6 @@ export class PilotStore {
   readonly sessions: AgentSessionStore
   readonly markers: MarkerStore
   readonly advance: AdvanceStore
-  readonly imports: ImportStore
   readonly handovers: HandoverStore
   readonly activity: ActivityStore
   readonly visibility: VisibilityStore
@@ -91,7 +89,6 @@ export class PilotStore {
     this.sessions = new AgentSessionStore(db)
     this.markers = new MarkerStore(db)
     this.advance = new AdvanceStore(db)
-    this.imports = new ImportStore(db)
     this.usage = new UsageStore(db, this.advance)
     this.spend = new SpendStore(db)
     this.handovers = new HandoverStore(db)

@@ -136,7 +136,7 @@ const DRAFTED = {
   draftedBase: 'c'.repeat(40)
 }
 
-describe('R-P5 at add: a push or Post card comes with a preparation request, whoever adds it', () => {
+describe('R-P5 at add: a push card comes with a preparation request, whoever adds it', () => {
   const PUSH = { type: 'action', title: 'Push !1?', action: 'push', actionArgs: { argv: ARGV } }
   it.each<[string, RpcCallerIdentity, object]>([
     ['the desktop', { kind: 'desktop' }, { automationId: 'ci', itemKey: 'mr:1' }],
@@ -200,7 +200,7 @@ describe('R-P5 at approve and apply', () => {
       definitions: inbox.definitions,
       inbox
     }
-    const step = await applyScript({ inbox, attempt }, store.inbox.get(card.id)!, [])
+    const step = await applyScript({ inbox, attempt }, store.inbox.get(card.id)!)
     expect(step).toEqual({ kind: 'reasked' })
     expect(actions.get('push')!.run).not.toHaveBeenCalled()
     expect(store.inbox.get(card.id)?.replies.at(-1)?.text).toBe(NEEDS_EVIDENCE)
