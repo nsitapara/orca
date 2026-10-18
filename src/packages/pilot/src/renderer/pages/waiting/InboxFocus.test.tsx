@@ -25,9 +25,9 @@ const at = (n: number): FocusPlace => ({ key: null, at: n })
 
 function Harness({ onExit, onChoice }: { onExit: () => void; onChoice: (l: string) => void }) {
   const [place, setPlace] = useState(at(1))
+  // InboxPage's root, which the keys are scoped to.
   return (
-    <>
-      <textarea aria-label="notes" />
+    <div className="pilot-inbox">
       <InboxFocus
         cards={cards}
         place={place}
@@ -37,6 +37,7 @@ function Harness({ onExit, onChoice }: { onExit: () => void; onChoice: (l: strin
         renderCard={(c) => (
           <div>
             <h3>current {c.title}</h3>
+            <textarea aria-label="notes" />
             <button data-skip="" data-choice="Skip" onClick={() => onChoice('Skip')}>
               Skip
             </button>
@@ -49,7 +50,7 @@ function Harness({ onExit, onChoice }: { onExit: () => void; onChoice: (l: strin
           </div>
         )}
       />
-    </>
+    </div>
   )
 }
 
@@ -233,10 +234,7 @@ describe('InboxFocus', () => {
           return { target: t, undo: () => t.remove() }
         }
       ],
-      [
-        'the target is a textarea inside the root',
-        () => ({ target: screen.getByLabelText('notes') })
-      ]
+      ["the target is the card's notes box", () => ({ target: screen.getByLabelText('notes') })]
     ]
     it.each(cases)('%s', (_name, arrange) => {
       setup()
