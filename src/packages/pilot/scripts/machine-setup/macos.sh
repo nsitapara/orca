@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Sets up a second Mac (the Mac mini) to run Pilot's packaged desktop app: checks Xcode's tools and
 # Node 24, updates Pilot's checkout, ~/.agents and pilotcli, keeps Pilot's settings in launchd with a
-# LaunchAgent (PILOT_SCHEDULER=pinned with --pinned), builds and installs /Applications/Pilot.app with
+# LaunchAgent (PILOT_SCHEDULER=pinned by default), builds and installs /Applications/Pilot.app with
 # build-mac.mjs, names the machine and prints how to pair it. Safe to re-run; it is also how the Mac is
 # updated. Guide: src/packages/pilot/docs/machine-setup.md.
 set -euo pipefail
@@ -68,8 +68,15 @@ EOF
 mac_ensure_node24() {
   local nvm_sh=${NVM_DIR:-$HOME/.nvm}/nvm.sh brew_node=''
   if [ "$(setup_node_major)" != 24 ] && command -v fnm >/dev/null 2>&1; then
-    eval "$(fnm env --shell bash)"
-    fnm use 24 >/dev/null 2>&1 || true
+    # Not in a dry run: `fnm env` writes a multishell link.
+    if [ "$SETUP_DRY_RUN" = 1 ] && fnm ls 2>/dev/null | grep -q 'v24\.'; then
+      say "  (dry run: fnm has Node 24, which the real run puts on PATH)"
+      return 0
+    fi
+    if [ "$SETUP_DRY_RUN" != 1 ]; then
+      eval "$(fnm env --shell bash)"
+      fnm use 24 >/dev/null 2>&1 || true
+    fi
   fi
   if [ "$(setup_node_major)" != 24 ] && [ -s "$nvm_sh" ]; then
     set +eu

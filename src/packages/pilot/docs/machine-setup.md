@@ -6,16 +6,19 @@ One Pilot window shows the Inbox, Running, Automations and Activity of every pai
 - **A Debian or Ubuntu box**, most likely a headless server, runs Pilot's headless engine (orcad) as a systemd user service.
 - **An Arch box** (Omarchy) runs the same headless engine. Pilot has no Linux desktop app yet (see [Linux desktop app (follow-up)](#linux-desktop-app-follow-up)).
 
-How machines, `runs_on` and pairing behave is in the README's "Pilot across machines" section. The scripts are in `src/packages/pilot/scripts/machine-setup/`. Each one takes `--help` and `--dry-run`, and is safe to re-run.
+How machines, `runs_on` and pairing behave is in the README's "Pilot across machines" section. The scripts are in `src/packages/pilot/scripts/machine-setup/`. Each one takes `--help` and `--dry-run`, and is safe to re-run. A dry run prints every command that would change the machine, runs none of them, and writes nothing.
 
-| Script                    | Runs on        | What it does                                                                                                                                    |
-| ------------------------- | -------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
-| `macos.sh`                | The Mac mini   | Checks Xcode's tools and Node 24, updates the checkouts, keeps Pilot's settings in a LaunchAgent, builds and installs Pilot.app, names the Mac  |
-| `debian.sh`               | Debian, Ubuntu | apt packages, Node 24, the checkouts, then `linux-engine.sh`                                                                                    |
-| `arch.sh`                 | Arch, Omarchy  | pacman packages, Node 24, the checkouts, then `linux-engine.sh`                                                                                 |
-| `linux-engine.sh`         | Either Linux   | Builds orcad, installs it, writes its settings, runs it as `pilot-engine.service`, prints the pairing command. Run it alone to update an engine |
-| `pilotcli-cross-build.sh` | The main Mac   | Builds pilotcli for another machine                                                                                                             |
-| `setup-steps.sh`          | (sourced)      | The dry-run runner and the checkout steps the others share                                                                                      |
+The scripts install commands into `~/.local/bin` (`pilot`, `pilotcli`, `pnpm`'s corepack shim, and on Linux `pilot-engine` and maybe `fnm`). They put it on their own PATH, but your shell may not have it: run those commands by their full path, or add `~/.local/bin` to your PATH.
+
+| Script                       | Runs on        | What it does                                                                                                                                    |
+| ---------------------------- | -------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| `macos.sh`                   | The Mac mini   | Checks Xcode's tools and Node 24, updates the checkouts, keeps Pilot's settings in a LaunchAgent, builds and installs Pilot.app, names the Mac  |
+| `debian.sh`                  | Debian, Ubuntu | apt packages, Node 24, the checkouts, then `linux-engine.sh`                                                                                    |
+| `arch.sh`                    | Arch, Omarchy  | pacman packages, Node 24, the checkouts, then `linux-engine.sh`                                                                                 |
+| `linux-engine.sh`            | Either Linux   | Builds orcad, installs it, writes its settings, runs it as `pilot-engine.service`, prints the pairing command. Run it alone to update an engine |
+| `pilotcli-cross-build.sh`    | The main Mac   | Builds pilotcli for another machine                                                                                                             |
+| `step-runner.sh`             | (sourced)      | How a step runs: printing, `--dry-run`, sudo steps, file writes, the OS check                                                                   |
+| `checkouts-and-toolchain.sh` | (sourced)      | The shared flags, the checkouts (Pilot, `~/.agents`, pilotcli), pnpm and Go                                                                     |
 
 ## Before you start
 
@@ -49,21 +52,24 @@ On each new machine:
 
     git clone -b pilot https://github.com/nsitapara/orca.git ~/Documents/GitHub/pilot
     ~/Documents/GitHub/pilot/src/packages/pilot/scripts/machine-setup/macos.sh \
-      --machine-name "Mac mini" --pinned --open-at-login --pilotcli-binary ~/pilotcli-darwin-arm64
+      --machine-name "Mac mini" --open-at-login --pilotcli-binary ~/pilotcli-darwin-arm64
 
 Run it with `--dry-run` first to see every command.
 
 ### What it does
 
 1. Checks Xcode's tools, `swiftc`, git and Node 24.
-2. Fast-forwards the checkout to `origin/pilot`. It clones the checkout if it is missing, and leaves it alone if it has uncommitted changes. It does the same for `~/.agents`, runs `~/.agents/sync-skills.sh`, and links `~/.pilot/automations` to `~/.agents/automations`, as on the main Mac.
-3. Installs pilotcli at `~/.local/bin/pilotcli`.
+2. Fast-forwards the checkout to `origin/pilot`. It clones the checkout if it is missing, and leaves it alone if it has uncommitted changes. A clean checkout on another branch is switched to `--branch` (default `pilot`). It does the same for `~/.agents` (on `main`), runs `~/.agents/sync-skills.sh`, and links `~/.pilot/automations` to `~/.agents/automations`, as on the main Mac.
+3. Installs pilotcli at `~/.local/bin/pilotcli`. A `--pilotcli-binary` is tried under a temporary name first: if it doesn't run here, it is deleted, the installed pilotcli stays, and the setup stops.
 4. Sets Pilot's settings for this login session with `launchctl setenv`:
-   - `PILOT_SCHEDULER=pinned` (with `--pinned`);
+   - `PILOT_SCHEDULER=pinned` by default (`--scheduler all|pinned|off`): this Mac ticks only the jobs pinned to it;
    - `PILOT_VAULT_EXPORT=off` (unless `--vault-export on`): one machine exports to the vault;
    - `PILOT_USAGE_REPORT_DIR=~/Library/Application Support/Pilot/usage-report`, so this Mac never writes over the main Mac's token report in a synced vault.
+
+   A re-run keeps each setting you leave out: it reads the LaunchAgent, then launchd, then falls back to the default. So a re-run without `--scheduler` never turns pinning off.
+
 5. Runs `pnpm install --frozen-lockfile`, then `node src/packages/pilot/scripts/build-mac.mjs`. That builds `dist/mac-arm64/Pilot.app` (this Mac's architecture only, so `pnpm install:release` isn't needed), quits Pilot, installs `/Applications/Pilot.app`, links `~/.local/bin/pilot`, and relaunches Pilot.
-6. Writes `~/Library/LaunchAgents/dev.nsitapara.pilot.environment.plist`. It runs the same `launchctl setenv` lines at every login, so the settings survive a restart. With `--open-at-login`, it then opens Pilot.
+6. Writes `~/Library/LaunchAgents/dev.nsitapara.pilot.environment.plist`. It runs the same `launchctl setenv` lines at every login, so the settings survive a restart. With `--open-at-login` (kept on re-runs until `--no-open-at-login`), it then opens Pilot. A changed agent is booted out, and bootstrapped once launchd has let it go.
 7. Sets the machine name: `pilot host name --name "Mac mini"`.
 8. Prints the pairing steps.
 
@@ -91,43 +97,47 @@ The build is unsigned. On the first launch, macOS may ask you to allow the app.
 
 ### What it does
 
-1. **apt packages** (the missing ones, as a printed sudo step): `git curl ca-certificates build-essential python3 unzip procps iproute2`. node-gyp compiles node-pty with python3, make and g++. The build's glibc gate reads the result with objdump, from binutils in build-essential.
-2. **Node 24.** It uses any Node 24 already on PATH. Otherwise it downloads fnm to `~/.local/bin/fnm` and installs Node 24 under an fnm alias of its own, `pilot`, so your fnm default is left alone. If you'd rather have a system Node, install NodeSource's `nodejs` 24 first. Then it enables corepack, which provides the pnpm that `package.json` pins.
-3. **Checkouts.** Pilot's repo, `~/.agents` and pilotcli, as on the Mac.
-4. **The engine** (`linux-engine.sh`):
+1. **Checks first**, before installing anything: it refuses to run as root (the engine is your user's systemd service, and each sudo step asks for itself), checks that `systemctl --user` reaches your user manager, and checks that the pairing code will advertise an address the main Mac can reach (below).
+2. **apt packages** (the missing ones, as a printed sudo step): `git curl ca-certificates build-essential python3 unzip procps iproute2`. node-gyp compiles node-pty with python3, make and g++. The build's glibc gate reads the result with objdump, from binutils in build-essential.
+3. **Node 24.** It uses any Node 24 already on PATH. Otherwise it downloads fnm v1.39.0 to `~/.local/bin/fnm`, checked against GitHub's sha256 digest of the release asset (fnm publishes no checksum file), and installs Node 24 under an fnm alias of its own, `pilot`, so your fnm default is left alone. If you'd rather have a system Node, install NodeSource's `nodejs` 24 first. Then it enables corepack, which provides the pnpm that `package.json` pins.
+4. **Checkouts.** Pilot's repo, `~/.agents` and pilotcli, as on the Mac.
+5. **The engine** (`linux-engine.sh`):
    - Runs `pnpm install --frozen-lockfile` and `pnpm run build:orcad`. The build compiles node-pty against the pinned Node's headers and downloads that Node. The orcad bundle carries its own CLI, so it doesn't run `build:cli`.
    - Copies `out/orcad` and its pinned Node to `~/.local/share/pilot/engine-server/versions/<build>`, and points `engine-server/current` at it. A pull or a rebuild never changes what the service runs. The last three builds are kept, and so is any build a terminal daemon still runs from.
    - Writes the files in the table below.
    - Turns on linger (`sudo loginctl enable-linger <you>`, a printed sudo step), so the engine runs at boot without a login.
-   - **Pairing.** On the first run, or when the address or port changes, it does one short run of orcad with a pairing offer, its output in a private file. It reads the `Pairing URL:` line and stops that run. The service itself runs with `--no-pairing`: a service's log must never hold a pairing offer, as `orca serve service install` does. The code stays valid until a client uses it.
+   - **Pairing.** On the first run, or when the address or port changes, it does one short run of orcad with a pairing offer, its output in a private file. It reads the `Pairing URL:` line and stops that run. If orcad prints `Pairing unavailable: <reason>` instead, the setup stops with that reason and orcad's guidance. However the setup ends, even on Ctrl+C, the run is stopped and the file deleted. The service itself runs with `--no-pairing`: a service's log must never hold a pairing offer, as `orca serve service install` does. The code stays valid until a client uses it.
    - Starts `pilot-engine.service`, waits until `pilot automations status` answers, and sets the name: `pilot host name --name "Debian box"`. It registers each `--add-repo` path with `pilot repo add`.
    - Prints the command to run on the main Mac.
 
-| File                                          | What it is                                                                                                   |
-| --------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
-| `~/.config/pilot/engine.env`                  | The engine's settings (below). A re-run keeps each value unless you pass its flag, and keeps lines you added |
-| `~/.config/systemd/user/pilot-engine.service` | The unit: `Restart=on-failure`, and `KillMode=process` so terminals outlive a restart                        |
-| `~/.local/bin/pilot-engine`                   | Starts orcad with the pinned Node; waits up to 300 s for the bind address at boot                            |
-| `~/.local/bin/pilot`                          | The CLI for this engine (it runs the launcher orcad writes in its data folder)                               |
-| `~/.local/share/pilot/engine-data`            | `ORCA_USER_DATA`: orcad's profile and Pilot's store                                                          |
+| File                                          | What it is                                                                                                                                          |
+| --------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `~/.config/pilot/engine.env`                  | The engine's settings (below). A re-run keeps each value unless you pass its flag. Lines you added, comments included, move to the end and are kept |
+| `~/.config/systemd/user/pilot-engine.service` | The unit: `Restart=on-failure`, and `KillMode=process` so terminals outlive a restart                                                               |
+| `~/.local/bin/pilot-engine`                   | Starts orcad with the pinned Node; waits up to 300 s for the bind address at boot                                                                   |
+| `~/.local/bin/pilot`                          | The CLI for this engine (it runs the launcher orcad writes in its data folder)                                                                      |
+| `~/.local/share/pilot/engine-data`            | `ORCA_USER_DATA`: orcad's profile and Pilot's store                                                                                                 |
 
 `engine.env` holds:
 
-| Setting                                          | Default                                                                    | Flag                                           |
-| ------------------------------------------------ | -------------------------------------------------------------------------- | ---------------------------------------------- |
-| `ORCA_USER_DATA`                                 | `~/.local/share/pilot/engine-data`                                         | `--data-dir`                                   |
-| `PILOT_SCHEDULER`                                | `pinned`                                                                   | `--scheduler all\|pinned\|off` (`all` is `on`) |
-| `PILOT_AUTOMATION_DIRS`                          | `~/.agents/automations`                                                    | `--automation-dirs`                            |
-| `PILOT_VAULT_EXPORT`                             | `off`                                                                      | `--vault-export on\|off`                       |
-| `PILOT_VAULT_AUTOMATIONS`                        | `~/Documents/WebPortal/Agent Work/Automations` (Details bundles go there)  | `--vault-dir`                                  |
-| `PILOT_USAGE_REPORT_DIR`                         | `<data-dir>/usage-report` (written only once `usage-legacy.json` is in it) | `--usage-report-dir`                           |
-| `PILOT_USAGE_TEMPLATE`                           | the token report's page, copied beside the server                          |                                                |
-| `PATH`                                           | `~/.local/bin`, Node's folder, then the system's                           | edit the file                                  |
-| `PILOT_ENGINE_BIND`, `_PORT`, `_PAIRING_ADDRESS` | `127.0.0.1`, `6868`, none                                                  | `--bind`, `--port`, `--pairing-address`        |
+| Setting                        | Default                                                                      | Flag                                           |
+| ------------------------------ | ---------------------------------------------------------------------------- | ---------------------------------------------- |
+| `ORCA_USER_DATA`               | `~/.local/share/pilot/engine-data`                                           | `--data-dir`                                   |
+| `PILOT_SCHEDULER`              | `pinned`                                                                     | `--scheduler all\|pinned\|off` (`all` is `on`) |
+| `PILOT_AUTOMATION_DIRS`        | `~/.agents/automations`                                                      | `--automation-dirs`                            |
+| `PILOT_VAULT_EXPORT`           | `off`                                                                        | `--vault-export on\|off`                       |
+| `PILOT_VAULT_AUTOMATIONS`      | `~/Documents/WebPortal/Agent Work/Automations` (Details bundles go there)    | `--vault-dir`                                  |
+| `PILOT_USAGE_REPORT_DIR`       | `<data-dir>/usage-report` (written only once `usage-legacy.json` is in it)   | `--usage-report-dir`                           |
+| `PILOT_USAGE_TEMPLATE`         | the token report's page, copied beside the server                            |                                                |
+| `PATH`                         | `<data-dir>/cli/bin` first, then `~/.local/bin`, Node's folder, the system's | edit the file (the first entry is put back)    |
+| `PILOT_ENGINE_BIND`, `_PORT`   | `127.0.0.1`, `6868`                                                          | `--bind`, `--port`                             |
+| `PILOT_ENGINE_PAIRING_ADDRESS` | empty: the bind address                                                      | `--pairing-address`                            |
 
-**The address.** orcad listens only on `--bind`, a literal IP. `tailscale` means this machine's `tailscale ip -4`. orcad binds exactly that address from its first start. Upstream's STA-2370 rule, which keeps the listener on loopback until a device pairs, is the desktop app's; it doesn't apply to orcad. With the default `127.0.0.1`, the main Mac can't reach the engine. With `0.0.0.0`, also pass `--pairing-address <IP the Mac reaches>`. If ufw is on, let the port in on Tailscale: `sudo ufw allow in on tailscale0 to any port 6868 proto tcp`.
+**The address.** orcad listens only on `--bind`, a literal IP. `tailscale` means this machine's `tailscale ip -4`. orcad binds exactly that address from its first start. Upstream's STA-2370 rule, which keeps the listener on loopback until a device pairs, is the desktop app's; it doesn't apply to orcad.
 
-**`PATH`.** A systemd user service gets a bare PATH, and orcad on plain Linux doesn't read your login shell's. Shell steps and field scripts find `claude`, `codex`, `glab` and `pilotcli` only through this PATH. Add their folders, such as `~/.local/share/mise/shims`, then run `systemctl --user restart pilot-engine`.
+**What the pairing code advertises.** Left to itself, orcad advertises `127.0.0.1` whatever it binds (`src/main/runtime/pairing-endpoint.ts`), which would pair the main Mac to itself. So when `--bind` is a specific IP, such as the Tailscale one, the engine passes that IP as the pairing address. `--pairing-address` overrides it, for a hostname or another IP. `--bind 0.0.0.0` (or `::`) without `--pairing-address` is refused before anything is installed. With the default `127.0.0.1`, the main Mac can't reach the engine at all. If ufw is on, let the port in on Tailscale: `sudo ufw allow in on tailscale0 to any port 6868 proto tcp`.
+
+**`PATH`.** A systemd user service gets a bare PATH, and orcad on plain Linux doesn't read your login shell's. Shell steps and field scripts find `claude`, `codex`, `glab` and `pilotcli` only through this PATH. Add their folders, such as `~/.local/share/mise/shims`, then run `systemctl --user restart pilot-engine`. Its first entry is `<data-dir>/cli/bin`, where orcad writes its own `orca` launcher at startup, pinned to the engine's data folder (`src/main/orcad/orcad-cli-launcher.ts`). Shell steps such as `orca worktree set …` reach the engine through it. On the desktop, Pilot puts its `bin/` first itself; under orcad it adds no launcher folder (`src/packages/pilot/src/main/engine-env.ts`). A re-run puts that entry back first, and it stays out of your own shell's PATH.
 
 ## Arch (Omarchy)
 
@@ -135,10 +145,11 @@ The same as Debian, with pacman:
 
     git clone -b pilot https://github.com/nsitapara/orca.git ~/Documents/GitHub/pilot
     ~/Documents/GitHub/pilot/src/packages/pilot/scripts/machine-setup/arch.sh \
-      --machine-name "Omarchy" --bind tailscale --pilotcli-binary ~/pilotcli-linux-amd64
+      --machine-name "Omarchy" --bind tailscale \
+      --pilotcli-binary ~/pilotcli-linux-amd64 --add-repo ~/Documents/GitHub/pilot
 
 - **Packages:** `git curl base-devel python unzip procps-ng iproute2`, plus `go` with `--pilotcli-repo`. It runs `pacman -S --needed` without `-y`, because refreshing the databases without upgrading is a partial upgrade. If pacman can't download a package, run `sudo pacman -Syu` and re-run.
-- **Node 24:** any Node 24 on PATH, such as one from mise. Otherwise pacman's `nodejs` when it is 24, else pacman's `fnm` and Node 24 under fnm's `pilot` alias. Arch's `nodejs` tracks the newest Node, so expect fnm.
+- **Node 24:** any Node 24 on PATH, such as one from mise. Otherwise pacman's Node 24 LTS, `nodejs-lts-krypton` (with `npm`), unless another `nodejs` is installed, which it would have to replace. Then pacman's `nodejs` if it is 24, else pacman's `fnm` and Node 24 under fnm's `pilot` alias.
 - **If real Orca is installed** at `/opt/Orca`, Pilot's orcad starts it as its browser host (`orcad-browser-provider.ts`). That is the same known gap as on macOS.
 
 ## Manual steps the scripts can't do
@@ -155,7 +166,7 @@ On every new machine:
   Then re-run `~/.agents/sync-skills.sh`, which links skills into `~/.claude/skills` once Claude Code exists.
 
 - **Linear.** Connect it in Pilot's Settings on a Mac. A headless engine has no Settings window, and Pilot's orcad keeps Linear's credential in `~/.orca` (README, Known gaps). Keep Linear jobs (13, M01) pinned to a Mac.
-- **pilotcli's config.** Copy `~/.config/pilotcli/config.toml` from the main Mac. On Linux, give `[paths]` this machine's paths. Its defaults are macOS paths, and Pilot strips `PILOT_*` from pilotcli's environment, so `PILOT_CLI` can't stand in:
+- **pilotcli's config.** pilotcli always reads `$HOME/.config/pilotcli/config.toml`, whatever `XDG_CONFIG_HOME` says (pilotCLI `internal/config/config.go`). Copy it from the main Mac. On Linux, give `[paths]` this machine's paths. Its defaults are macOS paths, and Pilot strips `PILOT_*` from pilotcli's environment, so `PILOT_CLI` can't stand in:
 
       [paths]
       pilot = "/home/<you>/.local/bin/pilot"
@@ -164,6 +175,8 @@ On every new machine:
       telemetry_file = "/home/<you>/.local/state/pilotcli/telemetry.jsonl"
 
   Also fix each project's `main_checkout`. `linux-engine.sh` prints this block while the file lacks it.
+
+  Leave `paths.orca` alone. It names real Orca, and pilotcli's real-Orca checks (such as whether you are busy in a worktree there) don't work on Linux, where there is no real Orca. Never point it at the engine's `orca`: those checks must never reach Pilot.
 
 - **The vault.** Either sync it (Obsidian Sync), or keep `PILOT_VAULT_EXPORT=off`, the default here. Details bundles are written to `PILOT_VAULT_AUTOMATIONS` either way.
 - **Projects.** Clone the repos the pinned jobs name (`repo:`), and register them: `--add-repo <path>`, or `pilot repo add --path <path>`. An automation that names a `/Users/nishsitapara/...` path runs only on a Mac.
@@ -174,7 +187,9 @@ On every new machine:
 
     pilot environment add --name "Debian box" --pairing-code 'orca://pair?code=...'
 
-For a new code, run the setup again with `--pair`. Until a client uses it, the code stays the same.
+For a new code, run the setup again with `--pair`. Until a client uses it, the code stays the same. When the main Mac already has this machine (a re-pair after a new address, say), remove the old pairing first. The script prints that line too:
+
+    pilot environment rm --environment "Debian box"
 
 **The Mac mini.**
 
@@ -232,7 +247,7 @@ A test job, pinned to the new machine, whose run starts no agent (shell steps on
 
 ## Update a machine later
 
-- **The Mac mini.** Re-run `macos.sh` with the same flags. It pulls, rebuilds, reinstalls and relaunches Pilot. `--no-build` changes only the settings, the name or the pairing steps; then quit Pilot (Cmd+Q) and reopen it.
+- **The Mac mini.** Re-run `macos.sh`. Settings you leave out keep their current values, so `--machine-name` is all it needs. It pulls, rebuilds, reinstalls and relaunches Pilot. `--no-build` changes only the settings, the name or the pairing steps; then quit Pilot (Cmd+Q) and reopen it.
 - **A Linux engine.** Re-run `debian.sh` or `arch.sh`, or just `linux-engine.sh`, which installs no packages:
 
       ~/Documents/GitHub/pilot/src/packages/pilot/scripts/machine-setup/linux-engine.sh
@@ -247,12 +262,20 @@ A test job, pinned to the new machine, whose run starts no agent (shell steps on
 **A Linux engine.**
 
     systemctl --user disable --now pilot-engine
+    systemctl --user stop pilot-engine-pairing 2>/dev/null   # a pairing run an interrupted setup left
     pkill -u "$USER" -f "$HOME/.local/share/pilot/engine-server/"   # the terminal daemon outlives the service
     rm ~/.config/systemd/user/pilot-engine.service ~/.local/bin/pilot-engine ~/.local/bin/pilot
     systemctl --user daemon-reload
     rm ~/.config/pilot/engine.env
     rm -rf ~/.local/share/pilot          # the engine and its data, Pilot's store included
     sudo loginctl disable-linger "$USER" # only if nothing else needs it
+
+Then, as they apply:
+
+- **A custom `--data-dir`** lives outside `~/.local/share/pilot`. Delete it too (`ORCA_USER_DATA` in `engine.env` names it, so read it before removing that file).
+- **`~/.pilot/automations`** is a link to `~/.agents/automations`. Remove the link with `rm ~/.pilot/automations`, never `rm -rf ~/.pilot/automations/`: with a trailing slash that deletes the automations themselves.
+- **`~/.local/share/pilot-setup`** holds a Go the setup downloaded for `--pilotcli-repo`. Delete it.
+- **fnm**, if the setup installed it: `~/.local/bin/fnm` and `~/.local/share/fnm` (Node 24 under the `pilot` alias). Delete them if nothing else uses fnm.
 
 **The Mac mini.**
 
