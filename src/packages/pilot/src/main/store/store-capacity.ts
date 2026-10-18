@@ -18,26 +18,35 @@ const RUN_LIMIT_KEY = 'run_limit'
 // The heaviest job is judged on its recent runs, so a job that got lighter stops counting its old peaks.
 export const RECENT_RUNS_FOR_PEAK = 20
 
-const HOLD_REASONS: readonly HoldReason[] = [
-  'worktree_busy',
-  'typing',
-  'claimed',
-  'quota',
-  'no_worktree',
-  'mr_unknown',
-  'in_flight',
-  'waits',
-  'retry',
-  'capacity',
-  'window',
-  'session_open',
-  'answers_pending',
-  'job_limit'
-]
+// A Record keeps this exhaustive: a new HoldReason member fails typecheck here.
+const HOLD_REASON_SET: Record<HoldReason, true> = {
+  worktree_busy: true,
+  typing: true,
+  claimed: true,
+  quota: true,
+  no_worktree: true,
+  mr_unknown: true,
+  in_flight: true,
+  waits: true,
+  retry: true,
+  capacity: true,
+  window: true,
+  session_open: true,
+  answers_pending: true,
+  job_limit: true
+}
+const HOLD_REASONS = Object.keys(HOLD_REASON_SET)
+
+function isHoldReason(value: unknown): value is HoldReason {
+  return typeof value === 'string' && HOLD_REASONS.includes(value)
+}
+
+// Rows an older process wrote have a NULL due_at, so they sort by when they joined.
+const LINE_ORDER = 'COALESCE(due_at, queued_at), queued_at, rowid'
 
 // A newer process may store a code this one doesn't know; it still waits for a slot here.
 function toHoldReason(stored: unknown): HoldReason {
-  return HOLD_REASONS.find((code) => code === stored) ?? 'capacity'
+  return isHoldReason(stored) ? stored : 'capacity'
 }
 
 function toQueued(r: Record<string, unknown>): QueuedItem {
@@ -82,7 +91,7 @@ export class CapacityStore {
   // Earliest due first: an item keeps the place its due time earned, whenever it joined.
   queued(): QueuedItem[] {
     return this.db
-      .prepare('SELECT * FROM run_queue ORDER BY due_at, queued_at, rowid')
+      .prepare(`SELECT * FROM run_queue ORDER BY ${LINE_ORDER}`)
       .all()
       .map((r) => toQueued(r))
   }
@@ -91,7 +100,7 @@ export class CapacityStore {
     return this.db
       .prepare(
         `SELECT * FROM run_queue WHERE item_key IN (SELECT value FROM json_each(?))
-         ORDER BY due_at, queued_at, rowid`
+         ORDER BY ${LINE_ORDER}`
       )
       .all(JSON.stringify(keys))
       .map((r) => toQueued(r))

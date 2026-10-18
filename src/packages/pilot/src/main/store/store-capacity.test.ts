@@ -2,6 +2,7 @@ import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
+import Database from '../../../../../main/sqlite/sync-database'
 import { PilotStore } from './store'
 import { RECENT_RUNS_FOR_PEAK, type QueuedItem } from './store-capacity'
 
@@ -81,6 +82,23 @@ describe('CapacityStore', () => {
     expect(store.capacity.queued()).toEqual([{ ...later, queuedAt: 10, dueAt: 10 }])
     expect(store.capacity.enqueue({ ...later, checkedAt: 70 })).toEqual({ changed: false })
     expect(store.capacity.queued()[0].checkedAt).toBe(70)
+  })
+
+  it('sorts a row from an older build by its join time and updates it as a changed hold', () => {
+    const path = join(mkdtempSync(join(tmpdir(), 'pilot-capacity-')), 'db.sqlite')
+    const store = PilotStore.open(path)
+    const db = new Database(path)
+    db.exec(
+      "INSERT INTO run_queue (automation_id, item_key, item_label, queued_at, by_hand) VALUES ('a', 'old', 'old', 50, 0)"
+    )
+    store.capacity.enqueue({ ...item('a', 'early', 10), dueAt: 10 })
+    store.capacity.enqueue({ ...item('a', 'late', 90), dueAt: 90 })
+    expect(store.capacity.queued().map((q) => q.itemKey)).toEqual(['early', 'old', 'late'])
+    expect(store.capacity.queuedFor(['old', 'late']).map((q) => q.itemKey)).toEqual(['old', 'late'])
+    expect(store.capacity.enqueue({ ...item('a', 'old', 80), dueAt: 80 })).toEqual({
+      changed: true
+    })
+    expect(store.capacity.queued().find((q) => q.itemKey === 'old')?.dueAt).toBe(50)
   })
 
   it('queuedFor returns only those keys', () => {
