@@ -61,8 +61,7 @@ export function recheckAfterMs(code: HoldReason): number {
   return code === 'quota' || code === 'window' ? 300_000 : 60_000
 }
 
-// Only slot-waiting rows due before the item are ahead of it: a held row never blocks a free slot. The line sorts by
-// due time, then join time, then insertion, so a row the item doesn't have yet sorts after its ties.
+// Slot-waiting rows before the item in line order (due, joined, then insertion; a new row sorts last among its ties).
 function slotWaitersAhead(line: readonly QueuedItem[], self: number, itemDueAt: number): number {
   const own = self === -1 ? null : line[self]
   // The store keeps a row's earliest due time.

@@ -13,13 +13,13 @@ const agentJob = (id: string, over: Partial<AutomationDefinition> = {}) =>
 const shellJob = (id: string) =>
   testDefinition({ id, steps: [testStep({ agent: 'shell', run: 'true', prompt: null })] })
 
-function setup(defs: AutomationDefinition[], limit: number | null) {
+function setup(defs: AutomationDefinition[], limit: number | null, now?: () => number) {
   const store = PilotStore.open(
     join(mkdtempSync(join(tmpdir(), 'pilot-run-capacity-')), 'db.sqlite')
   )
   store.capacity.setRunLimit(limit, 0)
   let clock = 100
-  const capacity = runCapacity({ store, definitions: () => defs, now: () => (clock += 1) })
+  const capacity = runCapacity({ store, definitions: () => defs, now: now ?? (() => (clock += 1)) })
   let n = 0
   const running = (automationId: string) =>
     store.runs.create({
@@ -139,6 +139,20 @@ describe('runCapacity.admit', () => {
     inLine(store, a, 'x', { holdCode, dueAt })
     const admission = capacity.admit(b, item('y', 2), false)
     expect(admission.start ? null : admission.reason).toBe(waits)
+  })
+
+  it('gives a free slot to exactly one of two items tied on due and join time: the one that joined first', () => {
+    const a = agentJob('a')
+    const b = agentJob('b')
+    // One tick queues both in the same millisecond.
+    const { store, capacity, running } = setup([a, b], 1, () => 100)
+    running('a')
+    capacity.admit(a, item('x', 5), false)
+    capacity.admit(b, item('y', 5), false)
+    store.runs.update('run-1', { status: 'done', finishedAt: 100 })
+    const y = capacity.admit(b, item('y', 5), false).start
+    const x = capacity.admit(a, item('x', 5), false).start
+    expect([x, y]).toEqual([true, false])
   })
 })
 
