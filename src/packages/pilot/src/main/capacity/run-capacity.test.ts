@@ -164,6 +164,24 @@ describe('runCapacity.toTick', () => {
   })
 })
 
+describe('runCapacity.toTick for a job pinned to another machine', () => {
+  const ticksHere = (def: AutomationDefinition) => def.runsOn === null
+  it.each([
+    ['drops its scheduled item, so it never ticks here', [false], [], []],
+    ["keeps Run now's item, so it still ticks here", [false, true], ['there'], ['by-hand']]
+  ])('%s', (_name, byHands, ticks, left) => {
+    const there = agentJob('there', { runsOn: 'Linux box' })
+    const { store, capacity, running } = setup([there], 1)
+    running('there')
+    for (const byHand of byHands) {
+      capacity.admit(there, item(byHand ? 'by-hand' : 'scheduled'), byHand)
+    }
+    store.capacity.setRunLimit(null, 1)
+    expect(capacity.toTick([there], ticksHere)).toEqual(ticks)
+    expect(store.capacity.queued().map((q) => q.itemKey)).toEqual(left)
+  })
+})
+
 describe('runCapacity.hasFreeSlot', () => {
   it('lets an answer run go ahead of the queue whenever a slot is free', () => {
     const a = agentJob('a')

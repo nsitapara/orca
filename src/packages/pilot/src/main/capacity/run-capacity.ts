@@ -21,9 +21,12 @@ export type RunCapacity = {
   forget(automationId: string): void
   // An answer run goes ahead of the queue (Nish is waiting on it), so it needs only a free slot.
   hasFreeSlot(def: AutomationDefinition): boolean
-  // The automations whose queued items can start now, oldest item first; rows of jobs that are gone or
-  // turned off leave the line.
-  toTick(definitions: readonly AutomationDefinition[]): string[]
+  // The automations whose queued items can start now, oldest item first; rows of jobs that are gone, turned
+  // off or ticked on another machine (ticksHere, runs_on) leave the line, unless Run now queued them.
+  toTick(
+    definitions: readonly AutomationDefinition[],
+    ticksHere?: (def: AutomationDefinition) => boolean
+  ): string[]
 }
 
 export type RunCapacityDeps = {
@@ -99,14 +102,14 @@ export function runCapacity(deps: RunCapacityDeps): RunCapacity {
       return limit === null || !holdsSlot(def) || inUse(holders(def)) < limit
     },
 
-    toTick(definitions) {
+    toTick(definitions, ticksHere = () => true) {
       const byId = new Map(definitions.map((d) => [d.id, d]))
       const limit = capacity.runLimit()
       let free = limit === null ? Number.POSITIVE_INFINITY : limit - inUse(holders())
       const ids: string[] = []
       for (const q of capacity.queued()) {
         const def = byId.get(q.automationId)
-        if (!def || (!def.enabled && !q.byHand)) {
+        if (!def || ((!def.enabled || !ticksHere(def)) && !q.byHand)) {
           capacity.dequeue(q.automationId, q.itemKey)
           continue
         }
