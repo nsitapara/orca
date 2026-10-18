@@ -119,7 +119,7 @@ function kindRank(type: InboxType): number {
   return at === -1 ? KIND_ORDER.length : at
 }
 
-function byCard(a: InboxListRow, b: InboxListRow): number {
+export function byCard(a: InboxListRow, b: InboxListRow): number {
   return (
     kindRank(a.type) - kindRank(b.type) || a.createdAt - b.createdAt || a.id.localeCompare(b.id)
   )

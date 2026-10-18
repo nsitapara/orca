@@ -1,0 +1,133 @@
+import type { InboxListRow } from '../../shared/api-types'
+import { byCard, type InboxGroup } from '../../shared/inbox-groups'
+import type { InboxListPayload } from '../../shared/inbox-types'
+import { jobCode } from '../pages/waiting/answer-text'
+import { INBOX_KINDS } from '../pages/waiting/inbox-tabs'
+import type { InboxGroupBy, InboxSort } from '../pages/waiting/inbox-view-prefs'
+import { groupHostedItems, type HostedSection } from './hosted-sections'
+import { groupByHost, hostedKey, type Hosted } from './pilot-host'
+
+const HOUR = 3_600_000
+const AGE_BUCKETS = [
+  { label: 'Last hour', under: HOUR },
+  { label: 'Today', under: 24 * HOUR },
+  { label: 'This week', under: 7 * 24 * HOUR },
+  { label: 'Older', under: Number.POSITIVE_INFINITY }
+] as const
+const OTHER_KIND = 'Other'
+const JOB_ORDER = new Intl.Collator(undefined, { numeric: true })
+
+type Bucket = { key: string; label: string; rank: number; order: string }
+
+function kindBucket(item: InboxListRow): Bucket {
+  const at = INBOX_KINDS.findIndex((k) => k.type === item.type)
+  const label = INBOX_KINDS[at]?.label ?? OTHER_KIND
+  return {
+    key: `kind:${label}`,
+    label,
+    rank: at === -1 ? INBOX_KINDS.length : at,
+    order: ''
+  }
+}
+
+function ageBucket(item: InboxListRow, now: number): Bucket {
+  const age = now - item.createdAt
+  const at = AGE_BUCKETS.findIndex((b) => age < b.under)
+  const label = AGE_BUCKETS[at].label
+  return { key: `age:${label}`, label, rank: at, order: '' }
+}
+
+function jobBucket(item: InboxListRow, automations: InboxListPayload['automations']): Bucket {
+  const name = automations.find((a) => a.id === item.automationId)?.name ?? item.automationId
+  const order = jobCode(name, item.automationId)
+  return { key: `job:${item.automationId}`, label: name, rank: 0, order }
+}
+
+function bucketOf(
+  item: InboxListRow,
+  automations: InboxListPayload['automations'],
+  group: Exclude<InboxGroupBy, 'worktree'>,
+  now: number
+): Bucket {
+  if (group === 'job') {
+    return jobBucket(item, automations)
+  }
+  if (group === 'kind') {
+    return kindBucket(item)
+  }
+  if (group === 'age') {
+    return ageBucket(item, now)
+  }
+  return { key: 'all', label: '', rank: 0, order: '' }
+}
+
+function byChosenSort(sort: InboxSort): (a: InboxListRow, b: InboxListRow) => number {
+  if (sort === 'oldest') {
+    return (a, b) => a.createdAt - b.createdAt || a.id.localeCompare(b.id)
+  }
+  if (sort === 'newest') {
+    return (a, b) => b.createdAt - a.createdAt || a.id.localeCompare(b.id)
+  }
+  return byCard
+}
+
+// Non-worktree groups use keys that don't start with `wt:`, so the headings render no worktree link.
+function sectionsByBucket(
+  items: readonly Hosted<InboxListRow>[],
+  automations: InboxListPayload['automations'],
+  group: Exclude<InboxGroupBy, 'worktree'>,
+  now: number
+): (HostedSection & { order: string })[] {
+  return groupByHost(items).flatMap(({ host, items: own }) => {
+    const buckets = new Map<string, Bucket & { items: Hosted<InboxListRow>[] }>()
+    for (const item of own) {
+      const bucket = bucketOf(item, automations, group, now)
+      const entry = buckets.get(bucket.key) ?? { ...bucket, items: [] }
+      entry.items.push(item)
+      buckets.set(bucket.key, entry)
+    }
+    return [...buckets.values()].map((b) => {
+      const inboxGroup: InboxGroup = {
+        key: b.key,
+        label: b.label,
+        rank: b.rank
+      }
+      return {
+        key: hostedKey(host, b.key),
+        host,
+        group: inboxGroup,
+        items: b.items,
+        order: b.order
+      }
+    })
+  })
+}
+
+// Cards grouped per machine by the chosen mode, sections and cards in the chosen order.
+export function groupHostedItemsBy(
+  items: Hosted<InboxListRow>[],
+  automations: InboxListPayload['automations'],
+  group: InboxGroupBy,
+  sort: InboxSort,
+  now: number
+): HostedSection[] {
+  const compareCards = byChosenSort(sort)
+  if (group === 'worktree') {
+    return groupHostedItems(items, automations).map((s) => ({
+      ...s,
+      items: [...s.items].sort(compareCards)
+    }))
+  }
+  const hostOrder = new Map(groupByHost(items).map(({ host }, at) => [host.key, at]))
+  return sectionsByBucket(items, automations, group, now)
+    .sort(
+      (a, b) =>
+        a.group.rank - b.group.rank ||
+        JOB_ORDER.compare(a.order, b.order) ||
+        (hostOrder.get(a.host.key) ?? 0) - (hostOrder.get(b.host.key) ?? 0)
+    )
+    .map(({ order: _order, ...section }) => ({
+      ...section,
+      items: [...section.items].sort(compareCards)
+    }))
+}
