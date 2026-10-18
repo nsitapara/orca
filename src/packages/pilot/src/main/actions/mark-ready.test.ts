@@ -1,9 +1,8 @@
 import { describe, expect, it, vi } from 'vitest'
 import { fakePilotcli } from '../envs/__fixtures__/fake-pilotcli'
 import { pilotcliRunner, type Pilotcli, type PilotcliReply } from '../envs/pilotcli'
-import { RUN_TIMEOUT_MS } from './act-bridge'
 import { checkReadyArgs, MARK_READY_USAGE, markReadyEntry, updateMrArgs } from './mark-ready'
-import type { ActionCaller, ActionResult } from './types'
+import { RUN_TIMEOUT_MS, type ActionCaller, type ActionResult } from './types'
 
 const SHA = '430f7e68'
 const ARGS = { argv: ['1577', SHA] }

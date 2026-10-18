@@ -1,10 +1,10 @@
 import type { Pilotcli, PilotcliReply } from '../envs/pilotcli'
-import { RUN_TIMEOUT_MS } from './act-bridge'
 import { noFolder } from './caller-folder'
 import {
   actionDone,
   actionFailed,
   callerOf,
+  RUN_TIMEOUT_MS,
   type ActionCaller,
   type ActionEntry,
   type ActionResult

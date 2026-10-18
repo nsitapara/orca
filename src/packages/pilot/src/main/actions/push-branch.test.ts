@@ -1,9 +1,8 @@
 import { describe, expect, it, vi } from 'vitest'
 import { fakePilotcli } from '../envs/__fixtures__/fake-pilotcli'
 import { pilotcliRunner, type Pilotcli, type PilotcliReply } from '../envs/pilotcli'
-import { RUN_TIMEOUT_MS } from './act-bridge'
 import { PUSH_USAGE, pushBranchArgs, pushBranchEntry } from './push-branch'
-import type { ActionResult } from './types'
+import { RUN_TIMEOUT_MS, type ActionResult } from './types'
 
 const HEAD = '9c1e2f04'.padEnd(40, 'a')
 const BASE = '1a2b3c4d'.padEnd(40, 'b')

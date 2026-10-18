@@ -1,8 +1,13 @@
 import { isAbsolute } from 'node:path'
 import type { Pilotcli, PilotcliReply } from '../envs/pilotcli'
 import { OBJECT_ID } from '../inbox/push-range'
-import { RUN_TIMEOUT_MS } from './act-bridge'
-import { actionDone, actionFailed, type ActionEntry, type ActionResult } from './types'
+import {
+  actionDone,
+  actionFailed,
+  RUN_TIMEOUT_MS,
+  type ActionEntry,
+  type ActionResult
+} from './types'
 
 export const PUSH_USAGE = 'push { "argv": [<worktree path>, <branch>, <commit>, <origin commit>] }'
 // A branch as act.py's push took it. No `=` (push-branch reads `a=b` as an MR condition) and no leading `-`.

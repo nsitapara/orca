@@ -1,5 +1,8 @@
 import type { Power } from '../../shared/definition/types'
 
+// The time limit push and mark_ready give their pilotcli call.
+export const RUN_TIMEOUT_MS = 10 * 60_000
+
 // The catalog's outcomes (act.py's, act.py:34): done 0, failed 1, stale 3, needs_agent 4, not_yet 5.
 export type ActionOutcome = 'done' | 'failed' | 'stale' | 'needs_agent' | 'not_yet'
 export type ActionResult = {
