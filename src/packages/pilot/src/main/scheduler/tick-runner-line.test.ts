@@ -87,7 +87,7 @@ describe("runTick holding an item in the runner's line", () => {
     const moment: Moment = { finished: '', waitingSince: 50 }
     const { store, tick } = holding(moment)
     await tick(t1)
-    // Its due time would now be when it was first seen (t1); the line keeps the earlier one.
+    // Its due time would now be this tick's (t2); the line keeps the earlier one.
     moment.waitingSince = null
     const second = await tick(t2)
     expect(second.decisions.map((x) => x.verdict)).toEqual(['held'])
@@ -251,8 +251,11 @@ describe('runTick starting a given-up key by hand', () => {
 type Lined = { listed: number[]; dirty: Set<number>; statusReads: string[] }
 
 // MRs whose worktrees are clean unless `dirty`; each tick lists `listed` as it is then.
-function lining(lineDef: AutomationDefinition) {
-  const store = PilotStore.open(':memory:')
+function lining(
+  lineDef: AutomationDefinition,
+  store = PilotStore.open(':memory:'),
+  waitingSince: number | null = null
+) {
   const state: Lined = { listed: [1], dirty: new Set([1]), statusReads: [] }
   let clock = t1
   const deps: TickDeps = {
@@ -266,7 +269,8 @@ function lining(lineDef: AutomationDefinition) {
             key: `mr:${n}`,
             label: `!${n}`,
             fields: { 'mr.iid': n, 'mr.branch': `web-${n}`, 'mr.finished_block': '' },
-            worktreeHint: { branch: `web-${n}` }
+            worktreeHint: { branch: `web-${n}` },
+            sortKeys: { waitingSince, priority: null }
           })
         ),
         warnings: []
@@ -414,6 +418,21 @@ describe('a Retry tick acts on its key and the line only', () => {
     ])
     expect(store.runs.forTick(retried.tickId).map((r) => [r.itemKey, r.trigger])).toEqual([
       ['mr:2', 'manual']
+    ])
+  })
+})
+
+describe("the line's due time", () => {
+  it('puts a card waiting since this morning ahead of an MR first seen weeks ago', async () => {
+    const store = PilotStore.open(':memory:')
+    const mrs = lining(cleanJob({ id: 'fix-failed-ci' }), store)
+    const cards = lining(cleanJob({ id: 'prepare-context' }), store, t1 - 3 * 60 * 60_000)
+    store.markSeen('fix-failed-ci', 'mr:1', t1 - 30 * 24 * 60 * 60_000)
+    await mrs.tick(t1)
+    await cards.tick(t1)
+    expect(store.capacity.queued().map((q) => [q.automationId, q.dueAt])).toEqual([
+      ['prepare-context', t1 - 3 * 60 * 60_000],
+      ['fix-failed-ci', t1]
     ])
   })
 })

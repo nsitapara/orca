@@ -201,15 +201,16 @@ function byHandKeys(
   return new Set([...(asked ?? []), ...queued])
 }
 
-// waitingSince is also the item's due time, its place in the runner's line.
+// The source's waitingSince is the item's due time in the runner's line; first sight only ranks it within the job.
 function toDecideItem(item: Item, seenAt: ReadonlyMap<string, number>, now: number): DecideItem {
   return {
     key: item.key,
     label: item.label,
     fields: item.fields,
     sortKeys: {
-      waitingSince: item.sortKeys.waitingSince ?? seenAt.get(item.key) ?? now,
-      priority: item.sortKeys.priority
+      waitingSince: item.sortKeys.waitingSince,
+      priority: item.sortKeys.priority,
+      seenAt: seenAt.get(item.key) ?? now
     }
   }
 }
