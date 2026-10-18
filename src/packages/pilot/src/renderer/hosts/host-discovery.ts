@@ -59,7 +59,6 @@ async function probeEnvironment(
   try {
     const status = await deps.status({ kind: 'environment', environmentId: env.id })
     const machineName = status.machineName ?? deps.runtimeMachineName(env.id) ?? env.name
-    deps.known.remember(env.id, machineName)
     const entry: PilotHostEntry = {
       key: environmentHostKey(env.id),
       target: { kind: 'environment', environmentId: env.id },
@@ -110,9 +109,18 @@ export async function discoverPilotHosts(deps: DiscoveryDeps): Promise<PilotHost
   ])
   const hosts = [local.entry]
   const identities = [local.identity]
-  for (const probe of probes) {
-    if (!probe || identities.some((seen) => isSameEngine(seen, probe.identity))) {
+  for (const [index, probe] of probes.entries()) {
+    if (!probe) {
       continue
+    }
+    const envId = deps.environments[index].id
+    // Remembered only once it isn't this engine, so a self-pairing never comes back as an offline copy.
+    if (identities.some((seen) => isSameEngine(seen, probe.identity))) {
+      deps.known.forget(envId)
+      continue
+    }
+    if (probe.entry.state === 'online') {
+      deps.known.remember(envId, probe.entry.machineName)
     }
     hosts.push(probe.entry)
     identities.push(probe.identity)

@@ -156,6 +156,23 @@ describe('discoverPilotHosts', () => {
     expect(store.get('mini')).toBe('Mac mini')
   })
 
+  it.each([
+    ['stops answering', new Error('timeout'), {}],
+    ['turns unreachable', 'unreachable' as const, {}],
+    [
+      'stops answering, though an older version stored it',
+      new Error('timeout'),
+      { self: 'MacBook' }
+    ]
+  ])('never lists a self-pairing that answered once and then %s', async (_why, later, seen) => {
+    const answers: Record<string, Answer> = { self: status('MacBook', '/data') }
+    const { value, store } = deps([SELF_ENV], answers, seen)
+    await discoverPilotHosts(value)
+    expect(store.has('self')).toBe(false)
+    answers.self = later
+    expect((await discoverPilotHosts(value)).map((h) => h.key)).toEqual(['local'])
+  })
+
   it("names an older Pilot by its runtime's machine name, else the environment's name", async () => {
     const older = deps([MINI_ENV], { mini: status(undefined) }, {})
     older.value.runtimeMachineName = () => 'Mini (runtime)'
@@ -226,6 +243,31 @@ describe('discoverPilotHosts in the browser version', () => {
     value.status = (target) => pilotRpc<PilotStatus>('pilot.status', undefined, { target })
     const hosts = await discoverPilotHosts(value)
     expect(hosts.map((h) => `${h.key}:${h.machineName}`)).toEqual(['local:Linux box'])
+  })
+
+  it('shows no offline copy of its own server when that environment answers too slowly', async () => {
+    vi.stubGlobal('window', {
+      __ORCA_WEB_CLIENT__: true,
+      location: { pathname: '/web-index.html' }
+    })
+    const SERVER_ENV = { id: 'web-server-a', name: 'Linux box' }
+    let slow = false
+    callRuntimeRpc.mockImplementation(async (target: RuntimeClientTarget) => {
+      if (target.kind !== 'environment') {
+        throw new Error('not this server')
+      }
+      if (target.environmentId === SERVER_ENV.id && slow) {
+        throw new Error('Runtime request timed out')
+      }
+      return status('Linux box', '/srv/pilot')
+    })
+    const { value, store } = deps([SERVER_ENV], {}, {})
+    value.status = (target) => pilotRpc<PilotStatus>('pilot.status', undefined, { target })
+    await discoverPilotHosts(value)
+    slow = true
+    const hosts = await discoverPilotHosts(value)
+    expect(hosts.map((h) => `${h.key}:${h.state}`)).toEqual(['local:online'])
+    expect(store.has(SERVER_ENV.id)).toBe(false)
   })
 })
 
