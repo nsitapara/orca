@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type { InboxListRow } from '../../../shared/api-types'
 import { groupHostedItems, type HostedSection } from '../../hosts/hosted-sections'
 import { groupHostedItemsBy } from '../../hosts/inbox-grouping'
@@ -6,7 +6,6 @@ import { HostsNotice } from '../../hosts/HostsNotice'
 import { hostedKey, type Hosted } from '../../hosts/pilot-host'
 import { useAutomationsFeed } from '../../run-views/automations-feed'
 import { motionSafeScrollBehavior } from '@/hooks/usePrefersReducedMotion'
-import { clearPendingInboxCard, usePendingInboxCard } from '../automations-view'
 import type { Answer } from './answer-types'
 import { CardList } from './CardList'
 import { FilterBadges } from './FilterBadges'
@@ -35,6 +34,7 @@ import { WorktreeName } from './WorktreeLink'
 import { useElementWidth } from './use-element-width'
 import { useDoneForYou } from './use-done-for-you'
 import { useListOpen } from './use-list-open'
+import { usePendingInboxCardPick } from './use-pending-inbox-card'
 import { useWaiting } from './use-waiting'
 
 // The page's own width from which the card list sits beside the cards.
@@ -99,10 +99,6 @@ export function InboxPage(): React.JSX.Element {
   const running = summaries.flatMap((a) =>
     a.live.filter((r) => r.status === 'running').map((run) => ({ run, automationName: a.name }))
   )
-  // A card the run panel's "asks you" link named: picked and scrolled to once the list has it, then forgotten.
-  const pending = usePendingInboxCard()
-  // The pending card the person picked another card over while it loaded: it is then dropped, not selected.
-  const pickedOver = useRef<string | null>(null)
   // Save errors are kept here, by card hostedKey: a card remounts as a new version on every reload.
   const [errors, setErrors] = useState<Record<string, string>>({})
   const people = inbox?.people ?? []
@@ -148,33 +144,24 @@ export function InboxPage(): React.JSX.Element {
   const defaults = allDefaults.filter((i) => !underRuns.has(hostedKey(i.host, i.id)))
   // The cards on screen: every default on Done for you, else the shown sections' cards.
   const visibleKeys = keysOf(onDone ? allDefaults : shown.flatMap((s) => s.items))
-  useEffect(() => {
-    if (!pending || !inbox) {
-      return
+  const notePick = usePendingInboxCardPick({
+    items: inbox?.items ?? null,
+    loading: reads.some((r) => r.value === null && r.error === null),
+    visibleKeys,
+    tab,
+    filtered,
+    section: activeSection,
+    view: prefs.view,
+    setPrefs,
+    unfilter: () => {
+      setFilters(NO_FILTERS)
+      setSection(ALL)
+    },
+    pick: (key) => {
+      setSelected(key)
+      document.getElementById(`card-${key}`)?.scrollIntoView?.({ block: 'start' })
     }
-    // The pending card is a hostedKey; another machine's card can arrive in a later read than this machine's.
-    const found = inbox.items.find((i) => hostedKey(i.host, i.id) === pending)
-    if (!found && reads.some((r) => r.value === null && r.error === null)) {
-      return
-    }
-    const picked = pickedOver.current === pending
-    if (found && !picked && !visibleKeys.has(pending)) {
-      const home = found.type === 'default' ? 'done' : 'all'
-      // Hidden by the tab, a filter or the picked section: show it unfiltered, and pick it on the next render.
-      if (tab !== home || filtered || activeSection !== ALL) {
-        setPrefs({ tab: home })
-        setFilters(NO_FILTERS)
-        setSection(ALL)
-        return
-      }
-    }
-    pickedOver.current = null
-    clearPendingInboxCard()
-    if (found && !picked) {
-      setSelected(pending)
-      document.getElementById(`card-${pending}`)?.scrollIntoView?.({ block: 'start' })
-    }
-  }, [pending, inbox, reads, visibleKeys, tab, filtered, activeSection, setPrefs])
+  })
   // A pick the tab, filters or grouping now hide is dropped, so it doesn't come back with them.
   useEffect(() => {
     if (selected !== null && !visibleKeys.has(selected)) {
@@ -193,7 +180,7 @@ export function InboxPage(): React.JSX.Element {
   const viewerName = people.find((p) => p.id === viewer)?.name.split(' ')[0] ?? 'you'
   const select = (item: Hosted<InboxListRow>) => {
     const key = hostedKey(item.host, item.id)
-    pickedOver.current = pending
+    notePick()
     setSelected(key)
     document.getElementById(`card-${key}`)?.scrollIntoView?.({ block: 'start' })
   }
