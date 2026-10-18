@@ -278,9 +278,9 @@ export class PilotStore {
     return this.handled.settle(automationId, runId, status, at)
   }
 
-  // Manual Retry: the failed key's count is cleared and it is free, so it is due.
-  resetFailures(automationId: string, onceKey: string): void {
-    this.handled.resetFailures(automationId, onceKey)
+  // Manual Retry: the failed key's count is cleared and it is free, so it is due. Returns the item its last run was about.
+  resetFailures(automationId: string, onceKey: string): string | null {
+    return this.handled.resetFailures(automationId, onceKey)
   }
 
   gaveUp(limit: number, since: number): GaveUpRow[] {

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { testDefinition } from '../../shared/definition/__fixtures__/definition'
+import type { AutomationDefinition } from '../../shared/definition/types'
 import { EMPTY_PEOPLE, parsePeopleYaml } from '../../shared/people'
 import { runCapacity } from '../capacity/run-capacity'
 import { fakeFieldDeps, testItem } from '../fields/__fixtures__/field-deps'
@@ -243,6 +244,167 @@ describe('runTick starting a given-up key by hand', () => {
     // Activity shows you started it, as Run now's runs.
     expect(store.runs.forTick(retried.tickId).map((r) => [r.itemKey, r.trigger])).toEqual([
       ['mr:1', 'manual']
+    ])
+  })
+})
+
+type Lined = { listed: number[]; dirty: Set<number>; statusReads: string[] }
+
+// MRs whose worktrees are clean unless `dirty`; each tick lists `listed` as it is then.
+function lining(lineDef: AutomationDefinition) {
+  const store = PilotStore.open(':memory:')
+  const state: Lined = { listed: [1], dirty: new Set([1]), statusReads: [] }
+  let clock = t1
+  const deps: TickDeps = {
+    store,
+    now: () => clock,
+    resolveRepo: async () => ({ name: 'r', id: 'r', path: '/repo', base: 'origin/dev' }),
+    sources: {
+      list: async () => ({
+        items: state.listed.map((n) =>
+          testItem({
+            key: `mr:${n}`,
+            label: `!${n}`,
+            fields: { 'mr.iid': n, 'mr.branch': `web-${n}`, 'mr.finished_block': '' },
+            worktreeHint: { branch: `web-${n}` }
+          })
+        ),
+        warnings: []
+      }),
+      scope: () => null
+    },
+    fields: fakeFieldDeps({
+      listWorktrees: async () =>
+        state.listed.map((n) => ({
+          id: `r::/wt/${n}`,
+          path: `/wt/${n}`,
+          branch: `web-${n}`,
+          head: 'h',
+          linkedLinearIssue: null
+        })),
+      gitStatus: async (path) => {
+        state.statusReads.push(path)
+        return { dirty: state.dirty.has(Number(path.split('/').pop())) ? 1 : 0, untracked: 0 }
+      }
+    }),
+    ask: {
+      store,
+      now: () => clock,
+      inbox: { store, now: () => clock, definitions: () => [lineDef], people: () => EMPTY_PEOPLE }
+    },
+    launch: async () => ({ terminalHandle: 't', paneKey: 'p' }),
+    capacity: runCapacity({ store, definitions: () => [lineDef], now: () => clock })
+  }
+  const tick = (at: number, opts: Omit<TickOptions, 'dryRun'> = {}) => {
+    clock = at
+    state.statusReads = []
+    return runTick(lineDef, EMPTY_PEOPLE, deps, { dryRun: false, ...opts })
+  }
+  return { store, state, tick }
+}
+
+const cleanJob = (over: Partial<AutomationDefinition> = {}) =>
+  testDefinition({
+    id: 'fix-failed-ci',
+    schedule: '10 * * * *',
+    oncePer: '{mr.iid}',
+    checks: [{ kind: 'mr', rule: 'not_merged' }, { kind: 'worktree_clean' }],
+    ...over
+  })
+
+const WAITS = "Waits for its job's next tick"
+
+describe("a re-check tick acts on its job's line only", () => {
+  it('starts the line item and leaves the other due items, unread and unrecorded, for the next tick', async () => {
+    const { store, state, tick } = lining(cleanJob())
+    await tick(t1)
+    state.listed = [1, 2, 3]
+    state.dirty = new Set()
+    const recheck = await tick(t2, { recheck: true })
+    expect(recheck.decisions.map((x) => [x.key, x.verdict, x.reason])).toEqual([
+      ['mr:1', 'started', 'All checks pass'],
+      ['mr:2', 'notdue', WAITS],
+      ['mr:3', 'notdue', WAITS]
+    ])
+    expect(store.runs.forTick(recheck.tickId).map((r) => r.itemKey)).toEqual(['mr:1'])
+    // No facts are read for an item the re-check leaves, and only the line item's decision is kept.
+    expect(state.statusReads).toEqual(['/wt/1'])
+    expect(store.tickItems(recheck.tickId).map((i) => i.itemKey)).toEqual(['mr:1'])
+    expect(store.seenKeys(cleanJob().id)).toEqual(new Set(['mr:1']))
+  })
+
+  it("still holds the line item, and a per-tick overflow keeps its row for the job's own tick", async () => {
+    const { store, state, tick } = lining(
+      cleanJob({ limits: { ...cleanJob().limits, perTick: 1 } })
+    )
+    state.listed = [1, 2, 3]
+    state.dirty = new Set([1])
+    await tick(t1)
+    expect(store.capacity.queued().map((q) => [q.itemKey, q.holdCode])).toEqual([
+      ['mr:1', 'in_flight'],
+      ['mr:3', 'tick_limit']
+    ])
+    const recheck = await tick(t2, { recheck: true })
+    expect(recheck.decisions.map((x) => [x.key, x.verdict])).toEqual([
+      ['mr:1', 'held'],
+      ['mr:2', 'notdue'],
+      ['mr:3', 'notdue']
+    ])
+    expect(store.capacity.queued().map((q) => [q.itemKey, q.holdCode])).toEqual([
+      ['mr:1', 'in_flight'],
+      ['mr:3', 'tick_limit']
+    ])
+  })
+
+  it('makes no once key for an item outside the line when once_per names the tick (job 06)', async () => {
+    const { store, state, tick } = lining(cleanJob({ oncePer: '{mr.iid}:{run.tick}' }))
+    await tick(t1)
+    state.listed = [1, 2]
+    await tick(t2, { recheck: true })
+    expect(store.handledKeys(cleanJob().id)).toEqual(new Set())
+  })
+
+  it('decides every item when it lands on the due slot (not a re-check)', async () => {
+    const { state, tick } = lining(cleanJob())
+    await tick(t1)
+    state.listed = [1, 2]
+    const due = await tick(t2)
+    expect(due.decisions.map((x) => [x.key, x.verdict])).toEqual([
+      ['mr:1', 'held'],
+      ['mr:2', 'started']
+    ])
+  })
+})
+
+describe('a Retry tick acts on its key and the line only', () => {
+  it('starts only the retried ticket of a manual job (M01)', async () => {
+    const m01 = cleanJob({ id: 'linear-todo', schedule: 'manual', enabled: false, checks: [] })
+    const { store, state, tick } = lining(m01)
+    state.listed = [1, 2, 3]
+    state.dirty = new Set()
+    store.runs.create({
+      id: 'old',
+      automationId: m01.id,
+      tickId: null,
+      itemKey: 'mr:2',
+      itemLabel: '!2',
+      worktreePath: '/wt/2',
+      startedAt: t1
+    })
+    store.runs.update('old', { status: 'failed', finishedAt: t1 })
+    store.markHandled(m01.id, '2', 'old', t1)
+    store.setHandledStatus(m01.id, 'old', 'failed', t1)
+    // As pilot.capacity.retry: the freed key's item is ticked with it.
+    const itemKey = store.resetFailures(m01.id, '2')
+    expect(itemKey).toBe('mr:2')
+    const retried = await tick(t2, { byHandKeys: new Set(['2', 'mr:2']) })
+    expect(retried.decisions.map((x) => [x.key, x.verdict])).toEqual([
+      ['mr:2', 'started'],
+      ['mr:1', 'notdue'],
+      ['mr:3', 'notdue']
+    ])
+    expect(store.runs.forTick(retried.tickId).map((r) => [r.itemKey, r.trigger])).toEqual([
+      ['mr:2', 'manual']
     ])
   })
 })

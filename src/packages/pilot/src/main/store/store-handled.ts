@@ -86,11 +86,21 @@ export class HandledStore {
     return Number(row?.failures ?? 0)
   }
 
-  // Retry: a failed key is freed, so it is due; a key a run holds is left alone.
-  resetFailures(automationId: string, onceKey: string): void {
-    this.db
-      .prepare("DELETE FROM handled WHERE automation_id = ? AND once_key = ? AND status = 'failed'")
-      .run(automationId, onceKey)
+  // Retry: a failed key is freed, so it is due; a key a run holds is left alone. Returns its last run's item key.
+  resetFailures(automationId: string, onceKey: string): string | null {
+    const freed = this.db
+      .prepare(
+        `DELETE FROM handled WHERE automation_id = ? AND once_key = ? AND status = 'failed'
+         RETURNING run_id`
+      )
+      .get(automationId, onceKey)
+    const runId = textOrNull(freed?.run_id)
+    if (runId === null) {
+      return null
+    }
+    return textOrNull(
+      this.db.prepare('SELECT item_key FROM runs WHERE id = ?').get(runId)?.item_key
+    )
   }
 
   // Failed keys past `limit` whose last failure is at or after `since`, newest first, across automations.

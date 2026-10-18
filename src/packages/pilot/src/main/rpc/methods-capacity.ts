@@ -90,8 +90,8 @@ export function buildCapacityMethods(
         return payload(c, readSystem, now)
       }
     }),
-    // A key the runner gave up on, or a failed run's: freed, then its job ticks with that key by hand, so the item goes
-    // through the job's checks and the runner's gates again and the job's other given-up keys stay given up.
+    // A key the runner gave up on, or a failed run's: freed, then its job ticks with that key and its item by hand, so
+    // the item goes through the job's checks and the runner's gates again; the job's other items wait for its next tick.
     defineMethod({
       name: 'pilot.capacity.retry',
       permission: 'workspace',
@@ -102,9 +102,10 @@ export function buildCapacityMethods(
         if (!c.loaded().definitions.some((d) => d.id === p.automationId)) {
           throw new Error(`No automation "${p.automationId}"`)
         }
-        c.store.resetFailures(p.automationId, p.onceKey)
+        const itemKey = c.store.resetFailures(p.automationId, p.onceKey)
         if (c.schedulerOn) {
-          const tick = { dryRun: false, byHandKeys: new Set([p.onceKey]) }
+          const keys = itemKey === null ? [p.onceKey] : [p.onceKey, itemKey]
+          const tick = { dryRun: false, byHandKeys: new Set(keys) }
           void c.scheduler.tickNow(p.automationId, tick).catch((error: unknown) => {
             const message = error instanceof Error ? error.message : String(error)
             console.warn(`[pilot] ${p.automationId}: Retry's tick failed: ${message}`)

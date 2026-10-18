@@ -2,6 +2,7 @@ import type { HandoverRow, ItemDecision, TickHandover } from '../../shared/api-t
 import { activeFeed, readsFed } from '../../shared/definition/jobs'
 import type { AutomationDefinition } from '../../shared/definition/types'
 import type { HandledState } from '../../shared/tick/decide'
+import { WAITS_FOR_TICK } from '../scheduler/line-scope'
 import { handledStates } from '../scheduler/tick-decide'
 import type { FedOutcome } from '../scheduler/tick-decide'
 import type { PilotStore } from '../store/store'
@@ -31,6 +32,10 @@ export function settles(
   }
   if (decision.verdict !== 'notdue') {
     return ['started', 'asked', 'out_of_scope', 'baselined'].includes(decision.verdict)
+  }
+  // A re-check or Retry tick didn't decide it; the job's next tick settles it.
+  if (decision.reason === WAITS_FOR_TICK) {
+    return false
   }
   // A failed key stays pending even once the runner gives up on it, so Retry on Running still finds the item.
   const state = handled.get(decision.onceKey)
