@@ -120,6 +120,7 @@ describe('capacityView', () => {
         checkedAt: 5
       }
     ])
+    expect(view.quotaCeiling).toEqual({ weekly: 90, session: 95 })
     expect(view.heaviest).toEqual({
       automationId: 'review',
       automationName: '03 Review and fix',

@@ -67,3 +67,8 @@ export function endedText(ms: number, now: number): string {
     minute: '2-digit'
   })
 }
+
+// Why a job with an agent step can wait on quota, from the one ceiling main enforces.
+export function quotaText(ceiling: { weekly: number; session: number }): string {
+  return `Jobs with an agent step wait while Claude or Codex is over ${ceiling.weekly}% weekly or ${ceiling.session}% session.`
+}

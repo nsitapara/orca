@@ -152,11 +152,49 @@ describe('RunningPage', () => {
     const running = within(screen.getByRole('region', { name: 'Running now' }))
     expect(running.getByText('03 Review and fix')).toBeTruthy()
     expect(running.getByText('1.5 GB · peak 2.0 GB')).toBeTruthy()
-    const waiting = within(screen.getByRole('region', { name: 'Waiting for a slot' }))
+    const waiting = within(screen.getByRole('region', { name: 'Waiting' }))
     expect(waiting.getByText('05 Fix failed CI')).toBeTruthy()
     expect(waiting.getByText('Run now')).toBeTruthy()
     expect(waiting.getByText('waiting 3m')).toBeTruthy()
     expect(screen.getByRole('status', { name: 'Jobs at once' }).textContent).toBe('2')
+  })
+
+  it('lists a held item with its reason, and says what the quota ceiling holds', async () => {
+    const now = Date.now()
+    serve(
+      capacity({
+        quotaCeiling: { weekly: 90, session: 95 },
+        queued: [
+          {
+            automationId: 'ci',
+            automationName: '05 Fix failed CI',
+            itemKey: 'mr:9',
+            itemLabel: '!9 web-9',
+            queuedAt: now - 9 * 60_000,
+            byHand: false,
+            dueAt: now - 3 * 60_000,
+            holdCode: 'session_open',
+            holdDetail: 'someone is typing in \u2733 F1'
+          }
+        ]
+      })
+    )
+    await shown()
+    expect(screen.getByRole('heading', { name: 'Waiting \u00b7 1' })).toBeTruthy()
+    const waiting = within(screen.getByRole('region', { name: 'Waiting' }))
+    expect(waiting.getByText('someone is typing in \u2733 F1')).toBeTruthy()
+    expect(waiting.getByText('waiting 3m')).toBeTruthy()
+    expect(
+      screen.getByText(
+        'Jobs with an agent step wait while Claude or Codex is over 90% weekly or 95% session.'
+      )
+    ).toBeTruthy()
+  })
+
+  it('renders an older payload without hold fields or the quota ceiling', async () => {
+    serve(capacity())
+    await shown()
+    expect(screen.queryByText(/over \d+% weekly/)).toBeNull()
   })
 
   it.each([
@@ -303,7 +341,7 @@ describe('RunningPage on more than one machine', () => {
     expect(await mini.findByText('Nothing is running.')).toBeTruthy()
     expect(mini.getByRole('heading', { name: 'Mac mini' })).toBeTruthy()
     expect(mini.getByText('0 of 4 in use · 1 waiting')).toBeTruthy()
-    const queue = within(mini.getByRole('region', { name: 'Waiting for a slot' }))
+    const queue = within(mini.getByRole('region', { name: 'Waiting' }))
     expect(queue.getByText('05 Fix failed CI')).toBeTruthy()
     const local = within(region('MacBook').getByRole('region', { name: 'Running now' }))
     expect(local.getByText('03 Review and fix')).toBeTruthy()

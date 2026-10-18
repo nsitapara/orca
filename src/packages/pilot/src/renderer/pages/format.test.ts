@@ -111,6 +111,10 @@ describe('status labels', () => {
   ] as const)('step %s → %s', (s, label) => expect(stepStatusLabel(s)).toBe(label))
 })
 
+describe('verdictLabel', () => {
+  it('words a held item as Waiting', () => expect(verdictLabel('held')).toBe('Waiting'))
+})
+
 describe('spentLabel', () => {
   it.each([
     [0.84, 0, '$0.84'],

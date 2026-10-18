@@ -8,7 +8,7 @@ import { openRun } from '../../run-views/run-panel-state'
 import { useNow } from '../waiting/use-now'
 import { FinishedRuns } from './FinishedRuns'
 import { RunLimitPicker } from './RunLimitPicker'
-import { memoryText, runMemoryText, suggestionText, usageText } from './running-text'
+import { memoryText, quotaText, runMemoryText, suggestionText, usageText } from './running-text'
 import { useCapacities, type MachineCapacity } from './use-capacity'
 
 function LimitPanel({
@@ -53,6 +53,11 @@ function LimitPanel({
           {suggestionText(payload)} Memory counts each job&apos;s processes on {where}, not
           Docker&apos;s containers.
         </p>
+        {payload.quotaCeiling ? (
+          <p className="basis-full text-xs text-muted-foreground">
+            {quotaText(payload.quotaCeiling)}
+          </p>
+        ) : null}
       </div>
     </section>
   )
@@ -101,15 +106,19 @@ function QueuedRow({
         {place}
       </span>
       <span className="shrink-0 font-medium">{item.automationName}</span>
-      <span
-        className="min-w-0 flex-1 truncate font-mono text-xs text-muted-foreground"
-        title={item.itemLabel}
-      >
-        {item.itemLabel}
-      </span>
+      <div className="min-w-0 flex-1">
+        <div className="truncate font-mono text-xs text-muted-foreground" title={item.itemLabel}>
+          {item.itemLabel}
+        </div>
+        {item.holdDetail ? (
+          <div className="truncate text-xs text-muted-foreground" title={item.holdDetail}>
+            {item.holdDetail}
+          </div>
+        ) : null}
+      </div>
       {item.byHand ? <Badge variant="outline">Run now</Badge> : null}
       <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
-        waiting {formatDuration(now - item.queuedAt)}
+        waiting {formatDuration(now - (item.dueAt ?? item.queuedAt))}
       </span>
     </li>
   )
@@ -170,11 +179,7 @@ function MachineRuns({
           <RunningRow key={run.id} run={run} now={now} />
         ))}
       </ListSection>
-      <ListSection
-        title="Waiting for a slot"
-        empty="Nothing is waiting."
-        count={payload.queued.length}
-      >
+      <ListSection title="Waiting" empty="Nothing is waiting." count={payload.queued.length}>
         {payload.queued.map((item, i) => (
           <QueuedRow
             key={`${item.automationId}:${item.itemKey}`}

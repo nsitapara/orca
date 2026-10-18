@@ -122,7 +122,7 @@ function WaitingNavButton(): React.JSX.Element {
   return <ViewNavButton view="inbox" icon={Inbox} label="Inbox" pills={pills} />
 }
 
-// The Running page's own counts: runs going now, and in yellow the ones waiting for a slot.
+// The Running page's own counts: runs going now, and in yellow the ones waiting.
 function RunningNavButton(): React.JSX.Element {
   const { running, queued } = useCapacityTotals()
   const pills: NavPill[] = [
@@ -134,7 +134,7 @@ function RunningNavButton(): React.JSX.Element {
     {
       count: queued,
       tone: 'waiting',
-      title: 'Waiting for a slot'
+      title: 'Waiting'
     }
   ]
   return <ViewNavButton view="running" icon={Gauge} label="Running" pills={pills} />

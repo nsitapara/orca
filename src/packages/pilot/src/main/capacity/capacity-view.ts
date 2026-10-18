@@ -1,5 +1,6 @@
 import type { CapacityPayload, CapacityRun, HeaviestJob } from '../../shared/api-types-capacity'
 import { suggestRunLimit, UNMEASURED_JOB_BYTES } from '../../shared/capacity/limit-suggestion'
+import { QUOTA_CEILING } from '../../shared/quota-ceiling'
 import type { AutomationDefinition } from '../../shared/definition/types'
 import type { PilotStore } from '../store/store'
 import { listedRuns } from '../timeline/run-detail'
@@ -90,6 +91,7 @@ export function capacityView(input: CapacityViewInput): CapacityPayload {
       runningJobsBytes,
       worstJobBytes: heaviest?.measured ? heaviest.peakBytes : null
     }),
-    heaviest
+    heaviest,
+    quotaCeiling: { ...QUOTA_CEILING }
   }
 }

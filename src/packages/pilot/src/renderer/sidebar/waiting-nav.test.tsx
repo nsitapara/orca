@@ -178,7 +178,7 @@ describe('waiting nav', () => {
     await act(async () => {})
     const pills = [...item.querySelectorAll('span[title]')]
     expect(pills.map((p) => p.textContent)).toEqual(shown)
-    const waiting = item.querySelector('span[title="Waiting for a slot"]')
+    const waiting = item.querySelector('span[title="Waiting"]')
     expect(waiting?.className.includes('text-status-warning') ?? false).toBe(queued > 0)
   })
 

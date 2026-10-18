@@ -1,4 +1,4 @@
-import type { ListedRun } from './api-types'
+import type { HoldReason, ListedRun } from './api-types'
 import type { LimitSuggestion } from './capacity/limit-suggestion'
 
 // A running run on the Running page. Memory is the summed RSS of its processes on this machine (Docker
@@ -17,7 +17,7 @@ export type CapacityRun = {
   counted: boolean
 }
 
-// An item waiting for a slot, oldest first; its place in line is its index.
+// An item in the runner's line, in line order; its place is its index. The hold fields are absent from older Pilots.
 export type QueuedRun = {
   automationId: string
   automationName: string
@@ -25,6 +25,11 @@ export type QueuedRun = {
   itemLabel: string
   queuedAt: number
   byHand: boolean
+  // When it became due; it has waited since then.
+  dueAt?: number
+  holdCode?: HoldReason
+  // Why it waits, in words.
+  holdDetail?: string
 }
 
 // An ended run of a job that holds a slot, as Activity lists it; queuedAt on it says when it joined the line.
@@ -49,4 +54,6 @@ export type CapacityPayload = {
   memory: { totalBytes: number; availableBytes: number } | null
   suggestion: LimitSuggestion
   heaviest: HeaviestJob | null
+  // The quota percentages jobs with an agent step wait at; absent from older Pilots.
+  quotaCeiling?: { weekly: number; session: number }
 }
