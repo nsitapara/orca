@@ -78,6 +78,26 @@ export function matchesFilters(
   )
 }
 
+const EMPTY_TAB_TEXT: Record<'preparing' | 'blocked' | 'all', string> = {
+  preparing: 'Nothing is preparing context.',
+  blocked: 'No preparation is blocked.',
+  all: 'No cards here.'
+}
+
+// What an empty tab says; a chip or search on a card tab names the filters, not the tab.
+export function emptyTabText(tab: InboxTab, filtered: boolean, viewerName: string): string {
+  if (tab === 'done') {
+    return `Nothing done for ${viewerName} here.`
+  }
+  if (filtered) {
+    return 'No cards match these filters.'
+  }
+  if (tab === 'needs_you') {
+    return `Nothing waiting on ${viewerName} here.`
+  }
+  return EMPTY_TAB_TEXT[tab]
+}
+
 export function kindCounts(items: InboxListRow[]): Partial<Record<InboxType, number>> {
   const counts: Partial<Record<InboxType, number>> = {}
   for (const item of items) {

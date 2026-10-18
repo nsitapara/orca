@@ -16,7 +16,14 @@ import { InboxCard } from './InboxCard'
 import { InboxFilters } from './InboxFilters'
 import { InboxTabs } from './InboxTabs'
 import { InboxStyle } from './inbox-style'
-import { inTab, kindCounts, matchesFilters, tabCounts, type CardFilters } from './inbox-tabs'
+import {
+  emptyTabText,
+  inTab,
+  kindCounts,
+  matchesFilters,
+  tabCounts,
+  type CardFilters
+} from './inbox-tabs'
 import { useInboxViewPrefs } from './inbox-view-prefs'
 import { InMotionPanel } from './InMotionPanel'
 import { WorktreeName } from './WorktreeLink'
@@ -218,11 +225,13 @@ export function InboxPage(): React.JSX.Element {
       {s.items.map(cardOf)}
     </section>
   )
-  const cardsBody = shown.length ? (
-    shown.map(sectionOf)
-  ) : (
-    <p className="text-sm text-muted-foreground">Nothing waiting on {viewerName} here.</p>
+  const emptyText = (
+    <p className="text-sm text-muted-foreground">{emptyTabText(tab, filtered, viewerName)}</p>
   )
+  // Only once every machine's Done for you list has answered cleanly: an error or a first load isn't "nothing".
+  const doneSettled =
+    done.reads.length > 0 && done.reads.every((r) => r.value !== null && r.error === null)
+  const cardsBody = shown.length ? shown.map(sectionOf) : emptyText
   const defaultSections = groupHostedItems(defaults, automations)
   const doneBody = (
     <>
@@ -251,9 +260,7 @@ export function InboxPage(): React.JSX.Element {
           </CollapsibleContent>
         </Collapsible>
       ) : null}
-      {done.runs.length || defaults.length ? null : (
-        <p className="text-sm text-muted-foreground">Nothing done for {viewerName} here.</p>
-      )}
+      {doneSettled && done.runs.length === 0 && defaults.length === 0 ? emptyText : null}
     </>
   )
   return (

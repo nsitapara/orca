@@ -40,7 +40,10 @@ export function InboxTabs({
     <div role="toolbar" aria-label="Card status" className="flex flex-wrap items-center gap-1.5">
       {button('needs_you', 'Needs you', counts.needs_you)}
       {button('preparing', 'Preparing', counts.preparing)}
-      {counts.blocked > 0 ? button('blocked', 'Blocked', counts.blocked) : null}
+      {/* Kept at 0 while it is the tab, so a Retry that empties it never leaves no tab pressed. */}
+      {counts.blocked > 0 || tab === 'blocked'
+        ? button('blocked', 'Blocked', counts.blocked)
+        : null}
       {button('all', 'All', counts.all)}
       {preparingNote ? (
         <span className="rounded-full bg-[var(--ib-bad-soft)] px-2 font-mono text-xs font-semibold leading-5 text-[var(--ib-bad)]">

@@ -62,6 +62,13 @@ describe('InboxTabs', () => {
     expect(screen.getByRole('button', { name: 'Blocked · 2' })).toBeTruthy()
   })
 
+  it('keeps Blocked at zero while it is the tab, so the tab on screen is never hidden', () => {
+    tabs({ tab: 'blocked' })
+    expect(screen.getByRole('button', { name: 'Blocked · 0' }).getAttribute('aria-pressed')).toBe(
+      'true'
+    )
+  })
+
   it('selects a tab on click', () => {
     const onTab = tabs()
     fireEvent.click(screen.getByRole('button', { name: 'Preparing · 9' }))
