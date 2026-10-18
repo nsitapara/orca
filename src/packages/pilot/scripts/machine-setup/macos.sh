@@ -7,8 +7,10 @@
 set -euo pipefail
 
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
-# shellcheck source=setup-steps.sh
-. "$SCRIPT_DIR/setup-steps.sh"
+# shellcheck source=step-runner.sh
+. "$SCRIPT_DIR/step-runner.sh"
+# shellcheck source=checkouts-and-toolchain.sh
+. "$SCRIPT_DIR/checkouts-and-toolchain.sh"
 
 MAC_PINNED=0
 MAC_VAULT_EXPORT=off

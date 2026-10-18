@@ -5,9 +5,10 @@
 set -euo pipefail
 
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
-# shellcheck source=setup-steps.sh
-. "$SCRIPT_DIR/setup-steps.sh"
+# shellcheck source=step-runner.sh
+. "$SCRIPT_DIR/step-runner.sh"
 
+CROSS_PILOTCLI_DIR=$HOME/Documents/GitHub/pilotCLI
 CROSS_TARGETS=()
 CROSS_OUT_DIR=
 CROSS_ALLOW_DIRTY=0
@@ -37,7 +38,7 @@ EOF
 }
 
 cross_check_tree() {
-  local dir=$SETUP_PILOTCLI_DIR branch
+  local dir=$CROSS_PILOTCLI_DIR branch
   [ -f "$dir/go.mod" ] || die "no pilotcli checkout at $dir (pass --pilotcli-dir)"
   branch=$(git -C "$dir" rev-parse --abbrev-ref HEAD)
   if [ "$CROSS_ALLOW_DIRTY" = 1 ]; then
@@ -65,7 +66,7 @@ main() {
         ;;
       --pilotcli-dir)
         setup_need_value "$@"
-        SETUP_PILOTCLI_DIR=$(setup_expand_home "$2")
+        CROSS_PILOTCLI_DIR=$(setup_expand_home "$2")
         shift 2
         ;;
       --target)
@@ -97,14 +98,14 @@ main() {
   if [ "${#CROSS_TARGETS[@]}" = 0 ]; then
     CROSS_TARGETS=(linux/amd64 linux/arm64)
   fi
-  out=${CROSS_OUT_DIR:-$SETUP_PILOTCLI_DIR/bin}
+  out=${CROSS_OUT_DIR:-$CROSS_PILOTCLI_DIR/bin}
   setup_banner
   cross_check_tree
   command -v go >/dev/null 2>&1 || die "Go is missing (brew install go)"
-  version=$(GIT_OPTIONAL_LOCKS=0 git -C "$SETUP_PILOTCLI_DIR" describe --tags --always --dirty)
-  step "pilotcli $version from $SETUP_PILOTCLI_DIR"
+  version=$(GIT_OPTIONAL_LOCKS=0 git -C "$CROSS_PILOTCLI_DIR" describe --tags --always --dirty)
+  step "pilotcli $version from $CROSS_PILOTCLI_DIR"
   if [ "$CROSS_SKIP_TESTS" = 0 ]; then
-    run_in "$SETUP_PILOTCLI_DIR" go test ./...
+    run_in "$CROSS_PILOTCLI_DIR" go test ./...
   fi
   run mkdir -p "$out"
   for target in "${CROSS_TARGETS[@]}"; do
@@ -112,7 +113,7 @@ main() {
     arch=${target#*/}
     name=$out/pilotcli-$os-$arch
     # No cgo, so the binary needs nothing from the target's libc.
-    run_in "$SETUP_PILOTCLI_DIR" env CGO_ENABLED=0 GOOS="$os" GOARCH="$arch" \
+    run_in "$CROSS_PILOTCLI_DIR" env CGO_ENABLED=0 GOOS="$os" GOARCH="$arch" \
       go build -trimpath -ldflags "-X pilotcli/internal/cli.Version=$version" -o "$name" ./cmd/pilotcli
   done
   step "Copy a build to its machine, then pass it to the setup script"

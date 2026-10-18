@@ -4,12 +4,14 @@
 # the systemd user service pilot-engine.service, name the machine, and print the pairing command for
 # the main Mac. Run it alone to update an engine whose packages and Node are already in place.
 # Guide: src/packages/pilot/docs/machine-setup.md.
-# shellcheck disable=SC2034 # SETUP_* globals belong to setup-steps.sh.
+# shellcheck disable=SC2034 # SETUP_* globals belong to step-runner.sh and checkouts-and-toolchain.sh.
 set -euo pipefail
 
 ENGINE_SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
-# shellcheck source=setup-steps.sh
-. "$ENGINE_SCRIPT_DIR/setup-steps.sh"
+# shellcheck source=step-runner.sh
+. "$ENGINE_SCRIPT_DIR/step-runner.sh"
+# shellcheck source=checkouts-and-toolchain.sh
+. "$ENGINE_SCRIPT_DIR/checkouts-and-toolchain.sh"
 
 ENGINE_CONFIG_HOME=${XDG_CONFIG_HOME:-$HOME/.config}
 ENGINE_SHARE_HOME=${XDG_DATA_HOME:-$HOME/.local/share}/pilot
