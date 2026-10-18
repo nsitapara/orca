@@ -4,6 +4,7 @@ import { OpenInMenuSetting } from './OpenInMenuSetting'
 import { SearchableSetting } from './SearchableSetting'
 import { SettingsSubsectionHeader, SettingsSwitchRow } from './SettingsFormControls'
 import { WorkspaceDirectorySetting } from './WorkspaceDirectorySetting'
+import { EmptyWorkspaceOpenSurfaceSetting } from './EmptyWorkspaceOpenSurfaceSetting'
 import { translate } from '@/i18n/i18n'
 import { GlobalWorktreeVisibilitySourcesSetting } from './GlobalWorktreeVisibilitySourcesSetting'
 import { GLOBAL_WORKTREE_VISIBILITY_SETTINGS_TARGET_ID } from '@/lib/settings-navigation-types'
@@ -100,6 +101,8 @@ export function GeneralWorkspaceSettingsSection({
           onChange={() => updateSettings({ nestWorkspaces: !settings.nestWorkspaces })}
         />
       </SearchableSetting>
+
+      <EmptyWorkspaceOpenSurfaceSetting settings={settings} updateSettings={updateSettings} />
 
       {/* Why: the "Don't ask again" toast in the delete-worktree dialog
           deep-links here, so the wrapper id must stay stable. Renaming it

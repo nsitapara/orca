@@ -25,7 +25,7 @@ import {
   type IssueCommandLaunch
 } from '@/lib/worktree-setup-issue-command-queue'
 import { applyDefaultTerminalTabs } from '@/lib/worktree-default-terminal-tabs'
-import { openDefaultAgentChatInEmptyWorkspace } from '@/lib/empty-workspace-default-agent-chat'
+import { openDefaultAgentInEmptyWorkspace } from '@/lib/empty-workspace-default-agent-chat'
 import { isEmptyWorkspaceDefaultSurfacePending } from '@/lib/empty-workspace-default-surface-claims'
 
 function getSetupRunnerCommandPlatformForLaunch(setup: WorktreeSetupLaunch): 'windows' | 'posix' {
@@ -249,22 +249,9 @@ export function ensureWorktreeHasInitialTerminal(
     !hasExplicitLaunchWork &&
     opts.activateCreatedTabs !== false
   ) {
-    // A host's "no" to the chat seeds what this same call would have without the default chat.
-    const defaultChat = openDefaultAgentChatInEmptyWorkspace(
-      worktreeId,
-      () =>
-        ensureWorktreeHasInitialTerminal(
-          store,
-          worktreeId,
-          startup,
-          setup,
-          issueCommand,
-          defaultTabs,
-          { ...opts, seedUserDefaultSurface: false }
-        ) !== null
-    )
-    if (defaultChat) {
-      return defaultChat.primaryTabId
+    const defaultAgent = openDefaultAgentInEmptyWorkspace(worktreeId)
+    if (defaultAgent) {
+      return defaultAgent.primaryTabId
     }
   }
 

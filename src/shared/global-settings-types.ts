@@ -344,6 +344,9 @@ export type GlobalSettings = GlobalSettingsBase & {
    *  - 'blank': blank terminal (no agent launched)
    *  - TuiAgent: a specific agent id */
   defaultTuiAgent: TuiAgent | 'blank' | null
+  /** What opening an empty workspace seeds: the default agent (a chat when Chat UI is on, else its
+   *  terminal) or a plain shell. Absent means the default agent. */
+  emptyWorkspaceOpenSurface?: 'default-agent' | 'terminal'
   /** @deprecated Retained for older peers; setup-only is now a per-create choice. */
   newWorkspaceSetupOnly?: boolean
   /** Agents hidden from picker/auto-launch; detection stays a raw PATH snapshot. */

@@ -5,6 +5,11 @@ import { searchKeywords, translateSearchKeyword } from './settings-search-keywor
 import { createLocalizedCatalog } from '@/i18n/localized-catalog'
 import { getGeneralProjectRuntimeSearchEntries } from './general-project-runtime-search'
 import { getGeneralSupportSearchEntries } from './general-support-search'
+import {
+  getEmptyWorkspaceOpenSurfaceDescription,
+  getEmptyWorkspaceOpenSurfaceSearchKeywords,
+  getEmptyWorkspaceOpenSurfaceTitle
+} from './empty-workspace-open-surface-copy'
 
 export { getGeneralEditorSearchEntries } from './general-editor-search'
 export { getGeneralSupportSearchEntries } from './general-support-search'
@@ -53,6 +58,11 @@ export const getGeneralWorkspaceSearchEntries = createLocalizedCatalog(() => [
       ...translateSearchKeyword('auto.components.settings.general.search.9bde064915', 'subfolder'),
       ...translateSearchKeyword('auto.components.settings.general.search.93f6ec5e70', 'directory')
     ]
+  },
+  {
+    title: getEmptyWorkspaceOpenSurfaceTitle(),
+    description: getEmptyWorkspaceOpenSurfaceDescription(),
+    keywords: getEmptyWorkspaceOpenSurfaceSearchKeywords()
   },
   {
     title: translate(

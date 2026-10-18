@@ -27,9 +27,9 @@ const defaultChat = vi.hoisted(() => ({
 }))
 
 vi.mock('@/lib/empty-workspace-default-agent-chat', () => ({
-  openDefaultAgentChatInEmptyWorkspace: defaultChat.open,
-  emptyWorkspaceDefaultChatAwaitsDetection: defaultChat.awaitsDetection,
-  loadEmptyWorkspaceDefaultChatDetection: defaultChat.loadDetection
+  openDefaultAgentInEmptyWorkspace: defaultChat.open,
+  emptyWorkspaceDefaultAgentAwaitsDetection: defaultChat.awaitsDetection,
+  loadEmptyWorkspaceDefaultAgentDetection: defaultChat.loadDetection
 }))
 
 const USER_OPEN = { navigationIntent: 'user-open' } as const
@@ -95,10 +95,9 @@ async function flushPromises(): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, 0))
 }
 
-// Why: with chat as the default view, clicking an empty workspace used to open a bare shell the
-// user then had to turn into a chat by hand.
-describe('empty workspace seeding with a default agent chat', () => {
-  it('opens the default agent chat instead of a shell', () => {
+// Why: clicking an empty workspace used to open a bare shell the user then had to start an agent in.
+describe('empty workspace seeding with a default agent', () => {
+  it('opens the default agent instead of a shell', () => {
     defaultChat.open.mockReturnValue({ primaryTabId: 'chat-tab' })
     const createTab = vi.fn(() => ({ id: 'shell-tab' }))
     const store = createMockStore({ createTab })
@@ -113,35 +112,12 @@ describe('empty workspace seeding with a default agent chat', () => {
       { seedUserDefaultSurface: true }
     )
 
-    expect(defaultChat.open).toHaveBeenCalledWith('wt-1', expect.any(Function))
+    expect(defaultChat.open).toHaveBeenCalledWith('wt-1')
     expect(primaryTabId).toBe('chat-tab')
     expect(createTab).not.toHaveBeenCalled()
   })
 
-  // A host's "no" to the chat seeds the shell this workspace would have had, not the agent's TUI.
-  it('seeds the plain shell when the host declines the default chat', () => {
-    defaultChat.open.mockImplementation((_worktreeId: string, seedShell: () => boolean) => {
-      seedShell()
-      return { primaryTabId: null }
-    })
-    const createTab = vi.fn(() => ({ id: 'shell-tab' }))
-    const store = createMockStore({ createTab })
-
-    ensureWorktreeHasInitialTerminal(store, 'wt-1', undefined, undefined, undefined, undefined, {
-      seedUserDefaultSurface: true
-    })
-
-    expect(defaultChat.open).toHaveBeenCalledOnce()
-    expect(createTab).toHaveBeenCalledOnce()
-    expect(createTab).toHaveBeenCalledWith(
-      'wt-1',
-      undefined,
-      undefined,
-      expect.not.objectContaining({ launchAgent: expect.anything() })
-    )
-  })
-
-  it('falls back to a shell when no chat can open', () => {
+  it('falls back to a shell when no agent can open', () => {
     defaultChat.open.mockReturnValue(null)
     const createTab = vi.fn(() => ({ id: 'shell-tab' }))
     const store = createMockStore({ createTab })
@@ -179,7 +155,7 @@ describe('empty workspace seeding with a default agent chat', () => {
 
     activateAndRevealWorktree(worktree.id, { ...USER_OPEN, notifyHostRuntime: false })
 
-    expect(defaultChat.open).toHaveBeenCalledWith(worktree.id, expect.any(Function))
+    expect(defaultChat.open).toHaveBeenCalledWith(worktree.id)
   })
 
   it('back/forward navigation asks for the default surface', () => {
@@ -193,7 +169,7 @@ describe('empty workspace seeding with a default agent chat', () => {
 
     useAppStore.getState().goBackWorktree()
 
-    expect(defaultChat.open).toHaveBeenCalledWith(worktree.id, expect.any(Function))
+    expect(defaultChat.open).toHaveBeenCalledWith(worktree.id)
   })
 
   // Why: CLI/phone creates, fallbacks after a failed agent launch, and the move after a delete
@@ -213,7 +189,7 @@ describe('empty workspace seeding with a default agent chat', () => {
 })
 
 describe('the gated reseed that seeds an empty workspace in Electron', () => {
-  it('opens the default agent chat for a user open', async () => {
+  it('opens the default agent for a user open', async () => {
     defaultChat.open.mockReturnValue({ primaryTabId: null })
     const worktree = makeWorktree()
     seedEmptyActivatableWorktree(worktree)
@@ -226,7 +202,7 @@ describe('the gated reseed that seeds an empty workspace in Electron', () => {
     expect(result === false ? 'failed' : result.primaryTabId).toBeNull()
     await gate.mock.results[0]?.value
 
-    expect(defaultChat.open).toHaveBeenCalledWith(worktree.id, expect.any(Function))
+    expect(defaultChat.open).toHaveBeenCalledWith(worktree.id)
     expect(tabCount(worktree.id)).toBe(0)
   })
 
@@ -242,7 +218,7 @@ describe('the gated reseed that seeds an empty workspace in Electron', () => {
     expect(tabCount(worktree.id)).toBe(1)
   })
 
-  it('opens the default agent chat for a user-opened folder workspace', async () => {
+  it('opens the default agent for a user-opened folder workspace', async () => {
     defaultChat.open.mockReturnValue({ primaryTabId: null })
     seedEmptyFolderWorkspace()
     const gate = useElectronActivationGate()
@@ -250,7 +226,7 @@ describe('the gated reseed that seeds an empty workspace in Electron', () => {
     activateAndRevealFolderWorkspace(FOLDER_ID, { ...USER_OPEN, executionHostId: 'local' })
     await gate.mock.results[0]?.value
 
-    expect(defaultChat.open).toHaveBeenCalledWith(FOLDER_KEY, expect.any(Function))
+    expect(defaultChat.open).toHaveBeenCalledWith(FOLDER_KEY)
     expect(tabCount(FOLDER_KEY)).toBe(0)
   })
 

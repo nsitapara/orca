@@ -12891,6 +12891,18 @@
           "confirm": "Restart",
           "terminalsUnknown": "Orca couldn’t confirm whether terminals are running on this host, so it didn’t restart the managed server.",
           "terminalsRunning": "{{count}} terminals are still running on this host. Close them, then restart the managed server."
+        },
+        "empty-workspace-open-surface-copy": {
+          "title": "Opening an Empty Workspace",
+          "description": "What opens when you click a workspace with no tabs. Default agent starts the agent chosen in Agents settings.",
+          "terminal": "Terminal",
+          "defaultAgent": "Default agent",
+          "keywordEmpty": "empty",
+          "keywordClick": "click",
+          "keywordOpen": "open",
+          "keywordAgent": "agent",
+          "keywordTerminal": "terminal",
+          "keywordWorktree": "worktree"
         }
       },
       "right": {
