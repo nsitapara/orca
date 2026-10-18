@@ -62,4 +62,6 @@ export type PilotServiceOptions = {
   // Pilot's own static files (env.ts pilotResourcesDir). Absent in orcad, whose token report has no HTML page.
   resourcesDir?: string
   schedulerEnabled?: boolean
+  // Tick only the jobs pinned to this machine (PILOT_SCHEDULER=pinned).
+  pinnedOnly?: boolean
 }

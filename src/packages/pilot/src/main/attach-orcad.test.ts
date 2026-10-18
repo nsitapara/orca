@@ -21,20 +21,27 @@ describe('attachPilotOrcad', () => {
 
   // A desktop and a headless host must never both tick, so orcad ticks only when asked to.
   it.each([
-    [undefined, false],
-    ['on', true],
-    ['off', false],
-    ['1', false],
-    ['ON', false]
-  ])('PILOT_SCHEDULER=%s runs the scheduler: %s, and stops Pilot on cleanup', (value, enabled) => {
-    vi.stubEnv('PILOT_SCHEDULER', value)
-    const cleanups: (() => void)[] = []
-    attachPilotOrcad(runtime, (fn) => cleanups.push(fn))
-    expect(services.start).toHaveBeenCalledWith(runtime, 'orcad', { schedulerEnabled: enabled })
-    expect(cleanups).toHaveLength(1)
-    cleanups[0]()
-    expect(services.stop).toHaveBeenCalledTimes(1)
-  })
+    [undefined, false, false],
+    ['on', true, false],
+    ['pinned', true, true],
+    ['off', false, false],
+    ['1', false, false],
+    ['ON', false, false]
+  ])(
+    'PILOT_SCHEDULER=%s runs the scheduler: %s (pinned only: %s), and stops Pilot on cleanup',
+    (value, enabled, pinnedOnly) => {
+      vi.stubEnv('PILOT_SCHEDULER', value)
+      const cleanups: (() => void)[] = []
+      attachPilotOrcad(runtime, (fn) => cleanups.push(fn))
+      expect(services.start).toHaveBeenCalledWith(runtime, 'orcad', {
+        schedulerEnabled: enabled,
+        pinnedOnly
+      })
+      expect(cleanups).toHaveLength(1)
+      cleanups[0]()
+      expect(services.stop).toHaveBeenCalledTimes(1)
+    }
+  )
 
   it("logs a failed start and lets orcad go on (Pilot's store can't stop the host)", () => {
     const error = vi.spyOn(console, 'error').mockImplementation(() => {})

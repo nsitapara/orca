@@ -61,7 +61,8 @@ describe('attachPilotMain', () => {
       quotas: { claude: m.quota, codex: m.codexQuota },
       engineEnv: { binDir: '/Apps/Pilot.app/Contents/Resources/bin', dataDir: '/data/pilot' },
       resourcesDir: '/Apps/Pilot.app/Contents/Resources/pilot',
-      schedulerEnabled: true
+      schedulerEnabled: true,
+      pinnedOnly: false
     })
     expect(m.hold).toHaveBeenCalledWith(PATH_FOUND)
     m.onWillQuit.mock.calls[0][0]()

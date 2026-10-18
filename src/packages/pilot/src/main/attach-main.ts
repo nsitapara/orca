@@ -6,6 +6,7 @@ import {
   applyPilotEnvDefaults,
   pilotResourcesDir,
   pilotSchedulerEnabled,
+  pilotSchedulerMode,
   type PilotHostKind
 } from './env'
 import { pilotBinDir } from './engine-env'
@@ -66,7 +67,8 @@ export function attachPilotMain(runtime: OrcaRuntimeService): void {
           dataDir: getAppEnvironment().getPath('userData')
         },
         resourcesDir: pilotResourcesDir(where),
-        schedulerEnabled: pilotSchedulerEnabled(kind)
+        schedulerEnabled: pilotSchedulerEnabled(kind),
+        pinnedOnly: pilotSchedulerMode(kind) === 'pinned'
       })
     )
   } catch (error) {

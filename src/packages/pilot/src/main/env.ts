@@ -11,21 +11,33 @@ export function applyPilotEnvDefaults(env: NodeJS.ProcessEnv = process.env): voi
 // Where a Pilot main process runs: the packaged app, `pnpm dev`, a serve (`--serve`), or headless orcad.
 export type PilotHostKind = 'desktop' | 'dev' | 'serve' | 'orcad'
 
+export type PilotSchedulerMode = 'off' | 'all' | 'pinned'
+
 // Only one Pilot may tick a folder of automations. A second one (a dev app, a serve on another
 // profile) has its own empty `handled` table, so its first loop would start agents on every item.
-// PILOT_SCHEDULER=on or =off decides everywhere; unset (or any other value), only the packaged
-// desktop app ticks.
+// PILOT_SCHEDULER=on ticks every job, =pinned only the jobs pinned to this machine (runs_on), =off none;
+// unset (or any other value), only the packaged desktop app ticks every job.
+export function pilotSchedulerMode(
+  host: PilotHostKind,
+  env: NodeJS.ProcessEnv = process.env
+): PilotSchedulerMode {
+  if (env.PILOT_SCHEDULER === 'on') {
+    return 'all'
+  }
+  if (env.PILOT_SCHEDULER === 'pinned') {
+    return 'pinned'
+  }
+  if (env.PILOT_SCHEDULER === 'off') {
+    return 'off'
+  }
+  return host === 'desktop' ? 'all' : 'off'
+}
+
 export function pilotSchedulerEnabled(
   host: PilotHostKind,
   env: NodeJS.ProcessEnv = process.env
 ): boolean {
-  if (env.PILOT_SCHEDULER === 'on') {
-    return true
-  }
-  if (env.PILOT_SCHEDULER === 'off') {
-    return false
-  }
-  return host === 'desktop'
+  return pilotSchedulerMode(host, env) !== 'off'
 }
 
 export function pilotAutomationDirs(env: NodeJS.ProcessEnv = process.env): string[] {

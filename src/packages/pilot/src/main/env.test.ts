@@ -6,6 +6,7 @@ import {
   pilotDetailsRoot,
   pilotResourcesDir,
   pilotSchedulerEnabled,
+  pilotSchedulerMode,
   pilotUsageReportDir,
   pilotUsageTemplate,
   pilotVaultAutomationsDir,
@@ -53,12 +54,26 @@ describe('pilotSchedulerEnabled', () => {
     [undefined, [true, false, false, false]],
     ['on', [true, true, true, true]],
     ['off', [false, false, false, false]],
+    ['pinned', [true, true, true, true]],
     // Anything else reads as unset, so a typo never turns a second Pilot on.
     ['ON', [true, false, false, false]],
     ['1', [true, false, false, false]]
   ] as const)('PILOT_SCHEDULER=%s → desktop, dev, serve, orcad: %j', (value, expected) => {
     const env = value === undefined ? {} : { PILOT_SCHEDULER: value }
     expect(HOSTS.map((h) => pilotSchedulerEnabled(h, env))).toEqual(expected)
+  })
+})
+
+describe('pilotSchedulerMode', () => {
+  const HOSTS: PilotHostKind[] = ['desktop', 'dev', 'serve', 'orcad']
+  it.each([
+    [undefined, ['all', 'off', 'off', 'off']],
+    ['on', ['all', 'all', 'all', 'all']],
+    ['pinned', ['pinned', 'pinned', 'pinned', 'pinned']],
+    ['ON', ['all', 'off', 'off', 'off']]
+  ] as const)('PILOT_SCHEDULER=%s → desktop, dev, serve, orcad: %j', (value, expected) => {
+    const env = value === undefined ? {} : { PILOT_SCHEDULER: value }
+    expect(HOSTS.map((h) => pilotSchedulerMode(h, env))).toEqual(expected)
   })
 })
 

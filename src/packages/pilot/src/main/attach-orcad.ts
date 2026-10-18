@@ -1,5 +1,5 @@
 import type { OrcaRuntimeService } from '../../../../main/runtime/orca-runtime'
-import { applyPilotEnvDefaults, pilotSchedulerEnabled } from './env'
+import { applyPilotEnvDefaults, pilotSchedulerEnabled, pilotSchedulerMode } from './env'
 import { startPilotServices, type PilotServices } from './pilot-services'
 
 // Hook target: src/main/orcad/orcad-entry.ts (pilot-hook: orcad), before the RPC server binds.
@@ -15,7 +15,8 @@ export function attachPilotOrcad(
   let services: PilotServices
   try {
     services = startPilotServices(runtime, 'orcad', {
-      schedulerEnabled: pilotSchedulerEnabled('orcad')
+      schedulerEnabled: pilotSchedulerEnabled('orcad'),
+      pinnedOnly: pilotSchedulerMode('orcad') === 'pinned'
     })
   } catch (error) {
     console.error(
