@@ -12,7 +12,7 @@ const LINUX: PilotHostEntry = {
 const MINI_OFF: PilotHostEntry = { ...MINI, schedulerOn: false }
 
 const offered = (choices: ReturnType<typeof runNowChoices>['choices']) =>
-  choices.map((c) => [c.host.key, c.label, c.disabled])
+  choices.map((c) => [c.host.key, c.label, c.disabled, c.short])
 
 describe('runNowChoices', () => {
   it.each<[string, string | null, PilotHostEntry[], string]>([
@@ -50,23 +50,29 @@ describe('runNowChoices', () => {
       LINUX
     ])
     expect(offered(choices)).toEqual([
-      ['local', 'MacBook', null],
-      ['env:mini', 'Mac mini', "Pilot's scheduler is off on Mac mini"]
+      ['local', 'MacBook', null, null],
+      ['env:mini', 'Mac mini', "Pilot's scheduler is off on Mac mini", 'scheduler off']
     ])
   })
 
-  it.each<[string, PilotHostEntry[], string]>([
+  it.each<[string, PilotHostEntry[], string, string]>([
     [
       'is no longer answering',
       [LOCAL_NAMED, MINI_OFFLINE],
-      "Mac mini isn't answering, so this automation can't be changed from here right now."
+      "Mac mini isn't answering, so this automation can't be changed from here right now.",
+      'not answering'
     ],
-    ['is no longer connected', [LOCAL_NAMED, LINUX], "Mac mini isn't connected any more"]
-  ])('disables a machine that loaded the job but %s', (_w, hosts, why) => {
+    [
+      'is no longer connected',
+      [LOCAL_NAMED, LINUX],
+      "Mac mini isn't connected any more",
+      'not connected'
+    ]
+  ])('disables a machine that loaded the job but %s', (_w, hosts, why, short) => {
     const { choices } = runNowChoices({ runsOn: null, hosts: [LOCAL_NAMED, MINI] }, hosts)
     expect(offered(choices)).toEqual([
-      ['local', 'MacBook', null],
-      ['env:mini', 'Mac mini', why]
+      ['local', 'MacBook', null, null],
+      ['env:mini', 'Mac mini', why, short]
     ])
   })
 
@@ -77,9 +83,9 @@ describe('runNowChoices', () => {
       other
     ])
     expect(offered(choices)).toEqual([
-      ['local', 'MacBook', null],
-      ['env:mini', 'Mac mini', "Mac mini isn't connected any more"],
-      ['env:mini2', 'Mac mini', null]
+      ['local', 'MacBook', null, null],
+      ['env:mini', 'Mac mini', "Mac mini isn't connected any more", 'not connected'],
+      ['env:mini2', 'Mac mini', null, null]
     ])
   })
 

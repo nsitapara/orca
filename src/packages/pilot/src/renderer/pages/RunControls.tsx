@@ -125,7 +125,7 @@ function MachineSelect({
       <SelectContent>
         {choices.map((c) => (
           <SelectItem key={c.host.key} value={c.host.key} disabled={c.disabled !== null}>
-            {c.disabled ? `${c.label} · ${c.disabled}` : c.label}
+            {c.short ? `${c.label} · ${c.short}` : c.label}
           </SelectItem>
         ))}
       </SelectContent>

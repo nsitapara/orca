@@ -4,7 +4,14 @@ import { rowRefusal } from './automation-home'
 import type { MergedAutomation } from './merge-automations'
 import type { PilotHostEntry, PilotHostRef } from './pilot-host'
 
-export type RunNowChoice = { host: PilotHostRef; label: string; disabled: string | null }
+// `disabled` is the full sentence for the bar; `short` is the menu's few words, with the label beside it.
+export type RunNowChoice = {
+  host: PilotHostRef
+  label: string
+  disabled: string | null
+  short: string | null
+}
+type WhyNot = { disabled: string; short: string }
 export type RunNowChoices = { choices: RunNowChoice[]; preferred: string | null }
 
 const NO_MACHINE = 'No connected Pilot can start this automation right now.'
@@ -14,19 +21,22 @@ function schedulerOffText(name: string): string {
 }
 
 // A run started on a machine waits on it as a row pinned there does, so the shared predicate words why.
-function whyNot(host: PilotHostRef, hosts: readonly PilotHostEntry[]): string | null {
+function whyNot(host: PilotHostRef, hosts: readonly PilotHostEntry[]): WhyNot | null {
   const entry = hosts.find((h) => h.key === host.key)
   // By key first: the name predicate would let a same-named machine stand in for it.
   if (!entry) {
-    return `${host.machineName} isn't connected any more`
+    return { disabled: `${host.machineName} isn't connected any more`, short: 'not connected' }
   }
   const down = entry.state !== 'online' ? [entry] : []
   const held = rowRefusal({ runsOn: host.machineName }, { listedHosts: hosts, failedHosts: down })
   if (held) {
-    return held
+    return { disabled: held, short: 'not answering' }
   }
   // tickNow refuses where the scheduler is off; null (not reported) is left for that machine to answer.
-  return entry.schedulerOn === false ? schedulerOffText(host.machineName) : null
+  if (entry.schedulerOn === false) {
+    return { disabled: schedulerOffText(host.machineName), short: 'scheduler off' }
+  }
+  return null
 }
 
 function enabledKey(
@@ -45,7 +55,13 @@ export function runNowChoices(
   const choices = loaded.map((ref) => {
     const entry = hosts.find((h) => h.key === ref.key)
     const host = entry ? refOf(entry) : ref
-    return { host, label: host.machineName, disabled: whyNot(host, hosts) }
+    const why = whyNot(host, hosts)
+    return {
+      host,
+      label: host.machineName,
+      disabled: why?.disabled ?? null,
+      short: why?.short ?? null
+    }
   })
   const name = row.runsOn?.trim()
   const preferred =

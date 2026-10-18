@@ -95,9 +95,7 @@ describe('Run now on more than one machine', () => {
       mini: answersFrom([summary])
     })
     fireEvent.keyDown(picker(), { key: 'ArrowDown' })
-    const off = await screen.findByRole('option', {
-      name: "Mac mini · Pilot's scheduler is off on Mac mini"
-    })
+    const off = await screen.findByRole('option', { name: 'Mac mini · scheduler off' })
     expect(off.getAttribute('aria-disabled')).toBe('true')
   })
 
