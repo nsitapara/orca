@@ -8,7 +8,14 @@ import { openRun } from '../../run-views/run-panel-state'
 import { useNow } from '../waiting/use-now'
 import { FinishedRuns } from './FinishedRuns'
 import { RunLimitPicker } from './RunLimitPicker'
-import { memoryText, quotaText, runMemoryText, suggestionText, usageText } from './running-text'
+import {
+  memoryText,
+  quotaText,
+  runMemoryText,
+  suggestionText,
+  usageText,
+  waitsForSlot
+} from './running-text'
 import { useCapacities, type MachineCapacity } from './use-capacity'
 
 function LimitPanel({
@@ -91,13 +98,22 @@ function RunningRow({ run, now }: { run: CapacityRun; now: number }): React.JSX.
   )
 }
 
+// 1-based place among the slot waiters, in line order; null for a held item.
+function placeInLine(queued: readonly QueuedRun[], item: QueuedRun): number | null {
+  if (!waitsForSlot(item)) {
+    return null
+  }
+  return queued.filter(waitsForSlot).indexOf(item) + 1
+}
+
 function QueuedRow({
   item,
   place,
   now
 }: {
   item: QueuedRun
-  place: number
+  // Null: it waits on something other than a slot, so it has no place in the slot line.
+  place: number | null
   now: number
 }): React.JSX.Element {
   return (
@@ -180,11 +196,11 @@ function MachineRuns({
         ))}
       </ListSection>
       <ListSection title="Waiting" empty="Nothing is waiting." count={payload.queued.length}>
-        {payload.queued.map((item, i) => (
+        {payload.queued.map((item) => (
           <QueuedRow
             key={`${item.automationId}:${item.itemKey}`}
             item={item}
-            place={i + 1}
+            place={placeInLine(payload.queued, item)}
             now={now}
           />
         ))}
@@ -250,7 +266,7 @@ export function RunningPage(): React.JSX.Element {
       <div>
         <h2 className="text-sm font-semibold leading-6">Running</h2>
         <p className="text-xs text-muted-foreground">
-          {only ? usageText(only) : 'Jobs running now, and the ones waiting for a slot.'}
+          {only ? usageText(only) : 'Jobs running now, and what is waiting to start, with why.'}
         </p>
       </div>
       <div className="flex flex-col gap-8">

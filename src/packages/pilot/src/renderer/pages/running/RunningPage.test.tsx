@@ -191,6 +191,31 @@ describe('RunningPage', () => {
     ).toBeTruthy()
   })
 
+  it('numbers only the rows waiting on a slot', async () => {
+    const now = Date.now()
+    const row = (key: string, over: Partial<CapacityPayload['queued'][number]>) => ({
+      automationId: 'ci',
+      automationName: 'Fix failed CI',
+      itemKey: key,
+      itemLabel: key,
+      queuedAt: now,
+      byHand: false,
+      ...over
+    })
+    serve(
+      capacity({
+        queued: [
+          row('held-one', { holdCode: 'quota', holdDetail: 'over quota' }),
+          row('slot-one', { holdCode: 'capacity' })
+        ]
+      })
+    )
+    await shown()
+    const rows = within(screen.getByRole('region', { name: 'Waiting' })).getAllByRole('listitem')
+    expect(rows[0]?.textContent).not.toMatch(/^\d/)
+    expect(rows[1]?.textContent).toMatch(/^1/)
+  })
+
   it('renders an older payload without hold fields or the quota ceiling', async () => {
     serve(capacity())
     await shown()
