@@ -4,6 +4,7 @@ import type {
   AnswerState,
   CardHistoryEntry,
   InboxListPayload,
+  PreparationWait,
   QueueEntry,
   QueueListPayload,
   RunLine
@@ -22,6 +23,8 @@ export type MergedInbox = {
   runs: ReadonlyMap<string, Hosted<ActivityRun>>
   // Keyed hostedKey(host, cardId).
   history: ReadonlyMap<string, CardHistoryEntry[]>
+  // Keyed hostedKey(host, cardId).
+  preparationWaits: ReadonlyMap<string, PreparationWait>
   people: InboxListPayload['people']
   groups: InboxListPayload['groups']
   automations: InboxListPayload['automations']
@@ -63,6 +66,9 @@ export function mergeInbox(reads: readonly HostRead<InboxListPayload>[]): Merged
     answerStates: tagged(got.map(({ host, value }) => ({ host, value: value.answerStates }))),
     runs,
     history: tagged(got.map(({ host, value }) => ({ host, value: value.history }))),
+    preparationWaits: tagged(
+      got.map(({ host, value }) => ({ host, value: value.preparationWaits }))
+    ),
     people: joinById(got.map((g) => g.value.people)),
     groups: joinById(
       got.map((g) => g.value.groups),

@@ -147,6 +147,7 @@ export function InboxPage(): React.JSX.Element {
         runLine={inbox?.runLines.get(key) ?? null}
         answerState={inbox?.answerStates.get(key) ?? null}
         history={inbox?.history.get(key) ?? null}
+        preparationWait={inbox?.preparationWaits.get(key) ?? null}
         error={errors[key] ?? null}
         selected={selected === key}
         now={loadedAt}

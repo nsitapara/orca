@@ -55,6 +55,7 @@ function inbox(id: string, runId: string, over: Partial<InboxListPayload> = {}):
     },
     runs: { [runId]: activityRun(runId) },
     history: { [id]: [{ kind: 'asked', at: 1, run: null }] },
+    preparationWaits: { [id]: { code: 'typing', detail: 'someone is typing', since: 1 } },
     people: [{ id: 'nish', name: 'Nish' }],
     groups: [],
     automations: [{ id: 'tests', name: 'Tests' }],
@@ -70,6 +71,9 @@ describe('mergeInbox', () => {
     expect(m.runLines.has('in_1') && m.runLines.has(hostedKey(MINI, 'in_1'))).toBe(true)
     expect(m.answerStates.has('in_1') && m.answerStates.has(hostedKey(MINI, 'in_1'))).toBe(true)
     expect(m.history.has(hostedKey(MINI, 'in_1'))).toBe(true)
+    expect(m.preparationWaits.has('in_1') && m.preparationWaits.has(hostedKey(MINI, 'in_1'))).toBe(
+      true
+    )
   })
 
   // A card's details load keys on its host: a new object each poll would restart a failed load unasked.

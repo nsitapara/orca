@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import type { InboxItemRow, InboxListRow } from '../../../shared/api-types'
+import type { PreparationWait } from '../../../shared/inbox-types'
 import type { PreparationRequirement } from '../../../shared/preparation'
 import { hostRpc } from '../../hosts/host-rpc'
 import { usePilotHost } from '../../hosts/PilotHostContext'
@@ -87,9 +88,12 @@ function NeedsEvidence({
 export function PreparationProgress({
   item,
   onRetry,
-  onPrepareEvidence
+  onPrepareEvidence,
+  wait = null
 }: {
   item: InboxListRow
+  // Why a queued card is still in the runner's line (InboxListPayload.preparationWaits); null from an older Pilot.
+  wait?: PreparationWait | null
   // A person's Retry on a blocked card (pilot.inbox.prepareRetry): null once requeued, else why not.
   onRetry: () => Promise<string | null>
   // A person's Prepare evidence on a never-prepared card (pilot.inbox.prepareEvidence): null once queued.
@@ -119,6 +123,7 @@ export function PreparationProgress({
   return (
     <div role="status" className="flex flex-col gap-1 text-sm text-muted-foreground">
       {preparation.progress ? <p>{preparation.progress}</p> : null}
+      {preparation.state === 'queued' && wait ? <p>Waiting: {wait.detail}</p> : null}
       <p>
         Needed for your decision:{' '}
         {preparation.input.requirements.map((kind) => ARTIFACT_LABELS[kind]).join(', ')}.

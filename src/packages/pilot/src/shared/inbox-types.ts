@@ -75,6 +75,7 @@ export type CardHistoryEntry =
       with: string[]
     }
   | { kind: 'reply'; at: number | null; by: InboxReply['by']; text: string; run: HistoryRun | null }
+export type PreparationWait = { code: HoldReason; detail: string; since: number }
 export type InboxListPayload = {
   items: InboxListRow[]
   // An action card's Run line by card id (main/inbox/run-line.ts); none for other cards.
@@ -85,6 +86,8 @@ export type InboxListPayload = {
   runs?: Record<string, ActivityRun>
   // Each card's Message history by card id. Absent from older builds.
   history?: Record<string, CardHistoryEntry[]>
+  // Why each queued context card waits, by card id: the runner line's hold. Absent from older builds.
+  preparationWaits?: Record<string, PreparationWait>
   people: { id: string; name: string }[]
   groups: { id: string; name: string; members: string[] }[]
   automations: { id: string; name: string }[]

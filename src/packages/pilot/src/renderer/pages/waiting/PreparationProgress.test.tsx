@@ -68,6 +68,22 @@ describe('PreparationProgress', () => {
     expect(screen.queryByRole('button', { name: 'Retry preparation' })).toBeNull()
   })
 
+  it('says what a queued card waits on, and adds nothing while it generates', () => {
+    const wait = { code: 'typing' as const, detail: 'someone is typing in ✳ F1', since: 1 }
+    const view = (state: InboxPreparation['state']) => (
+      <PreparationProgress
+        item={row(state)}
+        wait={wait}
+        onRetry={async () => null}
+        onPrepareEvidence={async () => null}
+      />
+    )
+    const { rerender } = render(view('queued'))
+    expect(screen.getByText('Waiting: someone is typing in ✳ F1')).toBeTruthy()
+    rerender(view('generating'))
+    expect(screen.queryByText(/Waiting:/)).toBeNull()
+  })
+
   it('shows why a Retry was refused', async () => {
     render(
       <PreparationProgress

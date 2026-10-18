@@ -1,6 +1,11 @@
 import type { AutomationDefinition } from '../../shared/definition/types'
 import type { InboxItemRow, InboxListRow, InboxStatus } from '../../shared/api-types'
-import type { AnswerState, InboxListPayload, RunLine } from '../../shared/inbox-types'
+import type {
+  AnswerState,
+  InboxListPayload,
+  PreparationWait,
+  RunLine
+} from '../../shared/inbox-types'
 import type { PeopleDirectory } from '../../shared/people'
 import { needsEvidence } from '../../shared/evidence'
 import { preparationRef } from '../../shared/preparation'
@@ -164,6 +169,31 @@ function withoutManifest(details: NonNullable<InboxItemRow['details']>) {
   return ref
 }
 
+// A queued context card waits in the runner's line; prefer job 14's row if the key repeats across automations.
+function preparationWaitsOf(
+  deps: InboxDeps,
+  items: InboxItemRow[]
+): Record<string, PreparationWait> {
+  const queued = items.filter((i) => i.preparation?.state === 'queued').map((i) => i.id)
+  if (queued.length === 0) {
+    return {}
+  }
+  const preparers = new Set(
+    deps
+      .definitions()
+      .filter((d) => d.items?.kind === 'inbox_preparation')
+      .map((d) => d.id)
+  )
+  const out: Record<string, PreparationWait> = {}
+  for (const row of deps.store.capacity.queuedFor(queued)) {
+    if (row.itemKey in out && !preparers.has(row.automationId)) {
+      continue
+    }
+    out[row.itemKey] = { code: row.holdCode, detail: row.holdDetail, since: row.dueAt }
+  }
+  return out
+}
+
 export function listInbox(
   deps: InboxDeps,
   filter: { person?: string; statuses?: readonly InboxStatus[] },
@@ -187,6 +217,7 @@ export function listInbox(
     answerStates: answerStatesOf(deps, items),
     runs: cardRuns(deps.store, items),
     history: cardHistories(deps.store, items),
+    preparationWaits: preparationWaitsOf(deps, items),
     people: people.people.map((p) => ({ id: p.id, name: p.name })),
     groups: people.groups.map((g) => ({ id: g.id, name: g.name, members: [...g.members] })),
     automations: deps.definitions().map((d) => ({ id: d.id, name: d.name }))
