@@ -5,7 +5,7 @@ import { handoverOf } from '../handover/tick-handover'
 import { createPassFetchCache } from '../sources/fetch-cache'
 import { messageOf } from '../sources/gitlab-fetch'
 import { glabApiForRepo } from '../sources/gitlab-api'
-import { decideTickItems, type DecideOutcome } from './tick-decide'
+import { decideTickItems, type DecideOutcome, type DecideScope } from './tick-decide'
 import type { TickDeps, TickOptions } from './tick-runner'
 
 // A dry run has no tick row: it decides with run.tick 0, which no stored tick has, as a new tick's id would be.
@@ -16,7 +16,7 @@ export async function decide(
   def: AutomationDefinition,
   people: PeopleDirectory,
   deps: TickDeps,
-  opts: TickOptions,
+  opts: TickOptions & Pick<DecideScope, 'lineKeys'>,
   tickId: number
 ): Promise<DecideOutcome> {
   const label = tickId === DRY_RUN_TICK ? `dry-run-${def.id}` : `tick-${tickId}`

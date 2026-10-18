@@ -8,6 +8,7 @@ import { askDecisions, type AskDeps } from '../run/ask-first'
 import type { PassFetchCache } from '../sources/fetch-cache'
 import type { GlabApi } from '../sources/gitlab-api'
 import { keepOrphanHandled, releaseUnlaunched, type Unlaunched } from './launch-failure'
+import { lineKeysOf } from './line-scope'
 import { worktreeTakenSinceDecide, type DecideDeps, type FedOutcome } from './tick-decide'
 import { decide, dryRunTick } from './tick-dry-run'
 
@@ -47,8 +48,9 @@ export type TickDeps = DecideDeps & {
 }
 // `pass` is the scheduler pass's fetch cache, shared by every automation that ticks in that pass. `trigger`: the run
 // whose feed (run: now) asked for this tick, recorded on it for Activity. `byHand`: a Run now, whose runs are stored
-// with trigger `manual`. `byHandKeys`: Retry's keys, due again though the runner gave up on them. `recheck`: the
-// runner's line asked for it; Activity leaves it out unless it starts a run.
+// with trigger `manual`. `byHandKeys`: Retry's once key and item key, due again though the runner gave up on them.
+// `recheck`: the runner's line asked for it; Activity leaves it out unless it starts a run. A re-check or Retry tick
+// decides only its job's line (and Retry's item): the job's other items wait for its next tick.
 export type TickOptions = {
   dryRun: boolean
   pass?: PassFetchCache
@@ -257,15 +259,19 @@ export async function runTick(
   }
   const tickId = deps.store.startTick(def.id, deps.now(), opts.recheck === true)
   let decisions: ItemDecision[]
+  let waits: ItemDecision[]
   let warnings: string[]
   let feeding: FedOutcome
+  let lineKeys: ReadonlySet<string> | undefined
   try {
     if (opts.trigger) {
       deps.store.handovers.setTickTrigger(tickId, opts.trigger)
     }
     expireStale(deps.store, def, tickId, deps.now())
-    const outcome = await decide(def, people, deps, opts, tickId)
+    lineKeys = lineKeysOf(deps.store, def, opts)
+    const outcome = await decide(def, people, deps, { ...opts, lineKeys }, tickId)
     decisions = outcome.decisions
+    waits = outcome.waits
     warnings = outcome.warnings
     feeding = outcome
   } catch (error) {
@@ -290,16 +296,17 @@ export async function runTick(
       runIdFor: (n) => `${makeRunId(def.id, at, n, tickId)}-ask`
     })
     await startRuns(def, decisions, tickId, deps, runIds, unlaunched, opts)
-    deps.capacity?.settle(def, decisions)
+    deps.capacity?.settle(def, decisions, lineKeys)
+    // Only what the tick decided is stored and counted; the items it left wait for the job's next tick.
     deps.store.recordDecisions(tickId, decisions, runIds)
-    settleFed(deps.store, def, feeding, decisions, runIds, tickId, deps.now())
+    settleFed(deps.store, def, feeding, [...decisions, ...waits], runIds, tickId, deps.now())
     deps.store.finishTick(tickId, 'ok', null, countVerdicts(decisions), deps.now(), warnings)
     const handover = handoverOf(def, feeding.fed, decisions)
     return {
       tickId,
       status: 'ok',
       error: null,
-      decisions,
+      decisions: [...decisions, ...waits],
       warnings,
       ...(handover ? { handover } : {})
     }

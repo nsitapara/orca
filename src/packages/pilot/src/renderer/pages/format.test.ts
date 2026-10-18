@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
+import type { ItemDecision, Verdict } from '../../shared/api-types'
 import {
+  dryRunLine,
   errorText,
   itemUrl,
   outcomeLine,
@@ -10,6 +12,16 @@ import {
   tickLine,
   verdictLabel
 } from './format'
+
+const decided = (verdict: Verdict): ItemDecision => ({
+  key: 'mr:1',
+  label: '!1',
+  verdict,
+  reason: '',
+  checks: [],
+  onceKey: '1',
+  fields: {}
+})
 
 describe('renderer formatting', () => {
   it.each([
@@ -62,6 +74,21 @@ describe('renderer formatting', () => {
         counts: { started: 1, skipped: 3, notdue: 2, out_of_scope: 15 }
       })
     ).toBe('6 checked · 1 started · 3 skipped · 2 not due')
+    // Held items are counted: the runner's line has them.
+    expect(
+      tickLine({
+        id: 3,
+        automationId: 'a',
+        startedAt: 0,
+        finishedAt: 1,
+        status: 'ok',
+        error: null,
+        counts: { started: 1, held: 21 }
+      })
+    ).toBe('22 checked · 1 started · 21 waiting')
+    expect(dryRunLine([decided('started'), decided('held'), decided('held')])).toBe(
+      '3 checked · 1 would start · 2 would wait'
+    )
     expect(
       tickLine({
         id: 2,

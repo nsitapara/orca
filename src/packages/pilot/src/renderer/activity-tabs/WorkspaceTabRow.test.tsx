@@ -83,3 +83,57 @@ it('selects the hosted browser over the tab created while activating an empty wo
   fireEvent.click(view.getByRole('button', { name: 'Docs' }))
   expect(getClientHostedBrowserRowSelection()?.groupActiveTabIdAtSelection).toBe('seeded-terminal')
 })
+
+// Why: the row names the agent its tab-bar tab names; a title can show Claude before or without launch intent.
+it.each([
+  { title: '✳ Claude Code', launchAgent: undefined, expected: 'Claude' },
+  { title: 'Terminal 1', launchAgent: 'codex' as const, expected: 'Codex' },
+  { title: 'zsh', launchAgent: undefined, expected: null }
+])(
+  'a terminal titled "$title" with launch agent $launchAgent shows $expected',
+  ({ title, launchAgent, expected }) => {
+    useAppStore.setState({
+      tabsByWorktree: {
+        'wt-1': [
+          {
+            id: 'term-1',
+            ptyId: null,
+            worktreeId: 'wt-1',
+            title,
+            customTitle: null,
+            color: null,
+            sortOrder: 0,
+            createdAt: 0,
+            ...(launchAgent ? { launchAgent } : {})
+          }
+        ]
+      }
+    })
+    const view = render(
+      <TooltipProvider>
+        <WorkspaceTabRow
+          compactMode={false}
+          item={{
+            key: 'tab-1',
+            label: title,
+            worktree: makeWorktree(),
+            repo: null,
+            tab: {
+              id: 'tab-1',
+              entityId: 'term-1',
+              groupId: 'g',
+              worktreeId: 'wt-1',
+              contentType: 'terminal',
+              label: title,
+              customLabel: null,
+              color: null,
+              sortOrder: 0,
+              createdAt: 0
+            }
+          }}
+        />
+      </TooltipProvider>
+    )
+    expect(view.queryByTitle(/^(Claude|Codex)$/)?.getAttribute('title') ?? null).toBe(expected)
+  }
+)

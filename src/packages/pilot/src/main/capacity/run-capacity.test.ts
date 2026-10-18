@@ -282,6 +282,10 @@ describe('recheckAfterMs', () => {
   it.each<[HoldReason, number]>([
     ['quota', 300_000],
     ['window', 300_000],
+    ['in_flight', 300_000],
+    ['session_open', 300_000],
+    ['answers_pending', 300_000],
+    // Job 14 starts soon after a tab frees.
     ['worktree_busy', 60_000],
     ['job_limit', 60_000],
     ['tick_limit', Number.POSITIVE_INFINITY]

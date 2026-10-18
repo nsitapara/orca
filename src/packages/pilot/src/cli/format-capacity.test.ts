@@ -66,6 +66,67 @@ describe('formatCapacity', () => {
     )
   })
 
+  it('numbers only the slot line, says why each item waits since it became due, and lists what the runner gave up on', () => {
+    const text = formatCapacity(
+      {
+        ...payload,
+        retryLimit: 2,
+        queued: [
+          {
+            ...payload.queued[0],
+            dueAt: NOW - 20 * 60_000,
+            holdCode: 'capacity',
+            holdDetail: 'Waiting for a slot: 2 of 2 running'
+          },
+          {
+            automationId: 'context',
+            automationName: '14 Prepare context',
+            itemKey: 'card-1',
+            itemLabel: 'F1 carrier samples',
+            queuedAt: NOW - 60_000,
+            byHand: false,
+            dueAt: NOW - 9 * 60_000,
+            holdCode: 'worktree_busy',
+            holdDetail: 'someone is typing in ✳ F1'
+          },
+          {
+            automationId: 'ci',
+            automationName: '05 Fix failed CI',
+            itemKey: 'mr:10',
+            itemLabel: '!10',
+            queuedAt: NOW - 2 * 60_000,
+            byHand: false
+          }
+        ],
+        gaveUp: [
+          {
+            automationId: 'review',
+            automationName: '03 Review and fix',
+            onceKey: 'wt@abc',
+            itemLabel: '!1600',
+            failures: 3,
+            failedAt: NOW - 60_000,
+            outcome: 'agent exited'
+          }
+        ]
+      },
+      NOW
+    )
+    expect(text.split('\n').slice(0, 2)).toEqual([
+      'Run limit: 2 (suggested 3)',
+      'Retries after a failure: 2'
+    ])
+    expect(text.split('\n').slice(5, 12)).toEqual([
+      'Waiting: 2 for a slot · 1 held',
+      '  1. 05 Fix failed CI  !9  waiting 20m  (Run now)  Waiting for a slot: 2 of 2 running',
+      '  -  14 Prepare context  F1 carrier samples  waiting 9m  someone is typing in ✳ F1',
+      '  2. 05 Fix failed CI  !10  waiting 2m',
+      'Gave up: 1',
+      '  03 Review and fix  !1600  failed 3 times  agent exited',
+      'Memory: 9.5 GB available of 24.0 GB'
+    ])
+  })
+
   it('says when there is no limit and no job has been measured yet', () => {
     const text = formatCapacity(
       {

@@ -7,6 +7,7 @@ import { createGlobalSettingsFixture } from '../../../../../shared/global-settin
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { NewAgentMenu } from './NewAgentMenu'
 import { launchAgentInNewTab } from '@/lib/launch-agent-in-new-tab'
+import { activateAndRevealWorkspace } from '@/lib/worktree-activation'
 
 vi.mock('@/hooks/useAgentDetectionTarget', () => ({
   useAgentDetectionTargetForWorktree: () => null
@@ -24,6 +25,9 @@ vi.mock('@/lib/structured-agent-session-launch', () => ({
 }))
 vi.mock('@/lib/launch-agent-in-new-tab', () => ({
   launchAgentInNewTab: vi.fn(() => ({ surface: { kind: 'remote-terminal' } }))
+}))
+vi.mock('@/lib/worktree-activation', () => ({
+  activateAndRevealWorkspace: vi.fn(() => ({ primaryTabId: null }))
 }))
 
 const menu = () => (
@@ -102,4 +106,23 @@ it('a worktree with no tab group gets one when the menu opens, and the agent lau
   expect(launchAgentInNewTab).toHaveBeenCalledWith(
     expect.objectContaining({ agent: 'claude', worktreeId: 'wt-1', groupId })
   )
+})
+
+// Why: Activity lists worktrees other than the open one; a launch there must bring it into view.
+it('switches to the worktree as the new tab opens, without seeding a shell beside it', async () => {
+  useAppStore.setState({ activeWorktreeId: 'wt-other' })
+  const user = userEvent.setup()
+  const view = render(menu())
+  await user.click(view.getByRole('button', { name: 'New agent' }))
+  await waitFor(() => expect(document.activeElement?.getAttribute('role')).toBe('menuitem'))
+  await user.keyboard('{Enter}')
+  expect(activateAndRevealWorkspace).not.toHaveBeenCalled()
+
+  const [args] = vi.mocked(launchAgentInNewTab).mock.calls[0] ?? []
+  expect(args?.beforeSurfaceOpen?.({ kind: 'local-terminal' })).toBe(true)
+
+  expect(activateAndRevealWorkspace).toHaveBeenCalledWith('wt-1', {
+    providesInitialSurface: true,
+    revealInSidebar: false
+  })
 })

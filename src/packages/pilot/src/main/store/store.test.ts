@@ -373,6 +373,36 @@ describe('PilotStore', () => {
     expect(store.lastTick('b')?.id).toBe(lonely)
   })
 
+  it('prunes quiet re-check ticks older than a day, and keeps ordinary ticks, visible re-checks and each newest tick', () => {
+    const store = freshStore()
+    const day = 24 * 60 * 60_000
+    const now = 10 * day
+    const tick = (id: string, at: number, recheck: boolean) => {
+      const t = store.startTick(id, at, recheck)
+      store.recordDecisions(t, [decision('!1', 'held')], new Map())
+      store.finishTick(t, 'ok', null, { held: 1 }, at + 1)
+      return t
+    }
+    const ordinary = tick('a', now - 2 * day, false)
+    const quiet = tick('a', now - day - 2, true)
+    const started = tick('a', now - day - 1, true)
+    store.runs.create({
+      id: 'run-1',
+      automationId: 'a',
+      tickId: started,
+      itemKey: '!1',
+      itemLabel: '!1',
+      worktreePath: null,
+      startedAt: now - day - 1
+    })
+    const young = tick('a', now - 60_000, true)
+    const lonely = tick('b', now - 2 * day, true)
+    expect(store.pruneRechecks(now)).toBe(1)
+    expect(store.listTicks('a', 10).map((t) => t.id)).toEqual([young, started, ordinary])
+    expect(store.tickItems(quiet)).toEqual([])
+    expect(store.lastTick('b')?.id).toBe(lonely)
+  })
+
   it('closes a tick still running after an hour as interrupted, and leaves a younger one', () => {
     const store = freshStore()
     const now = 10 * STUCK_TICK_MS

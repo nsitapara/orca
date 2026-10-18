@@ -119,8 +119,6 @@ export function passActivity(
   }
 }
 
-// quota.py CEILING: automations leave the rest of each window for Nish's own sessions. Unknown passes.
-
 export function quotaHold(agent: AgentKind, reading: QuotaReading): Hold | null {
   if (reading.weekly !== null && reading.weekly >= QUOTA_CEILING.weekly) {
     const at = Math.round(reading.weekly)

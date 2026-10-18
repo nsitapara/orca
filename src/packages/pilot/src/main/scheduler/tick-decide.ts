@@ -24,6 +24,7 @@ import { itemSource } from '../sources/registry'
 import { runOnceItem } from '../sources/run-once'
 import type { Item, RepoFacts, SourceContext, SourceListing } from '../sources/types'
 import type { PilotStore } from '../store/store'
+import { splitByLine } from './line-scope'
 import { idsForTick, type FedOutcome } from './tick-ids'
 import { lastLine } from '../last-line'
 
@@ -64,7 +65,12 @@ export type DecideDeps = {
   runIds?: IdsRunner
 }
 export type { FedOutcome }
-export type DecideOutcome = FedOutcome & { decisions: ItemDecision[]; warnings: string[] }
+// waits: the items a line-scoped tick left for the job's next tick (main/scheduler/line-scope.ts).
+export type DecideOutcome = FedOutcome & {
+  decisions: ItemDecision[]
+  waits: ItemDecision[]
+  warnings: string[]
+}
 type ScriptCheck = Extract<CheckDef, { kind: 'script' }>
 
 const SCRIPT_CHECK_CONCURRENCY = 4
@@ -175,7 +181,12 @@ async function scriptChecks(
   return out
 }
 
-export type ByHand = { byHand?: boolean; byHandKeys?: ReadonlySet<string> }
+// lineKeys: a re-check or Retry tick decides only these items (main/scheduler/line-scope.ts).
+export type DecideScope = {
+  byHand?: boolean
+  byHandKeys?: ReadonlySet<string>
+  lineKeys?: ReadonlySet<string>
+}
 
 // A row Run now queued keeps its exemption at every re-check, until its item starts.
 function byHandKeys(
@@ -190,15 +201,16 @@ function byHandKeys(
   return new Set([...(asked ?? []), ...queued])
 }
 
-// waitingSince is also the item's due time, its place in the runner's line.
+// The source's waitingSince is the item's due time in the runner's line; first sight only ranks it within the job.
 function toDecideItem(item: Item, seenAt: ReadonlyMap<string, number>, now: number): DecideItem {
   return {
     key: item.key,
     label: item.label,
     fields: item.fields,
     sortKeys: {
-      waitingSince: item.sortKeys.waitingSince ?? seenAt.get(item.key) ?? now,
-      priority: item.sortKeys.priority
+      waitingSince: item.sortKeys.waitingSince,
+      priority: item.sortKeys.priority,
+      seenAt: seenAt.get(item.key) ?? now
     }
   }
 }
@@ -250,7 +262,7 @@ export async function decideTickItems(
   deps: DecideDeps,
   pass: PassFetchCache,
   tickId: number,
-  hand: ByHand = {}
+  hand: DecideScope = {}
 ): Promise<DecideOutcome> {
   const now = deps.now()
   const repo = await deps.resolveRepo(def.repo)
@@ -269,7 +281,8 @@ export async function decideTickItems(
     ...item,
     fields: { ...tickFields, ...item.fields }
   }))
-  const withBuiltins = await addBuiltinFields(def, withTick, repo, deps.fields)
+  const { inLine, waits } = splitByLine(def, withTick, hand.lineKeys)
+  const withBuiltins = await addBuiltinFields(def, inLine, repo, deps.fields)
   const scope = new Map<string, ScopeGate>()
   for (const item of withBuiltins) {
     const gate = deps.sources.scope(def, item, people)
@@ -312,6 +325,7 @@ export async function decideTickItems(
   })
   return {
     decisions,
+    waits,
     warnings: [
       ...(ids?.warnings ?? []),
       ...listed.warnings,

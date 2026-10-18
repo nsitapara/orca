@@ -6,11 +6,13 @@ import { isRuntimeCheck } from './check-class'
 import { evaluateCheck, fieldLookup, plural, type CheckResult } from './checks'
 import { inTickGate, itemGate, limitGate, type Hold } from './runner-gates'
 
+// waitingSince: when the source says the item began waiting, its due time in the runner's line. seenAt: when this
+// job first saw it, which only ranks it within the job (oldest_waiting_first) when the source gives no time.
 export type DecideItem = {
   key: string
   label: string
   fields: ItemFields
-  sortKeys?: { waitingSince: number | null; priority: number | null }
+  sortKeys?: { waitingSince: number | null; priority: number | null; seenAt?: number | null }
 }
 export type ScopeGate = { verdict: 'out_of_scope' | 'notdue'; reason: string }
 export type HandledState = {
@@ -198,7 +200,7 @@ function ranked(def: AutomationDefinition, candidates: Candidate[]): Candidate[]
   const key = (c: Candidate) =>
     order === 'priority'
       ? sortValue(c.item.sortKeys?.priority)
-      : sortValue(c.item.sortKeys?.waitingSince)
+      : sortValue(c.item.sortKeys?.waitingSince ?? c.item.sortKeys?.seenAt)
   return [...candidates].sort((a, b) => key(a) - key(b) || a.index - b.index)
 }
 
@@ -213,7 +215,8 @@ function base(item: DecideItem, onceKey: string) {
   return { key: item.key, label: item.label, onceKey, fields: item.fields }
 }
 
-// An item that reached the checks has a place in the runner's line: when it became due.
+// An item that reached the checks has a place in the runner's line: since it began waiting, else now (the store keeps
+// the earliest), so an item first seen long ago doesn't jump ahead of one that waits since this morning.
 function reachedChecks(
   input: DecideInput,
   item: DecideItem,

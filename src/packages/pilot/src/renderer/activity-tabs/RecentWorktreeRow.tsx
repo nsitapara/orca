@@ -1,21 +1,10 @@
 import { FolderGit2, Pin } from 'lucide-react'
-import { toast } from 'sonner'
 import { getActivityThreadWorkspaceTitle } from '@/lib/activity-thread-display'
-import { getPaletteWorktreeExecutionHostId } from '@/lib/palette-repo-resolution'
-import { activateAndRevealWorkspace } from '@/lib/worktree-activation'
+import { isPortaledRowMenuClick } from '@/lib/list-row-interaction'
 import { ActivityMachineChip } from '../activity-machines/ActivityMachineChip'
 import { NewAgentMenu } from './NewAgentMenu'
+import { openActivityWorktree } from './open-activity-worktree'
 import type { RecentWorktreeItem } from './recent-worktree-items'
-
-function open({ worktree }: RecentWorktreeItem): void {
-  const executionHostId = getPaletteWorktreeExecutionHostId(worktree)
-  const opened = executionHostId
-    ? activateAndRevealWorkspace(worktree.id, { executionHostId, revealInSidebar: false })
-    : activateAndRevealWorkspace(worktree.id, { revealInSidebar: false })
-  if (!opened) {
-    toast.error('This worktree is no longer available.')
-  }
-}
 
 // Grouped by anything but worktree there is no header to start a session from: one line, the
 // worktree and its New agent. Grouped by worktree, the header stands in for it.
@@ -25,7 +14,12 @@ export function RecentWorktreeRow({ item }: { item: RecentWorktreeItem }): React
     <div
       data-worktree-card-surface="true"
       data-activity-recent-worktree={item.key}
-      onClick={() => open(item)}
+      onClick={(event) => {
+        // The New agent menu's pick bubbles here through its portal; it opens its own tab.
+        if (!isPortaledRowMenuClick(event)) {
+          openActivityWorktree(item.worktree)
+        }
+      }}
       role="listitem"
       aria-label={workspaceLabel}
       className="group relative flex w-full cursor-pointer items-center gap-1.5 rounded-lg border border-transparent px-1.5 py-1 text-left transition-[background-color,border-color,opacity,box-shadow] duration-200 outline-none select-none worktree-sidebar-card-hover focus-visible:ring-1 focus-visible:ring-ring"

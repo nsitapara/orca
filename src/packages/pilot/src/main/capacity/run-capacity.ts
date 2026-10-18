@@ -24,8 +24,13 @@ export type RunCapacity = {
   admit(def: AutomationDefinition, item: LineItem, byHand: boolean): Admission
   // An item a runner gate holds waits in line too, with or without a run limit, until a re-check starts it.
   hold(def: AutomationDefinition, item: LineItem, hold: LineHold, byHand: boolean): void
-  // After a tick: its automation's waiting items that this tick didn't queue or hold are no longer in line.
-  settle(def: AutomationDefinition, decisions: readonly ItemDecision[]): void
+  // After a tick: its automation's waiting items that this tick didn't queue or hold are no longer in line. A tick that
+  // decided only `lineKeys` (a re-check or Retry) leaves its job's other rows in place.
+  settle(
+    def: AutomationDefinition,
+    decisions: readonly ItemDecision[],
+    lineKeys?: ReadonlySet<string>
+  ): void
   // Drops a failing job's slot waiters; its held rows count as checked now, so they don't re-tick it every loop.
   tickFailed(automationId: string): void
   // An answer run goes ahead of the queue (Nish is waiting on it), so it needs only a free slot.
@@ -50,12 +55,21 @@ function waitingReason(inUse: number, limit: number, ahead: number): string {
   return `Waiting for a slot: ${inUse} of ${limit} running${line}`
 }
 
-// Quota reads are cached for 5 minutes; a per-tick overflow waits for its job's own tick, so per_tick still throttles.
+// Quota reads are cached for 5 minutes, and a dirty worktree, an open session or pending answers last that long too.
+const SLOW_HOLDS: ReadonlySet<HoldReason> = new Set<HoldReason>([
+  'quota',
+  'window',
+  'in_flight',
+  'session_open',
+  'answers_pending'
+])
+
+// A per-tick overflow waits for its job's own tick, so per_tick still throttles; a busy worktree frees soon (job 14).
 export function recheckAfterMs(code: HoldReason): number {
   if (code === 'tick_limit') {
     return Number.POSITIVE_INFINITY
   }
-  return code === 'quota' || code === 'window' ? 300_000 : 60_000
+  return SLOW_HOLDS.has(code) ? 300_000 : 60_000
 }
 
 // A hold that knows when it ends is re-checked then; any other every recheckAfterMs from its last check.
@@ -149,11 +163,17 @@ export function runCapacity(deps: RunCapacityDeps): RunCapacity {
 
     hold: wait,
 
-    settle(def, decisions) {
-      capacity.keepOnly(
-        def.id,
-        decisions.filter((d) => d.verdict === 'queued' || d.verdict === 'held').map((d) => d.key)
-      )
+    settle(def, decisions, lineKeys) {
+      const waiting = decisions
+        .filter((d) => d.verdict === 'queued' || d.verdict === 'held')
+        .map((d) => d.key)
+      const undecided = lineKeys
+        ? capacity
+            .queued()
+            .filter((q) => q.automationId === def.id && !lineKeys.has(q.itemKey))
+            .map((q) => q.itemKey)
+        : []
+      capacity.keepOnly(def.id, [...waiting, ...undecided])
     },
 
     tickFailed(automationId) {

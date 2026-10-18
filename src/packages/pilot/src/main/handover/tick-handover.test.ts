@@ -4,6 +4,7 @@ import { testDefinition, testStep } from '../../shared/definition/__fixtures__/d
 import type { HandledState } from '../../shared/tick/decide'
 import { EMPTY_PEOPLE } from '../../shared/people'
 import { fakeFieldDeps, testItem } from '../fields/__fixtures__/field-deps'
+import { WAITS_FOR_TICK } from '../scheduler/line-scope'
 import type { SourceAccess } from '../scheduler/tick-decide'
 import { makeRunId, runTick, UnrecordedLaunchError, type TickDeps } from '../scheduler/tick-runner'
 import type { IdsRunner } from '../sources/ids-from'
@@ -212,7 +213,13 @@ describe('settles: a fed id is consumed only when its tick started a run or the 
     ],
     ['not due by its scope, never handled', decision('notdue'), new Map(), false],
     ["skipped by a check or a field script's not due", decision('skipped'), new Map(), false],
-    ['held by quota, a busy worktree, a limit or a retry', decision('held'), new Map(), false]
+    ['held by quota, a busy worktree, a limit or a retry', decision('held'), new Map(), false],
+    [
+      "left for its job's next tick by a re-check or Retry, though handled",
+      { ...decision('notdue'), reason: WAITS_FOR_TICK },
+      handled(DONE),
+      false
+    ]
   ])('%s → %s', (_name, d, states, settled) => {
     expect(settles(d, states)).toBe(settled)
   })
