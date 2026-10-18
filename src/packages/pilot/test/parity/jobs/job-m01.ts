@@ -22,7 +22,7 @@ export const JOB_M01 = {
 // clause (out of scope), a kickoff already made is once_per (not due), the rest are the script check with the same
 // reason (skipped). A ticket the old sweep never lists (not in Todo) has no word: out of scope.
 export const VERDICTS_M01: VerdictTable = {
-  map: { start: ['started'], defer: ['over_limit'], QUOTA: ['skipped'] },
+  map: { start: ['started'], defer: ['held'], QUOTA: ['held'] },
   rows: [
     { word: 'skip', reason: /^no branch name in Linear$/, verdicts: ['out_of_scope'] },
     { word: 'skip', reason: /^kickoff session still open$|^kicked off /, verdicts: ['notdue'] },
@@ -30,12 +30,6 @@ export const VERDICTS_M01: VerdictTable = {
   ],
   whenOldMissing: ['out_of_scope'],
   known: [
-    {
-      key: 'linear:WEB-1',
-      word: 'defer',
-      verdict: 'skipped',
-      why: 'the old sweep counted a quota-out ticket toward --max, so the fourth was deferred; Pilot skips every one on the quota check'
-    },
     {
       key: 'linear:WEB-1',
       word: 'skip',

@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest'
 import Database from '../../../../../main/sqlite/sync-database'
 import type { ItemDecision } from '../../shared/api-types'
 import { PILOT_SCHEMA_VERSION } from './migrations'
+import { addImportedHandled } from './__fixtures__/imported-rows'
 import { INTERRUPTED, PilotStore, STUCK_TICK_MS, TICK_RETENTION_MS } from './store'
 
 function freshStore(): PilotStore {
@@ -56,21 +57,123 @@ describe('PilotStore', () => {
     const store = freshStore()
     store.markHandled('a', 'k:1', 'run-1', 1)
     store.markHandled('a', 'k:2', 'run-2', 1)
-    store.setHandledStatus('a', 'run-1', 'failed', 50)
-    store.setHandledStatus('a', 'run-2', 'done', 60)
+    expect(store.setHandledStatus('a', 'run-1', 'failed', 50)).toBe(1)
+    expect(store.setHandledStatus('a', 'run-2', 'done', 60)).toBe(0)
+    const settled = { lastOutcome: null }
     expect(store.handledRows('a')).toEqual([
-      { onceKey: 'k:1', runId: 'run-1', at: 1, status: 'failed', failedAt: 50 },
-      { onceKey: 'k:2', runId: 'run-2', at: 1, status: 'done', failedAt: null }
+      {
+        onceKey: 'k:1',
+        runId: 'run-1',
+        at: 1,
+        status: 'failed',
+        failedAt: 50,
+        failures: 1,
+        ...settled
+      },
+      {
+        onceKey: 'k:2',
+        runId: 'run-2',
+        at: 1,
+        status: 'done',
+        failedAt: null,
+        failures: 0,
+        ...settled
+      }
     ])
+    // A new run on a failed key starts it over and keeps its count, so the retry limit holds.
     store.markHandled('a', 'k:1', 'run-3', 70)
     expect(store.handledRows('a')[0]).toEqual({
       onceKey: 'k:1',
       runId: 'run-3',
       at: 70,
       status: 'started',
-      failedAt: null
+      failedAt: null,
+      failures: 1,
+      lastOutcome: null
     })
+    expect(store.setHandledStatus('a', 'run-3', 'failed', 80)).toBe(2)
+    store.markHandled('a', 'k:1', 'run-4', 90)
+    expect(store.setHandledStatus('a', 'run-4', 'done', 100)).toBe(0)
+    expect(store.handledRows('a')[0]).toMatchObject({ status: 'done', failures: 0 })
+    expect(store.setHandledStatus('a', 'no-such-run', 'failed', 110)).toBe(0)
     expect(store.handledRows('b')).toEqual([])
+  })
+
+  it("reads a key's last outcome from its run", () => {
+    const store = freshStore()
+    store.runs.create({
+      id: 'run-1',
+      automationId: 'a',
+      tickId: null,
+      itemKey: 'mr:1',
+      itemLabel: '!1',
+      worktreePath: null,
+      startedAt: 1
+    })
+    store.runs.update('run-1', { status: 'failed', outcome: 'agent exited', finishedAt: 2 })
+    store.markHandled('a', '1', 'run-1', 1)
+    store.markHandled('a', 'seeded', null, 1)
+    expect(store.handledRows('a').map((r) => [r.onceKey, r.lastOutcome])).toEqual([
+      ['1', 'agent exited'],
+      ['seeded', null]
+    ])
+  })
+
+  it('frees a failed key on Retry, leaving a key a run still holds', () => {
+    const store = freshStore()
+    store.markHandled('a', 'failed', 'run-1', 1)
+    store.markHandled('a', 'running', 'run-2', 1)
+    store.setHandledStatus('a', 'run-1', 'failed', 2)
+    store.resetFailures('a', 'failed')
+    store.resetFailures('a', 'running')
+    expect(store.handledKeys('a')).toEqual(new Set(['running']))
+  })
+
+  it('lists the keys that failed past the retry limit since a time, across automations', () => {
+    const store = freshStore()
+    const fail = (automationId: string, key: string, times: number, at: number) => {
+      for (let n = 1; n <= times; n += 1) {
+        const runId = `${automationId}-${key}-${n}`
+        store.runs.create({
+          id: runId,
+          automationId,
+          tickId: null,
+          itemKey: `mr:${key}`,
+          itemLabel: `!${key}`,
+          worktreePath: null,
+          startedAt: at
+        })
+        store.runs.update(runId, { status: 'failed', outcome: `failure ${n}`, finishedAt: at })
+        store.markHandled(automationId, key, runId, at)
+        store.setHandledStatus(automationId, runId, 'failed', at)
+      }
+    }
+    fail('a', 'over', 3, 100)
+    fail('b', 'over', 4, 200)
+    fail('a', 'within', 2, 100)
+    fail('a', 'old', 3, 10)
+    // Failed before failures were counted: never given up.
+    addImportedHandled(store, 'a', [
+      { onceKey: 'legacy', status: 'failed', at: 100, failedAt: 100 }
+    ])
+    expect(store.gaveUp(0, 50).map((r) => r.onceKey)).not.toContain('legacy')
+    expect(
+      store
+        .gaveUp(2, 50)
+        .map((r) => [r.automationId, r.onceKey, r.failures, r.itemLabel, r.lastOutcome])
+    ).toEqual([
+      ['b', 'over', 4, '!over', 'failure 4'],
+      ['a', 'over', 3, '!over', 'failure 3']
+    ])
+  })
+
+  it('names the failed key each run still holds, for Retry on a finished run', () => {
+    const store = freshStore()
+    store.markHandled('a', 'k:1', 'run-1', 1)
+    store.markHandled('a', 'k:2', 'run-2', 1)
+    store.setHandledStatus('a', 'run-1', 'failed', 2)
+    store.setHandledStatus('a', 'run-2', 'done', 2)
+    expect(store.failedKeysOf(['run-1', 'run-2', 'run-3'])).toEqual(new Map([['run-1', 'k:1']]))
   })
 
   it('records a tick with its item decisions', () => {

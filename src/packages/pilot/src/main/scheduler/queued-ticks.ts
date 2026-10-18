@@ -1,25 +1,28 @@
 import type { AutomationDefinition } from '../../shared/definition/types'
+import { mapLimit } from '../map-limit'
 import type { TickNowResult } from './scheduler'
 
 export type QueuedTickDeps = {
-  // The automations whose queued items can start now, oldest item first (main/capacity/run-capacity.ts).
-  queuedToTick?(definitions: readonly AutomationDefinition[]): string[]
+  now(): number
+  // Jobs whose waiting items can start now or are due a re-check, in line order (main/capacity/run-capacity.ts).
+  queuedToTick?(definitions: readonly AutomationDefinition[], now: number): string[]
   log(message: string): void
 }
 
-// The scheduler's side: whether it is stopping, whether an automation's tick runs now, and a real tick.
+// The scheduler's side: whether it is stopping, whether a job's tick runs now, a real tick, and how many run at once.
 export type QueuedTickHost = {
   stopped(): boolean
   busy(id: string): boolean
   tick(id: string): Promise<TickNowResult>
+  concurrency: number
 }
 
 function messageOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
 }
 
-// Queued items go before the due ticks, one automation at a time and oldest item first: each tick admits its own
-// items in line order, so a slot that frees goes to the item that waited longest, whatever its schedule.
+// Waiting items go before the due ticks, their jobs started in line order, a few at once. admit counts the slot waiters
+// due earlier, so a slot that frees goes to the item due longest, whatever its schedule or which tick ends first.
 export async function tickQueued(
   deps: QueuedTickDeps,
   definitions: readonly AutomationDefinition[],
@@ -27,17 +30,14 @@ export async function tickQueued(
 ): Promise<void> {
   let ids: string[]
   try {
-    ids = deps.queuedToTick?.(definitions) ?? []
+    ids = deps.queuedToTick?.(definitions, deps.now()) ?? []
   } catch (error) {
     deps.log(`[pilot] couldn't read the run queue: ${messageOf(error)}`)
     return
   }
-  for (const id of ids) {
-    if (host.stopped()) {
+  await mapLimit(ids, host.concurrency, async (id) => {
+    if (host.stopped() || host.busy(id)) {
       return
-    }
-    if (host.busy(id)) {
-      continue
     }
     try {
       const result = await host.tick(id)
@@ -47,5 +47,5 @@ export async function tickQueued(
     } catch (error) {
       deps.log(`[pilot] ${id} queued tick failed: ${messageOf(error)}`)
     }
-  }
+  })
 }

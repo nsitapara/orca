@@ -11,6 +11,7 @@ export type BusyTerminal = {
   worktreePath: string
   tabId: string
   leafId: string
+  recordedPaneKey?: string
 }
 export type BusyReads = {
   draft(handle: string): Promise<string>
@@ -24,7 +25,12 @@ export type TabReads = {
 }
 export type BusyRuntime = Pick<
   OrcaRuntimeService,
-  'listTerminals' | 'readTerminal' | 'getWorktreePs' | 'waitForTerminal' | 'showTerminal'
+  | 'listTerminals'
+  | 'readTerminal'
+  | 'getWorktreePs'
+  | 'waitForTerminal'
+  | 'showTerminal'
+  | 'getAgentStatusRowsForPane'
 >
 
 const UNFINISHED: Record<string, string> = {
@@ -43,7 +49,8 @@ const IDLE_WAIT_MS = 1500
 export async function worktreeBusy(
   path: string,
   terminals: readonly BusyTerminal[],
-  reads: BusyReads
+  reads: BusyReads,
+  endedRunTerminal: (t: BusyTerminal) => boolean = () => false
 ): Promise<{ typing: boolean; reason: string } | null> {
   for (const t of terminals) {
     if (
@@ -55,7 +62,8 @@ export async function worktreeBusy(
     }
     const name = t.title || t.handle
     try {
-      if (await reads.draft(t.handle)) {
+      // A finished run's leftover prompt isn't someone typing; its agent can still be busy.
+      if (!endedRunTerminal(t) && (await reads.draft(t.handle))) {
         return { typing: true, reason: `someone is typing in ${name}` }
       }
       const state = (await reads.agentStates()).get(`${t.tabId}:${t.leafId}`)
@@ -104,7 +112,8 @@ export async function listBusyTerminals(runtime: BusyRuntime): Promise<BusyTermi
     agentIdentity: t.agentIdentity ?? null,
     worktreePath: t.worktreePath,
     tabId: t.tabId,
-    leafId: t.leafId
+    leafId: t.leafId,
+    recordedPaneKey: t.recordedPaneKey
   }))
 }
 

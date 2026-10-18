@@ -26,15 +26,34 @@ function tick(automationId: string, at: number, counts: Record<string, number>):
 describe('ActivityStore', () => {
   afterEach(() => store.close())
 
-  it('lists the ticks of the named automations since a time, newest first, leaving out quiet ones on request', () => {
+  it('lists the ticks of the named automations since a time, newest first, leaving out quiet ones (nothing due, or only held) on request', () => {
     store = PilotStore.open(':memory:')
     const quiet = tick('a', 100, { notdue: 2 })
+    const held = tick('a', 150, { held: 1, notdue: 1 })
     const busy = tick('b', 200, { started: 1 })
     const other = tick('c', 300, { started: 1 })
     tick('a', 50, { started: 1 })
-    expect(store.activity.ticks(['a', 'b'], 60, 10, false).map((t) => t.id)).toEqual([busy, quiet])
+    expect(store.activity.ticks(['a', 'b'], 60, 10, false).map((t) => t.id)).toEqual([
+      busy,
+      held,
+      quiet
+    ])
     expect(store.activity.ticks(['a', 'b'], 60, 10, true).map((t) => t.id)).toEqual([busy])
     expect(store.activity.ticks(null, 0, 2, false).map((t) => t.id)).toEqual([other, busy])
+  })
+
+  it.each<[string, boolean, 'ok' | 'failed', boolean]>([
+    ['skipped, held and warned', true, 'ok', false],
+    ['started a run', false, 'ok', true],
+    ['failed', false, 'failed', false]
+  ])('counts a re-check tick that %s as quiet: %s', (_name, quiet, status, startedRun) => {
+    store = PilotStore.open(':memory:')
+    const id = store.startTick('a', 100, true)
+    store.finishTick(id, status, null, { skipped: 1, held: 1 }, 101, ['a source warned'])
+    if (startedRun) {
+      run('r', { tickId: id })
+    }
+    expect(store.activity.ticks(['a'], 0, 10, true).map((t) => t.id)).toEqual(quiet ? [] : [id])
   })
 
   it('lists live runs of any age, the runs no tick started, and the runs answering a run', () => {

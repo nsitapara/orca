@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import type { CapacityPayload } from '../../../shared/api-types-capacity'
+import type { CapacityPayload, RetryKey } from '../../../shared/api-types-capacity'
 import { answered } from '../../hosts/answered-reads'
 import { useHostPoll, type HostRead } from '../../hosts/host-poll'
 import { hostRpc } from '../../hosts/host-rpc'
@@ -43,7 +43,8 @@ export function useCapacityTotals(): { running: number; queued: number } {
   return capacityTotals(reads)
 }
 
-// What a limit change shows until a read started after `boundary` lands: the figures it answered, or why it failed.
+// What a change (a limit, a Retry) shows until a read started after `boundary` lands: the figures it answered, or why
+// it failed.
 type Change = { boundary: number; payload: CapacityPayload | null; error: string | null }
 type Shown = Pick<MachineCapacity, 'payload' | 'error'>
 
@@ -77,11 +78,16 @@ function withChange(
   return new Map(changes).set(key, change)
 }
 
-// Every machine's figures, polled on its own; a machine's limit change goes to that machine alone.
-export function useCapacities(): {
+export type CapacityChanges = {
+  setLimit(host: PilotHostRef, limit: number | null): Promise<void>
+  setRetryLimit(host: PilotHostRef, limit: number): Promise<void>
+  retry(host: PilotHostRef, key: RetryKey): Promise<void>
+}
+
+// Every machine's figures, polled on its own; a machine's change goes to that machine alone.
+export function useCapacities(): CapacityChanges & {
   machines: MachineCapacity[]
   saving: string | null
-  setLimit(host: PilotHostRef, limit: number | null): Promise<void>
 } {
   const hosts = usePilotHosts()
   const { reads, latest } = useHostPoll<CapacityPayload>(
@@ -109,8 +115,9 @@ export function useCapacities(): {
     return { host, ...shownOf(readOf(reads, host.key), changes.get(host.key)) }
   })
 
-  const setLimit = useCallback(
-    async (host: PilotHostRef, limit: number | null): Promise<void> => {
+  // Each change answers the machine's figures after it.
+  const change = useCallback(
+    async (host: PilotHostRef, method: string, params: Record<string, unknown>): Promise<void> => {
       const startedNow = (): number => readOf(latest(), host.key)?.startedSeq ?? 0
       const read = readOf(latest(), host.key)
       setChanges((current) =>
@@ -122,7 +129,7 @@ export function useCapacities(): {
       setSaving(host.key)
       let answer: { payload: CapacityPayload | null; error: string | null }
       try {
-        const payload = await hostRpc<CapacityPayload>(host, 'pilot.capacity.setLimit', { limit })
+        const payload = await hostRpc<CapacityPayload>(host, method, params)
         answer = { payload, error: null }
       } catch (e) {
         answer = { payload: null, error: errorText(e) }
@@ -141,5 +148,11 @@ export function useCapacities(): {
     [latest]
   )
 
-  return { machines, saving, setLimit }
+  return {
+    machines,
+    saving,
+    setLimit: (host, limit) => change(host, 'pilot.capacity.setLimit', { limit }),
+    setRetryLimit: (host, limit) => change(host, 'pilot.capacity.setRetryLimit', { limit }),
+    retry: (host, key) => change(host, 'pilot.capacity.retry', key)
+  }
 }

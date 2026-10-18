@@ -1,5 +1,7 @@
 import type { ItemFields } from '../../shared/api-types'
 import type { CheckDef } from '../../shared/definition/types'
+import { endedRunTerminals } from '../run/ended-run-tabs'
+import type { PilotStore } from '../store/store'
 import type { Item } from '../sources/types'
 import {
   listBusyTerminals,
@@ -13,6 +15,7 @@ import {
 export type ActivityRuntime = {
   terminals(): Promise<BusyTerminal[]>
   reads(): BusyReads
+  endedRunTerminal?(terminals: readonly BusyTerminal[]): (t: BusyTerminal) => boolean
   terminalAlive(handle: string, paneKey: string | null): Promise<boolean>
 }
 
@@ -35,7 +38,8 @@ async function busyFacts(
     return new Map(paths.map((p) => [p, why]))
   }
   const reads = rt.reads()
-  const answers = await Promise.all(paths.map((p) => worktreeBusy(p, terminals, reads)))
+  const ended = rt.endedRunTerminal?.(terminals)
+  const answers = await Promise.all(paths.map((p) => worktreeBusy(p, terminals, reads, ended)))
   return new Map(paths.map((p, i) => [p, answers[i]?.reason ?? '']))
 }
 
@@ -80,11 +84,14 @@ export async function addActivityFacts(
 
 export function runtimeActivity(
   runtime: BusyRuntime,
-  terminalAlive: ActivityRuntime['terminalAlive']
+  terminalAlive: ActivityRuntime['terminalAlive'],
+  store: PilotStore
 ): ActivityRuntime {
   return {
     terminals: () => listBusyTerminals(runtime),
     reads: () => runtimeBusyReads(runtime),
+    endedRunTerminal: (terminals) =>
+      endedRunTerminals(store, terminals, (key) => runtime.getAgentStatusRowsForPane(key)),
     terminalAlive
   }
 }

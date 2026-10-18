@@ -29,7 +29,6 @@ import { runtimeLauncherDeps, runtimeSessionTerminals } from './run/launch'
 import { resumeStepSession, runtimeResumeDeps } from './run/resume-session'
 import { continueRun } from './run/run-continue'
 import { modeTextFor, readMode } from './run/modes'
-import { sweepStaleStarts } from './run/stale-starts'
 import { terminalRelister } from './run/terminal-relist'
 import { agentStepStarter } from './run/step-starters'
 import { runtimeStepProbe } from './run/watcher'
@@ -49,6 +48,7 @@ import { housekeepStore } from './store/housekeep'
 import { usageReporter } from './usage-report/reporter'
 import { closeAll, softly } from './pilot-lifecycle'
 import { wireRunCapacity } from './capacity/capacity-wiring'
+import { giveUpOnFailure } from './capacity/give-up'
 import { pilotHostFor } from './pilot-host'
 import type { PilotContext, PilotHost, PilotServiceOptions, PilotServices } from './pilot-context'
 
@@ -130,6 +130,8 @@ function openPilot(
     onRunEnd: (run) => envs.runEnded(run),
     // A stage's run hands its outputs to the next stage (job.feeds).
     handover: handover.runEnd,
+    // `giveUp` needs the inbox, made below; no run ends before the scheduler polls.
+    failureCounted: (run, failures) => giveUp(run, failures),
     // {run.answer}: the free text that started an ask-first or answer run; {run.choice}: the option that started it.
     ...runAnswerSources(store)
   })
@@ -157,6 +159,7 @@ function openPilot(
     onResolved: (item) => cancelUnstartedRun(store, item, now()),
     detailsRoot
   })
+  const giveUp = giveUpOnFailure(inbox, definitionFor, log)
   const tickDeps: TickDeps = {
     store,
     now,
@@ -172,7 +175,7 @@ function openPilot(
       engineEnv,
       now
     },
-    activity: runtimeActivity(runtime, fieldDeps.terminalAlive),
+    activity: runtimeActivity(runtime, fieldDeps.terminalAlive, store),
     launch: (req) => wired.engine.startRun(req),
     ask: { store, now, inbox },
     previewEnvs: (def, decisions) => envs.preview(def, decisions),
@@ -247,7 +250,7 @@ function openPilot(
     repoProblem: (def, message) =>
       repoProblems.set(def.id, { file: def.file, repo: def.repo, message }),
     newPass: () => createPassFetchCache(`pass-${now()}`, glabApiForRepo),
-    queuedToTick: (defs) => capacity.toTick(defs, runsOn.ticksHere),
+    queuedToTick: (defs, at) => capacity.toTick(defs, runsOn.ticksHere, at),
     runsOn,
     log
   })
@@ -257,7 +260,7 @@ function openPilot(
   // The attach hooks decide (pilotSchedulerEnabled); a caller that doesn't say gets no scheduler.
   if (schedulerOn) {
     void softly('envs at start', () => envs.startup(), log)
-    sweepStaleStarts(store, now, log)
+    wired.sweep()
     scheduler.start()
   } else {
     log(`[pilot] scheduler off in ${host.processKind} (PILOT_SCHEDULER=on runs it here)`)

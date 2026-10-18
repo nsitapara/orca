@@ -10,7 +10,8 @@ const OUTCOME: Record<Verdict, string> = {
   over_limit: 'next tick',
   queued: 'waiting for a slot',
   baselined: 'baselined',
-  asked: 'asked first'
+  asked: 'asked first',
+  held: 'waiting'
 }
 
 function plural(n: number, word: string): string {

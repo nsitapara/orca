@@ -1,5 +1,11 @@
-import type { CapacityPayload, CapacityRun, HeaviestJob } from '../../shared/api-types-capacity'
+import type {
+  CapacityPayload,
+  CapacityRun,
+  GaveUpKey,
+  HeaviestJob
+} from '../../shared/api-types-capacity'
 import { suggestRunLimit, UNMEASURED_JOB_BYTES } from '../../shared/capacity/limit-suggestion'
+import { QUOTA_CEILING } from '../../shared/quota-ceiling'
 import type { AutomationDefinition } from '../../shared/definition/types'
 import type { PilotStore } from '../store/store'
 import { listedRuns } from '../timeline/run-detail'
@@ -12,10 +18,38 @@ export type CapacityViewInput = {
   definitions: readonly AutomationDefinition[]
   memory: RunMemorySnapshot | null
   system: SystemMemory
+  now: number
 }
 
 // The Running page's Finished list: the slot-holding jobs' newest ended runs.
 export const MAX_FINISHED_RUNS = 10
+// Gave up lists the keys whose last failure is this recent.
+export const GAVE_UP_WINDOW_MS = 7 * 24 * 60 * 60_000
+
+// Keys of loaded jobs the runner retries; an ask-first job's never were retried, so never given up.
+function gaveUpKeys(
+  input: CapacityViewInput,
+  byId: ReadonlyMap<string, AutomationDefinition>,
+  limit: number
+): GaveUpKey[] {
+  return input.store.gaveUp(limit, input.now - GAVE_UP_WINDOW_MS).flatMap((row) => {
+    const def = byId.get(row.automationId)
+    if (!def || def.start === 'ask_first' || row.failedAt === null) {
+      return []
+    }
+    return [
+      {
+        automationId: row.automationId,
+        automationName: def.name,
+        onceKey: row.onceKey,
+        itemLabel: row.itemLabel,
+        failures: row.failures,
+        failedAt: row.failedAt,
+        outcome: row.lastOutcome
+      }
+    ]
+  })
+}
 
 // The heaviest of the jobs that hold a slot: a measured one at its peak, an enabled one never measured at the
 // unmeasured budget, so a light job measured first can't talk the suggestion up before the heavy ones have run.
@@ -68,6 +102,8 @@ export function capacityView(input: CapacityViewInput): CapacityPayload {
     MAX_FINISHED_RUNS
   )
   const endedPeaks = store.capacity.peaks(ended.map((r) => r.id))
+  const failedKeys = store.failedKeysOf(ended.map((r) => r.id))
+  const retryLimit = store.capacity.retryLimit()
   const heaviest = heaviestJob(store.capacity.heaviestPeaks(), input.definitions)
   const runningJobsBytes = running
     .filter((r) => r.counted)
@@ -79,17 +115,24 @@ export function capacityView(input: CapacityViewInput): CapacityPayload {
       .queued()
       .filter((q) => byId.has(q.automationId))
       .map((q) => ({ ...q, automationName: nameOf(q.automationId) })),
-    finished: listedRuns(store, ended).map((run) => ({
-      ...run,
-      automationName: nameOf(run.automationId),
-      peakBytes: endedPeaks.get(run.id) ?? null
-    })),
+    finished: listedRuns(store, ended).map((run) => {
+      const onceKey = failedKeys.get(run.id)
+      return {
+        ...run,
+        automationName: nameOf(run.automationId),
+        peakBytes: endedPeaks.get(run.id) ?? null,
+        ...(onceKey === undefined ? {} : { onceKey })
+      }
+    }),
     memory: input.system,
     suggestion: suggestRunLimit({
       availableBytes: input.system.availableBytes,
       runningJobsBytes,
       worstJobBytes: heaviest?.measured ? heaviest.peakBytes : null
     }),
-    heaviest
+    heaviest,
+    quotaCeiling: { ...QUOTA_CEILING },
+    retryLimit,
+    gaveUp: gaveUpKeys(input, byId, retryLimit)
   }
 }

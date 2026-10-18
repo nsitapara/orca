@@ -229,8 +229,9 @@ describe('runTick', () => {
     expect(d.store.runs.runningCount('fix-failed-ci')).toBe(0)
   })
 
-  it('skips an item whose worktree another run took between deciding and starting, and leaves its key free', async () => {
+  it('holds an item whose worktree another run took between deciding and starting, and leaves its key free', async () => {
     const d = deps()
+    const capacity = runCapacity({ store: d.store, definitions: () => [def], now: d.now })
     d.launch = async (req) => {
       d.launched.push(req.decision.key)
       // Another automation's tick starts an agent in the second item's worktree meanwhile.
@@ -246,17 +247,20 @@ describe('runTick', () => {
       })
       return { terminalHandle: 't', paneKey: 'p' }
     }
-    const result = await runTick(def, people, d, { dryRun: false })
+    const result = await runTick(def, people, { ...d, capacity }, { dryRun: false })
     expect(result.status).toBe('ok')
     expect(d.launched).toEqual(['mr:1561'])
     expect(result.decisions.map((x) => [x.key, x.verdict, x.reason])).toEqual([
       ['mr:1561', 'started', expect.any(String)],
-      ['mr:1574', 'skipped', 'Another run is active in /wt/1474']
+      ['mr:1574', 'held', 'Another run is active in /wt/1474']
     ])
     expect(d.store.handledKeys('fix-failed-ci')).toEqual(new Set(['1561:1561']))
     expect(d.store.tickItems(result.tickId).map((i) => [i.itemKey, i.verdict, i.runId])).toEqual([
       ['mr:1561', 'started', expect.any(String)],
-      ['mr:1574', 'skipped', null]
+      ['mr:1574', 'held', null]
+    ])
+    expect(d.store.capacity.queued().map((q) => [q.itemKey, q.holdCode, q.holdDetail])).toEqual([
+      ['mr:1574', 'worktree_busy', 'Another run is active in /wt/1474']
     ])
   })
 
@@ -319,7 +323,7 @@ describe('runTick', () => {
     })
   })
 
-  it('still frees the key when the launch-failure bookkeeping partly throws', async () => {
+  it('still counts the failure on the key when the launch-failure bookkeeping partly throws', async () => {
     const d = deps({
       launch: async () => {
         throw new Error('gone')
@@ -330,10 +334,10 @@ describe('runTick', () => {
     }
     const result = await runTick(def, people, d, { dryRun: false })
     expect(result.status).toBe('ok')
-    expect(d.store.handledKeys('fix-failed-ci').size).toBe(0)
+    expect(d.store.handledRows('fix-failed-ci').map((r) => r.failures)).toEqual([1, 1])
   })
 
-  it('fails only the run whose launch throws, and leaves its item due again (Review Focus 4)', async () => {
+  it('fails only the run whose launch throws, and counts a failure on its key (Review Focus 4)', async () => {
     const d = deps({
       launch: async (req) => {
         if (req.decision.key === 'mr:1561') {
@@ -345,7 +349,7 @@ describe('runTick', () => {
     const result = await runTick(def, people, d, { dryRun: false })
     expect(result.status).toBe('ok')
     expect(result.decisions.map((x) => x.verdict)).toEqual(['started', 'started'])
-    expect(d.store.handledKeys('fix-failed-ci')).toEqual(new Set(['1574:1574']))
+    expect(d.store.handledRows('fix-failed-ci').map((r) => r.failures)).toEqual([1, 0])
     expect(
       d.store.runs.forTick(result.tickId).map((r) => [r.itemKey, r.status, r.outcome])
     ).toEqual([
@@ -509,7 +513,7 @@ describe('runTick launching into each workspace (Task 8d)', () => {
     )
   })
 
-  it("fails the step and the run, and frees the item's key, when its new worktree can't be made", async () => {
+  it("fails the step and the run, and counts a failure on the item's key, when its new worktree can't be made", async () => {
     const run = launching(async () => {
       throw new Error('git worktree add failed')
     })
@@ -532,7 +536,7 @@ describe('runTick launching into each workspace (Task 8d)', () => {
       { status: 'failed', error: 'git worktree add failed' },
       { status: 'failed', error: 'git worktree add failed' }
     ])
-    expect(run.d.store.handledKeys('fix-failed-ci').size).toBe(0)
+    expect(run.d.store.handledRows('fix-failed-ci').map((r) => r.failures)).toEqual([1, 1])
   })
 
   // H10: per_worktree in the main checkout is one session for the repo. The second item would resume it
@@ -555,7 +559,7 @@ describe('runTick launching into each workspace (Task 8d)', () => {
       ['mr:1561', 'running', null],
       ['mr:1574', 'failed', busy]
     ])
-    expect(run.d.store.handledKeys('fix-failed-ci')).toEqual(new Set(['1561:1561']))
+    expect(run.d.store.handledRows('fix-failed-ci').map((r) => r.failures)).toEqual([0, 1])
   })
 })
 
@@ -793,18 +797,33 @@ describe('runTick with a run limit', () => {
     expect(d.store.capacity.queued()).toEqual([])
   })
 
-  it("drops a job's queued items when its tick fails, so they can't hold the line", async () => {
+  it("drops a job's slot-waiting items when its tick fails, so they can't hold the line, and keeps its held ones", async () => {
     const d = deps({ sources: failingSources(new Error('glab is down')) })
-    d.store.capacity.enqueue({
-      automationId: def.id,
-      itemKey: 'mr:1561',
-      itemLabel: '!1561',
-      queuedAt: 1,
-      byHand: false
-    })
+    for (const [itemKey, holdCode] of [
+      ['mr:1561', 'capacity'],
+      ['mr:1574', 'quota']
+    ] as const) {
+      d.store.capacity.enqueue({
+        automationId: def.id,
+        itemKey,
+        itemLabel: itemKey,
+        queuedAt: 1,
+        byHand: true,
+        dueAt: 1,
+        holdCode,
+        holdDetail: 'waiting',
+        checkedAt: 1
+      })
+    }
     const capacity = runCapacity({ store: d.store, definitions: () => [def], now: d.now })
     const result = await runTick(def, people, { ...d, capacity }, { dryRun: false })
     expect(result.status).toBe('failed')
-    expect(d.store.capacity.queued()).toEqual([])
+    const failedAt = d.now()
+    expect(d.store.capacity.queued().map((q) => [q.itemKey, q.checkedAt])).toEqual([
+      ['mr:1574', failedAt]
+    ])
+    // The held row waits out its quota interval before the next re-check, instead of coming round every loop.
+    expect(capacity.toTick([def], () => true, failedAt + 299_999)).toEqual([])
+    expect(capacity.toTick([def], () => true, failedAt + 300_000)).toEqual([def.id])
   })
 })

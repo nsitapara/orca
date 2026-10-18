@@ -2,7 +2,12 @@ import { useRef, useState } from 'react'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { cn } from '@/lib/utils'
 import type { ActivityRun, InboxListRow, InboxReply } from '../../../shared/api-types'
-import type { AnswerState, CardHistoryEntry, RunLine } from '../../../shared/inbox-types'
+import type {
+  AnswerState,
+  CardHistoryEntry,
+  PreparationWait,
+  RunLine
+} from '../../../shared/inbox-types'
 import { MachineChip } from '../../hosts/MachineChip'
 import { PilotHostProvider } from '../../hosts/PilotHostContext'
 import { hostedKey, hostOf, type Hosted } from '../../hosts/pilot-host'
@@ -115,6 +120,8 @@ type InboxCardProps = {
   answerState: AnswerState | null
   // The card's Message history (InboxListPayload.history); null from an older Pilot, which shows the bare replies.
   history: CardHistoryEntry[] | null
+  // Why a queued context card waits (InboxListPayload.preparationWaits); null when it does not or from an older Pilot.
+  preparationWait: PreparationWait | null
   // Why the last save failed; held by the page so it survives the card remounting as a new version.
   error: string | null
   // The card picked in the list: a lighter border.
@@ -144,6 +151,7 @@ function CardBody({
   runLine,
   answerState,
   history,
+  preparationWait,
   error,
   selected,
   now,
@@ -178,6 +186,7 @@ function CardBody({
           item={item}
           onRetry={onRetryPreparation}
           onPrepareEvidence={onPrepareEvidence}
+          wait={preparationWait}
         />
         <AnsweredLine
           item={item}
@@ -202,6 +211,7 @@ function CardBody({
         item={item}
         onRetry={onRetryPreparation}
         onPrepareEvidence={onPrepareEvidence}
+        wait={preparationWait}
       />
       <h3 className="text-[15px] font-semibold">{item.title}</h3>
       {item.context ? <p className="text-sm text-muted-foreground">{item.context}</p> : null}

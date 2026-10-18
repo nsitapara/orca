@@ -124,25 +124,26 @@ describeParity(
       }
     })
 
-    it('checks a worktree in the sweep’s order: commits, work in flight, the MR rules, then quota', async () => {
+    // Review Focus: a runtime check declared before an eligibility check must not hold an ineligible worktree.
+    it('checks a worktree for commits and the MR rules first, then holds it for work in flight or quota', async () => {
       const fresh = await decide('check-order')
       expect(fresh.map((d) => [d.key, d.verdict, failedCheck(d)])).toEqual([
-        [key(321), 'skipped', 'Clean'],
-        [key(322), 'skipped', 'Clean'],
-        [key(323), 'skipped', 'Clean'],
+        [key(321), 'skipped', 'Not approved'],
+        [key(322), 'skipped', 'Not merged'],
+        [key(323), 'held', 'Clean'],
         [key(324), 'baselined', null],
         [key(325), 'out_of_scope', null],
         [key(326), 'skipped', 'Not approved'],
-        [key(327), 'skipped', 'Quota']
+        [key(327), 'held', 'Quota']
       ])
     })
 
-    it('starts two cycles per tick in listing order; the third is over the limit', async () => {
+    it('starts two cycles per tick in listing order; the third is held for the limit', async () => {
       const fresh = await decide('two-per-tick')
       expect(fresh.map((d) => [d.key, d.verdict])).toEqual([
         [key(331), 'started'],
         [key(332), 'started'],
-        [key(333), 'over_limit']
+        [key(333), 'held']
       ])
     })
 
@@ -166,7 +167,7 @@ describeParity(
       const file = join(CASES, 'quota-out-other-agent.json')
       const strict = { ...PARITY_03_FROZEN, table: { ...VERDICTS_03, known: [] } }
       expect(await parityReport(strict, loadFixture(file), frozenOldPlan(file))).toBe(
-        `${key(342)}: old start: 1 new commit(s) since aaaaaaaaa, claude leads | new skipped: Codex is at 95% of its weekly limit (stops at 90%)`
+        `${key(342)}: old start: 1 new commit(s) since aaaaaaaaa, claude leads | new held: Codex is at 95% of its weekly limit (stops at 90%)`
       )
     })
 

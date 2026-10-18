@@ -18,7 +18,8 @@ export const JOB_03 = {
 }
 
 // 03's words (frozen in each case's old block) and the verdicts that agree with them. Nothing new since the review is the worktree kind's
-// `where.commits` clause (out of scope); a parked hand-off is a run still active there (Pilot has no parking). A
+// `where.commits` clause (out of scope); a parked hand-off is a run still active there (Pilot has no parking). Work in
+// flight, a running cycle, quota and the per-tick limit hold the worktree in the runner's line; the MR rules skip it. A
 // teammate's branch, or one whose owner GitLab can't name, is never listed by the sweep and is out of scope for Pilot.
 export const VERDICTS_03: VerdictTable = {
   map: {
@@ -26,16 +27,35 @@ export const VERDICTS_03: VerdictTable = {
     nothing_new: ['out_of_scope'],
     skip: ['skipped'],
     start: ['started'],
-    defer: ['over_limit'],
-    QUOTA: ['skipped'],
-    parked: ['skipped']
+    defer: ['held'],
+    QUOTA: ['held'],
+    parked: ['held']
   },
+  rows: [
+    {
+      word: 'skip',
+      reason: /; retry next round$|^current cycle still running$/,
+      verdicts: ['held']
+    }
+  ],
   whenOldMissing: ['out_of_scope'],
   known: [
     {
+      key: 'wt:400fee61-a463-4f76-894a-39861e906007::/wt/web-321',
+      word: 'skip',
+      verdict: 'skipped',
+      why: 'Pilot decides the MR rules before work in flight, so an approved MR is skipped for its approval; the sweep named the uncommitted changes first'
+    },
+    {
+      key: 'wt:400fee61-a463-4f76-894a-39861e906007::/wt/web-322',
+      word: 'skip',
+      verdict: 'skipped',
+      why: 'Pilot decides the MR rules before work in flight, so a merged MR is skipped for the merge; the sweep named the uncommitted changes first'
+    },
+    {
       key: 'wt:400fee61-a463-4f76-894a-39861e906007::/wt/web-342',
       word: 'start',
-      verdict: 'skipped',
+      verdict: 'held',
       why: "Pilot needs both agents' quota before a cycle starts; the sweep checked only the lead's and parked round 2 until the other agent's reset"
     }
   ]

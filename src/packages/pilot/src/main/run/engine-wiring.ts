@@ -58,6 +58,8 @@ export type EngineWiringInput = {
   runAnswer?: RunEngineDeps['runAnswer']
   runChoice?: RunEngineDeps['runChoice']
   handover?: RunEngineDeps['handover']
+  // A run's end or a swept start counted a failure on its key (the give-up card).
+  failureCounted?: RunEngineDeps['failureCounted']
   // Env workspaces (main/envs): made off the tick; the sweep never closes the pending step of a run being prepared.
   envs?: EnvPreparer
 }
@@ -65,6 +67,8 @@ export type WiredEngine = {
   engine: RunEngine
   shell: ShellSteps
   definitionFor(automationId: string): AutomationDefinition | null
+  // Closes the starts a stopped process left (also at scheduler start); never a run this process is opening.
+  sweep(): void
   poll(): Promise<void>
 }
 
@@ -102,6 +106,7 @@ export function wireRunEngine(input: EngineWiringInput): WiredEngine {
     runAnswer: input.runAnswer,
     runChoice: input.runChoice,
     handover: input.handover,
+    failureCounted: input.failureCounted,
     envs: input.envs
   })
   // Runs whose startRun is still going (B8: making the workspace): the sweep never closes their pending step.
@@ -145,10 +150,18 @@ export function wireRunEngine(input: EngineWiringInput): WiredEngine {
     missingSince.set(run.automationId, since)
     return Math.max(since - (step.startedAt ?? since), 0) + MISSING_DEFINITION_TIMEOUT_MS
   }
+  const sweep = (): void =>
+    sweepStaleStarts(store, now, log, {
+      olderThanMs: STALE_START_MS,
+      opening: (runId) => opening.has(runId) || (input.envs?.isPreparing(runId) ?? false),
+      failureCounted: input.failureCounted,
+      asksFirst: (id) => input.definitionFor(id)?.start === 'ask_first'
+    })
   return {
     engine,
     shell,
     definitionFor: input.definitionFor,
+    sweep,
     async poll() {
       await stopCancelledPreparations({
         store,
@@ -163,9 +176,7 @@ export function wireRunEngine(input: EngineWiringInput): WiredEngine {
         }
       })
       store.transaction(() => store.inboxPreparations.recoverExpired(now()))
-      const stillOpening = (runId: string) =>
-        opening.has(runId) || (input.envs?.isPreparing(runId) ?? false)
-      sweepStaleStarts(store, now, log, STALE_START_MS, stillOpening)
+      sweep()
       sweepOrphanShellSteps(store, shell.isLive, now, log)
       await pollRunningSteps(store, input.probe, input.cost ?? claudeTranscriptCost, now, {
         timeoutOf,

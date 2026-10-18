@@ -754,6 +754,36 @@ it('lists a prepared card with a light preparation ref and no manifest', () => {
   expect(store.inbox.get(id)?.details?.artifacts).toEqual(manifest)
 })
 
+it('lists the runner line reason of a queued context card, and none for a ready one', () => {
+  const { deps, store } = setup()
+  const ask = (key: string) =>
+    addInboxItem(deps, {
+      ...QUESTION,
+      title: key,
+      preparation: { key, context: 'c', requirements: ['context' as const] }
+    }).id!
+  const queued = ask('a')
+  const ready = ask('b')
+  const prepared = store.inbox.get(ready)!.preparation!
+  store.inboxPreparations.write(ready, { ...prepared, state: 'ready' })
+  for (const itemKey of [queued, ready]) {
+    store.capacity.enqueue({
+      automationId: 'prep',
+      itemKey,
+      itemLabel: itemKey,
+      queuedAt: 50,
+      byHand: false,
+      dueAt: 60,
+      holdCode: 'typing',
+      holdDetail: 'someone is typing in F1',
+      checkedAt: 70
+    })
+  }
+  expect(listInbox(deps, {}).preparationWaits).toEqual({
+    [queued]: { code: 'typing', detail: 'someone is typing in F1', since: 60 }
+  })
+})
+
 it('uses the stable decision key rather than a repeated display title for managed items', () => {
   const { deps, store } = setup()
   for (const key of ['first-decision', 'second-decision']) {

@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest'
 import type { RunStatus } from '../../shared/api-types'
 import { PilotStore } from '../store/store'
 import type { SessionTerminalState } from './agent-step'
-import { createEndedRunTabs, type TurnRow } from './ended-run-tabs'
+import { createEndedRunTabs, endedRunTerminals, type TurnRow } from './ended-run-tabs'
+import { worktreeBusy } from '../fields/worktree-busy'
 import { SessionClaims } from './session-claims'
 
 type StepOpts = { status?: RunStatus; sessionId?: string | null; idx?: number; startedAt?: number }
@@ -15,13 +16,14 @@ function harness() {
   const states = new Map<string, SessionTerminalState>()
   const looked: string[] = []
   const closed: string[] = []
+  const rowsOfPane = (paneKey: string): TurnRow[] => rows.get(paneKey) ?? []
   const claims = new SessionClaims(() => 0)
   const listing = { cutShort: false }
   const tabs = createEndedRunTabs({
     store,
     openTerminals: async () =>
       listing.cutShort ? null : [...open].map(([handle, pane]) => ({ handle, paneKeys: [pane] })),
-    rowsOf: (paneKey) => rows.get(paneKey) ?? [],
+    rowsOf: rowsOfPane,
     terminals: {
       state: async (t, sessionId) => {
         looked.push(`${t.handle}:${claims.holder(sessionId)?.by ?? 'unclaimed'}`)
@@ -69,7 +71,7 @@ function harness() {
     store.runs.update(runId, { status: o.status ?? 'done', finishedAt: startedAt + 10 })
     open.set(handle, `${handle}:pane`)
   }
-  return { store, open, rows, states, looked, closed, claims, listing, tabs, step }
+  return { store, open, rows, rowsOfPane, states, looked, closed, claims, listing, tabs, step }
 }
 
 describe('closing ended runs’ tabs', () => {
@@ -195,5 +197,75 @@ describe('closing ended runs’ tabs', () => {
     h.store.runs.update('r2', { status: 'done' })
     await h.tabs.pass()
     expect(h.closed).toEqual(['h1'])
+  })
+})
+
+describe('endedRunTerminals', () => {
+  const tab = (handle: string, paneKey = 'x:y') => {
+    const [tabId = '', leafId = ''] = paneKey.split(':')
+    return {
+      handle,
+      title: null,
+      connected: true,
+      agentIdentity: 'claude',
+      worktreePath: '/wt',
+      tabId,
+      leafId
+    }
+  }
+
+  it('a tab whose recorded run is still running isn’t ended', () => {
+    const h = harness()
+    h.step('r1', 'h1', { status: 'running' })
+    expect(endedRunTerminals(h.store, [tab('h1')], h.rowsOfPane)(tab('h1'))).toBe(false)
+  })
+
+  it('a tab whose runs all ended is, by handle or by pane; an unrecorded one isn’t', () => {
+    const h = harness()
+    h.step('r1', 'h1')
+    const ended = endedRunTerminals(
+      h.store,
+      [tab('h1'), tab('h2', 'h1:pane'), tab('person')],
+      h.rowsOfPane
+    )
+    expect([ended(tab('h1')), ended(tab('h2', 'h1:pane')), ended(tab('person'))]).toEqual([
+      true,
+      true,
+      false
+    ])
+  })
+
+  it('a tab with a turn begun after its last step ended was taken over, so it isn’t ended', () => {
+    const h = harness()
+    h.step('r1', 'h1')
+    h.rows.set('h1:pane', [{ state: 'working', turnStartedAt: 30, stateStartedAt: 30 }])
+    expect(endedRunTerminals(h.store, [tab('h1')], h.rowsOfPane)(tab('h1'))).toBe(false)
+  })
+
+  it('finds a tab by its recorded pane key too', () => {
+    const h = harness()
+    h.step('r1', 'h1')
+    const orphan = { ...tab('h9', 'a:b'), recordedPaneKey: 'h1:pane' }
+    expect(endedRunTerminals(h.store, [orphan], h.rowsOfPane)(orphan)).toBe(true)
+  })
+
+  it.each([
+    ['a turn begun after the step ended: its draft is typing', true, true],
+    ['no later turn: the leftover draft isn’t busy', false, false]
+  ])('a finished run’s tab, %s', async (_name, tookOver, typing) => {
+    const h = harness()
+    h.step('r1', 'h1')
+    if (tookOver) {
+      h.rows.set('h1:pane', [{ state: 'working', turnStartedAt: 30, stateStartedAt: 30 }])
+    }
+    const t = tab('h1', 'h1:pane')
+    const reads = {
+      draft: async () => 'half a thought',
+      agentStates: async () => new Map<string, string>(),
+      tabBusy: async () => false
+    }
+    const ended = endedRunTerminals(h.store, [t], h.rowsOfPane)
+    const busy = await worktreeBusy('/wt', [t], reads, ended)
+    expect(busy?.typing ?? false).toBe(typing)
   })
 })

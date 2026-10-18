@@ -3,6 +3,7 @@ import type { StepRow } from '../../shared/api-types'
 import type { PilotStore } from '../store/store'
 import type { AgentRow } from './agent-rows'
 import type { SessionTerminals } from './agent-step'
+import type { BusyTerminal } from '../fields/worktree-busy'
 import { LIST_LIMIT, type Listed } from './terminal-relist'
 
 // Once every run on a tab has ended, however it ended, the tab closes: Resume reopens its session
@@ -51,6 +52,38 @@ function stepsOn(t: OpenTerminal, steps: readonly StepRow[]): StepRow[] {
   return steps.filter(
     (s) => s.terminalHandle === t.handle || (s.paneKey !== null && t.paneKeys.includes(s.paneKey))
   )
+}
+
+// Whether a listed terminal is one of Pilot's whose every recorded run has ended, found as the closer finds it. Its
+// leftover draft is then no one's typing (a greyed suggestion), so the busy read ignores it.
+export function endedRunTerminals(
+  store: PilotStore,
+  terminals: readonly BusyTerminal[],
+  rowsOf: EndedRunTabsDeps['rowsOf']
+): (t: BusyTerminal) => boolean {
+  const open = terminals.map((t) => ({ handle: t.handle, paneKeys: paneKeysOf(t) }))
+  const steps = store.runs.stepsOnTerminals(
+    open.map((t) => t.handle),
+    open.flatMap((t) => t.paneKeys)
+  )
+  const live = store.runs.liveAmong([...new Set(steps.map((s) => s.runId))])
+  const ended = new Set(
+    open
+      .filter((t) => {
+        const onTab = stepsOn(t, steps)
+        const last = onTab.at(-1)
+        // A turn begun after the last step ended means someone took the tab over, as the closer reads it.
+        return (
+          last !== undefined &&
+          last.paneKey !== null &&
+          last.finishedAt !== null &&
+          !onTab.some((s) => live.has(s.runId) || STEP_LIVE.has(s.status)) &&
+          !usedSince(rowsOf(last.paneKey), last.finishedAt)
+        )
+      })
+      .map((t) => t.handle)
+  )
+  return (t) => ended.has(t.handle)
 }
 
 export function createEndedRunTabs(deps: EndedRunTabsDeps): EndedRunTabs {
@@ -123,7 +156,7 @@ export function createEndedRunTabs(deps: EndedRunTabsDeps): EndedRunTabs {
 }
 
 // The panes a listed terminal sits in, as terminal-relist.ts's inPane reads them.
-function paneKeysOf(t: Listed): string[] {
+function paneKeysOf(t: Pick<Listed, 'tabId' | 'leafId' | 'recordedPaneKey'>): string[] {
   const keys = t.tabId && t.leafId ? [`${t.tabId}:${t.leafId}`] : []
   return t.recordedPaneKey ? [...keys, t.recordedPaneKey] : keys
 }

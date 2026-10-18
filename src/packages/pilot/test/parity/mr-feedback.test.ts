@@ -63,7 +63,9 @@ describe('06 · Address reviewer feedback: the definition', () => {
     // Exit 0 is due; unpushed commits and an unreadable branch each print their reason and exit 1.
     const due = definition.checks.find((c) => c.kind === 'script')
     expect(due).toMatchObject({ run: expect.stringContaining('wait to be pushed first') })
-    expect(due).toMatchObject({ run: expect.stringContaining("can't read the branch's unpushed commits") })
+    expect(due).toMatchObject({
+      run: expect.stringContaining("can't read the branch's unpushed commits")
+    })
     expect((due as { run: string }).run.match(/exit 1/g)).toHaveLength(2)
   })
 
@@ -277,20 +279,20 @@ describeParity(PARITY_06, '06 · Address reviewer feedback: parity with mr-feedb
     }
   })
 
-  it('gates: the dirty worktree now starts too, so three start and two are over the limit', async () => {
+  it('gates: the dirty worktree now starts too, so three start and two are held for the limit', async () => {
     const neu = await decide('gates')
     expect(neu.filter((d) => d.verdict === 'started').map((d) => d.key)).toEqual([
       'mr:1712',
       'mr:1713',
       'mr:1714'
     ])
-    expect(neu.filter((d) => d.verdict === 'over_limit').map((d) => d.key)).toEqual([
-      'mr:1715',
-      'mr:1716'
+    expect(neu.filter((d) => d.verdict === 'held').map((d) => [d.key, d.reason])).toEqual([
+      ['mr:1711', 'A session from this automation is still open there'],
+      ['mr:1715', 'Over the limit of 3 per tick'],
+      ['mr:1716', 'Over the limit of 3 per tick']
     ])
     expect(neu.filter((d) => d.verdict === 'skipped').map((d) => [d.key, failedCheck(d)])).toEqual([
-      ['mr:1710', 'Worktree'],
-      ['mr:1711', 'No open session']
+      ['mr:1710', 'Worktree']
     ])
     const spent = await decide('quota-out')
     expect(failedCheck(spent.find((d) => d.key === 'mr:1720'))).toBe('Quota')
@@ -313,11 +315,11 @@ describeParity(PARITY_06, '06 · Address reviewer feedback: parity with mr-feedb
     for (const d of old) {
       const fresh = neu.find((n) => n.key === d.key)
       if (busy.test(d.reason)) {
-        const held = fresh?.verdict === 'skipped'
-        expect([d.key, d.reason, held ? failedCheck(fresh) : fresh?.verdict]).toEqual([
+        // Never skipped for the sweep's reason: started, or held for the limit or (quota-out) by the quota check.
+        expect([d.key, d.reason, fresh?.verdict]).toEqual([
           d.key,
           d.reason,
-          held ? 'Quota' : expect.stringMatching(/^(started|over_limit)$/)
+          expect.stringMatching(/^(started|held)$/)
         ])
         continue
       }
@@ -327,7 +329,7 @@ describeParity(PARITY_06, '06 · Address reviewer feedback: parity with mr-feedb
   })
 
   // The sweep tested the open tab before the dirty worktree.
-  it('skips an MR with an open tab and a dirty worktree for the open tab, as the sweep did', async () => {
+  it('holds an MR with an open tab and a dirty worktree for the open tab, where the sweep skipped it', async () => {
     expect(frozenOldPlan(caseFile(JOB_06.job, 'tab-and-dirty'))).toMatchObject([
       {
         key: 'mr:1730',
@@ -337,14 +339,14 @@ describeParity(PARITY_06, '06 · Address reviewer feedback: parity with mr-feedb
     ])
     const neu = await decide('tab-and-dirty')
     expect(neu.map((d) => [d.key, d.verdict, failedCheck(d)])).toEqual([
-      ['mr:1730', 'skipped', 'No open session']
+      ['mr:1730', 'held', 'No open session']
     ])
   })
 
   it('re-dispatches a still-waiting MR once its tab closes, never remembering it as handled', async () => {
     const open = loadFixture(caseFile(JOB_06.job, 'gates'))
     const before = await decide('gates', open)
-    expect(before.find((d) => d.key === 'mr:1711')).toMatchObject({ verdict: 'skipped' })
+    expect(before.find((d) => d.key === 'mr:1711')).toMatchObject({ verdict: 'held' })
 
     // The tab closes: its terminal is no longer connected. The tick before this one started a run for the MR,
     // under that tick's key.

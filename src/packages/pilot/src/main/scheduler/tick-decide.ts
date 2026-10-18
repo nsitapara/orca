@@ -1,6 +1,7 @@
 import type { HandledRow, ItemDecision } from '../../shared/api-types'
 import type { AutomationDefinition, CheckDef } from '../../shared/definition/types'
 import type { PeopleDirectory } from '../../shared/people'
+import { isRuntimeCheck } from '../../shared/tick/check-class'
 import { evaluateCheck, type CheckResult } from '../../shared/tick/checks'
 import {
   decideTick,
@@ -67,16 +68,16 @@ export type DecideOutcome = FedOutcome & { decisions: ItemDecision[]; warnings: 
 type ScriptCheck = Extract<CheckDef, { kind: 'script' }>
 
 const SCRIPT_CHECK_CONCURRENCY = 4
-const HELD: HandledState = { status: 'started', failedAt: null }
+const HELD: HandledState = { status: 'started', failedAt: null, failures: 0, lastOutcome: null }
 
 function messageOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
 }
 
-// retry_after_failure's input. Only a run settles a key (setHandledStatus), so a key no run holds
+// The runner's retry input. Only a run settles a key (setHandledStatus), so a key no run holds
 // (baselined, or brought in by the retired sweep-state import) reads as started whatever its row says: never
 // retryable. The one exception is an old sweep's failure that import brought in with its time (04's failed.json): it
-// is due again retry_after_failure after that failure, as the sweep would have retried it.
+// is retried after that failure, as the sweep would have retried it.
 function importedFailure(r: HandledRow): boolean {
   return r.runId === null && r.status === 'failed' && r.failedAt !== null
 }
@@ -85,7 +86,14 @@ export function handledStates(rows: readonly HandledRow[]): Map<string, HandledS
   return new Map(
     rows.map((r) => [
       r.onceKey,
-      r.runId === null && !importedFailure(r) ? HELD : { status: r.status, failedAt: r.failedAt }
+      r.runId === null && !importedFailure(r)
+        ? HELD
+        : {
+            status: r.status,
+            failedAt: r.failedAt,
+            failures: r.failures,
+            lastOutcome: r.lastOutcome
+          }
     ])
   )
 }
@@ -126,8 +134,9 @@ export async function runScriptCheck(
   return { ok: false, reason: said || `The check exited ${result.code}` }
 }
 
-// Runs before the pure decision: only for items that reach the checks, in order, and only while
-// every earlier check passes, so no script runs for an item an earlier check already skips.
+// Runs before the pure decision: only for items that reach the checks, in order, and only while every
+// earlier eligibility check passes, so no script runs for an item an earlier check already skips. A
+// runtime check never stops them: its failure only holds the item, and a later script may still skip it.
 async function scriptChecks(
   input: Omit<DecideInput, 'scriptChecks'>,
   repo: RepoFacts,
@@ -146,6 +155,9 @@ async function scriptChecks(
     const ctx = { label: item.label, fields: item.fields, now: input.now, timeZone: def.timezone }
     const results = new Map<number, CheckResult>()
     for (const [index, check] of def.checks.entries()) {
+      if (isRuntimeCheck(check)) {
+        continue
+      }
       if (check.kind !== 'script') {
         if (!evaluateCheck(check, ctx).ok) {
           break
@@ -163,6 +175,22 @@ async function scriptChecks(
   return out
 }
 
+export type ByHand = { byHand?: boolean; byHandKeys?: ReadonlySet<string> }
+
+// A row Run now queued keeps its exemption at every re-check, until its item starts.
+function byHandKeys(
+  store: PilotStore,
+  automationId: string,
+  asked: ReadonlySet<string> | undefined
+): Set<string> {
+  const queued = store.capacity
+    .queued()
+    .filter((q) => q.automationId === automationId && q.byHand)
+    .map((q) => q.itemKey)
+  return new Set([...(asked ?? []), ...queued])
+}
+
+// waitingSince is also the item's due time, its place in the runner's line.
 function toDecideItem(item: Item, seenAt: ReadonlyMap<string, number>, now: number): DecideItem {
   return {
     key: item.key,
@@ -215,12 +243,14 @@ export function worktreeTakenSinceDecide(
 // One automation's decision (spec §6): repo → items → built-in fields → scope → custom fields →
 // script checks → decideTick. A failing source or worktree listing throws; the tick runner records
 // the tick as failed and the next one retries. `tickId` is the tick row the runner started first (G3).
+// `hand`: Run now (the whole job) or Retry (its keys), which start a key the runner gave up on.
 export async function decideTickItems(
   def: AutomationDefinition,
   people: PeopleDirectory,
   deps: DecideDeps,
   pass: PassFetchCache,
-  tickId: number
+  tickId: number,
+  hand: ByHand = {}
 ): Promise<DecideOutcome> {
   const now = deps.now()
   const repo = await deps.resolveRepo(def.repo)
@@ -271,7 +301,10 @@ export async function decideTickItems(
     seenKeys: new Set(seenAt.keys()),
     activeRuns: deps.store.runs.runningCount(def.id),
     busyWorktrees: busyWorktrees(deps.store, repo),
-    notDue: custom.notDue
+    notDue: custom.notDue,
+    retryLimit: deps.store.capacity.retryLimit(),
+    byHand: hand.byHand === true,
+    byHandKeys: byHandKeys(deps.store, def.id, hand.byHandKeys)
   }
   const decisions = decideTick({
     ...input,

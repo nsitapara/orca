@@ -47,6 +47,18 @@ describe('usageText', () => {
     ['no limit', payload({ limit: null }), '1 running, no limit'],
     ['the waiting items', payload({ queued: [waiting, waiting] }), '1 of 3 in use · 2 waiting'],
     [
+      'held items apart from slot waiters',
+      payload({
+        queued: [waiting, { ...waiting, holdCode: 'quota' }, { ...waiting, holdCode: 'window' }]
+      }),
+      '1 of 3 in use · 1 waiting for a slot · 2 held'
+    ],
+    [
+      'only held items',
+      payload({ queued: [{ ...waiting, holdCode: 'quota' }] }),
+      '1 of 3 in use · 1 held'
+    ],
+    [
       'runs past a lowered limit',
       payload({ limit: 1, running: [run(), run({ id: 'r3' })] }),
       '2 running, over the limit of 1'

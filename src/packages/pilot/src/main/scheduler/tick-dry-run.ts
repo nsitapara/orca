@@ -21,7 +21,7 @@ export async function decide(
 ): Promise<DecideOutcome> {
   const label = tickId === DRY_RUN_TICK ? `dry-run-${def.id}` : `tick-${tickId}`
   const pass = opts.pass ?? createPassFetchCache(label, deps.gitlab ?? glabApiForRepo)
-  return decideTickItems(def, people, deps, pass, tickId)
+  return decideTickItems(def, people, deps, pass, tickId, opts)
 }
 
 // What a tick would do, stored nowhere: no tick row, no seen or handled marks, no runs, no cards, no handover.

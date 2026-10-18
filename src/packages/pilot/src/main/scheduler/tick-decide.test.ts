@@ -190,7 +190,7 @@ describe('decideTickItems', () => {
     expect(checks.map(([r]) => r.env.PILOT_ITEM_KEY)).toEqual(['mr:2'])
   })
 
-  it("skips an item whose worktree has another automation's run", async () => {
+  it("holds an item whose worktree has another automation's run", async () => {
     const def = testDefinition({ id: 'a' })
     const { store, decide } = setup(def, { sources: { scope: () => null } })
     store.runs.create({
@@ -205,8 +205,9 @@ describe('decideTickItems', () => {
     const out = await decide()
     expect(out.decisions[0]).toMatchObject({
       key: 'mr:1',
-      verdict: 'skipped',
-      reason: 'Another run is active in /wt/1'
+      verdict: 'held',
+      reason: 'Another run is active in /wt/1',
+      hold: { code: 'worktree_busy', detail: 'Another run is active in /wt/1' }
     })
   })
 
@@ -298,7 +299,7 @@ describe('decideTickItems', () => {
     const pass = createPassFetchCache('pass-1', unusedGitlab)
     const out = await decideTickItems(def, EMPTY_PEOPLE, { ...deps, activity }, pass, 7)
     expect(summary(out)).toEqual([
-      ['mr:1', 'skipped', 'someone is typing in Fix'],
+      ['mr:1', 'held', 'someone is typing in Fix'],
       ['mr:2', 'started', 'All checks pass'],
       ['mr:3', 'out_of_scope', 'MR is closed']
     ])
@@ -310,6 +311,35 @@ describe('decideTickItems', () => {
       7
     )
     expect(terminals).toHaveBeenCalledTimes(1)
+  })
+
+  // A runtime failure holds the item, so its later eligibility scripts still decide whether it waits or is skipped.
+  it('a script check after a failing quota check still runs', async () => {
+    const def = testDefinition({
+      id: 'a',
+      checks: [
+        { kind: 'quota', agent: 'claude', weekly: 90, session: 95 },
+        { kind: 'script', run: './check.sh', timeoutMs: 5000 }
+      ]
+    })
+    const runScript = vi.fn(async (_req: ScriptRequest) => ok('ready'))
+    const { decide } = setup(def, {
+      sources: { list: async () => ({ items: [mr(1, 'b1')], warnings: [] }), scope: () => null },
+      fields: {
+        runScript,
+        quotas: {
+          claude: async () => ({ weekly: 99, session: 10 }),
+          codex: async () => ({ weekly: null, session: null })
+        }
+      }
+    })
+    const out = await decide()
+    expect(runScript).toHaveBeenCalledTimes(1)
+    expect(out.decisions[0]).toMatchObject({
+      key: 'mr:1',
+      verdict: 'held',
+      hold: { code: 'quota' }
+    })
   })
 
   it('fails when the source fails, so the tick is recorded failed', async () => {
@@ -462,7 +492,13 @@ describe('handledStates', () => {
       runId: string | null,
       status: HandledRow['status'],
       failedAt: number | null
-    ): HandledRow => ({ onceKey, runId, at: 1, status, failedAt })
+    ): HandledRow => ({ onceKey, runId, at: 1, status, failedAt, failures: 0, lastOutcome: null })
+    const state = (status: HandledState['status'], failedAt: number | null): HandledState => ({
+      status,
+      failedAt,
+      failures: 0,
+      lastOutcome: null
+    })
     expect(
       handledStates([
         row('1', 'run-1', 'failed', 50),
@@ -475,15 +511,33 @@ describe('handledStates', () => {
       ])
     ).toEqual(
       new Map<string, HandledState>([
-        ['1', { status: 'failed', failedAt: 50 }],
-        ['2', { status: 'done', failedAt: null }],
-        ['3', { status: 'started', failedAt: null }],
-        ['4', { status: 'failed', failedAt: 50 }],
-        ['5', { status: 'started', failedAt: null }],
-        ['6', { status: 'started', failedAt: null }],
-        ['7', { status: 'started', failedAt: null }]
+        ['1', state('failed', 50)],
+        ['2', state('done', null)],
+        ['3', state('started', null)],
+        ['4', state('failed', 50)],
+        ['5', state('started', null)],
+        ['6', state('started', null)],
+        ['7', state('started', null)]
       ])
     )
+  })
+
+  it("carries a failed key's count and its last run's outcome", () => {
+    const failed: HandledRow = {
+      onceKey: '1',
+      runId: 'run-1',
+      at: 1,
+      status: 'failed',
+      failedAt: 50,
+      failures: 2,
+      lastOutcome: 'agent exited'
+    }
+    expect(handledStates([failed]).get('1')).toEqual({
+      status: 'failed',
+      failedAt: 50,
+      failures: 2,
+      lastOutcome: 'agent exited'
+    })
   })
 })
 
@@ -587,7 +641,10 @@ describe('05 on 2026-10-10 12:10 through the merge-request source and decideTick
       })
     )
     const handled = new Map<string, HandledState>(
-      fixture.handledKeys.map((k) => [k, { status: 'started', failedAt: null }])
+      fixture.handledKeys.map((k) => [
+        k,
+        { status: 'started', failedAt: null, failures: 0, lastOutcome: null }
+      ])
     )
     const decisions = decideTick({
       definition: def,
@@ -598,13 +655,15 @@ describe('05 on 2026-10-10 12:10 through the merge-request source and decideTick
       seenKeys: new Set(),
       activeRuns: 0,
       busyWorktrees: new Set(),
-      scriptChecks: new Map()
+      scriptChecks: new Map(),
+      retryLimit: 2,
+      byHand: false
     })
     expect(decisions.map((d) => [d.key, d.verdict, d.reason])).toEqual([
       ['!1561', 'started', 'All checks pass'],
       ['!1587', 'notdue', 'Already handled 1587:2933991087'],
-      ['!1574', 'skipped', '2 uncommitted files'],
-      ['!1592', 'skipped', 'A session from this automation is still open there'],
+      ['!1574', 'held', '2 uncommitted files'],
+      ['!1592', 'held', 'A session from this automation is still open there'],
       ['!1347', 'notdue', 'Head pipeline success'],
       ['!1590', 'notdue', 'Head pipeline running'],
       ['!1588', 'out_of_scope', 'Author is Shivan; this automation looks at Nish Sitapara'],

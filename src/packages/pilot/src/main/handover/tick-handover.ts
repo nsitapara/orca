@@ -20,12 +20,11 @@ function decisionFor(decisions: readonly ItemDecision[], id: string): ItemDecisi
 
 // Whether a tick settles a fed id. Consumed: the tick started a run for the item (or holds one for an ask-first card),
 // or the item definitely needs nothing: out of scope, already handled (its once_per key; a baseline counts), or gone
-// from its source (closed, or not found). Anything that can change by the next tick keeps it pending: a check, quota
-// or busy worktree (skipped), the per-tick limit, a failed run's retry_after_failure wait, a scope that says not yet.
+// from its source (closed, or not found). Anything that can change by the next tick keeps it pending: a check (skipped),
+// quota, a busy worktree, a limit or a retry's wait (held), a failed run, a scope that says not yet.
 export function settles(
   decision: ItemDecision | undefined,
-  handled: ReadonlyMap<string, HandledState>,
-  retryAfterFailureMs: number | null
+  handled: ReadonlyMap<string, HandledState>
 ): boolean {
   if (decision === undefined) {
     return true
@@ -33,12 +32,12 @@ export function settles(
   if (decision.verdict !== 'notdue') {
     return ['started', 'asked', 'out_of_scope', 'baselined'].includes(decision.verdict)
   }
-  // decide.ts's handledGate: a handled key is due again only after a failed run's retry_after_failure.
+  // A failed key stays pending even once the runner gives up on it, so Retry on Running still finds the item.
   const state = handled.get(decision.onceKey)
   if (!state) {
     return false
   }
-  return state.status !== 'failed' || retryAfterFailureMs === null || state.failedAt === null
+  return state.status !== 'failed'
 }
 
 export const NOT_FOUND = 'dropped: not found by its source'
@@ -95,7 +94,7 @@ export function settleFed(
     if (!d && missing.has(row.itemId.toLowerCase())) {
       return [{ rowId: row.id, verdict: null, reason: NOT_FOUND, runId: null, state: 'expired' }]
     }
-    if (!settles(d, handled, def.retryAfterFailureMs)) {
+    if (!settles(d, handled)) {
       return []
     }
     const startedHere = d?.verdict === 'started' || d?.verdict === 'asked'

@@ -1,13 +1,13 @@
 import type { ItemDecision, TickResult, TickTrigger, Verdict } from '../../shared/api-types'
-import { repend } from '../handover/repend'
 import { expireStale, handoverOf, settleFed } from '../handover/tick-handover'
 import type { AutomationDefinition } from '../../shared/definition/types'
 import type { PeopleDirectory } from '../../shared/people'
 import { usesHandled, workspacePathOf } from '../../shared/tick/decide'
-import type { Admission, RunCapacity } from '../capacity/run-capacity'
+import type { Admission, LineItem, RunCapacity } from '../capacity/run-capacity'
 import { askDecisions, type AskDeps } from '../run/ask-first'
 import type { PassFetchCache } from '../sources/fetch-cache'
 import type { GlabApi } from '../sources/gitlab-api'
+import { keepOrphanHandled, releaseUnlaunched, type Unlaunched } from './launch-failure'
 import { worktreeTakenSinceDecide, type DecideDeps, type FedOutcome } from './tick-decide'
 import { decide, dryRunTick } from './tick-dry-run'
 
@@ -42,17 +42,20 @@ export type TickDeps = DecideDeps & {
   ask: AskDeps
   // A dry run of an env automation: where each started item would work (main/envs/preview.ts).
   previewEnvs?(def: AutomationDefinition, decisions: ItemDecision[]): Promise<void>
-  // The run limit across automations: a started item past it waits in the queue instead (verdict queued).
-  capacity?: Pick<RunCapacity, 'admit' | 'settle' | 'forget'>
+  // The runner's line: an item past the run limit (verdict queued) or held by a runner gate waits there.
+  capacity?: Pick<RunCapacity, 'admit' | 'hold' | 'settle' | 'tickFailed'>
 }
 // `pass` is the scheduler pass's fetch cache, shared by every automation that ticks in that pass. `trigger`: the run
 // whose feed (run: now) asked for this tick, recorded on it for Activity. `byHand`: a Run now, whose runs are stored
-// with trigger `manual`.
+// with trigger `manual`. `byHandKeys`: Retry's keys, due again though the runner gave up on them. `recheck`: the
+// runner's line asked for it; Activity leaves it out unless it starts a run.
 export type TickOptions = {
   dryRun: boolean
   pass?: PassFetchCache
   trigger?: TickTrigger
   byHand?: boolean
+  byHandKeys?: ReadonlySet<string>
+  recheck?: boolean
 }
 
 const pad = (v: number) => String(v).padStart(2, '0')
@@ -79,8 +82,6 @@ function remembersSeen(def: AutomationDefinition): boolean {
   return def.items !== null
 }
 
-type Unlaunched = { runId: string; onceKey: string }
-
 // Where the run is recorded: the item's worktree, or the repo's main checkout for main_checkout
 // (recorded, though G2 keeps it out of the one-agent-per-worktree rule); null for a new worktree,
 // which the launcher's claim records on this run once it exists (run/workspace.ts).
@@ -95,8 +96,21 @@ function recordedWorktree(
   return workspacePathOf(def, fields)
 }
 
-// Only 'started' decisions start runs; 'asked' ones wait for an answer (askDecisions writes the card).
-// A launch failure keeps the decision's verdict 'started'; the RUN row is the record of the failure.
+// A decision that reached the runner's gates has its due time; one that didn't joins the line now.
+function lineItem(decision: ItemDecision, at: number): LineItem {
+  return { key: decision.key, label: decision.label, dueAt: decision.dueAt ?? at }
+}
+
+// Run now, or Retry's key: its run is stored as manual and its line row keeps the by-hand exemption.
+function byHandFor(decision: ItemDecision, opts: TickOptions): boolean {
+  const keys = opts.byHandKeys
+  return (
+    opts.byHand === true || keys?.has(decision.key) === true || keys?.has(decision.onceKey) === true
+  )
+}
+
+// Only 'started' decisions start runs; 'asked' ones wait for an answer (askDecisions writes the card), and 'held'
+// ones wait in the runner's line. A launch failure keeps the decision's verdict 'started'; the RUN row is the record.
 async function startRuns(
   def: AutomationDefinition,
   decisions: ItemDecision[],
@@ -104,11 +118,16 @@ async function startRuns(
   deps: TickDeps,
   runIds: Map<string, string>,
   unlaunched: { current: Unlaunched | null },
-  byHand: boolean
+  opts: TickOptions
 ): Promise<void> {
   const at = deps.now()
   let n = 0
   for (const decision of decisions) {
+    const byHand = byHandFor(decision, opts)
+    if (decision.verdict === 'held' && decision.hold) {
+      deps.capacity?.hold(def, lineItem(decision, at), decision.hold, byHand)
+      continue
+    }
     if (decision.verdict !== 'started') {
       continue
     }
@@ -129,11 +148,14 @@ async function startRuns(
     const worktreePath = recordedWorktree(def, decision.fields)
     const busy = worktreeTakenSinceDecide(deps.store, def, worktreePath, decision.fields)
     if (busy !== null) {
-      decision.verdict = 'skipped'
-      decision.reason = `Another run is active in ${busy}`
+      const hold = { code: 'worktree_busy' as const, detail: `Another run is active in ${busy}` }
+      decision.verdict = 'held'
+      decision.reason = hold.detail
+      decision.hold = hold
+      deps.capacity?.hold(def, lineItem(decision, at), hold, byHand)
       continue
     }
-    const admission: Admission = deps.capacity?.admit(def, decision, byHand) ?? {
+    const admission: Admission = deps.capacity?.admit(def, lineItem(decision, at), byHand) ?? {
       start: true,
       byHand
     }
@@ -156,8 +178,14 @@ async function startRuns(
       ...(admission.byHand ? { trigger: 'manual' as const } : {})
     })
     runIds.set(decision.key, runId)
-    unlaunched.current = { runId, onceKey: decision.onceKey }
-    // Marked 'started' at launch (re-marking a failed key starts it fresh); Task 9 settles it.
+    const run = {
+      runId,
+      onceKey: decision.onceKey,
+      itemKey: decision.key,
+      itemLabel: decision.label
+    }
+    unlaunched.current = run
+    // Marked 'started' at launch (a failed key starts over and keeps its failures); the run's end settles it.
     if (usesHandled(def)) {
       deps.store.markHandled(def.id, decision.onceKey, runId, at)
     }
@@ -165,7 +193,6 @@ async function startRuns(
       unlaunched.current = null
       await deps.launch({ runId, definition: def, decision })
     } catch (error) {
-      const run = { runId, onceKey: decision.onceKey }
       if (error instanceof UnrecordedLaunchError) {
         keepOrphanHandled(def, run, error.message, deps)
       } else {
@@ -173,48 +200,6 @@ async function startRuns(
       }
     }
   }
-}
-
-// Best effort: one failing cleanup call must not mask the others.
-function releaseUnlaunched(
-  def: AutomationDefinition,
-  u: Unlaunched,
-  message: string,
-  deps: TickDeps
-) {
-  const outcome = `Couldn't start: ${message}`
-  try {
-    deps.store.runs.update(u.runId, { status: 'failed', outcome, finishedAt: deps.now() })
-    repend(deps.store, u.runId)
-  } catch {}
-  if (!usesHandled(def)) {
-    return
-  }
-  try {
-    deps.store.unmarkHandled(def.id, u.onceKey)
-  } catch {}
-}
-
-// The agent is running in a terminal no step tracks, so its key stays handled (marked again, in case
-// the stale-start sweep freed it during a slow launch) and no later tick starts a second agent on the
-// item. The run is failed, and its outcome names the terminal.
-function keepOrphanHandled(
-  def: AutomationDefinition,
-  u: Unlaunched,
-  message: string,
-  deps: TickDeps
-): void {
-  const at = deps.now()
-  try {
-    deps.store.runs.update(u.runId, { status: 'failed', outcome: message, finishedAt: at })
-    repend(deps.store, u.runId)
-  } catch {}
-  if (!usesHandled(def)) {
-    return
-  }
-  try {
-    deps.store.markHandled(def.id, u.onceKey, u.runId, at)
-  } catch {}
 }
 
 function markDecisions(def: AutomationDefinition, decisions: ItemDecision[], deps: TickDeps): void {
@@ -270,7 +255,7 @@ export async function runTick(
   if (opts.dryRun) {
     return dryRunTick(def, people, deps, opts)
   }
-  const tickId = deps.store.startTick(def.id, deps.now())
+  const tickId = deps.store.startTick(def.id, deps.now(), opts.recheck === true)
   let decisions: ItemDecision[]
   let warnings: string[]
   let feeding: FedOutcome
@@ -286,9 +271,9 @@ export async function runTick(
   } catch (error) {
     const message = errorMessage(error)
     finishFailed(tickId, message, {}, deps)
-    // Its queued items leave the line, so a job whose ticks keep failing can't hold the slot they wait for.
+    // A job whose ticks keep failing can't hold a slot; its held items hold none, so they keep their place in line.
     try {
-      deps.capacity?.forget(def.id)
+      deps.capacity?.tickFailed(def.id)
     } catch {}
     return { tickId, status: 'failed', error: message, decisions: [], warnings: [] }
   }
@@ -304,7 +289,7 @@ export async function runTick(
       tickId,
       runIdFor: (n) => `${makeRunId(def.id, at, n, tickId)}-ask`
     })
-    await startRuns(def, decisions, tickId, deps, runIds, unlaunched, opts.byHand === true)
+    await startRuns(def, decisions, tickId, deps, runIds, unlaunched, opts)
     deps.capacity?.settle(def, decisions)
     deps.store.recordDecisions(tickId, decisions, runIds)
     settleFed(deps.store, def, feeding, decisions, runIds, tickId, deps.now())

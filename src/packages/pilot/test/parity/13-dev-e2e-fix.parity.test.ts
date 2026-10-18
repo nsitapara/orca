@@ -372,12 +372,13 @@ describeParity(
       }
     })
 
-    it('quota is checked before the worktree, as the old start() did', async () => {
+    // The old start() checked quota first; Pilot decides eligibility (the start check) before it holds for quota.
+    it('a ticket whose worktree has work in flight is skipped, even while quota is out', async () => {
       const name = 'ticket-quota-out-and-dirty'
       const fresh = await decideAll(name)
       expect(fresh.find((d) => d.key === 'linear:WEB-2')).toMatchObject({
         verdict: 'skipped',
-        reason: expect.stringMatching(QUOTA_NEW)
+        reason: 'uncommitted changes in /wt/web-2; retry next run'
       })
     })
 

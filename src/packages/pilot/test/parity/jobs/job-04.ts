@@ -24,41 +24,39 @@ const REPO = '400fee61-a463-4f76-894a-39861e906007'
 const wt = (n: number): string => `wt:${REPO}::/wt/web-${n}`
 
 // 04's words (frozen in the test data) and the verdicts that agree with them. Nothing new since the last test is the worktree
-// kind's `where.commits` clause (out of scope); a failed head's 12-hour hold is retry_after_failure (not due); a QA run in
-// progress holds its own head (already handled) and every other due worktree (at most 1 at once). A teammate's branch,
-// or one whose owner GitLab can't name, is never listed by the sweep and is out of scope for Pilot.
+// kind's `where.commits` clause (out of scope); a failed head waits out retry_after_failure's 12 hours in the runner's
+// line (the retry gate); a QA run in progress holds its own head (already handled) and every other due worktree (at most
+// 1 at once). Answers, agents, the window, quota and the limits hold a worktree in the runner's line; a git operation
+// and the MR rules skip it. A teammate's branch, or one whose owner GitLab can't name, is never listed by the sweep and
+// is out of scope for Pilot.
 export const VERDICTS_04: VerdictTable = {
   map: {
     baseline: ['baselined'],
     idle: ['out_of_scope'],
     skip: ['skipped'],
     start: ['started'],
-    queued: ['over_limit'],
-    outside: ['skipped'],
-    QUOTA: ['skipped'],
+    queued: ['held'],
+    outside: ['held'],
+    QUOTA: ['held'],
     held_active: ['notdue'],
-    held: ['over_limit']
+    held: ['held']
   },
-  rows: [{ word: 'skip', reason: /; retry next night$/, verdicts: ['notdue'] }],
+  rows: [
+    { word: 'skip', reason: /; retry next night$/, verdicts: ['held'] },
+    {
+      word: 'skip',
+      reason:
+        /^automatic UI QA fixes are running$|^answers are being applied or an agent is working there; QA waits$/,
+      verdicts: ['held']
+    }
+  ],
   whenOldMissing: ['out_of_scope'],
   known: [
     {
-      key: wt(452),
-      word: 'queued',
-      verdict: 'skipped',
-      why: "Pilot checks Codex's quota for every due worktree, so each is held by it; the sweep tried only the first one it would start and left the rest for the next tick. Nothing starts either way."
-    },
-    {
       key: wt(472),
       word: 'start',
-      verdict: 'over_limit',
+      verdict: 'held',
       why: "Pilot's fixer is a step of the QA run, so the next run waits for it (at_once 1); the sweep's fixer ran in its own tab beside the next QA run"
-    },
-    {
-      key: wt(484),
-      word: 'skip',
-      verdict: 'notdue',
-      why: 'Pilot holds a failed head (retry_after_failure) before any check; the sweep looked at answers and agents first. Nothing starts either way.'
     },
     {
       key: wt(485),

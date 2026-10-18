@@ -2,7 +2,9 @@ import type { CheckOutcome, ItemDecision, ItemFields, Verdict } from '../api-typ
 import type { AutomationDefinition } from '../definition/types'
 import { evalExpr, parseExpr } from '../expr'
 import { oncePerKey, renderTemplate } from '../template'
-import { evaluateCheck, fieldLookup, type CheckResult } from './checks'
+import { isRuntimeCheck } from './check-class'
+import { evaluateCheck, fieldLookup, plural, type CheckResult } from './checks'
+import { inTickGate, itemGate, limitGate, type Hold } from './runner-gates'
 
 export type DecideItem = {
   key: string
@@ -11,7 +13,13 @@ export type DecideItem = {
   sortKeys?: { waitingSince: number | null; priority: number | null }
 }
 export type ScopeGate = { verdict: 'out_of_scope' | 'notdue'; reason: string }
-export type HandledState = { status: 'started' | 'done' | 'failed'; failedAt: number | null }
+export type HandledState = {
+  status: 'started' | 'done' | 'failed'
+  failedAt: number | null
+  // Failed runs in a row on the key, and the last run's outcome: the runner's retry gate reads both.
+  failures: number
+  lastOutcome: string | null
+}
 // Item key → index in definition.checks → the script's result.
 export type ScriptCheckResults = ReadonlyMap<string, ReadonlyMap<number, CheckResult>>
 export type DecideInput = {
@@ -27,6 +35,12 @@ export type DecideInput = {
   // Items a field script said aren't due now (exit 3): item key → its reason. Skipped this tick, after scope, once_per
   // and first_seen; a fed id stays pending (main/handover/tick-handover.ts settles).
   notDue?: ReadonlyMap<string, string>
+  // Retries after a failure (the Running page); a key failed more often than this is given up.
+  retryLimit: number
+  // Run now: every given-up key is due again.
+  byHand: boolean
+  // Items (by item key or once key) Run now or Retry started by hand: their given-up key is due again.
+  byHandKeys?: ReadonlySet<string>
 }
 type Gate = { verdict: Verdict; reason: string }
 type Candidate = {
@@ -35,16 +49,6 @@ type Candidate = {
   onceKey: string
   checks: CheckOutcome[]
   path: string | null
-}
-
-function formatWait(ms: number): string {
-  const minutes = Math.max(1, Math.ceil(ms / 60_000))
-  const hours = Math.floor(minutes / 60)
-  const rest = minutes % 60
-  if (hours === 0) {
-    return `${rest}m`
-  }
-  return rest === 0 ? `${hours}h` : `${hours}h ${rest}m`
 }
 
 function matchGate(def: AutomationDefinition, item: DecideItem): Gate | null {
@@ -60,21 +64,38 @@ function matchGate(def: AutomationDefinition, item: DecideItem): Gate | null {
   return null
 }
 
-// A key whose last run failed is due again retry_after_failure after the failure.
-function handledGate(input: Omit<DecideInput, 'scriptChecks'>, onceKey: string): Gate | null {
+// A failed key stays due while the runner retries it (its retry gate waits), and by hand past the retry limit.
+// An ask-first job's isn't retried: you approve each run.
+function handledGate(
+  input: Omit<DecideInput, 'scriptChecks'>,
+  item: DecideItem,
+  onceKey: string
+): Gate | null {
   const state = input.handled.get(onceKey)
   if (!state) {
     return null
   }
-  const retry = input.definition.retryAfterFailureMs
-  if (state.status !== 'failed' || retry === null || state.failedAt === null) {
-    return { verdict: 'notdue', reason: `Already handled ${onceKey}` }
-  }
-  const wait = state.failedAt + retry - input.now
-  if (wait <= 0) {
+  // Failed before failures were counted (0; a new failure counts 1): as before, only retry_after_failure retries it.
+  if (
+    state.status === 'failed' &&
+    state.failures === 0 &&
+    input.definition.retryAfterFailureMs !== null
+  ) {
     return null
   }
-  return { verdict: 'notdue', reason: `Its last run failed; due again in ${formatWait(wait)}` }
+  if (state.status !== 'failed' || state.failures === 0 || input.definition.start === 'ask_first') {
+    return { verdict: 'notdue', reason: `Already handled ${onceKey}` }
+  }
+  const byHand =
+    input.byHand ||
+    input.byHandKeys?.has(item.key) === true ||
+    input.byHandKeys?.has(onceKey) === true
+  if (state.failures > input.retryLimit && !byHand) {
+    const failures = plural(state.failures, 'failure')
+    const reason = `Gave up after ${failures}; Run now or Retry from Running starts it again`
+    return { verdict: 'notdue', reason }
+  }
+  return null
 }
 
 // A source that tracks its items' progress itself (the worktree kind's `commits` clause) says whether
@@ -101,7 +122,7 @@ export function preCheckGate(
   const def = input.definition
   const onceKey = oncePerKey(def.oncePer, item.fields, item.key)
   if (def.items === null) {
-    return usesHandled(def) ? handledGate(input, onceKey) : null
+    return usesHandled(def) ? handledGate(input, item, onceKey) : null
   }
   // A not-due item's field may be null (its script stopped the later ones), so items.match would misread it as out of scope.
   const notDue = input.notDue?.get(item.key)
@@ -109,7 +130,7 @@ export function preCheckGate(
   if (scoped) {
     return scoped
   }
-  const handled = handledGate(input, onceKey)
+  const handled = handledGate(input, item, onceKey)
   if (handled) {
     return handled
   }
@@ -137,22 +158,32 @@ export function workspacePathOf(def: AutomationDefinition, fields: ItemFields): 
   return typeof value === 'string' && value !== '' ? value : null
 }
 
-function runChecks(
-  input: DecideInput,
-  item: DecideItem
-): { checks: CheckOutcome[]; failed: CheckOutcome | null } {
+type ChecksRun = {
+  checks: CheckOutcome[]
+  failed: CheckOutcome | null
+  failedClass: 'eligibility' | 'runtime' | null
+}
+
+// Eligibility checks first, then runtime checks, each in declared order: an item that isn't eligible is
+// skipped even when a runtime check declared before its eligibility check fails.
+function runChecks(input: DecideInput, item: DecideItem): ChecksRun {
   const def = input.definition
   const ctx = { label: item.label, fields: item.fields, now: input.now, timeZone: def.timezone }
   const scripts = input.scriptChecks.get(item.key)
+  const indexed = [...def.checks.entries()]
+  const ordered = [
+    ...indexed.filter(([, c]) => !isRuntimeCheck(c)),
+    ...indexed.filter(([, c]) => isRuntimeCheck(c))
+  ]
   const checks: CheckOutcome[] = []
-  for (const [index, c] of def.checks.entries()) {
+  for (const [index, c] of ordered) {
     const result = evaluateCheck(c, ctx, scripts?.get(index))
     checks.push(result)
     if (!result.ok) {
-      return { checks, failed: result }
+      return { checks, failed: result, failedClass: isRuntimeCheck(c) ? 'runtime' : 'eligibility' }
     }
   }
-  return { checks, failed: null }
+  return { checks, failed: null, failedClass: null }
 }
 
 function sortValue(value: number | null | undefined): number {
@@ -171,32 +202,6 @@ function ranked(def: AutomationDefinition, candidates: Candidate[]): Candidate[]
   return [...candidates].sort((a, b) => key(a) - key(b) || a.index - b.index)
 }
 
-function inTickGate(
-  def: AutomationDefinition,
-  c: Candidate,
-  onceKeys: Set<string>,
-  paths: Set<string>
-): Gate | null {
-  if (usesHandled(def) && onceKeys.has(c.onceKey)) {
-    return { verdict: 'notdue', reason: `Already handled ${c.onceKey}` }
-  }
-  if (c.path !== null && paths.has(c.path)) {
-    return { verdict: 'skipped', reason: `Another run starts in ${c.path} this tick` }
-  }
-  return null
-}
-
-function limitGate(def: AutomationDefinition, taken: number, active: number): Gate | null {
-  const { perTick, atOnce } = def.limits
-  if (perTick !== null && taken >= perTick) {
-    return { verdict: 'over_limit', reason: `Over the limit of ${perTick} per tick` }
-  }
-  if (atOnce !== null && active >= atOnce) {
-    return { verdict: 'over_limit', reason: `At most ${atOnce} at once` }
-  }
-  return null
-}
-
 function askedReason(def: AutomationDefinition, fields: ItemFields): string {
   if (!def.askFirst) {
     return 'Asks before starting'
@@ -208,7 +213,22 @@ function base(item: DecideItem, onceKey: string) {
   return { key: item.key, label: item.label, onceKey, fields: item.fields }
 }
 
-// The per-tick slots go out in limits.order; decisions keep the source's order.
+// An item that reached the checks has a place in the runner's line: when it became due.
+function reachedChecks(
+  input: DecideInput,
+  item: DecideItem,
+  onceKey: string,
+  checks: CheckOutcome[]
+) {
+  return { ...base(item, onceKey), checks, dueAt: item.sortKeys?.waitingSince ?? input.now }
+}
+
+function held(decided: ReturnType<typeof reachedChecks>, hold: Hold): ItemDecision {
+  return { ...decided, verdict: 'held', reason: hold.detail, hold }
+}
+
+// The per-tick slots go out in limits.order; decisions keep the source's order. A held item takes no
+// slot, so the next one is tried.
 function allocate(input: DecideInput, candidates: Candidate[], out: ItemDecision[]): void {
   const def = input.definition
   const onceKeys = new Set<string>()
@@ -216,11 +236,15 @@ function allocate(input: DecideInput, candidates: Candidate[], out: ItemDecision
   let taken = 0
   let started = 0
   for (const c of ranked(def, candidates)) {
-    const decided = { ...base(c.item, c.onceKey), checks: c.checks }
-    const gate =
-      inTickGate(def, c, onceKeys, paths) ?? limitGate(def, taken, input.activeRuns + started)
-    if (gate) {
-      out[c.index] = { ...decided, ...gate }
+    const decided = reachedChecks(input, c.item, c.onceKey, c.checks)
+    if (usesHandled(def) && onceKeys.has(c.onceKey)) {
+      out[c.index] = { ...decided, verdict: 'notdue', reason: `Already handled ${c.onceKey}` }
+      continue
+    }
+    const hold =
+      inTickGate(c.path, c.item.fields, paths) ?? limitGate(def, taken, input.activeRuns + started)
+    if (hold) {
+      out[c.index] = held(decided, hold)
       continue
     }
     taken += 1
@@ -249,19 +273,17 @@ export function decideTick(input: DecideInput): ItemDecision[] {
       out[index] = { ...base(item, onceKey), checks: [], ...gate }
       return
     }
-    const { checks, failed } = runChecks(input, item)
-    if (failed) {
-      out[index] = { ...base(item, onceKey), checks, verdict: 'skipped', reason: failed.reason }
+    const { checks, failed, failedClass } = runChecks(input, item)
+    if (failed && failedClass === 'eligibility') {
+      const decided = reachedChecks(input, item, onceKey, checks)
+      out[index] = { ...decided, verdict: 'skipped', reason: failed.reason }
       return
     }
     const path = workspacePathOf(def, item.fields)
-    if (path !== null && input.busyWorktrees.has(path)) {
-      out[index] = {
-        ...base(item, onceKey),
-        checks,
-        verdict: 'skipped',
-        reason: `Another run is active in ${path}`
-      }
+    // The runner's gates own the hold; they re-read the runtime checks recorded above.
+    const hold = itemGate(input, item, onceKey, path)
+    if (hold) {
+      out[index] = held(reachedChecks(input, item, onceKey, checks), hold)
       return
     }
     candidates.push({ index, item, onceKey, checks, path })

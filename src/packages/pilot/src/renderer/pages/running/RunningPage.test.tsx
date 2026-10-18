@@ -72,6 +72,12 @@ function serve(current: CapacityPayload): void {
     if (method === 'pilot.capacity.setLimit') {
       return { ...current, limit: params?.limit ?? null }
     }
+    if (method === 'pilot.capacity.setRetryLimit') {
+      return { ...current, retryLimit: params?.limit }
+    }
+    if (method === 'pilot.capacity.retry') {
+      return { ...current, gaveUp: [] }
+    }
     if (method === 'pilot.runs.effects') {
       return {}
     }
@@ -152,12 +158,152 @@ describe('RunningPage', () => {
     const running = within(screen.getByRole('region', { name: 'Running now' }))
     expect(running.getByText('03 Review and fix')).toBeTruthy()
     expect(running.getByText('1.5 GB · peak 2.0 GB')).toBeTruthy()
-    const waiting = within(screen.getByRole('region', { name: 'Waiting for a slot' }))
+    const waiting = within(screen.getByRole('region', { name: 'Waiting' }))
     expect(waiting.getByText('05 Fix failed CI')).toBeTruthy()
     expect(waiting.getByText('Run now')).toBeTruthy()
     expect(waiting.getByText('waiting 3m')).toBeTruthy()
     expect(screen.getByRole('status', { name: 'Jobs at once' }).textContent).toBe('2')
   })
+
+  it('lists a held item with its reason, and says what the quota ceiling holds', async () => {
+    const now = Date.now()
+    serve(
+      capacity({
+        quotaCeiling: { weekly: 90, session: 95 },
+        queued: [
+          {
+            automationId: 'ci',
+            automationName: '05 Fix failed CI',
+            itemKey: 'mr:9',
+            itemLabel: '!9 web-9',
+            queuedAt: now - 9 * 60_000,
+            byHand: false,
+            dueAt: now - 3 * 60_000,
+            holdCode: 'session_open',
+            holdDetail: 'someone is typing in \u2733 F1'
+          }
+        ]
+      })
+    )
+    await shown()
+    expect(screen.getByRole('heading', { name: 'Waiting \u00b7 1' })).toBeTruthy()
+    const waiting = within(screen.getByRole('region', { name: 'Waiting' }))
+    expect(waiting.getByText('someone is typing in \u2733 F1')).toBeTruthy()
+    expect(waiting.getByText('waiting 3m')).toBeTruthy()
+    expect(
+      screen.getByText(
+        'Jobs with an agent step wait while Claude or Codex is over 90% weekly or 95% session.'
+      )
+    ).toBeTruthy()
+  })
+
+  it('numbers only the rows waiting on a slot', async () => {
+    const now = Date.now()
+    const row = (key: string, over: Partial<CapacityPayload['queued'][number]>) => ({
+      automationId: 'ci',
+      automationName: 'Fix failed CI',
+      itemKey: key,
+      itemLabel: key,
+      queuedAt: now,
+      byHand: false,
+      ...over
+    })
+    serve(
+      capacity({
+        queued: [
+          row('held-one', { holdCode: 'quota', holdDetail: 'over quota' }),
+          row('slot-one', { holdCode: 'capacity' })
+        ]
+      })
+    )
+    await shown()
+    const rows = within(screen.getByRole('region', { name: 'Waiting' })).getAllByRole('listitem')
+    expect(rows[0]?.textContent).not.toMatch(/^\d/)
+    expect(rows[1]?.textContent).toMatch(/^1/)
+  })
+
+  it('renders an older payload without hold fields, the quota ceiling or retries', async () => {
+    serve(capacity({ finished: [finishedRun({ onceKey: undefined })] }))
+    await shown()
+    expect(screen.queryByText(/over \d+% weekly/)).toBeNull()
+    expect(screen.queryByText('Retries after a failure')).toBeNull()
+    expect(screen.queryByRole('region', { name: 'Gave up' })).toBeNull()
+    await click('Recently finished · 1')
+    expect(screen.queryByRole('button', { name: 'Retry' })).toBeNull()
+  })
+
+  it('steps the retries after a failure, 0 to 5', async () => {
+    serve(capacity({ retryLimit: 2 }))
+    await shown()
+    expect(screen.getByText('Retries after a failure')).toBeTruthy()
+    expect(screen.getByRole('status', { name: 'Retries after a failure' }).textContent).toBe('2')
+    await click('More retries after a failure')
+    expect(pilotRpc).toHaveBeenCalledWith('pilot.capacity.setRetryLimit', { limit: 3 })
+    expect(screen.getByRole('status', { name: 'Retries after a failure' }).textContent).toBe('3')
+  })
+
+  it('lists the keys it gave up on, and Retry runs one again', async () => {
+    const now = Date.now()
+    serve(
+      capacity({
+        retryLimit: 2,
+        gaveUp: [
+          {
+            automationId: 'review',
+            automationName: '03 Review and fix',
+            onceKey: '1655:abc',
+            itemLabel: '!1655 web-2235',
+            failures: 3,
+            failedAt: now - 60_000,
+            outcome: 'agent exited'
+          }
+        ]
+      })
+    )
+    await shown()
+    expect(screen.getByRole('heading', { name: 'Gave up \u00b7 1' })).toBeTruthy()
+    const gaveUp = within(screen.getByRole('region', { name: 'Gave up' }))
+    expect(gaveUp.getByText('03 Review and fix')).toBeTruthy()
+    expect(gaveUp.getByText('!1655 web-2235')).toBeTruthy()
+    expect(gaveUp.getByText('failed 3 times')).toBeTruthy()
+    expect(gaveUp.getByText('agent exited')).toBeTruthy()
+    await act(async () => {
+      fireEvent.click(gaveUp.getByRole('button', { name: 'Retry' }))
+    })
+    expect(pilotRpc).toHaveBeenCalledWith('pilot.capacity.retry', {
+      automationId: 'review',
+      onceKey: '1655:abc'
+    })
+    expect(screen.queryByRole('region', { name: 'Gave up' })).toBeNull()
+  })
+
+  it.each([
+    ['failed', 'a failed key', '1', 1],
+    ['timed_out', 'a failed key', '1', 1],
+    ['done', 'no key', undefined, 0],
+    ['failed', 'no failed key', undefined, 0]
+  ] as const)(
+    'offers Retry on a %s finished run with %s',
+    async (status, _key, onceKey, retries) => {
+      serve(capacity({ finished: [finishedRun({ status, onceKey })] }))
+      await shown()
+      await click('Recently finished · 1')
+      const row = within(
+        within(screen.getByRole('region', { name: 'Recently finished' })).getAllByRole('row')[1]
+      )
+      expect(row.queryAllByRole('button', { name: 'Retry' })).toHaveLength(retries)
+      if (retries === 0) {
+        return
+      }
+      await act(async () => {
+        fireEvent.click(row.getByRole('button', { name: 'Retry' }))
+      })
+      expect(pilotRpc).toHaveBeenCalledWith('pilot.capacity.retry', {
+        automationId: 'review',
+        onceKey: '1'
+      })
+    }
+  )
 
   it.each([
     ['More jobs at once', 2, 3],
@@ -269,6 +415,18 @@ describe('RunningPage', () => {
     expect(row.queryAllByRole('button', { name: /resume/i })).toHaveLength(resumes)
   })
 
+  it("disables a finished run's Retry while a change is saving", async () => {
+    serve(capacity({ finished: [finishedRun({ onceKey: '1' })] }))
+    const served = pilotRpc.getMockImplementation()
+    pilotRpc.mockImplementation((method: string, params?: unknown) =>
+      method === 'pilot.capacity.retry' ? new Promise(() => {}) : served?.(method, params)
+    )
+    await shown()
+    await click('Recently finished · 1')
+    await click('Retry')
+    expect(screen.getByRole('button', { name: 'Retry' }).hasAttribute('disabled')).toBe(true)
+  })
+
   it('says when nothing runs or waits', async () => {
     serve(capacity({ running: [], queued: [], limit: null }))
     await shown()
@@ -303,7 +461,7 @@ describe('RunningPage on more than one machine', () => {
     expect(await mini.findByText('Nothing is running.')).toBeTruthy()
     expect(mini.getByRole('heading', { name: 'Mac mini' })).toBeTruthy()
     expect(mini.getByText('0 of 4 in use · 1 waiting')).toBeTruthy()
-    const queue = within(mini.getByRole('region', { name: 'Waiting for a slot' }))
+    const queue = within(mini.getByRole('region', { name: 'Waiting' }))
     expect(queue.getByText('05 Fix failed CI')).toBeTruthy()
     const local = within(region('MacBook').getByRole('region', { name: 'Running now' }))
     expect(local.getByText('03 Review and fix')).toBeTruthy()
@@ -581,7 +739,7 @@ describe("RunningPage: another machine's runs", () => {
     pilotRpc.mockResolvedValue({})
     render(
       <PilotHostProvider host={MINI}>
-        <FinishedRuns runs={[finishedRun()]} now={Date.now()} />
+        <FinishedRuns runs={[finishedRun()]} now={Date.now()} saving={false} onRetry={() => {}} />
       </PilotHostProvider>
     )
     await click('Recently finished · 1')

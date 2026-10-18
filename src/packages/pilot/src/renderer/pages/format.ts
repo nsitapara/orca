@@ -18,7 +18,8 @@ const VERDICT: Record<Verdict, string> = {
   over_limit: 'Next tick',
   queued: 'Waiting for a slot',
   baselined: 'Baselined',
-  asked: 'Asked first'
+  asked: 'Asked first',
+  held: 'Waiting'
 }
 // A dry run did none of these: they're what a tick would do.
 const DRY_VERDICT: Partial<Record<Verdict, string>> = {

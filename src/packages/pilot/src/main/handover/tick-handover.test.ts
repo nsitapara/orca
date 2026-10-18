@@ -119,7 +119,7 @@ describe('runTick: a stage fed ids by an earlier stage (job.feeds … pass)', ()
     expect(result.decisions.map((x) => [x.label, x.verdict])).toEqual([
       ['WEB-1', 'started'],
       ['WEB-2', 'started'],
-      ['WEB-3', 'over_limit']
+      ['WEB-3', 'held']
     ])
     expect(d.store.handovers.pending('starts', 10, 0).map((h) => h.itemId)).toEqual(['WEB-3'])
     const consumed = d.store.handovers.consumedBy([result.tickId]).get(result.tickId) ?? []
@@ -178,7 +178,6 @@ describe('runTick: a stage fed ids by an earlier stage (job.feeds … pass)', ()
 })
 
 describe('settles: a fed id is consumed only when its tick started a run or the item definitely needs nothing', () => {
-  const RETRY = 25 * 60_000
   const decision = (verdict: Verdict): ItemDecision => ({
     key: 'linear:WEB-1',
     label: 'WEB-1',
@@ -189,38 +188,34 @@ describe('settles: a fed id is consumed only when its tick started a run or the 
     fields: {}
   })
   const handled = (state: HandledState) => new Map([['WEB-1', state]])
-  const DONE: HandledState = { status: 'done', failedAt: null }
-  const FAILED: HandledState = { status: 'failed', failedAt: 1 }
-  it.each([
-    ['a run started', decision('started'), new Map(), RETRY, true],
-    ['a run held for an ask-first card', decision('asked'), new Map(), RETRY, true],
-    ['out of scope', decision('out_of_scope'), new Map(), RETRY, true],
-    ['baselined (recorded as handled)', decision('baselined'), new Map(), RETRY, true],
-    ['already handled (once_per)', decision('notdue'), handled(DONE), RETRY, true],
+  const DONE: HandledState = { status: 'done', failedAt: null, failures: 0, lastOutcome: null }
+  const failed = (failures: number): HandledState => ({
+    status: 'failed',
+    failedAt: 1,
+    failures,
+    lastOutcome: 'agent exited'
+  })
+  type Case = [string, ItemDecision | undefined, Map<string, HandledState>, boolean]
+  it.each<Case>([
+    ['a run started', decision('started'), new Map(), true],
+    ['a run held for an ask-first card', decision('asked'), new Map(), true],
+    ['out of scope', decision('out_of_scope'), new Map(), true],
+    ['baselined (recorded as handled)', decision('baselined'), new Map(), true],
+    ['already handled (once_per)', decision('notdue'), handled(DONE), true],
+    ['gone from its source (closed, or not found)', undefined, new Map(), true],
+    // Retry on Running finds the item only while its id is pending.
     [
-      'handled by a failed run, with no retry_after_failure',
+      'handled by a failed run the runner gave up on',
       decision('notdue'),
-      handled(FAILED),
-      null,
-      true
-    ],
-    ['gone from its source (closed, or not found)', undefined, new Map(), RETRY, true],
-    ['waiting out retry_after_failure', decision('notdue'), handled(FAILED), RETRY, false],
-    ['not due by its scope, never handled', decision('notdue'), new Map(), RETRY, false],
-    [
-      "skipped by a check, a field script's not due, quota or a busy worktree",
-      decision('skipped'),
-      new Map(),
-      RETRY,
+      handled(failed(3)),
       false
     ],
-    ['over the limit', decision('over_limit'), new Map(), RETRY, false]
-  ] as [string, ItemDecision | undefined, Map<string, HandledState>, number | null, boolean][])(
-    '%s → %s',
-    (_name, d, states, retry, settled) => {
-      expect(settles(d, states, retry)).toBe(settled)
-    }
-  )
+    ['not due by its scope, never handled', decision('notdue'), new Map(), false],
+    ["skipped by a check or a field script's not due", decision('skipped'), new Map(), false],
+    ['held by quota, a busy worktree, a limit or a retry', decision('held'), new Map(), false]
+  ])('%s → %s', (_name, d, states, settled) => {
+    expect(settles(d, states)).toBe(settled)
+  })
 })
 
 describe('runTick: what a fed stage leaves pending', () => {
@@ -276,7 +271,7 @@ describe('runTick: what a fed stage leaves pending', () => {
     const result = await runTick(FED, people, d, { dryRun: false })
     expect(result.decisions.map((x) => [x.label, x.verdict])).toEqual([
       ['WEB-1', 'notdue'],
-      ['WEB-2', 'notdue']
+      ['WEB-2', 'held']
     ])
     expect(pendingIds(d)).toEqual(['WEB-2'])
   })

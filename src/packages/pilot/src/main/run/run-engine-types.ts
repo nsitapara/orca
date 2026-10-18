@@ -1,6 +1,7 @@
 import type { ItemFields, RunRow } from '../../shared/api-types'
 import type { AutomationDefinition } from '../../shared/definition/types'
 import type { RunEnd } from '../../shared/run/step-plan'
+import type { FailureCounted } from '../capacity/give-up'
 import type { EnvPreparer } from '../envs/prepare'
 import type { LaunchRequest } from '../scheduler/tick-runner'
 import type { PilotStore } from '../store/store'
@@ -34,6 +35,8 @@ export type RunEngineDeps = {
   onRunEnd?(run: RunRow, end: RunEnd): void
   // What a stage's run hands the next stage, written in the transaction that ends it (main/handover).
   handover?: RunEndHandover
+  // A failed end counted a failure on the run's key: the runner's give-up card.
+  failureCounted?: FailureCounted
   // The answer text for {run.answer}: set for runs an answer starts, '' for a plain Approve, null
   // for any other run (Task 25 wires it).
   runAnswer?(run: RunRow): string | null

@@ -42,6 +42,7 @@ export type Verdict =
   | 'queued'
   | 'baselined'
   | 'asked'
+  | 'held'
 export type CheckOutcome = { check: string; ok: boolean; reason: string }
 export type TickItem = { key: string; label: string; fields: ItemFields }
 export type ItemDecision = {
@@ -55,6 +56,10 @@ export type ItemDecision = {
   // A dry run of an env automation: where a real run would work (main/envs/preview.ts). Not stored apart; its words are
   // in reason.
   workspace?: string
+  // A held item waits in the runner's line: why, and its place there (when it became due, ms since epoch).
+  // until: when a hold that knows its end (a retry's wait) is over, for the line's re-check.
+  hold?: { code: HoldReason; detail: string; until?: number }
+  dueAt?: number
 }
 
 // An item source's verdict on one item's where clauses (contract §3), before once_per and checks.
@@ -162,15 +167,6 @@ export type StepRow = {
   // A shell step's pilotcli result: the one envelope its whole stdout was, or null.
   result: StoredResult | null
 }
-// The run holding a once_per key settles it: done, or failed (retry_after_failure waits from failedAt).
-export type HandledStatus = 'started' | 'done' | 'failed'
-export type HandledRow = {
-  onceKey: string
-  runId: string | null
-  at: number
-  status: HandledStatus
-  failedAt: number | null
-}
 
 export type InboxType = 'question' | 'flagged' | 'default' | 'action' | 'bug' | 'left_for_you'
 export type InboxStatus = 'open' | 'answered' | 'done' | 'obsolete' | 'stale' | 'dismissed'
@@ -246,6 +242,11 @@ export type HoldReason =
   | 'waits'
   | 'retry'
   | 'capacity'
+  | 'window'
+  | 'session_open'
+  | 'answers_pending'
+  | 'job_limit'
+  | 'tick_limit'
 export type QueueRoute = 'resume' | 'fork' | 'new' | 'action'
 export type QueueRow = {
   id: number
@@ -357,3 +358,4 @@ export * from './api-types-spend'
 export * from './api-types-timeline'
 export * from './api-types-handover'
 export * from './api-types-runs'
+export * from './api-types-handled'

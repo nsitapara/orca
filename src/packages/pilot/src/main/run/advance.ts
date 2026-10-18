@@ -195,7 +195,7 @@ export function createRunEngine(deps: RunEngineDeps): RunEngine {
     close(run, runEnd(ended, store.inbox.openCountForRun(runId)), { ended })
   }
 
-  // The stale-start sweep frees a run's key (unmarkHandledForRun) when it closes a slow launch, which
+  // The stale-start sweep fails a run's key when it closes a slow launch, which
   // is when an agent most often shows up untracked: mark the key again, as the tick runner's
   // keepOrphanHandled does at step 0, so no tick starts a second agent on the item. A run-once
   // automation without once_per holds no key; after a restart the key is unknown, and only a row the

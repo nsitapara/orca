@@ -33,7 +33,7 @@ function startRun(store: PilotStore, runId: string, startedAt: number): void {
 }
 
 describe('sweepStaleStarts', () => {
-  it('fails a run whose agent never launched, frees its once_per key, and leaves the rest', () => {
+  it('fails a run whose agent never launched, counts a failure on its key, and leaves the rest', () => {
     const store = newStore()
     const now = 10 * MIN
     startRun(store, 'stuck', now - 3 * MIN)
@@ -41,10 +41,12 @@ describe('sweepStaleStarts', () => {
     startRun(store, 'launched', now - 3 * MIN)
     store.runs.updateStep('launched', 0, { status: 'running', terminalHandle: 't', paneKey: 'p' })
     const logs: string[] = []
+    const counted: [string, number][] = []
     sweepStaleStarts(
       store,
       () => now,
-      (m) => logs.push(m)
+      (m) => logs.push(m),
+      { failureCounted: (run, failures) => counted.push([run.id, failures]) }
     )
     expect(store.runs.get('stuck')).toMatchObject({
       status: 'failed',
@@ -56,10 +58,41 @@ describe('sweepStaleStarts', () => {
       error: STALE_START_OUTCOME,
       finishedAt: now
     })
-    expect(store.handledKeys('a')).toEqual(new Set(['launching:1', 'launched:1']))
+    expect(store.handledRows('a').map((r) => [r.onceKey, r.status, r.failures])).toEqual([
+      ['launched:1', 'started', 0],
+      ['launching:1', 'started', 0],
+      ['stuck:1', 'failed', 1]
+    ])
+    expect(counted).toEqual([['stuck', 1]])
     expect(store.runs.get('launching')?.status).toBe('running')
     expect(store.runs.get('launched')?.status).toBe('running')
     expect(logs).toEqual([`[pilot] run stuck: ${STALE_START_OUTCOME}`])
+  })
+
+  it("frees an ask-first job's key, counting no failure, so its item is asked again", () => {
+    const store = newStore()
+    const now = 10 * MIN
+    startRun(store, 'asked', now - 3 * MIN)
+    store.runs.create({
+      id: 'bare',
+      automationId: 'a',
+      tickId: null,
+      itemKey: 'bare',
+      itemLabel: 'bare',
+      worktreePath: '/wt',
+      startedAt: now - 3 * MIN
+    })
+    store.markHandled('a', 'bare:1', 'bare', now - 3 * MIN)
+    const counted: string[] = []
+    sweepStaleStarts(
+      store,
+      () => now,
+      () => {},
+      { asksFirst: (id) => id === 'a', failureCounted: (run) => counted.push(run.id) }
+    )
+    expect(['asked', 'bare'].map((id) => store.runs.get(id)?.status)).toEqual(['failed', 'failed'])
+    expect(store.handledRows('a')).toEqual([])
+    expect(counted).toEqual([])
   })
 
   it("closes the step but keeps a run's own outcome when the run already ended", () => {
@@ -82,7 +115,7 @@ describe('sweepStaleStarts', () => {
     expect(store.runs.steps('r')[0].status).toBe('failed')
   })
 
-  it('fails a run that never got a step and frees its key, once it is older than the cutoff', () => {
+  it('fails a run that never got a step and counts a failure on its key, once it is older than the cutoff', () => {
     const store = newStore()
     const now = 10 * MIN
     for (const [id, startedAt] of [
@@ -112,7 +145,10 @@ describe('sweepStaleStarts', () => {
       finishedAt: now
     })
     expect(store.runs.get('fresh')?.status).toBe('running')
-    expect(store.handledKeys('a')).toEqual(new Set(['fresh:1']))
+    expect(store.handledRows('a').map((r) => [r.onceKey, r.status, r.failures])).toEqual([
+      ['bare:1', 'failed', 1],
+      ['fresh:1', 'started', 0]
+    ])
     expect(logs).toEqual([`[pilot] run bare: ${STALE_START_OUTCOME}`])
   })
 
@@ -226,7 +262,9 @@ describe('sweepStaleStarts', () => {
       status: 'failed',
       outcome: STALE_PENDING_OUTCOME
     })
-    expect(store.handledKeys('a')).toEqual(new Set())
+    expect(store.handledRows('a')).toMatchObject([
+      { onceKey: 'left:1', status: 'failed', failures: 1 }
+    ])
   })
 
   it('never fails a pending step whose workspace this process is still making, however long it takes', () => {
@@ -254,8 +292,7 @@ describe('sweepStaleStarts', () => {
       store,
       () => 2 * STALE_PENDING_MS,
       () => {},
-      STALE_START_MS,
-      (runId) => runId === 'slow'
+      { olderThanMs: STALE_START_MS, opening: (runId) => runId === 'slow' }
     )
     expect(store.runs.steps('slow')[0].status).toBe('pending')
     expect(store.runs.get('slow')?.status).toBe('running')

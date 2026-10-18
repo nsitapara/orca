@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { worktreePathKey } from './agent-activity'
+import { worktreePathKey } from './worktree-path-key'
 
 describe('worktreePathKey', () => {
   it.each([

@@ -1,4 +1,5 @@
 import type { HoldReason } from '../../shared/api-types'
+import { QUOTA_CEILING } from '../../shared/quota-ceiling'
 import type { AgentKind, AutomationDefinition } from '../../shared/definition/types'
 import type { QuotaReading } from '../fields/quota'
 import {
@@ -9,6 +10,8 @@ import {
   type BusyTerminal
 } from '../fields/worktree-busy'
 import type { WorktreeFactDeps } from '../fields/worktree-facts'
+import { endedRunTerminals } from '../run/ended-run-tabs'
+import type { PilotStore } from '../store/store'
 
 export type HoldCode = HoldReason
 // The two QueuePatch fields: the code, and the plain words the Inbox page shows.
@@ -98,17 +101,25 @@ export function gitInFlight(
 
 // One per dispatcher pass: terminals are listed and agent states read once, the first time a worktree
 // needs them. A list that fails is shared too, so every worktree of the pass is held on it.
-export function passActivity(runtime: BusyRuntime): (path: string) => Promise<WorktreeActivity> {
+export function passActivity(
+  runtime: BusyRuntime,
+  store?: PilotStore
+): (path: string) => Promise<WorktreeActivity> {
   const reads = runtimeBusyReads(runtime)
   let terminals: Promise<BusyTerminal[]> | null = null
   return async (path) => {
     terminals ??= listBusyTerminals(runtime)
-    return worktreeBusy(path, await terminals, reads)
+    const listed = await terminals
+    return worktreeBusy(
+      path,
+      listed,
+      reads,
+      store && endedRunTerminals(store, listed, (key) => runtime.getAgentStatusRowsForPane(key))
+    )
   }
 }
 
 // quota.py CEILING: automations leave the rest of each window for Nish's own sessions. Unknown passes.
-export const QUOTA_CEILING = { weekly: 90, session: 95 }
 
 export function quotaHold(agent: AgentKind, reading: QuotaReading): Hold | null {
   if (reading.weekly !== null && reading.weekly >= QUOTA_CEILING.weekly) {
