@@ -519,14 +519,14 @@ describe('PilotScheduler run queue', () => {
       at1012,
       Date.UTC(2026, 9, 10, 19, 10)
     )
-    const asked: string[][] = []
-    d.queuedToTick = (defs) => {
-      asked.push(defs.map((x) => x.id))
+    const asked: [string[], number][] = []
+    d.queuedToTick = (defs, now) => {
+      asked.push([defs.map((x) => x.id), now])
       return ['manual-job', 'review']
     }
     await new PilotScheduler(d).tickAll()
     expect(d.ran).toEqual(['manual-job', 'review'])
-    expect(asked).toEqual([['ci', 'review', 'manual-job']])
+    expect(asked).toEqual([[['ci', 'review', 'manual-job'], at1012]])
   })
 
   it('still ticks the due automations when the run queue cannot be read', async () => {

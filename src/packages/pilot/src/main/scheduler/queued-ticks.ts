@@ -2,8 +2,9 @@ import type { AutomationDefinition } from '../../shared/definition/types'
 import type { TickNowResult } from './scheduler'
 
 export type QueuedTickDeps = {
-  // The automations whose queued items can start now, oldest item first (main/capacity/run-capacity.ts).
-  queuedToTick?(definitions: readonly AutomationDefinition[]): string[]
+  now(): number
+  // Jobs whose waiting items can start now or are due a re-check, in line order (main/capacity/run-capacity.ts).
+  queuedToTick?(definitions: readonly AutomationDefinition[], now: number): string[]
   log(message: string): void
 }
 
@@ -18,8 +19,8 @@ function messageOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
 }
 
-// Queued items go before the due ticks, one automation at a time and oldest item first: each tick admits its own
-// items in line order, so a slot that frees goes to the item that waited longest, whatever its schedule.
+// Waiting items go before the due ticks, one job at a time in line order: each tick admits its own items in order, so
+// a slot that frees goes to the item due longest, whatever its schedule; a held item's job ticks at its re-check.
 export async function tickQueued(
   deps: QueuedTickDeps,
   definitions: readonly AutomationDefinition[],
@@ -27,7 +28,7 @@ export async function tickQueued(
 ): Promise<void> {
   let ids: string[]
   try {
-    ids = deps.queuedToTick?.(definitions) ?? []
+    ids = deps.queuedToTick?.(definitions, deps.now()) ?? []
   } catch (error) {
     deps.log(`[pilot] couldn't read the run queue: ${messageOf(error)}`)
     return

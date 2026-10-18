@@ -247,7 +247,7 @@ function openPilot(
     repoProblem: (def, message) =>
       repoProblems.set(def.id, { file: def.file, repo: def.repo, message }),
     newPass: () => createPassFetchCache(`pass-${now()}`, glabApiForRepo),
-    queuedToTick: (defs) => capacity.toTick(defs, runsOn.ticksHere),
+    queuedToTick: (defs, at) => capacity.toTick(defs, runsOn.ticksHere, at),
     runsOn,
     log
   })

@@ -4,7 +4,7 @@ import { expireStale, handoverOf, settleFed } from '../handover/tick-handover'
 import type { AutomationDefinition } from '../../shared/definition/types'
 import type { PeopleDirectory } from '../../shared/people'
 import { usesHandled, workspacePathOf } from '../../shared/tick/decide'
-import type { Admission, RunCapacity } from '../capacity/run-capacity'
+import type { Admission, LineItem, RunCapacity } from '../capacity/run-capacity'
 import { askDecisions, type AskDeps } from '../run/ask-first'
 import type { PassFetchCache } from '../sources/fetch-cache'
 import type { GlabApi } from '../sources/gitlab-api'
@@ -42,8 +42,8 @@ export type TickDeps = DecideDeps & {
   ask: AskDeps
   // A dry run of an env automation: where each started item would work (main/envs/preview.ts).
   previewEnvs?(def: AutomationDefinition, decisions: ItemDecision[]): Promise<void>
-  // The run limit across automations: a started item past it waits in the queue instead (verdict queued).
-  capacity?: Pick<RunCapacity, 'admit' | 'settle' | 'forget'>
+  // The runner's line: an item past the run limit (verdict queued) or held by a runner gate waits there.
+  capacity?: Pick<RunCapacity, 'admit' | 'hold' | 'settle' | 'forget'>
 }
 // `pass` is the scheduler pass's fetch cache, shared by every automation that ticks in that pass. `trigger`: the run
 // whose feed (run: now) asked for this tick, recorded on it for Activity. `byHand`: a Run now, whose runs are stored
@@ -95,8 +95,13 @@ function recordedWorktree(
   return workspacePathOf(def, fields)
 }
 
-// Only 'started' decisions start runs; 'asked' ones wait for an answer (askDecisions writes the card).
-// A launch failure keeps the decision's verdict 'started'; the RUN row is the record of the failure.
+// A decision that reached the runner's gates has its due time; one that didn't joins the line now.
+function lineItem(decision: ItemDecision, at: number): LineItem {
+  return { key: decision.key, label: decision.label, dueAt: decision.dueAt ?? at }
+}
+
+// Only 'started' decisions start runs; 'asked' ones wait for an answer (askDecisions writes the card), and 'held'
+// ones wait in the runner's line. A launch failure keeps the decision's verdict 'started'; the RUN row is the record.
 async function startRuns(
   def: AutomationDefinition,
   decisions: ItemDecision[],
@@ -109,6 +114,10 @@ async function startRuns(
   const at = deps.now()
   let n = 0
   for (const decision of decisions) {
+    if (decision.verdict === 'held' && decision.hold) {
+      deps.capacity?.hold(def, lineItem(decision, at), decision.hold, byHand)
+      continue
+    }
     if (decision.verdict !== 'started') {
       continue
     }
@@ -129,11 +138,14 @@ async function startRuns(
     const worktreePath = recordedWorktree(def, decision.fields)
     const busy = worktreeTakenSinceDecide(deps.store, def, worktreePath, decision.fields)
     if (busy !== null) {
-      decision.verdict = 'skipped'
-      decision.reason = `Another run is active in ${busy}`
+      const hold = { code: 'worktree_busy' as const, detail: `Another run is active in ${busy}` }
+      decision.verdict = 'held'
+      decision.reason = hold.detail
+      decision.hold = hold
+      deps.capacity?.hold(def, lineItem(decision, at), hold, byHand)
       continue
     }
-    const admission: Admission = deps.capacity?.admit(def, decision, byHand) ?? {
+    const admission: Admission = deps.capacity?.admit(def, lineItem(decision, at), byHand) ?? {
       start: true,
       byHand
     }

@@ -229,8 +229,9 @@ describe('runTick', () => {
     expect(d.store.runs.runningCount('fix-failed-ci')).toBe(0)
   })
 
-  it('skips an item whose worktree another run took between deciding and starting, and leaves its key free', async () => {
+  it('holds an item whose worktree another run took between deciding and starting, and leaves its key free', async () => {
     const d = deps()
+    const capacity = runCapacity({ store: d.store, definitions: () => [def], now: d.now })
     d.launch = async (req) => {
       d.launched.push(req.decision.key)
       // Another automation's tick starts an agent in the second item's worktree meanwhile.
@@ -246,17 +247,20 @@ describe('runTick', () => {
       })
       return { terminalHandle: 't', paneKey: 'p' }
     }
-    const result = await runTick(def, people, d, { dryRun: false })
+    const result = await runTick(def, people, { ...d, capacity }, { dryRun: false })
     expect(result.status).toBe('ok')
     expect(d.launched).toEqual(['mr:1561'])
     expect(result.decisions.map((x) => [x.key, x.verdict, x.reason])).toEqual([
       ['mr:1561', 'started', expect.any(String)],
-      ['mr:1574', 'skipped', 'Another run is active in /wt/1474']
+      ['mr:1574', 'held', 'Another run is active in /wt/1474']
     ])
     expect(d.store.handledKeys('fix-failed-ci')).toEqual(new Set(['1561:1561']))
     expect(d.store.tickItems(result.tickId).map((i) => [i.itemKey, i.verdict, i.runId])).toEqual([
       ['mr:1561', 'started', expect.any(String)],
-      ['mr:1574', 'skipped', null]
+      ['mr:1574', 'held', null]
+    ])
+    expect(d.store.capacity.queued().map((q) => [q.itemKey, q.holdCode, q.holdDetail])).toEqual([
+      ['mr:1574', 'worktree_busy', 'Another run is active in /wt/1474']
     ])
   })
 

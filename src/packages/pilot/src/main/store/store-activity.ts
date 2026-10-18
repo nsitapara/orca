@@ -3,12 +3,12 @@ import type { RunRow, TickRow } from '../../shared/api-types'
 import { toRun } from './run-rows'
 
 // A tick that finished with nothing to do: it didn't fail, warned of nothing, started no run, wasn't triggered and read
-// or expired no handover, and every item it checked was not due (or out of scope). Activity can leave these out.
+// or expired no handover, and every item it checked was not due, out of scope or held. Activity can leave these out.
 export const QUIET_TICK = `(ticks.status = 'ok' AND ticks.warnings_json = '[]' AND ticks.trigger_json IS NULL
   AND NOT EXISTS (SELECT 1 FROM runs WHERE runs.tick_id = ticks.id)
   AND NOT EXISTS (SELECT 1 FROM handovers WHERE handovers.tick_id = ticks.id)
   AND NOT EXISTS (SELECT 1 FROM json_each(ticks.counts_json)
-    WHERE json_each.key NOT IN ('notdue', 'out_of_scope') AND json_each.value > 0))`
+    WHERE json_each.key NOT IN ('notdue', 'out_of_scope', 'held') AND json_each.value > 0))`
 
 export function toTick(r: Record<string, unknown>): TickRow {
   return {
