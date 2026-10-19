@@ -236,11 +236,9 @@ function FinishedRow({
       {home ? (
         <tr>
           <td />
-          <td
-            colSpan={COLUMNS.length - 1}
-            className="break-words px-3 pb-1.5 text-xs text-muted-foreground"
-          >
-            {home}
+          <td colSpan={COLUMNS.length - 1} className="px-3 pb-1.5 text-xs text-muted-foreground">
+            {/* Why: the table can be wider than the page, so the line wraps at the visible width and stays in view. */}
+            <div className="sticky left-3 max-w-[calc(100cqi-4rem)] break-words">{home}</div>
           </td>
         </tr>
       ) : null}
@@ -292,7 +290,7 @@ export function FinishedRuns({
         {runs.length === 0 ? (
           <p className="mt-1 text-sm text-muted-foreground">Nothing has finished yet.</p>
         ) : (
-          <div className="mt-1 overflow-x-auto rounded-lg border border-border/50">
+          <div className="@container mt-1 overflow-x-auto rounded-lg border border-border/50">
             <table className="text-left text-xs" style={{ tableLayout: 'fixed', width: total }}>
               <colgroup>
                 {COLUMNS.map((col) => (
