@@ -1,5 +1,5 @@
-import { readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs'
-import { join } from 'node:path'
+import { existsSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { basename, join } from 'node:path'
 
 // Why: written by the watchdog worker when main-thread heartbeats stop, refreshed while they stay
 // stopped, and rewritten if they resume; consumed on the next launch to report how long the stall
@@ -11,6 +11,10 @@ export type HangDetectionMarker = {
   parentPid: number
   unresponsiveMs: number
   selfRecovered: boolean
+  /** `/usr/bin/sample` output taken when the hang was detected. */
+  samplePath?: string
+  /** `/usr/bin/sample` output taken earlier in the same stall, before it counted as a hang. */
+  stallSamplePath?: string
 }
 
 // Unreadable: the file existed but held no valid marker, which a cut-short write leaves behind.
@@ -20,12 +24,31 @@ export function hangDetectionMarkerPath(userDataPath: string): string {
   return join(userDataPath, 'main-thread-hang.json')
 }
 
+// Why names, not paths: breadcrumbs redact every path; the files sit beside the trace in logs/.
+export function sampleFileBreadcrumbFields(
+  paths: Pick<HangDetectionMarker, 'samplePath' | 'stallSamplePath'>
+): { sampleFile?: string; stallSampleFile?: string } {
+  const written = (path: string | undefined): string | undefined =>
+    path && existsSync(path) ? basename(path) : undefined
+  const sampleFile = written(paths.samplePath)
+  const stallSampleFile = written(paths.stallSamplePath)
+  return {
+    ...(sampleFile ? { sampleFile } : {}),
+    ...(stallSampleFile ? { stallSampleFile } : {})
+  }
+}
+
 export function writeHangDetectionMarker(markerPath: string, marker: HangDetectionMarker): void {
   // Why rename: an in-place rewrite truncates first, so a write that fails or never finishes
   // would leave an empty file and lose the observation it was replacing.
   const tempPath = `${markerPath}.tmp`
   writeFileSync(tempPath, JSON.stringify(marker), { mode: 0o600 })
   renameSync(tempPath, markerPath)
+}
+
+function optionalPath(parsed: object, key: 'samplePath' | 'stallSamplePath'): string | undefined {
+  const value: unknown = Reflect.get(parsed, key)
+  return typeof value === 'string' && value.length > 0 ? value : undefined
 }
 
 function readAvailableHangDetectionMarker(
@@ -59,12 +82,16 @@ function readAvailableHangDetectionMarker(
     ) {
       return 'unreadable'
     }
+    const samplePath = optionalPath(parsed, 'samplePath')
+    const stallSamplePath = optionalPath(parsed, 'stallSamplePath')
     return {
       detectedAt: parsed.detectedAt,
       parentPid: parsed.parentPid,
       unresponsiveMs: parsed.unresponsiveMs,
       // Why: a marker left by the detect leg and never rewritten means the stall never cleared.
-      selfRecovered: 'selfRecovered' in parsed && parsed.selfRecovered === true
+      selfRecovered: 'selfRecovered' in parsed && parsed.selfRecovered === true,
+      ...(samplePath ? { samplePath } : {}),
+      ...(stallSamplePath ? { stallSamplePath } : {})
     }
   } catch {
     return 'unreadable'

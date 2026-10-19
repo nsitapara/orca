@@ -1,7 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
-const { workerState, appMock } = vi.hoisted(() => ({
+const { workerState, appMock, breadcrumbs } = vi.hoisted(() => ({
+  breadcrumbs: new Array<[string, unknown]>(),
   workerState: {
     calls: [] as unknown[][],
     instance: null as object | null,
@@ -29,6 +32,12 @@ vi.mock('node:worker_threads', () => ({
 
 vi.mock('electron', () => ({
   app: appMock
+}))
+
+vi.mock('../observability/logs-directory', () => ({ getLogsDirectory: () => '/ud/logs' }))
+
+vi.mock('../crash-reporting/durable-crash-breadcrumb', () => ({
+  recordDurableCrashBreadcrumb: (name: string, data: unknown) => breadcrumbs.push([name, data])
 }))
 
 import { installMainThreadHangWatchdog } from './main-thread-hang-watchdog'
@@ -77,6 +86,7 @@ describe('installMainThreadHangWatchdog', () => {
     delete process.env.ORCA_HANG_WATCHDOG_FORCE
     delete process.env.ORCA_HANG_WATCHDOG_TIMEOUT_MS
     delete process.env.ORCA_HANG_WATCHDOG_CHECK_INTERVAL_MS
+    delete process.env.ORCA_HANG_WATCHDOG_STALL_SAMPLE_MS
   })
 
   afterEach(() => {
@@ -90,6 +100,7 @@ describe('installMainThreadHangWatchdog', () => {
     delete process.env.ORCA_HANG_WATCHDOG_FORCE
     delete process.env.ORCA_HANG_WATCHDOG_TIMEOUT_MS
     delete process.env.ORCA_HANG_WATCHDOG_CHECK_INTERVAL_MS
+    delete process.env.ORCA_HANG_WATCHDOG_STALL_SAMPLE_MS
   })
 
   it.each(['win32', 'linux'] as const)('creates no worker or timers on %s', (platform) => {
@@ -164,7 +175,9 @@ describe('installMainThreadHangWatchdog', () => {
       parentPid: process.pid,
       markerPath: join('/ud', 'main-thread-hang.json'),
       timeoutMs: 45_000,
-      checkIntervalMs: 5_000
+      checkIntervalMs: 5_000,
+      sampleDir: '/ud/logs',
+      stallSampleMs: 15_000
     })
     expect(worker.unref).toHaveBeenCalled()
   })
@@ -197,12 +210,50 @@ describe('installMainThreadHangWatchdog', () => {
   it('passes test timing overrides to the worker', () => {
     process.env.ORCA_HANG_WATCHDOG_TIMEOUT_MS = '900'
     process.env.ORCA_HANG_WATCHDOG_CHECK_INTERVAL_MS = '100'
+    process.env.ORCA_HANG_WATCHDOG_STALL_SAMPLE_MS = '300'
     workerState.instance = fakeWorker()
     withPlatform('darwin', () => installMainThreadHangWatchdog({ userDataPath: '/ud' }))
     const options = workerState.calls[0][1] as {
       workerData: { timeoutMs: number; checkIntervalMs: number }
     }
-    expect(options.workerData).toMatchObject({ timeoutMs: 900, checkIntervalMs: 100 })
+    expect(options.workerData).toMatchObject({
+      timeoutMs: 900,
+      checkIntervalMs: 100,
+      stallSampleMs: 300
+    })
+  })
+
+  // Why: a stall that clears leaves its early sample in logs/; the trace has to say which file.
+  it('records a sampled stall the worker reports, naming only written sample files', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'hang-watchdog-main-'))
+    try {
+      const worker = fakeWorker()
+      workerState.instance = worker
+      breadcrumbs.length = 0
+      withPlatform('darwin', () => installMainThreadHangWatchdog({ userDataPath: '/ud' }))
+      const onMessage = worker.on.mock.calls.find(([event]) => event === 'message')?.[1]
+      const written = join(dir, 'main-thread-sample-1970-01-01T00-00-20-000Z-stall.txt')
+      writeFileSync(written, '')
+      onMessage({
+        type: 'stall-sampled',
+        unresponsiveMs: 21_000,
+        hang: false,
+        stallSamplePath: written,
+        samplePath: join(dir, 'never-written.txt')
+      })
+      expect(breadcrumbs).toEqual([
+        [
+          'main_thread_stall_sampled',
+          {
+            unresponsiveMs: 21_000,
+            hang: false,
+            stallSampleFile: 'main-thread-sample-1970-01-01T00-00-20-000Z-stall.txt'
+          }
+        ]
+      ])
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
   })
 
   it('registers stop on will-quit', () => {

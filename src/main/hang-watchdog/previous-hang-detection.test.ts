@@ -73,6 +73,36 @@ describe('previous hang detection', () => {
     expect(reportPreviousHangDetection(dir)).toBeNull()
   })
 
+  // Why: breadcrumbs redact paths, so the samples are named by file, and only ones `sample` wrote.
+  it('names the stack samples the previous hang left in the logs folder', () => {
+    const markerPath = hangDetectionMarkerPath(dir)
+    const stallSamplePath = join(dir, 'main-thread-sample-1970-01-01T00-00-20-000Z-stall.txt')
+    writeFileSync(stallSamplePath, '')
+    writeHangDetectionMarker(`${markerPath}.previous`, {
+      ...marker,
+      stallSamplePath,
+      samplePath: join(dir, 'main-thread-sample-1970-01-01T00-00-50-000Z-hang.txt')
+    })
+    const records: unknown[] = []
+    setActiveSink({ push: (record) => records.push(record), flush() {}, close() {} })
+    reportPreviousHangDetection(dir)
+    const breadcrumbData = (data: unknown): unknown[] => [
+      expect.objectContaining({
+        attributes: expect.objectContaining({ 'breadcrumb.data': data })
+      })
+    ]
+    expect(records).toEqual(
+      breadcrumbData(
+        expect.objectContaining({
+          stallSampleFile: 'main-thread-sample-1970-01-01T00-00-20-000Z-stall.txt'
+        })
+      )
+    )
+    expect(records).toEqual(
+      breadcrumbData(expect.not.objectContaining({ sampleFile: expect.anything() }))
+    )
+  })
+
   // Why: a watchdog note cut short mid-write was deleted without a trace, hiding the hang itself.
   it('records an unreadable previous marker instead of dropping it silently', () => {
     const markerPath = hangDetectionMarkerPath(dir)

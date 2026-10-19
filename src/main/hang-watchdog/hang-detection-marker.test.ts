@@ -57,6 +57,20 @@ describe('hang detection marker', () => {
     expect(consumeHangDetectionMarker(markerPath)).toBeNull()
   })
 
+  it('round-trips the stack sample paths', () => {
+    const markerPath = hangDetectionMarkerPath(dir)
+    const marker = {
+      detectedAt: 1,
+      parentPid: 2,
+      unresponsiveMs: 45000,
+      selfRecovered: false,
+      samplePath: '/logs/main-thread-sample-hang.txt',
+      stallSamplePath: '/logs/main-thread-sample-stall.txt'
+    }
+    writeHangDetectionMarker(markerPath, marker)
+    expect(consumeHangDetectionMarker(markerPath)).toEqual(marker)
+  })
+
   it('round-trips a self-recovered marker', () => {
     const markerPath = hangDetectionMarkerPath(dir)
     writeHangDetectionMarker(markerPath, {

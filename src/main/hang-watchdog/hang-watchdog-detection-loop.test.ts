@@ -4,25 +4,39 @@ import { createHangWatchdogDetectionLoop } from './hang-watchdog-detection-loop'
 const TIMEOUT_MS = 45_000
 const CHECK_INTERVAL_MS = 5_000
 
-function loopWithClock(startAt = 0) {
+function loopWithClock(startAt = 0, stallMs?: number) {
   let now = startAt
+  const onStallDetected = vi.fn()
+  const onStallResolved = vi.fn()
   const onHangDetected = vi.fn()
   const onHangContinued = vi.fn()
   const onHangResolved = vi.fn()
   const loop = createHangWatchdogDetectionLoop({
     timeoutMs: TIMEOUT_MS,
     checkIntervalMs: CHECK_INTERVAL_MS,
+    stallMs,
     now: () => now,
+    onStallDetected,
+    onStallResolved,
     onHangDetected,
     onHangContinued,
     onHangResolved
   })
   return {
     loop,
+    onStallDetected,
+    onStallResolved,
     onHangDetected,
     onHangContinued,
     onHangResolved,
     advance: (ms: number) => (now += ms)
+  }
+}
+
+function silentChecks(loop: { tick: () => void }, advance: (ms: number) => void, count: number) {
+  for (let i = 0; i < count; i++) {
+    advance(CHECK_INTERVAL_MS)
+    loop.tick()
   }
 }
 
@@ -122,6 +136,44 @@ describe('createHangWatchdogDetectionLoop', () => {
     advance(CHECK_INTERVAL_MS)
     loop.tick()
     expect(onHangContinued).toHaveBeenCalledTimes(4)
+  })
+
+  it('notes a stall once when silence passes the stall threshold, then the hang', () => {
+    const { loop, onStallDetected, onStallResolved, onHangDetected, advance } = loopWithClock(
+      0,
+      15_000
+    )
+    silentChecks(loop, advance, 3)
+    expect(onStallDetected).not.toHaveBeenCalled()
+    silentChecks(loop, advance, 6)
+    expect(onStallDetected.mock.calls).toEqual([[20_000]])
+    silentChecks(loop, advance, 1)
+    expect(onHangDetected).toHaveBeenCalledWith(50_000)
+    expect(onStallDetected).toHaveBeenCalledOnce()
+    expect(onStallResolved).not.toHaveBeenCalled()
+  })
+
+  it('reports a stall that clears before the hang timeout as a resolved stall, not a hang', () => {
+    const { loop, onStallDetected, onStallResolved, onHangResolved, advance } = loopWithClock(
+      0,
+      15_000
+    )
+    silentChecks(loop, advance, 5)
+    advance(1_000)
+    loop.recordHeartbeat()
+    expect(onStallDetected).toHaveBeenCalledOnce()
+    expect(onStallResolved).toHaveBeenCalledWith(26_000)
+    expect(onHangResolved).not.toHaveBeenCalled()
+    silentChecks(loop, advance, 5)
+    expect(onStallDetected).toHaveBeenCalledTimes(2)
+  })
+
+  it('notes no stalls without a stall threshold', () => {
+    const { loop, onStallDetected, onStallResolved, advance } = loopWithClock()
+    silentChecks(loop, advance, 8)
+    loop.recordHeartbeat()
+    expect(onStallDetected).not.toHaveBeenCalled()
+    expect(onStallResolved).not.toHaveBeenCalled()
   })
 
   it('does not report resolution when no hang was ever detected', () => {

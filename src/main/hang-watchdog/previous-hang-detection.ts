@@ -5,6 +5,7 @@ import { recordDurableCrashBreadcrumb } from '../crash-reporting/durable-crash-b
 import {
   consumeHangDetectionMarker,
   hangDetectionMarkerPath,
+  sampleFileBreadcrumbFields,
   type HangDetectionMarker
 } from './hang-detection-marker'
 
@@ -39,7 +40,8 @@ export function reportPreviousHangDetection(userDataPath: string): HangDetection
       unresponsiveMs: marker.unresponsiveMs,
       previousPid: marker.parentPid,
       selfRecovered: marker.selfRecovered,
-      detectedAt: new Date(marker.detectedAt).toISOString()
+      detectedAt: new Date(marker.detectedAt).toISOString(),
+      ...sampleFileBreadcrumbFields(marker)
     })
   }
   return marker
