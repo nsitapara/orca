@@ -1,9 +1,21 @@
 import { createHash } from 'node:crypto'
 import { z } from 'zod'
 import type { LinearWriter } from '../linear-connector/linear-writer'
-import { imageArg, imageRefProblem, readTicketImages, withAssetUrls } from './linear-create-images'
-import { createFailed, notCreated } from './linear-create-outcome'
-import { actionDone, actionFailed, type ActionEntry, type ActionResult } from './types'
+import {
+  bodyImages,
+  imageArg,
+  imageRefProblem,
+  uploadTicketImages,
+  withAssetUrls
+} from './linear-create-images'
+import { createFailed, messageOf } from './linear-create-outcome'
+import {
+  actionDone,
+  actionFailed,
+  type ActionEntry,
+  type ActionResult,
+  type ActionRunOpts
+} from './types'
 
 export const LINEAR_NOT_CONNECTED =
   "Linear isn't connected in Pilot; sign in to Linear in Pilot's settings"
@@ -72,10 +84,6 @@ type CommentArgs = z.infer<typeof commentArgs>
 type StateArgs = z.infer<typeof stateArgs>
 type AttachArgs = z.infer<typeof attachArgs>
 
-function messageOf(error: unknown): string {
-  return error instanceof Error ? error.message : String(error)
-}
-
 function priorityName(value: CreateArgs['priority']): string | undefined {
   return typeof value === 'number' ? PRIORITY_NAMES[value] : value
 }
@@ -93,6 +101,8 @@ type Spec<A extends { write_id?: string; workspace_id?: string }> = {
   write: (linear: LinearWriter, a: A, writeId: string, files: LinearFiles) => Promise<ActionResult>
   // The data a refusal before the write carries.
   refused?: Record<string, string>
+  // Why these args may not run for this caller, before anything else is checked.
+  refuseFor?: (a: A, opts: ActionRunOpts) => string | null
 }
 
 function counted(n: number, noun: string): string | null {
@@ -105,7 +115,7 @@ function counted(n: number, noun: string): string | null {
 // " (2 screenshots, 1 link)", or nothing without either.
 function attachments(a: CreateArgs): string {
   const parts = [
-    counted(a.images?.length ?? 0, 'screenshot'),
+    counted(bodyImages(a.body ?? '', a.images ?? []).length, 'screenshot'),
     counted(a.links?.length ?? 0, 'link')
   ].filter((part) => part !== null)
   return parts.length > 0 ? ` (${parts.join(', ')})` : ''
@@ -139,31 +149,16 @@ async function createTicket(
   id: string,
   files: LinearFiles
 ): Promise<ActionResult> {
-  const read = readTicketImages(files.detailsRoot, a.images ?? [])
-  if ('refused' in read) {
-    return read.refused
-  }
-  const urls = new Map<string, string>()
-  for (const image of read.images) {
-    try {
-      const uploaded = await linear.uploadImage({
-        bytes: image.bytes,
-        contentType: image.contentType,
-        filename: image.filename,
-        team: a.team,
-        workspaceId: a.workspace_id
-      })
-      urls.set(image.ref, uploaded.assetUrl)
-    } catch (error) {
-      return notCreated('failed', `couldn't upload ${image.ref}: ${messageOf(error)}`)
-    }
+  const uploaded = await uploadTicketImages(linear, files.detailsRoot, a)
+  if ('refused' in uploaded) {
+    return uploaded.refused
   }
   let made: Awaited<ReturnType<LinearWriter['createIssue']>>
   try {
     made = await linear.createIssue({
       team: a.team,
       title: a.title,
-      body: withAssetUrls(a.body ?? '', urls),
+      body: withAssetUrls(a.body ?? '', uploaded.urls),
       state: a.state,
       assignee: a.assignee,
       priority: priorityName(a.priority),
@@ -193,7 +188,12 @@ const create: Spec<CreateArgs> = {
   describe: (a) => `Create a ${a.team} ticket: ${a.title}${attachments(a)}`,
   dry: (a) => `would create a ${a.team} ticket: ${a.title}${attachments(a)}`,
   write: createTicket,
-  refused: { created: 'no' }
+  refused: { created: 'no' },
+  // Screenshots leave the Mac only on a person's Approve of a card, never on a run's own attempt.
+  refuseFor: (a, opts) =>
+    (a.images?.length ?? 0) > 0 && !opts.inboxItemId
+      ? "images need a person's approval on a card"
+      : null
 }
 
 const comment: Spec<CommentArgs> = {
@@ -272,15 +272,19 @@ function entryOf<A extends { write_id?: string; workspace_id?: string }>(
       const parsed = spec.schema.safeParse(args)
       return parsed.success ? spec.describe(parsed.data) : spec.usage
     },
-    run: async (args, { dryRun }) => {
+    run: async (args, opts) => {
       const parsed = spec.schema.safeParse(args)
       if (!parsed.success) {
         return refuse(usageProblem(spec, parsed.error))
       }
+      const forbidden = spec.refuseFor?.(parsed.data, opts) ?? null
+      if (forbidden !== null) {
+        return refuse(forbidden)
+      }
       if (!linear) {
         return refuse(LINEAR_NOT_CONNECTED)
       }
-      if (dryRun) {
+      if (opts.dryRun) {
         return actionDone(spec.dry(parsed.data))
       }
       const id = parsed.data.write_id

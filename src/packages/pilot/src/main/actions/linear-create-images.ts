@@ -3,7 +3,8 @@ import { z } from 'zod'
 import { DETAILS_LIMITS, IMAGE_TYPES } from '../../shared/details'
 import { realInside, realRoot } from '../inbox/details-bundle'
 import { DetailsRefused, readCapped, sha256 } from '../inbox/details-read'
-import { notCreated } from './linear-create-outcome'
+import type { LinearWriter } from '../linear-connector/linear-writer'
+import { messageOf, notCreated } from './linear-create-outcome'
 import type { ActionResult } from './types'
 
 // A screenshot's placeholder in a ticket body, replaced by its Linear asset URL before the create.
@@ -16,8 +17,8 @@ export const imageArg = z.strictObject({
   caption: z.string().optional()
 })
 type ImageArg = z.infer<typeof imageArg>
-
-export type TicketImage = { ref: string; bytes: Buffer; contentType: string; filename: string }
+type TicketImage = { ref: string; bytes: Buffer; contentType: string; filename: string }
+type Ticket = { team: string; body?: string; images?: ImageArg[]; workspace_id?: string }
 
 // Why a body's refs don't fit its images: a ref given twice, or a body ref with no image.
 export function imageRefProblem(
@@ -36,13 +37,19 @@ export function imageRefProblem(
   return null
 }
 
+// The images the body shows; one whose line was deleted never leaves the Mac.
+export function bodyImages(body: string, images: ImageArg[]): ImageArg[] {
+  const shown = new Set(body.match(IMAGE_REF))
+  return images.filter((image) => shown.has(image.ref))
+}
+
 function imageType(path: string): string | null {
   const ext = extname(path).toLowerCase()
   return Object.hasOwn(IMAGE_TYPES, ext) ? IMAGE_TYPES[ext] : null
 }
 
 // Every screenshot checked before any upload: an image inside the Automations folder, unchanged since the draft.
-export function readTicketImages(
+function readTicketImages(
   root: string | null,
   images: ImageArg[]
 ): { images: TicketImage[] } | { refused: ActionResult } {
@@ -72,6 +79,47 @@ export function readTicketImages(
     }
     throw error
   }
+}
+
+// The body's screenshots read and checked, then uploaded in order into the team's workspace (resolved once).
+export async function uploadTicketImages(
+  linear: Pick<LinearWriter, 'teamWorkspace' | 'uploadImage'>,
+  root: string | null,
+  ticket: Ticket
+): Promise<{ urls: Map<string, string> } | { refused: ActionResult }> {
+  const read = readTicketImages(root, bodyImages(ticket.body ?? '', ticket.images ?? []))
+  if ('refused' in read) {
+    return read
+  }
+  const urls = new Map<string, string>()
+  if (read.images.length === 0) {
+    return { urls }
+  }
+  let workspaceId: string
+  try {
+    workspaceId = await linear.teamWorkspace(ticket.team, ticket.workspace_id)
+  } catch (error) {
+    return {
+      refused: notCreated(
+        'failed',
+        `couldn't upload screenshots to ${ticket.team}: ${messageOf(error)}`
+      )
+    }
+  }
+  for (const image of read.images) {
+    try {
+      const uploaded = await linear.uploadImage({
+        bytes: image.bytes,
+        contentType: image.contentType,
+        filename: image.filename,
+        workspaceId
+      })
+      urls.set(image.ref, uploaded.assetUrl)
+    } catch (error) {
+      return { refused: notCreated('failed', `couldn't upload ${image.ref}: ${messageOf(error)}`) }
+    }
+  }
+  return { urls }
 }
 
 // The body with each screenshot ref replaced by the asset URL its image uploaded to.

@@ -11,6 +11,7 @@ import { LINEAR_NOT_CONNECTED, linearEntries, writeIdFor } from './linear-entrie
 function writer(): { [K in keyof LinearWriter]: Mock<LinearWriter[K]> } {
   let uploads = 0
   return {
+    teamWorkspace: vi.fn<LinearWriter['teamWorkspace']>(async (_team, ws) => ws ?? 'ws-web'),
     uploadImage: vi.fn<LinearWriter['uploadImage']>(async () => ({
       assetUrl: `https://uploads.linear.app/a/${++uploads}`
     })),
@@ -222,8 +223,10 @@ describe('linear_create with screenshots and links', () => {
     linearEntries(w, { detailsRoot }).find((e) => e.name === 'linear_create')!
   const BASE = { team: 'WEB', title: 'Finding', write_id: WRITE }
   const NOWHERE = { path: '/nowhere/a.png', sha256: 'a'.repeat(64) }
+  // A person's Approve on a card: the only attempt that may upload screenshots.
+  const CARD = { dryRun: false, runId: null, inboxItemId: 'card-1' }
 
-  it('uploads each screenshot in order, then creates the ticket with their asset URLs in its body', async () => {
+  it('uploads each screenshot in order into the team workspace, resolved once, then creates the ticket with their asset URLs', async () => {
     const w = writer()
     const a = shot('a.png', 'one')
     const b = shot('b.png', 'two')
@@ -233,18 +236,19 @@ describe('linear_create with screenshots and links', () => {
         body: 'Before ![a](pilot-image:1)\nAfter ![b](pilot-image:2)',
         images: [{ ...image(2, b), caption: 'b' }, image(1, a)]
       },
-      RUN
+      CARD
     )
+    expect(w.teamWorkspace.mock.calls).toEqual([['WEB', undefined]])
     expect(
       w.uploadImage.mock.calls.map(([input]) => [
         Buffer.from(input.bytes).toString(),
         input.contentType,
         input.filename,
-        input.team
+        input.workspaceId
       ])
     ).toEqual([
-      ['two', 'image/png', 'b.png', 'WEB'],
-      ['one', 'image/png', 'a.png', 'WEB']
+      ['two', 'image/png', 'b.png', 'ws-web'],
+      ['one', 'image/png', 'a.png', 'ws-web']
     ])
     expect(w.createIssue).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -263,8 +267,12 @@ describe('linear_create with screenshots and links', () => {
     const changed = shot('changed.png', 'two')
     writeFileSync(changed.path, 'edited')
     const result = await create(w).run(
-      { ...BASE, images: [image(1, kept), image(2, changed)] },
-      RUN
+      {
+        ...BASE,
+        body: '![k](pilot-image:1) ![c](pilot-image:2)',
+        images: [image(1, kept), image(2, changed)]
+      },
+      CARD
     )
     expect(result).toMatchObject({ outcome: 'stale', data: { created: 'no' } })
     expect(w.uploadImage).not.toHaveBeenCalled()
@@ -272,7 +280,12 @@ describe('linear_create with screenshots and links', () => {
   })
 
   it.each([
-    ['a file outside the Automations folder', () => image(1, shot('x.png', 'one', outside)), true],
+    [
+      'a file outside the Automations folder',
+      () => image(1, shot('x.png', 'one', outside)),
+      true,
+      'is outside the Automations folder'
+    ],
     [
       'a symlink out of the Automations folder',
       () => {
@@ -281,16 +294,21 @@ describe('linear_create with screenshots and links', () => {
         symlinkSync(target.path, link)
         return image(1, { path: link, sha256: target.sha256 })
       },
-      true
+      true,
+      'is outside the Automations folder'
     ],
-    ['no Automations folder', () => image(1, shot('z.png', 'one')), false]
-  ])('fails on %s before any upload', async (_name, make, hasRoot) => {
+    ['no Automations folder', () => image(1, shot('z.png', 'one')), false, 'no Automations folder']
+  ])('fails on %s before any upload', async (_name, make, hasRoot, why) => {
     const w = writer()
     const result = await create(w, hasRoot ? root : null).run(
       { ...BASE, body: '![s](pilot-image:1)', images: [make()] },
-      RUN
+      CARD
     )
-    expect(result).toMatchObject({ outcome: 'failed', data: { created: 'no' } })
+    expect(result).toMatchObject({
+      outcome: 'failed',
+      detail: expect.stringContaining(why),
+      data: { created: 'no' }
+    })
     expect(w.uploadImage).not.toHaveBeenCalled()
     expect(w.createIssue).not.toHaveBeenCalled()
   })
@@ -363,19 +381,63 @@ describe('linear_create with screenshots and links', () => {
     })
   })
 
-  it('fails before creating when a screenshot upload fails, and says nothing was created', async () => {
+  it.each([
+    ['an upload', 'uploadImage', 'Linear refused the upload of up.png: HTTP 403'],
+    ["the team's workspace lookup", 'teamWorkspace', 'Team WEB exists in multiple workspaces.']
+  ] as const)(
+    'fails before creating when %s fails, and says nothing was created',
+    async (_name, method, message) => {
+      const w = writer()
+      w[method].mockRejectedValue(new Error(message))
+      const result = await create(w).run(
+        { ...BASE, body: '![a](pilot-image:1)', images: [image(1, shot('up.png', 'one'))] },
+        CARD
+      )
+      expect(result).toMatchObject({
+        outcome: 'failed',
+        detail: expect.stringContaining(message),
+        data: { created: 'no' }
+      })
+      expect(w.createIssue).not.toHaveBeenCalled()
+    }
+  )
+
+  it("never uploads a screenshot the body doesn't show (its line was deleted)", async () => {
     const w = writer()
-    w.uploadImage.mockRejectedValue(new Error('Linear refused the upload of up.png: HTTP 403'))
+    const args = {
+      ...BASE,
+      body: '![a](pilot-image:1)',
+      images: [image(1, shot('shown.png', 'one')), image(2, NOWHERE)]
+    }
+    expect(await create(w).run(args, CARD)).toMatchObject({ outcome: 'done' })
+    expect(w.uploadImage.mock.calls.map(([input]) => input.filename)).toEqual(['shown.png'])
+    expect(await create(w).describe(args)).toBe('Create a WEB ticket: Finding (1 screenshot)')
+  })
+
+  const NEEDS_APPROVAL = {
+    outcome: 'failed',
+    detail: "images need a person's approval on a card",
+    data: { created: 'no' }
+  }
+  it.each([
+    ["a run's own attempt", RUN, NEEDS_APPROVAL, 0],
+    ['a dry run without a card', { ...RUN, dryRun: true }, NEEDS_APPROVAL, 0],
+    ["a person's Approve on a card", CARD, { outcome: 'done', detail: 'created WEB-2118' }, 1],
+    [
+      'a dry run on a card',
+      { ...CARD, dryRun: true },
+      { outcome: 'done', detail: 'would create a WEB ticket: Finding (1 screenshot)' },
+      0
+    ]
+  ])("takes screenshots only on a person's card: %s", async (_name, opts, expected, writes) => {
+    const w = writer()
     const result = await create(w).run(
-      { ...BASE, body: '![a](pilot-image:1)', images: [image(1, shot('up.png', 'one'))] },
-      RUN
+      { ...BASE, body: '![a](pilot-image:1)', images: [image(1, shot('ask.png', 'one'))] },
+      opts
     )
-    expect(result).toMatchObject({
-      outcome: 'failed',
-      detail: expect.stringContaining('Linear refused the upload of up.png: HTTP 403'),
-      data: { created: 'no' }
-    })
-    expect(w.createIssue).not.toHaveBeenCalled()
+    expect(result).toMatchObject(expected)
+    expect(w.uploadImage).toHaveBeenCalledTimes(writes)
+    expect(w.createIssue).toHaveBeenCalledTimes(writes)
   })
 
   // The codes `linearIssueCreate` raises (runtime-linear-create-commands.ts and what it calls).
@@ -425,7 +487,7 @@ describe('linear_create with screenshots and links', () => {
       links: [{ url: 'https://gitlab.com/mr/1' }]
     }
     expect(await e.describe(args)).toBe('Create a WEB ticket: Finding (2 screenshots, 1 link)')
-    expect(await e.run(args, { ...RUN, dryRun: true })).toMatchObject({
+    expect(await e.run(args, { ...CARD, dryRun: true })).toMatchObject({
       outcome: 'done',
       detail: 'would create a WEB ticket: Finding (2 screenshots, 1 link)'
     })

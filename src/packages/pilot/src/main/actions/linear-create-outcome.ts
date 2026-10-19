@@ -17,6 +17,10 @@ const NOT_CREATED: ReadonlySet<string> = new Set<LinearErrorCode>([
   'linear_permission_denied'
 ])
 
+export function messageOf(error: unknown): string {
+  return error instanceof Error ? error.message : String(error)
+}
+
 function codeOf(error: unknown): string | null {
   if (typeof error === 'object' && error !== null && 'code' in error) {
     return typeof error.code === 'string' ? error.code : null

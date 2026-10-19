@@ -23,6 +23,8 @@ export type LinearWriter = {
   addComment(issue: string, body: string, opts: LinearWriteOpts): Promise<{ url: string | null }>
   setState(issue: string, state: string, opts?: Pick<LinearWriteOpts, 'workspaceId'>): Promise<void>
   attachUrl(issue: string, url: string, title: string, opts: LinearWriteOpts): Promise<void>
+  // The workspace that owns a team: the one named, else resolved as `orca linear create` resolves it.
+  teamWorkspace(team: string, workspaceId?: string): Promise<string>
   uploadImage(input: LinearImageUpload): Promise<{ assetUrl: string }>
 }
 
@@ -46,7 +48,9 @@ function requireWriteId(writeId: string | undefined, what: string): string {
   return writeId
 }
 
-export function linearWriterOver(linear: LinearConnector): Omit<LinearWriter, 'uploadImage'> {
+export function linearWriterOver(
+  linear: LinearConnector
+): Omit<LinearWriter, 'teamWorkspace' | 'uploadImage'> {
   return {
     async createIssue(input) {
       const writeId = requireWriteId(input.writeId, 'creating a Linear issue')
@@ -105,12 +109,11 @@ export function createLinearWriter(
 ): LinearWriter {
   return {
     ...linearWriterOver(runtimeLinearConnector(runtime)),
-    async uploadImage(input) {
-      // The team resolved as `orca linear create` resolves it, so the asset lands in the issue's workspace.
-      const workspaceId =
-        input.workspaceId ??
-        (await runtime.resolveLinearCreateTeam(input.team, undefined, null)).workspaceId
-      return upload({ ...input, workspaceId })
-    }
+    async teamWorkspace(team, workspaceId) {
+      return (
+        workspaceId ?? (await runtime.resolveLinearCreateTeam(team, undefined, null)).workspaceId
+      )
+    },
+    uploadImage: (input) => upload(input)
   }
 }

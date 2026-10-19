@@ -138,8 +138,13 @@ describe('linearWriterOver sends what the orca linear CLI sends', () => {
   })
 })
 
-describe("createLinearWriter's image upload", () => {
-  const IMAGE = { bytes: new Uint8Array([1]), contentType: 'image/png', filename: 'a.png' }
+describe("createLinearWriter's screenshot uploads", () => {
+  const IMAGE = {
+    bytes: new Uint8Array([1]),
+    contentType: 'image/png',
+    filename: 'a.png',
+    workspaceId: 'ws2'
+  }
   const ASSET = { assetUrl: 'https://uploads.linear.app/a/1' }
 
   function writerResolving(resolve: () => Promise<unknown>) {
@@ -157,6 +162,7 @@ describe("createLinearWriter's image upload", () => {
     const upload = vi.fn().mockResolvedValue(ASSET)
     return { writer: createLinearWriter(runtime, upload), upload, resolveTeam }
   }
+  const resolvesToWs2 = async () => ({ id: 't2', key: 'WEB', name: 'Web', workspaceId: 'ws2' })
 
   it.each([
     [
@@ -165,28 +171,29 @@ describe("createLinearWriter's image upload", () => {
       'ws2',
       [['WEB', undefined, null]]
     ],
-    ['uploads to the workspace the args name', 'ws9', 'ws9', []]
-  ])('%s', async (_name, workspaceId, uploadedTo, resolutions) => {
-    const { writer, upload, resolveTeam } = writerResolving(async () => ({
-      id: 't2',
-      key: 'WEB',
-      name: 'Web',
-      workspaceId: 'ws2'
-    }))
+    ['takes the workspace the args name', 'ws9', 'ws9', []]
+  ])('%s', async (_name, workspaceId, found, resolutions) => {
+    const { writer, resolveTeam } = writerResolving(resolvesToWs2)
 
-    await expect(writer.uploadImage({ ...IMAGE, team: 'WEB', workspaceId })).resolves.toEqual(ASSET)
-    expect(upload).toHaveBeenCalledWith({ ...IMAGE, team: 'WEB', workspaceId: uploadedTo })
+    await expect(writer.teamWorkspace('WEB', workspaceId)).resolves.toBe(found)
     expect(resolveTeam.mock.calls).toEqual(resolutions)
   })
 
-  it('uploads nothing when the team is in several workspaces', async () => {
-    const { writer, upload } = writerResolving(async () => {
+  it('refuses a team that is in several workspaces', async () => {
+    const { writer } = writerResolving(async () => {
       throw linearError('linear_workspace_ambiguous', 'Team WEB exists in multiple workspaces.')
     })
 
-    await expect(writer.uploadImage({ ...IMAGE, team: 'WEB' })).rejects.toMatchObject({
+    await expect(writer.teamWorkspace('WEB')).rejects.toMatchObject({
       code: 'linear_workspace_ambiguous'
     })
-    expect(upload).not.toHaveBeenCalled()
+  })
+
+  it('uploads into the workspace it is given, without resolving a team', async () => {
+    const { writer, upload, resolveTeam } = writerResolving(resolvesToWs2)
+
+    await expect(writer.uploadImage(IMAGE)).resolves.toEqual(ASSET)
+    expect(upload).toHaveBeenCalledWith(IMAGE)
+    expect(resolveTeam).not.toHaveBeenCalled()
   })
 })
