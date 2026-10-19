@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import type { CapacityPayload, CapacityRun } from '../../../shared/api-types-capacity'
-import { endedText, memoryText, runMemoryText, suggestionText, usageText } from './running-text'
+import {
+  endedText,
+  limitsSummary,
+  memoryField,
+  runMemoryText,
+  suggestionText,
+  usageText
+} from './running-text'
 
 const GIB = 1024 ** 3
 
@@ -68,9 +75,9 @@ describe('usageText', () => {
   })
 })
 
-describe('memoryText', () => {
+describe('memoryField', () => {
   it.each([
-    ['what is available', payload(), 'Memory: 10.0 GB available of 24.0 GB'],
+    ['what is free', payload(), { free: '10.0 GB free of 24.0 GB', held: null }],
     [
       'what measured running jobs hold, never a run that takes no slot',
       payload({
@@ -80,11 +87,25 @@ describe('memoryText', () => {
           run({ id: 'r3', counted: false, memoryBytes: 4 * GIB })
         ]
       }),
-      'Memory: 10.0 GB available of 24.0 GB · running jobs hold 2.0 GB'
+      { free: '10.0 GB free of 24.0 GB', held: 'Running jobs hold 2.0 GB' }
     ],
     ['nothing when memory cannot be read', payload({ memory: null }), null]
   ])('says %s', (_name, p, expected) => {
-    expect(memoryText(p)).toBe(expected)
+    expect(memoryField(p)).toEqual(expected)
+  })
+})
+
+describe('limitsSummary', () => {
+  it.each([
+    [
+      'the limits as set',
+      payload({ limit: 1, retryLimit: 2, quotaCeiling: { weekly: 90, session: 95 } }),
+      '1 at once · 2 retries · quota stops at 90% / 95%'
+    ],
+    ['one retry', payload({ limit: 3, retryLimit: 1 }), '3 at once · 1 retry'],
+    ['no limit, from an older Pilot', payload({ limit: null }), 'no limit at once']
+  ])('says %s', (_name, p, expected) => {
+    expect(limitsSummary(p)).toBe(expected)
   })
 })
 

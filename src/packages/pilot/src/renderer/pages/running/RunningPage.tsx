@@ -1,5 +1,5 @@
+import { useState } from 'react'
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
 import type {
   CapacityPayload,
   CapacityRun,
@@ -13,9 +13,11 @@ import { PilotHostProvider, usePilotHost } from '../../hosts/PilotHostContext'
 import { openRun } from '../../run-views/run-panel-state'
 import { useNow } from '../waiting/use-now'
 import { FinishedRuns } from './FinishedRuns'
-import { RunLimitPicker } from './LimitPickers'
-import { GaveUpRow, RetryPanel } from './Retries'
-import { memoryText, quotaText, runMemoryText, suggestionText, usageText } from './running-text'
+import { LimitsPanel, LimitsToggle } from './LimitsPanel'
+import { GaveUpRow } from './Retries'
+import { checkOf } from './running-checks'
+import { placeBadgeText, placeReasonText } from './running-place'
+import { runMemoryText, usageText } from './running-text'
 import { useCapacities, type CapacityChanges, type MachineCapacity } from './use-capacity'
 
 // A machine's changes, bound to it.
@@ -25,85 +27,32 @@ type Changes = {
   onRetry(key: RetryKey): void
 }
 
-function LimitPanel({
-  payload,
-  where,
-  saving,
-  onChange,
-  onRetryLimit
-}: {
-  payload: CapacityPayload
-  where: string
-  saving: boolean
-  onChange(limit: number | null): void
-  onRetryLimit(limit: number): void
-}): React.JSX.Element {
-  const suggested = payload.suggestion.limit
-  const memory = memoryText(payload)
-  return (
-    <section
-      aria-label="Run limit"
-      className="flex flex-col gap-3 rounded-lg border border-border/50 p-3"
-    >
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-        <div className="min-w-0 flex-1">
-          <div className="text-sm font-medium">Jobs at once</div>
-          <p className="text-xs text-muted-foreground">
-            Counts jobs with an agent step. Past it, jobs wait in line, oldest first; changing it
-            stops nothing that is running.
-          </p>
-        </div>
-        <RunLimitPicker limit={payload.limit} disabled={saving} onChange={onChange} />
-      </div>
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-border/50 pt-3">
-        <span className="text-sm">
-          Suggested: <span className="font-medium tabular-nums">{suggested}</span>
-        </span>
-        {payload.limit === suggested ? null : (
-          <Button variant="outline" size="xs" disabled={saving} onClick={() => onChange(suggested)}>
-            Use {suggested}
-          </Button>
-        )}
-        {memory ? <p className="basis-full text-xs tabular-nums">{memory}</p> : null}
-        <p className="basis-full text-xs text-muted-foreground">
-          {suggestionText(payload)} Memory counts each job&apos;s processes on {where}, not
-          Docker&apos;s containers.
-        </p>
-        {payload.quotaCeiling ? (
-          <p className="basis-full text-xs text-muted-foreground">
-            {quotaText(payload.quotaCeiling)}
-          </p>
-        ) : null}
-      </div>
-      <RetryPanel payload={payload} saving={saving} onChange={onRetryLimit} />
-    </section>
-  )
-}
-
+// Name, where it works and its figures on top; the item under it; then why it isn't in your worktree.
 function RunningRow({ run, now }: { run: CapacityRun; now: number }): React.JSX.Element {
   const host = usePilotHost()
+  const why = run.place ? placeReasonText(run.place) : null
   return (
-    <li className="flex min-w-0 items-center gap-2 px-3 py-2 text-sm">
-      <span className="shrink-0 font-medium">{run.automationName}</span>
-      <span
-        className="min-w-0 flex-1 truncate font-mono text-xs text-muted-foreground"
-        title={run.itemLabel}
-      >
+    <li className="flex min-w-0 flex-col gap-1 px-3 py-2 text-sm">
+      <div className="flex min-w-0 items-center gap-2">
+        <span className="min-w-0 truncate font-medium" title={run.automationName}>
+          {run.automationName}
+        </span>
+        {run.place ? <Badge variant="secondary">{placeBadgeText(run.place)}</Badge> : null}
+        <span className="ml-auto shrink-0 pl-2 text-xs tabular-nums text-muted-foreground">
+          {formatDuration(workedMs(run, now))} · {runMemoryText(run)}
+        </span>
+        <button
+          type="button"
+          className="shrink-0 text-xs underline"
+          onClick={() => openRun(run.id, null, host)}
+        >
+          Open run
+        </button>
+      </div>
+      <div className="truncate font-mono text-xs text-muted-foreground" title={run.itemLabel}>
         {run.itemLabel}
-      </span>
-      <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
-        {formatDuration(workedMs(run, now))}
-      </span>
-      <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
-        {runMemoryText(run)}
-      </span>
-      <button
-        type="button"
-        className="shrink-0 text-xs underline"
-        onClick={() => openRun(run.id, null, host)}
-      >
-        Open run
-      </button>
+      </div>
+      {why ? <p className="text-xs text-muted-foreground">{why}</p> : null}
     </li>
   )
 }
@@ -116,12 +65,19 @@ function placeInLine(queued: readonly QueuedRun[], item: QueuedRun): number | nu
   return queued.filter(waitsForSlot).indexOf(item) + 1
 }
 
-// A slot waiter's place in line, or Held for a row that waits on something else.
-function QueuedStatus({ place }: { place: number | null }): React.JSX.Element {
-  if (place === null) {
-    return <Badge variant="secondary">Held</Badge>
+// A slot waiter's place in line, or Held and the check that holds it, as Limits & how it works names them.
+function QueuedStatus({
+  item,
+  place
+}: {
+  item: QueuedRun
+  place: number | null
+}): React.JSX.Element {
+  if (place !== null) {
+    return <Badge variant="outline">#{place} in line</Badge>
   }
-  return <Badge variant="outline">#{place} in line</Badge>
+  const check = checkOf(item.holdCode)
+  return <Badge variant="secondary">{check ? `Held · ${check.name}` : 'Held'}</Badge>
 }
 
 // Name, status and time on top; the item under it; then the reason across the whole row.
@@ -142,7 +98,7 @@ function QueuedRow({
         <span className="min-w-0 truncate font-medium" title={item.automationName}>
           {item.automationName}
         </span>
-        <QueuedStatus place={place} />
+        <QueuedStatus item={item} place={place} />
         {item.byHand ? <Badge variant="outline">Run now</Badge> : null}
         <span className="ml-auto shrink-0 pl-2 text-xs tabular-nums text-muted-foreground">
           {waitedText(item, now)}
@@ -189,31 +145,45 @@ type MachineProps = Changes & {
   named: boolean
   saving: boolean
   now: number
+  // Limits & how it works is open for this machine.
+  limitsOpen: boolean
+  onToggleLimits(): void
 }
 
-// Today's page for one machine: its limits, what runs, what waits, what it gave up on and what finished.
+// The panel's id, for the toggle's aria-controls: one per machine.
+function limitsPanelId(key: string): string {
+  return `running-limits-${key.replace(/[^A-Za-z0-9_-]/g, '-')}`
+}
+
+// Today's page for one machine: its limits when open, what runs, what waits, what it gave up on and what finished.
 function MachineRuns({
   payload,
+  panelId,
   where,
   saving,
   now,
+  limitsOpen,
   onLimit,
   onRetryLimit,
   onRetry
-}: Omit<MachineProps, 'machine' | 'named'> & {
+}: Omit<MachineProps, 'machine' | 'named' | 'onToggleLimits'> & {
   payload: CapacityPayload
+  panelId: string
   where: string
 }): React.JSX.Element {
   const gaveUp = payload.gaveUp ?? []
   return (
     <>
-      <LimitPanel
-        payload={payload}
-        where={where}
-        saving={saving}
-        onChange={onLimit}
-        onRetryLimit={onRetryLimit}
-      />
+      {limitsOpen ? (
+        <LimitsPanel
+          id={panelId}
+          payload={payload}
+          where={where}
+          saving={saving}
+          onLimit={onLimit}
+          onRetryLimit={onRetryLimit}
+        />
+      ) : null}
       <ListSection title="Running now" empty="Nothing is running." count={payload.running.length}>
         {payload.running.map((run) => (
           <RunningRow key={run.id} run={run} now={now} />
@@ -246,24 +216,53 @@ function MachineRuns({
   )
 }
 
+// A named machine's heading carries its own limits toggle; with one machine the page header carries it.
 function MachineHeading({
   machine: { host, payload },
-  named
-}: Pick<MachineProps, 'machine' | 'named'>): React.JSX.Element | null {
+  named,
+  limitsOpen,
+  onToggleLimits
+}: Pick<
+  MachineProps,
+  'machine' | 'named' | 'limitsOpen' | 'onToggleLimits'
+>): React.JSX.Element | null {
   if (!named) {
     return null
   }
   return (
-    <div>
-      <h3 className="text-sm font-semibold leading-6">{host.machineName}</h3>
-      {payload ? <p className="text-xs text-muted-foreground">{usageText(payload)}</p> : null}
+    <div className="flex flex-wrap items-start justify-between gap-3">
+      <div>
+        <h3 className="text-sm font-semibold leading-6">{host.machineName}</h3>
+        {payload ? <p className="text-xs text-muted-foreground">{usageText(payload)}</p> : null}
+      </div>
+      {payload && host.state !== 'offline' ? (
+        <LimitsToggle
+          payload={payload}
+          open={limitsOpen}
+          controls={limitsPanelId(host.key)}
+          onToggle={onToggleLimits}
+        />
+      ) : null}
     </div>
   )
 }
 
-function MachineSection({ machine, named, ...rest }: MachineProps): React.JSX.Element {
+function MachineSection({
+  machine,
+  named,
+  limitsOpen,
+  onToggleLimits,
+  ...rest
+}: MachineProps): React.JSX.Element {
   const { host, payload, error } = machine
-  const heading = <MachineHeading machine={machine} named={named} />
+  const heading = (
+    <MachineHeading
+      machine={machine}
+      named={named}
+      limitsOpen={limitsOpen}
+      onToggleLimits={onToggleLimits}
+    />
+  )
   let where = 'this Mac'
   if (named) {
     where = host.machineName
@@ -285,7 +284,15 @@ function MachineSection({ machine, named, ...rest }: MachineProps): React.JSX.El
       <section aria-label={host.machineName} className="flex flex-col gap-4">
         {heading}
         {error ? <p className="text-sm text-destructive">{error}</p> : null}
-        {payload ? <MachineRuns payload={payload} where={where} {...rest} /> : null}
+        {payload ? (
+          <MachineRuns
+            payload={payload}
+            panelId={limitsPanelId(host.key)}
+            where={where}
+            limitsOpen={limitsOpen}
+            {...rest}
+          />
+        ) : null}
       </section>
     </PilotHostProvider>
   )
@@ -301,20 +308,50 @@ function changesFor(changes: CapacityChanges, machine: MachineCapacity): Changes
   }
 }
 
-// What runs now, what waits in line order, what the runner gave up on, and how many jobs may run at once and how often
-// a failed one is retried (main/capacity), per machine.
+// The machines whose Limits & how it works is open, by host key; all closed at first.
+function useOpenLimits(): { isOpen(key: string): boolean; toggle(key: string): void } {
+  const [open, setOpen] = useState<ReadonlySet<string>>(() => new Set())
+  return {
+    isOpen: (key) => open.has(key),
+    toggle: (key) =>
+      setOpen((current) => {
+        const next = new Set(current)
+        if (next.has(key)) {
+          next.delete(key)
+        } else {
+          next.add(key)
+        }
+        return next
+      })
+  }
+}
+
+// What runs now, what waits in line order, what the runner gave up on and what finished, per machine, with each
+// machine's limits and how the runner decides folded behind Limits & how it works (main/capacity).
 export function RunningPage(): React.JSX.Element {
   const { machines, saving, ...changes } = useCapacities()
   const now = useNow(true)
+  const limits = useOpenLimits()
   const named = machines.length > 1
-  const only = named ? null : machines[0]?.payload
+  const single = named ? null : machines[0]
+  const only = single?.payload ?? null
   return (
     <section className="flex max-w-6xl flex-col gap-4 px-5 pb-6 pt-4">
-      <div>
-        <h2 className="text-sm font-semibold leading-6">Running</h2>
-        <p className="text-xs text-muted-foreground">
-          {only ? usageText(only) : 'Jobs running now, and what is waiting to start, with why.'}
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h2 className="text-sm font-semibold leading-6">Running</h2>
+          <p className="text-xs text-muted-foreground">
+            {only ? usageText(only) : 'Jobs running now, and what is waiting to start, with why.'}
+          </p>
+        </div>
+        {single && only && single.host.state !== 'offline' ? (
+          <LimitsToggle
+            payload={only}
+            open={limits.isOpen(single.host.key)}
+            controls={limitsPanelId(single.host.key)}
+            onToggle={() => limits.toggle(single.host.key)}
+          />
+        ) : null}
       </div>
       <div className="flex flex-col gap-8">
         {machines.map((machine) => (
@@ -324,6 +361,8 @@ export function RunningPage(): React.JSX.Element {
             named={named}
             saving={saving === machine.host.key}
             now={now}
+            limitsOpen={limits.isOpen(machine.host.key)}
+            onToggleLimits={() => limits.toggle(machine.host.key)}
             {...changesFor(changes, machine)}
           />
         ))}

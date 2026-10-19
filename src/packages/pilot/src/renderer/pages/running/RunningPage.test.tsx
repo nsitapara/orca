@@ -137,9 +137,16 @@ async function shown(): Promise<void> {
   await act(async () => {})
 }
 
-async function click(name: string): Promise<void> {
+async function click(name: string | RegExp): Promise<void> {
   await act(async () => {
     fireEvent.click(screen.getByRole('button', { name }))
+  })
+}
+
+// Opens Limits & how it works: the page's, or a named machine's within its region.
+async function openLimits(scope: Pick<typeof screen, 'getByRole'> = screen): Promise<void> {
+  await act(async () => {
+    fireEvent.click(scope.getByRole('button', { name: 'Limits & how it works' }))
   })
 }
 
@@ -157,12 +164,12 @@ describe('RunningPage', () => {
     expect(screen.getByText('1 of 2 in use · 1 waiting')).toBeTruthy()
     const running = within(screen.getByRole('region', { name: 'Running now' }))
     expect(running.getByText('03 Review and fix')).toBeTruthy()
-    expect(running.getByText('1.5 GB · peak 2.0 GB')).toBeTruthy()
+    expect(running.getByText(/· 1\.5 GB · peak 2\.0 GB$/)).toBeTruthy()
     const waiting = within(screen.getByRole('region', { name: 'Waiting' }))
     expect(waiting.getByText('05 Fix failed CI')).toBeTruthy()
     expect(waiting.getByText('Run now')).toBeTruthy()
     expect(waiting.getByText('waiting 3m')).toBeTruthy()
-    expect(screen.getByRole('status', { name: 'Jobs at once' }).textContent).toBe('2')
+    expect(screen.getByText('2 at once')).toBeTruthy()
   })
 
   it('lists a held item with how long it has been held and why, and says what the quota ceiling holds', async () => {
@@ -194,6 +201,7 @@ describe('RunningPage', () => {
       waiting.getByText(/^53 uncommitted files\. It starts once the worktree is clean/)
     ).toBeTruthy()
     expect(waiting.getByText('held 9m \u00b7 oldest new commit 48h ago')).toBeTruthy()
+    await openLimits()
     expect(
       screen.getByText(
         'Jobs with an agent step wait while Claude or Codex is over 90% weekly or 95% session.'
@@ -224,16 +232,18 @@ describe('RunningPage', () => {
     const [held, slot] = within(screen.getByRole('region', { name: 'Waiting' }))
       .getAllByRole('listitem')
       .map((li) => within(li))
-    expect(held?.getByText('Held')).toBeTruthy()
+    expect(held?.getByText('Held · Agent quota')).toBeTruthy()
     expect(held?.queryByText(/in line$/)).toBeNull()
     expect(slot?.getByText('#1 in line')).toBeTruthy()
-    expect(slot?.queryByText('Held')).toBeNull()
+    expect(slot?.queryByText(/^Held/)).toBeNull()
   })
 
   it('renders an older payload without hold fields, the quota ceiling or retries', async () => {
     serve(capacity({ finished: [finishedRun({ onceKey: undefined })] }))
     await shown()
+    await openLimits()
     expect(screen.queryByText(/over \d+% weekly/)).toBeNull()
+    expect(screen.queryByText('Agent quota ceiling')).toBeNull()
     expect(screen.queryByText('Retries after a failure')).toBeNull()
     expect(screen.queryByRole('region', { name: 'Gave up' })).toBeNull()
     await click('Recently finished · 1')
@@ -243,6 +253,7 @@ describe('RunningPage', () => {
   it('steps the retries after a failure, 0 to 5', async () => {
     serve(capacity({ retryLimit: 2 }))
     await shown()
+    await openLimits()
     expect(screen.getByText('Retries after a failure')).toBeTruthy()
     expect(screen.getByRole('status', { name: 'Retries after a failure' }).textContent).toBe('2')
     await click('More retries after a failure')
@@ -321,6 +332,7 @@ describe('RunningPage', () => {
   ] as const)('%s from %s sets %s at once', async (button, from, to) => {
     serve(capacity({ limit: from }))
     await shown()
+    await openLimits()
     await click(button)
     expect(pilotRpc).toHaveBeenCalledWith('pilot.capacity.setLimit', { limit: to })
     expect(screen.getByRole('status', { name: 'Jobs at once' }).textContent).toBe(
@@ -331,6 +343,7 @@ describe('RunningPage', () => {
   it('uses the suggestion, and offers it only while the limit differs', async () => {
     serve(capacity())
     await shown()
+    await openLimits()
     expect(screen.getByText(/The heaviest job, 03 Review and fix, peaked at 2\.0 GB/)).toBeTruthy()
     await click('Use 3')
     expect(pilotRpc).toHaveBeenCalledWith('pilot.capacity.setLimit', { limit: 3 })
@@ -345,6 +358,7 @@ describe('RunningPage', () => {
       return capacity()
     })
     await shown()
+    await openLimits()
     await click('More jobs at once')
     expect(screen.getByText("Pilot isn't running")).toBeTruthy()
     expect(screen.getByRole('status', { name: 'Jobs at once' }).textContent).toBe('2')
@@ -435,6 +449,79 @@ describe('RunningPage', () => {
     expect(screen.getByRole('button', { name: 'Retry' }).hasAttribute('disabled')).toBe(true)
   })
 
+  it('folds the limits behind Limits & how it works, with who handles what', async () => {
+    serve(capacity({ retryLimit: 2, quotaCeiling: { weekly: 90, session: 95 } }))
+    await shown()
+    expect(screen.getByText('2 at once · 2 retries · quota stops at 90% / 95%')).toBeTruthy()
+    expect(screen.queryByRole('status', { name: 'Jobs at once' })).toBeNull()
+    await openLimits()
+    const toggle = screen.getByRole('button', { name: 'Limits & how it works' })
+    expect(toggle.getAttribute('aria-expanded')).toBe('true')
+    const panel = within(screen.getByRole('region', { name: 'Limits and how it works' }))
+    expect(panel.getByRole('status', { name: 'Jobs at once' }).textContent).toBe('2')
+    expect(
+      ["Pilot's runner", 'The job file', 'The skill'].map((t) => !!panel.getByText(t))
+    ).toEqual([true, true, true])
+  })
+
+  it('says what each check holds now, from the waiting rows', async () => {
+    const now = Date.now()
+    serve(
+      capacity({
+        quotaCeiling: { weekly: 90, session: 95 },
+        quotaUse: { claude: { weekly: 92, session: 10 } },
+        queued: [
+          {
+            automationId: 'context',
+            automationName: '14 Prepare context',
+            itemKey: 'card-1',
+            itemLabel: 'F4',
+            queuedAt: now,
+            byHand: false,
+            holdCode: 'quota',
+            holdDetail: 'claude weekly limit at 92% (jobs stop at 90%)'
+          }
+        ]
+      })
+    )
+    await shown()
+    await openLimits()
+    await click(/^Every check before a run starts, in order/)
+    const quota = screen.getByRole('cell', { name: 'Agent quota' }).closest('tr')
+    expect(quota && within(quota).getByText('holding 1: Claude 92% weekly')).toBeTruthy()
+    expect(screen.getByText('1 of 2 used')).toBeTruthy()
+  })
+
+  it('says where a running run works and why, and what a finished run brought home', async () => {
+    const [first] = capacity().running
+    serve(
+      capacity({
+        running: [
+          { ...first, place: { mode: 'throwaway', reason: 'uncommitted changes', stack: true } }
+        ],
+        finished: [
+          finishedRun({
+            place: { mode: 'throwaway', reason: 'uncommitted changes', stack: false },
+            home: {
+              mergedBack: { ok: false, reason: 'uncommitted changes' },
+              kept: 'pilot/review-1'
+            }
+          })
+        ]
+      })
+    )
+    await shown()
+    const running = within(screen.getByRole('region', { name: 'Running now' }))
+    expect(running.getByText('In a throwaway · own stack')).toBeTruthy()
+    expect(running.getByText('Why a throwaway: uncommitted changes')).toBeTruthy()
+    await click('Recently finished · 1')
+    expect(
+      screen.getByText(
+        'Worked in a throwaway. Merge back skipped: uncommitted changes. Kept on pilot/review-1.'
+      )
+    ).toBeTruthy()
+  })
+
   it('says when nothing runs or waits', async () => {
     serve(capacity({ running: [], queued: [], limit: null }))
     await shown()
@@ -473,6 +560,8 @@ describe('RunningPage on more than one machine', () => {
     expect(queue.getByText('05 Fix failed CI')).toBeTruthy()
     const local = within(region('MacBook').getByRole('region', { name: 'Running now' }))
     expect(local.getByText('03 Review and fix')).toBeTruthy()
+    await openLimits(region('MacBook'))
+    await openLimits(mini)
     expect([limitOf('MacBook'), limitOf('Mac mini')]).toEqual(['2', '4'])
   })
 
@@ -489,6 +578,9 @@ describe('RunningPage on more than one machine', () => {
     pilotRpc.mockImplementation(byHost({ local: machine({}), mini: machine({ running: [] }) }))
     render(<RunningPage />)
     const mini = within(await screen.findByRole('region', { name: 'Mac mini' }))
+    await mini.findByText('Nothing is running.')
+    await openLimits(region('MacBook'))
+    await openLimits(mini)
     const use = await mini.findByRole('button', { name: 'Use 3' })
     await act(async () => {
       fireEvent.click(use)
@@ -516,7 +608,7 @@ describe('RunningPage on more than one machine', () => {
         "Mac mini can't be reached. Losing contact doesn't stop its runs; they just aren't visible from here."
       )
     ).toBeTruthy()
-    expect(mini.queryByRole('region', { name: 'Run limit' })).toBeNull()
+    expect(mini.queryByRole('button', { name: 'Limits & how it works' })).toBeNull()
   })
 
   type Read = { resolve(p: CapacityPayload): void; reject(e: Error): void; done: boolean }
@@ -589,6 +681,7 @@ describe('RunningPage on more than one machine', () => {
     render(<RunningPage />)
     await flush()
     await mini.answer(capacity({ limit: 2 }))
+    await openLimits(region('Mac mini'))
     await before(mini)
     await act(async () => {
       fireEvent.click(region('Mac mini').getByRole('button', { name: 'Use 3' }))
@@ -616,6 +709,7 @@ describe('RunningPage on more than one machine', () => {
     render(<RunningPage />)
     await flush()
     await mini.answer(capacity({ limit: 2 }))
+    await openLimits(region('Mac mini'))
     await act(async () => {
       fireEvent.click(region('Mac mini').getByRole('button', { name: 'Use 3' }))
     })

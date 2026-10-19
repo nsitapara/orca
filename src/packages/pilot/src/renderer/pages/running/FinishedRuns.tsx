@@ -25,6 +25,7 @@ import { worktreeName } from '../waiting/answer-text'
 import { openWorktree, repoNameForPath, worktreeIdForPath } from '../waiting/WorktreeLink'
 import { ResizableHeaderCell } from '../ResizableHeaderCell'
 import { useColumnWidths, type ColumnSpec } from '../use-column-widths'
+import { finishedHomeText } from './running-place'
 import { endedText } from './running-text'
 
 // Widths are remembered per viewer, by column id.
@@ -172,6 +173,7 @@ function FinishedRow({
   const host = usePilotHost()
   const ended = run.finishedAt ?? now
   const retryKey = retryKeyOf(run)
+  const home = finishedHomeText(run)
   return (
     <>
       <tr className="border-t border-border/50 align-top">
@@ -231,6 +233,17 @@ function FinishedRow({
           {endedText(ended, now)}
         </td>
       </tr>
+      {home ? (
+        <tr>
+          <td />
+          <td
+            colSpan={COLUMNS.length - 1}
+            className="break-words px-3 pb-1.5 text-xs text-muted-foreground"
+          >
+            {home}
+          </td>
+        </tr>
+      ) : null}
       {open ? (
         <tr>
           <td colSpan={COLUMNS.length} className="pb-3 pl-10 pr-3">

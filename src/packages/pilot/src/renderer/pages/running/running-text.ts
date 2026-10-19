@@ -29,16 +29,30 @@ export function usageText(p: CapacityPayload): string {
   return parts.join(' · ')
 }
 
-// What the machine has now, and what the measured running jobs hold of it; null when memory can't be read.
-export function memoryText(p: CapacityPayload): string | null {
+// What the machine has free now, and what the measured running jobs hold of it; null when memory can't be read.
+export function memoryField(p: CapacityPayload): { free: string; held: string | null } | null {
   if (!p.memory) {
     return null
   }
-  const free = `${formatMemory(p.memory.availableBytes)} available of ${formatMemory(p.memory.totalBytes)}`
+  const free = `${formatMemory(p.memory.availableBytes)} free of ${formatMemory(p.memory.totalBytes)}`
   const held = p.running.reduce((sum, r) => sum + (r.counted ? (r.memoryBytes ?? 0) : 0), 0)
-  return held === 0
-    ? `Memory: ${free}`
-    : `Memory: ${free} · running jobs hold ${formatMemory(held)}`
+  return { free, held: held === 0 ? null : `Running jobs hold ${formatMemory(held)}` }
+}
+
+function retriesText(limit: number): string {
+  return limit === 1 ? '1 retry' : `${limit} retries`
+}
+
+// The header's line beside Limits & how it works: the limits as set, with what an older Pilot doesn't send left out.
+export function limitsSummary(p: CapacityPayload): string {
+  const parts = [p.limit === null ? 'no limit at once' : `${p.limit} at once`]
+  if (p.retryLimit !== undefined) {
+    parts.push(retriesText(p.retryLimit))
+  }
+  if (p.quotaCeiling) {
+    parts.push(`quota stops at ${p.quotaCeiling.weekly}% / ${p.quotaCeiling.session}%`)
+  }
+  return parts.join(' · ')
 }
 
 // Why the suggestion is the number it is, in the page's words (a suggestion only: nothing changes until Nish picks).
@@ -85,8 +99,8 @@ export function quotaText(ceiling: { weekly: number; session: number }): string 
   return `Jobs with an agent step wait while Claude or Codex is over ${ceiling.weekly}% weekly or ${ceiling.session}% session.`
 }
 
-// What the retry limit does, with the runner's wait when a job sets none.
-export function retryText(): string {
+// The retry field's line: the runner's wait when a job sets none, and what happens past the limit.
+export function retryHint(): string {
   const minutes = DEFAULT_RETRY_AFTER_MS / 60_000
-  return `A failed run is tried again ${minutes} minutes later, or after its job's retry_after_failure. Past this many retries Pilot gives up on it and leaves you a card.`
+  return `${minutes} min apart, or the job's retry_after_failure; past it, a card`
 }
