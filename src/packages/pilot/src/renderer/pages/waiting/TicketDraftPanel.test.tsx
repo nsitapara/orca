@@ -135,6 +135,18 @@ describe('TicketDraftPanel', () => {
     await screen.findByText('Team not found')
   })
 
+  it('leaves an unticked screenshot unticked when its thumbnail is clicked; its caption ticks it', async () => {
+    await open()
+    const box = screen.getByRole('checkbox', { name: /pilot-image:2/ })
+    fireEvent.click(box)
+    expect(box.getAttribute('aria-checked')).toBe('false')
+    await waitFor(() => expect(document.querySelectorAll('img')).toHaveLength(2))
+    fireEvent.click(document.querySelectorAll('img')[1])
+    expect(box.getAttribute('aria-checked')).toBe('false')
+    fireEvent.click(screen.getByText('After'))
+    expect(box.getAttribute('aria-checked')).toBe('true')
+  })
+
   it('keeps "What Create does" in step with the fields', async () => {
     await open()
     expect(

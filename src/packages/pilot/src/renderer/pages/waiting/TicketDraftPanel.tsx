@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useId, useState } from 'react'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
@@ -118,19 +118,24 @@ function Screenshot({
   locked: boolean
   onTick: (ticked: boolean) => void
 }): React.JSX.Element {
+  const id = useId()
   const name = image.caption ? `${image.caption} · ${image.ref}` : image.ref
+  // The thumbnail is outside the label, so clicking it never ticks a screenshot back on.
   return (
-    <label className="flex min-w-0 items-center gap-2 text-[13px]">
+    <div className="flex min-w-0 items-center gap-2 text-[13px]">
       <Checkbox
+        id={id}
         aria-label={name}
         checked={ticked}
         disabled={locked}
         onCheckedChange={(next) => onTick(next === true)}
       />
       <Thumb host={host} item={item} file={image.file} />
-      <span className="min-w-0 flex-1 truncate">{image.caption}</span>
+      <label htmlFor={id} className="min-w-0 flex-1 truncate">
+        {image.caption}
+      </label>
       <code className="font-mono text-xs text-muted-foreground">{image.ref}</code>
-    </label>
+    </div>
   )
 }
 
