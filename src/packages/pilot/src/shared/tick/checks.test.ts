@@ -13,11 +13,6 @@ const run = (c: CheckDef, fields: ItemFields, now = NOON_LA) => {
   })
   return [ok, reason]
 }
-const CLEAN = {
-  'worktree.git_operation': null,
-  'worktree.dirty_count': 0,
-  'worktree.untracked_count': 0
-}
 type Case = [string, CheckDef, ItemFields, boolean, string]
 
 describe('worktree checks', () => {
@@ -43,84 +38,6 @@ describe('worktree checks', () => {
       { 'worktree.path': '' },
       false,
       'No worktree for !1561 web-1493'
-    ],
-    ['clean', { kind: 'worktree_clean' }, CLEAN, true, 'No uncommitted changes'],
-    [
-      'uncommitted files',
-      { kind: 'worktree_clean' },
-      { ...CLEAN, 'worktree.dirty_count': 2 },
-      false,
-      '2 uncommitted files'
-    ],
-    [
-      'untracked files count as dirty',
-      { kind: 'worktree_clean' },
-      { ...CLEAN, 'worktree.untracked_count': 1 },
-      false,
-      '1 untracked file'
-    ],
-    [
-      'a rebase in progress',
-      { kind: 'worktree_clean' },
-      { ...CLEAN, 'worktree.git_operation': 'rebase' },
-      false,
-      'A rebase is in progress'
-    ],
-    [
-      'git operation unknown',
-      { kind: 'worktree_clean' },
-      { 'worktree.dirty_count': 0, 'worktree.untracked_count': 0 },
-      false,
-      "Couldn't tell whether a git operation is in progress"
-    ],
-    [
-      'uncommitted unknown',
-      { kind: 'worktree_clean' },
-      { ...CLEAN, 'worktree.dirty_count': null },
-      false,
-      "Couldn't read uncommitted changes"
-    ],
-    [
-      'untracked unknown',
-      { kind: 'worktree_clean' },
-      { ...CLEAN, 'worktree.untracked_count': null },
-      false,
-      "Couldn't read untracked files"
-    ],
-    [
-      'idle',
-      { kind: 'worktree_idle' },
-      { 'worktree.path': '/wt/a', 'worktree.busy': '' },
-      true,
-      'No agent working and nobody typing'
-    ],
-    [
-      'someone typing',
-      { kind: 'worktree_idle' },
-      { 'worktree.path': '/wt/a', 'worktree.busy': 'someone is typing in ✳ Fix' },
-      false,
-      'someone is typing in ✳ Fix'
-    ],
-    [
-      'an agent working',
-      { kind: 'worktree_idle' },
-      { 'worktree.path': '/wt/a', 'worktree.busy': '✳ Fix is working' },
-      false,
-      '✳ Fix is working'
-    ],
-    [
-      'busy unknown',
-      { kind: 'worktree_idle' },
-      { 'worktree.path': '/wt/a' },
-      false,
-      "Couldn't tell whether an agent is working there"
-    ],
-    [
-      'no worktree yet',
-      { kind: 'worktree_idle' },
-      {},
-      true,
-      'No worktree yet, so nothing runs there'
     ]
   ])('%s', (_name, c, fields, ok, reason) => {
     expect(run(c, fields)).toEqual([ok, reason])
@@ -341,8 +258,6 @@ describe('window, field and script checks', () => {
 describe('checkName', () => {
   it.each<[CheckDef, string]>([
     [{ kind: 'worktree_exists' }, 'Worktree'],
-    [{ kind: 'worktree_clean' }, 'Clean'],
-    [{ kind: 'worktree_idle' }, 'Idle'],
     [{ kind: 'session_none_open', scope: 'automation' }, 'No open session'],
     [{ kind: 'session_none_open', scope: 'any' }, 'No open session (any)'],
     [{ kind: 'quota', agent: 'claude', weekly: 90, session: 95 }, 'Quota'],

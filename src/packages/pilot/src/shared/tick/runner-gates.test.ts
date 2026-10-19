@@ -78,9 +78,9 @@ describe('itemGate: the retry gate', () => {
   })
 
   it('goes before the runtime checks, so a held retry names its wait', () => {
-    const def = testDefinition({ oncePer: '{mr.iid}', checks: [{ kind: 'worktree_clean' }] })
-    const dirty: DecideItem = { ...ITEM, fields: { ...ITEM.fields, 'worktree.dirty_count': 2 } }
-    expect(itemGate(input(failed(1, MIN), { definition: def }), dirty, '1', null)?.code).toBe(
+    const def = testDefinition({ oncePer: '{mr.iid}', checks: [{ kind: 'answers_none_pending' }] })
+    const pending: DecideItem = { ...ITEM, fields: { ...ITEM.fields, 'inbox.pending_answers': 2 } }
+    expect(itemGate(input(failed(1, MIN), { definition: def }), pending, '1', null)?.code).toBe(
       'retry'
     )
   })

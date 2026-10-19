@@ -154,6 +154,23 @@ export function oncePerErrors(raw: RawAutomation): string[] {
   return ['once_per: no {field} placeholder (write {mr.iid}, without spaces)']
 }
 
+const WORKSPACE_CHECK_WHILE = {
+  clean: 'anything is in flight there',
+  idle: 'an agent or someone is working there'
+} as const
+
+// The place a run works is workspace: env's choice (pilotcli env create); a check would only make the item wait.
+export function workspaceCheckErrors(raw: RawAutomation): string[] {
+  return (raw.checks ?? []).flatMap((c, i) => {
+    if (typeof c !== 'object' || !('worktree' in c) || c.worktree === 'exists') {
+      return []
+    }
+    return [
+      `checks[${i}]: worktree: ${c.worktree} picks where a run works, not when: use workspace: env { worktree: "{worktree.path}", writes: true }, which works in a throwaway while ${WORKSPACE_CHECK_WHILE[c.worktree]}`
+    ]
+  })
+}
+
 // Keys that only make sense together, or not at all without items:.
 export function combinationErrors(raw: RawAutomation): string[] {
   const errors: string[] = []
@@ -293,6 +310,7 @@ export function definitionErrors(raw: RawAutomation): string[] {
     ...scheduleErrors(raw),
     ...stepErrors(raw),
     ...quotaErrors(raw),
+    ...workspaceCheckErrors(raw),
     ...oncePerErrors(raw),
     ...combinationErrors(raw),
     ...envWorkspaceErrors(raw),

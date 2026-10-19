@@ -7,14 +7,14 @@ import { fakeFieldDeps, testItem } from '../fields/__fixtures__/field-deps'
 import { PilotStore } from '../store/store'
 import { runTick, type TickDeps, type TickOptions } from './tick-runner'
 
-// Not merged is eligibility; an uncommitted file fails Clean, a runtime gate, so the item is held.
+// Not merged is eligibility; an answer waiting to be applied fails a runtime gate, so the item is held.
 const def = testDefinition({
   id: 'fix-failed-ci',
   oncePer: '{mr.iid}',
   checks: [
     { kind: 'mr', rule: 'not_merged' },
     { kind: 'worktree_exists' },
-    { kind: 'worktree_clean' }
+    { kind: 'answers_none_pending' }
   ]
 })
 const t1 = Date.UTC(2026, 9, 10, 19, 10)
@@ -22,7 +22,7 @@ const t2 = t1 + 60_000
 
 type Moment = { finished: string; waitingSince: number | null }
 
-// One MR whose worktree has an uncommitted file; each tick reads `moment` as it is then.
+// One MR with an answer waiting to be applied; each tick reads `moment` as it is then.
 function holding(moment: Moment) {
   const store = PilotStore.open(':memory:')
   let clock = t1
@@ -49,7 +49,7 @@ function holding(moment: Moment) {
       listWorktrees: async () => [
         { id: 'r::/wt/1', path: '/wt/1', branch: 'web-1', head: 'h', linkedLinearIssue: null }
       ],
-      gitStatus: async () => ({ dirty: 1, untracked: 0 })
+      pendingAnswers: () => 1
     }),
     ask: {
       store,
@@ -72,10 +72,10 @@ describe("runTick holding an item in the runner's line", () => {
     const { store, tick } = holding(moment)
     const first = await tick(t1)
     expect(first.decisions.map((x) => [x.verdict, x.reason])).toEqual([
-      ['held', '1 uncommitted file']
+      ['held', '1 answer waiting to be applied']
     ])
     expect(store.capacity.queued().map((q) => [q.itemKey, q.holdCode])).toEqual([
-      ['mr:1', 'in_flight']
+      ['mr:1', 'answers_pending']
     ])
     moment.finished = 'Merged'
     const second = await tick(t2)
@@ -104,7 +104,7 @@ describe("runTick holding an item in the runner's line", () => {
 
 const people = parsePeopleYaml('people:\n  - { id: nish, name: Nish }\n')
 
-// Clean MRs, launched by `launch`; the give-up card goes to the tick's inbox.
+// MRs with nothing waiting, launched by `launch`; the give-up card goes to the tick's inbox.
 function launching(launch: TickDeps['launch'], iids: readonly number[] = [1]) {
   const store = PilotStore.open(':memory:')
   if (!people.ok) {
@@ -248,15 +248,15 @@ describe('runTick starting a given-up key by hand', () => {
   })
 })
 
-type Lined = { listed: number[]; dirty: Set<number>; statusReads: string[] }
+type Lined = { listed: number[]; pending: Set<number>; statusReads: string[] }
 
-// MRs whose worktrees are clean unless `dirty`; each tick lists `listed` as it is then.
+// MRs with no answer waiting unless `pending`; each tick lists `listed` as it is then.
 function lining(
   lineDef: AutomationDefinition,
   store = PilotStore.open(':memory:'),
   waitingSince: number | null = null
 ) {
-  const state: Lined = { listed: [1], dirty: new Set([1]), statusReads: [] }
+  const state: Lined = { listed: [1], pending: new Set([1]), statusReads: [] }
   let clock = t1
   const deps: TickDeps = {
     store,
@@ -288,8 +288,10 @@ function lining(
         })),
       gitStatus: async (path) => {
         state.statusReads.push(path)
-        return { dirty: state.dirty.has(Number(path.split('/').pop())) ? 1 : 0, untracked: 0 }
-      }
+        return { dirty: 0, untracked: 0 }
+      },
+      pendingAnswers: (_automationId, itemKey) =>
+        state.pending.has(Number(itemKey.split(':')[1])) ? 1 : 0
     }),
     ask: {
       store,
@@ -307,12 +309,12 @@ function lining(
   return { store, state, tick }
 }
 
-const cleanJob = (over: Partial<AutomationDefinition> = {}) =>
+const answersJob = (over: Partial<AutomationDefinition> = {}) =>
   testDefinition({
     id: 'fix-failed-ci',
     schedule: '10 * * * *',
     oncePer: '{mr.iid}',
-    checks: [{ kind: 'mr', rule: 'not_merged' }, { kind: 'worktree_clean' }],
+    checks: [{ kind: 'mr', rule: 'not_merged' }, { kind: 'answers_none_pending' }],
     ...over
   })
 
@@ -320,10 +322,10 @@ const WAITS = "Waits for its job's next tick"
 
 describe("a re-check tick acts on its job's line only", () => {
   it('starts the line item and leaves the other due items, unread and unrecorded, for the next tick', async () => {
-    const { store, state, tick } = lining(cleanJob())
+    const { store, state, tick } = lining(answersJob())
     await tick(t1)
     state.listed = [1, 2, 3]
-    state.dirty = new Set()
+    state.pending = new Set()
     const recheck = await tick(t2, { recheck: true })
     expect(recheck.decisions.map((x) => [x.key, x.verdict, x.reason])).toEqual([
       ['mr:1', 'started', 'All checks pass'],
@@ -333,11 +335,11 @@ describe("a re-check tick acts on its job's line only", () => {
     expect(store.runs.forTick(recheck.tickId).map((r) => r.itemKey)).toEqual(['mr:1'])
     // No facts are read for an item the re-check leaves, and it isn't marked seen.
     expect(state.statusReads).toEqual(['/wt/1'])
-    expect(store.seenKeys(cleanJob().id)).toEqual(new Set(['mr:1']))
+    expect(store.seenKeys(answersJob().id)).toEqual(new Set(['mr:1']))
   })
 
   it('records tick items only for the line keys', async () => {
-    const { store, state, tick } = lining(cleanJob())
+    const { store, state, tick } = lining(answersJob())
     await tick(t1)
     state.listed = [1, 2, 3]
     const recheck = await tick(t2, { recheck: true })
@@ -348,13 +350,13 @@ describe("a re-check tick acts on its job's line only", () => {
 
   it("still holds the line item, and a per-tick overflow keeps its row for the job's own tick", async () => {
     const { store, state, tick } = lining(
-      cleanJob({ limits: { ...cleanJob().limits, perTick: 1 } })
+      answersJob({ limits: { ...answersJob().limits, perTick: 1 } })
     )
     state.listed = [1, 2, 3]
-    state.dirty = new Set([1])
+    state.pending = new Set([1])
     await tick(t1)
     expect(store.capacity.queued().map((q) => [q.itemKey, q.holdCode])).toEqual([
-      ['mr:1', 'in_flight'],
+      ['mr:1', 'answers_pending'],
       ['mr:3', 'tick_limit']
     ])
     const recheck = await tick(t2, { recheck: true })
@@ -364,21 +366,21 @@ describe("a re-check tick acts on its job's line only", () => {
       ['mr:3', 'notdue']
     ])
     expect(store.capacity.queued().map((q) => [q.itemKey, q.holdCode])).toEqual([
-      ['mr:1', 'in_flight'],
+      ['mr:1', 'answers_pending'],
       ['mr:3', 'tick_limit']
     ])
   })
 
   it('makes no once key for an item outside the line when once_per names the tick (job 06)', async () => {
-    const { store, state, tick } = lining(cleanJob({ oncePer: '{mr.iid}:{run.tick}' }))
+    const { store, state, tick } = lining(answersJob({ oncePer: '{mr.iid}:{run.tick}' }))
     await tick(t1)
     state.listed = [1, 2]
     await tick(t2, { recheck: true })
-    expect(store.handledKeys(cleanJob().id)).toEqual(new Set())
+    expect(store.handledKeys(answersJob().id)).toEqual(new Set())
   })
 
   it('decides every item when it lands on the due slot (not a re-check)', async () => {
-    const { state, tick } = lining(cleanJob())
+    const { state, tick } = lining(answersJob())
     await tick(t1)
     state.listed = [1, 2]
     const due = await tick(t2)
@@ -391,10 +393,10 @@ describe("a re-check tick acts on its job's line only", () => {
 
 describe('a Retry tick acts on its key and the line only', () => {
   it('starts only the retried ticket of a manual job (M01)', async () => {
-    const m01 = cleanJob({ id: 'linear-todo', schedule: 'manual', enabled: false, checks: [] })
+    const m01 = answersJob({ id: 'linear-todo', schedule: 'manual', enabled: false, checks: [] })
     const { store, state, tick } = lining(m01)
     state.listed = [1, 2, 3]
-    state.dirty = new Set()
+    state.pending = new Set()
     store.runs.create({
       id: 'old',
       automationId: m01.id,
@@ -425,8 +427,8 @@ describe('a Retry tick acts on its key and the line only', () => {
 describe("the line's due time", () => {
   it('puts a card waiting since this morning ahead of an MR first seen weeks ago', async () => {
     const store = PilotStore.open(':memory:')
-    const mrs = lining(cleanJob({ id: 'fix-failed-ci' }), store)
-    const cards = lining(cleanJob({ id: 'prepare-context' }), store, t1 - 3 * 60 * 60_000)
+    const mrs = lining(answersJob({ id: 'fix-failed-ci' }), store)
+    const cards = lining(answersJob({ id: 'prepare-context' }), store, t1 - 3 * 60 * 60_000)
     store.markSeen('fix-failed-ci', 'mr:1', t1 - 30 * 24 * 60 * 60_000)
     await mrs.tick(t1)
     await cards.tick(t1)

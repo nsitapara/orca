@@ -24,10 +24,6 @@ export function checkName(c: CheckDef): string {
   switch (c.kind) {
     case 'worktree_exists':
       return 'Worktree'
-    case 'worktree_clean':
-      return 'Clean'
-    case 'worktree_idle':
-      return 'Idle'
     case 'session_none_open':
       return c.scope === 'any' ? 'No open session (any)' : 'No open session'
     case 'quota':
@@ -71,31 +67,6 @@ function exists(ctx: CheckContext): CheckResult {
     return fail(`No worktree for branch ${branch}`)
   }
   return fail(`No worktree for ${ctx.label}`)
-}
-
-function clean(f: ItemFields): CheckResult {
-  const op = f['worktree.git_operation']
-  if (op !== null && typeof op !== 'string') {
-    return fail("Couldn't tell whether a git operation is in progress")
-  }
-  if (op) {
-    return fail(`A ${op} is in progress`)
-  }
-  const dirty = asNumber(f['worktree.dirty_count'])
-  if (dirty === null) {
-    return fail("Couldn't read uncommitted changes")
-  }
-  if (dirty > 0) {
-    return fail(plural(dirty, 'uncommitted file'))
-  }
-  const untracked = asNumber(f['worktree.untracked_count'])
-  if (untracked === null) {
-    return fail("Couldn't read untracked files")
-  }
-  if (untracked > 0) {
-    return fail(plural(untracked, 'untracked file'))
-  }
-  return pass('No uncommitted changes')
 }
 
 // Same rule as worktree-gate's quota.py: an unreadable quota lets the run start (fail-open).
@@ -147,11 +118,8 @@ function outcome(c: CheckDef, ctx: CheckContext, script: CheckResult | undefined
   switch (c.kind) {
     case 'worktree_exists':
       return exists(ctx)
-    case 'worktree_clean':
-      return clean(ctx.fields)
     case 'quota':
       return quota(c, ctx.fields)
-    case 'worktree_idle':
     case 'session_none_open':
     case 'mr':
       return gateCheckOutcome(c, ctx.fields)

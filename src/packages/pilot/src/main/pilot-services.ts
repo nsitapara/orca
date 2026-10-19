@@ -15,7 +15,6 @@ import type { LoadedDefinitions } from './definitions/loader'
 import { mergeRepoProblems, type RepoProblem } from './definitions/repo-problems'
 import { pilotDetailsRoot, pilotVaultAutomationsDir } from './env'
 import { resolveEngineEnv } from './engine-env'
-import { runtimeActivity } from './fields/activity-facts'
 import { cachedQuotas } from './fields/quota'
 import { reposListed, resolveRepoPath } from './fields/runtime-facts'
 import { runtimeFieldDeps } from './fields/runtime-field-deps'
@@ -175,7 +174,6 @@ function openPilot(
       engineEnv,
       now
     },
-    activity: runtimeActivity(runtime, fieldDeps.terminalAlive, store),
     launch: (req) => wired.engine.startRun(req),
     ask: { store, now, inbox },
     previewEnvs: (def, decisions) => envs.preview(def, decisions),

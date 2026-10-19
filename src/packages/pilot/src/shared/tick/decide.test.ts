@@ -291,7 +291,7 @@ describe('decideTick: checks and the worktree rule', () => {
       checks: [
         { kind: 'worktree_exists' },
         { kind: 'script', run: './gate.sh', timeoutMs: 1000 },
-        { kind: 'worktree_idle' }
+        { kind: 'answers_none_pending' }
       ]
     })
     const scriptChecks = new Map([
@@ -299,9 +299,13 @@ describe('decideTick: checks and the worktree rule', () => {
       ['mr:2', new Map([[1, { ok: true, reason: 'Ready' }]])]
     ])
     const out = decideTick(
-      input(def, [item(1), item(2, { 'worktree.busy': '' }), item(3, { 'worktree.path': null })], {
-        scriptChecks
-      })
+      input(
+        def,
+        [item(1), item(2, { 'inbox.pending_answers': 0 }), item(3, { 'worktree.path': null })],
+        {
+          scriptChecks
+        }
+      )
     )
     expect(out.map((d) => [d.verdict, d.reason, d.checks.length])).toEqual([
       ['skipped', 'Nothing to do', 2],
@@ -435,16 +439,12 @@ describe('decideTick: limits, order and ask_first', () => {
 describe("decideTick: the runner holds what can't start now", () => {
   const QUOTA = { kind: 'quota' as const, agent: 'claude' as const, weekly: 90, session: 95 }
 
-  // 03 declares worktree: clean before mr: not_merged; an ineligible item must not wait in line.
+  // A runtime check declared before an eligibility check: an ineligible item must not wait in line.
   it('an eligibility failure after a runtime failure skips', () => {
     const def = testDefinition({
-      checks: [{ kind: 'worktree_clean' }, { kind: 'mr', rule: 'not_merged' }]
+      checks: [{ kind: 'answers_none_pending' }, { kind: 'mr', rule: 'not_merged' }]
     })
-    const fields = {
-      'worktree.git_operation': null,
-      'worktree.dirty_count': 2,
-      'mr.finished_block': 'Merged'
-    }
+    const fields = { 'inbox.pending_answers': 2, 'mr.finished_block': 'Merged' }
     const [d] = decideTick(input(def, [item(1, fields)]))
     expect([d.verdict, d.reason, d.hold]).toEqual(['skipped', 'Merged', undefined])
   })
@@ -527,16 +527,13 @@ describe("decideTick: the runner holds what can't start now", () => {
 
   it("a held item doesn't use a per-tick slot", () => {
     const def = testDefinition({
-      checks: [{ kind: 'worktree_idle' }],
+      checks: [{ kind: 'answers_none_pending' }],
       limits: { perTick: 1, atOnce: null, timeoutMs: null, order: 'listed' }
     })
-    const items = [
-      item(1, { 'worktree.busy': 'someone is typing in Fix' }),
-      item(2, { 'worktree.busy': '' })
-    ]
+    const items = [item(1, { 'inbox.pending_answers': 1 }), item(2, { 'inbox.pending_answers': 0 })]
     const out = decideTick(input(def, items))
     expect(out.map((d) => [d.key, d.verdict, d.hold?.code])).toEqual([
-      ['mr:1', 'held', 'worktree_busy'],
+      ['mr:1', 'held', 'answers_pending'],
       ['mr:2', 'started', undefined]
     ])
   })

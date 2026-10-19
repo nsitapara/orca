@@ -9,7 +9,7 @@ import { chainOf } from '../../shared/run-views/chain'
 const fixCi = testDefinition({
   id: 'fix-ci',
   name: 'Fix failed CI',
-  checks: [{ kind: 'worktree_clean' }],
+  checks: [{ kind: 'worktree_exists' }],
   steps: [testStep({ name: 'fix', skill: 'fix-gitlab-ci', mode: 'fix', prompt: 'Fix it.' })]
 })
 

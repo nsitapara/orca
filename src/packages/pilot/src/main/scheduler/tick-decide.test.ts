@@ -6,7 +6,6 @@ import { EMPTY_PEOPLE, parsePeopleYaml } from '../../shared/people'
 import { fixture } from '../../shared/tick/__fixtures__/ci-05-2026-10-10'
 import { decideTick, type HandledState } from '../../shared/tick/decide'
 import { fakeFieldDeps, TEST_ENGINE_ENV, testItem } from '../fields/__fixtures__/field-deps'
-import type { ActivityRuntime } from '../fields/activity-facts'
 import type { FieldEngineDeps } from '../fields/engine'
 import type { ScriptRequest, ScriptResult } from '../fields/script-runner'
 import type { WorktreeInfo } from '../fields/worktree-facts'
@@ -271,46 +270,6 @@ describe('decideTickItems', () => {
       ['mr:1', 'started', 'All checks pass'],
       ['mr:2', 'notdue', 'Already handled 2']
     ])
-  })
-
-  it('runs the activity pre-pass for a worktree: idle check, and only then', async () => {
-    const def = testDefinition({ id: 'a', checks: [{ kind: 'worktree_idle' }] })
-    const terminals = vi.fn(async () => [
-      {
-        handle: 't1',
-        title: 'Fix',
-        connected: true,
-        agentIdentity: 'claude',
-        worktreePath: '/wt/1',
-        tabId: 'x',
-        leafId: 'l'
-      }
-    ])
-    const activity: ActivityRuntime = {
-      terminals,
-      reads: () => ({
-        draft: async () => 'half a prompt',
-        agentStates: async () => new Map(),
-        tabBusy: async () => false
-      }),
-      terminalAlive: async () => false
-    }
-    const { deps } = setup(def)
-    const pass = createPassFetchCache('pass-1', unusedGitlab)
-    const out = await decideTickItems(def, EMPTY_PEOPLE, { ...deps, activity }, pass, 7)
-    expect(summary(out)).toEqual([
-      ['mr:1', 'held', 'someone is typing in Fix'],
-      ['mr:2', 'started', 'All checks pass'],
-      ['mr:3', 'out_of_scope', 'MR is closed']
-    ])
-    await decideTickItems(
-      testDefinition({ id: 'a', checks: [] }),
-      EMPTY_PEOPLE,
-      { ...deps, activity },
-      pass,
-      7
-    )
-    expect(terminals).toHaveBeenCalledTimes(1)
   })
 
   // A runtime failure holds the item, so its later eligibility scripts still decide whether it waits or is skipped.
@@ -598,7 +557,8 @@ describe('runScriptCheck', () => {
 })
 
 describe('05 on 2026-10-10 12:10 through the merge-request source and decideTick v2', () => {
-  it('matches what the old sweep decided, item by item', () => {
+  // A dirty worktree no longer holds an item: workspace: env works in a throwaway instead.
+  it('matches what the old sweep decided, item by item, but starts the dirty worktree', () => {
     const people = parsePeopleYaml(
       'people:\n  - { id: nish, name: Nish Sitapara, gitlab: nish8 }\n  - { id: shivan, name: Shivan, gitlab: shivan2418 }\n'
     )
@@ -617,22 +577,13 @@ describe('05 on 2026-10-10 12:10 through the merge-request source and decideTick
       oncePer: '{mr.iid}:{mr.pipeline}',
       checks: [
         { kind: 'worktree_exists' },
-        { kind: 'worktree_clean' },
         { kind: 'session_none_open', scope: 'automation' },
         { kind: 'quota', agent: 'claude', weekly: 90, session: 95 }
       ],
       limits: { perTick: 3, atOnce: null, timeoutMs: null, order: 'listed' }
     })
-    // M1 counted untracked files in dirty_count; v2 reads them apart.
     const items = fixture.items.map((i) =>
-      testItem({
-        key: i.key,
-        label: i.label,
-        fields: {
-          ...i.fields,
-          'worktree.untracked_count': i.fields['worktree.path'] === null ? null : 0
-        }
-      })
+      testItem({ key: i.key, label: i.label, fields: i.fields })
     )
     const scope = new Map(
       items.flatMap((item) => {
@@ -662,7 +613,7 @@ describe('05 on 2026-10-10 12:10 through the merge-request source and decideTick
     expect(decisions.map((d) => [d.key, d.verdict, d.reason])).toEqual([
       ['!1561', 'started', 'All checks pass'],
       ['!1587', 'notdue', 'Already handled 1587:2933991087'],
-      ['!1574', 'held', '2 uncommitted files'],
+      ['!1574', 'started', 'All checks pass'],
       ['!1592', 'held', 'A session from this automation is still open there'],
       ['!1347', 'notdue', 'Head pipeline success'],
       ['!1590', 'notdue', 'Head pipeline running'],

@@ -1,12 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { ItemFields } from '../api-types'
-import {
-  gateCheckOutcome,
-  idleOutcome,
-  mrOutcome,
-  sessionOutcome,
-  type MrRule
-} from './checks-gate'
+import { gateCheckOutcome, mrOutcome, sessionOutcome, type MrRule } from './checks-gate'
 
 describe('mrOutcome', () => {
   it.each([
@@ -55,32 +49,6 @@ describe('mrOutcome', () => {
   })
 })
 
-describe('idleOutcome', () => {
-  it.each([
-    ['no worktree yet', {}, true, 'No worktree yet, so nothing runs there'],
-    [
-      'idle',
-      { 'worktree.path': '/wt/x', 'worktree.busy': '' },
-      true,
-      'No agent working and nobody typing'
-    ],
-    [
-      'typing',
-      { 'worktree.path': '/wt/x', 'worktree.busy': 'someone is typing in ✳ Fix' },
-      false,
-      'someone is typing in ✳ Fix'
-    ],
-    [
-      'unknown',
-      { 'worktree.path': '/wt/x' },
-      false,
-      "Couldn't tell whether an agent is working there"
-    ]
-  ] as [string, ItemFields, boolean, string][])('%s', (_name, fields, ok, reason) => {
-    expect(idleOutcome(fields)).toEqual({ ok, reason })
-  })
-})
-
 describe('sessionOutcome', () => {
   it.each([
     [
@@ -110,7 +78,6 @@ describe('sessionOutcome', () => {
       gateCheckOutcome({ kind: 'session_none_open', scope: 'any' }, { 'session.open_any': false })
         .ok
     ).toBe(true)
-    expect(gateCheckOutcome({ kind: 'worktree_idle' }, {}).ok).toBe(true)
     expect(gateCheckOutcome({ kind: 'mr', rule: 'mine' }, { 'mr.owner_block': '' }).ok).toBe(true)
   })
 })

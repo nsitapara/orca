@@ -9,7 +9,7 @@ import { PilotStore } from '../store/store'
 import { activity, getAutomation, listAutomations, validateYaml } from './handlers'
 
 const YAML =
-  'name: Fix CI\nrepo: web-platform\nschedule: "10 * * * *"\nitems: { kind: merge_request }\nchecks: [ { worktree: clean } ]\nsteps: [ { agent: claude, prompt: x } ]\n'
+  'name: Fix CI\nrepo: web-platform\nschedule: "10 * * * *"\nitems: { kind: merge_request }\nchecks: [ { worktree: exists } ]\nsteps: [ { agent: claude, prompt: x } ]\n'
 
 function schedulerStub(nextTickAt: number | null, ticksHere: boolean): PilotContext['scheduler'] {
   const stub = { nextTickAt: () => nextTickAt, ticksHere: () => ticksHere }
@@ -86,7 +86,7 @@ describe('Pilot API handlers', () => {
 
   it('returns a definition with its YAML text and check names', () => {
     const { ctx } = context()
-    expect(getAutomation(ctx, 'ci')).toMatchObject({ yaml: YAML, checkNames: ['Clean'] })
+    expect(getAutomation(ctx, 'ci')).toMatchObject({ yaml: YAML, checkNames: ['Worktree'] })
     expect(() => getAutomation(ctx, 'nope')).toThrow('No automation "nope"')
   })
 

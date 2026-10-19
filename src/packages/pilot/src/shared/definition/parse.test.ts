@@ -14,7 +14,6 @@ items:
 once_per: "{mr.iid}:{mr.pipeline}"
 checks:
   - worktree: exists
-  - worktree: clean
   - session: none_open
   - quota: { weekly: 90%, session: 95% }
 limits: { per_tick: 3 }
@@ -48,7 +47,6 @@ const CI_05_DEFINITION = {
   retryAfterFailureMs: null,
   checks: [
     { kind: 'worktree_exists' },
-    { kind: 'worktree_clean' },
     { kind: 'session_none_open', scope: 'automation' },
     { kind: 'quota', agent: 'claude', weekly: 90, session: 95 }
   ],
@@ -100,7 +98,6 @@ first_seen: baseline
 once_per: "{worktree.id}:{worktree.head}"
 retry_after_failure: 12h
 checks:
-  - worktree: idle
   - session: { none_open: any }
   - quota: { agent: codex, weekly: 80 }
   - mr: not_approved
@@ -184,7 +181,6 @@ describe('parseAutomationYaml', () => {
         oncePer: '{worktree.id}:{worktree.head}',
         retryAfterFailureMs: 43_200_000,
         checks: [
-          { kind: 'worktree_idle' },
           { kind: 'session_none_open', scope: 'any' },
           { kind: 'quota', agent: 'codex', weekly: 80, session: 95 },
           { kind: 'mr', rule: 'not_approved' },
@@ -439,12 +435,12 @@ describe('parseAutomationYaml', () => {
     [
       'a weekly quota over 100',
       CI_05.replace('weekly: 90%', 'weekly: 150%'),
-      'checks[3].quota.weekly: 150 is out of range 0-100'
+      'checks[2].quota.weekly: 150 is out of range 0-100'
     ],
     [
       'a negative session quota',
       CI_05.replace('session: 95%', 'session: -5'),
-      'checks[3].quota.session: -5 is out of range 0-100'
+      'checks[2].quota.session: -5 is out of range 0-100'
     ],
     [
       'a once_per with no placeholder',
@@ -460,6 +456,16 @@ describe('parseAutomationYaml', () => {
       'a once_per with spaces in braces',
       CI_05.replace('"{mr.iid}:{mr.pipeline}"', '"{ mr.iid }"'),
       'once_per: no {field} placeholder (write {mr.iid}, without spaces)'
+    ],
+    [
+      'worktree: clean, which workspace: env decides instead',
+      CI_05.replace('  - worktree: exists\n', '  - worktree: exists\n  - worktree: clean\n'),
+      'checks[1]: worktree: clean picks where a run works, not when: use workspace: env { worktree: "{worktree.path}", writes: true }, which works in a throwaway while anything is in flight there'
+    ],
+    [
+      'worktree: idle, which workspace: env decides instead',
+      CI_05.replace('  - worktree: exists\n', '  - worktree: exists\n  - worktree: idle\n'),
+      'checks[1]: worktree: idle picks where a run works, not when: use workspace: env { worktree: "{worktree.path}", writes: true }, which works in a throwaway while an agent or someone is working there'
     ]
   ])('rejects %s', (_label, yaml, message) => {
     expect(parseAutomationYaml(yaml, '/a/ci.yaml')).toEqual({

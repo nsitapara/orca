@@ -36,21 +36,6 @@ export function mrOutcome(rule: MrRule, f: ItemFields): Outcome {
   return { ok: true, reason: MR_OK[rule] }
 }
 
-// `worktree: idle` (gate.worktree_busy): Task 19c's activity pass sets worktree.busy to '' or the reason.
-export function idleOutcome(f: ItemFields): Outcome {
-  if (typeof f['worktree.path'] !== 'string') {
-    return { ok: true, reason: 'No worktree yet, so nothing runs there' }
-  }
-  const busy = f['worktree.busy']
-  if (typeof busy !== 'string') {
-    return { ok: false, reason: "Couldn't tell whether an agent is working there" }
-  }
-  if (busy !== '') {
-    return { ok: false, reason: busy }
-  }
-  return { ok: true, reason: 'No agent working and nobody typing' }
-}
-
 const OPEN_FIELD = { automation: 'session.open_from_automation', any: 'session.open_any' } as const
 const OPEN_REASON = {
   automation: 'A session from this automation is still open there',
@@ -69,14 +54,12 @@ export function sessionOutcome(scope: 'automation' | 'any', f: ItemFields): Outc
   return { ok: true, reason: 'No session open' }
 }
 
-export type GateCheck = Extract<CheckDef, { kind: 'mr' | 'worktree_idle' | 'session_none_open' }>
+export type GateCheck = Extract<CheckDef, { kind: 'mr' | 'session_none_open' }>
 
 export function gateCheckOutcome(c: GateCheck, f: ItemFields): Outcome {
   switch (c.kind) {
     case 'mr':
       return mrOutcome(c.rule, f)
-    case 'worktree_idle':
-      return idleOutcome(f)
     case 'session_none_open':
       return sessionOutcome(c.scope, f)
   }

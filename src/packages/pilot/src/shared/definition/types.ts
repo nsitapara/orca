@@ -81,8 +81,6 @@ export type ItemsDef = {
 
 export type CheckDef =
   | { kind: 'worktree_exists' }
-  | { kind: 'worktree_clean' }
-  | { kind: 'worktree_idle' }
   | { kind: 'session_none_open'; scope: 'automation' | 'any' }
   | { kind: 'quota'; agent: AgentKind; weekly: number; session: number }
   | { kind: 'mr'; rule: 'not_approved' | 'not_merged' | 'mine' | 'not_draft' }

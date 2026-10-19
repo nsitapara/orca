@@ -29,12 +29,6 @@ export function stepNames(steps: { name?: string }[]): string[] {
   return steps.map((s, i) => s.name ?? `step${i + 1}`)
 }
 
-const WORKTREE_CHECKS: Record<'exists' | 'clean' | 'idle', CheckDef> = {
-  exists: { kind: 'worktree_exists' },
-  clean: { kind: 'worktree_clean' },
-  idle: { kind: 'worktree_idle' }
-}
-
 // A quota check without agent: reads the quota of the agent the steps use (Claude for shell-only runs).
 function stepsAgent(raw: RawAutomation): AgentKind {
   const agentStep = raw.steps.find((s) => s.agent !== 'shell')
@@ -48,8 +42,9 @@ function normalizeCheck(c: RawCheck, agent: AgentKind): CheckDef {
   if (c === 'quota') {
     return { kind: 'quota', agent, weekly: 90, session: 95 }
   }
+  // validate.ts refuses worktree: clean and idle before normalize runs.
   if ('worktree' in c) {
-    return { ...WORKTREE_CHECKS[c.worktree] }
+    return { kind: 'worktree_exists' }
   }
   if ('session' in c) {
     return {

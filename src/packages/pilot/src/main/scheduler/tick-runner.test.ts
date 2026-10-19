@@ -23,7 +23,7 @@ const def = testDefinition({
   file: '/a/fix-failed-ci.yaml',
   name: 'Fix failed CI on my MRs',
   oncePer: '{mr.iid}:{mr.pipeline}',
-  checks: [{ kind: 'worktree_exists' }, { kind: 'worktree_clean' }]
+  checks: [{ kind: 'worktree_exists' }]
 })
 const baselineDef = { ...def, firstSeen: 'baseline' as const }
 const people = EMPTY_PEOPLE

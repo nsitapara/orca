@@ -13,7 +13,6 @@ import {
 } from '../../shared/tick/decide'
 import { runFields } from '../../shared/template'
 import { engineChildEnv, type EngineEnv } from '../engine-env'
-import { addActivityFacts, type ActivityRuntime } from '../fields/activity-facts'
 import { worktreePathKey } from '../fields/agent-activity'
 import { addBuiltinFields, addCustomFields, type FieldEngineDeps } from '../fields/engine'
 import { resolveScriptCommand, type ScriptRunner } from '../fields/script-runner'
@@ -59,8 +58,6 @@ export type DecideDeps = {
   resolveRepo(repo: string): Promise<RepoFacts>
   sources: SourceAccess
   fields: FieldEngineDeps
-  // Terminal activity for a `worktree: idle` check (Task 19c). Absent: the pre-pass is skipped.
-  activity?: ActivityRuntime
   // Runs where.ids_from's command; absent, the real process (runIdsCommand).
   runIds?: IdsRunner
 }
@@ -296,18 +293,10 @@ export async function decideTickItems(
     { inScope: (item) => !scope.has(item.key), repoPath: repo.path, pass },
     deps.fields
   )
-  const activity = deps.activity
-    ? await addActivityFacts(
-        custom.items,
-        def.checks,
-        deps.activity,
-        (item) => !scope.has(item.key)
-      )
-    : { items: custom.items, warnings: [] }
   const seenAt = deps.store.seenTimes(def.id)
   const input = {
     definition: def,
-    items: activity.items.map((item) => toDecideItem(item, seenAt, now)),
+    items: custom.items.map((item) => toDecideItem(item, seenAt, now)),
     now,
     scope,
     handled: handledStates(deps.store.handledRows(def.id)),
@@ -326,12 +315,7 @@ export async function decideTickItems(
   return {
     decisions,
     waits,
-    warnings: [
-      ...(ids?.warnings ?? []),
-      ...listed.warnings,
-      ...custom.warnings,
-      ...activity.warnings
-    ],
+    warnings: [...(ids?.warnings ?? []), ...listed.warnings, ...custom.warnings],
     fed: ids?.fed ?? [],
     dropped: ids?.dropped ?? [],
     missing: listed.missing ?? [],
