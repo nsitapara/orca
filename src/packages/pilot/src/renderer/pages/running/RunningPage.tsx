@@ -116,6 +116,15 @@ function placeInLine(queued: readonly QueuedRun[], item: QueuedRun): number | nu
   return queued.filter(waitsForSlot).indexOf(item) + 1
 }
 
+// A slot waiter's place in line, or Held for a row that waits on something else.
+function QueuedStatus({ place }: { place: number | null }): React.JSX.Element {
+  if (place === null) {
+    return <Badge variant="secondary">Held</Badge>
+  }
+  return <Badge variant="outline">#{place} in line</Badge>
+}
+
+// Name, status and time on top; the item under it; then the reason across the whole row.
 function QueuedRow({
   item,
   place,
@@ -128,21 +137,21 @@ function QueuedRow({
 }): React.JSX.Element {
   const reason = holdReasonText(item)
   return (
-    <li className="flex min-w-0 items-center gap-2 px-3 py-2 text-sm">
-      <span className="w-5 shrink-0 text-right text-xs tabular-nums text-muted-foreground">
-        {place}
-      </span>
-      <span className="shrink-0 font-medium">{item.automationName}</span>
-      <div className="min-w-0 flex-1">
-        <div className="truncate font-mono text-xs text-muted-foreground" title={item.itemLabel}>
-          {item.itemLabel}
-        </div>
-        {reason ? <div className="text-xs text-muted-foreground">{reason}</div> : null}
+    <li className="flex min-w-0 flex-col gap-1 px-3 py-2 text-sm">
+      <div className="flex min-w-0 items-center gap-2">
+        <span className="min-w-0 truncate font-medium" title={item.automationName}>
+          {item.automationName}
+        </span>
+        <QueuedStatus place={place} />
+        {item.byHand ? <Badge variant="outline">Run now</Badge> : null}
+        <span className="ml-auto shrink-0 pl-2 text-xs tabular-nums text-muted-foreground">
+          {waitedText(item, now)}
+        </span>
       </div>
-      {item.byHand ? <Badge variant="outline">Run now</Badge> : null}
-      <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
-        {waitedText(item, now)}
-      </span>
+      <div className="truncate font-mono text-xs text-muted-foreground" title={item.itemLabel}>
+        {item.itemLabel}
+      </div>
+      {reason ? <p className="text-xs text-muted-foreground">{reason}</p> : null}
     </li>
   )
 }

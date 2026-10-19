@@ -201,7 +201,7 @@ describe('RunningPage', () => {
     ).toBeTruthy()
   })
 
-  it('numbers only the rows waiting on a slot', async () => {
+  it('places only the rows waiting on a slot in line, and marks the others held', async () => {
     const now = Date.now()
     const row = (key: string, over: Partial<CapacityPayload['queued'][number]>) => ({
       automationId: 'ci',
@@ -221,9 +221,13 @@ describe('RunningPage', () => {
       })
     )
     await shown()
-    const rows = within(screen.getByRole('region', { name: 'Waiting' })).getAllByRole('listitem')
-    expect(rows[0]?.textContent).not.toMatch(/^\d/)
-    expect(rows[1]?.textContent).toMatch(/^1/)
+    const [held, slot] = within(screen.getByRole('region', { name: 'Waiting' }))
+      .getAllByRole('listitem')
+      .map((li) => within(li))
+    expect(held?.getByText('Held')).toBeTruthy()
+    expect(held?.queryByText(/in line$/)).toBeNull()
+    expect(slot?.getByText('#1 in line')).toBeTruthy()
+    expect(slot?.queryByText('Held')).toBeNull()
   })
 
   it('renders an older payload without hold fields, the quota ceiling or retries', async () => {
