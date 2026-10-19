@@ -46,11 +46,6 @@ export function writeHangDetectionMarker(markerPath: string, marker: HangDetecti
   renameSync(tempPath, markerPath)
 }
 
-function optionalPath(parsed: object, key: 'samplePath' | 'stallSamplePath'): string | undefined {
-  const value: unknown = Reflect.get(parsed, key)
-  return typeof value === 'string' && value.length > 0 ? value : undefined
-}
-
 function readAvailableHangDetectionMarker(
   markerPath: string
 ): HangDetectionMarker | 'unreadable' | undefined {
@@ -82,8 +77,12 @@ function readAvailableHangDetectionMarker(
     ) {
       return 'unreadable'
     }
-    const samplePath = optionalPath(parsed, 'samplePath')
-    const stallSamplePath = optionalPath(parsed, 'stallSamplePath')
+    const samplePath =
+      'samplePath' in parsed && typeof parsed.samplePath === 'string' ? parsed.samplePath : ''
+    const stallSamplePath =
+      'stallSamplePath' in parsed && typeof parsed.stallSamplePath === 'string'
+        ? parsed.stallSamplePath
+        : ''
     return {
       detectedAt: parsed.detectedAt,
       parentPid: parsed.parentPid,
