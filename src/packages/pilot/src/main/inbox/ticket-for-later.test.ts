@@ -2,7 +2,7 @@ import { rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 import { linearError } from '../../../../../main/linear/issue-context-errors'
-import type { InboxItemRow, InboxStatus } from '../../shared/api-types'
+import type { InboxAnswer, InboxItemRow, InboxStatus } from '../../shared/api-types'
 import type { LinearErrorCode } from '../../../../../shared/linear/agent-access'
 import { formatTicketedOutcome, FROZEN_DRAFT } from '../../shared/ticket-outcome'
 import type { TicketDraft, TicketDraftEdit } from '../../shared/ticket-types'
@@ -186,10 +186,52 @@ describe('fileTicketForLater', () => {
       'WEB-1482',
       MR,
       'Fix the sidebar',
-      expect.objectContaining({ workspaceId: undefined })
+      expect.objectContaining({ workspaceId: 'ws-web' })
     )
     expect(store.runs.get('run_1')).toEqual(run)
   })
+
+  const ANSWER: InboxAnswer = { option: null, text: 'Fixed it', digest: DIGEST, via: 'page' }
+  it.each<{
+    name: string
+    meanwhile: (store: PilotStore) => void
+    status: InboxStatus
+    answer: InboxAnswer | null
+  }>([
+    {
+      name: 'answered',
+      meanwhile: (store) => store.inbox.saveAnswer('in_1', ANSWER, 'nish', 5),
+      status: 'answered',
+      answer: ANSWER
+    },
+    {
+      name: 're-filed as a new version',
+      meanwhile: (store) =>
+        store.inbox.edit('in_1', { context: 'Again.', digest: 'e'.repeat(64) }, 5),
+      status: 'open',
+      answer: null
+    }
+  ])(
+    'leaves a card $name while Create ran as it is, and only names the ticket under it',
+    async ({ meanwhile, status, answer }) => {
+      const { store, linear, deps } = seeded()
+      linear.createIssue.mockImplementation(async () => {
+        meanwhile(store)
+        return ISSUE
+      })
+      const edit = edited(buildTicketDraft(deps, 'in_1', DIGEST))
+
+      const result = await fileTicketForLater(deps, { id: 'in_1', digest: DIGEST, draft: edit })
+
+      expect(result).toEqual({ ok: true, identifier: 'WEB-1482', url: ISSUE.url })
+      const card = store.inbox.get('in_1')
+      expect(card).toMatchObject({ status, answer, outcome: null })
+      expect(card?.replies.at(-1)).toEqual({
+        text: `Ticketed for later as WEB-1482 · ${ISSUE.url}`,
+        by: 'pilot'
+      })
+    }
+  )
 
   it.each<{
     name: string

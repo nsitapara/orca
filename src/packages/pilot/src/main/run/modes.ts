@@ -22,8 +22,15 @@ export function skillSearchDirs(workspacePath: string | null, home: string = hom
   ]
 }
 
+function errnoCode(error: unknown): string | null {
+  if (typeof error === 'object' && error !== null && 'code' in error) {
+    return typeof error.code === 'string' ? error.code : null
+  }
+  return null
+}
+
 function missingFile(error: unknown): boolean {
-  const code = (error as NodeJS.ErrnoException).code
+  const code = errnoCode(error)
   return code === 'ENOENT' || code === 'ENOTDIR'
 }
 
@@ -34,9 +41,7 @@ export function readFirstFile(files: string[]): { file: string; text: string } |
       return { file, text: readFileSync(file, 'utf8') }
     } catch (error) {
       if (!missingFile(error)) {
-        throw new Error(
-          `Can't read ${file}: ${(error as NodeJS.ErrnoException).code ?? String(error)}`
-        )
+        throw new Error(`Can't read ${file}: ${errnoCode(error) ?? String(error)}`)
       }
     }
   }

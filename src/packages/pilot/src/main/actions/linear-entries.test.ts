@@ -368,6 +368,21 @@ describe('linear_create with screenshots and links', () => {
     expect(other.attachUrl.mock.calls.map((call) => call[3].writeId)).not.toContain(ids[0])
   })
 
+  it('attaches links in the workspace its screenshots uploaded to', async () => {
+    const w = writer()
+    w.teamWorkspace.mockResolvedValue('ws-two')
+    await create(w).run(
+      {
+        ...BASE,
+        body: '![a](pilot-image:1)',
+        images: [image(1, shot('ws.png', 'one'))],
+        links: [{ url: 'https://gitlab.com/mr/1' }]
+      },
+      CARD
+    )
+    expect(w.attachUrl.mock.calls.map((call) => call[3].workspaceId)).toEqual(['ws-two'])
+  })
+
   it('is still done when a link fails to attach, and says why', async () => {
     const w = writer()
     w.attachUrl.mockRejectedValue(new Error('Attachment URL must be an absolute http(s) URL.'))

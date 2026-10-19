@@ -81,12 +81,13 @@ function readTicketImages(
   }
 }
 
-// The body's screenshots read and checked, then uploaded in order into the team's workspace (resolved once).
+// The body's screenshots read and checked, then uploaded in order into the team's workspace (resolved once,
+// and returned when it was).
 export async function uploadTicketImages(
   linear: Pick<LinearWriter, 'teamWorkspace' | 'uploadImage'>,
   root: string | null,
   ticket: Ticket
-): Promise<{ urls: Map<string, string> } | { refused: ActionResult }> {
+): Promise<{ urls: Map<string, string>; workspaceId?: string } | { refused: ActionResult }> {
   const read = readTicketImages(root, bodyImages(ticket.body ?? '', ticket.images ?? []))
   if ('refused' in read) {
     return read
@@ -119,7 +120,7 @@ export async function uploadTicketImages(
       return { refused: notCreated('failed', `couldn't upload ${image.ref}: ${messageOf(error)}`) }
     }
   }
-  return { urls }
+  return { urls, workspaceId }
 }
 
 // The body with each screenshot ref replaced by the asset URL its image uploaded to.

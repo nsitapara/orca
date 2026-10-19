@@ -122,18 +122,20 @@ function attachments(a: CreateArgs): string {
   return parts.length > 0 ? ` (${parts.join(', ')})` : ''
 }
 
-// Attaches each link under its own write id; a failed one is noted in the detail, never fatal.
+// Attaches each link under its own write id, in the workspace the uploads resolved when they did; a failed
+// one is noted in the detail, never fatal.
 async function attachLinks(
   linear: LinearWriter,
   issue: string,
   a: CreateArgs,
-  createId: string
+  createId: string,
+  workspaceId: string | undefined
 ): Promise<string> {
   let notes = ''
   for (const link of a.links ?? []) {
     try {
       await linear.attachUrl(issue, link.url, link.title ?? link.url, {
-        workspaceId: a.workspace_id,
+        workspaceId,
         writeId: writeIdFor(`${createId}\0link\0${link.url}`)
       })
     } catch (error) {
@@ -170,7 +172,13 @@ async function createTicket(
   } catch (error) {
     return createFailed(error, messageOf(error))
   }
-  const notes = await attachLinks(linear, made.identifier, a, id)
+  const notes = await attachLinks(
+    linear,
+    made.identifier,
+    a,
+    id,
+    uploaded.workspaceId ?? a.workspace_id
+  )
   return actionDone(`created ${made.identifier}${notes}`, made.url, {
     identifier: made.identifier,
     branchName: made.branchName ?? '',

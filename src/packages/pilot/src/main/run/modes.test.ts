@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 import { parseAutomationYaml } from '../../shared/definition/parse'
-import { modeTextFor, readMode, skillSearchDirs } from './modes'
+import { modeTextFor, readFirstFile, readMode, skillSearchDirs } from './modes'
 
 function writeMode(root: string, skill: string, mode: string, text: string): string {
   const dir = join(root, skill, 'modes')
@@ -70,6 +70,22 @@ describe('readMode', () => {
     const { home } = setup()
     writeMode(join(home, '.agents', 'skills'), 'ui-qa', 'test', '---\noutput: [x]\n---\nbody')
     expect(() => readMode('ui-qa', 'test', null, home)).toThrow('unknown frontmatter key "output"')
+  })
+})
+
+describe('readFirstFile', () => {
+  it('skips a missing file or one under a file, reads the first there, and names why one exists but is unreadable', () => {
+    const { home } = setup()
+    const file = join(home, 'ticket.md')
+    writeFileSync(file, 'body')
+    const dir = join(home, 'a-folder')
+    mkdirSync(dir)
+    expect(readFirstFile([join(home, 'gone.md'), join(file, 'under.md'), file])).toEqual({
+      file,
+      text: 'body'
+    })
+    expect(readFirstFile([join(home, 'gone.md')])).toBeNull()
+    expect(() => readFirstFile([dir, file])).toThrow(`Can't read ${dir}: EISDIR`)
   })
 })
 

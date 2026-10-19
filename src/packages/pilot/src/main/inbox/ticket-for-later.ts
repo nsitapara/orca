@@ -4,6 +4,7 @@ import type {
   TicketCreateResult,
   TicketDraft,
   TicketDraftEdit,
+  TicketedRef,
   TicketImage
 } from '../../shared/ticket-types'
 import { attemptAction, recordPilotAsk, type AttemptDeps } from '../actions/attempt'
@@ -109,6 +110,25 @@ function close(deps: TicketForLaterDeps, id: string, outcome: string): void {
   }
 }
 
+// The original closes as ticketed only while open and unchanged; one answered or re-filed during Create keeps
+// its answer and version, and only learns the ticket's name.
+function closeOriginal(
+  deps: TicketForLaterDeps,
+  req: TicketForLaterRequest,
+  ref: TicketedRef
+): void {
+  const card = deps.store.inbox.get(req.id)
+  if (card?.status === 'open' && card.digest === req.digest) {
+    close(deps, req.id, formatTicketedOutcome(ref))
+    return
+  }
+  if (card) {
+    const text = `Ticketed for later as ${ref.identifier} · ${ref.url}`
+    const replies = [...card.replies, { text, by: 'pilot' as const }]
+    deps.store.inbox.update(req.id, { replies }, deps.inbox.now())
+  }
+}
+
 // Pilot files its own linear_create card and asks about it, as ask_first's recordAsked does, but outside any
 // run, so no run's status moves. A card whose ask isn't recorded could never be approved, so it is closed.
 function fileTicketCard(deps: TicketForLaterDeps, card: InboxItemRow, args: TicketArgs): Filed {
@@ -188,7 +208,7 @@ async function fileOnce(
   }
   const ref = { identifier: result.data?.identifier ?? '', url: result.data?.url ?? '' }
   close(deps, filed.id, outcomeText(result))
-  close(deps, req.id, formatTicketedOutcome(ref))
+  closeOriginal(deps, req, ref)
   return { ok: true, ...ref }
 }
 

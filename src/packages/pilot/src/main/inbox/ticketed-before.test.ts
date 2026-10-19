@@ -86,20 +86,22 @@ describe('ticketedBeforeFor', () => {
 })
 
 describe('listInbox ticketedBefore', () => {
-  it('is set on the matched row only, and absent elsewhere', () => {
+  it('is set on a matched open row only: never on an answered match, nor on the done card itself', () => {
     const { store } = seeded()
     store.inbox.add(card('hit'))
     store.inbox.add(card('miss', { title: 'F3 Other — b.tsx:9' }))
+    store.inbox.add(card('answered'))
+    store.inbox.update('answered', { status: 'answered' }, 20)
     const deps: InboxDeps = {
       store,
       now: () => 100,
       definitions: () => [],
       people: () => directory
     }
-    const rows = listInbox(deps, {}).items
-    const hit = rows.find((r) => r.id === 'hit')!
-    const miss = rows.find((r) => r.id === 'miss')!
-    expect(hit.ticketedBefore).toEqual(REF)
-    expect('ticketedBefore' in miss).toBe(false)
+    const rows = listInbox(deps, { statuses: ['open', 'answered', 'done'] }).items
+    expect(rows.map((r) => r.id).toSorted()).toEqual(['answered', 'hit', 'miss', 'old'])
+    expect(rows.filter((r) => 'ticketedBefore' in r)).toEqual([
+      expect.objectContaining({ id: 'hit', ticketedBefore: REF })
+    ])
   })
 })

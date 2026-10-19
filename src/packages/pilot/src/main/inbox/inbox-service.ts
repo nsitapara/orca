@@ -216,7 +216,11 @@ export function listInbox(
     const label = labels.get(i.id) ?? (i.itemKey?.startsWith('mr:') ? i.details?.subject : '')
     return label ? { ...i, itemLabel: label } : i
   })
-  const ticketed = ticketedBeforeFor(deps.store, items)
+  // Only a card still waiting shows it; a done card would match itself.
+  const ticketed = ticketedBeforeFor(
+    deps.store,
+    items.filter((i) => i.status === 'open')
+  )
   return {
     items: items.map((i) => listRow(i, ticketed.get(i.id))),
     runLines: runLinesOf(items, runLineOf),
