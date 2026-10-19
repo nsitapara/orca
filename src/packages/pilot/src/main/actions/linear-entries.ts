@@ -1,10 +1,15 @@
 import { createHash } from 'node:crypto'
 import { z } from 'zod'
 import type { LinearWriter } from '../linear-connector/linear-writer'
+import { imageArg, imageRefProblem, readTicketImages, withAssetUrls } from './linear-create-images'
+import { createFailed, notCreated } from './linear-create-outcome'
 import { actionDone, actionFailed, type ActionEntry, type ActionResult } from './types'
 
 export const LINEAR_NOT_CONNECTED =
   "Linear isn't connected in Pilot; sign in to Linear in Pilot's settings"
+
+// Where linear_create reads a card's screenshots from: the Automations folder (null: none).
+export type LinearFiles = { detailsRoot: string | null }
 
 // `orca linear --priority` names, in Linear's numeric order (0 none … 4 low).
 const PRIORITY_NAMES = ['none', 'urgent', 'high', 'medium', 'low'] as const
@@ -21,17 +26,29 @@ export function writeIdFor(key: string): string {
 // Only a v4 uuid: Linear refuses any other version as a new entity's id ("id must be a UUID").
 const writeId = z.uuidv4({ error: 'must be a v4 uuid' }).optional()
 const workspace = z.string().min(1).optional()
-const createArgs = z.strictObject({
-  title: z.string().min(1),
-  body: z.string().optional(),
-  team: z.string().min(1),
-  state: z.string().min(1).optional(),
-  assignee: z.string().min(1).optional(),
-  priority: z.union([z.number().int().min(0).max(4), z.enum(PRIORITY_NAMES)]).optional(),
-  labels: z.array(z.string().min(1)).optional(),
-  workspace_id: workspace,
-  write_id: writeId
-})
+const httpUrl = z.string().regex(/^https?:\/\/\S+$/, 'an http(s) url')
+const createArgs = z
+  .strictObject({
+    title: z.string().min(1),
+    body: z.string().optional(),
+    team: z.string().min(1),
+    state: z.string().min(1).optional(),
+    assignee: z.string().min(1).optional(),
+    priority: z.union([z.number().int().min(0).max(4), z.enum(PRIORITY_NAMES)]).optional(),
+    labels: z.array(z.string().min(1)).optional(),
+    images: z.array(imageArg).optional(),
+    links: z
+      .array(z.strictObject({ url: httpUrl, title: z.string().min(1).optional() }))
+      .optional(),
+    workspace_id: workspace,
+    write_id: writeId
+  })
+  .superRefine((a, ctx) => {
+    const problem = imageRefProblem(a.body ?? '', a.images ?? [])
+    if (problem) {
+      ctx.addIssue({ code: 'custom', path: [problem.path], message: problem.message })
+    }
+  })
 const commentArgs = z.strictObject({
   issue: z.string().min(1),
   body: z.string().min(1),
@@ -45,7 +62,7 @@ const stateArgs = z.strictObject({
 })
 const attachArgs = z.strictObject({
   issue: z.string().min(1),
-  url: z.string().regex(/^https?:\/\/\S+$/, 'an http(s) url'),
+  url: httpUrl,
   title: z.string().min(1).optional(),
   workspace_id: workspace,
   write_id: writeId
@@ -73,24 +90,80 @@ type Spec<A extends { write_id?: string; workspace_id?: string }> = {
   pinned: boolean
   describe: (a: A) => string
   dry: (a: A) => string
-  write: (linear: LinearWriter, a: A, writeId: string) => Promise<ActionResult>
+  write: (linear: LinearWriter, a: A, writeId: string, files: LinearFiles) => Promise<ActionResult>
+  // The data a refusal before the write carries.
+  refused?: Record<string, string>
 }
 
-const create: Spec<CreateArgs> = {
-  name: 'linear_create',
-  power: 'create_ticket',
-  label: 'Create a Linear ticket',
-  usage:
-    'linear_create { "title", "team", "body"?, "state"?, "assignee"?, "priority"?, "labels"?, "workspace_id"?, "write_id"? }',
-  schema: createArgs,
-  pinned: true,
-  describe: (a) => `Create a ${a.team} ticket: ${a.title}`,
-  dry: (a) => `would create a ${a.team} ticket: ${a.title}`,
-  write: async (linear, a, id) => {
-    const made = await linear.createIssue({
+function counted(n: number, noun: string): string | null {
+  if (n === 0) {
+    return null
+  }
+  return n === 1 ? `1 ${noun}` : `${n} ${noun}s`
+}
+
+// " (2 screenshots, 1 link)", or nothing without either.
+function attachments(a: CreateArgs): string {
+  const parts = [
+    counted(a.images?.length ?? 0, 'screenshot'),
+    counted(a.links?.length ?? 0, 'link')
+  ].filter((part) => part !== null)
+  return parts.length > 0 ? ` (${parts.join(', ')})` : ''
+}
+
+// Attaches each link under its own write id; a failed one is noted in the detail, never fatal.
+async function attachLinks(
+  linear: LinearWriter,
+  issue: string,
+  a: CreateArgs,
+  createId: string
+): Promise<string> {
+  let notes = ''
+  for (const link of a.links ?? []) {
+    try {
+      await linear.attachUrl(issue, link.url, link.title ?? link.url, {
+        workspaceId: a.workspace_id,
+        writeId: writeIdFor(`${createId}\0link\0${link.url}`)
+      })
+    } catch (error) {
+      notes += ` (MR link not attached: ${messageOf(error)})`
+    }
+  }
+  return notes
+}
+
+// Screenshots are read and checked, then uploaded, before the create; links are attached after it.
+async function createTicket(
+  linear: LinearWriter,
+  a: CreateArgs,
+  id: string,
+  files: LinearFiles
+): Promise<ActionResult> {
+  const read = readTicketImages(files.detailsRoot, a.images ?? [])
+  if ('refused' in read) {
+    return read.refused
+  }
+  const urls = new Map<string, string>()
+  for (const image of read.images) {
+    try {
+      const uploaded = await linear.uploadImage({
+        bytes: image.bytes,
+        contentType: image.contentType,
+        filename: image.filename,
+        team: a.team,
+        workspaceId: a.workspace_id
+      })
+      urls.set(image.ref, uploaded.assetUrl)
+    } catch (error) {
+      return notCreated('failed', `couldn't upload ${image.ref}: ${messageOf(error)}`)
+    }
+  }
+  let made: Awaited<ReturnType<LinearWriter['createIssue']>>
+  try {
+    made = await linear.createIssue({
       team: a.team,
       title: a.title,
-      body: a.body ?? '',
+      body: withAssetUrls(a.body ?? '', urls),
       state: a.state,
       assignee: a.assignee,
       priority: priorityName(a.priority),
@@ -98,12 +171,29 @@ const create: Spec<CreateArgs> = {
       workspaceId: a.workspace_id,
       writeId: id
     })
-    return actionDone(`created ${made.identifier}`, made.url, {
-      identifier: made.identifier,
-      branchName: made.branchName ?? '',
-      url: made.url
-    })
+  } catch (error) {
+    return createFailed(error, messageOf(error))
   }
+  const notes = await attachLinks(linear, made.identifier, a, id)
+  return actionDone(`created ${made.identifier}${notes}`, made.url, {
+    identifier: made.identifier,
+    branchName: made.branchName ?? '',
+    url: made.url
+  })
+}
+
+const create: Spec<CreateArgs> = {
+  name: 'linear_create',
+  power: 'create_ticket',
+  label: 'Create a Linear ticket',
+  usage:
+    'linear_create { "title", "team", "body"?, "state"?, "assignee"?, "priority"?, "labels"?, "images"?: [{ "ref": "pilot-image:N", "path", "sha256", "caption"? }], "links"?: [{ "url", "title"? }], "workspace_id"?, "write_id"? }',
+  schema: createArgs,
+  pinned: true,
+  describe: (a) => `Create a ${a.team} ticket: ${a.title}${attachments(a)}`,
+  dry: (a) => `would create a ${a.team} ticket: ${a.title}${attachments(a)}`,
+  write: createTicket,
+  refused: { created: 'no' }
 }
 
 const comment: Spec<CommentArgs> = {
@@ -164,8 +254,11 @@ function usageProblem(spec: { usage: string }, error: z.ZodError): string {
 
 function entryOf<A extends { write_id?: string; workspace_id?: string }>(
   spec: Spec<A>,
-  linear: LinearWriter | null
+  linear: LinearWriter | null,
+  files: LinearFiles
 ): ActionEntry {
+  const refuse = (detail: string): ActionResult =>
+    spec.refused ? { ...actionFailed(detail), data: { ...spec.refused } } : actionFailed(detail)
   const entry: ActionEntry = {
     name: spec.name,
     power: spec.power,
@@ -182,22 +275,22 @@ function entryOf<A extends { write_id?: string; workspace_id?: string }>(
     run: async (args, { dryRun }) => {
       const parsed = spec.schema.safeParse(args)
       if (!parsed.success) {
-        return actionFailed(usageProblem(spec, parsed.error))
+        return refuse(usageProblem(spec, parsed.error))
       }
       if (!linear) {
-        return actionFailed(LINEAR_NOT_CONNECTED)
+        return refuse(LINEAR_NOT_CONNECTED)
       }
       if (dryRun) {
         return actionDone(spec.dry(parsed.data))
       }
       const id = parsed.data.write_id
       if (spec.pinned && !id) {
-        return actionFailed(
+        return refuse(
           `${spec.name} needs a write_id (Pilot pins one before it runs), so a retried write can't duplicate`
         )
       }
       try {
-        return await spec.write(linear, parsed.data, id ?? '')
+        return await spec.write(linear, parsed.data, id ?? '', files)
       } catch (error) {
         return actionFailed(messageOf(error))
       }
@@ -211,11 +304,14 @@ function entryOf<A extends { write_id?: string; workspace_id?: string }>(
 }
 
 // Bodies are inline in the args object (markdown), as `pilot action run --args-json` passes them.
-export function linearEntries(linear: LinearWriter | null): ActionEntry[] {
+export function linearEntries(
+  linear: LinearWriter | null,
+  files: LinearFiles = { detailsRoot: null }
+): ActionEntry[] {
   return [
-    entryOf(create, linear),
-    entryOf(comment, linear),
-    entryOf(setState, linear),
-    entryOf(attach, linear)
+    entryOf(create, linear, files),
+    entryOf(comment, linear, files),
+    entryOf(setState, linear, files),
+    entryOf(attach, linear, files)
   ]
 }

@@ -137,6 +137,7 @@ function openPilot(
   const actions = pilotActionCatalog({
     engineEnv,
     runtime,
+    detailsRoot,
     startRun: {
       store,
       now,

@@ -15,11 +15,13 @@ import type { ActionCaller, ActionCatalog } from './types'
 
 // The one catalog Pilot's services build: pilotcli's push and mark_ready, the Linear writes and start_run.
 // Built once; nothing runs until an action is attempted. start_run reaches the engine lazily. mark_ready reads the
-// card or run that asks from Pilot's store: its folder, and the MR's branch and open cards there.
+// card or run that asks from Pilot's store: its folder, and the MR's branch and open cards there. linear_create
+// reads screenshots from detailsRoot.
 export function pilotActionCatalog(deps: {
   engineEnv: EngineEnv
   runtime: OrcaRuntimeService
   startRun: Parameters<typeof startRunEntry>[0]
+  detailsRoot: string
 }): ActionCatalog {
   // One lookup for a card's Run line and the call itself, read at each use (pilotcli.ts).
   const binary = () => pilotcliPath()
@@ -47,6 +49,7 @@ export function pilotActionCatalog(deps: {
       }
     }),
     linear: createLinearWriter(deps.runtime),
+    linearFiles: { detailsRoot: deps.detailsRoot },
     extra: [startRunEntry(deps.startRun)]
   })
 }

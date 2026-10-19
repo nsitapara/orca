@@ -22,6 +22,7 @@ export type LinearRuntime = Pick<
   | 'linearIssueSetState'
   | 'linearIssueAttachLink'
   | 'linearStatus'
+  | 'resolveLinearCreateTeam'
 >
 
 export type LinearConnector = {

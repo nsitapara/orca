@@ -19,7 +19,7 @@ export { DetailsRefused }
 
 type RefKind = ArtifactFile['role']
 
-function realRoot(root: string | null): string {
+export function realRoot(root: string | null): string {
   if (root === null) {
     throw new DetailsRefused('Pilot has no Automations folder to read Details from')
   }
@@ -36,7 +36,7 @@ export function isInside(root: string, path: string): boolean {
 }
 
 // <path> with every symlink followed, which must land inside the root.
-function realInside(root: string, path: string, label: string): string {
+export function realInside(root: string, path: string, label: string): string {
   let real: string
   try {
     real = realpathSync(path)

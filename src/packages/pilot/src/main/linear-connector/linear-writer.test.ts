@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
-import type { LinearConnector } from './linear-connector'
-import { linearWriterOver } from './linear-writer'
+import { linearError } from '../../../../../main/linear/issue-context-errors'
+import type { LinearConnector, LinearRuntime } from './linear-connector'
+import { createLinearWriter, linearWriterOver } from './linear-writer'
 
 function fakeLinear(over: Partial<Record<keyof LinearConnector, unknown>> = {}) {
   const linear = {
@@ -134,5 +135,58 @@ describe('linearWriterOver sends what the orca linear CLI sends', () => {
     expect(linear.create).not.toHaveBeenCalled()
     expect(linear.comment).not.toHaveBeenCalled()
     expect(linear.attach).not.toHaveBeenCalled()
+  })
+})
+
+describe("createLinearWriter's image upload", () => {
+  const IMAGE = { bytes: new Uint8Array([1]), contentType: 'image/png', filename: 'a.png' }
+  const ASSET = { assetUrl: 'https://uploads.linear.app/a/1' }
+
+  function writerResolving(resolve: () => Promise<unknown>) {
+    const resolveTeam = vi.fn().mockImplementation(resolve)
+    const runtime: LinearRuntime = {
+      linearIssueListForAgents: vi.fn(),
+      linearIssueContext: vi.fn(),
+      linearIssueCreate: vi.fn(),
+      linearIssueAddComment: vi.fn(),
+      linearIssueSetState: vi.fn(),
+      linearIssueAttachLink: vi.fn(),
+      linearStatus: vi.fn(),
+      resolveLinearCreateTeam: resolveTeam
+    }
+    const upload = vi.fn().mockResolvedValue(ASSET)
+    return { writer: createLinearWriter(runtime, upload), upload, resolveTeam }
+  }
+
+  it.each([
+    [
+      'resolves the workspace that owns the team, as orca linear create does',
+      undefined,
+      'ws2',
+      [['WEB', undefined, null]]
+    ],
+    ['uploads to the workspace the args name', 'ws9', 'ws9', []]
+  ])('%s', async (_name, workspaceId, uploadedTo, resolutions) => {
+    const { writer, upload, resolveTeam } = writerResolving(async () => ({
+      id: 't2',
+      key: 'WEB',
+      name: 'Web',
+      workspaceId: 'ws2'
+    }))
+
+    await expect(writer.uploadImage({ ...IMAGE, team: 'WEB', workspaceId })).resolves.toEqual(ASSET)
+    expect(upload).toHaveBeenCalledWith({ ...IMAGE, team: 'WEB', workspaceId: uploadedTo })
+    expect(resolveTeam.mock.calls).toEqual(resolutions)
+  })
+
+  it('uploads nothing when the team is in several workspaces', async () => {
+    const { writer, upload } = writerResolving(async () => {
+      throw linearError('linear_workspace_ambiguous', 'Team WEB exists in multiple workspaces.')
+    })
+
+    await expect(writer.uploadImage({ ...IMAGE, team: 'WEB' })).rejects.toMatchObject({
+      code: 'linear_workspace_ambiguous'
+    })
+    expect(upload).not.toHaveBeenCalled()
   })
 })

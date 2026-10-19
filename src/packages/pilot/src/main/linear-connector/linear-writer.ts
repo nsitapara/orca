@@ -1,3 +1,4 @@
+import { uploadLinearImage, type LinearImageUpload } from './file-upload'
 import {
   runtimeLinearConnector,
   type LinearConnector,
@@ -22,6 +23,7 @@ export type LinearWriter = {
   addComment(issue: string, body: string, opts: LinearWriteOpts): Promise<{ url: string | null }>
   setState(issue: string, state: string, opts?: Pick<LinearWriteOpts, 'workspaceId'>): Promise<void>
   attachUrl(issue: string, url: string, title: string, opts: LinearWriteOpts): Promise<void>
+  uploadImage(input: LinearImageUpload): Promise<{ assetUrl: string }>
 }
 
 // `orca linear create --priority` names (src/cli/linear-request-builders.ts LINEAR_PRIORITY_VALUES).
@@ -44,7 +46,7 @@ function requireWriteId(writeId: string | undefined, what: string): string {
   return writeId
 }
 
-export function linearWriterOver(linear: LinearConnector): LinearWriter {
+export function linearWriterOver(linear: LinearConnector): Omit<LinearWriter, 'uploadImage'> {
   return {
     async createIssue(input) {
       const writeId = requireWriteId(input.writeId, 'creating a Linear issue')
@@ -96,7 +98,19 @@ export function linearWriterOver(linear: LinearConnector): LinearWriter {
   }
 }
 
-// The writer the action catalog uses: Pilot's Linear login (~/.pilot) through the runtime's own commands.
-export function createLinearWriter(runtime: LinearRuntime): LinearWriter {
-  return linearWriterOver(runtimeLinearConnector(runtime))
+// The catalog's writer: Pilot's Linear login (~/.pilot) through the runtime's own commands, plus image uploads.
+export function createLinearWriter(
+  runtime: LinearRuntime,
+  upload: typeof uploadLinearImage = uploadLinearImage
+): LinearWriter {
+  return {
+    ...linearWriterOver(runtimeLinearConnector(runtime)),
+    async uploadImage(input) {
+      // The team resolved as `orca linear create` resolves it, so the asset lands in the issue's workspace.
+      const workspaceId =
+        input.workspaceId ??
+        (await runtime.resolveLinearCreateTeam(input.team, undefined, null)).workspaceId
+      return upload({ ...input, workspaceId })
+    }
+  }
 }

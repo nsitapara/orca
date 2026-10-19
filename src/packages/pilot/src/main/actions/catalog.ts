@@ -1,5 +1,5 @@
 import type { LinearWriter } from '../linear-connector/linear-writer'
-import { linearEntries } from './linear-entries'
+import { linearEntries, type LinearFiles } from './linear-entries'
 import type { ActionCatalog, ActionEntry } from './types'
 
 // pilotcli's push (push-branch.ts) and mark_ready (mark-ready.ts), the Linear writes, then any extra ones. Their
@@ -8,9 +8,16 @@ export function buildActionCatalog(deps: {
   push: ActionEntry
   markReady: ActionEntry
   linear: LinearWriter | null
+  // Where linear_create reads screenshots from; none without it.
+  linearFiles?: LinearFiles
   extra?: ActionEntry[]
 }): ActionCatalog {
-  const all = [deps.push, deps.markReady, ...linearEntries(deps.linear), ...(deps.extra ?? [])]
+  const all = [
+    deps.push,
+    deps.markReady,
+    ...linearEntries(deps.linear, deps.linearFiles),
+    ...(deps.extra ?? [])
+  ]
   const byName = new Map<string, ActionEntry>()
   for (const entry of all) {
     if (byName.has(entry.name)) {
