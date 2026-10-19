@@ -1,6 +1,10 @@
 // @vitest-environment happy-dom
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import {
+  LINEAR_UPLOAD_PUT_TIMEOUT_MS,
+  LINEAR_UPLOAD_SIGN_TIMEOUT_MS
+} from '../../../shared/ticket-create-deadline'
 import type { TicketCreateResult, TicketDraft, TicketDraftEdit } from '../../../shared/ticket-types'
 
 const pilotRpc = vi.fn()
@@ -176,6 +180,35 @@ describe('TicketDraftPanel', () => {
     expect(screen.getByRole<HTMLButtonElement>('button', { name: /^Create/ }).disabled).toBe(true)
   })
 
+  it('marks a title over 255 characters invalid and announces why', async () => {
+    await open()
+    expect(input('Title').getAttribute('aria-invalid')).not.toBe('true')
+    fireEvent.change(input('Title'), { target: { value: 'x'.repeat(256) } })
+    expect(input('Title').getAttribute('aria-invalid')).toBe('true')
+    expect(
+      screen.getByText('The title is over 255 characters; shorten it.').getAttribute('aria-live')
+    ).toBe('polite')
+  })
+
+  it.each([
+    ['both screenshots', [], 2],
+    ['one screenshot', ['pilot-image:1'], 1],
+    ['none', ['pilot-image:1', 'pilot-image:2'], 0]
+  ])(
+    'waits long enough for Create to sign and upload every ticked screenshot: %s',
+    async (_name, untick, ticked) => {
+      await open()
+      for (const ref of untick) {
+        fireEvent.click(screen.getByRole('checkbox', { name: new RegExp(ref) }))
+      }
+      fireEvent.click(screen.getByRole('button', { name: 'Create WEB ticket' }))
+      await waitFor(() => expect(creates()).toHaveLength(1))
+      expect(creates()[0][2].timeoutMs).toBeGreaterThan(
+        ticked * (LINEAR_UPLOAD_SIGN_TIMEOUT_MS + LINEAR_UPLOAD_PUT_TIMEOUT_MS)
+      )
+    }
+  )
+
   it('toasts the filed ticket, then hands it back', async () => {
     const { onFiled } = await open()
     fireEvent.click(screen.getByRole('button', { name: 'Create WEB ticket' }))
@@ -189,7 +222,7 @@ describe('TicketDraftPanel', () => {
   it('shows an error Linear never acted on and leaves the draft editable', async () => {
     await open(async () => ({ ok: false, error: 'Label not found', maybeCreated: false }))
     fireEvent.click(screen.getByRole('button', { name: 'Create WEB ticket' }))
-    expect(await screen.findByText('Label not found')).toBeTruthy()
+    expect((await screen.findByText('Label not found')).getAttribute('aria-live')).toBe('polite')
     expect(fields().every((f) => !f.disabled)).toBe(true)
     expect(screen.queryByText(FROZEN)).toBeNull()
     expect(screen.getByRole('button', { name: 'Create WEB ticket' })).toBeTruthy()
@@ -268,7 +301,7 @@ describe('TicketDraftPanel', () => {
   it('says why when the draft cannot be built', async () => {
     pilotRpc.mockRejectedValue(new Error('/skills/ticket.md: no frontmatter'))
     render(<TicketDraftPanel item={ITEM} onClose={vi.fn()} onFiled={vi.fn()} />)
-    expect(await screen.findByText(/no frontmatter/)).toBeTruthy()
+    expect((await screen.findByText(/no frontmatter/)).getAttribute('aria-live')).toBe('polite')
     expect(screen.queryByRole('button', { name: /^Create/ })).toBeNull()
   })
 

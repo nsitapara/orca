@@ -26,7 +26,8 @@ vi.mock('../../../../../main/linear/linear-sdk', () => ({
   })
 }))
 
-import { LINEAR_UPLOAD_SIGN_TIMEOUT_MS, uploadLinearImage } from './file-upload'
+import { LINEAR_UPLOAD_SIGN_TIMEOUT_MS } from '../../shared/ticket-create-deadline'
+import { uploadLinearImage } from './file-upload'
 
 const UPLOAD_FILE = {
   uploadUrl: 'https://storage.googleapis.com/linear-uploads/abc?sig=1',

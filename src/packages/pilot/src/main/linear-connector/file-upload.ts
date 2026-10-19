@@ -3,6 +3,10 @@ import {
   LinearWriteFailure,
   runLinearWrite
 } from '../../../../../main/linear/linear-issue-write-support'
+import {
+  LINEAR_UPLOAD_PUT_TIMEOUT_MS,
+  LINEAR_UPLOAD_SIGN_TIMEOUT_MS
+} from '../../shared/ticket-create-deadline'
 
 // workspaceId: the workspace that owns the ticket's team (LinearWriter.teamWorkspace).
 export type LinearImageUpload = {
@@ -13,11 +17,6 @@ export type LinearImageUpload = {
 }
 
 export type LinearUploadDeps = { clients: typeof getClients; fetch: typeof fetch }
-
-// runLinearAgentWrite's write deadline (runtime-linear-comment-lookup-commands.ts): a stalled sign frees its slot.
-export const LINEAR_UPLOAD_SIGN_TIMEOUT_MS = 25_000
-// One screenshot's PUT to storage; it holds no Linear request slot, so it may outlast a Linear write.
-const PUT_TIMEOUT_MS = 120_000
 
 // Linear's signed upload target, asked for under a deadline that aborts the request.
 async function signedTarget(entry: LinearClientForWorkspace, input: LinearImageUpload) {
@@ -74,7 +73,7 @@ export async function uploadLinearImage(
     headers,
     // A copy on a plain ArrayBuffer: fetch's BodyInit takes no SharedArrayBuffer-backed view.
     body: new Uint8Array(input.bytes),
-    signal: AbortSignal.timeout(PUT_TIMEOUT_MS)
+    signal: AbortSignal.timeout(LINEAR_UPLOAD_PUT_TIMEOUT_MS)
   })
   if (!response.ok) {
     throw new LinearWriteFailure(

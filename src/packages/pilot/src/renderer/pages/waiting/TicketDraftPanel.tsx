@@ -32,8 +32,8 @@ import { useTicketCreate } from './use-ticket-create'
 
 const SCREENSHOT_NOTE =
   'Ticked screenshots upload to Linear. Untick any that show real patient data.'
-// Fixed so the label swap to Creating… or Retry doesn't move the row.
-const CREATE_BUTTON = `${PRIMARY_BUTTON} min-w-36`
+// A fixed width, wide enough for "Create INFRA ticket", so the swap to Creating… or Retry doesn't move the row.
+const CREATE_BUTTON = `${PRIMARY_BUTTON} w-44 truncate`
 
 type Load = { draft: TicketDraft } | { error: string }
 
@@ -198,6 +198,7 @@ function DraftForm({
       unticked: on ? now.unticked.filter((r) => r !== ref) : [...now.unticked, ref]
     }))
   const edit = editOf(fields, draft)
+  const titleTooLong = edit.title.length > TITLE_MAX
   const submit = () => void create(frozen ?? { id: item.id, digest: draft.digest, draft: edit })
   return (
     <Frame
@@ -207,11 +208,14 @@ function DraftForm({
         <Input
           value={fields.title}
           disabled={locked}
+          aria-invalid={titleTooLong}
           onChange={(e) => set({ title: e.target.value })}
         />
       </Field>
-      {edit.title.length > TITLE_MAX ? (
-        <p className="text-xs text-destructive">The title is over 255 characters; shorten it.</p>
+      {titleTooLong ? (
+        <p aria-live="polite" className="text-xs text-destructive">
+          The title is over 255 characters; shorten it.
+        </p>
       ) : null}
       <div className="grid grid-cols-3 gap-2">
         <Field label="Team">
@@ -288,7 +292,11 @@ function DraftForm({
       ) : null}
       {draft.link ? <LinkLine link={draft.link} /> : null}
       <p className="text-xs text-muted-foreground">{createSummary(edit, draft.link !== null)}</p>
-      {error && error !== FROZEN_DRAFT ? <p className="text-sm text-destructive">{error}</p> : null}
+      {error && error !== FROZEN_DRAFT ? (
+        <p aria-live="polite" className="text-sm text-destructive">
+          {error}
+        </p>
+      ) : null}
       {frozen ? <p className="text-sm">{FROZEN_DRAFT}</p> : null}
       <div className="flex justify-end gap-2">
         <button type="button" disabled={creating} onClick={onClose} className={OUTLINE_BUTTON}>
@@ -353,7 +361,7 @@ export function TicketDraftPanel({
   return (
     <Frame>
       {load ? (
-        <p className="text-sm text-destructive">
+        <p aria-live="polite" className="text-sm text-destructive">
           Couldn&apos;t draft the ticket: {load.error}{' '}
           <button type="button" className="underline underline-offset-4" onClick={retry}>
             Retry

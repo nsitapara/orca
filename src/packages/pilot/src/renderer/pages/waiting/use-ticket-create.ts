@@ -1,20 +1,19 @@
 import { useState } from 'react'
 import { toast } from 'sonner'
 import { safeHref } from '../../../shared/safe-href'
+import { ticketCreateDeadlineMs } from '../../../shared/ticket-create-deadline'
 import type { TicketCreateResult, TicketDraftEdit, TicketedRef } from '../../../shared/ticket-types'
 import { hostRpc } from '../../hosts/host-rpc'
 import type { PilotHostRef } from '../../hosts/pilot-host'
 import { errorText } from '../format'
 
-// Create uploads each ticked screenshot (25 s cap each) before it files the ticket.
-const CREATE_TIMEOUT_MS = 180_000
-
 export type TicketCreateArgs = { id: string; digest: string; draft: TicketDraftEdit }
 
 async function fileTicket(host: PilotHostRef, args: TicketCreateArgs): Promise<TicketCreateResult> {
   try {
+    // Create signs and uploads each ticked screenshot before it files the ticket.
     return await hostRpc<TicketCreateResult>(host, 'pilot.inbox.ticketForLater', args, {
-      timeoutMs: CREATE_TIMEOUT_MS
+      timeoutMs: ticketCreateDeadlineMs(args.draft.images.length)
     })
   } catch (e) {
     // A call that failed in transit may still have reached Linear.
