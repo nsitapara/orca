@@ -15,6 +15,8 @@ import { answerLocked, lockedBy, ownsLiveAnswer } from './answer-lock'
 import { cardHistories } from './card-history'
 import { cardRuns } from './card-runs'
 import { oneLine } from './card'
+import { ticketedBeforeFor } from './ticketed-before'
+import type { TicketedRef } from '../../shared/ticket-types'
 
 export type InboxDeps = {
   store: PilotStore
@@ -151,7 +153,7 @@ function answerStatesOf(deps: InboxDeps, items: InboxItemRow[]): Record<string, 
 }
 
 // A card as the list carries it (Ruling 2): its preparation as a light ref, its Details without the manifest.
-function listRow(item: InboxItemRow): InboxListRow {
+function listRow(item: InboxItemRow, ticketed?: TicketedRef): InboxListRow {
   const { preparation, details, ...rest } = item
   const row: InboxListRow = {
     ...rest,
@@ -160,6 +162,9 @@ function listRow(item: InboxItemRow): InboxListRow {
   }
   if (preparation !== undefined) {
     row.preparation = preparation ? preparationRef(preparation) : null
+  }
+  if (ticketed) {
+    row.ticketedBefore = ticketed
   }
   return row
 }
@@ -211,8 +216,9 @@ export function listInbox(
     const label = labels.get(i.id) ?? (i.itemKey?.startsWith('mr:') ? i.details?.subject : '')
     return label ? { ...i, itemLabel: label } : i
   })
+  const ticketed = ticketedBeforeFor(deps.store, items)
   return {
-    items: items.map(listRow),
+    items: items.map((i) => listRow(i, ticketed.get(i.id))),
     runLines: runLinesOf(items, runLineOf),
     answerStates: answerStatesOf(deps, items),
     runs: cardRuns(deps.store, items),

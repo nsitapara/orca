@@ -6,6 +6,7 @@ import type { ActivityRun } from './api-types-runs'
 import type { ChainPart } from './run-views/chain'
 import type { DetailsRef } from './details'
 import type { InboxPreparation, PreparationRef } from './preparation'
+import type { TicketedRef } from './ticket-types'
 
 export type PilotStatus = {
   version: string
@@ -229,6 +230,8 @@ export type InboxListRow = Omit<InboxItemRow, 'preparation'> & {
   // R-P5: a push or drafted card that was never prepared (imported, or stored by an older build). Nothing
   // runs from it; a person's Prepare evidence queues it for job 14.
   needsEvidence?: boolean
+  // A finding already ticketed for later (Ticket for later): the newest such ticket; absent otherwise.
+  ticketedBefore?: TicketedRef
 }
 export type QueueState = 'not_ready' | 'ready' | 'held' | 'dispatched' | 'failed'
 export type HoldReason =
