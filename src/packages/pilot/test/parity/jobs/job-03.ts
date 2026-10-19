@@ -19,7 +19,8 @@ export const JOB_03 = {
 
 // 03's words (frozen in each case's old block) and the verdicts that agree with them. Nothing new since the review is the worktree kind's
 // `where.commits` clause (out of scope); a parked hand-off is a run still active there (Pilot has no parking). Work in
-// flight, a running cycle, quota and the per-tick limit hold the worktree in the runner's line; the MR rules skip it. A
+// flight starts in a throwaway (2026-10-18: the env picks the place, it never waits); a running cycle, quota and the
+// per-tick limit hold the worktree in the runner's line; the MR rules skip it. A
 // teammate's branch, or one whose owner GitLab can't name, is never listed by the sweep and is out of scope for Pilot.
 export const VERDICTS_03: VerdictTable = {
   map: {
@@ -32,11 +33,8 @@ export const VERDICTS_03: VerdictTable = {
     parked: ['held']
   },
   rows: [
-    {
-      word: 'skip',
-      reason: /; retry next round$|^current cycle still running$/,
-      verdicts: ['held']
-    }
+    { word: 'skip', reason: /; retry next round$/, verdicts: ['started', 'held'] },
+    { word: 'skip', reason: /^current cycle still running$/, verdicts: ['held'] }
   ],
   whenOldMissing: ['out_of_scope'],
   known: [
@@ -57,6 +55,12 @@ export const VERDICTS_03: VerdictTable = {
       word: 'start',
       verdict: 'held',
       why: "Pilot needs both agents' quota before a cycle starts; the sweep checked only the lead's and parked round 2 until the other agent's reset"
+    },
+    {
+      key: 'wt:400fee61-a463-4f76-894a-39861e906007::/wt/web-314',
+      word: 'start',
+      verdict: 'held',
+      why: "Work in flight no longer skips (2026-10-18): web-305 and web-306 start in throwaways first and take the tick's two slots, so web-314 starts at the next tick"
     }
   ]
 }

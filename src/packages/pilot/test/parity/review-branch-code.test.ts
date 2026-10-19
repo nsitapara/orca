@@ -53,9 +53,16 @@ describe('03 · Review and fix branch code: the definition (old job: orca automa
       retryAfterFailureMs: 50 * MINUTE,
       // 3 phases × 45 minutes plus the publish's hooks (spec §7.5: at least 3h).
       limits: { perTick: 2, atOnce: null, timeoutMs: 3 * HOUR, order: 'listed' },
-      workspace: { kind: 'item_worktree' },
       powers: ['commit', 'push'],
       inbox: 'nish'
+    })
+    // My work in flight never holds it (2026-10-18): the env puts the run in a throwaway, with its own backend stack when
+    // the branch changes api/.
+    expect(definition.workspace).toEqual({
+      kind: 'env',
+      subject: { kind: 'worktree', worktree: '{worktree.path}', at: null },
+      writes: true,
+      stack: 'when_backend'
     })
   })
 
@@ -71,18 +78,18 @@ describe('03 · Review and fix branch code: the definition (old job: orca automa
     // holds on Claude's quota (the review step's agent); Codex's stays a check, as the runner can't see the Codex
     // sessions the orchestrator starts.
     expect(definition.checks).toEqual([
-      { kind: 'worktree_clean' },
       { kind: 'mr', rule: 'not_merged' },
       { kind: 'mr', rule: 'not_approved' },
       { kind: 'quota', agent: 'codex', weekly: 90, session: 95 }
     ])
   })
 
-  it("runs pilotcli's context, one orchestrating review, pilotcli's guarded publish, then the two flags", () => {
+  it("runs pilotcli's context, one orchestrating review, pilotcli's guarded publish, the merge back, then the two flags", () => {
     expect(definition.steps.map((s) => [s.name, s.agent, s.always])).toEqual([
       ['context', 'shell', false],
       ['review', 'claude', false],
       ['publish', 'shell', false],
+      ['merge_back', 'shell', false],
       ['flag_dirty', 'shell', true],
       ['flag_failed', 'shell', true]
     ])
@@ -110,6 +117,18 @@ describe('03 · Review and fix branch code: the definition (old job: orca automa
   })
 
   // pilot_mode.py's publication checks, now pilotcli's (spec §7.5): a refused push is a skip, never a failed run.
+  // A throwaway's reviewed commits come home without a push; env delete keeps any that reach neither home nor origin.
+  it("merges a reviewed throwaway's commits back into my worktree while holding it", () => {
+    expect(step('merge_back')).toMatchObject({
+      when: "{env.mode} == 'throwaway' and {steps.review.verdict} == 'ok'",
+      holdHome: true,
+      env: { HOME_WT: '{worktree.path}' },
+      run: 'pilotcli git update-branch "$HOME_WT" --merge true --to "$(git rev-parse HEAD)" --busy "$PILOT_HOME_BUSY"',
+      exitCodes: { ok: [0], skip: [3] },
+      timeoutMs: 5 * MINUTE
+    })
+  })
+
   it('publishes only a reviewed head, through push-branch’s guards, from env', () => {
     expect(step('publish')).toMatchObject({
       when: "{steps.review.verdict} == 'ok' and {steps.context.remote} != null",

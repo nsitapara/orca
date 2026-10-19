@@ -172,7 +172,6 @@ describe.skipIf(!existsSync(SKILL))(
         { kind: 'mr', rule: 'not_merged' },
         { kind: 'mr', rule: 'not_approved' },
         { kind: 'answers_none_pending' },
-        { kind: 'worktree_idle' },
         { kind: 'window', start: '02:00', end: '05:59' }
       ])
     })

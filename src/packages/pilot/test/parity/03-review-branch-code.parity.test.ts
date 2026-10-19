@@ -52,8 +52,11 @@ function quotaAgrees(o: OldDecision, n: ItemDecision): boolean {
 // gate.evaluate's and review_block's skip reasons, and the check that gives each in Pilot (the MR rules in gate.py's
 // own words).
 function skipAgrees(o: OldDecision, n: ItemDecision): boolean {
+  // Work in flight picks a throwaway now (2026-10-18): the worktree the sweep skipped starts, or waits on a resource.
   if (o.reason.endsWith('; retry next round')) {
-    return failedCheck(n) === 'Clean'
+    return (
+      n.reason === 'All checks pass' || n.hold?.code === 'quota' || n.hold?.code === 'tick_limit'
+    )
   }
   if (/^!\d+ (merged|closed)$/.test(o.reason)) {
     return failedCheck(n) === 'Not merged' && n.reason === o.reason
@@ -65,7 +68,7 @@ function skipAgrees(o: OldDecision, n: ItemDecision): boolean {
     return failedCheck(n) === 'Not approved' && n.reason.startsWith('MR approval unknown: ')
   }
   if (o.reason === 'current cycle still running') {
-    return n.reason === `Another run is active in ${String(n.fields['worktree.path'])}`
+    return n.reason === `Another run of this job is still active on ${n.label}`
   }
   return false
 }
@@ -87,7 +90,7 @@ function reasonAgrees(o: OldDecision, n: ItemDecision): boolean {
       // When it starts depends on the live file's switch, which parity doesn't pin.
       return n.reason.startsWith('Over the limit of 2 per tick; starts at ')
     case 'parked':
-      return n.reason === `Another run is active in ${String(n.fields['worktree.path'])}`
+      return n.reason === `Another run of this job is still active on ${n.label}`
     default:
       return false
   }
@@ -132,13 +135,14 @@ describeParity(
       }
     })
 
-    // Review Focus: a runtime check declared before an eligibility check must not hold an ineligible worktree.
-    it('checks a worktree for commits and the MR rules first, then holds it for work in flight or quota', async () => {
+    // Review Focus: a runtime check declared before an eligibility check must not hold an ineligible worktree. Work in
+    // flight holds nothing (2026-10-18): 323's uncommitted changes don't hold it, Claude's quota does.
+    it('checks a worktree for commits and the MR rules first, then holds it for quota, never for work in flight', async () => {
       const fresh = await decide('check-order')
       expect(fresh.map((d) => [d.key, d.verdict, stoppedBy(d)])).toEqual([
         [key(321), 'skipped', 'Not approved'],
         [key(322), 'skipped', 'Not merged'],
-        [key(323), 'held', 'Clean'],
+        [key(323), 'held', 'quota'],
         [key(324), 'baselined', null],
         [key(325), 'out_of_scope', null],
         [key(326), 'skipped', 'Not approved'],
@@ -155,10 +159,9 @@ describeParity(
       ])
     })
 
-    it("starts each due worktree once per head: the once_per key is the item's worktree at its head", async () => {
+    it("keys each due worktree once per head: the once_per key is the item's worktree at its head", async () => {
       const fresh = await decide('gates')
       expect(fresh.find((d) => d.key === key(314))).toMatchObject({
-        verdict: 'started',
         onceKey: `${REPO}::/wt/web-314@${'f314'.padEnd(40, '0')}` // HEAD is this loop's fix on top of my commit
       })
     })

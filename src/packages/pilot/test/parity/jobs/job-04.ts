@@ -26,7 +26,8 @@ const wt = (n: number): string => `wt:${REPO}::/wt/web-${n}`
 // 04's words (frozen in the test data) and the verdicts that agree with them. Nothing new since the last test is the worktree
 // kind's `where.commits` clause (out of scope); a failed head waits out retry_after_failure's 12 hours in the runner's
 // line (the retry gate); a QA run in progress holds its own head (already handled) and every other due worktree (at most
-// 1 at once). Answers, agents, the window, quota and the limits hold a worktree in the runner's line; a git operation
+// 1 at once). Answers, the window, quota and the limits hold a worktree in the runner's line; an agent or someone
+// working there no longer does (2026-10-18: QA tests a pinned throwaway, so it starts); a git operation
 // and the MR rules skip it. A teammate's branch, or one whose owner GitLab can't name, is never listed by the sweep and
 // is out of scope for Pilot.
 export const VERDICTS_04: VerdictTable = {
@@ -43,11 +44,11 @@ export const VERDICTS_04: VerdictTable = {
   },
   rows: [
     { word: 'skip', reason: /; retry next night$/, verdicts: ['held'] },
+    { word: 'skip', reason: /^automatic UI QA fixes are running$/, verdicts: ['held'] },
     {
       word: 'skip',
-      reason:
-        /^automatic UI QA fixes are running$|^answers are being applied or an agent is working there; QA waits$/,
-      verdicts: ['held']
+      reason: /^answers are being applied or an agent is working there; QA waits$/,
+      verdicts: ['held', 'started']
     }
   ],
   whenOldMissing: ['out_of_scope'],
@@ -69,6 +70,12 @@ export const VERDICTS_04: VerdictTable = {
       word: 'skip',
       verdict: 'baselined',
       why: 'Pilot records a first sight with no recent own commit before its checks; the sweep waited for the merge or rebase to end first. Neither tests the branch.'
+    },
+    {
+      key: wt(435),
+      word: 'start',
+      verdict: 'held',
+      why: "An agent working in my worktree no longer holds QA (2026-10-18): web-432 starts in its pinned throwaway first and takes the tick's one slot, so web-435 starts at the next tick"
     }
   ]
 }

@@ -12,7 +12,6 @@ const CASES = join(PARITY_DIR, JOB_04.job)
 const REPO = '400fee61-a463-4f76-894a-39861e906007'
 const key = (n: number): string => `wt:${REPO}::/wt/web-${n}`
 const GIT_OPERATION = 'A merge, rebase or git lock is in progress; retry next tick'
-const BUSY = /^(someone is typing in .+|.+ (is working|is asking for input|could not be read))$/
 
 // The runner's hold on Codex's quota (runner-gates.ts): the job declares no quota of its own.
 const CODEX_HOLD = /^codex (weekly|session) limit at \d+% \(jobs stop at \d+%\)$/
@@ -63,17 +62,17 @@ function skipAgrees(o: OldDecision, n: ItemDecision): boolean {
     return failedCheck(n) === 'Not approved' && n.reason.startsWith('MR approval unknown: ')
   }
   if (o.reason === 'automatic UI QA fixes are running') {
-    return (
-      (failedCheck(n) === 'Idle' && BUSY.test(n.reason)) ||
-      n.reason === `Another run is active in ${String(n.fields['worktree.path'])}`
-    )
+    return n.reason === `Another run of this job is still active on ${n.label}`
   }
-  // A failed head waits out its retry first; the sweep looked at answers and agents first. Nothing starts either way.
+  // A failed head waits out its retry first; the sweep looked at answers and agents first. Pending answers hold it; an
+  // agent working there doesn't any more (2026-10-18), so with none pending it starts in its pinned throwaway, or waits
+  // for the per-tick limit.
   if (o.reason === 'answers are being applied or an agent is working there; QA waits') {
     return (
       (failedCheck(n) === 'No pending answers' && n.reason.endsWith(' waiting to be applied')) ||
-      (failedCheck(n) === 'Idle' && BUSY.test(n.reason)) ||
-      (n.hold?.code === 'retry' && RETRY.test(n.reason))
+      (n.hold?.code === 'retry' && RETRY.test(n.reason)) ||
+      (n.fields['inbox.pending_answers'] === 0 &&
+        (n.verdict === 'started' || n.hold?.code === 'tick_limit'))
     )
   }
   return false
