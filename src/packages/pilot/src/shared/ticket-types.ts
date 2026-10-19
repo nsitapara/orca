@@ -1,4 +1,5 @@
-export type TicketPriority = 'none' | 'urgent' | 'high' | 'medium' | 'low'
+export const TICKET_PRIORITIES = ['none', 'urgent', 'high', 'medium', 'low'] as const
+export type TicketPriority = (typeof TICKET_PRIORITIES)[number]
 
 export type TicketedRef = { identifier: string; url: string }
 

@@ -252,13 +252,13 @@ export function detailsImagePath(
   return real
 }
 
-// One image a card's bundle names, read now: its path checked again (detailsImagePath), and the file
-// opened and measured before a byte is read.
-export function readDetailsImage(
+// One image a card's bundle names, read now: its path checked again (detailsImagePath), the file opened
+// and measured before a byte is read, and a prepared card's bytes still the ones its context recorded.
+export function readDetailsImageBytes(
   root: string | null,
   snapshot: DetailsSnapshot,
   file: string
-): { mime: string; base64: string; bytes: number } {
+): { path: string; bytes: Buffer } {
   const real = detailsImagePath(root, snapshot, file)
   const label = `image "${file}"`
   const bytes = readCapped(real, DETAILS_LIMITS.imageBytes, label)
@@ -266,6 +266,15 @@ export function readDetailsImage(
   if (snapshot.ref.artifacts && (!recorded || recorded.sha256 !== sha256(bytes))) {
     throw new DetailsRefused(`${label} changed after context was prepared`)
   }
+  return { path: real, bytes }
+}
+
+export function readDetailsImage(
+  root: string | null,
+  snapshot: DetailsSnapshot,
+  file: string
+): { mime: string; base64: string; bytes: number } {
+  const { path: real, bytes } = readDetailsImageBytes(root, snapshot, file)
   return {
     mime: IMAGE_TYPES[extname(real).toLowerCase()],
     base64: bytes.toString('base64'),

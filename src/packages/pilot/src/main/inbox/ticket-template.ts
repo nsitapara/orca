@@ -3,13 +3,11 @@ import { parse } from 'yaml'
 import type { FieldValue, ItemFields } from '../../shared/api-types'
 import { FRONTMATTER } from '../../shared/run/mode-file'
 import { placeholderNames, renderTemplate } from '../../shared/template'
-import type { TicketPriority } from '../../shared/ticket-types'
+import { TICKET_PRIORITIES, type TicketPriority } from '../../shared/ticket-types'
 import { readFirstFile } from '../run/modes'
 
 // The follow-up-ticket skill's template, under a skillSearchDirs folder.
 export const TICKET_TEMPLATE_PATH = 'follow-up-ticket/assets/ticket.md'
-
-const PRIORITIES: readonly TicketPriority[] = ['none', 'urgent', 'high', 'medium', 'low']
 
 export type TicketTemplate = {
   path: string
@@ -28,7 +26,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function isPriority(value: unknown): value is TicketPriority {
-  return PRIORITIES.some((p) => p === value)
+  return TICKET_PRIORITIES.some((p) => p === value)
 }
 
 function parseFrontmatter(yaml: string, file: string): Record<string, unknown> {
@@ -58,7 +56,7 @@ function readDefaults(yaml: string, file: string): TicketTemplate['defaults'] {
   const state = text('state')
   const { priority, labels } = meta
   if (!isPriority(priority)) {
-    throw new Error(`${file}: priority must be one of ${PRIORITIES.join(', ')}`)
+    throw new Error(`${file}: priority must be one of ${TICKET_PRIORITIES.join(', ')}`)
   }
   if (!Array.isArray(labels) || !labels.every((l): l is string => typeof l === 'string')) {
     throw new Error(`${file}: labels must be a list of strings`)

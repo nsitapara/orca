@@ -17,6 +17,7 @@ import { buildVisibilityMethods } from './methods-visibility'
 import { buildTimelineMethods } from './methods-timeline'
 import { buildChannelMethods } from './methods-channel'
 import { buildPreparationMethods } from './methods-preparation'
+import { buildTicketMethods } from './methods-ticket'
 import { buildDetailsMethods } from './methods-details'
 import { buildInboxMethods } from './methods-inbox'
 import { buildLinearMethods } from './methods-linear'
@@ -158,6 +159,7 @@ export function buildPilotMethods(host: PilotHost) {
     ...buildInboxMethods(ctx),
     ...buildDetailsMethods(ctx),
     ...buildPreparationMethods(ctx),
+    ...buildTicketMethods(ctx),
     ...buildActionMethods(ctx),
     ...buildAnswerMethods(ctx),
     ...buildSpendMethods(ctx),

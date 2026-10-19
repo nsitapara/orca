@@ -48,7 +48,7 @@ export function preparationBinding(
 export const RETRY_BY_PERSON = "Retry preparation from Pilot's window or a paired device"
 export const EVIDENCE_BY_PERSON = "Prepare evidence from Pilot's window or a paired device"
 
-const byPerson = (caller: RpcCallerIdentity | undefined): boolean =>
+export const byPerson = (caller: RpcCallerIdentity | undefined): boolean =>
   caller?.kind === 'desktop' || caller?.kind === 'paired-device'
 
 export function buildPreparationMethods(ctx: () => PilotContext) {
