@@ -11,7 +11,7 @@ export type ModeFile = {
 }
 export type ModeParse = { ok: true; mode: ModeFile } | { ok: false; error: string }
 
-const FRONTMATTER = /^---\r?\n([\s\S]*?)\r?\n?---[ \t]*(?:\r?\n|$)/
+export const FRONTMATTER = /^---\r?\n([\s\S]*?)\r?\n?---[ \t]*(?:\r?\n|$)/
 const KEYS = ['outputs', 'inputs', 'description']
 
 function names(

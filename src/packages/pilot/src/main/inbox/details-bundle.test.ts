@@ -17,7 +17,13 @@ import {
   type DetailsFixture as Fixture,
   type FixtureBundle as Bundle
 } from './__fixtures__/details-fixture'
-import { loadDetails, readDetailsImage, reportPath, DetailsRefused } from './details-bundle'
+import {
+  detailsImagePath,
+  loadDetails,
+  readDetailsImage,
+  reportPath,
+  DetailsRefused
+} from './details-bundle'
 
 const REPORT = { type: 'report', title: 'Your review guide', file: 'guide.html' }
 const sha = (data: string | Buffer) => createHash('sha256').update(data).digest('hex')
@@ -305,6 +311,9 @@ describe('readDetailsImage', () => {
       bytes: bytes.length
     })
     expect(Buffer.from(image.base64, 'base64').equals(bytes)).toBe(true)
+    expect(detailsImagePath(f.root, snapshot, 'F2-before.png')).toBe(
+      realpathSync(join(f.dir, 'F2-before.png'))
+    )
   })
 
   it.each<[string, (f: Fixture) => string]>([

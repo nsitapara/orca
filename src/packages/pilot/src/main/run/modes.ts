@@ -27,6 +27,22 @@ function missingFile(error: unknown): boolean {
   return code === 'ENOENT' || code === 'ENOTDIR'
 }
 
+// The first of these files that exists, read; null when none does. One that exists but can't be read throws.
+export function readFirstFile(files: string[]): { file: string; text: string } | null {
+  for (const file of files) {
+    try {
+      return { file, text: readFileSync(file, 'utf8') }
+    } catch (error) {
+      if (!missingFile(error)) {
+        throw new Error(
+          `Can't read ${file}: ${(error as NodeJS.ErrnoException).code ?? String(error)}`
+        )
+      }
+    }
+  }
+  return null
+}
+
 // The first <dir>/<skill>/modes/<mode>.md in skillSearchDirs order. Throws, naming every path it
 // tried, when there is none; and when the file is there but its frontmatter is wrong.
 export function readMode(
@@ -40,30 +56,20 @@ export function readMode(
       `Mode "${mode}" of skill "${skill}": names may use letters, digits, ., _ and - only`
     )
   }
-  const tried: string[] = []
-  for (const dir of skillSearchDirs(workspacePath, home)) {
-    const file = join(dir, skill, 'modes', `${mode}.md`)
-    tried.push(file)
-    let text: string
-    try {
-      text = readFileSync(file, 'utf8')
-    } catch (error) {
-      if (missingFile(error)) {
-        continue
-      }
-      throw new Error(
-        `Can't read ${file}: ${(error as NodeJS.ErrnoException).code ?? String(error)}`
-      )
-    }
-    const parsed = parseModeFile(text, file)
-    if (!parsed.ok) {
-      throw new Error(parsed.error)
-    }
-    return { ...parsed.mode, skill, mode, file }
-  }
-  throw new Error(
-    `Mode "${mode}" of skill "${skill}" not found; looked in:\n${tried.map((t) => `  ${t}`).join('\n')}`
+  const tried = skillSearchDirs(workspacePath, home).map((dir) =>
+    join(dir, skill, 'modes', `${mode}.md`)
   )
+  const found = readFirstFile(tried)
+  if (!found) {
+    throw new Error(
+      `Mode "${mode}" of skill "${skill}" not found; looked in:\n${tried.map((t) => `  ${t}`).join('\n')}`
+    )
+  }
+  const parsed = parseModeFile(found.text, found.file)
+  if (!parsed.ok) {
+    throw new Error(parsed.error)
+  }
+  return { ...parsed.mode, skill, mode, file: found.file }
 }
 
 // The mode body a wrapped prompt carries (contract §7), as launchAgentStep asks for it with the

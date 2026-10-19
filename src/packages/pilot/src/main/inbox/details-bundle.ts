@@ -30,7 +30,7 @@ function realRoot(root: string | null): string {
   }
 }
 
-function isInside(root: string, path: string): boolean {
+export function isInside(root: string, path: string): boolean {
   const rel = relative(root, path)
   return rel !== '' && rel !== '..' && !rel.startsWith(`..${sep}`) && !isAbsolute(rel)
 }
@@ -232,13 +232,13 @@ export function loadDetails(
   }
 }
 
-// One image a card's bundle names, read now: the path is checked again (inside the root, an image type),
-// and the file is opened and measured before a byte is read.
-export function readDetailsImage(
+// The real path of one image a card's bundle names, checked again now: an image of this card's Details,
+// inside the root, of an image type.
+export function detailsImagePath(
   root: string | null,
   snapshot: DetailsSnapshot,
   file: string
-): { mime: string; base64: string; bytes: number } {
+): string {
   const top = realRoot(root)
   const label = `image "${file}"`
   if (!imageRefs(snapshot.bundle).includes(file)) {
@@ -249,6 +249,18 @@ export function readDetailsImage(
   if (!hasExtension([file, real], isImage)) {
     throw new DetailsRefused(`${label} is not an image`)
   }
+  return real
+}
+
+// One image a card's bundle names, read now: its path checked again (detailsImagePath), and the file
+// opened and measured before a byte is read.
+export function readDetailsImage(
+  root: string | null,
+  snapshot: DetailsSnapshot,
+  file: string
+): { mime: string; base64: string; bytes: number } {
+  const real = detailsImagePath(root, snapshot, file)
+  const label = `image "${file}"`
   const bytes = readCapped(real, DETAILS_LIMITS.imageBytes, label)
   const recorded = snapshot.ref.artifacts?.files.find((asset) => asset.ref === file)
   if (snapshot.ref.artifacts && (!recorded || recorded.sha256 !== sha256(bytes))) {
