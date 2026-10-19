@@ -15,7 +15,13 @@ import {
 import { withLinearTickets } from './linear-fixture'
 import { frozenOldPlan, frozenOldSide, PARITY_DIR, type OldDecision } from './old-side'
 import { describeParity, expectParity } from './parity-case'
-import { caseFile, dryTick, loadPortedAutomation, portedAutomationsDir } from './ported'
+import {
+  caseFile,
+  dryTick,
+  loadPortedAutomation,
+  portedAutomationsDir,
+  runnerQuotaAgrees
+} from './ported'
 
 const { definition, people } = loadPortedAutomation(JOB_M01.automationId)
 const HOUR = 3_600_000
@@ -54,7 +60,8 @@ describe('M01 · Start my Todo Linear tickets: the definition (old job: orca aut
   it('lists Todo tickets with a branch, with no assignee clause (Linear’s `assigned` filter is the signed-in user)', () => {
     expect(definition.items).toMatchObject({ kind: 'linear_ticket' })
     expect(definition.items?.where).toEqual({ state_type: ['unstarted'], has_branch: true })
-    expect(definition.checks.map((c) => c.kind)).toEqual(['script', 'quota'])
+    // No quota check: the runner holds a run on its agent's quota (runner-gates.ts).
+    expect(definition.checks.map((c) => c.kind)).toEqual(['script'])
     expect(definition.checks[0]).toMatchObject({ run: COMMANDS_M01.checkItem, timeoutMs: 60_000 })
   })
 
@@ -80,8 +87,6 @@ const CASES = join(PARITY_DIR, JOB_M01.job)
 const cases = readdirSync(CASES)
   .filter((f) => f.endsWith('.json') && f !== 'incomplete-listing.json')
   .sort()
-const QUOTA_OLD = /^claude (weekly|session) limit at (\d+)%/
-const QUOTA_NEW = /^Claude is at (\d+)% of its (weekly|session) limit/
 
 type Fresh = { key: string; verdict: string; reason: string }
 
@@ -106,9 +111,7 @@ function reasonAgrees(o: OldDecision, n: Fresh): boolean {
     return n.reason === 'All checks pass'
   }
   if (o.decision === 'QUOTA') {
-    const [, window, percent] = QUOTA_OLD.exec(o.reason) ?? []
-    const [, newPercent, newWindow] = QUOTA_NEW.exec(n.reason) ?? []
-    return window !== undefined && window === newWindow && percent === newPercent
+    return runnerQuotaAgrees(o.reason, n.reason)
   }
   if (o.decision === 'skip' && /^kickoff session still open$|^kicked off /.test(o.reason)) {
     return n.reason.startsWith('Already handled ')

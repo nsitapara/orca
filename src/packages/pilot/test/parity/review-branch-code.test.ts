@@ -59,7 +59,7 @@ describe('03 · Review and fix branch code: the definition (old job: orca automa
     })
   })
 
-  it('lists my worktrees with new own commits, and checks them in gate.evaluate’s order, then both agents’ quota', () => {
+  it('lists my worktrees with new own commits, and checks them in gate.evaluate’s order, then Codex’s quota', () => {
     expect(definition.items).toMatchObject({
       kind: 'worktree',
       where: {
@@ -67,12 +67,13 @@ describe('03 · Review and fix branch code: the definition (old job: orca automa
         commits: { ignore_trailer: 'Agent-Loop: standards', first_sight: 'baseline' }
       }
     })
-    // The worktree kind doesn't leave out a merged or closed MR's branch itself, so not_merged stays a check.
+    // The worktree kind doesn't leave out a merged or closed MR's branch itself, so not_merged stays a check. The runner
+    // holds on Claude's quota (the review step's agent); Codex's stays a check, as the runner can't see the Codex
+    // sessions the orchestrator starts.
     expect(definition.checks).toEqual([
       { kind: 'worktree_clean' },
       { kind: 'mr', rule: 'not_merged' },
       { kind: 'mr', rule: 'not_approved' },
-      { kind: 'quota', agent: 'claude', weekly: 90, session: 95 },
       { kind: 'quota', agent: 'codex', weekly: 90, session: 95 }
     ])
   })

@@ -5,7 +5,7 @@ import { expect, it } from 'vitest'
 import { loadFixture } from './fixture'
 import { JOB_05, PARITY_05, load05, seed05 } from './jobs/job-05'
 import { frozenOldPlan, PARITY_DIR } from './old-side'
-import { caseFile, dryTick, failedCheck } from './ported'
+import { caseFile, dryTick, failedCheck, stoppedBy } from './ported'
 import { describeParity, expectParity, parityReport } from './parity-case'
 
 const CASES = join(PARITY_DIR, '05')
@@ -98,11 +98,11 @@ describeParity(PARITY_05, "05 · Fix failed CI v2: with the sweep's state", () =
   // git operation or an open tab are gone: the env's busy check replaces those gates (pilotcli M4 §8), so such an
   // MR is never skipped and no check names them.
   it.each(cases)(
-    "%s: each MR is skipped for the check that names the sweep's reason",
+    "%s: each MR is stopped by the check or runner hold that names the sweep's reason",
     async (name) => {
       const byReason: [RegExp, string][] = [
         [/^no Orca worktree$/, 'Worktree'],
-        [/^claude .*(weekly|session)/, 'Quota']
+        [/^claude .*(weekly|session)/, 'quota']
       ]
       const neu = await decide(name.replace(/\.json$/, ''))
       const old = frozenOldPlan(join(CASES, name)).filter(
@@ -113,7 +113,7 @@ describeParity(PARITY_05, "05 · Fix failed CI v2: with the sweep's state", () =
       for (const d of old) {
         const fresh = neu.find((n) => n.key === d.key)
         if (busy.test(d.reason)) {
-          // Never skipped for the sweep's reason: started, or held for the limit or (quota-out) by the quota check.
+          // Never skipped for the sweep's reason: started, or held for the limit or (quota-out) by the runner's quota.
           expect([d.key, d.reason, fresh?.verdict]).toEqual([
             d.key,
             d.reason,
@@ -122,7 +122,7 @@ describeParity(PARITY_05, "05 · Fix failed CI v2: with the sweep's state", () =
           continue
         }
         const expected = byReason.find(([re]) => re.test(d.reason))?.[1]
-        expect([d.key, d.reason, failedCheck(fresh)]).toEqual([d.key, d.reason, expected])
+        expect([d.key, d.reason, stoppedBy(fresh)]).toEqual([d.key, d.reason, expected])
       }
     }
   )
@@ -142,9 +142,9 @@ describeParity(PARITY_05, "05 · Fix failed CI v2: with the sweep's state", () =
 
   it('holds what the sweep stopped at dispatch when Claude is out of quota', async () => {
     const neu = await decide('quota-out')
-    expect(neu.map((d) => [d.key, d.verdict, failedCheck(d)])).toEqual([
-      ['mr:1561', 'held', 'Quota'],
-      ['mr:1574', 'held', 'Quota']
+    expect(neu.map((d) => [d.key, d.verdict, stoppedBy(d)])).toEqual([
+      ['mr:1561', 'held', 'quota'],
+      ['mr:1574', 'held', 'quota']
     ])
   })
 })

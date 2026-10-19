@@ -40,10 +40,8 @@ describe('05 · Fix failed CI v2: the definition', () => {
       stack: 'when_backend'
     })
     expect(definition.items).toMatchObject({ kind: 'merge_request' })
-    expect(definition.checks).toEqual([
-      { kind: 'worktree_exists' },
-      { kind: 'quota', agent: 'claude', weekly: 90, session: 95 }
-    ])
+    // No quota check: the runner holds a run on its agent's quota (runner-gates.ts).
+    expect(definition.checks).toEqual([{ kind: 'worktree_exists' }])
   })
 
   it('runs the chain: context, flag, catch-up, the fix, push, merge back, card, and a flag on failure', () => {

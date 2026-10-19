@@ -8,7 +8,7 @@ import { loadFixture, type ParityFixture } from './fixture'
 import { answerDue, JOB_06, PARITY_06, seed06 } from './jobs/job-06'
 import { frozenOldPlan, PARITY_DIR } from './old-side'
 import { describeParity, expectParity } from './parity-case'
-import { caseFile, dryTick, failedCheck, loadPortedAutomation } from './ported'
+import { caseFile, dryTick, failedCheck, loadPortedAutomation, stoppedBy } from './ported'
 
 const JOB = 'mr-feedback'
 const SKILL = 'global-command-address-mr-feedback'
@@ -50,6 +50,7 @@ describe('06 · Address reviewer feedback: the definition', () => {
       writes: true,
       stack: 'when_backend'
     })
+    // No quota check: the runner holds a run on its agent's quota (runner-gates.ts).
     expect(definition.checks).toMatchObject([
       { kind: 'worktree_exists' },
       { kind: 'session_none_open', scope: 'automation' },
@@ -57,8 +58,7 @@ describe('06 · Address reviewer feedback: the definition', () => {
         kind: 'script',
         run: expect.stringContaining('pilotcli git get-branch --format value --field unpushed'),
         timeoutMs: 60_000
-      },
-      { kind: 'quota', agent: 'claude', weekly: 90, session: 95 }
+      }
     ])
     // Exit 0 is due; unpushed commits and an unreadable branch each print their reason and exit 1.
     const due = definition.checks.find((c) => c.kind === 'script')
@@ -297,38 +297,41 @@ describeParity(PARITY_06, '06 · Address reviewer feedback: parity with mr-feedb
       ['mr:1710', 'Worktree']
     ])
     const spent = await decide('quota-out')
-    expect(failedCheck(spent.find((d) => d.key === 'mr:1720'))).toBe('Quota')
+    expect(stoppedBy(spent.find((d) => d.key === 'mr:1720'))).toBe('quota')
     expect(spent.find((d) => d.key === 'mr:1721')?.verdict).toBe('out_of_scope')
   })
 
   // The ruling for 05/06: skip reasons, not only verdicts, on every case. The sweep's skip for a dirty worktree or a
   // git operation is gone: the env's busy check replaces that gate (pilotcli M4 §8), so no check names it.
-  it.each(cases)("%s: each skip is for the check that names the sweep's reason", async (name) => {
-    const byReason: [RegExp, string][] = [
-      [/^no Orca worktree$/, 'Worktree'],
-      [/^previous feedback session still open/, 'No open session'],
-      [/^claude .*(weekly|session)/, 'Quota']
-    ]
-    const busy = /^(uncommitted changes|\S+ present); retry next round$/
-    const neu = await decide(name.replace(/\.json$/, ''))
-    const old = frozenOldPlan(join(CASES, name)).filter(
-      (d) => d.decision === 'skip' || d.decision === 'quota'
-    )
-    for (const d of old) {
-      const fresh = neu.find((n) => n.key === d.key)
-      if (busy.test(d.reason)) {
-        // Never skipped for the sweep's reason: started, or held for the limit or (quota-out) by the quota check.
-        expect([d.key, d.reason, fresh?.verdict]).toEqual([
-          d.key,
-          d.reason,
-          expect.stringMatching(/^(started|held)$/)
-        ])
-        continue
+  it.each(cases)(
+    "%s: each skip is for the check or runner hold that names the sweep's reason",
+    async (name) => {
+      const byReason: [RegExp, string][] = [
+        [/^no Orca worktree$/, 'Worktree'],
+        [/^previous feedback session still open/, 'No open session'],
+        [/^claude .*(weekly|session)/, 'quota']
+      ]
+      const busy = /^(uncommitted changes|\S+ present); retry next round$/
+      const neu = await decide(name.replace(/\.json$/, ''))
+      const old = frozenOldPlan(join(CASES, name)).filter(
+        (d) => d.decision === 'skip' || d.decision === 'quota'
+      )
+      for (const d of old) {
+        const fresh = neu.find((n) => n.key === d.key)
+        if (busy.test(d.reason)) {
+          // Never skipped for the sweep's reason: started, or held for the limit or (quota-out) by the runner's quota.
+          expect([d.key, d.reason, fresh?.verdict]).toEqual([
+            d.key,
+            d.reason,
+            expect.stringMatching(/^(started|held)$/)
+          ])
+          continue
+        }
+        const expected = byReason.find(([re]) => re.test(d.reason))?.[1]
+        expect([d.key, d.reason, stoppedBy(fresh)]).toEqual([d.key, d.reason, expected])
       }
-      const expected = byReason.find(([re]) => re.test(d.reason))?.[1]
-      expect([d.key, d.reason, failedCheck(fresh)]).toEqual([d.key, d.reason, expected])
     }
-  })
+  )
 
   // The sweep tested the open tab before the dirty worktree.
   it('holds an MR with an open tab and a dirty worktree for the open tab, where the sweep skipped it', async () => {

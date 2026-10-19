@@ -161,7 +161,8 @@ describe.skipIf(!existsSync(SKILL))(
         kind: 'worktree',
         where: { branch_owner: { people: ['nish'] }, commits: { first_sight: 'test_recent' } }
       })
-      // The worktree kind doesn't leave out a merged or closed MR's branch itself, so not_merged stays a check.
+      // The worktree kind doesn't leave out a merged or closed MR's branch itself, so not_merged stays a check. No quota
+      // check: the runner holds a run on its agents' quota (runner-gates.ts).
       expect(load().checks).toEqual([
         {
           kind: 'field',
@@ -172,8 +173,7 @@ describe.skipIf(!existsSync(SKILL))(
         { kind: 'mr', rule: 'not_approved' },
         { kind: 'answers_none_pending' },
         { kind: 'worktree_idle' },
-        { kind: 'window', start: '02:00', end: '05:59' },
-        { kind: 'quota', agent: 'codex', weekly: 90, session: 95 }
+        { kind: 'window', start: '02:00', end: '05:59' }
       ])
     })
 

@@ -109,7 +109,7 @@ describe('13 · Fix red hourly e2e on dev: the definitions (old job: orca automa
     }
   })
 
-  it('start step: tickets this job opened, quota before the worktree check, a raw slash command in the ticket worktree', () => {
+  it('start step: tickets this job opened, the item check (the runner holds on quota), a raw slash command in the ticket worktree', () => {
     expect(starts.definition).toMatchObject({
       name: '13 · Start fix sessions for red e2e tickets',
       schedule: '6,36 * * * *',
@@ -138,8 +138,8 @@ describe('13 · Fix red hourly e2e on dev: the definitions (old job: orca automa
       match: [],
       customFields: []
     })
+    // No quota check: the runner holds the start on Claude's quota (runner-gates.ts).
     expect(starts.definition.checks).toMatchObject([
-      { kind: 'quota', agent: 'claude', weekly: 90, session: 95 },
       { kind: 'script', run: COMMANDS_13.checkItem, timeoutMs: 60_000 }
     ])
     // The fix alone: nothing records the start any more, and once_per {ticket.id} keeps a started ticket from starting

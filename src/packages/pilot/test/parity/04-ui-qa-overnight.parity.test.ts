@@ -6,7 +6,7 @@ import { loadFixture } from './fixture'
 import { JOB_04, PARITY_04, seed04, VERDICTS_04 } from './jobs/job-04'
 import { frozenOldPlan, PARITY_DIR, type OldDecision } from './old-side'
 import { describeParity, expectParity, parityReport } from './parity-case'
-import { caseFile, dryTick, failedCheck, loadPortedAutomation } from './ported'
+import { caseFile, dryTick, failedCheck, loadPortedAutomation, runnerQuotaAgrees } from './ported'
 
 const CASES = join(PARITY_DIR, JOB_04.job)
 const REPO = '400fee61-a463-4f76-894a-39861e906007'
@@ -14,8 +14,8 @@ const key = (n: number): string => `wt:${REPO}::/wt/web-${n}`
 const GIT_OPERATION = 'A merge, rebase or git lock is in progress; retry next tick'
 const BUSY = /^(someone is typing in .+|.+ (is working|is asking for input|could not be read))$/
 
-const QUOTA_OLD = /^codex (weekly|session) limit at (\d+)%/
-const QUOTA_NEW = /^Codex is at (\d+)% of its (weekly|session) limit/
+// The runner's hold on Codex's quota (runner-gates.ts): the job declares no quota of its own.
+const CODEX_HOLD = /^codex (weekly|session) limit at \d+% \(jobs stop at \d+%\)$/
 
 function cases(): string[] {
   try {
@@ -39,9 +39,7 @@ async function decide(name: string): Promise<ItemDecision[]> {
 }
 
 function quotaAgrees(o: OldDecision, n: ItemDecision): boolean {
-  const [, window, percent] = QUOTA_OLD.exec(o.reason) ?? []
-  const [, newPercent, newWindow] = QUOTA_NEW.exec(n.reason) ?? []
-  return window !== undefined && window === newWindow && percent === newPercent
+  return n.hold?.code === 'quota' && runnerQuotaAgrees(o.reason, n.reason)
 }
 
 // The runner's retry gate holds a failed head before the job's checks.
@@ -97,7 +95,7 @@ function reasonAgrees(o: OldDecision, n: ItemDecision): boolean {
     case 'queued':
       return (
         n.reason.startsWith('Over the limit of 1 per tick; starts at ') ||
-        (failedCheck(n) === 'Codex quota' && QUOTA_NEW.test(n.reason))
+        (n.hold?.code === 'quota' && CODEX_HOLD.test(n.reason))
       )
     case 'held':
       return n.reason === 'At most 1 at once'
@@ -109,7 +107,7 @@ function reasonAgrees(o: OldDecision, n: ItemDecision): boolean {
         /^Outside 02:00-05:59 \(now \d\d:\d\d\)$/.test(n.reason)
       )
     case 'QUOTA':
-      return failedCheck(n) === 'Codex quota' && quotaAgrees(o, n)
+      return quotaAgrees(o, n)
     default:
       return false
   }

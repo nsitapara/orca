@@ -4,7 +4,7 @@ import { compareDecisions, formatMismatches } from './compare'
 import { loadFixture, type ParityFixture } from './fixture'
 import { JOB_02, VERDICTS_02 } from './jobs/job-02'
 import { frozenOldPlan } from './old-side'
-import { caseFile, dryTick, failedCheck, loadPortedAutomation } from './ported'
+import { caseFile, dryTick, loadPortedAutomation, stoppedBy } from './ported'
 
 const CASES = [
   'quota-ok',
@@ -25,7 +25,8 @@ describe('02 · Merge dev into my MR branches, on the engine', () => {
       missedRunGraceMs: 12 * 3_600_000,
       items: null,
       workspace: { kind: 'main_checkout' },
-      checks: [{ kind: 'quota', agent: 'codex', weekly: 90, session: 95 }],
+      // No quota check: the runner holds the run on Codex's quota, the merge step's agent (runner-gates.ts).
+      checks: [],
       powers: ['commit', 'push']
     })
     expect(definition.steps.map((s) => [s.name, s.agent])).toEqual([
@@ -47,12 +48,12 @@ describe('02 · Merge dev into my MR branches, on the engine', () => {
   // quota.py check codex's decisions are frozen in each case (its old block), recorded before quota.py was deleted, so
   // neither python3 nor quota.py is needed and nothing skips; a case without its old block fails.
   describe('parity with quota.py check codex (frozen)', () => {
-    it.each(CASES)('%s: the Codex quota gate decides as quota.py did', async (name) => {
+    it.each(CASES)("%s: the runner's Codex quota hold decides as quota.py did", async (name) => {
       const file = caseFile(JOB_02.job, name)
       const old = frozenOldPlan(file)
       const neu = await dryTick({ definition, people, fixture: loadFixture(file) })
       expect(formatMismatches(compareDecisions(old, neu, VERDICTS_02))).toBe('')
-      expect(failedCheck(neu[0])).toBe(old[0].decision === 'quota' ? 'Codex quota' : null)
+      expect(stoppedBy(neu[0])).toBe(old[0].decision === 'quota' ? 'quota' : null)
     })
   })
 

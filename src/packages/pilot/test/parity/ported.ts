@@ -83,3 +83,22 @@ function swapDeps(
 export function failedCheck(decision: ItemDecision | undefined): string | null {
   return decision?.checks.find((c) => !c.ok)?.check ?? null
 }
+
+// What holds or skips an item: the first check it failed, else the runner gate holding it ('quota', 'job_limit', …).
+export function stoppedBy(decision: ItemDecision | undefined): string | null {
+  return failedCheck(decision) ?? decision?.hold?.code ?? null
+}
+
+const QUOTA_WORDS = /^(claude|codex) (weekly|session) limit at (\d+)%/
+
+// Whether Pilot's runner holds on the agent, window and percent a sweep's quota skip named. The runner words it
+// "claude weekly limit at 95% (jobs stop at 90%)" (runner-gates.ts): no job declares the agent's quota any more.
+export function runnerQuotaAgrees(sweepReason: string, reason: string): boolean {
+  const [, agent, window, percent] = QUOTA_WORDS.exec(sweepReason) ?? []
+  const [, newAgent, newWindow, newPercent] = QUOTA_WORDS.exec(reason) ?? []
+  return (
+    agent !== undefined &&
+    reason.includes('(jobs stop at ') &&
+    [agent, window, percent].join() === [newAgent, newWindow, newPercent].join()
+  )
+}

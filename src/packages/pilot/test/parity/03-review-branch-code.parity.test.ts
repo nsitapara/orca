@@ -7,7 +7,14 @@ import { loadFixture } from './fixture'
 import { JOB_03, PARITY_03_FROZEN, seed03, VERDICTS_03 } from './jobs/job-03'
 import { frozenOldPlan, PARITY_DIR, type OldDecision } from './old-side'
 import { describeParity, expectParity, parityReport } from './parity-case'
-import { caseFile, dryTick, failedCheck, loadPortedAutomation } from './ported'
+import {
+  caseFile,
+  dryTick,
+  failedCheck,
+  loadPortedAutomation,
+  runnerQuotaAgrees,
+  stoppedBy
+} from './ported'
 import { withWorktrees } from './worktree-fixture'
 
 const CASES = join(PARITY_DIR, JOB_03.job)
@@ -18,7 +25,8 @@ const REPO = '400fee61-a463-4f76-894a-39861e906007'
 const key = (n: number): string => `wt:${REPO}::/wt/web-${n}`
 
 const QUOTA_OLD = /^(claude|codex) (weekly|session) limit at (\d+)%/
-const QUOTA_NEW = /^(Claude|Codex) is at (\d+)% of its (weekly|session) limit/
+// The Codex check 03 keeps (its orchestrator starts Codex sessions the runner can't see), in the check's words.
+const CODEX_CHECK = /^Codex is at (\d+)% of its (weekly|session) limit/
 
 async function decide(name: string): Promise<ItemDecision[]> {
   const { definition, people } = loadPortedAutomation(JOB_03.automationId)
@@ -31,15 +39,14 @@ async function decide(name: string): Promise<ItemDecision[]> {
   })
 }
 
+// Claude's quota is the runner's hold; Codex's is the job's own check.
 function quotaAgrees(o: OldDecision, n: ItemDecision): boolean {
+  if (runnerQuotaAgrees(o.reason, n.reason)) {
+    return n.hold?.code === 'quota'
+  }
   const [, agent, window, percent] = QUOTA_OLD.exec(o.reason) ?? []
-  const [, newAgent, newPercent, newWindow] = QUOTA_NEW.exec(n.reason) ?? []
-  return (
-    agent !== undefined &&
-    agent === newAgent?.toLowerCase() &&
-    window === newWindow &&
-    percent === newPercent
-  )
+  const [, newPercent, newWindow] = CODEX_CHECK.exec(n.reason) ?? []
+  return agent === 'codex' && window === newWindow && percent === newPercent
 }
 
 // gate.evaluate's and review_block's skip reasons, and the check that gives each in Pilot (the MR rules in gate.py's
@@ -128,14 +135,14 @@ describeParity(
     // Review Focus: a runtime check declared before an eligibility check must not hold an ineligible worktree.
     it('checks a worktree for commits and the MR rules first, then holds it for work in flight or quota', async () => {
       const fresh = await decide('check-order')
-      expect(fresh.map((d) => [d.key, d.verdict, failedCheck(d)])).toEqual([
+      expect(fresh.map((d) => [d.key, d.verdict, stoppedBy(d)])).toEqual([
         [key(321), 'skipped', 'Not approved'],
         [key(322), 'skipped', 'Not merged'],
         [key(323), 'held', 'Clean'],
         [key(324), 'baselined', null],
         [key(325), 'out_of_scope', null],
         [key(326), 'skipped', 'Not approved'],
-        [key(327), 'held', 'Quota']
+        [key(327), 'held', 'quota']
       ])
     })
 
