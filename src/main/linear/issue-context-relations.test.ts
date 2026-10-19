@@ -4,8 +4,12 @@ import type { ResolvedIssue } from './issue-context-client'
 const rawRequest = vi.fn()
 
 vi.mock('./issue-context-client', () => ({
-  getRequiredEntry: () => ({ client: { client: { rawRequest } } }),
-  withLinearRead: async (_entry: unknown, read: () => Promise<unknown>) => read()
+  getRequiredEntry: () => ({ client: { client: { rawRequest } } })
+}))
+
+vi.mock('./linear-read-deadline', () => ({
+  withLinearRead: async (entry: { client: unknown }, read: (client: unknown) => Promise<unknown>) =>
+    read(entry.client)
 }))
 
 function resolvedIssue(): ResolvedIssue {

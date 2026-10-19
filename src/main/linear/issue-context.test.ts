@@ -22,7 +22,8 @@ vi.mock('./client', () => ({
   isAuthError: (...args: unknown[]) => isAuthError(...args),
   // The signed public-file-url client reuses the same underlying raw client, so
   // body reads route through the entry's rawRequest spy in these tests.
-  getPublicFileUrlClient: (entry: LinearClientForWorkspace) => entry.client
+  getPublicFileUrlClient: (entry: LinearClientForWorkspace) => entry.client,
+  getClientWithSignal: (entry: LinearClientForWorkspace) => entry.client
 }))
 
 function workspace(id: string, organizationUrlKey: string): LinearWorkspace {

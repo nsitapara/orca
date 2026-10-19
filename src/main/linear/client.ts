@@ -92,6 +92,14 @@ export function getClients(
   return clients
 }
 
+// A plain client whose requests abort with `signal`.
+export function getClientWithSignal(
+  entry: LinearClientForWorkspace,
+  signal: AbortSignal
+): LinearClient {
+  return new (loadLinearSdk().LinearClient)({ apiKey: entry.apiKey, signal })
+}
+
 export function getPublicFileUrlClient(
   entry: LinearClientForWorkspace,
   signal?: AbortSignal
