@@ -70,3 +70,4 @@ export function statusPillClass(status: StatusPill): string {
 }
 
 export const DRAFTED_PILL_CLASS = `${PILL} ${ACCENT}`
+export const TICKETED_PILL_CLASS = `${PILL} ${ACCENT} shrink-0 underline-offset-2 hover:underline`

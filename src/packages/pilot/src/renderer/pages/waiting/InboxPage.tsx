@@ -219,10 +219,11 @@ export function InboxPage(): React.JSX.Element {
           onSave={(answer) => onSave(i, answer)}
           onRetryPreparation={() => retryPreparation(i)}
           onPrepareEvidence={() => prepareEvidence(i)}
+          onTicketed={() => void reload()}
         />
       )
     },
-    [names, inbox, errors, selected, loadedAt, onSave, retryPreparation, prepareEvidence]
+    [names, inbox, errors, selected, loadedAt, onSave, retryPreparation, prepareEvidence, reload]
   )
   const cardFor = (key: string) => {
     const item = items.find((i) => hostedKey(i.host, i.id) === key)

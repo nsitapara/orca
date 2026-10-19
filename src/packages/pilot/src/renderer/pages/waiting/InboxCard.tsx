@@ -21,6 +21,7 @@ import { runLineView } from './answer-text'
 import { CardDetails } from './CardDetails'
 import { CardTimes, contentKeys, MessageHistory } from './MessageHistory'
 import { DRAFTED_PILL_CLASS, type StatusPill, statusOf, statusPillClass } from './chips'
+import { TicketedBeforeChip } from './TicketedBeforeChip'
 
 // Who wrote a reply is stored with it (by), set by the path that wrote it; never guessed from its words.
 function Reply({ reply }: { reply: InboxReply }): React.JSX.Element {
@@ -133,6 +134,8 @@ type InboxCardProps = {
   onRetryPreparation: () => Promise<string | null>
   // Prepare evidence on a never-prepared push or drafted card: null once queued, else why not.
   onPrepareEvidence: () => Promise<string | null>
+  // Ticket for later filed this card's ticket.
+  onTicketed: () => void
 }
 
 // Everything inside a card (its Details, its preparation request) asks the card's own machine.
@@ -157,7 +160,8 @@ function CardBody({
   now,
   onSave,
   onRetryPreparation,
-  onPrepareEvidence
+  onPrepareEvidence,
+  onTicketed
 }: InboxCardProps): React.JSX.Element {
   const [unsaved, setUnsaved] = useState(false)
   // Set while the card is open: when it is answered from here the next line takes focus (not on page load).
@@ -170,6 +174,7 @@ function CardBody({
   const host = hostOf(item)
   const domId = `card-${hostedKey(host, item.id)}`
   const status = statusOf(item, answerState, unsaved && editing)
+  const ticketed = item.ticketedBefore ? <TicketedBeforeChip ticket={item.ticketedBefore} /> : null
   const frame = cn(
     'flex min-w-0 scroll-mt-14 flex-col gap-2 rounded-[10px] border bg-card px-3.5 py-3 text-card-foreground',
     selected ? 'border-foreground/30' : 'border-border'
@@ -180,6 +185,7 @@ function CardBody({
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
           <h3 className="min-w-0 flex-1 truncate text-sm font-semibold">{item.title}</h3>
           <span className={statusPillClass(status)}>{status}</span>
+          {ticketed}
           <MachineChip host={host} />
         </div>
         <PreparationProgress
@@ -203,6 +209,7 @@ function CardBody({
       {/* The chip sits beside the eyebrow, not in it, so it keeps its own case. */}
       <div className="flex items-center gap-2">
         <Eyebrow job={automationName} drafted={item.details?.drafted === true} status={status} />
+        {ticketed}
         <MachineChip host={host} />
       </div>
       <CardTimes createdAt={item.createdAt} history={history} now={now} />
@@ -224,7 +231,7 @@ function CardBody({
       <CardDetails item={item} />
       {history ? <MessageHistory item={item} entries={history} now={now} /> : null}
       {history ? null : <BareReplies replies={item.replies} />}
-      <AnswerRow item={item} onSave={onSave} onPick={setUnsaved} />
+      <AnswerRow item={item} onSave={onSave} onPick={setUnsaved} onTicketed={onTicketed} />
       {error ? <p className="text-sm text-destructive">{error}</p> : null}
     </article>
   )

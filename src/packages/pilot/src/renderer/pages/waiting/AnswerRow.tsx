@@ -1,10 +1,15 @@
 import { useState } from 'react'
 import { Textarea } from '@/components/ui/textarea'
+import { isWebClientLocation } from '@/lib/web-client-location'
 import { cn } from '@/lib/utils'
 import type { InboxListRow } from '../../../shared/api-types'
+import { hostOf, type Hosted } from '../../hosts/pilot-host'
 import { type AnswerButton, buttonsFor } from './answer-buttons'
 import { type Choice, composeAnswer } from './answer-text'
 import type { Answer } from './answer-types'
+import { OUTLINE, PRIMARY, QUIET_BUTTON } from './card-button-classes'
+import { canTicketForLater } from './ticket-button'
+import { TicketDraftPanel } from './TicketDraftPanel'
 
 function notesPlaceholder(choice: Choice): string {
   if (choice.notes === 'optional') {
@@ -12,9 +17,6 @@ function notesPlaceholder(choice: Choice): string {
   }
   return 'What should happen instead?'
 }
-
-const PRIMARY = 'bg-[var(--ib-accent)] text-[var(--ib-accent-fg)]'
-const OUTLINE = 'border border-border bg-background text-foreground hover:bg-muted'
 
 function buttonClass(b: AnswerButton): string {
   const filled = b.role === 'primary' || b.recommended
@@ -26,21 +28,25 @@ function buttonClass(b: AnswerButton): string {
 
 // One button per choice, named for what it does; clicking one saves it (the card then shows its countdown with
 // Undo). Only the choices that need words open the notes box, which has its own Send and Cancel.
+// Ticket for later is its own button, never a choice: its draft replaces the row until Back or Create.
 export function AnswerRow({
   item,
   onSave,
-  onPick
+  onPick,
+  onTicketed
 }: {
-  item: InboxListRow
+  item: Hosted<InboxListRow>
   onSave: (answer: Answer) => Promise<string | null>
   // Whether words are being typed and not yet sent (the card's "unsaved" pill).
   onPick: (picked: boolean) => void
+  onTicketed: () => void
 }): React.JSX.Element {
   const buttons = buttonsFor(item)
   const [open, setOpen] = useState<AnswerButton | null>(null)
   const [notes, setNotes] = useState('')
   const [saving, setSaving] = useState(false)
   const [hint, setHint] = useState('')
+  const [ticketing, setTicketing] = useState(false)
   const send = async (choice: Choice, words: string) => {
     const answer = composeAnswer(choice, words)
     if (!answer) {
@@ -72,6 +78,18 @@ export function AnswerRow({
   const skip = buttons.find((b) => b.role === 'skip')
   const rest = buttons.filter((b) => b.role !== 'skip')
   const ready = open ? composeAnswer(open.choice, notes) !== null : false
+  if (ticketing) {
+    return (
+      <TicketDraftPanel
+        item={item}
+        onClose={() => setTicketing(false)}
+        onFiled={() => {
+          setTicketing(false)
+          onTicketed()
+        }}
+      />
+    )
+  }
   return (
     <div className="flex flex-col gap-2 pt-1">
       {open ? (
@@ -112,9 +130,19 @@ export function AnswerRow({
             title={skip.hint || undefined}
             disabled={saving}
             onClick={() => click(skip)}
-            className="rounded px-1.5 py-1 text-[13px] text-muted-foreground hover:text-foreground disabled:opacity-50"
+            className={QUIET_BUTTON}
           >
             {skip.label}
+          </button>
+        ) : null}
+        {canTicketForLater(item, hostOf(item), isWebClientLocation()) ? (
+          <button
+            type="button"
+            disabled={saving}
+            onClick={() => setTicketing(true)}
+            className={QUIET_BUTTON}
+          >
+            Ticket for later
           </button>
         ) : null}
         <span className="min-w-0 flex-1 text-[13px] text-muted-foreground">{hint}</span>

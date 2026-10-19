@@ -88,6 +88,20 @@ function base64Url(mime: string, base64: string): string {
   return URL.createObjectURL(new Blob([bytes], { type: mime }))
 }
 
+// One of a card's Details images as an object URL, read from the card's own machine.
+export async function loadCardImage(
+  host: PilotHostRef,
+  item: Pick<InboxListRow, 'id' | 'digest'>,
+  file: string
+): Promise<string> {
+  const image = await hostRpc<{ mime: string; base64: string }>(host, 'pilot.inbox.image', {
+    id: item.id,
+    digest: item.digest,
+    file
+  })
+  return base64Url(image.mime, image.base64)
+}
+
 function BundleBody({
   item,
   loaded,
@@ -111,14 +125,7 @@ function BundleBody({
       </p>
     )
   }
-  const loadImage = async (file: string): Promise<string> => {
-    const image = await hostRpc<{ mime: string; base64: string }>(host, 'pilot.inbox.image', {
-      id: item.id,
-      digest: item.digest,
-      file
-    })
-    return base64Url(image.mime, image.base64)
-  }
+  const loadImage = (file: string): Promise<string> => loadCardImage(host, item, file)
   const openReport = async (file: string): Promise<void> => {
     // The report is a file on the card's machine; this machine's system can't open it.
     if (!host.local) {
