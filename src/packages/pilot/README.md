@@ -80,7 +80,7 @@ Every job is a YAML automation in `~/.agents/automations/` (one file per automat
   - someone is typing in it, or its agent is busy (looked at again next poll);
   - a launch, Resume or answer is opening its session.
 
-  A busy read (`worktree: idle`, and an answer run's hold) ignores the leftover draft of a tab whose runs have all ended, such as Claude's greyed prompt suggestion, unless someone took the tab over. Its agent working still counts.
+  A busy read (an answer run's hold, and `env create`'s busy check) ignores the leftover draft of a tab whose runs have all ended, such as Claude's greyed prompt suggestion, unless someone took the tab over. Its agent working still counts.
 
 ### Shell steps
 
@@ -340,7 +340,8 @@ A run costs the sum of its steps. A Claude step's session id is pinned at launch
 - Lowering the limit stops nothing that is running.
 
 **The line.** The job decides what is due; the runner decides when it starts, and makes sure each run finishes. An item that is due but can't start now waits in `run_queue` with its reason, instead of being skipped every tick.
-- **Held** (verdict `held`): a runtime gate stops it. These are the job's runtime checks (`quota`, `worktree: idle`, `worktree: clean`, `session: none_open`, `answers: none_pending`, `window`), the quota ceiling (below), another run in its worktree or one starting there this tick, `at_once`, `per_tick`, and a retry's wait (Retries after a failure).
+- **Held** (verdict `held`): a runtime gate stops it. These are the job's runtime checks (`quota`, `session: none_open`, `answers: none_pending`, `window`), the quota ceiling (below), another run in its worktree or one starting there this tick, the job's own run still active on the item, `at_once`, `per_tick`, and a retry's wait (Retries after a failure).
+- **Never held for the worktree's state:** uncommitted work, a merge or rebase, or someone working there picks where a run works, not when. `workspace: env` puts it in a throwaway, and Pilot refuses `worktree: clean` and `worktree: idle` in a job.
 - **Waiting for a slot** (verdict `queued`): past the run limit.
 - **Still skipped:** eligibility checks (scope, `match`, `once_per`, `first_seen`, `mr`, `worktree: exists`, `field`, `check:` scripts, a field script's exit 3). They win over a runtime check declared before them.
 - **Order:** by due time. That is when the item began waiting, as its source says (a context card's request time), else when it first joined the line. A row keeps the earliest across ticks, so an item that drops out and comes back keeps its place, and an MR first seen weeks ago doesn't jump ahead of a card queued this morning. Within one tick, `limits.order` ranks a job's items (first sight counts for `oldest_waiting_first`), and a held item takes no per-tick slot, so the next one is tried.

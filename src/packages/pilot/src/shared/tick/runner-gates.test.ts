@@ -85,3 +85,23 @@ describe('itemGate: the retry gate', () => {
     )
   })
 })
+
+describe("itemGate: the job's own run on the item", () => {
+  const done: HandledState = { status: 'done', failedAt: null, failures: 0, lastOutcome: null }
+  it.each<[string, Partial<DecideInput>, string | null]>([
+    [
+      'still running on this item',
+      { activeItems: new Set([ITEM.key]) },
+      'Another run of this job is still active on !1'
+    ],
+    ['running on another item', { activeItems: new Set(['mr:2']) }, null],
+    [
+      'a run-once job, which at_once paces',
+      { activeItems: new Set([ITEM.key]), definition: testDefinition({ items: null }) },
+      null
+    ]
+  ])('%s', (_name, over, detail) => {
+    const hold = itemGate(input(done, over), ITEM, '1', null)
+    expect(hold && [hold.code, hold.detail]).toEqual(detail && ['job_limit', detail])
+  })
+})

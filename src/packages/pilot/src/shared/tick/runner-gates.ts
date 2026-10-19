@@ -86,8 +86,17 @@ function busyHold(busy: ReadonlySet<string>, path: string | null): Hold | null {
   return { code: 'worktree_busy', detail: `Another run is active in ${path}` }
 }
 
-// A failed run's retry, the job's runtime checks in declared order, each agent's quota, then another run in the
-// item's worktree.
+// The job's own run still active on the item: an env job has no worktree path for busyHold, and a second run would race
+// the first's push. A run-once job has no items, so at_once alone paces it.
+function ownRunHold(input: DecideInput, item: DecideItem): Hold | null {
+  if (input.definition.items === null || !input.activeItems?.has(item.key)) {
+    return null
+  }
+  return { code: 'job_limit', detail: `Another run of this job is still active on ${item.label}` }
+}
+
+// A failed run's retry, the job's runtime checks in declared order, each agent's quota, another run in the item's
+// worktree, then the job's own run on the item.
 export function itemGate(
   input: DecideInput,
   item: DecideItem,
@@ -98,7 +107,8 @@ export function itemGate(
     retryHold(input, onceKey) ??
     declaredHold(input, item) ??
     implicitQuotaHold(input.definition, item.fields) ??
-    busyHold(input.busyWorktrees, path)
+    busyHold(input.busyWorktrees, path) ??
+    ownRunHold(input, item)
   )
 }
 

@@ -33,6 +33,8 @@ export type DecideInput = {
   seenKeys: ReadonlySet<string>
   activeRuns: number
   busyWorktrees: ReadonlySet<string>
+  // Item keys this job has a running run for: it never runs twice on one item at once.
+  activeItems?: ReadonlySet<string>
   scriptChecks: ScriptCheckResults
   // Items a field script said aren't due now (exit 3): item key → its reason. Skipped this tick, after scope, once_per
   // and first_seen; a fed id stays pending (main/handover/tick-handover.ts settles).

@@ -303,6 +303,7 @@ export async function decideTickItems(
     seenKeys: new Set(seenAt.keys()),
     activeRuns: deps.store.runs.runningCount(def.id),
     busyWorktrees: busyWorktrees(deps.store, repo),
+    activeItems: deps.store.runs.runningItemKeys(def.id),
     notDue: custom.notDue,
     retryLimit: deps.store.capacity.retryLimit(),
     byHand: hand.byHand === true,

@@ -310,6 +310,16 @@ export class RunStore {
     return Number((row as { n: number } | undefined)?.n ?? 0)
   }
 
+  // Item keys with a running run of this automation: a job runs once per item at a time.
+  runningItemKeys(automationId: string): Set<string> {
+    return new Set(
+      this.db
+        .prepare("SELECT item_key AS k FROM runs WHERE automation_id = ? AND status = 'running'")
+        .all(automationId)
+        .map((r) => String(r.k))
+    )
+  }
+
   // Worktrees with a running run of any automation: one agent per worktree across automations (§6). A run's home
   // counts too while one of its hold_home steps runs.
   runningWorktreePaths(): Set<string> {
