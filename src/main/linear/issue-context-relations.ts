@@ -1,7 +1,8 @@
 import type { LinearCollectionMeta, LinearIssueRelation } from '../../shared/linear/agent-access'
 import { LINEAR_RELATIONS_CAP } from '../../shared/linear/agent-access'
 import type { ResolvedIssue } from './issue-context-client'
-import { getRequiredEntry, withLinearRead } from './issue-context-client'
+import { getRequiredEntry } from './issue-context-client'
+import { withLinearRead } from './linear-read-deadline'
 import { readConnectionPages } from './issue-context-pagination'
 import {
   INVERSE_RELATIONS_QUERY,
@@ -17,11 +18,11 @@ export async function readIssueRelations(
 ): Promise<{ items: LinearIssueRelation[]; meta: LinearCollectionMeta }> {
   const entry = getRequiredEntry(resolved.workspace.id)
   const response = await readConnectionPages(LINEAR_RELATIONS_CAP, async (page) => {
-    return await withLinearRead(entry, async () => {
-      const raw = await entry.client.client.rawRequest<
-        RawRelationsResponse,
-        Record<string, unknown>
-      >(RELATIONS_QUERY, { id: resolved.issue.id, ...page })
+    return await withLinearRead(entry, async (client) => {
+      const raw = await client.client.rawRequest<RawRelationsResponse, Record<string, unknown>>(
+        RELATIONS_QUERY,
+        { id: resolved.issue.id, ...page }
+      )
       return raw.data?.issue?.relations ?? null
     })
   })
@@ -33,11 +34,11 @@ export async function readIssueRelations(
   // the response cannot claim completeness while silently omitting inbound ones.
   const inverseReadLimit = Math.max(1, remaining)
   const inverse = await readConnectionPages(inverseReadLimit, async (page) => {
-    return await withLinearRead(entry, async () => {
-      const raw = await entry.client.client.rawRequest<
-        RawRelationsResponse,
-        Record<string, unknown>
-      >(INVERSE_RELATIONS_QUERY, { id: resolved.issue.id, ...page })
+    return await withLinearRead(entry, async (client) => {
+      const raw = await client.client.rawRequest<RawRelationsResponse, Record<string, unknown>>(
+        INVERSE_RELATIONS_QUERY,
+        { id: resolved.issue.id, ...page }
+      )
       return raw.data?.issue?.inverseRelations ?? null
     })
   })

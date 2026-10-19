@@ -3,7 +3,7 @@ import type {
   LinearMcpIssueListResult
 } from '../../shared/linear/agent-access'
 import { getClients, getStatus, type LinearClientForWorkspace } from './client'
-import { withLinearRead } from './issue-context-client'
+import { withLinearRead } from './linear-read-deadline'
 import { linearError } from './issue-context-errors'
 import {
   getFanoutClientEntries,
@@ -183,17 +183,17 @@ async function readIssueListWorkspace(
         ? LIST_ISSUES_PAGE_SIZE
         : Math.min(limit - issues.length, LIST_ISSUES_PAGE_SIZE)
     // Each page takes its own concurrency slot so a long walk cannot starve other reads.
-    const connection = await withLinearRead(entry, async () => {
-      const raw = await entry.client.client.rawRequest<
-        RawListIssuesResponse,
-        Record<string, unknown>
-      >(LIST_ISSUES_QUERY, {
-        first,
-        after,
-        filter,
-        orderBy,
-        includeArchived: request.includeArchived ?? false
-      })
+    const connection = await withLinearRead(entry, async (client) => {
+      const raw = await client.client.rawRequest<RawListIssuesResponse, Record<string, unknown>>(
+        LIST_ISSUES_QUERY,
+        {
+          first,
+          after,
+          filter,
+          orderBy,
+          includeArchived: request.includeArchived ?? false
+        }
+      )
       return raw.data?.issues
     })
     for (const issue of connection?.nodes ?? []) {

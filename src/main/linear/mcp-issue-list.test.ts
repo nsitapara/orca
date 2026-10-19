@@ -36,7 +36,8 @@ vi.mock('./linear-token-store', () => ({
 vi.mock('./client', () => ({
   getClients,
   getStatus,
-  isAuthError: () => false
+  isAuthError: () => false,
+  getClientWithSignal: (entry: { client: unknown }) => entry.client
 }))
 
 describe('MCP-compatible Linear issue listing', () => {

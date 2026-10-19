@@ -26,12 +26,15 @@ vi.mock('./issue-context-client', () => ({
       email: 'brennan@example.com'
     },
     client: { client: { rawRequest: plainRawRequest } }
-  }),
-  withLinearRead: async (_entry: unknown, read: () => Promise<unknown>) => read()
+  })
 }))
 
-vi.mock('./client', () => ({
-  getPublicFileUrlClient: () => ({ client: { rawRequest } })
+vi.mock('./linear-read-deadline', () => ({
+  withLinearRead: async (
+    entry: { client: unknown },
+    read: (client: unknown) => Promise<unknown>,
+    options?: { publicFileUrls?: boolean }
+  ) => read(options?.publicFileUrls ? { client: { rawRequest } } : entry.client)
 }))
 
 function rawChild(index: number) {

@@ -18,8 +18,8 @@ import {
 } from '../../shared/linear/agent-access'
 import { extractLinearInlineMedia } from '../../shared/linear/inline-media'
 import type { ResolvedIssue } from './issue-context-client'
-import { getRequiredEntry, withLinearRead } from './issue-context-client'
-import { getPublicFileUrlClient } from './client'
+import { getRequiredEntry } from './issue-context-client'
+import { withLinearRead } from './linear-read-deadline'
 import { includeErrorCode } from './issue-context-errors'
 import { readConnectionPages } from './issue-context-pagination'
 import { ACTIVITY_QUERY, mapActivity, type RawActivityResponse } from './issue-activity-raw'
@@ -132,14 +132,17 @@ async function readComments(resolved: ResolvedIssue): Promise<{
 }> {
   const entry = getRequiredEntry(resolved.workspace.id)
   const response = await readConnectionPages(LINEAR_COMMENTS_CAP, async (page) => {
-    return await withLinearRead(entry, async () => {
-      const client = getPublicFileUrlClient(entry)
-      const raw = await client.client.rawRequest<RawCommentsResponse, Record<string, unknown>>(
-        COMMENTS_QUERY,
-        { id: resolved.issue.id, ...page }
-      )
-      return raw.data?.issue?.comments ?? null
-    })
+    return await withLinearRead(
+      entry,
+      async (client) => {
+        const raw = await client.client.rawRequest<RawCommentsResponse, Record<string, unknown>>(
+          COMMENTS_QUERY,
+          { id: resolved.issue.id, ...page }
+        )
+        return raw.data?.issue?.comments ?? null
+      },
+      { publicFileUrls: true }
+    )
   })
   const nodes = response.nodes
   const items = nodes.slice(0, LINEAR_COMMENTS_CAP).map((comment) => {
@@ -183,14 +186,17 @@ async function readChildren(
     }
     const remaining = LINEAR_CHILDREN_NODE_CAP - returned
     const response = await readConnectionPages(remaining, async (page) => {
-      return await withLinearRead(entry, async () => {
-        const client = getPublicFileUrlClient(entry)
-        const raw = await client.client.rawRequest<RawChildrenResponse, Record<string, unknown>>(
-          CHILDREN_QUERY,
-          { id: issueId, ...page }
-        )
-        return raw.data?.issue?.children ?? null
-      })
+      return await withLinearRead(
+        entry,
+        async (client) => {
+          const raw = await client.client.rawRequest<RawChildrenResponse, Record<string, unknown>>(
+            CHILDREN_QUERY,
+            { id: issueId, ...page }
+          )
+          return raw.data?.issue?.children ?? null
+        },
+        { publicFileUrls: true }
+      )
     })
     const nodes = response.nodes
     if (response.hasMore || nodes.length > remaining) {
@@ -239,11 +245,11 @@ async function readAttachments(
 ): Promise<{ items: LinearIssueAttachment[]; meta: LinearCollectionMeta }> {
   const entry = getRequiredEntry(resolved.workspace.id)
   const response = await readConnectionPages(LINEAR_ATTACHMENTS_CAP, async (page) => {
-    return await withLinearRead(entry, async () => {
-      const raw = await entry.client.client.rawRequest<
-        RawAttachmentsResponse,
-        Record<string, unknown>
-      >(ATTACHMENTS_QUERY, { id: resolved.issue.id, ...page })
+    return await withLinearRead(entry, async (client) => {
+      const raw = await client.client.rawRequest<RawAttachmentsResponse, Record<string, unknown>>(
+        ATTACHMENTS_QUERY,
+        { id: resolved.issue.id, ...page }
+      )
       return raw.data?.issue?.attachments ?? null
     })
   })
@@ -266,11 +272,11 @@ async function readActivity(
 ): Promise<{ items: LinearIssueActivityEntry[]; meta: LinearCollectionMeta }> {
   const entry = getRequiredEntry(resolved.workspace.id)
   const response = await readConnectionPages(LINEAR_ACTIVITY_CAP, async (page) => {
-    return await withLinearRead(entry, async () => {
-      const raw = await entry.client.client.rawRequest<
-        RawActivityResponse,
-        Record<string, unknown>
-      >(ACTIVITY_QUERY, { id: resolved.issue.id, ...page })
+    return await withLinearRead(entry, async (client) => {
+      const raw = await client.client.rawRequest<RawActivityResponse, Record<string, unknown>>(
+        ACTIVITY_QUERY,
+        { id: resolved.issue.id, ...page }
+      )
       return raw.data?.issue?.history ?? null
     })
   })

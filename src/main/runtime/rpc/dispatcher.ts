@@ -31,6 +31,7 @@ import { createDispatcherStreamingFeatureEmitter } from './dispatcher-streaming-
 import { recordRuntimeFeatureInteraction } from './runtime-feature-interaction'
 import type { RpcCallerScope } from './rpc-caller-scope'
 import { admitRpcRequest } from './rpc-request-admission-prologue'
+import { startSlowRpcSpan } from './rpc-slow-request-span'
 
 export type DispatcherOptions = {
   runtime: OrcaRuntimeService
@@ -62,6 +63,16 @@ export class RpcDispatcher {
   }
 
   async dispatch(request: RpcRequest, options?: RpcDispatchStreamingOptions): Promise<RpcResponse> {
+    const finishSpan = startSlowRpcSpan(request)
+    const response = await this.dispatchUnary(request, options)
+    finishSpan(response)
+    return response
+  }
+
+  private async dispatchUnary(
+    request: RpcRequest,
+    options: RpcDispatchStreamingOptions | undefined
+  ): Promise<RpcResponse> {
     const meta = this.meta()
     const pendingAdmission = this.admit(
       request,
@@ -114,11 +125,16 @@ export class RpcDispatcher {
     const { method, request, params, caller } = admission
 
     if (!isStreamingMethod(method)) {
+      const finishSpan = startSlowRpcSpan(request)
       try {
         const result = await this.invokeUnary({ method, request, params, caller }, options)
-        reply(JSON.stringify(successResponse(request.id, meta, result)))
+        const response = successResponse(request.id, meta, result)
+        finishSpan(response)
+        reply(JSON.stringify(response))
       } catch (error) {
-        reply(JSON.stringify(mapDispatcherError(request, meta, error)))
+        const response = mapDispatcherError(request, meta, error)
+        finishSpan(response)
+        reply(JSON.stringify(response))
       }
       return
     }

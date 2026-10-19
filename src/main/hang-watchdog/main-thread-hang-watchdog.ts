@@ -1,13 +1,17 @@
 import { Worker } from 'node:worker_threads'
 import { app } from 'electron'
-import { hangDetectionMarkerPath } from './hang-detection-marker'
+import { hangDetectionMarkerPath, sampleFileBreadcrumbFields } from './hang-detection-marker'
 import { resolveHangWatchdogWorkerPath } from './hang-watchdog-worker-path'
 import { resolveObservabilityConsent } from '../observability'
+import { getLogsDirectory } from '../observability/logs-directory'
+import { recordDurableCrashBreadcrumb } from '../crash-reporting/durable-crash-breadcrumb'
 import {
   HANG_WATCHDOG_CHECK_INTERVAL_MS,
   HANG_WATCHDOG_HEARTBEAT_INTERVAL_MS,
+  HANG_WATCHDOG_STALL_SAMPLE_MS,
   HANG_WATCHDOG_TIMEOUT_MS,
   type HangWatchdogWorkerData,
+  type HangWatchdogWorkerToMainMessage,
   type MainToHangWatchdogWorkerMessage
 } from './hang-watchdog-worker-protocol'
 
@@ -19,6 +23,18 @@ export type MainThreadHangWatchdogHandle = {
 function positiveTiming(value: string | undefined, fallback: number): number {
   const parsed = Number(value)
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback
+}
+
+// Recorded once main runs again, so a recovered stall's sample is findable from the trace.
+function recordSampledStall(message: HangWatchdogWorkerToMainMessage): void {
+  if (message.type !== 'stall-sampled') {
+    return
+  }
+  recordDurableCrashBreadcrumb('main_thread_stall_sampled', {
+    unresponsiveMs: message.unresponsiveMs,
+    hang: message.hang,
+    ...sampleFileBreadcrumbFields(message)
+  })
 }
 
 export function installMainThreadHangWatchdog(options: {
@@ -42,6 +58,11 @@ export function installMainThreadHangWatchdog(options: {
     checkIntervalMs: positiveTiming(
       process.env.ORCA_HANG_WATCHDOG_CHECK_INTERVAL_MS,
       HANG_WATCHDOG_CHECK_INTERVAL_MS
+    ),
+    sampleDir: getLogsDirectory(),
+    stallSampleMs: positiveTiming(
+      process.env.ORCA_HANG_WATCHDOG_STALL_SAMPLE_MS,
+      HANG_WATCHDOG_STALL_SAMPLE_MS
     )
   }
   let worker: Worker
@@ -84,6 +105,7 @@ export function installMainThreadHangWatchdog(options: {
     console.error('[hang-watchdog] watchdog worker failed:', error)
     stop()
   })
+  worker.on('message', recordSampledStall)
   worker.once('exit', () => {
     stopped = true
     app.off('will-quit', stop)

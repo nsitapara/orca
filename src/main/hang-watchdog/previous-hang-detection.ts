@@ -5,6 +5,7 @@ import { recordDurableCrashBreadcrumb } from '../crash-reporting/durable-crash-b
 import {
   consumeHangDetectionMarker,
   hangDetectionMarkerPath,
+  sampleFileBreadcrumbFields,
   type HangDetectionMarker
 } from './hang-detection-marker'
 
@@ -29,11 +30,18 @@ export function reportPreviousHangDetection(userDataPath: string): HangDetection
     return null
   }
   const marker = consumeHangDetectionMarker(previousMarkerPath(userDataPath))
+  if (marker === 'unreadable') {
+    // Why: the watchdog fired but its note was cut short; dropping it silently hid a whole hang.
+    recordDurableCrashBreadcrumb('main_thread_hang_marker_unreadable')
+    return null
+  }
   if (marker) {
     recordDurableCrashBreadcrumb('main_thread_hang_detected', {
       unresponsiveMs: marker.unresponsiveMs,
       previousPid: marker.parentPid,
-      selfRecovered: marker.selfRecovered
+      selfRecovered: marker.selfRecovered,
+      detectedAt: new Date(marker.detectedAt).toISOString(),
+      ...sampleFileBreadcrumbFields(marker)
     })
   }
   return marker

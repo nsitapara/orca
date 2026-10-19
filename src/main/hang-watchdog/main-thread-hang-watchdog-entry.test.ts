@@ -1,8 +1,13 @@
-import { mkdtempSync, rmSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { consumeHangDetectionMarker } from './hang-detection-marker'
+import type { RunSampleProgram } from './main-thread-stack-sampler'
+import type {
+  HangWatchdogWorkerToMainMessage,
+  MainToHangWatchdogWorkerMessage
+} from './hang-watchdog-worker-protocol'
 
 const { spawnMock } = vi.hoisted(() => ({
   spawnMock: vi.fn(() => ({ unref: vi.fn() }))
@@ -41,10 +46,12 @@ describe('recordHangObservation', () => {
     recordHangObservation({
       parentPid: 4242,
       markerPath,
+      detectedAt: 1_000,
       unresponsiveMs: 47_000,
       selfRecovered: false
     })
     expect(consumeHangDetectionMarker(markerPath)).toMatchObject({
+      detectedAt: 1_000,
       parentPid: 4242,
       unresponsiveMs: 47_000,
       selfRecovered: false
@@ -56,16 +63,19 @@ describe('recordHangObservation', () => {
     recordHangObservation({
       parentPid: 4242,
       markerPath,
+      detectedAt: 1_000,
       unresponsiveMs: 47_000,
       selfRecovered: false
     })
     recordHangObservation({
       parentPid: 4242,
       markerPath,
+      detectedAt: 1_000,
       unresponsiveMs: 62_000,
       selfRecovered: true
     })
     expect(consumeHangDetectionMarker(markerPath)).toMatchObject({
+      detectedAt: 1_000,
       unresponsiveMs: 62_000,
       selfRecovered: true
     })
@@ -76,6 +86,7 @@ describe('recordHangObservation', () => {
     recordHangObservation({
       parentPid: 4242,
       markerPath: join(dir, 'marker.json'),
+      detectedAt: 1_000,
       unresponsiveMs: 45_000,
       selfRecovered: false
     })
@@ -84,15 +95,16 @@ describe('recordHangObservation', () => {
     expect(exitSpy).not.toHaveBeenCalled()
   })
 
-  it('survives an unwritable marker path', () => {
-    expect(() =>
+  it('survives an unwritable marker path and reports the write failed', () => {
+    expect(
       recordHangObservation({
         parentPid: 4242,
         markerPath: join(dir, 'missing-subdir', 'marker.json'),
+        detectedAt: 1_000,
         unresponsiveMs: 45_000,
         selfRecovered: false
       })
-    ).not.toThrow()
+    ).toBe(false)
   })
 
   it('is a no-op when no marker path is configured', () => {
@@ -100,6 +112,7 @@ describe('recordHangObservation', () => {
       recordHangObservation({
         parentPid: 4242,
         markerPath: '',
+        detectedAt: 1_000,
         unresponsiveMs: 45_000,
         selfRecovered: false
       })
@@ -132,7 +145,21 @@ describe('watchdog worker entry', () => {
       { parentPid: 0, markerPath: '/tmp/marker', timeoutMs: 100, checkIntervalMs: 25 },
       { parentPid: 42, markerPath: 7, timeoutMs: 100, checkIntervalMs: 25 },
       { parentPid: 42, markerPath: '/tmp/marker', timeoutMs: 0, checkIntervalMs: 25 },
-      { parentPid: 42, markerPath: '/tmp/marker', timeoutMs: 100, checkIntervalMs: Infinity }
+      { parentPid: 42, markerPath: '/tmp/marker', timeoutMs: 100, checkIntervalMs: Infinity },
+      {
+        parentPid: 42,
+        markerPath: '/tmp/marker',
+        timeoutMs: 100,
+        checkIntervalMs: 25,
+        sampleDir: 7
+      },
+      {
+        parentPid: 42,
+        markerPath: '/tmp/marker',
+        timeoutMs: 100,
+        checkIntervalMs: 25,
+        stallSampleMs: 0
+      }
     ]) {
       expect(isHangWatchdogWorkerData(value)).toBe(false)
     }
@@ -147,6 +174,7 @@ describe('watchdog worker entry', () => {
           onMessage = listener
         }
       ),
+      postMessage: vi.fn(),
       close: vi.fn()
     }
     try {
@@ -176,5 +204,122 @@ describe('watchdog worker entry', () => {
     } finally {
       rmSync(markerPath, { force: true })
     }
+  })
+
+  // Why: the hang that ended in SIGKILL after two hours was reported as "silent ≥45 s"; the marker
+  // has to keep growing while the hang lasts, and a write that failed has to be tried again.
+  it('refreshes an ongoing hang marker, keeps its detection time, and retries a failed write', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'hang-watchdog-refresh-'))
+    const markerPath = join(dir, 'marker.json')
+    const port = { on: vi.fn(), postMessage: vi.fn(), close: vi.fn() }
+    try {
+      runWatchdog(
+        { parentPid: process.pid, markerPath, timeoutMs: 45_000, checkIntervalMs: 5_000 },
+        port
+      )
+      vi.advanceTimersByTime(50_000)
+      expect(consumeHangDetectionMarker(markerPath)).toEqual({
+        detectedAt: 50_000,
+        parentPid: process.pid,
+        unresponsiveMs: 50_000,
+        selfRecovered: false
+      })
+      // A rewrite within 30 s of the last one is skipped; the next due one lands.
+      vi.advanceTimersByTime(25_000)
+      expect(consumeHangDetectionMarker(markerPath)).toBeNull()
+      vi.advanceTimersByTime(5_000)
+      expect(consumeHangDetectionMarker(markerPath)).toMatchObject({
+        detectedAt: 50_000,
+        unresponsiveMs: 80_000
+      })
+      rmSync(dir, { recursive: true, force: true })
+      vi.advanceTimersByTime(30_000)
+      mkdirSync(dir)
+      vi.advanceTimersByTime(5_000)
+      expect(consumeHangDetectionMarker(markerPath)).toMatchObject({
+        detectedAt: 50_000,
+        unresponsiveMs: 115_000
+      })
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+  describe('stack samples', () => {
+    let dir: string
+    let markerPath: string
+    let onMessage: ((message: MainToHangWatchdogWorkerMessage) => void) | undefined
+    let postMessage: ReturnType<typeof vi.fn<(message: HangWatchdogWorkerToMainMessage) => void>>
+    let runSample: ReturnType<typeof vi.fn<RunSampleProgram>>
+
+    beforeEach(() => {
+      dir = mkdtempSync(join(tmpdir(), 'hang-watchdog-samples-'))
+      markerPath = join(dir, 'marker.json')
+      postMessage = vi.fn<(message: HangWatchdogWorkerToMainMessage) => void>()
+      const port = {
+        on: (_event: 'message', listener: (message: MainToHangWatchdogWorkerMessage) => void) => {
+          onMessage = listener
+        },
+        postMessage,
+        close: vi.fn()
+      }
+      runSample = vi.fn<RunSampleProgram>(async () => ({ code: 0 }))
+      runWatchdog(
+        {
+          parentPid: 4242,
+          markerPath,
+          timeoutMs: 45_000,
+          checkIntervalMs: 5_000,
+          sampleDir: join(dir, 'logs'),
+          stallSampleMs: 15_000
+        },
+        port,
+        runSample
+      )
+    })
+
+    afterEach(() => {
+      onMessage?.({ type: 'shutdown' })
+      rmSync(dir, { recursive: true, force: true })
+    })
+
+    const sampledFiles = (): string[] =>
+      runSample.mock.calls.map(([, args]) => args[3].slice(join(dir, 'logs').length + 1))
+
+    it('samples a stall early, samples again at the hang, and names both in the marker', async () => {
+      await vi.advanceTimersByTimeAsync(20_000)
+      expect(sampledFiles()).toEqual(['main-thread-sample-1970-01-01T00-00-20-000Z-stall.txt'])
+      await vi.advanceTimersByTimeAsync(30_000)
+      expect(sampledFiles()).toEqual([
+        'main-thread-sample-1970-01-01T00-00-20-000Z-stall.txt',
+        'main-thread-sample-1970-01-01T00-00-50-000Z-hang.txt'
+      ])
+      expect(consumeHangDetectionMarker(markerPath)).toMatchObject({
+        selfRecovered: false,
+        stallSamplePath: join(dir, 'logs', 'main-thread-sample-1970-01-01T00-00-20-000Z-stall.txt'),
+        samplePath: join(dir, 'logs', 'main-thread-sample-1970-01-01T00-00-50-000Z-hang.txt')
+      })
+    })
+
+    it('tells main about a sampled stall once heartbeats resume and the sample is written', async () => {
+      await vi.advanceTimersByTimeAsync(20_000)
+      onMessage?.({ type: 'heartbeat' })
+      await vi.waitFor(() => expect(postMessage).toHaveBeenCalledOnce())
+      expect(postMessage).toHaveBeenCalledWith({
+        type: 'stall-sampled',
+        unresponsiveMs: 20_000,
+        hang: false,
+        stallSamplePath: join(dir, 'logs', 'main-thread-sample-1970-01-01T00-00-20-000Z-stall.txt')
+      })
+      expect(consumeHangDetectionMarker(markerPath)).toBeNull()
+    })
+
+    it('does not name a sample that sample failed to write', async () => {
+      runSample.mockResolvedValue({ code: 1 })
+      await vi.advanceTimersByTimeAsync(50_000)
+      onMessage?.({ type: 'heartbeat' })
+      await vi.advanceTimersByTimeAsync(0)
+      expect(runSample).toHaveBeenCalledTimes(2)
+      expect(postMessage).not.toHaveBeenCalled()
+    })
   })
 })

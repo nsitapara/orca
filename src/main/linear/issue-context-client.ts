@@ -1,15 +1,8 @@
 import type { LinearSearchIssueSummary, LinearSearchResult } from '../../shared/linear/agent-access'
 import { clampLinearSearchLimit } from '../../shared/linear/agent-access'
 import type { LinearWorkspace } from '../../shared/linear/workspace-types'
-import { acquire, release } from './linear-request-concurrency'
-import { clearToken } from './linear-token-store'
-import {
-  getClients,
-  getPublicFileUrlClient,
-  getStatus,
-  isAuthError,
-  type LinearClientForWorkspace
-} from './client'
+import { getClients, getStatus, type LinearClientForWorkspace } from './client'
+import { withLinearRead } from './linear-read-deadline'
 import {
   ISSUE_QUERY,
   SEARCH_QUERY,
@@ -171,40 +164,21 @@ function throwIfExplicitWorkspaceHasConnectedAlternatives(
   }
 }
 
-export async function withLinearRead<T>(
-  entry: LinearClientForWorkspace,
-  read: () => Promise<T>,
-  selection?: (string & {}) | 'all'
-): Promise<T> {
-  void selection
-  await acquire()
-  try {
-    return await read()
-  } catch (error) {
-    if (isAuthError(error)) {
-      clearToken(entry.workspace.id)
-      throw linearError('linear_auth_expired', 'Linear authentication expired.', {
-        nextSteps: ['Reconnect Linear from Orca settings.']
-      })
-    }
-    throw linearError(classifyLinearError(error), linearMessage(error))
-  } finally {
-    release()
-  }
-}
-
 async function readIssueWorkspace(
   entry: LinearClientForWorkspace,
   identifier: string
 ): Promise<ResolvedIssue | null> {
-  const response = await withLinearRead(entry, async () => {
-    const client = getPublicFileUrlClient(entry)
-    const raw = await client.client.rawRequest<RawIssueResponse, Record<string, unknown>>(
-      ISSUE_QUERY,
-      { id: identifier }
-    )
-    return raw.data?.issue ?? null
-  })
+  const response = await withLinearRead(
+    entry,
+    async (client) => {
+      const raw = await client.client.rawRequest<RawIssueResponse, Record<string, unknown>>(
+        ISSUE_QUERY,
+        { id: identifier }
+      )
+      return raw.data?.issue ?? null
+    },
+    { publicFileUrls: true }
+  )
   return response ? { issue: mapIssue(response), workspace: entry.workspace } : null
 }
 
@@ -247,20 +221,15 @@ async function readIssueWorkspaces(
 async function readSearchWorkspace(
   entry: LinearClientForWorkspace,
   query: string,
-  limit: number,
-  workspaceId?: (string & {}) | 'all'
+  limit: number
 ): Promise<LinearSearchIssueSummary[]> {
-  const response = await withLinearRead(
-    entry,
-    async () => {
-      const raw = await entry.client.client.rawRequest<RawIssueResponse, Record<string, unknown>>(
-        SEARCH_QUERY,
-        { term: query, first: limit }
-      )
-      return raw.data?.searchIssues?.nodes ?? []
-    },
-    workspaceId
-  )
+  const response = await withLinearRead(entry, async (client) => {
+    const raw = await client.client.rawRequest<RawIssueResponse, Record<string, unknown>>(
+      SEARCH_QUERY,
+      { term: query, first: limit }
+    )
+    return raw.data?.searchIssues?.nodes ?? []
+  })
   return response.map((issue) => ({
     ...pickSearchIssue(mapIssue(issue)),
     workspace: {
@@ -279,13 +248,13 @@ async function readSearchWorkspaces(
 ): Promise<{ results: LinearSearchIssueSummary[][]; failures: WorkspaceReadFailure[] }> {
   if (workspaceId && workspaceId !== 'all') {
     return {
-      results: [await readSearchWorkspace(entries[0], query, limit, workspaceId)],
+      results: [await readSearchWorkspace(entries[0], query, limit)],
       failures: []
     }
   }
 
   const settled = await Promise.allSettled(
-    entries.map(async (entry) => readSearchWorkspace(entry, query, limit, workspaceId))
+    entries.map(async (entry) => readSearchWorkspace(entry, query, limit))
   )
   const attemptedWorkspaceCount = entries.length + initialFailures.length
   const results: LinearSearchIssueSummary[][] = []
