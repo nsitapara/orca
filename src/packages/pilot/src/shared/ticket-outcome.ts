@@ -2,6 +2,8 @@ import type { InboxItemRow } from './api-types'
 import type { TicketedRef } from './ticket-types'
 
 export const OUTCOME_PREFIX = 'ticketed for later: '
+export const FROZEN_DRAFT =
+  "Linear may have created this ticket. Retry sends the same draft and can't make a second one."
 const OUTCOME_SEPARATOR = ' · '
 const LOCATION_SUFFIX = /\s—\s(\S+:\d+(?:-\d+)?)$/
 

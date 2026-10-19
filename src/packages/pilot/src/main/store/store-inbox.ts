@@ -245,6 +245,20 @@ export class InboxStore {
       }))
   }
 
+  // The parsed args of the newest obsolete card for this action closed with this outcome prefix under this write id.
+  closedWriteArgs(action: string, outcomePrefix: string, writeId: string): unknown {
+    const r = this.db
+      .prepare(
+        `SELECT action_args_json FROM inbox_items
+          WHERE status = 'obsolete' AND action = ? AND outcome LIKE ?
+            AND json_extract(action_args_json, '$.write_id') = ?
+          ORDER BY updated_at DESC, rowid DESC LIMIT 1`
+      )
+      .get(action, `${outcomePrefix}%`, writeId)
+    const args: unknown = r?.action_args_json ? JSON.parse(String(r.action_args_json)) : null
+    return args
+  }
+
   setSnapshot(id: string, snapshot: DetailsSnapshot | null): void {
     writeSnapshot(this.db, id, snapshot)
   }

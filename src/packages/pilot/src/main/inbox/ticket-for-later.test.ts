@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { linearError } from '../../../../../main/linear/issue-context-errors'
 import type { InboxItemRow, InboxStatus } from '../../shared/api-types'
 import type { LinearErrorCode } from '../../../../../shared/linear/agent-access'
-import { formatTicketedOutcome } from '../../shared/ticket-outcome'
+import { formatTicketedOutcome, FROZEN_DRAFT } from '../../shared/ticket-outcome'
 import type { TicketDraft, TicketDraftEdit } from '../../shared/ticket-types'
 import { callerStore, DEFINITIONS } from '../actions/__fixtures__/caller-store'
 import { buildActionCatalog } from '../actions/catalog'
@@ -231,61 +231,128 @@ describe('fileTicketForLater', () => {
     expect(linear.createIssue.mock.calls[0]?.[0].body).not.toContain('pilot-image:')
   })
 
-  it.each<{ code: LinearErrorCode; maybeCreated: boolean }>([
-    { code: 'linear_write_unconfirmed', maybeCreated: true },
-    { code: 'linear_invalid_label', maybeCreated: false }
+  it.each<{ code: LinearErrorCode; maybeCreated: boolean; outcome: string }>([
+    { code: 'linear_write_unconfirmed', maybeCreated: true, outcome: 'may have created' },
+    { code: 'linear_invalid_label', maybeCreated: false, outcome: 'not created' }
   ])(
-    'a create failing with $code closes only the ticket card, maybeCreated $maybeCreated',
-    async ({ code, maybeCreated }) => {
+    'a create failing with $code closes only the ticket card as $outcome, and freezes the draft only when it may have created',
+    async ({ code, maybeCreated, outcome }) => {
       const { store, linear, deps } = seeded()
       linear.createIssue.mockRejectedValue(linearError(code, 'Linear said no'))
-      const draft = buildTicketDraft(deps, 'in_1', DIGEST)
+      const edit = edited(buildTicketDraft(deps, 'in_1', DIGEST))
 
-      const result = await fileTicketForLater(deps, {
-        id: 'in_1',
-        digest: DIGEST,
-        draft: edited(draft)
-      })
+      const result = await fileTicketForLater(deps, { id: 'in_1', digest: DIGEST, draft: edit })
 
       expect(result).toEqual({ ok: false, error: 'Linear said no', maybeCreated })
       expect(ticketCards(store)).toEqual([
         expect.objectContaining({
           status: 'obsolete',
-          outcome: expect.stringMatching(/^obsolete: not created: /)
+          outcome: `obsolete: ${outcome}: Linear said no`
         })
       ])
+      expect(store.inbox.get('in_1')?.status).toBe('open')
+      expect(buildTicketDraft(deps, 'in_1', DIGEST).frozen).toEqual(maybeCreated ? edit : undefined)
+    }
+  )
+
+  it.each<{
+    name: string
+    again: (deps: TicketForLaterDeps, sent: TicketDraftEdit) => TicketDraftEdit
+  }>([
+    { name: "the panel's own frozen request", again: (_deps, sent) => sent },
+    {
+      name: 'the frozen draft a reopened panel gets',
+      again: (deps) => buildTicketDraft(deps, 'in_1', DIGEST).frozen ?? BASE_EDIT
+    }
+  ])(
+    'retries $name with a fresh ticket card under the same write id, so Linear can make only one ticket',
+    async ({ again }) => {
+      const { store, linear, deps } = seeded()
+      linear.createIssue.mockRejectedValueOnce(
+        linearError('linear_write_unconfirmed', 'Linear said no')
+      )
+      const req = {
+        id: 'in_1',
+        digest: DIGEST,
+        draft: edited(buildTicketDraft(deps, 'in_1', DIGEST), { images: ['pilot-image:1'] })
+      }
+
+      expect(await fileTicketForLater(deps, req)).toMatchObject({ ok: false, maybeCreated: true })
+      expect(await fileTicketForLater(deps, { ...req, draft: again(deps, req.draft) })).toEqual({
+        ok: true,
+        identifier: 'WEB-1482',
+        url: ISSUE.url
+      })
+
+      expect(linear.createIssue.mock.calls.map(([input]) => input.writeId)).toEqual([
+        WRITE_ID,
+        WRITE_ID
+      ])
+      const [first, second] = ticketCards(store).map((item) => item.actionArgs)
+      expect(second).toEqual(first)
+      expect(
+        ticketCards(store)
+          .map((item) => item.status)
+          .toSorted()
+      ).toEqual(['done', 'obsolete'])
+      expect(store.inbox.get('in_1')?.status).toBe('done')
+    }
+  )
+
+  it.each<{ name: string; change: Partial<TicketDraftEdit> }>([
+    { name: 'title', change: { title: 'Another title' } },
+    { name: 'body', change: { body: 'Another body.' } },
+    { name: 'screenshots', change: { images: ['pilot-image:1', 'pilot-image:3'] } },
+    { name: 'team', change: { team: 'OPS' } },
+    { name: 'state', change: { state: 'Backlog' } },
+    { name: 'priority', change: { priority: 'low' } },
+    { name: 'labels', change: { labels: ['ui'] } }
+  ])(
+    'refuses a Create with an edited $name while Linear may hold the first ticket, and files nothing',
+    async ({ change }) => {
+      const { store, linear, deps } = seeded()
+      linear.createIssue.mockRejectedValueOnce(
+        linearError('linear_write_unconfirmed', 'Linear said no')
+      )
+      const draft = buildTicketDraft(deps, 'in_1', DIGEST)
+      await fileTicketForLater(deps, { id: 'in_1', digest: DIGEST, draft: edited(draft) })
+
+      const result = await fileTicketForLater(deps, {
+        id: 'in_1',
+        digest: DIGEST,
+        draft: edited(draft, change)
+      })
+
+      expect(result).toEqual({ ok: false, error: FROZEN_DRAFT, maybeCreated: true })
+      expect(linear.createIssue).toHaveBeenCalledTimes(1)
+      expect(linear.uploadImage).toHaveBeenCalledTimes(3)
+      expect(ticketCards(store)).toHaveLength(1)
       expect(store.inbox.get('in_1')?.status).toBe('open')
     }
   )
 
-  it('retries with a fresh ticket card under the same write id, so Linear can make only one ticket', async () => {
-    const { store, linear, deps } = seeded()
-    linear.createIssue.mockRejectedValueOnce(
-      linearError('linear_write_unconfirmed', 'Linear said no')
-    )
-    const req = {
-      id: 'in_1',
-      digest: DIGEST,
-      draft: edited(buildTicketDraft(deps, 'in_1', DIGEST))
-    }
-
-    expect(await fileTicketForLater(deps, req)).toMatchObject({ ok: false, maybeCreated: true })
-    expect(await fileTicketForLater(deps, req)).toEqual({
-      ok: true,
-      identifier: 'WEB-1482',
-      url: ISSUE.url
+  it('closes the ticket card as may have created, and freezes the draft, when the attempt throws', async () => {
+    const { store, deps } = seeded()
+    const finish = store.actions.finish.bind(store.actions)
+    vi.spyOn(store.actions, 'finish').mockImplementation((id, status, output, at) => {
+      if (status === 'done') {
+        throw new Error('database is locked')
+      }
+      finish(id, status, output, at)
     })
+    const edit = edited(buildTicketDraft(deps, 'in_1', DIGEST))
 
-    expect(linear.createIssue.mock.calls.map(([input]) => input.writeId)).toEqual([
-      WRITE_ID,
-      WRITE_ID
+    const result = await fileTicketForLater(deps, { id: 'in_1', digest: DIGEST, draft: edit })
+
+    expect(result).toEqual({ ok: false, error: 'database is locked', maybeCreated: true })
+    expect(ticketCards(store)).toEqual([
+      expect.objectContaining({
+        status: 'obsolete',
+        outcome: 'obsolete: may have created: database is locked'
+      })
     ])
-    expect(
-      ticketCards(store)
-        .map((item) => item.status)
-        .toSorted()
-    ).toEqual(['done', 'obsolete'])
-    expect(store.inbox.get('in_1')?.status).toBe('done')
+    expect(store.inbox.get('in_1')?.status).toBe('open')
+    expect(buildTicketDraft(deps, 'in_1', DIGEST).frozen).toEqual(edit)
   })
 
   it.each<{

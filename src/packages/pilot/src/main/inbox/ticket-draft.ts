@@ -10,6 +10,7 @@ import type { PilotStore } from '../store/store'
 import { isInside } from './details-bundle'
 import { branchOfRun, fieldsForRun, latestFieldsFor } from './run-fields'
 import { loadTicketTemplate, renderTicketBody } from './ticket-template'
+import { frozenDraftFor } from './ticket-freeze'
 import { ticketedBeforeFor } from './ticketed-before'
 
 export const CARD_CHANGED_ON_DRAFT = 'The card changed; reopen the draft'
@@ -165,6 +166,7 @@ export function buildTicketDraft(deps: TicketDraftDeps, id: string, digest: stri
   const images = snapshot ? ticketImages(snapshot.bundle) : []
   const run = runFieldsOf(deps.store, card)
   const fields = ticketFields(deps, card, run, images)
+  const frozen = frozenDraftFor(deps.store, card.id)
   return {
     title: renderTemplate(template.defaults.title, fields).text,
     body: renderTicketBody(template.body, fields),
@@ -177,6 +179,7 @@ export function buildTicketDraft(deps: TicketDraftDeps, id: string, digest: stri
     link: mrLink(run),
     ticketedBefore: ticketedBeforeFor(deps.store, [card]).get(card.id) ?? null,
     templatePath: template.path,
-    digest: card.digest
+    digest: card.digest,
+    ...(frozen ? { frozen } : {})
   }
 }

@@ -467,6 +467,18 @@ describe('linear_create with screenshots and links', () => {
     expect(await create(w).run(BASE, RUN)).toMatchObject({ outcome: 'failed', data: { created } })
   })
 
+  it('names a write id Linear already used for different fields, and says it may have created', async () => {
+    const w = writer()
+    w.createIssue.mockRejectedValue(
+      linearError('linear_invalid_write_id', 'The write id belongs to a different issue.')
+    )
+    expect(await create(w).run(BASE, RUN)).toMatchObject({
+      outcome: 'failed',
+      detail: 'Linear already has a ticket from this card with different fields',
+      data: { created: 'maybe' }
+    })
+  })
+
   it.each([
     ['bad arguments', writer(), { team: 'WEB' }],
     ['no Linear login', null, BASE],

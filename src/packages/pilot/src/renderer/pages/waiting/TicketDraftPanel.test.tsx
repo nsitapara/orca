@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import type { TicketCreateResult, TicketDraft } from '../../../shared/ticket-types'
+import type { TicketCreateResult, TicketDraft, TicketDraftEdit } from '../../../shared/ticket-types'
 
 const pilotRpc = vi.fn()
 vi.mock('../../api', () => ({ pilotRpc: (...args: unknown[]) => pilotRpc(...args) }))
@@ -78,7 +78,7 @@ async function open(
   const onClose = vi.fn()
   const onFiled = vi.fn()
   render(<TicketDraftPanel item={ITEM} onClose={onClose} onFiled={onFiled} />)
-  await screen.findByDisplayValue(draft.title)
+  await screen.findByDisplayValue(draft.frozen?.title ?? draft.title)
   return { onClose, onFiled }
 }
 
@@ -209,6 +209,31 @@ describe('TicketDraftPanel', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
     await waitFor(() => expect(creates()).toHaveLength(3))
     expect(creates()[2][1]).toEqual(creates()[0][1])
+  })
+
+  it('opens frozen on a draft Linear may have created, showing and resending exactly what was filed', async () => {
+    const frozen: TicketDraftEdit = {
+      title: 'Footer overlaps Save',
+      body: '## Evidence\n\n![Before](pilot-image:1)\n',
+      team: 'WEB',
+      state: 'Todo',
+      priority: 'high',
+      labels: ['qa'],
+      images: ['pilot-image:1']
+    }
+    await open(undefined, { ...DRAFT, frozen })
+    expect(screen.getByText(FROZEN)).toBeTruthy()
+    expect(fields().every((f) => f.disabled)).toBe(true)
+    expect(
+      fields()
+        .slice(0, 6)
+        .map((f) => f.value)
+    ).toEqual(['Footer overlaps Save', 'WEB', 'Todo', 'qa', 'high', frozen.body])
+    const boxes = screen.getAllByRole('checkbox')
+    expect(boxes.map((b) => b.getAttribute('aria-checked'))).toEqual(['true', 'false'])
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
+    await waitFor(() => expect(creates()).toHaveLength(1))
+    expect(creates()[0][1]).toEqual({ id: 'in_9', digest: 'draft-digest', draft: frozen })
   })
 
   it('freezes when the Create call itself fails, since it may have reached Linear', async () => {

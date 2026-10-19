@@ -33,9 +33,13 @@ export function notCreated(outcome: 'failed' | 'stale', detail: string): ActionR
   return { outcome, detail, link: null, log: null, onYou: false, data: { created: 'no' } }
 }
 
+// Linear holds an issue under this write id whose fields differ from these args.
+const WRITE_ID_TAKEN = 'Linear already has a ticket from this card with different fields'
+
 // A failed create call, saying whether Linear may still have made the ticket.
 export function createFailed(error: unknown, detail: string): ActionResult {
   const code = codeOf(error)
   const created = code !== null && NOT_CREATED.has(code) ? 'no' : 'maybe'
-  return { ...actionFailed(detail), data: { created } }
+  const shown = code === 'linear_invalid_write_id' ? WRITE_ID_TAKEN : detail
+  return { ...actionFailed(shown), data: { created } }
 }

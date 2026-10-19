@@ -4,6 +4,7 @@ import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import type { InboxListRow } from '../../../shared/api-types'
 import { safeHref } from '../../../shared/safe-href'
+import { FROZEN_DRAFT } from '../../../shared/ticket-outcome'
 import {
   TICKET_PRIORITIES,
   type TicketDraft,
@@ -31,8 +32,6 @@ import { useTicketCreate } from './use-ticket-create'
 
 const SCREENSHOT_NOTE =
   'Ticked screenshots upload to Linear. Untick any that show real patient data.'
-const FROZEN =
-  "Linear may have created this ticket. Retry sends the same draft and can't make a second one."
 // Fixed so the label swap to Creating… or Retry doesn't move the row.
 const CREATE_BUTTON = `${PRIMARY_BUTTON} min-w-36`
 
@@ -181,7 +180,11 @@ function DraftForm({
   onFiled: (ref: TicketedRef) => void
 }): React.JSX.Element {
   const [fields, setFields] = useState<DraftFields>(() => fieldsOf(draft))
-  const { creating, error, frozen, create } = useTicketCreate(host, onFiled)
+  const { creating, error, frozen, create } = useTicketCreate(
+    host,
+    onFiled,
+    draft.frozen ? { id: item.id, digest: draft.digest, draft: draft.frozen } : null
+  )
   const locked = creating || frozen !== null
   const set = (patch: Partial<DraftFields>) => setFields((now) => ({ ...now, ...patch }))
   const tick = (ref: string, on: boolean) =>
@@ -280,8 +283,8 @@ function DraftForm({
       ) : null}
       {draft.link ? <LinkLine link={draft.link} /> : null}
       <p className="text-xs text-muted-foreground">{createSummary(edit, draft.link !== null)}</p>
-      {error ? <p className="text-sm text-destructive">{error}</p> : null}
-      {frozen ? <p className="text-sm">{FROZEN}</p> : null}
+      {error && error !== FROZEN_DRAFT ? <p className="text-sm text-destructive">{error}</p> : null}
+      {frozen ? <p className="text-sm">{FROZEN_DRAFT}</p> : null}
       <div className="flex justify-end gap-2">
         <button type="button" disabled={creating} onClick={onClose} className={OUTLINE_BUTTON}>
           Back

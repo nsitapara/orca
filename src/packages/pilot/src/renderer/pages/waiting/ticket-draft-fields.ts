@@ -22,15 +22,18 @@ export type DraftFields = {
   unticked: string[]
 }
 
+// A frozen draft opens as it was filed, its screenshots ticked as they were.
 export function fieldsOf(draft: TicketDraft): DraftFields {
+  const refs = draft.images.map((image) => image.ref)
+  const shown = draft.frozen ?? { ...draft, images: refs }
   return {
-    title: draft.title,
-    body: draft.body,
-    team: draft.team,
-    state: draft.state,
-    priority: draft.priority,
-    labels: draft.labels.join(', '),
-    unticked: []
+    title: shown.title,
+    body: shown.body,
+    team: shown.team,
+    state: shown.state,
+    priority: shown.priority,
+    labels: shown.labels.join(', '),
+    unticked: refs.filter((ref) => !shown.images.includes(ref))
   }
 }
 

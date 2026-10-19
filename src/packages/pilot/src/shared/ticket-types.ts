@@ -19,6 +19,8 @@ export type TicketDraft = {
   ticketedBefore: TicketedRef | null
   templatePath: string
   digest: string
+  // What a Create that may have reached Linear filed: the only draft Create sends again.
+  frozen?: TicketDraftEdit
 }
 
 export type TicketDraftEdit = {
