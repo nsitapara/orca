@@ -9,6 +9,8 @@ import { phaseOf, quickAnswerFor, undoLabel } from './answer-buttons'
 import { ageLabel, jobCode } from './answer-text'
 import type { Answer } from './answer-types'
 import { statusOf, type StatusPill } from './chips'
+import type { ProjectSections } from './inbox-projects'
+import { ProjectBlock } from './ProjectLine'
 
 const KIND_LABEL: Record<InboxType, string> = {
   question: 'Question',
@@ -129,22 +131,11 @@ function InboxRow({
   )
 }
 
-// The dense view: one line per card in the same sections, so a one-click card is answered without opening it.
-export function InboxRows({
-  sections,
-  answerStates,
-  names,
-  places,
-  errors,
-  now,
-  onAnswer,
-  onOpen
-}: {
-  sections: HostedSection[]
+type RowsProps = {
   // By hostedKey.
   answerStates: ReadonlyMap<string, AnswerState>
   names: ReadonlyMap<string, string>
-  // By hostedKey, the card's Worktree heading to name on its row; null while the sections are worktrees.
+  // By hostedKey, the card's "project / worktree" to name on its row; null while the sections are worktrees.
   places: ReadonlyMap<string, string> | null
   // A failed save's message, by hostedKey.
   errors: Readonly<Record<string, string>>
@@ -152,39 +143,74 @@ export function InboxRows({
   // Resolves to the save's error, or null once saved.
   onAnswer: (item: Hosted<InboxListRow>, answer: Answer) => Promise<string | null>
   onOpen: (item: Hosted<InboxListRow>) => void
+}
+
+function RowsSection({
+  section: s,
+  answerStates,
+  names,
+  places,
+  errors,
+  now,
+  onAnswer,
+  onOpen
+}: RowsProps & { section: HostedSection }): React.JSX.Element {
+  return (
+    <section aria-label={s.group.label || UNGROUPED_NAME} className="flex min-w-0 flex-col gap-1">
+      {s.group.label ? (
+        <h2
+          title={s.group.label}
+          className="truncate border-b border-border px-2.5 py-1 font-mono text-xs font-semibold text-muted-foreground"
+        >
+          {s.group.label} · {s.items.length}
+        </h2>
+      ) : null}
+      <ul className="flex flex-col">
+        {s.items.map((i) => (
+          <InboxRow
+            key={hostedKey(i.host, i.id)}
+            item={i}
+            place={placeIn(s, places?.get(hostedKey(i.host, i.id)))}
+            names={names}
+            answerState={answerStates.get(hostedKey(i.host, i.id)) ?? null}
+            error={errors[hostedKey(i.host, i.id)] ?? null}
+            now={now}
+            onAnswer={onAnswer}
+            onOpen={onOpen}
+          />
+        ))}
+      </ul>
+    </section>
+  )
+}
+
+// The dense view: one line per card in the same sections, so a one-click card is answered without opening it.
+export function InboxRows({
+  sections,
+  projects,
+  ...rows
+}: RowsProps & {
+  sections: HostedSection[]
+  // Grouped by Worktree: the same sections under their projects.
+  projects: ProjectSections[] | null
 }): React.JSX.Element {
+  if (projects) {
+    return (
+      <>
+        {projects.map((p) => (
+          <ProjectBlock key={p.key} project={p}>
+            {p.sections.map((s) => (
+              <RowsSection key={s.key} section={s} {...rows} />
+            ))}
+          </ProjectBlock>
+        ))}
+      </>
+    )
+  }
   return (
     <>
       {sections.map((s) => (
-        <section
-          key={s.key}
-          aria-label={s.group.label || UNGROUPED_NAME}
-          className="flex min-w-0 flex-col gap-1"
-        >
-          {s.group.label ? (
-            <h2
-              title={s.group.label}
-              className="truncate border-b border-border px-2.5 py-1 font-mono text-xs font-semibold text-muted-foreground"
-            >
-              {s.group.label} · {s.items.length}
-            </h2>
-          ) : null}
-          <ul className="flex flex-col">
-            {s.items.map((i) => (
-              <InboxRow
-                key={hostedKey(i.host, i.id)}
-                item={i}
-                place={placeIn(s, places?.get(hostedKey(i.host, i.id)))}
-                names={names}
-                answerState={answerStates.get(hostedKey(i.host, i.id)) ?? null}
-                error={errors[hostedKey(i.host, i.id)] ?? null}
-                now={now}
-                onAnswer={onAnswer}
-                onOpen={onOpen}
-              />
-            ))}
-          </ul>
-        </section>
+        <RowsSection key={s.key} section={s} {...rows} />
       ))}
     </>
   )

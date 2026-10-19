@@ -5,6 +5,7 @@ import { groupHostedItemsBy } from '../../hosts/inbox-grouping'
 import type { MergedInbox } from '../../hosts/merge-inbox'
 import { hostedKey, type Hosted } from '../../hosts/pilot-host'
 import { ALL } from './InboxHeader'
+import { groupByProject, projectOf, type ProjectSections } from './inbox-projects'
 import { type CardFilters, type InboxTab, inTab, matchesFilters } from './inbox-tabs'
 import type { InboxGroupBy, InboxSort } from './inbox-view-prefs'
 
@@ -12,7 +13,7 @@ export type InboxSections = {
   // The search the cards are filtered by: it trails the search box while a keystroke renders.
   query: string
   filtered: boolean
-  // Each card's Worktree heading by hostedKey: what search matches, and what a list row names under another grouping.
+  // Each card's "project / worktree" by hostedKey: what search matches, and what a list row names under another grouping.
   places: ReadonlyMap<string, string>
   inTabItems: Hosted<InboxListRow>[]
   shownItems: Hosted<InboxListRow>[]
@@ -20,6 +21,9 @@ export type InboxSections = {
   // The picked section, or All once it has no card left (its last one was answered, or the tab moved).
   activeSection: string
   shown: HostedSection[]
+  // Grouped by Worktree: the sections (shown) under their projects, in the same order; null under another grouping.
+  projects: ProjectSections[] | null
+  shownProjects: ProjectSections[] | null
 }
 
 /**
@@ -50,9 +54,11 @@ export function useInboxSections({
     const automations = inbox?.automations ?? []
     const openItems = items.filter((i) => i.type !== 'default')
     const places = new Map(
-      groupHostedItems(openItems, automations).flatMap((s) =>
-        s.items.map((i) => [hostedKey(i.host, i.id), s.group.label] as const)
-      )
+      groupHostedItems(openItems, automations).flatMap((s) => {
+        const project = projectOf(s)
+        const place = project ? `${project} / ${s.group.label}` : s.group.label
+        return s.items.map((i) => [hostedKey(i.host, i.id), place] as const)
+      })
     )
     const inTabItems =
       tab === 'done'
@@ -63,8 +69,12 @@ export function useInboxSections({
     const shownItems = inTabItems.filter((i) =>
       matchesFilters(i, { kinds, query }, places.get(hostedKey(i.host, i.id)) ?? '')
     )
-    const sections = groupHostedItemsBy(shownItems, automations, group, sort, now)
+    const grouped = groupHostedItemsBy(shownItems, automations, group, sort, now)
+    const projects = group === 'worktree' ? groupByProject(grouped) : null
+    // A project's worktrees side by side, so the list, the cards and One at a time keep one order.
+    const sections = projects ? projects.flatMap((p) => p.sections) : grouped
     const activeSection = sections.some((s) => s.key === section) ? section : ALL
+    const isShown = (s: HostedSection) => activeSection === ALL || s.key === activeSection
     return {
       query,
       filtered: kinds.length > 0 || query.trim() !== '',
@@ -73,7 +83,12 @@ export function useInboxSections({
       shownItems,
       sections,
       activeSection,
-      shown: sections.filter((s) => activeSection === ALL || s.key === activeSection)
+      shown: sections.filter(isShown),
+      projects,
+      shownProjects:
+        projects
+          ?.map((p) => ({ ...p, sections: p.sections.filter(isShown) }))
+          .filter((p) => p.sections.length > 0) ?? null
     }
   }, [inbox, tab, kinds, query, group, sort, section, now])
 }

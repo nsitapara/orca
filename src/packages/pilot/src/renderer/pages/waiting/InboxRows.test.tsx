@@ -44,6 +44,7 @@ function renderRows(items: InboxListRow[], onAnswer = vi.fn(() => new Promise<nu
   const rows = (shown: InboxListRow[], answerStates: ReadonlyMap<string, AnswerState>) => (
     <InboxRows
       sections={sectionOf(...shown)}
+      projects={null}
       answerStates={answerStates}
       errors={{}}
       names={new Map([['ci', 'Fix failed CI']])}
@@ -121,6 +122,7 @@ describe('InboxRows', () => {
             group: { key: 'kind:Approvals', label: 'Approvals', rank: 2 }
           }
         ]}
+        projects={null}
         answerStates={new Map()}
         errors={{}}
         names={new Map()}
@@ -133,6 +135,32 @@ describe('InboxRows', () => {
     const row = screen.getByRole('listitem')
     expect(within(row).getByText('web-2099-carrier')).toBeTruthy()
     expect(within(row).getByText('MacBook')).toBeTruthy()
+  })
+
+  it('puts the sections under their projects, each with its worktree and card counts', () => {
+    const [web1] = sectionOf(card({}))
+    const job = { ...web1, key: 'j', group: { key: 'job:ci', label: 'Fix failed CI', rank: 4 } }
+    render(
+      <InboxRows
+        sections={[web1, job]}
+        projects={[
+          { key: 'project:web', name: 'web-platform', sections: [web1] },
+          { key: 'project:none', name: null, sections: [job] }
+        ]}
+        answerStates={new Map()}
+        errors={{}}
+        names={new Map()}
+        places={null}
+        now={1000}
+        onAnswer={vi.fn(async () => null)}
+        onOpen={vi.fn()}
+      />
+    )
+    const project = (name: string) => screen.getByRole('group', { name })
+    expect(project('web-platform').textContent).toContain('1 worktree · 1 card')
+    expect(within(project('web-platform')).getByRole('heading').textContent).toBe('web-1 · 1')
+    expect(project('Not in a worktree').textContent).toContain('1 card')
+    expect(project('Not in a worktree').textContent).not.toContain('worktree ·')
   })
 
   it('does not repeat the worktree its section already names', () => {

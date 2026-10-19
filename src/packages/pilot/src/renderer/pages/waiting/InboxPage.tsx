@@ -27,7 +27,8 @@ import {
 } from './inbox-tabs'
 import { useInboxViewPrefs } from './inbox-view-prefs'
 import { InMotionPanel } from './InMotionPanel'
-import { WorktreeName } from './WorktreeLink'
+import { ProjectBlock } from './ProjectLine'
+import { SectionHeading } from './SectionHeading'
 import { useElementWidth } from './use-element-width'
 import { useInboxSections } from './use-inbox-sections'
 import { useDoneForYou } from './use-done-for-you'
@@ -53,17 +54,6 @@ function withError(
 
 function keysOf(items: readonly Hosted<InboxListRow>[]): Set<string> {
   return new Set(items.map((i) => hostedKey(i.host, i.id)))
-}
-
-function SectionHeading({ section }: { section: HostedSection }): React.JSX.Element {
-  return (
-    <h2
-      title={section.group.label}
-      className="sticky top-0 z-20 -mx-5 truncate border-b border-border bg-background px-5 py-1.5 font-mono text-xs font-semibold text-muted-foreground"
-    >
-      <WorktreeName group={section.group} host={section.host} /> · {section.items.length}
-    </h2>
-  )
 }
 
 export function InboxPage(): React.JSX.Element {
@@ -111,16 +101,26 @@ export function InboxPage(): React.JSX.Element {
   const names = useMemo(() => new Map(automations.map((a) => [a.id, a.name])), [automations])
   const { tab } = prefs
   const onDone = tab === 'done'
-  const { query, filtered, places, inTabItems, shownItems, sections, activeSection, shown } =
-    useInboxSections({
-      inbox,
-      tab,
-      filters,
-      group: prefs.group,
-      sort: prefs.sort,
-      section,
-      now: loadedAt
-    })
+  const {
+    query,
+    filtered,
+    places,
+    inTabItems,
+    shownItems,
+    sections,
+    activeSection,
+    shown,
+    projects,
+    shownProjects
+  } = useInboxSections({
+    inbox,
+    tab,
+    filters,
+    group: prefs.group,
+    sort: prefs.sort,
+    section,
+    now: loadedAt
+  })
   // Defaults show under their run in Done for you; only the rest (no run, or a run already seen) fold at the end.
   const itemKeys = keysOf(items)
   const underRuns = new Set(
@@ -228,19 +228,21 @@ export function InboxPage(): React.JSX.Element {
     const item = items.find((i) => hostedKey(i.host, i.id) === key)
     return item ? cardOf(item) : null
   }
-  const sectionOf = useCallback(
-    (s: HostedSection) => (
+  const sectionIn = useCallback(
+    (s: HostedSection, project?: string | null) => (
       <section
         key={s.key}
         aria-label={s.group.label || UNGROUPED_NAME}
         className="flex min-w-0 flex-col gap-3"
       >
-        {s.group.label ? <SectionHeading section={s} /> : null}
+        {s.group.label ? <SectionHeading section={s} project={project} /> : null}
         {s.items.map(cardOf)}
       </section>
     ),
     [cardOf]
   )
+  // One argument only: Done for you maps sections through it.
+  const sectionOf = useCallback((s: HostedSection) => sectionIn(s), [sectionIn])
   const emptyText = (
     <p className="text-sm text-muted-foreground">{emptyTabText(tab, filtered, viewerName)}</p>
   )
@@ -251,6 +253,7 @@ export function InboxPage(): React.JSX.Element {
       return (
         <InboxRows
           sections={shown}
+          projects={shownProjects}
           answerStates={inbox?.answerStates ?? new Map()}
           names={names}
           places={group === 'worktree' ? null : places}
@@ -273,6 +276,13 @@ export function InboxPage(): React.JSX.Element {
         />
       )
     }
+    if (shownProjects) {
+      return shownProjects.map((p) => (
+        <ProjectBlock key={p.key} project={p}>
+          {p.sections.map((s) => sectionIn(s, p.name))}
+        </ProjectBlock>
+      ))
+    }
     return shown.map(sectionOf)
   }, [
     view,
@@ -290,7 +300,9 @@ export function InboxPage(): React.JSX.Element {
     cardOf,
     tab,
     setPrefs,
-    sectionOf
+    sectionOf,
+    sectionIn,
+    shownProjects
   ])
   const cardsBody = shown.length ? listBody : emptyText
   const defaultSections = groupHostedItems(defaults, automations)
@@ -370,6 +382,7 @@ export function InboxPage(): React.JSX.Element {
         {showList ? (
           <CardList
             sections={sections}
+            projects={projects}
             total={shownItems.length}
             group={activeSection}
             selected={selected}

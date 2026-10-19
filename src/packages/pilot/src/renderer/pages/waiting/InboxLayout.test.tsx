@@ -141,7 +141,7 @@ describe('the Inbox layout', () => {
       within(sections[0])
         .getAllByRole('heading')
         .map((h) => h.textContent)
-    ).toEqual(['web-2099-carrier · 2', 'F1 Fixture', 'F2 Rescind'])
+    ).toEqual(['w / web-2099-carrier · 2', 'F1 Fixture', 'F2 Rescind'])
     expect(sections[0].querySelector('h2')?.className).toContain('sticky')
     expect(screen.queryByText('Job-wide')).toBeNull()
   })
@@ -168,7 +168,7 @@ describe('the Inbox layout', () => {
     expect(regions()).toEqual(['web-2099-carrier'])
   })
 
-  it('lists the cards by the same groups: kind, job code, age, and the title', async () => {
+  it('lists the cards by the same groups, under their projects: the job, age, and the title', async () => {
     serve()
     render(<InboxPage />)
     await screen.findByRole('heading', { name: 'F1 Fixture' })
@@ -176,16 +176,18 @@ describe('the Inbox layout', () => {
     const headings = within(list)
       .getAllByRole('button')
       .filter((b) => !b.hasAttribute('data-row'))
-      .map((b) => b.textContent)
+      .map((b) => b.getAttribute('aria-label') ?? b.textContent)
     expect(headings).toEqual([
       'All · 4',
+      'w · 2',
       'web-2099-carrier · 2',
+      'Not in a worktree · 2',
       '!1579 · 1',
       '09 · Prepare reviews requested of me · 1'
     ])
     const row = list.querySelector('[data-row="f1"]')!
     expect(row.textContent).not.toContain('Left for you')
-    expect(row.textContent).toContain('04')
+    expect(row.textContent).toContain('04 · Test branch UIs overnight')
     expect(row.textContent).toMatch(/\d+d|[A-Z][a-z]{2} \d+/)
     expect(row.textContent).toContain('F1 Fixture')
   })
@@ -589,7 +591,9 @@ describe('when the ask was made', () => {
     expect(pills.map((p) => p.textContent)).toEqual(['04 · Test branch UIs overnight', 'drafted'])
     expect(pills[1].className).toContain('normal-case')
     expect(screen.queryByText('waiting')).toBeNull()
-    expect(screen.queryAllByText('04 · Test branch UIs overnight')).toEqual([pills[0]])
+    expect(
+      within(eyebrow.closest('article')!).queryAllByText('04 · Test branch UIs overnight')
+    ).toEqual([pills[0]])
     vi.useRealTimers()
   })
 
@@ -745,7 +749,7 @@ describe('one status tab at a time', () => {
     expect(row('f1').getAttribute('aria-current')).toBeNull()
   })
 
-  it('groups by job: the headings name the jobs, and each list row names its worktree', async () => {
+  it('groups by job: the headings name the jobs, and each list row names its project and worktree', async () => {
     serve()
     render(<InboxPage />)
     await screen.findByRole('heading', { name: 'F1 Fixture' })
@@ -755,7 +759,7 @@ describe('one status tab at a time', () => {
       '04 · Test branch UIs overnight · 2',
       '09 · Prepare reviews requested of me · 2'
     ])
-    expect(row('f1').textContent).toContain('web-2099-carrier')
+    expect(row('f1').textContent).toContain('w / web-2099-carrier')
     expect(row('r1579').textContent).toContain('!1579')
   })
 
