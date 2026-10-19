@@ -76,6 +76,26 @@ function heaviestJob(
   return heaviest
 }
 
+// What a queued row's due time marks: its source's waitingSince, else the tick that first found it due.
+function dueFromOf(def: AutomationDefinition | undefined): string {
+  const items = def?.items
+  if (!items) {
+    return 'first due'
+  }
+  switch (items.kind) {
+    case 'worktree':
+      return items.where.commits ? 'oldest new commit' : 'first due'
+    case 'linear_ticket':
+      return 'ticket opened'
+    case 'pipeline':
+      return 'pipeline created'
+    case 'inbox_preparation':
+      return 'card posted'
+    case 'merge_request':
+      return 'first due'
+  }
+}
+
 // The Running page: the limit, every running run with its memory, the queue in line order, and a suggested limit.
 export function capacityView(input: CapacityViewInput): CapacityPayload {
   const { store } = input
@@ -114,7 +134,11 @@ export function capacityView(input: CapacityViewInput): CapacityPayload {
     queued: store.capacity
       .queued()
       .filter((q) => byId.has(q.automationId))
-      .map((q) => ({ ...q, automationName: nameOf(q.automationId) })),
+      .map((q) => ({
+        ...q,
+        automationName: nameOf(q.automationId),
+        dueFrom: dueFromOf(byId.get(q.automationId))
+      })),
     finished: listedRuns(store, ended).map((run) => {
       const onceKey = failedKeys.get(run.id)
       return {

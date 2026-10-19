@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import Database from '../../../../../main/sqlite/sync-database'
 import { PilotStore } from './store'
+import type { HoldReason } from '../../shared/api-types'
 import { RECENT_RUNS_FOR_PEAK, type QueuedItem } from './store-capacity'
 
 function open(): PilotStore {
@@ -91,9 +92,53 @@ describe('CapacityStore', () => {
       checkedAt: 60
     }
     expect(store.capacity.enqueue(later)).toEqual({ changed: true })
-    expect(store.capacity.queued()).toEqual([{ ...later, queuedAt: 10, dueAt: 10 }])
+    expect(store.capacity.queued()).toEqual([{ ...later, queuedAt: 10, dueAt: 10, heldAt: 60 }])
     expect(store.capacity.enqueue({ ...later, checkedAt: 70 })).toEqual({ changed: false })
     expect(store.capacity.queued()[0].checkedAt).toBe(70)
+  })
+
+  it.each<[string, readonly [HoldReason, number][], number | undefined]>([
+    ['held from its first check', [['in_flight', 10]], 10],
+    [
+      'a slot waiter is held from the check that held it',
+      [
+        ['capacity', 10],
+        ['in_flight', 20]
+      ],
+      20
+    ],
+    [
+      'a hold that changes code keeps its start',
+      [
+        ['in_flight', 10],
+        ['quota', 20],
+        ['in_flight', 30]
+      ],
+      10
+    ],
+    [
+      'back to a slot wait, then held anew',
+      [
+        ['in_flight', 10],
+        ['capacity', 20],
+        ['in_flight', 30]
+      ],
+      30
+    ],
+    [
+      'a slot waiter is never held',
+      [
+        ['capacity', 10],
+        ['capacity', 20]
+      ],
+      undefined
+    ]
+  ])('heldAt: %s', (_name, checks, heldAt) => {
+    const store = open()
+    for (const [holdCode, at] of checks) {
+      store.capacity.enqueue({ ...item('a', 'x', at), holdCode, checkedAt: at })
+    }
+    expect(store.capacity.queued()[0].heldAt).toBe(heldAt)
   })
 
   it('sorts a row from an older build by its join time and updates it as a changed hold', () => {

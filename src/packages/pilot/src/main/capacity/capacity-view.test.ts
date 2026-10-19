@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { testDefinition, testStep } from '../../shared/definition/__fixtures__/definition'
+import type { AutomationDefinition } from '../../shared/definition/types'
 import { PilotStore } from '../store/store'
 import { UNMEASURED_JOB_BYTES } from '../../shared/capacity/limit-suggestion'
 import { capacityView } from './capacity-view'
@@ -118,7 +119,8 @@ describe('capacityView', () => {
         dueAt: 5,
         holdCode: 'capacity',
         holdDetail: 'Waiting for a slot',
-        checkedAt: 5
+        checkedAt: 5,
+        dueFrom: 'first due'
       }
     ])
     expect(view.quotaCeiling).toEqual({ weekly: 90, session: 95 })
@@ -135,6 +137,58 @@ describe('capacityView', () => {
       perJobBytes: 3 * GIB,
       measured: true
     })
+  })
+
+  it.each<[string, AutomationDefinition['items'], string]>([
+    [
+      "a worktree's new commits",
+      { kind: 'worktree', where: { commits: {} }, match: [], customFields: [] },
+      'oldest new commit'
+    ],
+    [
+      'a worktree without commits',
+      { kind: 'worktree', where: {}, match: [], customFields: [] },
+      'first due'
+    ],
+    [
+      'a Linear ticket',
+      { kind: 'linear_ticket', where: {}, match: [], customFields: [] },
+      'ticket opened'
+    ],
+    [
+      'a pipeline',
+      { kind: 'pipeline', where: {}, match: [], customFields: [] },
+      'pipeline created'
+    ],
+    [
+      'an inbox card',
+      { kind: 'inbox_preparation', where: {}, match: [], customFields: [] },
+      'card posted'
+    ],
+    ['a run-once job', null, 'first due']
+  ])("says what a queued row's due time marks: %s", (_name, items, dueFrom) => {
+    const store = PilotStore.open(
+      join(mkdtempSync(join(tmpdir(), 'pilot-capacity-view-')), 'db.sqlite')
+    )
+    store.capacity.enqueue({
+      automationId: 'job',
+      itemKey: 'k',
+      itemLabel: 'k',
+      queuedAt: 5,
+      byHand: false,
+      dueAt: 1,
+      holdCode: 'in_flight',
+      holdDetail: '1 uncommitted file',
+      checkedAt: 5
+    })
+    const view = capacityView({
+      store,
+      definitions: [testDefinition({ id: 'job', items })],
+      memory: null,
+      system: { totalBytes: 24 * GIB, availableBytes: 11 * GIB },
+      now: 100
+    })
+    expect(view.queued.map((q) => q.dueFrom)).toEqual([dueFrom])
   })
 
   it('budgets an enabled job never measured as unmeasured, so a light measured job cannot raise the suggestion', () => {

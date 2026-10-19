@@ -1,6 +1,11 @@
 import type { CapacityPayload, GaveUpKey, QueuedRun } from '../shared/api-types-capacity'
 import { formatMemory } from '../shared/capacity/format-memory'
-import { failedTimesText, waitsForSlot } from '../shared/capacity/waiting-rows'
+import {
+  failedTimesText,
+  holdReasonText,
+  waitedText,
+  waitsForSlot
+} from '../shared/capacity/waiting-rows'
 import { formatDuration } from '../shared/run/format-duration'
 import { workedMs } from '../shared/run/worked-time'
 
@@ -22,7 +27,7 @@ function waitingCount(queued: readonly QueuedRun[]): string {
   return `Waiting: ${parts.join(' · ')}`
 }
 
-// Only slot waiters have a place in line; a held row says why it waits, and it has waited since it became due.
+// Only slot waiters have a place in line; a held row says how long it has been held and why, as Running does.
 function waitingRows(queued: readonly QueuedRun[], now: number): string[] {
   let place = 0
   return queued.map((q) => {
@@ -32,9 +37,9 @@ function waitingRows(queued: readonly QueuedRun[], now: number): string[] {
       mark = `${place}.`
     }
     const byHand = q.byHand ? '  (Run now)' : ''
-    const detail = q.holdDetail ? `  ${q.holdDetail}` : ''
-    const waited = formatDuration(now - (q.dueAt ?? q.queuedAt))
-    return `  ${mark} ${q.automationName}  ${q.itemLabel}  waiting ${waited}${byHand}${detail}`
+    const reason = holdReasonText(q)
+    const detail = reason ? `  ${reason}` : ''
+    return `  ${mark} ${q.automationName}  ${q.itemLabel}  ${waitedText(q, now)}${byHand}${detail}`
   })
 }
 

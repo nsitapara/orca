@@ -27,9 +27,13 @@ export type QueuedRun = {
   byHand: boolean
   // When it became due; it has waited since then.
   dueAt?: number
+  // What dueAt marks, in words ("oldest new commit"); absent from older Pilots.
+  dueFrom?: string
   holdCode?: HoldReason
   // Why it waits, in words.
   holdDetail?: string
+  // When its current hold on something other than a slot began; absent on a slot waiter and from older Pilots.
+  heldAt?: number
 }
 
 // An ended run of a job that holds a slot, as Activity lists it; queuedAt on it says when it joined the line.

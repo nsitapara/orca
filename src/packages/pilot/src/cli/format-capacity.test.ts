@@ -66,7 +66,7 @@ describe('formatCapacity', () => {
     )
   })
 
-  it('numbers only the slot line, says why each item waits since it became due, and lists what the runner gave up on', () => {
+  it('numbers only the slot line, says how long each item has waited or been held and why, and lists what the runner gave up on', () => {
     const text = formatCapacity(
       {
         ...payload,
@@ -86,8 +86,10 @@ describe('formatCapacity', () => {
             queuedAt: NOW - 60_000,
             byHand: false,
             dueAt: NOW - 9 * 60_000,
+            dueFrom: 'card posted',
             holdCode: 'worktree_busy',
-            holdDetail: 'someone is typing in ✳ F1'
+            holdDetail: 'someone is typing in ✳ F1',
+            heldAt: NOW - 60_000
           },
           {
             automationId: 'ci',
@@ -119,7 +121,7 @@ describe('formatCapacity', () => {
     expect(text.split('\n').slice(5, 12)).toEqual([
       'Waiting: 2 for a slot · 1 held',
       '  1. 05 Fix failed CI  !9  waiting 20m  (Run now)  Waiting for a slot: 2 of 2 running',
-      '  -  14 Prepare context  F1 carrier samples  waiting 9m  someone is typing in ✳ F1',
+      '  -  14 Prepare context  F1 carrier samples  held 60s · card posted 9m ago  someone is typing in ✳ F1. It starts once nobody is typing or running an agent there.',
       '  2. 05 Fix failed CI  !10  waiting 2m',
       'Gave up: 1',
       '  03 Review and fix  !1600  failed 3 times  agent exited',

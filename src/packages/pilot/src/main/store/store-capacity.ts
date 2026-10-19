@@ -15,6 +15,8 @@ export type QueuedItem = {
   checkedAt: number
   // When a hold that knows its end is over (a retry's wait): it is re-checked then. Absent for any other.
   recheckAt?: number
+  // Set by the store: the check that began its current hold on something other than a slot. Absent on a slot waiter.
+  heldAt?: number
 }
 
 const RUN_LIMIT_KEY = 'run_limit'
@@ -66,7 +68,8 @@ function toQueued(r: Record<string, unknown>): QueuedItem {
     holdCode: toHoldReason(r.hold_code),
     holdDetail: String(r.hold_detail ?? ''),
     checkedAt: Number(r.checked_at ?? r.queued_at),
-    ...(typeof r.recheck_at === 'number' ? { recheckAt: r.recheck_at } : {})
+    ...(typeof r.recheck_at === 'number' ? { recheckAt: r.recheck_at } : {}),
+    ...(typeof r.held_at === 'number' ? { heldAt: r.held_at } : {})
   }
 }
 
@@ -128,7 +131,8 @@ export class CapacityStore {
   }
 
   // changed: the row is new or its reason differs, so callers write a line only when something moved.
-  enqueue(item: QueuedItem): { changed: boolean } {
+  // A hold that changes code keeps its held_at; one that goes back to a slot wait clears it (SET reads the old row).
+  enqueue(item: Omit<QueuedItem, 'heldAt'>): { changed: boolean } {
     const before = this.db
       .prepare(
         'SELECT hold_code, hold_detail FROM run_queue WHERE automation_id = ? AND item_key = ?'
@@ -136,13 +140,14 @@ export class CapacityStore {
       .get(item.automationId, item.itemKey)
     this.db
       .prepare(
-        `INSERT INTO run_queue (automation_id, item_key, item_label, queued_at, by_hand, due_at, hold_code, hold_detail, checked_at, recheck_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `INSERT INTO run_queue (automation_id, item_key, item_label, queued_at, by_hand, due_at, hold_code, hold_detail, checked_at, recheck_at, held_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT (automation_id, item_key) DO UPDATE SET item_label = excluded.item_label,
            by_hand = MAX(by_hand, excluded.by_hand),
            due_at = MIN(COALESCE(due_at, queued_at), excluded.due_at),
            hold_code = excluded.hold_code, hold_detail = excluded.hold_detail, checked_at = excluded.checked_at,
-           recheck_at = excluded.recheck_at`
+           recheck_at = excluded.recheck_at,
+           held_at = CASE WHEN excluded.held_at IS NULL THEN NULL ELSE COALESCE(held_at, excluded.held_at) END`
       )
       .run(
         item.automationId,
@@ -154,7 +159,8 @@ export class CapacityStore {
         item.holdCode,
         item.holdDetail,
         item.checkedAt,
-        item.recheckAt ?? null
+        item.recheckAt ?? null,
+        item.holdCode === 'capacity' ? null : item.checkedAt
       )
     return {
       changed:

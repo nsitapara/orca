@@ -243,8 +243,8 @@ describe('migrate', () => {
       "INSERT INTO inbox_items (id, automation_id, person, type, title, digest, created_at, updated_at) VALUES ('i1', 'a', 'p', 'question', 't', 'd', 1, 1)"
     )
     migrate(db)
-    expect(PILOT_SCHEMA_VERSION).toBe(17)
-    expect(db.pragma('user_version', { simple: true })).toBe(17)
+    expect(PILOT_SCHEMA_VERSION).toBe(18)
+    expect(db.pragma('user_version', { simple: true })).toBe(18)
     expect(
       firstRow(
         db,
@@ -382,7 +382,7 @@ describe('migrate', () => {
       "INSERT INTO steps (run_id, idx, name, agent, status) VALUES ('r1', 0, 'context', 'shell', 'done')"
     )
     migrate(db)
-    expect(db.pragma('user_version', { simple: true })).toBe(17)
+    expect(db.pragma('user_version', { simple: true })).toBe(18)
     expect(firstRow(db, 'SELECT result_json FROM steps')).toEqual({ result_json: null })
   })
 
@@ -457,6 +457,20 @@ describe('migrate', () => {
     })
   })
 
+  it("V18 holds a V17 database's held rows since they joined, and leaves its slot waiters unheld", () => {
+    const db = openDb()
+    migrate(db, 17)
+    db.exec(
+      `INSERT INTO run_queue (automation_id, item_key, item_label, queued_at, by_hand, hold_code) VALUES
+         ('a', 'held', 'held', 7, 0, 'in_flight'), ('a', 'slot', 'slot', 8, 0, 'capacity')`
+    )
+    migrate(db)
+    expect(db.prepare('SELECT item_key, held_at FROM run_queue ORDER BY item_key').all()).toEqual([
+      { item_key: 'held', held_at: 7 },
+      { item_key: 'slot', held_at: null }
+    ])
+  })
+
   it('V16 adds runs.idle_ms, 0 on the runs a V15 database had', () => {
     const db = openDb()
     migrate(db, 15)
@@ -496,7 +510,8 @@ describe('migrate', () => {
       'hold_code',
       'hold_detail',
       'checked_at',
-      'recheck_at'
+      'recheck_at',
+      'held_at'
     ])
   })
 })
