@@ -6,7 +6,7 @@ import type {
   QueuedRun,
   RetryKey
 } from '../../../shared/api-types-capacity'
-import { waitsForSlot } from '../../../shared/capacity/waiting-rows'
+import { holdReasonText, waitedText, waitsForSlot } from '../../../shared/capacity/waiting-rows'
 import { formatDuration } from '../../../shared/run/format-duration'
 import { workedMs } from '../../../shared/run/worked-time'
 import { PilotHostProvider, usePilotHost } from '../../hosts/PilotHostContext'
@@ -126,6 +126,7 @@ function QueuedRow({
   place: number | null
   now: number
 }): React.JSX.Element {
+  const reason = holdReasonText(item)
   return (
     <li className="flex min-w-0 items-center gap-2 px-3 py-2 text-sm">
       <span className="w-5 shrink-0 text-right text-xs tabular-nums text-muted-foreground">
@@ -136,15 +137,11 @@ function QueuedRow({
         <div className="truncate font-mono text-xs text-muted-foreground" title={item.itemLabel}>
           {item.itemLabel}
         </div>
-        {item.holdDetail ? (
-          <div className="truncate text-xs text-muted-foreground" title={item.holdDetail}>
-            {item.holdDetail}
-          </div>
-        ) : null}
+        {reason ? <div className="text-xs text-muted-foreground">{reason}</div> : null}
       </div>
       {item.byHand ? <Badge variant="outline">Run now</Badge> : null}
       <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
-        waiting {formatDuration(now - (item.dueAt ?? item.queuedAt))}
+        {waitedText(item, now)}
       </span>
     </li>
   )

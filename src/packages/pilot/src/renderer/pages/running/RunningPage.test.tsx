@@ -165,22 +165,24 @@ describe('RunningPage', () => {
     expect(screen.getByRole('status', { name: 'Jobs at once' }).textContent).toBe('2')
   })
 
-  it('lists a held item with its reason, and says what the quota ceiling holds', async () => {
+  it('lists a held item with how long it has been held and why, and says what the quota ceiling holds', async () => {
     const now = Date.now()
     serve(
       capacity({
         quotaCeiling: { weekly: 90, session: 95 },
         queued: [
           {
-            automationId: 'ci',
-            automationName: '05 Fix failed CI',
-            itemKey: 'mr:9',
-            itemLabel: '!9 web-9',
+            automationId: 'review',
+            automationName: '03 Review and fix',
+            itemKey: 'wt:1',
+            itemLabel: 'web-2099',
             queuedAt: now - 9 * 60_000,
             byHand: false,
-            dueAt: now - 3 * 60_000,
-            holdCode: 'session_open',
-            holdDetail: 'someone is typing in \u2733 F1'
+            dueAt: now - 48 * 60 * 60_000,
+            dueFrom: 'oldest new commit',
+            holdCode: 'in_flight',
+            holdDetail: '53 uncommitted files',
+            heldAt: now - 9 * 60_000
           }
         ]
       })
@@ -188,8 +190,10 @@ describe('RunningPage', () => {
     await shown()
     expect(screen.getByRole('heading', { name: 'Waiting \u00b7 1' })).toBeTruthy()
     const waiting = within(screen.getByRole('region', { name: 'Waiting' }))
-    expect(waiting.getByText('someone is typing in \u2733 F1')).toBeTruthy()
-    expect(waiting.getByText('waiting 3m')).toBeTruthy()
+    expect(
+      waiting.getByText(/^53 uncommitted files\. It starts once the worktree is clean/)
+    ).toBeTruthy()
+    expect(waiting.getByText('held 9m \u00b7 oldest new commit 48h ago')).toBeTruthy()
     expect(
       screen.getByText(
         'Jobs with an agent step wait while Claude or Codex is over 90% weekly or 95% session.'
