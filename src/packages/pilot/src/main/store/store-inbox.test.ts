@@ -263,3 +263,27 @@ describe('fillSummaries', () => {
     expect(store.inbox.get('good')?.details?.summary).toEqual(['1 screenshot'])
   })
 })
+
+describe('ticketedDone', () => {
+  it('lists only done cards closed as ticketed for later, with just the match columns', () => {
+    const store = PilotStore.open(':memory:')
+    const close = (id: string, status: 'done' | 'answered', outcome: string) => {
+      store.inbox.add(item(id))
+      store.inbox.update(id, { status, outcome }, 7)
+    }
+    close('hit', 'done', 'ticketed for later: WEB-1 · https://x/WEB-1')
+    close('other', 'done', 'done: created WEB-2')
+    close('open-status', 'answered', 'ticketed for later: WEB-3 · https://x/WEB-3')
+    store.inbox.add(item('open'))
+    expect(store.inbox.ticketedDone()).toEqual([
+      {
+        id: 'hit',
+        automationId: 'fix-failed-ci',
+        itemKey: 'mr:1561',
+        title: store.inbox.get('hit')!.title,
+        outcome: 'ticketed for later: WEB-1 · https://x/WEB-1',
+        updatedAt: 7
+      }
+    ])
+  })
+})

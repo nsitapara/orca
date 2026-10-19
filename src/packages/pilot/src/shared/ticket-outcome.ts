@@ -1,7 +1,7 @@
 import type { InboxItemRow } from './api-types'
 import type { TicketedRef } from './ticket-types'
 
-const OUTCOME_PREFIX = 'ticketed for later: '
+export const OUTCOME_PREFIX = 'ticketed for later: '
 const OUTCOME_SEPARATOR = ' · '
 const LOCATION_SUFFIX = /\s—\s(\S+:\d+(?:-\d+)?)$/
 

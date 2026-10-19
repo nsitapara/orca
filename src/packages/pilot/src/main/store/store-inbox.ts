@@ -1,9 +1,19 @@
 import type Database from '../../../../../main/sqlite/sync-database'
 import type { InboxAnswer, InboxItemRow, InboxStatus } from '../../shared/api-types'
 import type { DetailsSnapshot } from '../../shared/details'
+import { OUTCOME_PREFIX } from '../../shared/ticket-outcome'
 import { fillSummaries, itemLabels } from './store-inbox-labels'
 import { jsonOrNull, readCurrentDetails, readSnapshot, writeSnapshot } from './store-inbox-details'
 import { INBOX_ROW_COLUMNS, toItem } from './store-inbox-row'
+
+export type TicketedDoneRow = {
+  id: string
+  automationId: string
+  itemKey: string
+  title: string
+  outcome: string
+  updatedAt: number
+}
 
 export type NewInboxItem = Omit<
   InboxItemRow,
@@ -215,6 +225,24 @@ export class InboxStore {
     cards: { id: string; runId: string | null; automationId: string; itemKey: string | null }[]
   ): Map<string, string> {
     return itemLabels(this.db, cards)
+  }
+
+  // Done cards closed as ticketed for later, only the columns a match needs.
+  ticketedDone(): TicketedDoneRow[] {
+    return this.db
+      .prepare(
+        `SELECT id, automation_id, item_key, title, outcome, updated_at
+           FROM inbox_items WHERE status = 'done' AND item_key IS NOT NULL AND outcome LIKE ?`
+      )
+      .all(`${OUTCOME_PREFIX}%`)
+      .map((r) => ({
+        id: String(r.id),
+        automationId: String(r.automation_id),
+        itemKey: String(r.item_key),
+        title: String(r.title),
+        outcome: String(r.outcome),
+        updatedAt: Number(r.updated_at)
+      }))
   }
 
   setSnapshot(id: string, snapshot: DetailsSnapshot | null): void {
