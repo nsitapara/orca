@@ -35,6 +35,14 @@ function messageOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
 }
 
+// env delete's data.kept (pilotcli cf4d366): the branch it kept a throwaway's unhomed commits on. Older pilotcli: none.
+function keptOf(data: unknown): string | undefined {
+  if (typeof data !== 'object' || data === null || !('kept' in data)) {
+    return undefined
+  }
+  return typeof data.kept === 'string' && data.kept !== '' ? data.kept : undefined
+}
+
 // An ended run whose env may still need env delete. A preparing env counts: its create is stopped first.
 function mayTearDown(run: RunRow | null): run is RunRow & { env: RunEnv } {
   return !!run?.env && run.env.removedAt === null && !LIVE.has(run.status)
@@ -96,7 +104,7 @@ export function createTeardowns(deps: TeardownDeps): Teardowns {
       timeoutMs: DELETE_TIMEOUT_MS
     })
     if (reply.outcome === 'ok') {
-      store.runs.envs.removed(run.id, deps.now())
+      store.runs.envs.removed(run.id, deps.now(), keptOf(reply.data))
       deps.forget(run)
       return
     }

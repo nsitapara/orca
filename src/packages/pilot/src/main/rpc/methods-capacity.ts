@@ -1,10 +1,12 @@
 import { z } from 'zod'
 import { defineMethod } from '../../../../../main/runtime/rpc/core'
-import type { CapacityPayload } from '../../shared/api-types-capacity'
+import type { CapacityPayload, QuotaUse } from '../../shared/api-types-capacity'
 import { MAX_RUN_LIMIT } from '../../shared/capacity/limit-suggestion'
 import { MAX_RETRY_LIMIT } from '../../shared/capacity/retry-limit'
+import type { AgentKind } from '../../shared/definition/types'
 import { capacityView } from '../capacity/capacity-view'
 import { readSystemMemory, type SystemMemory } from '../capacity/system-memory'
+import { readQuotas, type QuotaReaders } from '../fields/quota'
 import type { PilotContext } from '../pilot-services'
 import { CallerBinding, refuseAgentCaller } from './run-binding'
 
@@ -14,6 +16,23 @@ export const AGENT_SETS_RETRIES =
   "An agent in a Pilot run can't change how often a failed run is retried; Nish does that in Pilot"
 // A sample older than this (the scheduler runs in another process, or stopped) gives way to a fresh reading.
 const STALE_SAMPLE_MS = 60_000
+// A stale cache refreshes in the background past this; the page shows the reading at its next poll.
+export const QUOTA_WAIT_MS = 2_000
+
+// The runner's cached readings, or none when a refresh doesn't answer within QUOTA_WAIT_MS.
+export async function quotaUseWithin(
+  readers: QuotaReaders | undefined,
+  waitMs = QUOTA_WAIT_MS
+): Promise<Partial<Record<AgentKind, QuotaUse>> | undefined> {
+  if (!readers) {
+    return undefined
+  }
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const late = new Promise<undefined>((resolve) => {
+    timer = setTimeout(() => resolve(undefined), waitMs)
+  })
+  return Promise.race([readQuotas(readers), late]).finally(() => clearTimeout(timer))
+}
 
 // Null: no limit.
 const SetLimit = z.object({
@@ -42,12 +61,17 @@ async function payload(
     memory?.sampledAt !== null &&
     memory?.sampledAt !== undefined &&
     now() - memory.sampledAt < STALE_SAMPLE_MS
+  const [system, quotaUse] = await Promise.all([
+    fresh ? sampled : readSystem(),
+    quotaUseWithin(c.quotas)
+  ])
   return capacityView({
     store: c.store,
     definitions: c.loaded().definitions,
     memory,
-    system: fresh ? sampled : await readSystem(),
-    now: now()
+    system,
+    now: now(),
+    ...(quotaUse ? { quotaUse } : {})
   })
 }
 

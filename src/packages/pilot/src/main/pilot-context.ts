@@ -10,7 +10,7 @@ import type { AnswerDispatcher } from './answers/dispatcher'
 import type { RunMemorySampler } from './capacity/run-memory'
 import type { LoadedDefinitions } from './definitions/loader'
 import type { EngineEnv } from './engine-env'
-import type { QuotaReader } from './fields/quota'
+import type { QuotaReader, QuotaReaders } from './fields/quota'
 import type { PlaygroundService } from './playground/create'
 import type { PilotScheduler } from './scheduler/scheduler'
 import type { PilotStore } from './store/store'
@@ -42,6 +42,8 @@ export type PilotContext = {
   playground?: PlaygroundService
   // Running runs' memory, sampled on the scheduler's poll (main/capacity); absent where nothing samples it.
   memory?: RunMemorySampler
+  // The runner's cached quota readers, shown on Running; absent where none were given.
+  quotas?: QuotaReaders
 }
 export type PilotServices = { stop: () => void; context: PilotContext }
 // What pilot.status reads. It is registered before anything opens, so status still answers (with

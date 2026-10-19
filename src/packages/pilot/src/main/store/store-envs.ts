@@ -76,13 +76,15 @@ export class EnvStore {
   }
 
   // Records the delete in env_removed_at. A deferred env (not_yet, nothing ran) stays deferred: its outcome is kept.
-  removed(runId: string, at: number): void {
+  // kept: the branch env delete kept a throwaway's unhomed commits on, recorded with the env.
+  removed(runId: string, at: number, kept?: string): void {
+    const json = kept ? JSON.stringify({ ...this.json(runId), kept }) : null
     this.db
       .prepare(
         `UPDATE runs SET env_state = CASE WHEN env_state = 'deferred' THEN 'deferred' ELSE 'removed' END,
-           env_removed_at = ?, env_delete_error = NULL, env_retry_at = NULL WHERE id = ?`
+           env_removed_at = ?, env_delete_error = NULL, env_retry_at = NULL, env_json = COALESCE(?, env_json) WHERE id = ?`
       )
-      .run(at, runId)
+      .run(at, json, runId)
   }
 
   // hold_home: the step whose claim on home_path this run holds. The claim queries (store-runs.ts) count it only while

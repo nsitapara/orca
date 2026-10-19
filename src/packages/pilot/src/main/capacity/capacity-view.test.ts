@@ -191,6 +191,89 @@ describe('capacityView', () => {
     expect(view.queued.map((q) => q.dueFrom)).toEqual([dueFrom])
   })
 
+  it('says where each run works, what a finished run brought home, and the quota use it was given', () => {
+    const store = PilotStore.open(
+      join(mkdtempSync(join(tmpdir(), 'pilot-capacity-view-')), 'db.sqlite')
+    )
+    const def = testDefinition({
+      id: 'review',
+      steps: [
+        testStep({ name: 'review' }),
+        testStep({ name: 'publish', agent: 'shell', run: 'x', prompt: null }),
+        testStep({ name: 'merge_back', agent: 'shell', run: 'x', prompt: null, holdHome: true })
+      ]
+    })
+    const stack = { kind: 'backend' as const, project: 'agents-r', urls: {}, log: null }
+    for (const [id, status] of [
+      ['live', 'running'],
+      ['ended', 'done']
+    ] as const) {
+      store.runs.create({
+        id,
+        automationId: 'review',
+        tickId: null,
+        itemKey: id,
+        itemLabel: id,
+        worktreePath: '/wt/a',
+        startedAt: 1
+      })
+      store.runs.envs.begin(id, '/wt/a', {})
+      store.runs.envs.ready(id, {
+        mode: 'throwaway',
+        reason: 'uncommitted changes',
+        path: `/agents/agents-${id}`,
+        home: '/wt/a',
+        worktreeId: 'w',
+        sha: null,
+        envFile: null,
+        vars: {},
+        stack
+      })
+      store.runs.update(id, { status, ...(status === 'done' ? { finishedAt: 9 } : {}) })
+    }
+    const results = [
+      ['publish', { command: 'git push-branch', outcome: 'ok', reason: '' }],
+      [
+        'merge_back',
+        { command: 'git update-branch', outcome: 'skip', reason: 'uncommitted changes' }
+      ]
+    ] as const
+    for (const [idx, [name, result]] of results.entries()) {
+      store.runs.createStep({
+        runId: 'ended',
+        idx,
+        name,
+        agent: 'shell',
+        skill: null,
+        startedAt: 2
+      })
+      store.runs.updateStep('ended', idx, { status: 'done', finishedAt: 3, result })
+    }
+    store.runs.envs.removed('ended', 10, 'pilot/ended')
+    const quotaUse = { claude: { weekly: 92, session: 10 } }
+    const view = capacityView({
+      store,
+      definitions: [def],
+      memory: null,
+      system: { totalBytes: 24 * GIB, availableBytes: 11 * GIB },
+      now: 100,
+      quotaUse
+    })
+    const place = { mode: 'throwaway', reason: 'uncommitted changes', stack: true }
+    expect(view.running.map((r) => r.place)).toEqual([place])
+    expect(view.finished.map((r) => [r.place, r.home])).toEqual([
+      [
+        place,
+        {
+          pushed: { ok: true, reason: null },
+          mergedBack: { ok: false, reason: 'uncommitted changes' },
+          kept: 'pilot/ended'
+        }
+      ]
+    ])
+    expect(view.quotaUse).toEqual(quotaUse)
+  })
+
   it('budgets an enabled job never measured as unmeasured, so a light measured job cannot raise the suggestion', () => {
     const store = PilotStore.open(
       join(mkdtempSync(join(tmpdir(), 'pilot-capacity-view-')), 'db.sqlite')
