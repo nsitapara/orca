@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -41,10 +41,12 @@ describe('recordHangObservation', () => {
     recordHangObservation({
       parentPid: 4242,
       markerPath,
+      detectedAt: 1_000,
       unresponsiveMs: 47_000,
       selfRecovered: false
     })
     expect(consumeHangDetectionMarker(markerPath)).toMatchObject({
+      detectedAt: 1_000,
       parentPid: 4242,
       unresponsiveMs: 47_000,
       selfRecovered: false
@@ -56,16 +58,19 @@ describe('recordHangObservation', () => {
     recordHangObservation({
       parentPid: 4242,
       markerPath,
+      detectedAt: 1_000,
       unresponsiveMs: 47_000,
       selfRecovered: false
     })
     recordHangObservation({
       parentPid: 4242,
       markerPath,
+      detectedAt: 1_000,
       unresponsiveMs: 62_000,
       selfRecovered: true
     })
     expect(consumeHangDetectionMarker(markerPath)).toMatchObject({
+      detectedAt: 1_000,
       unresponsiveMs: 62_000,
       selfRecovered: true
     })
@@ -76,6 +81,7 @@ describe('recordHangObservation', () => {
     recordHangObservation({
       parentPid: 4242,
       markerPath: join(dir, 'marker.json'),
+      detectedAt: 1_000,
       unresponsiveMs: 45_000,
       selfRecovered: false
     })
@@ -84,15 +90,16 @@ describe('recordHangObservation', () => {
     expect(exitSpy).not.toHaveBeenCalled()
   })
 
-  it('survives an unwritable marker path', () => {
-    expect(() =>
+  it('survives an unwritable marker path and reports the write failed', () => {
+    expect(
       recordHangObservation({
         parentPid: 4242,
         markerPath: join(dir, 'missing-subdir', 'marker.json'),
+        detectedAt: 1_000,
         unresponsiveMs: 45_000,
         selfRecovered: false
       })
-    ).not.toThrow()
+    ).toBe(false)
   })
 
   it('is a no-op when no marker path is configured', () => {
@@ -100,6 +107,7 @@ describe('recordHangObservation', () => {
       recordHangObservation({
         parentPid: 4242,
         markerPath: '',
+        detectedAt: 1_000,
         unresponsiveMs: 45_000,
         selfRecovered: false
       })
@@ -175,6 +183,45 @@ describe('watchdog worker entry', () => {
       expect(consumeHangDetectionMarker(markerPath)).toBeNull()
     } finally {
       rmSync(markerPath, { force: true })
+    }
+  })
+
+  // Why: the hang that ended in SIGKILL after two hours was reported as "silent ≥45 s"; the marker
+  // has to keep growing while the hang lasts, and a write that failed has to be tried again.
+  it('refreshes an ongoing hang marker, keeps its detection time, and retries a failed write', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'hang-watchdog-refresh-'))
+    const markerPath = join(dir, 'marker.json')
+    const port = { on: vi.fn(), close: vi.fn() }
+    try {
+      runWatchdog(
+        { parentPid: process.pid, markerPath, timeoutMs: 45_000, checkIntervalMs: 5_000 },
+        port
+      )
+      vi.advanceTimersByTime(50_000)
+      expect(consumeHangDetectionMarker(markerPath)).toEqual({
+        detectedAt: 50_000,
+        parentPid: process.pid,
+        unresponsiveMs: 50_000,
+        selfRecovered: false
+      })
+      // A rewrite within 30 s of the last one is skipped; the next due one lands.
+      vi.advanceTimersByTime(25_000)
+      expect(consumeHangDetectionMarker(markerPath)).toBeNull()
+      vi.advanceTimersByTime(5_000)
+      expect(consumeHangDetectionMarker(markerPath)).toMatchObject({
+        detectedAt: 50_000,
+        unresponsiveMs: 80_000
+      })
+      rmSync(dir, { recursive: true, force: true })
+      vi.advanceTimersByTime(30_000)
+      mkdirSync(dir)
+      vi.advanceTimersByTime(5_000)
+      expect(consumeHangDetectionMarker(markerPath)).toMatchObject({
+        detectedAt: 50_000,
+        unresponsiveMs: 115_000
+      })
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
     }
   })
 })

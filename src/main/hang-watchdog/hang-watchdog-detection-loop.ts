@@ -3,6 +3,8 @@ export type HangWatchdogDetectionLoopConfig = {
   checkIntervalMs: number
   now: () => number
   onHangDetected: (unresponsiveMs: number) => void
+  /** Each later check while the hang lasts, so a killed app still reports how long it ran. */
+  onHangContinued?: (unresponsiveMs: number) => void
   /** Heartbeats resumed after a detected hang — the main thread was stalled, not deadlocked. */
   onHangResolved: (unresponsiveMs: number) => void
 }
@@ -34,6 +36,7 @@ export function createHangWatchdogDetectionLoop(
       // stall clears reads as a huge gap and gets misread as system sleep.
       lastTickAt = now
       if (detected) {
+        config.onHangContinued?.(now - lastHeartbeatAt)
         return
       }
       // Why: system sleep suspends this process too; a huge tick gap means suspension, not a parent hang, so restart the wait from scratch.

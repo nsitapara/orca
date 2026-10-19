@@ -1,10 +1,11 @@
-import { readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 
-// Why: written by the watchdog worker when main-thread heartbeats stop, and rewritten if
-// they resume; consumed on the next launch to report how long the stall lasted and whether it ever
-// cleared. `selfRecovered` separates a real deadlock from a long-but-survivable stall — the two are
-// indistinguishable at detection time, and only the latter would have been a destructive kill.
+// Why: written by the watchdog worker when main-thread heartbeats stop, refreshed while they stay
+// stopped, and rewritten if they resume; consumed on the next launch to report how long the stall
+// lasted and whether it ever cleared. `selfRecovered` separates a real deadlock from a
+// long-but-survivable stall — the two are indistinguishable at detection time, and only the latter
+// would have been a destructive kill.
 export type HangDetectionMarker = {
   detectedAt: number
   parentPid: number
@@ -12,21 +13,28 @@ export type HangDetectionMarker = {
   selfRecovered: boolean
 }
 
+// Unreadable: the file existed but held no valid marker, which a cut-short write leaves behind.
+export type ConsumedHangDetectionMarker = HangDetectionMarker | 'unreadable' | null
+
 export function hangDetectionMarkerPath(userDataPath: string): string {
   return join(userDataPath, 'main-thread-hang.json')
 }
 
 export function writeHangDetectionMarker(markerPath: string, marker: HangDetectionMarker): void {
-  writeFileSync(markerPath, JSON.stringify(marker), { mode: 0o600 })
+  // Why rename: an in-place rewrite truncates first, so a write that fails or never finishes
+  // would leave an empty file and lose the observation it was replacing.
+  const tempPath = `${markerPath}.tmp`
+  writeFileSync(tempPath, JSON.stringify(marker), { mode: 0o600 })
+  renameSync(tempPath, markerPath)
 }
 
 function readAvailableHangDetectionMarker(
   markerPath: string
-): HangDetectionMarker | null | undefined {
+): HangDetectionMarker | 'unreadable' | undefined {
   let raw: string
   try {
     if (statSync(markerPath).size > 64 * 1024) {
-      return null
+      return 'unreadable'
     }
     raw = readFileSync(markerPath, 'utf8')
   } catch {
@@ -49,7 +57,7 @@ function readAvailableHangDetectionMarker(
       !Number.isFinite(parsed.unresponsiveMs) ||
       parsed.unresponsiveMs < 0
     ) {
-      return null
+      return 'unreadable'
     }
     return {
       detectedAt: parsed.detectedAt,
@@ -59,11 +67,11 @@ function readAvailableHangDetectionMarker(
       selfRecovered: 'selfRecovered' in parsed && parsed.selfRecovered === true
     }
   } catch {
-    return null
+    return 'unreadable'
   }
 }
 
-export function consumeHangDetectionMarker(markerPath: string): HangDetectionMarker | null {
+export function consumeHangDetectionMarker(markerPath: string): ConsumedHangDetectionMarker {
   const marker = readAvailableHangDetectionMarker(markerPath)
   // Retry unavailable reads next startup; only successfully inspected files are consumable.
   if (marker === undefined) {

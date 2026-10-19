@@ -7,15 +7,23 @@ const CHECK_INTERVAL_MS = 5_000
 function loopWithClock(startAt = 0) {
   let now = startAt
   const onHangDetected = vi.fn()
+  const onHangContinued = vi.fn()
   const onHangResolved = vi.fn()
   const loop = createHangWatchdogDetectionLoop({
     timeoutMs: TIMEOUT_MS,
     checkIntervalMs: CHECK_INTERVAL_MS,
     now: () => now,
     onHangDetected,
+    onHangContinued,
     onHangResolved
   })
-  return { loop, onHangDetected, onHangResolved, advance: (ms: number) => (now += ms) }
+  return {
+    loop,
+    onHangDetected,
+    onHangContinued,
+    onHangResolved,
+    advance: (ms: number) => (now += ms)
+  }
 }
 
 describe('createHangWatchdogDetectionLoop', () => {
@@ -98,6 +106,22 @@ describe('createHangWatchdogDetectionLoop', () => {
     loop.recordHeartbeat()
     expect(onHangResolved).toHaveBeenCalledTimes(1)
     expect(onHangResolved).toHaveBeenCalledWith(13 * CHECK_INTERVAL_MS)
+  })
+
+  it('reports the growing silence on each check while a detected hang lasts', () => {
+    const { loop, onHangDetected, onHangContinued, advance } = loopWithClock()
+    loop.recordHeartbeat()
+    for (let i = 0; i < 14; i++) {
+      advance(CHECK_INTERVAL_MS)
+      loop.tick()
+    }
+    expect(onHangDetected).toHaveBeenCalledTimes(1)
+    expect(onHangContinued.mock.calls).toEqual([[55_000], [60_000], [65_000], [70_000]])
+    advance(CHECK_INTERVAL_MS)
+    loop.recordHeartbeat()
+    advance(CHECK_INTERVAL_MS)
+    loop.tick()
+    expect(onHangContinued).toHaveBeenCalledTimes(4)
   })
 
   it('does not report resolution when no hang was ever detected', () => {

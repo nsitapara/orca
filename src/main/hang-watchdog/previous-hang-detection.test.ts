@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -71,6 +71,23 @@ describe('previous hang detection', () => {
     expect(existsSync(`${markerPath}.previous`)).toBe(false)
     expect(JSON.parse(readFileSync(markerPath, 'utf8')).parentPid).toBe(789)
     expect(reportPreviousHangDetection(dir)).toBeNull()
+  })
+
+  // Why: a watchdog note cut short mid-write was deleted without a trace, hiding the hang itself.
+  it('records an unreadable previous marker instead of dropping it silently', () => {
+    const markerPath = hangDetectionMarkerPath(dir)
+    writeFileSync(`${markerPath}.previous`, '')
+    const records: unknown[] = []
+    setActiveSink({ push: (record) => records.push(record), flush() {}, close() {} })
+    expect(reportPreviousHangDetection(dir)).toBeNull()
+    expect(records).toEqual([
+      expect.objectContaining({
+        attributes: expect.objectContaining({
+          'breadcrumb.name': 'main_thread_hang_marker_unreadable'
+        })
+      })
+    ])
+    expect(existsSync(`${markerPath}.previous`)).toBe(false)
   })
 
   it('retains a pending note when a launch ends before sink installation', () => {
