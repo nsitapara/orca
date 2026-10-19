@@ -243,6 +243,19 @@ describe('action cards filed through pilot.inbox.add', () => {
       "args that don't fit",
       { ...CARD, actionArgs: { argv: 'a' }, runId: 'run-2', stepIdx: 0 },
       'usage: push …'
+    ],
+    [
+      "it carries screenshots to upload (Pilot's Ticket for later only)",
+      {
+        ...CARD,
+        actionArgs: {
+          argv: ['a'],
+          images: [{ ref: 'pilot-image:1', path: '/a.png', sha256: 'a'.repeat(64) }]
+        },
+        automationId: 'rel',
+        itemKey: 'mr:1'
+      },
+      "images upload only from Pilot's own Ticket for later card"
     ]
   ])('refuses one when %s', (_name, params, message) => {
     const { store, call } = setup('push')

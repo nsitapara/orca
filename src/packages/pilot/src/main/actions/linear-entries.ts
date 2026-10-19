@@ -19,6 +19,7 @@ import {
 
 export const LINEAR_NOT_CONNECTED =
   "Linear isn't connected in Pilot; sign in to Linear in Pilot's settings"
+export const IMAGES_PILOT_ONLY = "images upload only from Pilot's own Ticket for later card"
 
 // Where linear_create reads a card's screenshots from: the Automations folder (null: none).
 export type LinearFiles = { detailsRoot: string | null }
@@ -182,17 +183,18 @@ const create: Spec<CreateArgs> = {
   power: 'create_ticket',
   label: 'Create a Linear ticket',
   usage:
-    'linear_create { "title", "team", "body"?, "state"?, "assignee"?, "priority"?, "labels"?, "images"?: [{ "ref": "pilot-image:N", "path", "sha256", "caption"? }], "links"?: [{ "url", "title"? }], "workspace_id"?, "write_id"? }',
+    'linear_create { "title", "team", "body"?, "state"?, "assignee"?, "priority"?, "labels"?, "images"? (Pilot\'s Ticket for later only): [{ "ref": "pilot-image:N", "path", "sha256", "caption"? }], "links"?: [{ "url", "title"? }], "workspace_id"?, "write_id"? }',
   schema: createArgs,
   pinned: true,
   describe: (a) => `Create a ${a.team} ticket: ${a.title}${attachments(a)}`,
   dry: (a) => `would create a ${a.team} ticket: ${a.title}${attachments(a)}`,
   write: createTicket,
   refused: { created: 'no' },
-  // Screenshots leave the Mac only on a person's Approve of a card, never on a run's own attempt.
+  // Screenshots leave the Mac only on Pilot's own Ticket for later card: an Approve outside any run (an
+  // ask-first card always has its run).
   refuseFor: (a, opts) =>
-    (a.images?.length ?? 0) > 0 && !opts.inboxItemId
-      ? "images need a person's approval on a card"
+    (a.images?.length ?? 0) > 0 && !(opts.inboxItemId && opts.runId === null)
+      ? IMAGES_PILOT_ONLY
       : null
 }
 

@@ -223,7 +223,7 @@ describe('linear_create with screenshots and links', () => {
     linearEntries(w, { detailsRoot }).find((e) => e.name === 'linear_create')!
   const BASE = { team: 'WEB', title: 'Finding', write_id: WRITE }
   const NOWHERE = { path: '/nowhere/a.png', sha256: 'a'.repeat(64) }
-  // A person's Approve on a card: the only attempt that may upload screenshots.
+  // A person's Approve on Pilot's own Ticket for later card, outside any run: the only attempt that may upload.
   const CARD = { dryRun: false, runId: null, inboxItemId: 'card-1' }
 
   it('uploads each screenshot in order into the team workspace, resolved once, then creates the ticket with their asset URLs', async () => {
@@ -414,31 +414,40 @@ describe('linear_create with screenshots and links', () => {
     expect(await create(w).describe(args)).toBe('Create a WEB ticket: Finding (1 screenshot)')
   })
 
-  const NEEDS_APPROVAL = {
+  const PILOT_ONLY = {
     outcome: 'failed',
-    detail: "images need a person's approval on a card",
+    detail: "images upload only from Pilot's own Ticket for later card",
     data: { created: 'no' }
   }
   it.each([
-    ["a run's own attempt", RUN, NEEDS_APPROVAL, 0],
-    ['a dry run without a card', { ...RUN, dryRun: true }, NEEDS_APPROVAL, 0],
-    ["a person's Approve on a card", CARD, { outcome: 'done', detail: 'created WEB-2118' }, 1],
+    ["a run's own attempt", RUN, PILOT_ONLY, 0],
+    ['a dry run without a card', { ...RUN, dryRun: true }, PILOT_ONLY, 0],
+    ["an Approve on a run's ask-first card", { ...RUN, inboxItemId: 'card-1' }, PILOT_ONLY, 0],
+    [
+      "a person's Approve on Pilot's Ticket for later card",
+      CARD,
+      { outcome: 'done', detail: 'created WEB-2118' },
+      1
+    ],
     [
       'a dry run on a card',
       { ...CARD, dryRun: true },
       { outcome: 'done', detail: 'would create a WEB ticket: Finding (1 screenshot)' },
       0
     ]
-  ])("takes screenshots only on a person's card: %s", async (_name, opts, expected, writes) => {
-    const w = writer()
-    const result = await create(w).run(
-      { ...BASE, body: '![a](pilot-image:1)', images: [image(1, shot('ask.png', 'one'))] },
-      opts
-    )
-    expect(result).toMatchObject(expected)
-    expect(w.uploadImage).toHaveBeenCalledTimes(writes)
-    expect(w.createIssue).toHaveBeenCalledTimes(writes)
-  })
+  ])(
+    "takes screenshots only on Pilot's Ticket for later card: %s",
+    async (_name, opts, expected, writes) => {
+      const w = writer()
+      const result = await create(w).run(
+        { ...BASE, body: '![a](pilot-image:1)', images: [image(1, shot('ask.png', 'one'))] },
+        opts
+      )
+      expect(result).toMatchObject(expected)
+      expect(w.uploadImage).toHaveBeenCalledTimes(writes)
+      expect(w.createIssue).toHaveBeenCalledTimes(writes)
+    }
+  )
 
   // The codes `linearIssueCreate` raises (runtime-linear-create-commands.ts and what it calls).
   it.each([
