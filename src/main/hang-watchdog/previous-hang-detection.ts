@@ -33,7 +33,8 @@ export function reportPreviousHangDetection(userDataPath: string): HangDetection
     recordDurableCrashBreadcrumb('main_thread_hang_detected', {
       unresponsiveMs: marker.unresponsiveMs,
       previousPid: marker.parentPid,
-      selfRecovered: marker.selfRecovered
+      selfRecovered: marker.selfRecovered,
+      detectedAt: new Date(marker.detectedAt).toISOString()
     })
   }
   return marker

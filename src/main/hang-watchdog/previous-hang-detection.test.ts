@@ -61,7 +61,8 @@ describe('previous hang detection', () => {
         attributes: expect.objectContaining({
           'breadcrumb.name': 'main_thread_hang_detected',
           'breadcrumb.data': expect.objectContaining({
-            previousPid: 456
+            previousPid: 456,
+            detectedAt: '1970-01-01T00:00:00.123Z'
           })
         })
       })

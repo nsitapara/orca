@@ -110,7 +110,8 @@ describe('main thread hang breadcrumb', () => {
       expect(breadcrumbData.get('main_thread_hang_detected')).toEqual({
         unresponsiveMs: 103_000,
         previousPid: 9536,
-        selfRecovered: true
+        selfRecovered: true,
+        detectedAt: '1970-01-01T00:00:00.001Z'
       })
       expect(existsSync(`${markerPath}.previous`)).toBe(false)
     } finally {
