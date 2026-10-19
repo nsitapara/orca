@@ -21,6 +21,7 @@ const HOLD_RELEASE: Record<HoldReason, string | null> = {
   quota: 'It starts once usage drops below that.',
   window: 'It starts when that window opens.',
   job_limit: "It starts when one of the job's runs ends.",
+  own_run: 'It starts when that run ends.',
   no_worktree: 'It starts once the worktree exists.',
   retry: null,
   tick_limit: null,

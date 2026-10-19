@@ -102,6 +102,6 @@ describe("itemGate: the job's own run on the item", () => {
     ]
   ])('%s', (_name, over, detail) => {
     const hold = itemGate(input(done, over), ITEM, '1', null)
-    expect(hold && [hold.code, hold.detail]).toEqual(detail && ['job_limit', detail])
+    expect(hold && [hold.code, hold.detail]).toEqual(detail && ['own_run', detail])
   })
 })

@@ -92,7 +92,7 @@ function ownRunHold(input: DecideInput, item: DecideItem): Hold | null {
   if (input.definition.items === null || !input.activeItems?.has(item.key)) {
     return null
   }
-  return { code: 'job_limit', detail: `Another run of this job is still active on ${item.label}` }
+  return { code: 'own_run', detail: `Another run of this job is still active on ${item.label}` }
 }
 
 // A failed run's retry, the job's runtime checks in declared order, each agent's quota, another run in the item's
