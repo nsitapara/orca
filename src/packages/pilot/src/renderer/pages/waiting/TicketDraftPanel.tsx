@@ -32,7 +32,7 @@ import { useTicketCreate } from './use-ticket-create'
 
 const SCREENSHOT_NOTE =
   'Ticked screenshots upload to Linear. Untick any that show real patient data.'
-// A fixed width, wide enough for "Create INFRA ticket", so the swap to Creating… or Retry doesn't move the row.
+// Fixed width for "Create INFRA ticket", so swapping to Creating… or Retry doesn't move the row.
 const CREATE_BUTTON = `${PRIMARY_BUTTON} w-44 truncate`
 
 type Load = { draft: TicketDraft } | { error: string }

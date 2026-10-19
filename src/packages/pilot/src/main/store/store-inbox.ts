@@ -245,7 +245,7 @@ export class InboxStore {
       }))
   }
 
-  // The parsed args of the newest obsolete card for this action closed with this outcome prefix under this write id.
+  // Args of the newest obsolete card with this action, outcome prefix and write id; null when none.
   closedWriteArgs(action: string, outcomePrefix: string, writeId: string): unknown {
     const r = this.db
       .prepare(

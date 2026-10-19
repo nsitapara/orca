@@ -30,8 +30,7 @@ function toastFiled(ref: TicketedRef): void {
 }
 
 // Create, and the frozen args: once Linear may hold the ticket, only those exact args go out again, for the
-// panel's life, so Linear's write-id check returns that ticket instead of filing an edited second one. A draft
-// the server froze earlier opens frozen.
+// panel's life, so Linear's write-id check returns that ticket instead of filing an edited second one.
 export function useTicketCreate(
   host: PilotHostRef,
   onFiled: (ref: TicketedRef) => void,

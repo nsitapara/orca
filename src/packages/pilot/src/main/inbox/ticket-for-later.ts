@@ -90,8 +90,7 @@ function argsFor(deps: TicketForLaterDeps, req: TicketForLaterRequest, draft: Ti
   return args
 }
 
-// The card as it is now, open, unchanged since the draft, and fileable; the args to file for it; and the
-// draft an earlier Create that may have reached Linear froze.
+// The open, unchanged, fileable card; the args to file for it; and the draft a may-have-created Create froze.
 function ticketToFile(deps: TicketForLaterDeps, req: TicketForLaterRequest): Ticket {
   const draft = buildTicketDraft(deps, req.id, req.digest)
   const card = deps.store.inbox.get(req.id)
@@ -110,8 +109,7 @@ function close(deps: TicketForLaterDeps, id: string, outcome: string): void {
   }
 }
 
-// The original closes as ticketed only while open and unchanged; one answered or re-filed during Create keeps
-// its answer and version, and only learns the ticket's name.
+// Closes the original only while open and unchanged; otherwise it keeps its answer and just names the ticket.
 function closeOriginal(
   deps: TicketForLaterDeps,
   req: TicketForLaterRequest,
@@ -161,8 +159,7 @@ function fileTicketCard(deps: TicketForLaterDeps, card: InboxItemRow, args: Tick
   return { id, digest: deps.store.inbox.get(id)?.digest ?? '' }
 }
 
-// The person reviewed the draft and pressed Create: the card is approved, with no settle window. A throw may
-// come after Linear's create, so it reads as maybe created.
+// The person reviewed the draft and pressed Create: the card is approved, with no settle window.
 async function attemptTicket(
   deps: TicketForLaterDeps,
   filed: { id: string; digest: string }
@@ -178,6 +175,7 @@ async function attemptTicket(
     })
     return attempted.outcome === 'asked' ? actionFailed(attempted.detail) : attempted
   } catch (error) {
+    // A throw may come after Linear's create.
     return { ...actionFailed(messageOf(error)), data: { created: 'maybe' } }
   }
 }

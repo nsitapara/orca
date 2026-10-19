@@ -99,12 +99,12 @@ export function inboxDeps(c: PilotContext): InboxDeps {
 
 // What a step (or a job-wide caller) files is a proposal: its action must be in the catalog, its args must
 // fit, and the filing automation (a run's card: the run's) must have the action's power. Pilot's own asks
-// (a run lacking the power, ask_first) don't come through here, nor does Ticket for later's card, the only one
-// whose screenshots upload.
+// (a run lacking the power, ask_first) don't come through here.
 function refuseUnproposable(c: PilotContext, target: InboxAddParams): void {
   if (!target.action) {
     return
   }
+  // Screenshots upload only from Pilot's own Ticket for later card, which never comes through here.
   const images = target.actionArgs?.images
   if (Array.isArray(images) && images.length > 0) {
     throw new Error(IMAGES_PILOT_ONLY)

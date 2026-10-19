@@ -81,8 +81,7 @@ function readTicketImages(
   }
 }
 
-// The body's screenshots read and checked, then uploaded in order into the team's workspace (resolved once,
-// and returned when it was).
+// The body's screenshots read, checked and uploaded in order into the team's workspace, resolved once and returned.
 export async function uploadTicketImages(
   linear: Pick<LinearWriter, 'teamWorkspace' | 'uploadImage'>,
   root: string | null,

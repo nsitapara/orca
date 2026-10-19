@@ -20,7 +20,7 @@ const FiledArgs = z.object({
   images: z.array(z.object({ ref: z.string() }))
 })
 
-// The draft fields a ticket card's linear_create args carry, as Create would send them; null: not Pilot's args.
+// The draft fields in Pilot's linear_create args, as Create would send them; null for other args.
 export function filedDraft(args: unknown): TicketDraftEdit | null {
   const parsed = FiledArgs.safeParse(args)
   if (!parsed.success) {

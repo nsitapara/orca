@@ -122,8 +122,7 @@ function attachments(a: CreateArgs): string {
   return parts.length > 0 ? ` (${parts.join(', ')})` : ''
 }
 
-// Attaches each link under its own write id, in the workspace the uploads resolved when they did; a failed
-// one is noted in the detail, never fatal.
+// Attaches each link under its own write id in the given workspace; a failed one is noted, never fatal.
 async function attachLinks(
   linear: LinearWriter,
   issue: string,
@@ -198,8 +197,7 @@ const create: Spec<CreateArgs> = {
   dry: (a) => `would create a ${a.team} ticket: ${a.title}${attachments(a)}`,
   write: createTicket,
   refused: { created: 'no' },
-  // Screenshots leave the Mac only on Pilot's own Ticket for later card: an Approve outside any run (an
-  // ask-first card always has its run).
+  // Screenshots upload only on Pilot's Ticket for later card: an Approve outside a run (ask-first cards have one).
   refuseFor: (a, opts) =>
     (a.images?.length ?? 0) > 0 && !(opts.inboxItemId && opts.runId === null)
       ? IMAGES_PILOT_ONLY
