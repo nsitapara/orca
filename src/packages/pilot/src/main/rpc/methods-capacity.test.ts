@@ -8,7 +8,12 @@ import { EMPTY_PEOPLE } from '../../shared/people'
 import type { RunMemorySampler } from '../capacity/run-memory'
 import type { PilotContext } from '../pilot-services'
 import { PilotStore } from '../store/store'
-import { AGENT_SETS_LIMIT, AGENT_SETS_RETRIES, buildCapacityMethods } from './methods-capacity'
+import {
+  AGENT_SETS_LIMIT,
+  AGENT_SETS_RETRIES,
+  buildCapacityMethods,
+  quotaUseWithin
+} from './methods-capacity'
 import { NO_CALLER_CHANGE } from './run-binding'
 
 type Callable = {
@@ -187,5 +192,26 @@ describe('pilot.capacity', () => {
     ).toThrow('No automation "gone"')
     expect(store.handledKeys('gone')).toEqual(new Set(['7']))
     expect(tickNow).not.toHaveBeenCalled()
+  })
+})
+
+describe('quotaUseWithin', () => {
+  const reading = { weekly: 92, session: 10 }
+  const answers = async () => reading
+  const never = () => new Promise<typeof reading>(() => {})
+  it.each<[string, Parameters<typeof quotaUseWithin>[0], unknown]>([
+    ['no readers in this process', undefined, undefined],
+    [
+      "the cache's reading",
+      { claude: answers, codex: async () => ({ weekly: null, session: null }) },
+      { claude: reading, codex: { weekly: null, session: null } }
+    ],
+    [
+      'a refresh that runs late, left for the next poll',
+      { claude: never, codex: answers },
+      undefined
+    ]
+  ])('%s', async (_name, readers, use) => {
+    expect(await quotaUseWithin(readers, 20)).toEqual(use)
   })
 })

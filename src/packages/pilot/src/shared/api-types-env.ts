@@ -21,6 +21,8 @@ export type RunEnv = {
   removedAt: number | null
   deleteError: string | null
   deleteAttempts: number
+  // The branch env delete kept a throwaway's unhomed commits on; absent when it kept none, or from older pilotcli.
+  kept?: string
 }
 
 // Where a run's work belongs (cards, answers, the timeline, the worktree panel): its item's worktree. For an env run it may

@@ -279,6 +279,7 @@ function openPilot(
     detailsRoot,
     playground,
     memory,
+    quotas,
     writeUsageReport: (dir) => usageReports.write(dir),
     resumeSession: (req) => resumeStepSession(runtimeResumeDeps(runtime, store, fieldDeps), req),
     continueRun: (runId) =>

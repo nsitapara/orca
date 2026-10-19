@@ -109,6 +109,21 @@ describe('teardown at run end', () => {
     expect(t.env()).toMatchObject({ state: 'removed', removedAt: 1000 })
   })
 
+  it.each<[string, unknown, string | undefined]>([
+    [
+      'the branch env delete kept the commits on',
+      { removed: ['folder'], kept: 'pilot/r1' },
+      'pilot/r1'
+    ],
+    ['none from an older pilotcli', { removed: ['folder'] }, undefined],
+    ['none for an empty name', { removed: ['folder'], kept: '' }, undefined]
+  ])("records with a throwaway's env %s", async (_name, data, kept) => {
+    const t = setup('throwaway', [{ ...OK, data }])
+    t.teardowns.start(t.store.runs.get('r1')!)
+    await t.teardowns.settled()
+    expect(t.env()?.kept).toBe(kept)
+  })
+
   // r1 is an answer run that typed its answers into the asking run's tab t2 (a resumed session): t2 is borrowed, never its
   // own, so its teardown leaves it open whatever env the answer run got.
   it.each([

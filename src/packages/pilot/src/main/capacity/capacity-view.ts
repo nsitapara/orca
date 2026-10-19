@@ -2,14 +2,16 @@ import type {
   CapacityPayload,
   CapacityRun,
   GaveUpKey,
-  HeaviestJob
+  HeaviestJob,
+  QuotaUse
 } from '../../shared/api-types-capacity'
 import { suggestRunLimit, UNMEASURED_JOB_BYTES } from '../../shared/capacity/limit-suggestion'
 import { QUOTA_CEILING } from '../../shared/quota-ceiling'
-import type { AutomationDefinition } from '../../shared/definition/types'
+import type { AgentKind, AutomationDefinition } from '../../shared/definition/types'
 import type { PilotStore } from '../store/store'
 import { listedRuns } from '../timeline/run-detail'
 import { holdsSlot } from './run-capacity'
+import { runHome, runPlace } from './run-place'
 import type { RunMemorySnapshot } from './run-memory'
 import type { SystemMemory } from './system-memory'
 
@@ -19,6 +21,8 @@ export type CapacityViewInput = {
   memory: RunMemorySnapshot | null
   system: SystemMemory
   now: number
+  // The runner's cached quota readings; absent where there are none, or they didn't answer in time.
+  quotaUse?: Partial<Record<AgentKind, QuotaUse>>
 }
 
 // The Running page's Finished list: the slot-holding jobs' newest ended runs.
@@ -105,6 +109,7 @@ export function capacityView(input: CapacityViewInput): CapacityPayload {
   const peaks = store.capacity.peaks(runs.map((r) => r.id))
   const running: CapacityRun[] = runs.map((run) => {
     const def = byId.get(run.automationId)
+    const place = runPlace(run)
     return {
       id: run.id,
       automationId: run.automationId,
@@ -114,7 +119,8 @@ export function capacityView(input: CapacityViewInput): CapacityPayload {
       idleMs: run.idleMs ?? 0,
       memoryBytes: input.memory?.runs.get(run.id) ?? null,
       peakBytes: peaks.get(run.id) ?? null,
-      counted: def !== undefined && holdsSlot(def)
+      counted: def !== undefined && holdsSlot(def),
+      ...(place ? { place } : {})
     }
   })
   const ended = store.capacity.finished(
@@ -141,11 +147,15 @@ export function capacityView(input: CapacityViewInput): CapacityPayload {
       })),
     finished: listedRuns(store, ended).map((run) => {
       const onceKey = failedKeys.get(run.id)
+      const place = runPlace(run)
+      const home = runHome(run, byId.get(run.automationId))
       return {
         ...run,
         automationName: nameOf(run.automationId),
         peakBytes: endedPeaks.get(run.id) ?? null,
-        ...(onceKey === undefined ? {} : { onceKey })
+        ...(onceKey === undefined ? {} : { onceKey }),
+        ...(place ? { place } : {}),
+        ...(home ? { home } : {})
       }
     }),
     memory: input.system,
@@ -156,6 +166,7 @@ export function capacityView(input: CapacityViewInput): CapacityPayload {
     }),
     heaviest,
     quotaCeiling: { ...QUOTA_CEILING },
+    ...(input.quotaUse ? { quotaUse: input.quotaUse } : {}),
     retryLimit,
     gaveUp: gaveUpKeys(input, byId, retryLimit)
   }

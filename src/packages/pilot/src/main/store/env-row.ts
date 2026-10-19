@@ -9,6 +9,8 @@ export type EnvJson = {
   envFile?: string | null
   vars?: Record<string, string>
   stack?: RunEnvStack | null
+  // env delete's data.kept: the branch it kept a throwaway's unhomed commits on.
+  kept?: string
 }
 
 export function readEnvJson(raw: unknown): EnvJson {
@@ -38,6 +40,7 @@ export function envOfRow(r: Record<string, unknown>): RunEnv | null {
     stack: json.stack ?? null,
     removedAt: (r.env_removed_at as number | null) ?? null,
     deleteError: (r.env_delete_error as string | null) ?? null,
-    deleteAttempts: Number(r.env_delete_attempts ?? 0)
+    deleteAttempts: Number(r.env_delete_attempts ?? 0),
+    ...(json.kept ? { kept: json.kept } : {})
   }
 }
