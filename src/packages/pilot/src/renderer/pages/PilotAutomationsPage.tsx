@@ -14,6 +14,7 @@ import { RunPanelHost } from '../run-views/RunPanelHost'
 import { ActivityPage } from './ActivityPage'
 import { PlaygroundPage } from './playground/PlaygroundPage'
 import { RunningPage } from './running/RunningPage'
+import { UsagePage } from './usage/UsagePage'
 import { InboxPage } from './waiting/InboxPage'
 
 function PageBody(): React.JSX.Element {
@@ -45,6 +46,13 @@ function PageBody(): React.JSX.Element {
     return (
       <main className="relative flex h-full flex-col gap-4 overflow-y-auto bg-background px-5 pb-10 pt-6">
         <ActivityPage />
+      </main>
+    )
+  }
+  if (view === 'usage') {
+    return (
+      <main className="relative flex h-full flex-col gap-4 overflow-y-auto bg-background px-5 pb-10 pt-6">
+        <UsagePage />
       </main>
     )
   }

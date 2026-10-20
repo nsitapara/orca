@@ -328,6 +328,11 @@ A run costs the sum of its steps. A Claude step's session id is pinned at launch
 
 **Rollups.** `pilot automations spend [--by automation|skill|agent|mr] [--days n]` (default: 7 days, by automation), or the RPC `pilot.spend`. A step counts once it has ended.
 
+**The Usage page.** The Automations page's **Usage** link, beside Activity (RPC `pilot.usage.dashboard {days, resetDays}`):
+- Claude's and Codex's limits as Orca last read them (this week, the 5-hour session), each with what the automations spent since its weekly reset, most expensive first. The renderer passes each reset's day.
+- For today, 7 or 30 days: the totals, each automation's cost and tokens split by Claude and Codex, the cost by day, and the ten costliest runs (Open run).
+- One machine at a time: each Pilot measures its own runs. Chips pick another machine that answered.
+
 **The token usage report.** Pilot writes job 08's files: `usage.json`, `usage.csv`, `usage-data.js`, `Token usage.html` and `Token usage.md`. They use the same paths and schema, so the vault note keeps working.
 - Folder: `PILOT_USAGE_REPORT_DIR`, default `~/Documents/WebPortal/Agent Work/Automations/08 · Tally token usage by job`. HTML template: `PILOT_USAGE_TEMPLATE`, default Pilot's own `resources/usage_report.html` (shipped as `Contents/Resources/pilot/usage_report.html`; orcad writes the report without it).
 - **The hand-over from job 08** was done on 2026-10-12: 08's last `usage.json` was copied to `usage-legacy.json` in that folder, and Pilot writes there only while that file is there. The packaged app refreshes the files after each measured step and at least hourly. It keeps 08's history (the legacy rows) and replaces only the sessions it measured itself.

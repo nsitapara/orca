@@ -61,6 +61,24 @@ function serve(payload: AutomationListPayload): void {
     if (method === 'pilot.queue.list') {
       return { entries: [] }
     }
+    if (method === 'pilot.usage.dashboard') {
+      return {
+        days: 7,
+        sinceDay: '2026-10-14',
+        total: {
+          runs: 0,
+          tokens: 0,
+          costUsd: null,
+          byAgent: { claude: { tokens: 0, costUsd: null }, codex: { tokens: 0, costUsd: null } }
+        },
+        automations: [],
+        daily: [],
+        topRuns: [],
+        sinceReset: {},
+        pendingSteps: 0,
+        measuredAt: null
+      }
+    }
     if (method === 'pilot.playground.projects') {
       return []
     }
@@ -92,16 +110,19 @@ describe('PilotAutomationsPage', () => {
     setPilotAutomationsView('automations')
   })
 
-  it('opens Activity across automations from the list header, and goes back from its crumb', async () => {
-    serve(list)
-    render(<PilotAutomationsPage />)
-    fireEvent.click(await screen.findByRole('button', { name: 'Activity' }))
-    expect(await screen.findByRole('heading', { name: 'Activity' })).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: 'Automations' }))
-    expect(
-      await screen.findByText('Each automation is a YAML file in an automation folder.')
-    ).toBeTruthy()
-  })
+  it.each(['Activity', 'Usage'])(
+    'opens %s across automations from the list header, and goes back from its crumb',
+    async (page) => {
+      serve(list)
+      render(<PilotAutomationsPage />)
+      fireEvent.click(await screen.findByRole('button', { name: page }))
+      expect(await screen.findByRole('heading', { name: page })).toBeTruthy()
+      fireEvent.click(screen.getByRole('button', { name: 'Automations' }))
+      expect(
+        await screen.findByText('Each automation is a YAML file in an automation folder.')
+      ).toBeTruthy()
+    }
+  )
 
   it('opens a job of several automations as one page; a stage opens from it, and its crumbs lead to the job and the list', async () => {
     const stage = (id: string, n: number) => ({

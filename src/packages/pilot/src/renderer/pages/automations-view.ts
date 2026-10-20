@@ -1,8 +1,15 @@
 import { useSyncExternalStore } from 'react'
 import { hostedKey, LOCAL_PILOT_HOST, type PilotHostRef } from '../hosts/pilot-host'
 
-// Which sub-view the Automations page shows. The sidebar's "Inbox", "Running" and "Playground" items flip it.
-export type PilotAutomationsView = 'automations' | 'inbox' | 'activity' | 'running' | 'playground'
+// Which sub-view the Automations page shows. The sidebar's "Inbox", "Running" and "Playground" items flip it; the list's
+// "Activity" and "Usage" links open those.
+export type PilotAutomationsView =
+  | 'automations'
+  | 'inbox'
+  | 'activity'
+  | 'usage'
+  | 'running'
+  | 'playground'
 
 let current: PilotAutomationsView = 'automations'
 let openId: string | null = null

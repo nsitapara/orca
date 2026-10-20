@@ -85,6 +85,13 @@ export function PilotAutomationsSection({
         <button
           type="button"
           className="text-sm underline"
+          onClick={() => setPilotAutomationsView('usage')}
+        >
+          Usage
+        </button>
+        <button
+          type="button"
+          className="text-sm underline"
           onClick={() => setPilotAutomationsView('activity')}
         >
           Activity

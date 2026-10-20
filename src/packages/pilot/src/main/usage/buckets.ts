@@ -1,5 +1,6 @@
 import { stat } from 'node:fs/promises'
 import type { AgentKind } from '../../shared/definition/types'
+import { localDay } from '../../shared/local-day'
 
 export type UsageBucket = {
   // Whose tokens: a step's child sessions can be the other agent's (a Claude orchestrator's Codex checks).
@@ -16,13 +17,7 @@ export type UsageBucket = {
 export type UsageWindow = { from: number; to: number }
 export type BucketRow = Omit<UsageBucket, 'agent' | 'day' | 'model'>
 
-const pad2 = (n: number): string => String(n).padStart(2, '0')
-
-// The local calendar day of a moment, as usage.py's _day reads a response's timestamp.
-export function localDay(ms: number): string {
-  const d = new Date(ms)
-  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`
-}
+export { localDay }
 
 // The moment a log line happened, when it falls inside the step's window; else null.
 export function inWindow(timestamp: string, window: UsageWindow): number | null {
