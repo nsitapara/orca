@@ -2,6 +2,7 @@ import { appendFileSync, mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
+import type { StepStatus, StopRunResult } from '../../shared/api-types'
 import { parseAutomationYaml } from '../../shared/definition/parse'
 import type { EnvPreparer } from '../envs/prepare'
 import { PilotStore } from '../store/store'
@@ -80,6 +81,7 @@ function setup(yaml = YAML, startMs = 11 * MIN, seen: Seen = null, envs?: EnvPre
       }
     },
     probe: { status: async () => 'working' as const, started: () => false, session: () => seen },
+    relist: async () => false,
     cost: async () => ({ costUsd: null, tokens: 0 }),
     log,
     envs
@@ -166,6 +168,30 @@ describe('wireRunEngine', () => {
       expect(store.runs.steps('run-1')[0].status).toBe('timed_out')
     }
   )
+
+  // Stop closes the tab through the watcher's own close, so a process it couldn't stop leaves the run as it was.
+  it.each<[string, { ptyStopVerdict?: string }, StopRunResult, StepStatus]>([
+    ['its process stopped', {}, { stopped: true }, 'failed'],
+    [
+      'its process may be live',
+      { ptyStopVerdict: 'live' },
+      { stopped: false, reason: "Couldn't close terminal t0: its process is live" },
+      'running'
+    ],
+    [
+      "its process can't be checked",
+      { ptyStopVerdict: 'unverifiable' },
+      { stopped: false, reason: "Couldn't close terminal t0: its process is unverifiable" },
+      'running'
+    ]
+  ])('stops a run through the runtime: %s', async (_when, closed, result, stepStatus) => {
+    const { store, runtime, wired } = setup()
+    runtime.closeTerminal.mockResolvedValueOnce(closed)
+    await expect(wired.engine.stopRun('run-1')).resolves.toEqual(result)
+    expect(runtime.closeTerminal).toHaveBeenCalledWith('t0')
+    expect(store.runs.steps('run-1')[0].status).toBe(stepStatus)
+    expect(store.runs.get('run-1')?.status).toBe(result.stopped ? 'cancelled' : 'running')
+  })
 
   // Task 9c ruling: an answer run's one step ("answers") is not the definition's step 0 (here 10m).
   function answerRun(store: PilotStore): void {
@@ -295,6 +321,7 @@ describe('wireRunEngine', () => {
         listWorktrees: () => new Promise((resolve) => (listed = () => resolve([])))
       },
       probe: { status: async () => 'working' as const, started: () => false, session: () => null },
+      relist: async () => false,
       log: () => {}
     })
     for (const id of ['slow', 'left']) {

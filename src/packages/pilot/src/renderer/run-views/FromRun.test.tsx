@@ -182,6 +182,11 @@ describe('FromRun', () => {
       ['a run waiting on you', failed({ status: 'needs_you' }), false],
       ['a run that ended done', failed({ status: 'done' }), false],
       ['an answer run', failed({ trigger: 'answer', parentRunId: 'r0' }), false],
+      [
+        'an ask-first run you declined',
+        failed({ trigger: 'ask_first', status: 'cancelled', steps: [] }),
+        false
+      ],
       ['a failed run in the browser version', failed(), true]
     ])('offers nothing for %s', async (_name, run, browser) => {
       vi.stubGlobal('__ORCA_WEB_CLIENT__', browser)

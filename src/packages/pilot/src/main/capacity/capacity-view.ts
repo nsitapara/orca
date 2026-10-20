@@ -128,7 +128,7 @@ export function capacityView(input: CapacityViewInput): CapacityPayload {
     MAX_FINISHED_RUNS
   )
   const endedPeaks = store.capacity.peaks(ended.map((r) => r.id))
-  const failedKeys = store.failedKeysOf(ended.map((r) => r.id))
+  const retryKeys = store.retryKeysOf(ended.map((r) => r.id))
   const retryLimit = store.capacity.retryLimit()
   const heaviest = heaviestJob(store.capacity.heaviestPeaks(), input.definitions)
   const runningJobsBytes = running
@@ -146,7 +146,7 @@ export function capacityView(input: CapacityViewInput): CapacityPayload {
         dueFrom: dueFromOf(byId.get(q.automationId))
       })),
     finished: listedRuns(store, ended).map((run) => {
-      const onceKey = failedKeys.get(run.id)
+      const onceKey = retryKeys.get(run.id)
       const place = runPlace(run)
       const home = runHome(run, byId.get(run.automationId))
       return {

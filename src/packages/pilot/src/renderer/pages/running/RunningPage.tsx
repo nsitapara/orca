@@ -11,6 +11,7 @@ import { formatDuration } from '../../../shared/run/format-duration'
 import { workedMs } from '../../../shared/run/worked-time'
 import { PilotHostProvider, usePilotHost } from '../../hosts/PilotHostContext'
 import { openRun } from '../../run-views/run-panel-state'
+import { useStopRun } from '../../run-views/StopRun'
 import { useNow } from '../waiting/use-now'
 import { FinishedRuns } from './FinishedRuns'
 import { LimitsPanel, LimitsToggle } from './LimitsPanel'
@@ -27,10 +28,12 @@ type Changes = {
   onRetry(key: RetryKey): void
 }
 
-// Name, where it works and its figures on top; the item under it; then why it isn't in your worktree.
+// Name, where it works, its figures and Open run and Stop on top; the item under it; then why it isn't in your worktree,
+// and what Pilot said to a Stop.
 function RunningRow({ run, now }: { run: CapacityRun; now: number }): React.JSX.Element {
   const host = usePilotHost()
   const why = run.place ? placeReasonText(run.place) : null
+  const stop = useStopRun({ id: run.id, status: 'running' })
   return (
     <li className="flex min-w-0 flex-col gap-1 px-3 py-2 text-sm">
       <div className="flex min-w-0 items-center gap-2">
@@ -48,11 +51,13 @@ function RunningRow({ run, now }: { run: CapacityRun; now: number }): React.JSX.
         >
           Open run
         </button>
+        {stop.control ? <span className="shrink-0 text-xs">{stop.control}</span> : null}
       </div>
       <div className="truncate font-mono text-xs text-muted-foreground" title={run.itemLabel}>
         {run.itemLabel}
       </div>
       {why ? <p className="text-xs text-muted-foreground">{why}</p> : null}
+      {stop.note ? <p className="text-xs text-muted-foreground">{stop.note}</p> : null}
     </li>
   )
 }

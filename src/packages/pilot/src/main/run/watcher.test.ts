@@ -251,6 +251,41 @@ describe('pollRunningSteps', () => {
     expect(store.runs.steps('run-1')[0].status).toBe('running')
     expect(h.onStepEnded).not.toHaveBeenCalled()
   })
+
+  // Stop (run-stop.ts) doesn't wait for the watcher: a step it ended while a probe was awaited keeps Stop's end.
+  it.each<[string, ObservedState, Partial<StepPollHooks>]>([
+    ['its tab then reads gone', 'gone', {}],
+    ['its agent then reads done', 'done', {}],
+    ['its timeout is due', 'working', { timeoutOf: () => 1 }],
+    ['its wait: start session is up', 'working', { endsAtStart: () => true }]
+  ])('leaves a step Stop ended mid-poll as Stop left it: %s', async (_n, state, over) => {
+    const store = storeWithRunningStep()
+    const stop = () =>
+      store.runs.updateStep('run-1', 0, { status: 'failed', error: 'Stopped by you' })
+    const status = vi.fn(async () => {
+      stop()
+      return state
+    })
+    const cost = vi.fn(async () => {
+      stop()
+      return { costUsd: null, tokens: 0 }
+    })
+    const h = hooks(over)
+    await pollRunningSteps(
+      store,
+      { ...probe(state), status, started: () => true },
+      cost,
+      () => 9,
+      h
+    )
+    expect(store.runs.steps('run-1')[0]).toMatchObject({
+      status: 'failed',
+      error: 'Stopped by you',
+      detached: false
+    })
+    expect(h.onStepEnded).not.toHaveBeenCalled()
+    expect(h.closeTerminal).not.toHaveBeenCalled()
+  })
 })
 
 describe('runtimeStepProbe.status', () => {

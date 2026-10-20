@@ -95,6 +95,14 @@ export type StepPollHooks = {
 
 const GONE = 'The terminal closed before the agent finished'
 
+const OPEN: ReadonlySet<OpenStep['status']> = new Set(['starting', 'running'])
+
+// Stop (run-stop.ts) doesn't take turns with the watcher: a step it ended while a probe was awaited keeps Stop's end.
+function stillOpen(store: PilotStore, step: OpenStep): boolean {
+  const row = store.runs.steps(step.runId).find((s) => s.idx === step.idx)
+  return row !== undefined && OPEN.has(row.status)
+}
+
 // The row first: if the engine then throws, the step stays ended and advanceIdle picks the run up.
 async function endStep(
   store: PilotStore,
@@ -102,6 +110,9 @@ async function endStep(
   patch: StepPatch,
   hooks: StepPollHooks
 ): Promise<void> {
+  if (!stillOpen(store, step)) {
+    return
+  }
   store.runs.updateStep(step.runId, step.idx, patch)
   await hooks.onStepEnded(step.runId)
 }
@@ -118,6 +129,9 @@ async function timeOutIfDue(
 ): Promise<void> {
   const limit = hooks.timeoutOf(step)
   if (limit === null || step.startedAt === null || now() - step.startedAt < limit) {
+    return
+  }
+  if (!stillOpen(store, step)) {
     return
   }
   try {

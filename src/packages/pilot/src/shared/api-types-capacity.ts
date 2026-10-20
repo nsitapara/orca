@@ -62,7 +62,7 @@ export type QueuedRun = {
 }
 
 // An ended run of a job that holds a slot, as Activity lists it; queuedAt on it says when it joined the line.
-// onceKey: the failed key the run still holds, which Retry frees; absent otherwise, and from older Pilots.
+// onceKey: the failed or stopped run's key it still holds, which Retry frees; absent otherwise, and from older Pilots.
 export type FinishedRun = ListedRun & {
   automationName: string
   peakBytes: number | null

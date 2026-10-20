@@ -21,6 +21,7 @@ import { WhatItChanged } from './EffectsLine'
 import { envLines } from './env-lines'
 import { RunTimeline } from './RunTimeline'
 import { closeRunPanel, openRun } from './run-panel-state'
+import { StopRun } from './StopRun'
 import { runTone } from './tokens'
 
 export const RUN_PANEL_POLL_MS = 10_000
@@ -60,6 +61,14 @@ function Worktree({ path }: { path: string }): React.JSX.Element {
     >
       {name}
     </button>
+  )
+}
+
+// Stop refuses a shell step (run-stop.ts), so a shell-only job's run offers none; with no chain the panel can't tell.
+function runsAnAgent(detail: RunDetail): boolean {
+  const steps = detail.chain.filter((p) => p.kind === 'step')
+  return (
+    detail.run.trigger === 'answer' || steps.length === 0 || steps.some((p) => p.who === 'agent')
   )
 }
 
@@ -158,6 +167,7 @@ function Header({
             {`Answers run ${parent}`}
           </button>
         ) : null}
+        {runsAnAgent(detail) ? <StopRun run={run} /> : null}
         <ContinueRun run={run} />
       </div>
     </header>

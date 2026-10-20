@@ -9,6 +9,7 @@ import { endedSteps, firstIdx, rowFor, runFieldsOf, stepInputFields } from './ad
 import { NothingToDoError } from './nothing-to-do'
 import { addRunEvent, closeRun, type CloseOptions } from './run-close'
 import type { ResumeStep, RunEngine, RunEngineDeps } from './run-engine-types'
+import { stopUnderLock } from './run-stop'
 import { resolveWorkspace } from './workspace'
 
 export { ANSWER_STEP_TIMEOUT_MS, runStepTimeoutMs, stepTimeoutMs } from './step-timeouts'
@@ -332,6 +333,7 @@ export function createRunEngine(deps: RunEngineDeps): RunEngine {
       continued.set(runId, resume)
       return engine.advance(runId)
     },
+    stopRun: (runId) => stopUnderLock({ ...deps, close }, { busy, locked }, runId),
     async advanceIdle() {
       let runs: RunRow[]
       try {

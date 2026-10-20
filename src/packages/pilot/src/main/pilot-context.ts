@@ -2,6 +2,7 @@ import type {
   ContinueRunResult,
   PilotStatus,
   SessionResumeResult,
+  StopRunResult,
   UsageReportResult
 } from '../shared/api-types'
 import type { AgentKind } from '../shared/definition/types'
@@ -36,6 +37,8 @@ export type PilotContext = {
   resumeSession?: (req: { runId: string; stepIdx: number }) => Promise<SessionResumeResult>
   // Continues a failed run where it broke (run/run-continue.ts); absent where the run engine isn't.
   continueRun?: (runId: string) => Promise<ContinueRunResult>
+  // Stops a running run (run/run-stop.ts); absent where the run engine isn't.
+  stopRun?: (runId: string) => Promise<StopRunResult>
   // The Automations folder every card's Details bundle must live in; null reads no bundle.
   detailsRoot?: string | null
   // pilotcli's playground (main/playground); absent in orcad, which has no launcher folder for View source.
