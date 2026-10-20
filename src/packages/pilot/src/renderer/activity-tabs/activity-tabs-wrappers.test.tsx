@@ -10,6 +10,7 @@ import {
 } from '@/components/activity/ActivityPrototypePage-test-fixtures'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { useAppStore } from '@/store'
+import { getHostedReviewCacheKey } from '@/store/slices/hosted-review-cache-identity'
 import { registerPilotStore } from '../store'
 import { ActivityTabsGroupHeader } from './ActivityTabsGroupHeader'
 import { ActivityTabsNest } from './ActivityTabsNest'
@@ -219,6 +220,50 @@ describe('Pilot wrappers around upstream Activity elements', () => {
       expect(activateAndRevealWorkspace).not.toHaveBeenCalled()
     }
   )
+
+  // Why: a merged MR is the sign a worktree is ready to go; the button is the Projects menu's own Delete.
+  it.each(
+    worktreeSurfaces.flatMap((surface) =>
+      (['merged', 'open'] as const).map((state) => ({ ...surface, state }))
+    )
+  )('$name with a $state MR offers Delete worktree only once merged', ({ element, state }) => {
+    registerPilotStore(useAppStore)
+    const repo = makeRepo()
+    const key = getHostedReviewCacheKey(repo.path, 'feature', null, repo.id, null, null, true)
+    useAppStore.setState({
+      repos: [repo],
+      worktreesByRepo: { 'repo-1': [makeWorktree()] },
+      activeModal: 'none',
+      hostedReviewCache: {
+        // A branch lookup: no linked MR asked for it.
+        [key]: {
+          fetchedAt: Date.now(),
+          linkedReviewHintKey: '',
+          data: {
+            provider: 'gitlab',
+            number: 7,
+            title: 'Feature',
+            state,
+            url: 'https://gitlab.com/x/-/merge_requests/7',
+            status: 'success',
+            updatedAt: '2026-10-20T00:00:00Z',
+            mergeable: 'MERGEABLE',
+            headSha: 'abc123'
+          }
+        }
+      }
+    })
+    const view = render(<TooltipProvider>{element}</TooltipProvider>)
+
+    const button = view.queryByRole('button', { name: 'Delete worktree' })
+    if (state === 'open') {
+      expect(button).toBeNull()
+      return
+    }
+    fireEvent.click(button!)
+    expect(useAppStore.getState().activeModal).toBe('delete-worktree')
+    expect(activateAndRevealWorkspace).not.toHaveBeenCalled()
+  })
 
   it('the Inactive header starts folded, counts its worktrees, and folds on Pilot’s own flag', () => {
     registerPilotStore(useAppStore)

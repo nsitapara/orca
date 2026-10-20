@@ -2,14 +2,16 @@ import { FolderGit2, Pin } from 'lucide-react'
 import WorktreeContextMenu from '@/components/sidebar/WorktreeContextMenu'
 import { getActivityThreadWorkspaceTitle } from '@/lib/activity-thread-display'
 import { isPortaledRowMenuClick } from '@/lib/list-row-interaction'
+import { WorktreeLinksPrefetch } from '../activity-card/worktree-links'
 import { ActivityMachineChip } from '../activity-machines/ActivityMachineChip'
+import { MergedWorktreeDeleteButton } from './MergedWorktreeDeleteButton'
 import { NewAgentMenu } from './NewAgentMenu'
 import { openActivityWorktree } from './open-activity-worktree'
 import type { RecentWorktreeItem } from './recent-worktree-items'
 
 // Grouped by anything but worktree there is no header to start a session from: one line, the
 // worktree and its New agent. Grouped by worktree, the header stands in for it. A right-click gives
-// the worktree's menu, as in Projects.
+// the worktree's menu, as in Projects; once its MR is merged, Delete shows at rest.
 export function RecentWorktreeRow({ item }: { item: RecentWorktreeItem }): React.JSX.Element {
   const workspaceLabel = getActivityThreadWorkspaceTitle(item.worktree)
   return (
@@ -39,6 +41,8 @@ export function RecentWorktreeRow({ item }: { item: RecentWorktreeItem }): React
           <Pin className="size-2.5 shrink-0 text-muted-foreground" aria-label="Pinned" />
         ) : null}
         <NewAgentMenu worktreeId={item.worktree.id} />
+        <WorktreeLinksPrefetch worktree={item.worktree} repo={item.repo} />
+        <MergedWorktreeDeleteButton worktree={item.worktree} repo={item.repo} />
       </div>
     </WorktreeContextMenu>
   )

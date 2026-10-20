@@ -10,6 +10,7 @@ import { WorktreeLinksPrefetch } from '../activity-card/worktree-links'
 import { ActivityMachineChip } from '../activity-machines/ActivityMachineChip'
 import { activityGroupMachineRows } from '../activity-machines/use-activity-machine-chips'
 import { pilotStore } from '../store'
+import { MergedWorktreeDeleteButton } from './MergedWorktreeDeleteButton'
 import { setActivityInactiveExpanded, useActivityInactiveExpanded } from './activity-tabs-setting'
 import {
   activityTabsGroupCount,
@@ -110,7 +111,7 @@ function openWorktree(worktreeId: string): void {
 // and the Workspaces sidebar's pin (a pinned worktree always shows in Activity, first). Clicking it
 // opens the worktree and a right-click gives its menu, as in Projects. It has no fold, so every
 // folder icon sits on the guide line. It fetches the worktree's MR and Linear issue once, for its
-// rows' footers.
+// rows' footers and its Delete once the MR is merged.
 export function ActivityTabsGroupHeader({ group, children }: HeaderProps): ReactNode {
   const worktreeId = group.key.startsWith(WORKTREE_GROUP)
     ? group.key.slice(WORKTREE_GROUP.length)
@@ -157,6 +158,7 @@ export function ActivityTabsGroupHeader({ group, children }: HeaderProps): React
       <span className="min-w-0 flex-1 truncate text-2xs text-muted-foreground">{project}</span>
       <NewAgentMenu worktreeId={worktreeId} />
       <PinButton worktreeId={worktreeId} pinned={pinned} />
+      {worktree ? <MergedWorktreeDeleteButton worktree={worktree} repo={repo} /> : null}
       <CountBadge count={count} />
     </div>
   )
