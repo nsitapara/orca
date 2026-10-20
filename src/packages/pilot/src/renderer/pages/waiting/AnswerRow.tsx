@@ -77,6 +77,7 @@ export function AnswerRow({
   }
   const skip = buttons.find((b) => b.role === 'skip')
   const rest = buttons.filter((b) => b.role !== 'skip')
+  const hinted = rest.filter((b) => b.hint)
   const ready = open ? composeAnswer(open.choice, notes) !== null : false
   if (ticketing) {
     return (
@@ -145,7 +146,7 @@ export function AnswerRow({
             Ticket for later
           </button>
         ) : null}
-        <span className="min-w-0 flex-1 text-[13px] text-muted-foreground">{hint}</span>
+        <span className="min-w-0 flex-1" />
         {rest.map((b) => (
           <button
             key={b.choice.label}
@@ -164,6 +165,19 @@ export function AnswerRow({
           </button>
         ))}
       </div>
+      {hinted.length > 0 ? (
+        // Every hint shares one cell, so the line keeps the longest one's height and hovering never moves the buttons.
+        <div className="grid text-[13px] text-muted-foreground">
+          {hinted.map((b) => (
+            <span
+              key={b.choice.label}
+              className={cn('col-start-1 row-start-1', b.hint !== hint && 'invisible')}
+            >
+              {b.hint}
+            </span>
+          ))}
+        </div>
+      ) : null}
     </div>
   )
 }

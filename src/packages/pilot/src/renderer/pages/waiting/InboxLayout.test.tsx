@@ -266,18 +266,20 @@ describe('the answer row', () => {
     )
   })
 
-  it('shows an option’s description beside the row on hover, and as the tooltip', async () => {
+  it('shows an option’s description under the row on hover, and as the tooltip', async () => {
     serve()
     render(<InboxPage />)
     const article = (await screen.findByRole('heading', { name: 'F1 Fixture' })).closest('article')!
     const fix = within(article).getByRole('button', { name: 'Fix it' })
     expect(fix.getAttribute('title')).toBe('fix it')
+    // The hint holds its space outside the button row, so showing it never moves the buttons.
+    const hint = within(article).getByText('fix it')
+    expect(within(article).getByRole('group', { name: 'Answer' }).contains(hint)).toBe(false)
+    expect(hint.classList.contains('invisible')).toBe(true)
     fireEvent.mouseEnter(fix)
-    expect(article.textContent).toContain('fix it')
+    expect(hint.classList.contains('invisible')).toBe(false)
     fireEvent.mouseLeave(fix)
-    expect(within(article).getByRole('group', { name: 'Answer' }).textContent).not.toContain(
-      'fix it'
-    )
+    expect(hint.classList.contains('invisible')).toBe(true)
   })
 
   it('opens the notes box for “With notes…”, which needs Send, and Cancel closes it without saving', async () => {
