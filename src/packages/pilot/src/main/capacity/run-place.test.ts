@@ -75,6 +75,22 @@ describe('runHome', () => {
       }
     ],
     [
+      'kept commits since merged home carry where that stands',
+      [],
+      env({
+        kept: 'pilot/r1',
+        keptHome: {
+          state: 'merged',
+          reason: null,
+          attempts: 2,
+          nextAt: null,
+          since: 1,
+          noticed: false
+        }
+      }),
+      { kept: 'pilot/r1', keptHome: { state: 'merged', reason: null } }
+    ],
+    [
       'steps their `when` skipped say nothing',
       [shell('publish', null), shell('merge_back', null)],
       env(),

@@ -1,4 +1,5 @@
 import type { HoldReason, ListedRun } from './api-types'
+import type { KeptHome } from './api-types-env'
 import type { AgentKind } from './definition/types'
 import type { LimitSuggestion } from './capacity/limit-suggestion'
 
@@ -19,6 +20,8 @@ export type RunHome = {
   pushed?: HomeStep
   mergedBack?: HomeStep
   kept?: string
+  // Where bringing `kept` home stands (main/envs/kept-home.ts); absent before the first try.
+  keptHome?: Pick<KeptHome, 'state' | 'reason'>
 }
 
 // An agent's quota use in percent; null where it couldn't be read.

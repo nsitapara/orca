@@ -517,7 +517,7 @@ describe('RunningPage', () => {
     await click('Recently finished · 1')
     expect(
       screen.getByText(
-        'Worked in a throwaway. Merge back skipped: uncommitted changes. Kept on pilot/review-1.'
+        "Worked in a throwaway. Merge back skipped: uncommitted changes. Kept on pilot/review-1; merging into your worktree once it's free."
       )
     ).toBeTruthy()
   })

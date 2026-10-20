@@ -48,6 +48,7 @@ import { usageReporter } from './usage-report/reporter'
 import { closeAll, softly } from './pilot-lifecycle'
 import { wireRunCapacity } from './capacity/capacity-wiring'
 import { giveUpOnFailure } from './capacity/give-up'
+import { inboxKeptCards } from './envs/kept-home'
 import { pilotHostFor } from './pilot-host'
 import type { PilotContext, PilotHost, PilotServiceOptions, PilotServices } from './pilot-context'
 
@@ -107,7 +108,9 @@ function openPilot(
     dataDir: host.dataDir,
     terminalDraft: (h) => fieldDeps.terminalDraft(h),
     // The rest of a run's end, before its env is removed: an answer run's outputs reach its cards (G6).
-    onRunEnd: (run) => answerRunEnded(store, run)
+    onRunEnd: (run) => answerRunEnded(store, run),
+    // The inbox is made below; no run ends before the scheduler polls.
+    keptCards: inboxKeptCards(() => inbox, log)
   })
   opened.push(() => envs.stop())
   // A stage's run end hands over to the next stage; its run: now reaches the scheduler once made (below).

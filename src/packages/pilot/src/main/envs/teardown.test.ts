@@ -51,6 +51,7 @@ function setup(
   const calls: PilotcliCall[] = []
   const closed: string[] = []
   const order: string[] = []
+  const kept: string[] = []
   const teardowns = createTeardowns({
     store,
     now: () => 1000,
@@ -75,9 +76,12 @@ function setup(
       }
     },
     forget: () => {},
+    kept: (runId) => {
+      kept.push(runId)
+    },
     log: () => {}
   })
-  return { store, calls, closed, order, teardowns, env: () => store.runs.get('r1')?.env }
+  return { store, calls, closed, order, kept, teardowns, env: () => store.runs.get('r1')?.env }
 }
 
 describe('teardown at run end', () => {
@@ -117,12 +121,16 @@ describe('teardown at run end', () => {
     ],
     ['none from an older pilotcli', { removed: ['folder'] }, undefined],
     ['none for an empty name', { removed: ['folder'], kept: '' }, undefined]
-  ])("records with a throwaway's env %s", async (_name, data, kept) => {
-    const t = setup('throwaway', [{ ...OK, data }])
-    t.teardowns.start(t.store.runs.get('r1')!)
-    await t.teardowns.settled()
-    expect(t.env()?.kept).toBe(kept)
-  })
+  ])(
+    "records with a throwaway's env %s, and brings a kept branch home",
+    async (_name, data, kept) => {
+      const t = setup('throwaway', [{ ...OK, data }])
+      t.teardowns.start(t.store.runs.get('r1')!)
+      await t.teardowns.settled()
+      expect(t.env()?.kept).toBe(kept)
+      expect(t.kept).toEqual(kept ? ['r1'] : [])
+    }
+  )
 
   // r1 is an answer run that typed its answers into the asking run's tab t2 (a resumed session): t2 is borrowed, never its
   // own, so its teardown leaves it open whatever env the answer run got.

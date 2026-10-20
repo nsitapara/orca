@@ -40,6 +40,21 @@ function stepText(step: HomeStep, done: string, skipped: string): string {
   return sentence(step.reason ? `${skipped}: ${step.reason}` : skipped)
 }
 
+function keptText(branch: string, keptHome: RunHome['keptHome']): string {
+  if (keptHome?.state === 'merged') {
+    return `Kept on ${branch}, then merged into your worktree.`
+  }
+  if (keptHome?.state === 'stuck') {
+    return sentence(
+      `Kept on ${branch}; it needs a merge by hand: ${keptHome.reason ?? 'see its card'}`
+    )
+  }
+  if (keptHome?.state === 'dropped') {
+    return `Kept on ${branch}, since deleted.`
+  }
+  return `Kept on ${branch}; merging into your worktree once it's free.`
+}
+
 // What a finished run did with its work, from its env and outward steps; null when it carries neither.
 export function finishedHomeText(run: { place?: RunPlace; home?: RunHome }): string | null {
   const { place, home } = run
@@ -54,7 +69,7 @@ export function finishedHomeText(run: { place?: RunPlace; home?: RunHome }): str
     parts.push(stepText(home.mergedBack, 'Merged back into your worktree.', 'Merge back skipped'))
   }
   if (home?.kept) {
-    parts.push(`Kept on ${home.kept}.`)
+    parts.push(keptText(home.kept, home.keptHome))
   }
   return parts.length > 0 ? parts.join(' ') : null
 }

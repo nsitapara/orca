@@ -41,7 +41,26 @@ describe('finishedHomeText', () => {
           kept: 'pilot/review-1'
         }
       },
-      'Worked in a throwaway. Not pushed: the branch is not on origin. Merge back skipped: uncommitted changes. Kept on pilot/review-1.'
+      "Worked in a throwaway. Not pushed: the branch is not on origin. Merge back skipped: uncommitted changes. Kept on pilot/review-1; merging into your worktree once it's free."
+    ],
+    [
+      'kept commits merged home later',
+      {
+        place: throwaway,
+        home: { kept: 'pilot/review-1', keptHome: { state: 'merged', reason: null } }
+      },
+      'Worked in a throwaway. Kept on pilot/review-1, then merged into your worktree.'
+    ],
+    [
+      'kept commits that conflict',
+      {
+        place: throwaway,
+        home: {
+          kept: 'pilot/review-1',
+          keptHome: { state: 'stuck', reason: 'conflicts in 1 file: a.ts' }
+        }
+      },
+      'Worked in a throwaway. Kept on pilot/review-1; it needs a merge by hand: conflicts in 1 file: a.ts.'
     ],
     [
       'your worktree, pushed',

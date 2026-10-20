@@ -53,14 +53,13 @@ describe('05 · Fix failed CI v2: the definition', () => {
       ['push', 'shell', false, '{steps.fix.head} != null and {steps.context.remote} != null'],
       ['merge_back', 'shell', false, "{env.mode} == 'throwaway'"],
       ['card', 'shell', false, "{steps.push.outcome} != 'ok'"],
-      ['forget_branch', 'shell', true, "{env.mode} == 'throwaway'"],
       ['flag_failed', 'shell', true, '{run.failed} == true']
     ])
     expect(definition.steps[1].run).toContain(
       '--gitlab-mr "!$IID" --comment "fixing failed CI !$IID (auto)"'
     )
     expect(definition.steps[1].run).toContain('|| echo')
-    expect(definition.steps[8].run).toContain('--unread')
+    expect(definition.steps[7].run).toContain('--unread')
     expect(definition.steps[3]).toMatchObject({
       skill: 'fix-gitlab-ci',
       mode: 'fix',
@@ -139,20 +138,6 @@ describe('05 · Fix failed CI v2: the definition', () => {
     expect(decideStep(card, mergedOrSkipped, {})).toMatchObject({ run: false })
   })
 
-  it("forgets a throwaway's keep branch once its commits are home or on origin; exit 3 keeps it", () => {
-    const forget = definition.steps[7]
-    expect(forget).toMatchObject({
-      name: 'forget_branch',
-      always: true,
-      when: "{env.mode} == 'throwaway'",
-      exitCodes: { ok: [0], skip: [3] },
-      timeoutMs: 2 * 60_000
-    })
-    expect(forget.run).toBe(
-      'pilotcli git delete-branch "$KEEP_BRANCH" --kept-in "$HOME_WT" --pushed-to "$BRANCH"'
-    )
-  })
-
   it("merges a throwaway's commits back into the worktree while holding its home", () => {
     const mergeBack = definition.steps[5]
     expect(mergeBack).toMatchObject({
@@ -170,7 +155,7 @@ describe('05 · Fix failed CI v2: the definition', () => {
   })
 
   it('still fixes when the flag hangs to its timeout, and flags a failed or timed-out fix', () => {
-    const [, flag, , fix, , , , , flagFailed] = definition.steps
+    const [, flag, , fix, , , , flagFailed] = definition.steps
     const timedOut = [
       { name: 'context', status: 'done' as const, always: false, error: null },
       { name: 'flag', status: 'timed_out' as const, always: flag.always, error: null },
