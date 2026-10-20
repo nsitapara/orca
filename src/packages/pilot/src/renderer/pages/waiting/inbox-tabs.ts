@@ -2,7 +2,7 @@ import type { InboxListRow, InboxType } from '../../../shared/api-types'
 import type { AnswerState } from '../../../shared/inbox-types'
 
 export type InboxTab = 'needs_you' | 'preparing' | 'blocked' | 'all' | 'done'
-export type CardFilters = { kinds: readonly InboxType[]; query: string }
+export type CardFilters = { kinds: readonly InboxType[] }
 
 export const INBOX_KINDS: readonly { type: InboxType; label: string }[] = [
   { type: 'question', label: 'Questions' },
@@ -63,21 +63,8 @@ export function tabCounts(
   }
 }
 
-export function matchesFilters(
-  item: InboxListRow,
-  filters: CardFilters,
-  groupLabel: string
-): boolean {
-  if (filters.kinds.length > 0 && !filters.kinds.includes(item.type)) {
-    return false
-  }
-  const query = filters.query.trim().toLowerCase()
-  if (!query) {
-    return true
-  }
-  return [item.title, item.context, item.itemLabel, groupLabel].some((text) =>
-    text?.toLowerCase().includes(query)
-  )
+export function matchesFilters(item: InboxListRow, filters: CardFilters): boolean {
+  return filters.kinds.length === 0 || filters.kinds.includes(item.type)
 }
 
 const EMPTY_TAB_TEXT: Record<'preparing' | 'blocked' | 'all', string> = {
@@ -86,7 +73,7 @@ const EMPTY_TAB_TEXT: Record<'preparing' | 'blocked' | 'all', string> = {
   all: 'No cards here.'
 }
 
-// What an empty tab says; a chip or search on a card tab names the filters, not the tab.
+// What an empty tab says; a kind chip on a card tab names the filters, not the tab.
 export function emptyTabText(tab: InboxTab, filtered: boolean, viewerName: string): string {
   if (tab === 'done') {
     return `Nothing done for ${viewerName} here.`

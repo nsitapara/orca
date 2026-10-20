@@ -1,4 +1,4 @@
-import { useDeferredValue, useMemo } from 'react'
+import { useMemo } from 'react'
 import type { InboxListRow } from '../../../shared/api-types'
 import { groupHostedItems, type HostedSection } from '../../hosts/hosted-sections'
 import { groupHostedItemsBy } from '../../hosts/inbox-grouping'
@@ -10,10 +10,8 @@ import { type CardFilters, type InboxTab, inTab, matchesFilters } from './inbox-
 import type { InboxGroupBy, InboxSort } from './inbox-view-prefs'
 
 export type InboxSections = {
-  // The search the cards are filtered by: it trails the search box while a keystroke renders.
-  query: string
   filtered: boolean
-  // Each card's "project / worktree" by hostedKey: what search matches, and what a list row names under another grouping.
+  // Each card's "project / worktree" by hostedKey: what a list row names under another grouping.
   places: ReadonlyMap<string, string>
   inTabItems: Hosted<InboxListRow>[]
   shownItems: Hosted<InboxListRow>[]
@@ -26,10 +24,7 @@ export type InboxSections = {
   shownProjects: ProjectSections[] | null
 }
 
-/**
- * The tab's cards through the chips and the search, grouped, and the picked section's. The search is deferred and
- * the result kept until an input changes, so a keystroke renders the search box without re-rendering a card.
- */
+// The tab's cards through the kind chips, grouped, and the picked section's.
 export function useInboxSections({
   inbox,
   tab,
@@ -47,7 +42,6 @@ export function useInboxSections({
   section: string
   now: number
 }): InboxSections {
-  const query = useDeferredValue(filters.query)
   const { kinds } = filters
   return useMemo(() => {
     const items = inbox?.items ?? []
@@ -66,9 +60,7 @@ export function useInboxSections({
         : openItems.filter((i) =>
             inTab(i, tab, inbox?.answerStates.get(hostedKey(i.host, i.id)) ?? null)
           )
-    const shownItems = inTabItems.filter((i) =>
-      matchesFilters(i, { kinds, query }, places.get(hostedKey(i.host, i.id)) ?? '')
-    )
+    const shownItems = inTabItems.filter((i) => matchesFilters(i, { kinds }))
     const grouped = groupHostedItemsBy(shownItems, automations, group, sort, now)
     const projects = group === 'worktree' ? groupByProject(grouped) : null
     // A project's worktrees side by side, so the list, the cards and One at a time keep one order.
@@ -76,8 +68,7 @@ export function useInboxSections({
     const activeSection = sections.some((s) => s.key === section) ? section : ALL
     const isShown = (s: HostedSection) => activeSection === ALL || s.key === activeSection
     return {
-      query,
-      filtered: kinds.length > 0 || query.trim() !== '',
+      filtered: kinds.length > 0,
       places,
       inTabItems,
       shownItems,
@@ -90,5 +81,5 @@ export function useInboxSections({
           ?.map((p) => ({ ...p, sections: p.sections.filter(isShown) }))
           .filter((p) => p.sections.length > 0) ?? null
     }
-  }, [inbox, tab, kinds, query, group, sort, section, now])
+  }, [inbox, tab, kinds, group, sort, section, now])
 }

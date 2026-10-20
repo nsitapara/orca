@@ -166,13 +166,16 @@ function ProjectGroup({
   )
 }
 
-// The left list: the same sections, in the same order, as the cards; under Group by Worktree, inside their projects.
+// The left list: the kind filter, then the same sections, in the same order, as the cards; under Group by
+// Worktree, inside their projects.
 export function CardList({
+  kinds,
   sections,
   projects,
   total,
   ...rows
 }: RowProps & {
+  kinds: React.ReactNode
   sections: HostedSection[]
   projects: ProjectSections[] | null
   total: number
@@ -192,6 +195,7 @@ export function CardList({
       aria-label="Cards"
       className="sticky top-3 z-20 flex max-h-[calc(100vh-6rem)] min-w-0 flex-[0_1_270px] flex-col self-start overflow-y-auto rounded-lg border border-border bg-background scrollbar-sleek"
     >
+      {kinds}
       <button
         type="button"
         aria-pressed={rows.group === ALL}

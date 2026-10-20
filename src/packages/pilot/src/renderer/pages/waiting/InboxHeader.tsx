@@ -35,62 +35,59 @@ export function Select({
   )
 }
 
+// One row beside the list: the title, the status tabs and the view controls; the controls wrap under it when narrow.
 export function InboxHeader({
   listOpen,
   onToggleList,
-  people,
-  viewer,
-  onViewer,
   wide,
   canExpand,
   allOpen,
-  onToggleAll
+  onToggleAll,
+  tabs,
+  controls
 }: {
   listOpen: boolean
   onToggleList: () => void
-  people: { id: string; name: string }[]
-  viewer: string | null
-  onViewer: (id: string) => void
   // The page is wide enough for the list beside the cards; only then is the fold button shown.
   wide: boolean
   // Whether any card has Details, and whether they are all open.
   canExpand: boolean
   allOpen: boolean
   onToggleAll: () => void
+  tabs: React.ReactNode
+  // Group by, Sort and the views, while the list holds the kinds; else they sit in the kind chips' row.
+  controls: React.ReactNode
 }): React.JSX.Element {
   return (
-    <header className="flex flex-wrap items-center gap-x-3 gap-y-2.5">
-      {wide ? (
-        <button
-          type="button"
-          aria-label={listOpen ? 'Hide the card list' : 'Show the card list'}
-          aria-expanded={listOpen}
-          onClick={onToggleList}
-          className="inline-grid size-8 place-items-center rounded-md border border-border bg-card hover:bg-muted"
-        >
-          <PanelLeft aria-hidden className="size-4" />
-        </button>
-      ) : null}
-      <div className="flex flex-1 items-center gap-2">
+    <header className="flex flex-wrap items-center gap-x-4 gap-y-2.5">
+      <div className="flex items-center gap-3">
+        {wide ? (
+          <button
+            type="button"
+            aria-label={listOpen ? 'Hide the card list' : 'Show the card list'}
+            aria-expanded={listOpen}
+            onClick={onToggleList}
+            className="inline-grid size-8 place-items-center rounded-md border border-border bg-card hover:bg-muted"
+          >
+            <PanelLeft aria-hidden className="size-4" />
+          </button>
+        ) : null}
         <h2 className="text-lg font-semibold">Inbox</h2>
       </div>
-      {canExpand ? (
-        <button
-          type="button"
-          onClick={onToggleAll}
-          className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-2.5 py-1 text-[13px] hover:bg-muted"
-        >
-          <ChevronsUpDown aria-hidden className="size-3.5" />
-          {allOpen ? 'Collapse all details' : 'Expand all details'}
-        </button>
-      ) : null}
-      <Select label="Viewing as" prefix="Viewing as" value={viewer ?? ''} onChange={onViewer}>
-        {people.map((p) => (
-          <option key={p.id} value={p.id}>
-            {p.name}
-          </option>
-        ))}
-      </Select>
+      {tabs}
+      <div className="ml-auto flex flex-wrap items-center gap-2">
+        {controls}
+        {canExpand ? (
+          <button
+            type="button"
+            onClick={onToggleAll}
+            className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-2.5 py-1 text-[13px] hover:bg-muted"
+          >
+            <ChevronsUpDown aria-hidden className="size-3.5" />
+            {allOpen ? 'Collapse all details' : 'Expand all details'}
+          </button>
+        ) : null}
+      </div>
     </header>
   )
 }

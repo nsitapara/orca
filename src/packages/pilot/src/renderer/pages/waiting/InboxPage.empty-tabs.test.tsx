@@ -37,9 +37,7 @@ function serve(items: () => InboxListRow[], done: () => Promise<unknown> = async
 const tabs = () => within(screen.getByRole('toolbar', { name: 'Card status' }))
 // The list has answered and the page views as its first person.
 const loaded = () =>
-  waitFor(() =>
-    expect(screen.getByRole('combobox', { name: 'Viewing as' })).toHaveProperty('value', 'nish')
-  )
+  waitFor(() => expect(pilotRpc).toHaveBeenCalledWith('pilot.inbox.list', { person: 'nish' }))
 
 afterEach(() => {
   cleanup()
@@ -78,8 +76,6 @@ describe('an empty tab', () => {
   it.each<{
     case: string
     tab: InboxTab
-    items?: InboxListRow[]
-    search?: string
     done?: () => Promise<unknown>
     // Shown once the case has settled, before the empty text is read.
     settled?: string
@@ -89,13 +85,6 @@ describe('an empty tab', () => {
     { case: 'Preparing', tab: 'preparing', text: 'Nothing is preparing context.' },
     { case: 'Blocked', tab: 'blocked', text: 'No preparation is blocked.' },
     { case: 'All', tab: 'all', text: 'No cards here.' },
-    {
-      case: 'a search that hides every card',
-      tab: 'needs_you',
-      items: [QUESTION],
-      search: 'zzz',
-      text: 'No cards match these filters.'
-    },
     { case: 'Done for you', tab: 'done', text: 'Nothing done for Nish here.' },
     {
       case: 'Done for you while its list errors',
@@ -110,16 +99,11 @@ describe('an empty tab', () => {
       done: () => new Promise(() => {}),
       text: null
     }
-  ])('says what is empty: $case', async ({ tab, items = [], search, done, settled, text }) => {
-    serve(() => items, done)
+  ])('says what is empty: $case', async ({ tab, done, settled, text }) => {
+    serve(() => [], done)
     setInboxViewPrefs({ tab })
     render(<InboxPage />)
     await loaded()
-    if (search) {
-      fireEvent.change(screen.getByRole('searchbox', { name: 'Search cards' }), {
-        target: { value: search }
-      })
-    }
     if (settled) {
       await screen.findByText(settled)
     }
