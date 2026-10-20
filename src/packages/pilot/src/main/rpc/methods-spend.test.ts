@@ -12,15 +12,13 @@ type Callable = {
   handler(p: unknown, rpc?: { caller?: { kind: string } }): unknown
 }
 
-function method(): Callable {
+function method(name = 'pilot.spend'): Callable {
   const store = PilotStore.open(join(mkdtempSync(join(tmpdir(), 'pilot-spend-rpc-')), 'db.sqlite'))
   const ctx = {
     store,
     loaded: () => ({ definitions: [{ id: 'fix-ci', name: 'Fix failed CI' }] })
   } as unknown as PilotContext
-  return (buildSpendMethods(() => ctx) as unknown as Callable[]).find(
-    (m) => m.name === 'pilot.spend'
-  )!
+  return (buildSpendMethods(() => ctx) as unknown as Callable[]).find((m) => m.name === name)!
 }
 
 describe('pilot.spend', () => {
@@ -40,6 +38,28 @@ describe('pilot.spend', () => {
     [{ days: 1.5 }, false]
   ])('params %o valid: %s', (params, ok) => {
     expect(method().params.safeParse(params).success).toBe(ok)
+  })
+})
+
+describe('pilot.usage.dashboard', () => {
+  it('answers an empty period with zeros', () => {
+    expect(method('pilot.usage.dashboard').handler({ days: 1 })).toMatchObject({
+      days: 1,
+      total: { runs: 0, tokens: 0, costUsd: null },
+      automations: [],
+      topRuns: [],
+      sinceReset: {}
+    })
+  })
+
+  it.each([
+    [{ days: 7 }, true],
+    [{ days: 30, resetDays: { codex: '2026-10-20' } }, true],
+    [{ days: 91 }, false],
+    [{}, false],
+    [{ days: 7, resetDays: { codex: 'Tuesday' } }, false]
+  ])('params %o valid: %s', (params, ok) => {
+    expect(method('pilot.usage.dashboard').params.safeParse(params).success).toBe(ok)
   })
 })
 

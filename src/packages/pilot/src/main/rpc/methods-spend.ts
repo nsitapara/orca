@@ -3,10 +3,17 @@ import { z } from 'zod'
 import { defineMethod } from '../../../../../main/runtime/rpc/core'
 import type { PilotContext } from '../pilot-services'
 import { DEFAULT_SPEND_DAYS, MAX_SPEND_DAYS, spendPayload } from '../spend/spend'
+import { MAX_USAGE_DAYS, usageDashboard } from '../spend/usage-dashboard'
 
 const Spend = z.object({
   by: z.enum(['automation', 'skill', 'agent', 'mr']).optional(),
   days: z.number().int().positive().max(MAX_SPEND_DAYS).optional()
+})
+
+const Day = z.string().regex(/^\d{4}-\d{2}-\d{2}$/)
+const Dashboard = z.object({
+  days: z.number().int().positive().max(MAX_USAGE_DAYS),
+  resetDays: z.object({ claude: Day.optional(), codex: Day.optional() }).optional()
 })
 
 const WriteReport = z.object({
@@ -36,6 +43,16 @@ export function buildSpendMethods(ctx: () => PilotContext) {
           p.days ?? DEFAULT_SPEND_DAYS,
           Date.now()
         )
+      }
+    }),
+    defineMethod({
+      name: 'pilot.usage.dashboard',
+      permission: 'workspace',
+      params: Dashboard,
+      handler: (p) => {
+        const c = ctx()
+        const names = new Map(c.loaded().definitions.map((d) => [d.id, d.name] as const))
+        return usageDashboard(c.store, names, p, Date.now())
       }
     }),
     // Any identified caller may trigger it (the transport's stamp, never a param; none is refused): it only
