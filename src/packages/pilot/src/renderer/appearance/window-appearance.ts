@@ -1,4 +1,5 @@
 import { resolveLeftSidebarStyleVariables } from '@/lib/left-sidebar-appearance'
+import { resolveEffectiveTerminalAppearance } from '@/lib/terminal-theme'
 import './window-appearance.css'
 
 type WindowAppearanceSettings = Parameters<typeof resolveLeftSidebarStyleVariables>[0]
@@ -39,6 +40,20 @@ export function resolvePilotWindowStyleVariables(
   }
 }
 
+export const ACTIVITY_GUIDE_VARIABLE = '--pilot-activity-guide'
+
+// Activity's guide lines take the terminal theme's blue, softened, in every sidebar appearance.
+export function resolveActivityGuideVariables(
+  settings: WindowAppearanceSettings,
+  systemPrefersDark: boolean
+): Record<string, string> {
+  if (!settings) {
+    return {}
+  }
+  const blue = resolveEffectiveTerminalAppearance(settings, systemPrefersDark).theme?.blue
+  return blue ? { [ACTIVITY_GUIDE_VARIABLE]: `color-mix(in srgb, ${blue} 50%, transparent)` } : {}
+}
+
 // Called from attachPilotRenderer (pilot-hook: renderer). Inline root variables beat the `.dark` theme
 // block, so the center column, tab bar, status bar and every portaled overlay follow the terminal theme.
 export function attachPilotWindowAppearance(
@@ -50,12 +65,14 @@ export function attachPilotWindowAppearance(
   let lastSettings: WindowAppearanceSettings | 'unset' = 'unset'
 
   const apply = (): void => {
-    const vars = resolvePilotWindowStyleVariables(store.getState().settings, darkQuery.matches)
+    const { settings } = store.getState()
+    const vars = resolvePilotWindowStyleVariables(settings, darkQuery.matches)
+    const all = { ...resolveActivityGuideVariables(settings, darkQuery.matches), ...vars }
     for (const name of applied) {
       root.style.removeProperty(name)
     }
-    applied = vars ? Object.keys(vars) : []
-    for (const [name, value] of Object.entries(vars ?? {})) {
+    applied = Object.keys(all)
+    for (const [name, value] of Object.entries(all)) {
       root.style.setProperty(name, value)
     }
     if (vars) {

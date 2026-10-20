@@ -3,7 +3,12 @@ import type {
   ActivityThreadGroup
 } from '@/components/activity/activity-thread-types'
 import { translate } from '@/i18n/i18n'
-import { withGroupRows, type ActivityTabsRow } from './activity-tabs-rows'
+import {
+  groupRows,
+  INACTIVE_WORKTREES_GROUP_KEY,
+  withGroupRows,
+  type ActivityTabsRow
+} from './activity-tabs-rows'
 import { compareWorktreeNames } from './workspace-tab-items'
 
 export const OPEN_TABS_GROUP_KEY = 'pilot:open-tabs'
@@ -59,15 +64,54 @@ function worktreeOrder(
   )
 }
 
+export type MergeRowsOptions = {
+  pinnedWorktreeIds?: readonly string[]
+  // The Inactive section's fold; it starts folded.
+  inactiveExpanded?: boolean
+}
+
+// A worktree group whose only row is its own header's: the worktree has no agent and no tab.
+function isInactiveWorktreeGroup(group: ActivityThreadGroup): boolean {
+  const rows = groupRows(group)
+  return (
+    group.key.startsWith(WORKTREE_GROUP) &&
+    group.threads.length === 0 &&
+    rows.length > 0 &&
+    rows.every((row) => row.kind === 'recent-worktree')
+  )
+}
+
+// Grouped by worktree, worktrees with no session move, in order, under one Inactive header at the end.
+function inactiveLast(
+  groups: ActivityThreadGroup[],
+  groupBy: ActivityGroupBy,
+  inactiveExpanded: boolean
+): ActivityThreadGroup[] {
+  if (groupBy !== 'worktree') {
+    return groups
+  }
+  const inactive = groups.filter(isInactiveWorktreeGroup)
+  if (inactive.length === 0) {
+    return groups
+  }
+  const section = withGroupRows(
+    { key: INACTIVE_WORKTREES_GROUP_KEY, label: 'Inactive', threads: [] },
+    inactive.flatMap(groupRows),
+    !inactiveExpanded
+  )
+  return [...groups.filter((group) => !isInactiveWorktreeGroup(group)), section]
+}
+
 /**
  * Puts each row in its Group by group, after the agents; groups with only Pilot rows go after the
- * rest. Grouped by worktree, groups go pinned first, then by name.
+ * rest. Grouped by worktree, groups go pinned first, then by name, and those with no session go
+ * under Inactive at the end.
  */
 export function mergeRowsIntoGroups(
   groups: ActivityThreadGroup[],
   rows: readonly ActivityTabsRow[],
   groupBy: ActivityGroupBy,
-  pinnedWorktreeIds: readonly string[] = []
+  { pinnedWorktreeIds = [], inactiveExpanded = false }: MergeRowsOptions = {}
 ): ActivityThreadGroup[] {
   if (rows.length === 0) {
     return worktreeOrder(groups, groupBy, pinnedWorktreeIds)
@@ -93,5 +137,5 @@ export function mergeRowsIntoGroups(
   for (const [key, entry] of pending) {
     merged.push(withGroupRows({ key, label: entry.label, threads: [] }, entry.rows))
   }
-  return worktreeOrder(merged, groupBy, pinnedWorktreeIds)
+  return inactiveLast(worktreeOrder(merged, groupBy, pinnedWorktreeIds), groupBy, inactiveExpanded)
 }

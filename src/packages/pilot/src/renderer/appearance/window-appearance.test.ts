@@ -53,12 +53,18 @@ describe('attachPilotWindowAppearance', () => {
     ['match-terminal themes the window root', 'match-terminal', MOCHA.background, 'match-terminal'],
     ['tinted leaves the root to Orca', 'tinted', '', null],
     ['default leaves the root to Orca', 'default', '', null]
-  ] as const)('%s', (_name, mode, background, attribute) => {
-    const store = fakeStore(settings({ leftSidebarAppearanceMode: mode }))
-    detach = attachPilotWindowAppearance(store, root, fakeDarkQuery(true))
-    expect(root.style.getPropertyValue('--background')).toBe(background)
-    expect(root.getAttribute(WINDOW_APPEARANCE_ATTRIBUTE)).toBe(attribute)
-  })
+  ] as const)(
+    '%s, and Activity’s guide line takes the theme’s blue',
+    (_name, mode, background, attribute) => {
+      const store = fakeStore(
+        settings({ leftSidebarAppearanceMode: mode, terminalThemeDark: 'Catppuccin Mocha' })
+      )
+      detach = attachPilotWindowAppearance(store, root, fakeDarkQuery(true))
+      expect(root.style.getPropertyValue('--background')).toBe(background)
+      expect(root.getAttribute(WINDOW_APPEARANCE_ATTRIBUTE)).toBe(attribute)
+      expect(root.style.getPropertyValue('--pilot-activity-guide')).toContain('#89b4fa')
+    }
+  )
 
   it('themes overlays and the center column, not only the sidebar tokens', () => {
     const store = fakeStore(settings({ leftSidebarAppearanceMode: 'match-terminal' }))

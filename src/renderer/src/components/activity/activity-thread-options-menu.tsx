@@ -17,7 +17,11 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { translate } from '@/i18n/i18n'
-import { ActivityTabsMenuItems } from '../../../../packages/pilot/src/renderer/activity-tabs/ActivityTabsMenuItems' // pilot-hook: activity-tabs-menu
+import {
+  ActivityTabsFilterMenuItems, // pilot-hook: activity-tabs-filter-menu
+  ActivityTabsMenuItems, // pilot-hook: activity-tabs-menu
+  useActivityTabsFilterCount // pilot-hook: activity-tabs-filter-count
+} from '../../../../packages/pilot/src/renderer/activity-tabs/ActivityTabsMenuItems'
 import { OptionsFilterCountBadge } from '@/components/sidebar/options-filter-count-badge'
 import { formatActiveFilterLabel } from '../../../../shared/workspace-view/workspace-row-filters'
 import {
@@ -82,7 +86,9 @@ export function ActivityThreadOptionsMenu({
 }): React.JSX.Element {
   const skipCloseAutoFocusRef = React.useRef(false)
   const activeFilterCount =
-    useActivityScopeFilterCount() + (onUnreadOnlyChange && unreadOnly ? 1 : 0)
+    useActivityScopeFilterCount() +
+    useActivityTabsFilterCount() + // pilot-hook: activity-tabs-filter-count
+    (onUnreadOnlyChange && unreadOnly ? 1 : 0)
   const activeFilterLabel = formatActiveFilterLabel(activeFilterCount)
   const optionsLabel =
     activeFilterCount > 0
@@ -168,6 +174,7 @@ export function ActivityThreadOptionsMenu({
             )}
           </DropdownMenuCheckboxItem>
         ) : null}
+        <ActivityTabsFilterMenuItems /> {/* pilot-hook: activity-tabs-filter-menu */}
         <ActivityScopeFilterMenuItems />
         <DropdownMenuSeparator />
         <DropdownMenuLabel>

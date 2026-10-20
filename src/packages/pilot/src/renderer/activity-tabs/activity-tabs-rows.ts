@@ -14,17 +14,26 @@ export type ActivityTabsVirtualItem = {
   groupKey: string
 }
 
+/** Grouped by worktree, the worktrees with no session, listed under one header after the rest. */
+export const INACTIVE_WORKTREES_GROUP_KEY = 'pilot:inactive-worktrees'
+
 const NO_ROWS: readonly ActivityTabsRow[] = []
 
 // Why a WeakMap: Activity's group type stays upstream's; the rows ride on the group object.
 const rowsByGroup = new WeakMap<ActivityThreadGroup, readonly ActivityTabsRow[]>()
+// Groups whose rows are counted but not listed: Pilot owns their fold, not upstream's collapse set.
+const foldedGroups = new WeakSet<ActivityThreadGroup>()
 
 export function withGroupRows(
   group: ActivityThreadGroup,
-  rows: readonly ActivityTabsRow[]
+  rows: readonly ActivityTabsRow[],
+  folded = false
 ): ActivityThreadGroup {
   const next = { ...group }
   rowsByGroup.set(next, rows)
+  if (folded) {
+    foldedGroups.add(next)
+  }
   return next
 }
 
@@ -33,8 +42,15 @@ export function groupRows(group: ActivityThreadGroup): readonly ActivityTabsRow[
   return rowsByGroup.get(group) ?? NO_ROWS
 }
 
+export function isGroupFolded(group: ActivityThreadGroup): boolean {
+  return foldedGroups.has(group)
+}
+
 // A worktree group's header is a recent worktree's row (with its own New agent): no row under it.
 function shownRows(group: ActivityThreadGroup): readonly ActivityTabsRow[] {
+  if (isGroupFolded(group)) {
+    return NO_ROWS
+  }
   const rows = groupRows(group)
   return group.key.startsWith('worktree:') ? rows.filter((row) => row.kind === 'tab') : rows
 }

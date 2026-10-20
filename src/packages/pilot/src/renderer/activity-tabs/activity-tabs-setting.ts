@@ -39,6 +39,8 @@ function localFlag(key: string) {
 
 const showAllTabs = localFlag('pilot.activity.show-all-tabs')
 const showRecentWorktrees = localFlag('pilot.activity.show-recent-worktrees')
+const hideTerminals = localFlag('pilot.activity.hide-terminals')
+const inactiveExpanded = localFlag('pilot.activity.inactive-expanded')
 
 export function useActivityShowAllTabs(): boolean {
   return showAllTabs.useValue()
@@ -60,6 +62,24 @@ export function useActivityShowRecentWorktrees(): boolean {
 
 export function setActivityShowRecentWorktrees(next: boolean): void {
   showRecentWorktrees.set(next)
+}
+
+// A filter on "Show all tabs": terminal tabs with no agent in them leave the list.
+export function useActivityHideTerminals(): boolean {
+  return hideTerminals.useValue()
+}
+
+export function setActivityHideTerminals(next: boolean): void {
+  hideTerminals.set(next)
+}
+
+// Grouped by worktree, the Inactive section starts folded.
+export function useActivityInactiveExpanded(): boolean {
+  return inactiveExpanded.useValue()
+}
+
+export function setActivityInactiveExpanded(next: boolean): void {
+  inactiveExpanded.set(next)
 }
 
 // Pilot's Activity rows show only in the open Activity sidebar; inert until Pilot attaches.

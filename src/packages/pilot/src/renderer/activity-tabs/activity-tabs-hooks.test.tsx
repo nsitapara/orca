@@ -13,7 +13,11 @@ import {
 import { useAppStore } from '@/store'
 import { registerPilotStore } from '../store'
 import { setActivityShowAllTabs, setActivityShowRecentWorktrees } from './activity-tabs-setting'
-import { activityTabsGroupRows, type ActivityTabsVirtualItem } from './activity-tabs-rows'
+import {
+  activityTabsGroupRows,
+  groupRows,
+  type ActivityTabsVirtualItem
+} from './activity-tabs-rows'
 import { useActivityTabsThreads } from './activity-tabs-threads'
 
 function arrange(args: { attached: boolean; on: boolean; body: 'agents' | 'workspaces' }): void {
@@ -136,11 +140,11 @@ describe('useActivityTabsThreads', () => {
   )
   // wt-1 holds the agent; wt-2 was active a minute ago; wt-3 four days ago; wt-4 is pinned, from long ago.
   it.each([
-    { on: true, groups: ['worktree:wt-4', 'worktree:wt-1', 'worktree:wt-2'] },
-    { on: false, groups: ['worktree:wt-4', 'worktree:wt-1'] }
+    { on: true, inactive: ['wt-4', 'wt-2'] },
+    { on: false, inactive: ['wt-4'] }
   ])(
-    'adds pinned worktrees, and recent ones only while on (on=$on)',
-    ({ on, groups: expected }) => {
+    'adds pinned worktrees, and recent ones only while on, under Inactive (on=$on)',
+    ({ on, inactive }) => {
       arrange({ attached: true, on: false, body: 'agents' })
       act(() => setActivityShowRecentWorktrees(on))
       const now = Date.now()
@@ -167,7 +171,15 @@ describe('useActivityTabsThreads', () => {
           { query: '', readFilter: 'all', groupBy: 'worktree' }
         )
       ).result.current.visibleThreadGroups
-      expect(groups.map((group) => group.key)).toEqual(expected)
+      expect(groups.map((group) => group.key)).toEqual([
+        'worktree:wt-1',
+        'pilot:inactive-worktrees'
+      ])
+      const section = groups.find((group) => group.key === 'pilot:inactive-worktrees')
+      const ids = (section ? groupRows(section) : []).map((row) =>
+        row.kind === 'recent-worktree' ? row.recent.worktree.id : row.tab.key
+      )
+      expect(ids).toEqual(inactive)
     }
   )
 

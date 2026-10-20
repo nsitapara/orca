@@ -13,6 +13,8 @@ import { useAppStore } from '@/store'
 import { registerPilotStore } from '../store'
 import { ActivityTabsGroupHeader } from './ActivityTabsGroupHeader'
 import { ActivityTabsNest } from './ActivityTabsNest'
+import { withGroupRows } from './activity-tabs-rows'
+import { setActivityInactiveExpanded } from './activity-tabs-setting'
 import { RecentWorktreeRow } from './RecentWorktreeRow'
 import { activateAndRevealWorkspace } from '@/lib/worktree-activation'
 import { launchAgentInNewTab } from '@/lib/launch-agent-in-new-tab'
@@ -76,6 +78,11 @@ describe('Pilot wrappers around upstream Activity elements', () => {
   it.each([
     { attached: false, groupKey: 'worktree:wt-1', pilot: [] },
     { attached: true, groupKey: 'worktree:wt-1', pilot: ['nest', 'header', 'leading', 'footer'] },
+    {
+      attached: true,
+      groupKey: 'pilot:inactive-worktrees',
+      pilot: ['nest', 'header', 'leading', 'footer']
+    },
     { attached: true, groupKey: 'done', pilot: ['leading', 'footer'] }
   ] as const)(
     'attached=$attached $groupKey → Pilot renders $pilot',
@@ -104,9 +111,6 @@ describe('Pilot wrappers around upstream Activity elements', () => {
     )
     expect(view.getByTitle('feature').textContent).toBe('feature')
     expect(view.getByText('Repo')).toBeTruthy()
-    expect(
-      view.container.querySelector('button[aria-expanded] .lucide-chevron-down')
-    ).not.toBeNull()
     expect(view.getByTitle('Claude')).toBeTruthy()
   })
 
@@ -138,13 +142,17 @@ describe('Pilot wrappers around upstream Activity elements', () => {
     }
   )
 
-  it('a worktree header with no sessions has no chevron, but keeps New agent', () => {
+  // Why: no fold keeps every worktree's folder icon in one column, on its guide line.
+  it.each([
+    { sessions: 'sessions', threads: [thread] },
+    { sessions: 'no sessions', threads: [] }
+  ])('a worktree header with $sessions has no chevron, but keeps New agent', ({ threads }) => {
     registerPilotStore(useAppStore)
     useAppStore.setState({ repos: [makeRepo()], worktreesByRepo: { 'repo-1': [makeWorktree()] } })
-    const empty = { key: 'worktree:wt-1', label: 'feature', threads: [] }
+    const group = { key: 'worktree:wt-1', label: 'feature', threads }
     const view = render(
       <TooltipProvider>
-        <ActivityTabsGroupHeader group={empty}>{UPSTREAM}</ActivityTabsGroupHeader>
+        <ActivityTabsGroupHeader group={group}>{UPSTREAM}</ActivityTabsGroupHeader>
       </TooltipProvider>
     )
     expect(view.container.querySelector('.lucide-chevron-down')).toBeNull()
@@ -182,25 +190,35 @@ describe('Pilot wrappers around upstream Activity elements', () => {
     )
   })
 
-  it('a worktree header’s chevron folds its sessions without opening the worktree', () => {
+  it('the Inactive header starts folded, counts its worktrees, and folds on Pilot’s own flag', () => {
     registerPilotStore(useAppStore)
-    useAppStore.setState({ repos: [makeRepo()], worktreesByRepo: { 'repo-1': [makeWorktree()] } })
+    setActivityInactiveExpanded(false)
     const onToggle = vi.fn()
+    const recent = { key: 'r', worktree: makeWorktree(), repo: makeRepo(), pinned: false }
+    const group = withGroupRows(
+      { key: 'pilot:inactive-worktrees', label: 'Inactive', threads: [] },
+      [
+        { kind: 'recent-worktree', recent },
+        { kind: 'recent-worktree', recent: { ...recent, key: 'r2' } }
+      ]
+    )
     const view = render(
       <TooltipProvider>
-        <ActivityTabsGroupHeader
-          group={{ key: 'worktree:wt-1', label: 'feature', threads: [thread] }}
-          onToggle={onToggle}
-        >
+        <ActivityTabsGroupHeader group={group} onToggle={onToggle}>
           {UPSTREAM}
         </ActivityTabsGroupHeader>
       </TooltipProvider>
     )
 
-    fireEvent.click(view.getByRole('button', { name: 'Hide sessions' }))
+    const header = view.getByRole('button', { name: 'Show inactive worktrees' })
+    expect(header.getAttribute('aria-expanded')).toBe('false')
+    expect(header.textContent).toBe('Inactive2')
+    fireEvent.click(header)
 
-    expect(onToggle).toHaveBeenCalledOnce()
+    expect(view.getByRole('button', { name: 'Hide inactive worktrees' })).toBeTruthy()
+    expect(onToggle).not.toHaveBeenCalled()
     expect(activateAndRevealWorkspace).not.toHaveBeenCalled()
+    setActivityInactiveExpanded(false)
   })
 
   // Why: the menu's items render in a portal whose clicks bubble to the header; the pick opens its own tab.

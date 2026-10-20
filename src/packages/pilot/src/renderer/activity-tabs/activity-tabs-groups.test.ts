@@ -99,7 +99,7 @@ describe('mergeRowsIntoGroups', () => {
       groups: [
         ['worktree:wt-a', 1, 1, 1],
         ['worktree:wt-b', 0, 1, 1],
-        ['worktree:wt-c', 0, 0, 0]
+        ['pilot:inactive-worktrees', 0, 0, 0]
       ]
     },
     {
@@ -124,7 +124,7 @@ describe('mergeRowsIntoGroups', () => {
     }
   )
 
-  it('lists each group’s Pilot rows after its agents (a worktree’s header stands in for its recent row), collapses them with it, and counts them', () => {
+  it('lists each group’s Pilot rows after its agents (a worktree’s header stands in for its recent row), collapses them with it, and counts them, folded ones included', () => {
     const groups = merged('worktree')
     const keys = (collapsed: string[]) =>
       buildActivityVirtualItems({
@@ -138,22 +138,26 @@ describe('mergeRowsIntoGroups', () => {
       'w:a-tab',
       'h:worktree:wt-b',
       'w:b-tab',
-      'h:worktree:wt-c'
+      'h:pilot:inactive-worktrees'
     ])
     expect(keys(['worktree:wt-a'])).toEqual([
       'h:worktree:wt-a',
       'h:worktree:wt-b',
       'w:b-tab',
-      'h:worktree:wt-c'
+      'h:pilot:inactive-worktrees'
     ])
     expect(withActivityTabsCount(1, groups)).toBe(4)
   })
   it('puts pinned worktrees’ groups first, and a pinned worktree’s row under Pinned', () => {
-    const groupKeys = (groupBy: ActivityGroupBy, rows: ActivityTabsRow[]) =>
-      mergeRowsIntoGroups(buildActivityThreadGroups([agent], groupBy), rows, groupBy, ['wt-c']).map(
-        (group) => group.key
-      )
-    expect(groupKeys('worktree', ROWS)).toEqual(['worktree:wt-c', 'worktree:wt-a', 'worktree:wt-b'])
+    const groupKeys = (groupBy: ActivityGroupBy, rows: ActivityTabsRow[], pinned = ['wt-c']) =>
+      mergeRowsIntoGroups(buildActivityThreadGroups([agent], groupBy), rows, groupBy, {
+        pinnedWorktreeIds: pinned
+      }).map((group) => group.key)
+    expect(groupKeys('worktree', ROWS, ['wt-b'])).toEqual([
+      'worktree:wt-b',
+      'worktree:wt-a',
+      'pilot:inactive-worktrees'
+    ])
     expect(groupKeys('worktree', [])).toEqual(['worktree:wt-a'])
     const pinnedRow: ActivityTabsRow = {
       kind: 'recent-worktree',
@@ -170,9 +174,47 @@ describe('mergeRowsIntoGroups', () => {
     const group = (id: string) => ({ key: `worktree:${id}`, label: id, threads: [] })
     const upstream = [group('wt-z'), group('WT-m'), group('wt-a')]
     const keys = (groupBy: ActivityGroupBy, pinned: string[]) =>
-      mergeRowsIntoGroups(upstream, [], groupBy, pinned).map((g) => g.key)
+      mergeRowsIntoGroups(upstream, [], groupBy, { pinnedWorktreeIds: pinned }).map((g) => g.key)
     expect(keys('worktree', [])).toEqual(['worktree:wt-a', 'worktree:WT-m', 'worktree:wt-z'])
     expect(keys('worktree', ['wt-z'])).toEqual(['worktree:wt-z', 'worktree:wt-a', 'worktree:WT-m'])
     expect(keys('status', ['wt-z'])).toEqual(['worktree:wt-z', 'worktree:WT-m', 'worktree:wt-a'])
   })
+
+  // Why: worktrees with no session sat between active ones; under Inactive they keep their order (pinned, then name).
+  it.each([
+    { inactiveExpanded: false, rows: [] },
+    { inactiveExpanded: true, rows: ['r:m-key', 'r:b-key'] }
+  ])(
+    'grouped by worktree, worktrees with no session go in order under Inactive at the end (expanded: $inactiveExpanded)',
+    ({ inactiveExpanded, rows }) => {
+      const recent = (id: string, pinned: boolean): ActivityTabsRow => ({
+        kind: 'recent-worktree',
+        recent: { key: `${id.slice(3)}-key`, worktree: makeWorktreeWithId(id), repo: null, pinned }
+      })
+      const groups = mergeRowsIntoGroups(
+        buildActivityThreadGroups([agent], 'worktree'),
+        [
+          { kind: 'tab', tab: tabItem('z-tab', 'wt-z', null) },
+          recent('wt-b', false),
+          recent('wt-m', true)
+        ],
+        'worktree',
+        { pinnedWorktreeIds: ['wt-m', 'wt-z'], inactiveExpanded }
+      )
+      const keys = buildActivityVirtualItems({
+        groups,
+        groupBy: 'worktree',
+        collapsedGroupKeys: new Set()
+      }).map(getActivityVirtualItemKey)
+      expect(keys).toEqual([
+        'h:worktree:wt-z',
+        'w:z-tab',
+        'h:worktree:wt-a',
+        't:pane-1',
+        'h:pilot:inactive-worktrees',
+        ...rows
+      ])
+      expect(withActivityTabsCount(1, groups)).toBe(4)
+    }
+  )
 })
