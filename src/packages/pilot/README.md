@@ -73,7 +73,9 @@ Every job is a YAML automation in `~/.agents/automations/` (one file per automat
   - `capacity [--set <n>|none]`: the run limit, what runs and waits, and what the runner gave up on (Run limit and the Running page)
 - **Nothing runs until Nish switches it on** (build plan Task 50). An automation's first tick shows in its Activity and in the worktree panel.
 - **`runs_on: Mac mini`** pins an automation to one machine: only that machine's scheduler ticks it. Without it, every Pilot that ticks all jobs ticks it. One line, at most 255 characters. See "Pilot across machines" for what it gates and how it is checked.
+- **`wait: start`** on an agent step ends the step, done, once its session is up (its first hook row in its tab), so a kickoff step stops holding a slot and the run goes on while the session works (`steps.detached`). Until a row comes, the step runs as any other, to its timeout or its tab closing; a row from an earlier step in the same tab doesn't count. The session keeps its run's powers while its tab lives, and an answer run for that item forks a new session instead of typing into it. Pilot refuses `wait: start` on a shell step, and in a `workspace: { env }` job, whose env is deleted when its run ends.
 - **A run's tabs close when it ends**, however it ends (`main/run/ended-run-tabs.ts`). Once every run on an agent tab has ended, the scheduler's next poll (every 15 s) closes it, and Resume reopens the session. A tab is found by its handle or its pane, since a restart can give the terminal a new handle. A tab stays when:
+  - it holds a `wait: start` step's session;
   - its last step has no session id to resume;
   - a turn began there after that step ended (someone took it over);
   - it runs another session now, or its agent exited;

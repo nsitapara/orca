@@ -50,6 +50,7 @@ function storeWithRunningStep(): PilotStore {
 
 const probe = (state: ObservedState): StepProbe => ({
   status: async () => state,
+  started: () => false,
   session: () => ({
     id: '00000000-0000-4000-8000-000000000001',
     transcriptPath: '/t/00000000-0000-4000-8000-000000000001.jsonl'
@@ -61,6 +62,7 @@ const HOUR = 60 * 60_000
 function hooks(over: Partial<StepPollHooks> = {}) {
   return {
     timeoutOf: () => null,
+    endsAtStart: () => false,
     closeTerminal: vi.fn(async () => {}),
     onStepEnded: vi.fn(async () => {}),
     ...over
@@ -105,6 +107,43 @@ describe('pollRunningSteps', () => {
     expect(store.runs.get('run-1')?.status).toBe('running')
   })
 
+  describe('a wait: start step', () => {
+    const waiting = (started: boolean) => ({
+      ...probe('working'),
+      started: vi.fn(() => started)
+    })
+
+    it('ends done and detached once its session is up, and hands the run on once', async () => {
+      const store = storeWithRunningStep()
+      const h = hooks({ endsAtStart: () => true })
+      const p = waiting(true)
+      await pollRunningSteps(store, p, noCost, () => 9, h)
+      expect(p.started).toHaveBeenCalledWith('pane-term_1', 1)
+      expect(store.runs.steps('run-1')[0]).toMatchObject({
+        status: 'done',
+        detached: true,
+        finishedAt: 9
+      })
+      expect(h.onStepEnded).toHaveBeenCalledTimes(1)
+      expect(h.closeTerminal).not.toHaveBeenCalled()
+    })
+
+    it('keeps running while the session has sent no row (or only an earlier step’s)', async () => {
+      const store = storeWithRunningStep()
+      const h = hooks({ endsAtStart: () => true })
+      await pollRunningSteps(store, waiting(false), noCost, () => 9, h)
+      expect(store.runs.steps('run-1')[0]).toMatchObject({ status: 'running', detached: false })
+      expect(h.onStepEnded).not.toHaveBeenCalled()
+    })
+
+    it('is left alone by started() when the step waits for the finish', async () => {
+      const store = storeWithRunningStep()
+      const h = hooks()
+      await pollRunningSteps(store, waiting(true), noCost, () => 9, h)
+      expect(store.runs.steps('run-1')[0].status).toBe('running')
+    })
+  })
+
   it('fails the step when its terminal is gone before the agent finished, and hands the run on', async () => {
     const store = storeWithRunningStep()
     const h = hooks()
@@ -139,6 +178,7 @@ describe('pollRunningSteps', () => {
     addRunningStep(store, 'run-1', 'bad')
     addRunningStep(store, 'run-2', 'good')
     const flaky: StepProbe = {
+      started: () => false,
       status: async (handle) => {
         if (handle === 'bad') {
           throw new Error('runtime_unavailable')
@@ -371,6 +411,24 @@ describe('runtimeStepProbe.status', () => {
     expect(show).toHaveBeenCalledTimes(1)
     const fresh = probeFor(show, [{ state: 'done', stateStartedAt: 12, receivedAt: 20 }])
     expect(await fresh.status('h', 'pane', 10)).toBe('done')
+  })
+
+  it('counts any live row since the step began as started, SessionStart included', () => {
+    const started = (rows: object[], since?: number) =>
+      probeFor(
+        vi.fn(async () => ({})),
+        rows
+      ).started('pane', since)
+    expect(started([])).toBe(false)
+    expect(started([{ state: 'done', sessionBoundary: true, stateStartedAt: 12 }], 10)).toBe(true)
+    expect(started([{ state: 'working', stateStartedAt: 3, receivedAt: 20 }], 10)).toBe(false)
+    expect(started([{ state: 'working', receivedAt: 10 }], 10)).toBe(true)
+    expect(started([{ state: 'working', providerSessionOnly: true, receivedAt: 20 }], 10)).toBe(
+      false
+    )
+    expect(started([{ state: 'working', restoredUnconfirmed: true, receivedAt: 20 }], 10)).toBe(
+      false
+    )
   })
 
   it('reads the status row when there is one, without asking the terminal', async () => {

@@ -132,6 +132,8 @@ export type StepDef = {
   mode: string | null
   prompt: string | null
   promptStyle: 'wrapped' | 'raw'
+  // `start`: an agent step ends once its session is up, and the session goes on in its tab.
+  wait: 'start' | 'finish'
   args: string[]
   session: StepSession
   run: string | null

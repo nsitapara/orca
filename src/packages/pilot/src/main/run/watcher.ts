@@ -17,6 +17,17 @@ export type StepProbe = {
     paneKey: string,
     since?: number | null
   ): { id: string; transcriptPath: string | null } | null
+  // Whether the session has sent any hook row since `since` (SessionStart's included): it is up.
+  started(paneKey: string, since?: number | null): boolean
+}
+
+function rowsSince<R extends { stateStartedAt?: number; receivedAt: number }>(
+  rows: readonly R[],
+  since: number | null | undefined
+): R[] {
+  return since === null || since === undefined
+    ? [...rows]
+    : rows.filter((r) => (r.stateStartedAt ?? r.receivedAt) >= since)
 }
 
 export function runtimeStepProbe(
@@ -28,11 +39,7 @@ export function runtimeStepProbe(
       const rows = runtime.getAgentStatusRowsForPane(paneKey)
       // Keyed on when the row's state began, not receivedAt: the hook server re-stamps receivedAt on a
       // same-state refresh, so an earlier turn's `done` row would otherwise look like this step's.
-      const row = newestLiveRow(
-        since === null || since === undefined
-          ? rows
-          : rows.filter((r) => (r.stateStartedAt ?? r.receivedAt) >= since)
-      )
+      const row = newestLiveRow(rowsSince(rows, since))
       if (row) {
         return observedState(row)
       }
@@ -53,15 +60,15 @@ export function runtimeStepProbe(
     },
     session(paneKey, since) {
       const rows = runtime.getAgentStatusRowsForPane(paneKey)
-      const mine =
-        since === null || since === undefined
-          ? rows
-          : rows.filter((r) => (r.stateStartedAt ?? r.receivedAt) >= since)
-      const s = newestSessionRow(mine)?.providerSession
+      const s = newestSessionRow(rowsSince(rows, since))?.providerSession
       if (!s?.id) {
         return null
       }
       return { id: s.id, transcriptPath: s.transcriptPath ?? null }
+    },
+    started(paneKey, since) {
+      const rows = runtime.getAgentStatusRowsForPane(paneKey)
+      return rowsSince(rows, since).some((r) => !r.providerSessionOnly && !r.restoredUnconfirmed)
     }
   }
 }
@@ -72,6 +79,8 @@ type StepPatch = Parameters<PilotStore['runs']['updateStep']>[2]
 export type StepPollHooks = {
   // The step's timeout in ms, or null for none (contract §7: its own, else limits.timeout).
   timeoutOf(step: OpenStep): number | null
+  // The step is `wait: start`: it ends done, detached, once its session is up.
+  endsAtStart(step: OpenStep): boolean
   closeTerminal(handle: string): Promise<void>
   // The step ended (done, failed or timed out): the run engine starts the next step or ends the run.
   onStepEnded(runId: string): Promise<void>
@@ -126,6 +135,28 @@ async function timeOutIfDue(
   )
 }
 
+async function endDone(
+  store: PilotStore,
+  step: OpenStep,
+  session: ReturnType<StepProbe['session']>,
+  cost: CostReader,
+  now: () => number,
+  hooks: StepPollHooks,
+  detached: boolean
+): Promise<void> {
+  const path = session?.transcriptPath ?? step.transcriptPath
+  // Only a provisional Claude cost is read here; measureFinishedSteps (usage/) overwrites it, for both agents, with
+  // the step's own window.
+  const spent = path && step.agent === 'claude' ? await cost(path) : { costUsd: null, tokens: null }
+  const patch: StepPatch = {
+    status: 'done',
+    finishedAt: now(),
+    costUsd: spent.costUsd,
+    tokens: spent.tokens
+  }
+  await endStep(store, step, detached ? { ...patch, detached: true } : patch, hooks)
+}
+
 async function pollStep(
   store: PilotStore,
   step: OpenStep,
@@ -146,19 +177,13 @@ async function pollStep(
       hooks.sessionLearned?.(step, patch.sessionId)
     }
   }
+  if (hooks.endsAtStart(step) && probe.started(step.paneKey, step.startedAt)) {
+    await endDone(store, step, session, cost, now, hooks, true)
+    return
+  }
   const state = await probe.status(handle, step.paneKey, step.startedAt)
   if (state === 'done') {
-    const path = session?.transcriptPath ?? step.transcriptPath
-    // Only a provisional Claude cost is read here; measureFinishedSteps (usage/) overwrites it, for both agents, with
-    // the step's own window.
-    const spent =
-      path && step.agent === 'claude' ? await cost(path) : { costUsd: null, tokens: null }
-    await endStep(
-      store,
-      step,
-      { status: 'done', finishedAt: now(), costUsd: spent.costUsd, tokens: spent.tokens },
-      hooks
-    )
+    await endDone(store, step, session, cost, now, hooks, false)
     return
   }
   if (state === 'gone') {

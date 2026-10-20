@@ -22,6 +22,7 @@ import {
 } from './shell-step'
 import { STALE_START_MS, sweepStaleStarts } from './stale-starts'
 import { stepStarterFor } from './step-starters'
+import { endsAtStart } from './step-wait'
 import { holdHomeForStep } from '../envs/home-hold'
 import { pollRunningSteps, type StepProbe } from './watcher'
 import type { WorkspaceDeps } from './workspace'
@@ -150,6 +151,14 @@ export function wireRunEngine(input: EngineWiringInput): WiredEngine {
     missingSince.set(run.automationId, since)
     return Math.max(since - (step.startedAt ?? since), 0) + MISSING_DEFINITION_TIMEOUT_MS
   }
+  const endsAtStartOf = (step: { runId: string; idx: number }): boolean => {
+    const run = store.runs.get(step.runId)
+    if (!run) {
+      return false
+    }
+    const def = input.definitionFor(run.automationId) ?? lastKnown.get(run.automationId) ?? null
+    return endsAtStart(def, run, step.idx)
+  }
   const sweep = (): void =>
     sweepStaleStarts(store, now, log, {
       olderThanMs: STALE_START_MS,
@@ -180,6 +189,7 @@ export function wireRunEngine(input: EngineWiringInput): WiredEngine {
       sweepOrphanShellSteps(store, shell.isLive, now, log)
       await pollRunningSteps(store, input.probe, input.cost ?? claudeTranscriptCost, now, {
         timeoutOf,
+        endsAtStart: endsAtStartOf,
         // As launch.ts's closeSessionTerminal: a process the close couldn't stop is a failed close, so
         // the step stays running (no next step starts beside a live agent) and the next poll retries.
         closeTerminal: async (handle) => {

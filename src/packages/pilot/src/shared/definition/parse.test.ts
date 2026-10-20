@@ -1,6 +1,20 @@
 import { describe, expect, it } from 'vitest'
 import { parseAutomationYaml } from './parse'
 
+describe('step wait', () => {
+  const yaml = (wait: string) =>
+    `name: n\nrepo: r\nschedule: manual\nsteps:\n  - { agent: claude, prompt: x${wait} }\n`
+  const waitOf = (y: string) => {
+    const r = parseAutomationYaml(y, '/a/n.yaml')
+    return r.ok ? r.definition.steps[0].wait : r.errors
+  }
+
+  it('reads wait: start, and defaults to finish', () => {
+    expect(waitOf(yaml(', wait: start'))).toBe('start')
+    expect(waitOf(yaml(''))).toBe('finish')
+  })
+})
+
 const CI_05 = `
 name: Fix failed CI on my MRs
 repo: web-platform
@@ -62,6 +76,7 @@ const CI_05_DEFINITION = {
       mode: null,
       prompt: 'Fix failed pipeline {mr.pipeline} on !{mr.iid}.\n',
       promptStyle: 'wrapped',
+      wait: 'finish',
       args: [],
       session: { kind: 'new' },
       run: null,
@@ -211,6 +226,7 @@ describe('parseAutomationYaml', () => {
             mode: 'review',
             prompt: 'Review it.',
             promptStyle: 'wrapped',
+            wait: 'finish',
             args: ['--full-auto'],
             session: { kind: 'per_worktree' },
             run: null,
@@ -229,6 +245,7 @@ describe('parseAutomationYaml', () => {
             mode: null,
             prompt: 'Fix {steps.review.findings}',
             promptStyle: 'raw',
+            wait: 'finish',
             args: [],
             session: { kind: 'new' },
             run: null,
@@ -247,6 +264,7 @@ describe('parseAutomationYaml', () => {
             mode: null,
             prompt: null,
             promptStyle: 'wrapped',
+            wait: 'finish',
             args: [],
             session: { kind: 'new' },
             run: './scripts/teardown.sh',
