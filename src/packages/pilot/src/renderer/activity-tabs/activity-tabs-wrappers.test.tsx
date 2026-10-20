@@ -173,8 +173,7 @@ describe('Pilot wrappers around upstream Activity elements', () => {
     expect(view.getByRole('button', { name: 'New agent' })).toBeTruthy()
   })
 
-  // Why: as in Projects, a click opens the worktree as a user open, so an empty one gets its default surface.
-  it.each([
+  const worktreeSurfaces = [
     {
       name: 'a worktree header',
       element: (
@@ -191,7 +190,10 @@ describe('Pilot wrappers around upstream Activity elements', () => {
         />
       )
     }
-  ])('clicking $name opens its worktree', ({ element }) => {
+  ]
+
+  // Why: as in Projects, a click opens the worktree as a user open, so an empty one gets its default surface.
+  it.each(worktreeSurfaces)('clicking $name opens its worktree', ({ element }) => {
     registerPilotStore(useAppStore)
     useAppStore.setState({ repos: [makeRepo()], worktreesByRepo: { 'repo-1': [makeWorktree()] } })
     const view = render(<TooltipProvider>{element}</TooltipProvider>)
@@ -203,6 +205,20 @@ describe('Pilot wrappers around upstream Activity elements', () => {
       expect.objectContaining({ navigationIntent: 'user-open' })
     )
   })
+
+  it.each(worktreeSurfaces)(
+    'right-clicking $name opens the Projects worktree menu, not the worktree',
+    async ({ element }) => {
+      registerPilotStore(useAppStore)
+      useAppStore.setState({ repos: [makeRepo()], worktreesByRepo: { 'repo-1': [makeWorktree()] } })
+      const view = render(<TooltipProvider>{element}</TooltipProvider>)
+
+      fireEvent.contextMenu(view.getByText('feature'))
+
+      expect(await view.findByRole('menuitem', { name: /Copy Path/ })).toBeTruthy()
+      expect(activateAndRevealWorkspace).not.toHaveBeenCalled()
+    }
+  )
 
   it('the Inactive header starts folded, counts its worktrees, and folds on Pilot’s own flag', () => {
     registerPilotStore(useAppStore)
