@@ -3,9 +3,11 @@ import { Badge } from '@/components/ui/badge'
 import type {
   CapacityPayload,
   CapacityRun,
+  GoNowKey,
   QueuedRun,
   RetryKey
 } from '../../../shared/api-types-capacity'
+import { canGoNow } from '../../../shared/capacity/go-now'
 import { holdReasonText, waitedText, waitsForSlot } from '../../../shared/capacity/waiting-rows'
 import { formatDuration } from '../../../shared/run/format-duration'
 import { workedMs } from '../../../shared/run/worked-time'
@@ -27,6 +29,7 @@ type Changes = {
   onLimit(limit: number | null): void
   onRetryLimit(limit: number): void
   onRetry(key: RetryKey): void
+  onGoNow(key: GoNowKey): void
 }
 
 // Name, where it works, its figures and Open run and Stop on top; the item under it; then why it isn't in your worktree,
@@ -92,16 +95,20 @@ function QueuedStatus({
   return <Badge variant="secondary">{check ? `Held · ${check.name}` : 'Held'}</Badge>
 }
 
-// Name, status and time on top; the item under it; then the reason across the whole row.
+// Name, status, time and Go now on top; the item under it; then the reason across the whole row.
 function QueuedRow({
   item,
   place,
-  now
+  now,
+  saving,
+  onGoNow
 }: {
   item: QueuedRun
   // Null: it waits on something other than a slot, so it has no place in the slot line.
   place: number | null
   now: number
+  saving: boolean
+  onGoNow(key: GoNowKey): void
 }): React.JSX.Element {
   const reason = holdReasonText(item)
   return (
@@ -115,6 +122,16 @@ function QueuedRow({
         <span className="ml-auto shrink-0 pl-2 text-xs tabular-nums text-muted-foreground">
           {waitedText(item, now)}
         </span>
+        {canGoNow(item) ? (
+          <button
+            type="button"
+            className="shrink-0 text-xs underline disabled:opacity-50"
+            disabled={saving}
+            onClick={() => onGoNow({ automationId: item.automationId, itemKey: item.itemKey })}
+          >
+            Go now
+          </button>
+        ) : null}
       </div>
       <div className="truncate font-mono text-xs text-muted-foreground" title={item.itemLabel}>
         {item.itemLabel}
@@ -177,7 +194,8 @@ function MachineRuns({
   limitsOpen,
   onLimit,
   onRetryLimit,
-  onRetry
+  onRetry,
+  onGoNow
 }: Omit<MachineProps, 'machine' | 'named' | 'onToggleLimits'> & {
   payload: CapacityPayload
   panelId: string
@@ -208,6 +226,8 @@ function MachineRuns({
             item={item}
             place={placeInLine(payload.queued, item)}
             now={now}
+            saving={saving}
+            onGoNow={onGoNow}
           />
         ))}
       </ListSection>
@@ -316,7 +336,8 @@ function changesFor(changes: CapacityChanges, machine: MachineCapacity): Changes
   return {
     onLimit: (limit) => void changes.setLimit(host, limit),
     onRetryLimit: (limit) => void changes.setRetryLimit(host, limit),
-    onRetry: (key) => void changes.retry(host, key)
+    onRetry: (key) => void changes.retry(host, key),
+    onGoNow: (key) => void changes.goNow(host, key)
   }
 }
 

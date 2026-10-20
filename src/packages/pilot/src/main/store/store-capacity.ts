@@ -17,6 +17,8 @@ export type QueuedItem = {
   recheckAt?: number
   // Set by the store: the check that began its current hold on something other than a slot. Absent on a slot waiter.
   heldAt?: number
+  // Set by markGoNow: the runner's waits pass it over. It goes with the row, when the item starts or leaves the line.
+  goNow?: boolean
 }
 
 const RUN_LIMIT_KEY = 'run_limit'
@@ -70,7 +72,8 @@ function toQueued(r: Record<string, unknown>): QueuedItem {
     holdDetail: String(r.hold_detail ?? ''),
     checkedAt: Number(r.checked_at ?? r.queued_at),
     ...(typeof r.recheck_at === 'number' ? { recheckAt: r.recheck_at } : {}),
-    ...(typeof r.held_at === 'number' ? { heldAt: r.held_at } : {})
+    ...(typeof r.held_at === 'number' ? { heldAt: r.held_at } : {}),
+    ...(Number(r.go_now) === 1 ? { goNow: true } : {})
   }
 }
 
@@ -133,7 +136,7 @@ export class CapacityStore {
 
   // changed: the row is new or its reason differs, so callers write a line only when something moved.
   // A hold that changes code keeps its held_at; one that goes back to a slot wait clears it (SET reads the old row).
-  enqueue(item: Omit<QueuedItem, 'heldAt'>): { changed: boolean } {
+  enqueue(item: Omit<QueuedItem, 'heldAt' | 'goNow'>): { changed: boolean } {
     const before = this.db
       .prepare(
         'SELECT hold_code, hold_detail FROM run_queue WHERE automation_id = ? AND item_key = ?'
@@ -167,6 +170,14 @@ export class CapacityStore {
       changed:
         !before || before.hold_code !== item.holdCode || before.hold_detail !== item.holdDetail
     }
+  }
+
+  // Go now on an item in line; false when it isn't there (it started or left meanwhile).
+  markGoNow(automationId: string, itemKey: string): boolean {
+    const marked = this.db
+      .prepare('UPDATE run_queue SET go_now = 1 WHERE automation_id = ? AND item_key = ?')
+      .run(automationId, itemKey)
+    return Number(marked.changes) > 0
   }
 
   // The row it removed, so a start knows whether Run now queued it.

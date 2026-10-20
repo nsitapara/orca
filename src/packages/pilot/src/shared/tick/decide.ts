@@ -4,7 +4,7 @@ import { evalExpr, parseExpr } from '../expr'
 import { oncePerKey, renderTemplate } from '../template'
 import { isRuntimeCheck } from './check-class'
 import { evaluateCheck, fieldLookup, plural, type CheckResult } from './checks'
-import { inTickGate, itemGate, limitGate, type Hold } from './runner-gates'
+import { inTickGate, itemGate, limitGate, standingHold, type Hold } from './runner-gates'
 
 // waitingSince: when the source says the item began waiting, its due time in the runner's line. seenAt: when this
 // job first saw it, which only ranks it within the job (oldest_waiting_first) when the source gives no time.
@@ -45,6 +45,8 @@ export type DecideInput = {
   byHand: boolean
   // Items (by item key or once key) Run now or Retry started by hand: their given-up key is due again.
   byHandKeys?: ReadonlySet<string>
+  // Items whose line row Go now marked: the runner's waits (GO_NOW_SKIPS) don't hold them.
+  goNowKeys?: ReadonlySet<string>
 }
 type Gate = { verdict: Verdict; reason: string }
 type Candidate = {
@@ -246,8 +248,10 @@ function allocate(input: DecideInput, candidates: Candidate[], out: ItemDecision
       out[c.index] = { ...decided, verdict: 'notdue', reason: `Already handled ${c.onceKey}` }
       continue
     }
-    const hold =
-      inTickGate(c.path, c.item.fields, paths) ?? limitGate(def, taken, input.activeRuns + started)
+    const hold = standingHold(
+      [inTickGate(c.path, c.item.fields, paths), limitGate(def, taken, input.activeRuns + started)],
+      input.goNowKeys?.has(c.item.key) === true
+    )
     if (hold) {
       out[c.index] = held(decided, hold)
       continue

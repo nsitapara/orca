@@ -1,6 +1,19 @@
-import type { CapacityPayload, FinishedRun } from '../../../../shared/api-types-capacity'
+import type { CapacityPayload, FinishedRun, QueuedRun } from '../../../../shared/api-types-capacity'
 
 const GIB = 1024 ** 3
+
+// The item waiting in capacity()'s line: Run now queued it, and it names no hold, as an older Pilot's slot waiter.
+export function waitingItem(over: Partial<QueuedRun> = {}): QueuedRun {
+  return {
+    automationId: 'ci',
+    automationName: '05 Fix failed CI',
+    itemKey: 'mr:9',
+    itemLabel: '!9 web-9',
+    queuedAt: Date.now() - 3 * 60_000,
+    byHand: true,
+    ...over
+  }
+}
 
 // The Running page's payload as a machine answers it: one run running, one waiting, nothing finished.
 export function capacity(over: Partial<CapacityPayload> = {}): CapacityPayload {
@@ -19,16 +32,7 @@ export function capacity(over: Partial<CapacityPayload> = {}): CapacityPayload {
         counted: true
       }
     ],
-    queued: [
-      {
-        automationId: 'ci',
-        automationName: '05 Fix failed CI',
-        itemKey: 'mr:9',
-        itemLabel: '!9 web-9',
-        queuedAt: now - 3 * 60_000,
-        byHand: true
-      }
-    ],
+    queued: [waitingItem()],
     finished: [],
     memory: { totalBytes: 24 * GIB, availableBytes: 9 * GIB },
     suggestion: { limit: 3, budgetBytes: 6.5 * GIB, perJobBytes: 2 * GIB, measured: true },

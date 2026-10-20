@@ -1,4 +1,5 @@
 import type { HoldReason, ItemFields } from '../api-types'
+import { GO_NOW_SKIPS } from '../capacity/go-now'
 import { DEFAULT_RETRY_AFTER_MS } from '../capacity/retry-limit'
 import type { AgentKind, AutomationDefinition } from '../definition/types'
 import { QUOTA_CEILING } from '../quota-ceiling'
@@ -11,6 +12,16 @@ import type { DecideInput, DecideItem } from './decide'
 // The job decides what is due; these gates decide when it starts. A failing gate holds the item in the
 // runner's line with its reason instead of skipping it.
 export type Hold = { code: HoldReason; detail: string; until?: number }
+
+// The first hold that stands. Go now's mark passes over the runner's waits, so a hold behind them still names itself.
+export function standingHold(holds: readonly (Hold | null)[], goNow: boolean): Hold | null {
+  for (const hold of holds) {
+    if (hold !== null && !(goNow && GO_NOW_SKIPS.has(hold.code))) {
+      return hold
+    }
+  }
+  return null
+}
 
 // A failed key within the retry limit waits out its retry; past the limit only a run by hand reaches here.
 function retryHold(input: DecideInput, onceKey: string): Hold | null {
@@ -30,19 +41,14 @@ function retryHold(input: DecideInput, onceKey: string): Hold | null {
   return { code: 'retry', detail, until: dueAt }
 }
 
-function declaredHold(input: DecideInput, item: DecideItem): Hold | null {
+// Every failing runtime check in declared order: one Go now passes over (a window) must not hide a later one.
+function declaredHolds(input: DecideInput, item: DecideItem): Hold[] {
   const def = input.definition
   const ctx = { label: item.label, fields: item.fields, now: input.now, timeZone: def.timezone }
-  for (const check of def.checks) {
-    if (!isRuntimeCheck(check)) {
-      continue
-    }
+  return def.checks.filter(isRuntimeCheck).flatMap((check) => {
     const result = evaluateCheck(check, ctx)
-    if (!result.ok) {
-      return { code: holdCodeOf(check), detail: result.reason }
-    }
-  }
-  return null
+    return result.ok ? [] : [{ code: holdCodeOf(check), detail: result.reason }]
+  })
 }
 
 // A job's declared quota check for an agent is its own ceiling for that agent.
@@ -87,9 +93,14 @@ function busyHold(busy: ReadonlySet<string>, path: string | null): Hold | null {
 }
 
 // The job's own run still active on the item: an env job has no worktree path for busyHold, and a second run would race
-// the first's push. A run-once job has no items, so at_once alone paces it.
-function ownRunHold(input: DecideInput, item: DecideItem): Hold | null {
-  if (input.definition.items === null || !input.activeItems?.has(item.key)) {
+// the first's push. A run-once job's one item is the job itself: at_once paces it, and once Go now passes at_once
+// over, any run of the job still active holds it.
+function ownRunHold(input: DecideInput, item: DecideItem, goNow: boolean): Hold | null {
+  const active =
+    input.definition.items === null
+      ? goNow && input.activeRuns > 0
+      : input.activeItems?.has(item.key) === true
+  if (!active) {
     return null
   }
   return { code: 'own_run', detail: `Another run of this job is still active on ${item.label}` }
@@ -103,12 +114,16 @@ export function itemGate(
   onceKey: string,
   path: string | null
 ): Hold | null {
-  return (
-    retryHold(input, onceKey) ??
-    declaredHold(input, item) ??
-    implicitQuotaHold(input.definition, item.fields) ??
-    busyHold(input.busyWorktrees, path) ??
-    ownRunHold(input, item)
+  const goNow = input.goNowKeys?.has(item.key) === true
+  return standingHold(
+    [
+      retryHold(input, onceKey),
+      ...declaredHolds(input, item),
+      implicitQuotaHold(input.definition, item.fields),
+      busyHold(input.busyWorktrees, path),
+      ownRunHold(input, item, goNow)
+    ],
+    goNow
   )
 }
 

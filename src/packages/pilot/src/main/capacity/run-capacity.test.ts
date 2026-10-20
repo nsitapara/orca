@@ -156,6 +156,82 @@ describe('runCapacity.admit', () => {
   })
 })
 
+describe("runCapacity.admit with Go now's mark", () => {
+  it('starts a marked item with no free slot, past the items ahead of it', () => {
+    const a = agentJob('a')
+    const { store, capacity, running } = setup([a], 1)
+    running('a')
+    capacity.admit(a, item('ahead', 1), false)
+    capacity.admit(a, item('x', 2), false)
+    expect(store.capacity.markGoNow('a', 'x')).toBe(true)
+    expect(capacity.admit(a, item('x', 2), false).start).toBe(true)
+    expect(capacity.admit(a, item('ahead', 1), false).start).toBe(false)
+  })
+
+  // One-shot: the mark lives on the line row, which goes when the item starts or leaves the line.
+  it.each<[string, (ctx: ReturnType<typeof setup>, a: AutomationDefinition) => void]>([
+    ['it starts', ({ capacity }, a) => void capacity.admit(a, item('x'), false)],
+    ['it leaves the line', ({ capacity }, a) => capacity.settle(a, [])]
+  ])("never applies to the item's next wait once %s", (_name, ends) => {
+    const a = agentJob('a')
+    const ctx = setup([a], 1)
+    ctx.running('a')
+    ctx.capacity.hold(a, item('x'), { code: 'retry', detail: 'Retry 1 of 2' }, false)
+    ctx.store.capacity.markGoNow('a', 'x')
+    ends(ctx, a)
+    expect(ctx.store.capacity.queued()).toEqual([])
+    expect(ctx.capacity.admit(a, item('x'), false).start).toBe(false)
+    expect(ctx.store.capacity.queued().map((q) => [q.itemKey, q.goNow])).toEqual([['x', undefined]])
+  })
+
+  // A run that started after the tick decided: the slot check is the last one before the start.
+  it.each([
+    ['a run-once job beside any run of its own', agentJob('a', { items: null }), 'repo:other'],
+    ['an item job beside its own run on the item', agentJob('a'), 'x']
+  ])('never starts %s', (_name, def, runKey) => {
+    const { store, capacity } = setup([def], 1)
+    store.runs.create({
+      id: 'own',
+      automationId: 'a',
+      tickId: null,
+      itemKey: runKey,
+      itemLabel: runKey,
+      worktreePath: null,
+      startedAt: 1
+    })
+    capacity.admit(def, item('x'), false)
+    store.capacity.markGoNow('a', 'x')
+    expect(capacity.admit(def, item('x'), false).start).toBe(false)
+  })
+
+  it('marks only a row in line', () => {
+    const a = agentJob('a')
+    const { store, capacity } = setup([a], 1)
+    capacity.hold(a, item('x'), { code: 'quota', detail: 'over quota' }, false)
+    expect([store.capacity.markGoNow('a', 'gone'), store.capacity.markGoNow('b', 'x')]).toEqual([
+      false,
+      false
+    ])
+    expect(store.capacity.queued().map((q) => q.goNow)).toEqual([undefined])
+  })
+
+  it('keeps the mark while a re-check holds the item again', () => {
+    const a = agentJob('a')
+    const { store, capacity } = setup([a], 1)
+    capacity.hold(a, item('x'), { code: 'retry', detail: 'Retry 1 of 2' }, false)
+    store.capacity.markGoNow('a', 'x')
+    capacity.hold(
+      a,
+      item('x'),
+      { code: 'worktree_busy', detail: 'Another run is active in /wt' },
+      false
+    )
+    expect(store.capacity.queued().map((q) => [q.holdCode, q.goNow])).toEqual([
+      ['worktree_busy', true]
+    ])
+  })
+})
+
 describe('runCapacity.hold', () => {
   it('writes the held row whatever the run limit', () => {
     const a = agentJob('a')

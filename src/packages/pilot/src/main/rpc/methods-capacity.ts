@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { defineMethod } from '../../../../../main/runtime/rpc/core'
+import type { RpcCallerIdentity } from '../../../../../main/runtime/rpc/rpc-caller-identity'
 import type { CapacityPayload, QuotaUse } from '../../shared/api-types-capacity'
 import { MAX_RUN_LIMIT } from '../../shared/capacity/limit-suggestion'
 import { MAX_RETRY_LIMIT } from '../../shared/capacity/retry-limit'
@@ -8,7 +9,8 @@ import { capacityView } from '../capacity/capacity-view'
 import { readSystemMemory, type SystemMemory } from '../capacity/system-memory'
 import { readQuotas, type QuotaReaders } from '../fields/quota'
 import type { PilotContext } from '../pilot-services'
-import { CallerBinding, refuseAgentCaller } from './run-binding'
+import { SCHEDULER_OFF } from '../scheduler/scheduler'
+import { CallerBinding, refuseAgentCaller, type CallBinding } from './run-binding'
 
 export const AGENT_SETS_LIMIT =
   "An agent in a Pilot run can't change how many runs go at once; Nish does that in Pilot"
@@ -48,6 +50,33 @@ const Retry = z.object({
   onceKey: z.string().min(1),
   ...CallerBinding
 })
+const GoNow = z.object({
+  automationId: z.string().min(1),
+  itemKey: z.string().min(1),
+  ...CallerBinding
+})
+
+// Retry and Go now: a person's change to a job's item, then its tick by hand with those keys, after any running tick.
+function changeThenTick(
+  c: PilotContext,
+  caller: RpcCallerIdentity | undefined,
+  p: CallBinding & { automationId: string },
+  what: string,
+  change: () => readonly string[]
+): void {
+  refuseAgentCaller(c, caller, p)
+  if (!c.loaded().definitions.some((d) => d.id === p.automationId)) {
+    throw new Error(`No automation "${p.automationId}"`)
+  }
+  const keys = change()
+  if (!c.schedulerOn) {
+    return
+  }
+  void c.scheduler.tickByHand(p.automationId, keys).catch((error: unknown) => {
+    const message = error instanceof Error ? error.message : String(error)
+    console.warn(`[pilot] ${p.automationId}: ${what}'s tick failed: ${message}`)
+  })
+}
 
 async function payload(
   c: PilotContext,
@@ -114,27 +143,37 @@ export function buildCapacityMethods(
         return payload(c, readSystem, now)
       }
     }),
-    // A key the runner gave up on, or a failed run's: freed, then its job ticks with that key and its item by hand, so
-    // the item goes through the job's checks and the runner's gates again; the job's other items wait for its next tick.
+    // A key the runner gave up on, or a failed run's: freed, then its job ticks with that key and its item by hand.
     defineMethod({
       name: 'pilot.capacity.retry',
       permission: 'workspace',
       params: Retry,
       handler: (p, rpc) => {
         const c = ctx()
-        refuseAgentCaller(c, rpc?.caller, p)
-        if (!c.loaded().definitions.some((d) => d.id === p.automationId)) {
-          throw new Error(`No automation "${p.automationId}"`)
-        }
-        const itemKey = c.store.resetFailures(p.automationId, p.onceKey)
-        if (c.schedulerOn) {
-          const keys = itemKey === null ? [p.onceKey] : [p.onceKey, itemKey]
-          const tick = { dryRun: false, byHandKeys: new Set(keys) }
-          void c.scheduler.tickNow(p.automationId, tick).catch((error: unknown) => {
-            const message = error instanceof Error ? error.message : String(error)
-            console.warn(`[pilot] ${p.automationId}: Retry's tick failed: ${message}`)
-          })
-        }
+        changeThenTick(c, rpc?.caller, p, 'Retry', () => {
+          const itemKey = c.store.resetFailures(p.automationId, p.onceKey)
+          return itemKey === null ? [p.onceKey] : [p.onceKey, itemKey]
+        })
+        return payload(c, readSystem, now)
+      }
+    }),
+    // An item waiting in line: marked, so the runner's waits pass it over once, then its job ticks with it by hand.
+    defineMethod({
+      name: 'pilot.capacity.goNow',
+      permission: 'workspace',
+      params: GoNow,
+      handler: (p, rpc) => {
+        const c = ctx()
+        changeThenTick(c, rpc?.caller, p, 'Go now', () => {
+          // Only where the scheduler runs does a tick read the mark at once; elsewhere it would sit unread.
+          if (!c.schedulerOn) {
+            throw new Error(SCHEDULER_OFF)
+          }
+          if (!c.store.capacity.markGoNow(p.automationId, p.itemKey)) {
+            throw new Error(`"${p.itemKey}" isn't waiting in line for "${p.automationId}"`)
+          }
+          return [p.itemKey]
+        })
         return payload(c, readSystem, now)
       }
     })

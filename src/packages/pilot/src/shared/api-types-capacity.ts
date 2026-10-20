@@ -65,6 +65,8 @@ export type QueuedRun = {
   holdDetail?: string
   // When its current hold on something other than a slot began; absent on a slot waiter and from older Pilots.
   heldAt?: number
+  // Go now marked it: the runner's waits pass it over once. Absent otherwise, and from older Pilots.
+  goNow?: boolean
 }
 
 // An ended run of a job that holds a slot, as Activity lists it; queuedAt on it says when it joined the line.
@@ -80,6 +82,9 @@ export type FinishedRun = ListedRun & {
 
 // What pilot.capacity.retry frees: a job's failed once_per key.
 export type RetryKey = { automationId: string; onceKey: string }
+
+// What pilot.capacity.goNow marks: an item waiting in the runner's line.
+export type GoNowKey = { automationId: string; itemKey: string }
 
 // A key the runner gave up on after failing past the retry limit; Retry frees it.
 export type GaveUpKey = {

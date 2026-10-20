@@ -243,8 +243,8 @@ describe('migrate', () => {
       "INSERT INTO inbox_items (id, automation_id, person, type, title, digest, created_at, updated_at) VALUES ('i1', 'a', 'p', 'question', 't', 'd', 1, 1)"
     )
     migrate(db)
-    expect(PILOT_SCHEMA_VERSION).toBe(19)
-    expect(db.pragma('user_version', { simple: true })).toBe(19)
+    expect(PILOT_SCHEMA_VERSION).toBe(20)
+    expect(db.pragma('user_version', { simple: true })).toBe(20)
     expect(
       firstRow(
         db,
@@ -382,7 +382,7 @@ describe('migrate', () => {
       "INSERT INTO steps (run_id, idx, name, agent, status) VALUES ('r1', 0, 'context', 'shell', 'done')"
     )
     migrate(db)
-    expect(db.pragma('user_version', { simple: true })).toBe(19)
+    expect(db.pragma('user_version', { simple: true })).toBe(20)
     expect(firstRow(db, 'SELECT result_json FROM steps')).toEqual({ result_json: null })
   })
 
@@ -397,6 +397,16 @@ describe('migrate', () => {
     )
     migrate(db)
     expect(firstRow(db, 'SELECT detached FROM steps')).toEqual({ detached: 0 })
+  })
+
+  it("V20 adds go_now to run_queue, 0 on the rows a V19 database's line already had", () => {
+    const db = openDb()
+    migrate(db, 19)
+    db.exec(
+      "INSERT INTO run_queue (automation_id, item_key, item_label, queued_at, by_hand) VALUES ('a', 'k', 'k', 7, 0)"
+    )
+    migrate(db)
+    expect(firstRow(db, 'SELECT go_now FROM run_queue')).toEqual({ go_now: 0 })
   })
 
   it('leaves a database migrated by a newer process unchanged', () => {
@@ -524,7 +534,8 @@ describe('migrate', () => {
       'hold_detail',
       'checked_at',
       'recheck_at',
-      'held_at'
+      'held_at',
+      'go_now'
     ])
   })
 })
