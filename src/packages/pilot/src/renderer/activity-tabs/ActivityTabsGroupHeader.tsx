@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 import { ChevronDown, FolderGit2, Pin } from 'lucide-react'
 import type { ActivityThreadGroup } from '@/components/activity/activity-thread-types'
+import WorktreeContextMenu from '@/components/sidebar/WorktreeContextMenu'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { isPortaledRowMenuClick, isRowActivationKey } from '@/lib/list-row-interaction'
 import { cn } from '@/lib/utils'
@@ -107,8 +108,9 @@ function openWorktree(worktreeId: string): void {
 // pilot-hook: activity-tabs-group-header. A worktree group's header reads as a title over its
 // sessions, not as one more caption: the worktree in row type, its project beside it, New agent
 // and the Workspaces sidebar's pin (a pinned worktree always shows in Activity, first). Clicking it
-// opens the worktree, as in Projects. It has no fold, so every folder icon sits on the guide line.
-// It fetches the worktree's MR and Linear issue once, for its rows' footers.
+// opens the worktree and a right-click gives its menu, as in Projects. It has no fold, so every
+// folder icon sits on the guide line. It fetches the worktree's MR and Linear issue once, for its
+// rows' footers.
 export function ActivityTabsGroupHeader({ group, children }: HeaderProps): ReactNode {
   const worktreeId = group.key.startsWith(WORKTREE_GROUP)
     ? group.key.slice(WORKTREE_GROUP.length)
@@ -126,7 +128,7 @@ export function ActivityTabsGroupHeader({ group, children }: HeaderProps): React
   const count = group.threads.length + activityTabsGroupCount(group)
   // Why: the header stands in for a recent worktree's row, so it names that row's machine.
   const [machineRow] = activityGroupMachineRows(group)
-  return (
+  const header = (
     <div
       role="button"
       tabIndex={0}
@@ -158,4 +160,5 @@ export function ActivityTabsGroupHeader({ group, children }: HeaderProps): React
       <CountBadge count={count} />
     </div>
   )
+  return worktree ? <WorktreeContextMenu worktree={worktree}>{header}</WorktreeContextMenu> : header
 }
