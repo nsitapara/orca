@@ -97,6 +97,10 @@ export function routeAnswer(answer: RoutableAnswer): Route {
     if ((answer.type === 'default' || answer.type === 'flagged') && KEEP.has(word)) {
       return { kind: 'tick', outcome: 'kept' }
     }
+    // Skip drops a question with no agent; "no" and "don't" are still answers to it.
+    if (answer.type === 'question' && word === 'skip') {
+      return { kind: 'tick', outcome: 'skipped' }
+    }
     return { kind: 'agent', revise: false }
   }
   return routeAction(answer, word)

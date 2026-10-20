@@ -250,7 +250,9 @@ function addInboxItemUnlocked(
     const callerRunId = opts.callerRunId ?? null
     return updateOpen(deps, open, merged, inboxDigest(merged), at, loaded, callerRunId)
   }
-  if (card.action && mine.some((i) => skippedBefore(i, card, origin))) {
+  // A skipped question is never asked again; pilotcli reads SKIPPED_BEFORE's words as a skip, so it keeps them.
+  const skippable = Boolean(card.action) || card.type === 'question'
+  if (skippable && mine.some((i) => skippedBefore(i, card, origin))) {
     return { id: null, existing: false, refused: SKIPPED_BEFORE }
   }
   const { person, routed } = resolveInboxPerson(def.inbox, origin.fields, deps.people())

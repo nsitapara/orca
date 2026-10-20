@@ -28,6 +28,8 @@ describe('routeAnswer (test_apply.py test_route)', () => {
   it.each<[InboxType, string, boolean, Route]>([
     ['question', 'Keep it', false, { kind: 'agent', revise: false }],
     ['question', 'no', false, { kind: 'agent', revise: false }],
+    ['question', 'Skip', false, { kind: 'tick', outcome: 'skipped' }],
+    ['question', 'skip the e2e', false, { kind: 'agent', revise: false }],
     ['default', 'keep', false, { kind: 'tick', outcome: 'kept' }],
     ['flagged', 'OK.', false, { kind: 'tick', outcome: 'kept' }],
     ['flagged', 'revert it', false, { kind: 'agent', revise: false }],

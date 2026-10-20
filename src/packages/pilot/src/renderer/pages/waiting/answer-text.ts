@@ -141,6 +141,15 @@ function questionChoices(item: InboxListRow): Choice[] {
     option: null,
     text: (n) => n.trim()
   })
+  if (item.type === 'question' && !item.options.some((o) => /^skip$/i.test(o.label))) {
+    choices.push({
+      label: 'Skip',
+      meaning: "drop it: nothing runs and it isn't asked again",
+      notes: 'none',
+      option: null,
+      text: () => 'skip'
+    })
+  }
   return choices
 }
 

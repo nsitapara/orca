@@ -106,7 +106,17 @@ describe('choicesFor', () => {
           { label: 'unit', meaning: '' }
         ]
       }),
-      ['e2e', 'unit', 'Something else…']
+      ['e2e', 'unit', 'Something else…', 'Skip']
+    ],
+    [
+      'a question with its own Skip',
+      card({
+        options: [
+          { label: 'e2e', meaning: '' },
+          { label: 'Skip', meaning: 'not now' }
+        ]
+      }),
+      ['e2e', 'Skip', 'Something else…']
     ],
     [
       'a default the agent took',

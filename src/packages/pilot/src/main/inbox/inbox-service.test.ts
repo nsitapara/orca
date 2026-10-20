@@ -212,22 +212,28 @@ describe('addInboxItem', () => {
     expect(store.queue.forInboxItem('in_0000000000000001')).toEqual([])
   })
 
-  it('refuses an action skipped before with the same pinned arguments', () => {
+  const PUSH: InboxAddParams = {
+    runId: 'run-1',
+    type: 'action',
+    title: 'Push?',
+    options: ['Approve — push', 'Skip — keep'],
+    action: 'publish',
+    actionArgs: { argv: ['/wt/1493', 'b', 'aaa', 'bbb'] }
+  }
+  // An action comes back when its arguments change; a question when its title does.
+  it.each<[string, InboxAddParams, InboxAddParams]>([
+    [
+      'an action, at the same pinned arguments',
+      PUSH,
+      { ...PUSH, actionArgs: { argv: ['/wt/1493', 'b', 'ccc', 'bbb'] } }
+    ],
+    ['a question', QUESTION, { ...QUESTION, title: 'Install Pandoc in the job?' }]
+  ])('refuses %s skipped before', (_name, card, changed) => {
     const { deps } = setup()
-    const push: InboxAddParams = {
-      runId: 'run-1',
-      type: 'action',
-      title: 'Push?',
-      options: ['Approve — push', 'Skip — keep'],
-      action: 'publish',
-      actionArgs: { argv: ['/wt/1493', 'b', 'aaa', 'bbb'] }
-    }
-    addInboxItem(deps, push)
+    addInboxItem(deps, card)
     resolveInboxItem(deps, 'in_0000000000000001', 'skipped')
-    expect(addInboxItem(deps, push)).toEqual({ id: null, existing: false, refused: SKIPPED_BEFORE })
-    expect(
-      addInboxItem(deps, { ...push, actionArgs: { argv: ['/wt/1493', 'b', 'ccc', 'bbb'] } }).id
-    ).toBe('in_0000000000000002')
+    expect(addInboxItem(deps, card)).toEqual({ id: null, existing: false, refused: SKIPPED_BEFORE })
+    expect(addInboxItem(deps, changed).id).toBe('in_0000000000000002')
   })
 
   // Only the same action's card is edited in place: an open card never turns into an ask for another action,

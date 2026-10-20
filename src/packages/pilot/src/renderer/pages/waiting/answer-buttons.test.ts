@@ -76,7 +76,8 @@ const OLD: Record<string, [string, string, number | null, string][]> = {
     ['Install in the job', 'option', 0, 'Install in the job'],
     ['Bake it', 'option', 1, 'Bake it'],
     ['Change…', 'notes', 2, 'change: some notes'],
-    ['Something else…', 'notes', null, 'some notes']
+    ['Something else…', 'notes', null, 'some notes'],
+    ['Skip', 'skip', null, 'skip']
   ],
   flagged: [
     ['Revert', 'option', 0, 'Revert'],
