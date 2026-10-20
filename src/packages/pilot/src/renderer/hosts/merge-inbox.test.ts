@@ -1,18 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import type { InboxListRow } from '../../shared/api-types'
-import type { ActivityRun, ListedRun } from '../../shared/api-types-runs'
+import type { ActivityRun } from '../../shared/api-types-runs'
 import type { InboxListPayload, QueueEntry } from '../../shared/inbox-types'
 import { LOCAL_NAMED, MINI, MINI_OFFLINE } from './__fixtures__/hosts'
 import { inboxRow } from './__fixtures__/inbox-row'
 import type { HostRead } from './host-poll'
-import {
-  isDoneRun,
-  mergeDoneForYou,
-  mergedError,
-  mergeInbox,
-  mergeQueue,
-  waitingTotal
-} from './merge-inbox'
+import { mergedError, mergeInbox, mergeQueue, waitingTotal } from './merge-inbox'
 import { hostedKey, type PilotHostEntry } from './pilot-host'
 
 function read<T>(host: PilotHostEntry, value: T | null): HostRead<T> {
@@ -152,22 +145,6 @@ describe('mergeQueue', () => {
       read(MINI, { entries: [entry] })
     ])
     expect(merged.map((e) => e.host.key)).toEqual(['local', 'env:mini'])
-  })
-})
-
-describe('mergeDoneForYou', () => {
-  it('keeps only well-formed Done for you rows from each host and tags each run', () => {
-    const run: ListedRun = { ...activityRun('r1'), fields: {} }
-    const good = { run, effects: [], defaults: [] }
-    const merged = mergeDoneForYou([
-      read<unknown>(LOCAL_NAMED, [good, { run: {}, effects: [], defaults: [] }, null, 'x']),
-      read<unknown>(MINI, [good]),
-      read<unknown>(MINI_OFFLINE, null),
-      read<unknown>(MINI, { not: 'a list' })
-    ])
-    expect(merged.map((d) => d.run.host.key)).toEqual(['local', 'env:mini'])
-    expect(isDoneRun(good)).toBe(true)
-    expect(isDoneRun({ run: { id: 3 }, effects: [], defaults: [] })).toBe(false)
   })
 })
 

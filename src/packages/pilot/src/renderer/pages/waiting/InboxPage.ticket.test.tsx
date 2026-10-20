@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { InboxListRow } from '../../../shared/api-types'
 import type { InboxListPayload } from '../../../shared/inbox-types'
 import type { TicketDraft } from '../../../shared/ticket-types'
+import { TooltipProvider } from '@/components/ui/tooltip'
 
 const pilotRpc = vi.fn()
 vi.mock('../../api', () => ({ pilotRpc: (...args: unknown[]) => pilotRpc(...args) }))
@@ -73,7 +74,7 @@ describe('Ticket for later on an Inbox card', () => {
       }
       return { entries: [] }
     })
-    render(<InboxPage />)
+    render(<InboxPage />, { wrapper: TooltipProvider })
     const card = (await screen.findByRole('heading', { name: 'Footer overlaps Save' })).closest(
       'article'
     )!

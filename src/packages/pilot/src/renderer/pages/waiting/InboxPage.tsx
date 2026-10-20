@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { InboxListRow } from '../../../shared/api-types'
-import { groupHostedItems, type HostedSection } from '../../hosts/hosted-sections'
+import type { HostedSection } from '../../hosts/hosted-sections'
 import { HostsNotice } from '../../hosts/HostsNotice'
 import { hostedKey, type Hosted } from '../../hosts/pilot-host'
 import { useAutomationsFeed } from '../../run-views/automations-feed'
@@ -11,7 +11,6 @@ import { FilterBadges } from './FilterBadges'
 import { setAllDetailsOpen, useAllDetailsOpen } from './details-open'
 import { ALL, InboxHeader } from './InboxHeader'
 import { InboxCard } from './InboxCard'
-import { InboxDoneTab } from './InboxDoneTab'
 import { InboxFilters } from './InboxFilters'
 import { type FocusPlace, InboxFocus } from './InboxFocus'
 import { InboxRows } from './InboxRows'
@@ -33,7 +32,6 @@ import { ProjectBlock } from './ProjectLine'
 import { SectionHeading } from './SectionHeading'
 import { useElementWidth } from './use-element-width'
 import { useInboxSections } from './use-inbox-sections'
-import { useDoneForYou } from './use-done-for-you'
 import { useListOpen } from './use-list-open'
 import { usePendingInboxCardPick } from './use-pending-inbox-card'
 import { useWaiting } from './use-waiting'
@@ -84,7 +82,6 @@ export function InboxPage(): React.JSX.Element {
     applyNow,
     reload
   } = useWaiting(viewer)
-  const done = useDoneForYou(viewer)
   const { list: summaries } = useAutomationsFeed()
   const running = summaries.flatMap((a) =>
     a.live.filter((r) => r.status === 'running').map((run) => ({ run, automationName: a.name }))
@@ -102,7 +99,6 @@ export function InboxPage(): React.JSX.Element {
   const automations = useMemo(() => inbox?.automations ?? [], [inbox])
   const names = useMemo(() => new Map(automations.map((a) => [a.id, a.name])), [automations])
   const { tab } = prefs
-  const onDone = tab === 'done'
   const {
     filtered,
     places,
@@ -122,17 +118,7 @@ export function InboxPage(): React.JSX.Element {
     section,
     now: loadedAt
   })
-  // Defaults show under their run in Done for you; only the rest (no run, or a run already seen) fold at the end.
-  const itemKeys = keysOf(items)
-  const underRuns = new Set(
-    done.runs
-      .flatMap((d) => d.defaults.map((c) => hostedKey(d.run.host, c.id)))
-      .filter((key) => itemKeys.has(key))
-  )
-  const allDefaults = items.filter((i) => i.type === 'default')
-  const defaults = allDefaults.filter((i) => !underRuns.has(hostedKey(i.host, i.id)))
-  // The cards on screen: every default on Done for you, else the shown sections' cards.
-  const visibleKeys = keysOf(onDone ? allDefaults : shown.flatMap((s) => s.items))
+  const visibleKeys = keysOf(shown.flatMap((s) => s.items))
   const notePick = usePendingInboxCardPick({
     items: inbox?.items ?? null,
     loading: reads.some((r) => r.value === null && r.error === null),
@@ -165,7 +151,7 @@ export function InboxPage(): React.JSX.Element {
   const allOpen = useAllDetailsOpen(detailIds)
   // The list sits beside the cards only on a wide page (measured on the page, not the window) while it is open.
   const wide = width === null || width >= WIDE_PX
-  const showList = wide && listOpen && !onDone && prefs.view === 'cards'
+  const showList = wide && listOpen && prefs.view === 'cards'
   const viewerName = people.find((p) => p.id === viewer)?.name.split(' ')[0] ?? 'you'
   const select = (item: Hosted<InboxListRow>) => {
     const key = hostedKey(item.host, item.id)
@@ -225,10 +211,6 @@ export function InboxPage(): React.JSX.Element {
     },
     [names, inbox, errors, selected, loadedAt, onSave, retryPreparation, prepareEvidence, reload]
   )
-  const cardFor = (key: string) => {
-    const item = items.find((i) => hostedKey(i.host, i.id) === key)
-    return item ? cardOf(item) : null
-  }
   const sectionIn = useCallback(
     (s: HostedSection, project?: string | null) => (
       <section
@@ -236,14 +218,14 @@ export function InboxPage(): React.JSX.Element {
         aria-label={s.group.label || UNGROUPED_NAME}
         className="flex min-w-0 flex-col gap-3"
       >
-        {s.group.label ? <SectionHeading section={s} project={project} /> : null}
+        {s.group.label ? (
+          <SectionHeading section={s} project={project} besideList={showList} />
+        ) : null}
         {s.items.map(cardOf)}
       </section>
     ),
-    [cardOf]
+    [cardOf, showList]
   )
-  // One argument only: Done for you maps sections through it.
-  const sectionOf = useCallback((s: HostedSection) => sectionIn(s), [sectionIn])
   const emptyText = (
     <p className="text-sm text-muted-foreground">{emptyTabText(tab, filtered, viewerName)}</p>
   )
@@ -284,7 +266,7 @@ export function InboxPage(): React.JSX.Element {
         </ProjectBlock>
       ))
     }
-    return shown.map(sectionOf)
+    return shown.map((s) => sectionIn(s))
   }, [
     view,
     group,
@@ -301,12 +283,10 @@ export function InboxPage(): React.JSX.Element {
     cardOf,
     tab,
     setPrefs,
-    sectionOf,
     sectionIn,
     shownProjects
   ])
   const cardsBody = shown.length ? listBody : emptyText
-  const defaultSections = groupHostedItems(defaults, automations)
   const kindFilter = {
     kinds: filters.kinds,
     counts: kindCounts(inTabItems),
@@ -328,17 +308,6 @@ export function InboxPage(): React.JSX.Element {
       onView={(view) => setPrefs({ view })}
     />
   )
-  const doneBody = (
-    <InboxDoneTab
-      done={done}
-      defaults={defaults}
-      defaultSections={defaultSections}
-      cardFor={cardFor}
-      sectionOf={sectionOf}
-      emptyText={emptyText}
-      onAcknowledged={reload}
-    />
-  )
   return (
     <div ref={rootRef} className="pilot-inbox flex flex-col gap-3 pt-6">
       <InboxStyle />
@@ -357,24 +326,20 @@ export function InboxPage(): React.JSX.Element {
               items,
               (i) => inbox?.preparationWaits.has(hostedKey(i.host, i.id)) ?? false
             )}
-            doneCount={done.runs.length}
             onTab={(next) => setPrefs({ tab: next })}
           />
         }
         controls={showList ? viewControls : null}
       />
-      {onDone || showList ? null : <InboxFilters {...kindFilter} controls={viewControls} />}
+      {showList ? null : <InboxFilters {...kindFilter} controls={viewControls} />}
       <InMotionPanel running={running} entries={queue} onApplyNow={applyNow} />
       {error ? <p className="text-sm text-destructive">{error}</p> : null}
       <HostsNotice
         reads={reads}
         what="cards"
-        also={[
-          { reads: queueReads, what: 'queued answers' },
-          { reads: done.reads, what: 'Done for you runs' }
-        ]}
+        also={[{ reads: queueReads, what: 'queued answers' }]}
       />
-      {showList || onDone ? null : (
+      {showList ? null : (
         <FilterBadges
           sections={sections}
           total={shownItems.length}
@@ -388,7 +353,6 @@ export function InboxPage(): React.JSX.Element {
             kinds={<KindSection {...kindFilter} />}
             sections={sections}
             projects={projects}
-            total={shownItems.length}
             group={activeSection}
             selected={selected}
             names={names}
@@ -398,9 +362,7 @@ export function InboxPage(): React.JSX.Element {
             onSelect={select}
           />
         ) : null}
-        <main className="flex min-w-0 flex-[999_1_480px] flex-col gap-3">
-          {onDone ? doneBody : cardsBody}
-        </main>
+        <main className="flex min-w-0 flex-[999_1_480px] flex-col gap-3">{cardsBody}</main>
       </div>
     </div>
   )

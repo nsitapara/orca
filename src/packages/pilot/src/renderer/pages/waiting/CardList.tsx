@@ -52,7 +52,8 @@ function ListSection({
             type="button"
             aria-pressed={group === s.key}
             title={s.group.label}
-            onClick={() => onGroup(s.key)}
+            // Picked again, it goes back to every section.
+            onClick={() => onGroup(group === s.key ? ALL : s.key)}
             className={cn(
               'flex min-w-0 flex-1 px-1 text-left font-mono text-[11.5px] font-semibold hover:text-foreground',
               group === s.key ? 'text-foreground' : 'text-muted-foreground'
@@ -172,13 +173,11 @@ export function CardList({
   kinds,
   sections,
   projects,
-  total,
   ...rows
 }: RowProps & {
   kinds: React.ReactNode
   sections: HostedSection[]
   projects: ProjectSections[] | null
-  total: number
 }): React.JSX.Element {
   // Project keys folded in the list.
   const [folded, setFolded] = useState<ReadonlySet<string>>(() => new Set())
@@ -196,17 +195,6 @@ export function CardList({
       className="sticky top-3 z-20 flex max-h-[calc(100vh-6rem)] min-w-0 flex-[0_1_270px] flex-col self-start overflow-y-auto rounded-lg border border-border bg-background scrollbar-sleek"
     >
       {kinds}
-      <button
-        type="button"
-        aria-pressed={rows.group === ALL}
-        onClick={() => rows.onGroup(ALL)}
-        className={cn(
-          'shrink-0 border-b border-border px-3 py-2 text-left font-mono text-[11.5px] font-semibold hover:text-foreground',
-          rows.group === ALL ? 'text-foreground' : 'text-muted-foreground'
-        )}
-      >
-        All · {total}
-      </button>
       {projects
         ? projects.map((p) => (
             <ProjectGroup

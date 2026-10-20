@@ -3,6 +3,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testi
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { InboxItemRow } from '../../../shared/api-types'
 import type { InboxListPayload, QueueEntry } from '../../../shared/inbox-types'
+import { TooltipProvider } from '@/components/ui/tooltip'
 
 const pilotRpc = vi.fn()
 vi.mock('../../api', () => ({ pilotRpc: (...args: unknown[]) => pilotRpc(...args) }))
@@ -128,9 +129,6 @@ function serve(list = LIST, queue: QueueEntry[] = [HELD]) {
     if (method === 'pilot.queue.list') {
       return { entries: queue }
     }
-    if (method === 'pilot.runs.doneForYou') {
-      return []
-    }
     return { status: 'answered' }
   })
 }
@@ -140,10 +138,6 @@ afterEach(() => {
   window.localStorage.clear()
   resetInboxViewPrefs()
 })
-const openTab = (name: RegExp) =>
-  fireEvent.click(
-    within(screen.getByRole('toolbar', { name: 'Card status' })).getByRole('button', { name })
-  )
 
 describe('InboxPage', () => {
   afterEach(() => {
@@ -155,7 +149,7 @@ describe('InboxPage', () => {
   it('picks the card the run panel named, once the list has it, and forgets it', async () => {
     serve()
     showInboxCard('in_q')
-    render(<InboxPage />)
+    render(<InboxPage />, { wrapper: TooltipProvider })
     await screen.findByRole('heading', { name: 'Install LibreOffice in the job?' })
     await waitFor(() =>
       expect(document.getElementById('card-in_q')?.hasAttribute('data-selected')).toBe(true)
@@ -166,7 +160,7 @@ describe('InboxPage', () => {
 
   it('picks a card the run panel names while the Inbox is already open', async () => {
     serve()
-    render(<InboxPage />)
+    render(<InboxPage />, { wrapper: TooltipProvider })
     await screen.findByRole('heading', { name: 'Install LibreOffice in the job?' })
     act(() => showInboxCard('in_q'))
     await waitFor(() =>
@@ -202,16 +196,16 @@ describe('InboxPage', () => {
       }
       return { status: 'answered' }
     })
-    render(<InboxPage />)
+    render(<InboxPage />, { wrapper: TooltipProvider })
     const card = await screen.findByRole('heading', { name: 'Install LibreOffice in the job?' })
     const article = card.closest('article') as HTMLElement
     expect(await within(article).findByText('!1561')).toBeTruthy()
     expect(within(article).getByText('From run')).toBeTruthy()
   })
 
-  it('shows the cards waiting, folds the defaults under Done for you, and opens In motion by itself on an answer held 20+ minutes', async () => {
+  it('shows the cards waiting but never a default, and opens In motion by itself on an answer held 20+ minutes', async () => {
     serve()
-    render(<InboxPage />)
+    render(<InboxPage />, { wrapper: TooltipProvider })
     expect(
       await screen.findByRole('heading', { name: "Push !1561's 2 commits to origin?" })
     ).toBeTruthy()
@@ -220,68 +214,8 @@ describe('InboxPage', () => {
     expect(screen.getByText(/someone is typing in Claude · review/)).toBeTruthy()
     const list = within(screen.getByRole('navigation', { name: 'Cards' }))
     expect(list.getByRole('button', { name: 'All · 2' })).toBeTruthy()
-    openTab(/^Done for you/)
-    expect(screen.getByText('Defaults without a run · 1')).toBeTruthy()
-  })
-
-  it("shows a run's default under it in Done for you, and Got it acknowledges the run", async () => {
     const def = LIST.items.find((i) => i.type === 'default')!
-    pilotRpc.mockImplementation(async (method: string, params: unknown) => {
-      if (method === 'pilot.inbox.list') {
-        return LIST
-      }
-      if (method === 'pilot.runs.doneForYou') {
-        return [
-          {
-            run: {
-              ...testRun({ id: def.runId!, itemLabel: 'WEB-2176', status: 'done' }),
-              fields: {}
-            },
-            effects: [],
-            defaults: [testCard({ id: def.id, type: 'default' })]
-          }
-        ]
-      }
-      if (method === 'pilot.runs.acknowledge') {
-        return {
-          acknowledged: (params as { runIds: string[] }).runIds,
-          kept: [def.id],
-          notKept: []
-        }
-      }
-      return method === 'pilot.queue.list' ? { entries: [] } : []
-    })
-    render(<InboxPage />)
-    openTab(/^Done for you/)
-    const section = await screen.findByRole('region', { name: 'Done for you' })
-    expect(within(section).getByRole('heading', { name: def.title })).toBeTruthy()
-    expect(screen.queryByText(/Defaults without a run/)).toBeNull()
-    fireEvent.click(within(section).getByRole('button', { name: 'Got it: WEB-2176' }))
-    await waitFor(() =>
-      expect(pilotRpc).toHaveBeenCalledWith('pilot.runs.acknowledge', { runIds: [def.runId] })
-    )
-  })
-
-  it("keeps LIST's default in the fold when a run's default isn't in the inbox list", async () => {
-    pilotRpc.mockImplementation(async (method: string) => {
-      if (method === 'pilot.inbox.list') {
-        return LIST
-      }
-      if (method === 'pilot.runs.doneForYou') {
-        return [
-          {
-            run: { ...testRun({ id: 'r9', itemLabel: 'WEB-9', status: 'done' }), fields: {} },
-            effects: [],
-            defaults: [testCard({ id: 'in_unknown', type: 'default' })]
-          }
-        ]
-      }
-      return method === 'pilot.queue.list' ? { entries: [] } : []
-    })
-    render(<InboxPage />)
-    openTab(/^Done for you/)
-    expect(await screen.findByText('Defaults without a run · 1')).toBeTruthy()
-    expect(screen.getByRole('region', { name: 'Done for you' })).toBeTruthy()
+    expect(screen.queryByRole('heading', { name: def.title })).toBeNull()
   })
 
   it('folds what is running and what answers set off into one In motion line that opens on a click', async () => {
@@ -304,7 +238,7 @@ describe('InboxPage', () => {
       }
       return []
     })
-    render(<InboxPage />)
+    render(<InboxPage />, { wrapper: TooltipProvider })
     const motion = await screen.findByRole('region', { name: 'In motion' })
     const line = await within(motion).findByText(
       /^1 running · 1 from your answers \(1 in 2:\d\d\)$/
@@ -328,14 +262,14 @@ describe('InboxPage', () => {
         ? { retired: 0, ticked: 0, actions: 0, agents: 0, held: 1, reasked: 0 }
         : served(method, ...rest)
     )
-    render(<InboxPage />)
+    render(<InboxPage />, { wrapper: TooltipProvider })
     fireEvent.click(await screen.findByRole('button', { name: 'Apply now' }))
     expect(await screen.findByText('1 still held')).toBeTruthy()
   })
 
   it("shows Pilot's Run line in its own Pilot block on an action card, and none on a question", async () => {
     serve()
-    render(<InboxPage />)
+    render(<InboxPage />, { wrapper: TooltipProvider })
     const line = await screen.findByText('python3 /a/act.py push run /wt/web-1493 web-1493-a')
     const block = line.closest('[data-pilot-run-line]')
     expect(block?.textContent).toMatch(/^Pilot · Push to origin runs/)
@@ -351,7 +285,7 @@ describe('InboxPage', () => {
   it('caps a long Run line out loud and keeps the whole of it on the card', async () => {
     const text = `python3 /a/act.py push run ${'x'.repeat(400)}`
     serve({ ...LIST, items: [PUSH], runLines: { in_push: { digest: 'dp', text } } })
-    render(<InboxPage />)
+    render(<InboxPage />, { wrapper: TooltipProvider })
     const more = text.length - 300
     expect(await screen.findByText(`… (${more} more chars)`)).toBeTruthy()
     expect(screen.getByText(text.slice(0, 300))).toBeTruthy()
@@ -361,7 +295,7 @@ describe('InboxPage', () => {
 
   it('shows no Run line built for another version of the card than the one shown', async () => {
     serve({ ...LIST, items: [PUSH], runLines: { in_push: { digest: 'old', text: 'python3 x' } } })
-    render(<InboxPage />)
+    render(<InboxPage />, { wrapper: TooltipProvider })
     await screen.findByRole('heading', { name: "Push !1561's 2 commits to origin?" })
     expect(screen.queryByText('python3 x')).toBeNull()
   })
@@ -382,7 +316,7 @@ describe('InboxPage', () => {
       ]
     })
     serve({ ...LIST, items: [asked] })
-    render(<InboxPage />)
+    render(<InboxPage />, { wrapper: TooltipProvider })
     expect(await screen.findByText(/^Pilot: The card changed after you approved it/)).toBeTruthy()
     expect(screen.getByText('Agent asked: Approve actions in Pilot on this Mac')).toBeTruthy()
     expect(screen.queryByText('Pilot: Approve actions in Pilot on this Mac')).toBeNull()
@@ -423,7 +357,7 @@ describe('InboxPage', () => {
     }
     const historyShown = async () => {
       serve({ ...LIST, items: [ASKED], history: HISTORY })
-      render(<InboxPage />)
+      render(<InboxPage />, { wrapper: TooltipProvider })
       return screen.findByRole('region', { name: 'Message history' })
     }
 
@@ -464,7 +398,7 @@ describe('InboxPage', () => {
 
   it('saves Approve against the version shown', async () => {
     serve()
-    render(<InboxPage />)
+    render(<InboxPage />, { wrapper: TooltipProvider })
     const article = (
       await screen.findByRole('heading', { name: "Push !1561's 2 commits to origin?" })
     ).closest('article')!
@@ -482,7 +416,7 @@ describe('InboxPage', () => {
 
   it('needs notes before it saves a revision', async () => {
     serve()
-    render(<InboxPage />)
+    render(<InboxPage />, { wrapper: TooltipProvider })
     const article = (
       await screen.findByRole('heading', { name: "Push !1561's 2 commits to origin?" })
     ).closest('article')!
@@ -507,7 +441,7 @@ describe('InboxPage', () => {
       }
       return method === 'pilot.inbox.list' ? LIST : { entries: [] }
     })
-    render(<InboxPage />)
+    render(<InboxPage />, { wrapper: TooltipProvider })
     const article = (
       await screen.findByRole('heading', { name: 'Install LibreOffice in the job?' })
     ).closest('article')!
@@ -527,7 +461,7 @@ describe('InboxPage', () => {
       }
       return { entries: [] }
     })
-    render(<InboxPage />)
+    render(<InboxPage />, { wrapper: TooltipProvider })
     const article = (
       await screen.findByRole('heading', { name: 'Install LibreOffice in the job?' })
     ).closest('article')!
@@ -551,7 +485,7 @@ describe('InboxPage', () => {
       ]
     })
     serve({ ...LIST, items: [ask] }, [])
-    render(<InboxPage />)
+    render(<InboxPage />, { wrapper: TooltipProvider })
     const article = (
       await screen.findByRole('heading', { name: 'Prepare a review of !1588?' })
     ).closest('article')!
@@ -595,7 +529,7 @@ describe('InboxPage on more than one machine', () => {
         mini: machine({ ...LIST, items: [card({ title: 'Mini question' })], runLines: {} })
       })
     )
-    render(<InboxPage />)
+    render(<InboxPage />, { wrapper: TooltipProvider })
     expect(within(await cardTitled('Local question')).getByText('MacBook')).toBeTruthy()
     expect(within(await cardTitled('Mini question')).getByText('Mac mini')).toBeTruthy()
   })
@@ -611,7 +545,7 @@ describe('InboxPage on more than one machine', () => {
   }
   const noticeLines = () =>
     screen.queryAllByText(/^Couldn't refresh /).map((line) => line.textContent)
-  // The page's own error lines (the list, and Done for you), apart from the hosts notice.
+  // The page's own error lines, apart from the hosts notice.
   const pageErrors = () =>
     [...document.querySelectorAll('p.text-sm.text-destructive')].map((p) => p.textContent)
 
@@ -636,13 +570,6 @@ describe('InboxPage on more than one machine', () => {
       { 'pilot.queue.list': 'timeout' },
       ["Couldn't refresh Mac mini's queued answers: timeout"],
       []
-    ],
-    [
-      "names this machine's failed Done for you",
-      { 'pilot.runs.doneForYou': 'busy' },
-      {},
-      ["Couldn't refresh MacBook's Done for you runs: busy"],
-      []
     ]
   ])('%s', async (_w, localFails, miniFails, lines, errors) => {
     setPilotHostsForTests([LOCAL_NAMED, MINI])
@@ -652,7 +579,7 @@ describe('InboxPage on more than one machine', () => {
         mini: failing({ ...LIST, items: [card({ title: 'Mini question' })] }, miniFails)
       })
     )
-    render(<InboxPage />)
+    render(<InboxPage />, { wrapper: TooltipProvider })
     await screen.findByText(lines[0] ?? errors[0])
     expect(noticeLines()).toEqual(lines)
     expect(pageErrors()).toEqual(errors)

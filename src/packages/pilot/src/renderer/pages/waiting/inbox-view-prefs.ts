@@ -13,7 +13,7 @@ export type InboxViewPrefs = {
 
 export const INBOX_VIEW_PREFS_KEY = 'pilot.inbox.view'
 
-const TABS: readonly InboxTab[] = ['needs_you', 'preparing', 'blocked', 'all', 'done']
+const TABS: readonly InboxTab[] = ['needs_you', 'preparing', 'blocked', 'all']
 const GROUPS: readonly InboxGroupBy[] = ['worktree', 'job', 'kind', 'age', 'none']
 const SORTS: readonly InboxSort[] = ['kind', 'oldest', 'newest']
 const VIEWS: readonly InboxView[] = ['cards', 'rows', 'focus']

@@ -1,4 +1,5 @@
-import { ChevronDown, ChevronsUpDown, PanelLeft } from 'lucide-react'
+import { ChevronDown, ChevronsDownUp, ChevronsUpDown, PanelLeft } from 'lucide-react'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 
 export const ALL = 'all'
 
@@ -58,6 +59,7 @@ export function InboxHeader({
   // Group by, Sort and the views, while the list holds the kinds; else they sit in the kind chips' row.
   controls: React.ReactNode
 }): React.JSX.Element {
+  const toggleAllLabel = allOpen ? 'Collapse all details' : 'Expand all details'
   return (
     <header className="flex flex-wrap items-center gap-x-4 gap-y-2.5">
       <div className="flex items-center gap-3">
@@ -78,14 +80,25 @@ export function InboxHeader({
       <div className="ml-auto flex flex-wrap items-center gap-2">
         {controls}
         {canExpand ? (
-          <button
-            type="button"
-            onClick={onToggleAll}
-            className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-2.5 py-1 text-[13px] hover:bg-muted"
-          >
-            <ChevronsUpDown aria-hidden className="size-3.5" />
-            {allOpen ? 'Collapse all details' : 'Expand all details'}
-          </button>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                aria-label={toggleAllLabel}
+                onClick={onToggleAll}
+                className="inline-grid size-8 place-items-center rounded-md border border-border bg-card text-muted-foreground hover:text-foreground"
+              >
+                {allOpen ? (
+                  <ChevronsDownUp aria-hidden className="size-4" />
+                ) : (
+                  <ChevronsUpDown aria-hidden className="size-4" />
+                )}
+              </button>
+            </TooltipTrigger>
+            <TooltipContent side="bottom" sideOffset={4}>
+              {toggleAllLabel}
+            </TooltipContent>
+          </Tooltip>
         ) : null}
       </div>
     </header>

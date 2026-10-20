@@ -3,6 +3,7 @@ import { cleanup, fireEvent, render, screen, within } from '@testing-library/rea
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { InboxListRow } from '../../../shared/api-types'
 import type { InboxListPayload } from '../../../shared/inbox-types'
+import { TooltipProvider } from '@/components/ui/tooltip'
 
 const pilotRpc = vi.fn()
 vi.mock('../../api', () => ({ pilotRpc: (...args: unknown[]) => pilotRpc(...args) }))
@@ -62,7 +63,7 @@ afterEach(() => {
 
 describe('cards by project', () => {
   it('keeps a project’s worktrees together in the list and the cards, with the cards no worktree holds last', async () => {
-    render(<InboxPage />)
+    render(<InboxPage />, { wrapper: TooltipProvider })
     await screen.findByRole('heading', { name: 'In alpha' })
     expect(
       nav()
@@ -83,7 +84,7 @@ describe('cards by project', () => {
   })
 
   it('pins each project and worktree heading on a solid background, the worktree’s below its project’s', async () => {
-    render(<InboxPage />)
+    render(<InboxPage />, { wrapper: TooltipProvider })
     await screen.findByRole('heading', { name: 'In alpha' })
     const project = nav().getByRole('button', { name: 'web-platform · 2' })
     for (const c of ['sticky', 'top-0', 'bg-muted']) {
@@ -96,7 +97,7 @@ describe('cards by project', () => {
   })
 
   it('folds a project in the list without hiding its cards, and opens it again', async () => {
-    render(<InboxPage />)
+    render(<InboxPage />, { wrapper: TooltipProvider })
     await screen.findByRole('heading', { name: 'In alpha' })
     const project = nav().getByRole('button', { name: 'web-platform · 2' })
     fireEvent.click(project)
@@ -108,7 +109,7 @@ describe('cards by project', () => {
   })
 
   it('still shows only the worktree picked in the list, under its project', async () => {
-    render(<InboxPage />)
+    render(<InboxPage />, { wrapper: TooltipProvider })
     await screen.findByRole('heading', { name: 'In alpha' })
     fireEvent.click(nav().getByRole('button', { name: 'gamma · 1' }))
     expect(regions()).toEqual(['gamma'])

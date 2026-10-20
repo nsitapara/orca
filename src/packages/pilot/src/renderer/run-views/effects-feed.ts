@@ -92,11 +92,10 @@ export function requestEffects(runId: string, host: PilotHostRef = LOCAL_PILOT_H
 }
 
 // A run's effects (null until first loaded): asked for when the row mounts, every 10 s while the run is live, and once
-// more when it ends. `enabled` false: the caller already has them (Done for you), so nothing is asked.
+// more when it ends.
 export function useRunEffects(
   runId: string,
   live: boolean,
-  enabled = true,
   // The run's machine; none is the machine the surrounding view is for.
   host?: PilotHostRef
 ): readonly Effect[] | null {
@@ -106,24 +105,22 @@ export function useRunEffects(
   const effects = useSyncExternalStore(subscribe, () => cache.get(key) ?? null)
   const wasLive = useRef(live)
   useEffect(() => {
-    if (enabled) {
-      requestEffects(runId, on)
-    }
-  }, [runId, enabled, on])
+    requestEffects(runId, on)
+  }, [runId, on])
   useEffect(() => {
     const ended = wasLive.current && !live
     wasLive.current = live
-    if (enabled && ended) {
+    if (ended) {
       requestEffects(runId, on)
     }
-  }, [runId, live, enabled, on])
+  }, [runId, live, on])
   useEffect(() => {
-    if (!enabled || !live) {
+    if (!live) {
       return undefined
     }
     const timer = setInterval(() => requestEffects(runId, on), EFFECTS_REFRESH_MS)
     return () => clearInterval(timer)
-  }, [runId, live, enabled, on])
+  }, [runId, live, on])
   return effects
 }
 

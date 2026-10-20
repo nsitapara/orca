@@ -7,6 +7,7 @@ import { byHost, LOCAL_NAMED, MINI } from '../../hosts/__fixtures__/hosts'
 import { LOCAL_PILOT_HOST, type PilotHostEntry, type PilotHostRef } from '../../hosts/pilot-host'
 import { resetPilotHostsFeed, setPilotHostsForTests } from '../../hosts/pilot-hosts-feed'
 import { registerPilotStore, type PilotStore, type PilotStoreState } from '../../store'
+import { TooltipProvider } from '@/components/ui/tooltip'
 
 const pilotRpc = vi.fn()
 vi.mock('../../api', () => ({ pilotRpc: (...args: unknown[]) => pilotRpc(...args) }))
@@ -100,7 +101,7 @@ describe('opening a worktree from its section', () => {
 
   it('makes the worktree name a button that activates the worktree found by path', async () => {
     serve()
-    render(<InboxPage />)
+    render(<InboxPage />, { wrapper: TooltipProvider })
     await screen.findByRole('heading', { name: 'By path' })
     const open = within(heading('web-1')).getByRole('button', { name: /web-1/ })
     expect(open.getAttribute('title')).toBe('Open this worktree')
@@ -110,7 +111,7 @@ describe('opening a worktree from its section', () => {
 
   it('takes the id from a wt:<repoId>::<path> item key when the store knows it', async () => {
     serve()
-    render(<InboxPage />)
+    render(<InboxPage />, { wrapper: TooltipProvider })
     await screen.findByRole('heading', { name: 'By key' })
     fireEvent.click(within(heading('web-2')).getByRole('button', { name: /web-2/ }))
     await waitFor(() => expect(activate).toHaveBeenCalledWith('repo-9::/w/web-2'))
@@ -126,7 +127,7 @@ describe('opening a worktree from its section', () => {
 
   it('renders plain text for a worktree the app does not have open', async () => {
     serve()
-    render(<InboxPage />)
+    render(<InboxPage />, { wrapper: TooltipProvider })
     await screen.findByRole('heading', { name: 'Gone' })
     const h = heading('web-gone')
     expect(within(h).queryByRole('button')).toBeNull()
@@ -135,7 +136,7 @@ describe('opening a worktree from its section', () => {
 
   it('has no button on MR or job sections', async () => {
     serve()
-    render(<InboxPage />)
+    render(<InboxPage />, { wrapper: TooltipProvider })
     await screen.findByRole('heading', { name: 'An MR' })
     expect(within(heading('!1579')).queryByRole('button')).toBeNull()
     expect(within(heading('Job A')).queryByRole('button')).toBeNull()
@@ -143,7 +144,7 @@ describe('opening a worktree from its section', () => {
 
   it('adds an open button beside each known worktree in the list, which still filters by its heading', async () => {
     serve()
-    render(<InboxPage />)
+    render(<InboxPage />, { wrapper: TooltipProvider })
     await screen.findByRole('heading', { name: 'By path' })
     const nav = within(screen.getByRole('navigation', { name: 'Cards' }))
     fireEvent.click(nav.getByRole('button', { name: 'Open web-1 in Pilot' }))
@@ -299,7 +300,7 @@ describe('opening a worktree on another machine', () => {
           mini: machineWith(MINI, [card({ id: 'm', title: 'Mini card', worktreePath: '/w/x' })])
         })
       )
-      render(<InboxPage />)
+      render(<InboxPage />, { wrapper: TooltipProvider })
       await screen.findByRole('heading', { name: 'Mini card' })
       const nav = within(screen.getByRole('navigation', { name: 'Cards' }))
       // The heading's name and the list's open button: both, or neither.

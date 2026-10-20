@@ -3,6 +3,7 @@ import { cleanup, fireEvent, render, screen, within } from '@testing-library/rea
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { InboxItemRow } from '../../../shared/api-types'
 import type { AnswerState } from '../../../shared/inbox-types'
+import { TooltipProvider } from '@/components/ui/tooltip'
 
 const pilotRpc = vi.fn()
 vi.mock('../../api', () => ({ pilotRpc: (...args: unknown[]) => pilotRpc(...args) }))
@@ -139,7 +140,7 @@ describe('colours on the page', () => {
       }
       return { entries: [] }
     })
-    render(<InboxPage />)
+    render(<InboxPage />, { wrapper: TooltipProvider })
     // A card still preparing its context is under Preparing, not Needs you.
     const tabs = within(screen.getByRole('toolbar', { name: 'Card status' }))
     fireEvent.click(await tabs.findByRole('button', { name: 'Preparing · 1' }))
@@ -179,7 +180,7 @@ describe('colours on the page', () => {
       }
       return method === 'pilot.queue.list' ? { entries: [] } : { imported: 0, skipped: [] }
     })
-    const { container } = render(<InboxPage />)
+    const { container } = render(<InboxPage />, { wrapper: TooltipProvider })
     const bug = (await screen.findByRole('heading', { name: 'A bug' })).closest('article')!
     expect(bug.textContent).not.toContain('waiting')
     // No kind chip: neither a card nor its list row says "Left for you" or "Question" (the kind filters may).

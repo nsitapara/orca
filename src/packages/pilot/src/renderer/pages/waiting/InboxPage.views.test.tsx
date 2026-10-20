@@ -3,6 +3,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testi
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { InboxListRow } from '../../../shared/api-types'
 import type { InboxListPayload } from '../../../shared/inbox-types'
+import { TooltipProvider } from '@/components/ui/tooltip'
 
 const pilotRpc = vi.fn()
 vi.mock('../../api', () => ({ pilotRpc: (...args: unknown[]) => pilotRpc(...args) }))
@@ -65,7 +66,7 @@ afterEach(() => {
 describe('One at a time keys', () => {
   it('move the card while focus is still on the view button that opened it', async () => {
     serve()
-    render(<InboxPage />)
+    render(<InboxPage />, { wrapper: TooltipProvider })
     await screen.findByRole('heading', { name: 'First' })
     fireEvent.click(view('One at a time'))
     view('One at a time').focus()
@@ -100,7 +101,7 @@ describe('a card the run panel names', () => {
     ['the One at a time view', 'c', () => fireEvent.click(view('One at a time'))]
   ])('is shown and picked in Cards when hidden by %s', async (_name, id, hide) => {
     serve([...CARDS, BUG])
-    render(<InboxPage />)
+    render(<InboxPage />, { wrapper: TooltipProvider })
     await screen.findByRole('heading', { name: 'First' })
     hide()
     act(() => showInboxCard(id))
@@ -122,7 +123,7 @@ describe('Group by', () => {
 
   it('drops the picked section when it changes, so switching back shows every card', async () => {
     serve()
-    render(<InboxPage />)
+    render(<InboxPage />, { wrapper: TooltipProvider })
     await screen.findByRole('heading', { name: 'First' })
     fireEvent.click(nav().getByRole('button', { name: 'web-1 · 2' }))
     expect(titles()).toEqual(['First', 'Second'])

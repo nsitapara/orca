@@ -27,7 +27,7 @@ function EffectLink({ effect }: { effect: Effect }): React.JSX.Element {
   )
 }
 
-// A run's effects in one line (Activity, Done for you): the first four, then "+N".
+// A run's effects in one line (Activity, finished runs): the first four, then "+N".
 export function EffectsLine({
   effects
 }: {

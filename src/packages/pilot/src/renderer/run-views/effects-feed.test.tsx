@@ -33,7 +33,7 @@ function Probe({
   host?: PilotHostRef
   name?: string
 }): React.JSX.Element {
-  const effects = useRunEffects(id, live, true, host)
+  const effects = useRunEffects(id, live, host)
   return <span data-testid={name}>{effects === null ? 'none' : String(effects.length)}</span>
 }
 

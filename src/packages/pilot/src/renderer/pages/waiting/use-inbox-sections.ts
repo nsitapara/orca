@@ -54,12 +54,9 @@ export function useInboxSections({
         return s.items.map((i) => [hostedKey(i.host, i.id), place] as const)
       })
     )
-    const inTabItems =
-      tab === 'done'
-        ? []
-        : openItems.filter((i) =>
-            inTab(i, tab, inbox?.answerStates.get(hostedKey(i.host, i.id)) ?? null)
-          )
+    const inTabItems = openItems.filter((i) =>
+      inTab(i, tab, inbox?.answerStates.get(hostedKey(i.host, i.id)) ?? null)
+    )
     const shownItems = inTabItems.filter((i) => matchesFilters(i, { kinds }))
     const grouped = groupHostedItemsBy(shownItems, automations, group, sort, now)
     const projects = group === 'worktree' ? groupByProject(grouped) : null

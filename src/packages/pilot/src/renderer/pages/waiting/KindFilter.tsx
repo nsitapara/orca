@@ -13,20 +13,34 @@ export type KindFilterProps = {
   onKinds: (kinds: readonly InboxType[]) => void
 }
 
+type KindOption = { key: string; label: string; count: number; on: boolean; pick: () => void }
+
 // Kinds with cards, and any picked one at zero, so a pressed kind never disappears.
-function kindOptions({ kinds, counts, onKinds }: KindFilterProps) {
+function kindOptions({ kinds, counts, onKinds }: KindFilterProps): KindOption[] {
   return INBOX_KINDS.filter(({ type }) => (counts[type] ?? 0) > 0 || kinds.includes(type)).map(
     ({ type, label }) => {
       const on = kinds.includes(type)
       return {
-        type,
+        key: type,
         label,
         count: counts[type] ?? 0,
         on,
-        toggle: () => onKinds(on ? kinds.filter((kind) => kind !== type) : [...kinds, type])
+        pick: () => onKinds(on ? kinds.filter((kind) => kind !== type) : [...kinds, type])
       }
     }
   )
+}
+
+// All, pressed while no kind is picked, before the kinds.
+function withAll(props: KindFilterProps, options: KindOption[]): KindOption[] {
+  const all = {
+    key: 'all',
+    label: 'All',
+    count: props.total,
+    on: props.kinds.length === 0,
+    pick: () => props.onKinds([])
+  }
+  return [all, ...options]
 }
 
 function ClearKinds({ kinds, shown, total, onKinds }: KindFilterProps): React.JSX.Element | null {
@@ -46,30 +60,32 @@ function ClearKinds({ kinds, shown, total, onKinds }: KindFilterProps): React.JS
 
 // The kind chips in the row under the header, while the list is not beside the cards.
 export function KindChips(props: KindFilterProps): React.JSX.Element {
+  const options = kindOptions(props)
   return (
     <div role="group" aria-label="Kind" className="flex flex-wrap items-center gap-1.5">
-      {kindOptions(props).map(({ type, label, count, on, toggle }) => (
-        <button
-          key={type}
-          type="button"
-          aria-pressed={on}
-          onClick={toggle}
-          className={cn(
-            'inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 font-mono text-xs font-semibold',
-            on
-              ? 'border-transparent bg-[var(--ib-accent-soft)] text-[var(--ib-accent)]'
-              : 'border-border bg-card text-muted-foreground hover:text-foreground'
-          )}
-        >
-          {label} · {count}
-        </button>
-      ))}
-      <ClearKinds {...props} />
+      {(options.length > 0 ? withAll(props, options) : []).map(
+        ({ key, label, count, on, pick }) => (
+          <button
+            key={key}
+            type="button"
+            aria-pressed={on}
+            onClick={pick}
+            className={cn(
+              'inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 font-mono text-xs font-semibold',
+              on
+                ? 'border-transparent bg-[var(--ib-accent-soft)] text-[var(--ib-accent)]'
+                : 'border-border bg-card text-muted-foreground hover:text-foreground'
+            )}
+          >
+            {label} · {count}
+          </button>
+        )
+      )}
     </div>
   )
 }
 
-// The same kinds at the top of the list; folding it keeps Clear in view while a kind is picked.
+// The same kinds at the top of the list; folded, Clear stands in for All while a kind is picked.
 export function KindSection(props: KindFilterProps): React.JSX.Element | null {
   const [open, toggleOpen] = useKindsOpen()
   const options = kindOptions(props)
@@ -94,17 +110,17 @@ export function KindSection(props: KindFilterProps): React.JSX.Element | null {
           />
           Kind
         </button>
-        <ClearKinds {...props} />
+        {open ? null : <ClearKinds {...props} />}
       </div>
       {open ? (
         <ul className="flex flex-col gap-0.5 px-1.5 pb-1.5">
-          {options.map(({ type, label, count, on, toggle }) => (
-            <li key={type}>
+          {withAll(props, options).map(({ key, label, count, on, pick }) => (
+            <li key={key}>
               <button
                 type="button"
                 aria-pressed={on}
                 aria-label={`${label} · ${count}`}
-                onClick={toggle}
+                onClick={pick}
                 className={cn(
                   'flex w-full items-center gap-2 rounded-lg px-2 py-1 text-left text-[13px]',
                   on

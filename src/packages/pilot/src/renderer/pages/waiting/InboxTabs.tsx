@@ -1,20 +1,16 @@
 import { cn } from '@/lib/utils'
 import type { InboxTab } from './inbox-tabs'
 
-type TabCounts = Record<'needs_you' | 'preparing' | 'blocked' | 'all', number>
-
 export function InboxTabs({
   tab,
   counts,
   preparingNote,
-  doneCount,
   onTab
 }: {
   tab: InboxTab
-  counts: TabCounts
+  counts: Record<InboxTab, number>
   // Shown right after Preparing: how many of its cards wait on the runner.
   preparingNote: string | null
-  doneCount: number
   onTab: (tab: InboxTab) => void
 }): React.JSX.Element {
   const button = (key: InboxTab, label: string, count: number) => {
@@ -53,8 +49,6 @@ export function InboxTabs({
         ? button('blocked', 'Blocked', counts.blocked)
         : null}
       {button('all', 'All', counts.all)}
-      <span aria-hidden className="mx-1 h-4 w-px bg-border" />
-      {button('done', 'Done for you', doneCount)}
     </div>
   )
 }

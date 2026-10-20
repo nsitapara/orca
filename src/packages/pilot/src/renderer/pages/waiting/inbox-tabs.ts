@@ -1,7 +1,7 @@
 import type { InboxListRow, InboxType } from '../../../shared/api-types'
 import type { AnswerState } from '../../../shared/inbox-types'
 
-export type InboxTab = 'needs_you' | 'preparing' | 'blocked' | 'all' | 'done'
+export type InboxTab = 'needs_you' | 'preparing' | 'blocked' | 'all'
 export type CardFilters = { kinds: readonly InboxType[] }
 
 export const INBOX_KINDS: readonly { type: InboxType; label: string }[] = [
@@ -26,11 +26,7 @@ function inNeedsYou(item: InboxListRow, answer: AnswerState | null): boolean {
   return false
 }
 
-export function inTab(
-  item: InboxListRow,
-  tab: Exclude<InboxTab, 'done'>,
-  answer: AnswerState | null
-): boolean {
+export function inTab(item: InboxListRow, tab: InboxTab, answer: AnswerState | null): boolean {
   if (item.type === 'default') {
     return false
   }
@@ -50,11 +46,8 @@ export function inTab(
 }
 
 // Counts have no answer states, so they match waitingCount: only open cards count as Needs you.
-export function tabCounts(
-  items: InboxListRow[]
-): Record<'needs_you' | 'preparing' | 'blocked' | 'all', number> {
-  const count = (tab: Exclude<InboxTab, 'done'>): number =>
-    items.filter((item) => inTab(item, tab, null)).length
+export function tabCounts(items: InboxListRow[]): Record<InboxTab, number> {
+  const count = (tab: InboxTab): number => items.filter((item) => inTab(item, tab, null)).length
   return {
     needs_you: count('needs_you'),
     preparing: count('preparing'),
@@ -73,11 +66,8 @@ const EMPTY_TAB_TEXT: Record<'preparing' | 'blocked' | 'all', string> = {
   all: 'No cards here.'
 }
 
-// What an empty tab says; a kind chip on a card tab names the filters, not the tab.
+// What an empty tab says; a picked kind names the filters, not the tab.
 export function emptyTabText(tab: InboxTab, filtered: boolean, viewerName: string): string {
-  if (tab === 'done') {
-    return `Nothing done for ${viewerName} here.`
-  }
   if (filtered) {
     return 'No cards match these filters.'
   }
@@ -99,8 +89,7 @@ const TAB_LABELS: Record<InboxTab, string> = {
   needs_you: 'Needs you',
   preparing: 'Preparing',
   blocked: 'Blocked',
-  all: 'All',
-  done: 'Done for you'
+  all: 'All'
 }
 
 export function tabLabel(tab: InboxTab): string {

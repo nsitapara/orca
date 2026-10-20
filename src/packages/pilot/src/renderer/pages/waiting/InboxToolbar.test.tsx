@@ -15,7 +15,6 @@ function tabs(over: Partial<Parameters<typeof InboxTabs>[0]> = {}) {
       tab="needs_you"
       counts={{ needs_you: 8, preparing: 9, blocked: 0, all: 17 }}
       preparingNote={null}
-      doneCount={2}
       onTab={onTab}
       {...over}
     />
@@ -105,10 +104,22 @@ describe.each([
     expect(onKinds).toHaveBeenCalledWith(['question'])
   })
 
-  it('offers Clear with the shown count when a kind is picked', () => {
+  it('offers All with every card, pressed until a kind is picked, and picking it clears them', () => {
+    kindsIn(Kinds)
+    expect(screen.getByRole('button', { name: 'All · 8' }).getAttribute('aria-pressed')).toBe(
+      'true'
+    )
+    cleanup()
     const onKinds = kindsIn(Kinds, { kinds: ['question'], shown: 3 })
-    fireEvent.click(screen.getByRole('button', { name: 'Clear · 3 of 8 shown' }))
+    const all = screen.getByRole('button', { name: 'All · 8' })
+    expect(all.getAttribute('aria-pressed')).toBe('false')
+    fireEvent.click(all)
     expect(onKinds).toHaveBeenCalledWith([])
+  })
+
+  it('offers nothing, not even All, when no kind has a card', () => {
+    kindsIn(Kinds, { counts: {}, total: 0 })
+    expect(screen.queryByRole('button')).toBeNull()
   })
 
   it('keeps a pressed kind visible at zero and unpresses it on click', () => {
@@ -123,19 +134,15 @@ describe.each([
 describe('the list’s Kind section', () => {
   afterEach(() => window.localStorage.clear())
 
-  it('folds away, keeping Clear in view, and stays folded next time', () => {
+  it('folds away, with Clear standing in for All, and stays folded next time', () => {
     kindsIn(KindSection, { kinds: ['question'], shown: 3 })
+    expect(screen.queryByRole('button', { name: /^Clear/ })).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: 'Kind' }))
     expect(screen.queryByRole('button', { name: 'Questions · 3' })).toBeNull()
     expect(screen.getByRole('button', { name: 'Clear · 3 of 8 shown' })).toBeTruthy()
     cleanup()
     kindsIn(KindSection)
     expect(screen.getByRole('button', { name: 'Kind' }).getAttribute('aria-expanded')).toBe('false')
-  })
-
-  it('is left out when no kind has a card', () => {
-    kindsIn(KindSection, { counts: {} })
-    expect(screen.queryByRole('group', { name: 'Kind' })).toBeNull()
   })
 })
 

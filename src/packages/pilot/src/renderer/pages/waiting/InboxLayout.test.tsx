@@ -4,8 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { InboxItemRow } from '../../../shared/api-types'
 import type { AnswerState, InboxListPayload } from '../../../shared/inbox-types'
 import { queuedPreparation } from '../../../shared/preparation'
-import { testRun } from '../../../shared/run-views/__fixtures__/runs'
-import type { DoneRun } from '../../../shared/visibility-types'
+import { TooltipProvider } from '@/components/ui/tooltip'
 
 const pilotRpc = vi.fn()
 vi.mock('../../api', () => ({ pilotRpc: (...args: unknown[]) => pilotRpc(...args) }))
@@ -83,16 +82,13 @@ const LIST: InboxListPayload = {
   answerStates: {}
 }
 
-function serve(list = LIST, done: DoneRun[] = []) {
+function serve(list = LIST) {
   pilotRpc.mockImplementation(async (method: string) => {
     if (method === 'pilot.inbox.list') {
       return list
     }
     if (method === 'pilot.queue.list') {
       return { entries: [] }
-    }
-    if (method === 'pilot.runs.doneForYou') {
-      return done
     }
     return { imported: 0, answers: 0, runs: 0, skipped: [], applied: false }
   })
@@ -117,7 +113,7 @@ describe('the Inbox layout', () => {
 
   it('has a one-row header beside the list: toggle, Inbox, the tabs and the view controls, kinds in the list', async () => {
     serve()
-    const { container } = render(<InboxPage />)
+    const { container } = render(<InboxPage />, { wrapper: TooltipProvider })
     await screen.findByRole('heading', { name: 'F1 Fixture' })
     const header = within(container.querySelector('header')!)
     expect(
@@ -136,7 +132,7 @@ describe('the Inbox layout', () => {
 
   it('puts interleaved cards in sections, each under one sticky heading with its count', async () => {
     serve()
-    render(<InboxPage />)
+    render(<InboxPage />, { wrapper: TooltipProvider })
     await screen.findByRole('heading', { name: 'F1 Fixture' })
     const sections = screen.getAllByRole('region')
     expect(sections.map((s) => s.getAttribute('aria-label'))).toEqual([
@@ -155,21 +151,24 @@ describe('the Inbox layout', () => {
 
   it('shows no worktree or group line on a card: the section heading carries it', async () => {
     serve()
-    render(<InboxPage />)
+    render(<InboxPage />, { wrapper: TooltipProvider })
     const article = (await screen.findByRole('heading', { name: 'F1 Fixture' })).closest('article')!
     expect(article.textContent).not.toContain('web-2099-carrier')
   })
 
-  it('shows only the selected group, picked from a heading in the list, and All again', async () => {
+  it('shows only the group picked from a heading in the list, and every group once it is picked again', async () => {
     serve()
-    render(<InboxPage />)
+    render(<InboxPage />, { wrapper: TooltipProvider })
     await screen.findByRole('heading', { name: 'F1 Fixture' })
     const list = () => within(screen.getByRole('navigation', { name: 'Cards' }))
     const regions = () => screen.getAllByRole('region').map((s) => s.getAttribute('aria-label'))
     fireEvent.click(list().getByRole('button', { name: '!1579 · 1' }))
     expect(regions()).toEqual(['!1579'])
     expect(screen.queryByRole('heading', { name: 'F1 Fixture' })).toBeNull()
-    fireEvent.click(list().getByRole('button', { name: 'All · 4' }))
+    expect(list().getByRole('button', { name: '!1579 · 1' }).getAttribute('aria-pressed')).toBe(
+      'true'
+    )
+    fireEvent.click(list().getByRole('button', { name: '!1579 · 1' }))
     expect(regions()).toHaveLength(3)
     fireEvent.click(list().getByRole('button', { name: 'web-2099-carrier · 2' }))
     expect(regions()).toEqual(['web-2099-carrier'])
@@ -177,7 +176,7 @@ describe('the Inbox layout', () => {
 
   it('lists the cards by the same groups, under their projects: the job, age, and the title', async () => {
     serve()
-    render(<InboxPage />)
+    render(<InboxPage />, { wrapper: TooltipProvider })
     await screen.findByRole('heading', { name: 'F1 Fixture' })
     const list = screen.getByRole('navigation', { name: 'Cards' })
     const headings = within(list)
@@ -185,7 +184,6 @@ describe('the Inbox layout', () => {
       .filter(isSectionButton)
       .map((b) => b.getAttribute('aria-label') ?? b.textContent)
     expect(headings).toEqual([
-      'All · 4',
       'w · 2',
       'web-2099-carrier · 2',
       'Not in a worktree · 2',
@@ -203,7 +201,7 @@ describe('the Inbox layout', () => {
     serve()
     const scroll = vi.fn()
     window.HTMLElement.prototype.scrollIntoView = scroll
-    render(<InboxPage />)
+    render(<InboxPage />, { wrapper: TooltipProvider })
     await screen.findByRole('heading', { name: 'F2 Rescind' })
     const row = screen.getByRole('navigation', { name: 'Cards' }).querySelector('[data-row="f2"]')!
     fireEvent.click(row)
@@ -215,7 +213,7 @@ describe('the Inbox layout', () => {
 
   it('hides the list completely, and remembers the choice', async () => {
     serve()
-    const { unmount } = render(<InboxPage />)
+    const { unmount } = render(<InboxPage />, { wrapper: TooltipProvider })
     await screen.findByRole('heading', { name: 'F1 Fixture' })
     fireEvent.click(screen.getByRole('button', { name: 'Hide the card list' }))
     expect(screen.queryByRole('navigation', { name: 'Cards' })).toBeNull()
@@ -223,7 +221,7 @@ describe('the Inbox layout', () => {
       screen.getByRole('button', { name: 'Show the card list' }).getAttribute('aria-expanded')
     ).toBe('false')
     unmount()
-    render(<InboxPage />)
+    render(<InboxPage />, { wrapper: TooltipProvider })
     await screen.findByRole('heading', { name: 'F1 Fixture' })
     expect(screen.queryByRole('navigation', { name: 'Cards' })).toBeNull()
   })
@@ -236,7 +234,7 @@ describe('the Inbox layout', () => {
     const set = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
       throw new Error('blocked')
     })
-    render(<InboxPage />)
+    render(<InboxPage />, { wrapper: TooltipProvider })
     await screen.findByRole('heading', { name: 'F1 Fixture' })
     fireEvent.click(screen.getByRole('button', { name: 'Hide the card list' }))
     expect(screen.queryByRole('navigation', { name: 'Cards' })).toBeNull()
@@ -253,7 +251,7 @@ describe('the answer row', () => {
 
   it('has one button per choice named for what it does, no Save button, and saves on the click', async () => {
     serve()
-    render(<InboxPage />)
+    render(<InboxPage />, { wrapper: TooltipProvider })
     const article = (await screen.findByRole('heading', { name: 'F1 Fixture' })).closest('article')!
     const group = within(article).getByRole('group', { name: 'Answer' })
     expect(
@@ -275,7 +273,7 @@ describe('the answer row', () => {
 
   it('shows an option’s description under the row on hover, and as the tooltip', async () => {
     serve()
-    render(<InboxPage />)
+    render(<InboxPage />, { wrapper: TooltipProvider })
     const article = (await screen.findByRole('heading', { name: 'F1 Fixture' })).closest('article')!
     const fix = within(article).getByRole('button', { name: 'Fix it' })
     expect(fix.getAttribute('title')).toBe('fix it')
@@ -291,7 +289,7 @@ describe('the answer row', () => {
 
   it('opens the notes box for “With notes…”, which needs Send, and Cancel closes it without saving', async () => {
     serve()
-    render(<InboxPage />)
+    render(<InboxPage />, { wrapper: TooltipProvider })
     const article = (await screen.findByRole('heading', { name: 'F1 Fixture' })).closest('article')!
     fireEvent.click(within(article).getByRole('button', { name: 'With notes…' }))
     const send = within(article).getByRole('button', { name: 'Send' }) as HTMLButtonElement
@@ -321,7 +319,7 @@ describe('fix round 1', () => {
       return method === 'pilot.queue.list' ? { entries: [] } : { imported: 0, skipped: [] }
     })
     vi.useFakeTimers({ shouldAdvanceTime: true })
-    render(<InboxPage />)
+    render(<InboxPage />, { wrapper: TooltipProvider })
     await screen.findByRole('heading', { name: 'F1 Fixture' })
     const nav = () => within(screen.getByRole('navigation', { name: 'Cards' }))
     fireEvent.click(nav().getByRole('button', { name: '!1579 · 1' }))
@@ -330,62 +328,7 @@ describe('fix round 1', () => {
     await vi.advanceTimersByTimeAsync(10_500)
     vi.useRealTimers()
     await waitFor(() => expect(screen.getAllByRole('region')).toHaveLength(2))
-    expect(nav().getByRole('button', { name: 'All · 3' }).getAttribute('aria-pressed')).toBe('true')
     expect(screen.queryByText(/Nothing waiting/)).toBeNull()
-  })
-
-  it('folds the defaults without a run on the Done for you tab, each under its section', async () => {
-    const dWt = card({
-      id: 'dw',
-      type: 'default',
-      title: 'Default in worktree',
-      worktreePath: '/w/web-2099-carrier'
-    })
-    const dJob = card({
-      id: 'dj',
-      type: 'default',
-      title: 'Default in job',
-      automationId: 'reviews'
-    })
-    pilotRpc.mockImplementation(async (method: string) => {
-      if (method === 'pilot.inbox.list') {
-        return { ...LIST, items: [F1, R1579, dWt, dJob] }
-      }
-      return method === 'pilot.queue.list' ? { entries: [] } : { imported: 0, skipped: [] }
-    })
-    render(<InboxPage />)
-    await screen.findByRole('heading', { name: 'F1 Fixture' })
-    expect(screen.queryByText(/Defaults without a run/)).toBeNull()
-    const tabs = within(screen.getByRole('toolbar', { name: 'Card status' }))
-    fireEvent.click(tabs.getByRole('button', { name: /^Done for you/ }))
-    fireEvent.click(screen.getByText('Defaults without a run · 2'))
-    expect(screen.getByRole('heading', { name: 'Default in job' })).toBeTruthy()
-    expect(screen.getByRole('heading', { name: 'Default in worktree' })).toBeTruthy()
-    expect(screen.getAllByRole('region').map((s) => s.getAttribute('aria-label'))).toEqual([
-      'web-2099-carrier',
-      '09 · Prepare reviews requested of me'
-    ])
-  })
-
-  it('nests the headings: sections h2 above the card titles h3', async () => {
-    serve()
-    render(<InboxPage />)
-    const title = await screen.findByRole('heading', { name: 'F1 Fixture' })
-    expect(title.tagName).toBe('H3')
-    expect(
-      screen.getByRole('region', { name: 'web-2099-carrier' }).querySelector('h2')
-    ).not.toBeNull()
-  })
-
-  it('shows the unsaved pill while notes are typed, and clears it on Cancel', async () => {
-    serve({ ...LIST, items: [F1] })
-    render(<InboxPage />)
-    const article = (await screen.findByRole('heading', { name: 'F1 Fixture' })).closest('article')!
-    const pill = () => [...article.querySelectorAll('span')].map((s) => s.textContent)
-    fireEvent.click(within(article).getByRole('button', { name: 'With notes…' }))
-    expect(pill()).toContain('unsaved')
-    fireEvent.click(within(article).getByRole('button', { name: 'Cancel' }))
-    expect(pill()).not.toContain('unsaved')
   })
 })
 
@@ -415,7 +358,7 @@ describe('the filter by page width', () => {
 
   it('on a wide page shows the list and no badges', async () => {
     serve()
-    render(<InboxPage />)
+    render(<InboxPage />, { wrapper: TooltipProvider })
     await screen.findByRole('heading', { name: 'F1 Fixture' })
     fireWidth(1100)
     expect(list()).not.toBeNull()
@@ -425,7 +368,7 @@ describe('the filter by page width', () => {
 
   it('on a narrow page shows badges and no list, no fold button, and the kinds and view controls under the header', async () => {
     serve()
-    const { container } = render(<InboxPage />)
+    const { container } = render(<InboxPage />, { wrapper: TooltipProvider })
     await screen.findByRole('heading', { name: 'F1 Fixture' })
     fireWidth(700)
     expect(list()).toBeNull()
@@ -452,7 +395,7 @@ describe('the filter by page width', () => {
 
   it('with the list folded shows badges, and the fold button brings the list back', async () => {
     serve()
-    render(<InboxPage />)
+    render(<InboxPage />, { wrapper: TooltipProvider })
     await screen.findByRole('heading', { name: 'F1 Fixture' })
     fireWidth(1100)
     fireEvent.click(screen.getByRole('button', { name: 'Hide the card list' }))
@@ -465,7 +408,7 @@ describe('the filter by page width', () => {
 
   it('filters on a badge click, highlighting the selected one', async () => {
     serve()
-    render(<InboxPage />)
+    render(<InboxPage />, { wrapper: TooltipProvider })
     await screen.findByRole('heading', { name: 'F1 Fixture' })
     fireWidth(500)
     const badge = within(badges()!).getByRole('button', { name: /^!1579/ })
@@ -479,12 +422,15 @@ describe('the filter by page width', () => {
 
   it('never lets a sticky element float transparent over the cards', async () => {
     serve()
-    render(<InboxPage />)
+    render(<InboxPage />, { wrapper: TooltipProvider })
     await screen.findByRole('heading', { name: 'F1 Fixture' })
-    const heading = screen.getByRole('region', { name: 'web-2099-carrier' }).querySelector('h2')!
-    for (const c of ['sticky', 'top-0', 'bg-background', 'z-20', 'border-b', '-mx-5']) {
-      expect(heading.className).toContain(c)
+    const heading = () =>
+      screen.getByRole('region', { name: 'web-2099-carrier' }).querySelector('h2')!
+    for (const c of ['sticky', 'top-0', 'bg-background', 'z-20', 'border-b', '-mr-5']) {
+      expect(heading().className).toContain(c)
     }
+    // It stops short of the list beside it, and runs to the page's edge once the list is gone.
+    expect(heading().className).not.toContain('-ml-5')
     const nav = list()!
     for (const c of [
       'sticky',
@@ -498,6 +444,7 @@ describe('the filter by page width', () => {
     }
     fireWidth(500)
     expect(list()).toBeNull()
+    expect(heading().className).toContain('-ml-5')
     expect(badges()!.className).not.toContain('sticky')
   })
 })
@@ -511,7 +458,7 @@ describe('an MR group’s name on screen', () => {
     vi.stubGlobal('ResizeObserver', FakeResizeObserver)
     const named = { ...R1579, itemLabel: '!1579 web-2107-improve-reports-with-a-long-branch-name' }
     serve({ ...LIST, items: [named] })
-    render(<InboxPage />)
+    render(<InboxPage />, { wrapper: TooltipProvider })
     await screen.findByRole('heading', { name: 'Post your review of !1579?' })
     const full = '!1579 · web-2107-improve-reports-with-a-long-branch-name'
     const region = screen.getByRole('region', { name: full })
@@ -537,7 +484,7 @@ describe('when the ask was made', () => {
     serve({ ...LIST, items: [item], history })
     vi.useFakeTimers({ shouldAdvanceTime: true })
     vi.setSystemTime(new Date(2026, 9, 12, 12, 0))
-    render(<InboxPage />)
+    render(<InboxPage />, { wrapper: TooltipProvider })
     const article = (await screen.findByRole('heading', { name: item.title })).closest('article')!
     const times = article.querySelector<HTMLElement>('[data-card-times]')!
     return { article, eyebrow: article.querySelector('[data-eyebrow]')!, times }
@@ -629,7 +576,7 @@ describe('the unsaved pill after Send', () => {
   })
   it('clears once the notes are sent', async () => {
     serve({ ...LIST, items: [F1] })
-    render(<InboxPage />)
+    render(<InboxPage />, { wrapper: TooltipProvider })
     const article = (await screen.findByRole('heading', { name: 'F1 Fixture' })).closest('article')!
     fireEvent.click(within(article).getByRole('button', { name: 'With notes…' }))
     fireEvent.change(article.querySelector('textarea')!, { target: { value: 'carefully' } })
@@ -676,7 +623,7 @@ describe('one status tab at a time', () => {
 
   it('lists the ready cards under Needs you and the queued one under Preparing; the list counts what is shown', async () => {
     serve({ ...LIST, items: [F1, F2, QUEUED] })
-    render(<InboxPage />)
+    render(<InboxPage />, { wrapper: TooltipProvider })
     await screen.findByRole('heading', { name: 'F1 Fixture' })
     expect(tabs().getByRole('button', { name: 'Needs you · 2' }).getAttribute('aria-pressed')).toBe(
       'true'
@@ -707,7 +654,7 @@ describe('one status tab at a time', () => {
       }
       return method === 'pilot.queue.list' ? { entries: [] } : []
     })
-    render(<InboxPage />)
+    render(<InboxPage />, { wrapper: TooltipProvider })
     const article = (await screen.findByRole('heading', { name: 'F1 Fixture' })).closest('article')!
     fireEvent.click(within(article).getByRole('button', { name: 'Fix it' }))
     expect(await screen.findByRole('button', { name: 'Undo' })).toBeTruthy()
@@ -716,27 +663,9 @@ describe('one status tab at a time', () => {
     )
   })
 
-  it('shows Done for you only on its tab, without the cards, their list or their filters', async () => {
-    serve(LIST, [
-      {
-        run: { ...testRun({ id: 'r9', itemLabel: 'WEB-9', status: 'done' }), fields: {} },
-        effects: [],
-        defaults: []
-      }
-    ])
-    render(<InboxPage />)
-    await screen.findByRole('heading', { name: 'F1 Fixture' })
-    expect(screen.queryByRole('region', { name: 'Done for you' })).toBeNull()
-    fireEvent.click(await tabs().findByRole('button', { name: 'Done for you · 1' }))
-    expect(screen.getByRole('region', { name: 'Done for you' })).toBeTruthy()
-    expect(screen.queryByRole('heading', { name: 'F1 Fixture' })).toBeNull()
-    expect(screen.queryByRole('navigation', { name: 'Cards' })).toBeNull()
-    expect(screen.queryByRole('group', { name: 'Kind' })).toBeNull()
-  })
-
   it('shows a card the run panel names but the tab hides under All, and picks it', async () => {
     serve({ ...LIST, items: [F1, QUEUED] })
-    render(<InboxPage />)
+    render(<InboxPage />, { wrapper: TooltipProvider })
     await screen.findByRole('heading', { name: 'F1 Fixture' })
     act(() => showInboxCard('queued'))
     await waitFor(() =>
@@ -751,7 +680,7 @@ describe('one status tab at a time', () => {
 
   it('forgets the picked card once the tab hides it', async () => {
     serve({ ...LIST, items: [F1, F2, QUEUED] })
-    render(<InboxPage />)
+    render(<InboxPage />, { wrapper: TooltipProvider })
     await screen.findByRole('heading', { name: 'F1 Fixture' })
     fireEvent.click(row('f1'))
     expect(document.getElementById('card-f1')?.hasAttribute('data-selected')).toBe(true)
@@ -763,7 +692,7 @@ describe('one status tab at a time', () => {
 
   it('groups by job: the headings name the jobs, and each list row names its project and worktree', async () => {
     serve()
-    render(<InboxPage />)
+    render(<InboxPage />, { wrapper: TooltipProvider })
     await screen.findByRole('heading', { name: 'F1 Fixture' })
     expect(row('f1').textContent).not.toContain('web-2099-carrier')
     groupBy('job')
@@ -777,7 +706,7 @@ describe('one status tab at a time', () => {
 
   it('groups by nothing: one section with no heading, and no blank group in the list', async () => {
     serve()
-    render(<InboxPage />)
+    render(<InboxPage />, { wrapper: TooltipProvider })
     await screen.findByRole('heading', { name: 'F1 Fixture' })
     groupBy('none')
     // Named apart from the "Cards" list beside it.
@@ -790,6 +719,6 @@ describe('one status tab at a time', () => {
         .getAllByRole('button')
         .filter(isSectionButton)
         .map((b) => b.textContent)
-    ).toEqual(['All · 4'])
+    ).toEqual([])
   })
 })

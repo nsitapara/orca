@@ -1,4 +1,4 @@
-import type { ActivityRun, ListedRun } from '../../shared/api-types-runs'
+import type { ActivityRun } from '../../shared/api-types-runs'
 import type { InboxListRow } from '../../shared/api-types'
 import type {
   AnswerState,
@@ -9,7 +9,6 @@ import type {
   QueueListPayload,
   RunLine
 } from '../../shared/inbox-types'
-import type { DoneRun } from '../../shared/visibility-types'
 import { waitingCount } from '../pages/waiting/answer-text'
 import { answered, type Answered } from './answered-reads'
 import type { HostRead } from './host-poll'
@@ -81,32 +80,6 @@ export function mergeInbox(reads: readonly HostRead<InboxListPayload>[]): Merged
 export function mergeQueue(reads: readonly HostRead<QueueListPayload>[]): Hosted<QueueEntry>[] {
   return answered(reads).flatMap(({ host, value }) =>
     value.entries.map((entry) => ({ ...entry, host }))
-  )
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null
-}
-
-// A well-formed row: an object whose run has a string id, with effects and defaults lists.
-export function isDoneRun(value: unknown): value is DoneRun {
-  if (!isRecord(value) || !isRecord(value.run)) {
-    return false
-  }
-  return (
-    typeof value.run.id === 'string' &&
-    Array.isArray(value.effects) &&
-    Array.isArray(value.defaults)
-  )
-}
-
-export function mergeDoneForYou(
-  reads: readonly HostRead<unknown>[]
-): (DoneRun & { run: Hosted<ListedRun> })[] {
-  return answered(reads).flatMap(({ host, value }) =>
-    Array.isArray(value)
-      ? value.filter(isDoneRun).map((row) => ({ ...row, run: { ...row.run, host } }))
-      : []
   )
 }
 

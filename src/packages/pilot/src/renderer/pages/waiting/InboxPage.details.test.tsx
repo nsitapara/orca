@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { InboxListRow } from '../../../shared/api-types'
 import type { DetailsBundle, DetailsRef } from '../../../shared/details'
 import type { InboxListPayload } from '../../../shared/inbox-types'
+import { TooltipProvider } from '@/components/ui/tooltip'
 
 const pilotRpc = vi.fn()
 vi.mock('../../api', () => ({ pilotRpc: (...args: unknown[]) => pilotRpc(...args) }))
@@ -65,7 +66,7 @@ describe('Details on a card', () => {
   it('loads the snapshot for the digest shown when it opens, and draws the titles', async () => {
     const withDetails = inboxRow({ id: 'in_a', title: 'A', digest: 'da1', details: REF })
     serveDetails(() => [withDetails])
-    render(<InboxPage />)
+    render(<InboxPage />, { wrapper: TooltipProvider })
     fireEvent.click(await screen.findByRole('button', { name: /^Details/ }))
     expect(await screen.findByRole('heading', { name: 'What Approve does' })).toBeTruthy()
     expect(detailCalls().map((c) => c[1])).toEqual([{ id: 'in_a', digest: 'da1' }])
@@ -75,7 +76,7 @@ describe('Details on a card', () => {
     vi.useFakeTimers({ shouldAdvanceTime: true })
     const withDetails = inboxRow({ id: 'in_b', title: 'B', digest: 'db1', details: REF })
     serveDetails(() => [{ ...withDetails }])
-    render(<InboxPage />)
+    render(<InboxPage />, { wrapper: TooltipProvider })
     fireEvent.click(await screen.findByRole('button', { name: /^Details/ }))
     await screen.findByRole('heading', { name: 'What Approve does' })
     const lists = () => pilotRpc.mock.calls.filter((c) => c[0] === 'pilot.inbox.list').length
@@ -92,7 +93,7 @@ describe('Details on a card', () => {
     serveDetails(() => [
       inboxRow({ id: 'in_c', title: 'C', version, digest: `dc${version}`, details: REF })
     ])
-    render(<InboxPage />)
+    render(<InboxPage />, { wrapper: TooltipProvider })
     fireEvent.click(await screen.findByRole('button', { name: /^Details/ }))
     await screen.findByRole('heading', { name: 'What Approve does' })
     version = 2
@@ -111,7 +112,7 @@ describe('Details on a card', () => {
         ? listOf([inboxRow({ id: 'in_d', title: 'D', digest: 'dd1', details: REF })])
         : { entries: [] }
     })
-    render(<InboxPage />)
+    render(<InboxPage />, { wrapper: TooltipProvider })
     fireEvent.click(await screen.findByRole('button', { name: /^Details/ }))
     expect(
       await screen.findByText(/Couldn.t load the details: The card changed; review it again/)
@@ -123,7 +124,7 @@ describe('Details on a card', () => {
     serveDetails(() => [
       inboxRow({ id: 'in_e', title: 'E', digest: 'de1', detailsMd: `\`\`\`\n${long}\n\`\`\`` })
     ])
-    const { container } = render(<InboxPage />)
+    const { container } = render(<InboxPage />, { wrapper: TooltipProvider })
     fireEvent.click(await screen.findByRole('button', { name: /^Details/ }))
     await waitFor(() =>
       expect(container.querySelector('.glr-body pre code')?.textContent).toBe(long)
@@ -133,14 +134,14 @@ describe('Details on a card', () => {
 
   it('shows no Details on a card with neither', async () => {
     serveDetails(() => [inboxRow({ id: 'in_f', title: 'F', digest: 'df1' })])
-    render(<InboxPage />)
+    render(<InboxPage />, { wrapper: TooltipProvider })
     await screen.findByRole('heading', { name: 'F' })
     expect(screen.queryByRole('button', { name: /^Details/ })).toBeNull()
   })
 
   it('lets the column and the card shrink so a long line cannot widen the page', async () => {
     serveDetails(() => [inboxRow({ id: 'in_h', title: 'H', digest: 'dh1' })])
-    const { container } = render(<InboxPage />)
+    const { container } = render(<InboxPage />, { wrapper: TooltipProvider })
     await screen.findByRole('heading', { name: 'H' })
     expect(container.querySelector('main')?.className).toContain('min-w-0')
     expect(container.querySelector('article')?.className).toContain('min-w-0')

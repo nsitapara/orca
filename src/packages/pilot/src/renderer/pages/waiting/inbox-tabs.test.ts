@@ -148,7 +148,7 @@ describe('matchesFilters', () => {
 describe('emptyTabText', () => {
   it.each([
     ['a picked kind on a card tab', 'needs_you', true, 'No cards match these filters.'],
-    ['Done for you, whatever is picked', 'done', true, 'Nothing done for Nish here.']
+    ['the tab, with no kind picked', 'needs_you', false, 'Nothing waiting on Nish here.']
   ] as const)('names %s', (_case, tab, filtered, want) => {
     expect(emptyTabText(tab, filtered, 'Nish')).toBe(want)
   })

@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { InboxListRow } from '../../../shared/api-types'
 import type { InboxListPayload } from '../../../shared/inbox-types'
 import { queuedPreparation } from '../../../shared/preparation'
+import { TooltipProvider } from '@/components/ui/tooltip'
 
 const pilotRpc = vi.fn()
 vi.mock('../../api', () => ({ pilotRpc: (...args: unknown[]) => pilotRpc(...args) }))
@@ -23,15 +24,12 @@ const listOf = (items: InboxListRow[]): InboxListPayload => ({
   answerStates: {},
   runLines: {}
 })
-function serve(items: () => InboxListRow[], done: () => Promise<unknown> = async () => []) {
+function serve(items: () => InboxListRow[]) {
   pilotRpc.mockImplementation(async (method: string) => {
     if (method === 'pilot.inbox.list') {
       return listOf(items())
     }
-    if (method === 'pilot.queue.list') {
-      return { entries: [] }
-    }
-    return method === 'pilot.runs.doneForYou' ? done() : {}
+    return method === 'pilot.queue.list' ? { entries: [] } : {}
   })
 }
 const tabs = () => within(screen.getByRole('toolbar', { name: 'Card status' }))
@@ -61,7 +59,7 @@ describe('an empty tab', () => {
       return method === 'pilot.queue.list' ? { entries: [] } : []
     })
     setInboxViewPrefs({ tab: 'blocked' })
-    render(<InboxPage />)
+    render(<InboxPage />, { wrapper: TooltipProvider })
     fireEvent.click(await screen.findByRole('button', { name: 'Retry preparation' }))
     await waitFor(() => expect(tabs().getByRole('button', { name: 'Preparing · 1' })).toBeTruthy())
     expect(tabs().getByRole('button', { name: 'Blocked · 0' }).getAttribute('aria-pressed')).toBe(
@@ -69,47 +67,18 @@ describe('an empty tab', () => {
     )
   })
 
-  const EMPTY = /^(Nothing waiting|Nothing is preparing|No preparation|No cards|Nothing done)/
-  const failing = async (): Promise<never> => {
-    throw new Error('down')
-  }
-  it.each<{
-    case: string
-    tab: InboxTab
-    done?: () => Promise<unknown>
-    // Shown once the case has settled, before the empty text is read.
-    settled?: string
-    text: string | null
-  }>([
+  const EMPTY = /^(Nothing waiting|Nothing is preparing|No preparation|No cards)/
+  it.each<{ case: string; tab: InboxTab; text: string }>([
     { case: 'Needs you', tab: 'needs_you', text: 'Nothing waiting on Nish here.' },
     { case: 'Preparing', tab: 'preparing', text: 'Nothing is preparing context.' },
     { case: 'Blocked', tab: 'blocked', text: 'No preparation is blocked.' },
-    { case: 'All', tab: 'all', text: 'No cards here.' },
-    { case: 'Done for you', tab: 'done', text: 'Nothing done for Nish here.' },
-    {
-      case: 'Done for you while its list errors',
-      tab: 'done',
-      done: failing,
-      settled: "Done for you couldn't load: down",
-      text: null
-    },
-    {
-      case: 'Done for you before its list first loads',
-      tab: 'done',
-      done: () => new Promise(() => {}),
-      text: null
-    }
-  ])('says what is empty: $case', async ({ tab, done, settled, text }) => {
-    serve(() => [], done)
+    { case: 'All', tab: 'all', text: 'No cards here.' }
+  ])('says what is empty: $case', async ({ tab, text }) => {
+    serve(() => [])
     setInboxViewPrefs({ tab })
-    render(<InboxPage />)
+    render(<InboxPage />, { wrapper: TooltipProvider })
     await loaded()
-    if (settled) {
-      await screen.findByText(settled)
-    }
-    if (text) {
-      await screen.findByText(text)
-    }
-    expect(screen.queryAllByText(EMPTY).map((p) => p.textContent)).toEqual(text ? [text] : [])
+    await screen.findByText(text)
+    expect(screen.queryAllByText(EMPTY).map((p) => p.textContent)).toEqual([text])
   })
 })

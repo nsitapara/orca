@@ -38,21 +38,21 @@ export function usePendingInboxCardPick(page: PendingCardPage): () => void {
     if (!pending || !items) {
       return
     }
-    const found = items.find((i) => hostedKey(i.host, i.id) === pending)
+    // A default has no card to show, so a link to one is dropped.
+    const found = items.find((i) => hostedKey(i.host, i.id) === pending && i.type !== 'default')
     if (!found && loading) {
       return
     }
     const picked = pickedOver.current === pending
     if (found && !picked) {
-      const home = found.type === 'default' ? 'done' : 'all'
       // Hidden by the tab, a filter or the picked section: show it unfiltered, and pick it on the next render.
-      if (!visibleKeys.has(pending) && (tab !== home || filtered || section !== ALL)) {
-        setPrefs({ tab: home })
+      if (!visibleKeys.has(pending) && (tab !== 'all' || filtered || section !== ALL)) {
+        setPrefs({ tab: 'all' })
         unfilter()
         return
       }
       // Rows and One at a time have no card to scroll to: switch to Cards, as Rows' Open does.
-      if (view !== 'cards' && tab !== 'done') {
+      if (view !== 'cards') {
         setPrefs({ view: 'cards' })
         return
       }

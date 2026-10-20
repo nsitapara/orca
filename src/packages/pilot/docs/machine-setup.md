@@ -229,7 +229,7 @@ In the main Mac's Pilot window, the new machine appears within 30 s.
 
 ## Test checklist
 
-> **Answering a card starts an agent session on the card's machine.** Pilot resumes, forks or starts a session there to act on the answer. To test, answer only cards from a throwaway test job, and expect a Claude session on that machine. Got it (Done for you) and a card's Details start nothing.
+> **Answering a card starts an agent session on the card's machine.** Pilot resumes, forks or starts a session there to act on the answer. To test, answer only cards from a throwaway test job, and expect a Claude session on that machine. A card's Details start nothing.
 
 A test job, pinned to the new machine, whose run starts no agent (shell steps only). Save it in `~/.agents/automations/` on that machine. Check it with `pilot automations validate --file <file>`, then enable it with `pilot automations enable --id <id>`:
 

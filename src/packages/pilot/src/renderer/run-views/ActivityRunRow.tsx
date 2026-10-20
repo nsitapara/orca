@@ -1,4 +1,3 @@
-import type { Effect } from '../../shared/visibility-types'
 import type { ActivityRun, AutomationSummary, ItemFields } from '../../shared/api-types'
 import { homeOf } from '../../shared/api-types-env'
 import { runStatusWord } from '../../shared/env-text'
@@ -25,27 +24,19 @@ export function ActivityRunRow({
   run,
   fields,
   summary,
-  effects,
   children
 }: {
   // An untagged run is this machine's.
   run: ActivityRun & { host?: PilotHostRef }
   fields: ItemFields
   summary: AutomationSummary | undefined
-  effects?: readonly Effect[] | null
   children?: React.ReactNode
 }): React.JSX.Element {
   const url = itemUrl(fields)
   const home = homeOf(run)
   const cleanup = envCleanup(run)
   const host = hostOf(run)
-  const fetched = useRunEffects(
-    run.id,
-    run.status === 'running' || run.status === 'asking',
-    effects === undefined,
-    host
-  )
-  const shown = effects === undefined ? fetched : effects
+  const effects = useRunEffects(run.id, run.status === 'running' || run.status === 'asking', host)
   const label = useRunStripLabel(run.id, host)
   const items = summary ? runStrip(paintRun(summary.chain, { run }).parts, run) : []
   return (
@@ -83,7 +74,7 @@ export function ActivityRunRow({
         </button>
       </div>
       {run.outcome ? <div className="text-xs text-muted-foreground">{run.outcome}</div> : null}
-      <EffectsLine effects={shown} />
+      <EffectsLine effects={effects} />
       {cleanup ? <div className="text-xs text-muted-foreground">{cleanup}</div> : null}
       {items.length > 0 ? (
         <RunStrip items={items} label={label} onChip={(chip) => openRun(run.id, chip.part, host)} />

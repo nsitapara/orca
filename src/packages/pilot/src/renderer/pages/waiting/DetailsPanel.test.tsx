@@ -3,6 +3,7 @@ import { cleanup, fireEvent, render, screen, within } from '@testing-library/rea
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { InboxItemRow } from '../../../shared/api-types'
 import type { DetailsRef } from '../../../shared/details'
+import { TooltipProvider } from '@/components/ui/tooltip'
 
 const pilotRpc = vi.fn()
 vi.mock('../../api', () => ({ pilotRpc: (...args: unknown[]) => pilotRpc(...args) }))
@@ -91,7 +92,7 @@ describe('the Details panel', () => {
 
   it('is a bordered panel with a bar: arrow, bold Details, summary chips, Show or Hide', async () => {
     serve([card('p1', { details: REF })])
-    render(<InboxPage />)
+    render(<InboxPage />, { wrapper: TooltipProvider })
     const bar = await screen.findByRole('button', { name: /^Details/ })
     expect(bar.getAttribute('aria-expanded')).toBe('false')
     expect(bar.querySelector('svg')).not.toBeNull()
@@ -110,7 +111,7 @@ describe('the Details panel', () => {
 
   it('uses the same panel for markdown-only Details, with no chips; and none without Details', async () => {
     serve([card('m1', { detailsMd: '## Why\nbecause' }), card('n1')])
-    render(<InboxPage />)
+    render(<InboxPage />, { wrapper: TooltipProvider })
     const bar = await screen.findByRole('button', { name: /^Details/ })
     expect(bar.querySelectorAll('span.font-mono')).toHaveLength(0)
     expect(screen.getAllByRole('button', { name: /^Details/ })).toHaveLength(1)
@@ -123,7 +124,7 @@ describe('the Details panel', () => {
       card('e3', { detailsMd: 'x' }),
       card('e4')
     ])
-    render(<InboxPage />)
+    render(<InboxPage />, { wrapper: TooltipProvider })
     await screen.findAllByRole('button', { name: /^Details/ })
     const bars = () => screen.getAllByRole('button', { name: /^Details/ })
     fireEvent.click(screen.getByRole('button', { name: 'Expand all details' }))
@@ -140,7 +141,7 @@ describe('the Details panel', () => {
 
   it('offers no Expand all when no card has Details', async () => {
     serve([card('x1')])
-    render(<InboxPage />)
+    render(<InboxPage />, { wrapper: TooltipProvider })
     await screen.findByRole('heading', { name: 'Card x1' })
     expect(screen.queryByRole('button', { name: /all details/ })).toBeNull()
   })
@@ -149,7 +150,7 @@ describe('the Details panel', () => {
     window.localStorage.clear()
     resetSectionFilter()
     serve([card('s1', { details: REF })])
-    render(<InboxPage />)
+    render(<InboxPage />, { wrapper: TooltipProvider })
     const bar = await screen.findByRole('button', { name: /^Details/ })
     expect(screen.queryByRole('button', { name: 'None' })).toBeNull()
     fireEvent.click(bar)

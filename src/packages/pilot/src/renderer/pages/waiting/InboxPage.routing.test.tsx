@@ -10,7 +10,7 @@ import type {
 } from '../../../shared/inbox-types'
 import { APPROVE_ON_DESKTOP } from '../../../shared/pilot-replies'
 import { stepAt, testRun } from '../../../shared/run-views/__fixtures__/runs'
-import type { DoneRun } from '../../../shared/visibility-types'
+import { TooltipProvider } from '@/components/ui/tooltip'
 
 const pilotRpc = vi.fn()
 vi.mock('../../api', () => ({ pilotRpc: (...args: unknown[]) => pilotRpc(...args) }))
@@ -57,11 +57,6 @@ const listOf = (
   answerStates,
   runLines: {}
 })
-const doneRun = (id: string, itemLabel: string): DoneRun => ({
-  run: { ...testRun({ id, itemLabel, status: 'done' }), fields: {} },
-  effects: [],
-  defaults: []
-})
 const HELD: QueueEntry = {
   rowId: 1,
   itemId: 'in_x',
@@ -94,21 +89,13 @@ type Machine = {
   items?: InboxListRow[]
   // Each answered card's answer state, by its id on that machine.
   answerStates?: InboxListPayload['answerStates']
-  done?: DoneRun[]
   queue?: QueueEntry[]
   // Methods that throw on this machine, with the error each throws.
   fails?: Partial<Record<string, string>>
   applied?: DispatchReport
 }
 const machine =
-  ({
-    items = [],
-    answerStates,
-    done = [],
-    queue = [],
-    fails = {},
-    applied = report({})
-  }: Machine) =>
+  ({ items = [], answerStates, queue = [], fails = {}, applied = report({}) }: Machine) =>
   (method: string) => {
     const error = fails[method]
     if (error) {
@@ -123,22 +110,13 @@ const machine =
     if (method === 'pilot.answers.applyNow') {
       return applied
     }
-    if (method === 'pilot.runs.acknowledge') {
-      return { acknowledged: [], kept: [], notKept: [] }
-    }
-    return method === 'pilot.runs.doneForYou' ? done : { status: 'answered' }
+    return { status: 'answered' }
   }
 const cardTitled = async (title: string) =>
   (await screen.findByRole('heading', { name: title })).closest('article')!
 const choice = (from: ParentNode, value: string): Element =>
   from.querySelector(`[data-choice="${value}"]`)!
 const callsOf = (method: string) => pilotRpc.mock.calls.filter(([m]) => m === method)
-const openDoneForYou = () =>
-  fireEvent.click(
-    within(screen.getByRole('toolbar', { name: 'Card status' })).getByRole('button', {
-      name: /^Done for you/
-    })
-  )
 // A headless engine's Apply now refusal (APPLY_NOW_ELSEWHERE in main/rpc/methods-answers.ts).
 const ELSEWHERE =
   "Answers are applied by the Pilot app that runs the scheduler; this process doesn't run it"
@@ -178,7 +156,7 @@ describe('InboxPage card actions, by machine', () => {
         mini: machine({ items: [question('/wt/web-2', 'Mini question')] })
       })
     )
-    render(<InboxPage />)
+    render(<InboxPage />, { wrapper: TooltipProvider })
     await cardTitled('Mini question')
     fireEvent.click(screen.getByRole('button', { name: /^web-2 ?· 1$/ }))
     expect(screen.queryByRole('heading', { name: 'Local question' })).toBeNull()
@@ -203,47 +181,11 @@ describe('InboxPage card actions, by machine', () => {
         mini: machine({ items: [PUSH], fails: { 'pilot.inbox.answer': APPROVE_ON_DESKTOP } })
       })
     )
-    render(<InboxPage />)
+    render(<InboxPage />, { wrapper: TooltipProvider })
     fireEvent.click(choice(await cardTitled('Push the fix?'), 'Approve'))
     expect(
       await within(await cardTitled('Push the fix?')).findByText(APPROVE_ON_DESKTOP)
     ).toBeTruthy()
-  })
-
-  it("acknowledges a Got it on another machine's run there, never this machine's run with the same id", async () => {
-    setPilotHostsForTests([LOCAL_NAMED, MINI])
-    pilotRpc.mockImplementation(
-      byHost({
-        local: machine({ done: [doneRun('r1', 'WEB-1')] }),
-        mini: machine({ done: [doneRun('r1', 'WEB-2')] })
-      })
-    )
-    render(<InboxPage />)
-    openDoneForYou()
-    fireEvent.click(await screen.findByRole('button', { name: 'Got it: WEB-2' }))
-    await waitFor(() => expect(callsOf('pilot.runs.acknowledge')).toHaveLength(1))
-    expect(callsOf('pilot.runs.acknowledge')).toEqual([
-      ['pilot.runs.acknowledge', { runIds: ['r1'] }, { target: MINI.target }]
-    ])
-  })
-
-  it("acknowledges each machine's runs on that machine", async () => {
-    setPilotHostsForTests([LOCAL_NAMED, MINI])
-    pilotRpc.mockImplementation(
-      byHost({
-        local: machine({ done: [doneRun('r1', 'WEB-1'), doneRun('r2', 'WEB-3')] }),
-        mini: machine({ done: [doneRun('r1', 'WEB-2')] })
-      })
-    )
-    render(<InboxPage />)
-    openDoneForYou()
-    await screen.findByRole('button', { name: 'Got it: WEB-2' })
-    fireEvent.click(screen.getByRole('button', { name: 'Got all' }))
-    await waitFor(() => expect(callsOf('pilot.runs.acknowledge')).toHaveLength(2))
-    expect(callsOf('pilot.runs.acknowledge')).toEqual([
-      ['pilot.runs.acknowledge', { runIds: ['r1', 'r2'] }],
-      ['pilot.runs.acknowledge', { runIds: ['r1'] }, { target: MINI.target }]
-    ])
   })
 
   it("applies every machine's answers and says what each couldn't", async () => {
@@ -278,7 +220,7 @@ describe('InboxPage card actions, by machine', () => {
         away: machine({ applied: report({ agents: 7 }) })
       })
     )
-    render(<InboxPage />)
+    render(<InboxPage />, { wrapper: TooltipProvider })
     fireEvent.click(await screen.findByRole('button', { name: 'Apply now' }))
     expect(
       await screen.findByText(
@@ -296,7 +238,7 @@ describe('InboxPage card actions, by machine', () => {
     setPilotHostsForTests([LOCAL_NAMED, MINI])
     const answerMini = serveMiniLate()
     showInboxCard('in_1', MINI)
-    render(<InboxPage />)
+    render(<InboxPage />, { wrapper: TooltipProvider })
     await cardTitled('Local question')
     answerMini(listOf([question('/wt/web-2', 'Mini question')]))
     await cardTitled('Mini question')
@@ -313,7 +255,7 @@ describe('InboxPage card actions, by machine', () => {
     setPilotHostsForTests([LOCAL_NAMED, MINI])
     const answerMini = serveMiniLate()
     showInboxCard('in_1', MINI)
-    render(<InboxPage />)
+    render(<InboxPage />, { wrapper: TooltipProvider })
     await cardTitled('Local question')
     fireEvent.click(document.querySelector('[data-row="in_1"]')!)
     answerMini(listOf([question('/wt/web-2', 'Mini question')]))
@@ -332,7 +274,7 @@ describe('InboxPage card actions, by machine', () => {
         local: machine({ queue: [HELD], fails: { 'pilot.answers.applyNow': ELSEWHERE } })
       })
     )
-    render(<InboxPage />)
+    render(<InboxPage />, { wrapper: TooltipProvider })
     fireEvent.click(await screen.findByRole('button', { name: 'Apply now' }))
     expect(await screen.findByText(ELSEWHERE)).toBeTruthy()
     expect(callsOf('pilot.answers.applyNow')).toHaveLength(1)
@@ -366,7 +308,7 @@ describe('InboxPage card actions, by machine', () => {
         })
       })
     )
-    render(<InboxPage />)
+    render(<InboxPage />, { wrapper: TooltipProvider })
     await cardTitled('Mini question')
     const status = within(screen.getByRole('toolbar', { name: 'Card status' }))
     const titles = () =>
@@ -388,7 +330,7 @@ describe('InboxPage card actions, by machine', () => {
         mini: machine({ fails: { 'pilot.answers.applyNow': 'Pilot is busy' } })
       })
     )
-    render(<InboxPage />)
+    render(<InboxPage />, { wrapper: TooltipProvider })
     fireEvent.click(await screen.findByRole('button', { name: 'Apply now' }))
     expect(await screen.findByText("Mac mini couldn't apply: Pilot is busy")).toBeTruthy()
     expect(callsOf('pilot.answers.applyNow').map(([, , o]) => o?.target)).toEqual([MINI.target])
@@ -480,7 +422,7 @@ describe('InboxPage runs, by machine', () => {
     ]
   ])("opens another machine's run on that machine from %s", async (_from, control) => {
     serveMiniRun()
-    render(<InboxPage />)
+    render(<InboxPage />, { wrapper: TooltipProvider })
     fireEvent.click(await control())
     expect([openRunPanel()?.runId, openRunPanel()?.host.key]).toEqual(['r1', 'env:mini'])
   })

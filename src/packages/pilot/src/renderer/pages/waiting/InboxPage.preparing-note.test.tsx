@@ -3,6 +3,7 @@ import { cleanup, render, screen, waitFor, within } from '@testing-library/react
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { InboxListPayload } from '../../../shared/inbox-types'
 import { queuedPreparation } from '../../../shared/preparation'
+import { TooltipProvider } from '@/components/ui/tooltip'
 
 const pilotRpc = vi.fn()
 vi.mock('../../api', () => ({ pilotRpc: (...args: unknown[]) => pilotRpc(...args) }))
@@ -53,7 +54,7 @@ describe('the Preparing tab note', () => {
   ])('when %s', async (_name, waits, shown) => {
     serve(waits)
     setInboxViewPrefs({ tab: 'preparing' })
-    render(<InboxPage />)
+    render(<InboxPage />, { wrapper: TooltipProvider })
     await waitFor(() => expect(tabs().getByRole('button', { name: 'Preparing · 2' })).toBeTruthy())
     expect(tabs().queryByText('1 waiting') !== null).toBe(shown)
   })
