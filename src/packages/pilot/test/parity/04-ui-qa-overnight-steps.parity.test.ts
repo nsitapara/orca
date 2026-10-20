@@ -352,7 +352,6 @@ describeParity(PARITY_04, '04 · a night run ends as close_out would have counte
     expect(steps.verdict === 'failed').toBe(!tested) // the verdict fails only when untested
     expect(ran.includes('fix')).toBe(reported && Boolean(n.bug) && expected.outcome === 'complete')
     expect(ran.includes('merge_back')).toBe(ran.includes('fix'))
-    expect(ran.includes('forget_branch')).toBe(ran.includes('fix'))
     expect(ran.includes('flag_held')).toBe(false) // every merge back here came home
     // The report queues context work for a separate run; no preparation step holds the night open.
     expect(ran.includes('drafts')).toBe(false)

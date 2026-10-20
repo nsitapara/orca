@@ -187,8 +187,7 @@ describe.skipIf(!existsSync(SKILL))(
         ['verdict', 'shell', false],
         ['fix', 'claude', true],
         ['merge_back', 'shell', false],
-        ['flag_held', 'shell', true],
-        ['forget_branch', 'shell', true]
+        ['flag_held', 'shell', true]
       ])
       // The session's 60 minutes is get-context's deadline too (a Go constant, spec §7.10.3).
       expect(step('test')).toMatchObject({
@@ -249,18 +248,6 @@ describe.skipIf(!existsSync(SKILL))(
         timeoutMs: 5 * MINUTE,
         holdHome: true
       })
-      // The keep branch is the one fix.md has the fixer move after each commit: pilot/ui-qa-$PILOT_RUN_ID.
-      expect(shellOf('forget_branch')).toEqual({
-        run: 'pilotcli git delete-branch "$KEEP" --kept-in "$HOME_WT" --pushed-to "$BRANCH"',
-        env: {
-          BRANCH: '{worktree.branch}',
-          HOME_WT: '{worktree.path}',
-          KEEP: 'pilot/ui-qa-{run.id}'
-        },
-        exitCodes: { ok: [0], skip: [3], stop: [] },
-        timeoutMs: 2 * MINUTE,
-        holdHome: false
-      })
       expect(shellOf('close_page')).toEqual({
         run: 'orca tab close --page "$PAGE" --json || echo "page not closed"',
         env: { PAGE: '{steps.test.page}' },
@@ -295,8 +282,7 @@ describe.skipIf(!existsSync(SKILL))(
         'flag_failed',
         'verdict',
         'fix',
-        'merge_back',
-        'forget_branch'
+        'merge_back'
       ]) {
         expect([name, runs(name, [stopped], skip)]).toEqual([name, false])
       }
@@ -389,8 +375,8 @@ describe.skipIf(!existsSync(SKILL))(
     })
 
     // fix == true implies tested, so the verdict never skips the fixer's steps; fix is `always`, so merge back runs after
-    // a fixer that failed or timed out, and forget_branch after a merge back that broke.
-    it('fixes only what the report handed over, then merges it back and forgets the keep branch', () => {
+    // a fixer that failed or timed out.
+    it('fixes only what the report handed over, then merges it back', () => {
       const before = [
         ok('context'),
         ok('test'),
@@ -405,23 +391,19 @@ describe.skipIf(!existsSync(SKILL))(
       expect(runs('fix', before, {})).toBe(false)
       for (const fixer of [ok('fix'), broke('fix'), late('fix')]) {
         expect(runs('merge_back', [...before, fixer], fix)).toBe(true)
-        expect(runs('forget_branch', [...before, fixer, broke('merge_back')], fix)).toBe(true)
       }
-      for (const name of ['merge_back', 'forget_branch']) {
-        expect([
-          name,
-          runs(name, [...before, unrun('fix')], { 'steps.report.fix': false })
-        ]).toEqual([name, false])
-      }
+      expect(runs('merge_back', [...before, unrun('fix')], { 'steps.report.fix': false })).toBe(
+        false
+      )
     })
 
-    // A merge back that skips (home busy, dirty, or diverged) leaves the fixes on the keep branch, and says so.
-    it('flags the keep branch only when the merge back skipped', () => {
+    // A merge back that skips (home busy, dirty, or diverged) leaves the fixes to Pilot's kept branch, and says so.
+    it('flags the kept branch only when the merge back skipped', () => {
       expect(step('flag_held')).toMatchObject({
         when: "{steps.merge_back.outcome} == 'skip'",
         env: {
           WT: '{worktree.path}',
-          KEEP: 'pilot/ui-qa-{run.id}',
+          KEEP: 'pilot/{run.id}',
           WHY: '{steps.merge_back.reason}'
         }
       })
@@ -472,7 +454,6 @@ describe.skipIf(!existsSync(SKILL))(
       )
       const answers = readFileSync(join(SKILL, 'modes', 'answers.md'), 'utf8')
       expect(answers).toContain('a throwaway copy of it with a detached HEAD and no stack')
-      expect(answers).toContain('`git branch -f pilot/ui-qa-<that id> HEAD`')
       expect(answers).toContain('pilot action run --name=push')
       expect(answers).toContain('never `git push`')
     })
@@ -486,11 +467,10 @@ describe.skipIf(!existsSync(SKILL))(
 
     // In a Pilot run the report files each finding as a card in Pilot's inbox (Pilot never reads the note's items),
     // so the fixer closes the cards it fixed and files new questions there, never as `- [ ]` lines. It works in the
-    // throwaway and keeps its commits on the branch forget_branch deletes once they're home.
-    it("has the fixer work in the throwaway, keep its commits on the keep branch, and close its cards in Pilot's inbox", () => {
+    // throwaway, where Pilot keeps what merge back can't bring in (kept-branches.parity.test.ts).
+    it("has the fixer work in the throwaway and close its cards in Pilot's inbox", () => {
       const fix = readFileSync(join(SKILL, 'modes', 'fix.md'), 'utf8')
       expect(fix).toContain("the job's merge_back step brings your commits into it")
-      expect(fix).toContain('`git branch -f pilot/ui-qa-$PILOT_RUN_ID HEAD`')
       expect(fix).toContain("the report's findings are cards in Pilot's inbox")
       expect(fix).toContain("pilot inbox tick --id <the handoff's cards[<finding id>]>")
       // Posted with pilotcli inbox create-card as plain cards (D1): no --evidence, and never through the intake.

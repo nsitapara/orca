@@ -53,6 +53,8 @@ function setup(
     },
     workspace: NO_WORKSPACE,
     log: () => {},
+    closeTerminal: async () => {},
+    relist: async () => false,
     envs: {
       begin: (_req, hooks) => {
         if (failBegin) {

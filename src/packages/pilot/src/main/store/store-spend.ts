@@ -29,7 +29,7 @@ const GROUP_FILTER: Record<SpendGroup, string> = {
 const FROM =
   'FROM step_usage u JOIN steps s ON s.run_id = u.run_id AND s.idx = u.idx JOIN runs r ON r.id = u.run_id'
 const TOKENS = 'u.input + u.cache_read + u.cache_write + u.output'
-// A bucket written before schema 19 has no agent of its own: its step's.
+// A bucket written before schema 21 has no agent of its own: its step's.
 const AGENT = 'COALESCE(u.agent, s.agent)'
 
 function agentOf(value: unknown): AgentKind {

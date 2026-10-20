@@ -27,6 +27,8 @@ export type TeardownDeps = {
   tabs: TabDeps
   // The runtime forgets the removed folder (a rescan of the run's repo); best effort.
   forget(run: RunRow): void
+  // env delete kept the throwaway's unhomed commits on a branch: bring them home (main/envs/kept-home.ts).
+  kept?(runId: string): void
   log(message: string): void
 }
 export type Teardowns = { start(run: RunRow): void; housekeep(): void; settled(): Promise<void> }
@@ -104,8 +106,12 @@ export function createTeardowns(deps: TeardownDeps): Teardowns {
       timeoutMs: DELETE_TIMEOUT_MS
     })
     if (reply.outcome === 'ok') {
-      store.runs.envs.removed(run.id, deps.now(), keptOf(reply.data))
+      const kept = keptOf(reply.data)
+      store.runs.envs.removed(run.id, deps.now(), kept)
       deps.forget(run)
+      if (kept) {
+        deps.kept?.(run.id)
+      }
       return
     }
     if (reply.outcome === 'not_yet') {

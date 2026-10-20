@@ -26,6 +26,7 @@ export function testStepRow(over: Partial<StepRow> = {}): StepRow {
     exitCode: null,
     outputTail: null,
     sessionPinned: false,
+    detached: false,
     launchArgs: null,
     result: null,
     ...over

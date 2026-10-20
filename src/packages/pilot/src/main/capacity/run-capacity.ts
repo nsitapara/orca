@@ -35,8 +35,7 @@ export type RunCapacity = {
   tickFailed(automationId: string): void
   // An answer run goes ahead of the queue (Nish is waiting on it), so it needs only a free slot.
   hasFreeSlot(def: AutomationDefinition): boolean
-  // Jobs to tick now, in line order: slot-waiting items that fit the free slots, held items due a re-check. Rows of
-  // jobs gone, turned off or ticked on another machine (ticksHere, runs_on) leave the line, unless Run now queued them.
+  // Jobs to tick: slot waiters that fit, held rows due a re-check; rows not ticked here go unless Run now queued them.
   toTick(
     definitions: readonly AutomationDefinition[],
     ticksHere: (def: AutomationDefinition) => boolean,
@@ -115,6 +114,14 @@ export function runCapacity(deps: RunCapacityDeps): RunCapacity {
   }
   const inUse = (ids: Set<string>): number =>
     capacity.running().filter((run) => ids.has(run.automationId)).length
+  // Checked with the start, so Go now never starts beside the job's own run on the item (a run-once job's on its one).
+  const goesNow = (def: AutomationDefinition, row: QueuedItem | undefined): boolean =>
+    row?.goNow === true &&
+    !capacity
+      .running()
+      .some(
+        (run) => run.automationId === def.id && (def.items === null || run.itemKey === row.itemKey)
+      )
   const started = (def: AutomationDefinition, key: string, byHand: boolean): Admission => {
     const row = capacity.dequeue(def.id, key)
     const admission: Admission = { start: true, byHand: byHand || row?.byHand === true }
@@ -153,7 +160,8 @@ export function runCapacity(deps: RunCapacityDeps): RunCapacity {
       const line = capacity.queued().filter((q) => ids.has(q.automationId))
       const self = line.findIndex((q) => q.automationId === def.id && q.itemKey === item.key)
       const ahead = slotWaitersAhead(line, self, item.dueAt)
-      if (used + ahead < limit) {
+      // Go now's mark starts it without a free slot; the gates already kept it out of a busy worktree.
+      if (used + ahead < limit || goesNow(def, self === -1 ? undefined : line[self])) {
         return started(def, item.key, byHand)
       }
       const reason = waitingReason(used, limit, ahead)

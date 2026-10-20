@@ -4,6 +4,7 @@ import type { AnswerState } from '../../../shared/inbox-types'
 import type { PreparationRef } from '../../../shared/preparation'
 import { waitingCount } from './answer-text'
 import {
+  emptyTabText,
   INBOX_KINDS,
   inTab,
   kindCounts,
@@ -136,29 +137,20 @@ describe('tabCounts', () => {
 })
 
 describe('matchesFilters', () => {
-  const none = { kinds: [], query: '' } as const
-  const item = card({
-    title: 'Which Carrier?',
-    itemKey: 'mr:77',
-    itemLabel: 'MR !77',
-    context: 'about shipping'
-  })
-
-  it.each([
-    ['the title, any case', 'carrier', 'x', true],
-    ['the context', 'SHIPPING', 'x', true],
-    ['the item label', 'mr !77', 'x', true],
-    ['nothing but the internal key', 'mr:77', 'x', false],
-    ['the group label', 'web-1493', 'web-1493 / ci', true],
-    ['nothing', 'zzz', 'web', false]
-  ])('query matches %s', (_name, query, group, want) => {
-    expect(matchesFilters(item, { ...none, query }, group)).toBe(want)
-  })
-
   it('filters by kind', () => {
-    expect(matchesFilters(item, { kinds: ['bug'], query: '' }, 'g')).toBe(false)
-    expect(matchesFilters(item, { kinds: ['bug', 'question'], query: '' }, 'g')).toBe(true)
-    expect(matchesFilters(item, none, 'g')).toBe(true)
+    const item = card({ title: 'Which Carrier?' })
+    expect(matchesFilters(item, { kinds: ['bug'] })).toBe(false)
+    expect(matchesFilters(item, { kinds: ['bug', 'question'] })).toBe(true)
+    expect(matchesFilters(item, { kinds: [] })).toBe(true)
+  })
+})
+
+describe('emptyTabText', () => {
+  it.each([
+    ['a picked kind on a card tab', 'needs_you', true, 'No cards match these filters.'],
+    ['Done for you, whatever is picked', 'done', true, 'Nothing done for Nish here.']
+  ] as const)('names %s', (_case, tab, filtered, want) => {
+    expect(emptyTabText(tab, filtered, 'Nish')).toBe(want)
   })
 })
 

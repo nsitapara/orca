@@ -12,8 +12,8 @@ export const CallerBinding = {
   stepIdx: z.number().int().nonnegative().optional()
 }
 
-// Whose powers apply (Task 22b ruling): the step starting or running on the caller's terminal, else the
-// env's PILOT_RUN_ID/PILOT_STEP_IDX only while that step is active in an open run (run-channel's resolver,
+// Whose powers apply (Task 22b ruling): the step starting, running or detached on the caller's terminal, else the
+// env's PILOT_RUN_ID/PILOT_STEP_IDX only while that step is active in an open run or detached (run-channel's resolver,
 // which refuses anything else). With neither the call is bound to no run (null).
 export function runBinding(
   c: PilotContext,

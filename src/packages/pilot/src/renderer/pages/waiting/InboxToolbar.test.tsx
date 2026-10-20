@@ -1,9 +1,10 @@
 // @vitest-environment happy-dom
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { InboxFilters } from './InboxFilters'
 import { InboxHeader } from './InboxHeader'
 import { InboxTabs } from './InboxTabs'
+import { InboxViewControls } from './InboxViewControls'
+import { KindChips, type KindFilterProps, KindSection } from './KindFilter'
 
 afterEach(cleanup)
 
@@ -22,26 +23,27 @@ function tabs(over: Partial<Parameters<typeof InboxTabs>[0]> = {}) {
   return onTab
 }
 
-function filters(over: Partial<Parameters<typeof InboxFilters>[0]> = {}) {
-  const handlers = {
-    onFilters: vi.fn(),
-    onGroup: vi.fn(),
-    onSort: vi.fn(),
-    onView: vi.fn()
-  }
+function kindsIn(
+  Kinds: typeof KindChips | typeof KindSection,
+  over: Partial<KindFilterProps> = {}
+) {
+  const onKinds = vi.fn()
   render(
-    <InboxFilters
-      filters={{ kinds: [], query: '' }}
-      kindCounts={{ question: 3, bug: 1 }}
+    <Kinds
+      kinds={[]}
+      counts={{ question: 3, bug: 1 }}
       shown={8}
       total={8}
-      group="worktree"
-      sort="kind"
-      view="cards"
-      {...handlers}
+      onKinds={onKinds}
       {...over}
     />
   )
+  return onKinds
+}
+
+function controls() {
+  const handlers = { onGroup: vi.fn(), onSort: vi.fn(), onView: vi.fn() }
+  render(<InboxViewControls group="worktree" sort="kind" view="cards" {...handlers} />)
   return handlers
 }
 
@@ -86,35 +88,60 @@ describe('InboxTabs', () => {
   })
 })
 
-describe('InboxFilters', () => {
+describe.each([
+  ['the chips row', KindChips],
+  ['the list section', KindSection]
+])('kinds in %s', (_where, Kinds) => {
   it('lists only kinds that have cards', () => {
-    filters()
+    kindsIn(Kinds)
     expect(screen.getByRole('button', { name: 'Questions · 3' })).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Bugs · 1' })).toBeTruthy()
     expect(screen.queryByRole('button', { name: /Approvals/ })).toBeNull()
   })
 
   it('toggles a kind', () => {
-    const { onFilters } = filters()
+    const onKinds = kindsIn(Kinds)
     fireEvent.click(screen.getByRole('button', { name: 'Questions · 3' }))
-    expect(onFilters).toHaveBeenCalledWith({ kinds: ['question'], query: '' })
+    expect(onKinds).toHaveBeenCalledWith(['question'])
   })
 
-  it('offers Clear with the shown count when a filter is on', () => {
-    filters({ filters: { kinds: ['question'], query: '' }, shown: 3 })
+  it('offers Clear with the shown count when a kind is picked', () => {
+    const onKinds = kindsIn(Kinds, { kinds: ['question'], shown: 3 })
+    fireEvent.click(screen.getByRole('button', { name: 'Clear · 3 of 8 shown' }))
+    expect(onKinds).toHaveBeenCalledWith([])
+  })
+
+  it('keeps a pressed kind visible at zero and unpresses it on click', () => {
+    const onKinds = kindsIn(Kinds, { kinds: ['bug'], counts: {} })
+    const kind = screen.getByRole('button', { name: 'Bugs · 0' })
+    expect(kind.getAttribute('aria-pressed')).toBe('true')
+    fireEvent.click(kind)
+    expect(onKinds).toHaveBeenCalledWith([])
+  })
+})
+
+describe('the list’s Kind section', () => {
+  afterEach(() => window.localStorage.clear())
+
+  it('folds away, keeping Clear in view, and stays folded next time', () => {
+    kindsIn(KindSection, { kinds: ['question'], shown: 3 })
+    fireEvent.click(screen.getByRole('button', { name: 'Kind' }))
+    expect(screen.queryByRole('button', { name: 'Questions · 3' })).toBeNull()
     expect(screen.getByRole('button', { name: 'Clear · 3 of 8 shown' })).toBeTruthy()
+    cleanup()
+    kindsIn(KindSection)
+    expect(screen.getByRole('button', { name: 'Kind' }).getAttribute('aria-expanded')).toBe('false')
   })
 
-  it('keeps a pressed kind chip visible at zero and unpresses it on click', () => {
-    const { onFilters } = filters({ filters: { kinds: ['bug'], query: '' }, kindCounts: {} })
-    const chip = screen.getByRole('button', { name: 'Bugs · 0' })
-    expect(chip.getAttribute('aria-pressed')).toBe('true')
-    fireEvent.click(chip)
-    expect(onFilters).toHaveBeenCalledWith({ kinds: [], query: '' })
+  it('is left out when no kind has a card', () => {
+    kindsIn(KindSection, { counts: {} })
+    expect(screen.queryByRole('group', { name: 'Kind' })).toBeNull()
   })
+})
 
+describe('InboxViewControls', () => {
   it('offers the agreed group, sort and view labels', () => {
-    filters()
+    controls()
     const names = (label: string) =>
       Array.from(screen.getByRole('combobox', { name: label }).querySelectorAll('option')).map(
         (o) => o.textContent
@@ -126,12 +153,8 @@ describe('InboxFilters', () => {
     }
   })
 
-  it('changes search, group, sort and view', () => {
-    const h = filters()
-    fireEvent.change(screen.getByRole('searchbox', { name: 'Search cards' }), {
-      target: { value: 'abc' }
-    })
-    expect(h.onFilters).toHaveBeenCalledWith({ kinds: [], query: 'abc' })
+  it('changes group, sort and view', () => {
+    const h = controls()
     fireEvent.change(screen.getByRole('combobox', { name: 'Group by' }), {
       target: { value: 'job' }
     })
@@ -151,13 +174,12 @@ describe('InboxHeader', () => {
       <InboxHeader
         listOpen
         onToggleList={() => {}}
-        people={[]}
-        viewer={null}
-        onViewer={() => {}}
         wide
         canExpand={false}
         allOpen={false}
         onToggleAll={() => {}}
+        tabs={null}
+        controls={null}
       />
     )
     expect(container.textContent).not.toContain('waiting')

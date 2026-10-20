@@ -23,6 +23,22 @@ export type RunEnv = {
   deleteAttempts: number
   // The branch env delete kept a throwaway's unhomed commits on; absent when it kept none, or from older pilotcli.
   kept?: string
+  // Bringing `kept` into the run's home worktree (main/envs/kept-home.ts); absent until the first try.
+  keptHome?: KeptHome
+}
+
+// waiting: merged at nextAt once the home is clean and idle. merged: in the home, the branch deleted. stuck: a conflict
+// (an agent's on its card) or a home that can't take it; only checked for landing. dropped: the branch was deleted.
+export type KeptHome = {
+  state: 'waiting' | 'merged' | 'stuck' | 'dropped'
+  reason: string | null
+  attempts: number
+  nextAt: number | null
+  // The first try; a wait past WAIT_NOTICE_MS leaves one notice.
+  since: number
+  noticed: boolean
+  // The card it left, closed when the branch lands.
+  cardId?: string
 }
 
 // Where a run's work belongs (cards, answers, the timeline, the worktree panel): its item's worktree. For an env run it may

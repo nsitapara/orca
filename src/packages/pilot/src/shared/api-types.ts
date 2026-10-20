@@ -162,6 +162,8 @@ export type StepRow = {
   exitCode: number | null
   outputTail: string | null
   sessionPinned: boolean
+  // A wait: start step that ended once its session was up: the session goes on in its tab. Absent from older Pilots.
+  detached?: boolean
   // The args the step's agent process runs under (its own launch, or the process it was sent into);
   // null when not known. Session flags (--session-id, --resume) are not included.
   launchArgs: string[] | null

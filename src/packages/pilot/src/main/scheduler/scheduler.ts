@@ -76,6 +76,8 @@ export class PilotScheduler {
   // When each stage was last triggered (within the minute), and the trigger that came while its tick ran.
   private readonly triggeredAt = new Map<string, number[]>()
   private readonly retrigger = new Map<string, TickTrigger>()
+  // Retry's and Go now's keys asked for while the job's tick ran: one more tick by hand with all of them after it.
+  private readonly byHandAfter = new Map<string, Set<string>>()
   private ready: Promise<void> = Promise.resolve()
 
   constructor(
@@ -296,13 +298,28 @@ export class PilotScheduler {
     }
     this.triggeredAt.get(id)?.push(this.deps.now())
     this.deps.log(`[pilot] ${id}: triggered by ${cause.automationId} run ${cause.runId}`)
-    this.tickNow(id, { dryRun: false, trigger: cause }).then(
+    this.logged(id, 'triggered', this.tickNow(id, { dryRun: false, trigger: cause }))
+  }
+
+  // Retry and Go now: the job ticks by hand with these keys now or, while its tick runs (it may have read the item
+  // before the change), once that tick ends. Keys asked for meanwhile join that one tick.
+  tickByHand(id: string, keys: readonly string[]): Promise<TickNowResult> {
+    if (this.running.has(id)) {
+      this.byHandAfter.set(id, new Set([...(this.byHandAfter.get(id) ?? []), ...keys]))
+      return Promise.resolve({ status: 'busy' })
+    }
+    return this.tickNow(id, { dryRun: false, byHandKeys: new Set(keys) })
+  }
+
+  // A tick nobody awaits: its failure is logged.
+  private logged(id: string, what: string, tick: Promise<TickNowResult>): void {
+    tick.then(
       (result) => {
         if (result.status === 'failed') {
-          this.deps.log(`[pilot] ${id} triggered tick failed: ${result.error}`)
+          this.deps.log(`[pilot] ${id} ${what} tick failed: ${result.error}`)
         }
       },
-      (error: unknown) => this.deps.log(`[pilot] ${id} triggered tick failed: ${messageOf(error)}`)
+      (error: unknown) => this.deps.log(`[pilot] ${id} ${what} tick failed: ${messageOf(error)}`)
     )
   }
 
@@ -337,6 +354,11 @@ export class PilotScheduler {
       if (again) {
         this.retrigger.delete(id)
         this.trigger(id, again)
+      }
+      const keys = this.byHandAfter.get(id)
+      this.byHandAfter.delete(id)
+      if (keys && !this.stopped) {
+        this.logged(id, 'by-hand', this.tickByHand(id, [...keys]))
       }
     }
   }

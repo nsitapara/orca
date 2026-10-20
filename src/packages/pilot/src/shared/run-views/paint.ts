@@ -104,7 +104,7 @@ function isLive(run: RunRow): boolean {
 }
 
 // Nish said no on its ask-first card: nothing after the ask ran.
-function askSkipped(run: ActivityRun): boolean {
+export function askSkipped(run: Pick<ActivityRun, 'trigger' | 'status' | 'steps'>): boolean {
   return run.trigger === 'ask_first' && run.status === 'cancelled' && run.steps.length === 0
 }
 

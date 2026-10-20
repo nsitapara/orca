@@ -16,6 +16,7 @@ import { InboxFilters } from './InboxFilters'
 import { type FocusPlace, InboxFocus } from './InboxFocus'
 import { InboxRows } from './InboxRows'
 import { InboxTabs } from './InboxTabs'
+import { InboxViewControls } from './InboxViewControls'
 import { InboxStyle } from './inbox-style'
 import {
   emptyTabText,
@@ -27,6 +28,7 @@ import {
 } from './inbox-tabs'
 import { useInboxViewPrefs } from './inbox-view-prefs'
 import { InMotionPanel } from './InMotionPanel'
+import { KindSection } from './KindFilter'
 import { ProjectBlock } from './ProjectLine'
 import { SectionHeading } from './SectionHeading'
 import { useElementWidth } from './use-element-width'
@@ -38,7 +40,7 @@ import { useWaiting } from './use-waiting'
 
 // The page's own width from which the card list sits beside the cards.
 const WIDE_PX = 960
-const NO_FILTERS: CardFilters = { kinds: [], query: '' }
+const NO_FILTERS: CardFilters = { kinds: [] }
 const FIRST_CARD: FocusPlace = { key: null, at: 0 }
 // Group by Nothing makes one section with no label: its region still needs a name.
 const UNGROUPED_NAME = 'All cards'
@@ -102,7 +104,6 @@ export function InboxPage(): React.JSX.Element {
   const { tab } = prefs
   const onDone = tab === 'done'
   const {
-    query,
     filtered,
     places,
     inTabItems,
@@ -135,7 +136,6 @@ export function InboxPage(): React.JSX.Element {
   const notePick = usePendingInboxCardPick({
     items: inbox?.items ?? null,
     loading: reads.some((r) => r.value === null && r.error === null),
-    stale: query !== filters.query,
     visibleKeys,
     tab,
     filtered,
@@ -173,7 +173,7 @@ export function InboxPage(): React.JSX.Element {
     setSelected(key)
     document.getElementById(`card-${key}`)?.scrollIntoView?.({ block: 'start' })
   }
-  // Stable, with the card renderers below, so the card bodies are kept while only the search box changes.
+  // Stable, with the card renderers below, so a render that changes no card keeps the card bodies.
   const onSave = useCallback(
     async (i: Hosted<InboxListRow>, answer: Answer) => {
       const key = hostedKey(i.host, i.id)
@@ -247,7 +247,7 @@ export function InboxPage(): React.JSX.Element {
   const emptyText = (
     <p className="text-sm text-muted-foreground">{emptyTabText(tab, filtered, viewerName)}</p>
   )
-  const focusScope = [tab, filters.kinds.join(), query, prefs.group, prefs.sort].join('|')
+  const focusScope = [tab, filters.kinds.join(), prefs.group, prefs.sort].join('|')
   const { view, group } = prefs
   const listBody = useMemo(() => {
     if (view === 'rows') {
@@ -307,6 +307,27 @@ export function InboxPage(): React.JSX.Element {
   ])
   const cardsBody = shown.length ? listBody : emptyText
   const defaultSections = groupHostedItems(defaults, automations)
+  const kindFilter = {
+    kinds: filters.kinds,
+    counts: kindCounts(inTabItems),
+    shown: shownItems.length,
+    total: inTabItems.length,
+    onKinds: (kinds: CardFilters['kinds']) => setFilters({ kinds })
+  }
+  const viewControls = (
+    <InboxViewControls
+      group={prefs.group}
+      sort={prefs.sort}
+      view={prefs.view}
+      onGroup={(group) => {
+        // A section picked under another grouping would come back when this one returns.
+        setPrefs({ group })
+        setSection(ALL)
+      }}
+      onSort={(sort) => setPrefs({ sort })}
+      onView={(view) => setPrefs({ view })}
+    />
+  )
   const doneBody = (
     <InboxDoneTab
       done={done}
@@ -324,43 +345,25 @@ export function InboxPage(): React.JSX.Element {
       <InboxHeader
         listOpen={listOpen}
         onToggleList={toggleList}
-        people={people}
-        viewer={viewer}
-        onViewer={setViewer}
         wide={wide}
         canExpand={detailIds.length > 0}
         allOpen={allOpen}
         onToggleAll={() => setAllDetailsOpen(detailIds, !allOpen)}
+        tabs={
+          <InboxTabs
+            tab={tab}
+            counts={tabCounts(items)}
+            preparingNote={preparingNote(
+              items,
+              (i) => inbox?.preparationWaits.has(hostedKey(i.host, i.id)) ?? false
+            )}
+            doneCount={done.runs.length}
+            onTab={(next) => setPrefs({ tab: next })}
+          />
+        }
+        controls={showList ? viewControls : null}
       />
-      <InboxTabs
-        tab={tab}
-        counts={tabCounts(items)}
-        preparingNote={preparingNote(
-          items,
-          (i) => inbox?.preparationWaits.has(hostedKey(i.host, i.id)) ?? false
-        )}
-        doneCount={done.runs.length}
-        onTab={(next) => setPrefs({ tab: next })}
-      />
-      {onDone ? null : (
-        <InboxFilters
-          filters={filters}
-          kindCounts={kindCounts(inTabItems)}
-          shown={shownItems.length}
-          total={inTabItems.length}
-          group={prefs.group}
-          sort={prefs.sort}
-          view={prefs.view}
-          onFilters={setFilters}
-          onGroup={(group) => {
-            // A section picked under another grouping would come back when this one returns.
-            setPrefs({ group })
-            setSection(ALL)
-          }}
-          onSort={(sort) => setPrefs({ sort })}
-          onView={(view) => setPrefs({ view })}
-        />
-      )}
+      {onDone || showList ? null : <InboxFilters {...kindFilter} controls={viewControls} />}
       <InMotionPanel running={running} entries={queue} onApplyNow={applyNow} />
       {error ? <p className="text-sm text-destructive">{error}</p> : null}
       <HostsNotice
@@ -382,6 +385,7 @@ export function InboxPage(): React.JSX.Element {
       <div className="flex flex-wrap items-start gap-4">
         {showList ? (
           <CardList
+            kinds={<KindSection {...kindFilter} />}
             sections={sections}
             projects={projects}
             total={shownItems.length}

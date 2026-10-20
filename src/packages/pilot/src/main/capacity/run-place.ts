@@ -28,10 +28,12 @@ export function runHome(
   const pushed = homeStep(run.steps.find((s) => s.result?.command === 'git push-branch'))
   const mergedBack = homeStep(run.steps.find((s) => homeSteps.has(s.name) && s.result))
   const kept = run.env?.kept
+  const keptHome = run.env?.keptHome
   const home: RunHome = {
     ...(pushed ? { pushed } : {}),
     ...(mergedBack ? { mergedBack } : {}),
-    ...(kept ? { kept } : {})
+    ...(kept ? { kept } : {}),
+    ...(kept && keptHome ? { keptHome: { state: keptHome.state, reason: keptHome.reason } } : {})
   }
   return Object.keys(home).length > 0 ? home : null
 }

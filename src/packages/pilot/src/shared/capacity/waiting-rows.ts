@@ -5,7 +5,7 @@ import { formatDuration } from '../run/format-duration'
 // How Running and the CLI read the runner's line and the keys it gave up on.
 
 // Waiting on a slot: a capacity hold, or a row from an older Pilot that names none.
-export function waitsForSlot(item: QueuedRun): boolean {
+export function waitsForSlot(item: Pick<QueuedRun, 'holdCode'>): boolean {
   return item.holdCode === undefined || item.holdCode === 'capacity'
 }
 

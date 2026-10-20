@@ -1,31 +1,37 @@
 import { useCallback, useState } from 'react'
 
-const KEY = 'pilot.inbox.listOpen'
-
-function read(): boolean {
+function read(key: string): boolean {
   try {
-    return window.localStorage.getItem(KEY) !== 'false'
+    return window.localStorage.getItem(key) !== 'false'
   } catch {
     return true
   }
 }
 
-function write(open: boolean): void {
+function write(key: string, open: boolean): void {
   try {
-    window.localStorage.setItem(KEY, String(open))
+    window.localStorage.setItem(key, String(open))
   } catch {
     // Private windows and blocked storage: the choice just doesn't persist.
   }
 }
 
+// An open/folded choice remembered in storage under key, open the first time.
+function useStoredOpen(key: string): [boolean, () => void] {
+  const [open, setOpen] = useState(() => read(key))
+  const toggle = useCallback(() => {
+    write(key, !open)
+    setOpen(!open)
+  }, [key, open])
+  return [open, toggle]
+}
+
 // Whether the card list shows; remembered per viewer, open the first time.
 export function useListOpen(): [boolean, () => void] {
-  const [open, setOpen] = useState(read)
-  const toggle = useCallback(() => {
-    setOpen((now) => {
-      write(!now)
-      return !now
-    })
-  }, [])
-  return [open, toggle]
+  return useStoredOpen('pilot.inbox.listOpen')
+}
+
+// Whether the list's Kind section is unfolded.
+export function useKindsOpen(): [boolean, () => void] {
+  return useStoredOpen('pilot.inbox.kindsOpen')
 }

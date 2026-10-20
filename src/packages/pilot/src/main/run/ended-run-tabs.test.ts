@@ -6,7 +6,13 @@ import { createEndedRunTabs, endedRunTerminals, type TurnRow } from './ended-run
 import { worktreeBusy } from '../fields/worktree-busy'
 import { SessionClaims } from './session-claims'
 
-type StepOpts = { status?: RunStatus; sessionId?: string | null; idx?: number; startedAt?: number }
+type StepOpts = {
+  status?: RunStatus
+  sessionId?: string | null
+  idx?: number
+  startedAt?: number
+  detached?: boolean
+}
 
 function harness() {
   const store = PilotStore.open(':memory:')
@@ -69,7 +75,8 @@ function harness() {
       status: 'done',
       terminalHandle: handle,
       paneKey: `${handle}:pane`,
-      finishedAt: startedAt + 9
+      finishedAt: startedAt + 9,
+      detached: o.detached ?? false
     })
     store.runs.update(runId, { status: o.status ?? 'done', finishedAt: startedAt + 10 })
     open.set(handle, `${handle}:pane`)
@@ -206,6 +213,13 @@ describe('closing ended runs’ tabs', () => {
     expect(h.closed).toEqual(['after-restart'])
   })
 
+  it('never closes a tab holding a detached step, though every run on it ended', async () => {
+    const h = harness()
+    h.step('r1', 'h1', { detached: true })
+    await h.tabs.pass()
+    expect(h.closed).toEqual([])
+  })
+
   // r2 is an answer run that typed its answers into the asking run's tab: the tab closes once both runs ended, judged by
   // the answer step's end.
   it('a tab two runs used closes once both ended', async () => {
@@ -254,6 +268,12 @@ describe('endedRunTerminals', () => {
       true,
       false
     ])
+  })
+
+  it('a tab holding a detached step isn’t ended', () => {
+    const h = harness()
+    h.step('r1', 'h1', { detached: true })
+    expect(endedRunTerminals(h.store, [tab('h1')], h.rowsOfPane)(tab('h1'))).toBe(false)
   })
 
   it('a tab with a turn begun after its last step ended was taken over, so it isn’t ended', () => {

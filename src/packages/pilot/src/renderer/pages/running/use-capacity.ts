@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import type { CapacityPayload, RetryKey } from '../../../shared/api-types-capacity'
+import type { CapacityPayload, GoNowKey, RetryKey } from '../../../shared/api-types-capacity'
 import { answered } from '../../hosts/answered-reads'
 import { useHostPoll, type HostRead } from '../../hosts/host-poll'
 import { hostRpc } from '../../hosts/host-rpc'
@@ -82,6 +82,7 @@ export type CapacityChanges = {
   setLimit(host: PilotHostRef, limit: number | null): Promise<void>
   setRetryLimit(host: PilotHostRef, limit: number): Promise<void>
   retry(host: PilotHostRef, key: RetryKey): Promise<void>
+  goNow(host: PilotHostRef, key: GoNowKey): Promise<void>
 }
 
 // Every machine's figures, polled on its own; a machine's change goes to that machine alone.
@@ -153,6 +154,7 @@ export function useCapacities(): CapacityChanges & {
     saving,
     setLimit: (host, limit) => change(host, 'pilot.capacity.setLimit', { limit }),
     setRetryLimit: (host, limit) => change(host, 'pilot.capacity.setRetryLimit', { limit }),
-    retry: (host, key) => change(host, 'pilot.capacity.retry', key)
+    retry: (host, key) => change(host, 'pilot.capacity.retry', key),
+    goNow: (host, key) => change(host, 'pilot.capacity.goNow', key)
   }
 }

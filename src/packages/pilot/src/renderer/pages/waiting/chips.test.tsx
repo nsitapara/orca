@@ -185,7 +185,7 @@ describe('colours on the page', () => {
     // No kind chip: neither a card nor its list row says "Left for you" or "Question" (the kind filters may).
     for (const el of [
       ...screen.getAllByRole('article'),
-      screen.getByRole('navigation', { name: 'Cards' })
+      ...container.querySelectorAll('nav [data-row]')
     ]) {
       expect(el.textContent).not.toMatch(/Left for you|Question|Action\b/)
     }

@@ -73,7 +73,9 @@ Every job is a YAML automation in `~/.agents/automations/` (one file per automat
   - `capacity [--set <n>|none]`: the run limit, what runs and waits, and what the runner gave up on (Run limit and the Running page)
 - **Nothing runs until Nish switches it on** (build plan Task 50). An automation's first tick shows in its Activity and in the worktree panel.
 - **`runs_on: Mac mini`** pins an automation to one machine: only that machine's scheduler ticks it. Without it, every Pilot that ticks all jobs ticks it. One line, at most 255 characters. See "Pilot across machines" for what it gates and how it is checked.
+- **`wait: start`** on an agent step ends the step, done, once its session is up (its first hook row in its tab), so a kickoff step stops holding a slot and the run goes on while the session works (`steps.detached`). Until a row comes, the step runs as any other, to its timeout or its tab closing; a row from an earlier step in the same tab doesn't count. The session keeps its run's powers while its tab lives, and an answer run for that item forks a new session instead of typing into it. Pilot refuses `wait: start` on a shell step, and in a `workspace: { env }` job, whose env is deleted when its run ends.
 - **A run's tabs close when it ends**, however it ends (`main/run/ended-run-tabs.ts`). Once every run on an agent tab has ended, the scheduler's next poll (every 15 s) closes it, and Resume reopens the session. A tab is found by its handle or its pane, since a restart can give the terminal a new handle. A tab stays when:
+  - it holds a `wait: start` step's session;
   - its last step has no session id to resume;
   - a turn began there after that step ended (someone took it over);
   - it runs another session now, or its agent exited;
@@ -360,6 +362,7 @@ A run costs the sum of its steps. A Claude step's session id is pinned at launch
 - **A re-check tick acts on the line's items only.** The job's other items read "Waits for its job's next tick": no facts are read or scripts run for them, nothing is stored, and a handed-over id stays pending. `per_tick` overflows wait for the job's own tick too, so `per_tick` keeps pacing the job. A re-check that lands on the job's due slot is its ordinary tick and decides everything.
 - **Re-checks stay quiet.** They are stored with `ticks.recheck = 1`, record only the line's items, and stay out of Activity unless they start a run or hand over; failed ones show. Quiet ones are pruned after a day (the loop prunes at most hourly); other ticks keep 30 days.
 - **By hand:** Run now waits in the same line. Its row keeps the by-hand exemption through every re-check, and its run is recorded as manual.
+- **Go now:** Running offers it on a slot waiter and on an item held only by one of the runner's waits: a retry's wait, quota, `at_once`, `per_tick` or `window`. It (the RPC `pilot.capacity.goNow {automationId, itemKey}`, only where the scheduler runs) marks the item's row (`run_queue.go_now`) and ticks its job by hand with that item, or right after the job's running tick ends, as Retry does. The waits pass it over and it may start past the run limit. A busy worktree, the job's own run on the item (for a run-once job, any run of it still active) and every other hold still hold it. The mark goes with the row when the item starts or leaves the line, so it never carries to the item's next run. An agent in a Pilot run can't use it.
 - An answer run or an approved ask-first card waits only for a free slot (its answer is held), ahead of the line.
 - **Leaving the line:** a row goes when its item starts, stops being eligible or is no longer listed, and when its job is gone, turned off or runs elsewhere (unless Run now queued it). A failed tick drops the job's slot waiters but keeps its held rows: they hold no slot, and they count as checked, so a source that is down doesn't re-tick the job every loop.
 - **Where it shows:** Running lists every row under **Waiting · N** with its place (slot waiters only), job, item, why it waits, and how long since it became due. The count line reads "N waiting for a slot · M held". Activity counts held items as waiting.
@@ -370,12 +373,22 @@ A run costs the sum of its steps. A Claude step's session id is pinned at launch
 - **What counts:** a run that ends `failed` or `timed_out` counts one failure on its key (`handled.failures`), and so do a launch that couldn't start and a stale start swept after a restart (an ask-first job's frees its key, so it asks again). A run that ends done clears the count; a cancelled one doesn't count.
 - **Within the limit** the key is held as `retry`, "Retry N of M at HH:MM. Last run failed: <outcome>", until its wait from the failure is over: the job's `retry_after_failure`, else 10 minutes.
 - **Past the limit** the runner gives up: the key leaves the line, and the failure that crosses the limit leaves one flagged card, "<job> failed N times: <item>", whose context is the last outcome and "Retry it from Running."
-- **Gave up · N** on Running lists the keys given up on in the last 7 days, each with **Retry**, and a failed run under Finished has a **Retry** too. Retry (the RPC `pilot.capacity.retry {automationId, onceKey}`) clears the key's failures, frees it and ticks its job by hand with that key, so the item goes through the job's checks and the runner's gates again; the job's other items wait for its next tick. Run now on the job also starts its given-up keys.
+- **Gave up · N** on Running lists the keys given up on in the last 7 days, each with **Retry**, and a failed or stopped run under Recently finished has a **Retry** too. Retry (the RPC `pilot.capacity.retry {automationId, onceKey}`) clears the key's failures, frees it and ticks its job by hand with that key, so the item goes through the job's checks and the runner's gates again; the job's other items wait for its next tick. Run now on the job also starts its given-up keys.
 - **Not retried on their own:** ask-first jobs (you approve each run). Job 14 keeps its own 3 attempts (its `once_per` includes the attempt). Jobs that set `retry_after_failure` (03, 04, 13) now stop at the limit too.
 
 **`pilot automations capacity`** prints the run limit, the retry limit, what runs, the line and what the runner gave up on. The line's count reads "Waiting: 2 for a slot · 1 held". Slot waiters are numbered and held rows marked `-`, each with why it waits and how long since it became due. Each Gave up key shows its failures and last outcome.
 
 **Recently finished.** Under the line, folded: the last 10 ended runs of jobs that hold a slot. Ran (and a run's Took) leave out the time a run sat ended before Continue run reopened it (`runs.idle_ms`). A run that ended "Nothing to do: …" reads **Nothing to do**, here and in Activity, not Done.
+- **Continue run** on a failed, timed-out or stopped run goes on from the step that broke, in that step's own session when its agent can resume it. It isn't offered on an answer run or an ask-first run you declined. Pilot refuses it for a run in an env workspace (its env went with its end) and for a failed stage run that reads handed-over ids (they went back to its queue); a stopped stage run still holds its ids, so it can go on.
+- **Retry** on a failed run whose key is still failed, or on a stopped run that still holds its key, frees the key and runs its item again from the start (Retries after a failure). It is how a stopped env run runs again.
+
+**Stop.** A running run's card on Running and its run panel offer **Stop** (`pilot.runs.stop {runId}`): the desktop or a paired device (the browser version included), never the CLI. After a yes ("Stop this run? Its agent's tab closes. You can pick it up again from Recently finished."; an answer run's says "Its agent's tab closes, and the cards it was answering go back to your Inbox.", as it has no Continue run or Retry and its cards reopen), Pilot closes the agent's tab, fails its step "Stopped by you", skips every step left (`always` ones too) and ends the run **Cancelled** through its usual end, so its env is taken down and its run-end hooks run. Its `once_per` key is settled done: nothing retries the item on its own.
+- A tab that won't close, or whose agent Pilot can't prove gone, stops nothing, and the card says why.
+- Refused while a step is starting ("try Stop again in a moment") or a shell step runs (it stops when its command exits). Stop isn't offered on a card while its run is on a shell step.
+- A `wait: start` session is left alone: it isn't the run's to close.
+- Pick the run up again from Recently finished, with Continue run or Retry.
+
+**Show tab.** A running run's card, and a running or `wait: start` step in its run panel, offer **Show tab**: it switches to the agent's tab in this window, or says "Its tab is closed". Only this machine's runs have it; another machine's tab can't be shown from here.
 
 **Memory and the suggestion.** On each scheduler poll Pilot sums the RSS of every running agent step's terminal process tree and keeps each run's peak (`runs.peak_rss_bytes`). Shell steps and Docker's containers aren't counted.
 - The suggestion is what can go to jobs (available memory plus what running jobs hold, less 4 GB), divided by the heaviest job's peak over its last 20 measured runs. It is at least 1 and at most 10.
@@ -420,11 +433,11 @@ To set up another machine (a Mac, a Debian server or an Arch box), see [docs/mac
 
 **Actions go to the item's machine.**
 - **Inbox:** answers, Retry preparation, Prepare evidence, Got it and a card's Details go to the card's machine. Open worktree opens that machine's worktree. A report on another machine's card doesn't open here: "This report is on Mac mini; open it there". Apply now asks every machine whose scheduler runs.
-- **Running and Activity:** a run opens, reads its steps and logs, and Resumes or Continues on its own machine. Step Source is hidden for another machine's run.
+- **Running and Activity:** a run opens, reads its steps and logs, and Resumes, Continues or Stops on its own machine. Step Source is hidden for another machine's run.
 - **Automations:** the switch, Dry run and the YAML go to the row's home machine: the one that ticks it, else the one its `runs_on` names, else this machine, else the first that loaded it. The switch edits that machine's copy of the file only.
 - **Nothing falls back to this machine.** With several machines listed, when a row's `runs_on` machine isn't answering, hasn't sent its list yet ("Waiting for Mac mini's list…") or is named by no listed machine, the row's actions are refused with that reason, and the list says "Automations that run on Mac mini can't be changed from here."
 
-**Approvals stay with the owner.** This window is a paired device to every other machine's engine. There, Approve (script routes and drafted changes), Resume and Continue run are refused, and the card or step shows that machine's own words ("Approve actions in Pilot on this Mac", where "this Mac" is the card's). Answering, skipping and revising work. A headless engine has no window, so its cards can be answered but never approved: keep jobs that need approval on a machine with a Pilot window.
+**Approvals stay with the owner.** This window is a paired device to every other machine's engine. There, Approve (script routes and drafted changes), Resume and Continue run are refused, and the card or step shows that machine's own words ("Approve actions in Pilot on this Mac", where "this Mac" is the card's). Answering, skipping, revising and Stop work: Stop ends an agent and starts none. A headless engine has no window, so its cards can be answered but never approved: keep jobs that need approval on a machine with a Pilot window.
 
 **Machine names.** A machine's name is the one its runtime publishes: the name set with `pilot host name`, else the macOS Computer Name, else the hostname. `runs_on`, the chips and Run now all use it. The chips show each engine's name from `pilot.status`, the name `runs_on` matches. Activity's machine tags are Orca's own and can label this Mac differently, such as "Local Mac" (Known gaps).
 
@@ -535,7 +548,7 @@ These need a phone, a second Mac and an iPad on Tailscale. Open Pilot (`dist/mac
 ## Known gaps
 
 - In the browser version, the controls that act on the Mac that runs Pilot, not on your device, are hidden:
-  - Run controls: a step's Resume and Source, a finished run's Resume (Running), and Continue run (a card's From run and the run panel).
+  - Run controls: a step's Resume and Source, a finished run's Resume (Running), and Continue run (a card's From run, Recently finished and the run panel). Stop shows: a paired device may stop a run.
   - A report's Open and a skill's Open.
   - The Playground's Start, replaced by a note that it runs only on that Mac.
 
@@ -576,7 +589,7 @@ These need a phone, a second Mac and an iPad on Tailscale. Open Pilot (`dist/mac
 - **Claude can still paint a prompt suggestion** in a run's tab despite `--prompt-suggestions=false`. A busy-worktree read ignores it once the tab's runs have ended (Automations on the YAML engine); stopping it is a follow-up.
 - **Pilot across machines, not done yet:**
   - A folded job row shows no "Runs on" line; its stage rows do.
-  - Another machine's run panel reads, but its Resume and Continue run are owner-only, and so is Approve: approvals stay with the owner.
+  - Another machine's run panel reads and stops, but its Resume and Continue run are owner-only, and so is Approve: approvals stay with the owner.
   - `runs_on` names one machine, not a list, and job 14 serves only its own machine.
   - Machine names can differ between Pilot and Orca: Pilot's chips use each engine's `pilot.status` name, while Activity's machine tags use Orca's own labels, which can call this Mac "Local Mac". Aligning the two is a follow-up.
   - The worktree panel shows this machine's runs only.

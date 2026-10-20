@@ -1,6 +1,6 @@
 import type Database from '../../../../../main/sqlite/sync-database'
 import type { RunRow } from '../../shared/api-types'
-import type { EnvMode, RunEnvStack } from '../../shared/api-types-env'
+import type { EnvMode, KeptHome, RunEnvStack } from '../../shared/api-types-env'
 import { worktreePathKey } from '../fields/agent-activity'
 import { readEnvJson, type EnvJson } from './env-row'
 import { toRun } from './run-rows'
@@ -85,6 +85,25 @@ export class EnvStore {
            env_removed_at = ?, env_delete_error = NULL, env_retry_at = NULL, env_json = COALESCE(?, env_json) WHERE id = ?`
       )
       .run(at, json, runId)
+  }
+
+  keptHome(runId: string, home: KeptHome): void {
+    this.db
+      .prepare('UPDATE runs SET env_json = ? WHERE id = ?')
+      .run(JSON.stringify({ ...this.json(runId), keptHome: home }), runId)
+  }
+
+  // Removed throwaways whose kept branch isn't in their home yet and whose next check is due (main/envs/kept-home.ts).
+  keptDue(at: number): RunRow[] {
+    return this.db
+      .prepare(
+        `SELECT * FROM runs WHERE ${ENDED} AND env_removed_at IS NOT NULL AND home_path IS NOT NULL
+           AND json_extract(env_json, '$.kept') IS NOT NULL
+           AND COALESCE(json_extract(env_json, '$.keptHome.state'), 'waiting') IN ('waiting', 'stuck')
+           AND COALESCE(json_extract(env_json, '$.keptHome.nextAt'), 0) <= ? ORDER BY finished_at, id`
+      )
+      .all(at)
+      .map((r) => toRun(r as never))
   }
 
   // hold_home: the step whose claim on home_path this run holds. The claim queries (store-runs.ts) count it only while

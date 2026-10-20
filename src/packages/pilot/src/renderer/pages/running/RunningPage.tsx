@@ -3,21 +3,25 @@ import { Badge } from '@/components/ui/badge'
 import type {
   CapacityPayload,
   CapacityRun,
+  GoNowKey,
   QueuedRun,
   RetryKey
 } from '../../../shared/api-types-capacity'
+import { canGoNow } from '../../../shared/capacity/go-now'
 import { holdReasonText, waitedText, waitsForSlot } from '../../../shared/capacity/waiting-rows'
 import { formatDuration } from '../../../shared/run/format-duration'
 import { workedMs } from '../../../shared/run/worked-time'
 import { PilotHostProvider, usePilotHost } from '../../hosts/PilotHostContext'
 import { openRun } from '../../run-views/run-panel-state'
+import { useShowTab } from '../../run-views/ShowTab'
+import { useStopRun } from '../../run-views/StopRun'
 import { useNow } from '../waiting/use-now'
 import { FinishedRuns } from './FinishedRuns'
 import { LimitsPanel, LimitsToggle } from './LimitsPanel'
 import { GaveUpRow } from './Retries'
 import { checkOf } from './running-checks'
 import { placeBadgeText, placeReasonText } from './running-place'
-import { runMemoryText, usageText } from './running-text'
+import { runMemoryText, stepText, usageText } from './running-text'
 import { useCapacities, type CapacityChanges, type MachineCapacity } from './use-capacity'
 
 // A machine's changes, bound to it.
@@ -25,18 +29,23 @@ type Changes = {
   onLimit(limit: number | null): void
   onRetryLimit(limit: number): void
   onRetry(key: RetryKey): void
+  onGoNow(key: GoNowKey): void
 }
 
-// Name, where it works and its figures on top; the item under it; then why it isn't in your worktree.
+// Name, where it works, its figures and Open run and Stop on top; the item under it; then why it isn't in your worktree,
+// and what Pilot said to a Stop or Show tab.
 function RunningRow({ run, now }: { run: CapacityRun; now: number }): React.JSX.Element {
   const host = usePilotHost()
   const why = run.place ? placeReasonText(run.place) : null
+  const stop = useStopRun({ id: run.id, status: 'running' }, undefined, run.fromAnswer === true)
+  const show = useShowTab(run.tab)
   return (
     <li className="flex min-w-0 flex-col gap-1 px-3 py-2 text-sm">
       <div className="flex min-w-0 items-center gap-2">
         <span className="min-w-0 truncate font-medium" title={run.automationName}>
           {run.automationName}
         </span>
+        {run.fromAnswer ? <Badge variant="outline">From your answer</Badge> : null}
         {run.place ? <Badge variant="secondary">{placeBadgeText(run.place)}</Badge> : null}
         <span className="ml-auto shrink-0 pl-2 text-xs tabular-nums text-muted-foreground">
           {formatDuration(workedMs(run, now))} · {runMemoryText(run)}
@@ -48,11 +57,21 @@ function RunningRow({ run, now }: { run: CapacityRun; now: number }): React.JSX.
         >
           Open run
         </button>
+        {show.control ? <span className="shrink-0 text-xs">{show.control}</span> : null}
+        {/* Why: Stop refuses a shell step (run-stop.ts); a card without a step (older Pilot) still offers it. */}
+        {run.step?.kind !== 'shell' && stop.control ? (
+          <span className="shrink-0 text-xs">{stop.control}</span>
+        ) : null}
       </div>
       <div className="truncate font-mono text-xs text-muted-foreground" title={run.itemLabel}>
         {run.itemLabel}
       </div>
+      {run.step ? (
+        <div className="truncate text-xs text-muted-foreground">{stepText(run.step)}</div>
+      ) : null}
       {why ? <p className="text-xs text-muted-foreground">{why}</p> : null}
+      {stop.note ? <p className="text-xs text-muted-foreground">{stop.note}</p> : null}
+      {show.note ? <p className="text-xs text-muted-foreground">{show.note}</p> : null}
     </li>
   )
 }
@@ -80,16 +99,20 @@ function QueuedStatus({
   return <Badge variant="secondary">{check ? `Held · ${check.name}` : 'Held'}</Badge>
 }
 
-// Name, status and time on top; the item under it; then the reason across the whole row.
+// Name, status, time and Go now on top; the item under it; then the reason across the whole row.
 function QueuedRow({
   item,
   place,
-  now
+  now,
+  saving,
+  onGoNow
 }: {
   item: QueuedRun
   // Null: it waits on something other than a slot, so it has no place in the slot line.
   place: number | null
   now: number
+  saving: boolean
+  onGoNow(key: GoNowKey): void
 }): React.JSX.Element {
   const reason = holdReasonText(item)
   return (
@@ -103,6 +126,16 @@ function QueuedRow({
         <span className="ml-auto shrink-0 pl-2 text-xs tabular-nums text-muted-foreground">
           {waitedText(item, now)}
         </span>
+        {canGoNow(item) ? (
+          <button
+            type="button"
+            className="shrink-0 text-xs underline disabled:opacity-50"
+            disabled={saving}
+            onClick={() => onGoNow({ automationId: item.automationId, itemKey: item.itemKey })}
+          >
+            Go now
+          </button>
+        ) : null}
       </div>
       <div className="truncate font-mono text-xs text-muted-foreground" title={item.itemLabel}>
         {item.itemLabel}
@@ -165,7 +198,8 @@ function MachineRuns({
   limitsOpen,
   onLimit,
   onRetryLimit,
-  onRetry
+  onRetry,
+  onGoNow
 }: Omit<MachineProps, 'machine' | 'named' | 'onToggleLimits'> & {
   payload: CapacityPayload
   panelId: string
@@ -196,6 +230,8 @@ function MachineRuns({
             item={item}
             place={placeInLine(payload.queued, item)}
             now={now}
+            saving={saving}
+            onGoNow={onGoNow}
           />
         ))}
       </ListSection>
@@ -304,7 +340,8 @@ function changesFor(changes: CapacityChanges, machine: MachineCapacity): Changes
   return {
     onLimit: (limit) => void changes.setLimit(host, limit),
     onRetryLimit: (limit) => void changes.setRetryLimit(host, limit),
-    onRetry: (key) => void changes.retry(host, key)
+    onRetry: (key) => void changes.retry(host, key),
+    onGoNow: (key) => void changes.goNow(host, key)
   }
 }
 

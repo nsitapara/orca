@@ -174,6 +174,20 @@ export function normalizeEnvWorkspace(env: RawEnvWorkspace): EnvWorkspaceDef {
   }
 }
 
+// A detached session lives on in its tab, but an env's folder goes with its run's end.
+export function waitStartErrors(raw: RawAutomation): string[] {
+  if (!rawEnvOf(raw)) {
+    return []
+  }
+  return raw.steps.flatMap((s, i) =>
+    s.wait === 'start'
+      ? [
+          `step ${i + 1}: wait: start needs a workspace that outlives its run: an env is deleted when its run ends`
+        ]
+      : []
+  )
+}
+
 // hold_home claims an env run's home for one shell step (its merge back). Other workspaces hold their worktree for the
 // whole run (item_worktree, new_worktree) or share it by design (main_checkout).
 export function holdHomeErrors(raw: RawAutomation): string[] {

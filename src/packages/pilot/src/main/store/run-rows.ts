@@ -40,6 +40,7 @@ export type StepPatch = Partial<{
   exitCode: number | null
   outputTail: string | null
   sessionPinned: boolean
+  detached: boolean
   launchArgs: string[] | null
   result: StoredResult | null
 }>
@@ -73,11 +74,12 @@ export const STEP_COLUMNS: Record<keyof StepPatch, string> = {
   exitCode: 'exit_code',
   outputTail: 'output_tail',
   sessionPinned: 'session_pinned',
+  detached: 'detached',
   launchArgs: 'launch_args_json',
   result: 'result_json'
 }
 
-// Values go in as they are, except outputs (JSON text) and the pinned flag (0/1), whose columns are
+// Values go in as they are, except outputs (JSON text) and the pinned and detached flags (0/1), whose columns are
 // NOT NULL, and the launch args and the result (JSON text, or NULL).
 export function encodeStep(patch: StepPatch): Record<string, unknown> {
   const encoded: Record<string, unknown> = { ...patch }
@@ -92,6 +94,9 @@ export function encodeStep(patch: StepPatch): Record<string, unknown> {
   }
   if ('sessionPinned' in patch) {
     encoded.sessionPinned = patch.sessionPinned ? 1 : 0
+  }
+  if ('detached' in patch) {
+    encoded.detached = patch.detached ? 1 : 0
   }
   return encoded
 }
@@ -158,6 +163,7 @@ export function toStep(r: Record<string, unknown>): StepRow {
     exitCode: (r.exit_code as number | null) ?? null,
     outputTail: (r.output_tail as string | null) ?? null,
     sessionPinned: Number(r.session_pinned) === 1,
+    detached: Number(r.detached) === 1,
     launchArgs: r.launch_args_json ? (JSON.parse(String(r.launch_args_json)) as string[]) : null,
     result: r.result_json ? (JSON.parse(String(r.result_json)) as StoredResult) : null
   }

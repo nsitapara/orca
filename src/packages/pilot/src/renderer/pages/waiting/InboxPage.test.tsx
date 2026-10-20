@@ -462,40 +462,6 @@ describe('InboxPage', () => {
     })
   })
 
-  it('loads the cards of the person you view as', async () => {
-    serve()
-    render(<InboxPage />)
-    fireEvent.change(await screen.findByRole('combobox', { name: 'Viewing as' }), {
-      target: { value: 'emil' }
-    })
-    await waitFor(() =>
-      expect(pilotRpc).toHaveBeenCalledWith('pilot.inbox.list', { person: 'emil' })
-    )
-  })
-
-  it("keeps the cards shown while another person's list loads, until it answers", async () => {
-    let answerEmil: (list: InboxListPayload) => void = () => {}
-    serve()
-    const served = pilotRpc.getMockImplementation()!
-    pilotRpc.mockImplementation(async (method: string, params?: { person?: string }) =>
-      method === 'pilot.inbox.list' && params?.person === 'emil'
-        ? new Promise<InboxListPayload>((resolve) => (answerEmil = resolve))
-        : served(method, params)
-    )
-    render(<InboxPage />)
-    fireEvent.change(await screen.findByRole('combobox', { name: 'Viewing as' }), {
-      target: { value: 'emil' }
-    })
-    await waitFor(() =>
-      expect(pilotRpc).toHaveBeenCalledWith('pilot.inbox.list', { person: 'emil' })
-    )
-    expect(screen.getByRole('heading', { name: 'Install LibreOffice in the job?' })).toBeTruthy()
-    expect(screen.queryByText(/Nothing waiting/)).toBeNull()
-    await act(async () => answerEmil({ ...LIST, items: [card({ id: 'in_e', title: 'For Emil' })] }))
-    expect(await screen.findByRole('heading', { name: 'For Emil' })).toBeTruthy()
-    expect(screen.queryByRole('heading', { name: 'Install LibreOffice in the job?' })).toBeNull()
-  })
-
   it('saves Approve against the version shown', async () => {
     serve()
     render(<InboxPage />)

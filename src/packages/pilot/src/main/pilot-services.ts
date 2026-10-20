@@ -45,19 +45,16 @@ import { PilotStore } from './store/store'
 import { VaultExporter } from './vault/export'
 import { housekeepStore, recheckPruner } from './store/housekeep'
 import { usageReporter } from './usage-report/reporter'
-import { closeAll, softly } from './pilot-lifecycle'
+import { closeAll, messageOf, softly } from './pilot-lifecycle'
 import { wireRunCapacity } from './capacity/capacity-wiring'
 import { giveUpOnFailure } from './capacity/give-up'
+import { inboxKeptCards } from './envs/kept-home'
 import { pilotHostFor } from './pilot-host'
 import type { PilotContext, PilotHost, PilotServiceOptions, PilotServices } from './pilot-context'
 
 export type { PilotContext, PilotHost, PilotServiceOptions, PilotServices } from './pilot-context'
 
 const log = (message: string): void => console.log(message)
-
-function messageOf(error: unknown): string {
-  return error instanceof Error ? error.message : String(error)
-}
 
 // Each thing opened is pushed on `opened`, so a failure part way closes exactly what is open.
 function openPilot(
@@ -107,7 +104,9 @@ function openPilot(
     dataDir: host.dataDir,
     terminalDraft: (h) => fieldDeps.terminalDraft(h),
     // The rest of a run's end, before its env is removed: an answer run's outputs reach its cards (G6).
-    onRunEnd: (run) => answerRunEnded(store, run)
+    onRunEnd: (run) => answerRunEnded(store, run),
+    // The inbox is made below; no run ends before the scheduler polls.
+    keptCards: inboxKeptCards(() => inbox, log)
   })
   opened.push(() => envs.stop())
   // A stage's run end hands over to the next stage; its run: now reaches the scheduler once made (below).
@@ -124,6 +123,7 @@ function openPilot(
     shell: pilotShellWiring(),
     envs: envs.preparations,
     probe: runtimeStepProbe(runtime, relist),
+    relist,
     log,
     // An answer run's outputs reach its cards (G6), then the run's env is removed (envs.runEnded, above).
     onRunEnd: (run) => envs.runEnded(run),
@@ -284,7 +284,8 @@ function openPilot(
     writeUsageReport: (dir) => usageReports.write(dir),
     resumeSession: (req) => resumeStepSession(runtimeResumeDeps(runtime, store, fieldDeps), req),
     continueRun: (runId) =>
-      continueRun({ store, now, definitionFor, capacity, launcherDeps, wired }, runId)
+      continueRun({ store, now, definitionFor, capacity, launcherDeps, wired }, runId),
+    stopRun: (runId) => wired.engine.stopRun(runId)
   }
 }
 

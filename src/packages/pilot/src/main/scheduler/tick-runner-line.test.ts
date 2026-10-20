@@ -424,6 +424,50 @@ describe('a Retry tick acts on its key and the line only', () => {
   })
 })
 
+describe('Go now on an item waiting out its retry', () => {
+  const started = async () => ({ terminalHandle: 't', paneKey: 'p' })
+  // A key that failed once a minute ago, held by its retry wait; then Go now marks it and ticks it by hand.
+  const goneNow = async (otherRunIn: string | null) => {
+    const ctx = launching(started)
+    const { store, deps, tick } = ctx
+    deps.capacity = runCapacity({ store, definitions: () => [def], now: () => deps.now() })
+    if (otherRunIn !== null) {
+      store.runs.create({
+        id: 'other',
+        automationId: 'other-job',
+        tickId: null,
+        itemKey: 'x',
+        itemLabel: 'x',
+        worktreePath: otherRunIn,
+        startedAt: t1
+      })
+    }
+    store.markHandled(def.id, '1', 'old', t1)
+    store.setHandledStatus(def.id, 'old', 'failed', t1)
+    const held = await tick(t2)
+    expect(held.decisions.map((x) => x.hold?.code)).toEqual(['retry'])
+    store.capacity.markGoNow(def.id, 'mr:1')
+    return { ...ctx, result: await tick(t2 + 1_000, { byHandKeys: new Set(['mr:1']) }) }
+  }
+
+  it('starts it at once, and its next failure waits out its retry again', async () => {
+    const { store, tick, result } = await goneNow(null)
+    expect(result.decisions.map((x) => x.verdict)).toEqual(['started'])
+    expect(store.capacity.queued()).toEqual([])
+    store.setHandledStatus(def.id, store.runs.forTick(result.tickId)[0].id, 'failed', t2 + 2_000)
+    const next = await tick(t2 + 3_000)
+    expect(next.decisions.map((x) => x.hold?.code)).toEqual(['retry'])
+  })
+
+  it('still holds it while another run works in its worktree, keeping the mark', async () => {
+    const { store, result } = await goneNow('/wt/1')
+    expect(result.decisions.map((x) => x.hold?.code)).toEqual(['worktree_busy'])
+    expect(store.capacity.queued().map((q) => [q.holdCode, q.goNow])).toEqual([
+      ['worktree_busy', true]
+    ])
+  })
+})
+
 describe("the line's due time", () => {
   it('puts a card waiting since this morning ahead of an MR first seen weeks ago', async () => {
     const store = PilotStore.open(':memory:')

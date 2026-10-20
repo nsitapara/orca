@@ -22,7 +22,9 @@ import {
 } from './shell-step'
 import { STALE_START_MS, sweepStaleStarts } from './stale-starts'
 import { stepStarterFor } from './step-starters'
+import { endsAtStart } from './step-wait'
 import { holdHomeForStep } from '../envs/home-hold'
+import type { TerminalRelist } from './terminal-relist'
 import { pollRunningSteps, type StepProbe } from './watcher'
 import type { WorkspaceDeps } from './workspace'
 import { stopCancelledPreparations } from './preparation-worker'
@@ -51,6 +53,8 @@ export type EngineWiringInput = {
   engineEnv: EngineEnv
   shell: ShellWiring
   probe: StepProbe
+  // The relister the probe uses, so Stop reads a stale terminal's liveness from the same listing.
+  relist: TerminalRelist
   cost?: CostReader
   log(message: string): void
   // Wired by Tasks 24c (answer runs' outputs) and 25 ({run.answer}); see RunEngineDeps.
@@ -95,6 +99,14 @@ export function wireRunEngine(input: EngineWiringInput): WiredEngine {
     releaseHome: (req) => store.runs.envs.releaseHome(req.run.id, req.idx),
     onEnded: (runId) => void advance(runId)
   })
+  // As launch.ts's closeSessionTerminal: a process the close couldn't stop is a failed close, so
+  // the step stays running (no next step starts beside a live agent) and the next poll retries.
+  const closeTerminal = async (handle: string): Promise<void> => {
+    const closed = await input.runtime.closeTerminal(handle)
+    if (closed.ptyStopVerdict) {
+      throw new Error(`Couldn't close terminal ${handle}: its process is ${closed.ptyStopVerdict}`)
+    }
+  }
   const inner = createRunEngine({
     store,
     now,
@@ -107,7 +119,10 @@ export function wireRunEngine(input: EngineWiringInput): WiredEngine {
     runChoice: input.runChoice,
     handover: input.handover,
     failureCounted: input.failureCounted,
-    envs: input.envs
+    envs: input.envs,
+    // Stop closes a step's tab as the watcher does: a process it couldn't stop leaves the run as it was.
+    closeTerminal,
+    relist: input.relist
   })
   // Runs whose startRun is still going (B8: making the workspace): the sweep never closes their pending step.
   const opening = new Set<string>()
@@ -150,6 +165,14 @@ export function wireRunEngine(input: EngineWiringInput): WiredEngine {
     missingSince.set(run.automationId, since)
     return Math.max(since - (step.startedAt ?? since), 0) + MISSING_DEFINITION_TIMEOUT_MS
   }
+  const endsAtStartOf = (step: { runId: string; idx: number }): boolean => {
+    const run = store.runs.get(step.runId)
+    if (!run) {
+      return false
+    }
+    const def = input.definitionFor(run.automationId) ?? lastKnown.get(run.automationId) ?? null
+    return endsAtStart(def, run, step.idx)
+  }
   const sweep = (): void =>
     sweepStaleStarts(store, now, log, {
       olderThanMs: STALE_START_MS,
@@ -180,16 +203,9 @@ export function wireRunEngine(input: EngineWiringInput): WiredEngine {
       sweepOrphanShellSteps(store, shell.isLive, now, log)
       await pollRunningSteps(store, input.probe, input.cost ?? claudeTranscriptCost, now, {
         timeoutOf,
-        // As launch.ts's closeSessionTerminal: a process the close couldn't stop is a failed close, so
-        // the step stays running (no next step starts beside a live agent) and the next poll retries.
-        closeTerminal: async (handle) => {
-          const closed = await input.runtime.closeTerminal(handle)
-          if (closed.ptyStopVerdict) {
-            throw new Error(
-              `Couldn't close terminal ${handle}: its process is ${closed.ptyStopVerdict}`
-            )
-          }
-        },
+        endsAtStart: endsAtStartOf,
+        log,
+        closeTerminal,
         onStepEnded: (runId) => engine.advance(runId),
         sessionLearned: (step, sessionId) =>
           rememberLearnedSession(store, input.definitionFor, step, sessionId, now())

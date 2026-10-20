@@ -8,6 +8,7 @@ export function testStep(over: Partial<StepDef> = {}): StepDef {
     mode: null,
     prompt: 'Do it',
     promptStyle: 'wrapped',
+    wait: 'finish',
     args: [],
     session: { kind: 'new' },
     run: null,

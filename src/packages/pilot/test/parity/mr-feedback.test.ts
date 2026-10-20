@@ -91,7 +91,6 @@ describe('06 · Address reviewer feedback: the definition', () => {
         "{steps.address.replies} > 0 and {steps.address.head} == null or {steps.address.replies} > 0 and {steps.push.outcome} == 'ok'"
       ],
       ['card', 'shell', null, false, "{steps.push.outcome} != 'ok'"],
-      ['forget_branch', 'shell', null, true, "{env.mode} == 'throwaway'"],
       ['forget_replies', 'shell', null, true, null],
       ['flag_failed', 'shell', null, true, '{run.failed} == true']
     ])
@@ -151,12 +150,6 @@ describe('06 · Address reviewer feedback: the definition', () => {
       WHY: '{steps.push.reason}',
       HOME_WT: '{worktree.path}',
       AFTER: expect.stringContaining('wait for this push')
-    })
-    expect(step('forget_branch')).toMatchObject({
-      always: true,
-      run: 'pilotcli git delete-branch "$KEEP_BRANCH" --kept-in "$HOME_WT" --pushed-to "$BRANCH"',
-      exitCodes: { ok: [0], skip: [3] },
-      timeoutMs: 2 * 60_000
     })
     expect(step('forget_replies')).toMatchObject({
       run: 'rm -rf "$DIR"',

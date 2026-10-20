@@ -291,7 +291,7 @@ export class PilotStore {
     return this.handled.settle(automationId, runId, status, at)
   }
 
-  // Manual Retry: the failed key's count is cleared and it is free, so it is due. Returns the item its last run was about.
+  // Manual Retry: a failed or stopped run's key is freed, so it is due. Returns the item its last run was about.
   resetFailures(automationId: string, onceKey: string): string | null {
     return this.handled.resetFailures(automationId, onceKey)
   }
@@ -300,8 +300,8 @@ export class PilotStore {
     return this.handled.gaveUp(limit, since)
   }
 
-  failedKeysOf(runIds: readonly string[]): Map<string, string> {
-    return this.handled.failedKeysOf(runIds)
+  retryKeysOf(runIds: readonly string[]): Map<string, string> {
+    return this.handled.retryKeysOf(runIds)
   }
 
   seenKeys(automationId: string): Set<string> {

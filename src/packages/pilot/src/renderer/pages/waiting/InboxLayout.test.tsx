@@ -98,6 +98,10 @@ function serve(list = LIST, done: DoneRun[] = []) {
   })
 }
 
+// A list button that picks a section: not a card's row, nor the Kind section's.
+const isSectionButton = (b: HTMLElement) =>
+  !b.hasAttribute('data-row') && !b.closest('[aria-label="Kind"]')
+
 // Tabs and grouping persist in a module cache and storage; each test starts from the defaults.
 beforeEach(() => {
   window.localStorage.clear()
@@ -111,20 +115,23 @@ describe('the Inbox layout', () => {
     pilotRpc.mockReset()
   })
 
-  it('has a one-line header: list toggle, Inbox with its count, and the two dropdowns', async () => {
+  it('has a one-row header beside the list: toggle, Inbox, the tabs and the view controls, kinds in the list', async () => {
     serve()
     const { container } = render(<InboxPage />)
     await screen.findByRole('heading', { name: 'F1 Fixture' })
-    const header = container.querySelector('header')!
+    const header = within(container.querySelector('header')!)
     expect(
-      within(header)
-        .getByRole('button', { name: 'Hide the card list' })
-        .getAttribute('aria-expanded')
+      header.getByRole('button', { name: 'Hide the card list' }).getAttribute('aria-expanded')
     ).toBe('true')
-    expect(within(header).getByRole('heading', { name: 'Inbox' })).toBeTruthy()
-    expect(within(header).getByRole('combobox', { name: 'Viewing as' })).toBeTruthy()
-    expect(within(header).queryByRole('combobox', { name: 'Worktree filter' })).toBeNull()
-    expect(header.textContent).not.toContain('Every automation leaves')
+    expect(header.getByRole('heading', { name: 'Inbox' })).toBeTruthy()
+    expect(header.getByRole('toolbar', { name: 'Card status' })).toBeTruthy()
+    expect(header.getByRole('combobox', { name: 'Group by' })).toBeTruthy()
+    expect(header.getByRole('group', { name: 'View' })).toBeTruthy()
+    expect(
+      within(screen.getByRole('navigation', { name: 'Cards' })).getByRole('group', { name: 'Kind' })
+    ).toBeTruthy()
+    expect(screen.queryByRole('combobox', { name: 'Viewing as' })).toBeNull()
+    expect(screen.queryByRole('searchbox')).toBeNull()
   })
 
   it('puts interleaved cards in sections, each under one sticky heading with its count', async () => {
@@ -175,7 +182,7 @@ describe('the Inbox layout', () => {
     const list = screen.getByRole('navigation', { name: 'Cards' })
     const headings = within(list)
       .getAllByRole('button')
-      .filter((b) => !b.hasAttribute('data-row'))
+      .filter(isSectionButton)
       .map((b) => b.getAttribute('aria-label') ?? b.textContent)
     expect(headings).toEqual([
       'All · 4',
@@ -416,13 +423,20 @@ describe('the filter by page width', () => {
     expect(screen.getByRole('button', { name: 'Hide the card list' })).toBeTruthy()
   })
 
-  it('on a narrow page shows badges and no list, and no fold button', async () => {
+  it('on a narrow page shows badges and no list, no fold button, and the kinds and view controls under the header', async () => {
     serve()
-    render(<InboxPage />)
+    const { container } = render(<InboxPage />)
     await screen.findByRole('heading', { name: 'F1 Fixture' })
     fireWidth(700)
     expect(list()).toBeNull()
     expect(screen.queryByRole('button', { name: /the card list/ })).toBeNull()
+    const header = container.querySelector('header')!
+    for (const control of [
+      screen.getByRole('group', { name: 'Kind' }),
+      screen.getByRole('combobox', { name: 'Group by' })
+    ]) {
+      expect(header.contains(control)).toBe(false)
+    }
     const bar = within(badges()!)
     expect(bar.getAllByRole('button').map((b) => b.textContent)).toEqual([
       'All· 4',
@@ -717,16 +731,13 @@ describe('one status tab at a time', () => {
     expect(screen.getByRole('region', { name: 'Done for you' })).toBeTruthy()
     expect(screen.queryByRole('heading', { name: 'F1 Fixture' })).toBeNull()
     expect(screen.queryByRole('navigation', { name: 'Cards' })).toBeNull()
-    expect(screen.queryByRole('searchbox', { name: 'Search cards' })).toBeNull()
+    expect(screen.queryByRole('group', { name: 'Kind' })).toBeNull()
   })
 
-  it('shows a card the run panel names but the tab and search hide under All, unfiltered, and picks it', async () => {
+  it('shows a card the run panel names but the tab hides under All, and picks it', async () => {
     serve({ ...LIST, items: [F1, QUEUED] })
     render(<InboxPage />)
     await screen.findByRole('heading', { name: 'F1 Fixture' })
-    fireEvent.change(screen.getByRole('searchbox', { name: 'Search cards' }), {
-      target: { value: 'F1' }
-    })
     act(() => showInboxCard('queued'))
     await waitFor(() =>
       expect(document.getElementById('card-queued')?.hasAttribute('data-selected')).toBe(true)
@@ -734,7 +745,6 @@ describe('one status tab at a time', () => {
     expect(tabs().getByRole('button', { name: 'All · 2' }).getAttribute('aria-pressed')).toBe(
       'true'
     )
-    expect(screen.getByRole('searchbox', { name: 'Search cards' })).toHaveProperty('value', '')
     expect(pendingInboxCard()).toBeNull()
     setPilotAutomationsView('automations')
   })
@@ -778,7 +788,7 @@ describe('one status tab at a time', () => {
     expect(
       within(nav())
         .getAllByRole('button')
-        .filter((b) => !b.hasAttribute('data-row'))
+        .filter(isSectionButton)
         .map((b) => b.textContent)
     ).toEqual(['All · 4'])
   })

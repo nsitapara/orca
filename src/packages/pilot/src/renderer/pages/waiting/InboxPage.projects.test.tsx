@@ -68,7 +68,7 @@ describe('cards by project', () => {
       nav()
         .getAllByRole('group')
         .map((g) => g.getAttribute('aria-label'))
-    ).toEqual(['web-platform', 'pilot', 'Not in a worktree'])
+    ).toEqual(['Kind', 'web-platform', 'pilot', 'Not in a worktree'])
     expect(regions()).toEqual(['alpha', 'gamma', 'beta', '!1579'])
     const web = screen
       .getAllByRole('group', { name: 'web-platform' })
@@ -113,15 +113,5 @@ describe('cards by project', () => {
     fireEvent.click(nav().getByRole('button', { name: 'gamma · 1' }))
     expect(regions()).toEqual(['gamma'])
     expect(screen.getByText('1 worktree · 1 card')).toBeTruthy()
-  })
-
-  it('finds a card by its project’s name', async () => {
-    render(<InboxPage />)
-    await screen.findByRole('heading', { name: 'In alpha' })
-    fireEvent.change(screen.getByRole('searchbox', { name: 'Search cards' }), {
-      target: { value: 'pilot' }
-    })
-    expect(await screen.findByRole('heading', { name: 'In beta' })).toBeTruthy()
-    expect(screen.queryByRole('heading', { name: 'In alpha' })).toBeNull()
   })
 })

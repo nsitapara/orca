@@ -510,6 +510,37 @@ describe('PilotScheduler.trigger: a feed’s run: now ticks the receiving stage'
   })
 })
 
+describe('PilotScheduler.tickByHand: Retry and Go now', () => {
+  const settle = () => new Promise((resolve) => setTimeout(resolve, 0))
+
+  it("ticks once more by hand after the job's running tick (busy), with every key asked meanwhile", async () => {
+    const d = deps([def('ci', 'manual')], Date.UTC(2026, 9, 13, 18, 5), null)
+    const options: TickOptions[] = []
+    let release: () => void = () => {}
+    d.runTick = vi.fn((_x, opts) => {
+      options.push(opts)
+      if (options.length > 1) {
+        return Promise.resolve(OK)
+      }
+      return new Promise<TickResult>((resolve) => (release = () => resolve(OK)))
+    })
+    const s = new PilotScheduler(d)
+    // A re-check that read the line before Go now marked its row.
+    const recheck = s.tickNow('ci', { dryRun: false, recheck: true })
+    expect(await s.tickByHand('ci', ['mr:7'])).toEqual({ status: 'busy' })
+    expect(await s.tickByHand('ci', ['7', 'mr:8'])).toEqual({ status: 'busy' })
+    release()
+    await recheck
+    await settle()
+    expect(options).toEqual([
+      { dryRun: false, recheck: true },
+      { dryRun: false, byHandKeys: new Set(['mr:7', '7', 'mr:8']) }
+    ])
+    expect(await s.tickByHand('ci', ['mr:9'])).toEqual(OK)
+    expect(options).toHaveLength(3)
+  })
+})
+
 describe('PilotScheduler run queue', () => {
   const at1012 = Date.UTC(2026, 9, 10, 19, 12) // 12:12 PDT
 
