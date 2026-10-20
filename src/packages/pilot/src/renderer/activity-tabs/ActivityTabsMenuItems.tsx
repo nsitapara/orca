@@ -1,9 +1,11 @@
 import { DropdownMenuCheckboxItem } from '@/components/ui/dropdown-menu'
 import { pilotStore } from '../store'
 import {
+  setActivityHideAutomationRuns,
   setActivityHideTerminals,
   setActivityShowAllTabs,
   setActivityShowRecentWorktrees,
+  useActivityHideAutomationRuns,
   useActivityHideTerminals,
   useActivityShowAllTabs,
   useActivityShowRecentWorktrees
@@ -36,27 +38,44 @@ function useHideTerminalsOffered(): boolean {
   return useActivityShowAllTabs() && pilotStore() !== null
 }
 
-// pilot-hook: activity-tabs-filter-menu. "Hide terminals" in the Filters section, beside upstream's.
+// pilot-hook: activity-tabs-filter-menu. "Hide terminals" and "Hide automation runs" in the Filters section, beside
+// upstream's.
 export function ActivityTabsFilterMenuItems(): React.JSX.Element | null {
-  const offered = useHideTerminalsOffered()
+  const terminalsOffered = useHideTerminalsOffered()
   const hideTerminals = useActivityHideTerminals()
-  if (!offered) {
+  const hideAutomationRuns = useActivityHideAutomationRuns()
+  if (!pilotStore()) {
     return null
   }
   return (
-    <DropdownMenuCheckboxItem
-      checked={hideTerminals}
-      onCheckedChange={(checked) => setActivityHideTerminals(checked === true)}
-      onSelect={(event) => event.preventDefault()}
-    >
-      Hide terminals
-    </DropdownMenuCheckboxItem>
+    <>
+      {terminalsOffered && (
+        <DropdownMenuCheckboxItem
+          checked={hideTerminals}
+          onCheckedChange={(checked) => setActivityHideTerminals(checked === true)}
+          onSelect={(event) => event.preventDefault()}
+        >
+          Hide terminals
+        </DropdownMenuCheckboxItem>
+      )}
+      <DropdownMenuCheckboxItem
+        checked={hideAutomationRuns}
+        onCheckedChange={(checked) => setActivityHideAutomationRuns(checked === true)}
+        onSelect={(event) => event.preventDefault()}
+      >
+        Hide automation runs
+      </DropdownMenuCheckboxItem>
+    </>
   )
 }
 
-// pilot-hook: activity-tabs-filter-count. "Hide terminals" counts toward the options badge while it applies.
+// pilot-hook: activity-tabs-filter-count. Pilot's filters count toward the options badge while they apply.
 export function useActivityTabsFilterCount(): number {
-  const offered = useHideTerminalsOffered()
+  const terminalsOffered = useHideTerminalsOffered()
   const hideTerminals = useActivityHideTerminals()
-  return offered && hideTerminals ? 1 : 0
+  const hideAutomationRuns = useActivityHideAutomationRuns()
+  if (!pilotStore()) {
+    return 0
+  }
+  return (terminalsOffered && hideTerminals ? 1 : 0) + (hideAutomationRuns ? 1 : 0)
 }

@@ -71,4 +71,29 @@ describe('ActivityStore', () => {
     ])
     expect(store.activity.children('done').map((r) => r.id)).toEqual(['answer'])
   })
+
+  // "Hide automation runs": a step's pane key is `<tabId>:<leafId>`.
+  it('finds the tabs a step ran in, by whole tab id', () => {
+    store = PilotStore.open(':memory:')
+    run('r1')
+    store.runs.createStep({
+      runId: 'r1',
+      idx: 0,
+      name: 'a',
+      agent: 'claude',
+      skill: null,
+      startedAt: 1
+    })
+    store.runs.updateStep('r1', 0, { paneKey: 'tab-1:leaf' })
+    store.runs.createStep({
+      runId: 'r1',
+      idx: 1,
+      name: 'b',
+      agent: 'claude',
+      skill: null,
+      startedAt: 2
+    })
+    expect(store.activity.automationTabs(['tab-1', 'tab', 'tab-2', 'person'])).toEqual(['tab-1'])
+    expect(store.activity.automationTabs([])).toEqual([])
+  })
 })

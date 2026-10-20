@@ -34,6 +34,9 @@ const ActivityList = z.object({
   skipQuiet: z.boolean().optional()
 })
 const RunGet = z.object({ runId: z.string().min(1) })
+const AutomationTabs = z.object({
+  tabIds: z.array(z.string().min(1).max(512)).max(1000)
+})
 
 // Activity across automations and the run panel (spec §4). The reads a paired device may call too; Continue only the
 // desktop app.
@@ -56,6 +59,13 @@ export function buildRunMethods(ctx: () => PilotContext) {
       permission: 'workspace',
       params: RunGet,
       handler: (p) => runDetail(ctx(), p.runId)
+    }),
+    // Activity's "Hide automation runs": the tabs among these a Pilot step ran in.
+    defineMethod({
+      name: 'pilot.runs.automationTabs',
+      permission: 'workspace',
+      params: AutomationTabs,
+      handler: (p) => ({ tabIds: ctx().store.activity.automationTabs(p.tabIds) })
     }),
     defineMethod({
       name: 'pilot.runs.continue',
