@@ -46,6 +46,7 @@ function setup(yaml = YAML, startMs = 11 * MIN, seen: Seen = null, envs?: EnvPre
   const def = definitionOf(yaml)
   const runtime = { closeTerminal: vi.fn(async () => ({})) }
   const started: StepStartRequest[] = []
+  const log = vi.fn()
   const wired = wireRunEngine({
     runtime: runtime as never,
     store,
@@ -80,7 +81,7 @@ function setup(yaml = YAML, startMs = 11 * MIN, seen: Seen = null, envs?: EnvPre
     },
     probe: { status: async () => 'working' as const, started: () => false, session: () => seen },
     cost: async () => ({ costUsd: null, tokens: 0 }),
-    log: () => {},
+    log,
     envs
   })
   store.runs.create({
@@ -101,7 +102,7 @@ function setup(yaml = YAML, startMs = 11 * MIN, seen: Seen = null, envs?: EnvPre
     startedAt: 0
   })
   store.runs.updateStep('run-1', 0, { status: 'running', terminalHandle: 't0', paneKey: 'p0' })
-  return { store, runtime, started, wired, clock, removed }
+  return { store, runtime, started, wired, clock, removed, log }
 }
 
 describe('wireRunEngine', () => {
@@ -153,13 +154,12 @@ describe('wireRunEngine', () => {
   it.each(['live', 'unverifiable'] as const)(
     'keeps a step past its timeout running while its process is %s',
     async (verdict) => {
-      const { store, runtime, started, wired } = setup()
+      const { store, runtime, started, wired, log } = setup()
       runtime.closeTerminal.mockResolvedValueOnce({ ptyStopVerdict: verdict })
-      const errors = vi.spyOn(console, 'error').mockImplementation(() => {})
       await wired.poll()
       expect(store.runs.steps('run-1')[0].status).toBe('running')
       expect(started).toEqual([])
-      expect(errors).toHaveBeenCalledWith(
+      expect(log).toHaveBeenCalledWith(
         `pilot: couldn't poll step run-1/0: Couldn't close terminal t0: its process is ${verdict}`
       )
       await wired.poll()
@@ -204,7 +204,6 @@ describe('wireRunEngine', () => {
     answerRun(store)
     const close = async (handle: string) => (handle === 'ta' ? { ptyStopVerdict: 'live' } : {})
     runtime.closeTerminal.mockImplementation(close as never)
-    vi.spyOn(console, 'error').mockImplementation(() => {})
     await wired.poll()
     expect(store.runs.get('ans-1')?.status).toBe('running')
     runtime.closeTerminal.mockImplementation(async () => ({}))

@@ -44,7 +44,11 @@ export function runtimeStepProbe(
         return observedState(row)
       }
       try {
-        await runtime.showTerminal(handle)
+        const shown = await runtime.showTerminal(handle)
+        // An exited agent leaves an orphaned, disconnected terminal that showTerminal still answers for.
+        if (shown.orphaned && !shown.connected) {
+          return (await relist(handle, paneKey)) ? 'working' : 'gone'
+        }
         return 'working'
       } catch (error) {
         if (!isTerminalGoneError(error)) {
@@ -81,6 +85,7 @@ export type StepPollHooks = {
   timeoutOf(step: OpenStep): number | null
   // The step is `wait: start`: it ends done, detached, once its session is up.
   endsAtStart(step: OpenStep): boolean
+  log(message: string): void
   closeTerminal(handle: string): Promise<void>
   // The step ended (done, failed or timed out): the run engine starts the next step or ends the run.
   onStepEnded(runId: string): Promise<void>
@@ -206,7 +211,7 @@ export async function pollRunningSteps(
     try {
       await pollStep(store, step, probe, cost, now, hooks)
     } catch (error) {
-      console.error(
+      hooks.log(
         `pilot: couldn't poll step ${step.runId}/${step.idx}: ${error instanceof Error ? error.message : String(error)}`
       )
     }

@@ -190,6 +190,7 @@ export function wireRunEngine(input: EngineWiringInput): WiredEngine {
       await pollRunningSteps(store, input.probe, input.cost ?? claudeTranscriptCost, now, {
         timeoutOf,
         endsAtStart: endsAtStartOf,
+        log,
         // As launch.ts's closeSessionTerminal: a process the close couldn't stop is a failed close, so
         // the step stays running (no next step starts beside a live agent) and the next poll retries.
         closeTerminal: async (handle) => {

@@ -63,6 +63,7 @@ function hooks(over: Partial<StepPollHooks> = {}) {
   return {
     timeoutOf: () => null,
     endsAtStart: () => false,
+    log: vi.fn(),
     closeTerminal: vi.fn(async () => {}),
     onStepEnded: vi.fn(async () => {}),
     ...over
@@ -166,7 +167,6 @@ describe('pollRunningSteps', () => {
         }
       })
     })
-    vi.spyOn(console, 'error').mockImplementation(() => {})
     await pollRunningSteps(store, probe('done'), noCost, () => 9, h)
     expect(store.runs.steps('run-1')[0].status).toBe('done')
     expect(store.runs.steps('run-2')[0].status).toBe('done')
@@ -187,7 +187,6 @@ describe('pollRunningSteps', () => {
       },
       session: () => null
     }
-    vi.spyOn(console, 'error').mockImplementation(() => {})
     await pollRunningSteps(store, flaky, noCost, () => 9, hooks())
     expect(store.runs.steps('run-1')[0].status).toBe('running')
     expect(store.runs.steps('run-2')[0].status).toBe('done')
@@ -248,7 +247,6 @@ describe('pollRunningSteps', () => {
         throw new Error('runtime_unavailable')
       })
     })
-    vi.spyOn(console, 'error').mockImplementation(() => {})
     await pollRunningSteps(store, probe('working'), noCost, () => 2 * HOUR, h)
     expect(store.runs.steps('run-1')[0].status).toBe('running')
     expect(h.onStepEnded).not.toHaveBeenCalled()
@@ -291,6 +289,49 @@ describe('runtimeStepProbe.status', () => {
     expect(h.onStepEnded).toHaveBeenCalledWith('run-1')
   })
 
+  // Claude exited: the pane's rows are cleared and the terminal is orphaned, yet showTerminal still answers.
+  describe('an orphaned, disconnected terminal', () => {
+    const orphaned = async () => ({ orphaned: true, connected: false })
+
+    it.each([
+      ['relist cannot find it', false, 'gone'],
+      ['relist finds it', true, 'working']
+    ])('asks relist and answers by it (%s)', async (_name, found, expected) => {
+      const relist = vi.fn(async () => found)
+      const p = probeFor(orphaned, [], relist)
+      expect(await p.status('h', 'pane')).toBe(expected)
+      expect(relist).toHaveBeenCalledWith('h', 'pane')
+    })
+
+    it('fails the step with the closed-terminal message when gone', async () => {
+      const store = storeWithRunningStep()
+      const h = hooks()
+      await pollRunningSteps(store, probeFor(orphaned), noCost, () => 9, h)
+      const step = store.runs.steps('run-1')[0]
+      expect(step.status).toBe('failed')
+      expect(step.error).toBe('The terminal closed before the agent finished')
+      expect(h.onStepEnded).toHaveBeenCalledWith('run-1')
+    })
+
+    it('logs and leaves the step running when relist cannot say', async () => {
+      const p = probeFor(orphaned, [], async () => {
+        throw new Error('terminal_liveness_unavailable')
+      })
+      const store = storeWithRunningStep()
+      const h = hooks()
+      await pollRunningSteps(store, p, noCost, () => 9, h)
+      expect(store.runs.steps('run-1')[0].status).toBe('running')
+      expect(h.log).toHaveBeenCalledWith(expect.stringContaining('terminal_liveness_unavailable'))
+    })
+
+    it('leaves a connected terminal working without asking relist', async () => {
+      const relist = vi.fn(async () => false)
+      const p = probeFor(async () => ({ orphaned: false, connected: true }), [], relist)
+      expect(await p.status('h', 'pane')).toBe('working')
+      expect(relist).not.toHaveBeenCalled()
+    })
+  })
+
   // After an app restart showTerminal calls a terminal the daemon still hosts stale; the PTY
   // host's inventory finds it again under its handle or pane, so the run stays open.
   it('keeps a step whose stale terminal the PTY host still lists (restart)', async () => {
@@ -322,7 +363,6 @@ describe('runtimeStepProbe.status', () => {
     )
     await expect(p.status('h', 'pane')).rejects.toThrow('terminal_liveness_unavailable')
     const store = storeWithRunningStep()
-    vi.spyOn(console, 'error').mockImplementation(() => {})
     await pollRunningSteps(store, p, noCost, () => 9, hooks())
     expect(store.runs.steps('run-1')[0].status).toBe('running')
   })
@@ -333,7 +373,6 @@ describe('runtimeStepProbe.status', () => {
     })
     await expect(p.status('h', 'pane')).rejects.toThrow('runtime_unavailable')
     const store = storeWithRunningStep()
-    vi.spyOn(console, 'error').mockImplementation(() => {})
     await pollRunningSteps(store, p, noCost, () => 9, hooks())
     expect(store.runs.steps('run-1')[0].status).toBe('running')
     expect(store.runs.runningCount('a')).toBe(1)
