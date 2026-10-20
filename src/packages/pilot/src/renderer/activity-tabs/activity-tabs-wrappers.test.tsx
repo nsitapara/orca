@@ -13,6 +13,8 @@ import { useAppStore } from '@/store'
 import { registerPilotStore } from '../store'
 import { ActivityTabsGroupHeader } from './ActivityTabsGroupHeader'
 import { ActivityTabsNest } from './ActivityTabsNest'
+import { ActivityRowGroupContext } from './activity-row-group-context'
+import { ActivityTabsFooterLabel } from '../activity-card/ActivityTabsFooterLabel'
 import { withGroupRows } from './activity-tabs-rows'
 import { setActivityInactiveExpanded } from './activity-tabs-setting'
 import { RecentWorktreeRow } from './RecentWorktreeRow'
@@ -64,7 +66,15 @@ function views(groupKey: string) {
     leading: (
       <ActivityTabsThreadLeadingIcon thread={thread}>{UPSTREAM}</ActivityTabsThreadLeadingIcon>
     ),
-    footer: <ActivityTabsThreadFooterIcon thread={thread}>{UPSTREAM}</ActivityTabsThreadFooterIcon>
+    footer: <ActivityTabsThreadFooterIcon thread={thread}>{UPSTREAM}</ActivityTabsThreadFooterIcon>,
+    // Why the provider: the nest tells its rows their group; the footer swaps only under a worktree.
+    footerLabel: (
+      <ActivityRowGroupContext.Provider value={groupKey}>
+        <ActivityTabsFooterLabel worktree={thread.worktree} repo={thread.repo}>
+          {UPSTREAM}
+        </ActivityTabsFooterLabel>
+      </ActivityRowGroupContext.Provider>
+    )
   }
 }
 
@@ -77,7 +87,11 @@ afterEach(() => {
 describe('Pilot wrappers around upstream Activity elements', () => {
   it.each([
     { attached: false, groupKey: 'worktree:wt-1', pilot: [] },
-    { attached: true, groupKey: 'worktree:wt-1', pilot: ['nest', 'header', 'leading', 'footer'] },
+    {
+      attached: true,
+      groupKey: 'worktree:wt-1',
+      pilot: ['nest', 'header', 'leading', 'footer', 'footerLabel']
+    },
     {
       attached: true,
       groupKey: 'pilot:inactive-worktrees',

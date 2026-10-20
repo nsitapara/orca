@@ -5,6 +5,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { isPortaledRowMenuClick, isRowActivationKey } from '@/lib/list-row-interaction'
 import { cn } from '@/lib/utils'
 import { useAppStore } from '@/store'
+import { WorktreeLinksPrefetch } from '../activity-card/worktree-links'
 import { ActivityMachineChip } from '../activity-machines/ActivityMachineChip'
 import { activityGroupMachineRows } from '../activity-machines/use-activity-machine-chips'
 import { pilotStore } from '../store'
@@ -107,17 +108,15 @@ function openWorktree(worktreeId: string): void {
 // sessions, not as one more caption: the worktree in row type, its project beside it, New agent
 // and the Workspaces sidebar's pin (a pinned worktree always shows in Activity, first). Clicking it
 // opens the worktree, as in Projects. It has no fold, so every folder icon sits on the guide line.
+// It fetches the worktree's MR and Linear issue once, for its rows' footers.
 export function ActivityTabsGroupHeader({ group, children }: HeaderProps): ReactNode {
   const worktreeId = group.key.startsWith(WORKTREE_GROUP)
     ? group.key.slice(WORKTREE_GROUP.length)
     : null
-  const project = useAppStore((s) => {
-    const repoId = worktreeId ? s.getKnownWorktreeById(worktreeId)?.repoId : undefined
-    return s.repos.find((repo) => repo.id === repoId)?.displayName ?? null
-  })
-  const pinned = useAppStore((s) =>
-    worktreeId ? s.getKnownWorktreeById(worktreeId)?.isPinned === true : false
-  )
+  const worktree = useAppStore((s) => (worktreeId ? s.getKnownWorktreeById(worktreeId) : undefined))
+  const repo = useAppStore((s) => s.repos.find((r) => r.id === worktree?.repoId) ?? null)
+  const project = repo?.displayName ?? null
+  const pinned = worktree?.isPinned === true
   if (pilotStore() && group.key === INACTIVE_WORKTREES_GROUP_KEY) {
     return <InactiveHeader group={group} />
   }
@@ -145,6 +144,7 @@ export function ActivityTabsGroupHeader({ group, children }: HeaderProps): React
       }}
       className="group flex h-8 cursor-pointer select-none items-center gap-1.5 rounded-md px-1.5 text-foreground transition-colors hover:bg-accent/60"
     >
+      {worktree ? <WorktreeLinksPrefetch worktree={worktree} repo={repo} /> : null}
       <FolderGit2 className="size-3.5 shrink-0 text-muted-foreground" />
       {machineRow ? (
         <ActivityMachineChip worktree={machineRow.worktree} repo={machineRow.repo} />

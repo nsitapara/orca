@@ -15,6 +15,7 @@ import {
   ActivityTabsThreadLeadingIcon
 } from '../../../../packages/pilot/src/renderer/activity-tabs/ActivityTabsThreadIcons' // pilot-hook: activity-tabs-thread-icons
 import { ActivityMachineChip } from '../../../../packages/pilot/src/renderer/activity-machines/ActivityMachineChip' // pilot-hook: activity-machines-chip
+import { ActivityTabsFooterLabel } from '../../../../packages/pilot/src/renderer/activity-card/ActivityTabsFooterLabel' // pilot-hook: activity-tabs-footer-label
 import { activityThreadRowCopy } from './activity-thread-presentation'
 import type { AgentPaneThread } from './activity-thread-types'
 import type { ActivityThreadClickEvent } from './use-activity-thread-selection'
@@ -174,9 +175,12 @@ export const ActivityThreadRow = React.memo(function ActivityThreadRow({
               </ActivityTabsThreadFooterIcon>
               {/* pilot-hook: activity-machines-chip */}
               <ActivityMachineChip worktree={thread.worktree} repo={thread.repo} />
-              <span className="min-w-0 flex-1 truncate" title={workspaceLabel}>
-                {workspaceLabel}
-              </span>
+              <ActivityTabsFooterLabel worktree={thread.worktree} repo={thread.repo}>
+                {/* pilot-hook: activity-tabs-footer-label */}
+                <span className="min-w-0 flex-1 truncate" title={workspaceLabel}>
+                  {workspaceLabel}
+                </span>
+              </ActivityTabsFooterLabel>
               {canJump && showJumpAction ? (
                 <ActivityThreadRowAction
                   label={translate(

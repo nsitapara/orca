@@ -30,6 +30,7 @@ import { getReviewLabel } from '../sidebar/worktree-review-helpers'
 import { ActivityThreadHoverCardSummary } from './activity-thread-hover-card-summary'
 import { ActivityThreadHoverCardTrigger } from './activity-thread-hover-card-trigger'
 import type { AgentPaneThread } from './activity-thread-types'
+import { ActivityTabsHoverCardContent } from '../../../../packages/pilot/src/renderer/activity-card/ActivityTabsHoverCardContent' // pilot-hook: activity-tabs-hover-card
 
 export type ActivityThreadHoverCardProps = {
   thread: AgentPaneThread
@@ -69,7 +70,8 @@ export function ActivityThreadHoverCard({
         {children}
       </ActivityThreadHoverCardTrigger>
       {open ? (
-        <ActivityThreadHoverCardContent
+        <ActivityTabsHoverCardContent
+          fallback={ActivityThreadHoverCardContent} // pilot-hook: activity-tabs-hover-card
           thread={thread}
           detailsHoverControl={detailsHoverControl}
           onJumpToWorkspace={onJumpToWorkspace}
