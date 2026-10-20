@@ -383,6 +383,45 @@ describe('runtimeLauncherDeps', () => {
     ).toBe(expected)
   })
 
+  // Claude's greyed prompt suggestion reads as a draft. Given when the agent's last turn began, a draft is
+  // someone's only if input reached the process after that, or if no record can tell.
+  type InputSeen = { lastInputAt: number | null; freshSpawn?: boolean; turnStartedAt?: number }
+  it.each<[string, InputSeen, SessionTerminalState]>([
+    [
+      'nothing ever typed into a process this app spawned',
+      { lastInputAt: null, turnStartedAt: 10 },
+      'free'
+    ],
+    ['only the input that began the turn', { lastInputAt: 9, turnStartedAt: 10 }, 'free'],
+    ['typed after the turn began', { lastInputAt: 11, turnStartedAt: 10 }, 'busy'],
+    [
+      'no record on a process reattached after a restart',
+      { lastInputAt: null, freshSpawn: false, turnStartedAt: 10 },
+      'busy'
+    ],
+    ['no turn start to judge by', { lastInputAt: 9 }, 'busy']
+  ])('sessionTerminals.state with a draft on screen: %s', async (_name, seen, expected) => {
+    const runtime = runtimeSeeing(
+      {},
+      {
+        showTerminal: async () => ({ ptyId: 'pty-1', incarnationId: 'inc-1' }),
+        terminalRunFacts: {
+          readLastInputAt: () => seen.lastInputAt,
+          read: () => ({ freshSpawn: seen.freshSpawn ?? true, firstUserInputAt: null })
+        }
+      }
+    )
+    const worktrees = { ...idleWorktrees, terminalDraft: async () => 'run the e2e next' }
+    const deps = runtimeLauncherDeps(runtime, worktrees, () => 1, runs(), noPause)
+    expect(
+      await deps.sessionTerminals?.state(
+        { handle: 't', paneKey: 'p' },
+        '00000000-0000-4000-8000-000000000011',
+        { turnStartedAt: seen.turnStartedAt }
+      )
+    ).toBe(expected)
+  })
+
   // Title and foreground caches lag, so "its agent exited" needs fresh evidence for about a second, as
   // upstream's send guard asks (150 ms apart); a read that fails on the way is busy.
   it.each<[string, (boolean | Error)[], SessionTerminalState, number]>([

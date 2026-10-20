@@ -10,6 +10,7 @@ import { runtimeClaims, runtimeSessionTabs, terminalOpen } from './session-tabs'
 import {
   type AgentStepDeps,
   type AgentStepRequest,
+  type DraftJudge,
   PromptNotSentError,
   type KnownTerminal,
   type SessionTerminals,
@@ -144,6 +145,28 @@ async function foregroundAgent(runtime: OrcaRuntimeService, handle: string, paus
   }
 }
 
+// Claude's greyed prompt suggestion reads as a draft, so a draft is someone's only if input reached the
+// process after its last turn began. With no record, only a process this app spawned is known untyped.
+async function typedSince(
+  runtime: OrcaRuntimeService,
+  handle: string,
+  turnStartedAt: number | undefined
+): Promise<boolean> {
+  if (turnStartedAt === undefined) {
+    return true
+  }
+  const { ptyId, incarnationId } = await runtime.showTerminal(handle)
+  if (!ptyId) {
+    return true
+  }
+  const facts = runtime.terminalRunFacts
+  const lastInputAt = facts.readLastInputAt(ptyId)
+  if (lastInputAt === null) {
+    return !facts.read(ptyId, incarnationId).freshSpawn
+  }
+  return lastInputAt > turnStartedAt
+}
+
 // H10's look at a session's old terminal (agent-step.ts checks the store first). The draft is read
 // from the rendered screen (B6); anything unreadable is busy, never gone.
 async function sessionTerminalState(
@@ -151,7 +174,8 @@ async function sessionTerminalState(
   worktrees: LauncherWorktrees,
   { handle, paneKey }: KnownTerminal,
   sessionId: string,
-  pause: Pause
+  pause: Pause,
+  judge: DraftJudge = {}
 ): Promise<SessionTerminalState> {
   if (!paneKey) {
     return 'busy'
@@ -168,7 +192,10 @@ async function sessionTerminalState(
     if (BUSY_STATUS.has(agent.status ?? '') || worktrees.paneState(paneKey) !== 'idle') {
       return 'busy'
     }
-    if ((await worktrees.terminalDraft(handle)).trim() !== '') {
+    if (
+      (await worktrees.terminalDraft(handle)).trim() !== '' &&
+      (await typedSince(runtime, handle, judge.turnStartedAt))
+    ) {
       return 'busy'
     }
     const rows = runtime.getAgentStatusRowsForPane(paneKey)
@@ -226,8 +253,8 @@ export function runtimeSessionTerminals(
   worktrees: LauncherWorktrees,
   pause: Pause = wait
 ): SessionTerminals {
-  const state: SessionTerminals['state'] = (terminal, id) =>
-    sessionTerminalState(runtime, worktrees, terminal, id, pause)
+  const state: SessionTerminals['state'] = (terminal, id, judge) =>
+    sessionTerminalState(runtime, worktrees, terminal, id, pause, judge)
   return {
     state,
     tabs: runtimeSessionTabs(runtime),

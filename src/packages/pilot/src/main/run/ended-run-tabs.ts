@@ -48,6 +48,11 @@ function usedSince(rows: readonly TurnRow[], at: number): boolean {
   )
 }
 
+function lastTurnStart(rows: readonly TurnRow[]): number | undefined {
+  const starts = rows.flatMap((row) => (row.turnStartedAt === undefined ? [] : [row.turnStartedAt]))
+  return starts.length > 0 ? Math.max(...starts) : undefined
+}
+
 function stepsOn(t: OpenTerminal, steps: readonly StepRow[]): StepRow[] {
   return steps.filter(
     (s) => s.terminalHandle === t.handle || (s.paneKey !== null && t.paneKeys.includes(s.paneKey))
@@ -102,7 +107,10 @@ export function createEndedRunTabs(deps: EndedRunTabsDeps): EndedRunTabs {
       }
     }
     try {
-      const state = await terminals.state({ handle, paneKey: step.paneKey }, step.sessionId)
+      // The agent's leftover suggestion reads as a draft; the last turn's start tells it from typing.
+      const state = await terminals.state({ handle, paneKey: step.paneKey }, step.sessionId, {
+        turnStartedAt: lastTurnStart(deps.rowsOf(step.paneKey))
+      })
       if (state === 'other' || state === 'gone') {
         kept.add(handle)
       }

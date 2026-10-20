@@ -15,6 +15,8 @@ function harness() {
   const rows = new Map<string, TurnRow[]>()
   const states = new Map<string, SessionTerminalState>()
   const looked: string[] = []
+  // The turn start each look judged a draft by.
+  const turnStarts: (number | undefined)[] = []
   const closed: string[] = []
   const rowsOfPane = (paneKey: string): TurnRow[] => rows.get(paneKey) ?? []
   const claims = new SessionClaims(() => 0)
@@ -25,8 +27,9 @@ function harness() {
       listing.cutShort ? null : [...open].map(([handle, pane]) => ({ handle, paneKeys: [pane] })),
     rowsOf: rowsOfPane,
     terminals: {
-      state: async (t, sessionId) => {
+      state: async (t, sessionId, opts) => {
         looked.push(`${t.handle}:${claims.holder(sessionId)?.by ?? 'unclaimed'}`)
+        turnStarts.push(opts?.turnStartedAt)
         return states.get(t.handle) ?? 'free'
       },
       close: async (handle) => {
@@ -71,7 +74,20 @@ function harness() {
     store.runs.update(runId, { status: o.status ?? 'done', finishedAt: startedAt + 10 })
     open.set(handle, `${handle}:pane`)
   }
-  return { store, open, rows, rowsOfPane, states, looked, closed, claims, listing, tabs, step }
+  return {
+    store,
+    open,
+    rows,
+    rowsOfPane,
+    states,
+    looked,
+    turnStarts,
+    closed,
+    claims,
+    listing,
+    tabs,
+    step
+  }
 }
 
 describe('closing ended runs’ tabs', () => {
@@ -148,12 +164,17 @@ describe('closing ended runs’ tabs', () => {
     expect(h.closed).toEqual([])
   })
 
-  it('closes under the session’s claim and lets it go after', async () => {
+  // The last turn's start lets the look tell the agent's leftover suggestion from someone's typing.
+  it('closes under the session’s claim, judging drafts by its last turn, and lets it go after', async () => {
     const h = harness()
     h.step('r1', 'h1')
-    h.rows.set('h1:pane', [{ state: 'done', turnStartedAt: 2, stateStartedAt: 10 }])
+    h.rows.set('h1:pane', [
+      { state: 'done', turnStartedAt: 1, stateStartedAt: 2 },
+      { state: 'done', turnStartedAt: 3, stateStartedAt: 10 }
+    ])
     await h.tabs.pass()
     expect(h.looked).toEqual(['h1:close-ended:h1'])
+    expect(h.turnStarts).toEqual([3])
     expect(h.closed).toEqual(['h1'])
     expect(h.claims.holder('s1')).toBeNull()
   })
