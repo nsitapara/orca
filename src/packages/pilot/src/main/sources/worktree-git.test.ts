@@ -1,7 +1,7 @@
 import { execFile, execFileSync } from 'node:child_process'
-import { mkdtempSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import { promisify } from 'node:util'
 import { beforeAll, describe, expect, it } from 'vitest'
 import {
@@ -35,13 +35,19 @@ function sh(cwd: string, ...args: string[]): string {
     { cwd, encoding: 'utf8', env: { ...process.env, GIT_AUTHOR_DATE: at, GIT_COMMITTER_DATE: at } }
   ).trim()
 }
-function commit(cwd: string, message: string): string {
+function commit(cwd: string, message: string, file?: string): string {
   clock += 3600
+  if (file) {
+    mkdirSync(join(cwd, dirname(file)), { recursive: true })
+    writeFileSync(join(cwd, file), message)
+    sh(cwd, 'add', file)
+  }
   sh(cwd, 'commit', '--allow-empty', '-q', '-m', message)
   return sh(cwd, 'rev-parse', 'HEAD')
 }
 
 // main: base ─ dev-work                 feature: base ─ own-1 ─ standards-fix ─ uiqa-fix ─ merge(main) ─ own-2
+// own-1 and dev-work change apps/, own-2 changes docs/; the rest change nothing.
 let repo = ''
 const sha: Record<string, string> = {}
 beforeAll(() => {
@@ -49,15 +55,15 @@ beforeAll(() => {
   sh(repo, 'init', '-q', '-b', 'main')
   sha.base = commit(repo, 'base')
   sh(repo, 'checkout', '-q', '-b', 'feature')
-  sha.own1 = commit(repo, 'own 1')
+  sha.own1 = commit(repo, 'own 1', 'apps/staff/a.tsx')
   sha.standards = commit(repo, 'review fixes\n\nAgent-Loop: standards\nAgent-Round: 1')
   sha.uiqa = commit(repo, 'fix(ui): button\n\nAgent-Loop: ui-qa')
   sh(repo, 'checkout', '-q', 'main')
-  sha.devWork = commit(repo, 'dev work')
+  sha.devWork = commit(repo, 'dev work', 'apps/staff/dev.tsx')
   sh(repo, 'checkout', '-q', 'feature')
   clock += 3600
   sh(repo, 'merge', '-q', '--no-ff', '-m', 'merge main', 'main')
-  sha.own2 = commit(repo, 'own 2')
+  sha.own2 = commit(repo, 'own 2', 'docs/notes.md')
   // A commit on a side branch: it exists in the clone but is not an ancestor of HEAD.
   sh(repo, 'checkout', '-q', '-b', 'side', sha.base)
   sha.side = commit(repo, 'side work')
@@ -95,6 +101,19 @@ describe('ownCommits (gate.new_commits / due.own_commits)', () => {
       }
       expect(commits.map((c) => named[bySha[c.sha]])).toEqual(subjects)
       expect(commits[0].at).toBeGreaterThan(commits.at(-1)?.at ?? 0)
+    }
+  )
+
+  it.each<[string, string[], string[]]>([
+    ['portal code', ['apps/', 'packages/', 'api/'], ['own1']],
+    ['docs', ['docs/'], ['own2']],
+    ['a folder nothing changed', ['infra/'], []]
+  ])(
+    'with paths (%s), only an own commit that changes one counts, never merged-in dev work',
+    async (_name, paths, names) => {
+      const commits = await ownCommits(git, repo, sha.base, null, paths)
+      const bySha = Object.fromEntries(Object.entries(sha).map(([k, v]) => [v, k]))
+      expect(commits.map((c) => bySha[c.sha])).toEqual(names)
     }
   )
 
@@ -215,5 +234,15 @@ describe('commitFacts', () => {
     if (mode === 'baseline') {
       expect(facts.since).toBe(facts.head)
     }
+  })
+
+  it('counts only commits under paths, from the marker and at a first sight', async () => {
+    const fromMarker = await commitFacts(git, repo, 'feature', sha.own1, null, 'baseline', null, [
+      'apps/'
+    ])
+    const whole = await commitFacts(git, repo, 'feature', null, null, 'test_recent', 'main', [
+      'apps/'
+    ])
+    expect([fromMarker.commits.length, whole.commits.map((c) => c.sha)]).toEqual([0, [sha.own1]])
   })
 })

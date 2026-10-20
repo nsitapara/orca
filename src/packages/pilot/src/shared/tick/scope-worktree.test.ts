@@ -27,7 +27,7 @@ const COMMITS = { commits: { ignore_trailer: 'Agent-Loop: standards' } }
 
 // gate.worktrees' owner rule, gate.evaluate's "no new commits", and the MR clauses.
 describe('worktreeScope', () => {
-  it.each([
+  it.each<[string, Record<string, unknown>, ItemFields, string | null]>([
     ['mine, with new commits', MINE, {}, null],
     [
       "a teammate's MR",
@@ -54,6 +54,12 @@ describe('worktreeScope', () => {
     ],
     ['nothing new', COMMITS, { 'worktree.new_commits': 0 }, 'Nothing new since abc123456'],
     [
+      'nothing new under the paths',
+      { commits: { paths: ['apps/', 'api/'] } },
+      { 'worktree.new_commits': 0 },
+      'Nothing new under apps/, api/ since abc123456'
+    ],
+    [
       'first sight is always in scope',
       COMMITS,
       { 'worktree.new_commits': 0, 'worktree.first_sight': true },
@@ -66,13 +72,10 @@ describe('worktreeScope', () => {
       "Couldn't read the branch's commits: fatal: bad object"
     ],
     ['no commits clause, no commit filter', {}, { 'worktree.new_commits': 0 }, null]
-  ] as [string, Record<string, unknown>, ItemFields, string | null][])(
-    '%s',
-    (_name, where, fields, want) => {
-      const got = worktreeScope({ ...base, ...fields }, worktreeWhereSchema.parse(where), people)
-      expect(got.ok ? null : got.reason).toBe(want)
-    }
-  )
+  ])('%s', (_name, where, fields, want) => {
+    const got = worktreeScope({ ...base, ...fields }, worktreeWhereSchema.parse(where), people)
+    expect(got.ok ? null : got.reason).toBe(want)
+  })
 })
 
 const DAY = 86_400_000

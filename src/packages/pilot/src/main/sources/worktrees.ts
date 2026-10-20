@@ -76,7 +76,8 @@ async function readCommits(
       marker,
       ignoreTrailer,
       firstSightMode(where.commits),
-      mrTarget
+      mrTarget,
+      where.commits?.paths
     )
     return commitFields(w.id, facts)
   } catch (error) {

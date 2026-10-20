@@ -62,6 +62,9 @@ describe('worktreeWhereSchema commits clause', () => {
     ['first_sight: baseline', { commits: { first_sight: 'baseline' } }, true],
     ['first_sight: test_recent', { commits: { first_sight: 'test_recent' } }, true],
     ['an empty clause', { commits: {} }, true],
+    ['paths', { commits: { paths: ['apps/', 'api/'] } }, true],
+    ['no paths', { commits: { paths: [] } }, false],
+    ['a path that is a string', { commits: { paths: 'apps/' } }, false],
     ['a duration instead of a mode', { commits: { first_sight: '7d' } }, false],
     ['the old exclude key', { commits: { exclude: 'Agent-Loop:' } }, false]
   ])('%s', (_name, where, ok) => {

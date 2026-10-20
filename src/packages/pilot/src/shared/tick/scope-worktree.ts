@@ -104,7 +104,8 @@ function commitsScope(f: ItemFields, w: WorktreeWhere): ScopeResult {
   if (f['worktree.first_sight'] === true || count > 0) {
     return IN_SCOPE
   }
-  return outOfScope(`Nothing new since ${textOf(f['worktree.since_short']) ?? '(unknown)'}`)
+  const under = w.commits.paths ? ` under ${w.commits.paths.join(', ')}` : ''
+  return outOfScope(`Nothing new${under} since ${textOf(f['worktree.since_short']) ?? '(unknown)'}`)
 }
 
 export function worktreeScope(

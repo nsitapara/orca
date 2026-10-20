@@ -80,16 +80,25 @@ export function parseOwnCommits(stdout: string, ignoreTrailer: string | null): O
 }
 
 // gate.new_commits / due.own_commits: first-parent and non-merge, so a dev merge is never new work.
+// With paths, only a commit that changes one of them counts.
 export async function ownCommits(
   git: GitRunner,
   path: string,
   since: string,
-  ignoreTrailer: string | null
+  ignoreTrailer: string | null,
+  paths: readonly string[] = []
 ): Promise<OwnCommit[]> {
-  const { stdout } = await git(
-    ['log', '--first-parent', '--no-merges', '--format=%H%x00%ct%x00%B%x1e', `${since}..HEAD`],
-    { cwd: path, env: gitOptionalLocksDisabledEnv() }
-  )
+  const args = [
+    'log',
+    '--first-parent',
+    '--no-merges',
+    '--format=%H%x00%ct%x00%B%x1e',
+    `${since}..HEAD`
+  ]
+  const { stdout } = await git(paths.length > 0 ? [...args, '--', ...paths] : args, {
+    cwd: path,
+    env: gitOptionalLocksDisabledEnv()
+  })
   return parseOwnCommits(stdout, ignoreTrailer)
 }
 
@@ -142,12 +151,13 @@ export async function commitFacts(
   marker: string | null,
   ignoreTrailer: string | null,
   mode: FirstSightMode,
-  mrTarget: string | null
+  mrTarget: string | null,
+  paths: readonly string[] = []
 ): Promise<CommitFacts> {
   const head = await read(git, path, ['rev-parse', 'HEAD'])
   const rewritten = marker !== null && !(await isAncestor(git, path, marker, head))
   if (marker !== null && !rewritten) {
-    const commits = await ownCommits(git, path, marker, ignoreTrailer)
+    const commits = await ownCommits(git, path, marker, ignoreTrailer, paths)
     return { head, marker, rewritten, firstSight: false, baseRef: null, since: marker, commits }
   }
   if (mode === 'baseline') {
@@ -155,6 +165,6 @@ export async function commitFacts(
   }
   const base = await baseRef(git, path, branch, mrTarget)
   const since = await read(git, path, ['merge-base', 'HEAD', base])
-  const commits = await ownCommits(git, path, since, ignoreTrailer)
+  const commits = await ownCommits(git, path, since, ignoreTrailer, paths)
   return { head, marker, rewritten, firstSight: true, baseRef: base, since, commits }
 }

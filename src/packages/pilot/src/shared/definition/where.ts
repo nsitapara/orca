@@ -44,7 +44,9 @@ export const worktreeWhereSchema: z.ZodType<WorktreeWhere> = z.strictObject({
   commits: z
     .strictObject({
       ignore_trailer: z.string().min(1).optional(),
-      first_sight: z.enum(['baseline', 'test_recent']).optional()
+      first_sight: z.enum(['baseline', 'test_recent']).optional(),
+      // Only commits that change one of these count as new work (04: what a portal serves or calls).
+      paths: z.array(z.string().min(1)).min(1).optional()
     })
     .optional()
 })
