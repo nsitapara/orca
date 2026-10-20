@@ -188,6 +188,10 @@ export function createKeptHomecoming(deps: KeptHomeDeps): KeptHomecoming {
       return
     }
     const reason = reply.reason || `update-branch answered ${reply.outcome}`
+    if (reply.outcome === 'invalid' && reason === `${k.branch} is not a commit`) {
+      record(k.run.id, { ...stateBase(k, at), state: 'dropped', reason })
+      return
+    }
     if (reply.outcome === 'skip' && CONFLICT.test(reason)) {
       stuck(k, at, 'conflict', reason)
       return

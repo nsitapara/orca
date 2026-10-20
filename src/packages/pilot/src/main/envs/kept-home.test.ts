@@ -95,6 +95,12 @@ describe('kept-home', () => {
       'left_for_you'
     ],
     [
+      'a branch deleted by hand is dropped, no card',
+      reply('invalid', 'pilot/r1 is not a commit'),
+      { state: 'dropped', reason: 'pilot/r1 is not a commit' },
+      null
+    ],
+    [
       'a home that is gone is stuck with a notice',
       reply('invalid', 'no such worktree'),
       { state: 'stuck', reason: 'no such worktree', cardId: 'in_1' },
