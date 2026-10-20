@@ -436,4 +436,71 @@ describe('capacityView', () => {
     })
     expect(view.running[0]?.tab).toEqual(tab)
   })
+
+  it.each([
+    {
+      name: 'an answer run on its running agent step',
+      trigger: 'answer',
+      steps: [{ status: 'running', name: 'answers', skill: 'ui-qa', mode: 'answers' }],
+      fromAnswer: true,
+      step: { name: 'answers', kind: 'agent', skill: 'ui-qa', mode: 'answers' }
+    },
+    {
+      name: 'a scheduled run on its starting shell step',
+      trigger: 'schedule',
+      steps: [
+        { status: 'done', name: 'first' },
+        { status: 'starting', name: 'pull', kind: 'shell' }
+      ],
+      fromAnswer: undefined,
+      step: { name: 'pull', kind: 'shell', skill: null, mode: null }
+    },
+    {
+      name: 'a manual run between steps',
+      trigger: 'manual',
+      steps: [
+        { status: 'done', name: 'first' },
+        { status: 'pending', name: 'next' }
+      ],
+      fromAnswer: undefined,
+      step: undefined
+    }
+  ] as const)('sets fromAnswer and step for $name', ({ trigger, steps, fromAnswer, step }) => {
+    const store = PilotStore.open(
+      join(mkdtempSync(join(tmpdir(), 'pilot-capacity-view-')), 'db.sqlite')
+    )
+    store.runs.create({
+      id: 'r1',
+      automationId: 'review',
+      tickId: null,
+      itemKey: 'r1',
+      itemLabel: '!r1',
+      worktreePath: '/wt/a',
+      startedAt: 1,
+      trigger
+    })
+    steps.forEach((s, idx) => {
+      const { skill, mode, kind } = { skill: null, mode: null, kind: 'agent', ...s }
+      store.runs.createStep({
+        runId: 'r1',
+        idx,
+        name: s.name,
+        agent: kind === 'shell' ? 'shell' : 'claude',
+        skill,
+        mode,
+        startedAt: 1,
+        kind,
+        status: s.status
+      })
+    })
+    const view = capacityView({
+      store,
+      definitions: [testDefinition({ id: 'review' })],
+      memory: null,
+      system: { totalBytes: 1, availableBytes: 1 },
+      now: 100
+    })
+    expect(view.running[0]?.fromAnswer).toBe(fromAnswer)
+    expect(view.running[0]?.step).toEqual(step)
+  })
 })

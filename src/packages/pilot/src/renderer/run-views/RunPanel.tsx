@@ -167,7 +167,7 @@ function Header({
             {`Answers run ${parent}`}
           </button>
         ) : null}
-        {runsAnAgent(detail) ? <StopRun run={run} /> : null}
+        {runsAnAgent(detail) ? <StopRun run={run} answerRun={run.trigger === 'answer'} /> : null}
         <ContinueRun run={run} />
       </div>
     </header>

@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import type { CapacityPayload } from '../../../shared/api-types-capacity'
+import type { CapacityPayload, CapacityRun } from '../../../shared/api-types-capacity'
 import { capacity } from './__fixtures__/capacity'
 
 const pilotRpc = vi.fn()
@@ -57,17 +57,6 @@ describe("A running run's Stop and Show tab on Running", () => {
     expect(await running.findByText(why)).toBeTruthy()
   })
 
-  // counted is false for a job with no agent step, whose shell steps Stop can't end.
-  it.each([
-    ['a job with an agent step', true, 1],
-    ['a shell-only job', false, 0]
-  ])('offers Stop on the running run of %s', async (_name, counted, stops) => {
-    serve(capacity({ running: [{ ...capacity().running[0], counted }] }))
-    await shown()
-    const running = within(screen.getByRole('region', { name: 'Running now' }))
-    expect(running.queryAllByRole('button', { name: 'Stop' })).toHaveLength(stops)
-  })
-
   it("shows the run's tab only when the run has one, and says when it is closed", async () => {
     const tab = { worktreePath: '/wt/web-1', tabId: 'tab-1' }
     serve(capacity({ running: [{ ...capacity().running[0], tab }] }))
@@ -76,5 +65,69 @@ describe("A running run's Stop and Show tab on Running", () => {
     await click('Show tab')
     expect(activateRunTab).toHaveBeenCalledWith(tab)
     expect(screen.getByText('Its tab is closed')).toBeTruthy()
+  })
+})
+
+describe("A running run's answer badge, step line and Stop on Running", () => {
+  const running = () => within(screen.getByRole('region', { name: 'Running now' }))
+  const step = (over: Partial<NonNullable<CapacityRun['step']>> = {}) => ({
+    name: 'answers',
+    kind: 'agent' as const,
+    skill: 'ui-qa',
+    mode: 'answers',
+    ...over
+  })
+
+  it.each([
+    ['an answer run', true as const, 1],
+    ['another run', undefined, 0]
+  ])('shows From your answer on %s only when it applies one', async (_name, fromAnswer, shown_) => {
+    serve(capacity({ running: [{ ...capacity().running[0], fromAnswer }] }))
+    await shown()
+    expect(running().queryAllByText('From your answer')).toHaveLength(shown_)
+  })
+
+  it.each([
+    ['skill and mode', step(), 'Step answers · ui-qa · answers mode'],
+    ['neither', step({ skill: null, mode: null }), 'Step answers'],
+    ['a skill only', step({ mode: null }), 'Step answers · ui-qa']
+  ])('names the step it runs with %s', async (_name, stepOf, text) => {
+    serve(capacity({ running: [{ ...capacity().running[0], step: stepOf }] }))
+    await shown()
+    expect(running().getByText(text)).toBeTruthy()
+  })
+
+  it('shows no step line for a card from an older Pilot', async () => {
+    serve(capacity())
+    await shown()
+    expect(running().queryByText(/^Step /)).toBeNull()
+  })
+
+  // Why: counted is false when the definition is unloaded, the stuck card Stop exists for.
+  it.each([
+    ['an agent step', { step: step() }, 1],
+    ['no step (an older Pilot)', {}, 1],
+    ['an unloaded definition on an agent step', { step: step(), counted: false }, 1],
+    ['a shell step', { step: step({ kind: 'shell' }) }, 0]
+  ])('offers Stop on a run on %s', async (_name, over, stops) => {
+    serve(capacity({ running: [{ ...capacity().running[0], ...over }] }))
+    await shown()
+    expect(running().queryAllByRole('button', { name: 'Stop' })).toHaveLength(stops)
+  })
+})
+
+describe("A running run's Stop dialog text on Running", () => {
+  const usual = "Its agent's tab closes. You can pick it up again from Recently finished."
+  const answered = "Its agent's tab closes, and the cards it was answering go back to your Inbox."
+  it.each<[string, true | undefined, string]>([
+    ['an answer run', true, answered],
+    ['any other run', undefined, usual]
+  ])('words the dialog for %s', async (_name, fromAnswer, text) => {
+    serve(capacity({ running: [{ ...capacity().running[0], fromAnswer }] }))
+    await shown()
+    const running = within(screen.getByRole('region', { name: 'Running now' }))
+    await act(async () => fireEvent.click(running.getByRole('button', { name: 'Stop' })))
+    const dialog = within(screen.getByRole('dialog', { name: 'Stop this run?' }))
+    expect(dialog.getByText(text)).toBeTruthy()
   })
 })

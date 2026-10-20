@@ -21,7 +21,7 @@ import { LimitsPanel, LimitsToggle } from './LimitsPanel'
 import { GaveUpRow } from './Retries'
 import { checkOf } from './running-checks'
 import { placeBadgeText, placeReasonText } from './running-place'
-import { runMemoryText, usageText } from './running-text'
+import { runMemoryText, stepText, usageText } from './running-text'
 import { useCapacities, type CapacityChanges, type MachineCapacity } from './use-capacity'
 
 // A machine's changes, bound to it.
@@ -37,7 +37,7 @@ type Changes = {
 function RunningRow({ run, now }: { run: CapacityRun; now: number }): React.JSX.Element {
   const host = usePilotHost()
   const why = run.place ? placeReasonText(run.place) : null
-  const stop = useStopRun({ id: run.id, status: 'running' })
+  const stop = useStopRun({ id: run.id, status: 'running' }, undefined, run.fromAnswer === true)
   const show = useShowTab(run.tab)
   return (
     <li className="flex min-w-0 flex-col gap-1 px-3 py-2 text-sm">
@@ -45,6 +45,7 @@ function RunningRow({ run, now }: { run: CapacityRun; now: number }): React.JSX.
         <span className="min-w-0 truncate font-medium" title={run.automationName}>
           {run.automationName}
         </span>
+        {run.fromAnswer ? <Badge variant="outline">From your answer</Badge> : null}
         {run.place ? <Badge variant="secondary">{placeBadgeText(run.place)}</Badge> : null}
         <span className="ml-auto shrink-0 pl-2 text-xs tabular-nums text-muted-foreground">
           {formatDuration(workedMs(run, now))} · {runMemoryText(run)}
@@ -57,14 +58,17 @@ function RunningRow({ run, now }: { run: CapacityRun; now: number }): React.JSX.
           Open run
         </button>
         {show.control ? <span className="shrink-0 text-xs">{show.control}</span> : null}
-        {/* Why: Stop refuses a shell step (run-stop.ts), so a job with no agent step offers none. */}
-        {run.counted && stop.control ? (
+        {/* Why: Stop refuses a shell step (run-stop.ts); a card without a step (older Pilot) still offers it. */}
+        {run.step?.kind !== 'shell' && stop.control ? (
           <span className="shrink-0 text-xs">{stop.control}</span>
         ) : null}
       </div>
       <div className="truncate font-mono text-xs text-muted-foreground" title={run.itemLabel}>
         {run.itemLabel}
       </div>
+      {run.step ? (
+        <div className="truncate text-xs text-muted-foreground">{stepText(run.step)}</div>
+      ) : null}
       {why ? <p className="text-xs text-muted-foreground">{why}</p> : null}
       {stop.note ? <p className="text-xs text-muted-foreground">{stop.note}</p> : null}
       {show.note ? <p className="text-xs text-muted-foreground">{show.note}</p> : null}

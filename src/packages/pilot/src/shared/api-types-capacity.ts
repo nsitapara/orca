@@ -27,6 +27,14 @@ export type QuotaUse = { weekly: number | null; session: number | null }
 // A run's agent tab on the machine it runs on: the worktree it opened in, and its terminal tab there.
 export type RunTab = { worktreePath: string; tabId: string }
 
+// The step a running run is on: what it is called and, for an agent step, the skill and mode it was given.
+export type RunStep = {
+  name: string
+  kind: 'agent' | 'shell'
+  skill: string | null
+  mode: string | null
+}
+
 // A running run on the Running page. Memory is the summed RSS of its processes on this machine (Docker
 // containers aren't counted); null until it has been sampled, or where processes can't be read.
 export type CapacityRun = {
@@ -46,6 +54,10 @@ export type CapacityRun = {
   // The tab of its running agent step, else its newest detached one; absent for a shell step or a step without a
   // pane, and from older Pilots.
   tab?: RunTab
+  // The run started from an answer to an inbox card; absent otherwise, and from older Pilots.
+  fromAnswer?: true
+  // The step it is starting or running; absent between steps, and from older Pilots.
+  step?: RunStep
 }
 
 // An item in the runner's line, in line order; its place is its index. The hold fields are absent from older Pilots.

@@ -3,8 +3,10 @@ import type {
   CapacityRun,
   GaveUpKey,
   HeaviestJob,
-  QuotaUse
+  QuotaUse,
+  RunStep
 } from '../../shared/api-types-capacity'
+import type { StepRow } from '../../shared/api-types'
 import { suggestRunLimit, UNMEASURED_JOB_BYTES } from '../../shared/capacity/limit-suggestion'
 import { QUOTA_CEILING } from '../../shared/quota-ceiling'
 import type { AgentKind, AutomationDefinition } from '../../shared/definition/types'
@@ -101,6 +103,15 @@ function dueFromOf(def: AutomationDefinition | undefined): string {
   }
 }
 
+// The step a run is starting or running, as its card names it.
+function activeStepOf(steps: readonly StepRow[]): RunStep | undefined {
+  const step = steps.find((s) => s.status === 'starting' || s.status === 'running')
+  if (!step) {
+    return undefined
+  }
+  return { name: step.name, kind: step.kind, skill: step.skill, mode: step.mode }
+}
+
 // The Running page: the limit, every running run with its memory, the queue in line order, and a suggested limit.
 export function capacityView(input: CapacityViewInput): CapacityPayload {
   const { store } = input
@@ -111,7 +122,9 @@ export function capacityView(input: CapacityViewInput): CapacityPayload {
   const running: CapacityRun[] = runs.map((run) => {
     const def = byId.get(run.automationId)
     const place = runPlace(run)
-    const tab = runTabOf(store.runs.steps(run.id), run.worktreePath)
+    const steps = store.runs.steps(run.id)
+    const tab = runTabOf(steps, run.worktreePath)
+    const step = activeStepOf(steps)
     return {
       id: run.id,
       automationId: run.automationId,
@@ -123,7 +136,9 @@ export function capacityView(input: CapacityViewInput): CapacityPayload {
       peakBytes: peaks.get(run.id) ?? null,
       counted: def !== undefined && holdsSlot(def),
       ...(place ? { place } : {}),
-      ...(tab ? { tab } : {})
+      ...(tab ? { tab } : {}),
+      ...(run.trigger === 'answer' ? { fromAnswer: true as const } : {}),
+      ...(step ? { step } : {})
     }
   })
   const ended = store.capacity.finished(

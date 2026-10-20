@@ -26,9 +26,21 @@ export type StopControl = {
   note: string | null
 }
 
+// Why: an answer run has no Continue run or Retry; stopping it reopens its cards (answer-run-end.ts).
+function stopDialogText(answerRun: boolean): string {
+  if (answerRun) {
+    return "Its agent's tab closes, and the cards it was answering go back to your Inbox."
+  }
+  return "Its agent's tab closes. You can pick it up again from Recently finished."
+}
+
 // Stop, for a view that places Pilot's answer itself: the agent's tab closes and the run ends cancelled, only after a
 // yes. The run's machine is `host`, else the surrounding view's.
-export function useStopRun(run: Pick<RunRow, 'id' | 'status'>, host?: PilotHostRef): StopControl {
+export function useStopRun(
+  run: Pick<RunRow, 'id' | 'status'>,
+  host?: PilotHostRef,
+  answerRun = false
+): StopControl {
   const viewHost = usePilotHost()
   const on = host ?? viewHost
   const [asking, setAsking] = useState(false)
@@ -66,9 +78,7 @@ export function useStopRun(run: Pick<RunRow, 'id' | 'status'>, host?: PilotHostR
         <DialogContent className="max-w-sm" showCloseButton={false}>
           <DialogHeader>
             <DialogTitle>Stop this run?</DialogTitle>
-            <DialogDescription>
-              Its agent&apos;s tab closes. You can pick it up again from Recently finished.
-            </DialogDescription>
+            <DialogDescription>{stopDialogText(answerRun)}</DialogDescription>
           </DialogHeader>
           <DialogFooter>
             {/* Why: Enter on the open dialog must not stop the run. */}
@@ -95,12 +105,14 @@ export function useStopRun(run: Pick<RunRow, 'id' | 'status'>, host?: PilotHostR
 // Stop with Pilot's answer beside it, as Continue run shows its own (ContinueRun.tsx).
 export function StopRun({
   run,
-  host
+  host,
+  answerRun = false
 }: {
   run: Pick<RunRow, 'id' | 'status'>
   host?: PilotHostRef
+  answerRun?: boolean
 }): React.JSX.Element | null {
-  const { control, note } = useStopRun(run, host)
+  const { control, note } = useStopRun(run, host, answerRun)
   if (!control && note === null) {
     return null
   }
