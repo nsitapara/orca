@@ -2,6 +2,7 @@
 // Packaged macOS build of Pilot with the wrapper config. Unsigned local build (--dir), like Orca's local builds.
 import { join } from 'node:path'
 import { readdirSync } from 'node:fs'
+import { constants, setPriority } from 'node:os'
 import { run, runInherit } from './run.mjs'
 import { installPilot, markNoIndex } from './install-mac.mjs'
 
@@ -11,8 +12,16 @@ const PILOT_BUNDLE_ID = 'dev.nsitapara.pilot'
 const shimsDir = join(import.meta.dirname, 'shims')
 const SWIFT_STEPS = new Set(['build:keyboard-layout-macos', 'build:notification-status-macos'])
 
+// The build shares the Mac with the desktop: every step inherits a lowered priority.
+setPriority(constants.priority.PRIORITY_BELOW_NORMAL)
+
 function stepEnv(args) {
-  const env = { ...process.env, CSC_IDENTITY_AUTO_DISCOVERY: 'false' }
+  const env = {
+    ...process.env,
+    CSC_IDENTITY_AUTO_DISCOVERY: 'false',
+    // Caps the Go tools the build runs (the native tsc, esbuild) to a few cores.
+    GOMAXPROCS: process.env.GOMAXPROCS ?? '4'
+  }
   if (SWIFT_STEPS.has(args[1])) {
     env.PILOT_REAL_PATH = process.env.PATH ?? ''
     env.PATH = `${shimsDir}:${process.env.PATH ?? ''}`

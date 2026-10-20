@@ -1,9 +1,10 @@
 import { spawnProcess } from '@orca/process-host'
 import { readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
-import { availableParallelism, totalmem } from 'node:os'
-import { dirname, join } from 'node:path'
+import { availableParallelism, constants, setPriority, totalmem } from 'node:os'
+import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
+import { acquireTypecheckLock, repoTypecheckLockDir } from './typecheck-repo-lock.mjs'
 
 const BYTES_PER_GIB = 1024 ** 3
 
@@ -70,6 +71,27 @@ export function resolveProjectCompiler(config, root = repoRoot) {
   return resolveProjectCompilerInfo(config, root).program
 }
 
+function positiveInteger(env, name, fallback) {
+  const raw = env[name]
+  if (raw === undefined || raw === '') {
+    return fallback
+  }
+  const value = Number(raw)
+  if (!Number.isInteger(value) || value < 1) {
+    throw new Error(`${name} must be a positive integer, not ${raw}`)
+  }
+  return value
+}
+
+// Pilot typechecks only on the dev machine, beside the desktop and other worktrees' agents:
+// one compiler at a time, each held to a few cores. Raise either for a faster, heavier check.
+export function localTypecheckLimits(env = process.env) {
+  return {
+    jobs: positiveInteger(env, 'ORCA_TYPECHECK_JOBS', 1),
+    threads: positiveInteger(env, 'ORCA_TYPECHECK_THREADS', 4)
+  }
+}
+
 export function parseTypecheckOptions(args) {
   const options = { compiler: 'native', bunConcurrency: 1, bunThreads: 4 }
   for (const argument of args) {
@@ -101,7 +123,7 @@ export function typecheckBatches(projects, { compiler, bunConcurrency, memoryByt
   )
 }
 
-function checkProject(config, { compiler, bunThreads, root, spawnCompiler }) {
+function checkProject(config, { compiler, bunThreads, threads, root, spawnCompiler }) {
   return new Promise((resolve, reject) => {
     const installedCompiler = resolveProjectCompilerInfo(config, root)
     // Bun 1.4.3 targets TypeScript 7.0.2; compiler upgrades require a new parity comparison.
@@ -117,6 +139,8 @@ function checkProject(config, { compiler, bunThreads, root, spawnCompiler }) {
           ? ['check', '-p', config, '--threads', String(bunThreads), '--no-pretty', '--all']
           : [installedCompiler.program, '--noEmit', '-p', config],
       cwd: root,
+      // The native compiler is Go: GOMAXPROCS caps the cores it runs on.
+      ...(threads === null ? {} : { env: { ...process.env, GOMAXPROCS: String(threads) } }),
       stdio: 'inherit'
     })
     child.on('error', reject)
@@ -136,6 +160,7 @@ export async function runTypecheckProjects({
   compiler = 'native',
   bunConcurrency = 1,
   bunThreads = 4,
+  threads = null,
   root = repoRoot,
   projects = TYPECHECK_PROJECTS,
   spawnCompiler = spawnProcess,
@@ -153,7 +178,13 @@ export async function runTypecheckProjects({
         while (next < pending.length) {
           const index = next++
           try {
-            await checkProject(pending[index].config, { compiler, bunThreads, root, spawnCompiler })
+            await checkProject(pending[index].config, {
+              compiler,
+              bunThreads,
+              threads,
+              root,
+              spawnCompiler
+            })
           } catch (reason) {
             failures.push({ index, reason })
           }
@@ -167,7 +198,7 @@ export async function runTypecheckProjects({
   for (const batch of batches) {
     const results = await Promise.allSettled(
       batch.map((project) =>
-        checkProject(project.config, { compiler, bunThreads, root, spawnCompiler })
+        checkProject(project.config, { compiler, bunThreads, threads, root, spawnCompiler })
       )
     )
     for (const result of results) {
@@ -179,8 +210,37 @@ export async function runTypecheckProjects({
   return failures
 }
 
+// Children inherit the lowered priority, so the desktop stays responsive while they check.
+function lowerPriority() {
+  try {
+    setPriority(constants.priority.PRIORITY_BELOW_NORMAL)
+  } catch (error) {
+    console.error(`typecheck: couldn't lower priority: ${error.message}`)
+  }
+}
+
+async function runLocally(options) {
+  const { jobs, threads } = localTypecheckLimits()
+  lowerPriority()
+  const lockDir = await repoTypecheckLockDir(repoRoot)
+  const release = lockDir
+    ? await acquireTypecheckLock(lockDir, { worktree: resolve(repoRoot) })
+    : () => {}
+  process.once('exit', release)
+  for (const signal of ['SIGINT', 'SIGTERM', 'SIGHUP']) {
+    process.once(signal, () => process.exit(128 + constants.signals[signal]))
+  }
+  try {
+    return await runTypecheckProjects({ ...options, parallelism: jobs, threads })
+  } finally {
+    release()
+  }
+}
+
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  const failures = await runTypecheckProjects(parseTypecheckOptions(process.argv.slice(2)))
+  const options = parseTypecheckOptions(process.argv.slice(2))
+  const failures =
+    options.compiler === 'native' ? await runLocally(options) : await runTypecheckProjects(options)
   if (failures.length > 0) {
     for (const failure of failures) {
       console.error(failure.message ?? failure)
