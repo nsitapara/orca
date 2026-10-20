@@ -119,10 +119,10 @@ describe('buildTicketDraft', () => {
         'Filed for later from Pilot · pilot-item `ui-qa-overnight:wt:7`'
       ].join('\n'),
       team: 'WEB',
-      state: 'Backlog',
+      state: 'Triage',
       priority: 'low',
       labels: [],
-      assignee: 'me',
+      assignee: null,
       images: [
         { ref: 'pilot-image:1', file: 'shot-a.png', caption: 'Sidebar' },
         { ref: 'pilot-image:2', file: 'shot-b.png', caption: 'Menu' },

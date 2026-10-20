@@ -174,7 +174,6 @@ describe('fileTicketForLater', () => {
           title: 'Mixed greys in the sidebar',
           body: edit.body.replace(/pilot-image:(\d+)/g, 'https://uploads.linear.app/a/$1'),
           state: 'Todo',
-          assignee: 'me',
           priority: 'high',
           labels: ['qa'],
           workspaceId: undefined,

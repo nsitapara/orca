@@ -5,10 +5,9 @@ import { join } from 'node:path'
 // ~/.agents/skills/follow-up-ticket/assets/ticket.md, verbatim (tests never read the home folder).
 export const TICKET_FRONTMATTER = `---
 team: WEB
-state: Backlog
+state: Triage
 priority: low
 labels: []
-assignee: me
 title: '{title}'
 ---
 `

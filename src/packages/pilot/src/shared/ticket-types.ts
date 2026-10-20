@@ -13,7 +13,8 @@ export type TicketDraft = {
   state: string
   priority: TicketPriority
   labels: string[]
-  assignee: 'me'
+  // The template's; null files the ticket unassigned.
+  assignee: string | null
   images: TicketImage[]
   link: { url: string; title: string } | null
   ticketedBefore: TicketedRef | null

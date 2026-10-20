@@ -78,7 +78,7 @@ function argsFor(deps: TicketForLaterDeps, req: TicketForLaterRequest, draft: Ti
     state: edit.state,
     priority: edit.priority,
     labels: edit.labels,
-    assignee: 'me',
+    ...(draft.assignee === null ? {} : { assignee: draft.assignee }),
     images: imageArgs(deps, req.id, kept, body),
     links: draft.link ? [{ url: draft.link.url, title: draft.link.title }] : [],
     write_id: ticketWriteId(req.id)

@@ -172,9 +172,25 @@ describe('loadTicketTemplate', () => {
     const missing = mkdtempSync(join(tmpdir(), 'pilot-ticket-none-'))
     expect(loadTicketTemplate([missing, first.dir, second.dir])).toEqual({
       path: first.file,
-      defaults: { team: 'WEB', state: 'Backlog', priority: 'low', labels: [], title: '{title}' },
+      defaults: {
+        team: 'WEB',
+        state: 'Triage',
+        priority: 'low',
+        labels: [],
+        assignee: null,
+        title: '{title}'
+      },
       body: TICKET_BODY
     })
+  })
+
+  it.each([
+    ['no assignee line', '', null],
+    ['an empty one', 'assignee:\n', null],
+    ['assignee: me', 'assignee: me\n', 'me']
+  ])('reads the assignee from %s', (_name, line, assignee) => {
+    const { dir } = skillsWithTemplate(TICKET_MD.replace('labels: []\n', `labels: []\n${line}`))
+    expect(loadTicketTemplate([dir]).defaults.assignee).toBe(assignee)
   })
 
   it('names every path it tried when there is no template', () => {
@@ -188,9 +204,10 @@ describe('loadTicketTemplate', () => {
   it.each([
     ['priority: low', 'priority: soon', 'priority must be one of none, urgent, high, medium, low'],
     ['team: WEB', "team: ''", 'team must be a non-empty string'],
-    ['state: Backlog', 'state: 3', 'state must be a non-empty string'],
+    ['state: Triage', 'state: 3', 'state must be a non-empty string'],
     ["title: '{title}'", 'title:', 'title must be a non-empty string'],
-    ['labels: []', 'labels: [bug, 2]', 'labels must be a list of strings']
+    ['labels: []', 'labels: [bug, 2]', 'labels must be a list of strings'],
+    ['labels: []', "labels: []\nassignee: ' '", 'assignee must be a non-empty string when set']
   ])('refuses %s replaced by %s, naming the path and the field', (from, to, problem) => {
     const { dir, file } = skillsWithTemplate(TICKET_MD.replace(from, to))
     expect(() => loadTicketTemplate([dir])).toThrow(`${file}: ${problem}`)

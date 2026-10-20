@@ -69,14 +69,32 @@ function uploadsPart(edit: TicketDraftEdit): string | null {
   return count === 1 ? 'Uploads 1 screenshot' : `Uploads ${count} screenshots`
 }
 
+// The draft's assignee as the panel's row shows it.
+export function assigneeLine(assignee: string | null): string {
+  if (assignee === null) {
+    return 'Unassigned'
+  }
+  return `Assignee · ${assignee === 'me' ? 'You' : assignee}`
+}
+
+function assigneePart(assignee: string | null): string {
+  if (assignee === null) {
+    return 'unassigned'
+  }
+  return `assigned to ${assignee === 'me' ? 'you' : assignee}`
+}
+
 // "What Create does", from the fields as they stand.
-export function createSummary(edit: TicketDraftEdit, link: boolean): string {
+export function createSummary(
+  edit: TicketDraftEdit,
+  draft: Pick<TicketDraft, 'link' | 'assignee'>
+): string {
   const labels = edit.labels.length > 0 ? `, labelled ${edit.labels.join(', ')}` : ''
   const priority = PRIORITY_WORDS[edit.priority].toLowerCase()
   const parts = [
     uploadsPart(edit),
-    `creates a ${edit.team} ticket in ${edit.state}, ${priority}${labels}, assigned to you`,
-    link ? 'attaches the MR link' : null,
+    `creates a ${edit.team} ticket in ${edit.state}, ${priority}${labels}, ${assigneePart(draft.assignee)}`,
+    draft.link ? 'attaches the MR link' : null,
     'closes this card'
   ].filter((part) => part !== null)
   const line = parts.join(' · ')

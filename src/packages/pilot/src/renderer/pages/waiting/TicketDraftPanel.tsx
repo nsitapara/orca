@@ -19,6 +19,7 @@ import { OUTLINE_BUTTON, PRIMARY_BUTTON } from './card-button-classes'
 import { loadCardImage } from './CardDetails'
 import { Select } from './InboxHeader'
 import {
+  assigneeLine,
   canCreate,
   createSummary,
   editOf,
@@ -260,7 +261,7 @@ function DraftForm({
             </option>
           ))}
         </Select>
-        <span className="text-muted-foreground">Assignee · You</span>
+        <span className="text-muted-foreground">{assigneeLine(draft.assignee)}</span>
       </div>
       <Field label="Description">
         <Textarea
@@ -291,7 +292,7 @@ function DraftForm({
         </div>
       ) : null}
       {draft.link ? <LinkLine link={draft.link} /> : null}
-      <p className="text-xs text-muted-foreground">{createSummary(edit, draft.link !== null)}</p>
+      <p className="text-xs text-muted-foreground">{createSummary(edit, draft)}</p>
       {error && error !== FROZEN_DRAFT ? (
         <p aria-live="polite" className="text-sm text-destructive">
           {error}

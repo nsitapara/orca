@@ -174,7 +174,7 @@ export function buildTicketDraft(deps: TicketDraftDeps, id: string, digest: stri
     state: template.defaults.state,
     priority: template.defaults.priority,
     labels: template.defaults.labels,
-    assignee: 'me',
+    assignee: template.defaults.assignee,
     images,
     link: mrLink(run),
     ticketedBefore: ticketedBeforeFor(deps.store, [card]).get(card.id) ?? null,

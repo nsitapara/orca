@@ -16,6 +16,7 @@ export type TicketTemplate = {
     state: string
     priority: TicketPriority
     labels: string[]
+    assignee: string | null
     title: string
   }
   body: string
@@ -27,6 +28,11 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function isPriority(value: unknown): value is TicketPriority {
   return TICKET_PRIORITIES.some((p) => p === value)
+}
+
+// Absent or null leaves the ticket unassigned.
+function isAssignee(value: unknown): value is string | null {
+  return value === null || (typeof value === 'string' && value.trim() !== '')
 }
 
 function parseFrontmatter(yaml: string, file: string): Record<string, unknown> {
@@ -54,14 +60,17 @@ function readDefaults(yaml: string, file: string): TicketTemplate['defaults'] {
   }
   const team = text('team')
   const state = text('state')
-  const { priority, labels } = meta
+  const { priority, labels, assignee = null } = meta
   if (!isPriority(priority)) {
     throw new Error(`${file}: priority must be one of ${TICKET_PRIORITIES.join(', ')}`)
   }
   if (!Array.isArray(labels) || !labels.every((l): l is string => typeof l === 'string')) {
     throw new Error(`${file}: labels must be a list of strings`)
   }
-  return { team, state, priority, labels, title: text('title') }
+  if (!isAssignee(assignee)) {
+    throw new Error(`${file}: assignee must be a non-empty string when set`)
+  }
+  return { team, state, priority, labels, assignee, title: text('title') }
 }
 
 // The first <dir>/follow-up-ticket/assets/ticket.md. No fallback: a missing or broken template throws, naming it.

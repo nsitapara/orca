@@ -170,6 +170,19 @@ describe('TicketDraftPanel', () => {
   })
 
   it.each([
+    { assignee: 'me', line: 'Assignee · You', part: 'assigned to you' },
+    { assignee: null, line: 'Unassigned', part: 'unassigned' }
+  ])('shows the template assignee $assignee as "$line"', async ({ assignee, line, part }) => {
+    await open(undefined, { ...DRAFT, assignee })
+    expect(screen.getByText(line)).toBeTruthy()
+    expect(
+      screen.getByText(
+        `Uploads 2 screenshots · creates a WEB ticket in Backlog, low, labelled ui, ${part} · attaches the MR link · closes this card`
+      )
+    ).toBeTruthy()
+  })
+
+  it.each([
     ['a blank title', 'Title', '   '],
     ['a title over 255 characters', 'Title', 'x'.repeat(256)],
     ['no team', 'Team', ''],
