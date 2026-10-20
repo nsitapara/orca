@@ -174,11 +174,11 @@ export class RunStore {
 
   // The steps starting or running on a terminal, newest first (more than one when a step was sent into
   // an earlier step's terminal while that one is still active): how `pilot run output|event` find their
-  // step from the terminal they run in.
+  // step from the terminal they run in. A detached step (wait: start) counts: its session is still running.
   stepsOnTerminal(handle: string): StepRow[] {
     return this.db
       .prepare(
-        "SELECT * FROM steps WHERE terminal_handle = ? AND status IN ('starting', 'running') ORDER BY started_at DESC, idx DESC"
+        "SELECT * FROM steps WHERE terminal_handle = ? AND (status IN ('starting', 'running') OR detached = 1) ORDER BY started_at DESC, idx DESC"
       )
       .all(handle)
       .map((r) => toStep(r as never))
