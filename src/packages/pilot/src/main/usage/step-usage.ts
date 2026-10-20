@@ -3,7 +3,8 @@ import { join } from 'node:path'
 import type { AgentKind } from '../../shared/definition/types'
 import type { PilotStore } from '../store/store'
 import type { MeasurableStep } from '../store/store-usage'
-import type { UsageBucket } from './buckets'
+import { mergeBuckets, type UsageBucket, type UsageWindow } from './buckets'
+import { findChildSessions } from './child-sessions'
 import { claudeSubagentFiles, claudeUsage, findClaudeTranscript } from './claude'
 import { codexHomes as sharedCodexHomes } from './codex-homes'
 import { codexUsage, findCodexRollout } from './codex'
@@ -43,39 +44,54 @@ export async function findSessionTranscript(
   return findCodexRollout(sessionId, hinted, startedAt, paths.codexHomes)
 }
 
-export function stepUsageReader(paths: UsagePaths, now: () => number): StepUsageReader {
+// The step's own session: its transcript and subagents (Claude) or its rollout (Codex); null when it can't be found.
+async function ownUsage(
+  step: MeasurableStep,
+  sessionId: string,
+  startedAt: number,
+  window: UsageWindow,
+  paths: UsagePaths
+): Promise<UsageBucket[] | null> {
+  if (step.agent === 'claude') {
+    const main = await findClaudeTranscript(sessionId, step.transcriptPath, paths.claudeProjects)
+    return main ? claudeUsage([main, ...(await claudeSubagentFiles(main))], window) : null
+  }
+  if (step.agent === 'codex') {
+    const rollout = await findCodexRollout(
+      sessionId,
+      step.transcriptPath,
+      startedAt,
+      paths.codexHomes
+    )
+    return rollout ? codexUsage(rollout, window) : null
+  }
+  return null
+}
+
+// `claimed`: every step's own session, so another step's session never counts as this one's child.
+export function stepUsageReader(
+  paths: UsagePaths,
+  now: () => number,
+  claimed: () => ReadonlySet<string> = () => new Set()
+): StepUsageReader {
   return async (step) => {
     if (!step.sessionId || step.startedAt === null) {
       return NOT_FOUND
     }
     const window = { from: step.startedAt, to: step.finishedAt ?? now() }
-    if (step.agent === 'claude') {
-      const main = await findClaudeTranscript(
-        step.sessionId,
-        step.transcriptPath,
-        paths.claudeProjects
-      )
-      if (!main) {
-        return NOT_FOUND
-      }
-      return {
-        buckets: await claudeUsage([main, ...(await claudeSubagentFiles(main))], window),
-        sessionFound: true
-      }
+    const own = await ownUsage(step, step.sessionId, step.startedAt, window, paths)
+    if (!own) {
+      return NOT_FOUND
     }
-    if (step.agent === 'codex') {
-      const rollout = await findCodexRollout(
-        step.sessionId,
-        step.transcriptPath,
-        step.startedAt,
-        paths.codexHomes
-      )
-      if (!rollout) {
-        return NOT_FOUND
-      }
-      return { buckets: await codexUsage(rollout, window), sessionFound: true }
-    }
-    return NOT_FOUND
+    const children = await findChildSessions(
+      { cwd: step.worktreePath, sessionId: step.sessionId, window, claimed: claimed() },
+      paths
+    )
+    const childBuckets = await Promise.all([
+      claudeUsage(children.claude, window),
+      ...children.codex.map((rollout) => codexUsage(rollout, window))
+    ])
+    return { buckets: mergeBuckets([own, ...childBuckets]), sessionFound: true }
   }
 }
 

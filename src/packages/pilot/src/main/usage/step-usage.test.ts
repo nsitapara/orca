@@ -13,6 +13,7 @@ import {
 } from './step-usage'
 
 const bucket = (costUsd: number): UsageBucket => ({
+  agent: 'claude',
   day: '2026-10-11',
   model: 'claude-opus-5-5',
   requests: 1,
@@ -156,7 +157,8 @@ describe('stepUsageReader', () => {
     sessionId: null,
     transcriptPath: null,
     startedAt: 0,
-    finishedAt: 10
+    finishedAt: 10,
+    worktreePath: null
   }
 
   it.each([
@@ -179,6 +181,57 @@ describe('stepUsageReader', () => {
     const read = stepUsageReader({ claudeProjects: projects, codexHomes: [] }, () => 10)
     expect(await read({ ...base, sessionId: 'sess-1' })).toEqual({
       buckets: [],
+      sessionFound: true
+    })
+  })
+
+  it("adds the step's child sessions, each under its own agent: a Claude orchestrator's codex exec check counts as Codex", async () => {
+    const root = mkdtempSync(join(tmpdir(), 'pilot-reader-'))
+    const projects = join(root, 'projects')
+    mkdirSync(join(projects, 'wt'), { recursive: true })
+    writeFileSync(join(projects, 'wt', 'orchestrator.jsonl'), '')
+    const day = join(root, 'codex', 'sessions', '2026', '10', '11')
+    mkdirSync(day, { recursive: true })
+    const at = (m: number): number => new Date(2026, 9, 11, 10, m).getTime()
+    const usage = { input_tokens: 1000, cached_input_tokens: 400, output_tokens: 100 }
+    const lines = [
+      {
+        timestamp: new Date(at(5)).toISOString(),
+        type: 'session_meta',
+        payload: { id: 'check', originator: 'codex_exec', source: 'exec', cwd: '/wt/run-1' }
+      },
+      { type: 'turn_context', payload: { turn_id: 't1', model: 'gpt-5.5' } },
+      {
+        timestamp: new Date(at(6)).toISOString(),
+        type: 'token_usage_record',
+        payload: { thread_id: 'check', turn_id: 't1', response_id: 'r1', usage }
+      }
+    ]
+    writeFileSync(
+      join(day, 'rollout-2026-10-11T10-05-00-check.jsonl'),
+      `${lines.map((l) => JSON.stringify(l)).join('\n')}\n`
+    )
+    const read = stepUsageReader(
+      { claudeProjects: projects, codexHomes: [join(root, 'codex')] },
+      () => at(30)
+    )
+    const step = {
+      ...base,
+      sessionId: 'orchestrator',
+      startedAt: at(0),
+      finishedAt: at(30),
+      worktreePath: '/wt/run-1'
+    }
+    expect(await read(step)).toEqual({
+      buckets: [
+        expect.objectContaining({
+          agent: 'codex',
+          model: 'gpt-5.5',
+          requests: 1,
+          input: 600,
+          output: 100
+        })
+      ],
       sessionFound: true
     })
   })

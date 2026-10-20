@@ -1,6 +1,9 @@
 import { stat } from 'node:fs/promises'
+import type { AgentKind } from '../../shared/definition/types'
 
 export type UsageBucket = {
+  // Whose tokens: a step's child sessions can be the other agent's (a Claude orchestrator's Codex checks).
+  agent: AgentKind
   day: string
   model: string
   requests: number
@@ -11,7 +14,7 @@ export type UsageBucket = {
   costUsd: number | null
 }
 export type UsageWindow = { from: number; to: number }
-export type BucketRow = Omit<UsageBucket, 'day' | 'model'>
+export type BucketRow = Omit<UsageBucket, 'agent' | 'day' | 'model'>
 
 const pad2 = (n: number): string => String(n).padStart(2, '0')
 
@@ -43,31 +46,51 @@ function addCost(a: number | null, b: number | null): number | null {
   return a + b
 }
 
+function putBucket(byKey: Map<string, UsageBucket>, b: UsageBucket): void {
+  const key = `${b.day}|${b.model}`
+  const old = byKey.get(key)
+  if (!old) {
+    byKey.set(key, { ...b })
+    return
+  }
+  old.requests += b.requests
+  old.input += b.input
+  old.cacheRead += b.cacheRead
+  old.cacheWrite += b.cacheWrite
+  old.output += b.output
+  old.costUsd = addCost(old.costUsd, b.costUsd)
+}
+
+function sortedBuckets(byKey: ReadonlyMap<string, UsageBucket>): UsageBucket[] {
+  return [...byKey.values()].sort((a, b) =>
+    `${a.day}|${a.model}`.localeCompare(`${b.day}|${b.model}`)
+  )
+}
+
 // One bucket per local day and model, like usage.py's day|model buckets. An unpriced model's cost stays null.
 export class BucketSet {
   private readonly byKey = new Map<string, UsageBucket>()
 
+  constructor(private readonly agent: AgentKind) {}
+
   add(ms: number, model: string, row: BucketRow): void {
-    const day = localDay(ms)
-    const key = `${day}|${model}`
-    const old = this.byKey.get(key)
-    if (!old) {
-      this.byKey.set(key, { day, model, ...row })
-      return
-    }
-    old.requests += row.requests
-    old.input += row.input
-    old.cacheRead += row.cacheRead
-    old.cacheWrite += row.cacheWrite
-    old.output += row.output
-    old.costUsd = addCost(old.costUsd, row.costUsd)
+    putBucket(this.byKey, { agent: this.agent, day: localDay(ms), model, ...row })
   }
 
   list(): UsageBucket[] {
-    return [...this.byKey.values()].sort((a, b) =>
-      `${a.day}|${a.model}`.localeCompare(`${b.day}|${b.model}`)
-    )
+    return sortedBuckets(this.byKey)
   }
+}
+
+// Several sessions' buckets as one step's: the same day and model add up.
+export function mergeBuckets(lists: readonly (readonly UsageBucket[])[]): UsageBucket[] {
+  const byKey = new Map<string, UsageBucket>()
+  for (const list of lists) {
+    for (const b of list) {
+      putBucket(byKey, b)
+    }
+  }
+  return sortedBuckets(byKey)
 }
 
 // A step's totals: the cost of its priced buckets (null when none is priced), every token, and the model that

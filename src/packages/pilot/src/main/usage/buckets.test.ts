@@ -27,13 +27,14 @@ describe('inWindow', () => {
 
 describe('BucketSet', () => {
   it('adds rows by day and model; a bucket whose model has no price has no cost', () => {
-    const set = new BucketSet()
+    const set = new BucketSet('claude')
     const row = { requests: 1, input: 10, cacheRead: 5, cacheWrite: 2, output: 3, costUsd: 0.5 }
     set.add(at(10), 'claude-opus-5-5', row)
     set.add(at(10, 5), 'claude-opus-5-5', row)
     set.add(at(10), 'mystery', { ...row, costUsd: null })
     expect(set.list()).toEqual([
       {
+        agent: 'claude',
         day: '2026-10-11',
         model: 'claude-opus-5-5',
         requests: 2,
@@ -44,6 +45,7 @@ describe('BucketSet', () => {
         costUsd: 1
       },
       {
+        agent: 'claude',
         day: '2026-10-11',
         model: 'mystery',
         requests: 1,
@@ -59,6 +61,7 @@ describe('BucketSet', () => {
 
 describe('totalsOf', () => {
   const b = (model: string, input: number, costUsd: number | null): UsageBucket => ({
+    agent: 'claude',
     day: '2026-10-11',
     model,
     requests: 1,

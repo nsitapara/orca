@@ -219,7 +219,7 @@ function openPilot(
         log
       })
     : null
-  const readUsage = stepUsageReader(defaultUsagePaths(), now)
+  const readUsage = stepUsageReader(defaultUsagePaths(), now, () => store.usage.sessionIds())
   const usageReports = usageReporter(store, definitions, now, log, options.resourcesDir)
   const endedTabs = createEndedRunTabs({
     store,

@@ -15,7 +15,7 @@ export type SpendRaw = {
 const GROUP_KEY: Record<SpendGroup, string> = {
   automation: 'r.automation_id',
   skill: "COALESCE(s.skill, '')",
-  agent: 's.agent',
+  agent: 'COALESCE(u.agent, s.agent)',
   mr: 'r.item_key'
 }
 // Older (M1) runs keyed MRs as "!<iid>", v2 runs as "mr:<iid>".
@@ -118,7 +118,7 @@ export class SpendStore {
   reportBuckets(): ReportBucketRow[] {
     return this.db
       .prepare(
-        `SELECT r.automation_id, r.item_label, r.worktree_path, s.agent, s.session_id,
+        `SELECT r.automation_id, r.item_label, r.worktree_path, COALESCE(u.agent, s.agent) AS agent, s.session_id,
            s.started_at AS step_started_at, u.day, u.model, u.requests, u.input, u.cache_read,
            u.cache_write, u.output, u.cost_usd
          ${FROM} WHERE s.session_id IS NOT NULL ORDER BY u.day, s.started_at, u.model`

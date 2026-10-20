@@ -243,8 +243,8 @@ describe('migrate', () => {
       "INSERT INTO inbox_items (id, automation_id, person, type, title, digest, created_at, updated_at) VALUES ('i1', 'a', 'p', 'question', 't', 'd', 1, 1)"
     )
     migrate(db)
-    expect(PILOT_SCHEMA_VERSION).toBe(18)
-    expect(db.pragma('user_version', { simple: true })).toBe(18)
+    expect(PILOT_SCHEMA_VERSION).toBe(19)
+    expect(db.pragma('user_version', { simple: true })).toBe(19)
     expect(
       firstRow(
         db,
@@ -382,7 +382,7 @@ describe('migrate', () => {
       "INSERT INTO steps (run_id, idx, name, agent, status) VALUES ('r1', 0, 'context', 'shell', 'done')"
     )
     migrate(db)
-    expect(db.pragma('user_version', { simple: true })).toBe(18)
+    expect(db.pragma('user_version', { simple: true })).toBe(19)
     expect(firstRow(db, 'SELECT result_json FROM steps')).toEqual({ result_json: null })
   })
 
@@ -455,6 +455,32 @@ describe('migrate', () => {
       hold_detail: 'Waiting for a slot',
       checked_at: 7
     })
+  })
+
+  it("V19 gives a V18 database's buckets their step's agent, and measures again the agent steps of the last 30 days", () => {
+    const db = openDb()
+    migrate(db, 18)
+    const recent = Date.now() - 86_400_000
+    const old = Date.now() - 31 * 86_400_000
+    db.exec(
+      "INSERT INTO runs (id, automation_id, item_key, item_label, status, started_at) VALUES ('r1', 'a', 'k', 'l', 'done', 1)"
+    )
+    db.exec(
+      `INSERT INTO steps (run_id, idx, name, agent, status, finished_at, usage_measured_at, kind) VALUES
+         ('r1', 0, 'fix', 'codex', 'done', ${recent}, 5, 'agent'),
+         ('r1', 1, 'old', 'claude', 'done', ${old}, 5, 'agent'),
+         ('r1', 2, 'sh', 'shell', 'done', ${recent}, 5, 'shell')`
+    )
+    db.exec(
+      "INSERT INTO step_usage (run_id, idx, day, model, requests, input, cache_read, cache_write, output, cost_usd) VALUES ('r1', 0, '2026-10-11', 'gpt', 1, 1, 0, 0, 0, 0.1)"
+    )
+    migrate(db)
+    expect(firstRow(db, 'SELECT agent FROM step_usage')).toEqual({ agent: 'codex' })
+    expect(db.prepare('SELECT idx, usage_measured_at FROM steps ORDER BY idx').all()).toEqual([
+      { idx: 0, usage_measured_at: null },
+      { idx: 1, usage_measured_at: 5 },
+      { idx: 2, usage_measured_at: 5 }
+    ])
   })
 
   it("V18 holds a V17 database's held rows since they joined, and leaves its slot waiters unheld", () => {

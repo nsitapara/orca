@@ -65,7 +65,7 @@ export async function claudeUsage(
   parse: ClaudeParse = parseClaudeUsageFile,
   estimate: Estimate = estimateCostUsd
 ): Promise<UsageBucket[]> {
-  const buckets = new BucketSet()
+  const buckets = new BucketSet('claude')
   for (const file of files) {
     let turns: Turn[]
     try {

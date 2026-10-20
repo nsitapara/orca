@@ -1,6 +1,6 @@
 import type Database from '../../../../../main/sqlite/sync-database'
 
-export const PILOT_SCHEMA_VERSION = 18
+export const PILOT_SCHEMA_VERSION = 19
 
 const V1 = `
 CREATE TABLE ticks (id INTEGER PRIMARY KEY AUTOINCREMENT, automation_id TEXT NOT NULL, started_at INTEGER NOT NULL,
@@ -208,6 +208,15 @@ ALTER TABLE run_queue ADD COLUMN held_at INTEGER;
 UPDATE run_queue SET held_at = queued_at WHERE hold_code IS NOT NULL AND hold_code != 'capacity';
 `
 
+// Each bucket keeps whose tokens it holds: a step now counts its agent's child sessions, which can be the other agent
+// (a Claude orchestrator's Codex checks). Agent steps of the last 30 days are measured again to add those sessions.
+const V19 = `
+ALTER TABLE step_usage ADD COLUMN agent TEXT;
+UPDATE step_usage SET agent = (SELECT s.agent FROM steps s WHERE s.run_id = step_usage.run_id AND s.idx = step_usage.idx);
+UPDATE steps SET usage_measured_at = NULL
+  WHERE kind = 'agent' AND finished_at >= (CAST(strftime('%s', 'now') AS INTEGER) - 30 * 86400) * 1000;
+`
+
 // MIGRATIONS[n - 1] takes a database from version n - 1 to n.
 const MIGRATIONS: readonly string[] = [
   V1,
@@ -227,7 +236,8 @@ const MIGRATIONS: readonly string[] = [
   V15,
   V16,
   V17,
-  V18
+  V18,
+  V19
 ]
 
 // Same pattern as Orca's orchestration.db (migrate.ts): user_version + one transaction, all or nothing.

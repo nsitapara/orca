@@ -1,5 +1,6 @@
 import type Database from '../../../../../main/sqlite/sync-database'
 import type { AdvanceStore } from './store-advance'
+import type { AgentKind } from '../../shared/definition/types'
 import { totalsOf, type UsageBucket } from '../usage/buckets'
 
 export type MeasurableStep = {
@@ -10,6 +11,8 @@ export type MeasurableStep = {
   transcriptPath: string | null
   startedAt: number | null
   finishedAt: number | null
+  // Where the run worked (an env run's folder): its agent's child sessions ran there.
+  worktreePath: string | null
 }
 
 function toMeasurable(r: Record<string, unknown>): MeasurableStep {
@@ -20,12 +23,18 @@ function toMeasurable(r: Record<string, unknown>): MeasurableStep {
     sessionId: (r.session_id as string | null) ?? null,
     transcriptPath: (r.transcript_path as string | null) ?? null,
     startedAt: (r.started_at as number | null) ?? null,
-    finishedAt: (r.finished_at as number | null) ?? null
+    finishedAt: (r.finished_at as number | null) ?? null,
+    worktreePath: typeof r.worktree_path === 'string' ? r.worktree_path : null
   }
+}
+
+function agentOf(value: unknown): AgentKind {
+  return value === 'codex' ? 'codex' : 'claude'
 }
 
 function toBucket(r: Record<string, unknown>): UsageBucket {
   return {
+    agent: agentOf(r.agent),
     day: String(r.day),
     model: String(r.model),
     requests: Number(r.requests),
@@ -47,10 +56,11 @@ export class UsageStore {
   unmeasuredSteps(limit = 50): MeasurableStep[] {
     return this.db
       .prepare(
-        `SELECT run_id, idx, agent, session_id, transcript_path, started_at, finished_at FROM steps
-         WHERE kind = 'agent' AND usage_measured_at IS NULL AND finished_at IS NOT NULL
-           AND status IN ('done', 'failed', 'timed_out')
-         ORDER BY finished_at, run_id, idx LIMIT ?`
+        `SELECT s.run_id, s.idx, s.agent, s.session_id, s.transcript_path, s.started_at, s.finished_at,
+           r.worktree_path FROM steps s JOIN runs r ON r.id = s.run_id
+         WHERE s.kind = 'agent' AND s.usage_measured_at IS NULL AND s.finished_at IS NOT NULL
+           AND s.status IN ('done', 'failed', 'timed_out')
+         ORDER BY s.finished_at, s.run_id, s.idx LIMIT ?`
       )
       .all(limit)
       .map((r) => toMeasurable(r as never))
@@ -102,7 +112,7 @@ export class UsageStore {
   ): void {
     const totals = totalsOf(buckets)
     const insert = this.db.prepare(
-      'INSERT INTO step_usage (run_id, idx, day, model, requests, input, cache_read, cache_write, output, cost_usd) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+      'INSERT INTO step_usage (run_id, idx, day, model, requests, input, cache_read, cache_write, output, cost_usd, agent) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
     )
     this.db.prepare('DELETE FROM step_usage WHERE run_id = ? AND idx = ?').run(runId, idx)
     for (const b of buckets) {
@@ -116,7 +126,8 @@ export class UsageStore {
         b.cacheRead,
         b.cacheWrite,
         b.output,
-        b.costUsd
+        b.costUsd,
+        b.agent
       )
     }
     this.db
@@ -128,9 +139,21 @@ export class UsageStore {
 
   stepBuckets(runId: string, idx: number): UsageBucket[] {
     return this.db
-      .prepare('SELECT * FROM step_usage WHERE run_id = ? AND idx = ? ORDER BY day, model')
+      .prepare(
+        `SELECT u.*, COALESCE(u.agent, s.agent) AS agent FROM step_usage u
+         JOIN steps s ON s.run_id = u.run_id AND s.idx = u.idx
+         WHERE u.run_id = ? AND u.idx = ? ORDER BY u.day, u.model`
+      )
       .all(runId, idx)
       .map((r) => toBucket(r as never))
+  }
+
+  // Every session a step owns: another step's session is never counted as a child of this one.
+  sessionIds(): Set<string> {
+    const rows = this.db
+      .prepare('SELECT DISTINCT session_id FROM steps WHERE session_id IS NOT NULL')
+      .all()
+    return new Set(rows.flatMap((r) => (typeof r.session_id === 'string' ? [r.session_id] : [])))
   }
 
   lastMeasuredAt(): number | null {

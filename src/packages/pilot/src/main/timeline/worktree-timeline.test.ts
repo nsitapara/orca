@@ -44,6 +44,7 @@ function setup() {
     0,
     [
       {
+        agent: 'claude',
         day: '2026-10-11',
         model: 'm',
         requests: 1,
@@ -176,6 +177,7 @@ describe('buildWorktreeTimeline', () => {
       0,
       [
         {
+          agent: 'claude',
           day: '2026-10-11',
           model: 'm',
           requests: 1,
@@ -209,6 +211,7 @@ describe('buildWorktreeTimeline', () => {
       0,
       [
         {
+          agent: 'claude',
           day: '2026-10-11',
           model: 'mystery',
           requests: 1,
