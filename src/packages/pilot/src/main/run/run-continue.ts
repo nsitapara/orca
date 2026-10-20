@@ -85,7 +85,8 @@ function refusal(
   if (def.workspace.kind === 'env') {
     return "A run in an env workspace can't be continued: its env was taken down when it ended"
   }
-  if (readsFed(def)) {
+  // A stopped run still holds the ids handed to it; a failed one gave them back.
+  if (readsFed(def) && run.status !== 'cancelled') {
     return 'The work handed over to this run went back to its queue when it failed: the next tick takes it up again'
   }
   const rows = deps.store.runs.steps(run.id)

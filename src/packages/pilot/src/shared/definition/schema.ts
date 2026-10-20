@@ -118,6 +118,7 @@ const step = z.strictObject({
   mode: z.string().min(1).optional(),
   prompt: z.string().optional(),
   prompt_style: z.enum(['wrapped', 'raw']).optional(),
+  wait: z.enum(['start', 'finish']).optional(),
   args: z.array(z.string()).optional(),
   session: stepSession.optional(),
   run: z.string().min(1).optional(),

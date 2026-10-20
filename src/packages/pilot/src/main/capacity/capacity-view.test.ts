@@ -364,4 +364,143 @@ describe('capacityView', () => {
       ['last-week', '3']
     ])
   })
+
+  // A pane key reads "<tabId>:<pane>"; the tab is the running agent step's, else the newest detached one's.
+  it.each([
+    {
+      name: 'a running agent step with a pane',
+      steps: [{ status: 'running', paneKey: 'tab-1:leaf-1' }],
+      tab: { worktreePath: '/wt/a', tabId: 'tab-1' }
+    },
+    { name: 'a running shell step', steps: [{ status: 'running', kind: 'shell' }], tab: undefined },
+    { name: 'a running agent step without a pane', steps: [{ status: 'running' }], tab: undefined },
+    {
+      name: 'a detached step when none runs',
+      steps: [
+        { status: 'done', detached: true, paneKey: 'tab-1:leaf-1' },
+        { status: 'done', detached: true, paneKey: 'tab-2:leaf-2' }
+      ],
+      tab: { worktreePath: '/wt/a', tabId: 'tab-2' }
+    },
+    {
+      name: 'the running step over a detached one',
+      steps: [
+        { status: 'done', detached: true, paneKey: 'tab-1:leaf-1' },
+        { status: 'running', paneKey: 'tab-3:leaf-3' }
+      ],
+      tab: { worktreePath: '/wt/a', tabId: 'tab-3' }
+    },
+    {
+      name: 'a finished step that did not detach',
+      steps: [{ status: 'done', paneKey: 'tab-1:l' }],
+      tab: undefined
+    },
+    {
+      name: 'a pane key whose tab id holds a colon',
+      steps: [{ status: 'running', paneKey: 'wt:tab-1:leaf-1' }],
+      tab: { worktreePath: '/wt/a', tabId: 'wt:tab-1' }
+    }
+  ] as const)('sets a run tab from $name', ({ steps, tab }) => {
+    const store = PilotStore.open(
+      join(mkdtempSync(join(tmpdir(), 'pilot-capacity-view-')), 'db.sqlite')
+    )
+    store.runs.create({
+      id: 'r1',
+      automationId: 'review',
+      tickId: null,
+      itemKey: 'r1',
+      itemLabel: '!r1',
+      worktreePath: '/wt/a',
+      startedAt: 1
+    })
+    steps.forEach((step, idx) => {
+      const { paneKey, ...rest } = { paneKey: undefined, kind: 'agent', detached: false, ...step }
+      store.runs.createStep({
+        runId: 'r1',
+        idx,
+        name: `s${idx}`,
+        agent: rest.kind === 'shell' ? 'shell' : 'claude',
+        skill: null,
+        startedAt: 1,
+        kind: rest.kind,
+        status: rest.status
+      })
+      store.runs.updateStep('r1', idx, { ...(paneKey ? { paneKey } : {}), detached: rest.detached })
+    })
+    const view = capacityView({
+      store,
+      definitions: [testDefinition({ id: 'review' })],
+      memory: null,
+      system: { totalBytes: 1, availableBytes: 1 },
+      now: 100
+    })
+    expect(view.running[0]?.tab).toEqual(tab)
+  })
+
+  it.each([
+    {
+      name: 'an answer run on its running agent step',
+      trigger: 'answer',
+      steps: [{ status: 'running', name: 'answers', skill: 'ui-qa', mode: 'answers' }],
+      fromAnswer: true,
+      step: { name: 'answers', kind: 'agent', skill: 'ui-qa', mode: 'answers' }
+    },
+    {
+      name: 'a scheduled run on its starting shell step',
+      trigger: 'schedule',
+      steps: [
+        { status: 'done', name: 'first' },
+        { status: 'starting', name: 'pull', kind: 'shell' }
+      ],
+      fromAnswer: undefined,
+      step: { name: 'pull', kind: 'shell', skill: null, mode: null }
+    },
+    {
+      name: 'a manual run between steps',
+      trigger: 'manual',
+      steps: [
+        { status: 'done', name: 'first' },
+        { status: 'pending', name: 'next' }
+      ],
+      fromAnswer: undefined,
+      step: undefined
+    }
+  ] as const)('sets fromAnswer and step for $name', ({ trigger, steps, fromAnswer, step }) => {
+    const store = PilotStore.open(
+      join(mkdtempSync(join(tmpdir(), 'pilot-capacity-view-')), 'db.sqlite')
+    )
+    store.runs.create({
+      id: 'r1',
+      automationId: 'review',
+      tickId: null,
+      itemKey: 'r1',
+      itemLabel: '!r1',
+      worktreePath: '/wt/a',
+      startedAt: 1,
+      trigger
+    })
+    steps.forEach((s, idx) => {
+      const { skill, mode, kind } = { skill: null, mode: null, kind: 'agent', ...s }
+      store.runs.createStep({
+        runId: 'r1',
+        idx,
+        name: s.name,
+        agent: kind === 'shell' ? 'shell' : 'claude',
+        skill,
+        mode,
+        startedAt: 1,
+        kind,
+        status: s.status
+      })
+    })
+    const view = capacityView({
+      store,
+      definitions: [testDefinition({ id: 'review' })],
+      memory: null,
+      system: { totalBytes: 1, availableBytes: 1 },
+      now: 100
+    })
+    expect(view.running[0]?.fromAnswer).toBe(fromAnswer)
+    expect(view.running[0]?.step).toEqual(step)
+  })
 })

@@ -17,6 +17,17 @@ export type StepProbe = {
     paneKey: string,
     since?: number | null
   ): { id: string; transcriptPath: string | null } | null
+  // Whether the session has sent any hook row since `since` (SessionStart's included): it is up.
+  started(paneKey: string, since?: number | null): boolean
+}
+
+function rowsSince<R extends { stateStartedAt?: number; receivedAt: number }>(
+  rows: readonly R[],
+  since: number | null | undefined
+): R[] {
+  return since === null || since === undefined
+    ? [...rows]
+    : rows.filter((r) => (r.stateStartedAt ?? r.receivedAt) >= since)
 }
 
 export function runtimeStepProbe(
@@ -28,16 +39,16 @@ export function runtimeStepProbe(
       const rows = runtime.getAgentStatusRowsForPane(paneKey)
       // Keyed on when the row's state began, not receivedAt: the hook server re-stamps receivedAt on a
       // same-state refresh, so an earlier turn's `done` row would otherwise look like this step's.
-      const row = newestLiveRow(
-        since === null || since === undefined
-          ? rows
-          : rows.filter((r) => (r.stateStartedAt ?? r.receivedAt) >= since)
-      )
+      const row = newestLiveRow(rowsSince(rows, since))
       if (row) {
         return observedState(row)
       }
       try {
-        await runtime.showTerminal(handle)
+        const shown = await runtime.showTerminal(handle)
+        // An exited agent leaves an orphaned, disconnected terminal that showTerminal still answers for.
+        if (shown.orphaned && !shown.connected) {
+          return (await relist(handle, paneKey)) ? 'working' : 'gone'
+        }
         return 'working'
       } catch (error) {
         if (!isTerminalGoneError(error)) {
@@ -53,15 +64,15 @@ export function runtimeStepProbe(
     },
     session(paneKey, since) {
       const rows = runtime.getAgentStatusRowsForPane(paneKey)
-      const mine =
-        since === null || since === undefined
-          ? rows
-          : rows.filter((r) => (r.stateStartedAt ?? r.receivedAt) >= since)
-      const s = newestSessionRow(mine)?.providerSession
+      const s = newestSessionRow(rowsSince(rows, since))?.providerSession
       if (!s?.id) {
         return null
       }
       return { id: s.id, transcriptPath: s.transcriptPath ?? null }
+    },
+    started(paneKey, since) {
+      const rows = runtime.getAgentStatusRowsForPane(paneKey)
+      return rowsSince(rows, since).some((r) => !r.providerSessionOnly && !r.restoredUnconfirmed)
     }
   }
 }
@@ -72,6 +83,9 @@ type StepPatch = Parameters<PilotStore['runs']['updateStep']>[2]
 export type StepPollHooks = {
   // The step's timeout in ms, or null for none (contract §7: its own, else limits.timeout).
   timeoutOf(step: OpenStep): number | null
+  // The step is `wait: start`: it ends done, detached, once its session is up.
+  endsAtStart(step: OpenStep): boolean
+  log(message: string): void
   closeTerminal(handle: string): Promise<void>
   // The step ended (done, failed or timed out): the run engine starts the next step or ends the run.
   onStepEnded(runId: string): Promise<void>
@@ -81,6 +95,14 @@ export type StepPollHooks = {
 
 const GONE = 'The terminal closed before the agent finished'
 
+const OPEN: ReadonlySet<OpenStep['status']> = new Set(['starting', 'running'])
+
+// Stop (run-stop.ts) doesn't take turns with the watcher: a step it ended while a probe was awaited keeps Stop's end.
+function stillOpen(store: PilotStore, step: OpenStep): boolean {
+  const row = store.runs.steps(step.runId).find((s) => s.idx === step.idx)
+  return row !== undefined && OPEN.has(row.status)
+}
+
 // The row first: if the engine then throws, the step stays ended and advanceIdle picks the run up.
 async function endStep(
   store: PilotStore,
@@ -88,6 +110,9 @@ async function endStep(
   patch: StepPatch,
   hooks: StepPollHooks
 ): Promise<void> {
+  if (!stillOpen(store, step)) {
+    return
+  }
   store.runs.updateStep(step.runId, step.idx, patch)
   await hooks.onStepEnded(step.runId)
 }
@@ -104,6 +129,9 @@ async function timeOutIfDue(
 ): Promise<void> {
   const limit = hooks.timeoutOf(step)
   if (limit === null || step.startedAt === null || now() - step.startedAt < limit) {
+    return
+  }
+  if (!stillOpen(store, step)) {
     return
   }
   try {
@@ -126,6 +154,28 @@ async function timeOutIfDue(
   )
 }
 
+async function endDone(
+  store: PilotStore,
+  step: OpenStep,
+  session: ReturnType<StepProbe['session']>,
+  cost: CostReader,
+  now: () => number,
+  hooks: StepPollHooks,
+  detached: boolean
+): Promise<void> {
+  const path = session?.transcriptPath ?? step.transcriptPath
+  // Only a provisional Claude cost is read here; measureFinishedSteps (usage/) overwrites it, for both agents, with
+  // the step's own window.
+  const spent = path && step.agent === 'claude' ? await cost(path) : { costUsd: null, tokens: null }
+  const patch: StepPatch = {
+    status: 'done',
+    finishedAt: now(),
+    costUsd: spent.costUsd,
+    tokens: spent.tokens
+  }
+  await endStep(store, step, detached ? { ...patch, detached: true } : patch, hooks)
+}
+
 async function pollStep(
   store: PilotStore,
   step: OpenStep,
@@ -146,19 +196,13 @@ async function pollStep(
       hooks.sessionLearned?.(step, patch.sessionId)
     }
   }
+  if (hooks.endsAtStart(step) && probe.started(step.paneKey, step.startedAt)) {
+    await endDone(store, step, session, cost, now, hooks, true)
+    return
+  }
   const state = await probe.status(handle, step.paneKey, step.startedAt)
   if (state === 'done') {
-    const path = session?.transcriptPath ?? step.transcriptPath
-    // Only a provisional Claude cost is read here; measureFinishedSteps (usage/) overwrites it, for both agents, with
-    // the step's own window.
-    const spent =
-      path && step.agent === 'claude' ? await cost(path) : { costUsd: null, tokens: null }
-    await endStep(
-      store,
-      step,
-      { status: 'done', finishedAt: now(), costUsd: spent.costUsd, tokens: spent.tokens },
-      hooks
-    )
+    await endDone(store, step, session, cost, now, hooks, false)
     return
   }
   if (state === 'gone') {
@@ -181,7 +225,7 @@ export async function pollRunningSteps(
     try {
       await pollStep(store, step, probe, cost, now, hooks)
     } catch (error) {
-      console.error(
+      hooks.log(
         `pilot: couldn't poll step ${step.runId}/${step.idx}: ${error instanceof Error ? error.message : String(error)}`
       )
     }

@@ -185,17 +185,17 @@ export type DecideScope = {
   lineKeys?: ReadonlySet<string>
 }
 
-// A row Run now queued keeps its exemption at every re-check, until its item starts.
-function byHandKeys(
+// A row Run now queued keeps its exemption at every re-check, and a row Go now marked its mark, until its item starts.
+function lineMarks(
   store: PilotStore,
   automationId: string,
   asked: ReadonlySet<string> | undefined
-): Set<string> {
-  const queued = store.capacity
-    .queued()
-    .filter((q) => q.automationId === automationId && q.byHand)
-    .map((q) => q.itemKey)
-  return new Set([...(asked ?? []), ...queued])
+): Pick<DecideInput, 'byHandKeys' | 'goNowKeys'> {
+  const rows = store.capacity.queued().filter((q) => q.automationId === automationId)
+  return {
+    byHandKeys: new Set([...(asked ?? []), ...rows.filter((q) => q.byHand).map((q) => q.itemKey)]),
+    goNowKeys: new Set(rows.filter((q) => q.goNow === true).map((q) => q.itemKey))
+  }
 }
 
 // The source's waitingSince is the item's due time in the runner's line; first sight only ranks it within the job.
@@ -307,7 +307,7 @@ export async function decideTickItems(
     notDue: custom.notDue,
     retryLimit: deps.store.capacity.retryLimit(),
     byHand: hand.byHand === true,
-    byHandKeys: byHandKeys(deps.store, def.id, hand.byHandKeys)
+    ...lineMarks(deps.store, def.id, hand.byHandKeys)
   }
   const decisions = decideTick({
     ...input,

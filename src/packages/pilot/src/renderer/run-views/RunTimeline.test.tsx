@@ -7,7 +7,13 @@ import { chainOf } from '../../shared/run-views/chain'
 import { paintRun } from '../../shared/run-views/paint'
 
 vi.mock('../api', () => ({ pilotRpc: vi.fn().mockResolvedValue(null) }))
+const activateRunTab = vi.fn()
+vi.mock('../activity-tabs/activate-run-tab', () => ({
+  activateRunTab: (...args: unknown[]) => activateRunTab(...args)
+}))
 
+import { LOCAL_NAMED, MINI } from '../hosts/__fixtures__/hosts'
+import { PilotHostProvider } from '../hosts/PilotHostContext'
 import { RunTimeline } from './RunTimeline'
 
 const shell = (name: string) => testStep({ name, agent: 'shell', run: `${name}.sh`, prompt: null })
@@ -25,7 +31,10 @@ const chain = chainOf(def, [def])
 const WHEN = "when: lead == 'claude' is false"
 
 describe('RunTimeline', () => {
-  afterEach(cleanup)
+  afterEach(() => {
+    cleanup()
+    activateRunTab.mockReset()
+  })
 
   it('numbers the steps that ran in order, shows the cards each left and how the run ended, then what did not run', () => {
     const onOpenCard = vi.fn()
@@ -61,9 +70,7 @@ describe('RunTimeline', () => {
         testCard({ id: 'd', stepIdx: 2, type: 'default', title: 'Keep the old name? → Yes' })
       ]
     })
-    render(
-      <RunTimeline parts={paintRun(chain, { run }).parts} run={run} onOpenCard={onOpenCard} />
-    )
+    render(<RunTimeline parts={paintRun(chain, { run }).parts} run={run} onOpenCard={onOpenCard} />)
     const ran = screen.getByRole('list', { name: 'Steps that ran' })
     expect(
       [...ran.querySelectorAll<HTMLElement>('[data-step-n]')].map(
@@ -136,5 +143,38 @@ describe('RunTimeline', () => {
     const painted = paintRun(chain, { run })
     render(<RunTimeline parts={painted.parts} run={run} drifted={painted.drifted} />)
     expect(screen.getByText('The YAML has changed since this run')).toBeTruthy()
+  })
+
+  describe('Show tab', () => {
+    const live = testRun({
+      automationId: 'review',
+      worktreePath: '/wt/web-1',
+      steps: [
+        testStepRow({ idx: 0, name: 'begin', agent: 'shell', kind: 'shell', paneKey: 'tab-0:l' }),
+        testStepRow({ idx: 1, name: 'r1_claude', status: 'running', paneKey: 'tab-1:leaf-1' }),
+        testStepRow({ idx: 2, name: 'r1_codex', status: 'running' })
+      ]
+    })
+    const show = (host = LOCAL_NAMED) =>
+      render(
+        <PilotHostProvider host={host}>
+          <RunTimeline parts={paintRun(chain, { run: live }).parts} run={live} />
+        </PilotHostProvider>
+      )
+
+    it("opens a running agent step's tab, and says when it is closed", () => {
+      show()
+      const buttons = screen.getAllByRole('button', { name: 'Show tab' })
+      expect(buttons).toHaveLength(1)
+      activateRunTab.mockReturnValue(false)
+      fireEvent.click(buttons[0])
+      expect(activateRunTab).toHaveBeenCalledWith({ worktreePath: '/wt/web-1', tabId: 'tab-1' })
+      expect(screen.getByText('Its tab is closed')).toBeTruthy()
+    })
+
+    it("is not offered for another machine's run", () => {
+      show(MINI)
+      expect(screen.queryByRole('button', { name: 'Show tab' })).toBeNull()
+    })
   })
 })

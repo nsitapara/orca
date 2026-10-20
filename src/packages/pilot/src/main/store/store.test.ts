@@ -3,7 +3,8 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import Database from '../../../../../main/sqlite/sync-database'
-import type { ItemDecision } from '../../shared/api-types'
+import type { HandledStatus, ItemDecision, RunStatus } from '../../shared/api-types'
+import { STOPPED_BY_YOU } from '../../shared/run/stopped-run'
 import { PILOT_SCHEMA_VERSION } from './migrations'
 import { addImportedHandled } from './__fixtures__/imported-rows'
 import { INTERRUPTED, PilotStore, STUCK_TICK_MS, TICK_RETENTION_MS } from './store'
@@ -119,14 +120,40 @@ describe('PilotStore', () => {
     ])
   })
 
-  it('frees a failed key on Retry, leaving a key a run still holds', () => {
+  // Stop settles its run's key done (run-stop.ts), so Retry is how its item runs again; a key a run holds stays.
+  it.each<[string, HandledStatus | null, RunStatus, string | null, boolean]>([
+    ['a failed run', 'failed', 'failed', 'agent exited', true],
+    ['a stopped run', 'done', 'cancelled', STOPPED_BY_YOU, true],
+    [
+      'a stopped run whose handover was refused',
+      'done',
+      'cancelled',
+      `${STOPPED_BY_YOU}; handover to b refused "x" (bad id)`,
+      true
+    ],
+    ['a declined ask-first run', 'done', 'cancelled', 'Not started: dismissed', false],
+    ['a run that ended done', 'done', 'done', 'Done', false],
+    ['a running run', null, 'running', null, false]
+  ])('names and frees the key of %s for Retry', (_name, settled, status, outcome, retried) => {
     const store = freshStore()
-    store.markHandled('a', 'failed', 'run-1', 1)
-    store.markHandled('a', 'running', 'run-2', 1)
-    store.setHandledStatus('a', 'run-1', 'failed', 2)
-    store.resetFailures('a', 'failed')
-    store.resetFailures('a', 'running')
-    expect(store.handledKeys('a')).toEqual(new Set(['running']))
+    store.runs.create({
+      id: 'run-1',
+      automationId: 'a',
+      tickId: null,
+      itemKey: 'mr:1',
+      itemLabel: '!1',
+      worktreePath: null,
+      startedAt: 1
+    })
+    store.runs.update('run-1', { status, outcome })
+    store.markHandled('a', 'k:1', 'run-1', 1)
+    if (settled) {
+      store.setHandledStatus('a', 'run-1', settled, 2)
+    }
+    const key: [string, string][] = retried ? [['run-1', 'k:1']] : []
+    expect(store.retryKeysOf(['run-1', 'run-2'])).toEqual(new Map(key))
+    expect(store.resetFailures('a', 'k:1')).toBe(retried ? 'mr:1' : null)
+    expect(store.handledKeys('a')).toEqual(new Set(retried ? [] : ['k:1']))
   })
 
   it('lists the keys that failed past the retry limit since a time, across automations', () => {
@@ -165,15 +192,6 @@ describe('PilotStore', () => {
       ['b', 'over', 4, '!over', 'failure 4'],
       ['a', 'over', 3, '!over', 'failure 3']
     ])
-  })
-
-  it('names the failed key each run still holds, for Retry on a finished run', () => {
-    const store = freshStore()
-    store.markHandled('a', 'k:1', 'run-1', 1)
-    store.markHandled('a', 'k:2', 'run-2', 1)
-    store.setHandledStatus('a', 'run-1', 'failed', 2)
-    store.setHandledStatus('a', 'run-2', 'done', 2)
-    expect(store.failedKeysOf(['run-1', 'run-2', 'run-3'])).toEqual(new Map([['run-1', 'k:1']]))
   })
 
   it('records a tick with its item decisions', () => {

@@ -2,7 +2,7 @@ import { z } from 'zod'
 import { isValidTimeZone, parseCron } from '../schedule/cron'
 import { RUN_PLACEHOLDER_ADVICE, envNameProblem, runPlaceholders } from '../run/shell-template'
 import { PLACEHOLDER } from '../template'
-import { envWorkspaceErrors, holdHomeErrors } from './env-workspace'
+import { envWorkspaceErrors, holdHomeErrors, waitStartErrors } from './env-workspace'
 import { feedsOf, stepNames } from './normalize'
 import type { RawAutomation, RawStep } from './schema'
 
@@ -89,6 +89,11 @@ function shellStepErrors(s: RawStep, n: number): string[] {
   const agentKeys = AGENT_ONLY.filter((k) => s[k] !== undefined)
   if (agentKeys.length > 0) {
     errors.push(`step ${n}: shell steps don't take ${keyNames(agentKeys)}`)
+  }
+  if (s.wait === 'start') {
+    errors.push(
+      `step ${n}: wait: start is for an agent step: a shell step ends when its command exits`
+    )
   }
   if (!s.run) {
     errors.push(`step ${n}: a shell step needs run:`)
@@ -315,6 +320,7 @@ export function definitionErrors(raw: RawAutomation): string[] {
     ...combinationErrors(raw),
     ...envWorkspaceErrors(raw),
     ...holdHomeErrors(raw),
+    ...waitStartErrors(raw),
     ...windowErrors(raw),
     ...fieldNameErrors(raw),
     ...jobErrors(raw)

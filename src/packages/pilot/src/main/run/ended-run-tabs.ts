@@ -82,7 +82,7 @@ export function endedRunTerminals(
           last !== undefined &&
           last.paneKey !== null &&
           last.finishedAt !== null &&
-          !onTab.some((s) => live.has(s.runId) || STEP_LIVE.has(s.status)) &&
+          !onTab.some((s) => s.detached || live.has(s.runId) || STEP_LIVE.has(s.status)) &&
           !usedSince(rowsOf(last.paneKey), last.finishedAt)
         )
       })
@@ -143,6 +143,10 @@ export function createEndedRunTabs(deps: EndedRunTabsDeps): EndedRunTabs {
           continue
         }
         if (onTab.some((s) => live.has(s.runId) || STEP_LIVE.has(s.status))) {
+          continue
+        }
+        // A detached step's session goes on in its tab: the tab is the session's, not the run's.
+        if (onTab.some((s) => s.detached)) {
           continue
         }
         // Ordered by start: the last is the step that used the tab last.

@@ -1,8 +1,20 @@
-import type { CapacityPayload, CapacityRun } from '../../../shared/api-types-capacity'
+import type { CapacityPayload, CapacityRun, RunStep } from '../../../shared/api-types-capacity'
 import { formatMemory } from '../../../shared/capacity/format-memory'
 import { HEADROOM_BYTES } from '../../../shared/capacity/limit-suggestion'
 import { DEFAULT_RETRY_AFTER_MS } from '../../../shared/capacity/retry-limit'
 import { waitsForSlot } from '../../../shared/capacity/waiting-rows'
+
+// The step a run is on, with its skill and mode where it has them: "Step answers · ui-qa · answers mode".
+export function stepText(step: RunStep): string {
+  const parts = [`Step ${step.name}`]
+  if (step.skill) {
+    parts.push(step.skill)
+  }
+  if (step.mode) {
+    parts.push(`${step.mode} mode`)
+  }
+  return parts.join(' · ')
+}
 
 function slotsText(running: number, limit: number | null): string {
   if (limit === null) {

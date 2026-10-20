@@ -258,6 +258,45 @@ describe('resolveChannelStep / resolveChannelRun', () => {
     expect(() => resolveChannelRun(ctx, { runId: 'run-1' })).toThrow('Run run-1 has ended (failed)')
   })
 
+  describe('a detached session (wait: start)', () => {
+    function withDetached(runStatus: 'running' | 'cancelled', detached: boolean) {
+      const s = setup()
+      s.store.runs.updateStep('run-1', 0, {
+        status: 'done',
+        terminalHandle: 'term-A',
+        finishedAt: 2,
+        detached
+      })
+      s.store.runs.update('run-1', { status: runStatus })
+      return s
+    }
+
+    it.each([
+      ['an open run', 'running'],
+      ['a stopped run', 'cancelled']
+    ] as const)('keeps its terminal and env binding in %s', (_n, runStatus) => {
+      const { ctx } = withDetached(runStatus, true)
+      const expected = { runId: 'run-1', stepIdx: 0 }
+      expect(resolveChannelStep(ctx, { terminal: 'term-A' })).toEqual(expected)
+      expect(resolveChannelStep(ctx, { runId: 'run-1', stepIdx: 0 })).toEqual(expected)
+    })
+
+    it('binds nothing for a done step that is not detached', () => {
+      const { ctx } = withDetached('running', false)
+      expect(() => resolveChannelStep(ctx, { terminal: 'term-A' })).toThrow(
+        "Not inside a Pilot run's step"
+      )
+    })
+
+    it('binds nothing from a handle no step holds once its tab closed; the step stays done', () => {
+      const { ctx, store } = withDetached('running', true)
+      expect(() => resolveChannelStep(ctx, { terminal: 'term-gone' })).toThrow(
+        "Not inside a Pilot run's step"
+      )
+      expect(store.runs.steps('run-1')[0]?.status).toBe('done')
+    })
+  })
+
   it.each([[{}], [{ terminal: 'term-Z' }], [{ runId: 'run-1' }]])(
     "refuses %j with neither a bound terminal nor the env's step",
     (target) => {

@@ -12,6 +12,7 @@ import { resetEffectsFeed } from '../../run-views/effects-feed'
 import { closeRunPanel, openRunPanel } from '../../run-views/run-panel-state'
 import { registerPilotStore } from '../../store'
 import { summary } from '../fixtures'
+import { capacity, finishedRun } from './__fixtures__/capacity'
 
 const pilotRpc = vi.fn()
 vi.mock('../../api', () => ({ pilotRpc: (...args: unknown[]) => pilotRpc(...args) }))
@@ -23,47 +24,6 @@ vi.mock('@/lib/worktree-activation', () => ({
 import { FINISHED_WIDTHS_KEY, FinishedRuns } from './FinishedRuns'
 import { RunningPage } from './RunningPage'
 import { CAPACITY_POLL_MS } from './use-capacity'
-
-const GIB = 1024 ** 3
-
-function capacity(over: Partial<CapacityPayload> = {}): CapacityPayload {
-  const now = Date.now()
-  return {
-    limit: 2,
-    running: [
-      {
-        id: 'r1',
-        automationId: 'review',
-        automationName: '03 Review and fix',
-        itemLabel: '!1655 web-2235',
-        startedAt: now - 5 * 60_000,
-        memoryBytes: 1.5 * GIB,
-        peakBytes: 2 * GIB,
-        counted: true
-      }
-    ],
-    queued: [
-      {
-        automationId: 'ci',
-        automationName: '05 Fix failed CI',
-        itemKey: 'mr:9',
-        itemLabel: '!9 web-9',
-        queuedAt: now - 3 * 60_000,
-        byHand: true
-      }
-    ],
-    finished: [],
-    memory: { totalBytes: 24 * GIB, availableBytes: 9 * GIB },
-    suggestion: { limit: 3, budgetBytes: 6.5 * GIB, perJobBytes: 2 * GIB, measured: true },
-    heaviest: {
-      automationId: 'review',
-      automationName: '03 Review and fix',
-      peakBytes: 2 * GIB,
-      measured: true
-    },
-    ...over
-  }
-}
 
 // The page's poll answers `current`; a change answers what was set. An opened finished run reads its effects and the
 // automations' chains.
@@ -86,50 +46,6 @@ function serve(current: CapacityPayload): void {
     }
     return current
   })
-}
-
-function finishedRun(over: Partial<FinishedRun> = {}): FinishedRun {
-  const now = Date.now()
-  return {
-    id: 'f1',
-    automationId: 'review',
-    automationName: '03 Review and fix',
-    tickId: null,
-    itemKey: 'mr:1',
-    itemLabel: '!1 web-1',
-    worktreePath: '/wt/web-1',
-    status: 'failed',
-    outcome: 'Merge conflict in api/models.py',
-    startedAt: now - 10 * 60_000,
-    finishedAt: now - 60_000,
-    costUsd: 0.4,
-    tokens: null,
-    worktreeId: null,
-    trigger: 'schedule',
-    parentRunId: null,
-    imported: false,
-    queuedAt: now - 14 * 60_000,
-    steps: [],
-    inbox: [
-      {
-        id: 'c1',
-        automationId: 'review',
-        runId: 'f1',
-        stepIdx: 0,
-        itemKey: 'mr:1',
-        worktreePath: '/wt/web-1',
-        person: 'nish',
-        type: 'question',
-        title: 'Resolve the conflict?',
-        context: '',
-        status: 'open',
-        createdAt: now - 60_000
-      }
-    ],
-    fields: { 'mr.web_url': 'https://gitlab.example/mr/1' },
-    peakBytes: 2 * GIB,
-    ...over
-  }
 }
 
 async function shown(): Promise<void> {
@@ -164,6 +80,7 @@ describe('RunningPage', () => {
     expect(screen.getByText('1 of 2 in use · 1 waiting')).toBeTruthy()
     const running = within(screen.getByRole('region', { name: 'Running now' }))
     expect(running.getByText('03 Review and fix')).toBeTruthy()
+    expect(running.queryByRole('button', { name: 'Show tab' })).toBeNull()
     expect(running.getByText(/· 1\.5 GB · peak 2\.0 GB$/)).toBeTruthy()
     const waiting = within(screen.getByRole('region', { name: 'Waiting' }))
     expect(waiting.getByText('05 Fix failed CI')).toBeTruthy()
@@ -296,33 +213,35 @@ describe('RunningPage', () => {
     expect(screen.queryByRole('region', { name: 'Gave up' })).toBeNull()
   })
 
-  it.each([
-    ['failed', 'a failed key', '1', 1],
-    ['timed_out', 'a failed key', '1', 1],
-    ['done', 'no key', undefined, 0],
-    ['failed', 'no failed key', undefined, 0]
-  ] as const)(
-    'offers Retry on a %s finished run with %s',
-    async (status, _key, onceKey, retries) => {
-      serve(capacity({ finished: [finishedRun({ status, onceKey })] }))
-      await shown()
-      await click('Recently finished · 1')
-      const row = within(
-        within(screen.getByRole('region', { name: 'Recently finished' })).getAllByRole('row')[1]
-      )
-      expect(row.queryAllByRole('button', { name: 'Retry' })).toHaveLength(retries)
-      if (retries === 0) {
-        return
-      }
-      await act(async () => {
-        fireEvent.click(row.getByRole('button', { name: 'Retry' }))
-      })
-      expect(pilotRpc).toHaveBeenCalledWith('pilot.capacity.retry', {
-        automationId: 'review',
-        onceKey: '1'
-      })
+  // Continue run goes on where a run broke, a stopped one included; Retry runs a failed or stopped run's item afresh.
+  it.each<[string, Partial<FinishedRun>, number, number]>([
+    ['a failed run with its failed key', { status: 'failed', onceKey: '1' }, 1, 1],
+    ['a timed-out run with its failed key', { status: 'timed_out', onceKey: '1' }, 1, 1],
+    ['a stopped run with its key', { status: 'cancelled', onceKey: '1' }, 1, 1],
+    ['a cancelled run with no key', { status: 'cancelled' }, 0, 1],
+    ['an ask-first run you declined', { status: 'cancelled', trigger: 'ask_first' }, 0, 0],
+    ['a done run', { status: 'done' }, 0, 0],
+    ['a failed run with no failed key', { status: 'failed' }, 0, 1]
+  ])('offers Retry and Continue run on %s', async (_name, over, retries, continues) => {
+    serve(capacity({ finished: [finishedRun(over)] }))
+    await shown()
+    await click('Recently finished · 1')
+    const row = within(
+      within(screen.getByRole('region', { name: 'Recently finished' })).getAllByRole('row')[1]
+    )
+    expect(row.queryAllByRole('button', { name: 'Continue run' })).toHaveLength(continues)
+    expect(row.queryAllByRole('button', { name: 'Retry' })).toHaveLength(retries)
+    if (retries === 0) {
+      return
     }
-  )
+    await act(async () => {
+      fireEvent.click(row.getByRole('button', { name: 'Retry' }))
+    })
+    expect(pilotRpc).toHaveBeenCalledWith('pilot.capacity.retry', {
+      automationId: 'review',
+      onceKey: '1'
+    })
+  })
 
   it.each([
     ['More jobs at once', 2, 3],
@@ -813,6 +732,55 @@ describe("RunningPage: another machine's runs", () => {
     await showDetails(finished)
     expect(await finished.findByText('pushed mini-1')).toBeTruthy()
     expect(finished.queryByText('pushed web-1')).toBeNull()
+  })
+
+  // An older Pilot on the Mac mini has no pilot.runs.stop: its refusal shows on its card, and nothing else breaks.
+  it('stops a Mac mini run there, and shows the error a Pilot without Stop gives', async () => {
+    const older = (method: string): unknown => {
+      if (method === 'pilot.runs.stop') {
+        throw new Error('Unknown method: pilot.runs.stop')
+      }
+      return machine()(method)
+    }
+    await showMini(machine(), older)
+    const running = within(
+      within(screen.getByRole('region', { name: 'Mac mini' })).getByRole('region', {
+        name: 'Running now'
+      })
+    )
+    await act(async () => fireEvent.click(running.getByRole('button', { name: 'Stop' })))
+    await click('Stop run')
+    expect(pilotRpc.mock.calls.filter(([m]) => m === 'pilot.runs.stop')).toEqual([
+      ['pilot.runs.stop', { runId: 'r1' }, { target: MINI.target }]
+    ])
+    expect(await running.findByText('Unknown method: pilot.runs.stop')).toBeTruthy()
+  })
+
+  it("offers Show tab on this machine's card but not the Mac mini's, whose tab is on that machine", async () => {
+    const tab = { worktreePath: '/wt/web-1', tabId: 'tab-1' }
+    const withTab = (method: string): unknown =>
+      method.startsWith('pilot.capacity')
+        ? capacity({ running: capacity().running.map((r) => ({ ...r, tab })) })
+        : machine()(method)
+    setPilotHostsForTests([LOCAL_NAMED, MINI])
+    pilotRpc.mockImplementation(byHost({ local: withTab, mini: withTab }))
+    await shown()
+    const running = (name: string) =>
+      within(
+        within(screen.getByRole('region', { name })).getByRole('region', { name: 'Running now' })
+      )
+    expect(running('MacBook').getAllByRole('button', { name: 'Show tab' })).toHaveLength(1)
+    expect(running('Mac mini').queryByRole('button', { name: 'Show tab' })).toBeNull()
+  })
+
+  it('continues a Mac mini finished run there', async () => {
+    const finished = await showMini()
+    await act(async () => {
+      fireEvent.click(finished.getByRole('button', { name: 'Continue run' }))
+    })
+    expect(pilotRpc.mock.calls.filter(([m]) => m === 'pilot.runs.continue')).toEqual([
+      ['pilot.runs.continue', { runId: 'f1' }, { target: MINI.target }]
+    ])
   })
 
   it("resumes a Mac mini finished run's session there", async () => {

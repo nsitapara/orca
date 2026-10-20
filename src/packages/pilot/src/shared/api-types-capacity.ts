@@ -27,6 +27,17 @@ export type RunHome = {
 // An agent's quota use in percent; null where it couldn't be read.
 export type QuotaUse = { weekly: number | null; session: number | null }
 
+// A run's agent tab on the machine it runs on: the worktree it opened in, and its terminal tab there.
+export type RunTab = { worktreePath: string; tabId: string }
+
+// The step a running run is on: what it is called and, for an agent step, the skill and mode it was given.
+export type RunStep = {
+  name: string
+  kind: 'agent' | 'shell'
+  skill: string | null
+  mode: string | null
+}
+
 // A running run on the Running page. Memory is the summed RSS of its processes on this machine (Docker
 // containers aren't counted); null until it has been sampled, or where processes can't be read.
 export type CapacityRun = {
@@ -43,6 +54,13 @@ export type CapacityRun = {
   counted: boolean
   // Absent for a run without an env, and from older Pilots.
   place?: RunPlace
+  // The tab of its running agent step, else its newest detached one; absent for a shell step or a step without a
+  // pane, and from older Pilots.
+  tab?: RunTab
+  // The run started from an answer to an inbox card; absent otherwise, and from older Pilots.
+  fromAnswer?: true
+  // The step it is starting or running; absent between steps, and from older Pilots.
+  step?: RunStep
 }
 
 // An item in the runner's line, in line order; its place is its index. The hold fields are absent from older Pilots.
@@ -62,10 +80,12 @@ export type QueuedRun = {
   holdDetail?: string
   // When its current hold on something other than a slot began; absent on a slot waiter and from older Pilots.
   heldAt?: number
+  // Go now marked it: the runner's waits pass it over once. Absent otherwise, and from older Pilots.
+  goNow?: boolean
 }
 
 // An ended run of a job that holds a slot, as Activity lists it; queuedAt on it says when it joined the line.
-// onceKey: the failed key the run still holds, which Retry frees; absent otherwise, and from older Pilots.
+// onceKey: the failed or stopped run's key it still holds, which Retry frees; absent otherwise, and from older Pilots.
 export type FinishedRun = ListedRun & {
   automationName: string
   peakBytes: number | null
@@ -77,6 +97,9 @@ export type FinishedRun = ListedRun & {
 
 // What pilot.capacity.retry frees: a job's failed once_per key.
 export type RetryKey = { automationId: string; onceKey: string }
+
+// What pilot.capacity.goNow marks: an item waiting in the runner's line.
+export type GoNowKey = { automationId: string; itemKey: string }
 
 // A key the runner gave up on after failing past the retry limit; Retry frees it.
 export type GaveUpKey = {

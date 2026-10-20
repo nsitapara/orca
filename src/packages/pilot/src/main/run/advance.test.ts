@@ -103,6 +103,8 @@ function setup(def: AutomationDefinition | null = DEF, over: Partial<RunEngineDe
     },
     workspace: WORKSPACE,
     log: () => {},
+    closeTerminal: async () => {},
+    relist: async () => false,
     ...over
   }
   const engine = createRunEngine(deps)

@@ -89,6 +89,16 @@ describe('definition validation', () => {
       'step 1: prompt_style: raw needs a prompt'
     ],
     [
+      'wait: start on a shell step',
+      `${BASE}steps:\n  - { agent: shell, run: ./x.sh, wait: start }\n`,
+      'step 1: wait: start is for an agent step: a shell step ends when its command exits'
+    ],
+    [
+      'wait: start in a job that works in an env',
+      `${BASE}${MR}workspace: { env: { worktree: "{worktree.path}", writes: true } }\nsteps:\n  - { agent: claude, prompt: x, wait: start }\n`,
+      'step 1: wait: start needs a workspace that outlives its run: an env is deleted when its run ends'
+    ],
+    [
       'an exit code that is both ok and skip',
       `${BASE}steps:\n  - { agent: shell, run: ./x.sh, exit_codes: { ok: [0, 3], skip: [3] } }\n`,
       'step 1: exit code 3 is both ok and skip'

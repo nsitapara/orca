@@ -1,4 +1,4 @@
-import type { ItemFields, RunRow } from '../../shared/api-types'
+import type { ItemFields, RunRow, StopRunResult } from '../../shared/api-types'
 import type { AutomationDefinition } from '../../shared/definition/types'
 import type { RunEnd } from '../../shared/run/step-plan'
 import type { FailureCounted } from '../capacity/give-up'
@@ -6,6 +6,7 @@ import type { EnvPreparer } from '../envs/prepare'
 import type { LaunchRequest } from '../scheduler/tick-runner'
 import type { PilotStore } from '../store/store'
 import type { RunEndHandover } from './run-close'
+import type { TerminalRelist } from './terminal-relist'
 import type { WorkspaceDeps } from './workspace'
 
 // The run engine's contract (advance.ts): what it asks of a step starter and of its caller, and what it offers.
@@ -44,6 +45,10 @@ export type RunEngineDeps = {
   runChoice?(run: RunRow): string
   // Env workspaces (main/envs): records the run as preparing and makes its env off the tick.
   envs?: EnvPreparer
+  // Closes a step's tab (Stop); throws when its process didn't stop, as the watcher's close does (engine-wiring.ts).
+  closeTerminal(handle: string): Promise<void>
+  // Whether a terminal the runtime calls stale is still alive: the watcher's probe asks the same (terminal-relist.ts).
+  relist: TerminalRelist
 }
 export type RunEngine = {
   // The tick runner's launch. Writes step 0 as pending, resolves and records the workspace, then
@@ -57,4 +62,6 @@ export type RunEngine = {
   advanceIdle(): Promise<void>
   // Walks a run run-continue.ts reopened, from its pending step; `resume` hands that step its old agent session.
   continueRun(runId: string, resume: ResumeStep | null): Promise<void>
+  // Stop (run-stop.ts): closes the run's agent and ends it cancelled, or says why not. Never throws.
+  stopRun(runId: string): Promise<StopRunResult>
 }

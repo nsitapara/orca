@@ -98,6 +98,7 @@ function normalizeStep(s: RawStep, name: string): StepDef {
     mode: s.mode ?? null,
     prompt: s.prompt ?? null,
     promptStyle: s.prompt_style ?? 'wrapped',
+    wait: s.wait ?? 'finish',
     args: s.args ?? [],
     session: normalizeSession(s.session),
     run: s.run ?? null,

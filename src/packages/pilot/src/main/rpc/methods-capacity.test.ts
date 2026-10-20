@@ -14,7 +14,8 @@ import {
   buildCapacityMethods,
   quotaUseWithin
 } from './methods-capacity'
-import { NO_CALLER_CHANGE } from './run-binding'
+import { SCHEDULER_OFF } from '../scheduler/scheduler'
+import { AGENT_IN_RUN, NO_CALLER_CHANGE } from './run-binding'
 
 type Callable = {
   name: string
@@ -26,12 +27,12 @@ const GIB = 1024 ** 3
 const NOW = 1_000_000
 const FRESH = { totalBytes: 24 * GIB, availableBytes: 9 * GIB }
 
-function setup(sample: ReturnType<RunMemorySampler['snapshot']> | null) {
+function setup(sample: ReturnType<RunMemorySampler['snapshot']> | null, schedulerOn = true) {
   const store = PilotStore.open(
     join(mkdtempSync(join(tmpdir(), 'pilot-capacity-rpc-')), 'db.sqlite')
   )
   const tickAll = vi.fn(async () => {})
-  const tickNow = vi.fn(async () => ({ status: 'ok' }))
+  const tickByHand = vi.fn(async () => ({ status: 'ok' }))
   const readSystem = vi.fn(async () => FRESH)
   const loaded = {
     definitions: [testDefinition({ id: 'review', oncePer: '{mr.iid}' })],
@@ -43,22 +44,44 @@ function setup(sample: ReturnType<RunMemorySampler['snapshot']> | null) {
   const ctx = {
     store,
     loaded: () => loaded,
-    schedulerOn: true,
-    scheduler: { tickAll, tickNow },
+    schedulerOn,
+    scheduler: { tickAll, tickByHand },
     memory: sample ? { snapshot: () => sample } : undefined
   }
   const list = buildCapacityMethods(
-    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the methods read only store, loaded, memory, scheduler.tickAll/tickNow and schedulerOn.
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the methods read only store, loaded, memory, scheduler.tickAll/tickByHand and schedulerOn.
     () => ctx as unknown as PilotContext,
     readSystem,
     () => NOW
   )
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: defineMethod's objects have name, params and handler; the tests call handlers with valid params.
   const methods = new Map((list as unknown as Callable[]).map((m) => [m.name, m]))
-  return { store, tickAll, tickNow, readSystem, method: (name: string) => methods.get(name)! }
+  return { store, tickAll, tickByHand, readSystem, method: (name: string) => methods.get(name)! }
 }
 
 const DESKTOP = { caller: { kind: 'desktop' } }
+
+// An agent step of run r1 on terminal term-1: a local CLI call from there is bound to the run.
+function agentInRun(store: PilotStore): void {
+  store.runs.create({
+    id: 'r1',
+    automationId: 'a',
+    tickId: null,
+    itemKey: 'k',
+    itemLabel: 'k',
+    worktreePath: null,
+    startedAt: 1
+  })
+  store.runs.createStep({
+    runId: 'r1',
+    idx: 0,
+    name: 's',
+    agent: 'claude',
+    skill: null,
+    startedAt: 1
+  })
+  store.runs.updateStep('r1', 0, { terminalHandle: 'term-1' })
+}
 
 describe('pilot.capacity', () => {
   it.each([
@@ -97,24 +120,7 @@ describe('pilot.capacity', () => {
 
   it('refuses an unknown caller and an agent in a run, leaving the limit as it was', () => {
     const { store, method } = setup(null)
-    store.runs.create({
-      id: 'r1',
-      automationId: 'a',
-      tickId: null,
-      itemKey: 'k',
-      itemLabel: 'k',
-      worktreePath: null,
-      startedAt: 1
-    })
-    store.runs.createStep({
-      runId: 'r1',
-      idx: 0,
-      name: 's',
-      agent: 'claude',
-      skill: null,
-      startedAt: 1
-    })
-    store.runs.updateStep('r1', 0, { terminalHandle: 'term-1' })
+    agentInRun(store)
     const setLimit = method('pilot.capacity.setLimit')
     expect(() => setLimit.handler({ limit: 5 }, {})).toThrow(NO_CALLER_CHANGE)
     expect(() =>
@@ -158,7 +164,7 @@ describe('pilot.capacity', () => {
   })
 
   it('retry frees a failed key and ticks its job once with only that key and its item by hand', async () => {
-    const { store, method, tickNow } = setup(null)
+    const { store, method, tickByHand } = setup(null)
     store.runs.create({
       id: 'run-1',
       automationId: 'review',
@@ -175,23 +181,72 @@ describe('pilot.capacity', () => {
       DESKTOP
     )
     expect(store.handledKeys('review')).toEqual(new Set())
-    expect(tickNow).toHaveBeenCalledTimes(1)
-    expect(tickNow).toHaveBeenCalledWith('review', {
-      dryRun: false,
-      byHandKeys: new Set(['7', 'mr:7'])
-    })
+    expect(tickByHand.mock.calls).toEqual([['review', ['7', 'mr:7']]])
     expect(view.gaveUp).toEqual([])
   })
 
   it('retry refuses a job it does not know, freeing nothing', () => {
-    const { store, method, tickNow } = setup(null)
+    const { store, method, tickByHand } = setup(null)
     store.markHandled('gone', '7', 'run-1', 1)
     store.setHandledStatus('gone', 'run-1', 'failed', 2)
     expect(() =>
       method('pilot.capacity.retry').handler({ automationId: 'gone', onceKey: '7' }, DESKTOP)
     ).toThrow('No automation "gone"')
     expect(store.handledKeys('gone')).toEqual(new Set(['7']))
-    expect(tickNow).not.toHaveBeenCalled()
+    expect(tickByHand).not.toHaveBeenCalled()
+  })
+})
+
+describe('pilot.capacity.goNow', () => {
+  const GO = { automationId: 'review', itemKey: 'mr:7' }
+  const waiting = (store: PilotStore) =>
+    store.capacity.enqueue({
+      automationId: 'review',
+      itemKey: 'mr:7',
+      itemLabel: '!7',
+      queuedAt: 1,
+      byHand: false,
+      dueAt: 1,
+      holdCode: 'retry',
+      holdDetail: 'Retry 1 of 2 at 12:05',
+      checkedAt: 1
+    })
+
+  it('marks the waiting item and ticks its job once with only that item by hand', async () => {
+    const { store, method, tickByHand } = setup(null)
+    waiting(store)
+    const view = await method('pilot.capacity.goNow').handler(GO, DESKTOP)
+    expect(store.capacity.queued().map((q) => q.goNow)).toEqual([true])
+    expect(tickByHand.mock.calls).toEqual([['review', ['mr:7']]])
+    expect(view.queued.map((q) => [q.itemKey, q.goNow])).toEqual([['mr:7', true]])
+  })
+
+  it.each([
+    ['an unknown caller', {}, {}, true, NO_CALLER_CHANGE],
+    [
+      'an agent in a run',
+      { terminal: 'term-1' },
+      { caller: { kind: 'local-cli' } },
+      true,
+      AGENT_IN_RUN
+    ],
+    ['a job it does not know', { automationId: 'gone' }, DESKTOP, true, 'No automation "gone"'],
+    [
+      'an item not in line',
+      { itemKey: 'mr:8' },
+      DESKTOP,
+      true,
+      `"mr:8" isn't waiting in line for "review"`
+    ],
+    // A mark there would wait unread for another process's re-check.
+    ['a process without the scheduler', {}, DESKTOP, false, SCHEDULER_OFF]
+  ])('refuses %s, marking and ticking nothing', (_name, params, rpc, schedulerOn, error) => {
+    const { store, method, tickByHand } = setup(null, schedulerOn)
+    waiting(store)
+    agentInRun(store)
+    expect(() => method('pilot.capacity.goNow').handler({ ...GO, ...params }, rpc)).toThrow(error)
+    expect(store.capacity.queued().map((q) => q.goNow)).toEqual([undefined])
+    expect(tickByHand).not.toHaveBeenCalled()
   })
 })
 

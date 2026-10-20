@@ -25,7 +25,7 @@ const NOT_IN_STEP =
 // Runs that still accept work; a finished, failed, timed-out or cancelled run takes nothing more.
 const OPEN_RUN: readonly string[] = ['asking', 'running', 'needs_you']
 
-// The env's step, only while it can still report: the step starting or running, in a run still open.
+// The env's step, only while it can still report: starting or running in a run still open, or detached.
 function activeEnvStep(ctx: PilotContext, runId: string, stepIdx: number): StepRow {
   const run = ctx.store.runs.get(runId)
   if (!run) {
@@ -35,7 +35,9 @@ function activeEnvStep(ctx: PilotContext, runId: string, stepIdx: number): StepR
   if (!step) {
     throw new Error(`Run ${runId} has no step ${stepIdx}`)
   }
-  if (!OPEN_RUN.includes(run.status) || (step.status !== 'starting' && step.status !== 'running')) {
+  // A detached session outlives its step and its run.
+  const active = step.status === 'starting' || step.status === 'running' || step.detached
+  if (!active || (!step.detached && !OPEN_RUN.includes(run.status))) {
     throw new Error(
       `Step ${stepIdx} of run ${runId} has ended (step ${step.status}, run ${run.status}); it can't record anything more`
     )
@@ -43,9 +45,9 @@ function activeEnvStep(ctx: PilotContext, runId: string, stepIdx: number): StepR
   return step
 }
 
-// The step a channel call is about: the one starting or running on the caller's terminal. With several
+// The step a channel call is about: the one starting, running or detached on the caller's terminal. With several
 // there (a step sent into an earlier step's terminal), the env's step wins when it is one of them. When
-// none is bound, the env's PILOT_RUN_ID / PILOT_STEP_IDX, if that step is still active.
+// none is bound, the env's PILOT_RUN_ID / PILOT_STEP_IDX, if that step is still active or detached.
 function resolveStep(ctx: PilotContext, t: RunChannelTarget): { runId: string; stepIdx: number } {
   const bound = t.terminal ? ctx.store.runs.stepsOnTerminal(t.terminal) : []
   const named = bound.find((s) => s.runId === t.runId && s.idx === t.stepIdx)

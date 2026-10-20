@@ -127,6 +127,7 @@ function openPilot(
     shell: pilotShellWiring(),
     envs: envs.preparations,
     probe: runtimeStepProbe(runtime, relist),
+    relist,
     log,
     // An answer run's outputs reach its cards (G6), then the run's env is removed (envs.runEnded, above).
     onRunEnd: (run) => envs.runEnded(run),
@@ -287,7 +288,8 @@ function openPilot(
     writeUsageReport: (dir) => usageReports.write(dir),
     resumeSession: (req) => resumeStepSession(runtimeResumeDeps(runtime, store, fieldDeps), req),
     continueRun: (runId) =>
-      continueRun({ store, now, definitionFor, capacity, launcherDeps, wired }, runId)
+      continueRun({ store, now, definitionFor, capacity, launcherDeps, wired }, runId),
+    stopRun: (runId) => wired.engine.stopRun(runId)
   }
 }
 

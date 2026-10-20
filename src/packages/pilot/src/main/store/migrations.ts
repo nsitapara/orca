@@ -1,6 +1,6 @@
 import type Database from '../../../../../main/sqlite/sync-database'
 
-export const PILOT_SCHEMA_VERSION = 18
+export const PILOT_SCHEMA_VERSION = 20
 
 const V1 = `
 CREATE TABLE ticks (id INTEGER PRIMARY KEY AUTOINCREMENT, automation_id TEXT NOT NULL, started_at INTEGER NOT NULL,
@@ -208,6 +208,12 @@ ALTER TABLE run_queue ADD COLUMN held_at INTEGER;
 UPDATE run_queue SET held_at = queued_at WHERE hold_code IS NOT NULL AND hold_code != 'capacity';
 `
 
+// A wait: start step ends once its session is up; the session goes on in its tab, so the step is marked detached.
+const V19 = `ALTER TABLE steps ADD COLUMN detached INTEGER NOT NULL DEFAULT 0;`
+
+// Go now's mark on a line row; the row goes when its item starts or leaves the line, and the mark with it.
+const V20 = `ALTER TABLE run_queue ADD COLUMN go_now INTEGER NOT NULL DEFAULT 0;`
+
 // MIGRATIONS[n - 1] takes a database from version n - 1 to n.
 const MIGRATIONS: readonly string[] = [
   V1,
@@ -227,7 +233,9 @@ const MIGRATIONS: readonly string[] = [
   V15,
   V16,
   V17,
-  V18
+  V18,
+  V19,
+  V20
 ]
 
 // Same pattern as Orca's orchestration.db (migrate.ts): user_version + one transaction, all or nothing.

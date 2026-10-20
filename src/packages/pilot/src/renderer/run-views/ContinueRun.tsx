@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import { StepForward } from 'lucide-react'
 import { isWebClientLocation } from '@/lib/web-client-location'
-import type { ContinueRunResult, RunRow } from '../../shared/api-types'
+import type { ActivityRun, ContinueRunResult, RunRow } from '../../shared/api-types'
+import { askSkipped } from '../../shared/run-views/paint'
 import { hostRpc } from '../hosts/host-rpc'
 import type { PilotHostRef } from '../hosts/pilot-host'
 import { usePilotHost } from '../hosts/PilotHostContext'
@@ -11,8 +12,10 @@ const BROKEN: ReadonlySet<RunRow['status']> = new Set(['failed', 'timed_out', 'c
 
 // A run that broke goes on from where it stopped (main/run/run-continue.ts); an answer run's card is answered again
 // instead. Only the desktop may continue one (methods-runs.ts), so the browser version offers nothing.
-export function canContinue(run: Pick<RunRow, 'status' | 'trigger'>): boolean {
-  return !isWebClientLocation() && BROKEN.has(run.status) && run.trigger !== 'answer'
+export function canContinue(run: Pick<ActivityRun, 'status' | 'trigger' | 'steps'>): boolean {
+  return (
+    !isWebClientLocation() && BROKEN.has(run.status) && run.trigger !== 'answer' && !askSkipped(run)
+  )
 }
 
 function continuedNote(result: ContinueRunResult): string {
@@ -26,7 +29,7 @@ export function ContinueRun({
   run,
   host
 }: {
-  run: Pick<RunRow, 'id' | 'status' | 'trigger'>
+  run: Pick<ActivityRun, 'id' | 'status' | 'trigger' | 'steps'>
   // The run's machine; none is the machine the surrounding view (the run panel) is for.
   host?: PilotHostRef
 }): React.JSX.Element | null {
@@ -54,7 +57,7 @@ export function ContinueRun({
     }
   }
   return (
-    <span className="flex min-w-0 items-center gap-2">
+    <span className="flex min-w-0 flex-wrap items-center gap-2">
       {canContinue(run) ? (
         <button
           type="button"

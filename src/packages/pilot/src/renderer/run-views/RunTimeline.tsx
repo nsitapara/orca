@@ -8,7 +8,9 @@ import type { PaintedPart } from '../../shared/run-views/paint'
 import { runTimeline, type RanStep } from '../../shared/run-views/timeline'
 import { formatDuration } from '../../shared/run/format-duration'
 import { clockSeconds, runStatusLabel } from '../pages/format'
+import { stepTabOf } from '../../shared/run-views/step-tab'
 import { RailRows } from './RunRail'
+import { useShowTab } from './ShowTab'
 import { StepDetail } from './StepDetail'
 import { STATE_CLASS, STATE_LABEL, STATE_MARK, WHO_CLASS, WHO_LABEL } from './tokens'
 
@@ -118,6 +120,7 @@ function StepRowView({
   }, [highlighted])
   const took =
     step?.startedAt && step.finishedAt ? formatDuration(step.finishedAt - step.startedAt) : null
+  const show = useShowTab(step ? stepTabOf(step, run.worktreePath) : undefined)
   const failed = part.state === 'failed' && step?.error ? step.error : null
   return (
     <li
@@ -169,6 +172,7 @@ function StepRowView({
           >
             {`${STATE_MARK[part.state]} ${STATE_LABEL[part.state]}`}
           </span>
+          {show.control ? <span className="text-xs">{show.control}</span> : null}
         </div>
         <div className="flex flex-wrap gap-x-3 text-xs tabular-nums text-muted-foreground">
           {took ? <span>{took}</span> : null}
@@ -179,6 +183,7 @@ function StepRowView({
             <span key={o}>{o}</span>
           ))}
         </div>
+        {show.note ? <p className="text-xs text-muted-foreground">{show.note}</p> : null}
         {failed ? (
           <div className="rounded-r border-l-2 border-destructive/60 bg-destructive/10 px-2 py-1 text-xs">
             {failed}

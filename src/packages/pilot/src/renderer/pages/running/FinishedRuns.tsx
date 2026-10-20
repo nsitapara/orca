@@ -13,6 +13,7 @@ import { paintRun } from '../../../shared/run-views/paint'
 import { runStrip } from '../../../shared/run-views/strip'
 import { usePilotHost } from '../../hosts/PilotHostContext'
 import { useAutomationsFeed } from '../../run-views/automations-feed'
+import { ContinueRun } from '../../run-views/ContinueRun'
 import { useRunEffects } from '../../run-views/effects-feed'
 import { EffectsLine } from '../../run-views/EffectsLine'
 import { openRun } from '../../run-views/run-panel-state'
@@ -45,7 +46,8 @@ const ENDED: ColumnSpec = { id: 'ended', label: 'Ended', defaultWidth: 128, minW
 // The row toggle and Open keep their width; their headers are for screen readers.
 type FixedColumn = { id: string; label: string; width: number }
 const TOGGLE: FixedColumn = { id: 'toggle', label: 'Details', width: 36 }
-const OPEN: FixedColumn = { id: 'open', label: 'Run', width: 56 }
+// Wide enough for Continue run.
+const OPEN: FixedColumn = { id: 'open', label: 'Run', width: 112 }
 
 // Result leads and Ended closes; FinishedRow's cells follow this order.
 const COLUMNS: (ColumnSpec | FixedColumn)[] = [
@@ -147,9 +149,11 @@ function FinishedDetails({ run }: { run: FinishedRun }): React.JSX.Element {
   )
 }
 
-// A failed or timed-out run whose key is still failed: Retry frees the key and runs its job by hand.
+// A run that broke and still holds its key (a stopped run's is done): Retry frees it and runs its job by hand.
+const RETRIED: ReadonlySet<FinishedRun['status']> = new Set(['failed', 'timed_out', 'cancelled'])
+
 function retryKeyOf(run: FinishedRun): RetryKey | null {
-  if (run.onceKey === undefined || (run.status !== 'failed' && run.status !== 'timed_out')) {
+  if (run.onceKey === undefined || !RETRIED.has(run.status)) {
     return null
   }
   return { automationId: run.automationId, onceKey: run.onceKey }
@@ -227,6 +231,7 @@ function FinishedRow({
                 Retry
               </button>
             ) : null}
+            <ContinueRun run={run} />
           </div>
         </td>
         <td className={NUMBER} title={new Date(ended).toLocaleString()}>

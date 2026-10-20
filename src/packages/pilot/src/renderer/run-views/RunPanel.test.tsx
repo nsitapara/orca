@@ -1,11 +1,11 @@
 // @vitest-environment happy-dom
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import type { RunDetail, RunStatus } from '../../shared/api-types'
+import type { RunDetail, RunStatus, RunTrigger } from '../../shared/api-types'
 import type { RunEnv } from '../../shared/api-types-env'
 import { testDefinition, testStep } from '../../shared/definition/__fixtures__/definition'
 import { stepAt, testCard, testRun } from '../../shared/run-views/__fixtures__/runs'
-import { chainOf } from '../../shared/run-views/chain'
+import { chainOf, type ChainPart } from '../../shared/run-views/chain'
 import { byHost, LOCAL_NAMED, MINI } from '../hosts/__fixtures__/hosts'
 import { LOCAL_PILOT_HOST, type PilotHostEntry } from '../hosts/pilot-host'
 import { resetPilotHostsFeed, setPilotHostsForTests } from '../hosts/pilot-hosts-feed'
@@ -63,6 +63,7 @@ describe('the run panel', () => {
     showAutomationsPage()
     resetEffectsFeed()
     pilotRpc.mockReset()
+    vi.unstubAllGlobals()
   })
 
   it('shows the run with its item linked out, at the part it was opened at, and goes to the card it waits on', async () => {
@@ -96,6 +97,57 @@ describe('the run panel', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Continue run' }))
     expect(await screen.findByText('Continuing from step fix, in its own session')).toBeTruthy()
     expect(pilotRpc).toHaveBeenCalledWith('pilot.runs.continue', { runId: 'r1' })
+  })
+
+  // A paired device may stop a run (methods-runs.ts), so the browser offers Stop; a shell-only job's run can't stop.
+  const shellOnly = testDefinition({
+    id: 'fix-ci',
+    steps: [testStep({ name: 'pull', agent: 'shell', run: 'git pull', prompt: null })]
+  })
+  it.each<[string, RunStatus, boolean, ChainPart[], number]>([
+    ['a running run', 'running', false, detail.chain, 1],
+    ['a run waiting on you', 'needs_you', false, detail.chain, 0],
+    ['a running run in the browser version', 'running', true, detail.chain, 1],
+    ["a shell-only job's running run", 'running', false, chainOf(shellOnly, [shellOnly]), 0]
+  ])('offers Stop on a running run only: %s', async (_n, status, web, chain, offers) => {
+    vi.stubGlobal('__ORCA_WEB_CLIENT__', web)
+    const shown: RunDetail = { ...detail, chain, run: { ...detail.run, status } }
+    pilotRpc.mockImplementation(async (method: string) =>
+      method === 'pilot.runs.stop' ? { stopped: true } : shown
+    )
+    openRun('r1')
+    render(<RunPanelHost />)
+    await screen.findByRole('link', { name: '!1561 web-1' })
+    expect(screen.queryAllByRole('button', { name: 'Stop' })).toHaveLength(offers)
+    if (offers === 0) {
+      return
+    }
+    fireEvent.click(screen.getByRole('button', { name: 'Stop' }))
+    // Enter answers Cancel, never Stop run.
+    expect(document.activeElement).toBe(await screen.findByRole('button', { name: 'Cancel' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Stop run' }))
+    await waitFor(() => expect(pilotRpc).toHaveBeenCalledWith('pilot.runs.stop', { runId: 'r1' }))
+  })
+
+  it.each<[string, RunTrigger, string]>([
+    [
+      'an answer run',
+      'answer',
+      "Its agent's tab closes, and the cards it was answering go back to your Inbox."
+    ],
+    [
+      'any other run',
+      'schedule',
+      "Its agent's tab closes. You can pick it up again from Recently finished."
+    ]
+  ])("words Stop's dialog for %s", async (_n, trigger, text) => {
+    const shown: RunDetail = { ...detail, run: { ...detail.run, status: 'running', trigger } }
+    pilotRpc.mockResolvedValue(shown)
+    openRun('r1')
+    render(<RunPanelHost />)
+    await screen.findByRole('link', { name: '!1561 web-1' })
+    fireEvent.click(screen.getByRole('button', { name: 'Stop' }))
+    expect(await screen.findByText(text)).toBeTruthy()
   })
 
   it("opens the automation's How it runs from its crumb, and closes on Escape", async () => {

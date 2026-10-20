@@ -26,6 +26,8 @@ export type ActivityPayload = {
 }
 // pilot.runs.continue: the step a failed run went on from, and whether that step's agent session was resumed.
 export type ContinueRunResult = { step: string; resumed: boolean }
+// pilot.runs.stop: the run ended cancelled, or why it wasn't stopped.
+export type StopRunResult = { stopped: true } | { stopped: false; reason: string }
 // pilot.runs.get: one run and everything its panel shows. paintRun(detail.chain, detail) paints all of it.
 export type RunDetail = {
   run: ListedRun
