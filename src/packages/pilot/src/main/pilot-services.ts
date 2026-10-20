@@ -45,7 +45,7 @@ import { PilotStore } from './store/store'
 import { VaultExporter } from './vault/export'
 import { housekeepStore, recheckPruner } from './store/housekeep'
 import { usageReporter } from './usage-report/reporter'
-import { closeAll, softly } from './pilot-lifecycle'
+import { closeAll, messageOf, softly } from './pilot-lifecycle'
 import { wireRunCapacity } from './capacity/capacity-wiring'
 import { giveUpOnFailure } from './capacity/give-up'
 import { inboxKeptCards } from './envs/kept-home'
@@ -55,10 +55,6 @@ import type { PilotContext, PilotHost, PilotServiceOptions, PilotServices } from
 export type { PilotContext, PilotHost, PilotServiceOptions, PilotServices } from './pilot-context'
 
 const log = (message: string): void => console.log(message)
-
-function messageOf(error: unknown): string {
-  return error instanceof Error ? error.message : String(error)
-}
 
 // Each thing opened is pushed on `opened`, so a failure part way closes exactly what is open.
 function openPilot(
@@ -223,7 +219,7 @@ function openPilot(
         log
       })
     : null
-  const readUsage = stepUsageReader(defaultUsagePaths(), now)
+  const readUsage = stepUsageReader(defaultUsagePaths(), now, () => store.usage.sessionIds())
   const usageReports = usageReporter(store, definitions, now, log, options.resourcesDir)
   const endedTabs = createEndedRunTabs({
     store,

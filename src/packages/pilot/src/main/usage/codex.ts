@@ -124,8 +124,8 @@ export async function codexUsage(
   }
   const turnModels = new Map<string, string>()
   const responses = new Set<string>()
-  const records = new BucketSet()
-  const counts = new BucketSet()
+  const records = new BucketSet('codex')
+  const counts = new BucketSet('codex')
   try {
     for await (const line of lines(path)) {
       const event = parseCodexUsageRecord(line, context)

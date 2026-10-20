@@ -319,7 +319,8 @@ An automation's Activity tab shows the same run cards: the run status in plain w
 
 **Per step.** When an agent step ends, Pilot reads its tokens from the agent's own logs, only inside the step's start-to-end window:
 - Claude: its transcript and its subagents' transcripts.
-- Codex: its rollout.
+- Codex: its rollout and its subagents' rollouts (`parent_thread_id`).
+- Its child sessions (`usage/child-sessions.ts`): the non-interactive sessions that began in the run's folder inside the window and are no step's own session. These are `claude -p` and `codex exec` (job 03's orchestrated phases) and a hook's SDK session (the security-guidance `sdk-py` review). Each child's buckets keep their own agent, so a Claude orchestrator's Codex check counts as Codex (`step_usage.agent`). Schema 19 measured the agent steps of the last 30 days again to add them.
 
 Each step's tokens are:
 - priced with the tables Pilot shares with Orca,
@@ -328,6 +329,11 @@ Each step's tokens are:
 A run costs the sum of its steps. A Claude step's session id is pinned at launch; a Codex step keeps the first session id its tab's hooks report.
 
 **Rollups.** `pilot automations spend [--by automation|skill|agent|mr] [--days n]` (default: 7 days, by automation), or the RPC `pilot.spend`. A step counts once it has ended.
+
+**The Usage page.** The Automations page's **Usage** link, beside Activity (RPC `pilot.usage.dashboard {days, resetDays}`):
+- Claude's and Codex's limits as Orca last read them (this week, the 5-hour session), each with what the automations spent since its weekly reset, most expensive first. The renderer passes each reset's day.
+- For today, 7 or 30 days: the totals, each automation's cost and tokens split by Claude and Codex, the cost by day, and the ten costliest runs (Open run).
+- One machine at a time: each Pilot measures its own runs. Chips pick another machine that answered.
 
 **The token usage report.** Pilot writes job 08's files: `usage.json`, `usage.csv`, `usage-data.js`, `Token usage.html` and `Token usage.md`. They use the same paths and schema, so the vault note keeps working.
 - Folder: `PILOT_USAGE_REPORT_DIR`, default `~/Documents/WebPortal/Agent Work/Automations/08 · Tally token usage by job`. HTML template: `PILOT_USAGE_TEMPLATE`, default Pilot's own `resources/usage_report.html` (shipped as `Contents/Resources/pilot/usage_report.html`; orcad writes the report without it).
@@ -562,7 +568,7 @@ These need a phone, a second Mac and an iPad on Tailscale. Open Pilot (`dist/mac
 - Pilot's orcad still starts Orca's own automation engine (`src/main/orcad/orcad-automations.ts`): the `orca-automations-off` hook covers desktop and serve only. Pilot's own scheduler doesn't run in orcad unless `PILOT_SCHEDULER=on`.
 - No idle-night drafting drain: a card the 03 or 04 draft step left undrafted waits for that branch's next run.
 - Images in a Details bundle are not bound to the digest; they are read live.
-- Codex subagent rollouts (child threads) aren't added to their parent step's usage; the retired `usage.py` added them.
+- A `claude -p` or `codex exec` you start by hand in a run's folder while its step runs counts toward that step (the folder is an env's throwaway, or your worktree only when nothing of yours is in flight there).
 - Pilot's Claude price table differs from the retired `usage.py`'s for Sonnet 4 and 4.5 long-context and for old models. That is intended.
 - Resume runs the agent's plain resume command, without the Settings default arguments a launch gets.
 - The badge shows on the Automations icon in the activity bar, not in its overflow menu.

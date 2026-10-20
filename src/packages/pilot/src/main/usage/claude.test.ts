@@ -31,6 +31,7 @@ describe('claudeUsage', () => {
     )
     expect(buckets).toEqual([
       {
+        agent: 'claude',
         day: '2026-10-11',
         model: 'claude-haiku-4-5',
         requests: 1,
@@ -41,6 +42,7 @@ describe('claudeUsage', () => {
         costUsd: 0.25
       },
       {
+        agent: 'claude',
         day: '2026-10-11',
         model: 'claude-opus-5-5',
         requests: 1,

@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import type { SpendGroup } from '../../shared/api-types'
+import type { AgentKind } from '../../shared/definition/types'
 import { PilotStore } from './store'
 
 // fix-ci: !1561 (Claude fix-gitlab-ci $1 + Codex unpriced, today) and !1574 (Claude $2, six days ago).
@@ -28,16 +29,35 @@ function setup(): PilotStore {
   step('r1', 1, 'codex', null)
   step('r2', 0, 'claude', 'fix-gitlab-ci')
   step('r3', 0, 'claude', 'dev-e2e-fix')
-  const save = (runId: string, idx: number, day: string, costUsd: number | null, input: number) =>
+  const save = (
+    runId: string,
+    idx: number,
+    day: string,
+    costUsd: number | null,
+    input: number,
+    agent: AgentKind = 'claude'
+  ) =>
     store.usage.saveStepUsage(
       runId,
       idx,
-      [{ day, model: 'm', requests: 1, input, cacheRead: 0, cacheWrite: 0, output: 0, costUsd }],
+      [
+        {
+          agent,
+          day,
+          model: 'm',
+          requests: 1,
+          input,
+          cacheRead: 0,
+          cacheWrite: 0,
+          output: 0,
+          costUsd
+        }
+      ],
       true,
       1
     )
   save('r1', 0, '2026-10-11', 1, 100)
-  save('r1', 1, '2026-10-11', null, 50)
+  save('r1', 1, '2026-10-11', null, 50, 'codex')
   save('r2', 0, '2026-10-05', 2, 200)
   save('r3', 0, '2026-10-11', 0.5, 10)
   return store

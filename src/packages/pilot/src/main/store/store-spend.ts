@@ -1,5 +1,6 @@
 import type Database from '../../../../../main/sqlite/sync-database'
 import type { SpendGroup } from '../../shared/api-types'
+import type { AgentKind } from '../../shared/definition/types'
 
 export type SpendRaw = {
   key: string
@@ -15,7 +16,7 @@ export type SpendRaw = {
 const GROUP_KEY: Record<SpendGroup, string> = {
   automation: 'r.automation_id',
   skill: "COALESCE(s.skill, '')",
-  agent: 's.agent',
+  agent: 'COALESCE(u.agent, s.agent)',
   mr: 'r.item_key'
 }
 // Older (M1) runs keyed MRs as "!<iid>", v2 runs as "mr:<iid>".
@@ -28,6 +29,16 @@ const GROUP_FILTER: Record<SpendGroup, string> = {
 const FROM =
   'FROM step_usage u JOIN steps s ON s.run_id = u.run_id AND s.idx = u.idx JOIN runs r ON r.id = u.run_id'
 const TOKENS = 'u.input + u.cache_read + u.cache_write + u.output'
+// A bucket written before schema 21 has no agent of its own: its step's.
+const AGENT = 'COALESCE(u.agent, s.agent)'
+
+function agentOf(value: unknown): AgentKind {
+  return value === 'codex' ? 'codex' : 'claude'
+}
+
+function costOf(value: unknown): number | null {
+  return typeof value === 'number' ? value : null
+}
 
 function toRaw(r: Record<string, unknown>): SpendRaw {
   return {
@@ -55,6 +66,24 @@ export type ReportBucketRow = {
   cacheRead: number
   cacheWrite: number
   output: number
+  costUsd: number | null
+}
+// The Usage page's rows: one per automation, day and agent; or one per run and agent.
+export type UsageSliceRow = {
+  automationId: string
+  day: string
+  agent: AgentKind
+  tokens: number
+  costUsd: number | null
+}
+export type UsageRunSliceRow = {
+  runId: string
+  automationId: string
+  itemLabel: string
+  startedAt: number
+  status: string
+  agent: AgentKind
+  tokens: number
   costUsd: number | null
 }
 export type SessionlessStep = {
@@ -118,13 +147,49 @@ export class SpendStore {
   reportBuckets(): ReportBucketRow[] {
     return this.db
       .prepare(
-        `SELECT r.automation_id, r.item_label, r.worktree_path, s.agent, s.session_id,
+        `SELECT r.automation_id, r.item_label, r.worktree_path, COALESCE(u.agent, s.agent) AS agent, s.session_id,
            s.started_at AS step_started_at, u.day, u.model, u.requests, u.input, u.cache_read,
            u.cache_write, u.output, u.cost_usd
          ${FROM} WHERE s.session_id IS NOT NULL ORDER BY u.day, s.started_at, u.model`
       )
       .all()
       .map((r) => toBucketRow(r as never))
+  }
+
+  usageSlices(sinceDay: string): UsageSliceRow[] {
+    return this.db
+      .prepare(
+        `SELECT r.automation_id, u.day, ${AGENT} AS agent, SUM(${TOKENS}) AS tokens, SUM(u.cost_usd) AS cost
+         ${FROM} WHERE u.day >= ? GROUP BY r.automation_id, u.day, ${AGENT} ORDER BY u.day`
+      )
+      .all(sinceDay)
+      .map((r) => ({
+        automationId: String(r.automation_id),
+        day: String(r.day),
+        agent: agentOf(r.agent),
+        tokens: Number(r.tokens ?? 0),
+        costUsd: costOf(r.cost)
+      }))
+  }
+
+  usageRunSlices(sinceDay: string): UsageRunSliceRow[] {
+    return this.db
+      .prepare(
+        `SELECT r.id, r.automation_id, r.item_label, r.started_at, r.status, ${AGENT} AS agent,
+           SUM(${TOKENS}) AS tokens, SUM(u.cost_usd) AS cost
+         ${FROM} WHERE u.day >= ? GROUP BY r.id, ${AGENT}`
+      )
+      .all(sinceDay)
+      .map((r) => ({
+        runId: String(r.id),
+        automationId: String(r.automation_id),
+        itemLabel: String(r.item_label ?? ''),
+        startedAt: Number(r.started_at),
+        status: String(r.status),
+        agent: agentOf(r.agent),
+        tokens: Number(r.tokens ?? 0),
+        costUsd: costOf(r.cost)
+      }))
   }
 
   // Agent steps whose usage isn't in yet: still going, or ended and waiting to be measured.

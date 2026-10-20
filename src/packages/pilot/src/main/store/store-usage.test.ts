@@ -7,6 +7,7 @@ import type { UsageBucket } from '../usage/buckets'
 import { PilotStore } from './store'
 
 const bucket = (model: string, input: number, costUsd: number | null): UsageBucket => ({
+  agent: 'claude',
   day: '2026-10-11',
   model,
   requests: 1,
@@ -43,8 +44,8 @@ function setup(): { store: PilotStore; file: string } {
 }
 
 describe('UsageStore', () => {
-  it('is schema 20', () => {
-    expect(setup().store.schemaVersion()).toBe(20)
+  it('is schema 21', () => {
+    expect(setup().store.schemaVersion()).toBe(21)
   })
 
   it('lists agent steps that ended and were never measured', () => {
@@ -64,7 +65,8 @@ describe('UsageStore', () => {
         sessionId: 's0',
         transcriptPath: '/t/s0.jsonl',
         startedAt: 10,
-        finishedAt: 20
+        finishedAt: 20,
+        worktreePath: '/wt'
       }
     ])
     new Database(file).prepare("UPDATE steps SET kind = 'shell' WHERE idx = 0").run()

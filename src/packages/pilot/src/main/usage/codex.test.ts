@@ -86,6 +86,7 @@ describe('codexUsage', () => {
     // gpt-5.5: 600 uncached input × $5 + 400 cached × $0.50 + 100 output × $30, per million; 100 of the cached were written.
     expect(await codexUsage(path, { from: at(10), to: at(11) })).toEqual([
       {
+        agent: 'codex',
         day: '2026-10-11',
         model: 'gpt-5.5',
         requests: 1,
@@ -103,6 +104,7 @@ describe('codexUsage', () => {
     // gpt-5.5: 600 uncached input × $5 + 400 cached × $0.50 + 100 output × $30, per million.
     expect(await codexUsage(path, { from: at(10), to: at(11) })).toEqual([
       {
+        agent: 'codex',
         day: '2026-10-11',
         model: 'gpt-5.5',
         requests: 1,

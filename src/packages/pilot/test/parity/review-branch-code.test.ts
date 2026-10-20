@@ -38,14 +38,15 @@ function runs(name: string, ended: EndedStep[], fields: ItemFields): boolean {
 const ok = (name: string): EndedStep => ({ name, status: 'done', always: false, error: null })
 const broke = (name: string): EndedStep => ({ name, status: 'failed', always: false, error: null })
 
-// Old: Orca automation 129cdf72 "03 · Review and fix branch code", rrule "20 * * * *" in America/Los_Angeles, a 720-minute
+// Old: Orca automation 129cdf72 "03 · Review and fix branch code", rrule "20 * * * *" in America/Los_Angeles (every 2 hours
+// at :20 since 2026-10-20, to halve its agent usage), a 720-minute
 // missed-run grace, precheck `loop.py sweep --push` (--max 2). Since pilotCLI milestone 8 (spec §7.5) one orchestrating
 // agent runs the review (/orchestrate review-cycles) between pilotcli's context and its guarded publish.
 describe('03 · Review and fix branch code: the definition (old job: orca automation 129cdf72, precheck loop.py sweep --push)', () => {
   it("keeps the sweep's schedule, two reviews per tick, its first-sight baseline and its retry of an abandoned review", () => {
     expect(definition).toMatchObject({
       name: '03 · Review and fix branch code',
-      schedule: '20 * * * *',
+      schedule: '20 */2 * * *',
       timezone: 'America/Los_Angeles',
       missedRunGraceMs: 12 * HOUR,
       firstSeen: 'baseline',
