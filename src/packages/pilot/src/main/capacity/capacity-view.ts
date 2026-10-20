@@ -9,6 +9,7 @@ import { suggestRunLimit, UNMEASURED_JOB_BYTES } from '../../shared/capacity/lim
 import { QUOTA_CEILING } from '../../shared/quota-ceiling'
 import type { AgentKind, AutomationDefinition } from '../../shared/definition/types'
 import type { PilotStore } from '../store/store'
+import { runTabOf } from '../../shared/run-views/step-tab'
 import { listedRuns } from '../timeline/run-detail'
 import { holdsSlot } from './run-capacity'
 import { runHome, runPlace } from './run-place'
@@ -110,6 +111,7 @@ export function capacityView(input: CapacityViewInput): CapacityPayload {
   const running: CapacityRun[] = runs.map((run) => {
     const def = byId.get(run.automationId)
     const place = runPlace(run)
+    const tab = runTabOf(store.runs.steps(run.id), run.worktreePath)
     return {
       id: run.id,
       automationId: run.automationId,
@@ -120,7 +122,8 @@ export function capacityView(input: CapacityViewInput): CapacityPayload {
       memoryBytes: input.memory?.runs.get(run.id) ?? null,
       peakBytes: peaks.get(run.id) ?? null,
       counted: def !== undefined && holdsSlot(def),
-      ...(place ? { place } : {})
+      ...(place ? { place } : {}),
+      ...(tab ? { tab } : {})
     }
   })
   const ended = store.capacity.finished(

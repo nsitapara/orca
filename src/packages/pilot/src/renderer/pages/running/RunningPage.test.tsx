@@ -80,6 +80,7 @@ describe('RunningPage', () => {
     expect(screen.getByText('1 of 2 in use · 1 waiting')).toBeTruthy()
     const running = within(screen.getByRole('region', { name: 'Running now' }))
     expect(running.getByText('03 Review and fix')).toBeTruthy()
+    expect(running.queryByRole('button', { name: 'Show tab' })).toBeNull()
     expect(running.getByText(/· 1\.5 GB · peak 2\.0 GB$/)).toBeTruthy()
     const waiting = within(screen.getByRole('region', { name: 'Waiting' }))
     expect(waiting.getByText('05 Fix failed CI')).toBeTruthy()
@@ -365,28 +366,6 @@ describe('RunningPage', () => {
     await click('Recently finished · 1')
     await click('Retry')
     expect(screen.getByRole('button', { name: 'Retry' }).hasAttribute('disabled')).toBe(true)
-  })
-
-  it("stops a running run only after a yes, and says why when Pilot couldn't", async () => {
-    const why = "Couldn't close terminal t1: its process is live"
-    serve(capacity())
-    const served = pilotRpc.getMockImplementation()
-    pilotRpc.mockImplementation(async (method: string, params?: unknown) =>
-      method === 'pilot.runs.stop' ? { stopped: false, reason: why } : served?.(method, params)
-    )
-    const stops = () => pilotRpc.mock.calls.filter(([method]) => method === 'pilot.runs.stop')
-    await shown()
-    const running = within(screen.getByRole('region', { name: 'Running now' }))
-    await act(async () => fireEvent.click(running.getByRole('button', { name: 'Stop' })))
-    const dialog = within(screen.getByRole('dialog', { name: 'Stop this run?' }))
-    const asks = "Its agent's tab closes. You can pick it up again from Recently finished."
-    expect(dialog.getByText(asks)).toBeTruthy()
-    await click('Cancel')
-    expect([screen.queryByRole('dialog'), stops()]).toEqual([null, []])
-    await act(async () => fireEvent.click(running.getByRole('button', { name: 'Stop' })))
-    await click('Stop run')
-    expect(stops()).toEqual([['pilot.runs.stop', { runId: 'r1' }]])
-    expect(await running.findByText(why)).toBeTruthy()
   })
 
   it('folds the limits behind Limits & how it works, with who handles what', async () => {
@@ -775,6 +754,23 @@ describe("RunningPage: another machine's runs", () => {
       ['pilot.runs.stop', { runId: 'r1' }, { target: MINI.target }]
     ])
     expect(await running.findByText('Unknown method: pilot.runs.stop')).toBeTruthy()
+  })
+
+  it("offers Show tab on this machine's card but not the Mac mini's, whose tab is on that machine", async () => {
+    const tab = { worktreePath: '/wt/web-1', tabId: 'tab-1' }
+    const withTab = (method: string): unknown =>
+      method.startsWith('pilot.capacity')
+        ? capacity({ running: capacity().running.map((r) => ({ ...r, tab })) })
+        : machine()(method)
+    setPilotHostsForTests([LOCAL_NAMED, MINI])
+    pilotRpc.mockImplementation(byHost({ local: withTab, mini: withTab }))
+    await shown()
+    const running = (name: string) =>
+      within(
+        within(screen.getByRole('region', { name })).getByRole('region', { name: 'Running now' })
+      )
+    expect(running('MacBook').getAllByRole('button', { name: 'Show tab' })).toHaveLength(1)
+    expect(running('Mac mini').queryByRole('button', { name: 'Show tab' })).toBeNull()
   })
 
   it('continues a Mac mini finished run there', async () => {

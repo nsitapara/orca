@@ -11,6 +11,7 @@ import { formatDuration } from '../../../shared/run/format-duration'
 import { workedMs } from '../../../shared/run/worked-time'
 import { PilotHostProvider, usePilotHost } from '../../hosts/PilotHostContext'
 import { openRun } from '../../run-views/run-panel-state'
+import { useShowTab } from '../../run-views/ShowTab'
 import { useStopRun } from '../../run-views/StopRun'
 import { useNow } from '../waiting/use-now'
 import { FinishedRuns } from './FinishedRuns'
@@ -29,11 +30,12 @@ type Changes = {
 }
 
 // Name, where it works, its figures and Open run and Stop on top; the item under it; then why it isn't in your worktree,
-// and what Pilot said to a Stop.
+// and what Pilot said to a Stop or Show tab.
 function RunningRow({ run, now }: { run: CapacityRun; now: number }): React.JSX.Element {
   const host = usePilotHost()
   const why = run.place ? placeReasonText(run.place) : null
   const stop = useStopRun({ id: run.id, status: 'running' })
+  const show = useShowTab(run.tab)
   return (
     <li className="flex min-w-0 flex-col gap-1 px-3 py-2 text-sm">
       <div className="flex min-w-0 items-center gap-2">
@@ -51,13 +53,18 @@ function RunningRow({ run, now }: { run: CapacityRun; now: number }): React.JSX.
         >
           Open run
         </button>
-        {stop.control ? <span className="shrink-0 text-xs">{stop.control}</span> : null}
+        {show.control ? <span className="shrink-0 text-xs">{show.control}</span> : null}
+        {/* Why: Stop refuses a shell step (run-stop.ts), so a job with no agent step offers none. */}
+        {run.counted && stop.control ? (
+          <span className="shrink-0 text-xs">{stop.control}</span>
+        ) : null}
       </div>
       <div className="truncate font-mono text-xs text-muted-foreground" title={run.itemLabel}>
         {run.itemLabel}
       </div>
       {why ? <p className="text-xs text-muted-foreground">{why}</p> : null}
       {stop.note ? <p className="text-xs text-muted-foreground">{stop.note}</p> : null}
+      {show.note ? <p className="text-xs text-muted-foreground">{show.note}</p> : null}
     </li>
   )
 }

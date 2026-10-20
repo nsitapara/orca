@@ -381,6 +381,8 @@ A run costs the sum of its steps. A Claude step's session id is pinned at launch
 - A `wait: start` session is left alone: it isn't the run's to close.
 - Pick the run up again from Recently finished, with Continue run or Retry.
 
+**Show tab.** A running run's card, and a running or `wait: start` step in its run panel, offer **Show tab**: it switches to the agent's tab in this window, or says "Its tab is closed". Only this machine's runs have it; another machine's tab can't be shown from here.
+
 **Memory and the suggestion.** On each scheduler poll Pilot sums the RSS of every running agent step's terminal process tree and keeps each run's peak (`runs.peak_rss_bytes`). Shell steps and Docker's containers aren't counted.
 - The suggestion is what can go to jobs (available memory plus what running jobs hold, less 4 GB), divided by the heaviest job's peak over its last 20 measured runs. It is at least 1 and at most 10.
 - An enabled job not measured yet counts as 2.5 GB, as web-platform's `e2e-parallel.sh` budgets a stack, so a light job measured first can't raise the suggestion before the heavy ones have run.
