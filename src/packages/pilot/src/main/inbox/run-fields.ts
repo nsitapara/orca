@@ -34,8 +34,9 @@ export function latestFieldsFor(
   return store.tickItems(tick.id).find((i) => i.itemKey === itemKey)?.fields ?? {}
 }
 
+// The branch the run's item is about: an MR's, a worktree's, or a Linear ticket's (whose worktree the run itself makes).
 export function branchOfRun(store: PilotStore, runId: string): string | null {
   const fields = fieldsForRun(store, runId)
-  const branch = fields['mr.branch'] ?? fields['worktree.branch']
+  const branch = fields['mr.branch'] ?? fields['worktree.branch'] ?? fields['ticket.branch']
   return typeof branch === 'string' && branch !== '' ? branch : null
 }

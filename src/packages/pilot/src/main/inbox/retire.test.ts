@@ -8,7 +8,7 @@ import type { GlabApi } from '../sources/gitlab-api'
 import { PilotStore } from '../store/store'
 import { addInboxItem } from './inbox-add'
 import type { InboxDeps } from './inbox-service'
-import { InboxRetirer, MR_CACHE_MS } from './retire'
+import { InboxRetirer, MR_CACHE_MS, retireTarget } from './retire'
 
 const def = parseAutomationYaml(
   'name: Fix CI\nrepo: web-platform\nschedule: manual\nitems: { kind: merge_request }\nsteps: [ { agent: claude, prompt: x } ]\ninbox: nish\n',
@@ -130,5 +130,40 @@ describe('InboxRetirer', () => {
       outcome: 'kept'
     })
     expect(store.inbox.get('in_0000000000000002')?.status).toBe('obsolete')
+  })
+})
+
+describe('retireTarget', () => {
+  // A ticket run's worktree is made by the run (new_worktree), so its tick snapshot has no worktree.branch.
+  it.each([
+    ['an MR', { 'mr.branch': 'web-1-a' }],
+    ['a worktree', { 'worktree.branch': 'web-1-a' }],
+    ['a Linear ticket', { 'ticket.branch': 'web-1-a', 'worktree.branch': null }]
+  ])("is the branch of %s item, from its run's tick", (_kind, fields) => {
+    const { store, inbox } = setup(() => 'opened')
+    const tickId = store.startTick('ci', 1)
+    const decision = {
+      key: 'item-1',
+      label: 'item',
+      verdict: 'started' as const,
+      reason: '',
+      checks: [],
+      onceKey: 'item-1',
+      fields
+    }
+    store.recordDecisions(tickId, [decision], new Map([['item-1', 'run-2']]))
+    store.runs.create({
+      id: 'run-2',
+      automationId: 'ci',
+      tickId,
+      itemKey: 'item-1',
+      itemLabel: 'item',
+      worktreePath: '/wt/1',
+      startedAt: 1
+    })
+    addInboxItem(inbox, { ...CARD, runId: 'run-2' })
+    expect(retireTarget(store, store.inbox.get('in_0000000000000001')!)).toEqual({
+      branch: 'web-1-a'
+    })
   })
 })
