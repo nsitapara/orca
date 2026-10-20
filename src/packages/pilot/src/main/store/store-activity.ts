@@ -73,6 +73,20 @@ export class ActivityStore {
   }
 
   // The answer runs of a run (parent_run_id), newest first.
+  // "Hide automation runs": the tabs among `tabIds` a step ran in. A step's pane key is `<tabId>:<leafId>`.
+  automationTabs(tabIds: readonly string[]): string[] {
+    if (tabIds.length === 0) {
+      return []
+    }
+    return this.db
+      .prepare(
+        `SELECT DISTINCT t.value AS tabId FROM json_each(?) AS t WHERE EXISTS (
+           SELECT 1 FROM steps WHERE substr(pane_key, 1, length(t.value) + 1) = t.value || ':')`
+      )
+      .all(JSON.stringify(tabIds))
+      .map((r) => String(r.tabId))
+  }
+
   children(runId: string): RunRow[] {
     return this.db
       .prepare('SELECT * FROM runs WHERE parent_run_id = ? ORDER BY started_at DESC, id')

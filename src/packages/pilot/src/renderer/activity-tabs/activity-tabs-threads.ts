@@ -14,12 +14,19 @@ import type {
 import { mergeRowsIntoGroups } from './activity-tabs-groups'
 import type { ActivityTabsRow } from './activity-tabs-rows'
 import {
+  useActivityHideAutomationRuns,
   useActivityHideTerminals,
   useActivityInactiveExpanded,
   useActivityShowRecentWorktrees,
   useActivitySidebarAttached,
   useActivityTabsVisible
 } from './activity-tabs-setting'
+import {
+  hostedTabsOf,
+  useAutomationTabIds,
+  withoutAutomationTabs,
+  withoutAutomationThreads
+} from './hide-automation-runs'
 import { useAgentTabItems } from './hide-terminal-tabs'
 import { useOpenTabItems } from './use-open-tab-items'
 import { usePinnedWorktreeIds, useRecentWorktreeItems } from './use-recent-worktree-items'
@@ -69,8 +76,9 @@ export type ActivityTabsView = {
 
 // pilot-hook: activity-tabs-threads. Wraps useAgentPaneThreads in the Activity sidebar: while
 // "Show all tabs" is on, every other open tab joins the agents' groups (less plain terminals under
-// "Hide terminals") and the active tab's agent reads as current. A pinned worktree with no row always
-// gets one to start a session from, and so, while "Show recently active worktrees" is on, does each
+// "Hide terminals") and the active tab's agent reads as current; "Hide automation runs" drops every
+// session and tab a Pilot step ran in. A pinned worktree with no row always gets one to start a
+// session from, and so, while "Show recently active worktrees" is on, does each
 // recently active one; pinned worktrees' groups lead the worktree grouping, and worktrees with no
 // session go under Inactive at its end.
 export function useActivityTabsThreads<
@@ -84,18 +92,31 @@ export function useActivityTabsThreads<
   const tabsVisible = useActivityTabsVisible()
   const recentOn = useActivityShowRecentWorktrees()
   const hideTerminals = useActivityHideTerminals()
+  const hideAutomationRuns = useActivityHideAutomationRuns()
   const inactiveExpanded = useActivityInactiveExpanded()
   const pinnedIds = usePinnedWorktreeIds(attached)
   const activePaneKey = useActiveWorkspaceThread(result.allThreads, result.effectiveSelectedPaneKey)
   // A tab or a worktree is never unread, so "Show unread only" leaves them out.
   const listsAll = view.readFilter === 'all'
-  const tabs = useAgentTabItems(
+  const openTabs = useAgentTabItems(
     useOpenTabItems(tabsVisible && listsAll, view.query, result.allThreads),
     hideTerminals
   )
+  const automationTabs = useAutomationTabIds(
+    hostedTabsOf(result.allThreads, openTabs),
+    attached && hideAutomationRuns
+  )
+  const tabs = useMemo(
+    () => withoutAutomationTabs(openTabs, automationTabs),
+    [openTabs, automationTabs]
+  )
+  const threadGroups = useMemo(
+    () => withoutAutomationThreads(result.visibleThreadGroups, automationTabs),
+    [result.visibleThreadGroups, automationTabs]
+  )
   const visibleThreads = useMemo(
-    () => result.visibleThreadGroups.flatMap((group) => group.threads),
-    [result.visibleThreadGroups]
+    () => threadGroups.flatMap((group) => group.threads),
+    [threadGroups]
   )
   const recent = useRecentWorktreeItems(
     attached && listsAll,
@@ -109,11 +130,11 @@ export function useActivityTabsThreads<
       ...tabs.map((tab): ActivityTabsRow => ({ kind: 'tab', tab })),
       ...recent.map((item): ActivityTabsRow => ({ kind: 'recent-worktree', recent: item }))
     ]
-    return mergeRowsIntoGroups(result.visibleThreadGroups, rows, view.groupBy, {
+    return mergeRowsIntoGroups(threadGroups, rows, view.groupBy, {
       pinnedWorktreeIds: pinnedIds,
       inactiveExpanded
     })
-  }, [result.visibleThreadGroups, tabs, recent, view.groupBy, pinnedIds, inactiveExpanded])
+  }, [threadGroups, tabs, recent, view.groupBy, pinnedIds, inactiveExpanded])
   if (!attached) {
     return result
   }

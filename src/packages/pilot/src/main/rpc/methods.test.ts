@@ -113,6 +113,7 @@ describe('Pilot RPC methods', () => {
       'pilot.run.event',
       'pilot.activity.list',
       'pilot.runs.get',
+      'pilot.runs.automationTabs',
       'pilot.runs.log',
       'pilot.runs.logEntry',
       'pilot.runs.effects',

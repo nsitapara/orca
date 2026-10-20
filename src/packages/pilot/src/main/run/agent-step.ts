@@ -42,8 +42,14 @@ export class PromptNotSentError extends Error {
     this.name = 'PromptNotSentError'
   }
 }
+// When the agent's last turn began: a draft nothing was typed into since is the agent's own suggestion.
+export type DraftJudge = { turnStartedAt?: number }
 export type SessionTerminals = {
-  state(terminal: KnownTerminal, sessionId: string): Promise<SessionTerminalState>
+  state(
+    terminal: KnownTerminal,
+    sessionId: string,
+    judge?: DraftJudge
+  ): Promise<SessionTerminalState>
   // Every terminal Orca says holds the session, whether or not a step row names it (session-tabs.ts).
   tabs?(sessionId: string): Promise<KnownTerminal[]>
   // The terminal's unsent input, read right before closing a tab nobody of ours owns.

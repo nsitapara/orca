@@ -40,6 +40,7 @@ function localFlag(key: string) {
 const showAllTabs = localFlag('pilot.activity.show-all-tabs')
 const showRecentWorktrees = localFlag('pilot.activity.show-recent-worktrees')
 const hideTerminals = localFlag('pilot.activity.hide-terminals')
+const hideAutomationRuns = localFlag('pilot.activity.hide-automation-runs')
 const inactiveExpanded = localFlag('pilot.activity.inactive-expanded')
 
 export function useActivityShowAllTabs(): boolean {
@@ -71,6 +72,15 @@ export function useActivityHideTerminals(): boolean {
 
 export function setActivityHideTerminals(next: boolean): void {
   hideTerminals.set(next)
+}
+
+// A filter: sessions and tabs a Pilot automation step ran in leave the list.
+export function useActivityHideAutomationRuns(): boolean {
+  return hideAutomationRuns.useValue()
+}
+
+export function setActivityHideAutomationRuns(next: boolean): void {
+  hideAutomationRuns.set(next)
 }
 
 // Grouped by worktree, the Inactive section starts folded.
