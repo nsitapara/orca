@@ -9,6 +9,7 @@ import type {
 } from '../../shared/api-types-capacity'
 import { mergeBackState } from '../../shared/run-views/merge-back-state'
 import type { StepRow } from '../../shared/api-types'
+import { homeOf } from '../../shared/api-types-env'
 import { suggestRunLimit, UNMEASURED_JOB_BYTES } from '../../shared/capacity/limit-suggestion'
 import { QUOTA_CEILING } from '../../shared/quota-ceiling'
 import type { AgentKind, AutomationDefinition } from '../../shared/definition/types'
@@ -158,6 +159,7 @@ export function capacityView(input: CapacityViewInput): CapacityPayload {
       memoryBytes: input.memory?.runs.get(run.id) ?? null,
       peakBytes: peaks.get(run.id) ?? null,
       counted: def !== undefined && holdsSlot(def),
+      homePath: homeOf(run),
       ...(place ? { place } : {}),
       ...(tab ? { tab } : {}),
       ...(run.trigger === 'answer' ? { fromAnswer: true as const } : {}),

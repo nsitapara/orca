@@ -52,6 +52,9 @@ export type CapacityRun = {
   counted: boolean
   // Absent for a run without an env, and from older Pilots.
   place?: RunPlace
+  // The worktree it is for (homeOf): the item's, not a throwaway it works in. Null for a job-wide run; absent from
+  // older Pilots.
+  homePath?: string | null
   // The tab of its running agent step, else its newest detached one; absent for a shell step or a step without a
   // pane, and from older Pilots.
   tab?: RunTab

@@ -71,6 +71,8 @@ afterEach(() => {
   pilotRpc.mockReset()
   window.localStorage.clear()
   vi.unstubAllGlobals()
+  registerPilotStore(null)
+  activate.mockReset()
 })
 
 describe('RunningPage', () => {
@@ -439,6 +441,23 @@ describe('RunningPage', () => {
         'Worked in a throwaway. Merge back skipped: uncommitted changes. Kept on pilot/review-1 for job 15 to merge back.'
       )
     ).toBeTruthy()
+  })
+
+  it('names the project and worktree a running run is for, and opens the worktree', async () => {
+    registerPilotStore({
+      getState: () => ({
+        rightSidebarOpen: false,
+        setRightSidebarOpen: () => {},
+        repos: [{ id: 'repo-1', displayName: 'web-platform' }],
+        worktreesByRepo: { 'repo-1': [{ id: 'a', path: '/wt/web-2153' }] }
+      })
+    })
+    serve(capacity({ running: [{ ...capacity().running[0], homePath: '/wt/web-2153' }] }))
+    await shown()
+    const running = within(screen.getByRole('region', { name: 'Running now' }))
+    expect(running.getByText('web-platform')).toBeTruthy()
+    await act(async () => fireEvent.click(running.getByRole('button', { name: 'web-2153' })))
+    await waitFor(() => expect(activate).toHaveBeenCalledWith('a'))
   })
 
   it('says when nothing runs or waits', async () => {

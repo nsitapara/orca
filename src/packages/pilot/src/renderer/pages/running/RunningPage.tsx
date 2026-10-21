@@ -20,6 +20,7 @@ import { FinishedRuns } from './FinishedRuns'
 import { LimitsPanel, LimitsToggle } from './LimitsPanel'
 import { MergeBackItem } from './MergeBackRows'
 import { GaveUpRow } from './Retries'
+import { RunWorktreeLine } from './RunWorktreeLine'
 import { checkOf } from './running-checks'
 import { placeBadgeText, placeReasonText } from './running-place'
 import { runMemoryText, stepText, usageText } from './running-text'
@@ -33,8 +34,8 @@ type Changes = {
   onGoNow(key: GoNowKey): void
 }
 
-// Name, where it works, its figures and Open run and Stop on top; the item under it; then why it isn't in your worktree,
-// and what Pilot said to a Stop or Show tab.
+// Name, where it works, its figures and Open run and Stop on top; its project and worktree, then the item under it; then
+// why it isn't in your worktree, and what Pilot said to a Stop or Show tab.
 function RunningRow({ run, now }: { run: CapacityRun; now: number }): React.JSX.Element {
   const host = usePilotHost()
   const why = run.place ? placeReasonText(run.place) : null
@@ -64,6 +65,7 @@ function RunningRow({ run, now }: { run: CapacityRun; now: number }): React.JSX.
           <span className="shrink-0 text-xs">{stop.control}</span>
         ) : null}
       </div>
+      {run.homePath ? <RunWorktreeLine path={run.homePath} /> : null}
       <div className="truncate font-mono text-xs text-muted-foreground" title={run.itemLabel}>
         {run.itemLabel}
       </div>

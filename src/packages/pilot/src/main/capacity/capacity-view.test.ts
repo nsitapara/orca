@@ -94,7 +94,8 @@ describe('capacityView', () => {
         idleMs: 0,
         memoryBytes: 1.5 * GIB,
         peakBytes: 2 * GIB,
-        counted: true
+        counted: true,
+        homePath: null
       },
       {
         id: 'p1',
@@ -105,7 +106,8 @@ describe('capacityView', () => {
         idleMs: 0,
         memoryBytes: null,
         peakBytes: null,
-        counted: false
+        counted: false,
+        homePath: null
       }
     ])
     expect(view.queued).toEqual([
@@ -260,7 +262,8 @@ describe('capacityView', () => {
       quotaUse
     })
     const place = { mode: 'throwaway', reason: 'uncommitted changes', stack: true }
-    expect(view.running.map((r) => r.place)).toEqual([place])
+    // The item's worktree, not the throwaway it works in.
+    expect(view.running.map((r) => [r.place, r.homePath])).toEqual([[place, '/wt/a']])
     expect(view.finished.map((r) => [r.place, r.home])).toEqual([
       [
         place,
