@@ -418,6 +418,7 @@ describe('an env answer run claims no worktree from its creation', () => {
       nameOf: (id) => (id === 'review' ? 'Review' : id),
       pidFile: (runId) => join(tmpdir(), `${runId}.pid`),
       preparer: () => ({ pid: process.pid, identity: null }),
+      nestThrowaway: async () => {},
       log: () => {}
     })
     const sent = await dispatchToAgent(t.deps, t.group)

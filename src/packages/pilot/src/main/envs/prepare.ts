@@ -55,13 +55,20 @@ export type PrepareDeps = {
   nameOf(automationId: string): string
   pidFile(runId: string): string
   preparer(): { pid: number; identity: string | null }
+  // Sets the throwaway's sidebar name and nests it under its home (its detached HEAD would show the repo's name).
+  nestThrowaway(worktreeId: string, home: string, label: string): Promise<void>
   log(message: string): void
 }
 type Flight = { controller: AbortController; done: Promise<void> }
-type Planned = { runId: string; home: string | null; heldBy: string | null }
+type Planned = { runId: string; job: string; home: string | null; heldBy: string | null }
 
 function messageOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
+}
+
+// A throwaway's sidebar name: its job, and the commit it was checked out at.
+function throwawayLabel(job: string, sha: string | null): string {
+  return sha ? `${job} · @${sha.slice(0, 7)}` : job
 }
 
 // A throwaway run's home, the item's worktree: the subject's for --worktree, else the item's own, else the repo's main
@@ -160,7 +167,26 @@ export function createPreparations(deps: PrepareDeps): Preparations {
       stopped(plan)
       return
     }
+    if (result.mode === 'throwaway' && home) {
+      await nestThrowaway(plan, found.id, home, result.sha)
+    }
     await hooks.ready()
+  }
+
+  // Best effort: the sidebar's name for it never holds up or fails the run.
+  async function nestThrowaway(
+    plan: Planned,
+    worktreeId: string,
+    home: string,
+    sha: string | null
+  ): Promise<void> {
+    try {
+      await deps.nestThrowaway(worktreeId, home, throwawayLabel(plan.job, sha))
+    } catch (error) {
+      deps.log(
+        `[pilot] run ${plan.runId}: couldn't nest its throwaway under ${home}: ${messageOf(error)}`
+      )
+    }
   }
 
   async function create(
@@ -197,7 +223,7 @@ export function createPreparations(deps: PrepareDeps): Preparations {
     const args = envCreateArgs({ runId, env, throwaway: heldBy, dryRun: false })
     deps.runs.envs.begin(runId, home, { args, preparer: deps.preparer() })
     const controller = new AbortController()
-    const plan: Planned = { runId, home, heldBy }
+    const plan: Planned = { runId, job: deps.nameOf(req.run.automationId), home, heldBy }
     const done = create(plan, args, controller.signal, hooks, req.repo)
       .catch((error: unknown) =>
         deps.log(`[pilot] run ${runId}: preparing its workspace failed: ${messageOf(error)}`)

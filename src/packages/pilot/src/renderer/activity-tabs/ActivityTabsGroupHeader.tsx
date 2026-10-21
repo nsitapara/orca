@@ -14,11 +14,14 @@ import { MergedWorktreeDeleteButton } from './MergedWorktreeDeleteButton'
 import { setActivityInactiveExpanded, useActivityInactiveExpanded } from './activity-tabs-setting'
 import {
   activityTabsGroupCount,
+  childGroups,
   groupRows,
   INACTIVE_WORKTREES_GROUP_KEY
 } from './activity-tabs-rows'
+import { NestGuides } from './ActivityTabsNest'
 import { NewAgentMenu } from './NewAgentMenu'
 import { openActivityWorktree } from './open-activity-worktree'
+import { useWorktreeGroupNestDepth } from './worktree-nest-parent'
 
 const WORKTREE_GROUP = 'worktree:'
 
@@ -99,6 +102,14 @@ function InactiveHeader({ group }: { group: ActivityThreadGroup }) {
   )
 }
 
+// A worktree's sessions and tabs, its child worktrees' included.
+function sessionCount(group: ActivityThreadGroup): number {
+  return childGroups(group).reduce(
+    (count, child) => count + sessionCount(child),
+    group.threads.length + activityTabsGroupCount(group)
+  )
+}
+
 function openWorktree(worktreeId: string): void {
   const worktree = useAppStore.getState().getKnownWorktreeById(worktreeId)
   if (worktree) {
@@ -111,14 +122,16 @@ function openWorktree(worktreeId: string): void {
 // and the Workspaces sidebar's pin (a pinned worktree always shows in Activity, first). Clicking it
 // opens the worktree and a right-click gives its menu, as in Projects. It has no fold, so every
 // folder icon sits on the guide line. It fetches the worktree's MR and Linear issue once, for its
-// rows' footers and its Delete once the MR is merged.
+// rows' footers and its Delete once the MR is merged. A child worktree's header sits on its parent's
+// guide line, without the project its parent already names.
 export function ActivityTabsGroupHeader({ group, children }: HeaderProps): ReactNode {
   const worktreeId = group.key.startsWith(WORKTREE_GROUP)
     ? group.key.slice(WORKTREE_GROUP.length)
     : null
   const worktree = useAppStore((s) => (worktreeId ? s.getKnownWorktreeById(worktreeId) : undefined))
   const repo = useAppStore((s) => s.repos.find((r) => r.id === worktree?.repoId) ?? null)
-  const project = repo?.displayName ?? null
+  const depth = useWorktreeGroupNestDepth(group.key)
+  const project = depth === 0 ? (repo?.displayName ?? null) : null
   const pinned = worktree?.isPinned === true
   if (pilotStore() && group.key === INACTIVE_WORKTREES_GROUP_KEY) {
     return <InactiveHeader group={group} />
@@ -126,7 +139,7 @@ export function ActivityTabsGroupHeader({ group, children }: HeaderProps): React
   if (!pilotStore() || !worktreeId) {
     return children
   }
-  const count = group.threads.length + activityTabsGroupCount(group)
+  const count = sessionCount(group)
   // Why: the header stands in for a recent worktree's row, so it names that row's machine.
   const [machineRow] = activityGroupMachineRows(group)
   const header = (
@@ -162,5 +175,9 @@ export function ActivityTabsGroupHeader({ group, children }: HeaderProps): React
       <CountBadge count={count} />
     </div>
   )
-  return worktree ? <WorktreeContextMenu worktree={worktree}>{header}</WorktreeContextMenu> : header
+  return (
+    <NestGuides depth={depth} header>
+      {worktree ? <WorktreeContextMenu worktree={worktree}>{header}</WorktreeContextMenu> : header}
+    </NestGuides>
+  )
 }

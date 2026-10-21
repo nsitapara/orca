@@ -30,6 +30,7 @@ import {
 import { useAgentTabItems } from './hide-terminal-tabs'
 import { useOpenTabItems } from './use-open-tab-items'
 import { usePinnedWorktreeIds, useRecentWorktreeItems } from './use-recent-worktree-items'
+import { worktreeParentOf } from './worktree-nest-parent'
 
 // The agent thread behind the active workspace tab, so its row reads as current.
 export function useActiveWorkspaceThread(
@@ -79,8 +80,8 @@ export type ActivityTabsView = {
 // "Hide terminals") and the active tab's agent reads as current; "Hide automation runs" drops every
 // session and tab a Pilot step ran in. A pinned worktree with no row always gets one to start a
 // session from, and so, while "Show recently active worktrees" is on, does each
-// recently active one; pinned worktrees' groups lead the worktree grouping, and worktrees with no
-// session go under Inactive at its end.
+// recently active one; pinned worktrees' groups lead the worktree grouping, a child worktree's group
+// follows its parent's, and worktrees with no session go under Inactive at its end.
 export function useActivityTabsThreads<
   T extends {
     allThreads: AgentPaneThread[]
@@ -94,6 +95,7 @@ export function useActivityTabsThreads<
   const hideTerminals = useActivityHideTerminals()
   const hideAutomationRuns = useActivityHideAutomationRuns()
   const inactiveExpanded = useActivityInactiveExpanded()
+  const parentOf = useAppStore(worktreeParentOf)
   const pinnedIds = usePinnedWorktreeIds(attached)
   const activePaneKey = useActiveWorkspaceThread(result.allThreads, result.effectiveSelectedPaneKey)
   // A tab or a worktree is never unread, so "Show unread only" leaves them out.
@@ -132,9 +134,10 @@ export function useActivityTabsThreads<
     ]
     return mergeRowsIntoGroups(threadGroups, rows, view.groupBy, {
       pinnedWorktreeIds: pinnedIds,
-      inactiveExpanded
+      inactiveExpanded,
+      parentOf
     })
-  }, [threadGroups, tabs, recent, view.groupBy, pinnedIds, inactiveExpanded])
+  }, [threadGroups, tabs, recent, view.groupBy, pinnedIds, inactiveExpanded, parentOf])
   if (!attached) {
     return result
   }

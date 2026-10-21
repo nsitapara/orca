@@ -23,6 +23,9 @@ const NO_ROWS: readonly ActivityTabsRow[] = []
 const rowsByGroup = new WeakMap<ActivityThreadGroup, readonly ActivityTabsRow[]>()
 // Groups whose rows are counted but not listed: Pilot owns their fold, not upstream's collapse set.
 const foldedGroups = new WeakSet<ActivityThreadGroup>()
+// Grouped by worktree, the child worktrees' groups listed under a group (activity-tabs-groups.ts).
+const childGroupsByGroup = new WeakMap<ActivityThreadGroup, readonly ActivityThreadGroup[]>()
+const NO_GROUPS: readonly ActivityThreadGroup[] = []
 
 export function withGroupRows(
   group: ActivityThreadGroup,
@@ -44,6 +47,20 @@ export function groupRows(group: ActivityThreadGroup): readonly ActivityTabsRow[
 
 export function isGroupFolded(group: ActivityThreadGroup): boolean {
   return foldedGroups.has(group)
+}
+
+/** A copy of the group that lists these child worktrees' groups under it, its Pilot rows and fold kept. */
+export function withChildGroups(
+  group: ActivityThreadGroup,
+  children: readonly ActivityThreadGroup[]
+): ActivityThreadGroup {
+  const next = withGroupRows(group, groupRows(group), isGroupFolded(group))
+  childGroupsByGroup.set(next, children)
+  return next
+}
+
+export function childGroups(group: ActivityThreadGroup): readonly ActivityThreadGroup[] {
+  return childGroupsByGroup.get(group) ?? NO_GROUPS
 }
 
 // A worktree group's header is a recent worktree's row (with its own New agent): no row under it.
