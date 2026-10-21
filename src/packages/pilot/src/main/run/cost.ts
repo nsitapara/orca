@@ -36,14 +36,7 @@ export async function claudeTranscriptCost(
   let tokens = 0
   for (const t of turns) {
     tokens += t.inputTokens + t.outputTokens + t.cacheReadTokens + t.cacheWriteTokens
-    const c = estimate(
-      t.model,
-      t.inputTokens,
-      t.outputTokens,
-      t.cacheReadTokens,
-      t.cacheWriteTokens,
-      t.cacheWrite1hTokens
-    )
+    const c = estimate(t.model, t)
     if (c !== null) {
       cost += c
       priced = true

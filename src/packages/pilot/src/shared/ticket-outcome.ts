@@ -5,7 +5,7 @@ export const OUTCOME_PREFIX = 'ticketed for later: '
 export const FROZEN_DRAFT =
   "Linear may have created this ticket. Retry sends the same draft and can't make a second one."
 const OUTCOME_SEPARATOR = ' · '
-const LOCATION_SUFFIX = /\s—\s(\S+:\d+(?:-\d+)?)$/
+const LOCATION_SUFFIX = /\s\u2014\s(\S+:\d+(?:-\d+)?)$/
 
 export function formatTicketedOutcome(ref: TicketedRef): string {
   return `${OUTCOME_PREFIX}${ref.identifier}${OUTCOME_SEPARATOR}${ref.url}`

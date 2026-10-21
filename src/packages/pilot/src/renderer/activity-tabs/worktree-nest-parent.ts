@@ -1,10 +1,8 @@
 import type { WorktreeLineage } from '../../../../../shared/worktree/lineage-types'
 import type { Worktree } from '../../../../../shared/worktree/types'
 import { getSidebarLineageRowsByIdentity } from '../../../../../shared/sidebar-list/pinned-section-worktrees'
-import {
-  getCyclicProjectedWorktreeLineageIds,
-  getSidebarLineageParent
-} from '../../../../../shared/sidebar-list/worktree-lineage-projection'
+import { getSidebarLineageParentsByIdentity } from '../../../../../shared/sidebar-list/worktree-lineage-projection'
+import { getWorktreeHostIdentity } from '../../../../../shared/worktree/host-qualified-identity'
 import { getLineageAncestorIndex } from '@/components/sidebar/visible-worktree-indexes'
 import { useAppStore } from '@/store'
 
@@ -32,14 +30,19 @@ export function worktreeParentOf(state: LineageState): WorktreeParentOf {
     return cached.parentOf
   }
   const index = getLineageAncestorIndex(worktreesByRepo)
-  const rowsByIdentity = getSidebarLineageRowsByIdentity([], index)
-  const cyclic = getCyclicProjectedWorktreeLineageIds(worktreeLineageById, index)
+  // Keyed by host identity, without cycles: the parents the Projects sidebar nests under.
+  const parents = getSidebarLineageParentsByIdentity(
+    worktreeLineageById,
+    getSidebarLineageRowsByIdentity([], index)
+  )
+  // The index is keyed by host identity; Activity groups name a worktree by its id.
+  const byId = new Map([...index.values()].map((worktree) => [worktree.id, worktree]))
   const parentOf: WorktreeParentOf = (worktreeId) => {
-    const worktree = index.get(worktreeId)
-    if (!worktree || cyclic.has(worktreeId)) {
+    const worktree = byId.get(worktreeId)
+    if (!worktree) {
       return null
     }
-    const parent = getSidebarLineageParent(worktree, worktreeLineageById, rowsByIdentity)
+    const parent = parents.get(getWorktreeHostIdentity(worktree))
     return parent && parent.id !== worktreeId ? { id: parent.id, label: parent.displayName } : null
   }
   cached = { worktreesByRepo, worktreeLineageById, parentOf }

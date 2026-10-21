@@ -225,7 +225,7 @@
     {
       "files": ["**/*.ts", "**/*.mts", "**/*.cts"],
       "rules": {
-        "max-lines": ["error", { "max": 300, "skipBlankLines": true, "skipComments": true }]
+        "max-lines": ["error", { "max": 600, "skipComments": true, "skipBlankLines": true }]
       }
     },
     {

@@ -26,7 +26,11 @@ import type { ClaudeSettledRequest } from './agent-hook-listener/claude-settled-
 
 import { createHash } from 'node:crypto'
 
-import type { AgentSubagentSnapshot, ParsedAgentStatusPayload } from './agent-status-types'
+import type {
+  AgentSubagentSnapshot,
+  ParsedAgentStatusPayload,
+  TurnEndDisposition
+} from './agent-status-types'
 import type { AgentProviderSessionMetadata } from './agent-session-resume'
 import type { AgentHookTarget } from './agent-hook-types'
 
@@ -122,6 +126,10 @@ export type AgentHookRelayEnvelope = {
   providerSessionOnly?: boolean
   /** True when the relay is replaying its cache after Orca reconnects. */
   isReplay?: boolean
+  /** The relay's turn-end stamp (see AgentHookEventPayload.turnEndedAt); older relays omit it. */
+  turnEndedAt?: number
+  /** How the relay identified that end; older relays omit it (legacy). */
+  turnEndDisposition?: TurnEndDisposition
   /** Claude live work the child list does not show (a shell, a cron, an owed task notification), for input-interrupt inference on the receiving host. */
   claudeRunningNonAgentTask?: boolean
   /** Forwarded from the agent CLI POST body. The relay default is `remote`,
@@ -251,18 +259,11 @@ export type AgentHookInstallManagedHooksParams = {
   claudeVersion?: string
 }
 
-/** Feature-flag env var. Read once at process start by Orca and the relay.
- *  Remote agent hooks ship as the default SSH behavior; set "0" to opt out. */
+/** Opt-out env var for the Windows WSL agent-hook relay, read on each relay start; set "0" to
+ *  disable. */
 export const ORCA_FEATURE_REMOTE_AGENT_HOOKS_ENV = 'ORCA_FEATURE_REMOTE_AGENT_HOOKS' as const
 
-export function isRemoteAgentHooksEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
+export function isWslAgentHookRelayEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
   const raw = env[ORCA_FEATURE_REMOTE_AGENT_HOOKS_ENV]
-  if (raw === undefined) {
-    return true
-  }
-  const trimmed = raw.trim()
-  if (trimmed.length === 0 || trimmed === '0') {
-    return false
-  }
-  return true
+  return raw === undefined || !['', '0'].includes(raw.trim())
 }

@@ -39,7 +39,7 @@ const UNFINISHED: Record<string, string> = {
   blocked: 'is asking for input'
 }
 // Claude's spinner ("✽ Symbioting… (7m 39s") or Codex's footer: a turn still running on screen.
-export const TURN_RUNNING = /^\s*\S \S+…|esc to interrupt/i
+export const TURN_RUNNING = /^\s*\S \S+\u2026|esc to interrupt/i
 const LIST_LIMIT = 10_000
 const PS_LIMIT = 1000
 const IDLE_WAIT_MS = 1500

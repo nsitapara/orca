@@ -189,7 +189,10 @@ describe('Pilot wrappers around upstream Activity elements', () => {
         </TooltipProvider>
       )
       fireEvent.click(view.getByRole('button', { name: label }))
-      expect(setWorktreesPinnedAndReveal).toHaveBeenCalledWith(['wt-1'], next)
+      expect(setWorktreesPinnedAndReveal).toHaveBeenCalledWith(
+        [expect.objectContaining({ id: 'wt-1' })],
+        next
+      )
       expect(onToggle).not.toHaveBeenCalled()
     }
   )

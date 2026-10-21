@@ -84,14 +84,7 @@ export async function claudeUsage(
         cacheRead: t.cacheReadTokens,
         cacheWrite: t.cacheWriteTokens,
         output: t.outputTokens,
-        costUsd: estimate(
-          t.model,
-          t.inputTokens,
-          t.outputTokens,
-          t.cacheReadTokens,
-          t.cacheWriteTokens,
-          t.cacheWrite1hTokens
-        )
+        costUsd: estimate(t.model, t)
       })
     }
   }

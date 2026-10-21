@@ -49,10 +49,5 @@ export const PILOT_HANDLER_GROUPS: readonly HandlerGroup[] = [
     name: 'pilot-spend',
     keys: ['automations spend', 'automations usage-report'],
     load: async () => (await import('./spend.js')).PILOT_SPEND_HANDLERS
-  },
-  {
-    name: 'pilot-linear',
-    keys: ['linear comment edit'],
-    load: async () => (await import('./handlers-linear.js')).LINEAR_HANDLERS
   }
 ]

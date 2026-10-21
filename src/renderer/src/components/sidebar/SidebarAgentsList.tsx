@@ -13,6 +13,11 @@ import type { ActivityGroupBy, ThreadReadFilter } from '@/components/activity/ac
 import { useActivityTabsThreads } from '../../../../packages/pilot/src/renderer/activity-tabs/activity-tabs-threads' // pilot-hook: activity-tabs-threads
 import { ActivityTabsPanel } from '../../../../packages/pilot/src/renderer/activity-tabs/ActivityTabsPanel' // pilot-hook: activity-tabs-panel
 import { withActivityTabsCount } from '../../../../packages/pilot/src/renderer/activity-tabs/activity-tabs-rows' // pilot-hook: activity-tabs-count
+import {
+  selectDetectedWorktreesByRepo,
+  selectFolderWorkspaces,
+  selectWorktreesByRepo
+} from '@/store/workspace-record-selectors'
 
 /**
  * The Activity thread list, hosted in the sidebar as a navigator: selecting a
@@ -102,19 +107,23 @@ export default function SidebarAgentsList({
     setSelectedPaneKey
   })
 
+  const worktreesByRepo = selectWorktreesByRepo(storeData)
+  const detectedWorktreesByRepo = selectDetectedWorktreesByRepo(storeData)
+  const folderWorkspaces = selectFolderWorkspaces(storeData)
+
   const canJumpToWorkspace = useCallback(
     (thread: Parameters<typeof hasActivityThreadWorkspace>[0]) =>
       hasActivityThreadWorkspace(thread, {
-        worktreesByRepo: storeData.worktreesByRepo,
-        detectedWorktreesByRepo: storeData.detectedWorktreesByRepo,
-        folderWorkspaces: storeData.folderWorkspaces,
+        worktreesByRepo,
+        detectedWorktreesByRepo,
+        folderWorkspaces,
         floatingWorkspacePath: storeData.floatingWorkspacePath,
         defaultHostId: storeData.defaultHostId
       }),
     [
-      storeData.worktreesByRepo,
-      storeData.detectedWorktreesByRepo,
-      storeData.folderWorkspaces,
+      worktreesByRepo,
+      detectedWorktreesByRepo,
+      folderWorkspaces,
       storeData.floatingWorkspacePath,
       storeData.defaultHostId
     ]

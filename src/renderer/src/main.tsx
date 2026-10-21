@@ -18,6 +18,7 @@ import { installAutomationHostDiagnostic } from './components/automations/automa
 import { attachPilotRenderer } from '../../packages/pilot/src/renderer/attach-renderer' // pilot-hook: renderer
 import { applyDocumentTheme } from './lib/document-theme'
 import { installTypingLatencyDiagnostic } from './lib/typing-latency/diagnostic'
+import { installAppKeyboardRouter } from './lib/app-keyboard-router'
 import { shouldEnableReactGrab } from './lib/react-grab-dev-gate'
 import { I18nProvider } from './i18n/I18nProvider'
 import { translate } from './i18n/i18n'
@@ -26,34 +27,15 @@ import { primeTerminalWebglAddon } from './lib/pane-manager/pane-webgl-renderer'
 import { SkillWarningPreviewLauncher } from './components/skills/SkillWarningPreviewLauncher'
 import { installBrowserClientPageRenderer } from './components/browser-pane/browser-client-page-renderer-installation'
 import { installOsFileDropCancellationGuard } from './lib/os-file-drop-cancellation-guard'
-import { installSidebarShadowComparison } from './lib/sidebar-shadow/sidebar-shadow-comparison'
-import { ORCA_SIDEBAR_INPUTS_IS_MAIN } from '../../shared/sidebar-inputs-switch'
-import { workspaceActivityShadow } from './lib/sidebar-shadow/workspace-activity-shadow'
-import {
-  pairedServerHostsShadow,
-  pairedServerRowsShadow
-} from './lib/sidebar-shadow/paired-server-rows-shadow'
-import { desktopFactsShadow } from './lib/sidebar-shadow/desktop-facts-shadow'
-import { workspaceReviewShadow } from './lib/sidebar-shadow/workspace-review-shadow'
 
 const disposeOsFileDropGuard = installOsFileDropCancellationGuard()
 import.meta.hot?.dispose(disposeOsFileDropGuard)
 recordRendererCrashBreadcrumb('renderer_bootstrap_started', { dev: import.meta.env.DEV })
 installRendererCrashDiagnostics()
 installTypingLatencyDiagnostic()
+installAppKeyboardRouter()
 installAutomationHostDiagnostic()
 attachPilotRenderer() // pilot-hook: renderer
-// Switch point: only a build where main produces the sidebar's inputs compares them.
-if (ORCA_SIDEBAR_INPUTS_IS_MAIN) {
-  const disposeSidebarShadow = installSidebarShadowComparison([
-    workspaceActivityShadow,
-    pairedServerRowsShadow,
-    pairedServerHostsShadow,
-    desktopFactsShadow,
-    workspaceReviewShadow
-  ])
-  import.meta.hot?.dispose(disposeSidebarShadow)
-}
 
 if (
   import.meta.env.DEV &&

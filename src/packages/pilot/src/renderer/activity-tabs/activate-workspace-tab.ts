@@ -7,7 +7,7 @@ import {
 import { getPaletteWorktreeExecutionHostId } from '@/lib/palette-repo-resolution'
 import { activateStructuredAgentSessionTab } from '@/lib/structured-agent-session-tab-activation'
 import { activateAndRevealWorkspace } from '@/lib/worktree-activation'
-import { getRuntimeEnvironmentIdForWorktree } from '@/lib/worktree-runtime-owner'
+import { runtimeEnvironmentIdWithLegacyFallbackUnlessTwin } from '@/lib/worktree-runtime-owner'
 import { browserWorkspaceHasRemoteOwner } from '@/runtime/remote-browser-tab-ownership'
 import { isWebRuntimeSessionActive } from '@/runtime/web-runtime-session-environment'
 import { activateWebRuntimeSessionTab } from '@/runtime/web-runtime-session-tab-lifecycle'
@@ -59,7 +59,7 @@ export function activateWorkspaceTab(item: WorkspaceTabItem): boolean {
   if (!activated || !live || !findGroup(tab.worktreeId, tab.groupId)) {
     return false
   }
-  const environmentId = getRuntimeEnvironmentIdForWorktree(state, tab.worktreeId)
+  const environmentId = runtimeEnvironmentIdWithLegacyFallbackUnlessTwin(state, tab.worktreeId)
   state.focusGroup(tab.worktreeId, tab.groupId)
   state.activateTab(tab.id, { worktreeId: tab.worktreeId })
   switch (tab.contentType) {

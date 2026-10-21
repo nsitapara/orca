@@ -1,5 +1,5 @@
 // The job code at the front of a vault job name: "05 · Fix failed CI on my MRs" → "05", "M01 · …" → "M01".
-const CODE = /^(M?\d{2}) · /
+const CODE = /^(M?\d{2}) \u00b7 /
 
 export function jobCode(jobName: string): string | null {
   return CODE.exec(jobName)?.[1] ?? null

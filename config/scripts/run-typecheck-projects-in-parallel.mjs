@@ -1,9 +1,10 @@
-import { spawnProcess } from '@orca/process-host'
+import { runProcessSync, spawnProcess } from '@orca/process-host'
 import { readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { availableParallelism, constants, setPriority, totalmem } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
+import { readPinnedBunVersion, resolvePinnedBunExecutable } from './pinned-bun-executable.mjs'
 import { acquireTypecheckLock, repoTypecheckLockDir } from './typecheck-repo-lock.mjs'
 
 const BYTES_PER_GIB = 1024 ** 3
@@ -71,6 +72,9 @@ export function resolveProjectCompiler(config, root = repoRoot) {
   return resolveProjectCompilerInfo(config, root).program
 }
 
+// Bun 1.4.3 targets TypeScript 7.0.2; compiler upgrades require a new parity comparison.
+export const BUN_TYPESCRIPT_VERSION = '7.0.2'
+
 function positiveInteger(env, name, fallback) {
   const raw = env[name]
   if (raw === undefined || raw === '') {
@@ -93,14 +97,27 @@ export function localTypecheckLimits(env = process.env) {
 }
 
 export function parseTypecheckOptions(args) {
-  const options = { compiler: 'native', bunConcurrency: 1, bunThreads: 4 }
+  const options = {
+    compiler: 'bun',
+    bunConcurrency: 2,
+    bunThreads: 4,
+    projects: TYPECHECK_PROJECTS
+  }
+  const selected = []
   for (const argument of args) {
-    if (argument === '--compiler=bun' || argument === '--compiler=native') {
+    if (/^--compiler=(bun|native)$/.test(argument)) {
       options.compiler = argument.slice('--compiler='.length)
     } else if (argument.startsWith('--bun-concurrency=')) {
       options.bunConcurrency = Number(argument.slice('--bun-concurrency='.length))
     } else if (argument.startsWith('--bun-threads=')) {
       options.bunThreads = Number(argument.slice('--bun-threads='.length))
+    } else if (argument.startsWith('--project=')) {
+      const config = argument.slice('--project='.length)
+      const project = TYPECHECK_PROJECTS.find((candidate) => candidate.config === config)
+      if (!project) {
+        throw new Error(`Unknown typecheck project: ${config}`)
+      }
+      selected.push(project)
     } else {
       throw new Error(`Unknown typecheck option: ${argument}`)
     }
@@ -110,7 +127,27 @@ export function parseTypecheckOptions(args) {
       throw new Error('Bun concurrency and threads must be integers from 1 to 4')
     }
   }
+  if (selected.length > 0) {
+    options.projects = selected
+  }
   return options
+}
+
+/**
+ * Bun is the default: on the node project it uses ~1/3 of tsc's CPU and ~2 GB instead of
+ * ~16 GB, and tsc's incremental cache rarely survives an edit to an export.
+ */
+export function selectTypecheckCompiler(compiler, { root, resolveBunExecutable }) {
+  if (compiler === 'native') {
+    return { compiler }
+  }
+  const bunExecutable = resolveBunExecutable(root)
+  if (!bunExecutable) {
+    throw new Error(
+      `Bun ${readPinnedBunVersion(root)} from devDependencies is missing; run pnpm install, or pass --compiler=native.`
+    )
+  }
+  return { compiler, bunExecutable }
 }
 
 export function typecheckBatches(projects, { compiler, bunConcurrency, memoryBytes, parallelism }) {
@@ -123,22 +160,30 @@ export function typecheckBatches(projects, { compiler, bunConcurrency, memoryByt
   )
 }
 
-function checkProject(config, { compiler, bunThreads, threads, root, spawnCompiler }) {
+export function resolveTypecheckCommand(config, { compiler, bunExecutable, bunThreads, root }) {
+  const installedCompiler = resolveProjectCompilerInfo(config, root)
+  if (compiler === 'bun' && installedCompiler.version !== BUN_TYPESCRIPT_VERSION) {
+    throw new Error(
+      `Bun CI compiler targets TypeScript ${BUN_TYPESCRIPT_VERSION}, but ${config} resolves ${installedCompiler.version}`
+    )
+  }
+  return {
+    program: compiler === 'bun' ? bunExecutable : process.execPath,
+    args:
+      compiler === 'bun'
+        ? ['check', '-p', config, '--threads', String(bunThreads), '--no-pretty', '--all']
+        : [installedCompiler.program, '--noEmit', '-p', config],
+    cwd: root
+  }
+}
+
+function checkProject(
+  config,
+  { compiler, bunExecutable, bunThreads, threads, root, spawnCompiler }
+) {
   return new Promise((resolve, reject) => {
-    const installedCompiler = resolveProjectCompilerInfo(config, root)
-    // Bun 1.4.3 targets TypeScript 7.0.2; compiler upgrades require a new parity comparison.
-    if (compiler === 'bun' && installedCompiler.version !== '7.0.2') {
-      throw new Error(
-        `Bun CI compiler targets TypeScript 7.0.2, but ${config} resolves ${installedCompiler.version}`
-      )
-    }
     const child = spawnCompiler({
-      program: compiler === 'bun' ? 'bun' : process.execPath,
-      args:
-        compiler === 'bun'
-          ? ['check', '-p', config, '--threads', String(bunThreads), '--no-pretty', '--all']
-          : [installedCompiler.program, '--noEmit', '-p', config],
-      cwd: root,
+      ...resolveTypecheckCommand(config, { compiler, bunExecutable, bunThreads, root }),
       // The native compiler is Go: GOMAXPROCS caps the cores it runs on.
       ...(threads === null ? {} : { env: { ...process.env, GOMAXPROCS: String(threads) } }),
       stdio: 'inherit'
@@ -158,6 +203,7 @@ function checkProject(config, { compiler, bunThreads, threads, root, spawnCompil
 
 export async function runTypecheckProjects({
   compiler = 'native',
+  bunExecutable = 'bun',
   bunConcurrency = 1,
   bunThreads = 4,
   threads = null,
@@ -180,6 +226,7 @@ export async function runTypecheckProjects({
           try {
             await checkProject(pending[index].config, {
               compiler,
+              bunExecutable,
               bunThreads,
               threads,
               root,
@@ -198,7 +245,14 @@ export async function runTypecheckProjects({
   for (const batch of batches) {
     const results = await Promise.allSettled(
       batch.map((project) =>
-        checkProject(project.config, { compiler, bunThreads, threads, root, spawnCompiler })
+        checkProject(project.config, {
+          compiler,
+          bunExecutable,
+          bunThreads,
+          threads,
+          root,
+          spawnCompiler
+        })
       )
     )
     for (const result of results) {
@@ -239,8 +293,11 @@ async function runLocally(options) {
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const options = parseTypecheckOptions(process.argv.slice(2))
-  const failures =
-    options.compiler === 'native' ? await runLocally(options) : await runTypecheckProjects(options)
+  const selection = selectTypecheckCompiler(options.compiler, {
+    root: repoRoot,
+    resolveBunExecutable: (root) => resolvePinnedBunExecutable(root, runProcessSync)
+  })
+  const failures = await runLocally({ ...options, ...selection })
   if (failures.length > 0) {
     for (const failure of failures) {
       console.error(failure.message ?? failure)

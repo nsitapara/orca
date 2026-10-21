@@ -8,10 +8,8 @@ import {
   dedupeLogicalLines,
   openFilePathLinkAtBufferPosition
 } from './terminal-file-link-hit-testing'
-import {
-  isHtmlFilePath,
-  shouldOpenTerminalFileWithSystemDefault
-} from './terminal-file-open-routing'
+import { isHtmlFilePath } from '../../../../shared/html-file-url'
+import { shouldOpenTerminalFileWithSystemDefault } from './terminal-file-open-routing'
 import { fileLinkTargetExists, resolveFileLinkTarget } from './terminal-file-link-target'
 import {
   buildHardWrappedPathLogicalLineCandidates,
@@ -52,6 +50,8 @@ export type LinkHandlerDeps = {
   /** The pane's terminal on its paired server, which may grant files it printed. */
   getRuntimeTerminalHandleForPane?: (paneId: number) => string | null
   getLinkActionContext?: (paneId: number) => TerminalLinkActionContext | null
+  /** The terminal tab whose panes print these links; editor opens place beside its group. */
+  sourceTabId?: string
 }
 
 type ProvidedFileLink = {
@@ -154,7 +154,8 @@ export function createFilePathLinkProvider(
                           worktreePath,
                           runtimeEnvironmentId,
                           wslDistro: deps.wslDistro,
-                          terminalHandle
+                          terminalHandle,
+                          sourceTabId: deps.sourceTabId
                         },
                         deps.getLinkActionContext?.(paneId)
                       )
@@ -249,7 +250,8 @@ export function installFilePathLinkClickFallback(
         wslDistro: deps.wslDistro,
         terminalHandle: deps.getRuntimeTerminalHandleForPane?.(paneId) ?? null,
         pathExistsCache: deps.pathExistsCache,
-        openWithSystemDefault: Boolean(event.shiftKey)
+        openWithSystemDefault: Boolean(event.shiftKey),
+        sourceTabId: deps.sourceTabId
       }
     )
     if (opened) {

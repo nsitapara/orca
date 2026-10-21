@@ -58,7 +58,16 @@ describe('claudeUsage', () => {
   it('prices every cache write, passing the 1-hour share separately', async () => {
     const estimate = vi.fn(() => 0.1)
     await claudeUsage(['/a.jsonl'], WINDOW, async () => [turn(10)] as never, estimate as never)
-    expect(estimate).toHaveBeenCalledWith('claude-opus-5-5', 100, 10, 1000, 50, 20)
+    expect(estimate).toHaveBeenCalledWith(
+      'claude-opus-5-5',
+      expect.objectContaining({
+        inputTokens: 100,
+        outputTokens: 10,
+        cacheReadTokens: 1000,
+        cacheWriteTokens: 50,
+        cacheWrite1hTokens: 20
+      })
+    )
   })
 
   it('skips a file it cannot read, and synthetic or model-less turns', async () => {

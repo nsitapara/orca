@@ -54,7 +54,11 @@ function PinButton({ worktreeId, pinned }: { worktreeId: string; pinned: boolean
           aria-pressed={pinned}
           onClick={(event) => {
             event.stopPropagation()
-            useAppStore.getState().setWorktreesPinnedAndReveal([worktreeId], !pinned)
+            const store = useAppStore.getState()
+            const worktree = store.getKnownWorktreeById(worktreeId)
+            if (worktree) {
+              store.setWorktreesPinnedAndReveal([worktree], !pinned)
+            }
           }}
           onKeyDown={(event) => event.stopPropagation()}
           className={cn(

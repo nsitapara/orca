@@ -23,9 +23,11 @@ import { I18nProvider } from '../i18n/I18nProvider'
 import { translate } from '../i18n/i18n'
 import { installOsFileDropCancellationGuard } from '../lib/os-file-drop-cancellation-guard'
 import { withPilotWebRenderer } from '../../../packages/pilot/src/renderer/attach-web-renderer' // pilot-hook: web-renderer
+import { installAppKeyboardRouter } from '../lib/app-keyboard-router'
 
 const disposeOsFileDropGuard = installOsFileDropCancellationGuard()
 import.meta.hot?.dispose(disposeOsFileDropGuard)
+installAppKeyboardRouter()
 const App = lazy(() => withPilotWebRenderer(import('../App'))) // pilot-hook: web-renderer
 
 function WebRoot(): React.JSX.Element {
