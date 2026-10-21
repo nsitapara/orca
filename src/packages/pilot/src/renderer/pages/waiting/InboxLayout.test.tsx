@@ -130,7 +130,7 @@ describe('the Inbox layout', () => {
     expect(screen.queryByRole('searchbox')).toBeNull()
   })
 
-  it('puts interleaved cards in sections, each under one sticky heading with its count', async () => {
+  it('puts interleaved cards in sections; only a job section has a heading, sticky with its count', async () => {
     serve()
     render(<InboxPage />, { wrapper: TooltipProvider })
     await screen.findByRole('heading', { name: 'F1 Fixture' })
@@ -140,20 +140,32 @@ describe('the Inbox layout', () => {
       '!1579',
       '09 · Prepare reviews requested of me'
     ])
+    expect(sections.map((s) => s.querySelector('h2')?.textContent ?? null)).toEqual([
+      null,
+      null,
+      '09 · Prepare reviews requested of me · 1'
+    ])
+    expect(sections[2].querySelector('h2')?.className).toContain('sticky')
     expect(
       within(sections[0])
         .getAllByRole('heading')
         .map((h) => h.textContent)
-    ).toEqual(['w / web-2099-carrier · 2', 'F1 Fixture', 'F2 Rescind'])
-    expect(sections[0].querySelector('h2')?.className).toContain('sticky')
+    ).toEqual(['F1 Fixture', 'F2 Rescind'])
     expect(screen.queryByText('Job-wide')).toBeNull()
   })
 
-  it('shows no worktree or group line on a card: the section heading carries it', async () => {
+  it('opens each card of a worktree or MR on its place, inside the card', async () => {
     serve()
     render(<InboxPage />, { wrapper: TooltipProvider })
-    const article = (await screen.findByRole('heading', { name: 'F1 Fixture' })).closest('article')!
-    expect(article.textContent).not.toContain('web-2099-carrier')
+    await screen.findByRole('heading', { name: 'F1 Fixture' })
+    const place = (id: string) =>
+      document.getElementById(`card-${id}`)?.querySelector('[data-card-place]')?.textContent ?? null
+    expect([place('f1'), place('f2'), place('r1579'), place('job')]).toEqual([
+      'w/web-2099-carrier',
+      'w/web-2099-carrier',
+      '!1579',
+      null
+    ])
   })
 
   it('shows only the group picked from a heading in the list, and every group once it is picked again', async () => {
@@ -425,7 +437,9 @@ describe('the filter by page width', () => {
     render(<InboxPage />, { wrapper: TooltipProvider })
     await screen.findByRole('heading', { name: 'F1 Fixture' })
     const heading = () =>
-      screen.getByRole('region', { name: 'web-2099-carrier' }).querySelector('h2')!
+      screen
+        .getByRole('region', { name: '09 · Prepare reviews requested of me' })
+        .querySelector('h2')!
     for (const c of ['sticky', 'top-0', 'bg-background', 'z-20', 'border-b', '-mr-5']) {
       expect(heading().className).toContain(c)
     }
@@ -454,7 +468,7 @@ describe('an MR group’s name on screen', () => {
     cleanup()
     pilotRpc.mockReset()
   })
-  it('shows the MR’s branch beside its iid in the list, the heading and the badges, truncated with the full text in title', async () => {
+  it('shows the MR’s branch beside its iid in the list, the card and the badges, truncated with the full text in title', async () => {
     vi.stubGlobal('ResizeObserver', FakeResizeObserver)
     const named = { ...R1579, itemLabel: '!1579 web-2107-improve-reports-with-a-long-branch-name' }
     serve({ ...LIST, items: [named] })
@@ -462,9 +476,10 @@ describe('an MR group’s name on screen', () => {
     await screen.findByRole('heading', { name: 'Post your review of !1579?' })
     const full = '!1579 · web-2107-improve-reports-with-a-long-branch-name'
     const region = screen.getByRole('region', { name: full })
-    expect(region.querySelector('h2')?.getAttribute('title')).toBe(full)
-    // The name truncates, not the worktree's chips beside it.
-    expect(region.querySelector('h2')?.firstElementChild?.className).toContain('truncate')
+    const name = within(region.querySelector<HTMLElement>('[data-card-place]')!).getByText(full)
+    expect(name.getAttribute('title')).toBe(full)
+    // The name truncates, not the chips beside it.
+    expect(name.className).toContain('truncate')
     const nav = within(screen.getByRole('navigation', { name: 'Cards' }))
     expect(nav.getByRole('button', { name: `${full} · 1` }).getAttribute('title')).toBe(full)
     fireWidth(500)
@@ -690,8 +705,6 @@ describe('one status tab at a time', () => {
     const place = (id: string) =>
       document.getElementById(`card-${id}`)?.querySelector('[data-card-place]')?.textContent ?? null
     expect(row('f1').textContent).not.toContain('web-2099-carrier')
-    // Under its worktree's heading a card leaves the place to the heading.
-    expect(place('f1')).toBeNull()
     groupBy('job')
     expect(screen.getAllByRole('region').map((s) => s.querySelector('h2')?.textContent)).toEqual([
       '04 · Test branch UIs overnight · 2',

@@ -75,9 +75,12 @@ function serve() {
     return method === 'pilot.queue.list' ? { entries: [] } : { imported: 0, skipped: [] }
   })
 }
+// A worktree or MR section's name is on its card's place line; a job section's is its heading.
+const place = (label: string) =>
+  screen.getByRole('region', { name: label }).querySelector<HTMLElement>('[data-card-place]')!
 const heading = (label: string) => screen.getByRole('region', { name: label }).querySelector('h2')!
 
-describe('opening a worktree from its section', () => {
+describe('opening a worktree from its card', () => {
   beforeEach(() => {
     registerPilotStore({
       getState: () =>
@@ -103,7 +106,7 @@ describe('opening a worktree from its section', () => {
     serve()
     render(<InboxPage />, { wrapper: TooltipProvider })
     await screen.findByRole('heading', { name: 'By path' })
-    const open = within(heading('web-1')).getByRole('button', { name: /web-1/ })
+    const open = within(place('web-1')).getByRole('button', { name: /web-1/ })
     expect(open.getAttribute('title')).toBe('Open this worktree')
     fireEvent.click(open)
     await waitFor(() => expect(activate).toHaveBeenCalledWith('repo-1::/w/web-1'))
@@ -113,7 +116,7 @@ describe('opening a worktree from its section', () => {
     serve()
     render(<InboxPage />, { wrapper: TooltipProvider })
     await screen.findByRole('heading', { name: 'By key' })
-    fireEvent.click(within(heading('web-2')).getByRole('button', { name: /web-2/ }))
+    fireEvent.click(within(place('web-2')).getByRole('button', { name: /web-2/ }))
     await waitFor(() => expect(activate).toHaveBeenCalledWith('repo-9::/w/web-2'))
   })
 
@@ -129,7 +132,7 @@ describe('opening a worktree from its section', () => {
     serve()
     render(<InboxPage />, { wrapper: TooltipProvider })
     await screen.findByRole('heading', { name: 'Gone' })
-    const h = heading('web-gone')
+    const h = place('web-gone')
     expect(within(h).queryByRole('button')).toBeNull()
     expect(within(h).getByText('web-gone').getAttribute('title')).toBe('Not open in Pilot')
   })
@@ -138,7 +141,7 @@ describe('opening a worktree from its section', () => {
     serve()
     render(<InboxPage />, { wrapper: TooltipProvider })
     await screen.findByRole('heading', { name: 'An MR' })
-    expect(within(heading('!1579')).queryByRole('button')).toBeNull()
+    expect(within(place('!1579')).queryByRole('button')).toBeNull()
     expect(within(heading('Job A')).queryByRole('button')).toBeNull()
   })
 
@@ -303,9 +306,9 @@ describe('opening a worktree on another machine', () => {
       render(<InboxPage />, { wrapper: TooltipProvider })
       await screen.findByRole('heading', { name: 'Mini card' })
       const nav = within(screen.getByRole('navigation', { name: 'Cards' }))
-      // The heading's name and the list's open button: both, or neither.
+      // The card's name and the list's open button: both, or neither.
       const openers = [
-        ...within(heading('x')).queryAllByRole('button'),
+        ...within(place('x')).queryAllByRole('button'),
         ...nav.queryAllByRole('button', { name: 'Open x in Pilot' })
       ]
       // One at a time: each click loads the activation module before it opens.

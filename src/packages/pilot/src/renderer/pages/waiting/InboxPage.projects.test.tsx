@@ -75,12 +75,12 @@ describe('cards by project', () => {
       .getAllByRole('group', { name: 'web-platform' })
       .find((g) => !g.closest('nav'))!
     expect(web.textContent).toContain('2 worktrees · 2 cards')
-    // Pinned, a worktree's heading still says which project it is in.
-    expect(
-      within(web)
-        .getAllByRole('heading', { level: 2 })
-        .map((h) => h.textContent)
-    ).toEqual(['web-platform / alpha · 1', 'web-platform / gamma · 1'])
+    // Each card says which project and worktree it is in; no worktree heading repeats it.
+    expect([...web.querySelectorAll('[data-card-place]')].map((p) => p.textContent)).toEqual([
+      'web-platform/alpha',
+      'web-platform/gamma'
+    ])
+    expect(within(web).queryAllByRole('heading', { level: 2 })).toEqual([])
   })
 
   it('pins each project and worktree heading on a solid background, the worktree’s below its project’s', async () => {

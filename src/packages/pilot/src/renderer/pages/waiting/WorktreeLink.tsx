@@ -87,7 +87,7 @@ export function openWorktree(id: string, host: PilotHostRef = LOCAL_PILOT_HOST):
   })
 }
 
-// A section heading's worktree name: a link that opens the worktree, plain text when the app does not have it.
+// A card's place name: for a worktree, a link that opens it; plain text when the app does not have it.
 export function WorktreeName({
   group,
   host
@@ -98,9 +98,13 @@ export function WorktreeName({
 }): React.JSX.Element {
   // Subscribed, so a change to the listed machines re-sorts whose worktree this is.
   const id = openableWorktreeId(group, host, usePilotHosts())
-  // Truncates when it is a flex item (a card's place line); inline in a heading, the heading truncates.
+  // A flex item, so a long name truncates by character; inside a truncating line the button would drop whole.
   if (!isWorktreeGroup(group)) {
-    return <span className="min-w-0 truncate text-foreground">{group.label}</span>
+    return (
+      <span className="min-w-0 truncate text-foreground" title={group.label}>
+        {group.label}
+      </span>
+    )
   }
   if (!id) {
     return (
