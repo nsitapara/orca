@@ -170,15 +170,23 @@ describe('InboxPage', () => {
     setPilotAutomationsView('automations')
   })
 
-  it('shows on each card the run it came from', async () => {
-    const run = testRun({
-      id: 'r',
-      automationId: 'ci',
-      itemLabel: '!1561',
-      status: 'needs_you',
-      steps: [stepAt(0, 'fix', 'done')],
-      inbox: [testCard({ id: 'in_q', automationId: 'ci', runId: 'r', stepIdx: 0 })]
-    })
+  it("shows on each card the run it came from, and its item's MR in the card's place line", async () => {
+    const run = {
+      ...testRun({
+        id: 'r',
+        automationId: 'ci',
+        itemLabel: '!1561',
+        status: 'needs_you',
+        steps: [stepAt(0, 'fix', 'done')],
+        inbox: [testCard({ id: 'in_q', automationId: 'ci', runId: 'r', stepIdx: 0 })]
+      }),
+      fields: {
+        'mr.iid': 1561,
+        'mr.web_url': 'https://gitlab.example/g/p/-/merge_requests/1561',
+        'mr.state': 'open',
+        'mr.pipeline_status': 'failed'
+      }
+    }
     pilotRpc.mockImplementation(async (method: string) => {
       if (method === 'pilot.inbox.list') {
         return { ...LIST, runs: { r: run } }
@@ -199,8 +207,13 @@ describe('InboxPage', () => {
     render(<InboxPage />, { wrapper: TooltipProvider })
     const card = await screen.findByRole('heading', { name: 'Install LibreOffice in the job?' })
     const article = card.closest('article') as HTMLElement
-    expect(await within(article).findByText('!1561')).toBeTruthy()
-    expect(article.querySelector('[data-from-run]')).toBeTruthy()
+    await waitFor(() =>
+      expect(article.querySelector('[data-from-run]')?.textContent).toContain('!1561')
+    )
+    const place = within(article.querySelector<HTMLElement>('[data-card-place]')!)
+    expect(
+      place.getByRole('button', { name: 'GitLab MR !1561 · Open · Pipeline failed' })
+    ).toBeTruthy()
   })
 
   it('shows the cards waiting but never a default, and opens In motion by itself on an answer held 20+ minutes', async () => {

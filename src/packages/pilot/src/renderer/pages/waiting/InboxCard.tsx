@@ -1,11 +1,12 @@
 import { useRef, useState } from 'react'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { cn } from '@/lib/utils'
-import type { ActivityRun, InboxListRow, InboxReply } from '../../../shared/api-types'
+import type { InboxListRow, InboxReply } from '../../../shared/api-types'
 import { isPlaceGroup } from '../../../shared/inbox-groups'
 import type {
   AnswerState,
   CardHistoryEntry,
+  CardRun,
   PreparationWait,
   RunLine
 } from '../../../shared/inbox-types'
@@ -128,7 +129,7 @@ type InboxCardProps = {
   // Where the card's work is (its section under Group by Worktree); null when that is unknown.
   home: CardHome | null
   // The run the card came from (InboxListPayload.runs), for its "From run" line; null when it has none.
-  run: ActivityRun | null
+  run: CardRun | null
   // An action card's Run line (InboxListPayload.runLines); null on any other card.
   runLine: RunLine | null
   // The server's lock and queue row for an answered card (InboxListPayload.answerStates).
@@ -222,7 +223,7 @@ function CardBody({
   const place = home && isPlaceGroup(home.group) ? home : null
   return (
     <article id={domId} data-selected={selected ? '' : undefined} className={frame}>
-      {place ? <CardPlace home={place} /> : null}
+      {place ? <CardPlace home={place} fields={run?.fields ?? null} /> : null}
       <JobLine
         job={automationName}
         drafted={item.details?.drafted === true}

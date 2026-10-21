@@ -153,4 +153,19 @@ export class AdvanceStore {
     }
     return JSON.parse(row.fields_json) as ItemFields
   }
+
+  // The fields each run's tick recorded for its item, in one read; a run no tick started, or whose tick item is
+  // gone, is left out.
+  runItemFields(runIds: readonly string[]): Map<string, ItemFields> {
+    const rows = this.db
+      .prepare(
+        `SELECT r.id AS run, ti.fields_json AS fields
+           FROM tick_items ti JOIN runs r ON ti.tick_id = r.tick_id AND ti.item_key = r.item_key
+          WHERE r.id IN (SELECT value FROM json_each(?))`
+      )
+      .all(JSON.stringify(runIds))
+    return new Map(
+      rows.map((r): [string, ItemFields] => [String(r.run), JSON.parse(String(r.fields))])
+    )
+  }
 }

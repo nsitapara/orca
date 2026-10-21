@@ -7,6 +7,7 @@ import type {
   InboxReply,
   InboxStatus,
   InboxType,
+  ItemFields,
   QueueState,
   RunStatus
 } from './api-types'
@@ -76,6 +77,9 @@ export type CardHistoryEntry =
     }
   | { kind: 'reply'; at: number | null; by: InboxReply['by']; text: string; run: HistoryRun | null }
 export type PreparationWait = { code: HoldReason; detail: string; since: number }
+// A card's run as the list carries it. fields: its tick item's MR and branch fields (main/inbox/card-runs.ts), for the
+// card's place line; absent from older builds and when its item had none.
+export type CardRun = ActivityRun & { fields?: ItemFields }
 export type InboxListPayload = {
   items: InboxListRow[]
   // An action card's Run line by card id (main/inbox/run-line.ts); none for other cards.
@@ -83,7 +87,7 @@ export type InboxListPayload = {
   // By card id, for each answered card.
   answerStates: Record<string, AnswerState>
   // Each card's run by run id, with its steps and cards, for the card's "From run" strip. Absent from older builds.
-  runs?: Record<string, ActivityRun>
+  runs?: Record<string, CardRun>
   // Each card's Message history by card id. Absent from older builds.
   history?: Record<string, CardHistoryEntry[]>
   // Why each queued context card waits, by card id: the runner line's hold. Absent from older builds.
