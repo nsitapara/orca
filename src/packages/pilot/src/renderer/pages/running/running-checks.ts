@@ -17,16 +17,17 @@ export const RUNNER_CHECKS: readonly RunnerCheck[] = [
   {
     name: 'Retry wait',
     holds:
-      "a failed run waits 10 min (or the job's retry_after_failure); past the retry limit it gives up and leaves a card",
+      "a failed run waits 10 min (or the job's retry_after_failure); past the retry limit it gives up and leaves a card, except a give_up: never job, which waits twice as long each time, up to an hour",
     again: 'at its time',
     codes: ['retry'],
     waits: true
   },
   {
     name: "The job's own gates",
-    holds: 'a session still open, answers waiting to apply, or outside its time window',
+    holds:
+      "a session still open, answers waiting to apply, outside its time window, or a kept fix that can't merge into its worktree yet",
     again: 'every 5 min',
-    codes: ['session_open', 'answers_pending', 'window']
+    codes: ['session_open', 'answers_pending', 'window', 'merge_blocked']
   },
   {
     name: 'Agent quota',
@@ -79,7 +80,7 @@ export const PLACE_RULES: readonly { title: string; body: string }[] = [
   },
   {
     title: 'Bringing it home',
-    body: "Merged into your worktree once you're free; pushed if the job pushes; else kept on pilot/<run>."
+    body: "Merged into your worktree once you're free; pushed if the job pushes. What can't come home yet, uncommitted edits included, is kept on pilot/<run>, and job 15 merges it in, trying until it lands."
   }
 ]
 

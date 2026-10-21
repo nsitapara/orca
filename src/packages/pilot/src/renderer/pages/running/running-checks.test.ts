@@ -89,6 +89,7 @@ describe('checkOf', () => {
   it.each([
     ['tick_limit', 'Job limits'],
     ['worktree_busy', 'Busy worktree'],
+    ['merge_blocked', "The job's own gates"],
     ['typing', null],
     [undefined, null]
   ] as const)('names %s as %s', (code, name) => {

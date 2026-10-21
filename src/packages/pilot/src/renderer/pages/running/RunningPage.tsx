@@ -385,7 +385,7 @@ export function RunningPage(): React.JSX.Element {
   const single = named ? null : machines[0]
   const only = single?.payload ?? null
   return (
-    <section className="flex max-w-6xl flex-col gap-4 px-5 pb-6 pt-4">
+    <section className="flex flex-col gap-4 px-5 pb-6 pt-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h2 className="text-sm font-semibold leading-6">Running</h2>

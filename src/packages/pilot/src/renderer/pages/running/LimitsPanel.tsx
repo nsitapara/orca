@@ -166,12 +166,15 @@ function OwnerCard({
 
 const RUNNER_ITEMS: readonly [string, string][] = [
   ['When it starts:', 'the line, Jobs at once, agent quota, per-job limits'],
-  ['Retries', 'after a failure, and giving up with a card'],
+  ['Retries', 'after a failure; past the limit a card, unless the job never gives up'],
   [
     'Where it works:',
-    'your worktree, or a throwaway with its own stack while you have work in flight'
+    'your worktree, or a throwaway while you have work in flight (its own stack when the branch changes api/)'
   ],
-  ['Bringing commits home:', 'merge back, else kept on pilot/<run>'],
+  [
+    'Bringing commits home:',
+    'merge back, else kept on pilot/<run>, uncommitted edits too, for job 15 to merge in'
+  ],
   ['Cleaning up:', 'stacks, throwaways, ended tabs']
 ]
 
@@ -179,7 +182,7 @@ const JOB_ITEMS: readonly [string, string][] = [
   ['Which items:', 'worktrees, MRs, tickets, pipelines, cards'],
   ['What is due:', 'once per head, first sight, the MR rules'],
   ['The steps:', 'context, agent, push, merge back, in order'],
-  ['Its schedule', 'and its own limits']
+  ['Its schedule', 'its own limits, and how long it retries (retry_after_failure, give_up)']
 ]
 
 const SKILL_ITEMS: readonly [string, string][] = [
@@ -213,8 +216,9 @@ function WhoHandlesWhat(): React.JSX.Element {
         />
       </div>
       <p className="text-xs text-muted-foreground">
-        Nothing the runner does is silent: a held row in Waiting says why and what frees it, and
-        each finished run says where it worked and what came home.
+        Nothing the runner does is silent: a held row in Waiting says why and what frees it, each
+        finished run says where it worked and what came home, and Merge back lists every fix still
+        on its way to your worktree.
       </p>
     </div>
   )

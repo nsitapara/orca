@@ -114,5 +114,5 @@ export function quotaText(ceiling: { weekly: number; session: number }): string 
 // The retry field's line: the runner's wait when a job sets none, and what happens past the limit.
 export function retryHint(): string {
   const minutes = DEFAULT_RETRY_AFTER_MS / 60_000
-  return `${minutes} min apart, or the job's retry_after_failure; past it, a card`
+  return `${minutes} min apart, or the job's retry_after_failure; past it, a card. A give_up: never job keeps trying, up to an hour apart.`
 }
