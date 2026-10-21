@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { InboxListRow } from '../../../shared/api-types'
+import { isPlaceGroup } from '../../../shared/inbox-groups'
 import type { HostedSection } from '../../hosts/hosted-sections'
 import { HostsNotice } from '../../hosts/HostsNotice'
 import { hostedKey, type Hosted } from '../../hosts/pilot-host'
@@ -187,9 +188,8 @@ export function InboxPage(): React.JSX.Element {
       ?.scrollIntoView?.({ block: 'start', behavior: motionSafeScrollBehavior() })
     setScrollTo(null)
   }, [scrollTo, prefs.view])
-  // `section`: the section the card is listed under, null when it is shown on its own.
   const cardOf = useCallback(
-    (i: Hosted<InboxListRow>, section: string | null) => {
+    (i: Hosted<InboxListRow>) => {
       const key = hostedKey(i.host, i.id)
       return (
         <InboxCard
@@ -197,7 +197,6 @@ export function InboxPage(): React.JSX.Element {
           item={i}
           automationName={names.get(i.automationId) ?? i.automationId}
           home={homes.get(key) ?? null}
-          section={section}
           run={i.runId ? (inbox?.runs.get(hostedKey(i.host, i.runId)) ?? null) : null}
           runLine={inbox?.runLines.get(key) ?? null}
           answerState={inbox?.answerStates.get(key) ?? null}
@@ -226,20 +225,22 @@ export function InboxPage(): React.JSX.Element {
       reload
     ]
   )
+  // Under Group by Worktree a worktree's (or MR's) cards each open on its name and chips, so it has no heading.
+  const byPlace = prefs.group === 'worktree'
   const sectionIn = useCallback(
-    (s: HostedSection, project?: string | null) => (
+    (s: HostedSection) => (
       <section
         key={s.key}
         aria-label={s.group.label || UNGROUPED_NAME}
         className="flex min-w-0 flex-col gap-3"
       >
-        {s.group.label ? (
-          <SectionHeading section={s} project={project} besideList={showList} />
+        {s.group.label && !(byPlace && isPlaceGroup(s.group)) ? (
+          <SectionHeading section={s} besideList={showList} />
         ) : null}
-        {s.items.map((i) => cardOf(i, s.key))}
+        {s.items.map((i) => cardOf(i))}
       </section>
     ),
-    [cardOf, showList]
+    [cardOf, showList, byPlace]
   )
   const emptyText = (
     <p className="text-sm text-muted-foreground">{emptyTabText(tab, filtered, viewerName)}</p>
@@ -268,7 +269,7 @@ export function InboxPage(): React.JSX.Element {
           cards={shown.flatMap((s) => s.items)}
           place={focus.scope === focusScope ? focus : FIRST_CARD}
           onPlace={(place) => setFocus({ ...place, scope: focusScope })}
-          renderCard={(i) => cardOf(i, null)}
+          renderCard={cardOf}
           tabLabel={tabLabel(tab)}
           onExit={() => setPrefs({ view: 'cards' })}
         />
@@ -277,7 +278,7 @@ export function InboxPage(): React.JSX.Element {
     if (shownProjects) {
       return shownProjects.map((p) => (
         <ProjectBlock key={p.key} project={p}>
-          {p.sections.map((s) => sectionIn(s, p.name))}
+          {p.sections.map((s) => sectionIn(s))}
         </ProjectBlock>
       ))
     }

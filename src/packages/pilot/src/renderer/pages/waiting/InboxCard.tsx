@@ -127,8 +127,6 @@ type InboxCardProps = {
   automationName: string
   // Where the card's work is (its section under Group by Worktree); null when that is unknown.
   home: CardHome | null
-  // The section the card is listed under; null when it is shown on its own (One at a time).
-  section: string | null
   // The run the card came from (InboxListPayload.runs), for its "From run" line; null when it has none.
   run: ActivityRun | null
   // An action card's Run line (InboxListPayload.runLines); null on any other card.
@@ -167,7 +165,6 @@ function CardBody({
   item,
   automationName,
   home,
-  section,
   run,
   runLine,
   answerState,
@@ -222,8 +219,7 @@ function CardBody({
       </article>
     )
   }
-  // Under its own worktree's heading the card leaves the place to the heading.
-  const place = home && home.key !== section && isPlaceGroup(home.group) ? home : null
+  const place = home && isPlaceGroup(home.group) ? home : null
   return (
     <article id={domId} data-selected={selected ? '' : undefined} className={frame}>
       {place ? <CardPlace home={place} /> : null}
