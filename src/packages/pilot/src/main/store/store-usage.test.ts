@@ -69,7 +69,10 @@ describe('UsageStore', () => {
         worktreePath: '/wt'
       }
     ])
-    new Database(file).prepare("UPDATE steps SET kind = 'shell' WHERE idx = 0").run()
+    // A step stopped with nothing to do may still have run a session.
+    store.runs.updateStep('r1', 1, { status: 'stopped', finishedAt: 25 })
+    expect(store.usage.unmeasuredSteps().map((s) => s.idx)).toEqual([0, 1])
+    new Database(file).prepare("UPDATE steps SET kind = 'shell'").run()
     expect(store.usage.unmeasuredSteps()).toEqual([])
   })
 
