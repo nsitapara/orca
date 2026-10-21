@@ -6,7 +6,7 @@ import type { PilotStore } from '../store/store'
 import { runtimeLinearConnector } from '../linear-connector/linear-connector'
 import { linearTicketSource } from './linear-tickets'
 import { inboxPreparationSource } from './inbox-preparations'
-import { keptBranchSource } from './kept-branches'
+import { keptBranchSource, keptRefsOf } from './kept-branches'
 import { registerItemSource } from './registry'
 import { runtimeWorktreeRecords } from './worktree-records'
 import { worktreeSource } from './worktrees'
@@ -28,13 +28,15 @@ export function registerPilotSources(deps: PilotSourceDeps): void {
       store: deps.store,
       listWorktrees,
       pilotcli: pilotcliRunner({ pilotBinDir: deps.pilotBinDir }),
-      branchTip: (path, branch) =>
-        gitExecFileAsync(['rev-parse', '--verify', '-q', `refs/heads/${branch}`], {
-          cwd: path
-        }).then(
-          (r) => r.stdout.trim() || null,
+      keptBranches: (path) =>
+        gitExecFileAsync(
+          ['for-each-ref', '--format=%(refname:short)%09%(objectname)', 'refs/heads/pilot/'],
+          { cwd: path }
+        ).then(
+          (r) => keptRefsOf(r.stdout),
           () => null
-        )
+        ),
+      now: Date.now
     })
   )
   registerItemSource(

@@ -209,6 +209,7 @@ export const automationSchema = z.strictObject({
   first_seen: z.enum(['process', 'baseline']).optional(),
   once_per: z.string().optional(),
   retry_after_failure: durationSchema.optional(),
+  give_up: z.enum(['after_retries', 'never']).optional(),
   checks: z.array(check).optional(),
   limits: z
     .strictObject({

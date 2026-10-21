@@ -9,6 +9,7 @@ import { itemGate, standingHold, type Hold } from './runner-gates'
 const NOW = Date.UTC(2026, 9, 11, 19, 0)
 const MIN = 60_000
 const ITEM: DecideItem = { key: 'mr:1', label: '!1', fields: { 'mr.iid': 1 } }
+const forever = testDefinition({ oncePer: '{mr.iid}', giveUp: 'never' })
 
 function failed(failures: number, ago: number): HandledState {
   return { status: 'failed', failedAt: NOW - ago, failures, lastOutcome: 'agent exited' }
@@ -51,6 +52,26 @@ describe('itemGate: the retry gate', () => {
       /^Retry 2 of 2 at \d{1,2}:\d{2}\. Last run failed: agent exited$/
     ],
     ['past the limit, by hand', input(failed(3, MIN), { byHand: true }), null],
+    [
+      'a job that never gives up, past the limit: its third retry waits 40 min',
+      input(failed(3, 30 * MIN), { definition: forever }),
+      /^Retry 3 at \d{1,2}:\d{2}\. Last run failed: agent exited$/
+    ],
+    [
+      'a job that never gives up, past that wait',
+      input(failed(3, 41 * MIN), { definition: forever }),
+      null
+    ],
+    [
+      'a job that never gives up waits an hour at most',
+      input(failed(9, 59 * MIN), { definition: forever }),
+      /^Retry 9 at /
+    ],
+    [
+      'a job that never gives up, an hour on',
+      input(failed(9, 61 * MIN), { definition: forever }),
+      null
+    ],
     [
       'a key that is done',
       input({ status: 'done', failedAt: null, failures: 0, lastOutcome: null }),

@@ -221,6 +221,21 @@ describe('PilotAutomationsPage', () => {
     expect(screen.getByRole('button', { name: /Fix failed CI/ })).toBeTruthy()
   })
 
+  it.each<[number, string]>([
+    [
+      1,
+      "1 fix made in a throwaway isn't in its worktree yet: Running › Merge back shows where each stands."
+    ],
+    [
+      3,
+      "3 fixes made in throwaways aren't in their worktrees yet: Running › Merge back shows where each stands."
+    ]
+  ])('counts %i fix(es) not merged back yet above the table', async (count, text) => {
+    serve({ ...list, unmergedFixes: count })
+    render(<PilotAutomationsPage />)
+    expect(await screen.findByText(text)).toBeTruthy()
+  })
+
   it('shows a warning, such as a feeds arrow it cannot draw, without marking the file bad', async () => {
     serve({
       ...list,

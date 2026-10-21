@@ -196,8 +196,11 @@ describe('closeRun: a failed run counts a failure on its key', () => {
     expect(logs).toEqual([])
   })
 
-  it('never gives up on an ask-first job: you approve each run', () => {
-    const { store } = failFourTimes({ ...job, start: 'ask_first' })
+  it.each<[string, AutomationDefinition]>([
+    ['an ask-first job: you approve each run', { ...job, start: 'ask_first' }],
+    ['a give_up: never job: it keeps retrying', { ...job, giveUp: 'never' }]
+  ])('leaves no give-up card for %s', (_name, def) => {
+    const { store } = failFourTimes(def)
     expect(store.inbox.list({ automationId: 'open' })).toEqual([])
   })
 

@@ -23,6 +23,8 @@ export type RunEnv = {
   deleteAttempts: number
   // The branch env delete kept a throwaway's unhomed commits on; absent when it kept none, or from older pilotcli.
   kept?: string
+  // When that branch was found gone from git: merged home by job 15, or deleted. Absent while it waits.
+  keptGoneAt?: number
 }
 
 // Where a run's work belongs (cards, answers, the timeline, the worktree panel): its item's worktree. For an env run it may

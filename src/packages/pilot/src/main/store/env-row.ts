@@ -11,6 +11,8 @@ export type EnvJson = {
   stack?: RunEnvStack | null
   // env delete's data.kept: the branch it kept a throwaway's unhomed commits on.
   kept?: string
+  // When job 15's source found that branch gone from git: merged home, or deleted.
+  keptGoneAt?: number
 }
 
 export function readEnvJson(raw: unknown): EnvJson {
@@ -41,6 +43,7 @@ export function envOfRow(r: Record<string, unknown>): RunEnv | null {
     removedAt: (r.env_removed_at as number | null) ?? null,
     deleteError: (r.env_delete_error as string | null) ?? null,
     deleteAttempts: Number(r.env_delete_attempts ?? 0),
-    ...(json.kept ? { kept: json.kept } : {})
+    ...(json.kept ? { kept: json.kept } : {}),
+    ...(json.keptGoneAt ? { keptGoneAt: json.keptGoneAt } : {})
   }
 }

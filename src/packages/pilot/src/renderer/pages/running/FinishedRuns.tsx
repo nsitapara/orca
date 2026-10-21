@@ -26,6 +26,7 @@ import { worktreeName } from '../waiting/answer-text'
 import { openWorktree, repoNameForPath, worktreeIdForPath } from '../waiting/WorktreeLink'
 import { ResizableHeaderCell } from '../ResizableHeaderCell'
 import { useColumnWidths, type ColumnSpec } from '../use-column-widths'
+import { mergeBackState } from '../../../shared/run-views/merge-back-state'
 import { finishedHomeText } from './running-place'
 import { endedText } from './running-text'
 
@@ -177,7 +178,7 @@ function FinishedRow({
   const host = usePilotHost()
   const ended = run.finishedAt ?? now
   const retryKey = retryKeyOf(run)
-  const home = finishedHomeText(run)
+  const home = finishedHomeText(run, mergeBackState(run, run.mergeBack).detail)
   return (
     <>
       <tr className="border-t border-border/50 align-top">

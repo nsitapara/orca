@@ -199,6 +199,9 @@ export function combinationErrors(raw: RawAutomation): string[] {
   if (raw.start === 'ask_first' && !raw.ask_first) {
     errors.push('ask_first: start: ask_first needs ask_first: { title: … }')
   }
+  if (raw.start === 'ask_first' && raw.give_up === 'never') {
+    errors.push('give_up: never: an ask-first job is never retried on its own')
+  }
   if (raw.ask_first && raw.start !== 'ask_first') {
     errors.push('ask_first: only used with start: ask_first')
   }

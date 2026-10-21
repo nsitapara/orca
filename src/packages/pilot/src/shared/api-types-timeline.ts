@@ -1,4 +1,5 @@
 import type { RunRow, StepRow, Verdict } from './api-types'
+import type { MergeBack } from './api-types-runs'
 import type { InboxItemSummary } from './inbox-types'
 
 // One automation's last word on this worktree: the newest finished real tick's verdict, and when it ticks next.
@@ -18,6 +19,8 @@ export type TimelineRun = RunRow & {
   automationName: string
   steps: StepRow[]
   inbox: InboxItemSummary[]
+  // How a kept branch's merge back stands; absent when nothing was kept, and from older Pilots.
+  mergeBack?: MergeBack | null
 }
 
 export type WorktreeTimeline = {

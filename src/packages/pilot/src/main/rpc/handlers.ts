@@ -61,7 +61,8 @@ export function listAutomations(ctx: PilotContext): AutomationListPayload {
     errors: loaded.errors,
     warnings: loaded.warnings ?? [],
     peopleError: loaded.peopleError,
-    missingDirs: loaded.missingDirs
+    missingDirs: loaded.missingDirs,
+    unmergedFixes: ctx.store.runs.envs.keptPending().length
   }
 }
 

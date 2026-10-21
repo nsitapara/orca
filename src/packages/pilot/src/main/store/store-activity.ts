@@ -95,13 +95,13 @@ export class ActivityStore {
   }
 
   // The runs these automations started for one item key, newest first: job 15's merges of one kept branch.
-  forItem(automationIds: readonly string[], itemKey: string): RunRow[] {
+  forItem(automationIds: readonly string[] | null, itemKey: string): RunRow[] {
     return this.db
       .prepare(
-        `SELECT * FROM runs WHERE automation_id IN (SELECT value FROM json_each(?)) AND item_key = ?
-           ORDER BY started_at DESC, id`
+        `SELECT * FROM runs WHERE (? IS NULL OR automation_id IN (SELECT value FROM json_each(?)))
+           AND item_key = ? ORDER BY started_at DESC, id`
       )
-      .all(JSON.stringify(automationIds), itemKey)
+      .all(automationIds === null ? null : 1, JSON.stringify(automationIds ?? []), itemKey)
       .map((r) => toRun(r as never))
   }
 }

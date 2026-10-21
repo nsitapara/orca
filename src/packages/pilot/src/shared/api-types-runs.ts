@@ -11,7 +11,12 @@ import type { InboxItemSummary } from './inbox-types'
 import type { ChainPart } from './run-views/chain'
 
 // A run with its steps and what it asked (open and answered cards): Activity's runs, the list's live runs, a card's run.
-export type ActivityRun = RunRow & { steps: StepRow[]; inbox: InboxItemSummary[] }
+// mergeBack: a run whose throwaway kept a branch, how its merge back stands (absent from older Pilots).
+export type ActivityRun = RunRow & {
+  steps: StepRow[]
+  inbox: InboxItemSummary[]
+  mergeBack?: MergeBack | null
+}
 
 // A run Activity lists outside a tick line (running now, waiting on you, no tick), with its tick item's fields for its
 // item link ({} when its tick was pruned or it had none).

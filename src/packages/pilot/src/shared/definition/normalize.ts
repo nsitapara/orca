@@ -194,6 +194,7 @@ export function normalize(
     firstSeen: raw.first_seen ?? 'process',
     oncePer: raw.once_per ?? null,
     retryAfterFailureMs: raw.retry_after_failure ?? null,
+    giveUp: raw.give_up ?? 'after_retries',
     checks: (raw.checks ?? []).map((c) => normalizeCheck(c, agent)),
     limits: {
       perTick: raw.limits?.per_tick ?? null,

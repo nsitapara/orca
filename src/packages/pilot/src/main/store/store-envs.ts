@@ -87,15 +87,32 @@ export class EnvStore {
       .run(at, json, runId)
   }
 
-  // Removed throwaways whose env delete kept commits on a branch: job 15's kept_branch items (sources/kept-branches.ts).
+  // Ended runs whose kept branch hasn't come home yet: what job 15 still has to merge (sources/kept-branches.ts) and
+  // the Running page lists as not merged back.
   keptPending(): RunRow[] {
     return this.db
       .prepare(
-        `SELECT * FROM runs WHERE ${ENDED} AND env_removed_at IS NOT NULL AND home_path IS NOT NULL
-           AND json_extract(env_json, '$.kept') IS NOT NULL ORDER BY env_removed_at, id`
+        `SELECT * FROM runs WHERE ${ENDED} AND json_extract(env_json, '$.kept') IS NOT NULL
+           AND json_extract(env_json, '$.keptGoneAt') IS NULL ORDER BY COALESCE(env_removed_at, finished_at), id`
       )
       .all()
       .map((r) => toRun(r as never))
+  }
+
+  // Git has the run's kept branch though no env delete said so (an older pilotcli, a lost reply, a skill's own
+  // branch): it is recorded as kept, and as not gone any more.
+  keptFound(runId: string, branch: string): void {
+    const { keptGoneAt: _gone, ...json } = this.json(runId)
+    this.db
+      .prepare('UPDATE runs SET env_json = ? WHERE id = ?')
+      .run(JSON.stringify({ ...json, kept: branch }), runId)
+  }
+
+  // The run's kept branch is gone from git: job 15 merged it home (its forget step deletes it), or someone deleted it.
+  keptGone(runId: string, at: number): void {
+    this.db
+      .prepare('UPDATE runs SET env_json = ? WHERE id = ?')
+      .run(JSON.stringify({ ...this.json(runId), keptGoneAt: at }), runId)
   }
 
   // hold_home: the step whose claim on home_path this run holds. The claim queries (store-runs.ts) count it only while

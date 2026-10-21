@@ -504,3 +504,79 @@ describe('capacityView', () => {
     expect(view.running[0]?.step).toEqual(step)
   })
 })
+
+describe('capacityView: Merge back', () => {
+  it('lists each fix a throwaway kept that is not in its worktree yet, with where its merge back stands', () => {
+    const store = PilotStore.open(':memory:')
+    const throwaway = (id: string, kept: string | undefined) => {
+      store.runs.create({
+        id,
+        automationId: 'review',
+        tickId: null,
+        itemKey: `wt:${id}`,
+        itemLabel: `web-${id}`,
+        worktreePath: `/agents/agents-${id}`,
+        startedAt: 1
+      })
+      store.runs.envs.begin(id, '/wt/a', {})
+      store.runs.envs.ready(id, {
+        mode: 'throwaway',
+        reason: 'uncommitted changes',
+        path: `/agents/agents-${id}`,
+        home: '/wt/a',
+        worktreeId: 'id',
+        sha: null,
+        envFile: null,
+        vars: {},
+        stack: null
+      })
+      store.runs.update(id, { status: 'done', finishedAt: 4 })
+      store.runs.envs.removed(id, 9, kept)
+    }
+    throwaway('r1', 'pilot/r1')
+    throwaway('r2', 'pilot/r2')
+    store.runs.envs.keptGone('r2', 30)
+    throwaway('r3', undefined)
+    store.runs.create({
+      id: 'm1',
+      automationId: 'merge-back',
+      tickId: null,
+      itemKey: 'kept:r1',
+      itemLabel: 'pilot/r1 → a',
+      worktreePath: '/wt/a',
+      startedAt: 10
+    })
+    store.runs.update('m1', { status: 'failed', finishedAt: 11, outcome: 'land failed' })
+    store.capacity.enqueue({
+      automationId: 'merge-back',
+      itemKey: 'kept:r1',
+      itemLabel: 'pilot/r1 → a',
+      queuedAt: 11,
+      byHand: false,
+      dueAt: 11,
+      holdCode: 'retry',
+      holdDetail: 'Retry 1 at 10:40. Last run failed: land failed',
+      checkedAt: 11
+    })
+    const view = capacityView({
+      store,
+      definitions: [testDefinition({ id: 'review', name: '03 Review and fix' })],
+      memory: null,
+      system: { totalBytes: 24 * GIB, availableBytes: 11 * GIB },
+      now: 100
+    })
+    expect(view.mergeBack).toEqual([
+      {
+        runId: 'r1',
+        automationName: '03 Review and fix',
+        itemLabel: 'web-r1',
+        branch: 'pilot/r1',
+        home: '/wt/a',
+        since: 9,
+        state: 'not_reached',
+        detail: 'Waiting in line: Retry 1 at 10:40. Last run failed: land failed',
+        mergeRunId: 'm1'
+      }
+    ])
+  })
+})

@@ -1,6 +1,6 @@
 import type { HoldReason, ItemFields } from '../api-types'
 import { GO_NOW_SKIPS } from '../capacity/go-now'
-import { DEFAULT_RETRY_AFTER_MS } from '../capacity/retry-limit'
+import { DEFAULT_RETRY_AFTER_MS, retryBackoffMs } from '../capacity/retry-limit'
 import type { AgentKind, AutomationDefinition } from '../definition/types'
 import { QUOTA_CEILING } from '../quota-ceiling'
 import { localTimeOfDay } from '../schedule/cron'
@@ -23,19 +23,27 @@ export function standingHold(holds: readonly (Hold | null)[], goNow: boolean): H
   return null
 }
 
-// A failed key within the retry limit waits out its retry; past the limit only a run by hand reaches here.
+// A failed key within the retry limit waits out its retry; past the limit only a run by hand reaches here, unless its
+// job never gives up: then each retry waits longer.
 function retryHold(input: DecideInput, onceKey: string): Hold | null {
   const state = input.handled.get(onceKey)
-  if (state?.status !== 'failed' || state.failedAt === null || state.failures > input.retryLimit) {
+  const def = input.definition
+  const forever = def.giveUp === 'never'
+  if (
+    state?.status !== 'failed' ||
+    state.failedAt === null ||
+    (!forever && state.failures > input.retryLimit)
+  ) {
     return null
   }
-  const def = input.definition
-  const dueAt = state.failedAt + (def.retryAfterFailureMs ?? DEFAULT_RETRY_AFTER_MS)
+  const after = def.retryAfterFailureMs ?? DEFAULT_RETRY_AFTER_MS
+  const dueAt = state.failedAt + (forever ? retryBackoffMs(after, state.failures) : after)
   if (dueAt <= input.now) {
     return null
   }
   // A key that failed before failures were counted reads as its first retry.
-  const retry = `Retry ${Math.max(state.failures, 1)} of ${input.retryLimit}`
+  const n = Math.max(state.failures, 1)
+  const retry = forever ? `Retry ${n}` : `Retry ${n} of ${input.retryLimit}`
   const last = state.lastOutcome ? `Last run failed: ${state.lastOutcome}` : 'Last run failed'
   const detail = `${retry} at ${localTimeOfDay(dueAt, def.timezone)}. ${last}`
   return { code: 'retry', detail, until: dueAt }

@@ -36,6 +36,7 @@ export function testDefinition(over: Partial<AutomationDefinition> = {}): Automa
     firstSeen: 'process',
     oncePer: null,
     retryAfterFailureMs: null,
+    giveUp: 'after_retries',
     checks: [],
     limits: { perTick: null, atOnce: null, timeoutMs: null, order: 'listed' },
     start: 'auto',

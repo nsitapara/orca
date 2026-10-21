@@ -6,13 +6,22 @@ import { loadPortedAutomation } from './ported'
 const { definition } = loadPortedAutomation('merge-back')
 
 // 15 · Merge back kept fixes: one run per kept pilot/<run> branch, queued while the merge can't land, an agent only for a
-// conflict, and the branch gone once it's home (sources/kept-branches.ts).
+// conflict, retried until the branch is home, and the branch gone once it is (sources/kept-branches.ts).
 describe('15 · Merge back kept fixes: the definition', () => {
   it('takes kept branches, waits in line until the merge can land, and works where env create says', () => {
     expect(definition.items).toMatchObject({ kind: 'kept_branch' })
     expect(definition.checks).toEqual([{ kind: 'kept_ready' }])
     expect(definition.oncePer).toBe('{kept.branch}@{kept.head}')
     expect(definition.workspace).toMatchObject({ kind: 'env', writes: true, stack: 'never' })
+  })
+
+  it('never asks and never gives up: a failed merge is tried again until the branch is home', () => {
+    expect(definition.giveUp).toBe('never')
+    expect(definition.steps.find((s) => s.name === 'forget')?.exitCodes).toEqual({
+      ok: [0],
+      skip: [],
+      stop: []
+    })
   })
 
   it('merges, resolves and lands only on a conflict, then forgets the branch', () => {

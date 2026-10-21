@@ -40,8 +40,12 @@ function stepText(step: HomeStep, done: string, skipped: string): string {
   return sentence(step.reason ? `${skipped}: ${step.reason}` : skipped)
 }
 
-// What a finished run did with its work, from its env and outward steps; null when it carries neither.
-export function finishedHomeText(run: { place?: RunPlace; home?: RunHome }): string | null {
+// What a finished run did with its work, from its env and outward steps; null when it carries neither. keptNow: where
+// its kept branch's merge back stands (merge-back-state.ts), when the host says.
+export function finishedHomeText(
+  run: { place?: RunPlace; home?: RunHome },
+  keptNow: string | null = null
+): string | null {
   const { place, home } = run
   const parts: string[] = []
   if (place) {
@@ -54,7 +58,7 @@ export function finishedHomeText(run: { place?: RunPlace; home?: RunHome }): str
     parts.push(stepText(home.mergedBack, 'Merged back into your worktree.', 'Merge back skipped'))
   }
   if (home?.kept) {
-    parts.push(`Kept on ${home.kept} for job 15 to merge back.`)
+    parts.push(sentence(keptNow ?? `Kept on ${home.kept} for job 15 to merge back`))
   }
   return parts.length > 0 ? parts.join(' ') : null
 }

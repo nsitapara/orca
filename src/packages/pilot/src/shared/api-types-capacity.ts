@@ -1,3 +1,4 @@
+import type { PartState } from './run-views/paint'
 import type { HoldReason, ListedRun } from './api-types'
 import type { AgentKind } from './definition/types'
 import type { LimitSuggestion } from './capacity/limit-suggestion'
@@ -135,4 +136,21 @@ export type CapacityPayload = {
   // Retries after a failure, and the keys given up on in the last 7 days; absent from older Pilots.
   retryLimit?: number
   gaveUp?: GaveUpKey[]
+  // Every fix a throwaway kept that isn't in its worktree yet, oldest first; absent from older Pilots.
+  mergeBack?: MergeBackRow[]
+}
+
+// A throwaway run's kept branch on its way into its worktree (job 15), as merge-back-state.ts words it.
+export type MergeBackRow = {
+  runId: string
+  automationName: string
+  itemLabel: string
+  branch: string
+  home: string | null
+  // When the throwaway went, else the run's end: what Waited counts from.
+  since: number
+  state: PartState
+  detail: string | null
+  // The kept_branch job's newest run for it.
+  mergeRunId: string | null
 }

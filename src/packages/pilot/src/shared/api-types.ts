@@ -332,6 +332,8 @@ export type AutomationListPayload = {
   warnings?: { file: string; warnings: string[] }[]
   peopleError: string | null
   missingDirs: string[]
+  // Fixes throwaway runs kept that aren't in their worktrees yet (Running's Merge back list); absent from older Pilots.
+  unmergedFixes?: number
 }
 export type ActivityTick = TickRow &
   TickHandoverFacts & { items: TickItemRow[]; runs: ActivityRun[] }

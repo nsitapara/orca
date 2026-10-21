@@ -4,7 +4,7 @@ import { testDefinition } from '../../shared/definition/__fixtures__/definition'
 import type { PilotcliCall, PilotcliReply } from '../envs/pilotcli'
 import { PilotStore } from '../store/store'
 import { sourceContext } from './__fixtures__/source-context'
-import { keptBranchSource, triggerKeptJobs } from './kept-branches'
+import { keptBranchSource, keptRefsOf, triggerKeptJobs, type KeptRef } from './kept-branches'
 
 const ORIGIN_YAML =
   'name: 03 · Review\nrepo: web-platform\nschedule: manual\nsteps:\n  - agent: claude\n    prompt: Review\n'
@@ -17,7 +17,11 @@ const reply = (outcome: PilotcliReply['outcome'], reason = ''): PilotcliReply =>
 
 type Case = {
   dryRun?: PilotcliReply
-  branch?: string | null
+  // The pilot/ branches git has in /repo (default: pilot/r1 at abc123).
+  refs?: KeptRef[] | null
+  // What env delete reported keeping for r1 (default: pilot/r1).
+  kept?: string | null
+  status?: 'done' | 'running'
   worktrees?: string[]
   repo?: string
   holder?: boolean
@@ -47,8 +51,11 @@ function setup(c: Case) {
     vars: {},
     stack: null
   })
-  store.runs.update('r1', { status: 'done', finishedAt: 4 })
-  store.runs.envs.removed('r1', 5, 'pilot/r1')
+  if (c.status !== 'running') {
+    store.runs.update('r1', { status: 'done', finishedAt: 4 })
+    const kept = c.kept === undefined ? 'pilot/r1' : c.kept
+    store.runs.envs.removed('r1', 5, kept ?? undefined)
+  }
   if (c.holder) {
     store.runs.create({
       id: 'r2',
@@ -61,6 +68,7 @@ function setup(c: Case) {
     })
   }
   const calls: string[][] = []
+  const refs = c.refs === undefined ? [{ branch: 'pilot/r1', head: 'abc123' }] : c.refs
   const source = keptBranchSource({
     store,
     listWorktrees: async () =>
@@ -77,7 +85,8 @@ function setup(c: Case) {
       calls.push([...call.args])
       return c.dryRun ?? reply('ok')
     },
-    branchTip: async () => (c.branch === undefined ? 'abc123' : c.branch)
+    keptBranches: async (path) => (path === '/repo' ? refs : []),
+    now: () => 99
   })
   const ctx = sourceContext(
     c.repo ? { repo: { id: 'o', name: c.repo, path: '/other', base: null } } : {}
@@ -85,52 +94,55 @@ function setup(c: Case) {
   return { store, source, ctx, calls }
 }
 
+const r1 = (wait: string, branch = 'pilot/r1') => ({
+  key: 'kept:r1',
+  label: `${branch} → a`,
+  fields: {
+    'kept.branch': branch,
+    'kept.head': 'abc123',
+    'kept.run': 'r1',
+    'kept.job': '03 · Review',
+    'kept.wait': wait,
+    'worktree.path': '/wt/a'
+  }
+})
+
 describe('kept branch source', () => {
-  it.each<[string, Case, string | null]>([
-    ['a merge that can land now waits for nothing', {}, ''],
+  it.each<[string, Case, ReturnType<typeof r1>[]]>([
+    ['a merge that can land now waits for nothing', {}, [r1('')]],
     [
       'a merge that would conflict waits for nothing: the job resolves it',
       { dryRun: reply('skip', 'conflicts in 1 file: a.ts') },
-      ''
+      [r1('')]
     ],
     [
       'a merge my local changes block waits with pilotcli’s reason',
       { dryRun: reply('skip', 'the merge changes 1 file you have local changes in: a.ts') },
-      'the merge changes 1 file you have local changes in: a.ts'
+      [r1('the merge changes 1 file you have local changes in: a.ts')]
     ],
     [
       'another Pilot run in the home worktree waits for it',
       { holder: true },
-      '03 · Review is already working in /wt/a (Pilot run r2)'
+      [r1('03 · Review is already working in /wt/a (Pilot run r2)')]
     ],
     [
       'a home worktree that is gone waits for me',
       { worktrees: [] },
-      'its worktree /wt/a is gone; merge or delete pilot/r1 by hand'
+      [r1('its worktree /wt/a is gone; merge or delete pilot/r1 by hand')]
     ],
-    ['a branch already gone is no item', { branch: null }, null],
-    ["another repo's job is no item", { repo: 'other' }, null]
-  ])('%s', async (_name, c, wait) => {
+    ['a branch env delete never reported is still an item', { kept: null }, [r1('')]],
+    [
+      "a skill's own branch is found by the run id it ends in",
+      { kept: null, refs: [{ branch: 'pilot/ui-qa-r1', head: 'abc123' }] },
+      [r1('', 'pilot/ui-qa-r1')]
+    ],
+    ['a branch already gone is no item', { refs: [] }, []],
+    ["another repo's branches are its own", { repo: 'other' }, []],
+    ['a run still going is left to its own end', { status: 'running' }, []]
+  ])('%s', async (_name, c, want) => {
     const { source, ctx, calls } = setup(c)
     const { items } = await source.list(ctx, {})
-    if (wait === null) {
-      expect(items).toEqual([])
-      return
-    }
-    expect(items).toEqual([
-      expect.objectContaining({
-        key: 'kept:r1',
-        label: 'pilot/r1 → a',
-        fields: {
-          'kept.branch': 'pilot/r1',
-          'kept.head': 'abc123',
-          'kept.run': 'r1',
-          'kept.job': '03 · Review',
-          'kept.wait': wait,
-          'worktree.path': '/wt/a'
-        }
-      })
-    ])
+    expect(items).toEqual(want.map((w) => expect.objectContaining(w)))
     if (calls.length > 0) {
       expect(calls[0]).toEqual([
         'git',
@@ -141,11 +153,54 @@ describe('kept branch source', () => {
         '--keep-local',
         'true',
         '--to',
-        'pilot/r1',
+        want[0]?.fields['kept.branch'],
         '--dry-run',
         'true'
       ])
     }
+  })
+
+  it('holds a branch no Pilot run knows, naming it', async () => {
+    const { source, ctx } = setup({ refs: [{ branch: 'pilot/ghost', head: 'def456' }] })
+    const { items } = await source.list(ctx, {})
+    expect(items.map((i) => [i.key, i.fields['kept.wait'], i.fields['worktree.path']])).toEqual([
+      [
+        'kept:ghost',
+        'no Pilot run says which worktree pilot/ghost came from; merge or delete it by hand',
+        ''
+      ]
+    ])
+  })
+
+  it('warns, and lists nothing, when git cannot list the branches', async () => {
+    const { source, ctx } = setup({ refs: null })
+    expect(await source.list(ctx, {})).toEqual({
+      items: [],
+      warnings: ["Couldn't list the pilot/ branches in /repo"]
+    })
+  })
+
+  // The store follows git, so every view says the same: kept while the branch is there, gone once it isn't.
+  it.each<[string, Case, { kept?: string; keptGoneAt?: number }]>([
+    ['a kept branch git still has', {}, { kept: 'pilot/r1' }],
+    ['a kept branch gone from git', { refs: [] }, { kept: 'pilot/r1', keptGoneAt: 99 }],
+    ["one gone from another repo's view", { repo: 'other' }, { kept: 'pilot/r1' }],
+    ['a branch no env delete reported', { kept: null }, { kept: 'pilot/r1' }]
+  ])('records %s', async (_name, c, env) => {
+    const { source, ctx, store } = setup(c)
+    await source.list(ctx, {})
+    const got = store.runs.get('r1')?.env
+    expect({ kept: got?.kept, keptGoneAt: got?.keptGoneAt }).toEqual({
+      kept: env.kept,
+      keptGoneAt: env.keptGoneAt
+    })
+  })
+
+  it('reads git for-each-ref lines', () => {
+    expect(keptRefsOf('pilot/a\tabc\n\npilot/b\tdef\n')).toEqual([
+      { branch: 'pilot/a', head: 'abc' },
+      { branch: 'pilot/b', head: 'def' }
+    ])
   })
 
   it('ticks every kept_branch job at once with the kept run, as a handover', () => {

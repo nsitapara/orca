@@ -15,12 +15,24 @@ const DRY_RUN_TIMEOUT_MS = 60_000
 // update-branch's skip for a merge with conflicts: job 15 resolves those, so they never wait.
 const CONFLICT = /^conflicts in /
 
+// A local branch under pilot/ and the commit it's at.
+export type KeptRef = { branch: string; head: string }
+
+// git for-each-ref's "<branch>\t<sha>" lines.
+export function keptRefsOf(stdout: string): KeptRef[] {
+  return stdout.split('\n').flatMap((line) => {
+    const [branch, head] = line.trim().split('\t')
+    return branch && head ? [{ branch, head }] : []
+  })
+}
+
 export type KeptBranchDeps = {
   store: PilotStore
   listWorktrees: (repo: RepoFacts) => Promise<WorktreeRecord[]>
   pilotcli: Pilotcli
-  // The tip of a local branch in the repo at path, or null when there's no such branch.
-  branchTip(path: string, branch: string): Promise<string | null>
+  // Every local branch under pilot/ in the repo at path, or null when git can't say.
+  keptBranches(path: string): Promise<KeptRef[] | null>
+  now(): number
 }
 
 // The automation a run belongs to, from its last valid file: its repo and name.
@@ -81,49 +93,104 @@ export function triggerKeptJobs(
   }
 }
 
-// The commits a throwaway kept on pilot/<run> (env delete) that haven't reached the run's home worktree: one item per
-// run whose branch still exists. Job 15 merges each home; the branch goes once it's in, and with it the item.
+const LIVE_STATUSES: readonly string[] = ['running', 'asking']
+
+// The run a pilot/ branch holds commits of: pilot/<run> as env delete names it, or a name that ends in the run's id,
+// as a skill's own branch did (pilot/ui-qa-<run>).
+function runOfBranch(store: PilotStore, branch: string): RunRow | null {
+  const parts = branch.slice('pilot/'.length).split('-')
+  for (let i = 0; i < parts.length; i += 1) {
+    const run = store.runs.get(parts.slice(i).join('-'))
+    if (run) {
+      return run
+    }
+  }
+  return null
+}
+
+// Git is the truth about what hasn't come home: a pilot/ branch is there until job 15's forget step deletes it once its
+// commits are in my worktree. The store follows it, so every view shows the same: a branch no env delete reported is
+// recorded as kept, and a kept branch now gone is recorded as gone.
+function reconcile(deps: KeptBranchDeps, repo: string, refs: readonly KeptRef[]): void {
+  const branches = new Set(refs.map((r) => r.branch))
+  for (const run of deps.store.runs.envs.keptPending()) {
+    if (run.env?.kept && !branches.has(run.env.kept) && originOf(deps.store, run)?.repo === repo) {
+      deps.store.runs.envs.keptGone(run.id, deps.now())
+    }
+  }
+  for (const { branch } of refs) {
+    const run = runOfBranch(deps.store, branch)
+    if (
+      run?.env &&
+      !LIVE_STATUSES.includes(run.status) &&
+      (run.env.kept !== branch || run.env.keptGoneAt)
+    ) {
+      deps.store.runs.envs.keptFound(run.id, branch)
+    }
+  }
+}
+
+// One item per pilot/ branch in the repo, whatever made it: the commits a throwaway kept (env delete) that haven't
+// reached the run's home worktree. Job 15 merges each home; the branch goes once it's in, and with it the item. A run
+// still going is left to its own end.
 export function keptBranchSource(deps: KeptBranchDeps): ItemSource {
   return {
     kind: 'kept_branch',
     whereSchema: WHERE_SCHEMAS.kept_branch,
     async list(ctx) {
+      const refs = await deps.keptBranches(ctx.repo.path)
+      if (!refs) {
+        return { items: [], warnings: [`Couldn't list the pilot/ branches in ${ctx.repo.path}`] }
+      }
+      reconcile(deps, ctx.repo.name, refs)
       const worktrees = await deps.listWorktrees(ctx.repo)
       const live = new Set(
         worktrees.filter((w) => !w.isArchived).map((w) => worktreePathKey(w.path))
       )
       const items: Item[] = []
-      for (const run of deps.store.runs.envs.keptPending()) {
-        const branch = run.env?.kept
-        const home = run.homePath
-        if (!branch || !home || originOf(deps.store, run)?.repo !== ctx.repo.name) {
+      for (const { branch, head } of refs) {
+        const run = runOfBranch(deps.store, branch)
+        if (run && LIVE_STATUSES.includes(run.status)) {
           continue
         }
-        const head = await deps.branchTip(ctx.repo.path, branch)
-        if (!head) {
-          continue
-        }
-        const wait = live.has(worktreePathKey(home))
-          ? await waitOf(deps, run, home, branch)
-          : `its worktree ${home} is gone; merge or delete ${branch} by hand`
+        const runId = run?.id ?? branch.slice('pilot/'.length)
+        const home = run?.homePath ?? null
+        const wait = await waitFor(deps, run, home, branch, live)
         items.push({
           kind: 'kept_branch',
-          key: `kept:${run.id}`,
-          label: `${branch} → ${basename(home)}`,
+          key: `kept:${runId}`,
+          label: `${branch} → ${home ? basename(home) : '?'}`,
           fields: {
             'kept.branch': branch,
             'kept.head': head,
-            'kept.run': run.id,
-            'kept.job': originOf(deps.store, run)?.name ?? run.automationId,
+            'kept.run': runId,
+            'kept.job': run ? (originOf(deps.store, run)?.name ?? run.automationId) : '',
             'kept.wait': wait,
-            'worktree.path': home
+            'worktree.path': home ?? ''
           },
-          worktreeHint: { path: home },
-          sortKeys: { waitingSince: run.env?.removedAt ?? null, priority: null }
+          worktreeHint: home ? { path: home } : null,
+          sortKeys: { waitingSince: run?.env?.removedAt ?? run?.finishedAt ?? null, priority: null }
         })
       }
       return { items, warnings: [] }
     },
     scope: () => ({ ok: true })
   }
+}
+
+// kept.wait for one branch: why it can't merge home now, or '' when it can.
+async function waitFor(
+  deps: KeptBranchDeps,
+  run: RunRow | null,
+  home: string | null,
+  branch: string,
+  live: ReadonlySet<string>
+): Promise<string> {
+  if (!run || !home) {
+    return `no Pilot run says which worktree ${branch} came from; merge or delete it by hand`
+  }
+  if (!live.has(worktreePathKey(home))) {
+    return `its worktree ${home} is gone; merge or delete ${branch} by hand`
+  }
+  return waitOf(deps, run, home, branch)
 }

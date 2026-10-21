@@ -200,6 +200,8 @@ export type AutomationDefinition = {
   firstSeen: 'process' | 'baseline'
   oncePer: string | null
   retryAfterFailureMs: number | null
+  // never: past the retry limit the runner keeps retrying, further apart, and leaves no give-up card.
+  giveUp: 'after_retries' | 'never'
   checks: CheckDef[]
   limits: {
     perTick: number | null

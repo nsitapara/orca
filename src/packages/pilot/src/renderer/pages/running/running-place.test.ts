@@ -53,4 +53,11 @@ describe('finishedHomeText', () => {
   ])('%s', (_name, run, text) => {
     expect(finishedHomeText(run)).toBe(text)
   })
+
+  it('says where the kept branch stands now, when the host says', () => {
+    const run = { place: throwaway, home: { kept: 'pilot/review-1' } }
+    expect(finishedHomeText(run, 'Merged pilot/review-1 into your worktree')).toBe(
+      'Worked in a throwaway. Merged pilot/review-1 into your worktree.'
+    )
+  })
 })

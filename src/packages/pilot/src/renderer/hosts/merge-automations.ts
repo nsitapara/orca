@@ -104,7 +104,8 @@ function problemsOf(got: readonly AnsweredRead<AutomationListPayload>[]): Proble
       }))
     ),
     peopleError: people.length ? people.join(' · ') : null,
-    missingDirs: got.flatMap(({ host, value }) => value.missingDirs.map((dir) => on(host, dir)))
+    missingDirs: got.flatMap(({ host, value }) => value.missingDirs.map((dir) => on(host, dir))),
+    unmergedFixes: got.reduce((sum, { value }) => sum + (value.unmergedFixes ?? 0), 0)
   }
 }
 

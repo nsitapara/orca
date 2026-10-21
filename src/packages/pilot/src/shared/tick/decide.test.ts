@@ -91,7 +91,13 @@ describe('decideTick: scope, once_per and baseline', () => {
   type HandledCase = [
     string,
     HandledState,
-    { retry?: number | null; askFirst?: boolean; byHand?: boolean; byHandKeys?: string[] },
+    {
+      retry?: number | null
+      askFirst?: boolean
+      byHand?: boolean
+      byHandKeys?: string[]
+      forever?: boolean
+    },
     string,
     string
   ]
@@ -127,6 +133,13 @@ describe('decideTick: scope, once_per and baseline', () => {
       {},
       'notdue',
       'Gave up after 3 failures; Run now or Retry from Running starts it again'
+    ],
+    [
+      'failed past the retry limit, in a job that never gives up',
+      failedAs(3, 13 * HOUR),
+      { forever: true },
+      'started',
+      'All checks pass'
     ],
     [
       'failed past the retry limit, by hand',
@@ -181,7 +194,8 @@ describe('decideTick: scope, once_per and baseline', () => {
     const def = testDefinition({
       oncePer: '{mr.iid}',
       retryAfterFailureMs: opts.retry ?? null,
-      ...(opts.askFirst ? { start: 'ask_first' as const } : {})
+      ...(opts.askFirst ? { start: 'ask_first' as const } : {}),
+      ...(opts.forever ? { giveUp: 'never' as const } : {})
     })
     const given = input(def, [item(1)], {
       handled: new Map([['1', state]]),

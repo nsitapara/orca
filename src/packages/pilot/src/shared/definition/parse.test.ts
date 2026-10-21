@@ -59,6 +59,7 @@ const CI_05_DEFINITION = {
   firstSeen: 'process',
   oncePer: '{mr.iid}:{mr.pipeline}',
   retryAfterFailureMs: null,
+  giveUp: 'after_retries',
   checks: [
     { kind: 'worktree_exists' },
     { kind: 'session_none_open', scope: 'automation' },
@@ -112,6 +113,7 @@ items:
 first_seen: baseline
 once_per: "{worktree.id}:{worktree.head}"
 retry_after_failure: 12h
+give_up: after_retries
 checks:
   - session: { none_open: any }
   - quota: { agent: codex, weekly: 80 }
@@ -195,6 +197,7 @@ describe('parseAutomationYaml', () => {
         firstSeen: 'baseline',
         oncePer: '{worktree.id}:{worktree.head}',
         retryAfterFailureMs: 43_200_000,
+        giveUp: 'after_retries',
         checks: [
           { kind: 'session_none_open', scope: 'any' },
           { kind: 'quota', agent: 'codex', weekly: 80, session: 95 },
@@ -349,6 +352,7 @@ describe('parseAutomationYaml', () => {
     ['answers.stack: never', `${CI_05}\nanswers: { stack: never }\n`],
     ['ask_first', `${CI_05}\nstart: ask_first\nask_first: { title: "Fix !{mr.iid}?" }\n`],
     ['retry_after_failure', `${CI_05}\nretry_after_failure: 12h\n`],
+    ['give_up: never', `${CI_05}\nretry_after_failure: 12h\ngive_up: never\n`],
     ['a file without items:', CI_05.replace(/items:\n( {2}.*\n)+/, '')]
   ])('accepts %s, which M1 rejected', (_label, yaml) => {
     const result = parseAutomationYaml(yaml, '/a/ci.yaml')

@@ -18,6 +18,7 @@ import { useStopRun } from '../../run-views/StopRun'
 import { useNow } from '../waiting/use-now'
 import { FinishedRuns } from './FinishedRuns'
 import { LimitsPanel, LimitsToggle } from './LimitsPanel'
+import { MergeBackItem } from './MergeBackRows'
 import { GaveUpRow } from './Retries'
 import { checkOf } from './running-checks'
 import { placeBadgeText, placeReasonText } from './running-place'
@@ -188,7 +189,8 @@ function limitsPanelId(key: string): string {
   return `running-limits-${key.replace(/[^A-Za-z0-9_-]/g, '-')}`
 }
 
-// Today's page for one machine: its limits when open, what runs, what waits, what it gave up on and what finished.
+// Today's page for one machine: its limits when open, what runs, what waits, the fixes not merged back yet, what it gave
+// up on and what finished.
 function MachineRuns({
   payload,
   panelId,
@@ -206,6 +208,7 @@ function MachineRuns({
   where: string
 }): React.JSX.Element {
   const gaveUp = payload.gaveUp ?? []
+  const mergeBack = payload.mergeBack ?? []
   return (
     <>
       {limitsOpen ? (
@@ -233,6 +236,15 @@ function MachineRuns({
             saving={saving}
             onGoNow={onGoNow}
           />
+        ))}
+      </ListSection>
+      <ListSection
+        title="Merge back"
+        empty="Every fix made in a throwaway is in its worktree."
+        count={mergeBack.length}
+      >
+        {mergeBack.map((row) => (
+          <MergeBackItem key={row.runId} row={row} now={now} />
         ))}
       </ListSection>
       {gaveUp.length > 0 ? (

@@ -475,6 +475,52 @@ describe('merge back', () => {
       'failed',
       'land failed',
       'm1'
+    ],
+    [
+      'kept, a failed merge waiting for its retry',
+      {
+        run: testRun({ ...ended, env: env() }),
+        mergeBack: {
+          runs: [job('failed', 'land failed')],
+          waiting: 'Retry 2 at 10:40. Last run failed: land failed'
+        }
+      },
+      'not_reached',
+      'Waiting in line: Retry 2 at 10:40. Last run failed: land failed',
+      'm1'
+    ],
+    [
+      'kept, merged, and the branch gone from git',
+      {
+        run: testRun({ ...ended, env: env({ keptGoneAt: 20 }) }),
+        mergeBack: { runs: [job('done')], waiting: null }
+      },
+      'done',
+      'Merged pilot/r1 into your worktree',
+      'm1'
+    ],
+    [
+      'kept, and the branch deleted with no merge',
+      {
+        run: testRun({ ...ended, env: env({ keptGoneAt: 20 }) }),
+        mergeBack: { runs: [], waiting: null }
+      },
+      'done',
+      'pilot/r1 is gone',
+      null
+    ],
+    [
+      "kept, from a list row's own merge back",
+      {
+        run: testRun({
+          ...ended,
+          env: env(),
+          mergeBack: { runs: [job('running')], waiting: null }
+        })
+      },
+      'running',
+      'Merging pilot/r1',
+      'm1'
     ]
   ])('%s', (_name, input, state, detail, link) => {
     const chainParts = chainOf(envJob, all)

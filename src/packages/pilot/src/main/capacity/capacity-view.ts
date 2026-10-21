@@ -3,15 +3,18 @@ import type {
   CapacityRun,
   GaveUpKey,
   HeaviestJob,
+  MergeBackRow,
   QuotaUse,
   RunStep
 } from '../../shared/api-types-capacity'
+import { mergeBackState } from '../../shared/run-views/merge-back-state'
 import type { StepRow } from '../../shared/api-types'
 import { suggestRunLimit, UNMEASURED_JOB_BYTES } from '../../shared/capacity/limit-suggestion'
 import { QUOTA_CEILING } from '../../shared/quota-ceiling'
 import type { AgentKind, AutomationDefinition } from '../../shared/definition/types'
 import type { PilotStore } from '../store/store'
 import { runTabOf } from '../../shared/run-views/step-tab'
+import { mergeBackOf } from '../timeline/merge-back'
 import { listedRuns } from '../timeline/run-detail'
 import { holdsSlot } from './run-capacity'
 import { runHome, runPlace } from './run-place'
@@ -41,7 +44,7 @@ function gaveUpKeys(
 ): GaveUpKey[] {
   return input.store.gaveUp(limit, input.now - GAVE_UP_WINDOW_MS).flatMap((row) => {
     const def = byId.get(row.automationId)
-    if (!def || def.start === 'ask_first' || row.failedAt === null) {
+    if (!def || def.start === 'ask_first' || def.giveUp === 'never' || row.failedAt === null) {
       return []
     }
     return [
@@ -103,6 +106,24 @@ function dueFromOf(def: AutomationDefinition | undefined): string {
     case 'merge_request':
       return 'first due'
   }
+}
+
+// Every fix a throwaway kept that isn't in its worktree yet, oldest first, and where its merge back stands.
+function mergeBackRows(store: PilotStore, nameOf: (id: string) => string): MergeBackRow[] {
+  return store.runs.envs.keptPending().map((run) => {
+    const s = mergeBackState(run, mergeBackOf(store, run))
+    return {
+      runId: run.id,
+      automationName: nameOf(run.automationId),
+      itemLabel: run.itemLabel,
+      branch: run.env?.kept ?? '',
+      home: run.homePath ?? null,
+      since: run.env?.removedAt ?? run.finishedAt ?? run.startedAt,
+      state: s.state,
+      detail: s.detail,
+      mergeRunId: s.linkRunId
+    }
+  })
 }
 
 // The step a run is starting or running, as its card names it.
@@ -188,6 +209,7 @@ export function capacityView(input: CapacityViewInput): CapacityPayload {
     quotaCeiling: { ...QUOTA_CEILING },
     ...(input.quotaUse ? { quotaUse: input.quotaUse } : {}),
     retryLimit,
-    gaveUp: gaveUpKeys(input, byId, retryLimit)
+    gaveUp: gaveUpKeys(input, byId, retryLimit),
+    mergeBack: mergeBackRows(store, nameOf)
   }
 }

@@ -9,14 +9,19 @@ export type FailureCounted = (run: RunRow, failures: number) => void
 
 type FailedRun = Pick<RunRow, 'itemKey' | 'itemLabel' | 'outcome'>
 
-// The failure that first passes the retry limit leaves one flagged card. An ask-first job never retries on its own.
+// The failure that first passes the retry limit leaves one flagged card. An ask-first job never retries on its own, and
+// a give_up: never job never stops.
 export function leaveGiveUpCard(
   inbox: InboxDeps,
   def: AutomationDefinition,
   run: FailedRun,
   failures: number
 ): void {
-  if (def.start === 'ask_first' || failures !== inbox.store.capacity.retryLimit() + 1) {
+  if (
+    def.start === 'ask_first' ||
+    def.giveUp === 'never' ||
+    failures !== inbox.store.capacity.retryLimit() + 1
+  ) {
     return
   }
   addInboxItem(inbox, {

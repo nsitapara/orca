@@ -3,6 +3,7 @@ import type { AutomationDefinition } from '../../shared/definition/types'
 import { worktreePathSpellings } from '../fields/agent-activity'
 import type { PilotStore } from '../store/store'
 import { localDay } from '../usage/buckets'
+import { mergeBackOf } from './merge-back'
 
 export type TimelineDeps = {
   store: PilotStore
@@ -62,7 +63,8 @@ export function buildWorktreeTimeline(
     ...run,
     automationName: nameOf(run.automationId),
     steps: deps.store.runs.steps(run.id),
-    inbox: asked.filter((i) => i.runId === run.id)
+    inbox: asked.filter((i) => i.runId === run.id),
+    ...(run.env?.kept ? { mergeBack: mergeBackOf(deps.store, run) } : {})
   }))
   const spent = deps.store.usage.costForWorktreeOn(
     worktreePathSpellings(worktreePath),

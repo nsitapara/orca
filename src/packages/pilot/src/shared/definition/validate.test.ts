@@ -154,6 +154,11 @@ describe('definition validation', () => {
       'ask_first: start: ask_first needs ask_first: { title: … }'
     ],
     [
+      'an ask-first job that never gives up',
+      `${BASE}start: ask_first\nask_first: { title: t }\ngive_up: never\n${STEP}`,
+      'give_up: never: an ask-first job is never retried on its own'
+    ],
+    [
       'a card without start: ask_first',
       `${BASE}ask_first: { title: t }\n${STEP}`,
       'ask_first: only used with start: ask_first'
