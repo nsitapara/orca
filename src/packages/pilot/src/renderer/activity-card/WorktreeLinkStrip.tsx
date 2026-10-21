@@ -6,6 +6,7 @@ import { getProviderName, getReviewLabel } from '@/components/sidebar/worktree-r
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { openHttpLink } from '@/lib/http-link-routing'
 import { cn } from '@/lib/utils'
+import { useBranchLinearIssue } from './linear-branch-issue'
 import { LinearStateMark } from './LinearStateMark'
 import { reviewPipelineMark, reviewStateMark } from './review-state-mark'
 import { useWorktreeLinks, type WorktreeLinearLink } from './worktree-links'
@@ -15,7 +16,7 @@ const CHIP_CLASS =
   'inline-flex min-w-0 shrink-0 cursor-pointer items-center gap-1 rounded border border-border/60 bg-muted/40 px-1 py-px text-[11px] font-medium leading-4 tabular-nums text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-default'
 
 // Chips sit inside the worktree header: a click or Enter opens the link, never the worktree.
-function chipHandlers(url: string | undefined, worktreeId: string) {
+function chipHandlers(url: string | undefined, worktreeId: string | undefined) {
   return {
     disabled: !url,
     onMouseDown: (event: React.MouseEvent) => event.stopPropagation(),
@@ -37,7 +38,7 @@ function Chip({
 }: {
   label: string
   url: string | undefined
-  worktreeId: string
+  worktreeId: string | undefined
   children: React.ReactNode
 }): React.JSX.Element {
   return (
@@ -77,7 +78,7 @@ function ReviewChip({
   worktreeId
 }: {
   review: WorktreeCardPrDisplay
-  worktreeId: string
+  worktreeId: string | undefined
 }): React.JSX.Element {
   const state = reviewStateMark(review)
   const pipeline = reviewPipelineMark(review)
@@ -99,7 +100,7 @@ function LinearChip({
   worktreeId
 }: {
   linear: WorktreeLinearLink
-  worktreeId: string
+  worktreeId: string | undefined
 }): React.JSX.Element {
   return (
     <Chip label={linearChipLabel(linear)} url={linear.url} worktreeId={worktreeId}>
@@ -110,8 +111,38 @@ function LinearChip({
 }
 
 /**
- * A worktree's MR/PR, Linear issue and live ports, as chips under its name. Status rides on each
- * chip's icon and colour; the words are in its tooltip. Nothing when it has none of the three.
+ * An MR/PR and a Linear issue as chips, then any more (`children`). Status rides on each chip's icon
+ * and colour; the words are in its tooltip. `worktreeId`: where a link may open in the app; none for an
+ * item no worktree holds. Nothing when there is none.
+ */
+export function LinkChips({
+  review,
+  linear,
+  worktreeId,
+  className,
+  children
+}: {
+  review: WorktreeCardPrDisplay | null
+  linear: WorktreeLinearLink | null
+  worktreeId?: string
+  className?: string
+  children?: React.ReactNode
+}): React.JSX.Element | null {
+  if (!review && !linear && !children) {
+    return null
+  }
+  return (
+    <div className={cn('flex min-w-0 items-center gap-1.5', className)}>
+      {review ? <ReviewChip review={review} worktreeId={worktreeId} /> : null}
+      {linear ? <LinearChip linear={linear} worktreeId={worktreeId} /> : null}
+      {children}
+    </div>
+  )
+}
+
+/**
+ * A worktree's MR/PR, Linear issue and live ports, as chips under its name. With no linked issue, the
+ * one its branch is named for.
  */
 export function WorktreeLinkStrip({
   worktree,
@@ -123,17 +154,18 @@ export function WorktreeLinkStrip({
   className?: string
 }): React.JSX.Element | null {
   const { review, linear } = useWorktreeLinks(worktree, repo)
+  const branchLinear = useBranchLinearIssue(linear ? null : worktree.branch)
   const ports = useWorktreeLivePorts(worktree.id)
-  if (!review && !linear && ports.length === 0) {
-    return null
-  }
   return (
-    <div className={cn('flex min-w-0 items-center gap-1.5', className)}>
-      {review ? <ReviewChip review={review} worktreeId={worktree.id} /> : null}
-      {linear ? <LinearChip linear={linear} worktreeId={worktree.id} /> : null}
+    <LinkChips
+      review={review}
+      linear={linear ?? branchLinear}
+      worktreeId={worktree.id}
+      className={className}
+    >
       {ports.length > 0 ? (
         <WorktreePortsChip worktree={worktree} repo={repo} ports={ports} />
       ) : null}
-    </div>
+    </LinkChips>
   )
 }

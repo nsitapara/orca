@@ -245,6 +245,40 @@ describe('WorktreeLinkStrip', () => {
     })
   })
 
+  it('with no linked issue, shows the one its branch is named for once Linear has it', () => {
+    registerPilotStore(useAppStore)
+    const unlinked = { ...makeWorktree(), branch: 'refs/heads/web-2153-create-a-review-skill' }
+    const fetchLinearIssue = vi.fn(async () => null)
+    const before = useAppStore.getState()
+    const key = scopedLinearCacheKey(
+      getLinearReadScope(useAppStore.getState().settings),
+      'selected::WEB-2153'
+    )
+    const issue = Object.values(linearIssueCache())[0].data
+    useAppStore.setState({
+      repos: [makeRepo()],
+      worktreesByRepo: { 'repo-1': [unlinked] },
+      fetchLinearIssue,
+      linearIssueCache: {
+        [key]: {
+          fetchedAt: Date.now(),
+          data: { ...issue, identifier: 'WEB-2153', title: 'Review skill' }
+        }
+      }
+    })
+    const view = render(
+      <TooltipProvider>
+        <WorktreeLinkStrip worktree={unlinked} repo={makeRepo()} />
+      </TooltipProvider>
+    )
+    expect(fetchLinearIssue).toHaveBeenCalledWith('WEB-2153')
+    expect(view.getByRole('button', { name: 'WEB-2153 · In Review · Review skill' })).toBeTruthy()
+    useAppStore.setState({
+      fetchLinearIssue: before.fetchLinearIssue,
+      linearIssueCache: before.linearIssueCache
+    })
+  })
+
   it('renders nothing for a worktree with no MR, issue or live port', () => {
     registerPilotStore(useAppStore)
     useAppStore.setState({ repos: [makeRepo()], worktreesByRepo: { 'repo-1': [makeWorktree()] } })

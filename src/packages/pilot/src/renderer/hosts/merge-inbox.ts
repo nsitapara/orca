@@ -1,8 +1,8 @@
-import type { ActivityRun } from '../../shared/api-types-runs'
 import type { InboxListRow } from '../../shared/api-types'
 import type {
   AnswerState,
   CardHistoryEntry,
+  CardRun,
   InboxListPayload,
   PreparationWait,
   QueueEntry,
@@ -19,7 +19,7 @@ export type MergedInbox = {
   runLines: ReadonlyMap<string, RunLine>
   answerStates: ReadonlyMap<string, AnswerState>
   // Keyed hostedKey(host, runId).
-  runs: ReadonlyMap<string, Hosted<ActivityRun>>
+  runs: ReadonlyMap<string, Hosted<CardRun>>
   // Keyed hostedKey(host, cardId).
   history: ReadonlyMap<string, CardHistoryEntry[]>
   // Keyed hostedKey(host, cardId).
@@ -53,7 +53,7 @@ export function mergeInbox(reads: readonly HostRead<InboxListPayload>[]): Merged
   if (got.length === 0) {
     return null
   }
-  const runs = new Map<string, Hosted<ActivityRun>>()
+  const runs = new Map<string, Hosted<CardRun>>()
   for (const { host, value } of got) {
     for (const [id, run] of Object.entries(value.runs ?? {})) {
       runs.set(hostedKey(host, id), { ...run, host })

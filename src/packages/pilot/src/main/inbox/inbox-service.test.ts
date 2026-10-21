@@ -521,7 +521,7 @@ describe('listInbox itemLabel', () => {
     })
   })
 
-  it('reads the run and tick labels in one query each, not one per card', () => {
+  it("reads the run and tick labels, and the runs' item fields, in one query each, not one per card", () => {
     const { store, deps } = setup()
     for (let i = 0; i < 5; i++) {
       store.inbox.add(newCard(`c${i}`, { runId: 'run-1' }))
@@ -536,7 +536,8 @@ describe('listInbox itemLabel', () => {
     listInbox(deps, {})
     // cardRuns reads each distinct run by id for the list's runs; the label read is the one that is not by id.
     expect(calls.filter((c) => /FROM runs/.test(c) && !/WHERE id = \?/.test(c))).toHaveLength(1)
-    expect(calls.filter((c) => /FROM tick_items/.test(c))).toHaveLength(1)
+    // The tick labels, and cardRuns' item fields for the place line.
+    expect(calls.filter((c) => /FROM tick_items/.test(c))).toHaveLength(2)
   })
 })
 

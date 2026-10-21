@@ -1,11 +1,19 @@
 import { GitBranch } from 'lucide-react'
+import type { ItemFields } from '../../../shared/api-types'
 import type { CardHome } from './use-inbox-sections'
 import { WorktreeChips } from './WorktreeChips'
 import { isWorktreeGroup, WorktreeName } from './WorktreeLink'
 
 // A card's first line, where its work is: the project, then its worktree (or MR, pipeline, ticket) and that
 // worktree's chips. It is the card's top band, out to the card's edges.
-export function CardPlace({ home }: { home: CardHome }): React.JSX.Element {
+export function CardPlace({
+  home,
+  fields
+}: {
+  home: CardHome
+  // The tick item fields of the card's run, for chips when the app has no worktree for it.
+  fields: ItemFields | null
+}): React.JSX.Element {
   return (
     <div
       data-card-place=""
@@ -21,7 +29,7 @@ export function CardPlace({ home }: { home: CardHome }): React.JSX.Element {
       <span className="flex min-w-0 flex-1 font-mono text-[12.5px] font-medium">
         <WorktreeName group={home.group} host={home.host} />
       </span>
-      <WorktreeChips group={home.group} host={home.host} />
+      <WorktreeChips group={home.group} host={home.host} fields={fields} />
     </div>
   )
 }
