@@ -164,9 +164,13 @@ const WORKSPACE_CHECK_WHILE = {
   idle: 'an agent or someone is working there'
 } as const
 
-// The place a run works is workspace: env's choice (pilotcli env create); a check would only make the item wait.
+// The place a run works is workspace: env's choice (pilotcli env create); a check would only make the item wait. The
+// one wait on a worktree is kept: ready, for job 15's kept branches (it reads kept.wait).
 export function workspaceCheckErrors(raw: RawAutomation): string[] {
   return (raw.checks ?? []).flatMap((c, i) => {
+    if (typeof c === 'object' && 'kept' in c && raw.items?.kind !== 'kept_branch') {
+      return [`checks[${i}]: kept: ready needs items: { kind: kept_branch }`]
+    }
     if (typeof c !== 'object' || !('worktree' in c) || c.worktree === 'exists') {
       return []
     }

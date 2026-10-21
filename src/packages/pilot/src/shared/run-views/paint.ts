@@ -10,7 +10,7 @@ import type {
   TickTrigger
 } from '../api-types'
 import { homeOf, type EnvState } from '../api-types-env'
-import type { ActivityRun } from '../api-types-runs'
+import type { ActivityRun, MergeBack } from '../api-types-runs'
 import { envWhereLine } from '../env-text'
 import type { ChainPart } from './chain'
 import { hasDrifted, storedStepPart } from './stored-steps'
@@ -45,6 +45,8 @@ export type PaintInput = {
   answerRuns?: readonly RunRow[]
   // The handovers whose tick started this run: the run on the other side of a stage-2 run.
   receivedFrom?: readonly HandoverRow[]
+  // The kept_branch job's runs for this run's kept branch, and why its item waits (pilot.runs.get).
+  mergeBack?: MergeBack | null
 }
 // drifted: a stored step doesn't match the YAML at its index, so the steps shown are the run's own (spec §1).
 export type PaintedRun = { parts: PaintedPart[]; drifted: boolean }
@@ -236,9 +238,53 @@ function paintHandover(p: ChainPart, input: PaintInput): PaintedPart {
   return painted(p, isLive(input.run) ? 'not_reached' : 'none')
 }
 
+// Merge back: from the throwaway's env (what env delete kept) and the kept_branch job's runs for that branch.
+function paintMergeBack(p: ChainPart, input: PaintInput): PaintedPart {
+  const { run } = input
+  const env = run.env
+  if (env?.mode !== 'throwaway') {
+    return painted(p, 'none')
+  }
+  if (isLive(run)) {
+    return painted(p, 'not_reached')
+  }
+  if (env.removedAt === null) {
+    return painted(p, 'running', 'Removing the throwaway')
+  }
+  if (!env.kept) {
+    return painted(
+      p,
+      'skipped',
+      'Nothing to merge back: its commits reached your worktree or origin'
+    )
+  }
+  const last = input.mergeBack?.runs[0] ?? null
+  const link = { linkRunId: last?.id ?? null }
+  if (last && isLive(last)) {
+    return painted(p, 'running', `Merging ${env.kept}`, link)
+  }
+  if (last?.status === 'done') {
+    return painted(p, 'done', `Merged ${env.kept} into your worktree`, link)
+  }
+  if (last?.status === 'needs_you') {
+    return painted(p, 'asking', `Merging ${env.kept} needs you`, link)
+  }
+  const waiting = input.mergeBack?.waiting
+  if (waiting) {
+    return painted(p, 'not_reached', `Waiting in line: ${waiting}`, link)
+  }
+  if (last) {
+    return painted(p, 'failed', last.outcome ?? `Merging ${env.kept} failed`, link)
+  }
+  return painted(p, 'not_reached', `Kept on ${env.kept}; queued for merge back`)
+}
+
 function paintAfter(p: ChainPart, input: PaintInput): PaintedPart {
   if (p.kind === 'answers') {
     return paintAnswers(p, input)
+  }
+  if (p.kind === 'merge_back') {
+    return paintMergeBack(p, input)
   }
   return paintHandover(p, input)
 }
@@ -253,7 +299,9 @@ function answerRunParts(chain: readonly ChainPart[], input: PaintInput): Painted
     ...chain
       .filter((p) => p.kind === 'answers')
       .map((p) => painted(p, RUN_STATE[run.status], null, { linkRunId: run.parentRunId })),
-    ...chain.filter((p) => p.group === 'after').map((p) => painted(p, 'none'))
+    ...chain
+      .filter((p) => p.group === 'after')
+      .map((p) => (p.kind === 'merge_back' ? paintMergeBack(p, input) : painted(p, 'none')))
   ]
 }
 

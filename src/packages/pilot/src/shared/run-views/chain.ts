@@ -5,6 +5,7 @@ import {
   checksText,
   FIELD_PREFIX,
   handoverText,
+  mergeBackText,
   idsCommand,
   itemKindShort,
   picksText,
@@ -28,6 +29,7 @@ export type PartKind =
   | 'workspace'
   | 'step'
   | 'answers'
+  | 'merge_back'
   | 'handover'
 
 // One part of an automation's chain, in the order a run meets it (spec §1). `key` is stable across loads: paintRun,
@@ -217,6 +219,28 @@ function stepParts(def: AutomationDefinition): ChainPart[] {
   )
 }
 
+// A run in a throwaway leaves what reached neither your worktree nor origin on pilot/<run>; the kept_branch job merges it.
+function mergeBackParts(
+  def: AutomationDefinition,
+  all: readonly AutomationDefinition[]
+): ChainPart[] {
+  if (def.workspace.kind !== 'env' || def.items?.kind === 'kept_branch') {
+    return []
+  }
+  const job = all.find((d) => d.items?.kind === 'kept_branch')
+  return [
+    chainPart({
+      key: 'merge_back',
+      kind: 'merge_back',
+      group: 'after',
+      who: 'pilot',
+      name: 'Merge back',
+      short: 'merge back',
+      runs: mergeBackText(job?.name ?? null)
+    })
+  ]
+}
+
 function answerParts(def: AutomationDefinition): ChainPart[] {
   if (!def.answers) {
     return []
@@ -265,6 +289,7 @@ export function chainOf(
   return [
     ...beforeParts(def, all),
     ...stepParts(def),
+    ...mergeBackParts(def, all),
     ...answerParts(def),
     ...handoverParts(def, all)
   ]

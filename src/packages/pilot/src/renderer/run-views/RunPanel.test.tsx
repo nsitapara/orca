@@ -52,7 +52,8 @@ const detail: RunDetail = {
   trigger: null,
   handovers: [],
   receivedFrom: [],
-  answerRuns: []
+  answerRuns: [],
+  mergeBack: null
 }
 
 describe('the run panel', () => {

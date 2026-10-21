@@ -28,7 +28,8 @@ const HOLD_RELEASE: Record<HoldReason, string | null> = {
   capacity: null,
   claimed: null,
   mr_unknown: null,
-  waits: null
+  waits: null,
+  merge_blocked: null
 }
 
 function sentence(text: string): string {

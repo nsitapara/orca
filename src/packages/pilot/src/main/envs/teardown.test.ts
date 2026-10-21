@@ -76,8 +76,8 @@ function setup(
       }
     },
     forget: () => {},
-    kept: (runId) => {
-      kept.push(runId)
+    kept: (run) => {
+      kept.push(run.id)
     },
     log: () => {}
   })

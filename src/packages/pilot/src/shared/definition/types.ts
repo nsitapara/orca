@@ -4,6 +4,7 @@ export type ItemKind =
   | 'pipeline'
   | 'linear_ticket'
   | 'inbox_preparation'
+  | 'kept_branch'
 export type PeopleSet = { people?: string[]; group?: string }
 // `not` leaves out the people it names; everyone else (people.yaml or not) is in.
 export type PeopleRef = 'anyone' | PeopleSet | { not: PeopleSet }
@@ -90,6 +91,8 @@ export type CheckDef =
   | { kind: 'mr'; rule: 'not_approved' | 'not_merged' | 'mine' | 'not_draft' }
   | { kind: 'window'; start: string; end: string }
   | { kind: 'answers_none_pending' }
+  // kept_branch items: the merge can land now (kept.wait is empty).
+  | { kind: 'kept_ready' }
   | { kind: 'field'; expr: string; reason: string }
   | { kind: 'script'; run: string; timeoutMs: number }
 

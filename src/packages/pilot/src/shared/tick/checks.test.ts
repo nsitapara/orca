@@ -129,6 +129,27 @@ describe('session, quota and answers checks', () => {
       { 'inbox.pending_answers': null },
       false,
       "Couldn't read this automation's waiting answers"
+    ],
+    [
+      'a kept branch nothing blocks',
+      { kind: 'kept_ready' },
+      { 'kept.wait': '' },
+      true,
+      'Nothing in the way'
+    ],
+    [
+      'a kept branch my local changes block',
+      { kind: 'kept_ready' },
+      { 'kept.wait': 'the merge changes 1 file you have local changes in: a.ts' },
+      false,
+      'the merge changes 1 file you have local changes in: a.ts'
+    ],
+    [
+      'a kept branch whose wait is unknown',
+      { kind: 'kept_ready' },
+      {},
+      false,
+      "Couldn't tell whether it can merge"
     ]
   ])('%s', (_name, c, fields, ok, reason) => {
     expect(run(c, fields)).toEqual([ok, reason])

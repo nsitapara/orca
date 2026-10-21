@@ -1,6 +1,6 @@
 import type Database from '../../../../../main/sqlite/sync-database'
 import type { RunRow } from '../../shared/api-types'
-import type { EnvMode, KeptHome, RunEnvStack } from '../../shared/api-types-env'
+import type { EnvMode, RunEnvStack } from '../../shared/api-types-env'
 import { worktreePathKey } from '../fields/agent-activity'
 import { readEnvJson, type EnvJson } from './env-row'
 import { toRun } from './run-rows'
@@ -87,22 +87,14 @@ export class EnvStore {
       .run(at, json, runId)
   }
 
-  keptHome(runId: string, home: KeptHome): void {
-    this.db
-      .prepare('UPDATE runs SET env_json = ? WHERE id = ?')
-      .run(JSON.stringify({ ...this.json(runId), keptHome: home }), runId)
-  }
-
-  // Removed throwaways whose kept branch isn't in their home yet and whose next check is due (main/envs/kept-home.ts).
-  keptDue(at: number): RunRow[] {
+  // Removed throwaways whose env delete kept commits on a branch: job 15's kept_branch items (sources/kept-branches.ts).
+  keptPending(): RunRow[] {
     return this.db
       .prepare(
         `SELECT * FROM runs WHERE ${ENDED} AND env_removed_at IS NOT NULL AND home_path IS NOT NULL
-           AND json_extract(env_json, '$.kept') IS NOT NULL
-           AND COALESCE(json_extract(env_json, '$.keptHome.state'), 'waiting') IN ('waiting', 'stuck')
-           AND COALESCE(json_extract(env_json, '$.keptHome.nextAt'), 0) <= ? ORDER BY finished_at, id`
+           AND json_extract(env_json, '$.kept') IS NOT NULL ORDER BY env_removed_at, id`
       )
-      .all(at)
+      .all()
       .map((r) => toRun(r as never))
   }
 

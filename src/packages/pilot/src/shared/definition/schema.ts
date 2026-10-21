@@ -10,7 +10,8 @@ export const ITEM_KINDS = [
   'worktree',
   'pipeline',
   'linear_ticket',
-  'inbox_preparation'
+  'inbox_preparation',
+  'kept_branch'
 ] as const satisfies readonly ItemKind[]
 export const AGENTS = ['claude', 'codex'] as const satisfies readonly AgentKind[]
 export const POWERS = [
@@ -33,6 +34,7 @@ const positiveInt = z.number().int().positive()
 const check = z.union(
   [
     z.strictObject({ worktree: z.enum(['exists', 'clean', 'idle']) }),
+    z.strictObject({ kept: z.literal('ready') }),
     z.strictObject({
       session: z.union(
         [z.literal('none_open'), z.strictObject({ none_open: z.enum(['automation', 'any']) })],

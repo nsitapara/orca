@@ -253,6 +253,7 @@ export type HoldReason =
   | 'job_limit'
   | 'own_run'
   | 'tick_limit'
+  | 'merge_blocked'
 export type QueueRoute = 'resume' | 'fork' | 'new' | 'action'
 export type QueueRow = {
   id: number

@@ -172,6 +172,7 @@ describe('the chain of every live automation', () => {
         'merge_back:script',
         'card:script',
         'flag_failed:script',
+        'Merge back:pilot',
         'Answers:you'
       ]
     ]

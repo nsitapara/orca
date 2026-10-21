@@ -39,6 +39,7 @@ const KIND_PREFIXES: Record<KindOrRunOnce, readonly string[]> = {
   linear_ticket: ['ticket', 'worktree', 'repo', 'run'],
   pipeline: ['pipeline', 'repo', 'run'],
   inbox_preparation: ['preparation', 'worktree', 'repo', 'run'],
+  kept_branch: ['kept', 'worktree', 'repo', 'run'],
   run_once: ['worktree', 'repo', 'run']
 }
 

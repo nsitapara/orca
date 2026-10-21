@@ -484,6 +484,11 @@ describe('parseAutomationYaml', () => {
       'worktree: idle, which workspace: env decides instead',
       CI_05.replace('  - worktree: exists\n', '  - worktree: exists\n  - worktree: idle\n'),
       'checks[1]: worktree: idle picks where a run works, not when: use workspace: env { worktree: "{worktree.path}", writes: true }, which works in a throwaway while an agent or someone is working there'
+    ],
+    [
+      'kept: ready on items that carry no kept.wait',
+      CI_05.replace('  - worktree: exists\n', '  - worktree: exists\n  - kept: ready\n'),
+      'checks[1]: kept: ready needs items: { kind: kept_branch }'
     ]
   ])('rejects %s', (_label, yaml, message) => {
     expect(parseAutomationYaml(yaml, '/a/ci.yaml')).toEqual({

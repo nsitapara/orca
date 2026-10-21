@@ -40,4 +40,8 @@ export type RunDetail = {
   // The handovers whose tick started this run (a stage-2 run): the run on the other side.
   receivedFrom: HandoverRow[]
   answerRuns: RunRow[]
+  // A run whose throwaway kept commits on pilot/<run>: the kept_branch job's runs for it, newest first, and why its
+  // item waits in line now (null when it isn't waiting). Null when nothing was kept.
+  mergeBack: MergeBack | null
 }
+export type MergeBack = { runs: RunRow[]; waiting: string | null }

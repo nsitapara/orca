@@ -1,4 +1,4 @@
-import type { EnvMode, EnvState, KeptHome, RunEnv, RunEnvStack } from '../../shared/api-types-env'
+import type { EnvMode, EnvState, RunEnv, RunEnvStack } from '../../shared/api-types-env'
 
 // What env_json holds beside the columns: the create command, who prepares it (a pid and its start identity, so a restart
 // tells a stopped Pilot's preparation from a live one), and pilotcli's result.
@@ -11,7 +11,6 @@ export type EnvJson = {
   stack?: RunEnvStack | null
   // env delete's data.kept: the branch it kept a throwaway's unhomed commits on.
   kept?: string
-  keptHome?: KeptHome
 }
 
 export function readEnvJson(raw: unknown): EnvJson {
@@ -42,7 +41,6 @@ export function envOfRow(r: Record<string, unknown>): RunEnv | null {
     removedAt: (r.env_removed_at as number | null) ?? null,
     deleteError: (r.env_delete_error as string | null) ?? null,
     deleteAttempts: Number(r.env_delete_attempts ?? 0),
-    ...(json.kept ? { kept: json.kept } : {}),
-    ...(json.keptHome ? { keptHome: json.keptHome } : {})
+    ...(json.kept ? { kept: json.kept } : {})
   }
 }

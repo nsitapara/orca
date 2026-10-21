@@ -19,7 +19,8 @@ const KIND_WORDS: Record<ItemKind, string> = {
   worktree: 'Worktrees',
   pipeline: 'Pipelines',
   linear_ticket: 'Linear tickets',
-  inbox_preparation: 'Inbox context requests'
+  inbox_preparation: 'Inbox context requests',
+  kept_branch: 'Kept fixes'
 }
 // The strip's first chip says what the automation looks at, short.
 const KIND_SHORT: Record<ItemKind, string> = {
@@ -27,7 +28,8 @@ const KIND_SHORT: Record<ItemKind, string> = {
   worktree: 'Worktrees',
   pipeline: 'Pipelines',
   linear_ticket: 'Tickets',
-  inbox_preparation: 'Context requests'
+  inbox_preparation: 'Context requests',
+  kept_branch: 'Kept fixes'
 }
 // The names templates read fields under ({mr.head8}); main/fields/custom-fields.ts writes them with the same prefixes.
 export const FIELD_PREFIX: Record<ItemKind, string> = {
@@ -35,7 +37,8 @@ export const FIELD_PREFIX: Record<ItemKind, string> = {
   worktree: 'worktree',
   pipeline: 'pipeline',
   linear_ticket: 'ticket',
-  inbox_preparation: 'preparation'
+  inbox_preparation: 'preparation',
+  kept_branch: 'kept'
 }
 const AGENT_WORD: Record<AgentKind, string> = { claude: 'Claude', codex: 'Codex' }
 
@@ -243,6 +246,13 @@ function agentSkillWords(a: NonNullable<AnswersDef['else']>): string {
     return `${who} · ${skill}`
   }
   return who
+}
+
+export function mergeBackText(jobName: string | null): string {
+  const by = jobName
+    ? `${jobName} merges it into your worktree`
+    : 'no kept_branch job is loaded to merge it'
+  return `When a throwaway's commits reach neither your worktree nor origin, they're kept on pilot/<run>; ${by}`
 }
 
 export function answersText(a: AnswersDef): string {

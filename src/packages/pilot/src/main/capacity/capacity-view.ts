@@ -98,6 +98,8 @@ function dueFromOf(def: AutomationDefinition | undefined): string {
       return 'pipeline created'
     case 'inbox_preparation':
       return 'card posted'
+    case 'kept_branch':
+      return 'kept'
     case 'merge_request':
       return 'first due'
   }

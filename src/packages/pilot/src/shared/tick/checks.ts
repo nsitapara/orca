@@ -34,6 +34,8 @@ export function checkName(c: CheckDef): string {
       return `Window ${c.start}-${c.end}`
     case 'answers_none_pending':
       return 'No pending answers'
+    case 'kept_ready':
+      return 'Can merge'
     case 'field':
       return c.expr
     case 'script':
@@ -106,6 +108,15 @@ function answers(f: ItemFields): CheckResult {
   return pass('No answers waiting to be applied')
 }
 
+// kept.wait is pilotcli's dry run of the merge (sources/kept-branches.ts): '' when nothing is in the way.
+function keptReady(f: ItemFields): CheckResult {
+  const wait = f['kept.wait']
+  if (typeof wait !== 'string') {
+    return fail("Couldn't tell whether it can merge")
+  }
+  return wait === '' ? pass('Nothing in the way') : fail(wait)
+}
+
 function fieldCheck(c: Extract<CheckDef, { kind: 'field' }>, f: ItemFields): CheckResult {
   const parsed = parseExpr(c.expr)
   if (!parsed.ok) {
@@ -127,6 +138,8 @@ function outcome(c: CheckDef, ctx: CheckContext, script: CheckResult | undefined
       return windowCheck(c, ctx)
     case 'answers_none_pending':
       return answers(ctx.fields)
+    case 'kept_ready':
+      return keptReady(ctx.fields)
     case 'field':
       return fieldCheck(c, ctx.fields)
     case 'script':

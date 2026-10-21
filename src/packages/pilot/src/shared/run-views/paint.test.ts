@@ -348,3 +348,139 @@ describe('paintRun', () => {
     expect(byKey(paintRun(chain, { run: testRun() }).parts).starts.linkRunId).toBeNull()
   })
 })
+
+describe('merge back', () => {
+  const envJob = testDefinition({
+    id: 'env-job',
+    workspace: {
+      kind: 'env',
+      subject: { kind: 'worktree', worktree: '{worktree.path}', at: null },
+      writes: true,
+      stack: 'never'
+    }
+  })
+  const keptJob = testDefinition({
+    id: 'merge-back',
+    name: '15 · Merge back kept fixes',
+    items: { kind: 'kept_branch', where: {}, match: [], customFields: [] }
+  })
+  const all = [envJob, keptJob, def]
+  const part = (d: typeof def) => chainOf(d, all).find((p) => p.kind === 'merge_back') ?? null
+
+  it('is a Pilot step of a job that may work in a throwaway, naming the job that merges back', () => {
+    expect(part(envJob)).toMatchObject({ group: 'after', who: 'pilot', name: 'Merge back' })
+    expect(part(envJob)?.runs).toContain('15 · Merge back kept fixes merges it into your worktree')
+    expect([part(keptJob), part(def)]).toEqual([null, null])
+  })
+
+  const env = (over = {}) => ({
+    state: 'removed' as const,
+    mode: 'throwaway' as const,
+    reason: null,
+    path: '/agents/agents-r1',
+    sha: null,
+    envFile: null,
+    vars: {},
+    stack: null,
+    removedAt: 9,
+    deleteError: null,
+    deleteAttempts: 0,
+    kept: 'pilot/r1',
+    ...over
+  })
+  const ended = { status: 'done' as const, finishedAt: 5 }
+  const job = (
+    status: 'running' | 'done' | 'needs_you' | 'failed',
+    outcome: string | null = null
+  ) => testRun({ id: 'm1', automationId: 'merge-back', status, outcome })
+  it.each<[string, Partial<PaintInput>, PartState, string | null, string | null]>([
+    [
+      'worked in your worktree: nothing to merge back',
+      { run: testRun({ ...ended, env: env({ mode: 'in_place' }) }) },
+      'none',
+      null,
+      null
+    ],
+    [
+      'the run still going',
+      { run: testRun({ env: env({ removedAt: null }) }) },
+      'not_reached',
+      null,
+      null
+    ],
+    [
+      'the throwaway not removed yet',
+      { run: testRun({ ...ended, env: env({ removedAt: null }) }) },
+      'running',
+      'Removing the throwaway',
+      null
+    ],
+    [
+      'everything already home',
+      { run: testRun({ ...ended, env: env({ kept: undefined }) }) },
+      'skipped',
+      'Nothing to merge back: its commits reached your worktree or origin',
+      null
+    ],
+    [
+      'kept, before the job saw it',
+      { run: testRun({ ...ended, env: env() }) },
+      'not_reached',
+      'Kept on pilot/r1; queued for merge back',
+      null
+    ],
+    [
+      'kept, waiting in line with the reason',
+      {
+        run: testRun({ ...ended, env: env() }),
+        mergeBack: { runs: [], waiting: '3 uncommitted files touch it' }
+      },
+      'not_reached',
+      'Waiting in line: 3 uncommitted files touch it',
+      null
+    ],
+    [
+      'kept, merging',
+      {
+        run: testRun({ ...ended, env: env() }),
+        mergeBack: { runs: [job('running')], waiting: null }
+      },
+      'running',
+      'Merging pilot/r1',
+      'm1'
+    ],
+    [
+      'kept, merged',
+      { run: testRun({ ...ended, env: env() }), mergeBack: { runs: [job('done')], waiting: null } },
+      'done',
+      'Merged pilot/r1 into your worktree',
+      'm1'
+    ],
+    [
+      'kept, the merge asks me',
+      {
+        run: testRun({ ...ended, env: env() }),
+        mergeBack: { runs: [job('needs_you')], waiting: null }
+      },
+      'asking',
+      'Merging pilot/r1 needs you',
+      'm1'
+    ],
+    [
+      'kept, the merge failed',
+      {
+        run: testRun({ ...ended, env: env() }),
+        mergeBack: { runs: [job('failed', 'land failed')], waiting: null }
+      },
+      'failed',
+      'land failed',
+      'm1'
+    ]
+  ])('%s', (_name, input, state, detail, link) => {
+    const chainParts = chainOf(envJob, all)
+    const painted = paintRun(chainParts, { run: testRun(), ...input }).parts.find(
+      (p) => p.kind === 'merge_back'
+    )
+    expect([painted?.state, painted?.detail, painted?.linkRunId]).toEqual([state, detail, link])
+  })
+})

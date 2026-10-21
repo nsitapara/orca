@@ -19,7 +19,8 @@ const KIND_NAMES: Record<ItemKind, string> = {
   worktree: 'worktree items',
   pipeline: 'pipelines',
   linear_ticket: 'Linear tickets',
-  inbox_preparation: 'inbox context requests'
+  inbox_preparation: 'inbox context requests',
+  kept_branch: 'kept fixes'
 }
 
 export function itemSource(kind: ItemKind): ItemSource {

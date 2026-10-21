@@ -93,4 +93,15 @@ export class ActivityStore {
       .all(runId)
       .map((r) => toRun(r as never))
   }
+
+  // The runs these automations started for one item key, newest first: job 15's merges of one kept branch.
+  forItem(automationIds: readonly string[], itemKey: string): RunRow[] {
+    return this.db
+      .prepare(
+        `SELECT * FROM runs WHERE automation_id IN (SELECT value FROM json_each(?)) AND item_key = ?
+           ORDER BY started_at DESC, id`
+      )
+      .all(JSON.stringify(automationIds), itemKey)
+      .map((r) => toRun(r as never))
+  }
 }

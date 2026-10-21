@@ -4,7 +4,7 @@ import type { CheckDef } from '../definition/types'
 export type RuntimeCheck = Extract<
   CheckDef,
   {
-    kind: 'quota' | 'session_none_open' | 'answers_none_pending' | 'window'
+    kind: 'quota' | 'session_none_open' | 'answers_none_pending' | 'window' | 'kept_ready'
   }
 >
 
@@ -15,6 +15,7 @@ export function isRuntimeCheck(check: CheckDef): check is RuntimeCheck {
     case 'session_none_open':
     case 'answers_none_pending':
     case 'window':
+    case 'kept_ready':
       return true
     case 'mr':
     case 'worktree_exists':
@@ -34,5 +35,7 @@ export function holdCodeOf(check: RuntimeCheck): HoldReason {
       return 'answers_pending'
     case 'window':
       return 'window'
+    case 'kept_ready':
+      return 'merge_blocked'
   }
 }

@@ -224,6 +224,17 @@ describe("Go now's mark on an item", () => {
         })
       ]
     },
+    merge_blocked: {
+      goes: false,
+      gates: [
+        tick({
+          definition: job({ checks: [{ kind: 'kept_ready' }] }),
+          items: [
+            withFields({ 'kept.wait': 'the merge changes 1 file you have local changes in: a.ts' })
+          ]
+        })
+      ]
+    },
     in_flight: { goes: false, gates: [elsewhere('in_flight')] },
     claimed: { goes: false, gates: [elsewhere('claimed')] },
     typing: { goes: false, gates: [elsewhere('typing')] },

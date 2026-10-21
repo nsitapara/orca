@@ -19,7 +19,8 @@ const SHOWS: Record<HoldReason, boolean> = {
   answers_pending: false,
   no_worktree: false,
   mr_unknown: false,
-  waits: false
+  waits: false,
+  merge_blocked: false
 }
 const CODES = Object.keys(SHOWS).filter((key): key is HoldReason => Object.hasOwn(SHOWS, key))
 

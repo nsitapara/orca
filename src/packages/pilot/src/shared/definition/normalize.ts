@@ -46,6 +46,9 @@ function normalizeCheck(c: RawCheck, agent: AgentKind): CheckDef {
   if ('worktree' in c) {
     return { kind: 'worktree_exists' }
   }
+  if ('kept' in c) {
+    return { kind: 'kept_ready' }
+  }
   if ('session' in c) {
     return {
       kind: 'session_none_open',

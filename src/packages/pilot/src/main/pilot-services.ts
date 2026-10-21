@@ -40,6 +40,7 @@ import { registrySources } from './scheduler/tick-decide'
 import { runTick, type TickDeps } from './scheduler/tick-runner'
 import { createPassFetchCache } from './sources/fetch-cache'
 import { glabApiForRepo } from './sources/gitlab-api'
+import { triggerKeptJobs } from './sources/kept-branches'
 import { registerPilotSources } from './sources/register-sources'
 import { PilotStore } from './store/store'
 import { VaultExporter } from './vault/export'
@@ -48,7 +49,6 @@ import { usageReporter } from './usage-report/reporter'
 import { closeAll, messageOf, softly } from './pilot-lifecycle'
 import { wireRunCapacity } from './capacity/capacity-wiring'
 import { giveUpOnFailure } from './capacity/give-up'
-import { inboxKeptCards } from './envs/kept-home'
 import { pilotHostFor } from './pilot-host'
 import type { PilotContext, PilotHost, PilotServiceOptions, PilotServices } from './pilot-context'
 
@@ -69,16 +69,16 @@ function openPilot(
   mkdirSync(host.dataDir, { recursive: true })
   const store = PilotStore.open(join(host.dataDir, 'pilot-automations.db'))
   opened.push(() => store.close())
+  // How field scripts and script checks reach Pilot's CLI and data folder (H9); orcad gets the default.
+  const engineEnv = resolveEngineEnv(options.engineEnv, host.dataDir)
   // Before the definitions load: a where clause of these kinds validates against their schemas.
-  registerPilotSources({ runtime, store })
+  registerPilotSources({ runtime, store, pilotBinDir: engineEnv.binDir })
   housekeepStore(store, now, log)
   const definitions = liveDefinitions(host.dirs, log, definitionIo(store.definitions, now))
   opened.push(definitions.stop)
   // One relister for the session check and the step watcher, so they share its listing.
   const relist = terminalRelister(runtime, now)
   const quotas = cachedQuotas(options.quotas)
-  // How field scripts and script checks reach Pilot's CLI and data folder (H9); orcad gets the default.
-  const engineEnv = resolveEngineEnv(options.engineEnv, host.dataDir)
   const fieldDeps = runtimeFieldDeps(runtime, store, { relist, now })
   // `store.runs`: a new worktree's claim reads and records running runs there (Task 8b).
   const launcherDeps = {
@@ -105,8 +105,9 @@ function openPilot(
     terminalDraft: (h) => fieldDeps.terminalDraft(h),
     // The rest of a run's end, before its env is removed: an answer run's outputs reach its cards (G6).
     onRunEnd: (run) => answerRunEnded(store, run),
-    // The inbox is made below; no run ends before the scheduler polls.
-    keptCards: inboxKeptCards(() => inbox, log)
+    // `scheduler` is made below; no run ends before the scheduler polls.
+    onKept: (run) =>
+      triggerKeptJobs(definitions.current().definitions, run, (id, c) => scheduler.trigger(id, c))
   })
   opened.push(() => envs.stop())
   // A stage's run end hands over to the next stage; its run: now reaches the scheduler once made (below).

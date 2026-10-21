@@ -30,7 +30,8 @@ const RUN: RunDetail = {
   trigger: null,
   handovers: [],
   receivedFrom: [],
-  answerRuns: []
+  answerRuns: [],
+  mergeBack: null
 }
 
 function serve(outcome: TickOutcome = { status: 'busy' }): void {

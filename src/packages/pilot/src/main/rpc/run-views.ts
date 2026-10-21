@@ -1,4 +1,6 @@
-import type { ActivityPayload, RunDetail } from '../../shared/api-types'
+import type { ActivityPayload, RunDetail, RunRow } from '../../shared/api-types'
+import type { MergeBack } from '../../shared/api-types-runs'
+import type { AutomationDefinition } from '../../shared/definition/types'
 import { chainOf } from '../../shared/run-views/chain'
 import { toInboxSummary } from '../inbox/card'
 import type { PilotContext } from '../pilot-services'
@@ -58,6 +60,24 @@ export function runDetail(ctx: PilotContext, runId: string): RunDetail {
     trigger,
     handovers: ctx.store.handovers.sentBy(row.id),
     receivedFrom: ctx.store.handovers.startedBy(row.id),
-    answerRuns: ctx.store.activity.children(row.id)
+    answerRuns: ctx.store.activity.children(row.id),
+    mergeBack: mergeBackOf(ctx, row, definitions)
+  }
+}
+
+function mergeBackOf(
+  ctx: PilotContext,
+  row: RunRow,
+  definitions: readonly AutomationDefinition[]
+): MergeBack | null {
+  if (!row.env?.kept) {
+    return null
+  }
+  const ids = definitions.filter((d) => d.items?.kind === 'kept_branch').map((d) => d.id)
+  const key = `kept:${row.id}`
+  const queued = ctx.store.capacity.queuedFor([key]).find((q) => ids.includes(q.automationId))
+  return {
+    runs: ctx.store.activity.forItem(ids, key),
+    waiting: queued ? queued.holdDetail || 'Waiting for a slot' : null
   }
 }
