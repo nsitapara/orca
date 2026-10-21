@@ -8,8 +8,8 @@ import { readRuntimeFileContent } from '@/runtime/runtime-file-read-client'
 import { useAppStore } from '@/store'
 import { buildStackPorts, STACK_PORTS_FILE, type StackPort } from './stack-ports'
 
-// Read once per mount: the hover card mounts as it opens, so each open sees the current file.
-function useStackPortsFile(worktree: Worktree, repo: Repo | null): string | null {
+// Read on mount, and again once the stack's ports come up: a header's chip mounts long before.
+function useStackPortsFile(worktree: Worktree, repo: Repo | null, live: boolean): string | null {
   const [content, setContent] = useState<string | null>(null)
   const connectionId = repo?.connectionId ?? undefined
   useEffect(() => {
@@ -35,7 +35,7 @@ function useStackPortsFile(worktree: Worktree, repo: Repo | null): string | null
     return () => {
       cancelled = true
     }
-  }, [worktree.id, worktree.path, connectionId])
+  }, [worktree.id, worktree.path, connectionId, live])
   return content
 }
 
@@ -45,7 +45,7 @@ export function useStackPorts(
   repo: Repo | null,
   livePorts: WorkspacePort[]
 ): { stack: StackPort[]; others: WorkspacePort[] } {
-  const content = useStackPortsFile(worktree, repo)
+  const content = useStackPortsFile(worktree, repo, livePorts.length > 0)
   return useMemo(
     () =>
       content === null ? { stack: [], others: livePorts } : buildStackPorts(content, livePorts),

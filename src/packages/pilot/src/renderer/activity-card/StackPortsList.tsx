@@ -59,7 +59,7 @@ function StackPortRow({ port, worktreeId }: { port: StackPort; worktreeId: strin
  * The worktree's live ports. With a `.env.ports`, its stack's ports lead by name (web pages first,
  * as links) and every other live port folds away; without one, upstream's Live Ports list.
  */
-export function HoverCardPorts({
+export function StackPortsList({
   worktree,
   repo,
   ports

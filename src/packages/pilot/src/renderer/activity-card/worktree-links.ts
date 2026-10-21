@@ -13,8 +13,11 @@ const NO_CARD_PROPS: ReviewDetailsInput['cardProps'] = []
 
 export type WorktreeLinearLink = {
   identifier: string
+  title?: string
   stateName?: string
   stateType?: string
+  // The workspace's own colour for the state, as Linear draws it.
+  stateColor?: string
   url?: string
 }
 
@@ -52,8 +55,10 @@ export function useWorktreeLinks(worktree: Worktree, repo: Repo | null): Worktre
     review: details.prDisplay ?? null,
     linear: {
       identifier: issue?.identifier ?? linearId,
+      title: issue?.title,
       stateName: issue?.state?.name,
       stateType: issue?.state?.type,
+      stateColor: issue?.state?.color,
       url: issue?.url ?? (references.length === 1 ? references[0].url : undefined)
     }
   }

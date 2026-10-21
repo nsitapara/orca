@@ -3,13 +3,11 @@ import type { Repo } from '../../../../../shared/repo-types'
 import type { Worktree } from '../../../../../shared/worktree/types'
 import { ActivityRowGroupContext } from '../activity-tabs/activity-row-group-context'
 import { pilotStore } from '../store'
-import { WorktreeLinkChips } from './WorktreeLinkChips'
 
-// pilot-hook: activity-tabs-footer-label. Grouped by worktree the header already names the worktree,
-// so a row's footer shows its MR and Linear links instead; grouped otherwise it keeps upstream's name.
+// pilot-hook: activity-tabs-footer-label. Grouped by worktree the header names the worktree and
+// carries its MR, Linear and ports chips, so a row's footer drops the name and keeps only its own
+// state, actions and time; grouped otherwise it keeps upstream's name.
 export function ActivityTabsFooterLabel({
-  worktree,
-  repo,
   children
 }: {
   worktree: Worktree
@@ -20,9 +18,6 @@ export function ActivityTabsFooterLabel({
   if (!pilotStore() || !groupKey?.startsWith('worktree:')) {
     return children
   }
-  return (
-    <span className="flex min-w-0 flex-1 items-center">
-      <WorktreeLinkChips worktree={worktree} repo={repo} />
-    </span>
-  )
+  // Keeps the row's actions and time at the right edge.
+  return <span className="min-w-0 flex-1" />
 }

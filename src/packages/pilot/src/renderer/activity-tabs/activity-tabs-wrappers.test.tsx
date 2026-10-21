@@ -226,7 +226,7 @@ describe('Pilot wrappers around upstream Activity elements', () => {
     worktreeSurfaces.flatMap((surface) =>
       (['merged', 'open'] as const).map((state) => ({ ...surface, state }))
     )
-  )('$name with a $state MR offers Delete worktree only once merged', ({ element, state }) => {
+  )('$name with a $state MR shows its chip, and Delete only once merged', ({ element, state }) => {
     registerPilotStore(useAppStore)
     const repo = makeRepo()
     const key = getHostedReviewCacheKey(repo.path, 'feature', null, repo.id, null, null, true)
@@ -254,6 +254,11 @@ describe('Pilot wrappers around upstream Activity elements', () => {
       }
     })
     const view = render(<TooltipProvider>{element}</TooltipProvider>)
+
+    const chip = view.getByRole('button', {
+      name: state === 'open' ? 'GitLab MR !7 · Open · Pipeline passed' : 'GitLab MR !7 · Merged'
+    })
+    expect(chip.textContent).toBe('!7')
 
     const button = view.queryByRole('button', { name: 'Delete worktree' })
     if (state === 'open') {
