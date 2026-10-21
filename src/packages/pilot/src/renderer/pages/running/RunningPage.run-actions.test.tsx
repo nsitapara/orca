@@ -2,6 +2,7 @@
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { CapacityPayload, CapacityRun } from '../../../shared/api-types-capacity'
+import { clearPendingInboxCard, pendingInboxCard } from '../automations-view'
 import { capacity } from './__fixtures__/capacity'
 
 const pilotRpc = vi.fn()
@@ -85,6 +86,23 @@ describe("A running run's answer badge, step line and Stop on Running", () => {
     serve(capacity({ running: [{ ...capacity().running[0], fromAnswer }] }))
     await shown()
     expect(running().queryAllByText('From your answer')).toHaveLength(shown_)
+  })
+
+  it('lists the cards an answer run applies with your answer, and a title opens its card', async () => {
+    const answering = [
+      { id: 'c1', title: 'Use a middot between classifications?', answer: 'yes, middot' },
+      { id: 'c2', title: 'Point mr-create at the report page?', answer: null }
+    ]
+    serve(capacity({ running: [{ ...capacity().running[0], fromAnswer: true, answering }] }))
+    await shown()
+    const cards = within(running().getByRole('list', { name: 'Answering' }))
+    expect(cards.getAllByRole('listitem').map((li) => li.textContent)).toEqual([
+      'Use a middot between classifications?You: yes, middot',
+      'Point mr-create at the report page?'
+    ])
+    fireEvent.click(cards.getByRole('button', { name: 'Point mr-create at the report page?' }))
+    expect(pendingInboxCard()).toBe('c2')
+    clearPendingInboxCard()
   })
 
   it.each([

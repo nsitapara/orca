@@ -506,6 +506,73 @@ describe('capacityView', () => {
     expect(view.running[0]?.fromAnswer).toBe(fromAnswer)
     expect(view.running[0]?.step).toEqual(step)
   })
+
+  it('lists the cards sent to an answer run, in the order they went, with the answer each carries', () => {
+    const store = PilotStore.open(':memory:')
+    const card = (id: string, title: string) =>
+      store.inbox.add({
+        id,
+        automationId: 'review',
+        runId: 'asker',
+        stepIdx: 0,
+        itemKey: 'mr:1',
+        worktreePath: '/wt/a',
+        person: 'nish',
+        type: 'question',
+        title,
+        context: '',
+        options: [],
+        suggested: null,
+        detailsMd: null,
+        action: null,
+        actionArgs: null,
+        digest: 'd1',
+        createdAt: 1,
+        source: 'engine',
+        vaultRef: null
+      })
+    card('c1', 'Use a middot?')
+    card('c2', 'Point mr-create at the report?')
+    card('c3', 'Sent elsewhere')
+    store.inbox.saveAnswer(
+      'c1',
+      { option: null, text: 'yes, middot', digest: 'd1', via: 'page' },
+      'nish',
+      2
+    )
+    store.runs.create({
+      id: 'ans-1',
+      automationId: 'review',
+      tickId: null,
+      itemKey: 'mr:1',
+      itemLabel: '!1',
+      worktreePath: '/wt/a',
+      startedAt: 3,
+      trigger: 'answer'
+    })
+    for (const [id, runId] of [
+      ['c2', 'ans-1'],
+      ['c3', 'ans-2'],
+      ['c1', 'ans-1']
+    ]) {
+      store.queue.update(
+        store.queue.enqueue(id, 1, 1),
+        { state: 'dispatched', dispatchedRunId: runId },
+        3
+      )
+    }
+    const view = capacityView({
+      store,
+      definitions: [testDefinition({ id: 'review' })],
+      memory: null,
+      system: { totalBytes: 1, availableBytes: 1 },
+      now: 100
+    })
+    expect(view.running[0]?.answering).toEqual([
+      { id: 'c2', title: 'Point mr-create at the report?', answer: null },
+      { id: 'c1', title: 'Use a middot?', answer: 'yes, middot' }
+    ])
+  })
 })
 
 describe('capacityView: Merge back', () => {

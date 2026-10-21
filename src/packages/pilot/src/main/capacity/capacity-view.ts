@@ -1,4 +1,5 @@
 import type {
+  AnsweringCard,
   CapacityPayload,
   CapacityRun,
   GaveUpKey,
@@ -136,6 +137,15 @@ function activeStepOf(steps: readonly StepRow[]): RunStep | undefined {
   return { name: step.name, kind: step.kind, skill: step.skill, mode: step.mode }
 }
 
+// The cards dispatched to an answer run (as answerRunEnded settles them), each once.
+function answeringCards(store: PilotStore, runId: string): AnsweringCard[] {
+  const ids = new Set(store.queue.forRun(runId).map((row) => row.inboxItemId))
+  return [...ids].flatMap((id) => {
+    const item = store.inbox.get(id)
+    return item ? [{ id, title: item.title, answer: item.answer?.text ?? null }] : []
+  })
+}
+
 // The Running page: the limit, every running run with its memory, the queue in line order, and a suggested limit.
 export function capacityView(input: CapacityViewInput): CapacityPayload {
   const { store } = input
@@ -162,7 +172,9 @@ export function capacityView(input: CapacityViewInput): CapacityPayload {
       homePath: homeOf(run),
       ...(place ? { place } : {}),
       ...(tab ? { tab } : {}),
-      ...(run.trigger === 'answer' ? { fromAnswer: true as const } : {}),
+      ...(run.trigger === 'answer'
+        ? { fromAnswer: true as const, answering: answeringCards(store, run.id) }
+        : {}),
       ...(step ? { step } : {})
     }
   })
