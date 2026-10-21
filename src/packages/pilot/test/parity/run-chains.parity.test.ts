@@ -47,6 +47,7 @@ const NOT_SHOWN = {
     'missed_run_grace',
     'first_seen',
     'retry_after_failure',
+    'give_up',
     'powers',
     'inbox'
   ],
