@@ -36,6 +36,9 @@ export type RunStep = {
   mode: string | null
 }
 
+// A card an answer run applies, with the answer it carries now (its text is what {run.answer} gave the agent).
+export type AnsweringCard = { id: string; title: string; answer: string | null }
+
 // A running run on the Running page. Memory is the summed RSS of its processes on this machine (Docker
 // containers aren't counted); null until it has been sampled, or where processes can't be read.
 export type CapacityRun = {
@@ -60,6 +63,8 @@ export type CapacityRun = {
   tab?: RunTab
   // The run started from an answer to an inbox card; absent otherwise, and from older Pilots.
   fromAnswer?: true
+  // An answer run's cards, in the order they were sent to it; absent on other runs, and from older Pilots.
+  answering?: AnsweringCard[]
   // The step it is starting or running; absent between steps, and from older Pilots.
   step?: RunStep
 }

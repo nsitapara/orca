@@ -16,6 +16,7 @@ import { openRun } from '../../run-views/run-panel-state'
 import { useShowTab } from '../../run-views/ShowTab'
 import { useStopRun } from '../../run-views/StopRun'
 import { useNow } from '../waiting/use-now'
+import { AnsweringCards } from './AnsweringCards'
 import { FinishedRuns } from './FinishedRuns'
 import { LimitsPanel, LimitsToggle } from './LimitsPanel'
 import { MergeBackItem } from './MergeBackRows'
@@ -34,8 +35,8 @@ type Changes = {
   onGoNow(key: GoNowKey): void
 }
 
-// Name, where it works, its figures and Open run and Stop on top; its project and worktree, then the item under it; then
-// why it isn't in your worktree, and what Pilot said to a Stop or Show tab.
+// Name, where it works, its figures and Open run and Stop on top; its project and worktree, the item, its step and the
+// cards it answers under it; then why it isn't in your worktree, and what Pilot said to a Stop or Show tab.
 function RunningRow({ run, now }: { run: CapacityRun; now: number }): React.JSX.Element {
   const host = usePilotHost()
   const why = run.place ? placeReasonText(run.place) : null
@@ -72,6 +73,7 @@ function RunningRow({ run, now }: { run: CapacityRun; now: number }): React.JSX.
       {run.step ? (
         <div className="truncate text-xs text-muted-foreground">{stepText(run.step)}</div>
       ) : null}
+      {run.answering?.length ? <AnsweringCards cards={run.answering} /> : null}
       {why ? <p className="text-xs text-muted-foreground">{why}</p> : null}
       {stop.note ? <p className="text-xs text-muted-foreground">{stop.note}</p> : null}
       {show.note ? <p className="text-xs text-muted-foreground">{show.note}</p> : null}
