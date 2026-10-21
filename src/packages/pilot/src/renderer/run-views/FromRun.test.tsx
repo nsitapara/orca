@@ -39,7 +39,7 @@ describe('FromRun', () => {
       steps: [stepAt(0, 'fix', 'done')],
       inbox: [testCard({ automationId: 'fix-ci', stepIdx: 0 })]
     })
-    render(<FromRun item={{ automationId: 'fix-ci', stepIdx: 0 }} run={run} />)
+    const { rerender } = render(<FromRun item={{ automationId: 'fix-ci', stepIdx: 0 }} run={run} />)
     const asked = await screen.findByRole('button', { name: 'Agent · 1 fix · Done' })
     expect(asked.dataset.highlighted).toBe('')
     expect(screen.getByText('Needs you')).toBeTruthy()
@@ -51,6 +51,9 @@ describe('FromRun', () => {
       part: 'step:0',
       host: expect.objectContaining({ key: 'local' })
     })
+    // A card that already names the run's item does not say it again.
+    rerender(<FromRun item={{ automationId: 'fix-ci', stepIdx: 0 }} run={run} place="!1477" />)
+    expect(screen.queryByText('!1477')).toBeNull()
   })
 
   it('says where a failed run stopped', async () => {

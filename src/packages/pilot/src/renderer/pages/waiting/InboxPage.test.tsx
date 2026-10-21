@@ -200,7 +200,7 @@ describe('InboxPage', () => {
     const card = await screen.findByRole('heading', { name: 'Install LibreOffice in the job?' })
     const article = card.closest('article') as HTMLElement
     expect(await within(article).findByText('!1561')).toBeTruthy()
-    expect(within(article).getByText('From run')).toBeTruthy()
+    expect(article.querySelector('[data-from-run]')).toBeTruthy()
   })
 
   it('shows the cards waiting but never a default, and opens In motion by itself on an answer held 20+ minutes', async () => {

@@ -339,3 +339,9 @@ export function askedLabel(
 export function jobCode(name: string, id: string): string {
   return /^(\d+)\b/.exec(name)?.[1] ?? id
 }
+
+// "04" and "Test branch UIs overnight" from "04 · Test branch UIs overnight"; no code when the name has none.
+export function jobParts(name: string): { code: string | null; rest: string } {
+  const parts = /^(\d+)\s*·\s*(.+)$/.exec(name)
+  return parts ? { code: parts[1], rest: parts[2] } : { code: null, rest: name }
+}

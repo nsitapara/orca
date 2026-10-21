@@ -28,6 +28,11 @@ const RANK = { worktree: 0, mr: 1, pipeline: 2, ticket: 3, job: 4, cleanup: 5 } 
 const CLEAN_UP = new Set(['docker-prune'])
 const DEV_PIPELINE = 'dev'
 
+// A group that says where a card's work is (worktree, MR, pipeline, ticket), not which job made it.
+export function isPlaceGroup(group: InboxGroup): boolean {
+  return group.rank < RANK.job
+}
+
 function folderName(path: string): string {
   const trimmed = path.replace(/\/+$/, '')
   return trimmed.split('/').at(-1) || trimmed

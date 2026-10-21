@@ -101,6 +101,7 @@ export function InboxPage(): React.JSX.Element {
   const { tab } = prefs
   const {
     filtered,
+    homes,
     places,
     inTabItems,
     shownItems,
@@ -186,14 +187,17 @@ export function InboxPage(): React.JSX.Element {
       ?.scrollIntoView?.({ block: 'start', behavior: motionSafeScrollBehavior() })
     setScrollTo(null)
   }, [scrollTo, prefs.view])
+  // `section`: the section the card is listed under, null when it is shown on its own.
   const cardOf = useCallback(
-    (i: Hosted<InboxListRow>) => {
+    (i: Hosted<InboxListRow>, section: string | null) => {
       const key = hostedKey(i.host, i.id)
       return (
         <InboxCard
           key={`${key}@${i.version}`}
           item={i}
           automationName={names.get(i.automationId) ?? i.automationId}
+          home={homes.get(key) ?? null}
+          section={section}
           run={i.runId ? (inbox?.runs.get(hostedKey(i.host, i.runId)) ?? null) : null}
           runLine={inbox?.runLines.get(key) ?? null}
           answerState={inbox?.answerStates.get(key) ?? null}
@@ -209,7 +213,18 @@ export function InboxPage(): React.JSX.Element {
         />
       )
     },
-    [names, inbox, errors, selected, loadedAt, onSave, retryPreparation, prepareEvidence, reload]
+    [
+      names,
+      homes,
+      inbox,
+      errors,
+      selected,
+      loadedAt,
+      onSave,
+      retryPreparation,
+      prepareEvidence,
+      reload
+    ]
   )
   const sectionIn = useCallback(
     (s: HostedSection, project?: string | null) => (
@@ -221,7 +236,7 @@ export function InboxPage(): React.JSX.Element {
         {s.group.label ? (
           <SectionHeading section={s} project={project} besideList={showList} />
         ) : null}
-        {s.items.map(cardOf)}
+        {s.items.map((i) => cardOf(i, s.key))}
       </section>
     ),
     [cardOf, showList]
@@ -253,7 +268,7 @@ export function InboxPage(): React.JSX.Element {
           cards={shown.flatMap((s) => s.items)}
           place={focus.scope === focusScope ? focus : FIRST_CARD}
           onPlace={(place) => setFocus({ ...place, scope: focusScope })}
-          renderCard={cardOf}
+          renderCard={(i) => cardOf(i, null)}
           tabLabel={tabLabel(tab)}
           onExit={() => setPrefs({ view: 'cards' })}
         />

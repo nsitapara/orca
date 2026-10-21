@@ -463,7 +463,8 @@ describe('an MR group’s name on screen', () => {
     const full = '!1579 · web-2107-improve-reports-with-a-long-branch-name'
     const region = screen.getByRole('region', { name: full })
     expect(region.querySelector('h2')?.getAttribute('title')).toBe(full)
-    expect(region.querySelector('h2')?.className).toContain('truncate')
+    // The name truncates, not the worktree's chips beside it.
+    expect(region.querySelector('h2')?.firstElementChild?.className).toContain('truncate')
     const nav = within(screen.getByRole('navigation', { name: 'Cards' }))
     expect(nav.getByRole('button', { name: `${full} · 1` }).getAttribute('title')).toBe(full)
     fireWidth(500)
@@ -480,41 +481,35 @@ describe('when the ask was made', () => {
     pilotRpc.mockReset()
   })
   const asked = new Date(2026, 9, 11, 2, 0).getTime()
-  const eyebrowOf = async (item: InboxItemRow, history?: InboxListPayload['history']) => {
+  const jobLineOf = async (item: InboxItemRow, history?: InboxListPayload['history']) => {
     serve({ ...LIST, items: [item], history })
     vi.useFakeTimers({ shouldAdvanceTime: true })
     vi.setSystemTime(new Date(2026, 9, 12, 12, 0))
     render(<InboxPage />, { wrapper: TooltipProvider })
     const article = (await screen.findByRole('heading', { name: item.title })).closest('article')!
-    const times = article.querySelector<HTMLElement>('[data-card-times]')!
-    return { article, eyebrow: article.querySelector('[data-eyebrow]')!, times }
+    const jobLine = article.querySelector<HTMLElement>('[data-job-line]')!
+    const times = jobLine.querySelector<HTMLElement>('[data-card-times]')!
+    return { article, jobLine, times }
   }
 
-  it('is a muted upper-case line above the title: job code and name', async () => {
-    const { article, eyebrow } = await eyebrowOf({ ...F1, createdAt: asked })
-    expect(eyebrow.textContent).toBe('04 · Test branch UIs overnight')
-    for (const c of ['uppercase', 'text-muted-foreground', 'text-[11.5px]', 'tracking-[0.04em]']) {
-      expect(eyebrow.className).toContain(c)
-    }
-    const line = eyebrow.firstElementChild!
-    expect(line.className).toContain('truncate')
-    expect(line.getAttribute('title')).toBe(eyebrow.textContent)
-    // Above the title, and nothing of it left in a chip row.
+  it('opens on a job line above the title: the code apart, then the name, whole in its title', async () => {
+    const { article, jobLine } = await jobLineOf({ ...F1, createdAt: asked })
+    const [code, name] = [...jobLine.children]
+    expect([code.textContent, name.textContent]).toEqual(['04', 'Test branch UIs overnight'])
+    expect(name.className).toContain('truncate')
+    expect(name.getAttribute('title')).toBe('04 · Test branch UIs overnight')
     const title = within(article).getByRole('heading', { name: 'F1 Fixture' })
-    expect(eyebrow.compareDocumentPosition(title) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(jobLine.compareDocumentPosition(title) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     expect(article.textContent).not.toContain('Asked')
     // The list keeps the short age.
     expect(screen.getByRole('navigation', { name: 'Cards' }).textContent).toContain('1d')
     vi.useRealTimers()
   })
 
-  it('says under it when the card was created and its age, the year in the date’s title', async () => {
-    const { eyebrow, times } = await eyebrowOf({ ...F1, createdAt: asked })
-    expect([...times.children].map((c) => c.textContent)).toEqual([
-      'Created Oct 11, 2:00 AM · 1d ago'
-    ])
-    expect(within(times).getByText('Oct 11, 2:00 AM').getAttribute('title')).toContain('2026')
-    expect(eyebrow.compareDocumentPosition(times) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  it('says on it how old the card is, the full date and year in the title', async () => {
+    const { times } = await jobLineOf({ ...F1, createdAt: asked })
+    expect([...times.children].map((c) => c.textContent)).toEqual(['1d ago'])
+    expect(times.firstElementChild!.getAttribute('title')).toMatch(/^Created .*October 11, 2026/)
     vi.useRealTimers()
   })
 
@@ -526,7 +521,7 @@ describe('when the ask was made', () => {
       text: `${by} at ${hour}`,
       run: null
     })
-    const { times } = await eyebrowOf(
+    const { times } = await jobLineOf(
       { ...F1, createdAt: asked },
       {
         f1: [
@@ -538,33 +533,31 @@ describe('when the ask was made', () => {
       }
     )
     expect([...times.children].map((c) => c.textContent)).toEqual([
-      'Created Oct 11, 2:00 AM · 1d ago',
-      'Agent replied Oct 12, 11:00 AM · 1h ago'
+      '1d ago',
+      '· agent replied 1h ago'
     ])
     vi.useRealTimers()
   })
 
-  it('has no waiting pill and no job chip, and says "drafted" on the right, in normal case', async () => {
-    const { eyebrow } = await eyebrowOf({
+  it('has no waiting pill and says "drafted" on the right, the job named once', async () => {
+    const { article, jobLine, times } = await jobLineOf({
       ...F1,
       createdAt: asked,
       details: { drafted: true } as never
     })
-    const pills = [...eyebrow.querySelectorAll('span')].filter((s) => s.parentElement === eyebrow)
-    expect(pills.map((p) => p.textContent)).toEqual(['04 · Test branch UIs overnight', 'drafted'])
-    expect(pills[1].className).toContain('normal-case')
+    const drafted = within(jobLine).getByText('drafted')
+    expect(drafted.className).toContain('normal-case')
+    expect(times.compareDocumentPosition(drafted) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     expect(screen.queryByText('waiting')).toBeNull()
-    expect(
-      within(eyebrow.closest('article')!).queryAllByText('04 · Test branch UIs overnight')
-    ).toEqual([pills[0]])
+    expect(within(article).queryAllByText('Test branch UIs overnight')).toHaveLength(1)
     vi.useRealTimers()
   })
 
   it('shows a status pill only when the card is not plainly waiting (unsaved while notes are typed)', async () => {
-    const { article, eyebrow } = await eyebrowOf({ ...F1, createdAt: asked })
-    expect(eyebrow.textContent).not.toContain('waiting')
+    const { article, jobLine } = await jobLineOf({ ...F1, createdAt: asked })
+    expect(jobLine.textContent).not.toContain('waiting')
     fireEvent.click(within(article).getByRole('button', { name: 'With notes…' }))
-    expect(eyebrow.textContent).toContain('unsaved')
+    expect(jobLine.textContent).toContain('unsaved')
     vi.useRealTimers()
   })
 })
@@ -690,11 +683,15 @@ describe('one status tab at a time', () => {
     expect(row('f1').getAttribute('aria-current')).toBeNull()
   })
 
-  it('groups by job: the headings name the jobs, and each list row names its project and worktree', async () => {
+  it('groups by job: the headings name the jobs, and each list row and card names its project and worktree', async () => {
     serve()
     render(<InboxPage />, { wrapper: TooltipProvider })
     await screen.findByRole('heading', { name: 'F1 Fixture' })
+    const place = (id: string) =>
+      document.getElementById(`card-${id}`)?.querySelector('[data-card-place]')?.textContent ?? null
     expect(row('f1').textContent).not.toContain('web-2099-carrier')
+    // Under its worktree's heading a card leaves the place to the heading.
+    expect(place('f1')).toBeNull()
     groupBy('job')
     expect(screen.getAllByRole('region').map((s) => s.querySelector('h2')?.textContent)).toEqual([
       '04 · Test branch UIs overnight · 2',
@@ -702,6 +699,11 @@ describe('one status tab at a time', () => {
     ])
     expect(row('f1').textContent).toContain('w / web-2099-carrier')
     expect(row('r1579').textContent).toContain('!1579')
+    expect([place('f1'), place('r1579'), place('job')]).toEqual([
+      'w/web-2099-carrier',
+      '!1579',
+      null
+    ])
   })
 
   it('groups by nothing: one section with no heading, and no blank group in the list', async () => {
