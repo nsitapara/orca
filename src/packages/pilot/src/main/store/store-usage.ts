@@ -59,7 +59,7 @@ export class UsageStore {
         `SELECT s.run_id, s.idx, s.agent, s.session_id, s.transcript_path, s.started_at, s.finished_at,
            r.worktree_path FROM steps s JOIN runs r ON r.id = s.run_id
          WHERE s.kind = 'agent' AND s.usage_measured_at IS NULL AND s.finished_at IS NOT NULL
-           AND s.status IN ('done', 'failed', 'timed_out')
+           AND s.status IN ('done', 'failed', 'timed_out', 'stopped')
          ORDER BY s.finished_at, s.run_id, s.idx LIMIT ?`
       )
       .all(limit)
