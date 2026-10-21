@@ -1,17 +1,10 @@
 import { useState } from 'react'
 import type { InboxItemRow, InboxListRow } from '../../../shared/api-types'
 import type { PreparationWait } from '../../../shared/inbox-types'
-import type { PreparationRequirement } from '../../../shared/preparation'
 import { hostRpc } from '../../hosts/host-rpc'
 import { usePilotHost } from '../../hosts/PilotHostContext'
 import { errorText } from '../format'
-
-const ARTIFACT_LABELS: Record<PreparationRequirement, string> = {
-  context: 'decision context',
-  diff: 'code diff',
-  screens: 'before / after screenshots',
-  checks: 'verification results'
-}
+import { PREPARATION_NEED_LABELS } from './preparation-needs'
 
 // The request a job saved for its card, as readable text: pretty JSON when it is JSON.
 function requestText(context: string): string {
@@ -126,7 +119,7 @@ export function PreparationProgress({
       {preparation.state === 'queued' && wait ? <p>Waiting: {wait.detail}</p> : null}
       <p>
         Needed for your decision:{' '}
-        {preparation.input.requirements.map((kind) => ARTIFACT_LABELS[kind]).join(', ')}.
+        {preparation.input.requirements.map((kind) => PREPARATION_NEED_LABELS[kind]).join(', ')}.
       </p>
       {preparation.error ? <p className="text-destructive">{preparation.error}</p> : null}
       {preparation.state === 'blocked' ? (

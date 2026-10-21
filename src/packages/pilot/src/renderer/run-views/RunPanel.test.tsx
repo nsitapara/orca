@@ -85,6 +85,42 @@ describe('the run panel', () => {
     ])
   })
 
+  it('says what a context-preparation run prepares, and opens the run that asked and its card', async () => {
+    pilotRpc.mockResolvedValue({
+      ...detail,
+      run: { ...detail.run, inbox: [] },
+      preparation: {
+        cardId: 'c9',
+        cardTitle: 'Use a middot?',
+        askedBy: '03 · Review and fix branch code',
+        askedInRun: 'rev-1',
+        needs: ['context', 'diff'],
+        attempt: 2,
+        maxAttempts: 3,
+        lastError: 'Preparation lease expired'
+      }
+    })
+    openRun('r1', null)
+    render(<RunPanelHost />)
+    await screen.findByText('Preparing')
+    const fact = (name: string) =>
+      screen.getByText(name, { selector: 'dt' }).nextSibling?.textContent
+    expect([fact('Preparing'), fact('Asked by'), fact('Try')]).toEqual([
+      'decision context, code diff for the card above · Open card',
+      '03 · Review and fix branch code in run rev-1',
+      '2 of 3 · the last try ended: Preparation lease expired'
+    ])
+    fireEvent.click(screen.getByRole('button', { name: 'run rev-1' }))
+    expect(openRunPanel()?.runId).toBe('rev-1')
+    // The asking run's panel loads; the mock answers it with the same detail.
+    fireEvent.click(await screen.findByRole('button', { name: 'Open card' }))
+    expect([pilotAutomationsView(), pendingInboxCard(), openRunPanel()]).toEqual([
+      'inbox',
+      'c9',
+      null
+    ])
+  })
+
   it('offers Continue run in the header of a failed run, and continues it from there', async () => {
     const broken: RunDetail = {
       ...detail,

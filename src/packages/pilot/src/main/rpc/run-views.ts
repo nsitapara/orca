@@ -5,6 +5,7 @@ import type { PilotContext } from '../pilot-services'
 import { mergeBackOf } from '../timeline/merge-back'
 import { listedRuns, tickItemOf } from '../timeline/run-detail'
 import { activityTicks } from './activity-ticks'
+import { preparationFor } from './run-preparation'
 
 export type ActivityListParams = {
   // Absent: every automation.
@@ -42,6 +43,8 @@ export function runDetail(ctx: PilotContext, runId: string): RunDetail {
   const definitions = ctx.loaded().definitions
   const def = definitions.find((d) => d.id === row.automationId) ?? null
   const tickItem = tickItemOf(ctx.store, row)
+  const fields = tickItem?.fields ?? {}
+  const nameOf = (id: string) => definitions.find((d) => d.id === id)?.name ?? id
   const trigger =
     row.tickId === null
       ? null
@@ -51,7 +54,7 @@ export function runDetail(ctx: PilotContext, runId: string): RunDetail {
       ...row,
       steps: ctx.store.runs.steps(row.id),
       inbox: ctx.store.inbox.list({ runId: row.id }).map(toInboxSummary),
-      fields: tickItem?.fields ?? {}
+      fields
     },
     automationName: def?.name ?? row.automationId,
     chain: def ? chainOf(def, definitions) : [],
@@ -60,6 +63,7 @@ export function runDetail(ctx: PilotContext, runId: string): RunDetail {
     handovers: ctx.store.handovers.sentBy(row.id),
     receivedFrom: ctx.store.handovers.startedBy(row.id),
     answerRuns: ctx.store.activity.children(row.id),
-    mergeBack: mergeBackOf(ctx.store, row)
+    mergeBack: mergeBackOf(ctx.store, row),
+    preparation: preparationFor(ctx.store, fields, nameOf)
   }
 }

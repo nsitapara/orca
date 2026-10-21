@@ -19,6 +19,8 @@ import { ContinueRun } from './ContinueRun'
 import { useRunEffects } from './effects-feed'
 import { WhatItChanged } from './EffectsLine'
 import { envLines } from './env-lines'
+import { PreparationFacts } from './PreparationFacts'
+import { RunFact as Fact } from './RunFact'
 import { RunTimeline } from './RunTimeline'
 import { closeRunPanel, openRun } from './run-panel-state'
 import { StopRun } from './StopRun'
@@ -33,15 +35,6 @@ function leave(go: () => void): () => void {
     closeRunPanel()
     go()
   }
-}
-
-function Fact({ name, children }: { name: string; children: React.ReactNode }): React.JSX.Element {
-  return (
-    <div className="contents">
-      <dt className="text-muted-foreground">{name}</dt>
-      <dd className="min-w-0 break-words">{children}</dd>
-    </div>
-  )
 }
 
 // The run's worktree on the run's machine: the same path can be another worktree here.
@@ -129,6 +122,12 @@ function Header({
         <Fact name="State">
           <span className={cn('rounded px-1.5', runTone(run))}>{stateWord(detail, painted)}</span>
         </Fact>
+        {detail.preparation ? (
+          <PreparationFacts
+            preparation={detail.preparation}
+            onOpenCard={(id) => leave(() => showInboxCard(id, host))()}
+          />
+        ) : null}
         {home ? (
           <Fact name="Worktree">
             <Worktree path={home} />

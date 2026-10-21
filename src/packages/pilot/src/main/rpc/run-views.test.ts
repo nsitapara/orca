@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { ItemDecision } from '../../shared/api-types'
 import { testDefinition, testStep } from '../../shared/definition/__fixtures__/definition'
+import { queuedPreparation } from '../../shared/preparation'
 import { loadDefinitions } from '../definitions/loader'
 import { PilotStore } from '../store/store'
 import { activityList, runDetail } from './run-views'
@@ -200,7 +201,65 @@ describe('runDetail', () => {
     expect(d.handovers.map((h) => h.itemId)).toEqual(['WEB-1'])
     expect(d.answerRuns.map((r) => r.id)).toEqual(['r2'])
     expect(d.receivedFrom).toEqual([])
+    expect(d.preparation).toBeNull()
     expect(() => runDetail(ctx, 'nope')).toThrow('No run "nope"')
+    store.close()
+  })
+
+  it('says what a context-preparation run prepares: its card, who asked, what it gathers and which try', () => {
+    const { ctx, store } = context()
+    store.inbox.add({
+      id: 'c1',
+      automationId: 'one',
+      runId: 'asker',
+      stepIdx: 0,
+      itemKey: 'mr:1',
+      worktreePath: null,
+      person: 'nish',
+      type: 'question',
+      title: 'Use a middot?',
+      context: '',
+      options: [],
+      suggested: null,
+      detailsMd: null,
+      action: null,
+      actionArgs: null,
+      digest: 'd1',
+      createdAt: 1,
+      source: 'engine',
+      vaultRef: null
+    })
+    const input = { key: 'k', context: 'x', requirements: ['context' as const], maxAttempts: 3 }
+    store.inboxPreparations.write('c1', queuedPreparation(input, 1))
+    const tick = store.startTick('prepare', 1)
+    store.runs.create({
+      id: 'p1',
+      automationId: 'prepare',
+      tickId: tick,
+      itemKey: 'c1',
+      itemLabel: 'Use a middot?',
+      worktreePath: null,
+      startedAt: 1
+    })
+    const fields = {
+      'preparation.item_id': 'c1',
+      'preparation.attempt': 2,
+      'preparation.requirements': 'context,diff,bogus',
+      'preparation.origin_automation': 'one',
+      'preparation.origin_run': 'asker',
+      'preparation.error': 'Preparation lease expired'
+    }
+    store.recordDecisions(tick, [{ ...decision('c1'), fields }], new Map([['c1', 'p1']]))
+    expect(runDetail(ctx, 'p1').preparation).toEqual({
+      cardId: 'c1',
+      cardTitle: 'Use a middot?',
+      askedBy: '13 · Job',
+      askedInRun: 'asker',
+      needs: ['context', 'diff'],
+      attempt: 2,
+      maxAttempts: 3,
+      lastError: 'Preparation lease expired'
+    })
     store.close()
   })
 
