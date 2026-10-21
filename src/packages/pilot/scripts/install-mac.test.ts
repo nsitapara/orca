@@ -121,15 +121,29 @@ describe('quitPilot', () => {
 })
 
 describe('copy, link, register, launch', () => {
-  it('copies with ditto into /Applications and fails on a ditto error', () => {
+  it('replaces the installed bundle through a staged copy, never merging into it', () => {
     const ok = makeDeps()
     install.copyApp(ok.deps, 'dist/mac-arm64/Pilot.app')
-    expect(ok.calls[0]).toEqual({
-      cmd: 'ditto',
-      args: ['dist/mac-arm64/Pilot.app', '/Applications/Pilot.app']
-    })
-    const bad = makeDeps(() => ({ code: 1, stderr: 'nope' }))
+    expect(ok.calls).toEqual([
+      { cmd: 'rm', args: ['-rf', '/Applications/Pilot.app.installing'] },
+      { cmd: 'ditto', args: ['dist/mac-arm64/Pilot.app', '/Applications/Pilot.app.installing'] },
+      { cmd: 'rm', args: ['-rf', '/Applications/Pilot.app'] },
+      { cmd: 'mv', args: ['/Applications/Pilot.app.installing', '/Applications/Pilot.app'] }
+    ])
+  })
+
+  it.each([
+    ['ditto', (c: Call) => c.cmd === 'ditto'],
+    [
+      'removing the old app',
+      (c: Call) => c.cmd === 'rm' && c.args[1] === '/Applications/Pilot.app'
+    ],
+    ['mv', (c: Call) => c.cmd === 'mv']
+  ])('fails on a %s error and installs nothing after it', (_name, failing) => {
+    const bad = makeDeps((c) => (failing(c) ? { code: 1, stderr: 'nope' } : undefined))
     expect(() => install.copyApp(bad.deps, 'x')).toThrow(/nope/)
+    const failedAt = bad.calls.findIndex(failing)
+    expect(bad.calls).toHaveLength(failedAt + 1)
   })
 
   it('points ~/.local/bin/pilot at the installed launcher', () => {
@@ -222,7 +236,14 @@ describe('installPilot', () => {
     const text = await install.installPilot({ ...opts, deps })
     const order = calls.map((c) => c.cmd).filter((c) => c !== 'mkdir')
     expect(order[0]).toBe('pgrep')
-    expect(order.slice(1, 4)).toEqual(['ditto', 'ln', expect.stringMatching(/lsregister$/)])
+    expect(order.slice(1, 7)).toEqual([
+      'rm',
+      'ditto',
+      'rm',
+      'mv',
+      'ln',
+      expect.stringMatching(/lsregister$/)
+    ])
     expect(text).toContain('Build commit: abc1234')
     expect(text).toContain('Installed at: /Applications/Pilot.app')
     expect(text).toContain('Enabled automations (2): a, c')

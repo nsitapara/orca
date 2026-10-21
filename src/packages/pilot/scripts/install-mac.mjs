@@ -131,13 +131,22 @@ export async function quitPilot(deps, timeoutMs = EXIT_TIMEOUT_MS) {
   return true
 }
 
-export function copyApp(deps, source) {
-  const r = deps.run('ditto', [source, INSTALL_PATH])
+function runOrThrow(deps, cmd, args) {
+  const r = deps.run(cmd, args)
   if (r.code !== 0) {
-    throw new Error(
-      `ditto ${source} ${INSTALL_PATH} failed: ${(r.stderr || r.stdout || '').trim()}`
-    )
+    throw new Error(`${cmd} ${args.join(' ')} failed: ${(r.stderr || r.stdout || '').trim()}`)
   }
+}
+
+// Why replace, not merge: ditto into an existing bundle keeps every file older builds left behind,
+// and those extras break the bundle's code seal, which macOS needs to deliver its notifications.
+export function copyApp(deps, source) {
+  const staging = `${INSTALL_PATH}.installing`
+  deps.run('rm', ['-rf', staging])
+  runOrThrow(deps, 'ditto', [source, staging])
+  // A partial removal would make mv nest the new bundle inside the old one.
+  runOrThrow(deps, 'rm', ['-rf', INSTALL_PATH])
+  runOrThrow(deps, 'mv', [staging, INSTALL_PATH])
 }
 
 export function linkCli(deps) {
