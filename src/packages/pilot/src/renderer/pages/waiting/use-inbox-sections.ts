@@ -9,8 +9,13 @@ import { groupByProject, projectOf, type ProjectSections } from './inbox-project
 import { type CardFilters, type InboxTab, inTab, matchesFilters } from './inbox-tabs'
 import type { InboxGroupBy, InboxSort } from './inbox-view-prefs'
 
+// The section a card has under Group by Worktree, and that section's project.
+export type CardHome = Omit<HostedSection, 'items'> & { project: string | null }
+
 export type InboxSections = {
   filtered: boolean
+  // Each card's home by hostedKey: what its card names first under another grouping.
+  homes: ReadonlyMap<string, CardHome>
   // Each card's "project / worktree" by hostedKey: what a list row names under another grouping.
   places: ReadonlyMap<string, string>
   inTabItems: Hosted<InboxListRow>[]
@@ -47,12 +52,17 @@ export function useInboxSections({
     const items = inbox?.items ?? []
     const automations = inbox?.automations ?? []
     const openItems = items.filter((i) => i.type !== 'default')
-    const places = new Map(
+    const homes = new Map(
       groupHostedItems(openItems, automations).flatMap((s) => {
-        const project = projectOf(s)
-        const place = project ? `${project} / ${s.group.label}` : s.group.label
-        return s.items.map((i) => [hostedKey(i.host, i.id), place] as const)
+        const home: CardHome = { key: s.key, host: s.host, group: s.group, project: projectOf(s) }
+        return s.items.map((i) => [hostedKey(i.host, i.id), home] as const)
       })
+    )
+    const places = new Map(
+      [...homes].map(([key, h]) => [
+        key,
+        h.project ? `${h.project} / ${h.group.label}` : h.group.label
+      ])
     )
     const inTabItems = openItems.filter((i) =>
       inTab(i, tab, inbox?.answerStates.get(hostedKey(i.host, i.id)) ?? null)
@@ -66,6 +76,7 @@ export function useInboxSections({
     const isShown = (s: HostedSection) => activeSection === ALL || s.key === activeSection
     return {
       filtered: kinds.length > 0,
+      homes,
       places,
       inTabItems,
       shownItems,

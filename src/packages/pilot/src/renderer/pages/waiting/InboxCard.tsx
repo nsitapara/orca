@@ -2,6 +2,7 @@ import { useRef, useState } from 'react'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { cn } from '@/lib/utils'
 import type { ActivityRun, InboxListRow, InboxReply } from '../../../shared/api-types'
+import { isPlaceGroup } from '../../../shared/inbox-groups'
 import type {
   AnswerState,
   CardHistoryEntry,
@@ -17,11 +18,13 @@ import { AnsweredLine } from './AnsweredLine'
 import { AnswerRow } from './AnswerRow'
 import type { Answer } from './answer-types'
 import { approveWords } from './answer-buttons'
-import { runLineView } from './answer-text'
+import { jobParts, runLineView } from './answer-text'
 import { CardDetails } from './CardDetails'
+import { CardPlace } from './CardPlace'
 import { CardTimes, contentKeys, MessageHistory } from './MessageHistory'
 import { DRAFTED_PILL_CLASS, type StatusPill, statusOf, statusPillClass } from './chips'
 import { TicketedBeforeChip } from './TicketedBeforeChip'
+import type { CardHome } from './use-inbox-sections'
 
 // Who wrote a reply is stored with it (by), set by the path that wrote it; never guessed from its words.
 function Reply({ reply }: { reply: InboxReply }): React.JSX.Element {
@@ -85,27 +88,36 @@ function RunLineRest({ text, more }: { text: string; more: number }): React.JSX.
   )
 }
 
-// The line above the title: job code and name, small and muted, on one line (its times are on CardTimes'
-// line); on its right only what differs from plain waiting (drafted, the countdown state, applying, failed).
-function Eyebrow({
+// The job line, under the card's place: the job's code and name, the card's age, then only what differs from plain
+// waiting (drafted, the countdown state, applying, failed), and the card's own chips.
+function JobLine({
   job,
   drafted,
-  status
+  status,
+  times,
+  children
 }: {
   job: string
   drafted: boolean
   status: StatusPill
+  times: React.ReactNode
+  children: React.ReactNode
 }): React.JSX.Element {
+  const { code, rest } = jobParts(job)
   return (
-    <div
-      data-eyebrow=""
-      className="flex min-w-0 flex-1 items-center gap-2 text-[11.5px] tracking-[0.04em] text-muted-foreground uppercase"
-    >
-      <span className="min-w-0 flex-1 truncate" title={job}>
-        {job}
+    <div data-job-line="" className="flex min-w-0 items-center gap-2">
+      {code ? (
+        <span className="shrink-0 rounded bg-muted px-1 font-mono text-2xs leading-[18px] font-semibold text-muted-foreground">
+          {code}
+        </span>
+      ) : null}
+      <span className="min-w-0 flex-1 truncate text-[13px] font-medium" title={job}>
+        {rest}
       </span>
+      {times}
       {drafted ? <span className={DRAFTED_PILL_CLASS}>drafted</span> : null}
       {status === 'waiting' ? null : <span className={statusPillClass(status)}>{status}</span>}
+      {children}
     </div>
   )
 }
@@ -113,6 +125,10 @@ function Eyebrow({
 type InboxCardProps = {
   item: Hosted<InboxListRow>
   automationName: string
+  // Where the card's work is (its section under Group by Worktree); null when that is unknown.
+  home: CardHome | null
+  // The section the card is listed under; null when it is shown on its own (One at a time).
+  section: string | null
   // The run the card came from (InboxListPayload.runs), for its "From run" line; null when it has none.
   run: ActivityRun | null
   // An action card's Run line (InboxListPayload.runLines); null on any other card.
@@ -150,6 +166,8 @@ export function InboxCard(props: InboxCardProps): React.JSX.Element {
 function CardBody({
   item,
   automationName,
+  home,
+  section,
   run,
   runLine,
   answerState,
@@ -204,16 +222,21 @@ function CardBody({
       </article>
     )
   }
+  // Under its own worktree's heading the card leaves the place to the heading.
+  const place = home && home.key !== section && isPlaceGroup(home.group) ? home : null
   return (
     <article id={domId} data-selected={selected ? '' : undefined} className={frame}>
-      {/* The chip sits beside the eyebrow, not in it, so it keeps its own case. */}
-      <div className="flex items-center gap-2">
-        <Eyebrow job={automationName} drafted={item.details?.drafted === true} status={status} />
+      {place ? <CardPlace home={place} /> : null}
+      <JobLine
+        job={automationName}
+        drafted={item.details?.drafted === true}
+        status={status}
+        times={<CardTimes createdAt={item.createdAt} history={history} now={now} />}
+      >
         {ticketed}
         <MachineChip host={host} />
-      </div>
-      <CardTimes createdAt={item.createdAt} history={history} now={now} />
-      <FromRun item={item} run={run} />
+      </JobLine>
+      <FromRun item={item} run={run} place={home?.group.label ?? null} />
       <PreparationProgress
         item={item}
         onRetry={onRetryPreparation}

@@ -26,20 +26,28 @@ function When({ at, now }: { at: number; now: number }): React.JSX.Element {
   return <span title={asked.full}>{asked.when}</span>
 }
 
-function Stamp({ label, at, now }: { label: string; at: number; now: number }): React.JSX.Element {
+// "1d ago" (the date past a week), with what happened and its full time in the title.
+function Age({
+  label,
+  prefix = '',
+  at,
+  now
+}: {
+  label: string
+  prefix?: string
+  at: number
+  now: number
+}): React.JSX.Element {
   const asked = askedLabel(at, now)
   return (
-    <span>
-      <span className={LABEL}>{label}</span>{' '}
-      <span className="font-medium text-foreground" title={asked.full}>
-        {asked.when}
-      </span>
-      {asked.relative ? ` · ${asked.relative}` : null}
+    <span title={`${label} ${asked.full}`}>
+      {prefix}
+      {asked.relative ?? asked.when}
     </span>
   )
 }
 
-// Under the job name: when the card was made and, once the agent has written back, when it last did.
+// Beside the job name: the card's age and, once the agent has written back, how long since it last did.
 export function CardTimes({
   createdAt,
   history,
@@ -51,13 +59,15 @@ export function CardTimes({
 }): React.JSX.Element {
   const replied = history?.findLast((e) => e.kind === 'reply' && e.by === 'agent' && e.at !== null)
   return (
-    <div
+    <span
       data-card-times=""
-      className="flex flex-wrap gap-x-4 gap-y-0.5 text-xs text-muted-foreground"
+      className="flex shrink-0 gap-1 text-xs whitespace-nowrap text-muted-foreground"
     >
-      <Stamp label="Created" at={createdAt} now={now} />
-      {replied?.at ? <Stamp label="Agent replied" at={replied.at} now={now} /> : null}
-    </div>
+      <Age label="Created" at={createdAt} now={now} />
+      {replied?.at ? (
+        <Age label="Agent replied" prefix="· agent replied " at={replied.at} now={now} />
+      ) : null}
+    </span>
   )
 }
 

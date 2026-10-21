@@ -98,12 +98,13 @@ export function WorktreeName({
 }): React.JSX.Element {
   // Subscribed, so a change to the listed machines re-sorts whose worktree this is.
   const id = openableWorktreeId(group, host, usePilotHosts())
+  // Truncates when it is a flex item (a card's place line); inline in a heading, the heading truncates.
   if (!isWorktreeGroup(group)) {
-    return <span className="text-foreground">{group.label}</span>
+    return <span className="min-w-0 truncate text-foreground">{group.label}</span>
   }
   if (!id) {
     return (
-      <span className="text-foreground" title="Not open in Pilot">
+      <span className="min-w-0 truncate text-foreground" title="Not open in Pilot">
         {group.label}
       </span>
     )
@@ -113,10 +114,10 @@ export function WorktreeName({
       type="button"
       title="Open this worktree"
       onClick={() => openWorktree(id, host)}
-      className="inline-flex items-center gap-1 text-foreground hover:underline"
+      className="inline-flex min-w-0 items-center gap-1 text-foreground hover:underline"
     >
-      {group.label}
-      <ArrowUpRight aria-hidden className="size-3 text-muted-foreground" />
+      <span className="truncate">{group.label}</span>
+      <ArrowUpRight aria-hidden className="size-3 shrink-0 text-muted-foreground" />
     </button>
   )
 }

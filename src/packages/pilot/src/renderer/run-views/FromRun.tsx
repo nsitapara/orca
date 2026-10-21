@@ -38,60 +38,67 @@ export function runSpan(run: Pick<ActivityRun, 'startedAt' | 'finishedAt'>): str
 
 type HostedRun = ActivityRun & { host?: PilotHostRef }
 
-// A card's "From run" block: the run's state, times, cost and item, then the steps that ran in order with the one the
-// card came from lit amber, and Open run at that step, on the run's machine.
+// A card's run line: the steps that ran in order with the one the card came from lit amber, then the run's state, times,
+// cost and item, and Open run at that step, on the run's machine.
 export function FromRun({
   item,
-  run
+  run,
+  place = null
 }: {
   item: Asked
   // An untagged run is this machine's.
   run: HostedRun | null
+  // The worktree (or MR…) the card already names; a run item that is just that is not said again.
+  place?: string | null
 }): React.JSX.Element | null {
   const summary = useAutomationsFeed().byId.get(item.automationId)
   if (!run || !summary) {
     return null
   }
-  return <FromRunBlock item={item} run={run} summary={summary} />
+  return <FromRunBlock item={item} run={run} summary={summary} place={place} />
 }
 
 function FromRunBlock({
   item,
   run,
-  summary
+  summary,
+  place
 }: {
   item: Asked
   run: HostedRun
   summary: AutomationSummary
+  place: string | null
 }): React.JSX.Element {
   const host = hostOf(run)
   const label = useRunStripLabel(run.id, host)
   const parts = paintRun(summary.chain, { run }).parts
   const asked = askingPart(item, run)
   return (
-    <div data-from-run="" className="flex flex-col gap-1.5 text-xs text-muted-foreground">
-      <div className="flex min-w-0 flex-wrap items-center gap-2">
-        <span className="font-semibold">From run</span>
-        <span className={cn('rounded px-1.5', runTone(run))}>
-          {runHeadline(run, runTimeline(parts, run), runStatusLabel)}
-        </span>
-        <span className="tabular-nums">{runSpan(run)}</span>
-        {run.costUsd !== null ? <span className="tabular-nums">{money(run.costUsd)}</span> : null}
-        <span className="min-w-0 truncate font-mono" title={run.itemLabel}>
-          {run.itemLabel}
-        </span>
-        <span className="flex-1" />
-        <ContinueRun run={run} host={host} />
-        <button type="button" className="underline" onClick={() => openRun(run.id, asked, host)}>
-          Open run
-        </button>
-      </div>
+    <div
+      data-from-run=""
+      className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground"
+    >
       <RunStrip
         items={runStrip(parts, run, asked)}
         label={label}
         highlight={asked}
         onChip={(chip) => openRun(run.id, chip.part, host)}
       />
+      <span className="flex-1" />
+      <span className={cn('rounded px-1.5', runTone(run))}>
+        {runHeadline(run, runTimeline(parts, run), runStatusLabel)}
+      </span>
+      <span className="tabular-nums">{runSpan(run)}</span>
+      {run.costUsd !== null ? <span className="tabular-nums">{money(run.costUsd)}</span> : null}
+      {run.itemLabel && run.itemLabel !== place ? (
+        <span className="min-w-0 truncate font-mono" title={run.itemLabel}>
+          {run.itemLabel}
+        </span>
+      ) : null}
+      <ContinueRun run={run} host={host} />
+      <button type="button" className="underline" onClick={() => openRun(run.id, asked, host)}>
+        Open run
+      </button>
     </div>
   )
 }
