@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
+import { cleanup, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { InboxItemRow } from '../../../shared/api-types'
 import type { AnswerState } from '../../../shared/inbox-types'
@@ -141,9 +141,6 @@ describe('colours on the page', () => {
       return { entries: [] }
     })
     render(<InboxPage />, { wrapper: TooltipProvider })
-    // A card still preparing its context is under Preparing, not Needs you.
-    const tabs = within(screen.getByRole('toolbar', { name: 'Card status' }))
-    fireEvent.click(await tabs.findByRole('button', { name: 'Preparing · 1' }))
     expect(
       await screen.findByRole('button', { name: 'Answer before context is ready…' })
     ).toBeTruthy()

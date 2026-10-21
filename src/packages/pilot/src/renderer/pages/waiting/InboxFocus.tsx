@@ -36,14 +36,12 @@ export function InboxFocus({
   place,
   onPlace,
   renderCard,
-  tabLabel,
   onExit
 }: {
   cards: Card[]
   place: FocusPlace
   onPlace: (place: { key: string; at: number }) => void
   renderCard: (card: Card) => React.ReactNode
-  tabLabel: string
   onExit: () => void
 }): React.JSX.Element | null {
   const cardRef = useRef<HTMLDivElement>(null)
@@ -86,7 +84,7 @@ export function InboxFocus({
           Previous
         </button>
         <span className="font-mono text-xs font-semibold text-muted-foreground">
-          {current + 1} of {cards.length} in {tabLabel}
+          {current + 1} of {cards.length}
         </span>
         <button
           type="button"

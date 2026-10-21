@@ -36,7 +36,7 @@ export function Select({
   )
 }
 
-// One row beside the list: the title, the status tabs and the view controls; the controls wrap under it when narrow.
+// One row beside the list: the title and the view controls; the controls wrap under it when narrow.
 export function InboxHeader({
   listOpen,
   onToggleList,
@@ -44,7 +44,6 @@ export function InboxHeader({
   canExpand,
   allOpen,
   onToggleAll,
-  tabs,
   controls
 }: {
   listOpen: boolean
@@ -55,7 +54,6 @@ export function InboxHeader({
   canExpand: boolean
   allOpen: boolean
   onToggleAll: () => void
-  tabs: React.ReactNode
   // Group by, Sort and the views, while the list holds the kinds; else they sit in the kind chips' row.
   controls: React.ReactNode
 }): React.JSX.Element {
@@ -76,7 +74,6 @@ export function InboxHeader({
         ) : null}
         <h2 className="text-lg font-semibold">Inbox</h2>
       </div>
-      {tabs}
       <div className="ml-auto flex flex-wrap items-center gap-2">
         {controls}
         {canExpand ? (

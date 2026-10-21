@@ -6,7 +6,7 @@ import type { MergedInbox } from '../../hosts/merge-inbox'
 import { hostedKey, type Hosted } from '../../hosts/pilot-host'
 import { ALL } from './InboxHeader'
 import { groupByProject, projectOf, type ProjectSections } from './inbox-projects'
-import { type CardFilters, type InboxTab, inTab, matchesFilters } from './inbox-tabs'
+import { type CardFilters, matchesFilters } from './inbox-kinds'
 import type { InboxGroupBy, InboxSort } from './inbox-view-prefs'
 
 // The section a card has under Group by Worktree, and that section's project.
@@ -18,10 +18,11 @@ export type InboxSections = {
   homes: ReadonlyMap<string, CardHome>
   // Each card's "project / worktree" by hostedKey: what a list row names under another grouping.
   places: ReadonlyMap<string, string>
-  inTabItems: Hosted<InboxListRow>[]
+  // Every card the Inbox lists: defaults have none.
+  cards: Hosted<InboxListRow>[]
   shownItems: Hosted<InboxListRow>[]
   sections: HostedSection[]
-  // The picked section, or All once it has no card left (its last one was answered, or the tab moved).
+  // The picked section, or All once it has no card left (its last one was answered).
   activeSection: string
   shown: HostedSection[]
   // Grouped by Worktree: the sections (shown) under their projects, in the same order; null under another grouping.
@@ -29,10 +30,9 @@ export type InboxSections = {
   shownProjects: ProjectSections[] | null
 }
 
-// The tab's cards through the kind chips, grouped, and the picked section's.
+// The cards through the kind chips, grouped, and the picked section's.
 export function useInboxSections({
   inbox,
-  tab,
   filters,
   group,
   sort,
@@ -40,7 +40,6 @@ export function useInboxSections({
   now
 }: {
   inbox: MergedInbox | null
-  tab: InboxTab
   filters: CardFilters
   group: InboxGroupBy
   sort: InboxSort
@@ -51,9 +50,9 @@ export function useInboxSections({
   return useMemo(() => {
     const items = inbox?.items ?? []
     const automations = inbox?.automations ?? []
-    const openItems = items.filter((i) => i.type !== 'default')
+    const cards = items.filter((i) => i.type !== 'default')
     const homes = new Map(
-      groupHostedItems(openItems, automations).flatMap((s) => {
+      groupHostedItems(cards, automations).flatMap((s) => {
         const home: CardHome = { key: s.key, host: s.host, group: s.group, project: projectOf(s) }
         return s.items.map((i) => [hostedKey(i.host, i.id), home] as const)
       })
@@ -64,10 +63,7 @@ export function useInboxSections({
         h.project ? `${h.project} / ${h.group.label}` : h.group.label
       ])
     )
-    const inTabItems = openItems.filter((i) =>
-      inTab(i, tab, inbox?.answerStates.get(hostedKey(i.host, i.id)) ?? null)
-    )
-    const shownItems = inTabItems.filter((i) => matchesFilters(i, { kinds }))
+    const shownItems = cards.filter((i) => matchesFilters(i, { kinds }))
     const grouped = groupHostedItemsBy(shownItems, automations, group, sort, now)
     const projects = group === 'worktree' ? groupByProject(grouped) : null
     // A project's worktrees side by side, so the list, the cards and One at a time keep one order.
@@ -78,7 +74,7 @@ export function useInboxSections({
       filtered: kinds.length > 0,
       homes,
       places,
-      inTabItems,
+      cards,
       shownItems,
       sections,
       activeSection,
@@ -89,5 +85,5 @@ export function useInboxSections({
           ?.map((p) => ({ ...p, sections: p.sections.filter(isShown) }))
           .filter((p) => p.sections.length > 0) ?? null
     }
-  }, [inbox, tab, kinds, group, sort, section, now])
+  }, [inbox, kinds, group, sort, section, now])
 }

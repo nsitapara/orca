@@ -15,17 +15,9 @@ import { InboxCard } from './InboxCard'
 import { InboxFilters } from './InboxFilters'
 import { type FocusPlace, InboxFocus } from './InboxFocus'
 import { InboxRows } from './InboxRows'
-import { InboxTabs } from './InboxTabs'
 import { InboxViewControls } from './InboxViewControls'
+import { emptyInboxText, kindCounts, type CardFilters } from './inbox-kinds'
 import { InboxStyle } from './inbox-style'
-import {
-  emptyTabText,
-  kindCounts,
-  preparingNote,
-  tabCounts,
-  tabLabel,
-  type CardFilters
-} from './inbox-tabs'
 import { useInboxViewPrefs } from './inbox-view-prefs'
 import { InMotionPanel } from './InMotionPanel'
 import { KindSection } from './KindFilter'
@@ -66,7 +58,7 @@ export function InboxPage(): React.JSX.Element {
   const [selected, setSelected] = useState<string | null>(null)
   // The card Rows' Open named: scrolled to once the Cards view has mounted it.
   const [scrollTo, setScrollTo] = useState<string | null>(null)
-  // The card One at a time shows, kept with the tab/filters/grouping it was picked under.
+  // The card One at a time shows, kept with the filters/grouping it was picked under.
   const [focus, setFocus] = useState<FocusPlace & { scope: string }>({ ...FIRST_CARD, scope: '' })
   const [listOpen, toggleList] = useListOpen()
   const [rootRef, width] = useElementWidth()
@@ -99,12 +91,11 @@ export function InboxPage(): React.JSX.Element {
   const items = useMemo(() => inbox?.items ?? [], [inbox])
   const automations = useMemo(() => inbox?.automations ?? [], [inbox])
   const names = useMemo(() => new Map(automations.map((a) => [a.id, a.name])), [automations])
-  const { tab } = prefs
   const {
     filtered,
     homes,
     places,
-    inTabItems,
+    cards,
     shownItems,
     sections,
     activeSection,
@@ -113,7 +104,6 @@ export function InboxPage(): React.JSX.Element {
     shownProjects
   } = useInboxSections({
     inbox,
-    tab,
     filters,
     group: prefs.group,
     sort: prefs.sort,
@@ -125,7 +115,6 @@ export function InboxPage(): React.JSX.Element {
     items: inbox?.items ?? null,
     loading: reads.some((r) => r.value === null && r.error === null),
     visibleKeys,
-    tab,
     filtered,
     section: activeSection,
     view: prefs.view,
@@ -139,7 +128,7 @@ export function InboxPage(): React.JSX.Element {
       document.getElementById(`card-${key}`)?.scrollIntoView?.({ block: 'start' })
     }
   })
-  // A pick the tab, filters or grouping now hide is dropped, so it doesn't come back with them.
+  // A pick the filters or grouping now hide is dropped, so it doesn't come back with them.
   useEffect(() => {
     if (selected !== null && !visibleKeys.has(selected)) {
       setSelected(null)
@@ -243,9 +232,9 @@ export function InboxPage(): React.JSX.Element {
     [cardOf, showList, byPlace]
   )
   const emptyText = (
-    <p className="text-sm text-muted-foreground">{emptyTabText(tab, filtered, viewerName)}</p>
+    <p className="text-sm text-muted-foreground">{emptyInboxText(filtered, viewerName)}</p>
   )
-  const focusScope = [tab, filters.kinds.join(), prefs.group, prefs.sort].join('|')
+  const focusScope = [filters.kinds.join(), prefs.group, prefs.sort].join('|')
   const { view, group } = prefs
   const listBody = useMemo(() => {
     if (view === 'rows') {
@@ -270,7 +259,6 @@ export function InboxPage(): React.JSX.Element {
           place={focus.scope === focusScope ? focus : FIRST_CARD}
           onPlace={(place) => setFocus({ ...place, scope: focusScope })}
           renderCard={cardOf}
-          tabLabel={tabLabel(tab)}
           onExit={() => setPrefs({ view: 'cards' })}
         />
       )
@@ -297,7 +285,6 @@ export function InboxPage(): React.JSX.Element {
     focus,
     focusScope,
     cardOf,
-    tab,
     setPrefs,
     sectionIn,
     shownProjects
@@ -305,9 +292,9 @@ export function InboxPage(): React.JSX.Element {
   const cardsBody = shown.length ? listBody : emptyText
   const kindFilter = {
     kinds: filters.kinds,
-    counts: kindCounts(inTabItems),
+    counts: kindCounts(cards),
     shown: shownItems.length,
-    total: inTabItems.length,
+    total: cards.length,
     onKinds: (kinds: CardFilters['kinds']) => setFilters({ kinds })
   }
   const viewControls = (
@@ -334,17 +321,6 @@ export function InboxPage(): React.JSX.Element {
         canExpand={detailIds.length > 0}
         allOpen={allOpen}
         onToggleAll={() => setAllDetailsOpen(detailIds, !allOpen)}
-        tabs={
-          <InboxTabs
-            tab={tab}
-            counts={tabCounts(items)}
-            preparingNote={preparingNote(
-              items,
-              (i) => inbox?.preparationWaits.has(hostedKey(i.host, i.id)) ?? false
-            )}
-            onTab={(next) => setPrefs({ tab: next })}
-          />
-        }
         controls={showList ? viewControls : null}
       />
       {showList ? null : <InboxFilters {...kindFilter} controls={viewControls} />}

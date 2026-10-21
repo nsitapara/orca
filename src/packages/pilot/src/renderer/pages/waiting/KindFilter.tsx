@@ -1,7 +1,7 @@
 import { ChevronDown } from 'lucide-react'
 import type { InboxType } from '../../../shared/api-types'
 import { cn } from '@/lib/utils'
-import { INBOX_KINDS } from './inbox-tabs'
+import { INBOX_KINDS } from './inbox-kinds'
 import { useKindsOpen } from './use-list-open'
 
 export type KindFilterProps = {

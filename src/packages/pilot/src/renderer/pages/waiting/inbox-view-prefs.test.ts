@@ -7,7 +7,7 @@ import {
   setInboxViewPrefs
 } from './inbox-view-prefs'
 
-const DEFAULTS = { tab: 'needs_you', group: 'worktree', sort: 'kind', view: 'cards' }
+const DEFAULTS = { group: 'worktree', sort: 'kind', view: 'cards' }
 
 beforeEach(() => {
   window.localStorage.clear()
@@ -20,12 +20,12 @@ describe('inbox view prefs', () => {
     expect(getInboxViewPrefs()).toEqual(DEFAULTS)
   })
 
-  it('reads a saved partial value back with the other defaults', () => {
+  it('reads a saved partial value back with the other defaults, dropping the old status tab', () => {
     window.localStorage.setItem(
       INBOX_VIEW_PREFS_KEY,
       JSON.stringify({ tab: 'preparing', view: 'rows' })
     )
-    expect(getInboxViewPrefs()).toEqual({ ...DEFAULTS, tab: 'preparing', view: 'rows' })
+    expect(getInboxViewPrefs()).toEqual({ ...DEFAULTS, view: 'rows' })
   })
 
   it('falls back field by field on invalid values', () => {

@@ -32,7 +32,6 @@ function Harness({ onExit, onChoice }: { onExit: () => void; onChoice: (l: strin
         cards={cards}
         place={place}
         onPlace={setPlace}
-        tabLabel="Needs you"
         onExit={onExit}
         renderCard={(c) => (
           <div>
@@ -62,9 +61,9 @@ function setup() {
 }
 
 describe('InboxFocus', () => {
-  it('names the position in the tab', () => {
+  it('names the position in the list', () => {
     setup()
-    expect(screen.getByText('2 of 3 in Needs you')).toBeTruthy()
+    expect(screen.getByText('2 of 3')).toBeTruthy()
   })
 
   it('J moves to the next card and K back', () => {
@@ -96,7 +95,7 @@ describe('InboxFocus', () => {
     fireEvent.keyDown(document.body, { key: 'Escape', ctrlKey: true })
     expect(onChoice).not.toHaveBeenCalled()
     expect(onExit).not.toHaveBeenCalled()
-    expect(screen.getByText('2 of 3 in Needs you')).toBeTruthy()
+    expect(screen.getByText('2 of 3')).toBeTruthy()
   })
 
   it('shows the next four cards under Up next', () => {
@@ -106,7 +105,6 @@ describe('InboxFocus', () => {
         cards={six}
         place={at(0)}
         onPlace={() => {}}
-        tabLabel="All"
         onExit={() => {}}
         renderCard={(c) => <p>{c.title}</p>}
       />
@@ -127,7 +125,6 @@ describe('InboxFocus', () => {
           cards={many(n)}
           place={place}
           onPlace={setPlace}
-          tabLabel="All"
           onExit={() => {}}
           renderCard={(c) => <p>{c.title}</p>}
         />
@@ -136,7 +133,7 @@ describe('InboxFocus', () => {
     const { rerender } = render(<Shrinking n={6} />)
     rerender(<Shrinking n={2} />)
     rerender(<Shrinking n={6} />)
-    expect(screen.getByText('2 of 6 in All')).toBeTruthy()
+    expect(screen.getByText('2 of 6')).toBeTruthy()
   })
 
   it.each([
@@ -150,7 +147,6 @@ describe('InboxFocus', () => {
           cards={list}
           place={place}
           onPlace={setPlace}
-          tabLabel="Needs you"
           onExit={() => {}}
           renderCard={(c) => (
             <div>
@@ -170,24 +166,23 @@ describe('InboxFocus', () => {
     expect(within(screen.getByRole('region', { name: 'Up next' })).getByText('Card 3')).toBeTruthy()
   })
 
-  it('starts a new tab at its first card', () => {
-    function Page({ tab }: { tab: string }) {
+  it('starts a new scope at its first card', () => {
+    function Page({ scope }: { scope: string }) {
       const [focus, setFocus] = useState({ ...at(2), scope: 'a' })
       return (
         <InboxFocus
           cards={many(5)}
-          place={focus.scope === tab ? focus : at(0)}
-          onPlace={(place) => setFocus({ ...place, scope: tab })}
-          tabLabel={tab}
+          place={focus.scope === scope ? focus : at(0)}
+          onPlace={(place) => setFocus({ ...place, scope })}
           onExit={() => {}}
           renderCard={(c) => <p>{c.title}</p>}
         />
       )
     }
-    const { rerender } = render(<Page tab="a" />)
-    expect(screen.getByText('3 of 5 in a')).toBeTruthy()
-    rerender(<Page tab="b" />)
-    expect(screen.getByText('1 of 5 in b')).toBeTruthy()
+    const { rerender } = render(<Page scope="a" />)
+    expect(screen.getByText('3 of 5')).toBeTruthy()
+    rerender(<Page scope="b" />)
+    expect(screen.getByText('1 of 5')).toBeTruthy()
   })
 
   describe('J does not move the card when', () => {
@@ -241,13 +236,13 @@ describe('InboxFocus', () => {
       const { target, init, undo } = arrange()
       fireEvent.keyDown(target, { key: 'j', ...init })
       undo?.()
-      expect(screen.getByText('2 of 3 in Needs you')).toBeTruthy()
+      expect(screen.getByText('2 of 3')).toBeTruthy()
     })
 
     it('control: document.body moves the card', () => {
       setup()
       fireEvent.keyDown(document.body, { key: 'j' })
-      expect(screen.getByText('3 of 3 in Needs you')).toBeTruthy()
+      expect(screen.getByText('3 of 3')).toBeTruthy()
     })
   })
 })

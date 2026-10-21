@@ -9,7 +9,6 @@ import { TooltipProvider } from '@/components/ui/tooltip'
 const pilotRpc = vi.fn()
 vi.mock('../../api', () => ({ pilotRpc: (...args: unknown[]) => pilotRpc(...args) }))
 
-import { pendingInboxCard, setPilotAutomationsView, showInboxCard } from '../automations-view'
 import { InboxPage } from './InboxPage'
 import { resetInboxViewPrefs } from './inbox-view-prefs'
 
@@ -111,7 +110,7 @@ describe('the Inbox layout', () => {
     pilotRpc.mockReset()
   })
 
-  it('has a one-row header beside the list: toggle, Inbox, the tabs and the view controls, kinds in the list', async () => {
+  it('has a one-row header beside the list: toggle, Inbox and the view controls, kinds in the list, no status tabs', async () => {
     serve()
     const { container } = render(<InboxPage />, { wrapper: TooltipProvider })
     await screen.findByRole('heading', { name: 'F1 Fixture' })
@@ -120,7 +119,7 @@ describe('the Inbox layout', () => {
       header.getByRole('button', { name: 'Hide the card list' }).getAttribute('aria-expanded')
     ).toBe('true')
     expect(header.getByRole('heading', { name: 'Inbox' })).toBeTruthy()
-    expect(header.getByRole('toolbar', { name: 'Card status' })).toBeTruthy()
+    expect(screen.queryByRole('toolbar', { name: 'Card status' })).toBeNull()
     expect(header.getByRole('combobox', { name: 'Group by' })).toBeTruthy()
     expect(header.getByRole('group', { name: 'View' })).toBeTruthy()
     expect(
@@ -603,7 +602,7 @@ describe('the unsaved pill after Send', () => {
   })
 })
 
-describe('one status tab at a time', () => {
+describe('every card in one list', () => {
   afterEach(() => {
     cleanup()
     pilotRpc.mockReset()
@@ -621,7 +620,6 @@ describe('one status tab at a time', () => {
     readyAt: null,
     reason: null
   }
-  const tabs = () => within(screen.getByRole('toolbar', { name: 'Card status' }))
   const nav = () => screen.getByRole('navigation', { name: 'Cards' })
   const row = (id: string) => nav().querySelector(`[data-row="${id}"]`)!
   const cardTitles = () =>
@@ -629,21 +627,15 @@ describe('one status tab at a time', () => {
   const groupBy = (value: string) =>
     fireEvent.change(screen.getByRole('combobox', { name: 'Group by' }), { target: { value } })
 
-  it('lists the ready cards under Needs you and the queued one under Preparing; the list counts what is shown', async () => {
+  it('lists the ready cards and the one still preparing together; the list counts them all', async () => {
     serve({ ...LIST, items: [F1, F2, QUEUED] })
     render(<InboxPage />, { wrapper: TooltipProvider })
     await screen.findByRole('heading', { name: 'F1 Fixture' })
-    expect(tabs().getByRole('button', { name: 'Needs you · 2' }).getAttribute('aria-pressed')).toBe(
-      'true'
-    )
-    expect(cardTitles()).toEqual(['F1 Fixture', 'F2 Rescind'])
-    expect(within(nav()).getByRole('button', { name: 'All · 2' })).toBeTruthy()
-    fireEvent.click(tabs().getByRole('button', { name: 'Preparing · 1' }))
-    expect(cardTitles()).toEqual(['Still preparing'])
-    expect(within(nav()).getByRole('button', { name: 'All · 1' })).toBeTruthy()
+    expect(cardTitles()).toEqual(['F1 Fixture', 'F2 Rescind', 'Still preparing'])
+    expect(within(nav()).getByRole('button', { name: 'All · 3' })).toBeTruthy()
   })
 
-  it('keeps a card just answered under Needs you, with its Undo, while the answer can be taken back', async () => {
+  it('keeps a card just answered on screen, with its Undo, while the answer can be taken back', async () => {
     let answered = false
     pilotRpc.mockImplementation(async (method: string) => {
       if (method === 'pilot.inbox.list') {
@@ -666,34 +658,16 @@ describe('one status tab at a time', () => {
     const article = (await screen.findByRole('heading', { name: 'F1 Fixture' })).closest('article')!
     fireEvent.click(within(article).getByRole('button', { name: 'Fix it' }))
     expect(await screen.findByRole('button', { name: 'Undo' })).toBeTruthy()
-    expect(tabs().getByRole('button', { name: 'Needs you · 0' }).getAttribute('aria-pressed')).toBe(
-      'true'
-    )
   })
 
-  it('shows a card the run panel names but the tab hides under All, and picks it', async () => {
-    serve({ ...LIST, items: [F1, QUEUED] })
-    render(<InboxPage />, { wrapper: TooltipProvider })
-    await screen.findByRole('heading', { name: 'F1 Fixture' })
-    act(() => showInboxCard('queued'))
-    await waitFor(() =>
-      expect(document.getElementById('card-queued')?.hasAttribute('data-selected')).toBe(true)
-    )
-    expect(tabs().getByRole('button', { name: 'All · 2' }).getAttribute('aria-pressed')).toBe(
-      'true'
-    )
-    expect(pendingInboxCard()).toBeNull()
-    setPilotAutomationsView('automations')
-  })
-
-  it('forgets the picked card once the tab hides it', async () => {
-    serve({ ...LIST, items: [F1, F2, QUEUED] })
+  it('forgets the picked card once a kind filter hides it', async () => {
+    serve({ ...LIST, items: [F1, JOB] })
     render(<InboxPage />, { wrapper: TooltipProvider })
     await screen.findByRole('heading', { name: 'F1 Fixture' })
     fireEvent.click(row('f1'))
     expect(document.getElementById('card-f1')?.hasAttribute('data-selected')).toBe(true)
-    fireEvent.click(tabs().getByRole('button', { name: 'Preparing · 1' }))
-    fireEvent.click(tabs().getByRole('button', { name: 'Needs you · 2' }))
+    fireEvent.click(within(nav()).getByRole('button', { name: 'Questions · 1' }))
+    fireEvent.click(within(nav()).getByRole('button', { name: 'Questions · 1' }))
     expect(document.getElementById('card-f1')?.hasAttribute('data-selected')).toBe(false)
     expect(row('f1').getAttribute('aria-current')).toBeNull()
   })

@@ -2,25 +2,10 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { InboxHeader } from './InboxHeader'
-import { InboxTabs } from './InboxTabs'
 import { InboxViewControls } from './InboxViewControls'
 import { KindChips, type KindFilterProps, KindSection } from './KindFilter'
 
 afterEach(cleanup)
-
-function tabs(over: Partial<Parameters<typeof InboxTabs>[0]> = {}) {
-  const onTab = vi.fn()
-  render(
-    <InboxTabs
-      tab="needs_you"
-      counts={{ needs_you: 8, preparing: 9, blocked: 0, all: 17 }}
-      preparingNote={null}
-      onTab={onTab}
-      {...over}
-    />
-  )
-  return onTab
-}
 
 function kindsIn(
   Kinds: typeof KindChips | typeof KindSection,
@@ -45,47 +30,6 @@ function controls() {
   render(<InboxViewControls group="worktree" sort="kind" view="cards" {...handlers} />)
   return handlers
 }
-
-describe('InboxTabs', () => {
-  it('shows each tab with its count and omits Blocked at zero', () => {
-    tabs()
-    expect(screen.getByRole('button', { name: 'Needs you · 8' })).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Preparing · 9' })).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'All · 17' })).toBeTruthy()
-    expect(screen.queryByRole('button', { name: /Blocked/ })).toBeNull()
-    expect(screen.getByRole('button', { name: 'Needs you · 8' }).getAttribute('aria-pressed')).toBe(
-      'true'
-    )
-  })
-
-  it('shows Blocked when something is blocked', () => {
-    tabs({ counts: { needs_you: 1, preparing: 0, blocked: 2, all: 3 } })
-    expect(screen.getByRole('button', { name: 'Blocked · 2' })).toBeTruthy()
-  })
-
-  it('keeps Blocked at zero while it is the tab, so the tab on screen is never hidden', () => {
-    tabs({ tab: 'blocked' })
-    expect(screen.getByRole('button', { name: 'Blocked · 0' }).getAttribute('aria-pressed')).toBe(
-      'true'
-    )
-  })
-
-  it('selects a tab on click', () => {
-    const onTab = tabs()
-    fireEvent.click(screen.getByRole('button', { name: 'Preparing · 9' }))
-    expect(onTab).toHaveBeenCalledWith('preparing')
-  })
-
-  it('shows the preparing note right after the Preparing tab, saying what it waits on', () => {
-    tabs({
-      preparingNote: '8 waiting',
-      counts: { needs_you: 1, preparing: 9, blocked: 2, all: 12 }
-    })
-    const note = screen.getByText('8 waiting')
-    expect(note.previousElementSibling).toBe(screen.getByRole('button', { name: 'Preparing · 9' }))
-    expect(note.getAttribute('title')).toBe('waiting for the runner')
-  })
-})
 
 describe.each([
   ['the chips row', KindChips],
@@ -185,7 +129,6 @@ describe('InboxHeader', () => {
         canExpand={false}
         allOpen={false}
         onToggleAll={() => {}}
-        tabs={null}
         controls={null}
       />
     )

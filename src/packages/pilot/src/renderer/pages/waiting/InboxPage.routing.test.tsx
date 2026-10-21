@@ -2,12 +2,7 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { InboxListRow } from '../../../shared/api-types'
-import type {
-  AnswerState,
-  DispatchReport,
-  InboxListPayload,
-  QueueEntry
-} from '../../../shared/inbox-types'
+import type { DispatchReport, InboxListPayload, QueueEntry } from '../../../shared/inbox-types'
 import { APPROVE_ON_DESKTOP } from '../../../shared/pilot-replies'
 import { stepAt, testRun } from '../../../shared/run-views/__fixtures__/runs'
 import { TooltipProvider } from '@/components/ui/tooltip'
@@ -278,48 +273,6 @@ describe('InboxPage card actions, by machine', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Apply now' }))
     expect(await screen.findByText(ELSEWHERE)).toBeTruthy()
     expect(callsOf('pilot.answers.applyNow')).toHaveLength(1)
-  })
-
-  it("puts each machine's card in a tab by that machine's answer state, and counts both machines", async () => {
-    setPilotHostsForTests([LOCAL_NAMED, MINI])
-    const answerState = (locked: boolean): AnswerState => ({
-      locked,
-      sentBeforePilot: false,
-      state: 'not_ready',
-      readyAt: null,
-      reason: null
-    })
-    // The same ids on both machines: only Mac mini's answer is locked, so only its card leaves Needs you.
-    const answered = (worktreePath: string, title: string): InboxListRow => ({
-      ...question(worktreePath, title),
-      id: 'in_2',
-      status: 'answered',
-      answer: { option: 0, text: 'Yes', digest: 'd1', via: 'page' }
-    })
-    pilotRpc.mockImplementation(
-      byHost({
-        local: machine({
-          items: [question('/wt/web-1', 'Local question'), answered('/wt/web-1', 'Local answered')],
-          answerStates: { in_2: answerState(false) }
-        }),
-        mini: machine({
-          items: [question('/wt/web-2', 'Mini question'), answered('/wt/web-2', 'Mini answered')],
-          answerStates: { in_2: answerState(true) }
-        })
-      })
-    )
-    render(<InboxPage />, { wrapper: TooltipProvider })
-    await cardTitled('Mini question')
-    const status = within(screen.getByRole('toolbar', { name: 'Card status' }))
-    const titles = () =>
-      screen
-        .queryAllByRole('article')
-        .map((a) => a.querySelector('h3')?.textContent)
-        .sort()
-    expect(status.getByRole('button', { name: 'Needs you · 2' })).toBeTruthy()
-    expect(titles()).toEqual(['Local answered', 'Local question', 'Mini question'])
-    fireEvent.click(status.getByRole('button', { name: 'All · 4' }))
-    expect(titles()).toEqual(['Local answered', 'Local question', 'Mini answered', 'Mini question'])
   })
 
   it('names the one machine asked to apply when it fails and more than one is listed', async () => {

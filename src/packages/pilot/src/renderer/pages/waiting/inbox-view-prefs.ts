@@ -1,11 +1,9 @@
 import { useSyncExternalStore } from 'react'
-import type { InboxTab } from './inbox-tabs'
 
 export type InboxGroupBy = 'worktree' | 'job' | 'kind' | 'age' | 'none'
 export type InboxSort = 'kind' | 'oldest' | 'newest'
 export type InboxView = 'cards' | 'rows' | 'focus'
 export type InboxViewPrefs = {
-  tab: InboxTab
   group: InboxGroupBy
   sort: InboxSort
   view: InboxView
@@ -13,13 +11,11 @@ export type InboxViewPrefs = {
 
 export const INBOX_VIEW_PREFS_KEY = 'pilot.inbox.view'
 
-const TABS: readonly InboxTab[] = ['needs_you', 'preparing', 'blocked', 'all']
 const GROUPS: readonly InboxGroupBy[] = ['worktree', 'job', 'kind', 'age', 'none']
 const SORTS: readonly InboxSort[] = ['kind', 'oldest', 'newest']
 const VIEWS: readonly InboxView[] = ['cards', 'rows', 'focus']
 
 const DEFAULTS: InboxViewPrefs = {
-  tab: 'needs_you',
   group: 'worktree',
   sort: 'kind',
   view: 'cards'
@@ -34,7 +30,6 @@ function load(): InboxViewPrefs {
     const parsed: unknown = JSON.parse(window.localStorage.getItem(INBOX_VIEW_PREFS_KEY) ?? '{}')
     const saved = typeof parsed === 'object' && parsed !== null ? parsed : {}
     return {
-      tab: pick(TABS, 'tab' in saved ? saved.tab : undefined, DEFAULTS.tab),
       group: pick(GROUPS, 'group' in saved ? saved.group : undefined, DEFAULTS.group),
       sort: pick(SORTS, 'sort' in saved ? saved.sort : undefined, DEFAULTS.sort),
       view: pick(VIEWS, 'view' in saved ? saved.view : undefined, DEFAULTS.view)

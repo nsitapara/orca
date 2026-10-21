@@ -71,7 +71,7 @@ describe('One at a time keys', () => {
     fireEvent.click(view('One at a time'))
     view('One at a time').focus()
     fireEvent.keyDown(view('One at a time'), { key: 'j' })
-    expect(screen.getByText('2 of 3 in Needs you')).toBeTruthy()
+    expect(screen.getByText('2 of 3')).toBeTruthy()
   })
 })
 

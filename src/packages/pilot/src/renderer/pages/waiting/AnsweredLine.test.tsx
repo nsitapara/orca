@@ -94,14 +94,11 @@ function serve(item: InboxItemRow, queue: QueueEntry[], answerState?: AnswerStat
   })
 }
 
-// Tabs persist in a module cache and storage; each test starts on Needs you.
+// View prefs persist in a module cache and storage; each test starts on the defaults.
 afterEach(() => {
   window.localStorage.clear()
   resetInboxViewPrefs()
 })
-const tabs = () => within(screen.getByRole('toolbar', { name: 'Card status' }))
-// A locked answer can't be undone, so its card leaves Needs you and shows under All.
-const openAll = async () => fireEvent.click(await tabs().findByRole('button', { name: 'All · 1' }))
 
 describe('an answered card', () => {
   beforeEach(() => {
@@ -114,13 +111,12 @@ describe('an answered card', () => {
     vi.useRealTimers()
   })
 
-  it('is one line counting down to the settle time, with Undo; it does not count as waiting', async () => {
+  it('is one line counting down to the settle time, with Undo', async () => {
     serve(CARD, [entry({})], state({}))
     render(<InboxPage />, { wrapper: TooltipProvider })
     expect(await screen.findByText('Mark ready in 2:59')).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Undo' })).toBeTruthy()
     expect(screen.getByText('answered')).toBeTruthy()
-    expect(tabs().getByRole('button', { name: 'Needs you · 0' })).toBeTruthy()
     expect(screen.queryByRole('button', { name: 'Mark ready' })).toBeNull()
     await vi.advanceTimersByTimeAsync(3_000)
     expect(screen.getByText('Mark ready in 2:56')).toBeTruthy()
@@ -141,7 +137,6 @@ describe('an answered card', () => {
   it('says what is being done, with no Undo and the applying pill, only when the server says it is locked', async () => {
     serve(CARD, [], state({ locked: true, state: 'ready', readyAt: NOW - 1000 }))
     render(<InboxPage />, { wrapper: TooltipProvider })
-    await openAll()
     expect(await screen.findByText('Marking ready…')).toBeTruthy()
     expect(screen.queryByRole('button', { name: 'Undo' })).toBeNull()
     expect(screen.getByText('applying')).toBeTruthy()
@@ -187,8 +182,6 @@ describe('an answered card', () => {
   it('says an answer sent before Pilot was sent, with no Undo and no waiting; Change answer only because the server allows it', async () => {
     serve(CARD, [], state({ state: 'dispatched', sentBeforePilot: true, readyAt: NOW - 5 }))
     render(<InboxPage />, { wrapper: TooltipProvider })
-    // It never locks, so it isn't in Needs you: it shows under All.
-    await openAll()
     const line = await screen.findByRole('status')
     expect(line.textContent).toContain('Answer sent before Pilot')
     expect(line.textContent).not.toContain('Waiting for Pilot')
@@ -205,7 +198,6 @@ describe('an answered card', () => {
   it('shows no Change answer for a sent-before-Pilot answer the server has locked', async () => {
     serve(CARD, [], state({ state: 'dispatched', sentBeforePilot: true, locked: true }))
     render(<InboxPage />, { wrapper: TooltipProvider })
-    await openAll()
     const line = await screen.findByRole('status')
     expect(within(line).queryByRole('button')).toBeNull()
   })

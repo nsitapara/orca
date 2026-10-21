@@ -3,7 +3,6 @@ import type { InboxListRow } from '../../../shared/api-types'
 import { hostedKey, type Hosted } from '../../hosts/pilot-host'
 import { clearPendingInboxCard, usePendingInboxCard } from '../automations-view'
 import { ALL } from './InboxHeader'
-import type { InboxTab } from './inbox-tabs'
 import type { InboxView, InboxViewPrefs } from './inbox-view-prefs'
 
 type PendingCardPage = {
@@ -13,7 +12,6 @@ type PendingCardPage = {
   loading: boolean
   // The cards on screen, by hostedKey, whatever the view.
   visibleKeys: ReadonlySet<string>
-  tab: InboxTab
   filtered: boolean
   section: string
   view: InboxView
@@ -32,8 +30,7 @@ export function usePendingInboxCardPick(page: PendingCardPage): () => void {
   const pending = usePendingInboxCard()
   // The pending card the person picked another card over while it loaded.
   const pickedOver = useRef<string | null>(null)
-  const { items, loading, visibleKeys, tab, filtered, section, view, setPrefs, unfilter, pick } =
-    page
+  const { items, loading, visibleKeys, filtered, section, view, setPrefs, unfilter, pick } = page
   useEffect(() => {
     if (!pending || !items) {
       return
@@ -45,9 +42,8 @@ export function usePendingInboxCardPick(page: PendingCardPage): () => void {
     }
     const picked = pickedOver.current === pending
     if (found && !picked) {
-      // Hidden by the tab, a filter or the picked section: show it unfiltered, and pick it on the next render.
-      if (!visibleKeys.has(pending) && (tab !== 'all' || filtered || section !== ALL)) {
-        setPrefs({ tab: 'all' })
+      // Hidden by a filter or the picked section: show it unfiltered, and pick it on the next render.
+      if (!visibleKeys.has(pending) && (filtered || section !== ALL)) {
         unfilter()
         return
       }
@@ -62,7 +58,7 @@ export function usePendingInboxCardPick(page: PendingCardPage): () => void {
     if (found && !picked) {
       pick(pending)
     }
-  }, [pending, items, loading, visibleKeys, tab, filtered, section, view, setPrefs, unfilter, pick])
+  }, [pending, items, loading, visibleKeys, filtered, section, view, setPrefs, unfilter, pick])
   return () => {
     pickedOver.current = pending
   }
