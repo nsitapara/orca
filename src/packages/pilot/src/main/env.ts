@@ -3,9 +3,11 @@ import { join, resolve } from 'node:path'
 import type { PilotStatus } from '../shared/api-types'
 
 // Why: the in-app "Install CLI" writes ORCA_CLI_INSTALL_PATH (default /usr/local/bin/orca). Pilot must
-// install `pilot` and never overwrite real Orca's `orca` command.
+// install `pilot` and never overwrite real Orca's `orca` command. Orca's "Open System Settings" for
+// notifications names ORCA_DEV_MACOS_BUNDLE_ID, else Orca's own entry; `pnpm dev` sets its own.
 export function applyPilotEnvDefaults(env: NodeJS.ProcessEnv = process.env): void {
   env.ORCA_CLI_INSTALL_PATH ??= '/usr/local/bin/pilot'
+  env.ORCA_DEV_MACOS_BUNDLE_ID ??= 'dev.nsitapara.pilot'
 }
 
 // Where a Pilot main process runs: the packaged app, `pnpm dev`, a serve (`--serve`), or headless orcad.

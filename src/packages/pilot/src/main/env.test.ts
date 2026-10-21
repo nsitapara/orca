@@ -2,6 +2,7 @@ import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import {
+  applyPilotEnvDefaults,
   pilotDataDir,
   pilotDetailsRoot,
   pilotResourcesDir,
@@ -14,6 +15,28 @@ import {
 } from './env'
 
 const HOME = '/h'
+
+describe('applyPilotEnvDefaults', () => {
+  it.each([
+    [
+      'unset: Pilot names its own CLI and notification settings entry',
+      {},
+      {
+        ORCA_CLI_INSTALL_PATH: '/usr/local/bin/pilot',
+        ORCA_DEV_MACOS_BUNDLE_ID: 'dev.nsitapara.pilot'
+      }
+    ],
+    [
+      "set: the dev runner's bundle id and a chosen CLI path are kept",
+      { ORCA_CLI_INSTALL_PATH: '/opt/pilot', ORCA_DEV_MACOS_BUNDLE_ID: 'com.stablyai.orca.dev' },
+      { ORCA_CLI_INSTALL_PATH: '/opt/pilot', ORCA_DEV_MACOS_BUNDLE_ID: 'com.stablyai.orca.dev' }
+    ]
+  ])('%s', (_name, given: NodeJS.ProcessEnv, expected) => {
+    const env = { ...given }
+    applyPilotEnvDefaults(env)
+    expect(env).toEqual(expected)
+  })
+})
 
 describe('pilotDataDir', () => {
   // Pilot never writes into real Orca's headless folder (~/.orca, or $XDG_DATA_HOME/Orca).

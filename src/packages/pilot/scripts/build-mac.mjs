@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Packaged macOS build of Pilot with the wrapper config. Unsigned local build (--dir), like Orca's local builds.
+// Packaged macOS build of Pilot with the wrapper config. Ad hoc signed local build (--dir), sealed as dev.nsitapara.pilot.
 import { join } from 'node:path'
 import { readdirSync } from 'node:fs'
 import { constants, setPriority } from 'node:os'
@@ -74,8 +74,7 @@ function plistValue(plist, key) {
   return r.code === 0 ? r.stdout.trim() : null
 }
 
-// Returns the verified app path.
-function verifyIdentities() {
+function findBuiltApp() {
   const appDir = readdirSync('dist')
     .filter((d) => d.startsWith('mac'))
     .map((d) => `dist/${d}/Pilot.app`)
@@ -84,7 +83,39 @@ function verifyIdentities() {
     console.error('Identity check: no dist/mac*/Pilot.app found')
     process.exit(1)
   }
+  return appDir
+}
+
+// Why: TCC grants and the safe-storage Keychain item are keyed to this requirement. An ad hoc
+// signature's default is its cdhash, which every build changes; the identifier survives rebuilds.
+const PILOT_REQUIREMENT = `designated => identifier "${PILOT_BUNDLE_ID}"`
+
+// Re-signs only the outer bundle: nested helpers have their own identifiers and would fail it.
+function sealApp(appDir) {
+  const r = run('codesign', [
+    '--force',
+    '--sign',
+    '-',
+    '--preserve-metadata=entitlements,flags',
+    `-r=${PILOT_REQUIREMENT}`,
+    appDir
+  ])
+  if (r.code !== 0) {
+    console.error(`codesign ${appDir} failed: ${(r.stderr || r.stdout || '').trim()}`)
+    process.exit(1)
+  }
+}
+
+function verifyIdentities(appDir) {
   const bad = []
+  const verify = run('codesign', ['--verify', '--deep', '--strict', appDir])
+  if (verify.code !== 0) {
+    bad.push(`${appDir}: invalid signature: ${(verify.stderr || verify.stdout || '').trim()}`)
+  }
+  const requirement = run('codesign', ['-d', '-r-', appDir])
+  if (!`${requirement.stdout}${requirement.stderr}`.includes(PILOT_REQUIREMENT)) {
+    bad.push(`${appDir}: designated requirement is not ${PILOT_REQUIREMENT}`)
+  }
   for (const plist of findInfoPlists(`${appDir}/Contents`)) {
     const id = plistValue(plist, 'CFBundleIdentifier')
     if (id?.startsWith('com.stablyai.orca')) {
@@ -106,10 +137,11 @@ function verifyIdentities() {
     process.exit(1)
   }
   console.log(`\nIdentity check passed for ${appDir}`)
-  return appDir
 }
 
-const appDir = verifyIdentities()
+const appDir = findBuiltApp()
+sealApp(appDir)
+verifyIdentities(appDir)
 markNoIndex('dist')
 const argv = process.argv.slice(2)
 if (argv.includes('--no-install')) {

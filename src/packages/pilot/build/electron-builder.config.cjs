@@ -47,6 +47,8 @@ module.exports = {
   asarUnpack: [...(base.asarUnpack ?? []), 'out/packages/pilot/**'],
   mac: {
     ...base.mac,
+    // Ad hoc: macOS registers only a validly signed bundle with Notification Center. build-mac.mjs reseals it.
+    identity: '-',
     artifactName: 'pilot-macos-${arch}.${ext}',
     extraResources: pilotMacResources(base.mac?.extraResources)
   },

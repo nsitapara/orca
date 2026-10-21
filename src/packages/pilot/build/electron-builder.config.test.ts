@@ -12,6 +12,10 @@ describe('Pilot electron-builder wrapper', () => {
     expect(config.extraMetadata.name).toBe('pilot')
   })
 
+  it('signs the mac bundle ad hoc, which macOS needs before it registers Pilot for notifications', () => {
+    expect(config.mac.identity).toBe('-')
+  })
+
   it('registers pilot:// and never orca:// (D25)', () => {
     expect(config.protocols).toEqual([{ name: 'Pilot', schemes: ['pilot'] }])
   })
