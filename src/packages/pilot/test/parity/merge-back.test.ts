@@ -11,7 +11,7 @@ describe('15 · Merge back kept fixes: the definition', () => {
   it('takes kept branches, waits in line until the merge can land, and works where env create says', () => {
     expect(definition.items).toMatchObject({ kind: 'kept_branch' })
     expect(definition.checks).toEqual([{ kind: 'kept_ready' }])
-    expect(definition.oncePer).toBe('{kept.branch}@{kept.head}')
+    expect(definition.oncePer).toBe('{kept.branch}@{kept.head}:{kept.tries}')
     expect(definition.workspace).toMatchObject({ kind: 'env', writes: true, stack: 'never' })
   })
 

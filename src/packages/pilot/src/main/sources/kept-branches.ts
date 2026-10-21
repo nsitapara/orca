@@ -156,6 +156,11 @@ export function keptBranchSource(deps: KeptBranchDeps): ItemSource {
         const runId = run?.id ?? branch.slice('pilot/'.length)
         const home = run?.homePath ?? null
         const wait = await waitFor(deps, run, home, branch, live)
+        // A run of job 15 that ended done yet left the branch (an answered card, a changed job): once_per counts them,
+        // so the item is due again until the branch is home.
+        const tries = deps.store.activity
+          .forItem(null, `kept:${runId}`)
+          .filter((r) => r.status === 'done').length
         items.push({
           kind: 'kept_branch',
           key: `kept:${runId}`,
@@ -166,6 +171,7 @@ export function keptBranchSource(deps: KeptBranchDeps): ItemSource {
             'kept.run': runId,
             'kept.job': run ? (originOf(deps.store, run)?.name ?? run.automationId) : '',
             'kept.wait': wait,
+            'kept.tries': tries,
             'worktree.path': home ?? ''
           },
           worktreeHint: home ? { path: home } : null,

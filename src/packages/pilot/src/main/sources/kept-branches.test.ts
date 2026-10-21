@@ -103,6 +103,7 @@ const r1 = (wait: string, branch = 'pilot/r1') => ({
     'kept.run': 'r1',
     'kept.job': '03 · Review',
     'kept.wait': wait,
+    'kept.tries': 0,
     'worktree.path': '/wt/a'
   }
 })
@@ -170,6 +171,22 @@ describe('kept branch source', () => {
         ''
       ]
     ])
+  })
+
+  it('counts the runs that ended done yet left the branch, so once_per makes it due again', async () => {
+    const { source, ctx, store } = setup({})
+    store.runs.create({
+      id: 'm1',
+      automationId: 'merge-back',
+      tickId: null,
+      itemKey: 'kept:r1',
+      itemLabel: 'pilot/r1 → a',
+      worktreePath: '/wt/a',
+      startedAt: 10
+    })
+    store.runs.update('m1', { status: 'done', finishedAt: 11 })
+    const { items } = await source.list(ctx, {})
+    expect(items[0]?.fields['kept.tries']).toBe(1)
   })
 
   it('warns, and lists nothing, when git cannot list the branches', async () => {
