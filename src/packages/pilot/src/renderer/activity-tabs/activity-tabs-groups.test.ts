@@ -9,12 +9,14 @@ import {
 import {
   makeRepo,
   makeTab,
+  makeTabWithIds,
   makeWorktreeWithId
 } from '@/components/activity/ActivityPrototypePage-test-fixtures'
 import { mergeRowsIntoGroups } from './activity-tabs-groups'
 import {
   activityTabsGroupCount,
   activityTabsGroupRows,
+  childGroups,
   withActivityTabsCount,
   type ActivityTabsRow
 } from './activity-tabs-rows'
@@ -217,4 +219,83 @@ describe('mergeRowsIntoGroups', () => {
       expect(withActivityTabsCount(1, groups)).toBe(4)
     }
   )
+
+  // Why: a Pilot run's throwaway (a child in Orca's lineage) read as the repo's own checkout, away from its branch.
+  it.each([
+    {
+      name: 'a parent with a session',
+      threads: ['wt-a', 'wt-kid'],
+      rows: [],
+      keys: ['h:worktree:wt-a', 't:pane-wt-a', 'h:worktree:wt-kid', 't:pane-wt-kid'],
+      children: [['worktree:wt-a', ['worktree:wt-kid']]]
+    },
+    {
+      name: 'a parent with no session leaves Inactive',
+      threads: ['wt-kid'],
+      rows: ['wt-a', 'wt-b'],
+      keys: ['h:worktree:wt-a', 'h:worktree:wt-kid', 't:pane-wt-kid', 'h:pilot:inactive-worktrees'],
+      children: [['worktree:wt-a', ['worktree:wt-kid']]]
+    },
+    {
+      name: 'a parent with no row gets a header',
+      threads: ['wt-kid'],
+      rows: [],
+      keys: ['h:worktree:wt-a', 'h:worktree:wt-kid', 't:pane-wt-kid'],
+      children: [['worktree:wt-a', ['worktree:wt-kid']]]
+    },
+    {
+      name: 'a child with no session stays under Inactive',
+      threads: ['wt-a'],
+      rows: ['wt-kid'],
+      keys: ['h:worktree:wt-a', 't:pane-wt-a', 'h:pilot:inactive-worktrees'],
+      children: [['worktree:wt-a', []]]
+    }
+  ])(
+    'grouped by worktree, a child worktree’s group follows its parent’s: $name',
+    ({ threads, rows, keys, children }) => {
+      const thread = (worktreeId: string): AgentPaneThread => ({
+        ...agent,
+        paneKey: `pane-${worktreeId}`,
+        tab: makeTabWithIds(`tab-${worktreeId}`, worktreeId),
+        worktree: makeWorktreeWithId(worktreeId)
+      })
+      const recent = (id: string): ActivityTabsRow => ({
+        kind: 'recent-worktree',
+        recent: { key: `${id}-key`, worktree: makeWorktreeWithId(id), repo: null, pinned: false }
+      })
+      const groups = mergeRowsIntoGroups(
+        buildActivityThreadGroups(threads.map(thread), 'worktree'),
+        rows.map(recent),
+        'worktree',
+        { parentOf: (id) => (id === 'wt-kid' ? { id: 'wt-a', label: 'wt-a' } : null) }
+      )
+      expect(
+        buildActivityVirtualItems({
+          groups,
+          groupBy: 'worktree',
+          collapsedGroupKeys: new Set()
+        }).map(getActivityVirtualItemKey)
+      ).toEqual(keys)
+      expect(
+        children.map(([key]) => [
+          key,
+          childGroups(groups.find((group) => group.key === key)!).map((child) => child.key)
+        ])
+      ).toEqual(children)
+    }
+  )
+
+  it('nests only when grouped by worktree', () => {
+    const groups = mergeRowsIntoGroups(
+      buildActivityThreadGroups([agent], 'project'),
+      [],
+      'project',
+      {
+        parentOf: () => ({ id: 'wt-z', label: 'wt-z' })
+      }
+    )
+    expect(groups.map((group) => [group.key, childGroups(group).length])).toEqual([
+      ['project:repo-1', 0]
+    ])
+  })
 })

@@ -4,12 +4,15 @@ import type {
 } from '@/components/activity/activity-thread-types'
 import { translate } from '@/i18n/i18n'
 import {
+  childGroups,
   groupRows,
   INACTIVE_WORKTREES_GROUP_KEY,
+  withChildGroups,
   withGroupRows,
   type ActivityTabsRow
 } from './activity-tabs-rows'
 import { compareWorktreeNames } from './workspace-tab-items'
+import type { WorktreeParentOf } from './worktree-nest-parent'
 
 export const OPEN_TABS_GROUP_KEY = 'pilot:open-tabs'
 export const RECENT_WORKTREES_GROUP_KEY = 'pilot:recent-worktrees'
@@ -68,17 +71,82 @@ export type MergeRowsOptions = {
   pinnedWorktreeIds?: readonly string[]
   // The Inactive section's fold; it starts folded.
   inactiveExpanded?: boolean
+  // Grouped by worktree, the worktree each worktree's group nests under (worktree-nest-parent.ts).
+  parentOf?: WorktreeParentOf
 }
 
-// A worktree group whose only row is its own header's: the worktree has no agent and no tab.
+// A worktree group whose only row is its own header's: the worktree has no agent, no tab and no active child.
 function isInactiveWorktreeGroup(group: ActivityThreadGroup): boolean {
   const rows = groupRows(group)
   return (
     group.key.startsWith(WORKTREE_GROUP) &&
     group.threads.length === 0 &&
+    childGroups(group).length === 0 &&
     rows.length > 0 &&
     rows.every((row) => row.kind === 'recent-worktree')
   )
+}
+
+const NO_PARENT: WorktreeParentOf = () => null
+
+function worktreeIdOf(group: ActivityThreadGroup): string | null {
+  return group.key.startsWith(WORKTREE_GROUP) ? group.key.slice(WORKTREE_GROUP.length) : null
+}
+
+// Grouped by worktree, an active worktree's group follows its parent's, a level in (a Pilot run's throwaway under the
+// worktree it checked out). An ancestor with no session gets a header of its own, and leaves Inactive while a child runs.
+function nestChildGroups(
+  groups: ActivityThreadGroup[],
+  groupBy: ActivityGroupBy,
+  parentOf: WorktreeParentOf,
+  pinnedWorktreeIds: readonly string[]
+): ActivityThreadGroup[] {
+  if (groupBy !== 'worktree') {
+    return groups
+  }
+  const ancestorsOfActive = new Set<string>()
+  for (const group of groups) {
+    const id = worktreeIdOf(group)
+    if (id === null || isInactiveWorktreeGroup(group)) {
+      continue
+    }
+    for (let parent = parentOf(id); parent; parent = parentOf(parent.id)) {
+      const key = `${WORKTREE_GROUP}${parent.id}`
+      if (ancestorsOfActive.has(key)) {
+        break
+      }
+      ancestorsOfActive.add(key)
+    }
+  }
+  const known = new Set(groups.map((group) => group.key))
+  const childrenByKey = new Map<string, ActivityThreadGroup[]>()
+  const roots: ActivityThreadGroup[] = []
+  const place = (group: ActivityThreadGroup): void => {
+    const id = worktreeIdOf(group)
+    const nests = !isInactiveWorktreeGroup(group) || ancestorsOfActive.has(group.key)
+    const parent = id !== null && nests ? parentOf(id) : null
+    if (!parent) {
+      roots.push(group)
+      return
+    }
+    const parentKey = `${WORKTREE_GROUP}${parent.id}`
+    childrenByKey.set(parentKey, [...(childrenByKey.get(parentKey) ?? []), group])
+    if (!known.has(parentKey)) {
+      known.add(parentKey)
+      place({ key: parentKey, label: parent.label, threads: [] })
+    }
+  }
+  for (const group of groups) {
+    place(group)
+  }
+  const listed: ActivityThreadGroup[] = []
+  const list = (group: ActivityThreadGroup): void => {
+    const children = worktreeOrder(childrenByKey.get(group.key) ?? [], groupBy, pinnedWorktreeIds)
+    listed.push(children.length > 0 ? withChildGroups(group, children) : group)
+    children.forEach(list)
+  }
+  worktreeOrder(roots, groupBy, pinnedWorktreeIds).forEach(list)
+  return listed
 }
 
 // Grouped by worktree, worktrees with no session move, in order, under one Inactive header at the end.
@@ -104,17 +172,17 @@ function inactiveLast(
 
 /**
  * Puts each row in its Group by group, after the agents; groups with only Pilot rows go after the
- * rest. Grouped by worktree, groups go pinned first, then by name, and those with no session go
- * under Inactive at the end.
+ * rest. Grouped by worktree, groups go pinned first, then by name, a child worktree's right after its
+ * parent's, and those with no session go under Inactive at the end.
  */
 export function mergeRowsIntoGroups(
   groups: ActivityThreadGroup[],
   rows: readonly ActivityTabsRow[],
   groupBy: ActivityGroupBy,
-  { pinnedWorktreeIds = [], inactiveExpanded = false }: MergeRowsOptions = {}
+  { pinnedWorktreeIds = [], inactiveExpanded = false, parentOf = NO_PARENT }: MergeRowsOptions = {}
 ): ActivityThreadGroup[] {
   if (rows.length === 0) {
-    return worktreeOrder(groups, groupBy, pinnedWorktreeIds)
+    return nestChildGroups(groups, groupBy, parentOf, pinnedWorktreeIds)
   }
   const pending = new Map<string, { label: string; rows: ActivityTabsRow[] }>()
   for (const row of rows) {
@@ -137,5 +205,9 @@ export function mergeRowsIntoGroups(
   for (const [key, entry] of pending) {
     merged.push(withGroupRows({ key, label: entry.label, threads: [] }, entry.rows))
   }
-  return inactiveLast(worktreeOrder(merged, groupBy, pinnedWorktreeIds), groupBy, inactiveExpanded)
+  return inactiveLast(
+    nestChildGroups(merged, groupBy, parentOf, pinnedWorktreeIds),
+    groupBy,
+    inactiveExpanded
+  )
 }

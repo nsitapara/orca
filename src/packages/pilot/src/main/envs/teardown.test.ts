@@ -316,6 +316,7 @@ describe('a run that ends while its env is made', () => {
       nameOf: (id) => id,
       pidFile: (runId) => `/nowhere/${runId}.pid`,
       preparer: () => ({ pid: 1, identity: null }),
+      nestThrowaway: async () => {},
       log: () => {}
     })
     let stepsStarted = 0

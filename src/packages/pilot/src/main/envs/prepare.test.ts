@@ -35,7 +35,13 @@ const listed: PrepareDeps['resolvePath'] = async (_repo, path) => {
   return { id, path }
 }
 
-function setup(replies: (PilotcliReply | Promise<PilotcliReply>)[], resolvePath = listed) {
+type Nested = { worktreeId: string; home: string; label: string }
+
+function setup(
+  replies: (PilotcliReply | Promise<PilotcliReply>)[],
+  resolvePath = listed,
+  nestThrowaway: PrepareDeps['nestThrowaway'] = async () => {}
+) {
   const store = PilotStore.open(':memory:')
   store.runs.create({
     id: 'ci-1',
@@ -48,6 +54,8 @@ function setup(replies: (PilotcliReply | Promise<PilotcliReply>)[], resolvePath 
   })
   const calls: PilotcliCall[] = []
   const ended: { status: string; outcome: string; release: boolean }[] = []
+  const nested: Nested[] = []
+  const logged: string[] = []
   let readies = 0
   const pidDir = mkdtempSync(join(tmpdir(), 'pids-'))
   const preps = createPreparations({
@@ -62,7 +70,11 @@ function setup(replies: (PilotcliReply | Promise<PilotcliReply>)[], resolvePath 
     nameOf: (id) => `${id} job`,
     pidFile: (runId) => join(pidDir, `${runId}.pid`),
     preparer: () => ({ pid: 1, identity: null }),
-    log: () => {}
+    nestThrowaway: async (worktreeId, home, label) => {
+      nested.push({ worktreeId, home, label })
+      await nestThrowaway(worktreeId, home, label)
+    },
+    log: (message) => logged.push(message)
   })
   const hooks: PreparedHooks = {
     ready: async () => {
@@ -73,7 +85,13 @@ function setup(replies: (PilotcliReply | Promise<PilotcliReply>)[], resolvePath 
   const run = () => store.runs.get('ci-1') as RunRow
   const begin = (fields = FIELDS, env = ENV) =>
     preps.begin({ run: run(), env, repo: 'web-platform', label: '!1', fields }, hooks)
-  return { store, calls, preps, ended, run, begin, readies: () => readies }
+  return { store, calls, preps, ended, nested, logged, run, begin, readies: () => readies }
+}
+
+const NESTED_CI: Nested = {
+  worktreeId: 'repo::/agents/agents-ci-1',
+  home: '/wt/a',
+  label: 'ci job · @abc1234'
 }
 
 describe('preparing a run’s workspace', () => {
@@ -84,11 +102,12 @@ describe('preparing a run’s workspace', () => {
       { state: 'ready', mode: 'in_place', worktree: '/wt/a', home: '/wt/a', readies: 1, ended: [] }
     ],
     [
-      'a throwaway',
+      'a throwaway: named for its job and commit, under its home',
       ok({
         mode: 'throwaway',
         reason: 'uncommitted changes',
         path: '/agents/agents-ci-1',
+        sha: 'abc1234def',
         env: { API_URL: 'http://localhost:8123' }
       }),
       {
@@ -97,7 +116,8 @@ describe('preparing a run’s workspace', () => {
         worktree: '/agents/agents-ci-1',
         home: '/wt/a',
         readies: 1,
-        ended: []
+        ended: [],
+        nested: [NESTED_CI]
       }
     ],
     [
@@ -200,6 +220,25 @@ describe('preparing a run’s workspace', () => {
     })
     expect(t.readies()).toBe(expected.readies)
     expect(t.ended).toEqual(expected.ended)
+    expect(t.nested).toEqual('nested' in expected ? expected.nested : [])
+  })
+
+  it('a throwaway it couldn’t nest still starts its steps', async () => {
+    const t = setup(
+      [ok({ mode: 'throwaway', path: '/agents/agents-ci-1', sha: 'abc1234def' })],
+      listed,
+      async () => {
+        throw new Error('selector_not_found')
+      }
+    )
+    t.begin()
+    await t.preps.settled()
+    expect(t.nested).toEqual([NESTED_CI])
+    expect(t.run().env).toMatchObject({ state: 'ready', mode: 'throwaway' })
+    expect(t.readies()).toBe(1)
+    expect(t.logged).toEqual([
+      "[pilot] run ci-1: couldn't nest its throwaway under /wt/a: selector_not_found"
+    ])
   })
 
   // Ruling P12 (§8 "the run ends, however it ends"): env delete still runs; for nothing made it answers ok, removed: [].

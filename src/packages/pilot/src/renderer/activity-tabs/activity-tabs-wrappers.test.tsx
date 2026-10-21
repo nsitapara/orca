@@ -6,7 +6,8 @@ import type { AgentPaneThread } from '@/components/activity/activity-thread-type
 import {
   makeRepo,
   makeTab,
-  makeWorktree
+  makeWorktree,
+  makeWorktreeWithId
 } from '@/components/activity/ActivityPrototypePage-test-fixtures'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { useAppStore } from '@/store'
@@ -128,6 +129,42 @@ describe('Pilot wrappers around upstream Activity elements', () => {
     expect(view.getByText('Repo')).toBeTruthy()
     expect(view.getByTitle('Claude')).toBeTruthy()
   })
+
+  // Why: a Pilot run's throwaway is a child of the worktree it checked out, and reads as part of it.
+  it.each([
+    { view: 'header', groupKey: 'worktree:wt-kid', guides: 1, project: false },
+    { view: 'nest', groupKey: 'worktree:wt-kid', guides: 2, project: false },
+    { view: 'header', groupKey: 'worktree:wt-1', guides: 0, project: true },
+    { view: 'nest', groupKey: 'worktree:wt-1', guides: 1, project: false }
+  ] as const)(
+    'a child worktree sits on its parent’s guide line: $view $groupKey → $guides line(s)',
+    ({ view, groupKey, guides, project }) => {
+      registerPilotStore(useAppStore)
+      useAppStore.setState({
+        repos: [makeRepo()],
+        worktreesByRepo: {
+          'repo-1': [
+            { ...makeWorktree(), instanceId: 'i-parent' },
+            { ...makeWorktreeWithId('wt-kid'), branch: '', instanceId: 'i-kid' }
+          ]
+        },
+        worktreeLineageById: {
+          'wt-kid': {
+            worktreeId: 'wt-kid',
+            worktreeInstanceId: 'i-kid',
+            parentWorktreeId: 'wt-1',
+            parentWorktreeInstanceId: 'i-parent',
+            origin: 'manual',
+            capture: { source: 'manual-action', confidence: 'explicit' },
+            createdAt: 1
+          }
+        }
+      })
+      const rendered = render(<TooltipProvider>{views(groupKey)[view]}</TooltipProvider>)
+      expect(rendered.container.querySelectorAll('.border-l')).toHaveLength(guides)
+      expect(rendered.queryByText('Repo') !== null).toBe(project)
+    }
+  )
 
   it.each([
     { isPinned: false, label: 'Pin worktree', next: true },

@@ -80,6 +80,13 @@ export function createEnvService(deps: EnvServiceDeps): EnvService {
     nameOf: nameOf(deps.definitionFor),
     pidFile: pidFileOf,
     preparer: () => ({ pid: process.pid, identity: ownProcessIdentity() }),
+    nestThrowaway: async (worktreeId, home, label) => {
+      await runtime.updateManagedWorktreeMeta(`id:${worktreeId}`, {
+        displayName: label,
+        displayNameIsPinned: true,
+        lineage: { parentWorktree: `path:${home}` }
+      })
+    },
     log: deps.log
   })
   const stopCreateOf = (runId: string): Promise<void> => stopOrphanCreate(pidFileOf(runId), runId)
