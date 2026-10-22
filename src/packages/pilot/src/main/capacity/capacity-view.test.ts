@@ -576,7 +576,7 @@ describe('capacityView', () => {
 })
 
 describe('capacityView: Merge back', () => {
-  it('lists each fix not in its worktree yet, stuck or kept, with where its merge back stands', () => {
+  it('lists each fix not in its worktree yet, stuck or kept, with where its merge back stands; a merged one only under Finished', () => {
     const store = PilotStore.open(':memory:')
     const throwaway = (id: string, kept: string | undefined) => {
       store.runs.create({
@@ -607,6 +607,18 @@ describe('capacityView: Merge back', () => {
     throwaway('r2', 'pilot/r2')
     store.runs.envs.keptGone('r2', 30)
     throwaway('r3', undefined)
+    // r6's branch was merged home by job 15's m6 a moment ago; the next listing hasn't found it gone yet.
+    throwaway('r6', 'pilot/r6')
+    store.runs.create({
+      id: 'm6',
+      automationId: 'merge-back',
+      tickId: null,
+      itemKey: 'kept:r6',
+      itemLabel: 'pilot/r6 → a',
+      worktreePath: '/wt/a',
+      startedAt: 12
+    })
+    store.runs.update('m6', { status: 'done', finishedAt: 13, outcome: 'Done' })
     // r4's throwaway can't be removed and holds a commit nothing else has; r5's can't either, but holds nothing.
     for (const id of ['r4', 'r5']) {
       store.runs.create({

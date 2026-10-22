@@ -25,15 +25,19 @@ describe('15 · Merge back kept fixes: the definition', () => {
     })
   })
 
-  it('fast-forwards only a branch on my HEAD; Claude merges and lands every other, then forgets the branch', () => {
+  it('fast-forwards only a branch on my HEAD; Claude merges and lands every other, forgets the branch, and aborts a merge left unfinished', () => {
     expect(definition.steps.map((s) => [s.name, s.agent, s.when])).toEqual([
       ['fast_forward', 'shell', null],
       ['merge', 'claude', '{steps.fast_forward.merged} == false'],
       ['land', 'shell', '{steps.fast_forward.merged} == false'],
-      ['forget', 'shell', null]
+      ['forget', 'shell', null],
+      ['abort_unfinished', 'shell', null]
     ])
-    const [fastForward, merge, land] = definition.steps
+    const [fastForward, merge, land, , abort] = definition.steps
     expect(fastForward.run).toContain('merge-back/scripts/fast-forward.sh')
+    // A merge step that times out, crashes or is stopped never leaves its folder mid-merge.
+    expect(abort).toMatchObject({ always: true })
+    expect(abort.run).toContain('merge --abort')
     expect(merge).toMatchObject({ skill: 'merge-back', mode: 'merge' })
     expect(land.run).toContain('--merge true --keep-local true')
     const tried = [{ name: 'fast_forward', status: 'done' as const, always: false, error: null }]

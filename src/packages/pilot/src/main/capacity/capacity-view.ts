@@ -111,11 +111,15 @@ function dueFromOf(def: AutomationDefinition | undefined): string {
 }
 
 // Every fix that isn't in its worktree yet, oldest first, and where its merge back stands: the ones stuck in a throwaway
-// Pilot can't remove (nothing kept them on a branch), then the ones a throwaway kept.
+// Pilot can't remove (nothing kept them on a branch), then the ones a throwaway kept. A merged one is home: it shows
+// only under Finished, even before job 15's next listing finds its branch gone.
 function mergeBackRows(store: PilotStore, nameOf: (id: string) => string): MergeBackRow[] {
   const runs = [...store.runs.envs.strandedPending(), ...store.runs.envs.keptPending()]
-  return runs.map((run) => {
+  return runs.flatMap((run) => {
     const s = mergeBackState(run, mergeBackOf(store, run))
+    if (s.state === 'done') {
+      return []
+    }
     return {
       runId: run.id,
       automationName: nameOf(run.automationId),
