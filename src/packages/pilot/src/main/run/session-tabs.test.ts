@@ -118,4 +118,24 @@ describe('terminalOpen', () => {
   ])('%s', async (_name, listing, expected) => {
     expect(await terminalOpen(runtime(listing), 'h1')).toBe(expected)
   })
+
+  // Two teardowns listing at once: Orca drops the older untargeted listing as superseded (terminal_liveness_unavailable),
+  // which kept throwaways from being removed for a day (2026-10-22). It is asked again; anything else isn't.
+  it('asks again when Orca drops its listing for a newer one, and gives up after a few tries', async () => {
+    const superseded = new Error('terminal_liveness_unavailable')
+    const open = { terminals: [{ handle: 'h1', connected: true }], truncated: false }
+    const flaky = vi.fn().mockRejectedValueOnce(superseded).mockResolvedValueOnce(open)
+    const noWait = async () => {}
+    expect(await terminalOpen({ listTerminals: flaky }, 'h1', noWait)).toBe(true)
+    const never = vi.fn().mockRejectedValue(superseded)
+    await expect(terminalOpen({ listTerminals: never }, 'h1', noWait)).rejects.toThrow(
+      'terminal_liveness_unavailable'
+    )
+    expect(never).toHaveBeenCalledTimes(4)
+    const other = vi.fn().mockRejectedValue(new Error('invalid_limit'))
+    await expect(terminalOpen({ listTerminals: other }, 'h1', noWait)).rejects.toThrow(
+      'invalid_limit'
+    )
+    expect(other).toHaveBeenCalledTimes(1)
+  })
 })

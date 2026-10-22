@@ -84,12 +84,42 @@ export function runtimeSessionTabs(runtime: OrcaRuntimeService): SessionTabs {
     (await panes(sessionId)).map(({ handle, paneKey }) => ({ handle, paneKey }))
 }
 
+// Orca drops an untargeted liveness listing that a newer one overtook (terminal_liveness_unavailable): two teardowns
+// listing at once failed every hour, so their throwaways were never removed (2026-10-22). It's asked again.
+const SUPERSEDED = 'terminal_liveness_unavailable'
+const LISTING_TRIES = 4
+const LISTING_RETRY_MS = 250
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+async function freshListing(
+  runtime: Pick<OrcaRuntimeService, 'listTerminals'>,
+  wait: (ms: number) => Promise<void>
+): ReturnType<OrcaRuntimeService['listTerminals']> {
+  for (let attempt = 1; ; attempt += 1) {
+    try {
+      return await runtime.listTerminals(undefined, LIST_LIMIT, {
+        requireFreshPtyLiveness: true,
+        includeVisualLayouts: false
+      })
+    } catch (error) {
+      if (!(error instanceof Error) || error.message !== SUPERSEDED || attempt >= LISTING_TRIES) {
+        throw error
+      }
+      await wait(LISTING_RETRY_MS * attempt)
+    }
+  }
+}
+
 // Whether the terminal is still connected (a fresh PTY liveness listing).
-export async function terminalOpen(runtime: OrcaRuntimeService, handle: string): Promise<boolean> {
-  const listing = await runtime.listTerminals(undefined, LIST_LIMIT, {
-    requireFreshPtyLiveness: true,
-    includeVisualLayouts: false
-  })
+export async function terminalOpen(
+  runtime: Pick<OrcaRuntimeService, 'listTerminals'>,
+  handle: string,
+  wait: (ms: number) => Promise<void> = sleep
+): Promise<boolean> {
+  const listing = await freshListing(runtime, wait)
   if (listing.terminals.some((t) => t.handle === handle && t.connected)) {
     return true
   }
