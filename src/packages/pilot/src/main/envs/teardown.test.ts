@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { EnvMode } from '../../shared/api-types-env'
+import type { EnvMode, StrandedWork } from '../../shared/api-types-env'
 import type { EnvWorkspaceDef } from '../../shared/definition/types'
 import { closeRun } from '../run/run-close'
 import { PilotStore } from '../store/store'
@@ -12,7 +12,12 @@ const OK: PilotcliReply = { outcome: 'ok', reason: '', data: { removed: ['folder
 function setup(
   mode: EnvMode,
   replies: PilotcliReply[],
-  opts: { status?: 'done' | 'running'; drafts?: Record<string, string> } = {}
+  opts: {
+    status?: 'done' | 'running'
+    drafts?: Record<string, string>
+    // What each failed try finds left in the throwaway, in order (main/envs/stranded.ts).
+    stranded?: (StrandedWork | null)[]
+  } = {}
 ) {
   const store = PilotStore.open(':memory:')
   store.runs.create({
@@ -52,6 +57,9 @@ function setup(
   const closed: string[] = []
   const order: string[] = []
   const kept: string[] = []
+  const raised: [string, StrandedWork, string][] = []
+  const cardsClosed: [string, string][] = []
+  const reads = opts.stranded
   const teardowns = createTeardowns({
     store,
     now: () => 1000,
@@ -79,10 +87,74 @@ function setup(
     kept: (run) => {
       kept.push(run.id)
     },
+    ...(reads
+      ? {
+          stranded: {
+            read: async () => reads.shift() ?? null,
+            raise: (run, work, reason) => {
+              raised.push([run.id, work, reason])
+              return 'card-1'
+            },
+            close: (cardId, outcome) => {
+              cardsClosed.push([cardId, outcome])
+            }
+          }
+        }
+      : {}),
     log: () => {}
   })
-  return { store, calls, closed, order, kept, teardowns, env: () => store.runs.get('r1')?.env }
+  const env = () => store.runs.get('r1')?.env
+  return { store, calls, closed, order, kept, raised, cardsClosed, teardowns, env }
 }
+
+async function tearDown(t: ReturnType<typeof setup>): Promise<void> {
+  t.teardowns.start(t.store.runs.get('r1')!)
+  await t.teardowns.settled()
+}
+
+// The keep step failed on every web-platform throwaway for a day (2026-10-22): the folders stayed, nothing reached a
+// pilot/ branch, and the runs read Done. A throwaway that holds work nothing else has is loud instead.
+describe("a throwaway Pilot can't remove that holds work nothing else has", () => {
+  const WHY = "couldn't keep its uncommitted edits: git add failed (exit 1)"
+  const FAIL: PilotcliReply = { outcome: 'failed', reason: WHY, data: null, code: 1 }
+  const WORK: StrandedWork = { commits: ['a46c16a5a5ec89a766df771a1e91b9d62101073a'], edits: 0 }
+
+  it('raises its card on every failed try, records the work on the run, and closes the card once it is removed', async () => {
+    const kept = { ...OK, data: { removed: ['folder'], kept: 'pilot/r1' } }
+    const t = setup('throwaway', [FAIL, FAIL, kept], { stranded: [WORK, WORK] })
+    await tearDown(t)
+    expect(t.raised).toEqual([['r1', WORK, WHY]])
+    expect(t.env()).toMatchObject({ removedAt: null, stranded: { ...WORK, cardId: 'card-1' } })
+    await tearDown(t)
+    expect(t.raised).toHaveLength(2)
+    expect(t.cardsClosed).toEqual([])
+    await tearDown(t)
+    expect(t.cardsClosed).toEqual([
+      ['card-1', 'Removed its throwaway; its work is kept on pilot/r1 for job 15 to merge home']
+    ])
+    expect(t.env()).toMatchObject({ state: 'removed', kept: 'pilot/r1' })
+    expect(t.env()?.stranded).toBeUndefined()
+  })
+
+  it('raises nothing while it holds nothing, and closes the card once it holds nothing now', async () => {
+    const t = setup('throwaway', [FAIL, FAIL, FAIL], { stranded: [null, WORK, null] })
+    await tearDown(t)
+    expect(t.raised).toEqual([])
+    expect(t.env()?.stranded).toBeUndefined()
+    await tearDown(t)
+    await tearDown(t)
+    expect(t.raised).toHaveLength(1)
+    expect(t.cardsClosed).toEqual([['card-1', "Its throwaway holds nothing that isn't home now"]])
+    expect(t.env()?.stranded).toBeUndefined()
+  })
+
+  it.each(['kept', 'in_place'] as const)('never looks in a %s env', async (mode) => {
+    const t = setup(mode, [FAIL], { stranded: [WORK] })
+    await tearDown(t)
+    expect(t.raised).toEqual([])
+    expect(t.env()?.stranded).toBeUndefined()
+  })
+})
 
 describe('teardown at run end', () => {
   it.each([

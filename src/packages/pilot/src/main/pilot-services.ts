@@ -9,6 +9,7 @@ import { wireAnswerDispatcher } from './answers/wiring'
 import { pilotActionCatalog } from './actions/wiring'
 import { definitionIo, liveDefinitions } from './definitions/live'
 import { createEnvService } from './envs/service'
+import { closeStrandedCard, raiseStrandedCard } from './envs/stranded-card'
 import { handoverService } from './handover/service'
 import { buildInboxDeps } from './inbox/inbox-service'
 import type { LoadedDefinitions } from './definitions/loader'
@@ -107,7 +108,13 @@ function openPilot(
     onRunEnd: (run) => answerRunEnded(store, run),
     // `scheduler` is made below; no run ends before the scheduler polls.
     onKept: (run) =>
-      triggerKeptJobs(definitions.current().definitions, run, (id, c) => scheduler.trigger(id, c))
+      triggerKeptJobs(definitions.current().definitions, run, (id, c) => scheduler.trigger(id, c)),
+    // `inbox` is made below; no run ends before the scheduler polls.
+    strandedCard: {
+      raise: (run, work, reason) =>
+        raiseStrandedCard(inbox, definitionFor(run.automationId), run, work, reason),
+      close: (cardId, outcome) => closeStrandedCard(inbox, cardId, outcome)
+    }
   })
   opened.push(() => envs.stop())
   // A stage's run end hands over to the next stage; its run: now reaches the scheduler once made (below).

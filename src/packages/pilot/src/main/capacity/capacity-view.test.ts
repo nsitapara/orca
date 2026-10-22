@@ -576,7 +576,7 @@ describe('capacityView', () => {
 })
 
 describe('capacityView: Merge back', () => {
-  it('lists each fix a throwaway kept that is not in its worktree yet, with where its merge back stands', () => {
+  it('lists each fix not in its worktree yet, stuck or kept, with where its merge back stands', () => {
     const store = PilotStore.open(':memory:')
     const throwaway = (id: string, kept: string | undefined) => {
       store.runs.create({
@@ -607,6 +607,33 @@ describe('capacityView: Merge back', () => {
     throwaway('r2', 'pilot/r2')
     store.runs.envs.keptGone('r2', 30)
     throwaway('r3', undefined)
+    // r4's throwaway can't be removed and holds a commit nothing else has; r5's can't either, but holds nothing.
+    for (const id of ['r4', 'r5']) {
+      store.runs.create({
+        id,
+        automationId: 'review',
+        tickId: null,
+        itemKey: `wt:${id}`,
+        itemLabel: `web-${id}`,
+        worktreePath: `/agents/agents-${id}`,
+        startedAt: 1
+      })
+      store.runs.envs.begin(id, '/wt/a', {})
+      store.runs.envs.ready(id, {
+        mode: 'throwaway',
+        reason: 'needs its own stack',
+        path: `/agents/agents-${id}`,
+        home: '/wt/a',
+        worktreeId: 'id',
+        sha: null,
+        envFile: null,
+        vars: {},
+        stack: null
+      })
+      store.runs.update(id, { status: 'needs_you', finishedAt: 3 })
+      store.runs.envs.deleteFailed(id, 'git add failed (exit 1)', 5)
+    }
+    store.runs.envs.setStranded('r4', { commits: ['a46c16a5a5ec89a7'], edits: 0, cardId: 'in_1' })
     store.runs.create({
       id: 'm1',
       automationId: 'merge-back',
@@ -636,6 +663,18 @@ describe('capacityView: Merge back', () => {
       now: 100
     })
     expect(view.mergeBack).toEqual([
+      {
+        runId: 'r4',
+        automationName: '03 Review and fix',
+        itemLabel: 'web-r4',
+        branch: null,
+        home: '/wt/a',
+        since: 3,
+        state: 'failed',
+        detail:
+          "Stuck: commit a46c16a5a5 only in its throwaway, which Pilot can't remove (1 try): git add failed (exit 1)",
+        mergeRunId: null
+      },
       {
         runId: 'r1',
         automationName: '03 Review and fix',

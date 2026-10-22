@@ -416,6 +416,36 @@ describe('merge back', () => {
       null
     ],
     [
+      'the throwaway failing to go, holding nothing of its own',
+      {
+        run: testRun({
+          ...ended,
+          env: env({ removedAt: null, deleteError: 'terminal t1 is open', deleteAttempts: 2 })
+        })
+      },
+      'running',
+      'Removing the throwaway (2 tries so far: terminal t1 is open)',
+      null
+    ],
+    [
+      "the throwaway Pilot can't remove, holding a commit nothing else has",
+      {
+        run: testRun({
+          ...ended,
+          env: env({
+            removedAt: null,
+            kept: undefined,
+            deleteError: 'git add failed (exit 1)',
+            deleteAttempts: 3,
+            stranded: { commits: ['a46c16a5a5ec89a7'], edits: 2, cardId: 'in_1' }
+          })
+        })
+      },
+      'failed',
+      "Stuck: commit a46c16a5a5 and 2 uncommitted files only in its throwaway, which Pilot can't remove (3 tries): git add failed (exit 1)",
+      null
+    ],
+    [
       'everything already home',
       { run: testRun({ ...ended, env: env({ kept: undefined }) }) },
       'skipped',

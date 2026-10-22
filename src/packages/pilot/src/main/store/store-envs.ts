@@ -1,6 +1,6 @@
 import type Database from '../../../../../main/sqlite/sync-database'
 import type { RunRow } from '../../shared/api-types'
-import type { EnvMode, RunEnvStack } from '../../shared/api-types-env'
+import type { EnvMode, RunEnvStack, RunStranded } from '../../shared/api-types-env'
 import { worktreePathKey } from '../fields/agent-activity'
 import { readEnvJson, type EnvJson } from './env-row'
 import { toRun } from './run-rows'
@@ -113,6 +113,27 @@ export class EnvStore {
     this.db
       .prepare('UPDATE runs SET env_json = ? WHERE id = ?')
       .run(JSON.stringify({ ...this.json(runId), keptGoneAt: at }), runId)
+  }
+
+  // What a throwaway env delete couldn't remove still holds that nothing else has (main/envs/teardown.ts); null once it
+  // holds none or is removed.
+  setStranded(runId: string, stranded: RunStranded | null): void {
+    const { stranded: _old, ...json } = this.json(runId)
+    this.db
+      .prepare('UPDATE runs SET env_json = ? WHERE id = ?')
+      .run(JSON.stringify(stranded ? { ...json, stranded } : json), runId)
+  }
+
+  // Ended runs whose throwaway couldn't be removed and still holds work nothing else has: nothing kept it on a branch,
+  // so the Running page lists them under Merge back as stuck.
+  strandedPending(): RunRow[] {
+    return this.db
+      .prepare(
+        `SELECT * FROM runs WHERE ${ENDED} AND env_removed_at IS NULL
+           AND json_extract(env_json, '$.stranded') IS NOT NULL ORDER BY finished_at, id`
+      )
+      .all()
+      .map((r) => toRun(r as never))
   }
 
   // hold_home: the step whose claim on home_path this run holds. The claim queries (store-runs.ts) count it only while

@@ -15,11 +15,14 @@ export type RunPlace = {
 export type HomeStep = { ok: boolean; reason: string | null }
 
 // What an ended run brought home. Each field is absent when the run had no such step: pushed is its git push-branch
-// step, mergedBack its hold_home merge back, kept the branch env delete kept a throwaway's unhomed commits on.
+// step, mergedBack its hold_home merge back, kept the branch env delete kept a throwaway's unhomed commits on, stuck a
+// throwaway that couldn't be removed and holds work nothing else has.
 export type RunHome = {
   pushed?: HomeStep
   mergedBack?: HomeStep
   kept?: string
+  // A throwaway Pilot can't remove that holds work nothing else has, in env-text.ts strandedLine's words.
+  stuck?: string
 }
 
 // An agent's quota use in percent; null where it couldn't be read.
@@ -148,12 +151,13 @@ export type CapacityPayload = {
   mergeBack?: MergeBackRow[]
 }
 
-// A throwaway run's kept branch on its way into its worktree (job 15), as merge-back-state.ts words it.
+// A throwaway run's kept branch on its way into its worktree (job 15), as merge-back-state.ts words it; or a throwaway
+// Pilot can't remove that holds work nothing kept on a branch (branch null).
 export type MergeBackRow = {
   runId: string
   automationName: string
   itemLabel: string
-  branch: string
+  branch: string | null
   home: string | null
   // When the throwaway went, else the run's end: what Waited counts from.
   since: number

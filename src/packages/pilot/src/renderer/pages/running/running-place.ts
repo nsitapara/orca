@@ -60,5 +60,8 @@ export function finishedHomeText(
   if (home?.kept) {
     parts.push(sentence(keptNow ?? `Kept on ${home.kept} for job 15 to merge back`))
   }
+  if (home?.stuck) {
+    parts.push(sentence(home.stuck))
+  }
   return parts.length > 0 ? parts.join(' ') : null
 }

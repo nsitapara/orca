@@ -1,5 +1,5 @@
 import type { RunRow, RunStatus, TickOutcome } from './api-types'
-import type { RunEnv } from './api-types-env'
+import type { RunEnv, StrandedWork } from './api-types-env'
 import { hadNothingToDo, NOTHING_TO_DO } from './run/step-plan'
 
 function withReason(words: string, reason: string | null): string {
@@ -33,6 +33,35 @@ export function envStackLine(env: RunEnv): string | null {
   }
   const urls = Object.entries(stack.urls).map(([name, url]) => `${name} ${url}`)
   return [`${stack.kind} stack ${stack.project}`, ...urls].join(' · ')
+}
+
+function count(n: number, one: string, many = `${one}s`): string {
+  return `${n} ${n === 1 ? one : many}`
+}
+
+// What a stuck throwaway holds, in a few words: "commit a46c16a5a5", "2 commits and 3 uncommitted files".
+export function strandedWhat(work: StrandedWork): string {
+  const parts: string[] = []
+  if (work.commits.length === 1) {
+    parts.push(`commit ${work.commits[0].slice(0, 10)}`)
+  } else if (work.commits.length > 1) {
+    parts.push(count(work.commits.length, 'commit'))
+  }
+  if (work.edits > 0) {
+    parts.push(count(work.edits, 'uncommitted file'))
+  }
+  return parts.join(' and ')
+}
+
+// A throwaway Pilot couldn't remove that holds work nothing else has: nothing kept it on a branch, so job 15 can't
+// merge it home. Null for any other env. The Merge back step, the Merge back list and Finished all say it this way.
+export function strandedLine(env: RunEnv): string | null {
+  if (env.removedAt !== null || !env.stranded) {
+    return null
+  }
+  const tries = count(env.deleteAttempts, 'try', 'tries')
+  const why = env.deleteError ? `: ${env.deleteError}` : ''
+  return `Stuck: ${strandedWhat(env.stranded)} only in its throwaway, which Pilot can't remove (${tries})${why}`
 }
 
 // What is left to say about removing the env: nothing once removed, or while the run still goes.

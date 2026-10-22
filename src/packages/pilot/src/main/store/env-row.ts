@@ -1,4 +1,10 @@
-import type { EnvMode, EnvState, RunEnv, RunEnvStack } from '../../shared/api-types-env'
+import type {
+  EnvMode,
+  EnvState,
+  RunEnv,
+  RunEnvStack,
+  RunStranded
+} from '../../shared/api-types-env'
 
 // What env_json holds beside the columns: the create command, who prepares it (a pid and its start identity, so a restart
 // tells a stopped Pilot's preparation from a live one), and pilotcli's result.
@@ -13,6 +19,8 @@ export type EnvJson = {
   kept?: string
   // When job 15's source found that branch gone from git: merged home, or deleted.
   keptGoneAt?: number
+  // What a throwaway env delete couldn't remove still holds (main/envs/teardown.ts).
+  stranded?: RunStranded
 }
 
 export function readEnvJson(raw: unknown): EnvJson {
@@ -44,6 +52,7 @@ export function envOfRow(r: Record<string, unknown>): RunEnv | null {
     deleteError: (r.env_delete_error as string | null) ?? null,
     deleteAttempts: Number(r.env_delete_attempts ?? 0),
     ...(json.kept ? { kept: json.kept } : {}),
-    ...(json.keptGoneAt ? { keptGoneAt: json.keptGoneAt } : {})
+    ...(json.keptGoneAt ? { keptGoneAt: json.keptGoneAt } : {}),
+    ...(json.stranded ? { stranded: json.stranded } : {})
   }
 }

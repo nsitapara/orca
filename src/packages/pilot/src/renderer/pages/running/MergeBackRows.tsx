@@ -15,6 +15,18 @@ const STATE_WORD: Record<PartState, string> = {
   none: 'Queued'
 }
 
+// A fix still in a throwaway Pilot can't remove (nothing kept it on a branch) is loud: Stuck, in red.
+function stateWord(row: MergeBackRow): string {
+  return row.branch === null ? 'Stuck' : STATE_WORD[row.state]
+}
+
+function badgeVariant(row: MergeBackRow): 'destructive' | 'outline' | 'secondary' {
+  if (row.branch === null) {
+    return 'destructive'
+  }
+  return row.state === 'not_reached' ? 'outline' : 'secondary'
+}
+
 function baseName(path: string): string {
   return (
     path
@@ -35,9 +47,7 @@ export function MergeBackItem({ row, now }: { row: MergeBackRow; now: number }):
         <span className="min-w-0 truncate font-medium" title={row.automationName}>
           {row.automationName}
         </span>
-        <Badge variant={row.state === 'not_reached' ? 'outline' : 'secondary'}>
-          {STATE_WORD[row.state]}
-        </Badge>
+        <Badge variant={badgeVariant(row)}>{stateWord(row)}</Badge>
         <span className="ml-auto shrink-0 pl-2 text-xs tabular-nums text-muted-foreground">
           kept {formatDuration(Math.max(now - row.since, 0))} ago
         </span>
@@ -59,7 +69,7 @@ export function MergeBackItem({ row, now }: { row: MergeBackRow; now: number }):
         ) : null}
       </div>
       <div className="truncate font-mono text-xs text-muted-foreground" title={row.home ?? ''}>
-        {row.branch} → {where} · {row.itemLabel}
+        {row.branch ?? 'not kept on a branch: still in its throwaway'} → {where} · {row.itemLabel}
       </div>
       {row.detail ? <p className="text-xs text-muted-foreground">{row.detail}</p> : null}
     </li>

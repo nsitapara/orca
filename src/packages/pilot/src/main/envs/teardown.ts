@@ -1,5 +1,5 @@
 import type { RunRow } from '../../shared/api-types'
-import type { RunEnv } from '../../shared/api-types-env'
+import type { RunEnv, StrandedWork } from '../../shared/api-types-env'
 import { envDeleteArgs } from '../../shared/run/env-args'
 import { addRunEvent } from '../run/run-close'
 import type { PilotStore } from '../store/store'
@@ -29,6 +29,14 @@ export type TeardownDeps = {
   forget(run: RunRow): void
   // env delete kept the throwaway's unhomed commits on a branch: job 15 (items: kept_branch) merges them home.
   kept?(run: RunRow): void
+  // A throwaway env delete couldn't remove: what it still holds that nothing else has (main/envs/stranded.ts), and the
+  // flagged card that says so (main/envs/stranded-card.ts), raised while it holds any and closed once it's removed or
+  // holds none. Never silent: nothing else would bring that work home.
+  stranded?: {
+    read(run: RunRow & { env: RunEnv }): Promise<StrandedWork | null>
+    raise(run: RunRow, work: StrandedWork, reason: string): string | null
+    close(cardId: string, outcome: string): void
+  }
   log(message: string): void
 }
 export type Teardowns = { start(run: RunRow): void; housekeep(): void; settled(): Promise<void> }
@@ -80,6 +88,55 @@ export function createTeardowns(deps: TeardownDeps): Teardowns {
     deps.log(`[pilot] run ${run.id}: its env isn't removed yet (try ${attempts}): ${reason}`)
   }
 
+  // After a delete that left a throwaway: what it holds that nothing else has, recorded on the run, and its card raised
+  // (or closed once it holds none). A card that can't be written is logged, never thrown into the teardown.
+  async function noteStranded(run: RunRow & { env: RunEnv }, reason: string): Promise<void> {
+    if (run.env.mode !== 'throwaway' || !run.env.path || !deps.stranded) {
+      return
+    }
+    const cardId = run.env.stranded?.cardId ?? null
+    try {
+      const work = await deps.stranded.read(run)
+      if (!work) {
+        if (cardId) {
+          deps.stranded.close(cardId, "Its throwaway holds nothing that isn't home now")
+        }
+        store.runs.envs.setStranded(run.id, null)
+        return
+      }
+      const raised = deps.stranded.raise(run, work, reason) ?? cardId
+      store.runs.envs.setStranded(run.id, { ...work, cardId: raised })
+      if (!run.env.stranded) {
+        addRunEvent(store, deps.now(), run, 'env_stranded', { ...work, error: reason })
+        deps.log(`[pilot] run ${run.id}: its throwaway holds work nothing else has: ${reason}`)
+      }
+    } catch (error) {
+      deps.log(`[pilot] run ${run.id}: couldn't say what its throwaway holds: ${messageOf(error)}`)
+    }
+  }
+
+  // The folder is gone: a stuck throwaway's card closes, saying where its work went.
+  function strandedRemoved(run: RunRow & { env: RunEnv }, kept: string | undefined): void {
+    const cardId = run.env.stranded?.cardId
+    if (!run.env.stranded) {
+      return
+    }
+    store.runs.envs.setStranded(run.id, null)
+    if (!cardId || !deps.stranded) {
+      return
+    }
+    const where = kept
+      ? `kept on ${kept} for job 15 to merge home`
+      : 'already in your worktree or on origin'
+    try {
+      deps.stranded.close(cardId, `Removed its throwaway; its work is ${where}`)
+    } catch (error) {
+      deps.log(
+        `[pilot] run ${run.id}: couldn't close its stuck-throwaway card: ${messageOf(error)}`
+      )
+    }
+  }
+
   // M4 §8, the run ends however it ends: a create still in flight is stopped and has exited (it settles the env failed,
   // Ruling P2), then a throwaway's tabs close, then env delete, with --keep-folder for a kept worktree. A run still going
   // is left alone, its create included. The answers are Contract answers 5.
@@ -98,6 +155,7 @@ export function createTeardowns(deps: TeardownDeps): Teardowns {
       const busy = await closeTabs(run)
       if (busy) {
         failedDelete(run, busy)
+        await noteStranded(run, busy)
         return
       }
     }
@@ -108,6 +166,7 @@ export function createTeardowns(deps: TeardownDeps): Teardowns {
     if (reply.outcome === 'ok') {
       const kept = keptOf(reply.data)
       store.runs.envs.removed(run.id, deps.now(), kept)
+      strandedRemoved(run, kept)
       deps.forget(run)
       if (kept) {
         deps.kept?.(run)
@@ -124,9 +183,12 @@ export function createTeardowns(deps: TeardownDeps): Teardowns {
       store.runs.envs.deleteRefused(run.id, reason)
       addRunEvent(store, deps.now(), run, 'env_delete_refused', { error: reason })
       deps.log(`[pilot] run ${run.id}: pilotcli refused to delete its env: ${reason}`)
+      await noteStranded(run, reason)
       return
     }
-    failedDelete(run, reply.reason || `env delete answered ${reply.outcome}`)
+    const reason = reply.reason || `env delete answered ${reply.outcome}`
+    failedDelete(run, reason)
+    await noteStranded(run, reason)
   }
 
   function start(run: RunRow): void {

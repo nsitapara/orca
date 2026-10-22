@@ -1,7 +1,9 @@
 import { mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 import type { OrcaRuntimeService } from '../../../../../main/runtime/orca-runtime'
+import { gitExecFileAsync } from '../../../../../main/git/command-runner/git-exec-file'
 import type { ItemDecision, RunRow } from '../../shared/api-types'
+import { homeOf, type StrandedWork } from '../../shared/api-types-env'
 import type { RunEnd } from '../../shared/run/step-plan'
 import type { AutomationDefinition } from '../../shared/definition/types'
 import { envRunKey } from '../../shared/run/env-args'
@@ -18,6 +20,7 @@ import { previewEnvs } from './preview'
 import { createPreparations, type EnvPreparer, type Preparations } from './prepare'
 import { recoverPreparing } from './recover'
 import { resolveEnvPath } from './resolve-path'
+import { strandedWork } from './stranded'
 import { sweepEnvs } from './sweep'
 import { createTeardowns } from './teardown'
 
@@ -35,6 +38,12 @@ export type EnvServiceDeps = {
   onRunEnd?(run: RunRow): void
   // env delete kept a throwaway's commits on pilot/<run>: queue job 15 (items: kept_branch), which merges them home.
   onKept?(run: RunRow): void
+  // A throwaway env delete couldn't remove that holds work nothing else has: its flagged card, raised and closed by the
+  // teardown (main/envs/stranded-card.ts).
+  strandedCard?: {
+    raise(run: RunRow, work: StrandedWork, reason: string): string | null
+    close(cardId: string, outcome: string): void
+  }
   pilotcli?: Pilotcli
 }
 export type EnvService = {
@@ -111,6 +120,19 @@ export function createEnvService(deps: EnvServiceDeps): EnvService {
       }
     },
     kept: (run) => deps.onKept?.(run),
+    ...(deps.strandedCard
+      ? {
+          stranded: {
+            read: (run) =>
+              strandedWork(
+                (args, cwd) => gitExecFileAsync(args, { cwd }).then((r) => r.stdout),
+                run.env.path ?? '',
+                homeOf(run)
+              ),
+            ...deps.strandedCard
+          }
+        }
+      : {}),
     log: deps.log
   })
   const runEnded = (run: RunRow): void => {

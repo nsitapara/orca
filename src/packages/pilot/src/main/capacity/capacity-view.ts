@@ -110,15 +110,17 @@ function dueFromOf(def: AutomationDefinition | undefined): string {
   }
 }
 
-// Every fix a throwaway kept that isn't in its worktree yet, oldest first, and where its merge back stands.
+// Every fix that isn't in its worktree yet, oldest first, and where its merge back stands: the ones stuck in a throwaway
+// Pilot can't remove (nothing kept them on a branch), then the ones a throwaway kept.
 function mergeBackRows(store: PilotStore, nameOf: (id: string) => string): MergeBackRow[] {
-  return store.runs.envs.keptPending().map((run) => {
+  const runs = [...store.runs.envs.strandedPending(), ...store.runs.envs.keptPending()]
+  return runs.map((run) => {
     const s = mergeBackState(run, mergeBackOf(store, run))
     return {
       runId: run.id,
       automationName: nameOf(run.automationId),
       itemLabel: run.itemLabel,
-      branch: run.env?.kept ?? '',
+      branch: run.env?.kept ?? null,
       home: run.homePath ?? null,
       since: run.env?.removedAt ?? run.finishedAt ?? run.startedAt,
       state: s.state,

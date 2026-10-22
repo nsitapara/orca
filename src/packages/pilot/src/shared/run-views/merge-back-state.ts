@@ -1,5 +1,6 @@
 import type { RunRow, RunStatus } from '../api-types'
 import type { MergeBack } from '../api-types-runs'
+import { strandedLine } from '../env-text'
 import type { PartState } from './paint'
 
 // Where a throwaway run's kept fix is on its way into its worktree: the run strip's Merge back part and the Running
@@ -30,7 +31,16 @@ export function mergeBackState(
     return state('not_reached', null)
   }
   if (env.removedAt === null) {
-    return state('running', 'Removing the throwaway')
+    // A throwaway Pilot can't remove that holds work nothing else has never reads as on its way.
+    const stuck = strandedLine(env)
+    if (stuck) {
+      return state('failed', stuck)
+    }
+    const tries = env.deleteAttempts === 1 ? 'try' : 'tries'
+    const why = env.deleteError
+      ? ` (${env.deleteAttempts} ${tries} so far: ${env.deleteError})`
+      : ''
+    return state('running', `Removing the throwaway${why}`)
   }
   const kept = env.kept
   if (!kept) {

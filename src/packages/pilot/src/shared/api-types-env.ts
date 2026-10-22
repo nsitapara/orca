@@ -25,7 +25,15 @@ export type RunEnv = {
   kept?: string
   // When that branch was found gone from git: merged home by job 15, or deleted. Absent while it waits.
   keptGoneAt?: number
+  // A throwaway env delete couldn't remove that still holds work nothing else has; absent once it's removed or holds none.
+  stranded?: RunStranded
 }
+
+// What a throwaway that couldn't be removed still holds that nothing else has (main/envs/stranded.ts): its commits on no
+// origin branch, no pilot/ branch and not in its home's HEAD, newest first, and how many files it has uncommitted (ignored
+// ones never). cardId: the flagged card that says so (main/envs/stranded-card.ts), null when it couldn't be written.
+export type StrandedWork = { commits: string[]; edits: number }
+export type RunStranded = StrandedWork & { cardId: string | null }
 
 // Where a run's work belongs (cards, answers, the timeline, the worktree panel): its item's worktree. For an env run it may
 // differ from the folder it worked in (worktreePath).
