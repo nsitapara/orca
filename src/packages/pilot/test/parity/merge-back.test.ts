@@ -12,12 +12,14 @@ describe('15 · Merge back kept fixes: the definition', () => {
   it('takes kept branches, waits in line until the merge can land, and works where env create says', () => {
     expect(definition.items).toMatchObject({ kind: 'kept_branch' })
     expect(definition.checks).toEqual([{ kind: 'kept_ready' }])
-    expect(definition.oncePer).toBe('{kept.branch}@{kept.head}:{kept.tries}')
+    expect(definition.oncePer).toBe('{kept.branch}@{kept.head}:{kept.home_head}:{kept.tries}')
     expect(definition.workspace).toMatchObject({ kind: 'env', writes: true, stack: 'never' })
   })
 
-  it('never asks and never gives up: a failed merge is tried again until the branch is home', () => {
-    expect(definition.giveUp).toBe('never')
+  // A merge that fails with nothing changed stops at the retry limit with a card; my branch or the fix moving makes it due
+  // again (once_per names both), so the fix is never dropped and no Claude run repeats for nothing.
+  it('never asks; retries up to the limit, then waits for my branch or the fix to change', () => {
+    expect(definition.giveUp).not.toBe('never')
     expect(definition.steps.find((s) => s.name === 'forget')?.exitCodes).toEqual({
       ok: [0],
       skip: [],
