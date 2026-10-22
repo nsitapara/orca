@@ -25,9 +25,9 @@ export const RUNNER_CHECKS: readonly RunnerCheck[] = [
   {
     name: "The job's own gates",
     holds:
-      "a session still open, answers waiting to apply, outside its time window, or a kept fix that can't merge into its worktree yet",
+      "a session still open, answers waiting to apply, outside its time window, a kept fix that can't merge into its worktree yet, or an earlier run's fix on the item that isn't home yet (a run now would redo it)",
     again: 'every 5 min',
-    codes: ['session_open', 'answers_pending', 'window', 'merge_blocked']
+    codes: ['session_open', 'answers_pending', 'window', 'merge_blocked', 'merge_back_pending']
   },
   {
     name: 'Agent quota',

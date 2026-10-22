@@ -136,6 +136,18 @@ export class EnvStore {
       .map((r) => toRun(r as never))
   }
 
+  // This job's items whose ended run left a fix not in its worktree yet: item key → its kept branch, or "its
+  // throwaway" when nothing kept it on one (the runner holds the item's next run: runner-gates.ts unhomedHold).
+  unhomedByItem(automationId: string): Map<string, string> {
+    const unhomed = new Map<string, string>()
+    for (const run of [...this.strandedPending(), ...this.keptPending()]) {
+      if (run.automationId === automationId && !unhomed.has(run.itemKey)) {
+        unhomed.set(run.itemKey, run.env?.kept ?? 'its throwaway')
+      }
+    }
+    return unhomed
+  }
+
   // hold_home: the step whose claim on home_path this run holds. The claim queries (store-runs.ts) count it only while
   // that step is starting or running, so a step that ends any way, a crash included, lets go.
   holdHome(runId: string, idx: number): void {

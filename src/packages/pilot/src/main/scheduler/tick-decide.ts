@@ -304,6 +304,7 @@ export async function decideTickItems(
     activeRuns: deps.store.runs.runningCount(def.id),
     busyWorktrees: busyWorktrees(deps.store, repo),
     activeItems: deps.store.runs.runningItemKeys(def.id),
+    unhomedItems: deps.store.runs.envs.unhomedByItem(def.id),
     notDue: custom.notDue,
     retryLimit: deps.store.capacity.retryLimit(),
     byHand: hand.byHand === true,

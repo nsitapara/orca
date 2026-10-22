@@ -29,7 +29,8 @@ const HOLD_RELEASE: Record<HoldReason, string | null> = {
   claimed: null,
   mr_unknown: null,
   waits: null,
-  merge_blocked: null
+  merge_blocked: null,
+  merge_back_pending: 'It starts once 15 · Merge back brings that fix into the worktree.'
 }
 
 function sentence(text: string): string {

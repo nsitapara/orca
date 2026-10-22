@@ -44,7 +44,8 @@ const HOLD_REASON_SET: Record<HoldReason, true> = {
   job_limit: true,
   own_run: true,
   tick_limit: true,
-  merge_blocked: true
+  merge_blocked: true,
+  merge_back_pending: true
 }
 const HOLD_REASONS = Object.keys(HOLD_REASON_SET)
 

@@ -254,6 +254,8 @@ export type HoldReason =
   | 'own_run'
   | 'tick_limit'
   | 'merge_blocked'
+  // An earlier run of the job on the item left a fix that isn't in its worktree yet: a run now would redo it.
+  | 'merge_back_pending'
 export type QueueRoute = 'resume' | 'fork' | 'new' | 'action'
 export type QueueRow = {
   id: number

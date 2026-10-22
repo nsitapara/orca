@@ -114,8 +114,21 @@ function ownRunHold(input: DecideInput, item: DecideItem, goNow: boolean): Hold 
   return { code: 'own_run', detail: `Another run of this job is still active on ${item.label}` }
 }
 
-// A failed run's retry, the job's runtime checks in declared order, each agent's quota, another run in the item's
-// worktree, then the job's own run on the item.
+// An earlier run of the job on the item left a fix that isn't in its worktree yet: a retry or the next run would start
+// from the worktree's HEAD without it and redo it (t4243 then t4278, 2026-10-20). Job 15's own items never wait on it.
+function unhomedHold(input: DecideInput, item: DecideItem): Hold | null {
+  const where = input.unhomedItems?.get(item.key)
+  if (where === undefined || input.definition.items?.kind === 'kept_branch') {
+    return null
+  }
+  return {
+    code: 'merge_back_pending',
+    detail: `An earlier run's fix isn't in the worktree yet (${where})`
+  }
+}
+
+// A failed run's retry, an earlier run's fix not home yet, the job's runtime checks in declared order, each agent's
+// quota, another run in the item's worktree, then the job's own run on the item.
 export function itemGate(
   input: DecideInput,
   item: DecideItem,
@@ -126,6 +139,7 @@ export function itemGate(
   return standingHold(
     [
       retryHold(input, onceKey),
+      unhomedHold(input, item),
       ...declaredHolds(input, item),
       implicitQuotaHold(input.definition, item.fields),
       busyHold(input.busyWorktrees, path),

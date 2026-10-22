@@ -129,6 +129,32 @@ describe("itemGate: the job's own run on the item", () => {
   })
 })
 
+describe("itemGate: an earlier run's fix not home yet", () => {
+  const done: HandledState = { status: 'done', failedAt: null, failures: 0, lastOutcome: null }
+  const unhomed = new Map([[ITEM.key, 'pilot/review-branch-code-202610201920-t4243-1']])
+  const keptJob = testDefinition({
+    oncePer: '{mr.iid}',
+    items: { kind: 'kept_branch', where: {}, match: [], customFields: [] }
+  })
+  it.each<[string, Partial<DecideInput>, string | null]>([
+    [
+      'its kept branch waits for job 15: the next run would redo it',
+      { unhomedItems: unhomed },
+      "An earlier run's fix isn't in the worktree yet (pilot/review-branch-code-202610201920-t4243-1)"
+    ],
+    ["another item's fix", { unhomedItems: new Map([['mr:2', 'pilot/x']]) }, null],
+    ["job 15's own item", { unhomedItems: unhomed, definition: keptJob }, null]
+  ])('%s', (_name, over, detail) => {
+    const hold = itemGate(input(done, over), ITEM, '1', null)
+    expect(hold && [hold.code, hold.detail]).toEqual(detail && ['merge_back_pending', detail])
+  })
+
+  it('stands behind a retry, so a failed run waits for its own fix before trying again', () => {
+    const later = itemGate(input(failed(1, 11 * MIN), { unhomedItems: unhomed }), ITEM, '1', null)
+    expect(later?.code).toBe('merge_back_pending')
+  })
+})
+
 describe("Go now's mark on an item", () => {
   const PATH = '/wt/1'
   const MARKED: DecideItem = { ...ITEM, fields: { ...ITEM.fields, 'worktree.path': PATH } }
@@ -255,6 +281,11 @@ describe("Go now's mark on an item", () => {
           ]
         })
       ]
+    },
+    // Go now never passes over it: a run now would redo the fix job 15 hasn't brought home yet.
+    merge_back_pending: {
+      goes: false,
+      gates: [tick({ unhomedItems: new Map([[MARKED.key, 'pilot/r1']]) })]
     },
     in_flight: { goes: false, gates: [elsewhere('in_flight')] },
     claimed: { goes: false, gates: [elsewhere('claimed')] },
