@@ -32,6 +32,8 @@ export type KeptBranchDeps = {
   pilotcli: Pilotcli
   // Every local branch under pilot/ in the repo at path, or null when git can't say.
   keptBranches(path: string): Promise<KeptRef[] | null>
+  // The commit checked out in the worktree at path, or null when git can't say.
+  headOf(path: string): Promise<string | null>
   now(): number
 }
 
@@ -156,11 +158,14 @@ export function keptBranchSource(deps: KeptBranchDeps): ItemSource {
         const runId = run?.id ?? branch.slice('pilot/'.length)
         const home = run?.homePath ?? null
         const wait = await waitFor(deps, run, home, branch, live)
-        // A run of job 15 that ended done yet left the branch (an answered card, a changed job): once_per counts them,
-        // so the item is due again until the branch is home.
+        // A run of job 15 that ended done or was stopped yet left the branch (an answered card, a changed job, Stop):
+        // its key is settled, so once_per counts them and the item is due again until the branch is home.
         const tries = deps.store.activity
           .forItem(null, `kept:${runId}`)
-          .filter((r) => r.status === 'done').length
+          .filter((r) => r.status === 'done' || r.status === 'cancelled').length
+        // My worktree's HEAD: once_per names it, so a merge that failed with nothing changed waits for the retry limit,
+        // and is due again the moment my branch moves (the 2026-10-22 audit: never an hourly Claude run for nothing).
+        const homeHead = home ? ((await deps.headOf(home)) ?? '') : ''
         items.push({
           kind: 'kept_branch',
           key: `kept:${runId}`,
@@ -172,6 +177,7 @@ export function keptBranchSource(deps: KeptBranchDeps): ItemSource {
             'kept.job': run ? (originOf(deps.store, run)?.name ?? run.automationId) : '',
             'kept.wait': wait,
             'kept.tries': tries,
+            'kept.home_head': homeHead,
             'worktree.path': home ?? ''
           },
           worktreeHint: home ? { path: home } : null,

@@ -36,6 +36,11 @@ export function registerPilotSources(deps: PilotSourceDeps): void {
           (r) => keptRefsOf(r.stdout),
           () => null
         ),
+      headOf: (path) =>
+        gitExecFileAsync(['rev-parse', 'HEAD'], { cwd: path }).then(
+          (r) => r.stdout.trim() || null,
+          () => null
+        ),
       now: Date.now
     })
   )

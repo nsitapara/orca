@@ -86,6 +86,7 @@ function setup(c: Case) {
       return c.dryRun ?? reply('ok')
     },
     keptBranches: async (path) => (path === '/repo' ? refs : []),
+    headOf: async (path) => (path === '/wt/a' ? 'home111' : null),
     now: () => 99
   })
   const ctx = sourceContext(
@@ -104,6 +105,7 @@ const r1 = (wait: string, branch = 'pilot/r1') => ({
     'kept.job': '03 · Review',
     'kept.wait': wait,
     'kept.tries': 0,
+    'kept.home_head': 'home111',
     'worktree.path': '/wt/a'
   }
 })
@@ -173,20 +175,33 @@ describe('kept branch source', () => {
     ])
   })
 
-  it('counts the runs that ended done yet left the branch, so once_per makes it due again', async () => {
+  // A stopped run settles its key as handled, so it counts too, or the branch would never be merged again.
+  it('counts the runs that ended done or stopped yet left the branch, so once_per makes it due again', async () => {
     const { source, ctx, store } = setup({})
-    store.runs.create({
-      id: 'm1',
-      automationId: 'merge-back',
-      tickId: null,
-      itemKey: 'kept:r1',
-      itemLabel: 'pilot/r1 → a',
-      worktreePath: '/wt/a',
-      startedAt: 10
-    })
-    store.runs.update('m1', { status: 'done', finishedAt: 11 })
+    for (const [id, status] of [
+      ['m1', 'done'],
+      ['m2', 'cancelled'],
+      ['m3', 'failed']
+    ] as const) {
+      store.runs.create({
+        id,
+        automationId: 'merge-back',
+        tickId: null,
+        itemKey: 'kept:r1',
+        itemLabel: 'pilot/r1 → a',
+        worktreePath: '/wt/a',
+        startedAt: 10
+      })
+      store.runs.update(id, { status, finishedAt: 11 })
+    }
     const { items } = await source.list(ctx, {})
-    expect(items[0]?.fields['kept.tries']).toBe(1)
+    expect(items[0]?.fields['kept.tries']).toBe(2)
+  })
+
+  it("names its home worktree's HEAD, so a merge that failed is due again once my branch moves", async () => {
+    const { source, ctx } = setup({ worktrees: ['/wt/a'] })
+    const { items } = await source.list(ctx, {})
+    expect(items[0]?.fields['kept.home_head']).toBe('home111')
   })
 
   it('warns, and lists nothing, when git cannot list the branches', async () => {
