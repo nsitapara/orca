@@ -1,4 +1,4 @@
-import type { RunRow } from '../../shared/api-types'
+import type { InboxItemRow, RunRow } from '../../shared/api-types'
 import type {
   AnswersDef,
   AutomationDefinition,
@@ -13,6 +13,7 @@ import { runFieldsOf } from '../run/advance-fields'
 import type { CloseOptions } from '../run/run-close'
 import type { PilotStore } from '../store/store'
 import { answersStepOf, askingRunOf, launchAnswerRun } from './answer-start'
+import { draftApproved } from './draft-grant'
 import type { AgentDispatch, AgentDispatchDeps, AgentGroup, AnswerRun } from './answer-run'
 import { holdRows } from './dispatch-groups'
 import { hold, type Hold } from './holds'
@@ -30,19 +31,51 @@ function messageOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
 }
 
+// pilotcli env create's when_backend rule (pilotCLI internal/modules/env/create.go): a change under api/ needs the
+// backend stack.
+const BACKEND_DIR = 'api/'
+
+// The files a card's approved drafted patch changes, a rename's source included; null when its answer grants no drafted
+// patch (draft-grant.ts) or its bundle lists no patch files.
+function approvedPatchPaths(item: InboxItemRow): string[] | null {
+  if (!draftApproved(item)) {
+    return null
+  }
+  const patches = (item.details?.artifacts?.files ?? []).filter((f) => f.role === 'patch')
+  const paths = patches
+    .flatMap((f) => f.diff ?? [])
+    .flatMap((d) => (d.oldPath ? [d.path, d.oldPath] : [d.path]))
+  return paths.length > 0 ? paths : null
+}
+
+// Every answer asks only for an approved drafted patch that changes nothing under api/. A when_backend job then starts no
+// stack for them: that stack follows the branch, job 14 checked the patch in its own env, and without a stack pilotcli
+// puts the run in my worktree when nothing is in flight there instead of a throwaway.
+export function answersSkipBackend(items: readonly InboxItemRow[]): boolean {
+  return (
+    items.length > 0 &&
+    items.every((item) => approvedPatchPaths(item)?.every((p) => !p.startsWith(BACKEND_DIR)))
+  )
+}
+
 // The job's env for an answer run (M4 §8, "An approved fix"), always with writes. A worktree subject names the card's
 // worktree. Otherwise, when the asking run worked in place or kept, its folder; else the job's own subject. create may
 // answer any mode for any subject (Contract answers 3), an existing branch included, so nothing else is decided here.
+// skipBackend: answersSkipBackend for the cards it answers.
 export function answerEnvOf(
   def: Pick<AutomationDefinition, 'name' | 'workspace'> & {
     answers?: Pick<AnswersDef, 'stack'> | null
   },
   home: string | null,
-  asking: { homePath: string | null; mode: string | null } | null
+  asking: { homePath: string | null; mode: string | null } | null,
+  skipBackend = false
 ): EnvWorkspaceDef {
   const env = answerEnvFolder(def, home, asking)
   // answers: { stack: never } keeps the job's env rules but starts no stack.
-  return def.answers?.stack === 'never' ? { ...env, stack: 'never' } : env
+  if (def.answers?.stack === 'never' || (skipBackend && env.stack === 'when_backend')) {
+    return { ...env, stack: 'never' }
+  }
+  return env
 }
 
 function answerEnvFolder(
@@ -167,7 +200,8 @@ export function prepareAnswerRun(
         'worktree.path': home,
         ...runFieldsOf(stored(), group.def)
       }
-      const env = answerEnvOf(group.def, home, facts)
+      const skipBackend = answersSkipBackend(group.answers.map((a) => a.item))
+      const env = answerEnvOf(group.def, home, facts, skipBackend)
       envs.preparer.begin(
         { run: stored(), env, repo: group.def.repo, label: run.label, fields },
         hooks

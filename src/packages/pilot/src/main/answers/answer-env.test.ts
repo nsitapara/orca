@@ -2,6 +2,7 @@ import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
+import type { InboxItemRow } from '../../shared/api-types'
 import type { EnvMode } from '../../shared/api-types-env'
 import { parseAutomationYaml } from '../../shared/definition/parse'
 import type { EnvWorkspaceDef } from '../../shared/definition/types'
@@ -9,7 +10,7 @@ import { createPreparations, type PrepareRequest, type PreparedHooks } from '../
 import { UnrecordedLaunchError } from '../scheduler/tick-runner'
 import { PilotStore } from '../store/store'
 import { FREE_HOLDS } from './__fixtures__/holds'
-import { answerEnvOf } from './answer-env'
+import { answerEnvOf, answersSkipBackend } from './answer-env'
 import { dispatchToAgent, type AgentDispatchDeps } from './answer-run'
 import { answersHold } from './holds'
 
@@ -259,6 +260,123 @@ describe('answerEnvOf: answers.stack never', () => {
     )
     expect(kept.stack).toBe('full')
     expect(never).toEqual({ ...kept, stack: 'never' })
+  })
+})
+
+// A left_for_you card answered on this Mac. approve: Approve, else Skip. patch: the files its drafted patch changes, as
+// [path, oldPath] (null when the bundle lists none).
+function draftedCard(approve: boolean, patch: [string, string | null][] | null): InboxItemRow {
+  const digest = 'a'.repeat(64)
+  const diff = (patch ?? []).map(([path, oldPath]) => ({
+    path,
+    oldPath,
+    rows: 2,
+    added: 1,
+    removed: 1,
+    hunksSha256: 'b'.repeat(64)
+  }))
+  return {
+    id: 'in_0000000000000001',
+    automationId: 'ci',
+    runId: 'run-1',
+    stepIdx: 0,
+    itemKey: 'mr:1',
+    worktreePath: '/wt/a',
+    person: 'nish',
+    type: 'left_for_you',
+    title: 'Join with " · "?',
+    context: '',
+    options: [],
+    suggested: null,
+    detailsMd: null,
+    details: {
+      path: '/v/F.json',
+      sha256: 'c'.repeat(64),
+      inlined: {},
+      blocks: 3,
+      drafted: true,
+      draftedBase: 'e'.repeat(40),
+      artifacts: {
+        files: patch
+          ? [{ ref: 'p.patch', role: 'patch', sha256: 'd'.repeat(64), bytes: 9, diff }]
+          : [],
+        expected: [],
+        generated: [],
+        tags: []
+      }
+    },
+    action: null,
+    actionArgs: null,
+    digest,
+    version: 1,
+    status: 'answered',
+    answer: {
+      option: null,
+      text: approve ? 'approve' : 'skip',
+      digest,
+      via: 'page',
+      callerKind: 'desktop'
+    },
+    answeredAt: 2,
+    answeredBy: 'nish',
+    createdAt: 1,
+    updatedAt: 2,
+    outcome: null,
+    replies: [],
+    source: 'engine',
+    vaultRef: null,
+    preparation: {
+      state: 'ready',
+      input: { key: 'k', context: '{}', requirements: ['diff'] },
+      revision: 1,
+      attempt: 1,
+      maxAttempts: 3,
+      runId: null,
+      stepIdx: null,
+      leaseUntil: null,
+      progress: '',
+      error: null,
+      updatedAt: 2
+    }
+  }
+}
+
+describe('answersSkipBackend: approved drafted patches outside api/ need no backend stack', () => {
+  const front = draftedCard(true, [['apps/staff/src/a.ts', null]])
+  it.each<[string, InboxItemRow[], boolean]>([
+    ['an approved frontend patch', [front], true],
+    ['two approved frontend patches', [front, front], true],
+    [
+      'an approved patch that changes api/',
+      [draftedCard(true, [['api/reports/models.py', null]])],
+      false
+    ],
+    [
+      'an approved patch that renames a file out of api/',
+      [draftedCard(true, [['lib/m.py', 'api/m.py']])],
+      false
+    ],
+    ['a Skip, which grants no patch', [draftedCard(false, [['apps/staff/src/a.ts', null]])], false],
+    ['an approved patch whose bundle lists no files', [draftedCard(true, null)], false],
+    ['a frontend patch and a backend one', [front, draftedCard(true, [['api/x.py', null]])], false],
+    ['no answers', [], false]
+  ])('%s', (_name, items, skip) => {
+    expect(answersSkipBackend(items)).toBe(skip)
+  })
+
+  it("starts no stack for a when_backend job's answers, and leaves a job that names its stack alone", () => {
+    const env: EnvWorkspaceDef = {
+      kind: 'env',
+      subject: { kind: 'worktree', worktree: '{worktree.path}', at: null },
+      writes: false,
+      stack: 'when_backend'
+    }
+    const full: EnvWorkspaceDef = { ...env, stack: 'full' }
+    expect(answerEnvOf({ name: 'Job', workspace: env }, '/wt/a', null, true).stack).toBe('never')
+    expect(answerEnvOf({ name: 'Job', workspace: env }, '/wt/a', null, false).stack).toBe(
+      'when_backend'
+    )
+    expect(answerEnvOf({ name: 'Job', workspace: full }, '/wt/a', null, true).stack).toBe('full')
   })
 })
 
