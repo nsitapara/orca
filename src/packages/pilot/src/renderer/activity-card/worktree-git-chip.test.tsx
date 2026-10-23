@@ -2,8 +2,12 @@
 import { cleanup, fireEvent, render, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { GitStatusResult, GitUpstreamStatus } from '../../../../../shared/git-status-types'
-import type { Worktree } from '../../../../../shared/worktree/types'
-import { makeRepo, makeWorktree } from '@/components/activity/ActivityPrototypePage-test-fixtures'
+import type { GitStatusMetadataChangedEvent, Worktree } from '../../../../../shared/worktree/types'
+import {
+  makeRepo,
+  makeWorktree,
+  makeWorktreeWithId
+} from '@/components/activity/ActivityPrototypePage-test-fixtures'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import type * as ResolveOwner from '@/lib/resolve-owner'
 import { getRuntimeGitBranchCompare } from '@/runtime/runtime-git-diff-client'
@@ -21,7 +25,9 @@ vi.mock('@/lib/resolve-owner', async (importOriginal) => ({
 }))
 vi.mock('@/runtime/runtime-git-status-client', () => ({ getRuntimeGitStatus: vi.fn() }))
 vi.mock('@/runtime/runtime-git-diff-client', () => ({ getRuntimeGitBranchCompare: vi.fn() }))
-vi.mock('../activity-tabs/open-activity-worktree', () => ({ openActivityWorktree: vi.fn() }))
+vi.mock('../activity-tabs/open-activity-worktree', () => ({
+  openActivityWorktree: vi.fn(() => true)
+}))
 
 const UPSTREAM = 'origin/feature'
 
@@ -52,17 +58,26 @@ function status(upstreamStatus: GitUpstreamStatus): GitStatusResult {
   }
 }
 
+const OPEN = { reviewMerged: false }
+
 describe('the git chip’s state', () => {
   it.each([
     {
       name: 'commits to push',
       sync: sync({ upstream: tracked(2, 0) }),
-      mark: ['ArrowUp', 'text-status-warning', '2', 'push', 'Push 2 commits to origin/feature']
+      mark: [
+        'ArrowUp',
+        'text-status-warning',
+        '2',
+        'push',
+        '2 commits to push to origin/feature',
+        'Push 2 commits to origin/feature'
+      ]
     },
     {
       name: 'in sync',
       sync: sync(),
-      mark: ['CloudCheck', 'text-status-success', null, 'open', 'In sync with origin/feature']
+      mark: ['CloudCheck', 'text-status-success', null, 'open', 'In sync with origin/feature', null]
     },
     {
       name: 'behind',
@@ -72,7 +87,8 @@ describe('the git chip’s state', () => {
         'text-muted-foreground',
         '1',
         'open',
-        '1 commit to pull from origin/feature'
+        '1 commit to pull from origin/feature',
+        null
       ]
     },
     {
@@ -83,7 +99,8 @@ describe('the git chip’s state', () => {
         'text-status-warning',
         '2↑ 3↓',
         'open',
-        'Diverged from origin/feature: 2 commits to push, 3 to pull. Sync in Source Control'
+        'Diverged from origin/feature: 2 commits to push, 3 to pull. Sync in Source Control',
+        null
       ]
     },
     {
@@ -94,6 +111,7 @@ describe('the git chip’s state', () => {
         'text-status-warning',
         '4',
         'publish',
+        '4 commits not on origin',
         'Publish branch: 4 commits not on origin'
       ]
     },
@@ -105,7 +123,21 @@ describe('the git chip’s state', () => {
         'text-muted-foreground',
         null,
         'publish',
+        'Branch not on origin yet',
         'Publish branch: not on origin yet'
+      ]
+    },
+    {
+      name: 'not on origin once its MR is merged',
+      sync: sync({ upstream: UNPUBLISHED, unpublishedCommits: 5 }),
+      merged: true,
+      mark: [
+        'CloudUpload',
+        'text-muted-foreground',
+        '5',
+        'open',
+        '5 commits not on origin · its MR is merged',
+        null
       ]
     },
     {
@@ -114,10 +146,17 @@ describe('the git chip’s state', () => {
       mark: null
     },
     { name: 'detached', sync: sync({ onBranch: false, upstream: tracked(2, 0) }), mark: null }
-  ])('$name', ({ sync, mark }) => {
-    const result = gitSyncMark(sync)
+  ])('$name', ({ sync, merged = false, mark }) => {
+    const result = gitSyncMark(sync, { reviewMerged: merged })
     expect(
-      result && [result.Icon.displayName, result.tone, result.count, result.action, result.label]
+      result && [
+        result.Icon.displayName,
+        result.tone,
+        result.count,
+        result.action,
+        result.label,
+        result.actionLabel
+      ]
     ).toEqual(mark)
   })
 
@@ -134,7 +173,7 @@ describe('the git chip’s state', () => {
     },
     { sync: sync({ onBranch: false }), changes: null, label: null }
   ])('uncommitted changes ride beside the branch: $label', ({ sync, changes, label }) => {
-    const view = worktreeGitChipView(sync)
+    const view = worktreeGitChipView(sync, OPEN)
     expect(view && [view.changes, view.label]).toEqual(label === null ? null : [changes, label])
   })
 })
@@ -160,6 +199,8 @@ describe('the git chip in the worktree strip', () => {
   afterEach(() => {
     cleanup()
     resetWorktreeGitSyncFeeds()
+    vi.restoreAllMocks()
+    Reflect.deleteProperty(window, 'api')
     useAppStore.setState({
       pushBranch: before.pushBranch,
       setRightSidebarTab: before.setRightSidebarTab,
@@ -189,7 +230,9 @@ describe('the git chip in the worktree strip', () => {
 
     fireEvent.click(await view.findByRole('button', { name: 'Push 2 commits to origin/feature' }))
 
-    expect(pushBranch).toHaveBeenCalledWith('wt-1', '/repo/wt-1', false, undefined, undefined)
+    expect(pushBranch).toHaveBeenCalledWith('wt-1', '/repo/wt-1', false, undefined, undefined, {
+      runtimeTarget: { kind: 'local' }
+    })
     expect(openRow).not.toHaveBeenCalled()
     await view.findByRole('button', { name: 'In sync with origin/feature' })
   })
@@ -220,18 +263,62 @@ describe('the git chip in the worktree strip', () => {
       'origin/dev',
       'background'
     )
-    expect(pushBranch).toHaveBeenCalledWith('wt-1', '/repo/wt-1', true, undefined, undefined)
+    expect(pushBranch).toHaveBeenCalledWith('wt-1', '/repo/wt-1', true, undefined, undefined, {
+      runtimeTarget: { kind: 'local' }
+    })
   })
 
   it('where it may not push, opens the worktree’s Source Control instead', async () => {
     vi.mocked(getRuntimeGitStatus).mockResolvedValue(status(tracked(2, 0)))
     const { view } = renderStrip(makeWorktree(), false)
 
-    fireEvent.click(await view.findByRole('button', { name: 'Push 2 commits to origin/feature' }))
+    fireEvent.click(
+      await view.findByRole('button', { name: '2 commits to push to origin/feature' })
+    )
 
     await waitFor(() => expect(setRightSidebarTab).toHaveBeenCalledWith('source-control'))
     expect(openActivityWorktree).toHaveBeenCalledWith(expect.objectContaining({ id: 'wt-1' }))
     expect(setRightSidebarOpen).toHaveBeenCalledWith(true)
     expect(pushBranch).not.toHaveBeenCalled()
+  })
+
+  it('re-reads a repo’s worktrees for a change that names none at most every 30 s', async () => {
+    const signals: { onMetadata?: (event: GitStatusMetadataChangedEvent) => void } = {}
+    Object.defineProperty(window, 'api', {
+      configurable: true,
+      value: {
+        worktrees: {
+          onGitStatusMetadataChanged: (
+            listener: (event: GitStatusMetadataChangedEvent) => void
+          ) => {
+            signals.onMetadata = listener
+            return () => {}
+          }
+        }
+      }
+    })
+    vi.mocked(getRuntimeGitStatus).mockResolvedValue(status(tracked(0, 0)))
+    const second = makeWorktreeWithId('wt-2')
+    useAppStore.setState({ worktreesByRepo: { 'repo-1': [makeWorktree(), second] } })
+    render(
+      <TooltipProvider>
+        <WorktreeLinkStrip worktree={makeWorktree()} repo={makeRepo()} />
+        <WorktreeLinkStrip worktree={second} repo={makeRepo()} />
+      </TooltipProvider>
+    )
+    await waitFor(() => expect(getRuntimeGitStatus).toHaveBeenCalledTimes(2))
+    const start = Date.now()
+    const clock = vi.spyOn(Date, 'now').mockReturnValue(start + 10_000)
+
+    signals.onMetadata?.({ repoId: 'repo-1' })
+    await waitFor(() => expect(getRuntimeGitStatus).toHaveBeenCalledTimes(4))
+    clock.mockReturnValue(start + 20_000)
+    signals.onMetadata?.({ repoId: 'repo-1' })
+    signals.onMetadata?.({ repoId: 'repo-1', worktreePaths: ['/repo/wt-2'] })
+
+    await waitFor(() => expect(getRuntimeGitStatus).toHaveBeenCalledTimes(5))
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    expect(getRuntimeGitStatus).toHaveBeenCalledTimes(5)
+    expect(vi.mocked(getRuntimeGitStatus).mock.calls[4][0].worktreeId).toBe('wt-2')
   })
 })

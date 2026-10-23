@@ -10,7 +10,9 @@ import { WORKTREE_CHIP_CLASS } from './worktree-chip-class'
 import { pushWorktreeBranch } from './worktree-git-sync-feed'
 
 function openSourceControl(worktree: Worktree): void {
-  openActivityWorktree(worktree)
+  if (!openActivityWorktree(worktree)) {
+    return
+  }
   const state = useAppStore.getState()
   state.setRightSidebarTab('source-control')
   state.setRightSidebarOpen(true)
@@ -38,6 +40,13 @@ function SyncIcon({
   return <Icon className={cn('size-3 shrink-0', tone)} />
 }
 
+function chipLabel(view: WorktreeGitChipView, pushing: boolean, pushes: boolean): string {
+  if (pushing) {
+    return 'Pushing…'
+  }
+  return (pushes ? view.actionLabel : null) ?? view.label
+}
+
 /**
  * The worktree's git state: its branch against origin (yellow: commits origin doesn't have, green:
  * in sync), then a dot and the count of uncommitted changes. Where `canPush`, a click on a push or
@@ -56,7 +65,7 @@ export function WorktreeGitChip({
 }): React.JSX.Element {
   const action = view.sync?.action ?? 'open'
   const pushes = canPush && (action === 'push' || action === 'publish')
-  const label = pushing ? 'Pushing…' : view.label
+  const label = chipLabel(view, pushing, pushes)
   return (
     <Tooltip>
       <TooltipTrigger asChild>

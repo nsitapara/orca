@@ -4,7 +4,8 @@ import { activateAndRevealWorkspace } from '@/lib/worktree-activation'
 import type { Worktree } from '../../../../../shared/worktree/types'
 
 // A click in Activity is a user open, so an empty worktree gets the user's default surface, as in Projects.
-export function openActivityWorktree(worktree: Worktree): void {
+// False when it couldn't open, after saying so.
+export function openActivityWorktree(worktree: Worktree): boolean {
   const executionHostId = getPaletteWorktreeExecutionHostId(worktree)
   const opened = activateAndRevealWorkspace(worktree.id, {
     navigationIntent: 'user-open',
@@ -14,4 +15,5 @@ export function openActivityWorktree(worktree: Worktree): void {
   if (!opened) {
     toast.error('This worktree is no longer available.')
   }
+  return opened !== false
 }

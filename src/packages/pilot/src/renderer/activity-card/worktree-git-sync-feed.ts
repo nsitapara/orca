@@ -5,11 +5,6 @@ import type { Repo } from '../../../../../shared/repo-types'
 import { getWorktreeHostIdentity } from '../../../../../shared/worktree/host-qualified-identity'
 import type { GitStatusMetadataChangedEvent, Worktree } from '../../../../../shared/worktree/types'
 import { isGitStatusSignalForWorktree } from '@/components/right-sidebar/git-status-signal-attribution'
-import {
-  getCachedAutomaticPushTargetUpstreamStatus,
-  invalidateAutomaticPushTargetUpstreamStatusCache,
-  storeCachedAutomaticPushTargetUpstreamStatus
-} from '@/components/right-sidebar/push-target-upstream-refresh-cache'
 import { ORCA_TERMINAL_COMMAND_FINISHED_EVENT } from '@/hooks/terminal-command-finished-event'
 import { getConnectionId } from '@/lib/connection-context'
 import { runtimeTargetForWorkspaceOwner } from '@/lib/resolve-owner'
@@ -26,8 +21,15 @@ import { findRepoForHost } from '@/store/slices/repo-host-identity'
 const MIN_GAP_MS = 3000
 // Agents edit files without touching the index, which no watcher reports.
 const SAFETY_POLL_MS = 60_000
+// A commit anywhere in a repo (and every SSH change) names no worktree. Fanning each one out to every
+// visible worktree of the repo would re-read them all per commit, so it happens at most this often.
+const UNATTRIBUTED_GAP_MS = 30_000
+// Under the poll, so each poll reads a push-target worktree's upstream afresh.
+const PUSH_TARGET_UPSTREAM_TTL_MS = 45_000
 // Leaves the git admission's interactive headroom to Source Control.
 const MAX_IN_FLIGHT = 2
+// Compare outcomes that hold for the HEAD; an `error` is asked again on the next read.
+const SETTLED_COMPARE = new Set(['ready', 'invalid-base', 'unborn-head', 'no-merge-base'])
 
 export type WorktreeGitSync = {
   /** Files git status lists: modified, staged or untracked. */
@@ -37,7 +39,7 @@ export type WorktreeGitSync = {
   /** False on a detached HEAD, which has nothing to push. */
   onBranch: boolean
   upstream: GitUpstreamStatus
-  /** A branch not on origin yet: its commits past the worktree's base, or null with no base to count from. */
+  /** A branch not on origin: its commits past the worktree's base, or null with no base to count from. */
   unpublishedCommits: number | null
 }
 
@@ -55,15 +57,30 @@ type Feed = {
   again: 'none' | 'paced' | 'now'
   // The last count of an unpublished branch's commits, for the HEAD and base it was counted at.
   unpublished: { key: string; commits: number | null } | null
+  // A push-target worktree's upstream, for the HEAD it was read at. A push or fetch moves it without
+  // moving HEAD, so those drop it.
+  pushTargetUpstream: { key: string; upstream: GitUpstreamStatus; at: number } | null
+  // Bumped on each drop, so a read begun before it can't put the old upstream back.
+  upstreamGeneration: number
+  // The push is done; the first read begun after it ends the spinner, so the old push isn't offered again.
+  settlePush: boolean
+  // The store's upstream for this worktree, which Source Control writes after its pushes and fetches.
+  storeUpstream: GitUpstreamStatus | undefined
 }
 
 const EMPTY: WorktreeGitSnapshot = { sync: null, pushing: false }
 // One read per worktree, shared by every chip that shows it (its header, its Inbox cards).
 const feeds = new Map<string, Feed>()
 const queue = new Set<string>()
+const repoFanouts = new Map<
+  string,
+  { at: number; trailing: ReturnType<typeof setTimeout> | null }
+>()
 let inFlight = 0
 let subscribers = 0
 let detachSignals: (() => void) | null = null
+// Tests reset the module between cases; a read from before a reset must not touch the new state.
+let epoch = 0
 
 function notify(feed: Feed): void {
   feed.listeners.forEach((listener) => listener())
@@ -72,6 +89,11 @@ function notify(feed: Feed): void {
 function setSnapshot(feed: Feed, next: Partial<WorktreeGitSnapshot>): void {
   feed.snapshot = { ...feed.snapshot, ...next }
   notify(feed)
+}
+
+function dropUpstream(feed: Feed): void {
+  feed.pushTargetUpstream = null
+  feed.upstreamGeneration += 1
 }
 
 // The transport the Delete dialog's status reads use: another machine's worktree through its host.
@@ -101,22 +123,33 @@ function gitContextFor({ worktree }: Subject): RuntimeGitContext | null {
 }
 
 // Porcelain status compares with git's upstream; a PR-created worktree publishes to Orca's own target.
+// Null when status failed, or a host too old to fold the upstream into it: keep the last answer.
 async function upstreamFor(
+  feed: Feed,
   context: RuntimeGitContext,
   { worktree }: Subject,
-  status: GitStatusResult
-): Promise<GitUpstreamStatus> {
+  status: GitStatusResult,
+  generation: number
+): Promise<GitUpstreamStatus | null> {
   const pushTarget = worktree.pushTarget
   if (!pushTarget) {
-    return status.upstreamStatus ?? getRuntimeGitUpstreamStatus(context)
+    return status.upstreamStatus ?? null
   }
-  const cacheInput = { ...context, worktreeId: worktree.id, pushTarget, status }
-  const cached = getCachedAutomaticPushTargetUpstreamStatus(cacheInput)
-  if (cached) {
-    return cached
+  const key = JSON.stringify([
+    status.head ?? null,
+    status.branch ?? null,
+    pushTarget.remoteName,
+    pushTarget.branchName,
+    pushTarget.remoteUrl ?? null
+  ])
+  const cached = feed.pushTargetUpstream
+  if (cached?.key === key && Date.now() - cached.at < PUSH_TARGET_UPSTREAM_TTL_MS) {
+    return cached.upstream
   }
   const upstream = await getRuntimeGitUpstreamStatus(context, pushTarget)
-  storeCachedAutomaticPushTargetUpstreamStatus(cacheInput, upstream)
+  if (feed.upstreamGeneration === generation) {
+    feed.pushTargetUpstream = { key, upstream, at: Date.now() }
+  }
   return upstream
 }
 
@@ -137,7 +170,9 @@ async function unpublishedCommits(
   }
   const { summary } = await getRuntimeGitBranchCompare(context, baseRef, 'background')
   const commits = summary.status === 'ready' ? (summary.commitsAhead ?? null) : null
-  feed.unpublished = { key, commits }
+  if (SETTLED_COMPARE.has(summary.status)) {
+    feed.unpublished = { key, commits }
+  }
   return commits
 }
 
@@ -147,12 +182,16 @@ async function readSync(feed: Feed, signal: AbortSignal): Promise<WorktreeGitSyn
   if (!subject || !context) {
     return null
   }
+  const generation = feed.upstreamGeneration
   const status = await getRuntimeGitStatus(context, {
     admissionTier: 'background',
     includeLineStats: false,
     signal
   })
-  const upstream = await upstreamFor(context, subject, status)
+  const upstream = await upstreamFor(feed, context, subject, status, generation)
+  if (!upstream) {
+    return null
+  }
   const onBranch = Boolean(status.branch)
   return {
     changes: status.entries.length,
@@ -167,26 +206,38 @@ async function readSync(feed: Feed, signal: AbortSignal): Promise<WorktreeGitSyn
 }
 
 async function run(key: string, feed: Feed): Promise<void> {
+  const runEpoch = epoch
   inFlight += 1
   feed.lastStartedAt = Date.now()
+  const settles = feed.settlePush
+  feed.settlePush = false
   const controller = new AbortController()
   feed.controller = controller
+  const next: Partial<WorktreeGitSnapshot> = {}
   try {
     const sync = await readSync(feed, controller.signal)
     if (sync && !controller.signal.aborted) {
-      setSnapshot(feed, { sync })
+      next.sync = sync
     }
   } catch {
     // Keep the last answer; the next signal or poll asks again.
   } finally {
-    inFlight -= 1
-    feed.controller = null
-    const again = feed.again
-    feed.again = 'none'
-    if (again !== 'none') {
-      requestRefresh(key, again === 'now')
+    if (runEpoch === epoch) {
+      inFlight -= 1
+      feed.controller = null
+      if (settles) {
+        next.pushing = false
+      }
+      if (Object.keys(next).length > 0) {
+        setSnapshot(feed, next)
+      }
+      const again = feed.again
+      feed.again = 'none'
+      if (again !== 'none') {
+        requestRefresh(key, again === 'now')
+      }
+      drain()
     }
-    drain()
   }
 }
 
@@ -203,10 +254,14 @@ function drain(): void {
   }
 }
 
-// `now` skips the pacing: after the chip's own push, the answer is the point.
+// `now` skips the pacing and the hidden-window wait: after the chip's own push, the answer is the point.
 function requestRefresh(key: string, now = false): void {
   const feed = feeds.get(key)
   if (!feed?.subject || feed.listeners.size === 0) {
+    return
+  }
+  // A hidden window asks once when it shows again.
+  if (!now && !isWindowVisible()) {
     return
   }
   if (feed.controller) {
@@ -230,16 +285,43 @@ function requestRefresh(key: string, now = false): void {
   drain()
 }
 
-function refreshWhere(matches: (subject: Subject) => boolean): void {
+function refreshWhere(matches: (subject: Subject, feed: Feed) => boolean): void {
   for (const [key, feed] of feeds) {
-    if (feed.listeners.size > 0 && feed.subject && matches(feed.subject)) {
+    if (feed.listeners.size > 0 && feed.subject && matches(feed.subject, feed)) {
       requestRefresh(key)
     }
   }
 }
 
+function fanOutUnattributed(repoId: string): void {
+  let fanout = repoFanouts.get(repoId)
+  if (!fanout) {
+    fanout = { at: 0, trailing: null }
+    repoFanouts.set(repoId, fanout)
+  }
+  if (fanout.trailing) {
+    return
+  }
+  const pending = fanout
+  const fan = (): void => {
+    pending.trailing = null
+    pending.at = Date.now()
+    refreshWhere(({ worktree }) => worktree.repoId === repoId)
+  }
+  const wait = pending.at + UNATTRIBUTED_GAP_MS - Date.now()
+  if (wait > 0) {
+    pending.trailing = setTimeout(fan, wait)
+  } else {
+    fan()
+  }
+}
+
 function attachSignals(): () => void {
   const onMetadata = (signal: GitStatusMetadataChangedEvent): void => {
+    if (!signal.worktreePaths?.length) {
+      fanOutUnattributed(signal.repoId)
+      return
+    }
     const paths = (useAppStore.getState().worktreesByRepo[signal.repoId] ?? []).map((w) => w.path)
     refreshWhere(
       ({ worktree }) =>
@@ -247,11 +329,32 @@ function attachSignals(): () => void {
         isGitStatusSignalForWorktree(signal, worktree.path, paths)
     )
   }
+  // A finished command may have pushed or fetched, which moves a push-target upstream without HEAD.
   const onCommandFinished = (event: Event): void => {
     const worktreeId: unknown = event instanceof CustomEvent ? event.detail?.worktreeId : undefined
-    refreshWhere(({ worktree }) => worktree.id === worktreeId)
+    refreshWhere(({ worktree }, feed) => {
+      if (worktree.id !== worktreeId) {
+        return false
+      }
+      dropUpstream(feed)
+      return true
+    })
   }
-  // A hidden window doesn't poll; it asks once when it shows again.
+  // Source Control's pushes, pulls and fetches land in the store's upstream status.
+  const unsubscribeStore = useAppStore.subscribe((state, previous) => {
+    if (state.remoteStatusesByWorktree === previous.remoteStatusesByWorktree) {
+      return
+    }
+    refreshWhere(({ worktree }, feed) => {
+      const upstream = state.remoteStatusesByWorktree[worktree.id]
+      if (upstream === feed.storeUpstream) {
+        return false
+      }
+      feed.storeUpstream = upstream
+      dropUpstream(feed)
+      return true
+    })
+  })
   const onVisible = (): void => {
     if (isWindowVisible()) {
       refreshWhere(() => true)
@@ -264,9 +367,16 @@ function attachSignals(): () => void {
   document.addEventListener('visibilitychange', onVisible)
   return () => {
     clearInterval(timer)
+    unsubscribeStore()
     unsubscribeMetadata?.()
     window.removeEventListener(ORCA_TERMINAL_COMMAND_FINISHED_EVENT, onCommandFinished)
     document.removeEventListener('visibilitychange', onVisible)
+    for (const fanout of repoFanouts.values()) {
+      if (fanout.trailing) {
+        clearTimeout(fanout.trailing)
+      }
+    }
+    repoFanouts.clear()
   }
 }
 
@@ -281,7 +391,11 @@ function feedFor(key: string): Feed {
       lastStartedAt: 0,
       trailing: null,
       again: 'none',
-      unpublished: null
+      unpublished: null,
+      pushTargetUpstream: null,
+      upstreamGeneration: 0,
+      settlePush: false,
+      storeUpstream: undefined
     }
     feeds.set(key, feed)
   }
@@ -298,7 +412,11 @@ function subscribe(key: string, listener: () => void): () => void {
     feed.listeners.delete(listener)
     if (feed.listeners.size === 0) {
       // Keep the snapshot: a row scrolled back into view shows its last answer while it asks again.
-      feed.controller?.abort()
+      if (feed.controller) {
+        feed.controller.abort()
+        // The aborted read answered nothing, so a remount (StrictMode's included) asks at once.
+        feed.lastStartedAt = 0
+      }
       if (feed.trailing) {
         clearTimeout(feed.trailing)
         feed.trailing = null
@@ -318,6 +436,9 @@ function noteSubject(key: string, subject: Subject): void {
   const feed = feedFor(key)
   const previous = feed.subject?.worktree
   feed.subject = subject
+  if (!previous) {
+    feed.storeUpstream = useAppStore.getState().remoteStatusesByWorktree[subject.worktree.id]
+  }
   if (
     !previous ||
     previous.head !== subject.worktree.head ||
@@ -330,41 +451,40 @@ function noteSubject(key: string, subject: Subject): void {
 }
 
 /**
- * Pushes the worktree's branch as Source Control's Push (or Publish Branch) does, then reads its
- * state again. The store toasts a failure; the chip shows where the branch stands after it.
+ * Pushes the worktree's branch as Source Control's Push (or Publish Branch) does, through the same
+ * host its state was read from, then reads it again. The store toasts a failure; the chip then shows
+ * where the branch stands.
  */
 export async function pushWorktreeBranch(worktree: Worktree, publish: boolean): Promise<void> {
   const key = getWorktreeHostIdentity(worktree)
   const feed = feeds.get(key)
-  if (!feed?.subject || feed.snapshot.pushing) {
+  const context = feed?.subject ? gitContextFor(feed.subject) : null
+  if (!feed || !context || feed.snapshot.pushing) {
     return
   }
-  const subject = feed.subject
   setSnapshot(feed, { pushing: true })
-  const connectionId = getConnectionId(worktree.id) ?? undefined
   try {
     await useAppStore
       .getState()
-      .pushBranch(worktree.id, worktree.path, publish, connectionId, worktree.pushTarget)
+      .pushBranch(worktree.id, worktree.path, publish, context.connectionId, worktree.pushTarget, {
+        runtimeTarget: context.target
+      })
   } catch {
     // The store already toasted why.
   } finally {
-    const context = gitContextFor(subject)
-    if (context && worktree.pushTarget) {
-      // Why: the cache is keyed by HEAD, which a push leaves alone, so it would replay the old counts.
-      invalidateAutomaticPushTargetUpstreamStatusCache({
-        ...context,
-        worktreeId: worktree.id,
-        pushTarget: worktree.pushTarget
-      })
+    dropUpstream(feed)
+    if (feed.listeners.size > 0) {
+      feed.settlePush = true
+      requestRefresh(key, true)
+    } else {
+      setSnapshot(feed, { pushing: false })
     }
-    setSnapshot(feed, { pushing: false })
-    requestRefresh(key, true)
   }
 }
 
 // Tests start every case from no feeds.
 export function resetWorktreeGitSyncFeeds(): void {
+  epoch += 1
   for (const feed of feeds.values()) {
     feed.controller?.abort()
     if (feed.trailing) {
@@ -381,8 +501,8 @@ export function resetWorktreeGitSyncFeeds(): void {
 
 /**
  * The worktree's git state against origin and its uncommitted changes, read in the background and
- * kept fresh by git's change signals, finished terminal commands and a slow poll. Nothing for a
- * folder workspace.
+ * kept fresh by git's change signals, finished terminal commands, Source Control's remote actions and
+ * a slow poll. Nothing for a folder workspace.
  */
 export function useWorktreeGitSync(worktree: Worktree, repo: Repo | null): WorktreeGitSnapshot {
   const gitRepo = repo && isGitRepoKind(repo) ? repo : null

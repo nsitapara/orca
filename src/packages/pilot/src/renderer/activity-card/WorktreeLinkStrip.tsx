@@ -160,7 +160,7 @@ export function WorktreeLinkStrip({
   const { review, linear } = useWorktreeLinks(worktree, repo)
   const branchLinear = useBranchLinearIssue(linear ? null : worktree.branch)
   const git = useWorktreeGitSync(worktree, repo)
-  const gitView = worktreeGitChipView(git.sync)
+  const gitView = worktreeGitChipView(git.sync, { reviewMerged: review?.state === 'merged' })
   const ports = useWorktreeLivePorts(worktree.id)
   const gitChip = gitView ? (
     <WorktreeGitChip worktree={worktree} view={gitView} pushing={git.pushing} canPush={canPush} />
