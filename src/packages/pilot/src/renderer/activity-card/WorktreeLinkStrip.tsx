@@ -6,14 +6,15 @@ import { getProviderName, getReviewLabel } from '@/components/sidebar/worktree-r
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { openHttpLink } from '@/lib/http-link-routing'
 import { cn } from '@/lib/utils'
+import { worktreeGitChipView } from './git-sync-mark'
 import { useBranchLinearIssue } from './linear-branch-issue'
 import { LinearStateMark } from './LinearStateMark'
 import { reviewPipelineMark, reviewStateMark } from './review-state-mark'
+import { WORKTREE_CHIP_CLASS } from './worktree-chip-class'
+import { useWorktreeGitSync } from './worktree-git-sync-feed'
 import { useWorktreeLinks, type WorktreeLinearLink } from './worktree-links'
+import { WorktreeGitChip } from './WorktreeGitChip'
 import { useWorktreeLivePorts, WorktreePortsChip } from './WorktreePortsChip'
-
-const CHIP_CLASS =
-  'inline-flex min-w-0 shrink-0 cursor-pointer items-center gap-1 rounded border border-border/60 bg-muted/40 px-1 py-px text-[11px] font-medium leading-4 tabular-nums text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-default'
 
 // Chips sit inside the worktree header: a click or Enter opens the link, never the worktree.
 function chipHandlers(url: string | undefined, worktreeId: string | undefined) {
@@ -47,7 +48,7 @@ function Chip({
         <button
           type="button"
           aria-label={label}
-          className={CHIP_CLASS}
+          className={WORKTREE_CHIP_CLASS}
           {...chipHandlers(url, worktreeId)}
         >
           {children}
@@ -141,21 +142,31 @@ export function LinkChips({
 }
 
 /**
- * A worktree's MR/PR, Linear issue and live ports, as chips under its name. With no linked issue, the
- * one its branch is named for.
+ * A worktree's MR/PR, Linear issue, git state and live ports, as chips under its name. With no linked
+ * issue, the one its branch is named for. `canPush` false keeps the git chip to showing state, where a
+ * push must go through its own gate (an Inbox card's Push to origin).
  */
 export function WorktreeLinkStrip({
   worktree,
   repo,
-  className
+  className,
+  canPush = true
 }: {
   worktree: Worktree
   repo: Repo | null
   className?: string
+  canPush?: boolean
 }): React.JSX.Element | null {
   const { review, linear } = useWorktreeLinks(worktree, repo)
   const branchLinear = useBranchLinearIssue(linear ? null : worktree.branch)
+  const git = useWorktreeGitSync(worktree, repo)
+  const gitView = worktreeGitChipView(git.sync)
   const ports = useWorktreeLivePorts(worktree.id)
+  const gitChip = gitView ? (
+    <WorktreeGitChip worktree={worktree} view={gitView} pushing={git.pushing} canPush={canPush} />
+  ) : null
+  const portsChip =
+    ports.length > 0 ? <WorktreePortsChip worktree={worktree} repo={repo} ports={ports} /> : null
   return (
     <LinkChips
       review={review}
@@ -163,8 +174,11 @@ export function WorktreeLinkStrip({
       worktreeId={worktree.id}
       className={className}
     >
-      {ports.length > 0 ? (
-        <WorktreePortsChip worktree={worktree} repo={repo} ports={ports} />
+      {gitChip || portsChip ? (
+        <>
+          {gitChip}
+          {portsChip}
+        </>
       ) : null}
     </LinkChips>
   )

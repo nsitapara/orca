@@ -8,6 +8,7 @@ import { getWorkspacePortsByWorktreeId } from '@/lib/workspace-port-groups'
 import { useAppStore } from '@/store'
 import { StackPortsList } from './StackPortsList'
 import { useStackPorts } from './use-stack-ports'
+import { WORKTREE_CHIP_CLASS } from './worktree-chip-class'
 
 const NO_PORTS: WorkspacePort[] = []
 
@@ -45,7 +46,7 @@ export function WorktreePortsChip({
           onClick={stopRowEvent}
           onMouseDown={stopRowEvent}
           onKeyDown={stopRowEvent}
-          className="inline-flex shrink-0 cursor-pointer items-center gap-1 rounded border border-border/60 bg-muted/40 px-1 py-px text-[11px] font-medium leading-4 tabular-nums text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+          className={WORKTREE_CHIP_CLASS}
         >
           <Plug className="size-3" />
           {label}

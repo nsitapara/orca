@@ -23,8 +23,9 @@ function ItemChips({ fields }: { fields: ItemFields }): React.JSX.Element | null
   return <LinkChips review={reviewFromItemFields(fields)} linear={linear} className={CHIPS_CLASS} />
 }
 
-// A card's place chips: its worktree's MR/PR, Linear and ports, as Activity's worktree header shows them. With no
-// worktree in the app (an MR no worktree holds, another machine's), the MR and issue its run's item named.
+// A card's place chips: its worktree's MR/PR, Linear, git state and ports, as Activity's worktree header shows them;
+// its git chip doesn't push, so a push card's Push to origin stays the one way to push from here. With no worktree
+// in the app (an MR no worktree holds, another machine's), the MR and issue its run's item named.
 export function WorktreeChips({
   group,
   host,
@@ -42,7 +43,12 @@ export function WorktreeChips({
     return (
       <>
         <WorktreeLinksPrefetch worktree={worktree} repo={repo} />
-        <WorktreeLinkStrip worktree={worktree} repo={repo} className={CHIPS_CLASS} />
+        <WorktreeLinkStrip
+          worktree={worktree}
+          repo={repo}
+          className={CHIPS_CLASS}
+          canPush={false}
+        />
       </>
     )
   }

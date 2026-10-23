@@ -126,8 +126,9 @@ function openWorktree(worktreeId: string): void {
 // sessions, not as one more caption: the worktree in row type, its project beside it, New agent
 // and the Workspaces sidebar's pin (a pinned worktree always shows in Activity, first). Clicking it
 // opens the worktree and a right-click gives its menu, as in Projects. It has no fold, so every
-// folder icon sits on the guide line. Under the name, chips carry the worktree's MR, Linear issue
-// and live ports, so its sessions don't each repeat them. It fetches the MR and issue once, for
+// folder icon sits on the guide line. Under the name, chips carry the worktree's MR, Linear issue,
+// git state (commits to push, uncommitted changes; a click pushes) and live ports, so its sessions
+// don't each repeat them. It fetches the MR and issue once, for
 // those chips and its Delete once the MR is merged. A child worktree's header sits on its parent's
 // guide line, without the project its parent already names.
 export function ActivityTabsGroupHeader({ group, children }: HeaderProps): ReactNode {

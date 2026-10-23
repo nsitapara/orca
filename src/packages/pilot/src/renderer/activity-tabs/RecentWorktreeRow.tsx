@@ -13,7 +13,7 @@ import type { RecentWorktreeItem } from './recent-worktree-items'
 // Grouped by anything but worktree there is no header to start a session from: one line, the
 // worktree and its New agent. Grouped by worktree, the header stands in for it. A right-click gives
 // the worktree's menu, as in Projects; once its MR is merged, Delete shows at rest. Under the name,
-// the same MR, Linear and ports chips as a worktree header.
+// the same MR, Linear, git and ports chips as a worktree header.
 export function RecentWorktreeRow({ item }: { item: RecentWorktreeItem }): React.JSX.Element {
   const workspaceLabel = getActivityThreadWorkspaceTitle(item.worktree)
   return (
