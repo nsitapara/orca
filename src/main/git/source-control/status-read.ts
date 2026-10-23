@@ -119,6 +119,18 @@ async function dropSharedSymlinkUntrackedEntries(
   }
 }
 
+// Why: porcelain v2 drops `# branch.ab` only when the upstream ref is gone (deleted on the remote and
+// pruned). Counting that as 0/0 reads as "up to date" while local commits are on no remote.
+function porcelainUpstreamStatus(
+  upstreamName: string | undefined,
+  upstreamAheadBehind: { ahead: number; behind: number } | undefined
+): GitUpstreamStatus {
+  if (!upstreamName || !upstreamAheadBehind) {
+    return { hasUpstream: false, ahead: 0, behind: 0 }
+  }
+  return { hasUpstream: true, upstreamName, ...upstreamAheadBehind }
+}
+
 async function runGetStatus(
   worktreePath: string,
   options: GetStatusOptions = {}
@@ -281,15 +293,7 @@ async function runGetStatus(
     ...(statusSucceeded
       ? {
           upstreamStatus:
-            effectiveUpstreamStatus ??
-            (upstreamName
-              ? {
-                  hasUpstream: true,
-                  upstreamName,
-                  ahead: upstreamAheadBehind?.ahead ?? 0,
-                  behind: upstreamAheadBehind?.behind ?? 0
-                }
-              : { hasUpstream: false, ahead: 0, behind: 0 })
+            effectiveUpstreamStatus ?? porcelainUpstreamStatus(upstreamName, upstreamAheadBehind)
         }
       : {})
   }

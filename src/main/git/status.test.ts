@@ -302,6 +302,18 @@ describe('getStatus', () => {
     })
   })
 
+  it('reports no upstream when the configured upstream ref is gone, not 0/0', async () => {
+    readFileMock.mockResolvedValue('gitdir: /repo/.git/worktrees/feature\n')
+    gitExecFileAsyncMock.mockResolvedValueOnce({
+      stdout:
+        '# branch.oid abcdef1234567890\n# branch.head feature/prompts\n# branch.upstream origin/feature/prompts\n'
+    })
+
+    const result = await getStatus('/repo')
+
+    expect(result.upstreamStatus).toEqual({ hasUpstream: false, ahead: 0, behind: 0 })
+  })
+
   it('reports no upstream from porcelain v2 status when no same-name origin branch exists', async () => {
     readFileMock.mockResolvedValue('gitdir: /repo/.git/worktrees/feature\n')
     gitExecFileAsyncMock.mockImplementation((args: string[]) => {
