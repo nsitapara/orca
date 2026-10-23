@@ -107,7 +107,7 @@ describe('makeLauncher', () => {
           '',
           'Fix pipeline 99 on !1561.'
         ].join('\n'),
-        title: 'Fix failed CI on my MRs · !1561 web-1493',
+        title: '[Automation] Fix failed CI on my MRs · !1561 web-1493',
         pilot: {
           env: {
             PILOT_RUN_ID: 'run-1',
@@ -580,7 +580,7 @@ describe('openAgentTerminal', () => {
     expect(launchAgentTerminal).toHaveBeenCalledWith('id:r1::/wt', {
       agent,
       prompt: 'Apply the answers.',
-      title: 'Apply · answers',
+      title: '[Automation] Apply · answers',
       pilot: {
         env: {
           PILOT_RUN_ID: 'ans-1',

@@ -269,7 +269,7 @@ describe('launchAgentStep', () => {
     expect(selector).toBe('id:r::/wt/a')
     expect(opts).toMatchObject({
       agent: 'claude',
-      title: 'Fix CI · web-1-a · fix',
+      title: '[Automation] Fix CI · web-1-a · fix',
       prompt:
         'Started by the Pilot automation "Fix CI" (run run-1) for web-1-a.\nUse the fix-gitlab-ci skill.\n\nAnswer mode.\n\nGo on web-1-a.',
       pilot: {

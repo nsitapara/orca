@@ -222,7 +222,7 @@ describe('terminalLaunchOptions', () => {
     ).toEqual({
       agent: 'claude',
       prompt: 'Go.',
-      title: 'Fix CI · !1561',
+      title: '[Automation] Fix CI · !1561',
       pilot: {
         env: {
           PILOT_RUN_ID: 'r-1',

@@ -1,3 +1,4 @@
+import { automationTabTitle } from '../../shared/automation-tab-title'
 import { isSessionId, NOT_A_SESSION_ID } from '../../shared/session-id'
 import type { ItemFields, StepRow } from '../../shared/api-types'
 import type { AgentKind, AutomationDefinition, StepDef } from '../../shared/definition/types'
@@ -139,7 +140,8 @@ export function pilotStepEnv(input: StepEnvInput): Record<string, string> {
 }
 
 // What the Task 8a hook needs for one agent terminal: the step env and the argv (session, then args)
-// ride on `pilot`, the rest is launchAgentTerminal's own options.
+// ride on `pilot`, the rest is launchAgentTerminal's own options. Every tab an automation opens
+// (its steps' and its answer runs') is named "[Automation] …" here; Resume's tab is the user's own.
 export function terminalLaunchOptions(input: {
   agent: AgentKind
   prompt: string
@@ -152,7 +154,7 @@ export function terminalLaunchOptions(input: {
   return {
     agent: input.agent,
     prompt: input.prompt,
-    title: input.title,
+    title: automationTabTitle(input.title),
     pilot: {
       // The env's variables first: Pilot's own step env always wins (parseEnvResult refuses PILOT_*/ORCA_* anyway).
       env: { ...input.runEnv, ...pilotStepEnv(input.env) },
