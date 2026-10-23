@@ -1,5 +1,5 @@
 import { AgentStateDot } from '@/components/AgentStateDot'
-import { AgentIcon } from '@/lib/agent-catalog'
+import { TabAgentGlyph } from '../../../../packages/pilot/src/renderer/automation-tab/automation-tab-scope' // pilot-hook: tab-bar-automation-glyph
 import { cn } from '@/lib/utils'
 import type { TerminalTab } from '../../../../shared/terminal-tab-types'
 import type { TerminalAgent } from '../../../../shared/terminal-agent'
@@ -39,7 +39,7 @@ function TerminalTabAgentIdentityIcon({
       data-agent-icon={agent}
       aria-hidden
     >
-      <AgentIcon agent={agent} size={12} />
+      <TabAgentGlyph agent={agent} size={12} />
     </span>
   )
 }

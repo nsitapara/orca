@@ -74,6 +74,7 @@ describe('hookTestTargets', () => {
     expect(hookTestTargets(rows)).toEqual([
       'src/cli/dispatch.test',
       'src/cli/specs',
+      'src/main/git/source-control/status-read.test',
       'src/main/linear',
       'src/main/orcad',
       'src/main/runtime',
@@ -86,12 +87,16 @@ describe('hookTestTargets', () => {
       'src/renderer/src/components/sidebar/SidebarAgentsList.test',
       'src/renderer/src/components/sidebar/SidebarNav.test',
       'src/renderer/src/components/skills',
+      'src/renderer/src/components/tab-bar/TabDragPreview.test',
+      'src/renderer/src/components/tab-bar/TerminalSortableTab.test',
+      'src/renderer/src/components/tab-bar/TerminalTabLeadingIcon.test',
       'src/renderer/src/components/tab-bar/use-tab-bar-runtime-model.test',
       'src/renderer/src/components/terminal-workspace-keydown.test',
       'src/renderer/src/hooks/ipc-events/tab-lifecycle-ipc-bridge.test',
       'src/renderer/src/main.test',
       'src/renderer/src/store/right-sidebar-route.test',
-      'src/renderer/src/web/main.test'
+      'src/renderer/src/web/main.test',
+      'src/shared/global-settings-base.test'
     ])
   })
 

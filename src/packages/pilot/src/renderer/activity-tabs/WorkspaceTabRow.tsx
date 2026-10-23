@@ -22,6 +22,8 @@ import { closeClientHostedBrowserRow } from '@/runtime/client-hosted-browser-row
 import { useAppStore } from '@/store'
 import { ActivityTabsFooterLabel } from '../activity-card/ActivityTabsFooterLabel'
 import { ActivityMachineChip } from '../activity-machines/ActivityMachineChip'
+import { isAutomationTabTitle } from '../../shared/automation-tab-title'
+import { AutomationRunRowIcon } from '../automation-tab/AutomationRunGlyph'
 import { activateWorkspaceTab } from './activate-workspace-tab'
 import { ActivityTabsNest } from './ActivityTabsNest'
 import type { ActivityTabsVirtualItem } from './activity-tabs-rows'
@@ -56,9 +58,15 @@ function TabRowIconFace({
   )
 }
 
-// Same agent as the tab bar shows: hooks, process and title, not only what Orca launched there.
+// Same agent as the tab bar shows: hooks, process and title, not only what Orca launched there. An
+// automation's tab shows the automation icon where its agent's was, as in the tab bar; once its
+// agent exits, the plain terminal icon.
 function TerminalTabRowIcon({ terminalTab }: { terminalTab: TerminalTab }): React.JSX.Element {
-  return <TabRowIconFace agent={useTabAgent(terminalTab)} Icon={Terminal} />
+  const agent = useTabAgent(terminalTab)
+  if (agent && isAutomationTabTitle(terminalTab.customTitle)) {
+    return <AutomationRunRowIcon agentLabel={formatAgentTypeLabel(agent)} />
+  }
+  return <TabRowIconFace agent={agent} Icon={Terminal} />
 }
 
 function TabRowIcon({ tab }: { tab: Tab }): React.JSX.Element {

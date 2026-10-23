@@ -85,13 +85,27 @@ it('selects the hosted browser over the tab created while activating an empty wo
 })
 
 // Why: the row names the agent its tab-bar tab names; a title can show Claude before or without launch intent.
+// An automation's tab (named so at launch) shows the automation icon where its agent's was; its tooltip still names the agent.
 it.each([
-  { title: '✳ Claude Code', launchAgent: undefined, expected: 'Claude' },
-  { title: 'Terminal 1', launchAgent: 'codex' as const, expected: 'Codex' },
-  { title: 'zsh', launchAgent: undefined, expected: null }
+  { title: '✳ Claude Code', customTitle: null, launchAgent: undefined, expected: 'Claude' },
+  { title: 'Terminal 1', customTitle: null, launchAgent: 'codex' as const, expected: 'Codex' },
+  { title: 'zsh', customTitle: null, launchAgent: undefined, expected: null },
+  {
+    title: '✳ Claude Code',
+    customTitle: '[Automation] Fix CI · !1561',
+    launchAgent: undefined,
+    expected: 'Automation run (Claude)'
+  },
+  // Its agent exited: the plain terminal icon, as the tab bar shows.
+  {
+    title: 'zsh',
+    customTitle: '[Automation] Fix CI · !1561',
+    launchAgent: undefined,
+    expected: null
+  }
 ])(
-  'a terminal titled "$title" with launch agent $launchAgent shows $expected',
-  ({ title, launchAgent, expected }) => {
+  'a terminal titled "$title" ($customTitle) with launch agent $launchAgent shows $expected',
+  ({ title, customTitle, launchAgent, expected }) => {
     useAppStore.setState({
       tabsByWorktree: {
         'wt-1': [
@@ -100,7 +114,7 @@ it.each([
             ptyId: null,
             worktreeId: 'wt-1',
             title,
-            customTitle: null,
+            customTitle,
             color: null,
             sortOrder: 0,
             createdAt: 0,
@@ -134,6 +148,8 @@ it.each([
         />
       </TooltipProvider>
     )
-    expect(view.queryByTitle(/^(Claude|Codex)$/)?.getAttribute('title') ?? null).toBe(expected)
+    expect(
+      view.queryByTitle(/^(Claude|Codex|Automation run.*)$/)?.getAttribute('title') ?? null
+    ).toBe(expected)
   }
 )

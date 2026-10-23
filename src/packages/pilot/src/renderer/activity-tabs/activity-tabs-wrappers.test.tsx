@@ -130,6 +130,24 @@ describe('Pilot wrappers around upstream Activity elements', () => {
     expect(view.getByTitle('Claude')).toBeTruthy()
   })
 
+  // Why: an automation's session (its tab named so at launch) reads as automation; the tooltip still names the agent.
+  it.each([
+    { customTitle: null, icon: 'Claude' },
+    { customTitle: '[Automation] Fix CI · !1561', icon: 'Automation run (Claude)' }
+  ])('a thread row whose tab is named $customTitle leads with $icon', ({ customTitle, icon }) => {
+    registerPilotStore(useAppStore)
+    const automationThread = { ...thread, tab: { ...thread.tab, customTitle } }
+    const view = render(
+      <ActivityTabsThreadLeadingIcon thread={automationThread}>
+        {UPSTREAM}
+      </ActivityTabsThreadLeadingIcon>
+    )
+    expect(view.getByTitle(icon)).toBeTruthy()
+    // One icon: the robot takes the agent's place, it isn't added beside it.
+    expect(view.container.querySelectorAll('svg')).toHaveLength(1)
+    expect(view.container.querySelector('.lucide-bot') !== null).toBe(customTitle !== null)
+  })
+
   // Why: like a worktree header, a recent worktree's row says whose worktree it is; grouped by project, its group does.
   it.each([
     { groupKey: 'pilot:inactive-worktrees', project: true },

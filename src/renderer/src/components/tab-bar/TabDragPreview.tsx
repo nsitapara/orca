@@ -1,7 +1,7 @@
 import { createElement } from 'react'
 import { Globe, Terminal as TerminalIcon } from 'lucide-react'
 import { FileTypeIcon } from '@/components/FileTypeIcon'
-import { AgentIcon } from '@/lib/agent-catalog'
+import { DragTabAgentGlyph } from '../../../../packages/pilot/src/renderer/automation-tab/automation-tab-scope' // pilot-hook: tab-drag-automation-glyph
 import type { TabDragItemData } from '../tab-group/useTabDragSplit'
 
 // Why: a terminal tab running an agent leads with the provider glyph so the
@@ -17,7 +17,7 @@ function LeadingIcon({ drag }: { drag: TabDragItemData }): React.JSX.Element {
     })
   }
   if (drag.agent) {
-    return <AgentIcon agent={drag.agent} size={14} />
+    return <DragTabAgentGlyph agent={drag.agent} label={drag.label} size={14} />
   }
   return <TerminalIcon className="h-3.5 w-3.5 shrink-0" />
 }

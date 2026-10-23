@@ -3,16 +3,22 @@ import { ThreadAgentStateIndicator } from '@/components/activity/activity-thread
 import type { AgentPaneThread } from '@/components/activity/activity-thread-types'
 import { AgentIcon } from '@/lib/agent-catalog'
 import { agentTypeToIconAgent, formatAgentTypeLabel } from '@/lib/agent-status'
+import { isAutomationTabTitle } from '../../shared/automation-tab-title'
+import { AutomationRunRowIcon } from '../automation-tab/AutomationRunGlyph'
 import { pilotStore } from '../store'
 
 type IconProps = { thread: AgentPaneThread; children: ReactNode }
 
 // pilot-hook: activity-tabs-thread-icons. With Pilot attached, a thread row leads with its agent's
 // icon, like the tab rows around it, and its state moves to the footer where the agent icon was.
-// `children` is upstream's own icon, kept while Pilot isn't attached.
+// An automation's session leads with the automation icon instead. `children` is upstream's own
+// icon, kept while Pilot isn't attached.
 export function ActivityTabsThreadLeadingIcon({ thread, children }: IconProps): ReactNode {
   if (!pilotStore()) {
     return children
+  }
+  if (isAutomationTabTitle(thread.tab.customTitle)) {
+    return <AutomationRunRowIcon agentLabel={formatAgentTypeLabel(thread.agentType)} />
   }
   return (
     <span
