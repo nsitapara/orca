@@ -206,7 +206,7 @@ ol.steps { list-style: none; margin: 0; padding: 0; display: flex; flex-directio
     ] },
     { id: 'debian', label: 'Debian box', where: function () { return n.debian; }, intro: 'Runs Pilot\'s headless engine as a systemd user service. Debian 12 and Ubuntu 24.04 work the same way.',
       steps: linuxSteps('deb', 'debian.sh', function () { return n.debian; }, 'sudo apt-get install -y git') },
-    { id: 'arch', label: 'Arch box', where: function () { return n.arch; }, intro: 'The same headless engine, installed with pacman. Pilot has no Linux desktop app yet.',
+    { id: 'arch', label: 'Arch box', where: function () { return n.arch; }, intro: 'The same headless engine, installed with pacman. Add --desktop for a Pilot window over it.',
       callout: '<strong>First Arch build.</strong> The engine build checks its native module against glibc 2.28. Arch\'s newer compiler may fail that check; if it does, keep the symbol names it prints and bring them back here.',
       steps: linuxSteps('arch', 'arch.sh', function () { return n.arch; }, 'sudo pacman -S --needed git', 'If pacman can\'t download a package, run sudo pacman -Syu and re-run.') },
     { id: 'verify', label: 'Verify', where: 'main Mac', intro: 'From the main Mac, once each machine is paired.', steps: [

@@ -4,7 +4,7 @@ One Pilot window shows the Inbox, Running, Automations and Activity of every pai
 
 - **A Mac mini** runs the packaged desktop app with `PILOT_SCHEDULER=pinned`, so it ticks only the jobs pinned to it.
 - **A Debian or Ubuntu box**, most likely a headless server, runs Pilot's headless engine (orcad) as a systemd user service.
-- **An Arch box** (Omarchy) runs the same headless engine. Pilot has no Linux desktop app yet (see [Linux desktop app (follow-up)](#linux-desktop-app-follow-up)).
+- **An Arch box** (Omarchy) runs the same headless engine, and optionally Pilot's desktop app as a window over it (see [Linux desktop app](#linux-desktop-app)).
 
 For a tick-as-you-go version of this guide, open [`machine-setup-checklist.html`](./machine-setup-checklist.html) in a browser from a clone; GitHub shows only its source. Type your machine names at the top and every command uses them. Ticks stay in that browser.
 
@@ -21,6 +21,7 @@ The scripts install commands into `~/.local/bin` (`pilot`, `pilotcli`, `pnpm`'s 
 | `pilotcli-cross-build.sh`    | The main Mac   | Builds pilotcli for another machine                                                                                                             |
 | `step-runner.sh`             | (sourced)      | How a step runs: printing, `--dry-run`, sudo steps, file writes, the OS check                                                                   |
 | `checkouts-and-toolchain.sh` | (sourced)      | The shared flags, the checkouts (Pilot, `~/.agents`, pilotcli), pnpm and Go                                                                     |
+| `build-pty-slot.sh`          | Either Linux   | node-pty's glibc 2.28 slot, in a manylinux_2_28 container when Docker answers. Sourced by `linux-engine.sh`, run by `build-linux.mjs`           |
 
 ## Before you start
 
@@ -108,7 +109,9 @@ The build is unsigned. On the first launch, macOS may ask you to allow the app.
 3. **Node 24.** It uses any Node 24 already on PATH. Otherwise it downloads fnm v1.39.0 to `~/.local/bin/fnm`, checked against GitHub's sha256 digest of the release asset (fnm publishes no checksum file), and installs Node 24 under an fnm alias of its own, `pilot`, so your fnm default is left alone. If you'd rather have a system Node, install NodeSource's `nodejs` 24 first. Then it enables corepack, which provides the pnpm that `package.json` pins.
 4. **Checkouts.** Pilot's repo, `~/.agents` and pilotcli, as on the Mac.
 5. **The engine** (`linux-engine.sh`):
-   - Runs `pnpm install --frozen-lockfile` and `pnpm run build:orcad`. The build compiles node-pty against the pinned Node's headers and downloads that Node. The orcad bundle carries its own CLI, so it doesn't run `build:cli`.
+   - Runs `pnpm install --frozen-lockfile`, then builds the mobile web bundle (`out/mobile-web`, which every orcad build ships and refuses to build without): `pnpm install --frozen-lockfile` in `mobile/`, its own pnpm project, and `pnpm run build:mobile-web`.
+   - Builds node-pty's slot in a container when `out/orcad-prebuilds` has no verified one and Docker answers: CI's pinned `manylinux_2_28` image, with gcc-toolset, under the pinned Node. The slot must load on glibc 2.28, and a rolling distro's compiler (Arch's) links newer symbols. Without Docker, `build:orcad` compiles it on the host, which works on Debian and Ubuntu.
+   - Runs `pnpm run build:orcad`. The build downloads the pinned Node. The orcad bundle carries its own CLI, so it doesn't run `build:cli`.
    - Copies `out/orcad` and its pinned Node to `~/.local/share/pilot/engine-server/versions/<build>`, and points `engine-server/current` at it. A pull or a rebuild never changes what the service runs. The last three builds are kept, and so is any build a terminal daemon still runs from.
    - Writes the files in the table below.
    - Turns on linger (`sudo loginctl enable-linger <you>`, a printed sudo step), so the engine runs at boot without a login.
@@ -157,6 +160,7 @@ The same as Debian, with pacman:
 
 - **Packages:** `git curl base-devel python unzip procps-ng iproute2`, plus `go` with `--pilotcli-repo`. It runs `pacman -S --needed` without `-y`, because refreshing the databases without upgrading is a partial upgrade. If pacman can't download a package, run `sudo pacman -Syu` and re-run.
 - **Node 24:** any Node 24 on PATH, such as one from mise. Otherwise pacman's Node 24 LTS, `nodejs-lts-krypton` (with `npm`), unless another `nodejs` is installed, which it would have to replace. Then pacman's `nodejs` if it is 24, else pacman's `fnm` and Node 24 under fnm's `pilot` alias.
+- **Docker, for the engine's build:** `sudo systemctl enable --now docker`, `sudo usermod -aG docker $USER`, then log in again. Without it, node-pty is compiled with Arch's toolchain and fails its glibc 2.28 check (`pty.node needs GLIBC_2.42`).
 - **If real Orca is installed** at `/opt/Orca`, Pilot's orcad starts it as its browser host (`orcad-browser-provider.ts`). That is the same known gap as on macOS.
 
 ## Manual steps the scripts can't do
@@ -294,20 +298,24 @@ Then quit Pilot, and delete `/Applications/Pilot.app`, `~/.local/bin/pilot` and,
 
 **The main Mac.** Forget the pairing: `pilot environment rm --environment "Debian box"`.
 
-## Linux desktop app (follow-up)
+## Linux desktop app
 
-Not supported: `arch.sh --desktop` refuses, and the headless engine is the Linux path. A Pilot-branded Linux app needs packaging work that doesn't exist yet:
+A Pilot window on Linux, beside the engine: `arch.sh --desktop`, or on its own (from the checkout):
 
-- Pilot's electron-builder wrapper (`build/electron-builder.config.cjs`) sets `productName`, `appId` and the Linux `executableName: pilot`. But it keeps Orca's Linux resources. The CLI launcher `resources/linux/bin/orca-ide` looks only for `orca-ide`, `orca` or `Orca`, so it can't find a `pilot` executable. It also doesn't pin Pilot's data folder, so the CLI would act on real Orca's `~/.config/orca` (`src/cli/runtime/metadata.ts`).
-- The deb and rpm hooks (`resources/linux/packaging/after-install.sh`) manage `/opt/Orca` and `/usr/bin/orca-ide`.
-- There is no Pilot Linux build script or test. Upstream's `pnpm build:linux` builds Orca-branded AppImage, deb and rpm.
-- Packaging checks native modules against the desktop's glibc floor (Ubuntu 20.04, `verify-linux-glibc-floor.cjs`). A rolling-release host like Arch is likely to fail it, unless the build runs in an older container.
+    node src/packages/pilot/scripts/build-linux.mjs
 
-What it would take: a Linux `bin/pilot` launcher that pins `~/.config/Pilot`, Linux `extraResources` overrides in Pilot's wrapper, a `build-linux.mjs` (`--linux dir` is enough for one machine), and a test like `electron-builder.config.test.ts`'s macOS one.
+- **Build.** `build:desktop`, then node-pty's glibc 2.28 slot (`build-pty-slot.sh`), then electron-builder with Pilot's wrapper, `--linux dir` for this machine's architecture: no AppImage, deb or rpm. It needs Docker: Orca's Wayland clipboard helper is built in a container, and so is the slot on a rolling distro.
+- **node-pty.** The host's Electron rebuild of node-pty fails the desktop's glibc floor on Arch. `build-linux.mjs` sets `PILOT_LINUX_PTY` to the slot, an N-API build Electron loads as it is, and the wrapper's `afterPack` puts it in the packaged node-pty before Orca's checks: the glibc floor, the daemon boot and the AppImage Node's PTY.
+- **Install** (`install-linux.mjs`; `--no-install` skips it). It asks a running Pilot to quit (SIGTERM, never a kill), installs `dist/linux-unpacked` at `~/.local/share/pilot-desktop/app`, links `~/.local/bin/pilot-desktop`, and writes the launcher entry `~/.local/share/applications/dev.nsitapara.pilot.desktop` with Orca's icon.
+- **The scheduler.** With `pilot-engine.service` on the machine, the launcher entry starts Pilot with `PILOT_SCHEDULER=off`: the window shows the engine once paired and never ticks a job twice. Without it, the window is the machine's Pilot. `--scheduler off|pinned|on|default` overrides that.
+- **The launcher.** `build/bin/pilot-linux` ships as `bin/orca-ide`, where the app points its terminals (`bundled-cli-launcher-path.ts`), and as `bin/pilot`. It pins `ORCA_USER_DATA_PATH` to `~/.config/Pilot` (Electron's userData for productName Pilot, under `XDG_CONFIG_HOME`) and installs the CLI as `pilot-desktop`, because the engine owns `~/.local/bin/pilot`.
+- **Pair it with the engine.** Each pairing code serves one client, so get a new one (`linux-engine.sh --pair --skip-build`), then, with Pilot open:
+
+      pilot-desktop environment add --name 'Omarchy engine' --pairing-code 'orca://pair?code=...'
 
 ## Known limits
 
 - **Approvals stay with the machine's own window.** A headless engine's cards can be answered but never approved. Keep jobs that need approval on a Mac.
 - **Job 14 serves only its own machine.** A job that posts prepared cards needs 14 on the same machine.
 - **orcad also runs Orca's own automation engine** (README, Known gaps). A fresh engine has no Orca automations.
-- **Building orcad on a rolling distro.** The node-pty slot is checked against glibc 2.28 and libstdc++ `GLIBCXX_3.4.25` (`config/scripts/verify-linux-glibc-floor.cjs`). CI builds it on Ubuntu 24.04. A much newer compiler, such as Arch's, could reference newer symbols, and the build then fails with the offending names.
+- **Building orcad on a rolling distro.** The node-pty slot is checked against glibc 2.28 and libstdc++ `GLIBCXX_3.4.25` (`config/scripts/verify-linux-glibc-floor.cjs`). A much newer compiler, such as Arch's, references newer symbols, so `linux-engine.sh` builds the slot in CI's `manylinux_2_28` container when Docker answers. Without Docker the host build fails with the offending names.

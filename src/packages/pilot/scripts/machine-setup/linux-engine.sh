@@ -12,6 +12,8 @@ ENGINE_SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 . "$ENGINE_SCRIPT_DIR/step-runner.sh"
 # shellcheck source=checkouts-and-toolchain.sh
 . "$ENGINE_SCRIPT_DIR/checkouts-and-toolchain.sh"
+# shellcheck source=build-pty-slot.sh
+. "$ENGINE_SCRIPT_DIR/build-pty-slot.sh"
 
 ENGINE_CONFIG_HOME=${XDG_CONFIG_HOME:-$HOME/.config}
 ENGINE_SHARE_HOME=${XDG_DATA_HOME:-$HOME/.local/share}/pilot
@@ -447,6 +449,11 @@ engine_build() {
   step "Build orcad (pnpm install, pnpm run build:orcad)"
   # build:orcad also bundles the CLI (out/orcad/out/cli/index.js), so build:cli isn't needed here.
   run_in "$SETUP_REPO_DIR" pnpm install --frozen-lockfile
+  # build:orcad ships out/mobile-web and refuses to build without it. mobile/ is its own pnpm project, so the
+  # root install leaves its node_modules empty (CI: .github/actions/build-mobile-web-bundle).
+  run_in "$SETUP_REPO_DIR/mobile" pnpm install --frozen-lockfile
+  run_in "$SETUP_REPO_DIR" pnpm run build:mobile-web
+  pty_slot_build "$SETUP_REPO_DIR"
   run_in "$SETUP_REPO_DIR" pnpm run build:orcad
 }
 

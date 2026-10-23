@@ -51,6 +51,18 @@ describe('Pilot electron-builder wrapper', () => {
     expect(config.asarUnpack).toContain('out/packages/pilot/**')
   })
 
+  it("ships Pilot's Linux launcher where the app and Install CLI look, and never Orca's", () => {
+    const resources = config.linux.extraResources.map((r: { from: string; to: string } | string) =>
+      typeof r === 'string' ? r : `${r.from} -> ${r.to}`
+    )
+    expect(resources).toContain('src/packages/pilot/build/bin/pilot-linux -> bin/orca-ide')
+    expect(resources).toContain('src/packages/pilot/build/bin/pilot-linux -> bin/pilot')
+    expect(resources).toContain('src/packages/pilot/resources -> pilot')
+    expect(resources.some((r: string) => r.startsWith('resources/linux/bin/orca-ide '))).toBe(false)
+    expect(config.linux.executableName).toBe('pilot')
+    expect(config.linux.desktop.entry.StartupWMClass).toBe('pilot')
+  })
+
   it('leaves the base config untouched', () => {
     expect(base.productName).toBe('Orca')
   })

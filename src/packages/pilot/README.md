@@ -12,6 +12,7 @@ Pilot is Nish's fork of Orca (`github.com/nsitapara/orca`), with Automations reb
   - `dist/.metadata_never_index` keeps Spotlight off the `dist/` copy. The steps live in `scripts/install-mac.mjs`.
   - Swift 6.4 (Xcode 27) workaround: the Swift helper steps run with `scripts/shims/swift` first on PATH, which adds `--build-system native` to `swift build` because Orca's helper scripts expect the `.build/<triple>/release` layout. Drop the shim once upstream's scripts handle the swiftbuild layout, or when `native` is removed from SwiftPM.
   - Data folder: the packaged app uses `~/Library/Application Support/Pilot` (from productName), and both launchers point at that exact path. It is separate from Orca's `orca` folder.
+- **Build for Linux:** `node src/packages/pilot/scripts/build-linux.mjs` builds and installs a Pilot window under `~/.local` with a launcher entry; see [docs/machine-setup.md](docs/machine-setup.md), "Linux desktop app".
 - **Launchers:** Pilot ships two identical launchers, `bin/orca` and `bin/pilot`. Both export Pilot's data folder (`ORCA_USER_DATA_PATH`) and CLI install path (`ORCA_CLI_INSTALL_PATH=/usr/local/bin/pilot`), so neither acts on real Orca, even when run from an Orca terminal.
 - **Tests:** `pnpm exec vitest run --config config/vitest.config.ts src/packages/pilot`
 
@@ -46,12 +47,12 @@ Every job has been ported (the build plan "Pilot: every job on the YAML engine",
 
 Both apps can run at once, each with its own backend and data. Pilot runs YAML automations only: Orca's own automation engine is always off inside Pilot (hook `orca-automations-off`), and there is no way back to Orca's jobs (retired 2026-10-15).
 
-| | Pilot | Orca |
-|---|---|---|
-| App | `dist/mac-arm64/Pilot.app`, port 6868 | `/Applications/Orca.app`, port 6768 |
-| Data | `~/Library/Application Support/Pilot` | `~/Library/Application Support/orca` |
-| Jobs | YAML automations (Orca's own engine is off) | none: the Orca-style jobs stay disabled |
-| `orca` in its terminals and prechecks | reaches Pilot | reaches Orca |
+|                                       | Pilot                                       | Orca                                    |
+| ------------------------------------- | ------------------------------------------- | --------------------------------------- |
+| App                                   | `dist/mac-arm64/Pilot.app`, port 6868       | `/Applications/Orca.app`, port 6768     |
+| Data                                  | `~/Library/Application Support/Pilot`       | `~/Library/Application Support/orca`    |
+| Jobs                                  | YAML automations (Orca's own engine is off) | none: the Orca-style jobs stay disabled |
+| `orca` in its terminals and prechecks | reaches Pilot                               | reaches Orca                            |
 
 What follows from that:
 
@@ -87,6 +88,7 @@ Every job is a YAML automation in `~/.agents/automations/` (one file per automat
 ### Shell steps
 
 A shell step's `run:` is plain shell. It takes no `{placeholders}`; validation rejects them.
+
 - **Values in:** `env: { NAME: "{mr.title}" }`. The script reads `"$NAME"`. Pilot fills the text in; the shell never parses it. A missing or null value fails the step at start, unless the placeholder ends in `?` (`env: { SAID: "{steps.test.outcome?}" }`): then it renders as empty text. `?` works in a shell step's `env:` only.
 - **Values out:** append `key=value` lines to `$PILOT_OUTPUT_FILE`. The last line per key wins. Declare the keys a later stage relies on with `outputs: [key]` (Multi-stage jobs, below). A value that reads as JSON (`true`, `3`, `null`) becomes that value. Stdout is never read for outputs, so what a child process prints can't forge one, and neither can `pilot run output`: Pilot refuses run-channel writes to a shell step. `pilot run output` works only from an agent step's own terminal (`PILOT_RUN_ID`/`PILOT_STEP_IDX` only choose among the steps running there). Names are letters, digits and `_`; a value is at most 4096 characters. A bad line is a warning, not a failure.
 - **Results:** when a shell step's whole stdout (trimmed) is one pilotcli envelope (`v: 1`, `command`, `outcome`), Pilot keeps it as the step's result, `{command, outcome, reason, data, meta}` (`steps.result_json`).
@@ -112,6 +114,7 @@ A shell step's `run:` is plain shell. It takes no `{placeholders}`; validation r
 A job ported as several automations, such as 13's ticket step and its fix sessions, shows as one job. Each automation is a **stage** of it. ("Step" already means the steps inside an automation.)
 
 **Stages or steps?**
+
 - **Steps** run one after another inside one run, on one item, in one workspace. Use them when the later work belongs to the same item and should run right away (review, then fix).
 - **Stages** are separate automations with their own items, schedule, checks, `once_per`, limits, quota and switch. Use them when the next part works on different items than the first produced (a pipeline opens a ticket; the ticket gets a fix session), or needs its own gates or timing.
 
@@ -149,6 +152,7 @@ A job ported as several automations, such as 13's ticket step and its fix sessio
 - **Trust note:** a stage with `feed: true` and no `run:` trusts what it is handed, checked only by the id format (WEB-123, at most 40 characters, 25 a run) and its source's own `where:` filters (team, state). Give it its own `run:` list when only some items should ever reach it.
 
 **Guarantees.**
+
 - **Durable:** when a sending run ends and `when` holds, each id is written to the store's `handovers` table, once per (sending run, receiving stage, id), and a stage has at most one pending row per id: handing over an id that already waits refreshes that row (the latest sending run), and its 7 days still count from the first handover. A pending id survives a restart.
 - **Consumed only when settled:** each real tick of the receiving stage (triggered or scheduled) reads its pending ids. It consumes an id only when the tick started a run for the item (or recorded an ask-first card and its run), keeping that run's id, or the item definitely needs nothing: out of scope, already handled (its `once_per` key, or a baseline; the id keeps the run that holds the key, so that run failing re-pends it), or gone from its source (closed, or not found). Anything that can change by the next tick keeps the id pending, to be retried: a hold in the runner's line (quota, a busy or dirty worktree, an open session, pending answers, a window, a limit, a retry's wait), a failed check, a scope that says not yet, or an item a re-check or Retry tick left for the job's next tick. A failed tick consumes nothing. A run started for a fed id that fails or times out puts the id back to pending, so the runner's retry picks it up. A failed key keeps its id pending even once the runner gives up on it, so Retry on Running still finds the item.
 - **Expiry and pruning:** an id still pending after 7 days expires. It is kept, marked expired, and Activity shows "Handover of WEB-2123 from stage 1 expired after 7 days" on the receiver's tick that found it (a receiver that is off has its ids expired by the scheduler pass instead, and its Activity shows the same line under its last tick, or as an entry of its own when it never ticked). Consumed and expired rows older than 30 days are pruned. The scheduler pass does both at most once an hour.
@@ -159,6 +163,7 @@ A job ported as several automations, such as 13's ticket step and its fix sessio
 - **Not handed over:** runs that apply an answer, and imported runs.
 
 **Validation.** A broken rule marks the involved automation invalid (shown from its last valid version, never ticked), and the error names the rule.
+
 - In one file: a `pass` output must be declared by a step; a stage is fed once per connection; `ids_from.feed` needs `job:`.
 - Across files: a stage number is used once per job; the stages that set `name` agree; feeds never form a cycle; a feed that passes ids or runs now must reach a stage of the same job; a stage passed ids must read them (`ids_from: { feed: true }`); a stage that reads its feed must be the `to` of some passing feed.
 - One machine: a feed that passes ids or runs now joins stages with the same `runs_on`, or two stages with none, because a handover stays in the database of the machine whose run wrote it. Otherwise the sending stage is invalid. Arrow-only feeds aren't checked.
@@ -166,6 +171,7 @@ A job ported as several automations, such as 13's ticket step and its fix sessio
 - `pilot automations validate --file` checks one file, so a rule across files shows in the list's errors and in `reload`.
 
 **Where it shows.**
+
 - **The list** shows the job as one row (its id and name, an "N stages" chip, on when any stage is, the newest tick of any stage), with its stages under it in stage order.
 - **The list's Status switch** turns an automation on or off (`enabled:` in its YAML) through `pilot.automations.setEnabled`, without asking. A job's row reads "Partly on" when only some stages are on; its switch turns every on stage off, or, when none is on, every stage on. A refusal shows above the list. The parity tests don't pin `enabled`, so flipping a switch keeps them green.
 - **The job page** shows the stages as cards joined by their arrows. Each arrow shows its caption and the most recent handover with how it went ("Last: WEB-2123 started · 5 min ago", or "waiting" while pending). It has one Activity timeline with each tick tagged by its stage, and each stage's YAML.
@@ -189,6 +195,7 @@ A source can read only the ids a command names, instead of listing everything an
 ### Field scripts (`items.fields`)
 
 A custom field runs its script once per tick (`cache: per_tick`) or per commit (`per_head`), with the item on stdin; its stdout is the value.
+
 - **Exit 3** means the item isn't due now. It is skipped this tick, with the script's last line as the reason (stdout first, as for `check: { run }`).
   - No run starts, nothing is marked failed, its `once_per` key is untouched, and a handed-over id stays pending.
   - The item's later field scripts and its script checks don't run. The cache never stores a skip.
@@ -211,6 +218,7 @@ A job that changes code on Nish's work, or needs a stack, says what it needs. pi
   - `new_branch` + `from` (+ `keep: true` for a new worktree kept beside the others).
 
   Values are templates of the item's own fields and `run.*`: `{worktree.path}`, `{mr.branch}`, `{mr.head_sha}`, `{ticket.branch}`, `{preparation.head}`, `{run.id}`. A field the item kind doesn't carry is a load error, and so is a step's output.
+
 - **Any mode for any subject.** pilotcli decides: an existing worktree means in place, or a throwaway at its HEAD; with none, `kept` with `keep`, else a throwaway.
   - Pilot assumes nothing from the subject.
   - It fails a run only when it asked for `--throwaway` and got in place.
@@ -238,6 +246,7 @@ A job that changes code on Nish's work, or needs a stack, says what it needs. pi
         exit_codes: { ok: [0], skip: [3] }
 
   pilotcli checks Nish's own sessions in the Orca app itself (pilotcli `b3a2eff`, branch `orca-real-app`, once installed), whatever env the step gives it; `PILOT_HOME_BUSY` covers Pilot's runs.
+
 - **The run ends, however it ends:**
   1. A throwaway's own step tabs close. A tab with text typed in it stays, and the delete waits.
   2. `pilotcli env delete <run>` runs, with `--keep-folder` for a kept worktree.
@@ -247,6 +256,7 @@ A job that changes code on Nish's work, or needs a stack, says what it needs. pi
   - then runs `pilotcli env list` and deletes **only** envs whose `run` (exactly as Pilot gave it to create) is one of its own runs that has ended. It skips a `creating` row of a run it still prepares.
 
   Orphans and runs it doesn't know are Nish's to delete.
+
 - **Sessions, Resume, answers:**
   - In place and kept work as before.
   - A throwaway is disposable: Resume says its checkout was removed, and no per-worktree session is kept.
@@ -288,6 +298,7 @@ A card carries its Details as markdown (`--details-file`) or as a structured **D
 - **The list** carries a light preparation ref (state, attempt, progress, error, needs); the request comes with `pilot inbox show` and the manifest with the Details.
 
 Rulings:
+
 - **R-P1.** Preparation has its own scoped write path: the `pilot.inbox.prepare*` RPCs (claim, progress, complete, fail), for a `local-cli` caller bound to a live run of an `inbox_preparation` automation whose item key is the card's id, at the matching revision, holding the claim. It is the one exception to "a run-bound caller may change only its own automation's cards". (`prepareRetry` is a person's, not the worker's.)
 - **R-P2.** Drafting and evidence moved out of 03 and 04 into job 14 plus item-details' `candidate` mode. This replaces plan Ruling 5.
 - **R-P3.** Images and patches are hashed in prepared bundles, and a changed image is refused. This replaces plan Ruling 3 for prepared bundles; plain bundles keep Ruling 3.
@@ -318,11 +329,13 @@ An automation's Activity tab shows the same run cards: the run status in plain w
 ## Spend and token usage
 
 **Per step.** When an agent step ends, Pilot reads its tokens from the agent's own logs, only inside the step's start-to-end window:
+
 - Claude: its transcript and its subagents' transcripts.
 - Codex: its rollout and its subagents' rollouts (`parent_thread_id`).
 - Its child sessions (`usage/child-sessions.ts`): the non-interactive sessions that began in the run's folder inside the window and are no step's own session. These are `claude -p` and `codex exec` (job 03's orchestrated phases) and a hook's SDK session (the security-guidance `sdk-py` review). Each child's buckets keep their own agent, so a Claude orchestrator's Codex check counts as Codex (`step_usage.agent`). Schema 19 measured the agent steps of the last 30 days again to add them.
 
 Each step's tokens are:
+
 - priced with the tables Pilot shares with Orca,
 - kept per day and model (`step_usage`), so a transcript Claude prunes later changes nothing.
 
@@ -331,11 +344,13 @@ A run costs the sum of its steps. A Claude step's session id is pinned at launch
 **Rollups.** `pilot automations spend [--by automation|skill|agent|mr] [--days n]` (default: 7 days, by automation), or the RPC `pilot.spend`. A step counts once it has ended.
 
 **The Usage page.** The Automations page's **Usage** link, beside Activity (RPC `pilot.usage.dashboard {days, resetDays}`):
+
 - Claude's and Codex's limits as Orca last read them (this week, the 5-hour session), each with what the automations spent since its weekly reset, most expensive first. The renderer passes each reset's day.
 - For today, 7 or 30 days: the totals, each automation's cost and tokens split by Claude and Codex, the cost by day, and the ten costliest runs (Open run).
 - One machine at a time: each Pilot measures its own runs. Chips pick another machine that answered.
 
 **The token usage report.** Pilot writes job 08's files: `usage.json`, `usage.csv`, `usage-data.js`, `Token usage.html` and `Token usage.md`. They use the same paths and schema, so the vault note keeps working.
+
 - Folder: `PILOT_USAGE_REPORT_DIR`, default `~/Documents/WebPortal/Agent Work/Automations/08 · Tally token usage by job`. HTML template: `PILOT_USAGE_TEMPLATE`, default Pilot's own `resources/usage_report.html` (shipped as `Contents/Resources/pilot/usage_report.html`; orcad writes the report without it).
 - **The hand-over from job 08** was done on 2026-10-12: 08's last `usage.json` was copied to `usage-legacy.json` in that folder, and Pilot writes there only while that file is there. The packaged app refreshes the files after each measured step and at least hourly. It keeps 08's history (the legacy rows) and replaces only the sessions it measured itself.
 - To write the report anywhere else, at any time: `pilot automations usage-report --out <dir>`.
@@ -343,11 +358,13 @@ A run costs the sum of its steps. A Claude step's session id is pinned at launch
 ## Run limit and the Running page
 
 **The limit.** One number for every automation: how many runs may go at once. The default is no limit. Set it on the Running page (sidebar, beside Inbox), with `pilot automations capacity --set <n>|none`, or the RPC `pilot.capacity.setLimit`. An agent in a Pilot run can't change it.
+
 - Only jobs with an agent step hold a slot. A shell-only job (01 Pull dev) never waits.
 - A run waiting on you (asking, needs you) holds none, as with `limits.at_once`, which still applies on top.
 - Lowering the limit stops nothing that is running.
 
 **The line.** The job decides what is due; the runner decides when it starts, and makes sure each run finishes. An item that is due but can't start now waits in `run_queue` with its reason, instead of being skipped every tick.
+
 - **Held** (verdict `held`): a runtime gate stops it. These are the job's runtime checks (`quota`, `session: none_open`, `answers: none_pending`, `window`), the quota ceiling (below), another run in its worktree or one starting there this tick, the job's own run still active on the item, `at_once`, `per_tick`, and a retry's wait (Retries after a failure).
 - **Never held for the worktree's state:** uncommitted work, a merge or rebase, or someone working there picks where a run works, not when. `workspace: env` puts it in a throwaway, and Pilot refuses `worktree: clean` and `worktree: idle` in a job.
 - **Waiting for a slot** (verdict `queued`): past the run limit.
@@ -370,6 +387,7 @@ A run costs the sum of its steps. A Claude step's session id is pinned at launch
 **Quota.** One ceiling for every job with an agent step: 90% weekly or 95% session, for each agent its steps use. Running says "Jobs with an agent step wait while Claude or Codex is over 90% weekly or 95% session." A job's own `quota:` check for an agent replaces the ceiling for that agent. Ask-first jobs aren't held (asking costs nothing), and an unreadable quota lets a run start.
 
 **Retries after a failure.** Set it on Running under Jobs at once, or with the RPC `pilot.capacity.setRetryLimit {limit}`: default 2, from 0 to 5 (`settings.retry_limit`). An agent in a Pilot run can't change it.
+
 - **What counts:** a run that ends `failed` or `timed_out` counts one failure on its key (`handled.failures`), and so do a launch that couldn't start and a stale start swept after a restart (an ask-first job's frees its key, so it asks again). A run that ends done clears the count; a cancelled one doesn't count.
 - **Within the limit** the key is held as `retry`, "Retry N of M at HH:MM. Last run failed: <outcome>", until its wait from the failure is over: the job's `retry_after_failure`, else 10 minutes.
 - **Past the limit** the runner gives up: the key leaves the line, and the failure that crosses the limit leaves one flagged card, "<job> failed N times: <item>", whose context is the last outcome and "Retry it from Running."
@@ -379,10 +397,12 @@ A run costs the sum of its steps. A Claude step's session id is pinned at launch
 **`pilot automations capacity`** prints the run limit, the retry limit, what runs, the line and what the runner gave up on. The line's count reads "Waiting: 2 for a slot · 1 held". Slot waiters are numbered and held rows marked `-`, each with why it waits and how long since it became due. Each Gave up key shows its failures and last outcome.
 
 **Recently finished.** Under the line, folded: the last 10 ended runs of jobs that hold a slot. Ran (and a run's Took) leave out the time a run sat ended before Continue run reopened it (`runs.idle_ms`). A run that ended "Nothing to do: …" reads **Nothing to do**, here and in Activity, not Done.
+
 - **Continue run** on a failed, timed-out or stopped run goes on from the step that broke, in that step's own session when its agent can resume it. It isn't offered on an answer run or an ask-first run you declined. Pilot refuses it for a run in an env workspace (its env went with its end) and for a failed stage run that reads handed-over ids (they went back to its queue); a stopped stage run still holds its ids, so it can go on.
 - **Retry** on a failed run whose key is still failed, or on a stopped run that still holds its key, frees the key and runs its item again from the start (Retries after a failure). It is how a stopped env run runs again.
 
 **Stop.** A running run's card on Running and its run panel offer **Stop** (`pilot.runs.stop {runId}`): the desktop or a paired device (the browser version included), never the CLI. After a yes ("Stop this run? Its agent's tab closes. You can pick it up again from Recently finished."; an answer run's says "Its agent's tab closes, and the cards it was answering go back to your Inbox.", as it has no Continue run or Retry and its cards reopen), Pilot closes the agent's tab, fails its step "Stopped by you", skips every step left (`always` ones too) and ends the run **Cancelled** through its usual end, so its env is taken down and its run-end hooks run. Its `once_per` key is settled done: nothing retries the item on its own.
+
 - A tab that won't close, or whose agent Pilot can't prove gone, stops nothing, and the card says why.
 - Refused while a step is starting ("try Stop again in a moment") or a shell step runs (it stops when its command exits). Stop isn't offered on a card while its run is on a shell step.
 - A `wait: start` session is left alone: it isn't the run's to close.
@@ -391,6 +411,7 @@ A run costs the sum of its steps. A Claude step's session id is pinned at launch
 **Show tab.** A running run's card, and a running or `wait: start` step in its run panel, offer **Show tab**: it switches to the agent's tab in this window, or says "Its tab is closed". Only this machine's runs have it; another machine's tab can't be shown from here.
 
 **Memory and the suggestion.** On each scheduler poll Pilot sums the RSS of every running agent step's terminal process tree and keeps each run's peak (`runs.peak_rss_bytes`). Shell steps and Docker's containers aren't counted.
+
 - The suggestion is what can go to jobs (available memory plus what running jobs hold, less 4 GB), divided by the heaviest job's peak over its last 20 measured runs. It is at least 1 and at most 10.
 - An enabled job not measured yet counts as 2.5 GB, as web-platform's `e2e-parallel.sh` budgets a stack, so a light job measured first can't raise the suggestion before the heavy ones have run.
 - It is a suggestion only; nothing changes until you pick a number.
@@ -419,19 +440,23 @@ One Pilot window shows the Inbox, Running, Automations and Activity of every mac
 To set up another machine (a Mac, a Debian server or an Arch box), see [docs/machine-setup.md](docs/machine-setup.md).
 
 **Finding machines.**
+
 - This machine is always listed. Each paired environment whose pairing isn't revoked is asked `pilot.status` (5 s timeout): at the start, every 30 s while the window shows, and when an environment is added or its connection changes.
 - Stock Orca (no `pilot.status`) is left out, and so is a second pairing of an engine already listed (same machine name and data folder), such as this Mac paired to itself.
 - A machine that doesn't answer is listed as offline only if this window has seen it answer before (`pilot.knownHosts.v1` in localStorage); otherwise it is left out. A revoked pairing is forgotten.
 
 **Machine tags.** Only while more than one machine is listed; with one, every page is as before.
+
 - A chip with the machine's name (the sidebar's host chip) on Inbox cards and In motion rows, Automations rows (every machine that loaded the file; a job's row names every stage's), Activity's runs and ticks, How it runs' latest run, and the run panel's header.
 - Running has a section per machine, each with its own run limit. The sidebar's Inbox and Running counts add up every machine.
 
 **A machine that can't be reached.**
+
 - Its items leave the page, and a line says so: "Mac mini can't be reached: its cards aren't shown here." On Running: "Mac mini can't be reached. Losing contact doesn't stop its runs; they just aren't visible from here."
 - A read that fails keeps that machine's last items, with "Couldn't refresh Mac mini's cards: <error>". When every machine fails, the page shows its one error, as it does alone.
 
 **Actions go to the item's machine.**
+
 - **Inbox:** answers, Retry preparation, Prepare evidence, Got it and a card's Details go to the card's machine. Open worktree opens that machine's worktree. A report on another machine's card doesn't open here: "This report is on Mac mini; open it there". Apply now asks every machine whose scheduler runs.
 - **Running and Activity:** a run opens, reads its steps and logs, and Resumes, Continues or Stops on its own machine. Step Source is hidden for another machine's run.
 - **Automations:** the switch, Dry run and the YAML go to the row's home machine: the one that ticks it, else the one its `runs_on` names, else this machine, else the first that loaded it. The switch edits that machine's copy of the file only.
@@ -448,6 +473,7 @@ To set up another machine (a Mac, a Debian server or an Arch box), see [docs/mac
 The scheduler reads the name on every pass, so a rename counts from the next one.
 
 **`runs_on`.**
+
 - **What it gates:** scheduled ticks, the catch-up of a slot missed while Pilot was closed, the first pass's wait for repos, repo-problem reports (one recorded before the job was pinned elsewhere stops showing), and `run: now` triggers. A trigger for a job pinned elsewhere is refused and logged ("it runs on Mac mini, not Studio"), and its handed-over ids wait.
 - **Queued items:** a job pinned to another machine drops its rows from this machine's line, held or waiting for a slot; its owner's own tick fetches those items again. Rows queued by Run now here still run here.
 - **Run now by hand ignores it:** picking the machine is the choice.
@@ -456,10 +482,12 @@ The scheduler reads the name on every pass, so a rename counts from the next one
 - **Where it shows:** "Runs on Mac mini" under the Schedule in the list and in How it runs. With one machine listed, that is all: this machine's own name isn't known then, so nothing is checked. With several, "Runs on Mac mini · can't be reached" or "· no connected Pilot has that name" warns. A folded job row shows none.
 
 **`PILOT_SCHEDULER=pinned`** ticks only the jobs whose `runs_on` names this machine. Give it to every engine but one, so each unpinned job runs once.
+
 - A headless orcad sets it in its environment (below).
 - A second packaged Mac ticks every unpinned job by default, which repeats the first Mac's runs. Run `launchctl setenv PILOT_SCHEDULER pinned`, then quit and reopen Pilot. It lasts until the Mac restarts.
 
 **Run now asks which machine** when more than one machine has the automation.
+
 - The confirm bar's machine menu lists the machines that have it. It starts on the `runs_on` machine, else this machine, else another one (when this machine's scheduler is off, or it doesn't have the automation). It changes only when you change it.
 - A machine that can't start it is disabled with a short reason: "· scheduler off", "· not answering", "· not connected". The outcome line names the machine ("On Mac mini: …").
 - Starting a pinned job on a machine other than its `runs_on` one costs two things, and the bar says so in one muted line: a sending stage's handover is stranded on that machine, because its receiver's `run: now` trigger is refused there and the ids wait, then expire after 7 days; and that machine's own `handled` table doesn't know the owner's items, so it can redo work already done.
@@ -467,6 +495,7 @@ The scheduler reads the name on every pass, so a rename counts from the next one
 **Job 14 serves only its own machine.** Context preparation reads its own engine's queue. A job pinned to another machine that posts prepared cards (a code change to approve, a push) leaves them **Context queued** until 14 runs there too. `runs_on` names one machine, so keep those jobs where 14 runs.
 
 **A headless engine.** Start Pilot's orcad as in "Remote use (D25)", with:
+
 - `ORCA_USER_DATA=<folder>`: its data folder, and Pilot's store. Without it orcad shares real Orca's `~/.orca` (Known gaps), and Pilot's store then uses `~/.pilot/orcad`.
 - `PILOT_SCHEDULER=pinned`, and `PILOT_AUTOMATION_DIRS` when its automations aren't in `~/.pilot/automations`.
 - `PILOT_VAULT_EXPORT=off`: no vault export.
@@ -480,10 +509,12 @@ The scheduler reads the name on every pass, so a rename counts from the next one
 The jobs moved from Orca's engine and the old sweeps to Pilot's YAML automations between 2026-10-10 and 2026-10-16, one at a time (`pilot automations enable --id <id>`). Orca's copies stay disabled. The open vault cards and each job's old state were imported once, and the importer was then removed with the old Python; job 12 (`apply.py`) is retired, and Pilot dispatches answers. Job 14 (`prepare-inbox-item-context`) prepares the cards that need evidence: until it has run, a prepared card stays **Context queued** and can't be approved, and plain cards never wait for it. Connect Linear in Pilot (Settings) for 13 and M01: Pilot can't read Orca's credential (see the Known gaps).
 
 **Not checkable in a dry run** (watch a real run):
+
 - Linear accepts the uuid5 write ids that 13 uses for ticket creates and fold comments.
 - `claude --resume <id>` keeps the same session id on the installed CLI. If it writes a new one, a Claude resume step reads the old transcript.
 
 **Behaviour that differs from the old jobs:**
+
 - **Answers** to sessions from the old system fork instead of resuming. Imported sessions have no recorded launch arguments.
 - **Approvals** come only from Pilot's own window on this Mac. Paired devices can answer, skip and revise, but not approve. The local CLI can't answer cards. An approval imported from the vault comes back as a re-ask.
 - **Idle tabs** that hold a session a step needs (no draft, no agent working) are closed, and the session resumes in Pilot's own tab.
@@ -543,6 +574,7 @@ These need a phone, a second Mac and an iPad on Tailscale. Open Pilot (`dist/mac
       ORCA_DEV_USER_DATA_PATH="$DATA" ORCA_CLI_INSTALL_PATH="$DATA/cli/pilot" ORCA_BROWSER_EXECUTABLE= ORCA_BACKGROUND_LAUNCH=1 \
       PILOT_SCHEDULER=off PILOT_VAULT_EXPORT=off PILOT_AUTOMATION_DIRS="$DATA/automations" \
       pnpm exec electron . --use-mock-keychain --password-store=basic --serve --serve-json --serve-port 6979 --serve-pairing-address <this Mac's Tailscale IP>
+
 - Pilot's WebSocket listener binds loopback until a device is paired (upstream STA-2370), so the network bind appears only after the first pairing. If a Tailscale address refuses the connection before pairing, that is expected.
 
 ## Known gaps
@@ -553,6 +585,7 @@ These need a phone, a second Mac and an iPad on Tailscale. Open Pilot (`dist/mac
   - The Playground's Start, replaced by a note that it runs only on that Mac.
 
   Approve works only on the desktop, and nothing pops up there when you try it in the browser: the browser's Approve is refused with "Approve actions in Pilot on this Mac", and the card stays open in the Inbox for you to approve in Pilot on that Mac.
+
 - Computer Use is unavailable in packaged Pilot. Enabling it needs a Pilot bundle id for the helper plus a trust-list entry in its Swift peer check.
 - After closing the right sidebar while on the Automations tab, Orca's main-side persistence allowlist drops `plugin:pilot` and resets the stored tab to Explorer (the UI hydrates it back via `hydratePersistedUI`), so reopening or restarting lands on Explorer, not Automations.
 - "Install CLI" links `/usr/local/bin/pilot` (never `orca`) to Pilot's `Contents/Resources/bin/orca`: upstream's `bundled-cli-launcher-path.ts` always installs the `bin/orca` launcher, and `applyPilotEnvDefaults` (`src/packages/pilot/src/main/env.ts`) sets `ORCA_CLI_INSTALL_PATH` to `/usr/local/bin/pilot`, which `cli-install-location.ts` uses ahead of its own `orca` default. That launcher pins Pilot's data folder and install path, so the installed `pilot` command and `pilot serve` (which re-installs the CLI on start) act on Pilot, never on real Orca. Checked in code and by `build/bin/launchers.test.ts`, not clicked.

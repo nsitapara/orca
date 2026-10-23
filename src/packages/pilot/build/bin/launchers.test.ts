@@ -91,3 +91,45 @@ describe('the installed pilot command', () => {
     }
   })
 })
+
+// A fake unpacked Linux Pilot whose "Electron" prints the two variables, run through ~/.local/bin/pilot-desktop →
+// resources/bin/orca-ide, the path the app hands its terminals.
+describe('the Linux launcher', () => {
+  function runLinux(extraEnv: Record<string, string>): { code: number; stdout: string } {
+    const root = mkdtempSync(join(tmpdir(), 'pilot-linux-launcher-'))
+    try {
+      mkdirSync(join(root, 'resources', 'bin'), { recursive: true })
+      const fake = join(root, 'pilot')
+      writeFileSync(fake, '#!/bin/sh\necho "$ORCA_USER_DATA_PATH|$ORCA_CLI_INSTALL_PATH"\n')
+      chmodSync(fake, 0o755)
+      const launcher = join(root, 'resources', 'bin', 'orca-ide')
+      copyFileSync(join(import.meta.dirname, 'pilot-linux'), launcher)
+      chmodSync(launcher, 0o755)
+      const installed = join(root, 'pilot-desktop')
+      symlinkSync(launcher, installed)
+      return run(installed, ['status'], {
+        env: {
+          PATH: process.env.PATH,
+          HOME: '/h',
+          ORCA_USER_DATA_PATH: '/h/.config/orca',
+          ORCA_CLI_INSTALL_PATH: '/h/.local/bin/orca-ide',
+          ...extraEnv
+        }
+      })
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
+  }
+
+  it("acts on Pilot's folder and installs as pilot-desktop, whatever the shell says", () => {
+    const r = runLinux({})
+    expect(r.code).toBe(0)
+    expect(r.stdout.trim()).toBe('/h/.config/Pilot|/h/.local/bin/pilot-desktop')
+  })
+
+  it("follows XDG_CONFIG_HOME, as Electron's userData does", () => {
+    expect(runLinux({ XDG_CONFIG_HOME: '/x' }).stdout.trim()).toBe(
+      '/x/Pilot|/h/.local/bin/pilot-desktop'
+    )
+  })
+})
