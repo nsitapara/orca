@@ -227,7 +227,7 @@ export function ActivityTabsVirtualRow({
         {row.kind === 'tab' ? (
           <WorkspaceTabRow item={row.tab} compactMode={compactMode} />
         ) : (
-          <RecentWorktreeRow item={row.recent} />
+          <RecentWorktreeRow item={row.recent} groupKey={item.groupKey} />
         )}
       </ActivityTabsNest>
     </div>

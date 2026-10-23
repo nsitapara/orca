@@ -23,6 +23,7 @@ import { NestGuides } from './ActivityTabsNest'
 import { NewAgentMenu } from './NewAgentMenu'
 import { openActivityWorktree } from './open-activity-worktree'
 import { useWorktreeGroupNestDepth } from './worktree-nest-parent'
+import { WorktreeTitle } from './WorktreeTitle'
 
 const WORKTREE_GROUP = 'worktree:'
 
@@ -173,10 +174,7 @@ export function ActivityTabsGroupHeader({ group, children }: HeaderProps): React
         {machineRow ? (
           <ActivityMachineChip worktree={machineRow.worktree} repo={machineRow.repo} />
         ) : null}
-        <span className="min-w-0 shrink truncate text-[13px] font-semibold" title={group.label}>
-          {group.label}
-        </span>
-        <span className="min-w-0 flex-1 truncate text-2xs text-muted-foreground">{project}</span>
+        <WorktreeTitle name={group.label} project={project} nameClassName="font-semibold" />
         <NewAgentMenu worktreeId={worktreeId} />
         <PinButton worktreeId={worktreeId} pinned={pinned} />
         {worktree ? <MergedWorktreeDeleteButton worktree={worktree} repo={repo} /> : null}

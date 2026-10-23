@@ -130,6 +130,27 @@ describe('Pilot wrappers around upstream Activity elements', () => {
     expect(view.getByTitle('Claude')).toBeTruthy()
   })
 
+  // Why: like a worktree header, a recent worktree's row says whose worktree it is; grouped by project, its group does.
+  it.each([
+    { groupKey: 'pilot:inactive-worktrees', project: true },
+    { groupKey: 'pilot:pinned-worktrees', project: true },
+    { groupKey: 'project:repo-1', project: false }
+  ])(
+    'a recent worktree row under $groupKey names its project: $project',
+    ({ groupKey, project }) => {
+      registerPilotStore(useAppStore)
+      useAppStore.setState({ repos: [makeRepo()], worktreesByRepo: { 'repo-1': [makeWorktree()] } })
+      const item = { key: 'recent:wt-1', worktree: makeWorktree(), repo: makeRepo(), pinned: false }
+      const view = render(
+        <TooltipProvider>
+          <RecentWorktreeRow item={item} groupKey={groupKey} />
+        </TooltipProvider>
+      )
+      expect(view.getByTitle('feature').textContent).toBe('feature')
+      expect(view.queryByText('Repo') !== null).toBe(project)
+    }
+  )
+
   // Why: a Pilot run's throwaway is a child of the worktree it checked out, and reads as part of it.
   it.each([
     { view: 'header', groupKey: 'worktree:wt-kid', guides: 1, project: false },
@@ -228,6 +249,7 @@ describe('Pilot wrappers around upstream Activity elements', () => {
       element: (
         <RecentWorktreeRow
           item={{ key: 'recent:wt-1', worktree: makeWorktree(), repo: makeRepo(), pinned: false }}
+          groupKey="pilot:inactive-worktrees"
         />
       )
     }

@@ -9,13 +9,26 @@ import { MergedWorktreeDeleteButton } from './MergedWorktreeDeleteButton'
 import { NewAgentMenu } from './NewAgentMenu'
 import { openActivityWorktree } from './open-activity-worktree'
 import type { RecentWorktreeItem } from './recent-worktree-items'
+import { WorktreeTitle } from './WorktreeTitle'
+
+// Upstream's Group by project keys (getActivityThreadGroup), which Pilot's rows mirror.
+const PROJECT_GROUP = 'project:'
 
 // Grouped by anything but worktree there is no header to start a session from: one line, the
-// worktree and its New agent. Grouped by worktree, the header stands in for it. A right-click gives
-// the worktree's menu, as in Projects; once its MR is merged, Delete shows at rest. Under the name,
-// the same MR, Linear, git and ports chips as a worktree header.
-export function RecentWorktreeRow({ item }: { item: RecentWorktreeItem }): React.JSX.Element {
+// worktree, its project beside it as on a worktree header, and its New agent. Grouped by worktree,
+// the header stands in for it (Inactive's rows keep theirs). Grouped by project, the group already
+// names the project. A right-click gives the worktree's menu, as in Projects; once its MR is merged,
+// Delete shows at rest. Under the name, the same MR, Linear, git and ports chips as a worktree header.
+export function RecentWorktreeRow({
+  item,
+  groupKey
+}: {
+  item: RecentWorktreeItem
+  // The Group by group the row is listed in.
+  groupKey: string
+}): React.JSX.Element {
   const workspaceLabel = getActivityThreadWorkspaceTitle(item.worktree)
+  const project = groupKey.startsWith(PROJECT_GROUP) ? null : (item.repo?.displayName ?? null)
   return (
     <WorktreeContextMenu worktree={item.worktree}>
       <div
@@ -34,12 +47,11 @@ export function RecentWorktreeRow({ item }: { item: RecentWorktreeItem }): React
         <div className="flex min-w-0 items-center gap-1.5">
           <FolderGit2 className="size-3.5 shrink-0 text-muted-foreground" />
           <ActivityMachineChip worktree={item.worktree} repo={item.repo} />
-          <span
-            className="min-w-0 flex-1 truncate text-[13px] leading-5 text-muted-foreground"
-            title={workspaceLabel}
-          >
-            {workspaceLabel}
-          </span>
+          <WorktreeTitle
+            name={workspaceLabel}
+            project={project}
+            nameClassName="leading-5 text-muted-foreground"
+          />
           {item.pinned ? (
             <Pin className="size-2.5 shrink-0 text-muted-foreground" aria-label="Pinned" />
           ) : null}
