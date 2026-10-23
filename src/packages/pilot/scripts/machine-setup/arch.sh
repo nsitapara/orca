@@ -14,6 +14,7 @@ SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 . "$SCRIPT_DIR/linux-engine.sh"
 
 ARCH_SKIP_PACKAGES=0
+ARCH_DESKTOP=0
 # node-gyp compiles node-pty (python, make, gcc); the build gate reads it with objdump (binutils, in
 # base-devel); fnm's download is a zip; ps and ip serve Pilot and the engine launcher.
 ARCH_PACKAGES=(git curl base-devel python unzip procps-ng iproute2)
@@ -33,24 +34,10 @@ EOF
   setup_common_help
   cat <<'EOF'
   --skip-packages           Don't check or install pacman packages.
-  --desktop                 Not supported yet: Pilot has no Linux desktop package (see the guide's
-                            "Linux desktop app" section). The engine is the Linux path.
+  --desktop                 Also build and install Pilot's desktop app (build-linux.mjs; needs Docker): a
+                            launcher entry whose window shows this engine once paired, scheduler off.
 EOF
   engine_help
-}
-
-arch_refuse_desktop() {
-  cat >&2 <<'EOF'
-error: --desktop isn't supported yet. Pilot has no Linux desktop package:
-  - Pilot's electron-builder wrapper only renames the Linux executable to pilot, and the CLI launcher
-    it still ships (resources/linux/bin/orca-ide) looks for orca-ide, orca or Orca, so `pilot` can't
-    find the app;
-  - that launcher doesn't pin Pilot's data folder, so the CLI would act on real Orca's ~/.config/orca;
-  - the deb/rpm install hooks manage Orca's /opt and /usr/bin paths, and nothing builds or tests it.
-See "Linux desktop app (follow-up)" in src/packages/pilot/docs/machine-setup.md. Re-run without
---desktop to set up the headless engine, which the main Mac's Pilot window shows like any machine.
-EOF
-  exit 2
 }
 
 arch_install_packages() {
@@ -81,7 +68,11 @@ main() {
         usage
         exit 0
         ;;
-      --desktop) arch_refuse_desktop ;;
+      --desktop)
+        ARCH_DESKTOP=1
+        shift
+        continue
+        ;;
       --skip-packages)
         ARCH_SKIP_PACKAGES=1
         shift
@@ -113,6 +104,12 @@ main() {
   setup_install_pilotcli
   setup_link_skills
   engine_main
+  if [ "$ARCH_DESKTOP" = 1 ]; then
+    step "Pilot's desktop app (build-linux.mjs)"
+    run_in "$SETUP_REPO_DIR" node src/packages/pilot/scripts/build-linux.mjs
+    say "Pair it with this engine: run this script again with --pair, then in the app's terminal or a shell:"
+    say "  pilot-desktop environment add --name 'this engine' --pairing-code 'orca://pair?code=...'"
+  fi
 }
 
 main "$@"

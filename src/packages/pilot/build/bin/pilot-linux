@@ -1,0 +1,35 @@
+#!/usr/bin/env bash
+# Pilot on Linux: always act on Pilot's data folder and install as `pilot-desktop`, never on real Orca's. Shipped
+# as both bin/pilot and bin/orca-ide, the path the app hands its terminals (bundled-cli-launcher-path.ts).
+# `pilot-desktop`, because a machine running Pilot's headless engine already has ~/.local/bin/pilot.
+export ORCA_USER_DATA_PATH="${XDG_CONFIG_HOME:-$HOME/.config}/Pilot"
+export ORCA_CLI_INSTALL_PATH="$HOME/.local/bin/pilot-desktop"
+set -euo pipefail
+
+# Why: invoked through a symlink (~/.local/bin/pilot-desktop); resolve it so APP_DIR is the real install.
+SOURCE="${BASH_SOURCE[0]}"
+while [ -h "$SOURCE" ]; do
+	DIR="$(cd "$(dirname "$SOURCE")" >/dev/null 2>&1 && pwd)"
+	SOURCE="$(readlink "$SOURCE")"
+	[[ $SOURCE != /* ]] && SOURCE="$DIR/$SOURCE"
+done
+SCRIPT_DIR="$(cd "$(dirname "$SOURCE")" >/dev/null 2>&1 && pwd)"
+RESOURCES_DIR="$(cd "$SCRIPT_DIR/.." >/dev/null 2>&1 && pwd)"
+APP_DIR="$(cd "$RESOURCES_DIR/.." >/dev/null 2>&1 && pwd)"
+
+# Pilot's Linux executableName; `-f` rejects a same-named directory.
+ELECTRON="$APP_DIR/pilot"
+if [ ! -f "$ELECTRON" ] || [ ! -x "$ELECTRON" ]; then
+	echo "Unable to locate the Pilot executable next to $RESOURCES_DIR" >&2
+	exit 1
+fi
+
+CLI="$RESOURCES_DIR/app.asar.unpacked/out/cli/index.js"
+
+export ORCA_NODE_OPTIONS="${NODE_OPTIONS-}"
+export ORCA_NODE_REPL_EXTERNAL_MODULE="${NODE_REPL_EXTERNAL_MODULE-}"
+unset NODE_OPTIONS
+unset NODE_REPL_EXTERNAL_MODULE
+
+# CLI commands run in Electron's Node mode and must never initialize Chromium.
+ELECTRON_RUN_AS_NODE=1 exec "$ELECTRON" "$CLI" "$@"

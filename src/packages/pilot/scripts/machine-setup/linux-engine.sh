@@ -12,6 +12,8 @@ ENGINE_SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 . "$ENGINE_SCRIPT_DIR/step-runner.sh"
 # shellcheck source=checkouts-and-toolchain.sh
 . "$ENGINE_SCRIPT_DIR/checkouts-and-toolchain.sh"
+# shellcheck source=build-pty-slot.sh
+. "$ENGINE_SCRIPT_DIR/build-pty-slot.sh"
 
 ENGINE_CONFIG_HOME=${XDG_CONFIG_HOME:-$HOME/.config}
 ENGINE_SHARE_HOME=${XDG_DATA_HOME:-$HOME/.local/share}/pilot
@@ -443,49 +445,6 @@ engine_resolve_settings() {
 
 # --- Build and install -----------------------------------------------------------------------------
 
-# CI's glibc 2.28 builders (.github/workflows/node-server-tests.yml), pinned by digest.
-ENGINE_SLOT_IMAGE_X64=quay.io/pypa/manylinux_2_28_x86_64@sha256:407f771c51a2c3e83ebe5a7970b4289ead3a6db21d9b9c089168775cad11d328
-ENGINE_SLOT_IMAGE_ARM64=quay.io/pypa/manylinux_2_28_aarch64@sha256:c22ffd129ac99a8a42d1f2c2f4e88a9089288dd9ee987a7092da1c7dc48f27a9
-
-# build:orcad compiles node-pty on this host when out/orcad-prebuilds has no verified slot, and refuses a
-# pty.node that won't load on glibc 2.28. A rolling distro's compiler (Arch's) links newer symbols, so build the
-# slot as CI does: in a manylinux_2_28 container, with gcc-toolset, under the pinned Node the build downloads
-# anyway (it runs on glibc 2.28). Without Docker, build:orcad tries the host, which works on Debian or Ubuntu.
-engine_build_pty_slot() {
-  local repo=$SETUP_REPO_DIR slot node image store
-  if [ "$SETUP_DRY_RUN" = 1 ]; then
-    say "  (builds node-pty's slot in a manylinux_2_28 container when out/orcad-prebuilds has none and Docker answers)"
-    return 0
-  fi
-  slot=$(cd "$repo" && node config/scripts/build-orcad-prebuilds.mjs --print-slot) || die "couldn't read this machine's orcad prebuild slot"
-  if (cd "$repo" && node config/scripts/build-orcad-prebuilds.mjs --require-slots "$slot" >/dev/null 2>&1); then
-    say "  node-pty's $slot slot is already built and verified"
-    return 0
-  fi
-  case "$slot" in
-    linux-x64-glibc) image=$ENGINE_SLOT_IMAGE_X64 ;;
-    linux-arm64-glibc) image=$ENGINE_SLOT_IMAGE_ARM64 ;;
-    *)
-      say "  no container builds the $slot slot; build:orcad builds it on this host"
-      return 0
-      ;;
-  esac
-  if ! engine_has docker || ! docker info >/dev/null 2>&1; then
-    warn "Docker isn't reachable, so build:orcad builds node-pty on this host. If its glibc 2.28 check fails (likely on Arch), start Docker and join its group (sudo systemctl enable --now docker; sudo usermod -aG docker \$USER), log in again, and re-run."
-    return 0
-  fi
-  node=$(cd "$repo" && node config/scripts/build-orcad-prebuilds.mjs --print-runtime | tail -n 1) || die "couldn't fetch the pinned Node"
-  # pnpm's global virtual store holds node-pty's sources outside the checkout; mount it at the same path.
-  store=$(cd "$repo" && pnpm store path) || die "couldn't find pnpm's store"
-  store=${store%/*}
-  run docker run --rm --user "$(id -u):$(id -g "$(id -un)")" \
-    -v "$repo:$repo" -v "$store:$store:ro" -v "$(dirname "$(dirname "$node")"):/opt/pinned-node:ro" \
-    -e HOME=/tmp -e CC=gcc -e CXX=g++ -e PYTHON=/opt/python/cp312-cp312/bin/python3 \
-    -e PATH=/opt/pinned-node/bin:/opt/rh/gcc-toolset-14/root/usr/bin:/usr/local/bin:/usr/bin:/bin \
-    -w "$repo" "$image" \
-    bash -c "node config/scripts/build-orcad-prebuilds.mjs --slot=$slot && node config/scripts/build-orcad-prebuilds.mjs --require-slots $slot && node config/scripts/build-orcad-prebuilds.mjs --slot=$slot --smoke"
-}
-
 engine_build() {
   step "Build orcad (pnpm install, pnpm run build:orcad)"
   # build:orcad also bundles the CLI (out/orcad/out/cli/index.js), so build:cli isn't needed here.
@@ -494,7 +453,7 @@ engine_build() {
   # root install leaves its node_modules empty (CI: .github/actions/build-mobile-web-bundle).
   run_in "$SETUP_REPO_DIR/mobile" pnpm install --frozen-lockfile
   run_in "$SETUP_REPO_DIR" pnpm run build:mobile-web
-  engine_build_pty_slot
+  pty_slot_build "$SETUP_REPO_DIR"
   run_in "$SETUP_REPO_DIR" pnpm run build:orcad
 }
 
