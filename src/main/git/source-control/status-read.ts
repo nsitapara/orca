@@ -34,6 +34,7 @@ import {
   getStatusLineStatsCacheKey
 } from './status-branch-line-total-input'
 import { reconcileDriveCheckoutSuspects } from './drive-checkout-suspect-status'
+import { porcelainUpstreamStatus } from '../../../packages/pilot/src/main/git/porcelain-upstream-status' // pilot-hook: gone-upstream-status
 
 /**
  * Parse `git status --porcelain=v2` output into structured entries.
@@ -117,18 +118,6 @@ async function dropSharedSymlinkUntrackedEntries(
       entries.splice(index, 1)
     }
   }
-}
-
-// Why: porcelain v2 drops `# branch.ab` only when the upstream ref is gone (deleted on the remote and
-// pruned). Counting that as 0/0 reads as "up to date" while local commits are on no remote.
-function porcelainUpstreamStatus(
-  upstreamName: string | undefined,
-  upstreamAheadBehind: { ahead: number; behind: number } | undefined
-): GitUpstreamStatus {
-  if (!upstreamName || !upstreamAheadBehind) {
-    return { hasUpstream: false, ahead: 0, behind: 0 }
-  }
-  return { hasUpstream: true, upstreamName, ...upstreamAheadBehind }
 }
 
 async function runGetStatus(
