@@ -108,7 +108,9 @@ The build is unsigned. On the first launch, macOS may ask you to allow the app.
 3. **Node 24.** It uses any Node 24 already on PATH. Otherwise it downloads fnm v1.39.0 to `~/.local/bin/fnm`, checked against GitHub's sha256 digest of the release asset (fnm publishes no checksum file), and installs Node 24 under an fnm alias of its own, `pilot`, so your fnm default is left alone. If you'd rather have a system Node, install NodeSource's `nodejs` 24 first. Then it enables corepack, which provides the pnpm that `package.json` pins.
 4. **Checkouts.** Pilot's repo, `~/.agents` and pilotcli, as on the Mac.
 5. **The engine** (`linux-engine.sh`):
-   - Runs `pnpm install --frozen-lockfile` and `pnpm run build:orcad`. The build compiles node-pty against the pinned Node's headers and downloads that Node. The orcad bundle carries its own CLI, so it doesn't run `build:cli`.
+   - Runs `pnpm install --frozen-lockfile`, then builds the mobile web bundle (`out/mobile-web`, which every orcad build ships and refuses to build without): `pnpm install --frozen-lockfile` in `mobile/`, its own pnpm project, and `pnpm run build:mobile-web`.
+   - Builds node-pty's slot in a container when `out/orcad-prebuilds` has no verified one and Docker answers: CI's pinned `manylinux_2_28` image, with gcc-toolset, under the pinned Node. The slot must load on glibc 2.28, and a rolling distro's compiler (Arch's) links newer symbols. Without Docker, `build:orcad` compiles it on the host, which works on Debian and Ubuntu.
+   - Runs `pnpm run build:orcad`. The build downloads the pinned Node. The orcad bundle carries its own CLI, so it doesn't run `build:cli`.
    - Copies `out/orcad` and its pinned Node to `~/.local/share/pilot/engine-server/versions/<build>`, and points `engine-server/current` at it. A pull or a rebuild never changes what the service runs. The last three builds are kept, and so is any build a terminal daemon still runs from.
    - Writes the files in the table below.
    - Turns on linger (`sudo loginctl enable-linger <you>`, a printed sudo step), so the engine runs at boot without a login.
@@ -157,6 +159,7 @@ The same as Debian, with pacman:
 
 - **Packages:** `git curl base-devel python unzip procps-ng iproute2`, plus `go` with `--pilotcli-repo`. It runs `pacman -S --needed` without `-y`, because refreshing the databases without upgrading is a partial upgrade. If pacman can't download a package, run `sudo pacman -Syu` and re-run.
 - **Node 24:** any Node 24 on PATH, such as one from mise. Otherwise pacman's Node 24 LTS, `nodejs-lts-krypton` (with `npm`), unless another `nodejs` is installed, which it would have to replace. Then pacman's `nodejs` if it is 24, else pacman's `fnm` and Node 24 under fnm's `pilot` alias.
+- **Docker, for the engine's build:** `sudo systemctl enable --now docker`, `sudo usermod -aG docker $USER`, then log in again. Without it, node-pty is compiled with Arch's toolchain and fails its glibc 2.28 check (`pty.node needs GLIBC_2.42`).
 - **If real Orca is installed** at `/opt/Orca`, Pilot's orcad starts it as its browser host (`orcad-browser-provider.ts`). That is the same known gap as on macOS.
 
 ## Manual steps the scripts can't do
@@ -310,4 +313,4 @@ What it would take: a Linux `bin/pilot` launcher that pins `~/.config/Pilot`, Li
 - **Approvals stay with the machine's own window.** A headless engine's cards can be answered but never approved. Keep jobs that need approval on a Mac.
 - **Job 14 serves only its own machine.** A job that posts prepared cards needs 14 on the same machine.
 - **orcad also runs Orca's own automation engine** (README, Known gaps). A fresh engine has no Orca automations.
-- **Building orcad on a rolling distro.** The node-pty slot is checked against glibc 2.28 and libstdc++ `GLIBCXX_3.4.25` (`config/scripts/verify-linux-glibc-floor.cjs`). CI builds it on Ubuntu 24.04. A much newer compiler, such as Arch's, could reference newer symbols, and the build then fails with the offending names.
+- **Building orcad on a rolling distro.** The node-pty slot is checked against glibc 2.28 and libstdc++ `GLIBCXX_3.4.25` (`config/scripts/verify-linux-glibc-floor.cjs`). A much newer compiler, such as Arch's, references newer symbols, so `linux-engine.sh` builds the slot in CI's `manylinux_2_28` container when Docker answers. Without Docker the host build fails with the offending names.
