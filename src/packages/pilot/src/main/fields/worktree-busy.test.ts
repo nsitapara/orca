@@ -23,6 +23,7 @@ const TAB: BusyTerminal = {
 describe('worktreeBusy (gate.worktree_busy)', () => {
   it.each([
     ['idle and finished', TAB, '', 'done', false, null],
+    ["finished per Orca's hooks, though the tui-idle probe times out", TAB, '', 'done', true, null],
     [
       'typing',
       TAB,

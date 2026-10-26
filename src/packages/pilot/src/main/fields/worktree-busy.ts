@@ -71,6 +71,11 @@ export async function worktreeBusy(
       if (unfinished) {
         return { typing: false, reason: `${name} ${unfinished}` }
       }
+      // Orca's hooks say its turn ended, so the screen needs no second look: the tui-idle probe times out on idle
+      // Claude tabs, which read as working (pilotCLI fd86dea; a kept-open M01 kickoff tab held its answers).
+      if (state === 'done') {
+        continue
+      }
       if (await reads.tabBusy(t.handle)) {
         return { typing: false, reason: `${name} is working` }
       }
