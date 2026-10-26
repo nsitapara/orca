@@ -258,6 +258,8 @@ A job that changes code on Nish's work, or needs a stack, says what it needs. pi
 
   Orphans and runs it doesn't know are Nish's to delete.
 
+- **Every 5 minutes,** housekeeping runs `pilotcli env list` and deletes each throwaway an agent made in one of Pilot's runs under its own name (`owner_run`, the step's `PILOT_RUN_ID`: job 14's `<run>-draft`), once that run ended 10 minutes ago, and only one made before that end (an answer run resuming the tab keeps the old `PILOT_RUN_ID`). No run row records these envs, so neither the run's teardown nor the startup sweep reaches them; a run Pilot cancels (a card closed mid-preparation) kills its agent before the agent deletes its own.
+
 - **Sessions, Resume, answers:**
   - In place and kept work as before.
   - A throwaway is disposable: Resume says its checkout was removed, and no per-worktree session is kept.
