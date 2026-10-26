@@ -6,7 +6,7 @@ import type { OrcaRuntimeService } from '../../../../../main/runtime/orca-runtim
 import { PilotStore } from '../store/store'
 import type { PilotcliReply } from './pilotcli'
 import { RECOVERED_OUTCOME } from './recover'
-import { createEnvService } from './service'
+import { createEnvService, OWNED_SWEEP_EVERY_MS } from './service'
 
 const dirs: string[] = []
 afterEach(() => {
@@ -31,14 +31,18 @@ function storeWithRun(status: 'running' | 'failed') {
 }
 
 // `seen` records the answers hook and each pilotcli call (its first two words).
-function serviceFor(store: PilotStore, seen: string[], opts: { hookThrows?: boolean } = {}) {
+function serviceFor(
+  store: PilotStore,
+  seen: string[],
+  opts: { hookThrows?: boolean; now?: () => number } = {}
+) {
   const dataDir = mkdtempSync(join(tmpdir(), 'pilot-envs-'))
   dirs.push(dataDir)
   return createEnvService({
     // Never reached: no folder is resolved, no tab closed, no repo rescanned (no definition).
     runtime: {} as unknown as OrcaRuntimeService,
     store,
-    now: () => 1000,
+    now: opts.now ?? (() => 1000),
     log: () => {},
     definitionFor: () => null,
     engineEnv: { binDir: '/nowhere/bin', dataDir },
@@ -101,5 +105,23 @@ describe('EnvService.startup', () => {
     expect(store.handledRows('ci')).toEqual([])
     expect(seen[0]).toBe('answers')
     expect([...seen].sort()).toEqual(['answers', 'env delete', 'env list'])
+  })
+})
+
+// The scheduler's poll: an env list for the owned-env sweep at most every OWNED_SWEEP_EVERY_MS.
+describe('EnvService.housekeep', () => {
+  it('sweeps the envs ended runs own at most every OWNED_SWEEP_EVERY_MS', async () => {
+    let at = 1000
+    const seen: string[] = []
+    const envs = serviceFor(storeWithRun('failed'), seen, { now: () => at })
+    envs.housekeep()
+    await vi.waitFor(() => expect(seen).toEqual(['env list']))
+    at += OWNED_SWEEP_EVERY_MS - 1
+    envs.housekeep()
+    await new Promise((resolve) => setImmediate(resolve))
+    expect(seen).toEqual(['env list'])
+    at += 1
+    envs.housekeep()
+    await vi.waitFor(() => expect(seen).toEqual(['env list', 'env list']))
   })
 })

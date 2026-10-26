@@ -21,8 +21,11 @@ import { createPreparations, type EnvPreparer, type Preparations } from './prepa
 import { recoverPreparing } from './recover'
 import { resolveEnvPath } from './resolve-path'
 import { strandedWork } from './stranded'
-import { sweepEnvs } from './sweep'
+import { sweepEnvs, sweepOwnedEnvs } from './sweep'
 import { createTeardowns } from './teardown'
+
+// How often housekeeping sweeps envs a run's agent made under another name (main/envs/sweep.ts, sweepOwnedEnvs).
+export const OWNED_SWEEP_EVERY_MS = 5 * 60_000
 
 export type EnvServiceDeps = {
   runtime: OrcaRuntimeService
@@ -57,7 +60,8 @@ export type EnvService = {
   // The run engine's onRunEnd (M4 §8, the run ends however it ends): the rest of the run's end, then its env's teardown,
   // which first stops a create still in flight.
   runEnded(run: RunRow): void
-  // The scheduler's poll: the deletes now due (a retry, a not_yet, a run that ended outside closeRun). Never awaits one.
+  // The scheduler's poll: the deletes now due (a retry, a not_yet, a run that ended outside closeRun), and every
+  // OWNED_SWEEP_EVERY_MS the envs ended runs' agents made. Never awaits one.
   housekeep(): void
   // A dry run's workspace preview (main/envs/preview.ts): asks `env create --dry-run true`, makes nothing.
   preview(def: AutomationDefinition, decisions: ItemDecision[]): Promise<void>
@@ -144,6 +148,24 @@ export function createEnvService(deps: EnvServiceDeps): EnvService {
       }
     }
   }
+  let ownedSweptAt = Number.NEGATIVE_INFINITY
+  let ownedSweep: Promise<void> | null = null
+  const sweepOwned = (): void => {
+    if (ownedSweep || deps.now() - ownedSweptAt < OWNED_SWEEP_EVERY_MS) {
+      return
+    }
+    ownedSweptAt = deps.now()
+    ownedSweep = sweepOwnedEnvs({ store: deps.store, pilotcli, now: deps.now, log: deps.log })
+      .then((deleted) => {
+        if (deleted.length > 0) {
+          deps.log(`[pilot] deleted envs ended runs' agents made: ${deleted.join(', ')}`)
+        }
+      })
+      .catch((error: unknown) => deps.log(`[pilot] owned env sweep failed: ${String(error)}`))
+      .finally(() => {
+        ownedSweep = null
+      })
+  }
   const closing = { store: deps.store, now: deps.now, log: deps.log, onRunEnd: runEnded }
   const close = (run: RunRow, end: RunEnd, opts?: CloseOptions): void =>
     closeRun(closing, run, end, opts)
@@ -151,7 +173,10 @@ export function createEnvService(deps: EnvServiceDeps): EnvService {
     preparations,
     answerHooks: { preparer: preparations, close },
     runEnded,
-    housekeep: () => teardowns.housekeep(),
+    housekeep: () => {
+      teardowns.housekeep()
+      sweepOwned()
+    },
     preview: (def, decisions) =>
       previewEnvs(
         { runs: deps.store.runs, pilotcli, nameOf: nameOf(deps.definitionFor), now: deps.now },

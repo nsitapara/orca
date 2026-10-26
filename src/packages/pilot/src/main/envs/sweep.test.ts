@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { RunRow } from '../../shared/api-types'
 import { PilotStore } from '../store/store'
 import type { Pilotcli, PilotcliReply } from './pilotcli'
-import { sweepEnvs } from './sweep'
+import { OWNED_GRACE_MS, sweepEnvs, sweepOwnedEnvs } from './sweep'
 import { createTeardowns } from './teardown'
 
 type Seed = {
@@ -258,5 +258,88 @@ describe('the startup sweep', () => {
     }
     expect(deletes).toEqual([10, 60_010])
     expect(store.runs.get('ci-1')?.env).toMatchObject({ state: 'removed', removedAt: 60_010 })
+  })
+})
+
+// Job 14's shape: run 14-1 has no env of its own; an agent in its step made 14-1-draft (owner_run 14-1).
+describe('the owned-env sweep', () => {
+  const ended = Date.parse('2026-10-24T09:49:42Z')
+  const graceOver = ended + OWNED_GRACE_MS
+
+  function ownerStore(status: RunRow['status']) {
+    const store = PilotStore.open(':memory:')
+    store.runs.create({
+      id: '14-1',
+      automationId: 'prepare',
+      tickId: null,
+      itemKey: 'in_1',
+      itemLabel: 'in_1',
+      worktreePath: '/wt',
+      startedAt: 1
+    })
+    store.runs.update('14-1', status === 'running' ? { status } : { status, finishedAt: ended })
+    return store
+  }
+
+  function ownedSweep(store: PilotStore, rows: unknown[], at: number, deleteReply?: PilotcliReply) {
+    const calls: string[][] = []
+    const logged: string[] = []
+    const report = sweepOwnedEnvs({
+      store,
+      pilotcli: async (call) => {
+        calls.push([...call.args])
+        return call.args[1] === 'list'
+          ? list(rows)
+          : (deleteReply ?? { outcome: 'ok', reason: '', data: { removed: [] }, code: 0 })
+      },
+      now: () => at,
+      log: (message) => logged.push(message)
+    })
+    return { report, calls, logged }
+  }
+
+  const draft = (over: Record<string, unknown> = {}) =>
+    row('14-1-draft', { owner_run: '14-1', created: '2026-10-24T09:27:10Z', ...over })
+
+  it.each([
+    [
+      "an ended run's draft, the grace over: deleted",
+      'cancelled',
+      draft(),
+      graceOver,
+      ['14-1-draft']
+    ],
+    ['within the grace: left', 'cancelled', draft(), graceOver - 1, []],
+    ['its run still runs: left', 'running', draft(), graceOver, []],
+    ["a run Pilot doesn't know: left", 'done', draft({ owner_run: 'gone-1' }), graceOver, []],
+    [
+      'made after its run ended (an answer run resumed the tab): left',
+      'done',
+      draft({ created: '2026-10-24T09:50:00Z' }),
+      graceOver + 60_000,
+      []
+    ],
+    ['a kept worktree: left', 'done', draft({ mode: 'kept' }), graceOver, []],
+    ['in place: left', 'done', draft({ mode: 'in_place' }), graceOver, []],
+    [
+      'no owner (an older pilotcli, or made by hand): left',
+      'done',
+      row('14-1-draft'),
+      graceOver,
+      []
+    ],
+    ["the run's own env: its teardown's", 'done', row('14-1', { owner_run: '14-1' }), graceOver, []]
+  ] as const)('%s', async (_name, status, envRow, at, deleted) => {
+    const { report, calls } = ownedSweep(ownerStore(status), [envRow], at)
+    expect(await report).toEqual(deleted)
+    const deletes = calls.filter((args) => args[1] === 'delete')
+    expect(deletes).toEqual(deleted.map((run) => ['env', 'delete', run, '--format', 'json']))
+  })
+
+  it('a delete that fails is logged and left for the next sweep', async () => {
+    const failed: PilotcliReply = { outcome: 'failed', reason: 'busy', data: null, code: 1 }
+    const { report, logged } = ownedSweep(ownerStore('cancelled'), [draft()], graceOver, failed)
+    expect(await report).toEqual([])
+    expect(logged).toEqual(["[pilot] run 14-1: couldn't delete its env 14-1-draft: busy"])
   })
 })

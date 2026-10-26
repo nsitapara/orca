@@ -144,7 +144,7 @@ describe.skipIf(!existsSync(skillsDir()))(
       const text = readFileSync(join(dir, 'modes', 'candidate.md'), 'utf8')
       for (const needed of [
         'env create --run "$PILOT_RUN_ID-draft"',
-        '--stack never --scrub true',
+        '--stack backend --scrub true',
         'git get-diff -C <env path> --uncommitted true',
         'env delete "$PILOT_RUN_ID-draft"'
       ]) {

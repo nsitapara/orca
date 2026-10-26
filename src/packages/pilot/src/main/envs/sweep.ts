@@ -1,12 +1,14 @@
 import type { RunRow } from '../../shared/api-types'
-import { ENV_LIST_ARGS } from '../../shared/run/env-args'
+import { ENV_LIST_ARGS, envDeleteArgs } from '../../shared/run/env-args'
 import { worktreePathKey } from '../fields/agent-activity'
 import type { PilotStore } from '../store/store'
 import { parseEnvRows, type EnvListRow } from './env-result'
 import type { Pilotcli } from './pilotcli'
-import { LIVE } from './teardown'
+import { DELETE_TIMEOUT_MS, LIVE } from './teardown'
 
 export const LIST_TIMEOUT_MS = 60_000
+// How long an owned env outlives its run's end: a subagent may still be finishing in it.
+export const OWNED_GRACE_MS = 10 * 60_000
 export type SweepReport = { deleted: string[]; removed: string[]; skipped: number }
 export type SweepDeps = {
   store: PilotStore
@@ -46,7 +48,7 @@ function goneUnlisted(run: RunRow, listed: ReadonlySet<string>): boolean {
 }
 
 // env list's rows, or null (logged) when it failed or answered anything but a list: then nothing is touched.
-async function listEnvs(deps: SweepDeps): Promise<EnvListRow[] | null> {
+async function listEnvs(deps: Pick<SweepDeps, 'pilotcli' | 'log'>): Promise<EnvListRow[] | null> {
   try {
     const reply = await deps.pilotcli({ args: ENV_LIST_ARGS, timeoutMs: LIST_TIMEOUT_MS })
     if (reply.outcome !== 'ok') {
@@ -104,4 +106,47 @@ export async function sweepEnvs(deps: SweepDeps): Promise<SweepReport> {
     report.removed.push(run.id)
   }
   return report
+}
+
+export type OwnedSweepDeps = Pick<SweepDeps, 'store' | 'pilotcli' | 'now' | 'log'>
+
+// The ended run that owns this row's env, once OWNED_GRACE_MS has passed, else null. An agent in that run's step made it
+// under another name (owner_run, the step's PILOT_RUN_ID: job 14's <run>-draft), so no run row records it and the run's
+// teardown never sees it. Only a throwaway, and only one made before the run ended: an answer run resuming the tab keeps
+// the old PILOT_RUN_ID.
+function endedOwner(row: EnvListRow, deps: OwnedSweepDeps): RunRow | null {
+  const ownsOther = row.ownerRun !== '' && row.ownerRun !== row.run
+  if (row.orphan || row.mode !== 'throwaway' || !ownsOther || deps.store.runs.get(row.run)) {
+    return null
+  }
+  const owner = deps.store.runs.get(row.ownerRun)
+  const end = owner?.finishedAt ?? null
+  if (!owner || LIVE.has(owner.status) || end === null || row.created === null) {
+    return null
+  }
+  return row.created <= end && deps.now() - end >= OWNED_GRACE_MS ? owner : null
+}
+
+// The scheduler's poll, every few minutes: env delete for each env an ended run owns (endedOwner). A delete that fails is
+// logged and tried again on the next sweep.
+export async function sweepOwnedEnvs(deps: OwnedSweepDeps): Promise<string[]> {
+  const deleted: string[] = []
+  for (const row of (await listEnvs(deps)) ?? []) {
+    const owner = endedOwner(row, deps)
+    if (!owner) {
+      continue
+    }
+    const reply = await deps.pilotcli({
+      args: envDeleteArgs(row.run, false),
+      timeoutMs: DELETE_TIMEOUT_MS
+    })
+    if (reply.outcome === 'ok') {
+      deleted.push(row.run)
+    } else {
+      deps.log(
+        `[pilot] run ${owner.id}: couldn't delete its env ${row.run}: ${reply.reason || reply.outcome}`
+      )
+    }
+  }
+  return deleted
 }

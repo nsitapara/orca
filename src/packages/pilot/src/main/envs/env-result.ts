@@ -19,14 +19,18 @@ const resultSchema = z.looseObject({
   env: z.record(z.string(), z.string()).optional(),
   env_file: z.string().nullable().optional()
 })
-// env list's rows (Contract answers 4): {run, name, project, mode, status, path, stack, created, age_hours, orphan, stale}.
-// `run` is the id exactly as passed to create; an orphan's is "".
+// env list's rows (Contract answers 4): {run, name, project, mode, status, path, stack, created, age_hours, orphan, stale,
+// owner_run}. `run` is the id exactly as passed to create; an orphan's is "". owner_run is the run whose step made it
+// (pilotcli 47bf79d); an older pilotcli sends none.
 const rowsSchema = z.array(
   z.looseObject({
     run: z.string(),
+    mode: z.string().nullable().optional(),
     status: z.string().nullable().optional(),
     path: z.string().nullable().optional(),
-    orphan: z.boolean().optional()
+    created: z.string().nullable().optional(),
+    orphan: z.boolean().optional(),
+    owner_run: z.string().optional()
   })
 )
 
@@ -41,9 +45,13 @@ export type EnvResult = {
 }
 export type EnvListRow = {
   run: string
+  mode: string | null
   status: string | null
   path: string | null
+  // When env create made it (ms); null for an orphan.
+  created: number | null
   orphan: boolean
+  ownerRun: string
 }
 
 function stackOf(raw: z.infer<typeof resultSchema>['stack']): RunEnvStack | null {
@@ -87,6 +95,11 @@ export function parseEnvResult(data: unknown): EnvResult {
   }
 }
 
+function createdAt(raw: string | null | undefined): number | null {
+  const at = raw ? Date.parse(raw) : Number.NaN
+  return Number.isNaN(at) ? null : at
+}
+
 // env list's data: a list of rows. Anything else is refused, so the sweep does nothing.
 export function parseEnvRows(data: unknown): EnvListRow[] {
   const parsed = rowsSchema.safeParse(data)
@@ -95,8 +108,11 @@ export function parseEnvRows(data: unknown): EnvListRow[] {
   }
   return parsed.data.map((row) => ({
     run: row.run,
+    mode: row.mode ?? null,
     status: row.status ?? null,
     path: row.path ?? null,
-    orphan: row.orphan ?? false
+    created: createdAt(row.created),
+    orphan: row.orphan ?? false,
+    ownerRun: row.owner_run ?? ''
   }))
 }

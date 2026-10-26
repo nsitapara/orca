@@ -85,17 +85,34 @@ describe('parseEnvRows', () => {
     stale: false,
     ...over
   })
-  it('reads the contract rows: run exactly as given, the status, orphans with an empty run', () => {
+  it('reads the contract rows: run exactly as given, the status, orphans with an empty run, the owning run', () => {
+    const made = Date.parse('2026-10-13T10:00:00Z')
     expect(
       parseEnvRows([
         row({}),
-        row({ run: '', name: 'agents-old', path: '/b', status: 'ready', orphan: true }),
-        row({ run: 'r2', status: 'creating', path: null })
+        row({ run: '', name: 'agents-old', path: '/b', mode: '', created: null, orphan: true }),
+        row({ run: 'r2-draft', status: 'creating', path: null, owner_run: 'r2' })
       ])
     ).toEqual([
-      { run: 'Fix_CI-1', status: 'ready', path: '/a', orphan: false },
-      { run: '', status: 'ready', path: '/b', orphan: true },
-      { run: 'r2', status: 'creating', path: null, orphan: false }
+      {
+        run: 'Fix_CI-1',
+        mode: 'throwaway',
+        status: 'ready',
+        path: '/a',
+        created: made,
+        orphan: false,
+        ownerRun: ''
+      },
+      { run: '', mode: '', status: 'ready', path: '/b', created: null, orphan: true, ownerRun: '' },
+      {
+        run: 'r2-draft',
+        mode: 'throwaway',
+        status: 'creating',
+        path: null,
+        created: made,
+        orphan: false,
+        ownerRun: 'r2'
+      }
     ])
   })
   it('refuses anything but a list of rows', () => {
