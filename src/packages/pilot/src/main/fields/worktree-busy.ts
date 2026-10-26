@@ -72,7 +72,7 @@ export async function worktreeBusy(
         return { typing: false, reason: `${name} ${unfinished}` }
       }
       // Orca's hooks say its turn ended, so the screen needs no second look: the tui-idle probe times out on idle
-      // Claude tabs, which read as working (pilotCLI fd86dea; a kept-open M01 kickoff tab held its answers).
+      // Claude tabs, which read as working and would hold answers behind any kept-open idle tab (pilotCLI fd86dea).
       if (state === 'done') {
         continue
       }
