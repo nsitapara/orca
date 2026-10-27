@@ -50,8 +50,15 @@ function switchToWorktree(worktreeId: string): boolean {
   return switchToWorkspaceForLaunch(worktreeId, executionHostId, { revealInSidebar: false })
 }
 
-/** The tab bar's agent picker for one worktree, which may have no tab group yet, behind a + button. */
-export function NewAgentMenu({ worktreeId }: { worktreeId: string }): React.JSX.Element {
+/** The tab bar's agent picker for one worktree, which may have no tab group yet, behind a + button.
+ *  `onPick` runs as a pick opens its tab. */
+export function NewAgentMenu({
+  worktreeId,
+  onPick
+}: {
+  worktreeId: string
+  onPick?: () => void
+}): React.JSX.Element {
   const groupId = useAppStore(
     (s) => s.activeGroupIdByWorktree[worktreeId] ?? s.groupsByWorktree[worktreeId]?.[0]?.id ?? null
   )
@@ -110,7 +117,10 @@ export function NewAgentMenu({ worktreeId }: { worktreeId: string }): React.JSX.
           <QuickLaunchAgentMenuItems
             worktreeId={worktreeId}
             groupId={groupId}
-            beforeSurfaceOpen={() => switchToWorktree(worktreeId)}
+            beforeSurfaceOpen={() => {
+              onPick?.()
+              return switchToWorktree(worktreeId)
+            }}
             onFocusTerminal={(tabId) => {
               pendingFocus.current = tabId
             }}

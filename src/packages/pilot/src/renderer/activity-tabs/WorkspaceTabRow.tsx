@@ -13,21 +13,19 @@ import type { TerminalTab } from '../../../../../shared/terminal-tab-types'
 import { AgentIcon } from '@/lib/agent-catalog'
 import { agentTypeToIconAgent, formatAgentTypeLabel } from '@/lib/agent-status'
 import { useTabAgent } from '@/lib/use-tab-agent'
-import { getActivityThreadWorkspaceTitle } from '@/lib/activity-thread-display'
 import { useActiveClientHostedBrowserRowId } from '@/lib/pane-manager/client-hosted-browser-row-state'
 import { isPaletteCurrentWorktree } from '@/lib/palette-repo-resolution'
 import { cn } from '@/lib/utils'
 import { dispatchWorkspaceTabCommand } from '@/lib/workspace-tab-commands'
 import { closeClientHostedBrowserRow } from '@/runtime/client-hosted-browser-row-close'
 import { useAppStore } from '@/store'
-import { ActivityTabsFooterLabel } from '../activity-card/ActivityTabsFooterLabel'
-import { ActivityMachineChip } from '../activity-machines/ActivityMachineChip'
 import { isAutomationTabTitle } from '../../shared/automation-tab-title'
 import { AutomationRunRowIcon } from '../automation-tab/AutomationRunGlyph'
 import { activateWorkspaceTab } from './activate-workspace-tab'
 import { ActivityTabsNest } from './ActivityTabsNest'
 import type { ActivityTabsVirtualItem } from './activity-tabs-rows'
 import { RecentWorktreeRow } from './RecentWorktreeRow'
+import { RowWorkspaceLabel } from './RowWorkspaceLabel'
 import type { WorkspaceTabItem } from './workspace-tab-items'
 
 const icons = {
@@ -50,7 +48,7 @@ function TabRowIconFace({
 }): React.JSX.Element {
   return (
     <span
-      className="mt-0.5 inline-flex size-4 shrink-0 items-center justify-center text-muted-foreground"
+      className="inline-flex size-4 shrink-0 items-center justify-center text-muted-foreground"
       title={agent ? formatAgentTypeLabel(agent) : undefined}
     >
       {agent ? <AgentIcon agent={agent} size={14} /> : <Icon className="size-3.5" />}
@@ -87,14 +85,9 @@ function errorText(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
 }
 
-// Laid out like Activity's ActivityThreadRow card: the tab is the title, its workspace the footer.
-export function WorkspaceTabRow({
-  item,
-  compactMode
-}: {
-  item: WorkspaceTabItem
-  compactMode: boolean
-}): React.JSX.Element {
+// One line, like an agent session's row (ActivityTabsThreadRow): the tab's icon and title, where it
+// runs when no worktree header says so, then its pin and Close.
+export function WorkspaceTabRow({ item }: { item: WorkspaceTabItem }): React.JSX.Element {
   const { tab } = item
   const groupActiveTabId = useAppStore(
     (s) =>
@@ -119,7 +112,6 @@ export function WorkspaceTabRow({
     ? activeClientRowId === tab.id
     : !activeClientRowId && groupActiveTabId === tab.id
   const active = workspaceActive && rowActive
-  const workspaceLabel = getActivityThreadWorkspaceTitle(item.worktree)
   const close = () => {
     if (item.clientHostedRow) {
       void closeClientHostedBrowserRow({ worktreeId: tab.worktreeId, browserPageId: tab.id }).catch(
@@ -149,54 +141,44 @@ export function WorkspaceTabRow({
           role="listitem"
           aria-label={item.label}
           aria-current={active ? 'true' : undefined}
-          className="group relative flex w-full cursor-pointer flex-col gap-1 rounded-lg border border-transparent px-1.5 py-1.5 text-left transition-[background-color,border-color,opacity,box-shadow] duration-200 outline-none select-none worktree-sidebar-card-hover focus-visible:ring-1 focus-visible:ring-ring"
+          className="group relative flex w-full min-w-0 cursor-pointer items-center gap-1.5 rounded-lg border border-transparent px-1.5 py-1 text-left transition-[background-color,border-color,opacity,box-shadow] duration-200 outline-none select-none worktree-sidebar-card-hover focus-visible:ring-1 focus-visible:ring-ring"
         >
-          <div className="flex min-w-0 items-start gap-1.5">
-            <TabRowIcon tab={tab} />
-            <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+          <TabRowIcon tab={tab} />
+          <button
+            type="button"
+            aria-label={item.label}
+            onClick={(event) => {
+              event.stopPropagation()
+              activate()
+            }}
+            className={cn(
+              'block min-w-0 flex-1 cursor-pointer truncate text-left text-[13px] font-medium leading-5 text-foreground outline-none focus-visible:ring-1 focus-visible:ring-ring',
+              tab.isPreview && 'italic'
+            )}
+          >
+            {item.label}
+          </button>
+          <RowWorkspaceLabel worktree={item.worktree} repo={item.repo} />
+          {tab.isPinned ? (
+            <Pin className="size-2.5 shrink-0 text-muted-foreground" aria-label="Pinned" />
+          ) : null}
+          <Tooltip>
+            <TooltipTrigger asChild>
               <button
                 type="button"
-                aria-label={item.label}
                 onClick={(event) => {
                   event.stopPropagation()
-                  activate()
+                  close()
                 }}
-                className={cn(
-                  'block w-full min-w-0 cursor-pointer text-left text-[13px] font-medium leading-5 text-foreground outline-none focus-visible:ring-1 focus-visible:ring-ring',
-                  compactMode ? 'truncate' : 'line-clamp-2 break-words',
-                  tab.isPreview && 'italic'
-                )}
+                onMouseDown={(event) => event.stopPropagation()}
+                aria-label={`Close ${item.label}`}
+                className="flex size-3.5 shrink-0 cursor-pointer items-center justify-center rounded text-muted-foreground transition-opacity hover:bg-accent/80 hover:text-foreground can-hover:opacity-0 can-hover:group-hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
               >
-                {item.label}
+                <X className="size-2.5" />
               </button>
-              <div className="flex min-w-0 items-center gap-1.5 pt-0.5 text-[11px] text-muted-foreground">
-                <ActivityMachineChip worktree={item.worktree} repo={item.repo} />
-                <ActivityTabsFooterLabel worktree={item.worktree} repo={item.repo}>
-                  <span className="min-w-0 flex-1 truncate" title={workspaceLabel}>
-                    {workspaceLabel}
-                  </span>
-                </ActivityTabsFooterLabel>
-                {tab.isPinned ? <Pin className="size-2.5 shrink-0" aria-label="Pinned" /> : null}
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <button
-                      type="button"
-                      onClick={(event) => {
-                        event.stopPropagation()
-                        close()
-                      }}
-                      onMouseDown={(event) => event.stopPropagation()}
-                      aria-label={`Close ${item.label}`}
-                      className="flex size-3.5 shrink-0 cursor-pointer items-center justify-center rounded transition-opacity hover:bg-accent/80 hover:text-foreground can-hover:opacity-0 can-hover:group-hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                    >
-                      <X className="size-2.5" />
-                    </button>
-                  </TooltipTrigger>
-                  <TooltipContent side="left">Close tab</TooltipContent>
-                </Tooltip>
-              </div>
-            </div>
-          </div>
+            </TooltipTrigger>
+            <TooltipContent side="left">Close tab</TooltipContent>
+          </Tooltip>
         </div>
       </ContextMenuTrigger>
       <ContextMenuContent>
@@ -222,10 +204,10 @@ export function WorkspaceTabRow({
 
 // pilot-hook: activity-tabs-row. A Pilot row in Activity's list, spaced like a thread row.
 export function ActivityTabsVirtualRow({
-  item,
-  compactMode
+  item
 }: {
   item: ActivityTabsVirtualItem
+  // Upstream's Compact option; Pilot's rows are always one line.
   compactMode: boolean
 }): React.JSX.Element {
   const { row } = item
@@ -233,7 +215,7 @@ export function ActivityTabsVirtualRow({
     <div className="pb-0.5">
       <ActivityTabsNest groupKey={item.groupKey}>
         {row.kind === 'tab' ? (
-          <WorkspaceTabRow item={row.tab} compactMode={compactMode} />
+          <WorkspaceTabRow item={row.tab} />
         ) : (
           <RecentWorktreeRow item={row.recent} groupKey={item.groupKey} />
         )}

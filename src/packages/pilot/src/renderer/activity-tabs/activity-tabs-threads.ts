@@ -28,6 +28,7 @@ import {
   withoutAutomationThreads
 } from './hide-automation-runs'
 import { useAgentTabItems } from './hide-terminal-tabs'
+import { childrenFoldedOf } from './activity-worktree-folds'
 import { useOpenTabItems } from './use-open-tab-items'
 import { usePinnedWorktreeIds, useRecentWorktreeItems } from './use-recent-worktree-items'
 import { worktreeParentOf } from './worktree-nest-parent'
@@ -81,7 +82,8 @@ export type ActivityTabsView = {
 // session and tab a Pilot step ran in. A pinned worktree with no row always gets one to start a
 // session from, and so, while "Show recently active worktrees" is on, does each
 // recently active one; pinned worktrees' groups lead the worktree grouping, a child worktree's group
-// follows its parent's, and worktrees with no session go under Inactive at its end.
+// follows its parent's (unless the parent's children are folded), and worktrees with no session go
+// under Inactive at its end.
 export function useActivityTabsThreads<
   T extends {
     allThreads: AgentPaneThread[]
@@ -96,6 +98,7 @@ export function useActivityTabsThreads<
   const hideAutomationRuns = useActivityHideAutomationRuns()
   const inactiveExpanded = useActivityInactiveExpanded()
   const parentOf = useAppStore(worktreeParentOf)
+  const childrenFolded = useAppStore(childrenFoldedOf)
   const pinnedIds = usePinnedWorktreeIds(attached)
   const activePaneKey = useActiveWorkspaceThread(result.allThreads, result.effectiveSelectedPaneKey)
   // A tab or a worktree is never unread, so "Show unread only" leaves them out.
@@ -135,9 +138,19 @@ export function useActivityTabsThreads<
     return mergeRowsIntoGroups(threadGroups, rows, view.groupBy, {
       pinnedWorktreeIds: pinnedIds,
       inactiveExpanded,
-      parentOf
+      parentOf,
+      childrenFolded
     })
-  }, [threadGroups, tabs, recent, view.groupBy, pinnedIds, inactiveExpanded, parentOf])
+  }, [
+    threadGroups,
+    tabs,
+    recent,
+    view.groupBy,
+    pinnedIds,
+    inactiveExpanded,
+    parentOf,
+    childrenFolded
+  ])
   if (!attached) {
     return result
   }

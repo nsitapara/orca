@@ -10,7 +10,7 @@ export function AutomationRunGlyph({ size }: { size: number }): React.JSX.Elemen
 export function AutomationRunRowIcon({ agentLabel }: { agentLabel: string }): React.JSX.Element {
   return (
     <span
-      className="mt-0.5 inline-flex size-4 shrink-0 items-center justify-center"
+      className="inline-flex size-4 shrink-0 items-center justify-center"
       title={`Automation run (${agentLabel})`}
     >
       <AutomationRunGlyph size={14} />
