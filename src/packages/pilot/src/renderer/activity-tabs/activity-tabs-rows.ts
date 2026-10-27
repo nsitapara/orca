@@ -88,10 +88,22 @@ export function activityTabsGroupCount(group: ActivityThreadGroup): number {
 }
 
 // pilot-hook: activity-tabs-count. Keeps "No agent activity" away while Pilot rows are listed,
-// a worktree header standing in for its row included.
+// a worktree header standing in for its row included, and those under folded children too.
 export function withActivityTabsCount(
   threadCount: number,
   groups: readonly ActivityThreadGroup[]
 ): number {
-  return groups.reduce((count, group) => count + groupRows(group).length, threadCount)
+  // Listed children are also their parent's child groups: count each group once.
+  const counted = new Set<ActivityThreadGroup>()
+  const rowCount = (group: ActivityThreadGroup): number => {
+    if (counted.has(group)) {
+      return 0
+    }
+    counted.add(group)
+    return childGroups(group).reduce(
+      (count, child) => count + rowCount(child),
+      groupRows(group).length
+    )
+  }
+  return groups.reduce((count, group) => count + rowCount(group), threadCount)
 }

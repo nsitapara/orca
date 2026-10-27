@@ -319,6 +319,17 @@ describe('mergeRowsIntoGroups', () => {
     }
   )
 
+  // Why: a folded child's tabs aren't listed, but "No agent activity" mustn't show under a header counting them.
+  it('counts a folded child worktree’s tabs toward the list, once each', () => {
+    const parentOf = (id: string) => (id === 'wt-kid' ? { id: 'wt-a', label: 'wt-a' } : null)
+    const rows: ActivityTabsRow[] = [{ kind: 'tab', tab: tabItem('kid-tab', 'wt-kid', null) }]
+    const merge = (folded: boolean) =>
+      mergeRowsIntoGroups([], rows, 'worktree', { parentOf, childrenFolded: () => folded })
+    expect(merge(true).map((group) => group.key)).toEqual(['worktree:wt-a'])
+    expect(withActivityTabsCount(0, merge(true))).toBe(1)
+    expect(withActivityTabsCount(0, merge(false))).toBe(1)
+  })
+
   it('nests only when grouped by worktree', () => {
     const groups = mergeRowsIntoGroups(
       buildActivityThreadGroups([agent], 'project'),

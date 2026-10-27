@@ -40,11 +40,7 @@ export function useFoldedWorktreeGroups(): ReadonlySet<string> {
   return useSyncExternalStore(subscribe, current, () => NONE)
 }
 
-export function toggleWorktreeGroupFold(groupKey: string): void {
-  const next = new Set(current())
-  if (!next.delete(groupKey)) {
-    next.add(groupKey)
-  }
+function save(next: ReadonlySet<string>): void {
   folded = next
   try {
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify([...next]))
@@ -53,6 +49,23 @@ export function toggleWorktreeGroupFold(groupKey: string): void {
   }
   for (const listener of listeners) {
     listener()
+  }
+}
+
+export function toggleWorktreeGroupFold(groupKey: string): void {
+  const next = new Set(current())
+  if (!next.delete(groupKey)) {
+    next.add(groupKey)
+  }
+  save(next)
+}
+
+/** Unfolds a worktree's sessions; a no-op when they aren't folded. */
+export function unfoldWorktreeGroup(groupKey: string): void {
+  if (current().has(groupKey)) {
+    const next = new Set(current())
+    next.delete(groupKey)
+    save(next)
   }
 }
 

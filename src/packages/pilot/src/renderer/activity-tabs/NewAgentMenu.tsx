@@ -12,6 +12,7 @@ import { focusTerminalTabSurface } from '@/lib/focus-terminal-tab-surface'
 import { getPaletteWorktreeExecutionHostId } from '@/lib/palette-repo-resolution'
 import { useAppStore } from '@/store'
 import { switchToWorkspaceForLaunch } from '../new-tab-agent-picker/launch-agent-in-workspace'
+import { unfoldWorktreeGroup } from './activity-worktree-folds'
 
 const FIRST_ITEM = '[role="menuitem"]:not([data-disabled])'
 
@@ -50,15 +51,8 @@ function switchToWorktree(worktreeId: string): boolean {
   return switchToWorkspaceForLaunch(worktreeId, executionHostId, { revealInSidebar: false })
 }
 
-/** The tab bar's agent picker for one worktree, which may have no tab group yet, behind a + button.
- *  `onPick` runs as a pick opens its tab. */
-export function NewAgentMenu({
-  worktreeId,
-  onPick
-}: {
-  worktreeId: string
-  onPick?: () => void
-}): React.JSX.Element {
+/** The tab bar's agent picker for one worktree, which may have no tab group yet, behind a + button. */
+export function NewAgentMenu({ worktreeId }: { worktreeId: string }): React.JSX.Element {
   const groupId = useAppStore(
     (s) => s.activeGroupIdByWorktree[worktreeId] ?? s.groupsByWorktree[worktreeId]?.[0]?.id ?? null
   )
@@ -118,7 +112,8 @@ export function NewAgentMenu({
             worktreeId={worktreeId}
             groupId={groupId}
             beforeSurfaceOpen={() => {
-              onPick?.()
+              // A folded worktree unfolds, so the session started in it shows.
+              unfoldWorktreeGroup(`worktree:${worktreeId}`)
               return switchToWorktree(worktreeId)
             }}
             onFocusTerminal={(tabId) => {

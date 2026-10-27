@@ -25,6 +25,8 @@ const ACTION_CLASS =
   'flex size-3.5 shrink-0 cursor-pointer items-center justify-center rounded text-muted-foreground hover:bg-accent/80 hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring'
 const SHOW_ON_HOVER =
   'transition-opacity can-hover:opacity-0 can-hover:group-hover:opacity-100 focus-visible:opacity-100'
+// Hidden, not just faded, so a long list doesn't gain a tab stop per row (upstream's Jump does the same).
+const HOVER_ONLY = `${SHOW_ON_HOVER} can-hover:invisible can-hover:group-hover:visible can-hover:pointer-events-none can-hover:group-hover:pointer-events-auto`
 
 // The row selects on click; its buttons only act.
 function stop(event: React.SyntheticEvent): void {
@@ -120,10 +122,9 @@ const TerseThreadRow = React.memo(function TerseThreadRow({
       >
         <ThreadAgentStateIndicator thread={thread} />
         <ThreadAgentIcon thread={thread} />
-        {/* Keep the activation target apart from the row's actions. */}
+        {/* Keep the activation target apart from the row's actions. Its name is its text, status included. */}
         <button
           type="button"
-          aria-label={taskTitle}
           aria-keyshortcuts="Enter Space"
           onClick={(event) => {
             event.stopPropagation()
@@ -149,7 +150,7 @@ const TerseThreadRow = React.memo(function TerseThreadRow({
               'Jump to workspace'
             )}
             onClick={() => onJump(thread)}
-            className={SHOW_ON_HOVER}
+            className={HOVER_ONLY}
           >
             <ExternalLink className="size-2.5" />
           </RowAction>

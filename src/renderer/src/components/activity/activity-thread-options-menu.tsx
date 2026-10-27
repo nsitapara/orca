@@ -18,6 +18,7 @@ import {
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { translate } from '@/i18n/i18n'
 import {
+  ActivityTabsCompactModeItem, // pilot-hook: activity-tabs-compact-option
   ActivityTabsFilterMenuItems, // pilot-hook: activity-tabs-filter-menu
   ActivityTabsMenuItems, // pilot-hook: activity-tabs-menu
   useActivityTabsFilterCount // pilot-hook: activity-tabs-filter-count
@@ -214,13 +215,16 @@ export function ActivityThreadOptionsMenu({
             </DropdownMenuSubContent>
           </DropdownMenuSub>
         ) : null}
-        <DropdownMenuCheckboxItem
-          checked={compactMode}
-          onCheckedChange={(checked) => onCompactModeChange(checked === true)}
-          onSelect={(event) => event.preventDefault()}
-        >
-          {translate('auto.components.activity.ActivityPrototypePage.f70e4bec47', 'Compact mode')}
-        </DropdownMenuCheckboxItem>
+        <ActivityTabsCompactModeItem>
+          {/* pilot-hook: activity-tabs-compact-option */}
+          <DropdownMenuCheckboxItem
+            checked={compactMode}
+            onCheckedChange={(checked) => onCompactModeChange(checked === true)}
+            onSelect={(event) => event.preventDefault()}
+          >
+            {translate('auto.components.activity.ActivityPrototypePage.f70e4bec47', 'Compact mode')}
+          </DropdownMenuCheckboxItem>
+        </ActivityTabsCompactModeItem>
         {onShowSearchChange ? (
           <DropdownMenuCheckboxItem
             checked={showSearch}

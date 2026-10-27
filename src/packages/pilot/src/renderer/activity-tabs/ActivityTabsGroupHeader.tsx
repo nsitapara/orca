@@ -124,17 +124,6 @@ function sessionCount(group: ActivityThreadGroup): number {
   )
 }
 
-// A fold toggle that runs once, however often a launch calls it.
-function once(toggle: () => void): () => void {
-  let done = false
-  return () => {
-    if (!done) {
-      done = true
-      toggle()
-    }
-  }
-}
-
 function openWorktree(worktreeId: string): void {
   const worktree = useAppStore.getState().getKnownWorktreeById(worktreeId)
   if (worktree) {
@@ -209,11 +198,7 @@ export function ActivityTabsGroupHeader({
           <ActivityMachineChip worktree={machineRow.worktree} repo={machineRow.repo} />
         ) : null}
         <WorktreeTitle name={group.label} project={project} nameClassName="font-semibold" />
-        {/* A folded worktree unfolds for the session started from it. */}
-        <NewAgentMenu
-          worktreeId={worktreeId}
-          onPick={collapsed && onToggle ? once(onToggle) : undefined}
-        />
+        <NewAgentMenu worktreeId={worktreeId} />
         <PinButton worktreeId={worktreeId} pinned={pinned} />
         {worktree ? <MergedWorktreeDeleteButton worktree={worktree} repo={repo} /> : null}
         {hidesUnread(group, collapsed, childrenFolded) ? <HiddenUnreadBell /> : null}

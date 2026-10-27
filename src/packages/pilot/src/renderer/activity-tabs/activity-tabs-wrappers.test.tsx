@@ -19,6 +19,7 @@ import { ActivityRowGroupContext } from './activity-row-group-context'
 import { withChildGroups, withGroupRows } from './activity-tabs-rows'
 import { getWorktreeLineageGroupKey } from '../../../../../shared/sidebar-list/group-keys'
 import { setActivityInactiveExpanded } from './activity-tabs-setting'
+import { toggleWorktreeGroupFold } from './activity-worktree-folds'
 import { RecentWorktreeRow } from './RecentWorktreeRow'
 import { activateAndRevealWorkspace } from '@/lib/worktree-activation'
 import { launchAgentInNewTab } from '@/lib/launch-agent-in-new-tab'
@@ -139,7 +140,8 @@ describe('Pilot wrappers around upstream Activity elements', () => {
       }
       const view = render(threadRow(session, groupKey))
       const row = view.getByRole('listitem', { name: 'Fix the build' })
-      expect(view.getByRole('button', { name: 'Fix the build' }).textContent).toBe(text)
+      // The title's button is named by its text, so the status is read out too.
+      expect(view.getByRole('button', { name: text })).toBeTruthy()
       // The bell and time sit in the row itself, not in a footer line under the title.
       const bell = view.getByRole('button', {
         name: unread ? 'Mark thread as read' : 'Mark thread unread'
@@ -394,18 +396,21 @@ describe('Pilot wrappers around upstream Activity elements', () => {
   })
 
   // Why: the menu's items render in a portal whose clicks bubble to the header; the pick opens its own
-  // tab. A folded worktree unfolds as it does, so the new session shows.
+  // tab. A folded worktree unfolds as it opens, so the new session shows (an Inactive row's menu too).
   it('a pick in a folded worktree header’s New agent menu unfolds it, without also opening it', async () => {
     registerPilotStore(useAppStore)
     useAppStore.setState({ repos: [makeRepo()], worktreesByRepo: { 'repo-1': [makeWorktree()] } })
+    toggleWorktreeGroupFold('worktree:wt-1')
+    const savedFolds = () =>
+      JSON.parse(window.localStorage.getItem('pilot.activity.folded-worktrees') ?? '[]')
+    expect(savedFolds()).toEqual(['worktree:wt-1'])
     const user = userEvent.setup()
-    const onToggle = vi.fn()
     const view = render(
       <TooltipProvider>
         <ActivityTabsGroupHeader
           group={{ key: 'worktree:wt-1', label: 'feature', threads: [] }}
           collapsed
-          onToggle={onToggle}
+          onToggle={vi.fn()}
         >
           {UPSTREAM}
         </ActivityTabsGroupHeader>
@@ -418,7 +423,7 @@ describe('Pilot wrappers around upstream Activity elements', () => {
     expect(launchAgentInNewTab).toHaveBeenCalledWith(expect.objectContaining({ agent: 'claude' }))
     expect(activateAndRevealWorkspace).not.toHaveBeenCalled()
     vi.mocked(launchAgentInNewTab).mock.calls[0]![0].beforeSurfaceOpen?.({ kind: 'host-published' })
-    expect(onToggle).toHaveBeenCalledTimes(1)
+    expect(savedFolds()).toEqual([])
   })
 
   // Why: a worktree folds its own sessions from its folder icon, and its child worktrees from Projects'
