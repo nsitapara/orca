@@ -25,7 +25,7 @@ export function RowWorkspaceLabel({
     <>
       <ActivityMachineChip worktree={worktree} repo={repo} />
       <span
-        className="min-w-0 max-w-[40%] shrink truncate text-2xs text-muted-foreground"
+        className="min-w-0 max-w-[30%] shrink truncate text-2xs text-muted-foreground"
         title={label}
       >
         {label}
