@@ -135,7 +135,7 @@ export function envDeleteArgs(runId: string, keepFolder: boolean): string[] {
   return ['env', 'delete', runId, ...keep, '--format', 'json']
 }
 
-export const ENV_LIST_ARGS: readonly string[] = ['env', 'list', '--format', 'json']
+export const ENV_LIST_ARGS: readonly string[] = ['env', 'list', '--limit', '0', '--format', 'json']
 
 // A run id as a file name (pid files), sanitized as pilotcli names its folders (M4 §2.1). Never used to match env list
 // rows: their `run` is the id exactly as passed to create (Contract answers 4).

@@ -150,12 +150,29 @@ export function createEnvService(deps: EnvServiceDeps): EnvService {
   }
   let ownedSweptAt = Number.NEGATIVE_INFINITY
   let ownedSweep: Promise<void> | null = null
+  const noted = new Map<string, string>()
+  // A tab that can't be read counts as open: the env waits for the next sweep.
+  const agentOpen = async (owner: RunRow): Promise<boolean> => {
+    for (const handle of deps.store.runs.ownTerminals(owner.id)) {
+      if (await terminalOpen(runtime, handle).catch(() => true)) {
+        return true
+      }
+    }
+    return false
+  }
   const sweepOwned = (): void => {
     if (ownedSweep || deps.now() - ownedSweptAt < OWNED_SWEEP_EVERY_MS) {
       return
     }
     ownedSweptAt = deps.now()
-    ownedSweep = sweepOwnedEnvs({ store: deps.store, pilotcli, now: deps.now, log: deps.log })
+    ownedSweep = sweepOwnedEnvs({
+      store: deps.store,
+      pilotcli,
+      now: deps.now,
+      log: deps.log,
+      agentOpen,
+      noted
+    })
       .then((deleted) => {
         if (deleted.length > 0) {
           deps.log(`[pilot] deleted envs ended runs' agents made: ${deleted.join(', ')}`)

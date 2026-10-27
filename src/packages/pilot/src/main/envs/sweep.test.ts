@@ -281,22 +281,35 @@ describe('the owned-env sweep', () => {
     return store
   }
 
-  function ownedSweep(store: PilotStore, rows: unknown[], at: number, deleteReply?: PilotcliReply) {
+  const deletedOk: PilotcliReply = { outcome: 'ok', reason: '', data: { removed: [] }, code: 0 }
+
+  function ownedSweep(
+    store: PilotStore,
+    rows: unknown[],
+    at: number,
+    opts: { deleteReply?: PilotcliReply; agentOpen?: boolean; noted?: Map<string, string> } = {}
+  ) {
     const calls: string[][] = []
     const logged: string[] = []
     const report = sweepOwnedEnvs({
       store,
       pilotcli: async (call) => {
         calls.push([...call.args])
-        return call.args[1] === 'list'
-          ? list(rows)
-          : (deleteReply ?? { outcome: 'ok', reason: '', data: { removed: [] }, code: 0 })
+        return call.args[1] === 'list' ? list(rows) : (opts.deleteReply ?? deletedOk)
       },
       now: () => at,
-      log: (message) => logged.push(message)
+      log: (message) => logged.push(message),
+      agentOpen: async () => opts.agentOpen ?? false,
+      noted: opts.noted ?? new Map()
     })
     return { report, calls, logged }
   }
+
+  const ownedEvents = (store: PilotStore) =>
+    store.events
+      .forRun('14-1')
+      .filter((e) => e.kind.startsWith('owned_env'))
+      .map((e) => [e.kind, e.payload])
 
   const draft = (over: Record<string, unknown> = {}) =>
     row('14-1-draft', { owner_run: '14-1', created: '2026-10-24T09:27:10Z', ...over })
@@ -328,7 +341,13 @@ describe('the owned-env sweep', () => {
       graceOver,
       []
     ],
-    ["the run's own env: its teardown's", 'done', row('14-1', { owner_run: '14-1' }), graceOver, []]
+    [
+      'named after a Pilot run: that run is not its owner',
+      'done',
+      row('14-1', { owner_run: '14-1' }),
+      graceOver,
+      []
+    ]
   ] as const)('%s', async (_name, status, envRow, at, deleted) => {
     const { report, calls } = ownedSweep(ownerStore(status), [envRow], at)
     expect(await report).toEqual(deleted)
@@ -336,10 +355,34 @@ describe('the owned-env sweep', () => {
     expect(deletes).toEqual(deleted.map((run) => ['env', 'delete', run, '--format', 'json']))
   })
 
-  it('a delete that fails is logged and left for the next sweep', async () => {
-    const failed: PilotcliReply = { outcome: 'failed', reason: 'busy', data: null, code: 1 }
-    const { report, logged } = ownedSweep(ownerStore('cancelled'), [draft()], graceOver, failed)
+  it("its agent's tab is still open: left", async () => {
+    const { report, calls } = ownedSweep(ownerStore('done'), [draft()], graceOver, {
+      agentOpen: true
+    })
     expect(await report).toEqual([])
-    expect(logged).toEqual(["[pilot] run 14-1: couldn't delete its env 14-1-draft: busy"])
+    expect(calls.filter((args) => args[1] === 'delete')).toEqual([])
+  })
+
+  it('a delete that fails is retried each sweep, with one run event per new reason', async () => {
+    const store = ownerStore('cancelled')
+    const noted = new Map<string, string>()
+    const failed: PilotcliReply = { outcome: 'failed', reason: 'busy', data: null, code: 1 }
+    const kept: PilotcliReply = {
+      outcome: 'ok',
+      reason: '',
+      data: { kept: 'pilot/14-1-draft' },
+      code: 0
+    }
+    for (const deleteReply of [failed, failed]) {
+      const { report, logged } = ownedSweep(store, [draft()], graceOver, { deleteReply, noted })
+      expect(await report).toEqual([])
+      expect(logged).toEqual(["[pilot] run 14-1: couldn't delete its env 14-1-draft: busy"])
+    }
+    const { report } = ownedSweep(store, [draft()], graceOver, { deleteReply: kept, noted })
+    expect(await report).toEqual(['14-1-draft'])
+    expect(ownedEvents(store)).toEqual([
+      ['owned_env_delete_failed', { env: '14-1-draft', error: 'busy' }],
+      ['owned_env_removed', { env: '14-1-draft', kept: 'pilot/14-1-draft' }]
+    ])
   })
 })
