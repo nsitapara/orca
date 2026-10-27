@@ -151,10 +151,20 @@ export function createEnvService(deps: EnvServiceDeps): EnvService {
   let ownedSweptAt = Number.NEGATIVE_INFINITY
   let ownedSweep: Promise<void> | null = null
   const noted = new Map<string, string>()
-  // A tab that can't be read counts as open: the env waits for the next sweep.
+  const unreadable = new Set<string>()
+  // A tab that can't be read counts as open: the env waits for the next sweep, logged once per run.
   const agentOpen = async (owner: RunRow): Promise<boolean> => {
     for (const handle of deps.store.runs.ownTerminals(owner.id)) {
-      if (await terminalOpen(runtime, handle).catch(() => true)) {
+      const open = await terminalOpen(runtime, handle).catch((error: unknown) => {
+        if (!unreadable.has(owner.id)) {
+          unreadable.add(owner.id)
+          deps.log(
+            `[pilot] run ${owner.id}: tab ${handle} can't be read, so its envs wait: ${String(error)}`
+          )
+        }
+        return true
+      })
+      if (open) {
         return true
       }
     }

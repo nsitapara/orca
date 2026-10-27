@@ -78,7 +78,7 @@ describe('startPilotServices', () => {
   it('opens the store in userData, loads the folders, and runs the scheduler when asked', async () => {
     const services = startPilotServices(runtime, 'main', { schedulerEnabled: true })
     await vi.waitFor(() => expect(logs).toContain(SWEPT))
-    expect(pilotcli.calls()).toEqual(['env list --format json'])
+    expect(pilotcli.calls()).toEqual(['env list --limit 0 --format json'])
     expect(existsSync(join(userData, 'pilot-automations.db'))).toBe(true)
     expect(services.context.loaded().definitions.map((d) => d.id)).toEqual(['ci'])
     expect(logs).toContain('[pilot] scheduler started: first check in 60s, then every 15s')
