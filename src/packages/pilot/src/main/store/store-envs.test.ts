@@ -156,6 +156,16 @@ describe('EnvStore', () => {
     })
   })
 
+  it("a failed create's log tail is kept beside what begin recorded, after its env is removed", () => {
+    const store = setup()
+    store.runs.envs.settle('r1', 'failed', 'the stack exited', ['vite: port 3017 is in use'])
+    store.runs.envs.removed('r1', 11)
+    expect(store.runs.envs.json('r1')).toMatchObject({
+      args: ['env', 'create'],
+      output: ['vite: port 3017 is in use']
+    })
+  })
+
   // The sweep found pilotcli still has it: due again at once, in the state it had before it was removed, its backoff
   // starting over.
   it.each([

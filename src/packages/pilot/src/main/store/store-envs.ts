@@ -68,11 +68,15 @@ export class EnvStore {
   }
 
   // Create ended with no env to use (deferred, failed, refused or stopped). env delete still follows at the run's end,
-  // whatever create made (Ruling P12): with nothing made it answers ok, removed: [].
-  settle(runId: string, state: 'deferred' | 'failed', reason: string): void {
+  // whatever create made (Ruling P12): with nothing made it answers ok, removed: []. output: a failed create's log
+  // tail, recorded with the env and kept past its delete.
+  settle(runId: string, state: 'deferred' | 'failed', reason: string, output?: string[]): void {
+    const json = output ? JSON.stringify({ ...this.json(runId), output }) : null
     this.db
-      .prepare('UPDATE runs SET env_state = ?, env_reason = ? WHERE id = ?')
-      .run(state, reason, runId)
+      .prepare(
+        'UPDATE runs SET env_state = ?, env_reason = ?, env_json = COALESCE(?, env_json) WHERE id = ?'
+      )
+      .run(state, reason, json, runId)
   }
 
   // Records the delete in env_removed_at. A deferred env (not_yet, nothing ran) stays deferred: its outcome is kept.

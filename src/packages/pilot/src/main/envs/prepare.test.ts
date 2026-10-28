@@ -257,6 +257,23 @@ describe('preparing a run’s workspace', () => {
       }
     ])
   })
+
+  // The stack's log goes with the env at teardown: the run keeps what it said last, at most 20 lines (2026-10-28).
+  it("a failed create keeps pilotcli's log tail with the run, capped", async () => {
+    const lines = [...Array.from({ length: 24 }, (_, i) => `line ${i + 1}`), 'x'.repeat(1500)]
+    const t = setup([
+      {
+        outcome: 'failed',
+        reason: "http://localhost:3017 didn't answer within 20m",
+        data: { run: 'ci-1', output: lines },
+        code: 1
+      }
+    ])
+    t.begin()
+    await t.preps.settled()
+    expect(t.run().env).toMatchObject({ state: 'failed' })
+    expect(t.store.runs.envs.json('ci-1').output).toEqual([...lines.slice(5, 24), 'x'.repeat(1000)])
+  })
 })
 
 describe('any mode for any subject (Contract answers 3)', () => {

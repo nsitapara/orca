@@ -17,6 +17,9 @@ import type { Pilotcli, PilotcliReply } from './pilotcli'
 // Setup plus a stack's 20-minute readiness (M4 §2.4), with room for the cap's wait.
 export const CREATE_TIMEOUT_MS = 45 * 60_000
 export const STOPPED = 'stopped while it was being made'
+// A failed create's log tail as the run keeps it: pilotcli sends its last 20 lines; Pilot caps them too.
+const OUTPUT_LINES = 20
+const OUTPUT_LINE_CHARS = 1000
 
 export type PrepareRequest = {
   run: RunRow
@@ -66,6 +69,21 @@ function messageOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
 }
 
+// env create's data.output when setup or the stack failed: its log's last lines, redacted. The log goes with the env at
+// teardown, so the run keeps them (env_json.output) to say why a stack never answered (2026-10-28). Other shapes: none.
+function outputOf(data: unknown): string[] | undefined {
+  if (typeof data !== 'object' || data === null || !('output' in data)) {
+    return undefined
+  }
+  const lines = Array.isArray(data.output)
+    ? data.output.filter((line: unknown): line is string => typeof line === 'string')
+    : []
+  if (lines.length === 0) {
+    return undefined
+  }
+  return lines.slice(-OUTPUT_LINES).map((line) => line.slice(0, OUTPUT_LINE_CHARS))
+}
+
 // A throwaway's sidebar name: its job, and the commit it was checked out at.
 function throwawayLabel(job: string, sha: string | null): string {
   return sha ? `${job} · @${sha.slice(0, 7)}` : job
@@ -99,10 +117,11 @@ function checkWhere(result: EnvResult, plan: Planned): void {
 export function createPreparations(deps: PrepareDeps): Preparations {
   const flights = new Map<string, Flight>()
 
-  // failed or invalid (§8): the run fails with the reason. The env stays due for env delete at the run's end whatever
-  // create made (Ruling P12): with nothing made, delete answers ok, removed: [].
-  function failed(plan: Planned, hooks: PreparedHooks, reason: string): void {
-    deps.runs.envs.settle(plan.runId, 'failed', reason)
+  // failed or invalid (§8): the run fails with the reason, and keeps pilotcli's log tail when it sent one. The env
+  // stays due for env delete at the run's end whatever create made (Ruling P12): with nothing made, delete answers ok,
+  // removed: [].
+  function failed(plan: Planned, hooks: PreparedHooks, reason: string, output?: string[]): void {
+    deps.runs.envs.settle(plan.runId, 'failed', reason, output)
     hooks.end({ status: 'failed', outcome: `Couldn't prepare its workspace: ${reason}` }, {})
   }
 
@@ -131,7 +150,8 @@ export function createPreparations(deps: PrepareDeps): Preparations {
       return
     }
     if (reply.outcome !== 'ok') {
-      failed(plan, hooks, reply.reason || `pilotcli env create answered ${reply.outcome}`)
+      const reason = reply.reason || `pilotcli env create answered ${reply.outcome}`
+      failed(plan, hooks, reason, outputOf(reply.data))
       return
     }
     let result: EnvResult

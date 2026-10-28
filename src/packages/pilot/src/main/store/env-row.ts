@@ -21,6 +21,9 @@ export type EnvJson = {
   keptGoneAt?: number
   // What a throwaway env delete couldn't remove still holds (main/envs/teardown.ts).
   stranded?: RunStranded
+  // A failed env create's data.output: its setup or stack log's last lines, redacted (main/envs/prepare.ts). The log
+  // goes with the env, so this is what still says why it failed.
+  output?: string[]
 }
 
 export function readEnvJson(raw: unknown): EnvJson {
