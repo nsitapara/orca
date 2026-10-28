@@ -98,7 +98,7 @@ function Tiles({
     { label: `calls in ${windowText(since)}`, value: usage.calls, tone: '' },
     { label: 'failed', value: totals.failed, tone: badClass('failed', totals.failed) },
     {
-      label: 'invalid (bad flags or values)',
+      label: 'invalid (refused, nothing attempted)',
       value: totals.invalid,
       tone: badClass('invalid', totals.invalid)
     },

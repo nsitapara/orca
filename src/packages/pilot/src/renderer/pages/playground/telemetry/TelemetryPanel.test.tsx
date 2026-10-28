@@ -70,7 +70,9 @@ describe('TelemetryPanel', () => {
     )
     const tiles = within(screen.getByRole('list', { name: 'Totals' }))
     expect(tiles.getByText('calls in 7 days').previousSibling?.textContent).toBe('7')
-    expect(tiles.getByText('invalid (bad flags or values)').previousSibling?.textContent).toBe('3')
+    expect(
+      tiles.getByText('invalid (refused, nothing attempted)').previousSibling?.textContent
+    ).toBe('3')
     expect(screen.getByRole('img', { name: /Calls per day/ })).toBeTruthy()
     expect(screen.getByText(/Data since Oct 12 · kept 90 days/)).toBeTruthy()
     expect(firstCells('Commands')).toEqual([

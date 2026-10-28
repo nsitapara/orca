@@ -78,7 +78,7 @@ function FailureRow({
       <td
         className={`${CELL} whitespace-nowrap font-mono ${call.command ? '' : 'text-muted-foreground'}`}
       >
-        {commandText(call.command, call.attempted)}
+        {commandText(call.command, call.attempted, call.cause)}
       </td>
       <td className={`${CELL} whitespace-nowrap ${outcomeClass(call.outcome)}`}>
         {outcomeText(call)}

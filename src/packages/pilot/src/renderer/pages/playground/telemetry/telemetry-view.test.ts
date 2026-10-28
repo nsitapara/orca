@@ -51,11 +51,13 @@ describe('telemetry-view', () => {
   ])('durationText %d is %s', (ms, text) => expect(durationText(ms)).toBe(text))
 
   it.each([
-    ['', undefined, '(no command)'],
-    ['', 'inbox list-cards', 'inbox list-cards (no such command)'],
-    ['gitlab check-mr', undefined, 'gitlab check-mr']
-  ])('commandText %j attempting %j is %s', (command, attempted, text) =>
-    expect(commandText(command, attempted)).toBe(text)
+    ['', undefined, undefined, '(no command)'],
+    ['', 'inbox list-cards', 'unknown_command', 'inbox list-cards (no such command)'],
+    ['', 'inbox', 'unknown_flag', 'inbox (attempted)'],
+    ['', 'fake', 'bad_value', 'fake (attempted)'],
+    ['gitlab check-mr', undefined, undefined, 'gitlab check-mr']
+  ])('commandText %j attempting %j (%j) is %s', (command, attempted, cause, text) =>
+    expect(commandText(command, attempted, cause)).toBe(text)
   )
 
   it.each([

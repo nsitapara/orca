@@ -20,12 +20,16 @@ export function windowText(since: TelemetryWindow): string {
 }
 
 // A command's name as shown: pilotcli's row for calls it couldn't name (every parse error) has "". Such a call says
-// what it attempted, when pilotcli recorded it: "inbox list-cards (no such command)".
-export function commandText(command: string, attempted?: string): string {
+// what it attempted, when pilotcli recorded it: "inbox list-cards (no such command)" for an unknown command, and
+// "inbox (attempted)" for a real module refused for a flag or a missing verb.
+export function commandText(command: string, attempted?: string, cause?: string): string {
   if (command) {
     return command
   }
-  return attempted ? `${attempted} (no such command)` : '(no command)'
+  if (!attempted) {
+    return '(no command)'
+  }
+  return cause === 'unknown_command' ? `${attempted} (no such command)` : `${attempted} (attempted)`
 }
 
 // A call's outcome as shown: a dry run's says so, so a refusal it caught reads apart from a live one.
