@@ -22,7 +22,8 @@ import {
 } from './telemetry-view'
 
 const CAUSES_NOTE =
-  'Causes are fixed categories (timeout, HTTP status, parse, git, invalid flag, stack start). ' +
+  'Causes are fixed categories (timeout, HTTP status, parse, git, unknown command, unknown flag, bad value, ' +
+  'missing argument, precondition, refused, interrupted, stack start, stack stop; invalid flag on older calls). ' +
   'Free-text reasons are never stored: they can carry PHI.'
 
 const CELL = 'px-3 py-1.5'

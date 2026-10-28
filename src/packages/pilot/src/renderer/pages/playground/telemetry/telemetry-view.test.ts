@@ -20,8 +20,16 @@ describe('telemetry-view', () => {
   it.each([
     [{ cause: 'http', http_status: 502 }, 'HTTP 502'],
     [{ cause: 'http' }, 'HTTP'],
-    [{ cause: 'invalid_flag' }, 'invalid flag'],
+    [{ cause: 'unknown_command' }, 'unknown command'],
+    [{ cause: 'unknown_flag' }, 'unknown flag'],
+    [{ cause: 'bad_value' }, 'bad value'],
+    [{ cause: 'missing_arg' }, 'missing argument'],
+    [{ cause: 'precondition' }, 'precondition'],
+    [{ cause: 'refused' }, 'refused'],
+    [{ cause: 'interrupted' }, 'interrupted'],
     [{ cause: 'stack_start' }, 'stack start'],
+    [{ cause: 'stack_stop' }, 'stack stop'],
+    [{ cause: 'invalid_flag' }, 'invalid flag'],
     [{ cause: 'timeout' }, 'timeout'],
     [{}, '-']
   ])('causeText %o is %s', (call, text) => expect(causeText(call)).toBe(text))

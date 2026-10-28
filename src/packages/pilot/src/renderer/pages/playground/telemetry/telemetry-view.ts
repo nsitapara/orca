@@ -94,9 +94,16 @@ export function callTimeText(iso: string, now: Date): string {
   return `${monthDay(at)} ${clockText(iso)}`
 }
 
+// A cause whose slug is its words (timeout, parse, git, precondition, refused, interrupted, other) needs no entry.
 const CAUSE_TEXT: Record<string, string> = {
-  invalid_flag: 'invalid flag',
-  stack_start: 'stack start'
+  unknown_command: 'unknown command',
+  unknown_flag: 'unknown flag',
+  bad_value: 'bad value',
+  missing_arg: 'missing argument',
+  stack_start: 'stack start',
+  stack_stop: 'stack stop',
+  // Older lines: until 2026-10-28 every invalid call recorded it.
+  invalid_flag: 'invalid flag'
 }
 // A failed or invalid call's cause, one of pilotcli's fixed categories, as words.
 export function causeText(call: Pick<TelemetryCall, 'cause' | 'http_status'>): string {
