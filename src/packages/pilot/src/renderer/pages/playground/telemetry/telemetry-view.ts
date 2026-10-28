@@ -19,9 +19,18 @@ export function windowText(since: TelemetryWindow): string {
   return `${WINDOW_DAYS[since]} days`
 }
 
-// A command's name as shown: pilotcli's row for calls it couldn't name (every parse error) has "".
-export function commandText(command: string): string {
-  return command || '(no command)'
+// A command's name as shown: pilotcli's row for calls it couldn't name (every parse error) has "". Such a call says
+// what it attempted, when pilotcli recorded it: "inbox list-cards (no such command)".
+export function commandText(command: string, attempted?: string): string {
+  if (command) {
+    return command
+  }
+  return attempted ? `${attempted} (no such command)` : '(no command)'
+}
+
+// A call's outcome as shown: a dry run's says so, so a refusal it caught reads apart from a live one.
+export function outcomeText(call: Pick<TelemetryCall, 'outcome' | 'dry_run'>): string {
+  return call.dry_run ? `${call.outcome} (dry run)` : call.outcome
 }
 
 // A count as a table cell: - for none, so the counts that matter stand out.

@@ -95,7 +95,11 @@ export type TelemetryJob = TelemetryUsage['jobs'][number]
 export const TelemetryCallSchema = z.object({
   ts: z.string(),
   command: z.string(),
+  // Beside an empty command: the command the call attempted, by name only (pilotcli's ShownAttempted).
+  attempted: z.string().optional(),
   outcome: z.string(),
+  // The call was a --dry-run: it changed nothing, so its refusal is one the dry run caught (2026-10-28).
+  dry_run: z.boolean().optional(),
   cause: z.string().optional(),
   http_status: z.number().optional(),
   exit: z.number(),

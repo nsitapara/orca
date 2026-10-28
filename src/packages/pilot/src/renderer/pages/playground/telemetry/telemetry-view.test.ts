@@ -7,6 +7,7 @@ import {
   commandText,
   durationText,
   isPayload,
+  outcomeText,
   sortCommands,
   sparkPoints,
   totalsOf,
@@ -42,9 +43,18 @@ describe('telemetry-view', () => {
   ])('durationText %d is %s', (ms, text) => expect(durationText(ms)).toBe(text))
 
   it.each([
-    ['', '(no command)'],
-    ['gitlab check-mr', 'gitlab check-mr']
-  ])('commandText %j is %s', (command, text) => expect(commandText(command)).toBe(text))
+    ['', undefined, '(no command)'],
+    ['', 'inbox list-cards', 'inbox list-cards (no such command)'],
+    ['gitlab check-mr', undefined, 'gitlab check-mr']
+  ])('commandText %j attempting %j is %s', (command, attempted, text) =>
+    expect(commandText(command, attempted)).toBe(text)
+  )
+
+  it.each([
+    [{ outcome: 'invalid', dry_run: true }, 'invalid (dry run)'],
+    [{ outcome: 'invalid' }, 'invalid'],
+    [{ outcome: 'failed', dry_run: false }, 'failed']
+  ])('outcomeText %o is %s', (call, text) => expect(outcomeText(call)).toBe(text))
 
   it('sorts commands by the column picked, then by calls', () => {
     expect(sortCommands(NEW_USAGE.commands, 'invalid').map((c) => c.command)).toEqual([
