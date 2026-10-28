@@ -231,7 +231,7 @@ A job that changes code on Nish's work, or needs a stack, says what it needs. pi
   2. Pilot runs `pilotcli env create --run <run id> …` in its own process group, then reads its envelope (exit codes as backup).
   3. `ok`: Pilot's own runtime rescans the repo and finds the folder (60 s at most).
      - `not_yet`: the run is **Deferred**. Its `once_per` key is freed, it counts no failure, `retry_after_failure` doesn't apply, and handed-over ids stay pending.
-     - `failed` or `invalid`: the run fails with pilotcli's reason. Its `data.output`, the setup or stack log's last lines (at most 20), stays in the run's `env_json.output`: the log goes with the env, so that is what says why a stack never answered (2026-10-28).
+     - `failed` or `invalid`: the run fails with pilotcli's reason. Its `data.output`, the setup or stack log's last lines (at most 20), stays in the run's `env_json.output`: the log goes with the env, so that is what says why a stack never answered (2026-10-28). It is kept in the local database only: no RPC, `pilot` command or run panel shows it, because the lines are redacted for secrets but not filtered for PHI. Read it with `sqlite3 -readonly` on the runs table.
 - **During the run:**
   - Every step runs in the env's folder, with its variables (`data.env`). Pilot's own `PILOT_*` and a step's `env:` win over them. A variable named like Pilot's own (`PILOT_*`, `ORCA_*`, `PATH`, …) fails the run.
   - `{worktree.path}` stays the item's worktree. The folder is `{env.path}`; also `{env.mode}`, `{env.reason}`, `{env.file}`, `{env.stack}`.
