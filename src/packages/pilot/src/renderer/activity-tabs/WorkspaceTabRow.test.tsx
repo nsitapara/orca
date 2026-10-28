@@ -57,7 +57,6 @@ it('selects the hosted browser over the tab created while activating an empty wo
   const view = render(
     <TooltipProvider>
       <WorkspaceTabRow
-        compactMode={false}
         item={{
           key: 'page',
           label: 'Docs',
@@ -126,7 +125,6 @@ it.each([
     const view = render(
       <TooltipProvider>
         <WorkspaceTabRow
-          compactMode={false}
           item={{
             key: 'tab-1',
             label: title,

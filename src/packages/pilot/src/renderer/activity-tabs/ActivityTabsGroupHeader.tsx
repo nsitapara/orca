@@ -6,6 +6,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { isPortaledRowMenuClick, isRowActivationKey } from '@/lib/list-row-interaction'
 import { cn } from '@/lib/utils'
 import { useAppStore } from '@/store'
+import { getWorktreeLineageGroupKey } from '../../../../../shared/sidebar-list/group-keys'
 import { WorktreeLinksPrefetch } from '../activity-card/worktree-links'
 import { WorktreeLinkStrip } from '../activity-card/WorktreeLinkStrip'
 import { ActivityMachineChip } from '../activity-machines/ActivityMachineChip'
@@ -23,13 +24,20 @@ import { NestGuides } from './ActivityTabsNest'
 import { NewAgentMenu } from './NewAgentMenu'
 import { openActivityWorktree } from './open-activity-worktree'
 import { useWorktreeGroupNestDepth } from './worktree-nest-parent'
+import {
+  HiddenUnreadBell,
+  hidesUnread,
+  WorktreeChildrenChip,
+  WorktreeFoldButton
+} from './WorktreeHeaderFolds'
 import { WorktreeTitle } from './WorktreeTitle'
 
 const WORKTREE_GROUP = 'worktree:'
 
 type HeaderProps = {
   group: ActivityThreadGroup
-  // Upstream's collapse; Pilot's headers don't use it (worktrees don't fold, Inactive keeps its own).
+  // Upstream's collapse, which folds a worktree's own sessions (Pilot keeps the set: WorktreeFoldCollapseProvider).
+  // Inactive keeps its own fold.
   collapsed?: boolean
   onToggle?: () => void
   // Upstream's header, kept for every other group and while Pilot isn't attached.
@@ -126,13 +134,20 @@ function openWorktree(worktreeId: string): void {
 // pilot-hook: activity-tabs-group-header. A worktree group's header reads as a title over its
 // sessions, not as one more caption: the worktree in row type, its project beside it, New agent
 // and the Workspaces sidebar's pin (a pinned worktree always shows in Activity, first). Clicking it
-// opens the worktree and a right-click gives its menu, as in Projects. It has no fold, so every
-// folder icon sits on the guide line. Under the name, chips carry the worktree's MR, Linear issue,
-// git state (commits to push, uncommitted changes; a click pushes) and live ports, so its sessions
-// don't each repeat them. It fetches the MR and issue once, for
-// those chips and its Delete once the MR is merged. A child worktree's header sits on its parent's
-// guide line, without the project its parent already names.
-export function ActivityTabsGroupHeader({ group, children }: HeaderProps): ReactNode {
+// opens the worktree and a right-click gives its menu, as in Projects. Its folder icon folds the
+// worktree's own sessions (a chevron on hover and while folded), so every icon still sits on the
+// guide line. Under the name, chips carry the worktree's MR, Linear issue, git state (commits to
+// push, uncommitted changes; a click pushes), live ports and, with child worktrees, Projects' own
+// "N children" fold, which hides them apart from the sessions. A bell shows while a fold hides an
+// unread session. It fetches the MR and issue once, for those chips and its Delete once the MR is
+// merged. A child worktree's header sits on its parent's guide line, without the project its
+// parent already names.
+export function ActivityTabsGroupHeader({
+  group,
+  collapsed = false,
+  onToggle,
+  children
+}: HeaderProps): ReactNode {
   const worktreeId = group.key.startsWith(WORKTREE_GROUP)
     ? group.key.slice(WORKTREE_GROUP.length)
     : null
@@ -141,6 +156,9 @@ export function ActivityTabsGroupHeader({ group, children }: HeaderProps): React
   const depth = useWorktreeGroupNestDepth(group.key)
   const project = depth === 0 ? (repo?.displayName ?? null) : null
   const pinned = worktree?.isPinned === true
+  const childrenFolded = useAppStore((s) =>
+    worktree ? s.collapsedGroups.has(getWorktreeLineageGroupKey(worktree)) : false
+  )
   if (pilotStore() && group.key === INACTIVE_WORKTREES_GROUP_KEY) {
     return <InactiveHeader group={group} />
   }
@@ -148,6 +166,7 @@ export function ActivityTabsGroupHeader({ group, children }: HeaderProps): React
     return children
   }
   const count = sessionCount(group)
+  const childCount = childGroups(group).length
   // Why: the header stands in for a recent worktree's row, so it names that row's machine.
   const [machineRow] = activityGroupMachineRows(group)
   const header = (
@@ -170,7 +189,11 @@ export function ActivityTabsGroupHeader({ group, children }: HeaderProps): React
     >
       <div className="flex h-8 min-w-0 items-center gap-1.5">
         {worktree ? <WorktreeLinksPrefetch worktree={worktree} repo={repo} /> : null}
-        <FolderGit2 className="size-3.5 shrink-0 text-muted-foreground" />
+        {onToggle ? (
+          <WorktreeFoldButton collapsed={collapsed} onToggle={onToggle} />
+        ) : (
+          <FolderGit2 className="size-3.5 shrink-0 text-muted-foreground" />
+        )}
         {machineRow ? (
           <ActivityMachineChip worktree={machineRow.worktree} repo={machineRow.repo} />
         ) : null}
@@ -178,11 +201,14 @@ export function ActivityTabsGroupHeader({ group, children }: HeaderProps): React
         <NewAgentMenu worktreeId={worktreeId} />
         <PinButton worktreeId={worktreeId} pinned={pinned} />
         {worktree ? <MergedWorktreeDeleteButton worktree={worktree} repo={repo} /> : null}
+        {hidesUnread(group, collapsed, childrenFolded) ? <HiddenUnreadBell /> : null}
         <CountBadge count={count} />
       </div>
       {/* Under the name: the folder icon's width plus the gap. */}
       {worktree ? (
-        <WorktreeLinkStrip worktree={worktree} repo={repo} className="pb-1.5 pl-5" />
+        <WorktreeLinkStrip worktree={worktree} repo={repo} className="pb-1.5 pl-5">
+          {childCount > 0 ? <WorktreeChildrenChip worktree={worktree} count={childCount} /> : null}
+        </WorktreeLinkStrip>
       ) : null}
     </div>
   )

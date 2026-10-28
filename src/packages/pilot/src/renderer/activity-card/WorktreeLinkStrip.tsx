@@ -142,20 +142,22 @@ export function LinkChips({
 }
 
 /**
- * A worktree's MR/PR, Linear issue, git state and live ports, as chips under its name. With no linked
- * issue, the one its branch is named for. `canPush` false keeps the git chip to showing state, where a
- * push must go through its own gate (an Inbox card's Push to origin).
+ * A worktree's MR/PR, Linear issue, git state and live ports, as chips under its name, then any more
+ * (`children`). With no linked issue, the one its branch is named for. `canPush` false keeps the git
+ * chip to showing state, where a push must go through its own gate (an Inbox card's Push to origin).
  */
 export function WorktreeLinkStrip({
   worktree,
   repo,
   className,
-  canPush = true
+  canPush = true,
+  children
 }: {
   worktree: Worktree
   repo: Repo | null
   className?: string
   canPush?: boolean
+  children?: React.ReactNode
 }): React.JSX.Element | null {
   const { review, linear } = useWorktreeLinks(worktree, repo)
   const branchLinear = useBranchLinearIssue(linear ? null : worktree.branch)
@@ -174,10 +176,11 @@ export function WorktreeLinkStrip({
       worktreeId={worktree.id}
       className={className}
     >
-      {gitChip || portsChip ? (
+      {gitChip || portsChip || children ? (
         <>
           {gitChip}
           {portsChip}
+          {children}
         </>
       ) : null}
     </LinkChips>

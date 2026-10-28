@@ -1,7 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import type { Repo } from '../../../../../shared/repo-types'
 import { buildActivityThreadGroups } from '@/components/activity/activity-thread-grouping'
-import type { ActivityGroupBy, AgentPaneThread } from '@/components/activity/activity-thread-types'
+import type {
+  ActivityGroupBy,
+  ActivityThreadGroup,
+  AgentPaneThread
+} from '@/components/activity/activity-thread-types'
 import {
   buildActivityVirtualItems,
   getActivityVirtualItemKey
@@ -249,10 +253,29 @@ describe('mergeRowsIntoGroups', () => {
       rows: ['wt-kid'],
       keys: ['h:worktree:wt-a', 't:pane-wt-a', 'h:pilot:inactive-worktrees'],
       children: [['worktree:wt-a', []]]
+    },
+    {
+      name: 'a parent whose children are folded lists none of its subtree',
+      threads: ['wt-a', 'wt-kid', 'wt-grand'],
+      rows: [],
+      folded: ['wt-a'],
+      keys: ['h:worktree:wt-a', 't:pane-wt-a'],
+      children: [['worktree:wt-a', ['worktree:wt-kid']]]
+    },
+    {
+      name: 'a folded child still carries its own children',
+      threads: ['wt-a', 'wt-kid', 'wt-grand'],
+      rows: [],
+      folded: ['wt-kid'],
+      keys: ['h:worktree:wt-a', 't:pane-wt-a', 'h:worktree:wt-kid', 't:pane-wt-kid'],
+      children: [
+        ['worktree:wt-a', ['worktree:wt-kid']],
+        ['worktree:wt-kid', ['worktree:wt-grand']]
+      ]
     }
   ])(
     'grouped by worktree, a child worktree’s group follows its parent’s: $name',
-    ({ threads, rows, keys, children }) => {
+    ({ threads, rows, keys, children, folded = [] }) => {
       const thread = (worktreeId: string): AgentPaneThread => ({
         ...agent,
         paneKey: `pane-${worktreeId}`,
@@ -267,7 +290,13 @@ describe('mergeRowsIntoGroups', () => {
         buildActivityThreadGroups(threads.map(thread), 'worktree'),
         rows.map(recent),
         'worktree',
-        { parentOf: (id) => (id === 'wt-kid' ? { id: 'wt-a', label: 'wt-a' } : null) }
+        {
+          parentOf: (id) => {
+            const parent = { 'wt-kid': 'wt-a', 'wt-grand': 'wt-kid' }[id]
+            return parent ? { id: parent, label: parent } : null
+          },
+          childrenFolded: (id) => folded.includes(id)
+        }
       )
       expect(
         buildActivityVirtualItems({
@@ -276,14 +305,30 @@ describe('mergeRowsIntoGroups', () => {
           collapsedGroupKeys: new Set()
         }).map(getActivityVirtualItemKey)
       ).toEqual(keys)
+      // A folded group's subtree stays attached, so its header counts what the fold hides.
+      const attached = (
+        key: unknown,
+        list: readonly ActivityThreadGroup[] = groups
+      ): ActivityThreadGroup | undefined =>
+        list
+          .map((group) => (group.key === key ? group : attached(key, childGroups(group))))
+          .find(Boolean)
       expect(
-        children.map(([key]) => [
-          key,
-          childGroups(groups.find((group) => group.key === key)!).map((child) => child.key)
-        ])
+        children.map(([key]) => [key, childGroups(attached(key)!).map((child) => child.key)])
       ).toEqual(children)
     }
   )
+
+  // Why: a folded child's tabs aren't listed, but "No agent activity" mustn't show under a header counting them.
+  it('counts a folded child worktree’s tabs toward the list, once each', () => {
+    const parentOf = (id: string) => (id === 'wt-kid' ? { id: 'wt-a', label: 'wt-a' } : null)
+    const rows: ActivityTabsRow[] = [{ kind: 'tab', tab: tabItem('kid-tab', 'wt-kid', null) }]
+    const merge = (folded: boolean) =>
+      mergeRowsIntoGroups([], rows, 'worktree', { parentOf, childrenFolded: () => folded })
+    expect(merge(true).map((group) => group.key)).toEqual(['worktree:wt-a'])
+    expect(withActivityTabsCount(0, merge(true))).toBe(1)
+    expect(withActivityTabsCount(0, merge(false))).toBe(1)
+  })
 
   it('nests only when grouped by worktree', () => {
     const groups = mergeRowsIntoGroups(

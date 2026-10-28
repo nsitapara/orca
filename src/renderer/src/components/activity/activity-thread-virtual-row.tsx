@@ -3,12 +3,13 @@ import { translate } from '@/i18n/i18n'
 import { clearActivityThread, isClearableActivityThread } from './activity-clear-completed'
 import { ActivityStatusGroupHeader } from './activity-thread-controls'
 import { ActivityThreadContextMenu } from './activity-thread-context-menu'
-import { ActivityThreadRow } from './activity-thread-row'
+import type { ActivityThreadRow } from './activity-thread-row' // pilot-hook: activity-tabs-thread-row
 import type { AgentPaneThread } from './activity-thread-types'
 import type { ActivityVirtualItemDescriptor } from './activity-thread-virtual-items'
 import { ActivityTabsVirtualRow } from '../../../../packages/pilot/src/renderer/activity-tabs/WorkspaceTabRow' // pilot-hook: activity-tabs-row
 import { ActivityTabsGroupHeader } from '../../../../packages/pilot/src/renderer/activity-tabs/ActivityTabsGroupHeader' // pilot-hook: activity-tabs-group-header
 import { ActivityTabsNest } from '../../../../packages/pilot/src/renderer/activity-tabs/ActivityTabsNest' // pilot-hook: activity-tabs-nest
+import { ActivityTabsThreadRow } from '../../../../packages/pilot/src/renderer/activity-tabs/ActivityTabsThreadRow' // pilot-hook: activity-tabs-thread-row
 
 type ContextMenuProps = Parameters<typeof ActivityThreadContextMenu>[0]
 
@@ -98,8 +99,8 @@ export function ActivityThreadVirtualRow({
         // trigger, and stacking two Radix triggers on one node composes their refs.
         <div className="pb-0.5">
           <ActivityTabsNest groupKey={item.groupKey}>
-            {/* pilot-hook: activity-tabs-nest */}
-            <ActivityThreadRow
+            {/* pilot-hook: activity-tabs-nest, activity-tabs-thread-row */}
+            <ActivityTabsThreadRow
               thread={item.thread}
               selected={isOpen}
               multiSelected={!isOpen && multiSelectedKeys.has(item.thread.paneKey)}

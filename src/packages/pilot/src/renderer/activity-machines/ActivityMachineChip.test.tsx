@@ -68,7 +68,8 @@ it.each(['tab', 'recent-worktree'] as const)(
   }
 )
 
-// Grouped by worktree, a recent or pinned worktree is its group's header, not a row under it.
+// Grouped by worktree, a recent or pinned worktree is its group's header, not a row under it, and the
+// header names the machine for the sessions under it.
 it('grouped by worktree, a header-only worktree on another machine names it', () => {
   attach()
   arrangeMachines()
@@ -76,6 +77,6 @@ it('grouped by worktree, a header-only worktree on another machine names it', ()
   const remote = withGroupRows({ key: 'worktree:wt-recent-worktree', label: 'main', threads: [] }, [
     pilotRow('recent-worktree', MINI)
   ])
-  // The local header, its session, then the remote header.
-  expect(chipLabels([local, remote], 'worktree')).toEqual([LOCAL_LABEL, LOCAL_LABEL, 'Mac mini'])
+  // The local header, then the remote header; the local session doesn't repeat its header's chip.
+  expect(chipLabels([local, remote], 'worktree')).toEqual([LOCAL_LABEL, 'Mac mini'])
 })

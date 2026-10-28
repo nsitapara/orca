@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react'
 import { DropdownMenuCheckboxItem } from '@/components/ui/dropdown-menu'
 import { pilotStore } from '../store'
 import {
@@ -78,4 +79,10 @@ export function useActivityTabsFilterCount(): number {
     return 0
   }
   return (terminalsOffered && hideTerminals ? 1 : 0) + (hideAutomationRuns ? 1 : 0)
+}
+
+// pilot-hook: activity-tabs-compact-option. Pilot's Activity rows are always one line, so upstream's
+// "Compact mode" would change nothing; it shows only while Pilot isn't attached.
+export function ActivityTabsCompactModeItem({ children }: { children: ReactNode }): ReactNode {
+  return pilotStore() ? null : children
 }

@@ -4,6 +4,7 @@ import {
   activityTabsRowKey,
   type ActivityTabsVirtualItem
 } from '../../../../packages/pilot/src/renderer/activity-tabs/activity-tabs-rows' // pilot-hook: activity-tabs-rows
+import { activityTabsItemEstimate } from '../../../../packages/pilot/src/renderer/activity-tabs/activity-tabs-row-estimate' // pilot-hook: activity-tabs-row-estimate
 
 /** One row of the virtualized Activity list: a group header or a thread. */
 export type ActivityVirtualItemDescriptor =
@@ -52,6 +53,10 @@ export function estimateActivityVirtualItemSize(
   item: ActivityVirtualItemDescriptor | undefined,
   compactMode: boolean
 ): number {
+  const pilotEstimate = activityTabsItemEstimate(item) // pilot-hook: activity-tabs-row-estimate
+  if (pilotEstimate !== null) {
+    return pilotEstimate
+  }
   if (!item || item.type === 'header') {
     return ACTIVITY_HEADER_ROW_ESTIMATE
   }

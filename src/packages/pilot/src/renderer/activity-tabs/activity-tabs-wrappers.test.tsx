@@ -16,16 +16,14 @@ import { registerPilotStore } from '../store'
 import { ActivityTabsGroupHeader } from './ActivityTabsGroupHeader'
 import { ActivityTabsNest } from './ActivityTabsNest'
 import { ActivityRowGroupContext } from './activity-row-group-context'
-import { ActivityTabsFooterLabel } from '../activity-card/ActivityTabsFooterLabel'
-import { withGroupRows } from './activity-tabs-rows'
+import { withChildGroups, withGroupRows } from './activity-tabs-rows'
+import { getWorktreeLineageGroupKey } from '../../../../../shared/sidebar-list/group-keys'
 import { setActivityInactiveExpanded } from './activity-tabs-setting'
+import { toggleWorktreeGroupFold } from './activity-worktree-folds'
 import { RecentWorktreeRow } from './RecentWorktreeRow'
 import { activateAndRevealWorkspace } from '@/lib/worktree-activation'
 import { launchAgentInNewTab } from '@/lib/launch-agent-in-new-tab'
-import {
-  ActivityTabsThreadFooterIcon,
-  ActivityTabsThreadLeadingIcon
-} from './ActivityTabsThreadIcons'
+import { ActivityTabsThreadRow } from './ActivityTabsThreadRow'
 
 const thread: AgentPaneThread = {
   paneKey: 'pane-1',
@@ -64,20 +62,30 @@ function views(groupKey: string) {
   const group = { key: groupKey, label: 'feature', threads: [thread] }
   return {
     nest: <ActivityTabsNest groupKey={groupKey}>{UPSTREAM}</ActivityTabsNest>,
-    header: <ActivityTabsGroupHeader group={group}>{UPSTREAM}</ActivityTabsGroupHeader>,
-    leading: (
-      <ActivityTabsThreadLeadingIcon thread={thread}>{UPSTREAM}</ActivityTabsThreadLeadingIcon>
-    ),
-    footer: <ActivityTabsThreadFooterIcon thread={thread}>{UPSTREAM}</ActivityTabsThreadFooterIcon>,
-    // Why the provider: the nest tells its rows their group; the footer swaps only under a worktree.
-    footerLabel: (
-      <ActivityRowGroupContext.Provider value={groupKey}>
-        <ActivityTabsFooterLabel worktree={thread.worktree} repo={thread.repo}>
-          {UPSTREAM}
-        </ActivityTabsFooterLabel>
-      </ActivityRowGroupContext.Provider>
-    )
+    header: <ActivityTabsGroupHeader group={group}>{UPSTREAM}</ActivityTabsGroupHeader>
   }
+}
+
+const noop = () => {}
+
+// Why the provider: the nest tells its rows their group; grouped by worktree, a row doesn't name it.
+function threadRow(row: AgentPaneThread, groupKey: string | null = null) {
+  return (
+    <TooltipProvider>
+      <ActivityRowGroupContext.Provider value={groupKey}>
+        <ActivityTabsThreadRow
+          thread={row}
+          selected={false}
+          onSelect={noop}
+          onJump={noop}
+          onMarkRead={noop}
+          onMarkUnread={noop}
+          canJump={false}
+          compactMode
+        />
+      </ActivityRowGroupContext.Provider>
+    </TooltipProvider>
+  )
 }
 
 afterEach(() => {
@@ -89,17 +97,9 @@ afterEach(() => {
 describe('Pilot wrappers around upstream Activity elements', () => {
   it.each([
     { attached: false, groupKey: 'worktree:wt-1', pilot: [] },
-    {
-      attached: true,
-      groupKey: 'worktree:wt-1',
-      pilot: ['nest', 'header', 'leading', 'footer', 'footerLabel']
-    },
-    {
-      attached: true,
-      groupKey: 'pilot:inactive-worktrees',
-      pilot: ['nest', 'header', 'leading', 'footer']
-    },
-    { attached: true, groupKey: 'done', pilot: ['leading', 'footer'] }
+    { attached: true, groupKey: 'worktree:wt-1', pilot: ['nest', 'header'] },
+    { attached: true, groupKey: 'pilot:inactive-worktrees', pilot: ['nest', 'header'] },
+    { attached: true, groupKey: 'done', pilot: [] }
   ] as const)(
     'attached=$attached $groupKey → Pilot renders $pilot',
     ({ attached, groupKey, pilot }) => {
@@ -115,37 +115,51 @@ describe('Pilot wrappers around upstream Activity elements', () => {
     }
   )
 
-  it('a worktree header names its project, and a thread row leads with its agent', () => {
+  it('a worktree header names its project', () => {
     registerPilotStore(useAppStore)
     useAppStore.setState({ repos: [makeRepo()], worktreesByRepo: { 'repo-1': [makeWorktree()] } })
-    const { header, leading } = views('worktree:wt-1')
-    const view = render(
-      <TooltipProvider>
-        {header}
-        {leading}
-      </TooltipProvider>
-    )
+    const view = render(<TooltipProvider>{views('worktree:wt-1').header}</TooltipProvider>)
     expect(view.getByTitle('feature').textContent).toBe('feature')
     expect(view.getByText('Repo')).toBeTruthy()
-    expect(view.getByTitle('Claude')).toBeTruthy()
   })
+
+  // Why: a session is one line, as in Projects: its state, agent, title and status, its bell and time
+  // together. Grouped by worktree the header names the worktree; grouped otherwise the line does.
+  it.each([
+    { groupKey: 'worktree:wt-1', unread: true, text: 'Fix the build - Tests pass', names: false },
+    { groupKey: null, unread: false, text: 'Fix the build - Tests pass', names: true }
+  ])(
+    'a session row under $groupKey (unread $unread) is one line',
+    ({ groupKey, unread, text, names }) => {
+      registerPilotStore(useAppStore)
+      const session = {
+        ...thread,
+        paneTitle: 'Fix the build',
+        responsePreview: 'Tests pass',
+        unread
+      }
+      const view = render(threadRow(session, groupKey))
+      const row = view.getByRole('listitem', { name: 'Fix the build' })
+      // The title's button is named by its text, so the status is read out too.
+      expect(view.getByRole('button', { name: text })).toBeTruthy()
+      // The bell and time sit in the row itself, not in a footer line under the title.
+      const bell = view.getByRole('button', {
+        name: unread ? 'Mark thread as read' : 'Mark thread unread'
+      })
+      expect(bell.parentElement).toBe(row)
+      expect(view.queryByTitle('feature') !== null).toBe(names)
+    }
+  )
 
   // Why: an automation's session (its tab named so at launch) reads as automation; the tooltip still names the agent.
   it.each([
     { customTitle: null, icon: 'Claude' },
     { customTitle: '[Automation] Fix CI · !1561', icon: 'Automation run (Claude)' }
-  ])('a thread row whose tab is named $customTitle leads with $icon', ({ customTitle, icon }) => {
+  ])('a session row whose tab is named $customTitle shows $icon', ({ customTitle, icon }) => {
     registerPilotStore(useAppStore)
-    const automationThread = { ...thread, tab: { ...thread.tab, customTitle } }
-    const view = render(
-      <ActivityTabsThreadLeadingIcon thread={automationThread}>
-        {UPSTREAM}
-      </ActivityTabsThreadLeadingIcon>
-    )
+    const view = render(threadRow({ ...thread, tab: { ...thread.tab, customTitle } }))
     expect(view.getByTitle(icon)).toBeTruthy()
-    // One icon: the robot takes the agent's place, it isn't added beside it.
-    expect(view.container.querySelectorAll('svg')).toHaveLength(1)
-    expect(view.container.querySelector('.lucide-bot') !== null).toBe(customTitle !== null)
+    expect(view.queryByTitle('Claude') !== null).toBe(customTitle === null)
   })
 
   // Why: like a worktree header, a recent worktree's row says whose worktree it is; grouped by project, its group does.
@@ -381,14 +395,23 @@ describe('Pilot wrappers around upstream Activity elements', () => {
     setActivityInactiveExpanded(false)
   })
 
-  // Why: the menu's items render in a portal whose clicks bubble to the header; the pick opens its own tab.
-  it('a pick in a worktree header’s New agent menu doesn’t also open the worktree', async () => {
+  // Why: the menu's items render in a portal whose clicks bubble to the header; the pick opens its own
+  // tab. A folded worktree unfolds as it opens, so the new session shows (an Inactive row's menu too).
+  it('a pick in a folded worktree header’s New agent menu unfolds it, without also opening it', async () => {
     registerPilotStore(useAppStore)
     useAppStore.setState({ repos: [makeRepo()], worktreesByRepo: { 'repo-1': [makeWorktree()] } })
+    toggleWorktreeGroupFold('worktree:wt-1')
+    const savedFolds = () =>
+      JSON.parse(window.localStorage.getItem('pilot.activity.folded-worktrees') ?? '[]')
+    expect(savedFolds()).toEqual(['worktree:wt-1'])
     const user = userEvent.setup()
     const view = render(
       <TooltipProvider>
-        <ActivityTabsGroupHeader group={{ key: 'worktree:wt-1', label: 'feature', threads: [] }}>
+        <ActivityTabsGroupHeader
+          group={{ key: 'worktree:wt-1', label: 'feature', threads: [] }}
+          collapsed
+          onToggle={vi.fn()}
+        >
           {UPSTREAM}
         </ActivityTabsGroupHeader>
       </TooltipProvider>
@@ -398,6 +421,46 @@ describe('Pilot wrappers around upstream Activity elements', () => {
     await user.click(await view.findByRole('menuitem', { name: /Claude/ }))
 
     expect(launchAgentInNewTab).toHaveBeenCalledWith(expect.objectContaining({ agent: 'claude' }))
+    expect(activateAndRevealWorkspace).not.toHaveBeenCalled()
+    vi.mocked(launchAgentInNewTab).mock.calls[0]![0].beforeSurfaceOpen?.({ kind: 'host-published' })
+    expect(savedFolds()).toEqual([])
+  })
+
+  // Why: a worktree folds its own sessions from its folder icon, and its child worktrees from Projects'
+  // own "N children" chip, apart; neither opens the worktree, and a fold hiding an unread session says so.
+  it('a worktree header folds its sessions and its children apart, opening nothing', () => {
+    registerPilotStore(useAppStore)
+    const worktree = makeWorktree()
+    const toggleCollapsedGroup = vi.fn()
+    useAppStore.setState({
+      repos: [makeRepo()],
+      worktreesByRepo: { 'repo-1': [worktree] },
+      collapsedGroups: new Set([getWorktreeLineageGroupKey(worktree)]),
+      toggleCollapsedGroup
+    })
+    const onToggle = vi.fn()
+    const kid = { key: 'worktree:wt-kid', label: 'kid', threads: [{ ...thread, unread: true }] }
+    const group = withChildGroups({ key: 'worktree:wt-1', label: 'feature', threads: [thread] }, [
+      kid
+    ])
+    const view = render(
+      <TooltipProvider>
+        <ActivityTabsGroupHeader group={group} onToggle={onToggle}>
+          {UPSTREAM}
+        </ActivityTabsGroupHeader>
+      </TooltipProvider>
+    )
+
+    const fold = view.getByRole('button', { name: 'Collapse worktree' })
+    expect(fold.getAttribute('aria-expanded')).toBe('true')
+    fireEvent.click(fold)
+    expect(onToggle).toHaveBeenCalledTimes(1)
+
+    const chip = view.getByRole('button', { name: 'Show 1 child workspace' })
+    expect(chip.getAttribute('aria-expanded')).toBe('false')
+    fireEvent.click(chip)
+    expect(toggleCollapsedGroup).toHaveBeenCalledWith(getWorktreeLineageGroupKey(worktree))
+    expect(view.getByRole('img', { name: 'Unread sessions folded' })).toBeTruthy()
     expect(activateAndRevealWorkspace).not.toHaveBeenCalled()
   })
 })

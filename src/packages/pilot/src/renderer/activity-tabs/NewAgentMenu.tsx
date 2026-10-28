@@ -12,6 +12,7 @@ import { focusTerminalTabSurface } from '@/lib/focus-terminal-tab-surface'
 import { getPaletteWorktreeExecutionHostId } from '@/lib/palette-repo-resolution'
 import { useAppStore } from '@/store'
 import { switchToWorkspaceForLaunch } from '../new-tab-agent-picker/launch-agent-in-workspace'
+import { unfoldWorktreeGroup } from './activity-worktree-folds'
 
 const FIRST_ITEM = '[role="menuitem"]:not([data-disabled])'
 
@@ -110,7 +111,11 @@ export function NewAgentMenu({ worktreeId }: { worktreeId: string }): React.JSX.
           <QuickLaunchAgentMenuItems
             worktreeId={worktreeId}
             groupId={groupId}
-            beforeSurfaceOpen={() => switchToWorktree(worktreeId)}
+            beforeSurfaceOpen={() => {
+              // A folded worktree unfolds, so the session started in it shows.
+              unfoldWorktreeGroup(`worktree:${worktreeId}`)
+              return switchToWorktree(worktreeId)
+            }}
             onFocusTerminal={(tabId) => {
               pendingFocus.current = tabId
             }}

@@ -5,16 +5,18 @@ import { getHostDisplayLabelOverrides } from '../../../../../shared/host-setting
 import type { ActivityThreadGroup } from '@/components/activity/activity-thread-types'
 import { buildSidebarHostOptions } from '@/components/sidebar/sidebar-host-options'
 import { useAppStore } from '@/store'
-import { groupRows } from '../activity-tabs/activity-tabs-rows'
+import { childGroups, groupRows } from '../activity-tabs/activity-tabs-rows'
 import { pilotStore } from '../store'
 import { buildActivityMachineLabels, type ActivityMachineRow } from './activity-machine-labels'
 import type { ActivityMachineChips } from './activity-machine-chips-context'
 
-/** A group's agents, then its Pilot rows, a worktree header's own row included. */
+/** A group's agents, then its Pilot rows (a worktree header's own row included), then its child
+ *  worktrees' rows, listed or folded. */
 export function activityGroupMachineRows(group: ActivityThreadGroup): ActivityMachineRow[] {
   return [
     ...group.threads,
-    ...groupRows(group).map((row) => (row.kind === 'tab' ? row.tab : row.recent))
+    ...groupRows(group).map((row) => (row.kind === 'tab' ? row.tab : row.recent)),
+    ...childGroups(group).flatMap(activityGroupMachineRows)
   ]
 }
 
@@ -48,7 +50,7 @@ export function useActivityMachineChips(
   )
   const defaultHostId = getSettingsFocusedExecutionHostId(hostSettings)
   const builtLabels = useMemo(
-    // Collapsed groups count too, so folding one never drops the chips.
+    // Collapsed groups and folded children count too, so folding never drops the chips.
     () =>
       buildActivityMachineLabels({
         rows: groups.flatMap(activityGroupMachineRows),
