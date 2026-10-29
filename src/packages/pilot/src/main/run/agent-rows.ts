@@ -42,7 +42,10 @@ export function newestSessionRow(rows: readonly AgentRow[]): AgentRow | null {
 
 // 2026-10-29: background watchers and stale monitoring rows held answers and merge backs for hours. A turn that ended
 // leaving only background shells or Monitor watchers reads working + monitoring with its main agent done: it holds
-// nothing. Without a main agent, or with one not done, the turn still runs.
+// nothing. Without a main agent, or with one not done, the turn still runs. Accepted: for about 100 ms (up to a 60 s
+// lease) after a Claude task ends its wake-up turn is owed (claudeTaskWakeupPending), which worktree ps rows don't
+// carry, so only the step watcher excludes it. Reasoned for Claude: Grok's still-active stop hook also reads monitoring
+// after its turn ends, and can resume that turn (Pilot runs no Grok).
 export function turnOver(row: TurnOverFields): boolean {
   return (
     row.state === 'working' && row.workingMode === 'monitoring' && row.mainAgent?.state === 'done'
