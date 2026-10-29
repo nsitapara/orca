@@ -572,23 +572,21 @@ describe('runtimeLauncherDeps', () => {
     await expect(deps.sessionTerminals?.send('t', 'go')).rejects.toThrow("didn't start a turn")
   })
 
-  it("sessionTerminals.send types into an agent whose turn is over, reading its pane's rows", async () => {
+  it('sessionTerminals.send types into an agent whose turn is over under its recorded pane key', async () => {
     const sendTerminalAgentPrompt = vi.fn(async () => ({
       accepted: true,
       prompt: { stages: ['input_accepted', 'turn_started'] }
     }))
-    const getAgentStatusRowsForPane = vi.fn(() => [TURN_OVER])
     const runtime = runtimeSeeing(
       { status: 'working' },
       {
         sendTerminalAgentPrompt,
-        getAgentStatusRowsForPane,
+        getAgentStatusRowsForPane: (key: string) => (key === 'old:pane' ? [TURN_OVER] : []),
         showTerminal: async () => ({ tabId: 'tab', leafId: 'leaf', recordedPaneKey: 'old:pane' })
       }
     )
     const deps = runtimeLauncherDeps(runtime, idleWorktrees, () => 1, runs())
     await deps.sessionTerminals?.send('t', 'go')
-    expect(getAgentStatusRowsForPane.mock.calls).toEqual([['tab:leaf'], ['old:pane']])
     expect(sendTerminalAgentPrompt).toHaveBeenCalledOnce()
   })
 
