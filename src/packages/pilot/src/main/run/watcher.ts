@@ -40,16 +40,26 @@ function rowsSince<R extends { stateStartedAt?: number; receivedAt: number }>(
     : rows.filter((r) => (r.stateStartedAt ?? r.receivedAt) >= since)
 }
 
-// The step's own turn is over, leaving background shells or Monitor watchers (agent-rows turnOver), and no task wake-up
-// is owed: a turn's end is the step's end, as skills run in a Pilot step are told. That work may predate the step (an
-// answer typed into the asking session): the row's stateStartedAt then dates it from before the step, while the main
-// agent's own state dates this turn's end.
+// The step was typed into a session whose background shells or Monitor watchers predate it (an answer typed into the
+// asking session, a step resumed into its tab), its own turn is over (agent-rows turnOver), and no task wake-up is owed.
+// The row's stateStartedAt stays pinned for the whole working run, so it dates that work from before the step, while the
+// main agent's own state dates this turn's end. Without this the step would wait on work it never started. Background
+// work the step started itself keeps it running, as before: its agent may have ended its turn to wait on that work, and
+// the run mustn't move on before its wake-up turn. A permission prompt in the typed turn re-stamps the row, so that step
+// also waits, and its timeout leaves the tab open.
 function ownTurnOver(row: AgentRow | null, since: number | null | undefined): boolean {
-  if (!row || !turnOver(row) || row.claudeTaskWakeupPending !== undefined) {
+  if (
+    !row ||
+    !turnOver(row) ||
+    row.claudeTaskWakeupPending !== undefined ||
+    since === null ||
+    since === undefined
+  ) {
     return false
   }
+  const began = row.stateStartedAt ?? row.receivedAt
   const ended = row.mainAgent?.stateStartedAt
-  return since === null || since === undefined || (ended !== undefined && ended >= since)
+  return began < since && ended !== undefined && ended >= since
 }
 
 export function runtimeStepProbe(
@@ -244,8 +254,8 @@ async function pollStep(
   await timeOutIfDue(store, step, { handle, paneKey: step.paneKey }, state, probe, now, hooks)
 }
 
-// Called every scheduler pass. A step is done when the agent reports done (Stop hook), or its own turn is over with only
-// background work left (ownTurnOver); the run engine decides what comes next. One step's error leaves that step for the
+// Called every scheduler pass. A step is done when the agent reports done (Stop hook), or, typed into a session, its own
+// turn is over with only background work from before it left (ownTurnOver); the run engine decides what comes next. One step's error leaves that step for the
 // next pass and never stops the others.
 export async function pollRunningSteps(
   store: PilotStore,

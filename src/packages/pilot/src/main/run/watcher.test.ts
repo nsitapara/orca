@@ -472,11 +472,17 @@ describe('runtimeStepProbe.status', () => {
     expect(await p.status('h', 'pane')).toBe(expected)
   })
 
-  // Background shells or Monitor watchers keep the row working + monitoring after the turn (agent-rows turnOver); a
-  // turn's end is the step's end, as skills run in a Pilot step are told. The step began at 10.
+  // Background shells or Monitor watchers keep the row working + monitoring after the turn (agent-rows turnOver). Only
+  // work from before the step ends it with its own turn; work it started keeps it running until that work's wake-up
+  // turn. The step began at 10.
   it.each<[string, Record<string, unknown>, ObservedState]>([
     ['its own turn over, background work from before the step running', {}, 'done'],
-    ['its own turn over, background work it started running', { stateStartedAt: 12 }, 'done'],
+    ['its own turn over, background work it started running', { stateStartedAt: 12 }, 'working'],
+    [
+      'its own turn over, the row with no state start and received during the step',
+      { stateStartedAt: undefined },
+      'working'
+    ],
     [
       'the prompt typed, no turn of its own reported yet',
       { mainAgent: { state: 'done', stateStartedAt: 5 } },
