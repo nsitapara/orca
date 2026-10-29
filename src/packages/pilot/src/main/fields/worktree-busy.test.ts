@@ -3,6 +3,7 @@ import {
   listBusyTerminals,
   runtimeBusyReads,
   tabBusy,
+  REST_QUIET_MS,
   worktreeBusy,
   type BusyReads,
   type BusyRuntime,
@@ -178,33 +179,77 @@ describe('tabBusy (gate.tab_busy)', () => {
   const fail = async (): Promise<never> => {
     throw new Error('timeout')
   }
+  const NOW = 1_800_000_000_000
+  const live = (lastOutputAt: number | null) => async () => ({ orphaned: false, lastOutputAt })
+  const orphaned = async () => ({ orphaned: true, lastOutputAt: null })
+  const quiet = live(NOW - REST_QUIET_MS - 60_000)
+  const rule = '\u2500'.repeat(30)
   it.each([
     ['Orca says the TUI is idle', { waitIdle: async () => true }, false],
     ['Orca says it is not idle', { waitIdle: async () => false }, true],
-    ['the wait fails on a live pane', { waitIdle: fail, orphaned: async () => false }, true],
+    ['the wait fails on a live pane', { show: live(null), screen: async () => ['done'] }, true],
     [
       "an orphaned tab showing Claude's spinner",
-      {
-        waitIdle: fail,
-        orphaned: async () => true,
-        screen: async () => ['✽ Symbioting… (7m 39s · esc']
-      },
+      { show: orphaned, screen: async () => ['\u273d Symbioting\u2026 (7m 39s \u00b7 esc'] },
       true
     ],
     [
       "an orphaned tab showing Codex's footer",
-      { waitIdle: fail, orphaned: async () => true, screen: async () => ['  esc to interrupt'] },
+      { show: orphaned, screen: async () => ['  esc to interrupt'] },
       true
     ],
     [
       'an orphaned tab at a quiet prompt',
-      { waitIdle: fail, orphaned: async () => true, screen: async () => ['> ', 'done'] },
+      { show: orphaned, screen: async () => ['> ', 'done'] },
       false
     ],
-    ['nothing can be read', { waitIdle: fail, orphaned: fail }, true]
+    // No hook state and a wait that times out: a live tab is free once its screen has rested, quiet for
+    // REST_QUIET_MS with Claude's input box empty at its bottom (2026-10-29).
+    [
+      "no hook state, Claude's box empty and quiet",
+      {
+        show: quiet,
+        screen: async () => ['\u273b Worked for 2m 8s', rule, '\u276f', rule, '  web-2404 | Opus']
+      },
+      false
+    ],
+    [
+      "no hook state, Claude's box empty, output a minute ago",
+      { show: live(NOW - 60_000), screen: async () => [rule, '\u276f', rule, '  web-2404 | Opus'] },
+      true
+    ],
+    [
+      'no hook state, quiet, a turn running above the box',
+      {
+        show: quiet,
+        screen: async () => [
+          '\u273d Symbioting\u2026 (7m 39s \u00b7 esc to interrupt)',
+          rule,
+          '\u276f',
+          rule
+        ]
+      },
+      true
+    ],
+    [
+      'no hook state, quiet, a permission dialog in place of the box',
+      { show: quiet, screen: async () => ['Do you want to proceed?', '\u276f 1. Yes', '  2. No'] },
+      true
+    ],
+    [
+      'no hook state, quiet, the box scrolled off the bottom',
+      { show: quiet, screen: async () => [rule, '\u276f', rule, ...Array<string>(12).fill('x')] },
+      true
+    ],
+    [
+      'no hook state, quiet, the prompt with no rule over it',
+      { show: quiet, screen: async () => ['some output', '\u276f'] },
+      true
+    ],
+    ['nothing can be read', { show: fail }, true]
   ] as [string, Partial<TabReads>, boolean][])('%s', async (_name, reads, want) => {
-    const all: TabReads = { waitIdle: fail, orphaned: fail, screen: fail, ...reads }
-    expect(await tabBusy('term_a', all)).toBe(want)
+    const all: TabReads = { waitIdle: fail, show: fail, screen: fail, ...reads }
+    expect(await tabBusy('term_a', all, NOW)).toBe(want)
   })
 })
 

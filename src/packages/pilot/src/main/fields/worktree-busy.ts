@@ -21,7 +21,7 @@ export type BusyReads = {
 }
 export type TabReads = {
   waitIdle(handle: string): Promise<boolean>
-  orphaned(handle: string): Promise<boolean>
+  show(handle: string): Promise<{ orphaned: boolean; lastOutputAt: number | null }>
   screen(handle: string): Promise<readonly string[]>
 }
 export type BusyRuntime = Pick<
@@ -87,23 +87,50 @@ export async function worktreeBusy(
   return null
 }
 
-// gate.tab_busy: mid-turn unless Orca says the TUI is idle. A wait that fails says nothing, so the
-// terminal decides: a live pane is busy (the safe answer); an orphaned one is busy while its screen
-// shows a turn running. Anything unreadable is busy.
-export async function tabBusy(handle: string, reads: TabReads): Promise<boolean> {
+// gate.tab_busy: mid-turn unless Orca says the TUI is idle. A wait that fails (it times out on an idle tab with no
+// hook state) says nothing, so the terminal decides: a turn running on its screen is busy, an orphaned tab is
+// otherwise free, and a live one is free only once it has rested (atRest). Anything unreadable is busy.
+export async function tabBusy(handle: string, reads: TabReads, now = Date.now()): Promise<boolean> {
   try {
     return !(await reads.waitIdle(handle))
   } catch {
     // fall through to the terminal itself
   }
   try {
-    if (!(await reads.orphaned(handle))) {
+    const shown = await reads.show(handle)
+    const screen = await reads.screen(handle)
+    if (screen.some((line) => TURN_RUNNING.test(line))) {
       return true
     }
-    return (await reads.screen(handle)).some((line) => TURN_RUNNING.test(line))
+    return !shown.orphaned && !atRest(screen, shown.lastOutputAt, now)
   } catch {
     return true
   }
+}
+
+// How long a live tab's screen must go unchanged before atRest believes it (pilotcli's orca.RestQuiet).
+export const REST_QUIET_MS = 5 * 60_000
+// Claude's input box with nothing in it: its prompt alone on a line, right under a rule.
+const COMPOSER_EMPTY = /^\s*\u276f\s*$/
+const COMPOSER_RULE = /^\s*\u2500{3,}/
+
+// atRest: a live tab whose screen hasn't changed for REST_QUIET_MS, with Claude's input box, empty, among its last 12
+// non-blank lines. It's for a tab with no hook state: upstream hides a row it restored at a restart until that agent's
+// next hook (restoredUnconfirmed), and its tui-idle wait can't settle without one, so an idle tab read as working until
+// someone used it (2026-10-29). A turn animates its spinner, so it's never quiet; a permission or question dialog
+// replaces the box. pilotcli's orca.go atRest reads the same way.
+export function atRest(
+  screen: readonly string[],
+  lastOutputAt: number | null,
+  now: number
+): boolean {
+  if (lastOutputAt === null || lastOutputAt <= 0 || now - lastOutputAt < REST_QUIET_MS) {
+    return false
+  }
+  const live = screen.filter((line) => line.trim() !== '').slice(-12)
+  return live.some(
+    (line, i) => i > 0 && COMPOSER_EMPTY.test(line) && COMPOSER_RULE.test(live[i - 1])
+  )
 }
 
 export async function listBusyTerminals(runtime: BusyRuntime): Promise<BusyTerminal[]> {
@@ -143,7 +170,10 @@ export function runtimeBusyReads(runtime: BusyRuntime): BusyReads {
     waitIdle: async (handle) =>
       (await runtime.waitForTerminal(handle, { condition: 'tui-idle', timeoutMs: IDLE_WAIT_MS }))
         .satisfied,
-    orphaned: async (handle) => (await runtime.showTerminal(handle)).orphaned === true,
+    show: async (handle) => {
+      const shown = await runtime.showTerminal(handle)
+      return { orphaned: shown.orphaned === true, lastOutputAt: shown.lastOutputAt ?? null }
+    },
     screen: async (handle) => (await runtime.readTerminal(handle)).tail
   }
   return {
