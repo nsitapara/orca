@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { OrcaRuntimeService } from '../../../../../main/runtime/orca-runtime'
+import { AGENT_STATUS_STALE_AFTER_MS } from '../../../../../shared/agent-status-freshness'
 import type { ItemDecision } from '../../shared/api-types'
 import { testDefinition, testStep } from '../../shared/definition/__fixtures__/definition'
 import type { AutomationDefinition } from '../../shared/definition/types'
@@ -306,14 +307,19 @@ type AgentLook = {
   unreadable?: boolean
   // The pane's hook row: its state, working mode and main agent.
   row?: Record<string, unknown>
+  // The only row under the pane's live key (tab:leaf), as after its pane moved; the recorded key keeps the session row.
+  liveRow?: Record<string, unknown>
 }
 const noPause = async () => {}
-// A turn that ended with background work left: upstream's status still reads it as working.
+// A turn that ended with background work left, its row fresh: upstream's status still reads it as working.
 const TURN_OVER = {
   state: 'working',
   workingMode: 'monitoring',
-  mainAgent: { state: 'done', stateStartedAt: 1 }
+  mainAgent: { state: 'done', stateStartedAt: 1 },
+  receivedAt: Date.now()
 }
+// Past upstream's freshness window, its `working` comes from the tab (a title spinner), not this row.
+const PAST_FRESH = Date.now() - AGENT_STATUS_STALE_AFTER_MS - 60_000
 const MONITORING_MID_TURN = { ...TURN_OVER, mainAgent: { state: 'working', stateStartedAt: 1 } }
 // The runtime's view of a terminal: whether an agent is in the foreground and its state (what
 // upstream's send guard reads), and the session the pane's hooks report.
@@ -333,10 +339,14 @@ function runtimeSeeing(look: AgentLook = {}, more: Record<string, unknown> = {})
       const status = 'status' in look ? look.status : 'idle'
       return { handle, isRunningAgent: running, status }
     },
-    getAgentStatusRowsForPane: () =>
-      session
+    getAgentStatusRowsForPane: (key: string) => {
+      if (look.liveRow && key === 'tab:leaf') {
+        return [look.liveRow]
+      }
+      return session
         ? [{ receivedAt: 1, providerSession: { key: 'session_id', id: session }, ...look.row }]
-        : [],
+        : []
+    },
     showTerminal: async () => ({ tabId: 'tab', leafId: 'leaf' }),
     ...more
   } as unknown as OrcaRuntimeService
@@ -404,6 +414,27 @@ describe('runtimeLauncherDeps', () => {
       { status: 'working', row: TURN_OVER },
       'p',
       'busy'
+    ],
+    [
+      'an agent whose turn is over, its row past the freshness window',
+      {},
+      { status: 'working', row: { ...TURN_OVER, receivedAt: PAST_FRESH } },
+      'p',
+      'busy'
+    ],
+    [
+      'an agent whose turn is over, its row re-sent but its evidence past the window',
+      {},
+      { status: 'working', row: { ...TURN_OVER, evidenceObservedAt: PAST_FRESH } },
+      'p',
+      'busy'
+    ],
+    [
+      'an agent whose turn is over, its row under the pane’s live key',
+      {},
+      { status: 'working', liveRow: TURN_OVER },
+      'p',
+      'free'
     ],
     ['an agent working by its hooks', { paneState: () => 'working' }, {}, 'p', 'busy'],
     ['an agent waiting for input by its hooks', { paneState: () => 'waiting' }, {}, 'p', 'busy'],
@@ -491,7 +522,14 @@ describe('runtimeLauncherDeps', () => {
     ['its agent is working', { status: 'working' }],
     ['its agent is mid-turn with background work', { status: 'working', row: MONITORING_MID_TURN }],
     ['its agent is at a permission prompt', { status: 'permission' }],
-    ['its agent is at a permission prompt after its turn', { status: 'permission', row: TURN_OVER }]
+    [
+      'its agent is at a permission prompt after its turn',
+      { status: 'permission', row: TURN_OVER }
+    ],
+    [
+      'its agent’s turn is over, its row past the freshness window',
+      { status: 'working', row: { ...TURN_OVER, receivedAt: PAST_FRESH } }
+    ]
   ])('sessionTerminals.send refuses, typing nothing, when %s', async (_name, look) => {
     const sendTerminalAgentPrompt = vi.fn()
     const runtime = runtimeSeeing(look, { sendTerminalAgentPrompt })
@@ -539,7 +577,7 @@ describe('runtimeLauncherDeps', () => {
       accepted: true,
       prompt: { stages: ['input_accepted', 'turn_started'] }
     }))
-    const getAgentStatusRowsForPane = vi.fn(() => [{ receivedAt: 1, ...TURN_OVER }])
+    const getAgentStatusRowsForPane = vi.fn(() => [TURN_OVER])
     const runtime = runtimeSeeing(
       { status: 'working' },
       {

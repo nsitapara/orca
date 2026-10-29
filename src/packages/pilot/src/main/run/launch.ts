@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import type { OrcaRuntimeService } from '../../../../../main/runtime/orca-runtime'
+import { AGENT_STATUS_STALE_AFTER_MS } from '../../../../../shared/agent-status-freshness'
 import type { AgentKind, StepDef } from '../../shared/definition/types'
 import type { WorktreeFactDeps } from '../fields/worktree-facts'
 import { UnrecordedLaunchError, type LaunchResult } from '../scheduler/tick-runner'
@@ -129,14 +130,22 @@ type LauncherWorktrees = Pick<
   'listWorktrees' | 'terminalAlive' | 'paneState' | 'terminalDraft'
 >
 // The runtime's own word for an agent that can't take a prompt now (RuntimeTerminalAgentStatusState). Its `working`
-// is also a turn over's hook row (agent-rows turnOver), which can take one.
+// is also a turn over's hook row (agent-rows turnOver), which can take one, but only while upstream reads that row: past
+// its freshness window the `working` comes from the tab (a title spinner, a turn that fired no hooks), and the tab is
+// busy. The answers then fork, as they do beside a stale `done` row.
 function agentBusy(status: string | null, rows: readonly AgentRow[]): boolean {
   if (status === 'working') {
     const row = newestLiveRow(rows)
-    return row === null || !turnOver(row)
+    return row === null || !turnOver(row) || !upstreamReads(row)
   }
   return status === 'permission'
 }
+
+// Upstream's freshness rule for a hook row (selectFreshExplicitAgentStatusRow), on the same clock.
+function upstreamReads(row: AgentRow): boolean {
+  return Date.now() - (row.evidenceObservedAt ?? row.receivedAt) <= AGENT_STATUS_STALE_AFTER_MS
+}
+
 // Title and foreground caches refresh asynchronously, so "no agent here" counts only when it holds for
 // about a second: upstream's send guard re-polls the same way (terminal-agent-send-guard.ts).
 const AGENT_RECHECKS = 7
@@ -202,10 +211,9 @@ async function sessionTerminalState(
     if (!agent) {
       return 'gone'
     }
-    if (
-      agentBusy(agent.status, runtime.getAgentStatusRowsForPane(paneKey)) ||
-      worktrees.paneState(paneKey) !== 'idle'
-    ) {
+    // The rows send reads, under the pane's live key and its recorded one.
+    const paneRows = agent.status === 'working' ? await terminalPaneRows(runtime, handle) : []
+    if (agentBusy(agent.status, paneRows) || worktrees.paneState(paneKey) !== 'idle') {
       return 'busy'
     }
     if (
