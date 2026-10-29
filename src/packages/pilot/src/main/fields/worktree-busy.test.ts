@@ -184,6 +184,8 @@ describe('tabBusy (gate.tab_busy)', () => {
   const orphaned = async () => ({ orphaned: true, lastOutputAt: null })
   const quiet = live(NOW - REST_QUIET_MS - 60_000)
   const rule = '\u2500'.repeat(30)
+  // The line Claude prints when a turn ends.
+  const done = '\u273b Worked for 2m 8s \u00b7 done 3:43 PM'
   // What an idle Claude screen shows under its box: two statusline lines and its permission mode.
   const status = [
     '  web-2404 | Opus 5.5 | xhigh',
@@ -210,23 +212,24 @@ describe('tabBusy (gate.tab_busy)', () => {
       false
     ],
     // No hook state and a wait that times out: a live tab is free once its screen has rested, quiet for
-    // REST_QUIET_MS with Claude's input box empty among its last 12 non-blank lines (2026-10-29).
+    // REST_QUIET_MS with Claude's input box empty among its last 12 non-blank lines and proof above it that its turn
+    // ended (2026-10-29).
     [
-      "no hook state, Claude's box empty and quiet",
+      'no hook state, quiet, its turn done above the box',
       {
         show: quiet,
-        screen: async () => ['\u273b Worked for 2m 8s', rule, '\u276f', rule, ...status]
+        screen: async () => ['\u23fa Started the pipeline.', done, rule, '\u276f', rule, ...status]
       },
       false
     ],
     [
-      "no hook state, Claude's box empty, output a minute ago",
-      { show: live(NOW - 60_000), screen: async () => [rule, '\u276f', rule, ...status] },
+      'no hook state, its turn done, output a minute ago',
+      { show: live(NOW - 60_000), screen: async () => [done, rule, '\u276f', rule, ...status] },
       true
     ],
     [
-      "no hook state, Claude's box empty, no output since the app restored the tab",
-      { show: live(null), screen: async () => [rule, '\u276f', rule, ...status] },
+      'no hook state, its turn done, no output since the app restored the tab',
+      { show: live(null), screen: async () => [done, rule, '\u276f', rule, ...status] },
       true
     ],
     [
@@ -244,33 +247,134 @@ describe('tabBusy (gate.tab_busy)', () => {
     ],
     [
       'no hook state, quiet, a permission dialog in place of the box',
-      { show: quiet, screen: async () => ['Do you want to proceed?', '\u276f 1. Yes', '  2. No'] },
+      {
+        show: quiet,
+        screen: async () => [done, 'Do you want to proceed?', '\u276f 1. Yes', '  2. No']
+      },
       true
     ],
     [
       'no hook state, quiet, text after the prompt',
-      { show: quiet, screen: async () => [rule, '\u276f /usage', rule] },
+      { show: quiet, screen: async () => [done, rule, '\u276f /usage', rule] },
       true
     ],
     [
       'no hook state, quiet, the prompt with no rule over it',
-      { show: quiet, screen: async () => ['some output', '\u276f'] },
+      { show: quiet, screen: async () => [done, 'some output', '\u276f'] },
       true
     ],
     [
       'no hook state, quiet, a no-break space after the prompt',
-      { show: quiet, screen: async () => [rule, '\u276f\u00a0', rule] },
+      { show: quiet, screen: async () => [done, rule, '\u276f\u00a0', rule] },
       false
     ],
-    // The 12-line window: 9 lines under the box put its rule 12th from the bottom, 10 put it 13th.
+    // The box's 12-line window: 9 lines under the box put its rule 12th from the bottom, 10 put it 13th.
     [
       "no hook state, quiet, the box's rule 12th from the bottom",
-      { show: quiet, screen: async () => [rule, '\u276f', rule, ...Array<string>(9).fill('x')] },
+      {
+        show: quiet,
+        screen: async () => [done, rule, '\u276f', rule, ...Array<string>(9).fill('x')]
+      },
       false
     ],
     [
       "no hook state, quiet, the box's rule 13th from the bottom",
-      { show: quiet, screen: async () => [rule, '\u276f', rule, ...Array<string>(10).fill('x')] },
+      {
+        show: quiet,
+        screen: async () => [done, rule, '\u276f', rule, ...Array<string>(10).fill('x')]
+      },
+      true
+    ],
+    // The proof: the first line at the screen's edge above the box, past indented lines and a recap. A screen still
+    // mid-turn can be quiet with a spinner TURN_RUNNING misses (Reduce motion freezes it; a task's words are in it), or
+    // a retry banner that changes hourly.
+    [
+      'no hook state, quiet, its turn done, a recap and a hint under it',
+      {
+        show: quiet,
+        screen: async () => [
+          done,
+          '\u203b recap: the MR is ready for review.',
+          '  Next: check both pipelines finish green.',
+          '                new task? /clear to save 182.9k tokens',
+          rule,
+          '\u276f',
+          rule
+        ]
+      },
+      false
+    ],
+    [
+      'no hook state, quiet, compacted while idle',
+      {
+        show: quiet,
+        screen: async () => [
+          '\u23fa Compacted while idle, before the prompt cache expired',
+          rule,
+          '\u276f',
+          rule
+        ]
+      },
+      false
+    ],
+    [
+      'no hook state, quiet, no turn-done line above the box',
+      { show: quiet, screen: async () => ['\u23fa Done.', rule, '\u276f', rule] },
+      true
+    ],
+    [
+      "no hook state, quiet, the agent's text under its turn done",
+      {
+        show: quiet,
+        screen: async () => [done, '\u23fa Next I will run the tests.', rule, '\u276f', rule]
+      },
+      true
+    ],
+    [
+      "no hook state, quiet, a frozen spinner with a task's words",
+      {
+        show: quiet,
+        screen: async () => [
+          done,
+          '> run the e2e suite',
+          '\u273b Reviewing the migration plan\u2026 (6m 12s \u00b7 \u2193 2.1k tokens)',
+          '  \u23bf  Tip: Use /color to tell sessions apart',
+          rule,
+          '\u276f',
+          rule
+        ]
+      },
+      true
+    ],
+    [
+      'no hook state, quiet, a retry banner over the box',
+      {
+        show: quiet,
+        screen: async () => [
+          done,
+          '\u273b Session limit reached \u00b7 Retrying in 3h (resets 6:00pm) \u00b7 attempt 1/10',
+          rule,
+          '\u276f',
+          rule
+        ]
+      },
+      true
+    ],
+    // The proof's 12-line window above the box: 11 indented lines put turn done 12th, 12 put it 13th.
+    [
+      'no hook state, quiet, its turn done 12th above the box',
+      {
+        show: quiet,
+        screen: async () => [done, ...Array<string>(11).fill('  x'), rule, '\u276f', rule]
+      },
+      false
+    ],
+    [
+      'no hook state, quiet, its turn done 13th above the box',
+      {
+        show: quiet,
+        screen: async () => [done, ...Array<string>(12).fill('  x'), rule, '\u276f', rule]
+      },
       true
     ],
     ['nothing can be read', { show: fail }, true]

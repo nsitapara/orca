@@ -111,10 +111,12 @@ export async function tabBusy(handle: string, reads: TabReads, now = Date.now())
 // How long a live tab's screen must go unchanged before atRest believes it (pilotcli's orca.RestQuiet).
 export const REST_QUIET_MS = 5 * 60_000
 // atRest: a live tab whose screen hasn't changed for REST_QUIET_MS, with Claude's input box, empty (its prompt ❯ alone
-// on a line, right under a ─── rule), among its last 12 non-blank lines. It's for a tab with no hook state: upstream
-// hides a row it restored at a restart until that agent's next hook (restoredUnconfirmed), and its tui-idle wait can't
-// settle without one, so an idle tab read as working until someone used it (2026-10-29). A turn animates its spinner,
-// so it's never quiet; a permission or question dialog replaces the box. pilotcli's orca.go atRest reads the same way.
+// on a line, right under a ─── rule), among its last 12 non-blank lines, and proof above the box that its turn ended
+// (turnEnded). It's for a tab with no hook state: upstream hides a row it restored at a restart until that agent's next
+// hook (restoredUnconfirmed), and its tui-idle wait can't settle without one, so an idle tab read as working until
+// someone used it (2026-10-29). A screen still mid-turn can be quiet (Reduce motion freezes the spinner, a retry banner
+// changes hourly) and its spinner can miss TURN_RUNNING, so only that proof frees it: a screen it doesn't recognise, a
+// Claude update included, stays busy. pilotcli's orca.go atRest reads the same way.
 export function atRest(
   screen: readonly string[],
   lastOutputAt: number | null,
@@ -123,13 +125,30 @@ export function atRest(
   if (lastOutputAt === null || lastOutputAt <= 0 || now - lastOutputAt < REST_QUIET_MS) {
     return false
   }
-  const live = screen
-    .map((line) => line.trim())
-    .filter((line) => line !== '')
-    .slice(-12)
-  return live.some(
-    (line, i) => i > 0 && line === '\u276f' && live[i - 1].startsWith('\u2500\u2500\u2500')
-  )
+  const lines = screen.filter((line) => line.trim() !== '').toReversed() // bottom first
+  for (let i = 0; i + 1 < lines.length && i + 1 < 12; i++) {
+    if (lines[i].trim() === '\u276f' && lines[i + 1].trim().startsWith('\u2500\u2500\u2500')) {
+      return turnEnded(lines.slice(i + 2))
+    }
+  }
+  return false
+}
+
+// The line Claude prints when a turn ends ("✻ Worked for 2m 8s · done 3:43 PM"), or when it compacts the conversation
+// while idle.
+const TURN_DONE = /^\S \S+ for [^\u00b7]+ \u00b7 done \d{1,2}:\d{2}|^\u23fa Compacted while idle/
+
+// turnEnded: within the 12 non-blank lines above Claude's input box (bottom first), the first one at the screen's edge
+// is TURN_DONE. Indented lines (a recap's continuation, a tip, a hint) and a ※ recap may sit between them; a spinner, a
+// retry banner or the agent's text there means the turn may still be running.
+function turnEnded(above: readonly string[]): boolean {
+  for (const line of above.slice(0, 12)) {
+    if (line.trimStart() !== line || line.startsWith('\u203b')) {
+      continue
+    }
+    return TURN_DONE.test(line)
+  }
+  return false
 }
 
 export async function listBusyTerminals(runtime: BusyRuntime): Promise<BusyTerminal[]> {
