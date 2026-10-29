@@ -110,15 +110,11 @@ export async function tabBusy(handle: string, reads: TabReads, now = Date.now())
 
 // How long a live tab's screen must go unchanged before atRest believes it (pilotcli's orca.RestQuiet).
 export const REST_QUIET_MS = 5 * 60_000
-// Claude's input box with nothing in it: its prompt alone on a line, right under a rule.
-const COMPOSER_EMPTY = /^\s*\u276f\s*$/
-const COMPOSER_RULE = /^\s*\u2500{3,}/
-
-// atRest: a live tab whose screen hasn't changed for REST_QUIET_MS, with Claude's input box, empty, among its last 12
-// non-blank lines. It's for a tab with no hook state: upstream hides a row it restored at a restart until that agent's
-// next hook (restoredUnconfirmed), and its tui-idle wait can't settle without one, so an idle tab read as working until
-// someone used it (2026-10-29). A turn animates its spinner, so it's never quiet; a permission or question dialog
-// replaces the box. pilotcli's orca.go atRest reads the same way.
+// atRest: a live tab whose screen hasn't changed for REST_QUIET_MS, with Claude's input box, empty (its prompt ❯ alone
+// on a line, right under a ─── rule), among its last 12 non-blank lines. It's for a tab with no hook state: upstream
+// hides a row it restored at a restart until that agent's next hook (restoredUnconfirmed), and its tui-idle wait can't
+// settle without one, so an idle tab read as working until someone used it (2026-10-29). A turn animates its spinner,
+// so it's never quiet; a permission or question dialog replaces the box. pilotcli's orca.go atRest reads the same way.
 export function atRest(
   screen: readonly string[],
   lastOutputAt: number | null,
@@ -127,9 +123,12 @@ export function atRest(
   if (lastOutputAt === null || lastOutputAt <= 0 || now - lastOutputAt < REST_QUIET_MS) {
     return false
   }
-  const live = screen.filter((line) => line.trim() !== '').slice(-12)
+  const live = screen
+    .map((line) => line.trim())
+    .filter((line) => line !== '')
+    .slice(-12)
   return live.some(
-    (line, i) => i > 0 && COMPOSER_EMPTY.test(line) && COMPOSER_RULE.test(live[i - 1])
+    (line, i) => i > 0 && line === '\u276f' && live[i - 1].startsWith('\u2500\u2500\u2500')
   )
 }
 

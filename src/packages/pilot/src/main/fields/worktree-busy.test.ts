@@ -184,6 +184,12 @@ describe('tabBusy (gate.tab_busy)', () => {
   const orphaned = async () => ({ orphaned: true, lastOutputAt: null })
   const quiet = live(NOW - REST_QUIET_MS - 60_000)
   const rule = '\u2500'.repeat(30)
+  // What an idle Claude screen shows under its box: two statusline lines and its permission mode.
+  const status = [
+    '  web-2404 | Opus 5.5 | xhigh',
+    '  2fc4b2f1',
+    '  \u23f5\u23f5 bypass permissions on'
+  ]
   it.each([
     ['Orca says the TUI is idle', { waitIdle: async () => true }, false],
     ['Orca says it is not idle', { waitIdle: async () => false }, true],
@@ -204,18 +210,23 @@ describe('tabBusy (gate.tab_busy)', () => {
       false
     ],
     // No hook state and a wait that times out: a live tab is free once its screen has rested, quiet for
-    // REST_QUIET_MS with Claude's input box empty at its bottom (2026-10-29).
+    // REST_QUIET_MS with Claude's input box empty among its last 12 non-blank lines (2026-10-29).
     [
       "no hook state, Claude's box empty and quiet",
       {
         show: quiet,
-        screen: async () => ['\u273b Worked for 2m 8s', rule, '\u276f', rule, '  web-2404 | Opus']
+        screen: async () => ['\u273b Worked for 2m 8s', rule, '\u276f', rule, ...status]
       },
       false
     ],
     [
       "no hook state, Claude's box empty, output a minute ago",
-      { show: live(NOW - 60_000), screen: async () => [rule, '\u276f', rule, '  web-2404 | Opus'] },
+      { show: live(NOW - 60_000), screen: async () => [rule, '\u276f', rule, ...status] },
+      true
+    ],
+    [
+      "no hook state, Claude's box empty, no output since the app restored the tab",
+      { show: live(null), screen: async () => [rule, '\u276f', rule, ...status] },
       true
     ],
     [
@@ -237,13 +248,29 @@ describe('tabBusy (gate.tab_busy)', () => {
       true
     ],
     [
-      'no hook state, quiet, the box scrolled off the bottom',
-      { show: quiet, screen: async () => [rule, '\u276f', rule, ...Array<string>(12).fill('x')] },
+      'no hook state, quiet, text after the prompt',
+      { show: quiet, screen: async () => [rule, '\u276f /usage', rule] },
       true
     ],
     [
       'no hook state, quiet, the prompt with no rule over it',
       { show: quiet, screen: async () => ['some output', '\u276f'] },
+      true
+    ],
+    [
+      'no hook state, quiet, a no-break space after the prompt',
+      { show: quiet, screen: async () => [rule, '\u276f\u00a0', rule] },
+      false
+    ],
+    // The 12-line window: 9 lines under the box put its rule 12th from the bottom, 10 put it 13th.
+    [
+      "no hook state, quiet, the box's rule 12th from the bottom",
+      { show: quiet, screen: async () => [rule, '\u276f', rule, ...Array<string>(9).fill('x')] },
+      false
+    ],
+    [
+      "no hook state, quiet, the box's rule 13th from the bottom",
+      { show: quiet, screen: async () => [rule, '\u276f', rule, ...Array<string>(10).fill('x')] },
       true
     ],
     ['nothing can be read', { show: fail }, true]
