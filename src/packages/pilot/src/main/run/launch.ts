@@ -5,7 +5,7 @@ import type { WorktreeFactDeps } from '../fields/worktree-facts'
 import { UnrecordedLaunchError, type LaunchResult } from '../scheduler/tick-runner'
 import type { RunStore } from '../store/store-runs'
 import type { PilotAgentLaunchOptions } from './agent-launch-hook'
-import { newestSessionRow } from './agent-rows'
+import { newestLiveRow, newestSessionRow, turnOver, type AgentRow } from './agent-rows'
 import { runtimeClaims, runtimeSessionTabs, terminalOpen } from './session-tabs'
 import {
   type AgentStepDeps,
@@ -122,8 +122,15 @@ type LauncherWorktrees = Pick<
   WorktreeFactDeps,
   'listWorktrees' | 'terminalAlive' | 'paneState' | 'terminalDraft'
 >
-// The runtime's own word for an agent that can't take a prompt now (RuntimeTerminalAgentStatusState).
-const BUSY_STATUS = new Set(['working', 'permission'])
+// The runtime's own word for an agent that can't take a prompt now (RuntimeTerminalAgentStatusState). Its `working`
+// is also a turn over's hook row (agent-rows turnOver), which can take one.
+function agentBusy(status: string | null, rows: readonly AgentRow[]): boolean {
+  if (status === 'working') {
+    const row = newestLiveRow(rows)
+    return row === null || !turnOver(row)
+  }
+  return status === 'permission'
+}
 // Title and foreground caches refresh asynchronously, so "no agent here" counts only when it holds for
 // about a second: upstream's send guard re-polls the same way (terminal-agent-send-guard.ts).
 const AGENT_RECHECKS = 7
@@ -189,7 +196,10 @@ async function sessionTerminalState(
     if (!agent) {
       return 'gone'
     }
-    if (BUSY_STATUS.has(agent.status ?? '') || worktrees.paneState(paneKey) !== 'idle') {
+    if (
+      agentBusy(agent.status, runtime.getAgentStatusRowsForPane(paneKey)) ||
+      worktrees.paneState(paneKey) !== 'idle'
+    ) {
       return 'busy'
     }
     if (
@@ -216,7 +226,13 @@ async function sendToIdleAgent(
   const agent = await runtime.getTerminalAgentStatus(handle).catch((error: unknown) => {
     throw new PromptNotSentError(`terminal ${handle} could not be read: ${messageOf(error)}`)
   })
-  if (!agent.isRunningAgent || BUSY_STATUS.has(agent.status ?? '')) {
+  const rows =
+    agent.status === 'working'
+      ? await terminalPaneRows(runtime, handle).catch((error: unknown) => {
+          throw new PromptNotSentError(`terminal ${handle} could not be read: ${messageOf(error)}`)
+        })
+      : []
+  if (!agent.isRunningAgent || agentBusy(agent.status, rows)) {
     throw new PromptNotSentError(`terminal ${handle} has no idle agent to take the prompt`)
   }
   const sent = await runtime.sendTerminalAgentPrompt(handle, prompt, {
@@ -232,6 +248,28 @@ async function sendToIdleAgent(
   if (!sent.prompt?.stages.includes('turn_started')) {
     throw new Error("the agent didn't start a turn on the prompt")
   }
+}
+
+// The hook rows of the pane a terminal sits in, under its live key and the one it was recorded under.
+async function terminalPaneRows(runtime: OrcaRuntimeService, handle: string): Promise<AgentRow[]> {
+  const t = await runtime.showTerminal(handle)
+  const keys = new Set([
+    `${t.tabId}:${t.leafId}`,
+    ...(t.recordedPaneKey ? [t.recordedPaneKey] : [])
+  ])
+  return [...keys].flatMap((key) => runtime.getAgentStatusRowsForPane(key))
+}
+
+// A turn over still runs its background work in the tab, which closing would end: the session's tab is refused.
+async function closeIdleSessionTerminal(
+  runtime: OrcaRuntimeService,
+  handle: string
+): Promise<void> {
+  const row = newestLiveRow(await terminalPaneRows(runtime, handle))
+  if (row && turnOver(row)) {
+    throw new Error(`Couldn't close terminal ${handle}: its agent's background work still runs`)
+  }
+  await closeSessionTerminal(runtime, handle)
 }
 
 // Pilot's own idle tab, or a throwaway's before env delete (main/envs/service.ts). A process the close couldn't stop
@@ -262,7 +300,7 @@ export function runtimeSessionTerminals(
     isOpen: (handle) => terminalOpen(runtime, handle),
     claims: runtimeClaims(runtime, state),
     send: (handle, prompt) => sendToIdleAgent(runtime, handle, prompt),
-    close: (handle) => closeSessionTerminal(runtime, handle)
+    close: (handle) => closeIdleSessionTerminal(runtime, handle)
   }
 }
 

@@ -101,6 +101,30 @@ describe('runtimeFieldDeps', () => {
       'working'
     ],
     [
+      'a turn over: monitoring, its main agent done',
+      [
+        { state: 'working', workingMode: 'monitoring', mainAgent: { state: 'done' }, receivedAt: 1 }
+      ],
+      'idle'
+    ],
+    [
+      'monitoring while its main agent works',
+      [
+        {
+          state: 'working',
+          workingMode: 'monitoring',
+          mainAgent: { state: 'working' },
+          receivedAt: 1
+        }
+      ],
+      'working'
+    ],
+    [
+      'monitoring with no main agent',
+      [{ state: 'working', workingMode: 'monitoring', receivedAt: 1 }],
+      'working'
+    ],
+    [
       'the newest live row, ignoring session-only rows',
       [
         { state: 'working', receivedAt: 1 },

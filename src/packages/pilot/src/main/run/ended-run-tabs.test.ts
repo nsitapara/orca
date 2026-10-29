@@ -136,6 +136,20 @@ describe('closing ended runs’ tabs', () => {
       }
     ],
     [
+      'its agent’s turn is over but its background work still runs',
+      (h) => {
+        h.step('r1', 'h1')
+        h.rows.set('h1:pane', [
+          {
+            state: 'working',
+            workingMode: 'monitoring',
+            mainAgent: { state: 'done', stateStartedAt: 5 },
+            stateStartedAt: 5
+          }
+        ])
+      }
+    ],
+    [
       'it runs another session now',
       (h) => {
         h.step('r1', 'h1')

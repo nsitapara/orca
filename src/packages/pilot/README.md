@@ -81,10 +81,12 @@ Every job is a YAML automation in `~/.agents/automations/` (one file per automat
   - its last step has no session id to resume;
   - a turn began there after that step ended (someone took it over);
   - it runs another session now, or its agent exited;
-  - someone is typing in it, or its agent is busy (looked at again next poll);
+  - someone is typing in it, its agent is busy, or its agent's turn is over but its background work still runs (looked at again next poll);
   - a launch, Resume or answer is opening its session.
 
   A busy read (an answer run's hold, and `env create`'s busy check) ignores the leftover draft of a tab whose runs have all ended, such as Claude's greyed prompt suggestion, unless someone took the tab over. Its agent working still counts.
+
+  A turn over holds nothing (2026-10-29: background watchers and stale monitoring rows held answers and merge backs for hours). Its agent reads `working` + `monitoring` with `mainAgent.state` `done`: its turn ended, and only background shells or Monitor watchers still run. The busy read counts it done, and the asking session takes its answers. A draft in its tab still holds, and so does a turn still running (no `mainAgent`, or one not `done`). Neither the ended-run closer nor a step resuming the session closes its tab, which would end that work (`run/agent-rows.ts` `turnOver`).
 
 ### Shell steps
 

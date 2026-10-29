@@ -58,10 +58,10 @@ export function observedState(row: AgentRow): ObservedState {
   return STATE_MAP[row.state] ?? 'working'
 }
 
-// No live row: nothing runs in the pane, or its agent has no hooks; both read as idle.
+// No live row: nothing runs in the pane, or its agent has no hooks; both read as idle, as a turn over does.
 export function paneStateFromRows(rows: readonly AgentRow[]): AgentState {
   const row = newestLiveRow(rows)
-  if (!row) {
+  if (!row || turnOver(row)) {
     return 'idle'
   }
   const state = observedState(row)

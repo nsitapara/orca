@@ -30,9 +30,9 @@ export type AgentStepRequest = {
   resume?: { sessionId: string; reason: string }
 }
 export type KnownTerminal = { handle: string; paneKey: string | null }
-// H10, the terminal a resumed session last ran in. free: an idle agent running that session, nobody
-// typing; other: an idle agent running another session; busy: working, waiting, at a permission
-// prompt, typed into, or unreadable; gone: closed, or its agent exited.
+// H10, the terminal a resumed session last ran in. free: an idle agent (or one whose turn is over, agent-rows turnOver)
+// running that session, nobody typing; other: an idle agent running another session; busy: working, waiting, at a
+// permission prompt, typed into, or unreadable; gone: closed, or its agent exited.
 export type SessionTerminalState = 'free' | 'other' | 'busy' | 'gone'
 // A send that typed nothing into the terminal (no idle agent, a draft, the runtime refused it). Any other
 // failure of a send may have left the prompt with the agent.
@@ -60,6 +60,7 @@ export type SessionTerminals = {
   claims?: SessionClaimTable
   // Types the prompt in; refuses (PromptNotSentError) unless an idle agent is still in the foreground.
   send(handle: string, prompt: string): Promise<void>
+  // Refuses a tab whose agent's turn is over while its background work still runs: closing would end that work.
   close(handle: string): Promise<void>
 }
 export type AgentStepDeps = {

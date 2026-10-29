@@ -304,8 +304,17 @@ type AgentLook = {
   status?: 'working' | 'permission' | 'idle' | null
   session?: string | null
   unreadable?: boolean
+  // The pane's hook row: its state, working mode and main agent.
+  row?: Record<string, unknown>
 }
 const noPause = async () => {}
+// A turn that ended with background work left: upstream's status still reads it as working.
+const TURN_OVER = {
+  state: 'working',
+  workingMode: 'monitoring',
+  mainAgent: { state: 'done', stateStartedAt: 1 }
+}
+const MONITORING_MID_TURN = { ...TURN_OVER, mainAgent: { state: 'working', stateStartedAt: 1 } }
 // The runtime's view of a terminal: whether an agent is in the foreground and its state (what
 // upstream's send guard reads), and the session the pane's hooks report.
 function runtimeSeeing(look: AgentLook = {}, more: Record<string, unknown> = {}) {
@@ -325,7 +334,10 @@ function runtimeSeeing(look: AgentLook = {}, more: Record<string, unknown> = {})
       return { handle, isRunningAgent: running, status }
     },
     getAgentStatusRowsForPane: () =>
-      session ? [{ receivedAt: 1, providerSession: { key: 'session_id', id: session } }] : [],
+      session
+        ? [{ receivedAt: 1, providerSession: { key: 'session_id', id: session }, ...look.row }]
+        : [],
+    showTerminal: async () => ({ tabId: 'tab', leafId: 'leaf' }),
     ...more
   } as unknown as OrcaRuntimeService
 }
@@ -365,6 +377,34 @@ describe('runtimeLauncherDeps', () => {
     ['an agent that exited, leaving a shell', {}, { running: false }, 'p', 'gone'],
     ['a working agent', {}, { status: 'working' }, 'p', 'busy'],
     ['an agent at a permission prompt', {}, { status: 'permission' }, 'p', 'busy'],
+    [
+      'an agent whose turn is over, its background work still running',
+      {},
+      { status: 'working', row: TURN_OVER },
+      'p',
+      'free'
+    ],
+    [
+      'an agent mid-turn with background work',
+      {},
+      { status: 'working', row: MONITORING_MID_TURN },
+      'p',
+      'busy'
+    ],
+    [
+      'a monitoring agent with no main agent',
+      {},
+      { status: 'working', row: { state: 'working', workingMode: 'monitoring' } },
+      'p',
+      'busy'
+    ],
+    [
+      'an agent whose turn is over, someone typing',
+      { terminalDraft: async () => 'half a prompt' },
+      { status: 'working', row: TURN_OVER },
+      'p',
+      'busy'
+    ],
     ['an agent working by its hooks', { paneState: () => 'working' }, {}, 'p', 'busy'],
     ['an agent waiting for input by its hooks', { paneState: () => 'waiting' }, {}, 'p', 'busy'],
     ['someone typing', { terminalDraft: async () => 'half a prompt' }, {}, 'p', 'busy'],
@@ -449,7 +489,9 @@ describe('runtimeLauncherDeps', () => {
   it.each<[string, AgentLook]>([
     ['its agent exited', { running: false }],
     ['its agent is working', { status: 'working' }],
-    ['its agent is at a permission prompt', { status: 'permission' }]
+    ['its agent is mid-turn with background work', { status: 'working', row: MONITORING_MID_TURN }],
+    ['its agent is at a permission prompt', { status: 'permission' }],
+    ['its agent is at a permission prompt after its turn', { status: 'permission', row: TURN_OVER }]
   ])('sessionTerminals.send refuses, typing nothing, when %s', async (_name, look) => {
     const sendTerminalAgentPrompt = vi.fn()
     const runtime = runtimeSeeing(look, { sendTerminalAgentPrompt })
@@ -492,6 +534,26 @@ describe('runtimeLauncherDeps', () => {
     await expect(deps.sessionTerminals?.send('t', 'go')).rejects.toThrow("didn't start a turn")
   })
 
+  it("sessionTerminals.send types into an agent whose turn is over, reading its pane's rows", async () => {
+    const sendTerminalAgentPrompt = vi.fn(async () => ({
+      accepted: true,
+      prompt: { stages: ['input_accepted', 'turn_started'] }
+    }))
+    const getAgentStatusRowsForPane = vi.fn(() => [{ receivedAt: 1, ...TURN_OVER }])
+    const runtime = runtimeSeeing(
+      { status: 'working' },
+      {
+        sendTerminalAgentPrompt,
+        getAgentStatusRowsForPane,
+        showTerminal: async () => ({ tabId: 'tab', leafId: 'leaf', recordedPaneKey: 'old:pane' })
+      }
+    )
+    const deps = runtimeLauncherDeps(runtime, idleWorktrees, () => 1, runs())
+    await deps.sessionTerminals?.send('t', 'go')
+    expect(getAgentStatusRowsForPane.mock.calls).toEqual([['tab:leaf'], ['old:pane']])
+    expect(sendTerminalAgentPrompt).toHaveBeenCalledOnce()
+  })
+
   it('sessionTerminals.close closes the tab, and fails when its process may still run', async () => {
     const closeTerminal = vi
       .fn()
@@ -502,13 +564,24 @@ describe('runtimeLauncherDeps', () => {
         ptyKilled: false,
         ptyStopVerdict: 'live'
       })
-    const runtime = { closeTerminal } as unknown as OrcaRuntimeService
+    const runtime = runtimeSeeing({}, { closeTerminal })
     const deps = runtimeLauncherDeps(runtime, idleWorktrees, () => 1, runs())
     await deps.sessionTerminals?.close('t')
     expect(closeTerminal).toHaveBeenCalledWith('t')
     await expect(deps.sessionTerminals?.close('t')).rejects.toThrow(
       "Couldn't close terminal t: its process is live"
     )
+  })
+
+  // Closing would end the work a turn over left running; a turn over no longer holds, but isn't killed.
+  it('sessionTerminals.close refuses the tab of an agent whose turn is over', async () => {
+    const closeTerminal = vi.fn()
+    const runtime = runtimeSeeing({ row: TURN_OVER }, { closeTerminal })
+    const deps = runtimeLauncherDeps(runtime, idleWorktrees, () => 1, runs())
+    await expect(deps.sessionTerminals?.close('t')).rejects.toThrow(
+      "Couldn't close terminal t: its agent's background work still runs"
+    )
+    expect(closeTerminal).not.toHaveBeenCalled()
   })
 })
 
