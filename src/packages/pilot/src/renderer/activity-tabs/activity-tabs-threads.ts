@@ -82,8 +82,8 @@ export type ActivityTabsView = {
 // session and tab a Pilot step ran in. A pinned worktree with no row always gets one to start a
 // session from, and so, while "Show recently active worktrees" is on, does each
 // recently active one; pinned worktrees' groups lead the worktree grouping, a child worktree's group
-// follows its parent's (unless the parent's children are folded), and worktrees with no session go
-// under Inactive at its end.
+// follows its parent's (unless the parent's children are folded and it doesn't lead to the current
+// worktree), and worktrees with no session go under Inactive at its end.
 export function useActivityTabsThreads<
   T extends {
     allThreads: AgentPaneThread[]
@@ -99,6 +99,7 @@ export function useActivityTabsThreads<
   const inactiveExpanded = useActivityInactiveExpanded()
   const parentOf = useAppStore(worktreeParentOf)
   const childrenFolded = useAppStore(childrenFoldedOf)
+  const currentWorktreeId = useAppStore((s) => s.activeWorktreeId)
   const pinnedIds = usePinnedWorktreeIds(attached)
   const activePaneKey = useActiveWorkspaceThread(result.allThreads, result.effectiveSelectedPaneKey)
   // A tab or a worktree is never unread, so "Show unread only" leaves them out.
@@ -139,7 +140,8 @@ export function useActivityTabsThreads<
       pinnedWorktreeIds: pinnedIds,
       inactiveExpanded,
       parentOf,
-      childrenFolded
+      childrenFolded,
+      currentWorktreeId
     })
   }, [
     threadGroups,
@@ -149,7 +151,8 @@ export function useActivityTabsThreads<
     pinnedIds,
     inactiveExpanded,
     parentOf,
-    childrenFolded
+    childrenFolded,
+    currentWorktreeId
   ])
   if (!attached) {
     return result

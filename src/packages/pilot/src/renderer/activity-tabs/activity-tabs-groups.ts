@@ -76,6 +76,8 @@ export type MergeRowsOptions = {
   parentOf?: WorktreeParentOf
   // Grouped by worktree, whether a worktree's child worktrees are folded (activity-worktree-folds.ts).
   childrenFolded?: ChildrenFoldedOf
+  // The worktree open in the workspace, which no fold hides.
+  currentWorktreeId?: string | null
 }
 
 // A worktree group whose only row is its own header's: the worktree has no agent, no tab and no active child.
@@ -99,13 +101,14 @@ function worktreeIdOf(group: ActivityThreadGroup): string | null {
 
 // Grouped by worktree, an active worktree's group follows its parent's, a level in (a Pilot run's throwaway under the
 // worktree it checked out). An ancestor with no session gets a header of its own, and leaves Inactive while a child runs.
-// A worktree whose children are folded lists none of its subtree.
+// A worktree whose children are folded lists none of its subtree but the way down to the current worktree.
 function nestChildGroups(
   groups: ActivityThreadGroup[],
   groupBy: ActivityGroupBy,
   parentOf: WorktreeParentOf,
   pinnedWorktreeIds: readonly string[],
-  childrenFolded: ChildrenFoldedOf
+  childrenFolded: ChildrenFoldedOf,
+  currentWorktreeId: string | null
 ): ActivityThreadGroup[] {
   if (groupBy !== 'worktree') {
     return groups
@@ -150,12 +153,17 @@ function nestChildGroups(
     const children = worktreeOrder(childrenByKey.get(group.key) ?? [], groupBy, pinnedWorktreeIds)
     return children.length > 0 ? withChildGroups(group, children.map(attach)) : group
   }
+  const currentKey = currentWorktreeId === null ? null : `${WORKTREE_GROUP}${currentWorktreeId}`
+  const holdsCurrent = (group: ActivityThreadGroup): boolean =>
+    group.key === currentKey || childGroups(group).some(holdsCurrent)
   const listed: ActivityThreadGroup[] = []
   const list = (group: ActivityThreadGroup): void => {
     listed.push(group)
     const id = worktreeIdOf(group)
     if (id === null || !childrenFolded(id)) {
       childGroups(group).forEach(list)
+    } else {
+      childGroups(group).filter(holdsCurrent).forEach(list)
     }
   }
   worktreeOrder(roots, groupBy, pinnedWorktreeIds).map(attach).forEach(list)
@@ -186,7 +194,7 @@ function inactiveLast(
 /**
  * Puts each row in its Group by group, after the agents; groups with only Pilot rows go after the
  * rest. Grouped by worktree, groups go pinned first, then by name, a child worktree's right after its
- * parent's, and those with no session go under Inactive at the end.
+ * parent's (the current worktree's even when folded), and those with no session go under Inactive at the end.
  */
 export function mergeRowsIntoGroups(
   groups: ActivityThreadGroup[],
@@ -196,11 +204,19 @@ export function mergeRowsIntoGroups(
     pinnedWorktreeIds = [],
     inactiveExpanded = false,
     parentOf = NO_PARENT,
-    childrenFolded = NONE_FOLDED
+    childrenFolded = NONE_FOLDED,
+    currentWorktreeId = null
   }: MergeRowsOptions = {}
 ): ActivityThreadGroup[] {
   if (rows.length === 0) {
-    return nestChildGroups(groups, groupBy, parentOf, pinnedWorktreeIds, childrenFolded)
+    return nestChildGroups(
+      groups,
+      groupBy,
+      parentOf,
+      pinnedWorktreeIds,
+      childrenFolded,
+      currentWorktreeId
+    )
   }
   const pending = new Map<string, { label: string; rows: ActivityTabsRow[] }>()
   for (const row of rows) {
@@ -224,7 +240,14 @@ export function mergeRowsIntoGroups(
     merged.push(withGroupRows({ key, label: entry.label, threads: [] }, entry.rows))
   }
   return inactiveLast(
-    nestChildGroups(merged, groupBy, parentOf, pinnedWorktreeIds, childrenFolded),
+    nestChildGroups(
+      merged,
+      groupBy,
+      parentOf,
+      pinnedWorktreeIds,
+      childrenFolded,
+      currentWorktreeId
+    ),
     groupBy,
     inactiveExpanded
   )
