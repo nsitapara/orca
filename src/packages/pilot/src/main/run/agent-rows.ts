@@ -12,10 +12,13 @@ const STATE_MAP: Record<string, ObservedState> = {
   done: 'done'
 }
 
+type LiveRowFields = Pick<AgentRow, 'receivedAt' | 'providerSessionOnly' | 'restoredUnconfirmed'>
+type TurnOverFields = { state?: string; workingMode?: string; mainAgent?: { state: string } | null }
+
 // Mirrors upstream's selectRuntimeHookAgentRowForPane "live" rule: newest by receivedAt, ignoring
 // provider-session-only and restored-unconfirmed rows (neither proves the agent is live).
-export function newestLiveRow(rows: readonly AgentRow[]): AgentRow | null {
-  let best: AgentRow | null = null
+export function newestLiveRow<R extends LiveRowFields>(rows: readonly R[]): R | null {
+  let best: R | null = null
   for (const row of rows) {
     if (row.providerSessionOnly === true || row.restoredUnconfirmed === true) {
       continue
@@ -40,14 +43,16 @@ export function newestSessionRow(rows: readonly AgentRow[]): AgentRow | null {
 // 2026-10-29: background watchers and stale monitoring rows held answers and merge backs for hours. A turn that ended
 // leaving only background shells or Monitor watchers reads working + monitoring with its main agent done: it holds
 // nothing. Without a main agent, or with one not done, the turn still runs.
-export function turnOver(row: {
-  state?: string
-  workingMode?: string
-  mainAgent?: { state: string } | null
-}): boolean {
+export function turnOver(row: TurnOverFields): boolean {
   return (
     row.state === 'working' && row.workingMode === 'monitoring' && row.mainAgent?.state === 'done'
   )
+}
+
+// A turn over's tab, read off the pane's newest live row: closing it would end the background work it left.
+export function backgroundWorkRuns(rows: readonly (LiveRowFields & TurnOverFields)[]): boolean {
+  const row = newestLiveRow(rows)
+  return row !== null && turnOver(row)
 }
 
 export function observedState(row: AgentRow): ObservedState {

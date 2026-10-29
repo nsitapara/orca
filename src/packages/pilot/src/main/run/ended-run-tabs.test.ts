@@ -123,8 +123,8 @@ describe('closing ended runs’ tabs', () => {
       (h) => {
         h.step('r1', 'h1')
         h.rows.set('h1:pane', [
-          { state: 'done', turnStartedAt: 2, stateStartedAt: 5 },
-          { state: 'working', stateStartedAt: 30 }
+          { state: 'done', turnStartedAt: 2, stateStartedAt: 5, receivedAt: 5 },
+          { state: 'working', stateStartedAt: 30, receivedAt: 30 }
         ])
       }
     ],
@@ -144,7 +144,8 @@ describe('closing ended runs’ tabs', () => {
             state: 'working',
             workingMode: 'monitoring',
             mainAgent: { state: 'done', stateStartedAt: 5 },
-            stateStartedAt: 5
+            stateStartedAt: 5,
+            receivedAt: 5
           }
         ])
       }
@@ -190,8 +191,8 @@ describe('closing ended runs’ tabs', () => {
     const h = harness()
     h.step('r1', 'h1')
     h.rows.set('h1:pane', [
-      { state: 'done', turnStartedAt: 1, stateStartedAt: 2 },
-      { state: 'done', turnStartedAt: 3, stateStartedAt: 10 }
+      { state: 'done', turnStartedAt: 1, stateStartedAt: 2, receivedAt: 2 },
+      { state: 'done', turnStartedAt: 3, stateStartedAt: 10, receivedAt: 10 }
     ])
     await h.tabs.pass()
     expect(h.looked).toEqual(['h1:close-ended:h1'])
@@ -221,10 +222,28 @@ describe('closing ended runs’ tabs', () => {
     h.open.set('after-restart', 'before-restart:pane')
     // The session resumed in its pane after the restart: a boundary, not a turn.
     h.rows.set('before-restart:pane', [
-      { state: 'done', stateStartedAt: 50, sessionBoundary: true }
+      { state: 'done', stateStartedAt: 50, receivedAt: 50, sessionBoundary: true }
     ])
     await h.tabs.pass()
     expect(h.closed).toEqual(['after-restart'])
+  })
+
+  // Read as the session's tab close reads it: a row hydrated from disk with no live hook since proves no work runs.
+  it('closes a tab whose only turn-over row is restored and unconfirmed', async () => {
+    const h = harness()
+    h.step('r1', 'h1')
+    h.rows.set('h1:pane', [
+      {
+        state: 'working',
+        workingMode: 'monitoring',
+        mainAgent: { state: 'done', stateStartedAt: 5 },
+        stateStartedAt: 5,
+        receivedAt: 5,
+        restoredUnconfirmed: true
+      }
+    ])
+    await h.tabs.pass()
+    expect(h.closed).toEqual(['h1'])
   })
 
   it('never closes a tab holding a detached step, though every run on it ended', async () => {
@@ -240,7 +259,9 @@ describe('closing ended runs’ tabs', () => {
     const h = harness()
     h.step('r1', 'h1', { status: 'needs_you' })
     h.step('r2', 'h1', { status: 'running', startedAt: 30 })
-    h.rows.set('h1:pane', [{ state: 'done', turnStartedAt: 30, stateStartedAt: 35 }])
+    h.rows.set('h1:pane', [
+      { state: 'done', turnStartedAt: 30, stateStartedAt: 35, receivedAt: 35 }
+    ])
     await h.tabs.pass()
     expect(h.closed).toEqual([])
     h.store.runs.update('r2', { status: 'done' })
@@ -293,7 +314,9 @@ describe('endedRunTerminals', () => {
   it('a tab with a turn begun after its last step ended was taken over, so it isn’t ended', () => {
     const h = harness()
     h.step('r1', 'h1')
-    h.rows.set('h1:pane', [{ state: 'working', turnStartedAt: 30, stateStartedAt: 30 }])
+    h.rows.set('h1:pane', [
+      { state: 'working', turnStartedAt: 30, stateStartedAt: 30, receivedAt: 30 }
+    ])
     expect(endedRunTerminals(h.store, [tab('h1')], h.rowsOfPane)(tab('h1'))).toBe(false)
   })
 
@@ -311,7 +334,9 @@ describe('endedRunTerminals', () => {
     const h = harness()
     h.step('r1', 'h1')
     if (tookOver) {
-      h.rows.set('h1:pane', [{ state: 'working', turnStartedAt: 30, stateStartedAt: 30 }])
+      h.rows.set('h1:pane', [
+        { state: 'working', turnStartedAt: 30, stateStartedAt: 30, receivedAt: 30 }
+      ])
     }
     const t = tab('h1', 'h1:pane')
     const reads = {

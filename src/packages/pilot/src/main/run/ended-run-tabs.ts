@@ -1,7 +1,7 @@
 import type { OrcaRuntimeService } from '../../../../../main/runtime/orca-runtime'
 import type { StepRow } from '../../shared/api-types'
 import type { PilotStore } from '../store/store'
-import { turnOver, type AgentRow } from './agent-rows'
+import { backgroundWorkRuns, type AgentRow } from './agent-rows'
 import type { SessionTerminals } from './agent-step'
 import type { BusyTerminal } from '../fields/worktree-busy'
 import { LIST_LIMIT, type Listed } from './terminal-relist'
@@ -24,7 +24,15 @@ export type OpenTerminal = { handle: string; paneKeys: readonly string[] }
 
 export type TurnRow = Pick<
   AgentRow,
-  'turnStartedAt' | 'stateStartedAt' | 'state' | 'sessionBoundary' | 'workingMode' | 'mainAgent'
+  | 'turnStartedAt'
+  | 'stateStartedAt'
+  | 'state'
+  | 'sessionBoundary'
+  | 'workingMode'
+  | 'mainAgent'
+  | 'receivedAt'
+  | 'providerSessionOnly'
+  | 'restoredUnconfirmed'
 >
 type Resumable = StepRow & { sessionId: string; paneKey: string; finishedAt: number }
 
@@ -99,7 +107,7 @@ export function createEndedRunTabs(deps: EndedRunTabsDeps): EndedRunTabs {
   // Under the session's claim, so no launch, Resume or answer can send into the tab while it closes.
   async function closeIfFree(handle: string, step: Resumable): Promise<void> {
     // A turn over's background work still runs in the tab, which closing would end: looked at again next poll.
-    if (deps.rowsOf(step.paneKey).some(turnOver)) {
+    if (backgroundWorkRuns(deps.rowsOf(step.paneKey))) {
       return
     }
     const { claims } = terminals

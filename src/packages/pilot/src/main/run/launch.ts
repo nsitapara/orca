@@ -5,7 +5,13 @@ import type { WorktreeFactDeps } from '../fields/worktree-facts'
 import { UnrecordedLaunchError, type LaunchResult } from '../scheduler/tick-runner'
 import type { RunStore } from '../store/store-runs'
 import type { PilotAgentLaunchOptions } from './agent-launch-hook'
-import { newestLiveRow, newestSessionRow, turnOver, type AgentRow } from './agent-rows'
+import {
+  backgroundWorkRuns,
+  newestLiveRow,
+  newestSessionRow,
+  turnOver,
+  type AgentRow
+} from './agent-rows'
 import { runtimeClaims, runtimeSessionTabs, terminalOpen } from './session-tabs'
 import {
   type AgentStepDeps,
@@ -265,8 +271,7 @@ async function closeIdleSessionTerminal(
   runtime: OrcaRuntimeService,
   handle: string
 ): Promise<void> {
-  const row = newestLiveRow(await terminalPaneRows(runtime, handle))
-  if (row && turnOver(row)) {
+  if (backgroundWorkRuns(await terminalPaneRows(runtime, handle))) {
     throw new Error(`Couldn't close terminal ${handle}: its agent's background work still runs`)
   }
   await closeSessionTerminal(runtime, handle)
