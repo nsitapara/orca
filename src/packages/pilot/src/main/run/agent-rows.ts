@@ -37,6 +37,19 @@ export function newestSessionRow(rows: readonly AgentRow[]): AgentRow | null {
   return best
 }
 
+// 2026-10-29: background watchers and stale monitoring rows held answers and merge backs for hours. A turn that ended
+// leaving only background shells or Monitor watchers reads working + monitoring with its main agent done: it holds
+// nothing. Without a main agent, or with one not done, the turn still runs.
+export function turnOver(row: {
+  state?: string
+  workingMode?: string
+  mainAgent?: { state: string } | null
+}): boolean {
+  return (
+    row.state === 'working' && row.workingMode === 'monitoring' && row.mainAgent?.state === 'done'
+  )
+}
+
 export function observedState(row: AgentRow): ObservedState {
   // Claude's SessionStart writes done + sessionBoundary before the prompt lands: not a turn end.
   if (row.state === 'done' && row.sessionBoundary === true) {

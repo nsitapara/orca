@@ -134,6 +134,46 @@ describe('worktreeBusy on an ended run’s tab', () => {
   })
 })
 
+// A turn that ended with background work left reads working + monitoring; only its main agent says the turn is over.
+describe('worktreeBusy on a monitoring agent', () => {
+  const main = (state: string) => ({ state, stateStartedAt: 1 })
+  const working = { typing: false, reason: '✳ Fix is working' }
+  type Busy = { typing: boolean; reason: string } | null
+  it.each<[string, Record<string, unknown>, string, Busy]>([
+    ['its main agent done: the turn is over', { mainAgent: main('done') }, '', null],
+    ['its main agent working', { mainAgent: main('working') }, '', working],
+    ['no main agent', {}, '', working],
+    ['a null main agent', { mainAgent: null }, '', working],
+    [
+      'not monitoring (live child agents), its main agent done',
+      { workingMode: undefined, mainAgent: main('done') },
+      '',
+      working
+    ],
+    [
+      'its main agent done, someone typing',
+      { mainAgent: main('done') },
+      'push it',
+      { typing: true, reason: 'someone is typing in ✳ Fix' }
+    ]
+  ])('%s', async (_name, row, draft, want) => {
+    const runtime = {
+      readTerminal: async () => ({ draft, tail: [] }),
+      getWorktreePs: async () => ({
+        worktrees: [
+          { agents: [{ paneKey: 't1:l1', state: 'working', workingMode: 'monitoring', ...row }] }
+        ],
+        totalCount: 1,
+        truncated: false
+      }),
+      // A tui-idle look would call it busy: a turn over is never looked at.
+      waitForTerminal: async () => ({ satisfied: false })
+    }
+    const reads = runtimeBusyReads(runtime as unknown as BusyRuntime)
+    expect(await worktreeBusy('/wt/x', [TAB], reads)).toEqual(want)
+  })
+})
+
 describe('tabBusy (gate.tab_busy)', () => {
   const fail = async (): Promise<never> => {
     throw new Error('timeout')

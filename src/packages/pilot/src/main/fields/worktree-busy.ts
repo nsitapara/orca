@@ -1,4 +1,5 @@
 import { worktreePathKey } from './agent-activity'
+import { turnOver } from '../run/agent-rows'
 import type { OrcaRuntimeService } from '../../../../../main/runtime/orca-runtime'
 
 // Ports of worktree-gate/gate.py worktree_busy and tab_busy: why another agent can't start in a
@@ -122,13 +123,17 @@ export async function listBusyTerminals(runtime: BusyRuntime): Promise<BusyTermi
   }))
 }
 
-// gate.agent_states: what each agent's hooks last told Orca, by pane key (`tabId:leafId`).
+// gate.agent_states: what each agent's hooks last told Orca, by pane key (`tabId:leafId`). A turn over reads done.
 async function readAgentStates(runtime: BusyRuntime): Promise<ReadonlyMap<string, string>> {
   const ps = await runtime.getWorktreePs(PS_LIMIT)
   if (ps.truncated) {
     throw new Error(`worktree ps returned ${ps.worktrees.length} of ${ps.totalCount} worktrees`)
   }
-  return new Map(ps.worktrees.flatMap((w) => w.agents.map((a) => [a.paneKey, a.state] as const)))
+  return new Map(
+    ps.worktrees.flatMap((w) =>
+      w.agents.map((a) => [a.paneKey, turnOver(a) ? 'done' : a.state] as const)
+    )
+  )
 }
 
 // One per pass: agent states are read once, the first time a worktree needs them.
