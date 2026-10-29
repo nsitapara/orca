@@ -89,30 +89,6 @@ describe('pollRunningSteps', () => {
     })
   })
 
-  // An answer typed into the asking session, or a step resumed into its tab, while watchers it left still run: the row's
-  // state began before the step (stateStartedAt stays pinned for the whole working run), its main agent's after.
-  it('ends a step typed into a session done once its own turn is over, closing nothing', async () => {
-    const store = storeWithRunningStep()
-    const h = hooks({ timeoutOf: () => HOUR })
-    const rows = [
-      {
-        state: 'working',
-        workingMode: 'monitoring',
-        mainAgent: { state: 'done', stateStartedAt: 5 },
-        stateStartedAt: 0,
-        receivedAt: 6
-      }
-    ]
-    const real = runtimeStepProbe({
-      getAgentStatusRowsForPane: () => rows,
-      showTerminal: async () => ({})
-    } as unknown as OrcaRuntimeService)
-    await pollRunningSteps(store, real, noCost, () => 9, h)
-    expect(store.runs.steps('run-1')[0]).toMatchObject({ status: 'done', finishedAt: 9 })
-    expect(h.onStepEnded).toHaveBeenCalledWith('run-1')
-    expect(h.closeTerminal).not.toHaveBeenCalled()
-  })
-
   it('ends the step with its cost and hands the run to the run engine', async () => {
     const store = storeWithRunningStep()
     const h = hooks()
@@ -359,6 +335,32 @@ describe('runtimeStepProbe.status', () => {
     await pollRunningSteps(store, p, noCost, () => 9, h)
     expect(store.runs.steps('run-1')[0].status).toBe('failed')
     expect(h.onStepEnded).toHaveBeenCalledWith('run-1')
+  })
+
+  // An answer typed into the asking session, or a step resumed into its tab, while watchers it left still run: the row's
+  // state began before the step (stateStartedAt stays pinned for the whole working run), its main agent's after.
+  it('ends a step typed into a session done once its own turn is over, closing nothing', async () => {
+    const store = storeWithRunningStep()
+    const h = hooks({ timeoutOf: () => HOUR })
+    const rows = [
+      {
+        state: 'working',
+        workingMode: 'monitoring',
+        mainAgent: { state: 'done', stateStartedAt: 5 },
+        stateStartedAt: 0,
+        receivedAt: 6
+      }
+    ]
+    await pollRunningSteps(
+      store,
+      probeFor(async () => ({}), rows),
+      noCost,
+      () => 9,
+      h
+    )
+    expect(store.runs.steps('run-1')[0]).toMatchObject({ status: 'done', finishedAt: 9 })
+    expect(h.onStepEnded).toHaveBeenCalledWith('run-1')
+    expect(h.closeTerminal).not.toHaveBeenCalled()
   })
 
   // Claude exited: the pane's rows are cleared and the terminal is orphaned, yet showTerminal still answers.
