@@ -48,9 +48,10 @@ function storeWithRunningStep(): PilotStore {
   return store
 }
 
-const probe = (state: ObservedState): StepProbe => ({
+const probe = (state: ObservedState, backgroundWork = false): StepProbe => ({
   status: async () => state,
   started: () => false,
+  backgroundWork: () => backgroundWork,
   session: () => ({
     id: '00000000-0000-4000-8000-000000000001',
     transcriptPath: '/t/00000000-0000-4000-8000-000000000001.jsonl'
@@ -86,6 +87,30 @@ describe('pollRunningSteps', () => {
       sessionId: '00000000-0000-4000-8000-000000000001',
       transcriptPath: '/t/00000000-0000-4000-8000-000000000001.jsonl'
     })
+  })
+
+  // An answer typed into the asking session, or a step resumed into its tab, while watchers it left still run: the row's
+  // state began before the step (stateStartedAt stays pinned for the whole working run), its main agent's after.
+  it('ends a step typed into a session done once its own turn is over, closing nothing', async () => {
+    const store = storeWithRunningStep()
+    const h = hooks({ timeoutOf: () => HOUR })
+    const rows = [
+      {
+        state: 'working',
+        workingMode: 'monitoring',
+        mainAgent: { state: 'done', stateStartedAt: 5 },
+        stateStartedAt: 0,
+        receivedAt: 6
+      }
+    ]
+    const real = runtimeStepProbe({
+      getAgentStatusRowsForPane: () => rows,
+      showTerminal: async () => ({})
+    } as unknown as OrcaRuntimeService)
+    await pollRunningSteps(store, real, noCost, () => 9, h)
+    expect(store.runs.steps('run-1')[0]).toMatchObject({ status: 'done', finishedAt: 9 })
+    expect(h.onStepEnded).toHaveBeenCalledWith('run-1')
+    expect(h.closeTerminal).not.toHaveBeenCalled()
   })
 
   it('ends the step with its cost and hands the run to the run engine', async () => {
@@ -179,6 +204,7 @@ describe('pollRunningSteps', () => {
     addRunningStep(store, 'run-2', 'good')
     const flaky: StepProbe = {
       started: () => false,
+      backgroundWork: () => false,
       status: async (handle) => {
         if (handle === 'bad') {
           throw new Error('runtime_unavailable')
@@ -192,8 +218,10 @@ describe('pollRunningSteps', () => {
     expect(store.runs.steps('run-2')[0].status).toBe('done')
   })
 
-  // The step started at 1 (addRunningStep); "now" is 1 + elapsed.
-  it.each([
+  // The step started at 1 (addRunningStep); "now" is 1 + elapsed. The last column: its agent's turn is over while its
+  // background work runs.
+  type TimeoutCase = [string, ObservedState, number, string, string | null, boolean?]
+  it.each<TimeoutCase>([
     ['working past its timeout', 'working', HOUR, 'timed_out', 'Timed out after 60m'],
     [
       'waiting past its timeout',
@@ -203,13 +231,22 @@ describe('pollRunningSteps', () => {
       'Timed out after 60m while it waited in its tab'
     ],
     ['working within its timeout', 'working', HOUR - 1, 'running', null],
-    ['done exactly at its timeout', 'done', HOUR, 'done', null]
-  ] as const)('a step %s', async (_name, state, elapsed, status, error) => {
+    ['done exactly at its timeout', 'done', HOUR, 'done', null],
+    // Closing would end the background work its agent's turn left running (agent-rows backgroundWorkRuns).
+    [
+      'past its timeout, its agent’s turn over and its background work running',
+      'working',
+      HOUR,
+      'timed_out',
+      'Timed out after 60m; its tab stays open for the background work its agent left running',
+      true
+    ]
+  ])('a step %s', async (_name, state, elapsed, status, error, background = false) => {
     const store = storeWithRunningStep()
     const h = hooks({ timeoutOf: () => HOUR })
-    await pollRunningSteps(store, probe(state), noCost, () => 1 + elapsed, h)
+    await pollRunningSteps(store, probe(state, background), noCost, () => 1 + elapsed, h)
     expect(store.runs.steps('run-1')[0]).toMatchObject({ status, ...(error ? { error } : {}) })
-    expect(h.closeTerminal).toHaveBeenCalledTimes(status === 'timed_out' ? 1 : 0)
+    expect(h.closeTerminal).toHaveBeenCalledTimes(status === 'timed_out' && !background ? 1 : 0)
   })
 
   it('keeps the outputs set with pilot run output when the step times out, and a later step reads them', async () => {
@@ -431,6 +468,36 @@ describe('runtimeStepProbe.status', () => {
   ])('reads %s', async (_n, rows, expected) => {
     const p = probeFor(async () => ({}), rows)
     expect(await p.status('h', 'pane')).toBe(expected)
+  })
+
+  // Background shells or Monitor watchers keep the row working + monitoring after the turn (agent-rows turnOver); a
+  // turn's end is the step's end, as skills run in a Pilot step are told. The step began at 10.
+  it.each<[string, Record<string, unknown>, ObservedState]>([
+    ['its own turn over, background work from before the step running', {}, 'done'],
+    ['its own turn over, background work it started running', { stateStartedAt: 12 }, 'done'],
+    [
+      'the prompt typed, no turn of its own reported yet',
+      { mainAgent: { state: 'done', stateStartedAt: 5 } },
+      'working'
+    ],
+    [
+      'its turn still running beside the background work',
+      { mainAgent: { state: 'working', stateStartedAt: 12 } },
+      'working'
+    ],
+    ['its turn over, a task wake-up owed', { claudeTaskWakeupPending: 'notification' }, 'working'],
+    ['a restored turn over, no live hook since', { restoredUnconfirmed: true }, 'working']
+  ])('reads a step with a monitoring row, %s', async (_n, over, expected) => {
+    const row = {
+      state: 'working',
+      workingMode: 'monitoring',
+      mainAgent: { state: 'done', stateStartedAt: 15 },
+      stateStartedAt: 3,
+      receivedAt: 20,
+      ...over
+    }
+    const p = probeFor(async () => ({}), [row])
+    expect(await p.status('h', 'pane', 10)).toBe(expected)
   })
 
   it('ignores restoredUnconfirmed and provider-session-only rows, so a stale handle is gone', async () => {

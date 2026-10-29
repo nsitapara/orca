@@ -80,7 +80,12 @@ function setup(yaml = YAML, startMs = 11 * MIN, seen: Seen = null, envs?: EnvPre
         return { code: 0, signal: null, stdout: '', stderr: '', timedOut: false }
       }
     },
-    probe: { status: async () => 'working' as const, started: () => false, session: () => seen },
+    probe: {
+      status: async () => 'working' as const,
+      started: () => false,
+      backgroundWork: () => false,
+      session: () => seen
+    },
     relist: async () => false,
     cost: async () => ({ costUsd: null, tokens: 0 }),
     log,
@@ -320,7 +325,12 @@ describe('wireRunEngine', () => {
         ...WORKSPACE,
         listWorktrees: () => new Promise((resolve) => (listed = () => resolve([])))
       },
-      probe: { status: async () => 'working' as const, started: () => false, session: () => null },
+      probe: {
+        status: async () => 'working' as const,
+        started: () => false,
+        backgroundWork: () => false,
+        session: () => null
+      },
       relist: async () => false,
       log: () => {}
     })

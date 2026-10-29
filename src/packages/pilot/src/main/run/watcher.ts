@@ -2,7 +2,15 @@ import { sessionPatch } from './session-pin'
 import type { OrcaRuntimeService } from '../../../../../main/runtime/orca-runtime'
 import { formatDuration } from '../../shared/run/format-duration'
 import type { PilotStore } from '../store/store'
-import { newestLiveRow, newestSessionRow, observedState, type ObservedState } from './agent-rows'
+import {
+  backgroundWorkRuns,
+  newestLiveRow,
+  newestSessionRow,
+  observedState,
+  turnOver,
+  type AgentRow,
+  type ObservedState
+} from './agent-rows'
 import type { CostReader } from './cost'
 import { isTerminalGoneError, terminalRelister, type TerminalRelist } from './terminal-relist'
 
@@ -19,6 +27,8 @@ export type StepProbe = {
   ): { id: string; transcriptPath: string | null } | null
   // Whether the session has sent any hook row since `since` (SessionStart's included): it is up.
   started(paneKey: string, since?: number | null): boolean
+  // Whether the pane's agent's turn is over while its background work still runs (agent-rows backgroundWorkRuns).
+  backgroundWork(paneKey: string): boolean
 }
 
 function rowsSince<R extends { stateStartedAt?: number; receivedAt: number }>(
@@ -30,6 +40,18 @@ function rowsSince<R extends { stateStartedAt?: number; receivedAt: number }>(
     : rows.filter((r) => (r.stateStartedAt ?? r.receivedAt) >= since)
 }
 
+// The step's own turn is over, leaving background shells or Monitor watchers (agent-rows turnOver), and no task wake-up
+// is owed: a turn's end is the step's end, as skills run in a Pilot step are told. That work may predate the step (an
+// answer typed into the asking session): the row's stateStartedAt then dates it from before the step, while the main
+// agent's own state dates this turn's end.
+function ownTurnOver(row: AgentRow | null, since: number | null | undefined): boolean {
+  if (!row || !turnOver(row) || row.claudeTaskWakeupPending !== undefined) {
+    return false
+  }
+  const ended = row.mainAgent?.stateStartedAt
+  return since === null || since === undefined || (ended !== undefined && ended >= since)
+}
+
 export function runtimeStepProbe(
   runtime: OrcaRuntimeService,
   relist: TerminalRelist = terminalRelister(runtime)
@@ -37,6 +59,9 @@ export function runtimeStepProbe(
   return {
     async status(handle, paneKey, since) {
       const rows = runtime.getAgentStatusRowsForPane(paneKey)
+      if (ownTurnOver(newestLiveRow(rows), since)) {
+        return 'done'
+      }
       // Keyed on when the row's state began, not receivedAt: the hook server re-stamps receivedAt on a
       // same-state refresh, so an earlier turn's `done` row would otherwise look like this step's.
       const row = newestLiveRow(rowsSince(rows, since))
@@ -73,7 +98,8 @@ export function runtimeStepProbe(
     started(paneKey, since) {
       const rows = runtime.getAgentStatusRowsForPane(paneKey)
       return rowsSince(rows, since).some((r) => !r.providerSessionOnly && !r.restoredUnconfirmed)
-    }
+    },
+    backgroundWork: (paneKey) => backgroundWorkRuns(runtime.getAgentStatusRowsForPane(paneKey))
   }
 }
 
@@ -118,12 +144,14 @@ async function endStep(
 }
 
 // Past its timeout, a working or waiting agent alike: its terminal is closed and the step times out.
-// A close that fails for any reason but "already gone" leaves the step for the next poll.
+// A close that fails for any reason but "already gone" leaves the step for the next poll. A tab whose agent's turn is
+// over stays open: closing it would end the background work that turn left, which holds nothing.
 async function timeOutIfDue(
   store: PilotStore,
   step: OpenStep,
-  handle: string,
+  pane: { handle: string; paneKey: string },
   state: ObservedState,
+  probe: StepProbe,
   now: () => number,
   hooks: StepPollHooks
 ): Promise<void> {
@@ -134,21 +162,25 @@ async function timeOutIfDue(
   if (!stillOpen(store, step)) {
     return
   }
-  try {
-    await hooks.closeTerminal(handle)
-  } catch (error) {
-    if (!isTerminalGoneError(error)) {
-      throw error
+  const keepTab = probe.backgroundWork(pane.paneKey)
+  if (!keepTab) {
+    try {
+      await hooks.closeTerminal(pane.handle)
+    } catch (error) {
+      if (!isTerminalGoneError(error)) {
+        throw error
+      }
     }
   }
   const waited = state === 'waiting' ? ' while it waited in its tab' : ''
+  const kept = keepTab ? '; its tab stays open for the background work its agent left running' : ''
   await endStep(
     store,
     step,
     {
       status: 'timed_out',
       finishedAt: now(),
-      error: `Timed out after ${formatDuration(limit)}${waited}`
+      error: `Timed out after ${formatDuration(limit)}${waited}${kept}`
     },
     hooks
   )
@@ -209,11 +241,12 @@ async function pollStep(
     await endStep(store, step, { status: 'failed', finishedAt: now(), error: GONE }, hooks)
     return
   }
-  await timeOutIfDue(store, step, handle, state, now, hooks)
+  await timeOutIfDue(store, step, { handle, paneKey: step.paneKey }, state, probe, now, hooks)
 }
 
-// Called every scheduler pass. A step is done when the agent reports done (Stop hook); the run engine
-// decides what comes next. One step's error leaves that step for the next pass and never stops the others.
+// Called every scheduler pass. A step is done when the agent reports done (Stop hook), or its own turn is over with only
+// background work left (ownTurnOver); the run engine decides what comes next. One step's error leaves that step for the
+// next pass and never stops the others.
 export async function pollRunningSteps(
   store: PilotStore,
   probe: StepProbe,
