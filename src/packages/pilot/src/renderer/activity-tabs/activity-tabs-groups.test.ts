@@ -263,6 +263,22 @@ describe('mergeRowsIntoGroups', () => {
       children: [['worktree:wt-a', ['worktree:wt-kid']]]
     },
     {
+      name: 'a folded parent still lists the way to the current worktree',
+      threads: ['wt-a', 'wt-kid', 'wt-sib', 'wt-grand'],
+      rows: [],
+      folded: ['wt-a'],
+      current: 'wt-grand',
+      keys: [
+        'h:worktree:wt-a',
+        't:pane-wt-a',
+        'h:worktree:wt-kid',
+        't:pane-wt-kid',
+        'h:worktree:wt-grand',
+        't:pane-wt-grand'
+      ],
+      children: [['worktree:wt-a', ['worktree:wt-kid', 'worktree:wt-sib']]]
+    },
+    {
       name: 'a folded child still carries its own children',
       threads: ['wt-a', 'wt-kid', 'wt-grand'],
       rows: [],
@@ -275,7 +291,7 @@ describe('mergeRowsIntoGroups', () => {
     }
   ])(
     'grouped by worktree, a child worktree’s group follows its parent’s: $name',
-    ({ threads, rows, keys, children, folded = [] }) => {
+    ({ threads, rows, keys, children, folded = [], current = null }) => {
       const thread = (worktreeId: string): AgentPaneThread => ({
         ...agent,
         paneKey: `pane-${worktreeId}`,
@@ -292,10 +308,11 @@ describe('mergeRowsIntoGroups', () => {
         'worktree',
         {
           parentOf: (id) => {
-            const parent = { 'wt-kid': 'wt-a', 'wt-grand': 'wt-kid' }[id]
+            const parent = { 'wt-kid': 'wt-a', 'wt-sib': 'wt-a', 'wt-grand': 'wt-kid' }[id]
             return parent ? { id: parent, label: parent } : null
           },
-          childrenFolded: (id) => folded.includes(id)
+          childrenFolded: (id) => folded.includes(id),
+          currentWorktreeId: current
         }
       )
       expect(
