@@ -11,6 +11,12 @@ describe('automationTabTitle', () => {
     expect(isAutomationTabTitle(named)).toBe(true)
   })
 
+  it('leaves a manual job’s tab plain', () => {
+    const title = 'M01 · Start my Todo Linear tickets · WEB-2472'
+    expect(automationTabTitle(title)).toBe(title)
+    expect(isAutomationTabTitle(automationTabTitle(title))).toBe(false)
+  })
+
   it.each([null, undefined, '', 'Fix CI · !1561', 'Automation · !1561', ' [Automation] Fix CI'])(
     'a tab named %j is no automation’s',
     (title) => {
