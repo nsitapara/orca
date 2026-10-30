@@ -24,6 +24,7 @@ import { NestGuides } from './ActivityTabsNest'
 import { NewAgentMenu } from './NewAgentMenu'
 import { openActivityWorktree } from './open-activity-worktree'
 import { useWorktreeGroupNestDepth } from './worktree-nest-parent'
+import '../sidebar/sidebar-selection.css'
 import {
   HiddenUnreadBell,
   hidesUnread,
@@ -156,6 +157,7 @@ export function ActivityTabsGroupHeader({
   const depth = useWorktreeGroupNestDepth(group.key)
   const project = depth === 0 ? (repo?.displayName ?? null) : null
   const pinned = worktree?.isPinned === true
+  const selected = useAppStore((s) => worktreeId !== null && s.activeWorktreeId === worktreeId)
   const childrenFolded = useAppStore((s) =>
     worktree ? s.collapsedGroups.has(getWorktreeLineageGroupKey(worktree)) : false
   )
@@ -173,6 +175,9 @@ export function ActivityTabsGroupHeader({
     <div
       role="button"
       tabIndex={0}
+      aria-current={selected ? 'true' : undefined}
+      data-pilot-worktree-header={worktreeId}
+      data-pilot-selected-worktree={selected ? '' : undefined}
       onClick={(event) => {
         // The New agent menu's pick bubbles here through its portal; it opens its own tab.
         if (!isPortaledRowMenuClick(event)) {
@@ -206,7 +211,7 @@ export function ActivityTabsGroupHeader({
       </div>
       {/* Under the name: the folder icon's width plus the gap. */}
       {worktree ? (
-        <WorktreeLinkStrip worktree={worktree} repo={repo} className="pb-1.5 pl-5">
+        <WorktreeLinkStrip worktree={worktree} repo={repo} className="pb-1.5 pl-5" artifacts>
           {childCount > 0 ? <WorktreeChildrenChip worktree={worktree} count={childCount} /> : null}
         </WorktreeLinkStrip>
       ) : null}

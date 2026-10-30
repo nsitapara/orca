@@ -1,0 +1,48 @@
+/* The sidebar's selection accent: the terminal theme's blue (window-appearance), else the sidebar's own
+   primary. Hover stays the list's plain shading. */
+:root {
+  --pilot-selected-accent: var(--pilot-selection-accent, var(--sidebar-primary));
+}
+
+/* The selected worktree's header and chip strip in Activity: an accent wash, a 3px bar on the left and an
+   accent name. Only the header: its sessions and child worktrees sit outside it. Unlayered, so it beats
+   the header's hover shading. */
+[data-pilot-selected-worktree] {
+  position: relative;
+  background: color-mix(in srgb, var(--pilot-selected-accent) 13%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--pilot-selected-accent) 35%, transparent);
+}
+
+[data-pilot-selected-worktree]::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 4px;
+  bottom: 4px;
+  width: 3px;
+  border-radius: 2px;
+  background: var(--pilot-selected-accent);
+}
+
+[data-pilot-selected-worktree] [data-pilot-worktree-name] {
+  color: var(--pilot-selected-accent);
+}
+
+/* The open session: an accent outline over upstream's open-row surface, and a bold title. Four attributes
+   so it outranks upstream's `.dark [data-worktree-card-surface][data-worktree-card-active='primary']`
+   border, which would otherwise win in dark mode. */
+[data-worktree-card-surface][data-worktree-card-active='primary'][data-current][data-pilot-open-session] {
+  border-color: color-mix(
+    in srgb,
+    var(--pilot-selected-accent) 55%,
+    var(--worktree-sidebar-border)
+  );
+}
+
+[data-pilot-open-session] [data-pilot-session-title] {
+  font-weight: 600;
+}
+
+.pilot-selected-label {
+  color: var(--pilot-selected-accent);
+}

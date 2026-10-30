@@ -7,6 +7,7 @@ import { useAppStore } from '@/store'
 import { isWebClientLocation } from '@/lib/web-client-location'
 import { translate } from '@/i18n/i18n'
 import { OrcaSignInButton, OrcaSignInWaitNotice } from '../OrcaSignInProgress'
+import { ArtifactsPinSetting } from '../../../../packages/pilot/src/renderer/artifacts/ArtifactsPinSetting' // pilot-hook: artifacts-pin-setting
 
 type HowToStep = { key: string; title: string; description: string }
 
@@ -99,15 +100,22 @@ export function ArtifactsSettingsPane({
         disabled={isWebClient}
         onChange={() => void updateSettings({ artifactSharingEnabled: !sharingEnabled })}
       />
-      <SettingsSwitchRow
-        label={translate('auto.components.settings.artifacts.showButton', 'Show Artifacts Button')}
-        description={translate(
-          'auto.components.settings.artifacts.showButtonDescription',
-          'Show the Artifacts shortcut in the sidebar.'
-        )}
-        checked={settings.showArtifactsButton === true}
-        onChange={() => void updateSettings({ showArtifactsButton: !settings.showArtifactsButton })}
-      />
+      <ArtifactsPinSetting>
+        <SettingsSwitchRow
+          label={translate(
+            'auto.components.settings.artifacts.showButton',
+            'Show Artifacts Button'
+          )}
+          description={translate(
+            'auto.components.settings.artifacts.showButtonDescription',
+            'Show the Artifacts shortcut in the sidebar.'
+          )}
+          checked={settings.showArtifactsButton === true}
+          onChange={() =>
+            void updateSettings({ showArtifactsButton: !settings.showArtifactsButton })
+          }
+        />
+      </ArtifactsPinSetting>
       {!signedIn ? (
         <section className="flex flex-wrap items-center gap-4 py-5">
           <div className="min-w-0 flex-1 space-y-1">

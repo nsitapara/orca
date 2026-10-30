@@ -2,8 +2,8 @@ import { useSyncExternalStore } from 'react'
 import { useAppStore } from '@/store'
 import { pilotStore } from '../store'
 
-// One of Activity's remembered View options.
-function localFlag(key: string) {
+// A remembered on/off choice (off until set): Activity's View options, the sidebar's Artifacts fold-out.
+export function localFlag(key: string) {
   const listeners = new Set<() => void>()
   let enabled: boolean | null = null
   const read = (): boolean => {

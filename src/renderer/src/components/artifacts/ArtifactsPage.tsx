@@ -14,6 +14,8 @@ import {
   ArtifactsPageErrorBanner
 } from './ArtifactsPageStates'
 import { artifactAccountIdentity, useArtifactPagination } from './useArtifactPagination'
+import { ArtifactsPageTabs } from '../../../../packages/pilot/src/renderer/artifacts/ArtifactsPageTabs' // pilot-hook: artifacts-page-tabs
+import { AgentArtifactsBody } from '../../../../packages/pilot/src/renderer/artifacts/AgentArtifactsBody' // pilot-hook: artifacts-page-body
 
 const LOCAL_RUNTIME = { kind: 'local' } as const
 
@@ -179,55 +181,58 @@ export default function ArtifactsPage(): React.JSX.Element {
         <h1 className="truncate text-base font-semibold leading-8">
           {translate('auto.components.artifacts.ArtifactsPage.title', 'Artifacts')}
         </h1>
+        <ArtifactsPageTabs signedIn={signedIn} />
       </header>
 
-      {error ? (
-        <ArtifactsPageErrorBanner
-          error={error}
-          loading={loading}
-          onRetry={() => void loadArtifacts()}
-        />
-      ) : null}
-      {!signedIn ? (
-        <ArtifactsPageAuthState
-          needsReconnect={needsReconnect}
-          configured={authStatus?.configured === true}
-          onOpenAccountSettings={openAccountSettings}
-        />
-      ) : loading && artifacts.length === 0 ? (
-        <ArtifactsPageSkeleton />
-      ) : artifacts.length === 0 ? (
-        <ArtifactsPageEmptyState
-          hasMore={Boolean(nextCursor)}
-          loadingMore={loadingMore}
-          publishingBlocked={publishingBlocked}
-          onLoadMore={() => void loadMoreArtifacts()}
-          onOpenArtifactsSettings={() => {
-            openSettingsTarget({ pane: 'artifacts', repoId: null })
-            openSettingsPage()
-          }}
-        />
-      ) : (
-        <ArtifactCollection
-          artifacts={artifacts}
-          deletingId={deletingId}
-          selectedSlug={selectedSlug}
-          selectArtifact={setSelectedSlug}
-          deleteArtifact={(target) => void deleteArtifact(target)}
-          hasMore={Boolean(nextCursor)}
-          loadingMore={loadingMore}
-          loadMore={() => void loadMoreArtifacts()}
-          onRefresh={() => void loadArtifacts()}
-          isRefreshing={loading}
-        />
-      )}
+      <AgentArtifactsBody signedIn={signedIn}>
+        {error ? (
+          <ArtifactsPageErrorBanner
+            error={error}
+            loading={loading}
+            onRetry={() => void loadArtifacts()}
+          />
+        ) : null}
+        {!signedIn ? (
+          <ArtifactsPageAuthState
+            needsReconnect={needsReconnect}
+            configured={authStatus?.configured === true}
+            onOpenAccountSettings={openAccountSettings}
+          />
+        ) : loading && artifacts.length === 0 ? (
+          <ArtifactsPageSkeleton />
+        ) : artifacts.length === 0 ? (
+          <ArtifactsPageEmptyState
+            hasMore={Boolean(nextCursor)}
+            loadingMore={loadingMore}
+            publishingBlocked={publishingBlocked}
+            onLoadMore={() => void loadMoreArtifacts()}
+            onOpenArtifactsSettings={() => {
+              openSettingsTarget({ pane: 'artifacts', repoId: null })
+              openSettingsPage()
+            }}
+          />
+        ) : (
+          <ArtifactCollection
+            artifacts={artifacts}
+            deletingId={deletingId}
+            selectedSlug={selectedSlug}
+            selectArtifact={setSelectedSlug}
+            deleteArtifact={(target) => void deleteArtifact(target)}
+            hasMore={Boolean(nextCursor)}
+            loadingMore={loadingMore}
+            loadMore={() => void loadMoreArtifacts()}
+            onRefresh={() => void loadArtifacts()}
+            isRefreshing={loading}
+          />
+        )}
 
-      <ArtifactDetailDrawer
-        item={selectedArtifact}
-        deleting={deletingId === selectedArtifact?.artifact.slug}
-        onClose={() => setSelectedSlug(null)}
-        onDelete={(target) => void deleteArtifact(target)}
-      />
+        <ArtifactDetailDrawer
+          item={selectedArtifact}
+          deleting={deletingId === selectedArtifact?.artifact.slug}
+          onClose={() => setSelectedSlug(null)}
+          onDelete={(target) => void deleteArtifact(target)}
+        />
+      </AgentArtifactsBody>
     </main>
   )
 }

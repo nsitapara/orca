@@ -22,7 +22,11 @@ export function WorktreeTitle({
 }): React.JSX.Element {
   return (
     <span className={cn('grid min-w-0 flex-1 items-baseline gap-x-1.5', columnsFor(project))}>
-      <span className={cn('min-w-0 truncate text-[13px]', nameClassName)} title={name}>
+      <span
+        data-pilot-worktree-name=""
+        className={cn('min-w-0 truncate text-[13px]', nameClassName)}
+        title={name}
+      >
         {name}
       </span>
       {project ? (
