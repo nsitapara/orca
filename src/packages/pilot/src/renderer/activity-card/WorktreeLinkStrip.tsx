@@ -15,6 +15,8 @@ import { useWorktreeGitSync } from './worktree-git-sync-feed'
 import { useWorktreeLinks, type WorktreeLinearLink } from './worktree-links'
 import { WorktreeGitChip } from './WorktreeGitChip'
 import { useWorktreeLivePorts, WorktreePortsChip } from './WorktreePortsChip'
+import { useWorktreeArtifacts } from '../artifacts/artifacts-feed'
+import { WorktreeArtifactsChip } from '../artifacts/WorktreeArtifactsChip'
 
 // Chips sit inside the worktree header: a click or Enter opens the link, never the worktree.
 function chipHandlers(url: string | undefined, worktreeId: string | undefined) {
@@ -142,21 +144,24 @@ export function LinkChips({
 }
 
 /**
- * A worktree's MR/PR, Linear issue, git state and live ports, as chips under its name, then any more
+ * A worktree's MR/PR, Linear issue, git state, artifacts and live ports, as chips under its name, then any more
  * (`children`). With no linked issue, the one its branch is named for. `canPush` false keeps the git
  * chip to showing state, where a push must go through its own gate (an Inbox card's Push to origin).
+ * `artifacts` adds the artifacts chip, on the sidebar's worktree cards only.
  */
 export function WorktreeLinkStrip({
   worktree,
   repo,
   className,
   canPush = true,
+  artifacts = false,
   children
 }: {
   worktree: Worktree
   repo: Repo | null
   className?: string
   canPush?: boolean
+  artifacts?: boolean
   children?: React.ReactNode
 }): React.JSX.Element | null {
   const { review, linear } = useWorktreeLinks(worktree, repo)
@@ -164,9 +169,11 @@ export function WorktreeLinkStrip({
   const git = useWorktreeGitSync(worktree, repo)
   const gitView = worktreeGitChipView(git.sync, { reviewMerged: review?.state === 'merged' })
   const ports = useWorktreeLivePorts(worktree.id)
+  const artifactCount = useWorktreeArtifacts(artifacts ? worktree : null).length
   const gitChip = gitView ? (
     <WorktreeGitChip worktree={worktree} view={gitView} pushing={git.pushing} canPush={canPush} />
   ) : null
+  const artifactsChip = artifactCount > 0 ? <WorktreeArtifactsChip worktree={worktree} /> : null
   const portsChip =
     ports.length > 0 ? <WorktreePortsChip worktree={worktree} repo={repo} ports={ports} /> : null
   return (
@@ -176,9 +183,10 @@ export function WorktreeLinkStrip({
       worktreeId={worktree.id}
       className={className}
     >
-      {gitChip || portsChip || children ? (
+      {gitChip || artifactsChip || portsChip || children ? (
         <>
           {gitChip}
+          {artifactsChip}
           {portsChip}
           {children}
         </>

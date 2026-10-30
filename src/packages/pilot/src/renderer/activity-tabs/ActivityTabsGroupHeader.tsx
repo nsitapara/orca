@@ -211,7 +211,7 @@ export function ActivityTabsGroupHeader({
       </div>
       {/* Under the name: the folder icon's width plus the gap. */}
       {worktree ? (
-        <WorktreeLinkStrip worktree={worktree} repo={repo} className="pb-1.5 pl-5">
+        <WorktreeLinkStrip worktree={worktree} repo={repo} className="pb-1.5 pl-5" artifacts>
           {childCount > 0 ? <WorktreeChildrenChip worktree={worktree} count={childCount} /> : null}
         </WorktreeLinkStrip>
       ) : null}

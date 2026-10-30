@@ -22,6 +22,7 @@ import { LocalGitToolchainScanBanner } from './LocalGitToolchainScanBanner'
 import { SeveredTerminalDaemonBanner } from './SeveredTerminalDaemonBanner'
 import { StalledTerminalDaemonBanner } from './StalledTerminalDaemonBanner'
 import { SidebarTop } from '../../../../packages/pilot/src/renderer/sidebar/SidebarTop' // pilot-hook: sidebar-top
+import { ArtifactsFoldOut } from '../../../../packages/pilot/src/renderer/artifacts/ArtifactsFoldOut' // pilot-hook: sidebar-artifacts-fold
 
 // Why lazy: the Agents list pulls the whole activity pipeline (virtualizer, markdown
 // previews, thread derivation); users on the workspace view should not load or render any of it.
@@ -215,6 +216,7 @@ function Sidebar({
               </>
             )}
 
+            <ArtifactsFoldOut />
             <div className="relative shrink-0">
               <SetupScriptPromptCard />
 

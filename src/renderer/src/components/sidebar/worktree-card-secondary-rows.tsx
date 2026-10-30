@@ -9,6 +9,7 @@ import { LinearAgentSkillSetupPrompt } from './LinearAgentSkillSetupPrompt'
 import WorktreeCardAgents from './WorktreeCardAgents'
 import type { WorktreeCardPresentation } from './worktree-card-presentation'
 import type { WorktreeCardController } from './use-worktree-card-controller'
+import { ProjectsCardArtifactsChip } from '../../../../packages/pilot/src/renderer/artifacts/WorktreeArtifactsChip' // pilot-hook: projects-card-artifacts
 
 export function WorktreeCardSecondaryRows({
   card,
@@ -92,6 +93,8 @@ export function WorktreeCardSecondaryRows({
           className={hasMetaRow || remoteBranchConflict ? 'mt-0' : '-mt-1'}
         />
       )}
+
+      <ProjectsCardArtifactsChip worktree={worktree} />
 
       {showLineageChildChip && (
         <div

@@ -21,7 +21,12 @@ export function linearIdOfBranch(branch: string): string | null {
  * that issue, so a branch whose name only looks like an id ("release-2026-…") never shows one.
  */
 export function useBranchLinearIssue(branch: string | null | undefined): WorktreeLinearLink | null {
-  const id = branch ? linearIdOfBranch(branch) : null
+  return useLinearIssue(branch ? linearIdOfBranch(branch) : null)
+}
+
+/** A Linear issue by its id ("WEB-2153"), fetched once; null until Linear returns it. */
+export function useLinearIssue(identifier: string | null | undefined): WorktreeLinearLink | null {
+  const id = identifier ? identifier.toUpperCase() : null
   const settings = useAppStore((s) => s.settings)
   const fetchLinearIssue = useAppStore((s) => s.fetchLinearIssue)
   // The key fetchLinearIssue(id) writes with no workspace named.

@@ -59,7 +59,7 @@ export function RecentWorktreeRow({
           <WorktreeLinksPrefetch worktree={item.worktree} repo={item.repo} />
           <MergedWorktreeDeleteButton worktree={item.worktree} repo={item.repo} />
         </div>
-        <WorktreeLinkStrip worktree={item.worktree} repo={item.repo} className="pl-5" />
+        <WorktreeLinkStrip worktree={item.worktree} repo={item.repo} className="pl-5" artifacts />
       </div>
     </WorktreeContextMenu>
   )
