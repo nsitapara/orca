@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
 import { DropdownMenuCheckboxItem } from '@/components/ui/dropdown-menu'
+import { SidebarBodyChoice } from '../sidebar/SidebarBodyChoice'
 import { pilotStore } from '../store'
 import {
   setActivityHideAutomationRuns,
@@ -12,7 +13,8 @@ import {
   useActivityShowRecentWorktrees
 } from './activity-tabs-setting'
 
-// pilot-hook: activity-tabs-menu. Pilot's toggles in Activity's thread list View options.
+// pilot-hook: activity-tabs-menu. Pilot's rows in Activity's thread list View options, led by the switch
+// back to Projects.
 export function ActivityTabsMenuItems(): React.JSX.Element | null {
   const allTabs = useActivityShowAllTabs()
   const recentWorktrees = useActivityShowRecentWorktrees()
@@ -21,6 +23,7 @@ export function ActivityTabsMenuItems(): React.JSX.Element | null {
   }
   return (
     <>
+      <SidebarBodyChoice />
       <DropdownMenuCheckboxItem checked={allTabs} onCheckedChange={setActivityShowAllTabs}>
         Show all tabs in Activity
       </DropdownMenuCheckboxItem>

@@ -38,6 +38,7 @@ import {
 } from '../../../../shared/workspace-view/workspace-view-options'
 import { translate } from '@/i18n/i18n'
 import { SidebarGroupByToggle } from './SidebarGroupByToggle'
+import { SidebarBodyMenuSection } from '../../../../packages/pilot/src/renderer/sidebar/SidebarBodyChoice' // pilot-hook: workspace-options-sidebar-body
 
 export function useWorkspaceOptionsFilterBadge(): {
   hasAnyFilter: boolean
@@ -295,6 +296,7 @@ export function WorkspaceOptionsMenuItems({
           'Workspace options'
         )}
       </DropdownMenuLabel>
+      <SidebarBodyMenuSection /> {/* pilot-hook: workspace-options-sidebar-body */}
       {sections.map(({ section, options }, index) => (
         <Fragment key={section}>
           {index > 0 && <DropdownMenuSeparator />}

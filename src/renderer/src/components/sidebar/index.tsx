@@ -21,6 +21,7 @@ import { lazyWithRetry } from '@/lib/lazy-with-retry'
 import { LocalGitToolchainScanBanner } from './LocalGitToolchainScanBanner'
 import { SeveredTerminalDaemonBanner } from './SeveredTerminalDaemonBanner'
 import { StalledTerminalDaemonBanner } from './StalledTerminalDaemonBanner'
+import { SidebarTop } from '../../../../packages/pilot/src/renderer/sidebar/SidebarTop' // pilot-hook: sidebar-top
 
 // Why lazy: the Agents list pulls the whole activity pipeline (virtualizer, markdown
 // previews, thread derivation); users on the workspace view should not load or render any of it.
@@ -171,11 +172,17 @@ function Sidebar({
         {sidebarOpen && (
           <>
             {/* Fixed controls */}
-            <SidebarNav />
-            <SidebarHeader
-              onWorkspaceBoardMenuOpenChange={setWorkspaceBoardMenuOpen}
+            <SidebarTop
               activityOptionsTarget={setAgentOptionsTarget}
-            />
+              onWorkspaceBoardMenuOpenChange={setWorkspaceBoardMenuOpen}
+            >
+              {/* pilot-hook: sidebar-top */}
+              <SidebarNav />
+              <SidebarHeader
+                onWorkspaceBoardMenuOpenChange={setWorkspaceBoardMenuOpen}
+                activityOptionsTarget={setAgentOptionsTarget}
+              />
+            </SidebarTop>
             <SeveredTerminalDaemonBanner />
             <StalledTerminalDaemonBanner />
             {sidebarBody === 'agents' ? (

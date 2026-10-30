@@ -11,7 +11,6 @@ import { useAgentPaneThreads } from '@/components/activity/use-agent-pane-thread
 import { ActivityThreadOptionsMenu } from '@/components/activity/activity-thread-controls'
 import type { ActivityGroupBy, ThreadReadFilter } from '@/components/activity/activity-thread-types'
 import { useActivityTabsThreads } from '../../../../packages/pilot/src/renderer/activity-tabs/activity-tabs-threads' // pilot-hook: activity-tabs-threads
-import { ActivityTabsPanel } from '../../../../packages/pilot/src/renderer/activity-tabs/ActivityTabsPanel' // pilot-hook: activity-tabs-panel
 import { withActivityTabsCount } from '../../../../packages/pilot/src/renderer/activity-tabs/activity-tabs-rows' // pilot-hook: activity-tabs-count
 import {
   selectDetectedWorktreesByRepo,
@@ -154,7 +153,6 @@ export default function SidebarAgentsList({
           />
         </div>
       ) : null}
-      <ActivityTabsPanel /> {/* pilot-hook: activity-tabs-panel */}
       {/* pilot-hook: activity-machines-list */}
       <ActivityMachinesListPane
         activityFilterInputRef={activityFilterInputRef}

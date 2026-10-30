@@ -29,6 +29,7 @@ import {
 } from './appearance-sidebar-search'
 import { translate } from '@/i18n/i18n'
 import { matchesSettingsSearch, normalizeSettingsSearchQuery } from './settings-search'
+import { PinnedPagesSettings } from '../../../../packages/pilot/src/renderer/sidebar/PinnedPagesSettings' // pilot-hook: settings-pinned-pages
 
 type AppearanceWindowSidebarSectionProps = {
   settings: GlobalSettings
@@ -242,75 +243,80 @@ export function AppearanceWindowSidebarSection({
                     />
                   </SearchableSetting>
 
-                  <SearchableSetting
-                    title={translate(
-                      'auto.components.settings.AppearancePane.cf81907069',
-                      'Show Tasks Button'
-                    )}
-                    description={sidebarEntries[0]?.description}
-                    keywords={sidebarEntries[0]?.keywords ?? ['tasks', 'sidebar', 'button']}
-                  >
-                    <SettingsSwitchRow
-                      label={translate(
+                  <PinnedPagesSettings>
+                    {/* pilot-hook: settings-pinned-pages */}
+                    <SearchableSetting
+                      title={translate(
                         'auto.components.settings.AppearancePane.cf81907069',
                         'Show Tasks Button'
                       )}
-                      checked={settings.showTasksButton !== false}
-                      onChange={() =>
-                        updateSettings({ showTasksButton: !(settings.showTasksButton !== false) })
-                      }
-                    />
-                  </SearchableSetting>
+                      description={sidebarEntries[0]?.description}
+                      keywords={sidebarEntries[0]?.keywords ?? ['tasks', 'sidebar', 'button']}
+                    >
+                      <SettingsSwitchRow
+                        label={translate(
+                          'auto.components.settings.AppearancePane.cf81907069',
+                          'Show Tasks Button'
+                        )}
+                        checked={settings.showTasksButton !== false}
+                        onChange={() =>
+                          updateSettings({ showTasksButton: !(settings.showTasksButton !== false) })
+                        }
+                      />
+                    </SearchableSetting>
 
-                  <SearchableSetting
-                    title={translate(
-                      'auto.components.settings.AppearancePane.511f270ebb',
-                      'Show Automations Button'
-                    )}
-                    description={sidebarEntries[1]?.description}
-                    keywords={
-                      sidebarEntries[1]?.keywords ?? ['automations', 'automation', 'schedule']
-                    }
-                  >
-                    <SettingsSwitchRow
-                      label={translate(
+                    <SearchableSetting
+                      title={translate(
                         'auto.components.settings.AppearancePane.511f270ebb',
                         'Show Automations Button'
                       )}
-                      checked={settings.showAutomationsButton !== false}
-                      onChange={() =>
-                        updateSettings({
-                          showAutomationsButton: !(settings.showAutomationsButton !== false)
-                        })
+                      description={sidebarEntries[1]?.description}
+                      keywords={
+                        sidebarEntries[1]?.keywords ?? ['automations', 'automation', 'schedule']
                       }
-                    />
-                  </SearchableSetting>
+                    >
+                      <SettingsSwitchRow
+                        label={translate(
+                          'auto.components.settings.AppearancePane.511f270ebb',
+                          'Show Automations Button'
+                        )}
+                        checked={settings.showAutomationsButton !== false}
+                        onChange={() =>
+                          updateSettings({
+                            showAutomationsButton: !(settings.showAutomationsButton !== false)
+                          })
+                        }
+                      />
+                    </SearchableSetting>
 
-                  <SearchableSetting
-                    title={translate(
-                      'auto.components.settings.AppearancePane.9da1020447',
-                      'Show Orca Mobile Button'
-                    )}
-                    description={sidebarEntries[2]?.description}
-                    keywords={sidebarEntries[2]?.keywords ?? ['mobile', 'phone', 'sidebar']}
-                  >
-                    <SettingsSwitchRow
-                      label={translate(
+                    <SearchableSetting
+                      title={translate(
                         'auto.components.settings.AppearancePane.9da1020447',
                         'Show Orca Mobile Button'
                       )}
-                      // Why: clarify where the shortcut still lives after hiding it, so users
-                      // don't think the feature is gone.
-                      description={translate(
-                        'auto.components.settings.AppearancePane.61d842eca0',
-                        'Show the Orca Mobile shortcut in the sidebar. It remains available from Toolbox.'
-                      )}
-                      checked={settings.showMobileButton !== false}
-                      onChange={() =>
-                        updateSettings({ showMobileButton: !(settings.showMobileButton !== false) })
-                      }
-                    />
-                  </SearchableSetting>
+                      description={sidebarEntries[2]?.description}
+                      keywords={sidebarEntries[2]?.keywords ?? ['mobile', 'phone', 'sidebar']}
+                    >
+                      <SettingsSwitchRow
+                        label={translate(
+                          'auto.components.settings.AppearancePane.9da1020447',
+                          'Show Orca Mobile Button'
+                        )}
+                        // Why: clarify where the shortcut still lives after hiding it, so users
+                        // don't think the feature is gone.
+                        description={translate(
+                          'auto.components.settings.AppearancePane.61d842eca0',
+                          'Show the Orca Mobile shortcut in the sidebar. It remains available from Toolbox.'
+                        )}
+                        checked={settings.showMobileButton !== false}
+                        onChange={() =>
+                          updateSettings({
+                            showMobileButton: !(settings.showMobileButton !== false)
+                          })
+                        }
+                      />
+                    </SearchableSetting>
+                  </PinnedPagesSettings>
 
                   <SearchableSetting
                     title={getShowPinnedWorktreesInGroupsEntry().title}
