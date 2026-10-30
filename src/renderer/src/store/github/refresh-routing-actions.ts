@@ -13,6 +13,7 @@ import {
   hasNonGitHubReview,
   shouldCoordinateVisibleGitHubReview
 } from './visible-hosted-review-refresh-ownership'
+import { withActivityReviewWorktreeIds } from '../../../../packages/pilot/src/renderer/activity-card/activity-review-visibility' // pilot-hook: activity-review-visibility
 
 export const createRefreshRoutingActions = (
   set: Parameters<StateCreator<AppState>>[0],
@@ -24,7 +25,8 @@ export const createRefreshRoutingActions = (
   | 'bumpGitHubPRVisibleRefreshGeneration'
   | 'setVisibleReviewCardWorktreeIds'
 > => ({
-  setVisibleReviewCardWorktreeIds: (ids) => {
+  setVisibleReviewCardWorktreeIds: (listIds) => {
+    const ids = withActivityReviewWorktreeIds(listIds) // pilot-hook: activity-review-visibility
     set((s) =>
       s.visibleReviewCardWorktreeIds?.length === ids.length &&
       ids.every((id, index) => s.visibleReviewCardWorktreeIds[index] === id)

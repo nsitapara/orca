@@ -24,6 +24,8 @@ export type PilotStoreState = {
   // Read by the host list to find paired machines running Pilot.
   runtimeEnvironments?: readonly { id: string; name: string }[]
   runtimeStatusByEnvironmentId?: ReadonlyMap<string, RuntimeEnvironmentStatus>
+  // Called by Activity rows to join the visible review set the review refresher polls.
+  setVisibleReviewCardWorktreeIds?(ids: readonly string[]): void
 }
 export type PilotStore = {
   getState(): PilotStoreState

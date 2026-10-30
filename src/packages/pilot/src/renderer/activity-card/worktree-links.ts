@@ -5,6 +5,7 @@ import { useWorktreeCardLifecycleEffects } from '@/components/sidebar/use-worktr
 import { useWorktreeCardReviewDetails } from '@/components/sidebar/use-worktree-card-review-details'
 import type { WorktreeCardPrDisplay } from '@/components/sidebar/worktree-card-pr-display'
 import { useAppStore } from '@/store'
+import { useActivityReviewVisibility } from './activity-review-visibility'
 
 type ReviewDetailsInput = Parameters<typeof useWorktreeCardReviewDetails>[0]
 
@@ -67,6 +68,7 @@ export function useWorktreeLinks(worktree: Worktree, repo: Repo | null): Worktre
 /**
  * Fetches a worktree's review and Linear issue once, as its hover card does on open; the stores'
  * TTLs keep a remount from refetching. Rendered once per worktree header, so its rows can read them.
+ * While mounted, the worktree's review joins the visible set the review refresher polls.
  */
 export function WorktreeLinksPrefetch({
   worktree,
@@ -79,6 +81,7 @@ export function WorktreeLinksPrefetch({
   const fetchHostedReviewForBranch = useAppStore((s) => s.fetchHostedReviewForBranch)
   const fetchIssue = useAppStore((s) => s.fetchIssue)
   const fetchLinearIssue = useAppStore((s) => s.fetchLinearIssue)
+  useActivityReviewVisibility(worktree.id)
   useWorktreeCardLifecycleEffects({
     worktree,
     repo: repo ?? undefined,
