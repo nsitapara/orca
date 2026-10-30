@@ -15,6 +15,7 @@ import {
   dropRemovedWorktreeProcessState,
   pruneRemovedWorktreeSnapshots
 } from '../../../worktree-removal-process-cleanup'
+import { archiveVaultNotesOnRemoval } from '../../../../packages/pilot/src/main/vault/notes-on-removal' // pilot-hook: vault-notes-on-removal
 
 export async function stopPtysForDestructiveWorktreeRemoval(
   runtime: OrcaRuntimeService,
@@ -106,4 +107,5 @@ export function removeWorktreeMetadataAndTransientState(
     hostId,
     snapshotPruneBatchId
   )
+  archiveVaultNotesOnRemoval(worktreeId, hostId ?? persistedHostId, entryPoint) // pilot-hook: vault-notes-on-removal
 }
