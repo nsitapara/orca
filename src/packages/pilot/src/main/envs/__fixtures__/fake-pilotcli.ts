@@ -21,6 +21,7 @@ exit "$(cat "$d/$v.code" 2>/dev/null || echo 0)"
 `
 export type FakeReply = { json?: unknown; code?: number; stderr?: string; sleep?: number }
 export type FakeVerb =
+  | 'artifacts-list-artifacts'
   | 'env-create'
   | 'env-delete'
   | 'env-list'

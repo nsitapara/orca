@@ -10,6 +10,8 @@ export type PilotcliCall = {
   timeoutMs: number
   signal?: AbortSignal
   pidFile?: string
+  // A command that lists a lot (artifacts list-artifacts) raises it; its JSON cut short would read as nothing.
+  maxOutputBytes?: number
 }
 export type Pilotcli = (call: PilotcliCall) => Promise<PilotcliReply>
 
@@ -102,7 +104,7 @@ export function pilotcliRunner(opts: {
           env: pilotcliEnv(opts.baseEnv ?? process.env, opts.pilotBinDir),
           timeoutMs: call.timeoutMs,
           signal: call.signal,
-          maxOutputBytes: MAX_OUTPUT_BYTES,
+          maxOutputBytes: call.maxOutputBytes ?? MAX_OUTPUT_BYTES,
           terminationBarrier: true
         },
         'tail'
