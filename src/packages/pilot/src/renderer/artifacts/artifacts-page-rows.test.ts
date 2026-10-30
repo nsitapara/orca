@@ -10,6 +10,7 @@ import {
   UNTRACKED
 } from '../../shared/__fixtures__/artifacts'
 import { artifactsForWorktree, indexArtifactsByWorktree } from './artifacts-match'
+import { resumeCommand } from './artifact-labels'
 import { filterArtifacts, repoOfPath, repoOptions, tabCounts } from './artifacts-page-rows'
 
 const NONE = new Map<string, string>()
@@ -75,5 +76,21 @@ describe('the page’s tabs', () => {
 
   it('offers the agents’ repos, sorted', () => {
     expect(repoOptions(ARTIFACTS, NONE)).toEqual(['notes', 'web-platform'])
+  })
+})
+
+describe('the resume command', () => {
+  it.each([
+    [
+      'a session UUID',
+      '0A1B2C3D-0000-4000-8000-000000000001',
+      'claude --resume 0A1B2C3D-0000-4000-8000-000000000001'
+    ],
+    ['a command after a separator', 'x; rm -rf ~', null],
+    ['no id', '', null],
+    ['a command substitution', '$(id)', null],
+    ['a UUID with a command after it', '0a1b2c3d-0000-4000-8000-000000000001 && id', null]
+  ])('is built for %s only when it is a UUID', (_name, id, expected) => {
+    expect(resumeCommand(id)).toBe(expected)
   })
 })

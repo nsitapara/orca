@@ -118,6 +118,9 @@ export function publishDates(first: string, last: string): string {
   return first.slice(0, 10) === last.slice(0, 10) ? day(first) : `${day(first)} – ${day(last)}`
 }
 
-export function resumeCommand(sessionId: string): string {
-  return `claude --resume ${sessionId}`
+const SESSION_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+/** `claude --resume <id>` to paste in a shell, or null unless the id is a UUID: anything else could run as a command. */
+export function resumeCommand(sessionId: string): string | null {
+  return SESSION_ID.test(sessionId) ? `claude --resume ${sessionId}` : null
 }

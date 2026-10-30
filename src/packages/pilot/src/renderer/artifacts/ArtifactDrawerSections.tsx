@@ -236,6 +236,7 @@ function SessionItem({ contribution }: { contribution: ArtifactContribution }) {
   const c = contribution
   const worktree = c.worktree ? baseName(c.worktree) : 'No worktree'
   const branch = c.branch && c.branch !== worktree ? ` · ${c.branch}` : ''
+  const resume = resumeCommand(c.session_id)
   return (
     <Item>
       <span
@@ -258,10 +259,10 @@ function SessionItem({ contribution }: { contribution: ArtifactContribution }) {
           {branch}
         </span>
       </span>
-      {c.session_id ? (
+      {resume ? (
         <LinkButton
           label="Copy resume command"
-          onClick={() => void copyText(resumeCommand(c.session_id), 'Resume command copied')}
+          onClick={() => void copyText(resume, 'Resume command copied')}
         >
           <Terminal className="size-3.5" />
         </LinkButton>
