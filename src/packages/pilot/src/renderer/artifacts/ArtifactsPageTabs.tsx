@@ -35,7 +35,7 @@ function AttachedTabs({ signedIn }: { signedIn: boolean }): React.JSX.Element {
       }}
       className="ml-4 min-w-0"
     >
-      <TabsList aria-label="Artifacts" className="h-8 max-w-full overflow-x-auto">
+      <TabsList aria-label="Artifacts">
         {TABS.filter((t) => t.tab !== 'shared' || signedIn).map((t) => (
           <TabsTrigger key={t.tab} value={t.tab}>
             {t.label}
