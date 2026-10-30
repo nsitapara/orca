@@ -28,7 +28,8 @@ export function claimHome(runs: RunStore, runId: string, path: string): RunRow |
   return null
 }
 
-// What --throwaway says (M4 §8): Pilot's own runs are invisible to `orca terminal list`.
+// What --throwaway says (M4 §8): pilotcli's busy read sees agent tabs in Pilot and Orca, not Pilot's claim on the
+// worktree, which a run holds outside its agent tabs too (setup, shell steps, between steps).
 export function throwawayReason(holder: RunRow, nameOf: (automationId: string) => string): string {
   return `${nameOf(holder.automationId)} is already working in it (Pilot run ${holder.id})`
 }

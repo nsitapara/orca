@@ -69,7 +69,8 @@ export async function worktreeHold(path: string | null, deps: HoldDeps): Promise
 }
 
 // An env automation's answers never wait for a busy worktree (M4 §8): Pilot passes --throwaway when its own run holds it,
-// and pilotcli makes a throwaway when Nish is busy. Only a worktree that is gone holds them.
+// and pilotcli makes a throwaway when an agent tab there is busy, in Pilot or Orca. Only a worktree that is gone holds
+// them.
 export async function answersHold(
   def: AutomationDefinition,
   path: string | null,

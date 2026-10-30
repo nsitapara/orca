@@ -58,9 +58,10 @@ export function pilotcliPath(
   return null
 }
 
-// pilotcli asks real Orca whether Nish is busy there (worktree check free): it must never reach Pilot. So its env loses
-// Pilot's routing (ORCA_*, PILOT_*) and Pilot's launcher folder on PATH (engine-env.ts adds both for scripts). It marks its calls as Pilot's own for
-// pilotcli's telemetry.
+// pilotcli asks Pilot, then real Orca, whether Nish is busy there (worktree check free), reaching each only by its
+// configured path (paths.pilot, paths.orca), never by this env's routing. So its env loses Pilot's routing (ORCA_*,
+// PILOT_*) and Pilot's launcher folder on PATH (engine-env.ts adds both for scripts). It marks its calls as Pilot's own
+// for pilotcli's telemetry.
 export function pilotcliEnv(base: NodeJS.ProcessEnv, pilotBinDir: string): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = {}
   for (const [name, value] of Object.entries(base)) {
