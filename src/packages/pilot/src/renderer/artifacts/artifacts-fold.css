@@ -1,0 +1,28 @@
+/* The fold-out's grabber: a short bar on its top edge, accent and wider while hovered, focused or dragged. */
+.pilot-fold-grip::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 2.5px;
+  width: 32px;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--worktree-sidebar-border);
+  transform: translateX(-50%);
+  transition:
+    background-color 120ms,
+    width 120ms;
+}
+
+.pilot-fold-grip:hover::after,
+.pilot-fold-grip:focus-visible::after,
+.pilot-fold-grip[data-dragging]::after {
+  background: var(--pilot-selected-accent);
+  width: 48px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pilot-fold-grip::after {
+    transition: none;
+  }
+}

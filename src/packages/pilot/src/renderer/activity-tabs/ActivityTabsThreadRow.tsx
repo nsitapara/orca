@@ -92,7 +92,7 @@ const MARK_UNREAD = () =>
  * The session the workbench shows, only ever in the selected worktree: with a terminal in front, the
  * one in that terminal tab; otherwise (a chat session, a file) the row last clicked. Upstream's
  * selection alone is the row last clicked anywhere, so it lingered after the worktree changed
- * elsewhere and disagreed with the Selected band and the worktree header.
+ * elsewhere and disagreed with the Current header and the worktree header.
  */
 export function useOpenSession(thread: AgentPaneThread, clicked: boolean): boolean {
   return useAppStore((s) => {

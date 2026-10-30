@@ -15,7 +15,12 @@ import { AgentArtifactsBody } from './AgentArtifactsBody'
 import { ArtifactsFoldOut } from './ArtifactsFoldOut'
 import { ArtifactsPageTabs } from './ArtifactsPageTabs'
 import { resetArtifactsFeed } from './artifacts-feed'
-import { artifactsView, resetArtifactsView, setArtifactsFoldOpen } from './artifacts-view'
+import {
+  artifactsView,
+  resetArtifactsView,
+  setArtifactsFoldHeight,
+  setArtifactsFoldOpen
+} from './artifacts-view'
 import { WorktreeArtifactsChip } from './WorktreeArtifactsChip'
 
 const rpc = vi.hoisted(() => {
@@ -77,6 +82,7 @@ afterEach(() => {
   resetArtifactsFeed()
   resetArtifactsView()
   setArtifactsFoldOpen(true)
+  setArtifactsFoldHeight(null)
   window.localStorage.clear()
   opened.mockClear()
 })
@@ -197,5 +203,68 @@ describe('the Artifacts fold-out', () => {
     useAppStore.setState({ worktreesByRepo: { 'repo-1': [{ ...WORKTREE, path: '/elsewhere' }] } })
     await show(<ArtifactsFoldOut />)
     expect(screen.getByText('No artifacts from this worktree yet.')).toBeTruthy()
+  })
+})
+
+const HEIGHT_KEY = 'pilot.sidebar.artifacts-fold-height'
+
+// A 500px sidebar, so the fold-out may grow to 350px (70%).
+async function sizedFoldOut() {
+  await show(
+    <div data-testid="sidebar">
+      <ArtifactsFoldOut />
+    </div>
+  )
+  Object.defineProperty(screen.getByTestId('sidebar'), 'clientHeight', { value: 500 })
+  return {
+    fold: screen.getByRole('region', { name: 'Artifacts' }),
+    grip: screen.getByRole('separator', { name: 'Resize artifacts' })
+  }
+}
+
+describe('resizing the Artifacts fold-out', () => {
+  // Why: the list keeps at least 30% of the sidebar, and the fold-out never shrinks below its header and a row.
+  it.each([
+    { name: 'up 76px', to: 324, height: 176 },
+    { name: 'past 70% of the sidebar', to: -1000, height: 350 },
+    { name: 'below the minimum', to: 1000, height: 76 }
+  ])('drags its top edge $name, and remembers the height', async ({ to, height }) => {
+    setArtifactsFoldHeight(100)
+    const { fold, grip } = await sizedFoldOut()
+    fireEvent.pointerDown(grip, { button: 0, pointerId: 1, clientY: 400 })
+    fireEvent.pointerMove(grip, { pointerId: 1, clientY: to })
+    expect(fold.style.height).toBe(`${height}px`)
+    expect(window.localStorage.getItem(HEIGHT_KEY)).toBe('100')
+    fireEvent.pointerUp(grip, { pointerId: 1 })
+    expect(window.localStorage.getItem(HEIGHT_KEY)).toBe(String(height))
+  })
+
+  it.each([
+    { key: 'ArrowUp', from: 200, height: 216 },
+    { key: 'ArrowDown', from: 200, height: 184 },
+    { key: 'ArrowDown', from: 80, height: 76 },
+    { key: 'ArrowUp', from: 340, height: 350 }
+  ])('$key from $from px nudges it to $height px', async ({ key, from, height }) => {
+    setArtifactsFoldHeight(from)
+    const { fold, grip } = await sizedFoldOut()
+    fireEvent.keyDown(grip, { key })
+    expect(fold.style.height).toBe(`${height}px`)
+    expect(window.localStorage.getItem(HEIGHT_KEY)).toBe(String(height))
+  })
+
+  it('goes back to its default size on a double-click', async () => {
+    setArtifactsFoldHeight(200)
+    const { fold, grip } = await sizedFoldOut()
+    fireEvent.doubleClick(grip)
+    expect(fold.style.height).toBe('')
+    expect(window.localStorage.getItem(HEIGHT_KEY)).toBeNull()
+  })
+
+  it('ignores the height while folded', async () => {
+    setArtifactsFoldHeight(200)
+    setArtifactsFoldOpen(false)
+    await show(<ArtifactsFoldOut />)
+    expect(screen.getByRole('region', { name: 'Artifacts' }).style.height).toBe('')
+    expect(screen.queryByRole('separator')).toBeNull()
   })
 })

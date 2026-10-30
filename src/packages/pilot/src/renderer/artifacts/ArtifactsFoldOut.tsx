@@ -1,3 +1,4 @@
+import { useRef } from 'react'
 import { ChevronDown } from 'lucide-react'
 import { formatArtifactUpdatedCompact } from '@/components/artifacts/artifact-display-labels'
 import { isRowActivationKey } from '@/lib/list-row-interaction'
@@ -9,6 +10,8 @@ import { pilotStore } from '../store'
 import { artifactTitle, ticketSummary } from './artifact-labels'
 import { ArtifactOpenCopy } from './AgentArtifactRow'
 import { useArtifactsFeed, useWorktreeArtifacts } from './artifacts-feed'
+import { FoldResizeHandle } from './FoldResizeHandle'
+import { useFoldResize } from './fold-resize'
 import {
   setArtifactsFoldOpen,
   showArtifact,
@@ -72,16 +75,26 @@ function AttachedFoldOut(): React.JSX.Element | null {
   const feed = useArtifactsFeed()
   const ticket = useBranchLinearIssue(worktree?.branch)?.identifier ?? null
   const open = useArtifactsFoldOpen()
+  const section = useRef<HTMLElement>(null)
+  const resize = useFoldResize(section)
   if (!worktree) {
     return null
   }
   const label = ticket ?? worktree.displayName
   const listId = `pilot-artifacts-fold-${worktree.id}`
+  // Folded, it is only its header; the dragged height applies while open.
+  const height = open ? resize.height : null
   return (
     <section
+      ref={section}
       aria-label="Artifacts"
-      className="mx-2 flex max-h-[40vh] min-h-0 shrink-0 flex-col border-t border-worktree-sidebar-border/60"
+      style={height === null ? undefined : { height }}
+      className={cn(
+        'relative mx-2 flex min-h-0 shrink-0 flex-col border-t border-worktree-sidebar-border/60',
+        height === null ? 'max-h-[40vh]' : 'max-h-[70%]'
+      )}
     >
+      {open ? <FoldResizeHandle resize={resize} /> : null}
       <button
         type="button"
         aria-expanded={open}
@@ -109,7 +122,13 @@ function AttachedFoldOut(): React.JSX.Element | null {
         </span>
       </button>
       {open ? (
-        <div id={listId} className="scrollbar-sleek min-h-0 overflow-y-auto pb-2">
+        <div
+          id={listId}
+          className={cn(
+            'scrollbar-sleek min-h-0 overflow-y-auto pb-2',
+            height !== null && 'flex-1'
+          )}
+        >
           {artifacts.length > 0 ? (
             <>
               <ul className="flex flex-col gap-px">

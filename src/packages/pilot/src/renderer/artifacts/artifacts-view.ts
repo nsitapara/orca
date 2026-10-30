@@ -1,6 +1,6 @@
 import { useSyncExternalStore } from 'react'
 import { useAppStore } from '@/store'
-import { localFlag } from '../activity-tabs/activity-tabs-setting'
+import { localFlag, localValue } from '../activity-tabs/activity-tabs-setting'
 
 // The Artifacts page's tabs: what agents published, the HTML reports in the vault, ids only the account knows, and
 // Orca's own shared links (signed in only).
@@ -74,6 +74,23 @@ export function useArtifactsFoldOpen(): boolean {
 
 export function setArtifactsFoldOpen(open: boolean): void {
   foldClosed.set(!open)
+}
+
+// The fold-out's dragged height in px; null is its default, sized to its rows.
+const foldHeight = localValue<number | null>('pilot.sidebar.artifacts-fold-height', {
+  parse: (raw) => {
+    const height = raw ? Number(raw) : Number.NaN
+    return Number.isFinite(height) && height > 0 ? Math.round(height) : null
+  },
+  serialize: (height) => (height === null ? null : String(height))
+})
+
+export function useArtifactsFoldHeight(): number | null {
+  return foldHeight.useValue()
+}
+
+export function setArtifactsFoldHeight(height: number | null): void {
+  foldHeight.set(height)
 }
 
 // Tests only.

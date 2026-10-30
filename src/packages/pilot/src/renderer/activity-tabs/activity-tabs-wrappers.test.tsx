@@ -464,7 +464,7 @@ describe('Pilot wrappers around upstream Activity elements', () => {
     expect(activateAndRevealWorkspace).not.toHaveBeenCalled()
   })
 
-  // Why: the selected worktree's header, the open session and the Selected band agree, whichever
+  // Why: the selected worktree's header, the open session and the Current header agree, whichever
   // row was clicked last; the accent covers the header only, not the worktree's sessions.
   it.each([
     {

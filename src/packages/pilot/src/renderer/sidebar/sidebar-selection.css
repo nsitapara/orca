@@ -46,3 +46,10 @@
 .pilot-selected-label {
   color: var(--pilot-selected-accent);
 }
+
+/* The Current header: the full sidebar width, a faint accent wash and a 2px accent rule under it. */
+.pilot-current-band {
+  background: color-mix(in srgb, var(--pilot-selected-accent) 7%, transparent);
+  border-top: 1px solid var(--worktree-sidebar-border);
+  border-bottom: 2px solid var(--pilot-selected-accent);
+}

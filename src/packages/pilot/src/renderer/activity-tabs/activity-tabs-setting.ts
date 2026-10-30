@@ -2,31 +2,43 @@ import { useSyncExternalStore } from 'react'
 import { useAppStore } from '@/store'
 import { pilotStore } from '../store'
 
-// A remembered on/off choice (off until set): Activity's View options, the sidebar's Artifacts fold-out.
-export function localFlag(key: string) {
+type StoredCodec<T> = { parse: (raw: string | null) => T; serialize: (value: T) => string | null }
+
+// A value remembered in localStorage, read once and shared by every reader; null serialized removes it.
+export function localValue<T>(key: string, codec: StoredCodec<T>) {
   const listeners = new Set<() => void>()
-  let enabled: boolean | null = null
-  const read = (): boolean => {
+  let loaded = false
+  let value: T
+  const read = (): T => {
     try {
-      return window.localStorage.getItem(key) === 'true'
+      return codec.parse(window.localStorage.getItem(key))
     } catch {
-      return false
+      return codec.parse(null)
     }
   }
-  const current = (): boolean => {
-    enabled ??= read()
-    return enabled
+  const current = (): T => {
+    if (!loaded) {
+      value = read()
+      loaded = true
+    }
+    return value
   }
   const subscribe = (listener: () => void): (() => void) => {
     listeners.add(listener)
     return () => listeners.delete(listener)
   }
   return {
-    useValue: (): boolean => useSyncExternalStore(subscribe, current, () => false),
-    set(next: boolean): void {
-      enabled = next
+    useValue: (): T => useSyncExternalStore(subscribe, current, () => codec.parse(null)),
+    set(next: T): void {
+      value = next
+      loaded = true
       try {
-        window.localStorage.setItem(key, String(next))
+        const raw = codec.serialize(next)
+        if (raw === null) {
+          window.localStorage.removeItem(key)
+        } else {
+          window.localStorage.setItem(key, raw)
+        }
       } catch {
         // Private windows and blocked storage: the choice just doesn't persist.
       }
@@ -35,6 +47,11 @@ export function localFlag(key: string) {
       }
     }
   }
+}
+
+// A remembered on/off choice (off until set): Activity's View options, the sidebar's Artifacts fold-out.
+export function localFlag(key: string) {
+  return localValue(key, { parse: (raw) => raw === 'true', serialize: String })
 }
 
 const showAllTabs = localFlag('pilot.activity.show-all-tabs')

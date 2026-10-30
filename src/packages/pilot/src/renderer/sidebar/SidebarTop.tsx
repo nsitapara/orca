@@ -9,7 +9,7 @@ import { useAppStore } from '@/store'
 import { pilotStore } from '../store'
 import { PagesMenu } from './PagesMenu'
 import { PinnedPagesNav } from './PinnedPagesNav'
-import { SelectedBand } from './SelectedBand'
+import { CurrentBand } from './CurrentBand'
 
 const AgentDashboardSidebarEntry = lazyWithRetry(
   () => import('@/components/sidebar/AgentDashboardSidebarEntry')
@@ -55,7 +55,7 @@ type SidebarTopProps = {
 /**
  * pilot-hook: sidebar-top. The sidebar's top in one place: a row of ☰ (open or pin a page), Search,
  * the view's options menu and the new project and workspace buttons; the pinned pages as rows (and
- * the open page while it's open); then the Selected band. The Projects title and its bell are gone:
+ * the open page while it's open); then the Current header. The Projects title and its bell are gone:
  * the options menus' View sections switch Projects and Activity.
  */
 export function SidebarTop({
@@ -95,7 +95,7 @@ export function SidebarTop({
           </React.Suspense>
         ) : null}
       </div>
-      <SelectedBand />
+      <CurrentBand />
     </>
   )
 }
