@@ -41,8 +41,10 @@ export function resolvePilotWindowStyleVariables(
 }
 
 export const ACTIVITY_GUIDE_VARIABLE = '--pilot-activity-guide'
+export const SELECTION_ACCENT_VARIABLE = '--pilot-selection-accent'
 
-// Activity's guide lines take the terminal theme's blue, softened, in every sidebar appearance.
+// Activity's guide lines take the terminal theme's blue, softened, in every sidebar appearance, and the
+// sidebar's selected worktree and open session take it whole.
 export function resolveActivityGuideVariables(
   settings: WindowAppearanceSettings,
   systemPrefersDark: boolean
@@ -51,7 +53,12 @@ export function resolveActivityGuideVariables(
     return {}
   }
   const blue = resolveEffectiveTerminalAppearance(settings, systemPrefersDark).theme?.blue
-  return blue ? { [ACTIVITY_GUIDE_VARIABLE]: `color-mix(in srgb, ${blue} 50%, transparent)` } : {}
+  return blue
+    ? {
+        [ACTIVITY_GUIDE_VARIABLE]: `color-mix(in srgb, ${blue} 50%, transparent)`,
+        [SELECTION_ACCENT_VARIABLE]: blue
+      }
+    : {}
 }
 
 // Called from attachPilotRenderer (pilot-hook: renderer). Inline root variables beat the `.dark` theme

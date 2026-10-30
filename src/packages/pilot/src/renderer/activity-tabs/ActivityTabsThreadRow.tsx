@@ -14,10 +14,12 @@ import { translate } from '@/i18n/i18n'
 import { AgentIcon } from '@/lib/agent-catalog'
 import { agentTypeToIconAgent, formatAgentTypeLabel } from '@/lib/agent-status'
 import { cn } from '@/lib/utils'
+import { useAppStore } from '@/store'
 import { isAutomationTabTitle } from '../../shared/automation-tab-title'
 import { AutomationRunRowIcon } from '../automation-tab/AutomationRunGlyph'
 import { pilotStore } from '../store'
 import { RowWorkspaceLabel } from './RowWorkspaceLabel'
+import '../sidebar/sidebar-selection.css'
 
 type RowProps = React.ComponentProps<typeof ActivityThreadRow>
 
@@ -86,6 +88,21 @@ const MARK_READ = () =>
 const MARK_UNREAD = () =>
   translate('auto.components.activity.ActivityPrototypePage.59b131fbd9', 'Mark thread unread')
 
+/**
+ * The session the workbench shows, only ever in the selected worktree: with a terminal in front, the
+ * one in that terminal tab; otherwise (a chat session, a file) the row last clicked. Upstream's
+ * selection alone is the row last clicked anywhere, so it lingered after the worktree changed
+ * elsewhere and disagreed with the Selected band and the worktree header.
+ */
+export function useOpenSession(thread: AgentPaneThread, clicked: boolean): boolean {
+  return useAppStore((s) => {
+    if (s.activeWorktreeId !== thread.worktree.id) {
+      return false
+    }
+    return s.activeTabType === 'terminal' ? s.activeTabId === thread.tab.id : clicked
+  })
+}
+
 /** Upstream's session row, its selection, actions and hover card kept, on one line. */
 const TerseThreadRow = React.memo(function TerseThreadRow({
   thread,
@@ -102,6 +119,7 @@ const TerseThreadRow = React.memo(function TerseThreadRow({
   previewSuppressed = false
 }: RowProps): React.JSX.Element {
   const { taskTitle, statusLine, needsAttention } = activityThreadRowCopy(thread)
+  const open = useOpenSession(thread, selected)
   return (
     <ActivityThreadHoverCard
       thread={thread}
@@ -110,14 +128,16 @@ const TerseThreadRow = React.memo(function TerseThreadRow({
       suppressed={previewSuppressed}
     >
       <div
-        data-current={selected ? 'true' : undefined}
+        data-current={open ? 'true' : undefined}
         data-worktree-card-surface="true"
-        data-worktree-card-active={selected ? 'primary' : undefined}
+        data-worktree-card-active={open ? 'primary' : undefined}
         data-worktree-card-selected={multiSelected || undefined}
+        data-pilot-open-session={open ? '' : undefined}
+        data-pilot-session-worktree={thread.worktree.id}
         onClick={(event) => onSelect(thread, event)}
         role="listitem"
         aria-label={taskTitle}
-        aria-current={selected ? 'true' : undefined}
+        aria-current={open ? 'true' : undefined}
         className="group relative flex w-full min-w-0 cursor-pointer items-center gap-1.5 rounded-lg border border-transparent px-1.5 py-1 text-left transition-[background-color,border-color,opacity,box-shadow] duration-200 outline-none select-none worktree-sidebar-card-hover focus-visible:ring-1 focus-visible:ring-ring"
       >
         <ThreadAgentStateIndicator thread={thread} />
@@ -132,7 +152,10 @@ const TerseThreadRow = React.memo(function TerseThreadRow({
           }}
           className="block min-w-0 flex-1 cursor-pointer truncate text-left text-[13px] leading-5 outline-none focus-visible:ring-1 focus-visible:ring-ring"
         >
-          <span className={cn('text-foreground', thread.unread ? 'font-semibold' : 'font-medium')}>
+          <span
+            data-pilot-session-title=""
+            className={cn('text-foreground', thread.unread ? 'font-semibold' : 'font-medium')}
+          >
             {taskTitle}
           </span>
           {statusLine ? (

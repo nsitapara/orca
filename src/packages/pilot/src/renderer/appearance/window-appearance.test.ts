@@ -54,7 +54,7 @@ describe('attachPilotWindowAppearance', () => {
     ['tinted leaves the root to Orca', 'tinted', '', null],
     ['default leaves the root to Orca', 'default', '', null]
   ] as const)(
-    '%s, and Activity’s guide line takes the theme’s blue',
+    '%s, and Activity’s guide line and the selection accent take the theme’s blue',
     (_name, mode, background, attribute) => {
       const store = fakeStore(
         settings({ leftSidebarAppearanceMode: mode, terminalThemeDark: 'Catppuccin Mocha' })
@@ -63,6 +63,7 @@ describe('attachPilotWindowAppearance', () => {
       expect(root.style.getPropertyValue('--background')).toBe(background)
       expect(root.getAttribute(WINDOW_APPEARANCE_ATTRIBUTE)).toBe(attribute)
       expect(root.style.getPropertyValue('--pilot-activity-guide')).toContain('#89b4fa')
+      expect(root.style.getPropertyValue('--pilot-selection-accent')).toBe('#89b4fa')
     }
   )
 

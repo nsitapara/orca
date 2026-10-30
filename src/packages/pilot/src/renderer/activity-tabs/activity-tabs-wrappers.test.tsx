@@ -463,4 +463,74 @@ describe('Pilot wrappers around upstream Activity elements', () => {
     expect(view.getByRole('img', { name: 'Unread sessions folded' })).toBeTruthy()
     expect(activateAndRevealWorkspace).not.toHaveBeenCalled()
   })
+
+  // Why: the selected worktree's header, the open session and the Selected band agree, whichever
+  // row was clicked last; the accent covers the header only, not the worktree's sessions.
+  it.each([
+    {
+      active: 'wt-1',
+      tabType: 'terminal',
+      tabId: 'tab-1',
+      clicked: false,
+      header: true,
+      open: true
+    },
+    {
+      active: 'wt-1',
+      tabType: 'terminal',
+      tabId: 'tab-2',
+      clicked: true,
+      header: true,
+      open: false
+    },
+    {
+      active: 'wt-1',
+      tabType: 'agent-session',
+      tabId: null,
+      clicked: true,
+      header: true,
+      open: true
+    },
+    {
+      active: 'wt-2',
+      tabType: 'terminal',
+      tabId: 'tab-1',
+      clicked: true,
+      header: false,
+      open: false
+    }
+  ] as const)(
+    'selected $active, $tabType tab $tabId, row clicked $clicked → header $header, session open $open',
+    ({ active, tabType, tabId, clicked, header, open }) => {
+      registerPilotStore(useAppStore)
+      useAppStore.setState({
+        repos: [makeRepo()],
+        worktreesByRepo: { 'repo-1': [makeWorktree()] },
+        activeWorktreeId: active,
+        activeTabType: tabType,
+        activeTabId: tabId
+      })
+      const view = render(
+        <TooltipProvider>
+          {views('worktree:wt-1').header}
+          <ActivityTabsThreadRow
+            thread={thread}
+            selected={clicked}
+            onSelect={noop}
+            onJump={noop}
+            onMarkRead={noop}
+            onMarkUnread={noop}
+            canJump={false}
+            compactMode
+          />
+        </TooltipProvider>
+      )
+      const headerRow = view.container.querySelector('[data-pilot-worktree-header="wt-1"]')
+      expect(headerRow?.hasAttribute('data-pilot-selected-worktree')).toBe(header)
+      expect(headerRow?.getAttribute('aria-current') === 'true').toBe(header)
+      const row = view.getByRole('listitem')
+      expect(row.hasAttribute('data-pilot-open-session')).toBe(open)
+      expect(row.getAttribute('aria-current') === 'true').toBe(open)
+    }
+  )
 })
