@@ -28,8 +28,10 @@
   color: var(--pilot-selected-accent);
 }
 
-/* The open session: an accent outline over upstream's open-row surface, and a bold title. */
-[data-worktree-card-surface][data-pilot-open-session] {
+/* The open session: an accent outline over upstream's open-row surface, and a bold title. Four attributes
+   so it outranks upstream's `.dark [data-worktree-card-surface][data-worktree-card-active='primary']`
+   border, which would otherwise win in dark mode. */
+[data-worktree-card-surface][data-worktree-card-active='primary'][data-current][data-pilot-open-session] {
   border-color: color-mix(
     in srgb,
     var(--pilot-selected-accent) 55%,

@@ -8,7 +8,8 @@ import { useAppStore } from '@/store'
 import { getDefaultSettings } from '../../../../../shared/constants'
 import type { GlobalSettings } from '../../../../../shared/global-settings-types'
 import { registerPilotStore } from '../store'
-import { SidebarBodyChoice } from './SidebarBodyChoice'
+import { PinnedPagesSettings } from './PinnedPagesSettings'
+import { SidebarBodyChoice, SidebarBodyMenuSection } from './SidebarBodyChoice'
 import { selectedCrumbs } from './SelectedBand'
 import { SidebarTop } from './SidebarTop'
 
@@ -152,5 +153,60 @@ describe('Sidebar shows', () => {
     expect(current.textContent).toBe(`Sidebar shows ${from === 'agents' ? 'Activity' : 'Projects'}`)
     fireEvent.click(screen.getByRole('menuitemradio', { name: `Sidebar shows ${pick}` }))
     expect(useAppStore.getState().sidebarBody).toBe(to)
+  })
+})
+
+// Why: each hook renders upstream's own element until Pilot attaches.
+describe('the menu and settings hooks', () => {
+  it.each([
+    { attached: false, menu: [], switches: [] },
+    {
+      attached: true,
+      menu: ['Sidebar shows Projects', 'Sidebar shows Activity'],
+      switches: [
+        'Pin Inbox',
+        'Pin Running',
+        'Pin Automations',
+        'Pin Tasks',
+        'Pin Artifacts',
+        'Pin Playground'
+      ]
+    }
+  ])('attached=$attached', ({ attached, menu, switches }) => {
+    registerPilotStore(attached ? useAppStore : null)
+    render(
+      <DropdownMenu open>
+        <DropdownMenuContent>
+          <SidebarBodyMenuSection />
+        </DropdownMenuContent>
+      </DropdownMenu>
+    )
+    expect(screen.queryAllByRole('menuitemradio').map((item) => item.textContent)).toEqual(menu)
+    cleanup()
+    render(
+      <PinnedPagesSettings>
+        <span>upstream</span>
+      </PinnedPagesSettings>
+    )
+    expect(screen.queryByText('upstream') === null).toBe(attached)
+    expect(screen.queryAllByRole('switch').map((s) => s.getAttribute('aria-label'))).toEqual(
+      switches
+    )
+  })
+
+  it('a settings switch pins its page', () => {
+    registerPilotStore(useAppStore)
+    render(
+      <PinnedPagesSettings>
+        <span>upstream</span>
+      </PinnedPagesSettings>
+    )
+    const inbox = screen.getByRole('switch', { name: 'Pin Inbox' })
+    expect(inbox.getAttribute('aria-checked')).toBe('true')
+    act(() => fireEvent.click(inbox))
+    expect(updateSettings).toHaveBeenCalledWith({ pilotPinnedPages: ['running', 'automations'] })
+    expect(screen.getByRole('switch', { name: 'Pin Inbox' }).getAttribute('aria-checked')).toBe(
+      'false'
+    )
   })
 })
