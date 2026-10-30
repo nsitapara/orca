@@ -14,6 +14,7 @@ import { claudeQuotaReader } from './fields/claude-quota'
 import { codexQuotaReader } from './fields/codex-quota'
 import { startPilotServices, type PilotServices } from './pilot-services'
 import { loginPath } from './startup/login-path'
+import { attachVaultNotesOnRemoval, vaultNotesOnRemovalDeps } from './vault/notes-on-removal'
 import { beginPilotStartup } from './startup/pilot-startup'
 
 // Hook target: src/main/startup/main-process-ready-runtime.ts (pilot-hook: main). Runs once in desktop
@@ -71,6 +72,8 @@ export function attachPilotMain(runtime: OrcaRuntimeService): void {
         pinnedOnly: pilotSchedulerMode(kind) === 'pinned'
       })
     )
+    // A removed worktree's notes folder goes to the vault's Archive (pilot-hook: vault-notes-on-removal).
+    attachVaultNotesOnRemoval(vaultNotesOnRemovalDeps(pilotBinDir(where)))
   } catch (error) {
     console.error(
       `[pilot] couldn't start: ${error instanceof Error ? error.message : String(error)}`
