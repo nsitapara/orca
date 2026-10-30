@@ -47,7 +47,7 @@ export function SidebarBodyChoice(): React.JSX.Element | null {
   )
 }
 
-/** pilot-hook: workspace-options-sidebar-body. Projects' options menu has no View section, so the
+/** pilot-hook: workspace-options-view. Projects' options menu has no View section, so the
  *  switch gets one of its own, first. */
 export function SidebarBodyMenuSection(): React.JSX.Element | null {
   if (!pilotStore()) {
