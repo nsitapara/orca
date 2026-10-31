@@ -6,14 +6,9 @@ import { JOB_02, VERDICTS_02 } from './jobs/job-02'
 import { frozenOldPlan } from './old-side'
 import { caseFile, dryTick, loadPortedAutomation, stoppedBy } from './ported'
 
-const CASES = [
-  'quota-ok',
-  'weekly-at-ceiling',
-  'session-at-ceiling',
-  'codex-says-out',
-  'reset-passed',
-  'unreadable'
-]
+const CASES = ['quota-ok', 'codex-says-out', 'reset-passed', 'unreadable']
+// quota.py stopped Codex at 90% weekly and 95% session; Codex's ceiling is 98% now, so these start.
+const UNDER_CODEX_CEILING = ['weekly-at-ceiling', 'session-at-ceiling']
 const { definition, people } = loadPortedAutomation(JOB_02.automationId)
 
 describe('02 · Merge dev into my MR branches, on the engine', () => {
@@ -55,6 +50,12 @@ describe('02 · Merge dev into my MR branches, on the engine', () => {
       expect(formatMismatches(compareDecisions(old, neu, VERDICTS_02))).toBe('')
       expect(stoppedBy(neu[0])).toBe(old[0].decision === 'quota' ? 'quota' : null)
     })
+  })
+
+  it.each(UNDER_CODEX_CEILING)("%s: starts under Codex's own ceiling", async (name) => {
+    const fixture = loadFixture(caseFile(JOB_02.job, name))
+    const neu = await dryTick({ definition, people, fixture })
+    expect(stoppedBy(neu[0])).toBeNull()
   })
 
   it('a run in the main checkout never blocks another (01 at 03:00, a manual M02)', async () => {

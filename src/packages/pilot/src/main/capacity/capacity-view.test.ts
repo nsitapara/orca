@@ -125,7 +125,10 @@ describe('capacityView', () => {
         dueFrom: 'first due'
       }
     ])
-    expect(view.quotaCeiling).toEqual({ weekly: 90, session: 95 })
+    expect(view.quotaCeilings).toEqual({
+      claude: { weekly: 90, session: 95 },
+      codex: { weekly: 98, session: 98 }
+    })
     expect(view.heaviest).toEqual({
       automationId: 'review',
       automationName: '03 Review and fix',

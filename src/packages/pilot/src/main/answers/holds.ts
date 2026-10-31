@@ -121,18 +121,19 @@ export function passActivity(
 }
 
 export function quotaHold(agent: AgentKind, reading: QuotaReading): Hold | null {
-  if (reading.weekly !== null && reading.weekly >= QUOTA_CEILING.weekly) {
+  const ceiling = QUOTA_CEILING[agent]
+  if (reading.weekly !== null && reading.weekly >= ceiling.weekly) {
     const at = Math.round(reading.weekly)
     return hold(
       'quota',
-      `${agent} weekly limit at ${at}% (automations stop at ${QUOTA_CEILING.weekly}%)`
+      `${agent} weekly limit at ${at}% (automations stop at ${ceiling.weekly}%)`
     )
   }
-  if (reading.session !== null && reading.session >= QUOTA_CEILING.session) {
+  if (reading.session !== null && reading.session >= ceiling.session) {
     const at = Math.round(reading.session)
     return hold(
       'quota',
-      `${agent} session limit at ${at}% (automations stop at ${QUOTA_CEILING.session}%)`
+      `${agent} session limit at ${at}% (automations stop at ${ceiling.session}%)`
     )
   }
   return null

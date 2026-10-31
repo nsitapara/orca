@@ -226,7 +226,7 @@ export function capacityView(input: CapacityViewInput): CapacityPayload {
       worstJobBytes: heaviest?.measured ? heaviest.peakBytes : null
     }),
     heaviest,
-    quotaCeiling: { ...QUOTA_CEILING },
+    quotaCeilings: { claude: { ...QUOTA_CEILING.claude }, codex: { ...QUOTA_CEILING.codex } },
     ...(input.quotaUse ? { quotaUse: input.quotaUse } : {}),
     retryLimit,
     gaveUp: gaveUpKeys(input, byId, retryLimit),

@@ -1,6 +1,7 @@
 import type { HoldReason } from '../../../shared/api-types'
 import type { CapacityPayload, QuotaUse } from '../../../shared/api-types-capacity'
 import type { AgentKind } from '../../../shared/definition/types'
+import type { QuotaCeiling } from '../../../shared/quota-ceiling'
 
 // What the runner checks before a run starts (shared/tick/runner-gates.ts and main/capacity), in its order, with the
 // hold codes each one stores on a Waiting row.
@@ -95,7 +96,7 @@ export function checkOf(code: HoldReason | undefined): RunnerCheck | null {
 const AGENT_NAMES: Record<AgentKind, string> = { claude: 'Claude', codex: 'Codex' }
 const AGENTS: readonly AgentKind[] = ['claude', 'codex']
 
-function over(use: QuotaUse, ceiling: { weekly: number; session: number }): string | null {
+function over(use: QuotaUse, ceiling: QuotaCeiling): string | null {
   if (use.weekly !== null && use.weekly >= ceiling.weekly) {
     return `${Math.round(use.weekly)}% weekly`
   }
@@ -105,11 +106,11 @@ function over(use: QuotaUse, ceiling: { weekly: number; session: number }): stri
   return null
 }
 
-// Each agent's use now: the ones past the ceiling, and every weekly figure; null when the payload carries none.
+// Each agent's use now: the ones past their own ceiling, and every weekly figure; null when the payload carries none.
 function quotaUse(p: CapacityPayload): { blocked: string[]; weekly: string[] } | null {
-  const ceiling = p.quotaCeiling
+  const ceilings = p.quotaCeilings
   const use = p.quotaUse
-  if (!ceiling || !use) {
+  if (!ceilings || !use) {
     return null
   }
   const known = AGENTS.flatMap((agent) => {
@@ -118,7 +119,7 @@ function quotaUse(p: CapacityPayload): { blocked: string[]; weekly: string[] } |
   })
   return {
     blocked: known.flatMap((k) => {
-      const past = over(k.use, ceiling)
+      const past = over(k.use, ceilings[k.agent])
       return past ? [`${AGENT_NAMES[k.agent]} ${past}`] : []
     }),
     weekly: known.flatMap((k) =>

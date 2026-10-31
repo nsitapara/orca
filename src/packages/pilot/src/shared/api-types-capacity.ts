@@ -1,6 +1,7 @@
 import type { PartState } from './run-views/paint'
 import type { HoldReason, ListedRun } from './api-types'
 import type { AgentKind } from './definition/types'
+import type { QuotaCeiling } from './quota-ceiling'
 import type { LimitSuggestion } from './capacity/limit-suggestion'
 
 // Where a run works, as its env chose at the start: the item's worktree, or a throwaway while work was in flight
@@ -140,8 +141,8 @@ export type CapacityPayload = {
   memory: { totalBytes: number; availableBytes: number } | null
   suggestion: LimitSuggestion
   heaviest: HeaviestJob | null
-  // The quota percentages jobs with an agent step wait at; absent from older Pilots.
-  quotaCeiling?: { weekly: number; session: number }
+  // Each agent's quota percentages its steps wait at; absent from older Pilots.
+  quotaCeilings?: Record<AgentKind, QuotaCeiling>
   // Each agent's quota use now, from the runner's cached reading; absent from older Pilots.
   quotaUse?: Partial<Record<AgentKind, QuotaUse>>
   // Retries after a failure, and the keys given up on in the last 7 days; absent from older Pilots.

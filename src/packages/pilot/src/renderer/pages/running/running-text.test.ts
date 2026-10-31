@@ -99,8 +99,12 @@ describe('limitsSummary', () => {
   it.each([
     [
       'the limits as set',
-      payload({ limit: 1, retryLimit: 2, quotaCeiling: { weekly: 90, session: 95 } }),
-      '1 at once · 2 retries · quota stops at 90% / 95%'
+      payload({
+        limit: 1,
+        retryLimit: 2,
+        quotaCeilings: { claude: { weekly: 90, session: 95 }, codex: { weekly: 98, session: 98 } }
+      }),
+      '1 at once · 2 retries · quota stops at Claude 90% / 95%, Codex 98% / 98%'
     ],
     ['one retry', payload({ limit: 3, retryLimit: 1 }), '3 at once · 1 retry'],
     ['no limit, from an older Pilot', payload({ limit: null }), 'no limit at once']
