@@ -500,11 +500,18 @@ describe("decideTick: the runner holds what can't start now", () => {
       'claude weekly limit at 93% (jobs stop at 90%)'
     ],
     [
-      'a codex step at weekly 91',
+      'a codex step at weekly 98',
       { steps: [testStep({ agent: 'shell' }), testStep({ agent: 'codex' })] },
-      { 'quota.codex.weekly_pct': 91 },
+      { 'quota.codex.weekly_pct': 98 },
       'held',
-      'codex weekly limit at 91% (jobs stop at 90%)'
+      'codex weekly limit at 98% (jobs stop at 98%)'
+    ],
+    [
+      'a codex step at weekly 97, under its own ceiling',
+      { steps: [testStep({ agent: 'shell' }), testStep({ agent: 'codex' })] },
+      { 'quota.codex.weekly_pct': 97 },
+      'started',
+      undefined
     ],
     [
       'a shell-only job',

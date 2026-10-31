@@ -131,15 +131,23 @@ describe('passActivity', () => {
 
 describe('quotaHold', () => {
   it.each([
-    [{ weekly: 89, session: 94 }, null],
-    [{ weekly: null, session: null }, null],
+    ['claude' as const, { weekly: 89, session: 94 }, null],
+    ['claude' as const, { weekly: null, session: null }, null],
     [
+      'claude' as const,
       { weekly: 92.4, session: 10 },
       h('quota', 'claude weekly limit at 92% (automations stop at 90%)')
     ],
     [
+      'claude' as const,
       { weekly: 10, session: 95 },
       h('quota', 'claude session limit at 95% (automations stop at 95%)')
+    ],
+    ['codex' as const, { weekly: 97, session: 97 }, null],
+    [
+      'codex' as const,
+      { weekly: 98, session: 10 },
+      h('quota', 'codex weekly limit at 98% (automations stop at 98%)')
     ]
-  ])('%j', (reading, expected) => expect(quotaHold('claude', reading)).toEqual(expected))
+  ])('%s %j', (agent, reading, expected) => expect(quotaHold(agent, reading)).toEqual(expected))
 })

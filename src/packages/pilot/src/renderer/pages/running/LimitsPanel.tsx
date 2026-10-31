@@ -14,7 +14,14 @@ import { cn } from '@/lib/utils'
 import type { CapacityPayload } from '../../../shared/api-types-capacity'
 import { RetryLimitPicker, RunLimitPicker } from './LimitPickers'
 import { checkNow, JOB_DECIDES, PLACE_RULES, quotaUseText, RUNNER_CHECKS } from './running-checks'
-import { limitsSummary, memoryField, quotaText, retryHint, suggestionText } from './running-text'
+import {
+  ceilingsText,
+  limitsSummary,
+  memoryField,
+  quotaText,
+  retryHint,
+  suggestionText
+} from './running-text'
 
 // The header's limits as set, and the button that opens them with how the runner works.
 export function LimitsToggle({
@@ -87,7 +94,7 @@ function LimitFields({
 }): React.JSX.Element {
   const suggested = payload.suggestion.limit
   const memory = memoryField(payload)
-  const ceiling = payload.quotaCeiling
+  const ceilings = payload.quotaCeilings
   return (
     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
       <LimitField
@@ -115,11 +122,9 @@ function LimitFields({
           <RetryLimitPicker limit={payload.retryLimit} disabled={saving} onChange={onRetryLimit} />
         </LimitField>
       )}
-      {ceiling ? (
-        <LimitField label="Agent quota ceiling" hint={quotaUseText(payload) ?? quotaText(ceiling)}>
-          <ReadOnlyValue>
-            {ceiling.weekly}% weekly · {ceiling.session}% session
-          </ReadOnlyValue>
+      {ceilings ? (
+        <LimitField label="Agent quota ceiling" hint={quotaUseText(payload) ?? quotaText(ceilings)}>
+          <ReadOnlyValue>{ceilingsText(ceilings)}</ReadOnlyValue>
         </LimitField>
       ) : null}
       {memory ? (

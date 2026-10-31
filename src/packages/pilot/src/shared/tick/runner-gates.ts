@@ -81,7 +81,7 @@ function implicitQuotaHold(def: AutomationDefinition, fields: ItemFields): Hold 
   for (const agent of implicitQuotaAgents(def)) {
     for (const window of ['weekly', 'session'] as const) {
       const used = read(`quota.${agent}.${window}_pct`)
-      const ceiling = QUOTA_CEILING[window]
+      const ceiling = QUOTA_CEILING[agent][window]
       if (typeof used === 'number' && used >= ceiling) {
         return {
           code: 'quota',

@@ -3,6 +3,8 @@ import { formatMemory } from '../../../shared/capacity/format-memory'
 import { HEADROOM_BYTES } from '../../../shared/capacity/limit-suggestion'
 import { DEFAULT_RETRY_AFTER_MS } from '../../../shared/capacity/retry-limit'
 import { waitsForSlot } from '../../../shared/capacity/waiting-rows'
+import type { AgentKind } from '../../../shared/definition/types'
+import type { QuotaCeiling } from '../../../shared/quota-ceiling'
 
 // The step a run is on, with its skill and mode where it has them: "Step answers · ui-qa · answers mode".
 export function stepText(step: RunStep): string {
@@ -61,8 +63,8 @@ export function limitsSummary(p: CapacityPayload): string {
   if (p.retryLimit !== undefined) {
     parts.push(retriesText(p.retryLimit))
   }
-  if (p.quotaCeiling) {
-    parts.push(`quota stops at ${p.quotaCeiling.weekly}% / ${p.quotaCeiling.session}%`)
+  if (p.quotaCeilings) {
+    parts.push(`quota stops at ${ceilingsText(p.quotaCeilings)}`)
   }
   return parts.join(' · ')
 }
@@ -106,9 +108,18 @@ export function endedText(ms: number, now: number): string {
   })
 }
 
-// Why a job with an agent step can wait on quota, from the one ceiling main enforces.
-export function quotaText(ceiling: { weekly: number; session: number }): string {
-  return `Jobs with an agent step wait while Claude or Codex is over ${ceiling.weekly}% weekly or ${ceiling.session}% session.`
+const AGENT_NAMES: Record<AgentKind, string> = { claude: 'Claude', codex: 'Codex' }
+
+// Each agent's ceiling as weekly / session.
+export function ceilingsText(ceilings: Record<AgentKind, QuotaCeiling>): string {
+  return (Object.keys(AGENT_NAMES) as AgentKind[])
+    .map((agent) => `${AGENT_NAMES[agent]} ${ceilings[agent].weekly}% / ${ceilings[agent].session}%`)
+    .join(', ')
+}
+
+// Why a job with an agent step can wait on quota, from the ceilings main enforces.
+export function quotaText(ceilings: Record<AgentKind, QuotaCeiling>): string {
+  return `Jobs with an agent step wait while that agent is at its weekly / session ceiling: ${ceilingsText(ceilings)}.`
 }
 
 // The retry field's line: the runner's wait when a job sets none, and what happens past the limit.

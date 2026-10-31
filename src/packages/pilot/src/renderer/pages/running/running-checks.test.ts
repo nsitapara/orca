@@ -31,7 +31,7 @@ const payload = (over: Partial<CapacityPayload> = {}): CapacityPayload => ({
   memory: null,
   suggestion: { limit: 1, budgetBytes: 0, perJobBytes: 0, measured: false },
   heaviest: null,
-  quotaCeiling: { weekly: 90, session: 95 },
+  quotaCeilings: { claude: { weekly: 90, session: 95 }, codex: { weekly: 98, session: 98 } },
   ...over
 })
 
@@ -101,8 +101,13 @@ describe('quotaUseText', () => {
   it.each<[string, Partial<CapacityPayload>, string | null]>([
     [
       'an agent past its session ceiling',
+      { quotaUse: { codex: { weekly: 40, session: 98 } } },
+      'Codex 98% session now: agent steps wait'
+    ],
+    [
+      'Codex under its own ceiling at 96% session',
       { quotaUse: { codex: { weekly: 40, session: 96 } } },
-      'Codex 96% session now: agent steps wait'
+      'Codex 40% weekly now'
     ],
     [
       'every weekly figure when none is past',

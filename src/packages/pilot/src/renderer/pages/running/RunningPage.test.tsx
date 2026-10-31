@@ -95,7 +95,7 @@ describe('RunningPage', () => {
     const now = Date.now()
     serve(
       capacity({
-        quotaCeiling: { weekly: 90, session: 95 },
+        quotaCeilings: { claude: { weekly: 90, session: 95 }, codex: { weekly: 98, session: 98 } },
         queued: [
           {
             automationId: 'review',
@@ -123,7 +123,7 @@ describe('RunningPage', () => {
     await openLimits()
     expect(
       screen.getByText(
-        'Jobs with an agent step wait while Claude or Codex is over 90% weekly or 95% session.'
+        'Jobs with an agent step wait while that agent is at its weekly / session ceiling: Claude 90% / 95%, Codex 98% / 98%.'
       )
     ).toBeTruthy()
   })
@@ -371,9 +371,9 @@ describe('RunningPage', () => {
   })
 
   it('folds the limits behind Limits & how it works, with who handles what', async () => {
-    serve(capacity({ retryLimit: 2, quotaCeiling: { weekly: 90, session: 95 } }))
+    serve(capacity({ retryLimit: 2, quotaCeilings: { claude: { weekly: 90, session: 95 }, codex: { weekly: 98, session: 98 } } }))
     await shown()
-    expect(screen.getByText('2 at once · 2 retries · quota stops at 90% / 95%')).toBeTruthy()
+    expect(screen.getByText('2 at once · 2 retries · quota stops at Claude 90% / 95%, Codex 98% / 98%')).toBeTruthy()
     expect(screen.queryByRole('status', { name: 'Jobs at once' })).toBeNull()
     await openLimits()
     const toggle = screen.getByRole('button', { name: 'Limits & how it works' })
@@ -389,7 +389,7 @@ describe('RunningPage', () => {
     const now = Date.now()
     serve(
       capacity({
-        quotaCeiling: { weekly: 90, session: 95 },
+        quotaCeilings: { claude: { weekly: 90, session: 95 }, codex: { weekly: 98, session: 98 } },
         quotaUse: { claude: { weekly: 92, session: 10 } },
         queued: [
           {
