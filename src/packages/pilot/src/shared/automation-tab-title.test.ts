@@ -17,6 +17,11 @@ describe('automationTabTitle', () => {
     expect(isAutomationTabTitle(automationTabTitle(title))).toBe(false)
   })
 
+  it('leaves the tab of a session handed over at its start plain', () => {
+    const title = '13 · Start fix sessions for red e2e tickets · WEB-2521'
+    expect(automationTabTitle(title, { handedOver: true })).toBe(title)
+  })
+
   it.each([null, undefined, '', 'Fix CI · !1561', 'Automation · !1561', ' [Automation] Fix CI'])(
     'a tab named %j is no automation’s',
     (title) => {

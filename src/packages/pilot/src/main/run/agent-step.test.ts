@@ -282,6 +282,17 @@ describe('launchAgentStep', () => {
     })
   })
 
+  it("names a wait: start step's tab plainly, since its session is handed over", async () => {
+    const def = testDefinition({
+      id: 'ci',
+      name: 'Fix CI',
+      steps: [testStep({ name: 'fix', wait: 'start' })]
+    })
+    const { store, request, launchTerminal, deps } = setup(def)
+    await launchAgentStep(store, request(0), deps)
+    expect(launchTerminal.mock.calls[0][1].title).toBe('Fix CI · web-1-a')
+  })
+
   it('fails the step with the reason when its mode text cannot be read', async () => {
     const def = testDefinition({ steps: [testStep({ mode: 'answers', skill: 'x' })] })
     const { store, request, launchTerminal, deps } = setup(def, {

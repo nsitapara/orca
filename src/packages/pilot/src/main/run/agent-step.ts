@@ -128,7 +128,8 @@ function launchOptions(
     },
     args: step.args,
     session,
-    runEnv: req.workspace.env
+    runEnv: req.workspace.env,
+    handedOver: step.wait === 'start'
   })
 }
 

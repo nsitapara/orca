@@ -141,8 +141,8 @@ export function pilotStepEnv(input: StepEnvInput): Record<string, string> {
 
 // What the Task 8a hook needs for one agent terminal: the step env and the argv (session, then args)
 // ride on `pilot`, the rest is launchAgentTerminal's own options. Every tab an automation opens
-// (its steps' and its answer runs') is named "[Automation] …" here, a manual job's (M01 …) aside;
-// Resume's tab is the user's own.
+// (its steps' and its answer runs') is named "[Automation] …" here, a manual job's (M01 …) and a handed-over
+// session's (wait: start) aside; Resume's tab is the user's own.
 export function terminalLaunchOptions(input: {
   agent: AgentKind
   prompt: string
@@ -151,11 +151,12 @@ export function terminalLaunchOptions(input: {
   args: readonly string[]
   session: SessionPlan
   runEnv?: Record<string, string>
+  handedOver?: boolean
 }): PilotAgentLaunchOptions {
   return {
     agent: input.agent,
     prompt: input.prompt,
-    title: automationTabTitle(input.title),
+    title: automationTabTitle(input.title, { handedOver: input.handedOver }),
     pilot: {
       // The env's variables first: Pilot's own step env always wins (parseEnvResult refuses PILOT_*/ORCA_* anyway).
       env: { ...input.runEnv, ...pilotStepEnv(input.env) },
