@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import type { ItemDecision, Verdict } from '../../shared/api-types'
 import {
+  dryReason,
   dryRunLine,
+  dryVerdict,
   errorText,
   itemUrl,
   outcomeLine,
@@ -88,6 +90,15 @@ describe('renderer formatting', () => {
     ).toBe('22 checked · 1 started · 21 waiting')
     expect(dryRunLine([decided('started'), decided('held'), decided('held')])).toBe(
       '3 checked · 1 would start · 2 would wait'
+    )
+    // Held by the job's own run limit: queued, it starts once a run ends.
+    const limited = { ...decided('held'), hold: { code: 'job_limit' as const, detail: 'At most 2 at once' } }
+    expect(dryRunLine([decided('started'), limited, limited, decided('held')])).toBe(
+      '4 checked · 1 would start · 2 queued · 1 would wait'
+    )
+    expect(verdictLabel(dryVerdict(limited), true)).toBe('Queued')
+    expect(dryReason({ ...limited, reason: 'At most 2 at once' })).toBe(
+      "At most 2 at once · starts when one of the job's runs ends"
     )
     expect(
       tickLine({

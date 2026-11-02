@@ -24,6 +24,7 @@ const VERDICT: Record<Verdict, string> = {
 // A dry run did none of these: they're what a tick would do.
 const DRY_VERDICT: Partial<Record<Verdict, string>> = {
   started: 'Would start',
+  queued: 'Queued',
   asked: 'Would ask first',
   baselined: 'Would baseline'
 }
@@ -39,12 +40,27 @@ const COUNT_ORDER: [Verdict, string][] = [
 ]
 const DRY_COUNT: Partial<Record<Verdict, string>> = {
   started: 'would start',
+  queued: 'queued',
   held: 'would wait',
   asked: 'would ask first',
   baselined: 'would baseline'
 }
 
 export { relativeTime }
+
+// A dry run's item held only by the job's own run limit (or the runner's capacity) is in the line: it starts once a run
+// ends, so a dry run calls it queued; any other hold waits on something outside the job and stays held.
+export function dryVerdict(d: Pick<ItemDecision, 'verdict' | 'hold'>): Verdict {
+  const code = d.hold?.code
+  return d.verdict === 'held' && (code === 'job_limit' || code === 'capacity') ? 'queued' : d.verdict
+}
+
+// A dry run's reason for d, with when a queued item starts.
+export function dryReason(d: Pick<ItemDecision, 'verdict' | 'hold' | 'reason'>): string {
+  return dryVerdict(d) === 'queued' && d.verdict === 'held'
+    ? `${d.reason} · starts when one of the job's runs ends`
+    : d.reason
+}
 
 // `dry`: a dry run's verdict, worded as what a tick would do.
 export function verdictLabel(v: Verdict, dry = false): string {
@@ -92,7 +108,8 @@ export function tickLine(t: TickRow): string {
 export function dryRunLine(decisions: readonly ItemDecision[]): string {
   const counts: Partial<Record<Verdict, number>> = {}
   for (const d of decisions) {
-    counts[d.verdict] = (counts[d.verdict] ?? 0) + 1
+    const v = dryVerdict(d)
+    counts[v] = (counts[v] ?? 0) + 1
   }
   return countsLine(counts, true)
 }

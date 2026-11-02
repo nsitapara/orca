@@ -1,5 +1,5 @@
 import type { ItemDecision } from '../../shared/api-types'
-import { itemUrl, verdictLabel } from './format'
+import { dryReason, dryVerdict, itemUrl, verdictLabel } from './format'
 import { ResizableHeaderCell } from './ResizableHeaderCell'
 import { CHECKS_WIDTHS_KEY, useColumnWidths, type ColumnSpec } from './use-column-widths'
 
@@ -7,7 +7,8 @@ import { CHECKS_WIDTHS_KEY, useColumnWidths, type ColumnSpec } from './use-colum
 export type CheckRow = Pick<
   ItemDecision,
   'key' | 'label' | 'verdict' | 'reason' | 'checks' | 'fields'
->
+> &
+  Partial<Pick<ItemDecision, 'hold'>>
 
 const ITEM: ColumnSpec = { id: 'Item', label: 'Item', defaultWidth: 200, minWidth: 100 }
 const RESULT: ColumnSpec = { id: 'Result', label: 'Result', defaultWidth: 260, minWidth: 140 }
@@ -84,8 +85,10 @@ export function CheckTable({
                 <CheckCell key={name} item={item} name={name} />
               ))}
               <td className="px-3 py-2">
-                <div>{verdictLabel(item.verdict, dryRun)}</div>
-                <div className="break-words text-xs text-muted-foreground">{item.reason}</div>
+                <div>{verdictLabel(dryRun ? dryVerdict(item) : item.verdict, dryRun)}</div>
+                <div className="break-words text-xs text-muted-foreground">
+                  {dryRun ? dryReason(item) : item.reason}
+                </div>
               </td>
             </tr>
           ))}
