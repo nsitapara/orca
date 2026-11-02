@@ -43,6 +43,7 @@ describe('02 · Merge main into my MR branches: the definition', () => {
       stack: 'when_backend'
     })
     expect(definition.checks).toMatchObject([
+      { kind: 'field', expr: '{mr.iid} != 1214 and {mr.iid} != 1238' },
       { kind: 'worktree_exists' },
       { kind: 'mr', rule: 'mine' },
       { kind: 'script', run: 'pilotcli automations check-item merge-main --pilot-item - --format text' }
