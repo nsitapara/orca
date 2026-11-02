@@ -86,10 +86,10 @@ describe('02 · Merge main into my MR branches: the definition', () => {
     expect(decideStep(merge, stopped, {})).toMatchObject({ run: false })
   })
 
-  it("pushes the merge pinned and never onto a staging deploy, else leaves a push card", () => {
+  it("pushes the merge pinned, else leaves a push card (the staging hold is the check's and the context's)", () => {
     const [, , , , , push, , card] = definition.steps
     expect(push.run).toBe(
-      'pilotcli git push-branch "$BRANCH" labels!=deploy:staging --checkout . --expect-sha "$REMOTE" --expect-head "$HEAD_SHA" --from "$FROM"'
+      'pilotcli git push-branch "$BRANCH" --checkout . --expect-sha "$REMOTE" --expect-head "$HEAD_SHA" --from "$FROM"'
     )
     expect(push.env).toEqual({
       BRANCH: '{mr.branch}',
@@ -111,11 +111,12 @@ describe('02 · Merge main into my MR branches: the definition', () => {
     expect(decideStep(card, [], { 'steps.push.outcome': 'skip' })).toMatchObject({ run: false })
   })
 
-  it("sends my answers back to the asking session, else to the merge mode, which hands over head and summary", () => {
+  it("sends my answers back to the asking session, else to the skill's answers mode", () => {
     expect(definition.answers).toEqual({
       resume: 'asking_session',
-      else: { agent: 'codex', skill: 'global-command-merge-main', mode: 'merge' }
+      else: { agent: 'codex', skill: 'global-command-merge-main', mode: 'answers' }
     })
     expect(modeOutputs('global-command-merge-main', 'merge')).toEqual(['head', 'summary'])
+    expect(modeOutputs('global-command-merge-main', 'answers')).toEqual(['outcome', 'item_status', 'reply'])
   })
 })
