@@ -59,6 +59,13 @@ export const RUNNER_CHECKS: readonly RunnerCheck[] = [
     holds: 'every slot is in use; the line goes oldest due first',
     again: 'as slots free',
     codes: ['capacity']
+  },
+  {
+    name: 'Memory',
+    holds:
+      "the job's reserve (its 90th-percentile peak over its last 20 runs, 2.5 GB until measured) doesn't fit what's free beside the running jobs' reserves, less 4.0 GB kept free; with nothing else running it always starts",
+    again: 'as running jobs end',
+    codes: ['memory']
   }
 ]
 

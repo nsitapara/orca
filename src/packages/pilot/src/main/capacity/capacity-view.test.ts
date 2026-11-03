@@ -142,6 +142,24 @@ describe('capacityView', () => {
       perJobBytes: 3 * GIB,
       measured: true
     })
+    // 11 free, less the 1.5 GB r1 may still grow into its 3 GB reserve, less 4 headroom; the shell job reserves none.
+    expect(view.memoryReserve).toEqual({
+      spareBytes: 5.5 * GIB,
+      jobs: [
+        {
+          automationId: 'review',
+          automationName: '03 Review and fix',
+          reserveBytes: 3 * GIB,
+          measured: true
+        },
+        {
+          automationId: 'ci',
+          automationName: '05 Fix failed CI',
+          reserveBytes: UNMEASURED_JOB_BYTES,
+          measured: false
+        }
+      ]
+    })
   })
 
   it.each<[string, AutomationDefinition['items'], string]>([
@@ -314,6 +332,10 @@ describe('capacityView', () => {
     expect(view([light, heavy, off]).suggestion).toMatchObject({ limit: 4, measured: false })
     // A turned-off job that never ran is left out.
     expect(view([light, off]).heaviest).toMatchObject({ automationId: 'light', measured: true })
+    expect(view([light, heavy, off]).memoryReserve?.jobs.map((j) => j.automationId)).toEqual([
+      'heavy',
+      'light'
+    ])
   })
 
   it('lists the keys given up on this week, with the retry limit, and names the failed key a finished run holds', () => {

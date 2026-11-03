@@ -19,6 +19,7 @@ import {
   limitsSummary,
   memoryField,
   quotaText,
+  reservesText,
   retryHint,
   suggestionText
 } from './running-text'
@@ -78,6 +79,29 @@ function ReadOnlyValue({ children }: { children: React.ReactNode }): React.JSX.E
   )
 }
 
+// An older Pilot's suggested limit, from the heaviest job's peak.
+function SuggestedLimit({
+  payload,
+  saving,
+  onLimit
+}: {
+  payload: CapacityPayload
+  saving: boolean
+  onLimit(limit: number | null): void
+}): React.JSX.Element {
+  const suggested = payload.suggestion.limit
+  return (
+    <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
+      Suggested {suggested}: what memory fits
+      {payload.limit === suggested ? null : (
+        <Button variant="outline" size="xs" disabled={saving} onClick={() => onLimit(suggested)}>
+          Use {suggested}
+        </Button>
+      )}
+    </span>
+  )
+}
+
 // Small fields: the two limits Nish sets, and the quota and memory they work within.
 function LimitFields({
   payload,
@@ -92,27 +116,19 @@ function LimitFields({
   onLimit(limit: number | null): void
   onRetryLimit(limit: number): void
 }): React.JSX.Element {
-  const suggested = payload.suggestion.limit
   const memory = memoryField(payload)
   const ceilings = payload.quotaCeilings
+  const reserve = payload.memoryReserve
   return (
     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
       <LimitField
         label="Jobs at once"
         hint={
-          <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
-            Suggested {suggested}: what memory fits
-            {payload.limit === suggested ? null : (
-              <Button
-                variant="outline"
-                size="xs"
-                disabled={saving}
-                onClick={() => onLimit(suggested)}
-              >
-                Use {suggested}
-              </Button>
-            )}
-          </span>
+          reserve ? (
+            'The most at once; memory decides which jobs fit under it'
+          ) : (
+            <SuggestedLimit payload={payload} saving={saving} onLimit={onLimit} />
+          )
         }
       >
         <RunLimitPicker limit={payload.limit} disabled={saving} onChange={onLimit} />
@@ -128,13 +144,13 @@ function LimitFields({
         </LimitField>
       ) : null}
       {memory ? (
-        <LimitField label={`Memory on ${where}`} hint={memory.held ?? 'No running job holds any'}>
+        <LimitField label={`Memory on ${where}`} hint={memory.held}>
           <ReadOnlyValue>{memory.free}</ReadOnlyValue>
         </LimitField>
       ) : null}
       <p className="text-2xs text-muted-foreground sm:col-span-2 lg:col-span-4">
-        {suggestionText(payload)} Memory counts each job&apos;s processes on {where}, not
-        Docker&apos;s containers.
+        {reserve ? reservesText(reserve) : suggestionText(payload)} Memory counts each job&apos;s
+        processes on {where}, not Docker&apos;s containers.
       </p>
     </div>
   )

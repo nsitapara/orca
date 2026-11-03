@@ -1,4 +1,9 @@
-import type { CapacityPayload, CapacityRun, RunStep } from '../../../shared/api-types-capacity'
+import type {
+  CapacityPayload,
+  CapacityRun,
+  MemoryReserve,
+  RunStep
+} from '../../../shared/api-types-capacity'
 import { formatMemory } from '../../../shared/capacity/format-memory'
 import { HEADROOM_BYTES } from '../../../shared/capacity/limit-suggestion'
 import { DEFAULT_RETRY_AFTER_MS } from '../../../shared/capacity/retry-limit'
@@ -43,14 +48,40 @@ export function usageText(p: CapacityPayload): string {
   return parts.join(' · ')
 }
 
-// What the machine has free now, and what the measured running jobs hold of it; null when memory can't be read.
-export function memoryField(p: CapacityPayload): { free: string; held: string | null } | null {
+// What the machine has free now, what the measured running jobs hold of it, and what's spare for another job; null
+// when memory can't be read.
+export function memoryField(p: CapacityPayload): { free: string; held: string } | null {
   if (!p.memory) {
     return null
   }
   const free = `${formatMemory(p.memory.availableBytes)} free of ${formatMemory(p.memory.totalBytes)}`
-  const held = p.running.reduce((sum, r) => sum + (r.counted ? (r.memoryBytes ?? 0) : 0), 0)
-  return { free, held: held === 0 ? null : `Running jobs hold ${formatMemory(held)}` }
+  const bytes = p.running.reduce((sum, r) => sum + (r.counted ? (r.memoryBytes ?? 0) : 0), 0)
+  const parts = [
+    bytes === 0 ? 'No running job holds any' : `Running jobs hold ${formatMemory(bytes)}`
+  ]
+  if (p.memoryReserve) {
+    parts.push(spareText(p.memoryReserve.spareBytes))
+  }
+  return { free, held: parts.join(' · ') }
+}
+
+function spareText(bytes: number): string {
+  return bytes > 0 ? `${formatMemory(bytes)} spare for another job` : 'none spare for another job'
+}
+
+// How the runner fits jobs to memory, with each job's reserve, heaviest first.
+export function reservesText(r: MemoryReserve): string {
+  const rule = `A job starts when its reserve fits what's spare: what's free, less what running jobs may still grow into and ${formatMemory(HEADROOM_BYTES)} kept free. With nothing else running, it always starts.`
+  if (r.jobs.length === 0) {
+    return rule
+  }
+  const jobs = r.jobs
+    .map(
+      (j) =>
+        `${j.automationName} ${formatMemory(j.reserveBytes)}${j.measured ? '' : ' (unmeasured)'}`
+    )
+    .join(' · ')
+  return `${rule} Each job's reserve is its 90th-percentile peak over its last 20 runs: ${jobs}.`
 }
 
 function retriesText(limit: number): string {
@@ -113,7 +144,9 @@ const AGENT_NAMES: Record<AgentKind, string> = { claude: 'Claude', codex: 'Codex
 // Each agent's ceiling as weekly / session.
 export function ceilingsText(ceilings: Record<AgentKind, QuotaCeiling>): string {
   return (Object.keys(AGENT_NAMES) as AgentKind[])
-    .map((agent) => `${AGENT_NAMES[agent]} ${ceilings[agent].weekly}% / ${ceilings[agent].session}%`)
+    .map(
+      (agent) => `${AGENT_NAMES[agent]} ${ceilings[agent].weekly}% / ${ceilings[agent].session}%`
+    )
     .join(', ')
 }
 

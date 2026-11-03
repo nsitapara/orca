@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { parseMemAvailable, parseVmStat } from './system-memory'
+import { parseMemAvailable, parseMemoryStatusLevel, parseVmStat } from './system-memory'
 
 const VM_STAT = `Mach Virtual Memory Statistics: (page size of 16384 bytes)
 Pages free:                                9000.
@@ -31,5 +31,15 @@ describe('parseMemAvailable', () => {
     ['MemTotal:       32000000 kB\n', null]
   ])('reads %j', (text, expected) => {
     expect(parseMemAvailable(text)).toBe(expected)
+  })
+})
+
+describe('parseMemoryStatusLevel', () => {
+  it.each([
+    ['the free percentage of the total', '44\n', 1000, 440],
+    ['null for a level past 100', '140\n', 1000, null],
+    ['null for no number', '\n', 1000, null]
+  ])('reads %s', (_name, text, total, expected) => {
+    expect(parseMemoryStatusLevel(text, total)).toBe(expected)
   })
 })

@@ -231,6 +231,7 @@ describe("Go now's mark on an item", () => {
       ]
     },
     capacity: { goes: true, gates: [elsewhere('capacity')] },
+    memory: { goes: true, gates: [elsewhere('memory')] },
     worktree_busy: {
       goes: false,
       gates: [tick({ busyWorktrees: new Set([PATH]) }), tick({ items: [other(PATH), MARKED] })]

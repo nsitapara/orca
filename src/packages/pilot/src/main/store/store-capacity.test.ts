@@ -227,7 +227,7 @@ describe('CapacityStore', () => {
     expect(store.capacity.running().map((r) => r.id)).toEqual(['r1', 'r2'])
   })
 
-  it("takes each automation's heaviest peak from its recent measured runs only", () => {
+  it("lists each automation's peaks from its recent measured runs only", () => {
     const store = open()
     addRun(store, 'old', 'a', 0)
     store.capacity.recordPeak('old', 9_000)
@@ -238,11 +238,11 @@ describe('CapacityStore', () => {
     addRun(store, 'b1', 'b', 1)
     store.capacity.recordPeak('b1', 70)
     addRun(store, 'unmeasured', 'c', 1)
-    expect(store.capacity.heaviestPeaks()).toEqual(
-      new Map([
-        ['a', RECENT_RUNS_FOR_PEAK],
-        ['b', 70]
-      ])
+    const peaks = store.capacity.recentPeaks()
+    expect([...peaks.keys()].sort()).toEqual(['a', 'b'])
+    expect(peaks.get('a')?.toSorted((x, y) => x - y)).toEqual(
+      Array.from({ length: RECENT_RUNS_FOR_PEAK }, (_, i) => i + 1)
     )
+    expect(peaks.get('b')).toEqual([70])
   })
 })

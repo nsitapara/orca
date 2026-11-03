@@ -247,6 +247,8 @@ export type HoldReason =
   | 'waits'
   | 'retry'
   | 'capacity'
+  // Every slot isn't taken, but the job's memory reserve doesn't fit beside the running jobs.
+  | 'memory'
   | 'window'
   | 'session_open'
   | 'answers_pending'

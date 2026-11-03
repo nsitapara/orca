@@ -6,24 +6,35 @@ import type { HoldReason, ItemDecision } from '../../shared/api-types'
 import { testDefinition, testStep } from '../../shared/definition/__fixtures__/definition'
 import type { AutomationDefinition } from '../../shared/definition/types'
 import { PilotStore } from '../store/store'
-import { recheckAfterMs, runCapacity } from './run-capacity'
+import { recheckAfterMs, runCapacity, type MemoryNow } from './run-capacity'
 
 const agentJob = (id: string, over: Partial<AutomationDefinition> = {}) =>
   testDefinition({ id, ...over })
 const shellJob = (id: string) =>
   testDefinition({ id, steps: [testStep({ agent: 'shell', run: 'true', prompt: null })] })
 
-function setup(defs: AutomationDefinition[], limit: number | null, now?: () => number) {
+function setup(
+  defs: AutomationDefinition[],
+  limit: number | null,
+  now?: () => number,
+  memory?: () => MemoryNow | null
+) {
   const store = PilotStore.open(
     join(mkdtempSync(join(tmpdir(), 'pilot-run-capacity-')), 'db.sqlite')
   )
   store.capacity.setRunLimit(limit, 0)
   let clock = 100
-  const capacity = runCapacity({ store, definitions: () => defs, now: now ?? (() => (clock += 1)) })
+  const capacity = runCapacity({
+    store,
+    definitions: () => defs,
+    now: now ?? (() => (clock += 1)),
+    ...(memory ? { memory } : {})
+  })
   let n = 0
-  const running = (automationId: string) =>
+  const running = (automationId: string): string => {
+    const id = `run-${(n += 1)}`
     store.runs.create({
-      id: `run-${(n += 1)}`,
+      id,
       automationId,
       tickId: null,
       itemKey: `k${n}`,
@@ -31,6 +42,8 @@ function setup(defs: AutomationDefinition[], limit: number | null, now?: () => n
       worktreePath: null,
       startedAt: n
     })
+    return id
+  }
   return { store, capacity, running }
 }
 
@@ -398,5 +411,101 @@ describe('runCapacity.hasFreeSlot', () => {
     running('a')
     expect(capacity.hasFreeSlot(a)).toBe(false)
     expect(capacity.hasFreeSlot(shellJob('pull'))).toBe(true)
+  })
+})
+
+const GIB = 1024 ** 3
+
+describe('runCapacity with memory reserves', () => {
+  // heavy reserves 5 GB, light 0.5 GB; one light run holds its whole reserve, so 8 GB available leaves 4 GB spare.
+  function withMemory(availableGib: number | null, limit: number | null = 3) {
+    const heavy = agentJob('heavy')
+    const light = agentJob('light')
+    const fresh = agentJob('fresh')
+    let available = availableGib
+    const runs = new Map<string, number>()
+    const ctx = setup([heavy, light, fresh], limit, undefined, () =>
+      available === null ? null : { availableBytes: available * GIB, runs }
+    )
+    for (const [id, gib] of [
+      ['heavy', 5],
+      ['light', 0.5]
+    ] as const) {
+      const run = ctx.running(id)
+      ctx.store.capacity.recordPeak(run, gib * GIB)
+      ctx.store.runs.update(run, { status: 'done', finishedAt: 1 })
+    }
+    const busy = ctx.running('light')
+    runs.set(busy, 0.5 * GIB)
+    return {
+      ...ctx,
+      heavy,
+      light,
+      fresh,
+      busy,
+      setAvailable: (gib: number) => void (available = gib)
+    }
+  }
+
+  it.each<[string, number | null, 'heavy' | 'light' | 'fresh', string | null]>([
+    ['a light job fits the spare', 8, 'light', null],
+    [
+      'a heavy job past the spare waits',
+      8,
+      'heavy',
+      'Waiting for memory: needs 5.0 GB, 4.0 GB spare'
+    ],
+    [
+      'an unmeasured job counts a stack',
+      6,
+      'fresh',
+      'Waiting for memory: needs 2.5 GB, 2.0 GB spare'
+    ],
+    ['with no memory reading, only slots count', null, 'heavy', null],
+    ['nothing spare says so', 3, 'light', 'Waiting for memory: needs 512 MB, none spare']
+  ])('%s', (_name, availableGib, job, reason) => {
+    const ctx = withMemory(availableGib)
+    const def = ctx[job]
+    const admission = ctx.capacity.admit(def, item('x'), false)
+    expect(admission).toEqual(
+      reason === null ? { start: true, byHand: false } : { start: false, reason }
+    )
+    if (reason !== null) {
+      expect(ctx.store.capacity.queued().map((q) => [q.itemKey, q.holdCode])).toEqual([
+        ['x', 'memory']
+      ])
+    }
+  })
+
+  it('starts any job alone, whatever its reserve', () => {
+    const ctx = withMemory(1)
+    ctx.store.runs.update(ctx.busy, { status: 'done', finishedAt: 2 })
+    expect(ctx.capacity.admit(ctx.heavy, item('x'), false).start).toBe(true)
+  })
+
+  it('counts memory even with no run limit', () => {
+    const ctx = withMemory(8, null)
+    expect(ctx.capacity.admit(ctx.heavy, item('x'), false).start).toBe(false)
+  })
+
+  it('keeps no place for a job waiting on memory: a lighter one behind it takes the slot', () => {
+    const ctx = withMemory(8, 2)
+    ctx.capacity.admit(ctx.heavy, item('first', 1), false)
+    expect(ctx.capacity.admit(ctx.light, item('second', 2), false).start).toBe(true)
+  })
+
+  it("lets Go now's mark start it past memory", () => {
+    const ctx = withMemory(8)
+    ctx.capacity.admit(ctx.heavy, item('x'), false)
+    ctx.store.capacity.markGoNow(ctx.heavy.id, 'x')
+    expect(ctx.capacity.admit(ctx.heavy, item('x'), false).start).toBe(true)
+  })
+
+  it('re-ticks a memory wait only once its reserve fits', () => {
+    const ctx = withMemory(8)
+    ctx.capacity.admit(ctx.heavy, item('x'), false)
+    expect(ctx.capacity.toTick([ctx.heavy, ctx.light], everywhere, 0)).toEqual([])
+    ctx.setAvailable(9)
+    expect(ctx.capacity.toTick([ctx.heavy, ctx.light], everywhere, 0)).toEqual(['heavy'])
   })
 })

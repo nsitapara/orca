@@ -26,6 +26,7 @@ const HOLD_RELEASE: Record<HoldReason, string | null> = {
   retry: null,
   tick_limit: null,
   capacity: null,
+  memory: 'It starts once running jobs end and free enough.',
   claimed: null,
   mr_unknown: null,
   waits: null,

@@ -1,4 +1,6 @@
 import type { HoldReason, ItemDecision } from '../../shared/api-types'
+import { formatMemory } from '../../shared/capacity/format-memory'
+import { fitsMemory, reserveOf, spareBytes } from '../../shared/capacity/memory-reserve'
 import type { AutomationDefinition } from '../../shared/definition/types'
 import type { PilotStore } from '../store/store'
 import type { QueuedItem } from '../store/store-capacity'
@@ -43,15 +45,25 @@ export type RunCapacity = {
   ): string[]
 }
 
+// The memory sampler's last reading: what the machine has available, and what each running run holds.
+export type MemoryNow = { availableBytes: number; runs: ReadonlyMap<string, number> }
+
 export type RunCapacityDeps = {
   store: PilotStore
   definitions(): readonly AutomationDefinition[]
   now(): number
+  // Null until memory is first sampled, and where it can't be read: then only slots limit a start.
+  memory?(): MemoryNow | null
 }
 
 function waitingReason(inUse: number, limit: number, ahead: number): string {
   const line = ahead === 0 ? '' : `, ${ahead} ahead`
   return `Waiting for a slot: ${inUse} of ${limit} running${line}`
+}
+
+function memoryReason(reserve: number, spare: number): string {
+  const free = spare > 0 ? `${formatMemory(spare)} spare` : 'none spare'
+  return `Waiting for memory: needs ${formatMemory(reserve)}, ${free}`
 }
 
 // Quota reads are cached for 5 minutes, and a dirty worktree, an open session or pending answers last that long too.
@@ -114,6 +126,23 @@ export function runCapacity(deps: RunCapacityDeps): RunCapacity {
   }
   const inUse = (ids: Set<string>): number =>
     capacity.running().filter((run) => ids.has(run.automationId)).length
+  // Each job's reserve from its recent peaks, and what's spare beside the running slot holders; null without a reading.
+  const memoryBudget = (
+    ids: Set<string>
+  ): { reserve(id: string): number; spare: number; running: number } | null => {
+    const now = deps.memory?.() ?? null
+    if (now === null) {
+      return null
+    }
+    const peaks = capacity.recentPeaks()
+    const reserve = (id: string): number => reserveOf(peaks.get(id) ?? []).bytes
+    const runs = capacity.running().filter((run) => ids.has(run.automationId))
+    const held = runs.map((run) => ({
+      reserveBytes: reserve(run.automationId),
+      memoryBytes: now.runs.get(run.id) ?? null
+    }))
+    return { reserve, spare: spareBytes(now.availableBytes, held), running: runs.length }
+  }
   // Checked with the start, so Go now never starts beside the job's own run on the item (a run-once job's on its one).
   const goesNow = (def: AutomationDefinition, row: QueuedItem | undefined): boolean =>
     row?.goNow === true &&
@@ -151,22 +180,35 @@ export function runCapacity(deps: RunCapacityDeps): RunCapacity {
 
   return {
     admit(def, item, byHand) {
-      const limit = capacity.runLimit()
-      if (limit === null || !holdsSlot(def)) {
+      if (!holdsSlot(def)) {
         return started(def, item.key, byHand)
       }
+      const limit = capacity.runLimit()
       const ids = holders(def)
-      const used = inUse(ids)
       const line = capacity.queued().filter((q) => ids.has(q.automationId))
       const self = line.findIndex((q) => q.automationId === def.id && q.itemKey === item.key)
-      const ahead = slotWaitersAhead(line, self, item.dueAt)
-      // Go now's mark starts it without a free slot; the gates already kept it out of a busy worktree.
-      if (used + ahead < limit || goesNow(def, self === -1 ? undefined : line[self])) {
+      // Go now's mark starts it without a free slot or memory; the gates already kept it out of a busy worktree.
+      if (goesNow(def, self === -1 ? undefined : line[self])) {
         return started(def, item.key, byHand)
       }
-      const reason = waitingReason(used, limit, ahead)
-      wait(def, item, { code: 'capacity', detail: reason }, byHand)
-      return { start: false, reason }
+      if (limit !== null) {
+        const used = inUse(ids)
+        const ahead = slotWaitersAhead(line, self, item.dueAt)
+        if (used + ahead >= limit) {
+          const reason = waitingReason(used, limit, ahead)
+          wait(def, item, { code: 'capacity', detail: reason }, byHand)
+          return { start: false, reason }
+        }
+      }
+      // A job waiting on memory holds no place: a lighter one behind it can take the slot.
+      const budget = memoryBudget(ids)
+      const reserve = budget?.reserve(def.id) ?? 0
+      if (budget && !fitsMemory(reserve, budget.spare, budget.running)) {
+        const reason = memoryReason(reserve, budget.spare)
+        wait(def, item, { code: 'memory', detail: reason }, byHand)
+        return { start: false, reason }
+      }
+      return started(def, item.key, byHand)
     },
 
     hold: wait,
@@ -198,6 +240,9 @@ export function runCapacity(deps: RunCapacityDeps): RunCapacity {
       const byId = new Map(definitions.map((d) => [d.id, d]))
       const limit = capacity.runLimit()
       let free = limit === null ? Number.POSITIVE_INFINITY : limit - inUse(holders())
+      const budget = memoryBudget(holders())
+      let spare = budget?.spare ?? Number.POSITIVE_INFINITY
+      let running = budget?.running ?? 0
       const ids = new Set<string>()
       for (const q of capacity.queued()) {
         const def = byId.get(q.automationId)
@@ -205,17 +250,21 @@ export function runCapacity(deps: RunCapacityDeps): RunCapacity {
           capacity.dequeue(q.automationId, q.itemKey)
           continue
         }
-        if (q.holdCode !== 'capacity') {
+        if (q.holdCode !== 'capacity' && q.holdCode !== 'memory') {
           if (recheckDue(q, now)) {
             ids.add(def.id)
           }
           continue
         }
         if (holdsSlot(def)) {
-          if (free <= 0) {
+          const reserve = budget?.reserve(def.id) ?? 0
+          // A slot waiter ticks once a slot frees, and turns into a memory wait there if it doesn't fit.
+          if (free <= 0 || (q.holdCode === 'memory' && !fitsMemory(reserve, spare, running))) {
             continue
           }
           free -= 1
+          spare -= reserve
+          running += 1
         }
         ids.add(def.id)
       }

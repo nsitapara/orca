@@ -4,6 +4,8 @@ import type {
   CapacityRun,
   GaveUpKey,
   HeaviestJob,
+  JobReserve,
+  MemoryReserve,
   MergeBackRow,
   QuotaUse,
   RunStep
@@ -11,7 +13,8 @@ import type {
 import { mergeBackState } from '../../shared/run-views/merge-back-state'
 import type { StepRow } from '../../shared/api-types'
 import { homeOf } from '../../shared/api-types-env'
-import { suggestRunLimit, UNMEASURED_JOB_BYTES } from '../../shared/capacity/limit-suggestion'
+import { suggestRunLimit } from '../../shared/capacity/limit-suggestion'
+import { reserveOf, spareBytes } from '../../shared/capacity/memory-reserve'
 import { QUOTA_CEILING } from '../../shared/quota-ceiling'
 import type { AgentKind, AutomationDefinition } from '../../shared/definition/types'
 import type { PilotStore } from '../store/store'
@@ -63,29 +66,58 @@ function gaveUpKeys(
   })
 }
 
-// The heaviest of the jobs that hold a slot: a measured one at its peak, an enabled one never measured at the
-// unmeasured budget, so a light job measured first can't talk the suggestion up before the heavy ones have run.
-function heaviestJob(
-  peaks: ReadonlyMap<string, number>,
+// The reserve of each job that holds a slot, heaviest first: a measured one from its recent peaks, an enabled one
+// never measured at the unmeasured budget.
+function jobReserves(
+  peaks: ReadonlyMap<string, readonly number[]>,
   definitions: readonly AutomationDefinition[]
-): HeaviestJob | null {
-  let heaviest: HeaviestJob | null = null
-  for (const def of definitions) {
-    const peak = peaks.get(def.id)
-    if (!holdsSlot(def) || (peak === undefined && !def.enabled)) {
-      continue
-    }
-    const job = {
-      automationId: def.id,
-      automationName: def.name,
-      peakBytes: peak ?? UNMEASURED_JOB_BYTES,
-      measured: peak !== undefined
-    }
-    if (heaviest === null || job.peakBytes > heaviest.peakBytes) {
-      heaviest = job
-    }
-  }
-  return heaviest
+): JobReserve[] {
+  return definitions
+    .flatMap((def) => {
+      const recent = peaks.get(def.id) ?? []
+      if (!holdsSlot(def) || (recent.length === 0 && !def.enabled)) {
+        return []
+      }
+      const reserve = reserveOf(recent)
+      return [
+        {
+          automationId: def.id,
+          automationName: def.name,
+          reserveBytes: reserve.bytes,
+          measured: reserve.measured
+        }
+      ]
+    })
+    .sort((a, b) => b.reserveBytes - a.reserveBytes)
+}
+
+// The heaviest reserve, as older Running pages read it.
+function heaviestJob(reserves: readonly JobReserve[]): HeaviestJob | null {
+  const top = reserves[0]
+  return top
+    ? {
+        automationId: top.automationId,
+        automationName: top.automationName,
+        peakBytes: top.reserveBytes,
+        measured: top.measured
+      }
+    : null
+}
+
+// What's spare beside the running slot holders, at their reserves (an unknown job at the unmeasured budget).
+function memoryReserve(
+  reserves: readonly JobReserve[],
+  running: readonly CapacityRun[],
+  availableBytes: number
+): MemoryReserve {
+  const byId = new Map(reserves.map((r) => [r.automationId, r.reserveBytes]))
+  const held = running
+    .filter((r) => r.counted)
+    .map((r) => ({
+      reserveBytes: byId.get(r.automationId) ?? reserveOf([]).bytes,
+      memoryBytes: r.memoryBytes
+    }))
+  return { spareBytes: spareBytes(availableBytes, held), jobs: [...reserves] }
 }
 
 // What a queued row's due time marks: its source's waitingSince, else the tick that first found it due.
@@ -191,7 +223,8 @@ export function capacityView(input: CapacityViewInput): CapacityPayload {
   const endedPeaks = store.capacity.peaks(ended.map((r) => r.id))
   const retryKeys = store.retryKeysOf(ended.map((r) => r.id))
   const retryLimit = store.capacity.retryLimit()
-  const heaviest = heaviestJob(store.capacity.heaviestPeaks(), input.definitions)
+  const reserves = jobReserves(store.capacity.recentPeaks(), input.definitions)
+  const heaviest = heaviestJob(reserves)
   const runningJobsBytes = running
     .filter((r) => r.counted)
     .reduce((sum, r) => sum + (r.memoryBytes ?? 0), 0)
@@ -226,6 +259,7 @@ export function capacityView(input: CapacityViewInput): CapacityPayload {
       worstJobBytes: heaviest?.measured ? heaviest.peakBytes : null
     }),
     heaviest,
+    memoryReserve: memoryReserve(reserves, running, input.system.availableBytes),
     quotaCeilings: { claude: { ...QUOTA_CEILING.claude }, codex: { ...QUOTA_CEILING.codex } },
     ...(input.quotaUse ? { quotaUse: input.quotaUse } : {}),
     retryLimit,

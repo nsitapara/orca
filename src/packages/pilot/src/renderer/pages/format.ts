@@ -48,11 +48,13 @@ const DRY_COUNT: Partial<Record<Verdict, string>> = {
 
 export { relativeTime }
 
-// A dry run's item held only by the job's own run limit (or the runner's capacity) is in the line: it starts once a run
+// A dry run's item held only by the job's own run limit (or the runner's slots or memory) is in the line: it starts once a run
 // ends, so a dry run calls it queued; any other hold waits on something outside the job and stays held.
 export function dryVerdict(d: Pick<ItemDecision, 'verdict' | 'hold'>): Verdict {
   const code = d.hold?.code
-  return d.verdict === 'held' && (code === 'job_limit' || code === 'capacity') ? 'queued' : d.verdict
+  return d.verdict === 'held' && (code === 'job_limit' || code === 'capacity' || code === 'memory')
+    ? 'queued'
+    : d.verdict
 }
 
 // A dry run's reason for d, with when a queued item starts.

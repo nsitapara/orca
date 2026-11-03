@@ -6,7 +6,7 @@ const GIB = 1024 ** 3
 export const HEADROOM_BYTES = 4 * GIB
 export const UNMEASURED_JOB_BYTES = 2.5 * GIB
 // A job measured almost empty still gets a floor, so the division never suggests dozens.
-const MIN_JOB_BYTES = 256 * MIB
+export const MIN_JOB_BYTES = 256 * MIB
 // The picker's top; more agents than this mostly contend for CPU.
 export const MAX_RUN_LIMIT = 10
 

@@ -131,6 +131,21 @@ export type HeaviestJob = {
   measured: boolean
 }
 
+// A job's memory reserve: what the runner sets aside for it to start beside other jobs.
+export type JobReserve = {
+  automationId: string
+  automationName: string
+  reserveBytes: number
+  measured: boolean
+}
+
+// What a job needs to start beside the running ones: its reserve must fit spareBytes (none when nothing runs).
+export type MemoryReserve = {
+  spareBytes: number
+  // Heaviest first: every enabled job that holds a slot, and any measured one.
+  jobs: JobReserve[]
+}
+
 export type CapacityPayload = {
   // Null: no limit.
   limit: number | null
@@ -139,8 +154,11 @@ export type CapacityPayload = {
   // Newest first, at most MAX_FINISHED_RUNS.
   finished: FinishedRun[]
   memory: { totalBytes: number; availableBytes: number } | null
+  // Kept for older Running pages; this one shows memoryReserve.
   suggestion: LimitSuggestion
   heaviest: HeaviestJob | null
+  // Absent from older Pilots, whose page shows suggestion instead.
+  memoryReserve?: MemoryReserve
   // Each agent's quota percentages its steps wait at; absent from older Pilots.
   quotaCeilings?: Record<AgentKind, QuotaCeiling>
   // Each agent's quota use now, from the runner's cached reading; absent from older Pilots.

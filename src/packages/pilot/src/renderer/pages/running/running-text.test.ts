@@ -4,6 +4,7 @@ import {
   endedText,
   limitsSummary,
   memoryField,
+  reservesText,
   runMemoryText,
   suggestionText,
   usageText
@@ -77,7 +78,27 @@ describe('usageText', () => {
 
 describe('memoryField', () => {
   it.each([
-    ['what is free', payload(), { free: '10.0 GB free of 24.0 GB', held: null }],
+    [
+      'what is free',
+      payload(),
+      { free: '10.0 GB free of 24.0 GB', held: 'No running job holds any' }
+    ],
+    [
+      "what's spare for another job",
+      payload({ memoryReserve: { spareBytes: 3 * GIB, jobs: [] } }),
+      {
+        free: '10.0 GB free of 24.0 GB',
+        held: 'No running job holds any · 3.0 GB spare for another job'
+      }
+    ],
+    [
+      'none spare',
+      payload({ memoryReserve: { spareBytes: -1, jobs: [] } }),
+      {
+        free: '10.0 GB free of 24.0 GB',
+        held: 'No running job holds any · none spare for another job'
+      }
+    ],
     [
       'what measured running jobs hold, never a run that takes no slot',
       payload({
@@ -110,6 +131,32 @@ describe('limitsSummary', () => {
     ['no limit, from an older Pilot', payload({ limit: null }), 'no limit at once']
   ])('says %s', (_name, p, expected) => {
     expect(limitsSummary(p)).toBe(expected)
+  })
+})
+
+describe('reservesText', () => {
+  it("names each job's reserve, heaviest first, and marks an unmeasured one", () => {
+    const text = reservesText({
+      spareBytes: GIB,
+      jobs: [
+        {
+          automationId: 'h',
+          automationName: '14 Prepare context',
+          reserveBytes: 5.6 * GIB,
+          measured: true
+        },
+        {
+          automationId: 'n',
+          automationName: '05 Fix CI',
+          reserveBytes: 2.5 * GIB,
+          measured: false
+        },
+        { automationId: 'r', automationName: '03 Review', reserveBytes: 0.9 * GIB, measured: true }
+      ]
+    })
+    expect(text).toContain(
+      'last 20 runs: 14 Prepare context 5.6 GB · 05 Fix CI 2.5 GB (unmeasured) · 03 Review 922 MB.'
+    )
   })
 })
 

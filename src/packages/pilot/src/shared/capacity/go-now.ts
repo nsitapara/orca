@@ -9,6 +9,7 @@ export const GO_NOW_SKIPS: ReadonlySet<HoldReason> = new Set<HoldReason>([
   'job_limit',
   'tick_limit',
   'capacity',
+  'memory',
   'window'
 ])
 

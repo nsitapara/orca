@@ -9,6 +9,7 @@ const SHOWS: Record<HoldReason, boolean> = {
   job_limit: true,
   tick_limit: true,
   capacity: true,
+  memory: true,
   window: true,
   worktree_busy: false,
   own_run: false,
@@ -26,7 +27,7 @@ const SHOWS: Record<HoldReason, boolean> = {
 const CODES = Object.keys(SHOWS).filter((key): key is HoldReason => Object.hasOwn(SHOWS, key))
 
 describe('Go now', () => {
-  it('passes over the waits only: a retry, quota, the limits, a free slot and the window', () => {
+  it('passes over the waits only: a retry, quota, the limits, a free slot, memory and the window', () => {
     expect([...GO_NOW_SKIPS].sort()).toEqual(CODES.filter((code) => SHOWS[code]).sort())
   })
 

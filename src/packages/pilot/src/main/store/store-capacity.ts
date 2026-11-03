@@ -23,7 +23,7 @@ export type QueuedItem = {
 
 const RUN_LIMIT_KEY = 'run_limit'
 const RETRY_LIMIT_KEY = 'retry_limit'
-// The heaviest job is judged on its recent runs, so a job that got lighter stops counting its old peaks.
+// A job's reserve is judged on its recent runs, so a job that got lighter stops counting its old peaks.
 export const RECENT_RUNS_FOR_PEAK = 20
 
 // A Record keeps this exhaustive: a new HoldReason member fails typecheck here.
@@ -38,6 +38,7 @@ const HOLD_REASON_SET: Record<HoldReason, true> = {
   waits: true,
   retry: true,
   capacity: true,
+  memory: true,
   window: true,
   session_open: true,
   answers_pending: true,
@@ -260,17 +261,22 @@ export class CapacityStore {
     return new Map(rows.map((r) => [String(r.id), Number(r.peak)]))
   }
 
-  // Each automation's highest peak over its RECENT_RUNS_FOR_PEAK newest measured runs.
-  heaviestPeaks(): Map<string, number> {
+  // Each automation's peaks over its RECENT_RUNS_FOR_PEAK newest measured runs.
+  recentPeaks(): Map<string, number[]> {
     const rows = this.db
       .prepare(
-        `SELECT automation_id, MAX(peak_rss_bytes) AS peak FROM (
+        `SELECT automation_id, peak_rss_bytes AS peak FROM (
            SELECT automation_id, peak_rss_bytes,
              ROW_NUMBER() OVER (PARTITION BY automation_id ORDER BY started_at DESC) AS n
            FROM runs WHERE peak_rss_bytes IS NOT NULL)
-         WHERE n <= ? GROUP BY automation_id`
+         WHERE n <= ?`
       )
       .all(RECENT_RUNS_FOR_PEAK)
-    return new Map(rows.map((r) => [String(r.automation_id), Number(r.peak)]))
+    const peaks = new Map<string, number[]>()
+    for (const r of rows) {
+      const id = String(r.automation_id)
+      peaks.set(id, [...(peaks.get(id) ?? []), Number(r.peak)])
+    }
+    return peaks
   }
 }

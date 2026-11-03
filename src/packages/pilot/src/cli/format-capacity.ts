@@ -1,4 +1,9 @@
-import type { CapacityPayload, GaveUpKey, QueuedRun } from '../shared/api-types-capacity'
+import type {
+  CapacityPayload,
+  GaveUpKey,
+  MemoryReserve,
+  QueuedRun
+} from '../shared/api-types-capacity'
 import { formatMemory } from '../shared/capacity/format-memory'
 import {
   failedTimesText,
@@ -54,11 +59,26 @@ function gaveUpRows(gaveUp: readonly GaveUpKey[]): string[] {
   return [`Gave up: ${gaveUp.length}`, ...rows]
 }
 
+function reserveLines(r: MemoryReserve): string[] {
+  const spare = r.spareBytes > 0 ? formatMemory(r.spareBytes) : 'none'
+  const jobs = r.jobs.map(
+    (j) =>
+      `  ${j.automationName}  ${formatMemory(j.reserveBytes)}${j.measured ? '' : '  (unmeasured)'}`
+  )
+  return [
+    `Spare for another job: ${spare}`,
+    'Reserves (90th-percentile peak, last 20 runs):',
+    ...jobs
+  ]
+}
+
 export function formatCapacity(c: CapacityPayload, now: number): string {
   const counted = c.running.filter((r) => r.counted).length
   const limit = c.limit === null ? 'no limit' : String(c.limit)
   const lines = [
-    `Run limit: ${limit} (suggested ${c.suggestion.limit})`,
+    c.memoryReserve
+      ? `Run limit: ${limit}`
+      : `Run limit: ${limit} (suggested ${c.suggestion.limit})`,
     ...(c.retryLimit === undefined ? [] : [`Retries after a failure: ${c.retryLimit}`]),
     c.limit === null ? `Running: ${counted}` : `Running: ${counted} of ${c.limit}`
   ]
@@ -73,6 +93,9 @@ export function formatCapacity(c: CapacityPayload, now: number): string {
     lines.push(
       `Memory: ${formatMemory(c.memory.availableBytes)} available of ${formatMemory(c.memory.totalBytes)}`
     )
+  }
+  if (c.memoryReserve) {
+    return [...lines, ...reserveLines(c.memoryReserve)].join('\n')
   }
   const each = formatMemory(c.suggestion.perJobBytes)
   let per = `no job measured yet, so ${each} each`
