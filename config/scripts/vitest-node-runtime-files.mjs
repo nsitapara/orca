@@ -213,5 +213,9 @@ const NODE_RUNTIME_INCLUDE = [
 
 /** `filters` limits the SQLite import scan to the tests a filtered CLI run can select. */
 export function getNodeRuntimeInclude({ filters } = {}) {
-  return [...NODE_RUNTIME_INCLUDE, ...findSqliteRuntimeTests({ filters }), ...PILOT_SQLITE_RUNTIME_INCLUDE] // pilot-hook: vitest-sqlite-runtime
+  return [
+    ...NODE_RUNTIME_INCLUDE,
+    ...findSqliteRuntimeTests({ filters }),
+    ...PILOT_SQLITE_RUNTIME_INCLUDE
+  ] // pilot-hook: vitest-sqlite-runtime
 }

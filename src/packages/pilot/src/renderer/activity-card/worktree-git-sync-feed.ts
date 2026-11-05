@@ -1,5 +1,8 @@
 import { useCallback, useEffect, useSyncExternalStore } from 'react'
-import type { GitStatusResult, GitUpstreamStatus } from '../../../../../shared/git/status/git-status-types'
+import type {
+  GitStatusResult,
+  GitUpstreamStatus
+} from '../../../../../shared/git/status/git-status-types'
 import { isGitRepoKind } from '../../../../../shared/repo-kind'
 import type { Repo } from '../../../../../shared/repo-types'
 import { getWorktreeHostIdentity } from '../../../../../shared/worktree/host-qualified-identity'

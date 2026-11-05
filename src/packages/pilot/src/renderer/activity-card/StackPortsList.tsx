@@ -7,7 +7,10 @@ import {
   WorktreeCardDetailSection,
   WorktreeCardDetailSectionContent
 } from '@/components/sidebar/workspace-card/details/WorktreeCardDetailSection'
-import { DetailHeader, MetadataActionIcon } from '@/components/sidebar/workspace-card/metadata/WorktreeCardMetadataControls'
+import {
+  DetailHeader,
+  MetadataActionIcon
+} from '@/components/sidebar/workspace-card/metadata/WorktreeCardMetadataControls'
 import { WorktreeCardPortsDetails } from '@/components/sidebar/workspace-card/details/WorktreeCardPorts'
 import { openHttpLink } from '@/lib/http-link-routing'
 import type { StackPort } from './stack-ports'

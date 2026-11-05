@@ -27,11 +27,7 @@ function defaultChatHost(state: AppState, worktreeId: string): DefaultChatHost |
   const preferences = readAgentLaunchPreferencesForWorktree(state, worktreeId)
   const chosen = preferences.defaultTuiAgent
   // Why: only a saved agent opens here; Auto must not turn catalog order into a launch (#36594).
-  if (
-    state.settings?.emptyWorkspaceOpenSurface === 'terminal' ||
-    !chosen ||
-    chosen === 'blank'
-  ) {
+  if (state.settings?.emptyWorkspaceOpenSurface === 'terminal' || !chosen || chosen === 'blank') {
     return undefined
   }
   // Why: an unresolved owner is an unknown host, not the local machine.

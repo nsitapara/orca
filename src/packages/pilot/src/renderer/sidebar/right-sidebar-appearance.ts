@@ -15,9 +15,7 @@ export function usePilotRightSidebarAppearance(
   const settings = useStore((s) => s.settings)
   useLayoutEffect(() => {
     const el = ref.current
-    const vars = pilotStore()
-      ? resolveLeftSidebarStyleVariables(settings)
-      : undefined
+    const vars = pilotStore() ? resolveLeftSidebarStyleVariables(settings) : undefined
     if (!el || !vars) {
       return
     }

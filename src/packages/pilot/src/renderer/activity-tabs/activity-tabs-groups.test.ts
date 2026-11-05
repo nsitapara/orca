@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import type { Repo } from '../../../../../shared/repo-types'
 import { buildActivityThreadGroups } from '@/components/activity/activity-thread-grouping'
-import type { ActivityThreadGroup, AgentPaneThread } from '@/components/activity/activity-thread-types'
+import type {
+  ActivityThreadGroup,
+  AgentPaneThread
+} from '@/components/activity/activity-thread-types'
 import type { ActivityGroupBy } from '../../../../../shared/agents-view-thread-filters'
 import {
   buildActivityVirtualItems,
