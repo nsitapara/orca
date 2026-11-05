@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { cleanup, renderHook } from '@testing-library/react'
 import { afterEach, expect, it, vi } from 'vitest'
-import { makePaneKey } from '../../../../../shared/stable-pane-id'
+import { makePaneKey } from '../../../../../shared/workspace-layout/stable-pane-id'
 import {
   LEAF_ID,
   makeTabWithIds,

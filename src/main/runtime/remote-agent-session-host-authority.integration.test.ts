@@ -1,16 +1,16 @@
-import { pairedRuntimeConnectionFromOffer } from '../../shared/paired-runtime-connection'
+import { pairedRuntimeConnectionFromOffer } from '../../shared/remote-runtime/pairing/paired-runtime-connection'
 import '../daemon/mock-descendant-sweep'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { FLOATING_TERMINAL_WORKTREE_ID } from '../../shared/constants'
-import { parsePairingCode } from '../../shared/pairing'
-import { RemoteRuntimeRequestConnection } from '../../shared/remote-runtime-request-connection'
+import { parsePairingCode } from '../../shared/remote-runtime/pairing/pairing'
+import { RemoteRuntimeRequestConnection } from '../../shared/remote-runtime/requests/remote-runtime-request-connection'
 import type {
   RuntimeEnsureAgentSessionResult,
   RuntimeEnsureAgentSessionRequest
-} from '../../shared/agent-session-host-authority'
+} from '../../shared/agent-session/agent-session-host-authority'
 import type { RuntimeMobileSessionTabsResult } from '../../shared/runtime-types'
 import type { SubprocessHandle } from '../daemon/session-subprocess-handle'
 import { TerminalHost } from '../daemon/terminal-host'
@@ -199,8 +199,7 @@ describe('remote agent-session host authority integration', () => {
       expect(spawnSubprocess).toHaveBeenCalledOnce()
       expect(host.listSessions()).toHaveLength(1)
 
-      // Why: a retry cannot prove whether its previous response arrived, so
-      // the provider identity—not a new client operation—must recover the owner.
+      // A lost reply cannot prove delivery; retries must recover ownership through provider identity.
       const retry = await retryClient.request<RuntimeEnsureAgentSessionResult>(
         'terminal.ensureAgentSession',
         request,

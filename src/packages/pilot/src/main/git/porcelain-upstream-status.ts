@@ -1,4 +1,4 @@
-import type { GitUpstreamStatus } from '../../../../../shared/git-status-types'
+import type { GitUpstreamStatus } from '../../../../../shared/git/status/git-status-types'
 
 // Why: porcelain v2 drops `# branch.ab` only when the upstream ref is gone (deleted on the remote,
 // then pruned). Upstream counts that as 0/0, so the branch reads "up to date" while its commits are

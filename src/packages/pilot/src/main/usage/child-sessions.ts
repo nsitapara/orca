@@ -2,7 +2,7 @@ import { createReadStream } from 'node:fs'
 import { readdir, stat } from 'node:fs/promises'
 import { join } from 'node:path'
 import { createInterface } from 'node:readline'
-import { encodeClaudeProjectPaths } from '../../../../../main/ai-vault/claude-project-dir-encoding'
+import { encodeClaudeProjectPaths } from '../../../../../main/ai-vault/scanners/claude/claude-project-dir-encoding'
 import { inWindow, localDay, type UsageWindow } from './buckets'
 import { claudeSubagentFiles } from './claude'
 

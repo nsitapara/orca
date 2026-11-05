@@ -3,7 +3,7 @@ import type { ExecutionHostHealth } from '../../../../../shared/execution-host-r
 import type { ProjectHostSetupState } from '../../../../../shared/project-types'
 import type { Repo } from '../../../../../shared/repo-types'
 import type { Worktree } from '../../../../../shared/worktree/types'
-import { makeRepo } from '@/components/worktree-jump-palette-test-fixtures'
+import { makeRepo } from '@/components/worktree-jump/worktree-jump-palette-test-fixtures'
 import { buildNewTabMachineStep, type NewTabMachineStepInput } from './new-tab-machine-step'
 import { host, machineWorktree, PROJECT, setup } from './new-tab-machine-test-fixtures'
 

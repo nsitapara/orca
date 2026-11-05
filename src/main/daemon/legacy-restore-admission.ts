@@ -1,6 +1,8 @@
-import type { SpawnRequestFacts } from '../../shared/host-spawn-admission'
-import { TERMINAL_SPAWN_REFUSED_MESSAGE } from '../../shared/host-spawn-admission'
-import { TERMINAL_HOST_CAP_HINT } from '../../shared/terminal-spawn-error-copy'
+import {
+  type SpawnRequestFacts,
+  TERMINAL_SPAWN_REFUSED_MESSAGE
+} from '../../shared/host-spawn-admission'
+import { TERMINAL_HOST_CAP_HINT } from '../../shared/terminal/pty/lifecycle/terminal-spawn-error-copy'
 import type { LegacyRestoreDetails, LegacyRestoreRecords } from './legacy-restore-records'
 import type { TerminalSpawnLease } from './terminal-spawn-gate'
 
@@ -18,11 +20,7 @@ function refusalReason(error: unknown): 'pressure' | 'host_cap' | null {
       : null
 }
 
-/**
- * Runs one admission and keeps the host's copy of an old client's refused restore, since that
- * client cleared its own resume record before asking. A restore that starts, from any client,
- * drops the copy. A declared caller is never recorded: its pane keeps its handle.
- */
+/** Save refused legacy restores because old clients clear their own resume records before asking. */
 export function admitRecordingLegacyRestore(
   admit: () => TerminalSpawnLease | Promise<TerminalSpawnLease>,
   records: LegacyRestoreRecords | undefined,

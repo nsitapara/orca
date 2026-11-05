@@ -5,7 +5,7 @@ import type { editor as MonacoEditor } from 'monaco-editor'
 import type { DecoratedDiffComment } from './decorated-diff-comment'
 import type * as ReactDomClientModule from 'react-dom/client'
 import type * as DiffCommentZoneCardModule from './diff-comment-zone-card'
-import type { NotesSendMenu } from '../editor/NotesSendMenu'
+import type { NotesSendMenu } from '../editor/review-note-delivery/NotesSendMenu'
 
 vi.mock('monaco-editor', () => import('monaco-editor/esm/vs/editor/editor.api.js'))
 
@@ -15,8 +15,9 @@ const notesMenuFixture = vi.hoisted(() => ({
   })
 }))
 
-// Remote review-note lifecycle does not exercise saved-note delivery.
-vi.mock('../editor/NotesSendMenu', () => ({ NotesSendMenu: notesMenuFixture.NotesSendMenu }))
+vi.mock('../editor/review-note-delivery/NotesSendMenu', () => ({
+  NotesSendMenu: notesMenuFixture.NotesSendMenu
+}))
 
 const storeFixture = vi.hoisted(() => ({
   activeGroupIdByWorktree: {},
@@ -27,7 +28,7 @@ vi.mock('@/store', () => ({
   useAppStore: (selector: (state: typeof storeFixture) => unknown) => selector(storeFixture)
 }))
 
-// Stub only the card render: this suite is about zone/root lifecycle, not card markup.
+// Stub card rendering to isolate zone/root lifecycles.
 vi.mock('./diff-comment-zone-card', async (importOriginal) => ({
   ...(await importOriginal<typeof DiffCommentZoneCardModule>()),
   renderDiffCommentZoneCard: vi.fn()
@@ -81,18 +82,17 @@ function reviewNote(index: number): DecoratedDiffComment {
   }
 }
 
-// Every refresh of remote review data yields a fresh-but-equal array, exactly as the main process ships it.
+// Remote review refreshes replace arrays even when their values match.
 function freshCommentableLines(): readonly number[] {
   return [10, 11, 12, 13, 14, 15, 16]
 }
 
-// Root teardown is deferred through queueMicrotask, so drain before asserting on unmount counts.
+// Drain deferred root unmounts before reading counts.
 async function flushDeferredUnmounts(): Promise<void> {
   await Promise.resolve()
   await Promise.resolve()
 }
 
-// Asserted as one object so a failure reports every lifecycle number at once.
 function lifecycleTotals(fake: FakeDiffCommentEditor): Record<string, number> {
   return {
     createRootCalls: rootCounts.created,
@@ -163,7 +163,6 @@ describe('useDiffCommentDecorator commentable-line churn', () => {
   it('joins the commentable-line array once, not once per render, for a stable array', () => {
     const fake = createFakeDiffCommentEditor()
     const comments = [reviewNote(1)]
-    // reviewCommentLineNumbers carries every added and context line of the patch.
     const { lines, joins } = countingCommentableLines(4_000)
     const hook = renderDecorator(fake, { commentableLineNumbers: lines, comments })
 
@@ -214,7 +213,6 @@ describe('useDiffCommentDecorator commentable-line churn', () => {
       monacoViewZones: 3
     })
 
-    // Still tracked, so dropping a note reclaims its vertical space instead of leaving a blank gap.
     hook.rerender({ commentableLineNumbers: freshCommentableLines(), comments: comments.slice(1) })
     expect(fake.zones.size).toBe(2)
   })
@@ -233,7 +231,6 @@ describe('useDiffCommentDecorator commentable-line churn', () => {
     }
     await flushDeferredUnmounts()
 
-    // 6 live notes => 6 roots, 6 zones, nothing stranded.
     expect(lifecycleTotals(fake)).toEqual({
       createRootCalls: 6,
       rootUnmounts: 0,
@@ -255,10 +252,8 @@ describe('useDiffCommentDecorator commentable-line churn', () => {
     hook.rerender({ commentableLineNumbers: [10, 11, 12, 40], comments })
     await flushDeferredUnmounts()
 
-    // Decorator is not stale: the widened set is live...
     fake.emitMouseMove(40)
     expect(isAddButtonVisible(fake.domNode)).toBe(true)
-    // ...and the existing note's zone/root was neither orphaned nor rebuilt.
     expect(lifecycleTotals(fake)).toEqual({
       createRootCalls: 1,
       rootUnmounts: 0,
@@ -288,7 +283,6 @@ describe('useDiffCommentDecorator commentable-line churn', () => {
     hook.rerender({ monacoModelIdentity: 'modified-v2' })
     await flushDeferredUnmounts()
 
-    // Stale zone ids are gone rather than left as untracked blank gaps, and the note was rebuilt.
     expect(fake.zones.size).toBe(1)
     expect([...fake.zones.keys()]).not.toEqual(firstZoneIds)
     expect(rootCounts.created).toBe(2)

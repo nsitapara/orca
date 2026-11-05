@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto'
+import { realpath } from 'node:fs/promises'
 import { isAbsolute } from 'node:path'
 import { DEFAULT_REPO_BADGE_COLOR } from '../../shared/constants'
 import { normalizeRuntimePathForComparison } from '../../shared/cross-platform-path'
@@ -8,7 +9,11 @@ import type {
   ProjectGroupImportResult
 } from '../../shared/project-group-types'
 import type { Repo } from '../../shared/repo-types'
-import { getRepoDialableSshTargetId } from '../../shared/execution-host'
+import {
+  getRepoDialableSshTargetId,
+  getRepoExecutionHostId,
+  getRepoRoutingConnectionId
+} from '../../shared/execution-host'
 import { awaitWindowsHostGitEnvironmentReady } from '../git/runner'
 import { getRepoName, isGitRepoAsync } from '../git/repo'
 import { scanNestedRepos } from '../project-groups/nested-repo-discovery'
@@ -18,6 +23,7 @@ import {
 } from '../project-groups/nested-repo-import'
 import { createNestedRepoImportTargetResolver } from '../project-groups/nested-repo-import-target'
 import type { RuntimeStore } from './runtime-store-contract'
+import { refuseWslHostWindowsDrivePath } from './wsl-host-windows-drive-guard'
 
 type RuntimeNestedRepoImportDependencies = {
   getStore: () => RuntimeStore | null
@@ -38,6 +44,7 @@ export class RuntimeNestedRepoImport {
     if (!isAbsolute(path)) {
       throw new Error('Project path must be an absolute path')
     }
+    await refuseWslHostWindowsDrivePath(path)
     await awaitWindowsHostGitEnvironmentReady({ cwd: path })
     return scanNestedRepos({ path, options: { timeoutMs: 15_000 } })
   }
@@ -48,6 +55,7 @@ export class RuntimeNestedRepoImport {
     projectPaths: string[]
     mode: ProjectGroupImportMode
   }): Promise<ProjectGroupImportResult> {
+    await refuseWslHostWindowsDrivePath(args.parentPath)
     await awaitWindowsHostGitEnvironmentReady({ cwd: args.parentPath })
     const store = this.deps.getStore()
     if (!store?.createProjectGroup || !store.moveProjectToGroup) {
@@ -84,6 +92,10 @@ export class RuntimeNestedRepoImport {
         }
         const importRepoPath = await importTargetResolver.resolveLocal(repoPath)
         const normalizedImportRepoPath = normalizeRuntimePathForComparison(importRepoPath)
+        // Clone and create save Git's resolved path, so a symlinked import root matches it too.
+        const resolvedImportRepoPath = await realpath(importRepoPath)
+          .then(normalizeRuntimePathForComparison)
+          .catch(() => null)
         const alreadyImportedProjectId = importedProjectIdsByRepoPath.get(normalizedImportRepoPath)
         if (alreadyImportedProjectId) {
           results.push({
@@ -93,15 +105,17 @@ export class RuntimeNestedRepoImport {
           })
           continue
         }
-        // Why not SSH: an SSH row can sit at the same path, and this import adds native rows. A
-        // paired host stamps its native rows `runtime:<env>`, so those still match.
-        const existing = store
-          .getRepos()
-          .find(
-            (repo) =>
-              getRepoDialableSshTargetId(repo) === null &&
-              normalizeRuntimePathForComparison(repo.path) === normalizedImportRepoPath
-          )
+        // Import native rows only; SSH may share the path string. Paired hosts stamp native rows runtime:<env>, which still match.
+        const existing = store.getRepos().find(
+          (repo) =>
+            getRepoDialableSshTargetId(repo) === null &&
+            (normalizeRuntimePathForComparison(repo.path) === normalizedImportRepoPath ||
+              // The resolved spelling names this machine's folder, so only native rows may match it.
+              (resolvedImportRepoPath !== null &&
+                getRepoRoutingConnectionId(repo) === null &&
+                !getRepoExecutionHostId(repo).startsWith('ssh:') &&
+                normalizeRuntimePathForComparison(repo.path) === resolvedImportRepoPath))
+        )
         const group = groupResolver.getGroupForRepo(repoPath)
         if (existing) {
           if (group) {

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { linearError } from '../../../../../main/linear/issue-context-errors'
+import { linearError } from '../../../../../main/linear/issue-context/errors'
 import type { LinearConnector, LinearRuntime } from './linear-connector'
 import { createLinearWriter, linearWriterOver } from './linear-writer'
 

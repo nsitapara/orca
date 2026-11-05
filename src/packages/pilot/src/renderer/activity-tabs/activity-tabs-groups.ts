@@ -1,7 +1,5 @@
-import type {
-  ActivityGroupBy,
-  ActivityThreadGroup
-} from '@/components/activity/activity-thread-types'
+import type { ActivityThreadGroup } from '@/components/activity/activity-thread-types'
+import type { ActivityGroupBy } from '../../../../../shared/agents-view-thread-filters'
 import { translate } from '@/i18n/i18n'
 import {
   childGroups,

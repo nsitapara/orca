@@ -2,7 +2,7 @@
 import React, { type ReactNode } from 'react'
 import { cleanup, fireEvent, render, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import type { AgentStatusState } from '../../../../../shared/agent-status-types'
+import type { AgentStatusState } from '../../../../../shared/agent-status/contracts/agent-status-types'
 import type { WorkspacePort } from '../../../../../shared/workspace-ports'
 import { ActivityThreadHoverCard } from '@/components/activity/activity-thread-hover-card'
 import type { ActivityEvent, AgentPaneThread } from '@/components/activity/activity-thread-types'
@@ -12,18 +12,20 @@ import {
   makeWorkingEntryWithoutHistory,
   makeWorktree
 } from '@/components/activity/ActivityPrototypePage-test-fixtures'
-import type { WorktreeCardPrDisplay } from '@/components/sidebar/worktree-card-pr-display'
+import type { WorktreeCardPrDisplay } from '@/components/sidebar/workspace-card/review/worktree-card-pr-display'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { openHttpLink } from '@/lib/http-link-routing'
 import type * as HttpLinkRouting from '@/lib/http-link-routing'
 import { useAppStore } from '@/store'
 import { getLinearReadScope, scopedLinearCacheKey } from '@/store/slices/linear/linear-slice-scope'
-import { getWorkspaceAttachmentSourceContext } from '@/components/sidebar/workspace-attachment-source-result'
+import { getWorkspaceAttachmentSourceContext } from '@/components/sidebar/workspace-card/review/workspace-attachment-source-result'
 import { registerPilotStore } from '../store'
 import { reviewChipLabel, WorktreeLinkStrip } from './WorktreeLinkStrip'
 import { reviewPipelineMark, reviewStateMark } from './review-state-mark'
 import { StackPortsList } from './StackPortsList'
 import { WorktreePortsChip } from './WorktreePortsChip'
+import { linearIssueReadFixture } from '@/store/slices/linear-slice-test-harness'
+import type { LinearIssue } from '../../../../../shared/linear/issue-types'
 
 vi.mock('@/components/ui/hover-card', () => ({
   HoverCard: ({
@@ -248,7 +250,9 @@ describe('WorktreeLinkStrip', () => {
   it('with no linked issue, shows the one its branch is named for once Linear has it', () => {
     registerPilotStore(useAppStore)
     const unlinked = { ...makeWorktree(), branch: 'refs/heads/web-2153-create-a-review-skill' }
-    const fetchLinearIssue = vi.fn(async () => null)
+    const fetchLinearIssue = vi.fn((_id: string) =>
+      linearIssueReadFixture<LinearIssue | null>(async () => null)
+    )
     const before = useAppStore.getState()
     const key = scopedLinearCacheKey(
       getLinearReadScope(useAppStore.getState().settings),

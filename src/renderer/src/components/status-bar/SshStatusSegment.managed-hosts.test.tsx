@@ -5,8 +5,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { getDefaultSettings } from '../../../../shared/constants'
 import { RUNTIME_PROTOCOL_VERSION } from '../../../../shared/protocol-version'
 import type { GlobalSettings } from '../../../../shared/global-settings-types'
-import type { PublicKnownRuntimeEnvironment } from '../../../../shared/runtime-environments'
-import type { RuntimeEnvironmentStatus } from '../../../../shared/runtime-host-status'
+import type { PublicKnownRuntimeEnvironment } from '../../../../shared/remote-runtime/host-catalog/runtime-environments'
+import type { RuntimeEnvironmentStatus } from '../../../../shared/remote-runtime/host-status/runtime-host-status'
 import type { SshConnectionState } from '../../../../shared/ssh-types'
 import { SshStatusSegment } from './SshStatusSegment'
 
@@ -43,7 +43,7 @@ vi.mock('../../store', () => {
 vi.mock('./runtime-environment-explicit-connect', () => ({
   connectRuntimeHostAndReloadProjects: mocks.connectRuntime
 }))
-vi.mock('../settings/RuntimeRepairDialog', () => ({
+vi.mock('../runtime-access/RuntimeRepairDialog', () => ({
   RuntimeRepairDialog: ({ environmentId, name }: { environmentId: string; name: string }) => (
     <div role="dialog">{`Re-pair ${name} (${environmentId})`}</div>
   )
@@ -151,6 +151,48 @@ afterEach(() => {
 })
 
 describe('the status menu for a managed SSH host', () => {
+  it.each([
+    { compact: false, iconOnly: false },
+    { compact: true, iconOnly: false },
+    { compact: true, iconOnly: true }
+  ])('keeps the summary steady during host retries (%j)', (density) => {
+    state.runtimeStatusByEnvironmentId.delete('server-windows')
+    const { rerender } = render(<SshStatusSegment {...density} />)
+    const trigger = screen.getByRole('button', { name: 'Remote host connection status' })
+    const checkingSummary = trigger.innerHTML
+    expect(screen.getByText('Checking')).toBeTruthy()
+    if (!density.compact && !density.iconOnly) {
+      expect(screen.getByText('1 host', { selector: 'span:not([aria-hidden])' })).toBeTruthy()
+    }
+
+    const ready = readyStatus()
+    state.runtimeStatusByEnvironmentId.set('server-windows', {
+      ...ready,
+      remoteControl: ready.remoteControl ? { ...ready.remoteControl, state: 'reconnecting' } : null
+    })
+    rerender(<SshStatusSegment {...density} />)
+    expect(screen.getByText('Reconnecting')).toBeTruthy()
+    expect(trigger.innerHTML).toBe(checkingSummary)
+
+    state.runtimeStatusByEnvironmentId.set('server-windows', { status: null, checkedAt: 1 })
+    rerender(<SshStatusSegment {...density} />)
+    expect(screen.getByText('Disconnected')).toBeTruthy()
+    expect(trigger.innerHTML).toBe(checkingSummary)
+
+    state.runtimeStatusByEnvironmentId.set('server-windows', blockedStatus('access-revoked'))
+    rerender(<SshStatusSegment {...density} />)
+    expect(screen.getByText('Access revoked')).toBeTruthy()
+    expect(trigger.innerHTML).toBe(checkingSummary)
+
+    state.runtimeStatusByEnvironmentId.set('server-windows', ready)
+    rerender(<SshStatusSegment {...density} />)
+    if (!density.compact && !density.iconOnly) {
+      expect(trigger.textContent).toContain('2 hosts')
+    } else {
+      expect(trigger.innerHTML).toBe(checkingSummary)
+    }
+  })
+
   it('shows and counts one row per machine and disconnects the managed server', async () => {
     render(<SshStatusSegment compact={false} iconOnly={false} />)
     expect(screen.getAllByText('openclaw')).toHaveLength(1)

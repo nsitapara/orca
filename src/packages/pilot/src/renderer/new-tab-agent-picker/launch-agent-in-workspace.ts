@@ -5,7 +5,7 @@ import { launchAgentInNewTab, type LaunchAgentInNewTabArgs } from '@/lib/launch-
 import { activateAndRevealWorkspace } from '@/lib/worktree-activation'
 import { useAppStore } from '@/store'
 import type { ExecutionHostId } from '../../../../../shared/execution-host'
-import type { TuiAgent } from '../../../../../shared/tui-agent'
+import type { TuiAgent } from '../../../../../shared/agent-launch/catalog/tui-agent'
 import { holdRemoteFirstShell } from './remote-first-shell-hold'
 
 /** Another machine's workspace, switched to just before its surface opens, even before the host answers. */

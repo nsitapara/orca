@@ -4,7 +4,7 @@ import { act, useLayoutEffect, useMemo } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { OpenFile } from '@/store/slices/editor'
-import type { GitStatusEntry } from '../../../../shared/git-status-types'
+import type { GitStatusEntry } from '../../../../shared/git/status/git-status-types'
 import type { DiffContent, FileContent } from './editor-panel-content-types'
 
 const mocks = vi.hoisted(() => ({
@@ -38,9 +38,14 @@ vi.mock('@/lib/runtime-workspace-file-route', () => ({
   findWorkspaceFileRoute: vi.fn(() => null)
 }))
 
-vi.mock('@/store', () => ({ useAppStore: { getState: mocks.getState } }))
+vi.mock('@/store', () => ({
+  useAppStore: Object.assign(
+    (select: (state: ReturnType<typeof mocks.getState>) => unknown) => select(mocks.getState()),
+    { getState: mocks.getState }
+  )
+}))
 
-import { ORCA_EDITOR_EXTERNAL_FILE_CHANGE_EVENT } from './editor-autosave'
+import { ORCA_EDITOR_EXTERNAL_FILE_CHANGE_EVENT } from './autosave/editor-autosave'
 import { useEditorPanelContentState } from './useEditorPanelContentState'
 import { createTestStore } from '@/store/slices/store-test-helpers'
 
@@ -405,8 +410,7 @@ describe('useEditorPanelContentState visibility', () => {
 
     await act(async () => root.render(<Probe activeFile={file} isVisible={false} />))
     dispatchExternalChange(file)
-    // Why: the viewers render "Loading diff…" purely on a missing entry, so a
-    // retained (stale-marked) entry is what keeps the pane painted.
+    // Retaining a stale entry prevents the missing-entry Loading diff state while reload is pending.
     expect(snapshots.get('main')?.diffContents[file.id]?.modifiedContent).toBe('old diff')
     expect(snapshots.get('main')?.diffContents[file.id]?.isStale).toBe(true)
     expect(mocks.getRuntimeGitDiff).toHaveBeenCalledOnce()

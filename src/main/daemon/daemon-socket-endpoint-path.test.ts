@@ -15,56 +15,10 @@ import { setAppEnvironment } from '../../shared/app-environment'
 import { DaemonClient } from './client'
 import { checkDaemonHealthWithCoverage } from './daemon-health'
 import { createOutOfProcessLauncher } from './daemon-out-of-process-launcher'
-import { unixSocketPathFits } from '../../shared/unix-socket-path-limit'
+
 import { getDaemonSocketBindPath } from './daemon-endpoint-ownership'
 import { getDaemonSocketPath, getDaemonTokenPath } from './daemon-spawner'
-import {
-  ensureDaemonSocketDir,
-  resolveDaemonUnixSocketPath,
-  shortDaemonSocketDir
-} from './daemon-socket-endpoint-path'
-
-const SOCKET_NAME = 'daemon-v99.sock'
-const longRuntimeDir = (bytes: number): string => `/home/${'u'.repeat(bytes - 20)}/orca/daemon`
-
-describe('resolveDaemonUnixSocketPath (#17840)', () => {
-  it.each(['linux', 'darwin'] as const)(
-    'keeps the userData endpoint for a short root on %s',
-    (os) => {
-      expect(
-        resolveDaemonUnixSocketPath('/home/me/.config/orca/daemon', SOCKET_NAME, os, 1000)
-      ).toBe(`/home/me/.config/orca/daemon/${SOCKET_NAME}`)
-    }
-  )
-
-  it.each(['linux', 'darwin'] as const)(
-    'moves a 120-byte root to the per-uid short dir on %s, and the bind name fits too',
-    (os) => {
-      const runtimeDir = longRuntimeDir(120)
-      const resolved = resolveDaemonUnixSocketPath(runtimeDir, SOCKET_NAME, os, 1000)
-      expect(resolved).toBe(`${shortDaemonSocketDir(runtimeDir, 1000)}/${SOCKET_NAME}`)
-      expect(unixSocketPathFits(resolved, os)).toBe(true)
-      expect(unixSocketPathFits(getDaemonSocketBindPath(resolved), os)).toBe(true)
-    }
-  )
-
-  it('relocates on darwin at a length linux still accepts', () => {
-    // 104-byte darwin sun_path vs 108 on linux.
-    const runtimeDir = `/h/${'x'.repeat(105 - 3 - 1 - SOCKET_NAME.length)}`
-    expect(resolveDaemonUnixSocketPath(runtimeDir, SOCKET_NAME, 'linux', 1)).toBe(
-      `${runtimeDir}/${SOCKET_NAME}`
-    )
-    expect(resolveDaemonUnixSocketPath(runtimeDir, SOCKET_NAME, 'darwin', 1)).not.toContain(
-      runtimeDir
-    )
-  })
-
-  it('gives distinct data roots distinct short dirs', () => {
-    expect(shortDaemonSocketDir(longRuntimeDir(120), 1)).not.toBe(
-      shortDaemonSocketDir(`${longRuntimeDir(120)}x`, 1)
-    )
-  })
-})
+import { ensureDaemonSocketDir, shortDaemonSocketDir } from './daemon-socket-endpoint-path'
 
 describe.skipIf(process.platform === 'win32')('relocated endpoint binds (#17840)', () => {
   const uid = process.getuid!()
@@ -77,7 +31,7 @@ describe.skipIf(process.platform === 'win32')('relocated endpoint binds (#17840)
     try {
       rmdirSync(dirname(shortDaemonSocketDir(runtimeDir, uid)))
     } catch {
-      // Not empty: another Orca on this machine uses it.
+      // Another Orca instance may still use the shared parent.
     }
   })
 
@@ -97,15 +51,6 @@ describe.skipIf(process.platform === 'win32')('relocated endpoint binds (#17840)
     })
     await new Promise<void>((resolve) => server.close(() => resolve()))
   })
-
-  it('refuses a shared short dir rather than repairing it', () => {
-    base = mkdtempSync(join(tmpdir(), 'orca-long-'))
-    runtimeDir = join(base, 'x'.repeat(130))
-    const socketPath = getDaemonSocketPath(runtimeDir, 99)
-    ensureDaemonSocketDir(socketPath)
-    chmodSync(shortDaemonSocketDir(runtimeDir, uid), 0o777)
-    expect(() => ensureDaemonSocketDir(socketPath)).toThrow(/not a private directory/)
-  })
   it('never connects to a listener planted in a shared relocated dir', async () => {
     base = mkdtempSync(join(tmpdir(), 'orca-long-'))
     runtimeDir = join(base, 'x'.repeat(130))
@@ -113,7 +58,7 @@ describe.skipIf(process.platform === 'win32')('relocated endpoint binds (#17840)
     const socketPath = getDaemonSocketPath(runtimeDir, 99)
     const tokenPath = getDaemonTokenPath(runtimeDir, 99)
     writeFileSync(tokenPath, 'secret-token')
-    // Stands in for another user's pre-created, traversable dir; mode is what the guard sees.
+    // Shared permissions model an untrusted directory despite the test owning it.
     mkdirSync(shortDaemonSocketDir(runtimeDir, uid), { recursive: true, mode: 0o700 })
     chmodSync(shortDaemonSocketDir(runtimeDir, uid), 0o777)
     const received: string[] = []

@@ -1,5 +1,4 @@
 // @vitest-environment happy-dom
-import '@testing-library/jest-dom/vitest'
 import {
   act,
   cleanup,
@@ -11,6 +10,33 @@ import {
 } from '@testing-library/react'
 import { useRef, useState } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import type { NativeChatStructuredComposerTransport } from './native-chat-composer-types'
+import { useStructuredAgentSessionSends } from './use-structured-agent-session-sends'
+import {
+  getStructuredAgentSessionSendNotice,
+  setStructuredAgentSessionSendNotice
+} from './structured-agent-session-pending-sends'
+import { resetStructuredAgentSessionSendsForTests } from './structured-agent-session-message-sender'
+import {
+  clearNativeChatComposerDraftsForTests,
+  readNativeChatComposerDraft,
+  updateNativeChatComposerDraft,
+  structuredAgentSessionDraftScopeKey
+} from './native-chat-composer-draft-store'
+import { emitNativeChatMessageSent } from '@/lib/native-chat-telemetry'
+import { TooltipProvider } from '@/components/ui/tooltip'
+import { agentSessionFailureWords } from '../../../../shared/agent-session/failures/agent-session-failure-words'
+import { agentJournalItemKey } from '../../../../shared/agent-session/journal/agent-session-journal-item-key'
+import type {
+  AgentJournalRenderItem,
+  AgentJournalSubmission
+} from '../../../../shared/agent-session/journal/agent-session-journal-types'
+import type { RuntimeClientTarget } from '../../../../shared/runtime-client-target'
+import {
+  NativeChatInterruptedContinueButton,
+  useNativeChatInterruptedContinuation
+} from './NativeChatInterruptedContinue'
+import '@testing-library/jest-dom/vitest'
 
 const mocks = vi.hoisted(() => {
   const hostLabel = (): string | null => 'studio-mac'
@@ -26,15 +52,12 @@ const mocks = vi.hoisted(() => {
 })
 
 vi.mock('@/lib/native-chat-telemetry', () => ({ emitNativeChatMessageSent: vi.fn() }))
-vi.mock('@/lib/worker-terminal-takeover-report', () => ({
-  reportStructuredSessionUserInput: vi.fn()
-}))
 
 vi.mock('@/i18n/i18n', () => ({ translate: (_key: string, fallback: string) => fallback }))
 vi.mock('@/runtime/runtime-rpc-client', () => ({
   ensureRuntimeEnvironmentCompatible: async () => {}
 }))
-vi.mock('@/lib/structured-agent-session-launch-label', () => ({
+vi.mock('@/lib/agent-session/launch/structured-agent-session-launch-label', () => ({
   structuredAgentLabel: () => 'Codex'
 }))
 vi.mock('@/runtime/structured-agent-session-client', () => ({
@@ -43,8 +66,8 @@ vi.mock('@/runtime/structured-agent-session-client', () => ({
 vi.mock('@/runtime/structured-agent-session-host-capability', () => ({
   useStructuredAgentSessionHostCapabilityState: () => mocks.capability
 }))
-vi.mock('../native-chat-resume-on-restart-store', () => ({
-  useNativeChatRestartResuming: () => mocks.resuming
+vi.mock('../native-chat-restart-runtimes', () => ({
+  useNativeChatTargetRestartResuming: () => mocks.resuming
 }))
 vi.mock('../native-chat-launch-resume-decision', () => ({
   useNativeChatLaunchResumePending: () => mocks.launchPending
@@ -52,34 +75,6 @@ vi.mock('../native-chat-launch-resume-decision', () => ({
 vi.mock('./use-structured-agent-session-host-label', () => ({
   useStructuredAgentSessionHostLabel: () => mocks.hostLabel
 }))
-
-import type { NativeChatStructuredComposerTransport } from './native-chat-composer-types'
-import { useStructuredAgentSessionSends } from './use-structured-agent-session-sends'
-import {
-  getStructuredAgentSessionSendNotice,
-  setStructuredAgentSessionSendNotice
-} from './structured-agent-session-pending-sends'
-import { resetStructuredAgentSessionSendsForTests } from './structured-agent-session-message-sender'
-import {
-  clearNativeChatComposerDraftsForTests,
-  readNativeChatComposerDraft,
-  updateNativeChatComposerDraft,
-  structuredAgentSessionDraftScopeKey
-} from './native-chat-composer-draft-store'
-import { reportStructuredSessionUserInput } from '@/lib/worker-terminal-takeover-report'
-import { emitNativeChatMessageSent } from '@/lib/native-chat-telemetry'
-import { TooltipProvider } from '@/components/ui/tooltip'
-import { agentSessionFailureWords } from '../../../../shared/agent-session-failure-words'
-import { agentJournalItemKey } from '../../../../shared/agent-session-journal-item-key'
-import type {
-  AgentJournalRenderItem,
-  AgentJournalSubmission
-} from '../../../../shared/agent-session-journal-types'
-import type { RuntimeClientTarget } from '../../../../shared/runtime-client-target'
-import {
-  NativeChatInterruptedContinueButton,
-  useNativeChatInterruptedContinuation
-} from './NativeChatInterruptedContinue'
 
 const TURN = agentJournalItemKey({ provider: 'codex', threadId: 't', turnId: 'cut', ordinal: 1 })
 const PAIRED: RuntimeClientTarget = { kind: 'environment', environmentId: 'studio-mac' }
@@ -115,7 +110,7 @@ type Props = {
   isWorking?: boolean
   target?: RuntimeClientTarget
   transport?: NativeChatStructuredComposerTransport
-  pending?: readonly { phase: 'sending' | 'recorded' }[]
+  pending?: Parameters<typeof useNativeChatInterruptedContinuation>[0]['pending']
 }
 
 function Harness(props: Props): React.JSX.Element {
@@ -135,6 +130,7 @@ function Harness(props: Props): React.JSX.Element {
     isWorking: props.isWorking ?? false,
     pending: props.pending ?? [],
     transport: props.transport ?? {
+      capturePresentation: () => () => true,
       send: () => true,
       dispatchCommand: async () => ({ handled: false, accepted: false, error: null }),
       optionsSurface,
@@ -161,7 +157,6 @@ function Harness(props: Props): React.JSX.Element {
           disabled={continuation.view.usageLimitContinueDisabled}
         />
       )}
-      {/* As the cut's own row shows it. */}
       {continuation.view.offeredTurnItemId === null ? null : (
         <NativeChatInterruptedContinueButton onContinue={continuation.view.continueNow} />
       )}
@@ -199,7 +194,6 @@ describe('Continue on a reply an Orca stop cut off', () => {
       sessionId: 'session-1',
       turnItemId: TURN
     })
-    // Gone once asked, and the row gets its own way on back: the journal shows what came of it.
     expect(continueButton()).toBeNull()
     expect(screen.getByTestId('offered')).toHaveTextContent('none')
   })
@@ -277,7 +271,6 @@ describe('Continue on a reply an Orca stop cut off', () => {
     fireEvent.click(continueButton()!)
     await waitFor(() => expect(continueButton()).toBeInTheDocument())
     expect(screen.getByTestId('error')).toHaveTextContent(FAILED)
-    // A retry clears the line until its own answer, which sets the same one line again.
     fireEvent.click(continueButton()!)
     expect(screen.getByTestId('error')).toHaveTextContent('none')
     await waitFor(() => expect(continueButton()).toBeInTheDocument())
@@ -326,7 +319,6 @@ describe('Continue on a reply an Orca stop cut off', () => {
     fireEvent.click(continueButton()!)
     await waitFor(() => expect(screen.getByTestId('error')).toHaveTextContent(FAILED))
 
-    // The journal then shows the continuation on its way: the chat is no longer on that cut.
     rerender(<Harness submissions={[{ dispatchState: 'pending' }]} />)
 
     expect(screen.getByTestId('error')).toHaveTextContent('none')
@@ -383,11 +375,19 @@ it('keeps the draft through Continue admission, refusal, uncertainty and recorde
       fence: 1,
       submissions: [],
       queuedMessageIds: [],
-      queue: { capability: 'unsupported', enabled: false },
+      queue: {
+        capability: 'unsupported',
+        followUpsQueue: false,
+        isWorking: false,
+        stopping: false,
+        session: {},
+        prompts: []
+      },
       historyLoaded: false,
       sendOptions: () => options
     })
     const transport: NativeChatStructuredComposerTransport = {
+      capturePresentation: () => () => true,
       send: (text, images, request) =>
         sends.send(
           text,
@@ -441,7 +441,6 @@ it('keeps the draft through Continue admission, refusal, uncertainty and recorde
     }
   ])
   expect(reveal).toHaveBeenCalledOnce()
-  expect(reportStructuredSessionUserInput).toHaveBeenCalledWith('session-1', 'studio-mac')
   expect(emitNativeChatMessageSent).toHaveBeenCalledWith({ agent: 'codex', runtime: 'remote' })
   await act(async () =>
     answer.resolve({
@@ -464,9 +463,7 @@ it('keeps the draft through Continue admission, refusal, uncertainty and recorde
   await waitFor(() => expect(mocks.call).toHaveBeenCalledTimes(2))
   expect(mocks.call.mock.calls[1][2]).not.toHaveProperty('usageLimitContinuationOfTurnItemId')
   await act(async () => answer.reject(new Error('connection lost')))
-  await waitFor(() =>
-    expect(screen.getByTestId('error')).toHaveTextContent('Check the chat before trying again.')
-  )
+  await waitFor(() => expect(screen.getByTestId('error')).toHaveTextContent('none'))
   expect(screen.getByTestId('error')).not.toHaveTextContent('was not sent')
   expect(readNativeChatComposerDraft(scope)).toMatchObject(draft)
   mocks.capability = 'supported'
@@ -483,8 +480,8 @@ it('keeps the draft through Continue admission, refusal, uncertainty and recorde
       value: { clientMessageId: id, submission: { clientMessageId: id, dispatchState: 'accepted' } }
     })
   )
-  // Accepted before the journal arrives: the recorded sender entry still owns availability.
-  expect(continueButton()).toBeNull()
+  // Completed content is not a live operation; the next action uses actual host state.
+  expect(continueButton()).toBeInTheDocument()
   expect(readNativeChatComposerDraft(scope)).toMatchObject(draft)
   expect(screen.getByText('next.png')).toBeInTheDocument()
   expect(options).toEqual({ model: 'gpt-current', effort: 'high' })
@@ -514,6 +511,7 @@ it('keeps the notice view stable while Continue invokes the latest committed tra
   const first = vi.fn(() => true)
   const latest = vi.fn(() => true)
   const transport: NativeChatStructuredComposerTransport = {
+    capturePresentation: () => () => true,
     send: first,
     dispatchCommand: async () => ({ handled: false, accepted: false, error: null }),
     optionsSurface,

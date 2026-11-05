@@ -2,9 +2,10 @@ import type { Terminal } from '@xterm/headless'
 import type { SerializeAddon } from '@xterm/addon-serialize'
 import {
   buildAbsoluteCursorRestoreSequence,
-  readSavedCursorRegister
-} from '../../shared/terminal-serialize-absolute-cursor'
-import type { SavedCursorRegister } from '../../shared/terminal-serialize-absolute-cursor'
+  readSavedCursorRegister,
+  type SavedCursorRegister
+} from '../../shared/terminal/replay/terminal-serialize-absolute-cursor'
+
 import type { TerminalModes } from './types'
 
 export function buildFrameRestoreSnapshotFields(
@@ -24,7 +25,6 @@ export function buildFrameRestoreSnapshotFields(
     : {}
 }
 
-/** Restores live terminal state without replaying an alternate-screen frame. */
 function buildTerminalFrameRestoreSequences(
   serializer: SerializeAddon,
   terminal: Terminal,
@@ -87,7 +87,7 @@ function buildTerminalFrameRestoreSequences(
 }
 
 function serializeCurrentSgrState(serializer: SerializeAddon, terminal: Terminal): string {
-  // Unsupported addon behavior under our vendored patch: an out-of-range row emits only its authoritative pen-state diff.
+  // Our vendored addon’s undocumented out-of-range row behavior emits only the live pen state.
   const emptyRow = terminal.buffer.normal.length
   return serializer.serialize({
     range: { start: emptyRow, end: emptyRow },

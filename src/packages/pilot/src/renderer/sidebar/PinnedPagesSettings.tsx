@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
-import { SearchableSetting } from '@/components/settings/SearchableSetting'
-import { SettingsSwitchRow } from '@/components/settings/SettingsFormControls'
+import { SearchableSetting } from '@/components/settings/section-layout/SearchableSetting'
+import { SettingsSwitchRow } from '@/components/settings/form-controls/SettingsFormControls'
 import { SIDEBAR_PAGE_KEYS } from '../../shared/sidebar-pages-settings'
 import { pilotStore } from '../store'
 import { setSidebarPagePinned, SIDEBAR_PAGES, usePinnedPages } from './sidebar-pages'

@@ -1,11 +1,11 @@
 import type { WorkspaceVisibleTabType } from '../../shared/tab-types'
-import type { WorkspaceSessionState } from '../../shared/workspace-session-state-types'
+import type { WorkspaceSessionState } from '../../shared/workspace-session/workspace-session-state-types'
 import {
   pruneTabGroupLayoutAfterRetirement,
   repairMobileSessionTabGroupsAfterRetirement,
-  retireLeavesFromTerminalLayout,
   type RetiredTerminalSurface
 } from './mobile-session-terminal-retirement'
+import { retireLeavesFromTerminalLayout } from '../../shared/workspace-layout/terminal-layout-leaf-retirement'
 import { rebaseWorkspaceSessionTerminalMembership } from './workspace-session-terminal-membership-authority'
 import { advanceTerminalTopologyRevision } from '../persistence/terminal-topology/terminal-topology-membership'
 
@@ -79,8 +79,7 @@ export function retireTerminalSurfaceFromPersistence(
 
   const isLegacyFinalSurface = !layout && persistedTab?.ptyId === surface.ptyId
   if (!exactLeafInLayout && !isLegacyFinalSurface) {
-    // Why: tab.ptyId may describe a live sibling. The absent exact leaf still
-    // needs a tombstone, but sibling evidence must not remove its parent.
+    // Tombstone the absent exact leaf; tab.ptyId may name a live sibling and cannot justify parent removal.
     return recordTerminalSurfaceRetirement(session, surface, paneKey)
   }
 

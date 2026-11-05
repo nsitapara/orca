@@ -5,12 +5,8 @@ import {
   isClientHostedBrowserRowSelectionLive,
   useClientHostedBrowserRowSelection
 } from '@/lib/pane-manager/client-hosted-browser-row-state'
-import type {
-  ActivityGroupBy,
-  ActivityThreadGroup,
-  AgentPaneThread,
-  ThreadReadFilter
-} from '@/components/activity/activity-thread-types'
+import type { ActivityThreadGroup, AgentPaneThread } from '@/components/activity/activity-thread-types'
+import type { ActivityGroupBy, ThreadReadFilter } from '../../../../../shared/agents-view-thread-filters'
 import { mergeRowsIntoGroups } from './activity-tabs-groups'
 import type { ActivityTabsRow } from './activity-tabs-rows'
 import {

@@ -4,13 +4,13 @@ import type { RuntimeTerminalOrphanAdoptionRequest } from '../../shared/runtime-
 import { loadWorkspaceLayoutWithoutReport } from '../../shared/workspace-layout/workspace-layout-load'
 import { nameBasedLoadContext } from '../../shared/workspace-layout/workspace-layout-minted-ids'
 import { saveWorkspaceLayout } from '../../shared/workspace-layout/workspace-layout-save'
-import type { WorkspaceSessionState } from '../../shared/workspace-session-state-types'
+import type { WorkspaceSessionState } from '../../shared/workspace-session/workspace-session-state-types'
 import { collectPersistedTerminalLeafIds } from './mobile-session-layout-projection'
 import {
   collectLayoutLeafIdsInOrder,
   removeLayoutLeaf
 } from '../../shared/workspace-layout/terminal-pane-tree'
-import type { TerminalPaneLayoutNode } from '../../shared/terminal-tab-types'
+import type { TerminalPaneLayoutNode } from '../../shared/workspace-layout/terminal-tab-types'
 import type { RuntimePtyWorktreeRecord } from './runtime-terminal-state-records'
 import { mergeTerminalOrphanGroupLayout } from './terminal-orphan-topology'
 import { canonicalizeTerminalSessionWorktreeId } from './workspace-session-worktree-id'
@@ -203,10 +203,7 @@ export function buildRuntimeTerminalOrphanSession(args: {
   )
 }
 
-/**
- * The client's topology names only the panes it adopts; the tab's other panes keep their place
- * beside them, so recovering one split never drops a healthy sibling.
- */
+/** Adopt only named panes while retaining healthy siblings; one split recovery must not drop the rest of its tab. */
 function mergeAdoptedTopologyRoot(
   existingRoot: TerminalPaneLayoutNode | null,
   adoptedRoot: TerminalPaneLayoutNode

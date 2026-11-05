@@ -1,4 +1,5 @@
-import type { ActivityGroupBy, ActivityThreadGroup, AgentPaneThread } from './activity-thread-types'
+import type { ActivityGroupBy } from '../../../../shared/agents-view-thread-filters'
+import type { ActivityThreadGroup, AgentPaneThread } from './activity-thread-types'
 import {
   activityTabsGroupRows,
   activityTabsRowKey,

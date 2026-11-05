@@ -1,8 +1,3 @@
-/**
- * One windowed Orca under the layout oracle: launch, relaunch (optionally with a cold PTY daemon),
- * and a report of every finding per scenario.
- */
-
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 import type { ElectronApplication, Page, TestInfo } from '@stablyai/playwright-test'
@@ -136,7 +131,7 @@ export async function runOracleScenario(
         )
         if (!options.quitWithoutSettling) {
           run.oracle.compareRestart(coldDaemon ? 'cold relaunch' : 'relaunch', after, {
-            maskPtyIds: coldDaemon
+            maskPtyIds: restartsTerminals
           })
         }
       }

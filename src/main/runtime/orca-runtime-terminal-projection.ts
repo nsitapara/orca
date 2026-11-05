@@ -1,4 +1,4 @@
-import { detectTerminalComposerDraft } from '../../shared/terminal-composer-draft'
+import { detectTerminalComposerDraft } from '../../shared/terminal/input/terminal-composer-draft'
 import type { HeadlessEmulator } from '../daemon/headless-emulator'
 import type { HeadlessTerminalRow } from '../daemon/headless-terminal-rows'
 import type { RuntimeTerminalRowMetadata } from '../../shared/runtime-terminal-contracts'
@@ -90,7 +90,7 @@ export function projectTerminalVisibleLines(emulator: TerminalProjectionEmulator
 
 const PROJECTED_PROMPT_GLYPHS: ReadonlySet<string> = new Set(['❯', '›', '»'])
 
-/** Undoes the projection's draft blanking, for rules that read the rows the TUI painted. */
+/** Restore blanked drafts before rules inspect what the TUI painted. */
 export function restoreProjectedComposerDraft(
   lines: readonly string[],
   draft: string | undefined

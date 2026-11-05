@@ -1,6 +1,6 @@
 import type React from 'react'
 import { useContext } from 'react'
-import { WorktreeHostContextBadge } from '@/components/sidebar/WorktreeHostContextBadge'
+import { WorktreeHostContextBadge } from '@/components/sidebar/workspace-card/host/WorktreeHostContextBadge'
 import { ActivityMachineChipsContext } from './activity-machine-chips-context'
 import { getActivityRowHostId, type ActivityMachineRow } from './activity-machine-labels'
 

@@ -1,12 +1,11 @@
 import { useLayoutEffect, type RefObject } from 'react'
-import { useSystemPrefersDark } from '@/components/terminal-pane/use-system-prefers-dark'
 import { resolveLeftSidebarStyleVariables } from '@/lib/left-sidebar-appearance'
 import { pilotStore } from '../store'
 
 type SidebarAppearanceSettings = Parameters<typeof resolveLeftSidebarStyleVariables>[0]
 
-// pilot-hook: right-sidebar-appearance. Orca scopes the sidebar appearance setting (Match Terminal,
-// Tinted) to the left sidebar only; set the same variables on the right sidebar so both match.
+// pilot-hook: right-sidebar-appearance. Orca scopes the Tinted sidebar appearance to the left sidebar
+// only; set the same variables on the right sidebar so both match.
 export function usePilotRightSidebarAppearance(
   ref: RefObject<HTMLElement | null>,
   useStore: (
@@ -14,11 +13,10 @@ export function usePilotRightSidebarAppearance(
   ) => SidebarAppearanceSettings
 ): void {
   const settings = useStore((s) => s.settings)
-  const systemPrefersDark = useSystemPrefersDark()
   useLayoutEffect(() => {
     const el = ref.current
     const vars = pilotStore()
-      ? resolveLeftSidebarStyleVariables(settings, systemPrefersDark)
+      ? resolveLeftSidebarStyleVariables(settings)
       : undefined
     if (!el || !vars) {
       return
@@ -31,5 +29,5 @@ export function usePilotRightSidebarAppearance(
         el.style.removeProperty(name)
       }
     }
-  }, [ref, settings, systemPrefersDark])
+  }, [ref, settings])
 }

@@ -9,7 +9,10 @@ import { useActivityThreadActionBindings } from '@/components/activity/use-activ
 import { ActivityMachinesListPane } from '../../../../packages/pilot/src/renderer/activity-machines/ActivityMachinesListPane' // pilot-hook: activity-machines-list
 import { useAgentPaneThreads } from '@/components/activity/use-agent-pane-threads'
 import { ActivityThreadOptionsMenu } from '@/components/activity/activity-thread-controls'
-import type { ActivityGroupBy, ThreadReadFilter } from '@/components/activity/activity-thread-types'
+import type {
+  ActivityGroupBy,
+  ThreadReadFilter
+} from '../../../../shared/agents-view-thread-filters'
 import { useActivityTabsThreads } from '../../../../packages/pilot/src/renderer/activity-tabs/activity-tabs-threads' // pilot-hook: activity-tabs-threads
 import { withActivityTabsCount } from '../../../../packages/pilot/src/renderer/activity-tabs/activity-tabs-rows' // pilot-hook: activity-tabs-count
 import {
@@ -18,12 +21,7 @@ import {
   selectWorktreesByRepo
 } from '@/store/workspace-record-selectors'
 
-/**
- * The Activity thread list, hosted in the sidebar as a navigator: selecting a
- * row reveals that agent's pane in the workbench instead of swapping the view.
- * Threads whose pane is gone stay listed but inert — activateThreadTerminal
- * already no-ops without a live tab.
- */
+/** Select threads by revealing their existing panes; threads whose panes are gone remain listed but inert. */
 export type SidebarAgentsListProps = {
   readFilter: ThreadReadFilter
   setReadFilter: (filter: ThreadReadFilter) => void
@@ -45,7 +43,7 @@ export default function SidebarAgentsList({
   optionsTarget,
   scrollTopRef
 }: SidebarAgentsListProps): React.JSX.Element {
-  // The search row is owned here and mounts conditionally, so subscribe this host to locale changes.
+  // Subscribe here because the translated search row mounts conditionally.
   useTranslation()
   const compactMode = useAppStore((s) => s.agentsCompactMode)
   const setCompactMode = useAppStore((s) => s.setAgentsCompactMode)
@@ -63,7 +61,7 @@ export default function SidebarAgentsList({
         setQuery('')
         return
       }
-      // Wait for the newly visible input to mount before focusing it.
+      // Focus after the newly visible input mounts.
       requestAnimationFrame(() => activityFilterInputRef.current?.focus())
     },
     [setQuery, setShowSearch]

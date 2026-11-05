@@ -1,9 +1,9 @@
 import type { Repo } from '../../../../../shared/repo-types'
-import { getWorkspaceAttachments } from '../../../../../shared/workspace-attachments'
+import { getWorkspaceAttachments } from '../../../../../shared/workspace-attachments/workspace-attachments'
 import type { Worktree } from '../../../../../shared/worktree/types'
-import { useWorktreeCardLifecycleEffects } from '@/components/sidebar/use-worktree-card-lifecycle-effects'
-import { useWorktreeCardReviewDetails } from '@/components/sidebar/use-worktree-card-review-details'
-import type { WorktreeCardPrDisplay } from '@/components/sidebar/worktree-card-pr-display'
+import { useWorktreeCardLifecycleEffects } from '@/components/sidebar/workspace-card/controller/use-worktree-card-lifecycle-effects'
+import { useWorktreeCardReviewDetails } from '@/components/sidebar/workspace-card/details/use-worktree-card-review-details'
+import type { WorktreeCardPrDisplay } from '@/components/sidebar/workspace-card/review/worktree-card-pr-display'
 import { useAppStore } from '@/store'
 import { useActivityReviewVisibility } from './activity-review-visibility'
 

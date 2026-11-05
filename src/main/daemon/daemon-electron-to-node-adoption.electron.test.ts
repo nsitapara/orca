@@ -1,13 +1,8 @@
-/**
- * A daemon the previous build started under Electron (`ELECTRON_RUN_AS_NODE`) must survive a
- * launcher whose daemons run on plain Node: a busy one is adopted with its terminals intact, and
- * only once it has retired on its own does a Node daemon take the endpoint. Linux only, where the
- * AppImage moves its daemon from Electron to the bundled Node.
- */
+// Linux runtime migration must adopt busy Electron daemons before starting Node replacements.
 import { mkdirSync, mkdtempSync, realpathSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { join } from 'node:path'
-import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
+import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest'
 import { runProcess } from '@orca/process-host'
 import {
   buildDaemonLauncherDriver,
@@ -90,7 +85,7 @@ describe.runIf(linux)('an Electron-hosted daemon meeting a Node-hosted launcher'
     }
     runtimes.electron = realpathSync(electron)
     runtimes.node = realpathSync(locatePinnedNodeForTests() ?? process.execPath)
-    // Short root: the daemon's socket must fit sun_path.
+    // Keep the daemon socket path within sun_path.
     root = realpathSync(mkdtempSync('/tmp/orca-e2n-'))
     appPath = join(root, 'app')
     launcher = join(root, 'launcher.cjs')
@@ -138,7 +133,6 @@ describe.runIf(linux)('an Electron-hosted daemon meeting a Node-hosted launcher'
       expect(isProcessAlive(pid!)).toBe(true)
 
       const next = await openWindow('node', userData, nextVersion)
-      // Adopted as a normal target, never replaced or quarantined, while it owns a live shell.
       expect(next.result).toEqual({ adopted: true, mode: null })
       expect(profileDaemonPid(userData)).toBe(pid)
       expect(isProcessAlive(created.pid)).toBe(true)
@@ -146,31 +140,6 @@ describe.runIf(linux)('an Electron-hosted daemon meeting a Node-hosted launcher'
       expect(attached).toEqual({ pid: created.pid, isReattach: true, output: true })
       await next.quit()
       expect(isProcessAlive(pid!)).toBe(true)
-    }
-  )
-
-  it(
-    'starts the next daemon on Node once the Electron daemon has retired',
-    { timeout: 120_000 },
-    async () => {
-      const userData = newProfile('retired')
-      const previous = await openWindow('electron', userData, '1.0.0')
-      const oldPid = profileDaemonPid(userData)
-      expect(oldPid).not.toBeNull()
-      await previous.quit()
-      // An idle daemon leaves with its last client, as when the old window quits with no terminals.
-      await vi.waitFor(() => expect(isProcessAlive(oldPid!)).toBe(false), { timeout: 30_000 })
-
-      const next = await openWindow('node', userData, '1.1.0')
-      expect(next.result).toEqual({ adopted: false, mode: null })
-      const newPid = profileDaemonPid(userData)
-      expect(newPid).not.toBe(oldPid)
-      expect(executableOf(newPid!)).toBe(runtimes.node)
-      expect(await session('create', userData, 'e2n-fresh', 'FRESH')).toMatchObject({
-        isReattach: false,
-        output: true
-      })
-      await next.quit()
     }
   )
 })

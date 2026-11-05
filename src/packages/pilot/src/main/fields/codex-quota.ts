@@ -10,7 +10,7 @@ import {
   readCodexRateLimitsViaRpc,
   type CodexRpcRateLimitChild
 } from '../../../../../main/rate-limits/codex-rpc-rate-limit-probe'
-import { resolveHiddenRateLimitPtyCwd } from '../../../../../main/rate-limits/hidden-rate-limit-pty-cwd'
+import { resolveHiddenProbeCwd } from '../../../../../main/rate-limits/hidden-probe-cwd'
 import { withCliRuntimeOnPath } from '../../../../../shared/node-cli-command-resolution'
 import { codexQuotaReading, rateLimitsResultTap } from './codex-quota-reading'
 import type { QuotaReader } from './quota'
@@ -31,7 +31,7 @@ export function codexQuotaReader(now: () => number = Date.now): QuotaReader {
         program: command,
         args: [...CODEX_SHORT_LIVED_PROBE_APP_SERVER_ARGS],
         stdio: ['pipe', 'pipe', 'pipe'],
-        cwd: resolveHiddenRateLimitPtyCwd(),
+        cwd: resolveHiddenProbeCwd(),
         env: withCliRuntimeOnPath(command, process.env)
       })
       const probe = child as CodexRpcRateLimitChild

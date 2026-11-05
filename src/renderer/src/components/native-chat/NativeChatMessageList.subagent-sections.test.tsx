@@ -2,7 +2,8 @@
 
 import '@testing-library/jest-dom/vitest'
 
-import { cleanup, fireEvent, render, screen, within, act } from '@testing-library/react'
+import { cleanup, fireEvent, screen, within, act } from '@testing-library/react'
+import { render } from './native-chat-tooltip-test-harness'
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -30,19 +31,19 @@ import type {
   AgentJournalItemBody,
   AgentJournalProducerLinkage,
   AgentJournalRenderItem
-} from '../../../../shared/agent-session-journal-types'
+} from '../../../../shared/agent-session/journal/agent-session-journal-types'
 
 import type {
   NativeChatSubagentState,
   NativeChatMessage
-} from '../../../../shared/native-chat-types'
+} from '../../../../shared/native-chat/native-chat-types'
 
-import { projectStructuredItemsToNativeChat } from '../../../../shared/structured-agent-session-projection'
+import { projectStructuredItemsToNativeChat } from '../../../../shared/agent-session/view/structured-agent-session-projection'
 
 import {
   foldStructuredAgentSubagentRoster,
   NO_STRUCTURED_AGENT_SUBAGENT_ROSTER
-} from '../../../../shared/structured-agent-session-subagent-roster'
+} from '../../../../shared/agent-session/view/structured-agent-session-subagent-roster'
 
 import { NativeChatMessageList } from './NativeChatMessageList'
 
@@ -53,7 +54,6 @@ import {
   list,
   marker,
   scrollTranscript,
-  session as materialRailSession,
   stubLayout as materialRailStubLayout,
   windowState
 } from './NativeChatMessageList.windowing-test-support'
@@ -159,7 +159,6 @@ import {
       fireEvent.click(screen.getByRole('button', { name: /Ran 1 subagent/ }))
       fireEvent.click(screen.getByRole('button', { name: /explore the lane/, expanded: false }))
 
-      // Named once: its entry heads its rows, which come before the parent's answer.
       expect(screen.getAllByText('explore the lane')).toHaveLength(1)
       const entry = screen.getByRole('button', { name: /explore the lane/, expanded: true })
       const said = screen.getByText('The PR is CLEAN.')
@@ -175,10 +174,7 @@ import {
       ).toBeVisible()
     })
 
-    // happy-dom has no layout, so the geometry is pinned by the margin that decides it:
-    // outside a section a row's controls hang into the gap below it (`-mb-5`), and
-    // inside one that overhang would leave them below the section's border, touching
-    // the parent's next row.
+    // happy-dom has no layout; assert margins so controls cannot overhang the section border into the next row.
     it("keeps a section row's controls inside the row that carries the section's border", () => {
       renderList()
       fireEvent.click(screen.getByRole('button', { name: /Ran 1 subagent/ }))
@@ -250,22 +246,19 @@ import {
       expect(screen.getAllByText(/^lane [abc]$/)).toHaveLength(3)
     })
 
-    it("still counts the subagent's edit in the turn, and reveals it inside its section", () => {
+    it("shows the subagent's patch without opening its diagnostic section", () => {
       vi.spyOn(HTMLElement.prototype, 'scrollTo').mockImplementation(() => {})
       renderList()
       expect(screen.queryByRole('button', { name: /^Edited .*a\.ts(?:\s|$)/ })).toBeNull()
 
-      fireEvent.click(screen.getByRole('button', { name: /1 changed file/ }))
       fireEvent.click(screen.getByRole('button', { name: /src\/a.ts/ }))
 
       expect(screen.getByText('Edited')).toBeInTheDocument()
-      expect(screen.getByText('The PR is CLEAN.')).toBeInTheDocument()
-      expect(screen.getByRole('button', { name: /explore the lane/, expanded: true })).toBeVisible()
+      expect(screen.queryByText('The PR is CLEAN.')).toBeNull()
+      expect(screen.getByRole('button', { name: /Ran 1 subagent/, expanded: false })).toBeVisible()
     })
 
-    // Rows are grouped by the journal's turn records, so a subagent's edit counts in the
-    // turn that was running when it was made: not a send queued mid-turn, whose own turn
-    // had not opened, and in a turn keyed to its own record rather than the last prompt.
+    // Journal turn records own subagent edits, even when a newer send is queued or the opener is unloaded.
     it("counts a subagent's edit in the turn the journal says it was made in", () => {
       const say = (itemId: string, role: 'user' | 'assistant', text: string, sequence: number) =>
         journalItem(itemId, { kind: 'message', role, blocks: [{ type: 'text', text }] }, sequence)
@@ -309,10 +302,10 @@ import {
           expandSignal={false}
         />
       )
-      const rollups = screen.getAllByRole('button', { name: /changed file/ })
-      expect(rollups.map((rollup) => rollup.textContent)).toEqual([
-        expect.stringMatching(/1 changed file/),
-        expect.stringMatching(/1 changed file/)
+      const rollups = screen.getAllByRole('button', { name: /src\/[ab].ts/ })
+      expect(rollups.map((rollup) => rollup.getAttribute('aria-label'))).toEqual([
+        expect.stringMatching(/src\/a.ts/),
+        expect.stringMatching(/src\/b.ts/)
       ])
       const inOrder = [
         screen.getByText('Edited a.'),
@@ -332,11 +325,10 @@ import {
       fireEvent.click(screen.getByRole('button', { name: /Ran 1 subagent/ }))
       fireEvent.click(screen.getByRole('button', { name: /Ran 1 subagent/ }))
 
-      fireEvent.click(screen.getByRole('button', { name: /1 changed file/ }))
       fireEvent.click(screen.getByRole('button', { name: /src\/a.ts/ }))
 
       expect(screen.getByText('Edited')).toBeInTheDocument()
-      expect(screen.getByRole('button', { name: /Ran 1 subagent/, expanded: true })).toBeVisible()
+      expect(screen.getByRole('button', { name: /Ran 1 subagent/, expanded: false })).toBeVisible()
     })
 
     it('keeps a roster list open or closed past its row unmounting, and hides its sections while closed', () => {
@@ -374,7 +366,6 @@ import {
       expect(screen.getAllByText('explore the lane')).toHaveLength(1)
       rerender(listOf('working'))
       expect(screen.queryByText('The PR is CLEAN.')).toBeNull()
-      // The closed roster still says the agent works.
       expect(screen.getByRole('button', { name: /Kicked off 1 subagent/ })).toBeInTheDocument()
     })
 
@@ -384,7 +375,6 @@ import {
       rerender(listOf('working', true))
       expect(screen.queryByText('The PR is CLEAN.')).toBeNull()
 
-      // Closing the section from its entry left the list open.
       fireEvent.click(screen.getByRole('button', { name: /explore the lane/, expanded: false }))
       rerender(listOf('working'))
       expect(screen.getByText('The PR is CLEAN.')).toBeInTheDocument()
@@ -432,126 +422,9 @@ import {
 }
 
 {
-  const session = materialRailSession
   const stubLayout = materialRailStubLayout
 
-  describe('revealing a diff from a turn rollup', () => {
-    afterEach(cleanup)
-    let restoreLayout = (): void => {}
-    beforeEach(() => {
-      restoreLayout = stubLayout({ scrollGeometry: true, offsetChain: true })
-      vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (
-        this: HTMLElement
-      ) {
-        const row = this.closest<HTMLElement>('[data-index]')
-        const scroller = this.closest<HTMLElement>('[data-native-chat-scroll]')
-        return new DOMRect(
-          0,
-          row ? row.offsetTop - (scroller?.scrollTop ?? 0) : 0,
-          100,
-          this.offsetHeight
-        )
-      })
-    })
-    afterEach(() => {
-      restoreLayout()
-      vi.restoreAllMocks()
-    })
-
-    function journalItem(itemId: string, body: AgentJournalItemBody, sequence: number) {
-      return { itemId, body, sequence, observedAt: sequence * 1000, revision: 1 }
-    }
-
-    const patch = '@@ -1 +1 @@\n-before\n+after'
-    const items: AgentJournalRenderItem[] = [
-      journalItem(
-        'user',
-        { kind: 'message', role: 'user', blocks: [{ type: 'text', text: 'Edit it' }] },
-        1
-      ),
-      journalItem(
-        'diff',
-        {
-          kind: 'diff',
-          path: 'src/a.ts',
-          patch: { head: patch, truncated: false, digest: 'fixture', byteLength: patch.length }
-        },
-        2
-      ),
-      ...Array.from({ length: TRANSCRIPT_LENGTH }, (_, index) =>
-        journalItem(
-          `tail-${index}`,
-          {
-            kind: 'message',
-            role: 'assistant',
-            blocks: [{ type: 'text', text: `marker-${index}` }]
-          },
-          index + 3
-        )
-      )
-    ]
-
-    it('lets a rail jump supersede a previously revealed diff', () => {
-      const withPrompts = [
-        ...items.slice(0, 2),
-        journalItem(
-          'user-2',
-          { kind: 'message', role: 'user', blocks: [{ type: 'text', text: 'Second prompt' }] },
-          3
-        ),
-        journalItem(
-          'user-3',
-          { kind: 'message', role: 'user', blocks: [{ type: 'text', text: 'Third prompt' }] },
-          4
-        ),
-        ...items.slice(2)
-      ].map((item, index) => ({ ...item, sequence: index + 1 }))
-      const scrollTo = vi.fn()
-      vi.spyOn(HTMLElement.prototype, 'scrollTo').mockImplementation(scrollTo)
-      const transcript = (): React.JSX.Element => (
-        <NativeChatMessageList
-          session={session(projectStructuredItemsToNativeChat(withPrompts))}
-          journalItems={withPrompts}
-          isWorking={false}
-          expandSignal={false}
-        />
-      )
-      const { container, rerender } = render(transcript())
-      const selectedTop =
-        screen.getByText('Second prompt').closest<HTMLElement>('[data-index]')?.offsetTop ?? 0
-      expect(selectedTop).toBeGreaterThan(0)
-      fireEvent.click(screen.getByRole('button', { name: /1 changed file/ }))
-      fireEvent.click(screen.getByRole('button', { name: /src\/a.ts/ }))
-      scrollTranscript(container, 6000)
-      expect(screen.getByText('Edited')).toBeInTheDocument()
-      scrollTo.mockClear()
-      fireEvent.click(screen.getByRole('button', { name: 'Second prompt' }))
-      expect(scrollTo.mock.calls).toEqual([
-        [{ top: 6000, behavior: 'auto' }],
-        [{ top: selectedTop, behavior: 'auto' }]
-      ])
-      expect(screen.queryByRole('button', { name: /^Edited .*a\.ts(?:\s|$)/ })).toBeNull()
-      scrollTo.mockClear()
-      rerender(transcript())
-      rerender(transcript())
-      expect(scrollTo).not.toHaveBeenCalled()
-
-      scrollTranscript(container, 0)
-      scrollTo.mockClear()
-      fireEvent.click(screen.getByRole('button', { name: /1 changed file/ }))
-      fireEvent.click(screen.getByRole('button', { name: /src\/a.ts/ }))
-      const diffTop =
-        screen.getByText('Edited').closest<HTMLElement>('[data-index]')?.offsetTop ?? 0
-      expect(Number.isFinite(diffTop)).toBe(true)
-      expect(scrollTo).toHaveBeenCalledWith({ top: diffTop, behavior: 'auto' })
-      expect(scrollTo.mock.calls.some(([options]) => options?.behavior === 'smooth')).toBe(false)
-    })
-  })
-
-  // The rail borrows the reveal's pin to reach a row the window has left behind.
-  // Borrowing the pin means it also has to give it back: the request is what
-  // outranks a later reveal, and slots is rebuilt every render, so an effect that
-  // merely watched it would re-scroll forever.
+  // Rail jumps borrow the diff-reveal pin; release it after scrolling so later renders cannot repeat or outrank navigation.
   describe('jumping to a message from the rail', () => {
     afterEach(cleanup)
     let restoreLayout = (): void => {}
@@ -595,8 +468,7 @@ import {
       jumpToFirstPrompt()
       expect(scrollTo).toHaveBeenCalled()
 
-      // A streaming turn re-renders constantly with the same messages. The jump is
-      // spent; nothing here may drag the reader back to the row they left.
+      // Streaming rerenders must not replay a consumed jump after the reader leaves.
       scrollTo.mockClear()
       rerender(list(conversation))
       rerender(list(conversation))
@@ -613,9 +485,7 @@ import {
       jumpToFirstPrompt()
       expect(scrollTo).toHaveBeenCalled()
 
-      // The request is spent as soon as the scroll is issued, so the row it pinned
-      // is not held in the window afterwards. A pin still standing here would also
-      // still outrank a diff reveal, which shares the same slot.
+      // Release the pin after issuing the scroll so it cannot retain the row or outrank a diff reveal.
       expect(windowState(container).indexes).not.toContain(0)
     })
   })

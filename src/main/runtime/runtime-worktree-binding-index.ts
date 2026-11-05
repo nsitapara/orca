@@ -1,5 +1,5 @@
-import type { WorkspaceSessionState } from '../../shared/workspace-session-state-types'
-import { makePaneKey } from '../../shared/stable-pane-id'
+import type { WorkspaceSessionState } from '../../shared/workspace-session/workspace-session-state-types'
+import { makePaneKey } from '../../shared/workspace-layout/stable-pane-id'
 
 export function indexPersistedPtyWorktreeBindings(
   session: WorkspaceSessionState | null | undefined
@@ -12,7 +12,7 @@ export function indexPersistedPtyWorktreeBindings(
     }
     const existingWorktreeId = worktreeIdByPtyId.get(ptyId)
     if (existingWorktreeId && existingWorktreeId !== worktreeId) {
-      // Why: a corrupt/stale duplicate binding must not attribute a live PTY to whichever workspace was visited first.
+      // Duplicate stale bindings must not attribute a live PTY by workspace iteration order.
       worktreeIdByPtyId.delete(ptyId)
       ambiguousPtyIds.add(ptyId)
       return

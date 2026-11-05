@@ -2,9 +2,9 @@ import { withDurableRuntimeStore } from './runtime-durable-store-fixture'
 import { describe, expect, it, vi } from 'vitest'
 import { getDefaultWorkspaceSession } from '../../shared/constants'
 import { LOCAL_EXECUTION_HOST_ID, type ExecutionHostId } from '../../shared/execution-host'
-import { hasClosedTerminalTabRecord } from '../../shared/closed-terminal-tab-tombstones'
+import { hasClosedTerminalTabRecord } from '../../shared/workspace-layout/closed-terminal-tab-tombstones'
 import type { RuntimeMobileSessionTabsSnapshot } from '../../shared/runtime-types'
-import type { WorkspaceSessionState } from '../../shared/workspace-session-state-types'
+import type { WorkspaceSessionState } from '../../shared/workspace-session/workspace-session-state-types'
 import { buildHeadlessMobileSessionTerminalTabs } from './mobile-session-terminal-projection'
 import { OrcaRuntimeService } from './orca-runtime'
 import { terminalSurfaceCloseMutation } from './terminal-surface-close'
@@ -73,7 +73,6 @@ export function registerOrcaRuntimeTerminalCloseSpillPartitionTests(): void {
       getForegroundProcess: async () => null,
       listProcesses: async () => [{ id: 'target-pty', cwd: REPO.path, title: 'Terminal' }]
     })
-    // The published snapshot lists both partitions' tabs, as the Web UI sees them.
     const tabs = [...sessions.values()].flatMap((session) =>
       buildHeadlessMobileSessionTerminalTabs(
         WORKTREE_ID,
@@ -126,7 +125,6 @@ export function registerOrcaRuntimeTerminalCloseSpillPartitionTests(): void {
         true
       )
       expect(kill).toHaveBeenCalledWith('target-pty')
-      // The unrelated tab and its partition are untouched.
       expect(sessions.get(LOCAL_EXECUTION_HOST_ID)).toBe(local)
     })
 
@@ -171,7 +169,6 @@ export function registerOrcaRuntimeTerminalCloseSpillPartitionTests(): void {
           capturePersistedTerminalTabCopy(session, WORKTREE_ID, 'target')
         ])
       )
-      // In place, as the binding writer rebinds a session it holds.
       const second = sessions.get('runtime:env-0')!
       second.terminalLayoutsByTabId.target!.ptyIdsByLeafId = { [LEAF]: 'replacement-pty' }
       second.terminalPtyIncarnationsByPaneKey = { [`target:${LEAF}`]: 'replacement-incarnation' }

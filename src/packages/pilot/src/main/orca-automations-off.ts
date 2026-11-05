@@ -1,5 +1,5 @@
 import type { AutomationService } from '../../../../main/automations/service'
-import type { Store } from '../../../../main/persistence'
+import type { Store } from '../../../../main/persistence/loading-store/store'
 
 // Hook target: src/main/startup/main-process-automations.ts (pilot-hook: orca-automations-off).
 // Spec hook 1: Pilot runs the YAML automations; Orca's own scheduler doesn't run inside Pilot.

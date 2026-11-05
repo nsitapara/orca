@@ -1,5 +1,5 @@
 import type { ExecutionHostId } from '../../../../../shared/execution-host'
-import type { TuiAgent } from '../../../../../shared/tui-agent'
+import type { TuiAgent } from '../../../../../shared/agent-launch/catalog/tui-agent'
 import type { NewTabMachineOpensIn, NewTabMachineTarget } from './new-tab-machine-step'
 
 export type NewTabMachineAvailability = 'detected' | 'missing' | 'checking'

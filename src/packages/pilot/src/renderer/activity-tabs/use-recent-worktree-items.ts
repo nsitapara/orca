@@ -1,6 +1,6 @@
 import { useMemo } from 'react'
 import { useShallow } from 'zustand/react/shallow'
-import { folderWorkspaceToWorktree } from '../../../../../shared/folder-workspace-worktree'
+import { folderWorkspaceToWorktree } from '../../../../../shared/folder-workspaces/folder-workspace-worktree'
 import type { AgentPaneThread } from '@/components/activity/activity-thread-types'
 import { useNow } from '@/hooks/use-now'
 import { useAppStore } from '@/store'

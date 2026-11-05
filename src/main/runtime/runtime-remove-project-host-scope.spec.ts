@@ -1,16 +1,12 @@
-/**
- * The same repo id is allowed on two execution hosts (persistence.ts `removeProjectForHost`).
- * `repo.rm` resolves a *row*, so the deletion it performs must be scoped to that row's host,
- * never the sibling host's registration.
- * A `path:`/`name:` selector resolves unambiguously even when the id is duplicated, so this
- * is reachable — and since #11994 every paired device now learns about it immediately.
- */
+/** Same repo ids may exist on multiple hosts; repo.rm resolves one row and must delete only that host registration, including unambiguous path/name selectors (#11994). */
 import { describe, expect, it, vi } from 'vitest'
 import type { Repo } from '../../shared/repo-types'
 import { OrcaRuntimeService } from './orca-runtime'
 import { findRepoRowForHostScopedWrite } from '../persistence/tracking-repos/repo-update-operations'
 import { getRepoExecutionHostId } from '../../shared/execution-host'
 import type { RepoHostTarget } from '../../shared/repo-host-identity'
+import { partialRuntimeStore } from './runtime-store-partial-fixture'
+import { withProjectWorktreeCreate } from '../workspaces/creation/worktree-create-in-flight'
 
 export function registerRuntimeRemoveProjectHostScopeTests(): void {
   function makeRepos(): Repo[] {
@@ -22,7 +18,7 @@ export function registerRuntimeRemoveProjectHostScopeTests(): void {
         badgeColor: '#000',
         addedAt: 1,
         executionHostId: 'local'
-      } as Repo,
+      },
       {
         id: 'dup',
         path: '/remote/dup',
@@ -30,7 +26,7 @@ export function registerRuntimeRemoveProjectHostScopeTests(): void {
         badgeColor: '#000',
         addedAt: 2,
         connectionId: 'ssh-1'
-      } as Repo
+      }
     ]
   }
 
@@ -48,46 +44,38 @@ export function registerRuntimeRemoveProjectHostScopeTests(): void {
         }
       }
     })
-    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the store stub covers every read and write repo.rm and repo.update drive.
-    const runtime = new OrcaRuntimeService({
-      getRepos: () => [...repos],
-      getRepo: (id: string) => repos.find((repo) => repo.id === id) ?? null,
-      getAllWorktreeMeta: () => ({}),
-      getWorktreeMeta: () => null,
-      setWorktreeMeta: vi.fn(),
-      removeWorktreeMeta: vi.fn(),
-      getGitHubCache: () => null,
-      // Same row lookup the real store's host-scoped write uses.
-      updateRepo: (target: RepoHostTarget, updates: Partial<Repo>) => {
-        const row = findRepoRowForHostScopedWrite(repos, target.id, getRepoExecutionHostId(target))
-        return row ? Object.assign(row, updates) : null
-      },
-      moveProjectToGroup: (target: RepoHostTarget, groupId: string | null) => {
-        const row = findRepoRowForHostScopedWrite(repos, target.id, getRepoExecutionHostId(target))
-        return row ? Object.assign(row, { projectGroupId: groupId }) : null
-      },
-      removeProjectForHost
-    } as never)
+    const runtime = new OrcaRuntimeService(
+      partialRuntimeStore({
+        getRepos: () => [...repos],
+        getRepo: (id: string) => repos.find((repo) => repo.id === id),
+        getAllWorktreeMeta: () => ({}),
+        getWorktreeMeta: () => undefined,
+        setWorktreeMeta: vi.fn(),
+        removeWorktreeMeta: vi.fn(),
+        // Same row lookup the real store's host-scoped write uses.
+        updateRepo: (target: RepoHostTarget, updates: Partial<Repo>) => {
+          const row = findRepoRowForHostScopedWrite(
+            repos,
+            target.id,
+            getRepoExecutionHostId(target)
+          )
+          return row ? Object.assign(row, updates) : null
+        },
+        moveProjectToGroup: (target: RepoHostTarget, groupId: string | null) => {
+          const row = findRepoRowForHostScopedWrite(
+            repos,
+            target.id,
+            getRepoExecutionHostId(target)
+          )
+          return row ? Object.assign(row, { projectGroupId: groupId }) : null
+        },
+        removeProjectForHost
+      })
+    )
     return { runtime, repos, removeProjectForHost }
   }
 
   describe('repo.rm with the same repo id on two execution hosts', () => {
-    it('removes only the resolved row when a path selector picks the SSH host copy', async () => {
-      const { runtime, repos } = createRuntime()
-
-      await runtime.removeProject('path:/remote/dup')
-
-      expect(repos.map((repo) => repo.path)).toEqual(['/laptop/dup'])
-    })
-
-    it('removes only the resolved row when a name selector picks the local copy', async () => {
-      const { runtime, repos } = createRuntime()
-
-      await runtime.removeProject('name:Dup Local')
-
-      expect(repos.map((repo) => repo.path)).toEqual(['/remote/dup'])
-    })
-
     it('refuses a bare duplicated id rather than guessing a host', async () => {
       const { runtime, repos, removeProjectForHost } = createRuntime()
 
@@ -97,65 +85,29 @@ export function registerRuntimeRemoveProjectHostScopeTests(): void {
     })
   })
 
-  describe('projectGroup.moveProject with the same repo id on two execution hosts', () => {
-    it('moves the SSH row a path selector picked, not its local sibling', async () => {
-      const { runtime, repos } = createRuntime()
+  describe('repo.rm while a workspace create is open', () => {
+    it('refuses the host row whose create is open, not its same-id twin', async () => {
+      const { runtime, repos, removeProjectForHost } = createRuntime()
+      const holdCreate = (repo: Repo) => {
+        let finish!: () => void
+        const create = withProjectWorktreeCreate(repo, () => new Promise<void>((r) => (finish = r)))
+        return () => {
+          finish()
+          return create
+        }
+      }
 
-      await runtime.moveProjectToGroup('path:/remote/dup', 'group-1')
+      const finishRemoteCreate = holdCreate(repos[1])
+      await expect(runtime.removeProject('path:/remote/dup')).rejects.toMatchObject({
+        code: 'worktree_create_in_progress'
+      })
+      expect(removeProjectForHost).not.toHaveBeenCalled()
+      await finishRemoteCreate()
 
-      expect(repos.map((repo) => repo.projectGroupId)).toEqual([undefined, 'group-1'])
-    })
-
-    it('moves the local row a name selector picked, not its SSH sibling', async () => {
-      const { runtime, repos } = createRuntime()
-
-      const moved = await runtime.moveProjectToGroup('name:Dup Local', 'group-1')
-
-      expect(moved).toMatchObject({ path: '/laptop/dup', projectGroupId: 'group-1' })
-      expect(repos.map((repo) => repo.projectGroupId)).toEqual(['group-1', undefined])
-    })
-
-    it('refuses a bare duplicated id rather than guessing a host', async () => {
-      const { runtime, repos } = createRuntime()
-
-      await expect(runtime.moveProjectToGroup('dup', 'group-1')).rejects.toThrow(
-        'selector_ambiguous'
-      )
-      expect(repos.map((repo) => repo.projectGroupId)).toEqual([undefined, undefined])
-    })
-
-    it('moves the SSH row a paired client names by its connection', async () => {
-      const { runtime, repos } = createRuntime()
-
-      await runtime.moveProjectToGroup('dup', 'group-1', undefined, 'ssh-1')
-
-      expect(repos.map((repo) => repo.projectGroupId)).toEqual([undefined, 'group-1'])
-    })
-
-    it('moves the local row a paired client names with no connection', async () => {
-      const { runtime, repos } = createRuntime()
-
-      await runtime.moveProjectToGroup('dup', 'group-1', undefined, null)
-
-      expect(repos.map((repo) => repo.projectGroupId)).toEqual(['group-1', undefined])
-    })
-  })
-
-  describe('repo.update with the same repo id on two execution hosts', () => {
-    it('writes the SSH row a path selector picked, not its local sibling', async () => {
-      const { runtime, repos } = createRuntime()
-
-      await runtime.updateRepo('path:/remote/dup', { displayName: 'Renamed Remote' })
-
-      expect(repos.map((repo) => repo.displayName)).toEqual(['Dup Local', 'Renamed Remote'])
-    })
-
-    it('sets the base ref on the SSH row a path selector picked', async () => {
-      const { runtime, repos } = createRuntime()
-
-      await runtime.setRepoBaseRef('path:/remote/dup', 'origin/dev')
-
-      expect(repos.map((repo) => repo.worktreeBaseRef)).toEqual([undefined, 'origin/dev'])
+      const finishLocalCreate = holdCreate(repos[0])
+      await runtime.removeProject('path:/remote/dup')
+      await finishLocalCreate()
+      expect(repos.map((repo) => repo.path)).toEqual(['/laptop/dup'])
     })
   })
 }

@@ -47,7 +47,7 @@ export function recordHangObservation(options: {
     })
     return true
   } catch {
-    // Why: telemetry is best-effort; a marker that cannot be written must not take down the watchdog.
+    // Diagnostic write failures must not terminate the watchdog.
     return false
   }
 }
@@ -135,7 +135,7 @@ export function runWatchdog(
         record(unresponsiveMs, false)
       }
     },
-    // Why: rewriting the marker keeps one observation per stall rather than two rows to reconcile.
+    // Update one marker per stall so resolution does not require reconciling a second record.
     onHangResolved: (unresponsiveMs) => {
       record(unresponsiveMs, true)
       reportSampledStall(unresponsiveMs, true)

@@ -2,7 +2,8 @@
 import { renderHook } from '@testing-library/react'
 import { act } from 'react'
 import { afterEach, describe, expect, it } from 'vitest'
-import type { AgentPaneThread, ThreadReadFilter } from '@/components/activity/activity-thread-types'
+import type { AgentPaneThread } from '@/components/activity/activity-thread-types'
+import type { ThreadReadFilter } from '../../../../../shared/agents-view-thread-filters'
 import { buildActivityThreadGroups } from '@/components/activity/activity-thread-grouping'
 import {
   makeRepo,

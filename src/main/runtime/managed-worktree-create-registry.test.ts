@@ -1,5 +1,4 @@
-// Every runtime create (CLI, agents, phone, paired clients, orchestration) is listed in the host's
-// creation registry while it runs, and names its workspace before the host announces it.
+// Runtime creates must enter the host registry and name their workspace before announcement.
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 vi.mock('../../shared/sidebar-inputs-switch', () => ({ ORCA_SIDEBAR_INPUTS_IS_MAIN: true }))
@@ -19,7 +18,9 @@ const mocks = vi.hoisted(() => ({
 }))
 
 vi.mock('../telemetry/client', () => ({ track: mocks.track, isTelemetryEnabled: () => true }))
-vi.mock('../git/create-event-repo-probe', () => ({ probeCreateEventRepoFacts: mocks.probe }))
+vi.mock('../git/worktrees/creation/create-event-repo-probe', () => ({
+  probeCreateEventRepoFacts: mocks.probe
+}))
 vi.mock('./runtime-local-worktree-create', () => ({
   createRuntimeLocalManagedWorktree: mocks.createLocal
 }))
@@ -37,14 +38,15 @@ vi.mock('./runtime-local-worktree-setup', () => ({
     didStartInProcessSetupHook: false
   }))
 }))
-vi.mock('../ipc/registered-worktree-roots-cache', () => ({
+vi.mock('../ipc/worktrees/removal/registered-worktree-roots-cache', () => ({
   invalidateAuthorizedRootsCache: vi.fn()
 }))
-vi.mock('../ipc/registered-worktree-roots-scoped-invalidation', () => ({
+vi.mock('../ipc/worktrees/removal/registered-worktree-roots-scoped-invalidation', () => ({
   invalidateAuthorizedRootsCacheForRepo: vi.fn()
 }))
 
 import { OrcaRuntimeService } from './orca-runtime'
+import { partialRuntimeStore } from './runtime-store-partial-fixture'
 
 const gitRepo = {
   id: 'repo-1',
@@ -68,12 +70,12 @@ type RuntimeInternals = {
 }
 
 function makeRuntime(repo: Record<string, unknown> = gitRepo): OrcaRuntimeService {
-  const store = {
-    getSettings: () => ({ disabledTuiAgents: ['codex'], workspaceDir: '/worktrees' }),
-    getProjectHostSetups: () => []
-  }
-  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: every store method this create path reaches is supplied above.
-  const runtime = new OrcaRuntimeService(store as never)
+  const runtime = new OrcaRuntimeService(
+    partialRuntimeStore({
+      getSettings: () => ({ disabledTuiAgents: ['codex'], workspaceDir: '/worktrees' }),
+      getProjectHostSetups: () => []
+    })
+  )
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the named members all exist on the service; the cast only exposes non-public ones to the spies.
   const internals = runtime as unknown as RuntimeInternals
   vi.spyOn(internals, 'resolveRepoSelector').mockResolvedValue(repo)
@@ -95,10 +97,10 @@ function makeRuntime(repo: Record<string, unknown> = gitRepo): OrcaRuntimeServic
 type LocalCreateArgs = { onWorktreeMetadataPersisted: (created: { id: string }) => unknown }
 
 function creationsOf(runtime: OrcaRuntimeService): Record<string, unknown> {
-  if (!runtime.workspaceCreations) {
+  if (!runtime.workspaceLifecycle) {
     throw new Error('the switch is mocked on')
   }
-  return runtime.workspaceCreations.snapshot().creations
+  return runtime.workspaceLifecycle.creationsSnapshot().creations
 }
 
 describe('runtime creation registry', () => {

@@ -1,5 +1,5 @@
 import type { ItemFields } from '../../shared/api-types'
-import type { WorktreeCardPrDisplay } from '@/components/sidebar/worktree-card-pr-display'
+import type { WorktreeCardPrDisplay } from '@/components/sidebar/workspace-card/review/worktree-card-pr-display'
 
 type ReviewStatus = WorktreeCardPrDisplay['status']
 

@@ -1,5 +1,5 @@
 import React from 'react'
-import { WorktreeHostContextBadge } from '@/components/sidebar/WorktreeHostContextBadge'
+import { WorktreeHostContextBadge } from '@/components/sidebar/workspace-card/host/WorktreeHostContextBadge'
 import type { PilotHostRef } from './pilot-host'
 import { useMachineChipsShown } from './pilot-hosts-feed'
 

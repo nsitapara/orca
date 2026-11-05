@@ -1,14 +1,6 @@
 #!/usr/bin/env node
-// Benchmarks two CPU costs `setLocalWorkspaceSession` pays on every session write — the write
-// that fires on something as ordinary as clicking between two terminal split panes.
-//
-//   1. capTerminalScrollbackSessionBuffer — UTF-8 budget scan per retained scrollback buffer
-//   2. remapPaneKeys                      — pane-key map rebuild that steady state throws away
-//
-// The snapshot disk rewrite on the same path is measured separately (#18764).
-//
-// Each scenario runs the production export against a baseline that reproduces the pre-change
-// shape, so the reported speedup cannot drift away from what production actually does.
+// Benchmark production scrollback capping and pane-key remapping against scan/rebuild baselines.
+// Snapshot disk rewrite is measured separately (#18764).
 import { spawnSync } from 'node:child_process'
 import { performance } from 'node:perf_hooks'
 import fs from 'node:fs'
@@ -55,10 +47,12 @@ for (const [name, value] of [
 }
 
 const { capTerminalScrollbackSessionBuffer } = await import(
-  pathToFileURL(path.join(ROOT, 'src/shared/workspace-session-terminal-buffers.ts')).href
+  pathToFileURL(
+    path.join(ROOT, 'src/shared/workspace-session/workspace-session-terminal-buffers.ts')
+  ).href
 )
 const { TERMINAL_SCROLLBACK_SESSION_BUFFER_BYTE_LIMIT } = await import(
-  pathToFileURL(path.join(ROOT, 'src/shared/terminal-scrollback-limits.ts')).href
+  pathToFileURL(path.join(ROOT, 'src/shared/terminal/replay/terminal-scrollback-limits.ts')).href
 )
 const { remapAcknowledgedAgentPaneKeys } = await import(
   pathToFileURL(path.join(ROOT, 'src/main/persistence/restoring-sessions/pane-key-remapping.ts'))
@@ -68,12 +62,13 @@ const { clampUtf8TextTail, measureUtf8ByteLength } = await import(
   pathToFileURL(path.join(ROOT, 'src/shared/utf8-byte-limits.ts')).href
 )
 const { isTerminalLeafId, makePaneKey, parsePaneKey } = await import(
-  pathToFileURL(path.join(ROOT, 'src/shared/stable-pane-id.ts')).href
+  pathToFileURL(path.join(ROOT, 'src/shared/workspace-layout/stable-pane-id.ts')).href
 )
 
 function median(samples) {
   const sorted = [...samples].sort((left, right) => left - right)
-  return sorted[Math.floor(sorted.length / 2)]
+  const middle = Math.floor(sorted.length / 2)
+  return sorted.length % 2 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2
 }
 
 function timeRounds(run) {
@@ -95,9 +90,7 @@ function report(label, baselineMs, currentMs, extra = '') {
   return speedup
 }
 
-// ---------------------------------------------------------------- scenario 1
-
-// Verbatim pre-change capTerminalScrollbackSessionBuffer; measureUtf8ByteLength itself is unchanged.
+// Scan UTF-8 bytes before clamping; compare with the production budget probe.
 function baselineCapScrollbackBuffer(buffer) {
   if (
     buffer.length <= TERMINAL_SCROLLBACK_SESSION_BUFFER_BYTE_LIMIT &&
@@ -144,8 +137,6 @@ report(
   capCurrentMs
 )
 
-// ---------------------------------------------------------------- scenario 2
-
 const paneKeys = {}
 const leafIdByInputLeafIdByTabId = new Map()
 for (let index = 0; index < PANE_KEYS; index += 1) {
@@ -161,7 +152,7 @@ for (let index = 0; index < PANE_KEYS; index += 1) {
   leaves.set(leafId, leafId)
 }
 
-// Verbatim pre-change remapPaneKeys: parses every key, then rebuilds the object regardless.
+// Parse every key and rebuild the object; compare steady-state reuse.
 function baselineRemapPaneKeys(values, remap) {
   if (!values || Object.keys(values).length === 0) {
     return { values, changed: false }

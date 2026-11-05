@@ -14,10 +14,11 @@ import {
 } from '@/components/activity/activity-thread-presentation'
 import type { ActivityEvent, AgentPaneThread } from '@/components/activity/activity-thread-types'
 import CommentMarkdown from '@/components/sidebar/CommentMarkdown'
-import { DetailHeader } from '@/components/sidebar/WorktreeCardMetadataControls'
+import { DetailHeader } from '@/components/sidebar/workspace-card/metadata/WorktreeCardMetadataControls'
 import { Button } from '@/components/ui/button'
 import { AgentIcon } from '@/lib/agent-catalog'
-import { agentTypeToIconAgent, formatAgentTypeLabel } from '@/lib/agent-status'
+import { agentTypeToIconAgent } from '../../../../../shared/agent-status/presentation/agent-type-icon-agent'
+import { formatAgentTypeLabel } from '../../../../../shared/agent-status/presentation/agent-type-label'
 import { cn } from '@/lib/utils'
 import { useAppStore } from '@/store'
 

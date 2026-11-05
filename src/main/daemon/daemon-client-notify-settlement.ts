@@ -5,13 +5,13 @@ import {
   writeRefused,
   writeUnverifiable,
   type WriteSettlement
-} from '../../shared/pty-write-settlement'
+} from '../../shared/terminal/pty/lifecycle/pty-write-settlement'
 
 export type NotifySettlementRequest = {
   socket: Socket
   message: unknown
   timeoutMs: number
-  // Why: a notify that never drains is the only local evidence a dead endpoint leaves.
+  // Failure to drain provides a local signal for dead-endpoint recovery.
   onUndeliverable: () => void
 }
 

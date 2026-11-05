@@ -3,7 +3,7 @@ import {
   isRuntimeHostContactRevoked,
   lastVerifiedRuntimeStatus,
   type RuntimeEnvironmentStatus
-} from '../../../../../shared/runtime-host-status'
+} from '../../../../../shared/remote-runtime/host-status/runtime-host-status'
 import type { PilotStatus } from '../../shared/api-types'
 import { pilotRpc } from '../api'
 import { pilotStore } from '../store'

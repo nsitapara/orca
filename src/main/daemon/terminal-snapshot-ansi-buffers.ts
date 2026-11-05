@@ -1,5 +1,5 @@
 import type { TerminalModes } from './types'
-import { splitAtAlternateScreenEntry } from '../../shared/terminal-alternate-screen-split'
+import { splitAtAlternateScreenEntry } from '../../shared/terminal/protocol/escape/terminal-alternate-screen-split'
 
 export function splitTerminalSnapshotAnsi(
   snapshotAnsi: string,
@@ -9,7 +9,6 @@ export function splitTerminalSnapshotAnsi(
   if (!split) {
     return { snapshotAnsi, scrollbackAnsi: '' }
   }
-  // Why: rehydrateSequences owns the alt-screen transition. Keeping the
-  // normal buffer separate lets an already-alt renderer rebuild it safely.
+  // Keep normal-buffer replay separate; rehydrateSequences owns the alternate-screen transition.
   return { scrollbackAnsi: split.normalAnsi, snapshotAnsi: split.alternateAnsi }
 }

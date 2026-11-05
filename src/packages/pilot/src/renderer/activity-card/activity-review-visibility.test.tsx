@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { cleanup, render, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { HostedReviewInfo } from '../../../../../shared/hosted-review'
+import type { HostedReviewInfo } from '../../../../../shared/source-control/hosted-review/hosted-review-contracts'
 import type { Repo } from '../../../../../shared/repo-types'
 import type { Worktree } from '../../../../../shared/worktree/types'
 import { useVisibleHostedReviewRefresh } from '@/app-shell/use-visible-hosted-review-refresh'

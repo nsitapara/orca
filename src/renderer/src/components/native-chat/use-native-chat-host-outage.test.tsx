@@ -7,7 +7,7 @@ import { getDefaultSettings } from '../../../../shared/constants'
 import type {
   RuntimeEnvironmentStatus,
   RuntimeHostStatusSnapshot
-} from '../../../../shared/runtime-host-status'
+} from '../../../../shared/remote-runtime/host-status/runtime-host-status'
 import type { RuntimeStatus } from '../../../../shared/runtime-types'
 import type { RuntimeClientTarget } from '../../../../shared/runtime-client-target'
 import {
@@ -170,7 +170,6 @@ describe('useNativeChatHostOutage', () => {
       (id: string) => entry(id, { verification: 'unavailable', transport: 'unknown' }),
       true
     ],
-    // Auth or protocol refusals turn a reconnect away the same way, so none is offered.
     ['refused', refused, false]
   ])('says a %s host is offline at once', (_name, offline, canReconnect) => {
     const { result } = renderHook(() => useNativeChatHostOutage(remote))

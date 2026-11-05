@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { z } from 'zod'
 import { afterAll, beforeAll, describe, expect, it, vi, type Mock } from 'vitest'
-import { linearError } from '../../../../../main/linear/issue-context-errors'
+import { linearError } from '../../../../../main/linear/issue-context/errors'
 import type { LinearWriter } from '../linear-connector/linear-writer'
 import { LINEAR_NOT_CONNECTED, linearEntries, writeIdFor } from './linear-entries'
 

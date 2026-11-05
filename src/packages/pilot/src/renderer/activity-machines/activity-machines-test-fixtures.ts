@@ -5,7 +5,7 @@ import {
   LOCAL_EXECUTION_HOST_ID,
   type ExecutionHostId
 } from '../../../../../shared/execution-host'
-import type { GitRemoteIdentity } from '../../../../../shared/git-remote-identity'
+import type { GitRemoteIdentity } from '../../../../../shared/git/remotes/git-remote-identity'
 import { createGlobalSettingsFixture } from '../../../../../shared/global-settings-test-fixture'
 import type { Repo } from '../../../../../shared/repo-types'
 import type { Worktree } from '../../../../../shared/worktree/types'

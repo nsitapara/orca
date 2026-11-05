@@ -1,9 +1,9 @@
-import type { TuiAgent } from '../../../../../shared/tui-agent'
+import type { TuiAgent } from '../../../../../shared/agent-launch/catalog/tui-agent'
 import {
   quoteStartupArg,
   resolveStartupShell,
   type AgentStartupShell
-} from '../../../../../shared/tui-agent-startup-shell'
+} from '../../../../../shared/agent-launch/startup/tui-agent-startup-shell'
 
 // Hook target: src/main/runtime/terminal/launch/terminal-create-deduplication.ts (pilot-hook:
 // agent-launch-env). launchAgentTerminal forwards no caller env, and its extraAgentArgs allow only
@@ -42,6 +42,11 @@ export function spliceAgentArgv(
     )
   }
   return `${command.slice(0, -quoted.length)} ${args}${quoted}`
+}
+
+// Only a Pilot step carries `pilot`; every other launch takes upstream's startupAgent path.
+export function hasPilotAgentLaunch(opts: object): boolean {
+  return 'pilot' in opts && opts.pilot !== undefined
 }
 
 // Upstream callers pass no `pilot` key and get the very same object back.

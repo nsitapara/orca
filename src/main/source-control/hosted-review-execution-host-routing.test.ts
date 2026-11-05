@@ -1,14 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Repo } from '../../shared/repo-types'
 
-/**
- * Routing cases for the hosted-review contract.
- *
- * Two SSH targets are registered at once in every case on purpose: routing that answers with
- * "some connected host" rather than *this row's* host only shows up once a second one exists,
- * and the `runtime:` cases reuse one of those names so a nested target cannot be told apart
- * from a client-dialable one by its spelling.
- */
+/** Register two SSH targets to expose wrong-host fallback; reuse a name under runtime: to expose nested-namespace confusion. */
 
 const {
   gitExecFileAsyncMock,
@@ -74,26 +67,29 @@ vi.mock('../gitlab/gl-utils', () => ({
   glabRepoExecOptions: vi.fn(() => ({}))
 }))
 
-vi.mock('../git/runner', () => ({
+vi.mock('../git/command-runner/git-process-env', async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
   gitOptionalLocksDisabledEnv: vi.fn(() => ({}))
 }))
 
-vi.mock('../git/upstream', () => ({ getUpstreamStatus: getUpstreamStatusMock }))
+vi.mock('../git/source-control/upstream', () => ({ getUpstreamStatus: getUpstreamStatusMock }))
 
-vi.mock('../git/repo', () => ({
+vi.mock('../git/repo', () => ({}))
+
+vi.mock('../../shared/git/refs/git-default-base-ref', async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
   resolveDefaultBaseRefViaExec: resolveDefaultBaseRefViaExecMock
 }))
 
 vi.mock('../git/exact-ref-probe', () => ({
-  probeAnyExactRef: probeAnyExactRefMock,
-  isShowRefNoMatchError: vi.fn(() => false)
+  probeAnyExactRef: probeAnyExactRefMock
 }))
 
-vi.mock('../git/worktree-symlink-detection', () => ({
+vi.mock('../git/worktrees/content-paths/worktree-symlink-detection', () => ({
   findExistingWorktreeSymlinkPaths: vi.fn(async () => [])
 }))
 
-vi.mock('../git/remote-url-probe', () => ({
+vi.mock('../git/remotes/remote-url-probe', () => ({
   assertRemoteUrlReadable: assertRemoteUrlReadableMock
 }))
 
@@ -153,7 +149,7 @@ vi.mock('../gitea/pull-request-creation', () => ({
 }))
 
 import { __resetHostedReviewBranchCacheForTests } from './hosted-review-branch-cache'
-import { getStoredRepoExecutionHostId } from '../repo-execution-host'
+import { getStoredRepoExecutionHostId } from '../workspaces/execution-host/repo-execution-host'
 import { hostedReviewSshConnectionId } from './hosted-review-execution-host'
 import { RuntimeHostedReviewCommands } from '../runtime/runtime-hosted-review-commands'
 import { SshHostNotServedError } from '../providers/ssh-host-not-served-error'
@@ -197,7 +193,6 @@ function makeCommands(repo: Repo): RuntimeHostedReviewCommands {
   })
 }
 
-/** Which SSH target the git-state layer actually ran the preflight on, or null for local. */
 function sshTargetThatRanGit(): string | null {
   for (const [id, provider] of sshProviders) {
     if (provider.exec.mock.calls.length > 0 || provider.getStatus.mock.calls.length > 0) {
@@ -238,7 +233,6 @@ beforeEach(() => {
   probeAnyExactRefMock.mockResolvedValue({ found: true, unknown: false })
   assertRemoteUrlReadableMock.mockResolvedValue(undefined)
 
-  // No forge claims the remote unless a case says so; each test opts its provider in.
   getProjectSlugMock.mockResolvedValue(null)
   getRepoSlugMock.mockResolvedValue(null)
   getRepoUpstreamMock.mockResolvedValue(null)
@@ -420,8 +414,7 @@ describe('hosted-review host resolution', () => {
   })
 
   it('reads a runtime stamp on a row in this store as self-addressing, not a second machine', () => {
-    // The registration controller only adopts `runtime:` onto a row with no connectionId, so the
-    // checkout is here; a nested target belongs to that server's namespace and is never dialed.
+    // runtime: adopts only rows without connectionId; nested SSH targets belong to that server's namespace, never this client's.
     expect(getStoredRepoExecutionHostId({ executionHostId: 'runtime:env-1' })).toBe('local')
     expect(
       getStoredRepoExecutionHostId({

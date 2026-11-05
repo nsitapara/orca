@@ -6,7 +6,7 @@ import {
 } from '../../../../../shared/execution-host'
 import { indexExecutionHostsById } from '../../../../../shared/managed-orcad-execution-host'
 import { getMixedHostContextLabels } from '../../../../../shared/worktree/host-context-labels'
-import type { SidebarHostOption } from '@/components/sidebar/sidebar-host-options'
+import type { SidebarHostOption } from '@/components/sidebar/worktree-list/controls/sidebar-host-options'
 
 export type ActivityMachineRow = {
   worktree: Pick<Worktree, 'hostId'>

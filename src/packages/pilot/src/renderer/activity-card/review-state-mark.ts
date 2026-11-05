@@ -8,7 +8,7 @@ import {
   GitPullRequestDraft,
   type LucideIcon
 } from 'lucide-react'
-import type { WorktreeCardPrDisplay } from '@/components/sidebar/worktree-card-pr-display'
+import type { WorktreeCardPrDisplay } from '@/components/sidebar/workspace-card/review/worktree-card-pr-display'
 
 export type ReviewMark = { Icon: LucideIcon; tone: string; label: string }
 

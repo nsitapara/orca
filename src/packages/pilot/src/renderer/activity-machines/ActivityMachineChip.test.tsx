@@ -1,10 +1,8 @@
 // @vitest-environment happy-dom
 import { cleanup, render } from '@testing-library/react'
 import { afterEach, expect, it, vi } from 'vitest'
-import type {
-  ActivityGroupBy,
-  ActivityThreadGroup
-} from '@/components/activity/activity-thread-types'
+import type { ActivityThreadGroup } from '@/components/activity/activity-thread-types'
+import type { ActivityGroupBy } from '../../../../../shared/agents-view-thread-filters'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { withGroupRows } from '../activity-tabs/activity-tabs-rows'
 import { registerPilotStore } from '../store'

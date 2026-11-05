@@ -197,7 +197,8 @@ function usePathsExist(paths: readonly string[]): readonly boolean[] | null {
       return
     }
     void check([...paths]).then(
-      (value) => alive && setExist({ key, value }),
+      // An unreadable path counts as missing.
+      (value) => alive && setExist({ key, value: value.map((found) => found === true) }),
       () => undefined
     )
     return () => {

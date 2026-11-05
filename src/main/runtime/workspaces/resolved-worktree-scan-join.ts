@@ -11,21 +11,19 @@ import {
   type HostScopedWorktreeKey
 } from '../../../shared/worktree/host-qualified-identity'
 import { projectResolvedWorktreeLineage } from '../../../shared/resolved-worktree-lineage'
-import { resolveLocalProjectRuntimesForRepos } from '../../project-runtime-git-options'
+import { resolveLocalProjectRuntimesForRepos } from '../../workspaces/execution-host/local-project-runtime-resolution'
 import { getAgentLaunchPlatformForRepo } from '../runtime-agent-launch-resolution'
 import type { ResolvedWorktreeSnapshot } from '../runtime-resolved-worktree-cache'
 import type { RuntimeStore } from '../runtime-store-contract'
 import {
+  projectRepoWorktreeRows,
   joinRepoWorktreeRows,
   scanRepoWorktreeRows,
   type RepoWorktreeRowDeps,
   type RepoWorktreeRowsScan
 } from '../repo-worktree-row-resolution'
 
-/**
- * Per-repo scans by repo and execution host, since one repo id can live on two hosts. `gitRun` is
- * the scan-cache entry the result came from: a new one only when the host was consulted again.
- */
+/** Key scans by repo and host; gitRun identifies the cache entry and changes only when the host is consulted. */
 export type ResolvedWorktreeRepoScans = Map<
   HostScopedRepoKey,
   RepoWorktreeRowsScan & { gitRun: object | null }
@@ -34,7 +32,7 @@ export type ResolvedWorktreeRepoScans = Map<
 export type ResolvedWorktreeScanJoin = ResolvedWorktreeSnapshot & {
   /** Git repos the scans predate, which list no rows until scanned. */
   unscannedRepoKeys: ReadonlySet<HostScopedRepoKey>
-  /** Rows a scan that reached a verdict listed, by their git run; a stalled scan's carry no branch. */
+  /** Rows a scan that reached a verdict listed, by their git run; stalled scans remain degraded. */
   gitRunById: ReadonlyMap<HostScopedWorktreeKey, object | null>
   /** Repos whose scan reached a verdict, so a row they no longer list is gone. */
   scannedRepoKeys: ReadonlySet<HostScopedRepoKey>
@@ -80,14 +78,12 @@ export async function scanResolvedWorktreeRepos(
   return scans
 }
 
-/**
- * The fleet listing from cached scans and the store as it is now, synchronously. A git repo the
- * scans predate lists no rows yet and is counted, so its owner can scan again.
- */
+/** Join cached scans with current metadata; count newly registered repos with no rows so owners can rescan. */
 export function joinResolvedWorktreeScans(
   store: RuntimeStore | null,
   rowDeps: () => RepoWorktreeRowDeps,
-  scans: ResolvedWorktreeRepoScans
+  scans: ResolvedWorktreeRepoScans,
+  projectOnly = false
 ): ResolvedWorktreeScanJoin {
   if (!store) {
     return {
@@ -114,7 +110,12 @@ export function joinResolvedWorktreeScans(
     if (!scan && !isFolderRepo(repo)) {
       unscannedRepoKeys.add(key)
     }
-    const rows = joinRepoWorktreeRows(deps, repo, scan, metaById)
+    const rows = (projectOnly ? projectRepoWorktreeRows : joinRepoWorktreeRows)(
+      deps,
+      repo,
+      scan,
+      metaById
+    )
     if (scan?.ok) {
       scannedRepoKeys.add(key)
       for (const row of rows) {

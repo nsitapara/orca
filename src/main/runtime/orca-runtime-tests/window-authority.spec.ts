@@ -6,7 +6,7 @@ import {
   RUNTIME_GRAPH_RELOAD_TIMEOUT_MS,
   electronMocks
 } from '../orca-runtime-test-mocks.spec'
-import type { WorkspaceSessionState } from '../orca-runtime-test-mocks.spec'
+import type { WorkspaceSessionState } from '../../../shared/workspace-session/workspace-session-state-types'
 import {
   HEADLESS_LEAF_ID,
   TEST_WINDOW_ID,
@@ -243,7 +243,7 @@ describe('OrcaRuntimeService', () => {
     runtime.markRendererReloading(TEST_WINDOW_ID)
     runtime.markGraphUnavailable(TEST_WINDOW_ID)
 
-    // Layout-owner build: main holds every pane it owns, so it answers once the window is gone.
+    // Main-owned panes remain answerable after the window closes.
     expect(runtime.getStatus()).toMatchObject(
       ORCA_LAYOUT_OWNER_IS_MAIN
         ? { graphStatus: 'ready', authoritativeWindowId: HEADLESS_RUNTIME_WINDOW_ID }

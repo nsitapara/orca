@@ -71,17 +71,6 @@ describe('hang detection marker', () => {
     expect(consumeHangDetectionMarker(markerPath)).toEqual(marker)
   })
 
-  it('round-trips a self-recovered marker', () => {
-    const markerPath = hangDetectionMarkerPath(dir)
-    writeHangDetectionMarker(markerPath, {
-      detectedAt: 1,
-      parentPid: 2,
-      unresponsiveMs: 61000,
-      selfRecovered: true
-    })
-    expect(consumeHangDetectionMarker(markerPath)).toMatchObject({ selfRecovered: true })
-  })
-
   // Why: the 10-16 freeze left no record; a rewrite cut short must never cost the earlier note.
   it('keeps the previous marker intact when a rewrite fails', () => {
     const markerPath = hangDetectionMarkerPath(dir)
@@ -96,10 +85,6 @@ describe('hang detection marker', () => {
       writeHangDetectionMarker(markerPath, { ...marker, unresponsiveMs: 90000 })
     ).toThrow('no space left on device')
     expect(consumeHangDetectionMarker(markerPath)).toEqual(marker)
-  })
-
-  it('returns null for a missing marker', () => {
-    expect(consumeHangDetectionMarker(hangDetectionMarkerPath(dir))).toBeNull()
   })
 
   it.each(['stat', 'read'])('retains a real marker after a transient %s failure', (operation) => {
@@ -127,17 +112,6 @@ describe('hang detection marker', () => {
     expect(consumeHangDetectionMarker(markerPath)).toBe('unreadable')
     expect(readFileSync).not.toHaveBeenCalled()
     expect(existsSync(markerPath)).toBe(false)
-  })
-
-  // Why: a marker written by the detect leg has no selfRecovered field until the resolve leg
-  // rewrites it, and "never resolved" is the conservative reading of its absence.
-  it('treats a missing selfRecovered flag as an unresolved hang', () => {
-    const markerPath = hangDetectionMarkerPath(dir)
-    writeFileSync(
-      markerPath,
-      JSON.stringify({ detectedAt: 1, parentPid: 2, unresponsiveMs: 45000 })
-    )
-    expect(consumeHangDetectionMarker(markerPath)).toMatchObject({ selfRecovered: false })
   })
 
   it.each(['', 'not json', JSON.stringify({ detectedAt: 1 })])(

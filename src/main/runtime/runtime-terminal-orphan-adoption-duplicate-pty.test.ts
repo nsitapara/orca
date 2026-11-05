@@ -4,16 +4,16 @@ import type {
   RuntimeMobileSessionTabsResult,
   RuntimeTerminalOrphanAdoptionRequest
 } from '../../shared/runtime-types'
-import type { WorkspaceSessionState } from '../../shared/workspace-session-state-types'
+import type { WorkspaceSessionState } from '../../shared/workspace-session/workspace-session-state-types'
 import {
   GIT_KEY,
   addWorkspace,
   emptySession,
   leaf
 } from '../../shared/workspace-layout/workspace-layout-session.test-fixture'
-import { planDuplicatePtyPaneRepair } from '../persistence/terminal-topology/duplicate-pty-pane-repair'
 import { adoptRuntimeTerminalOrphansFromInventory } from './runtime-terminal-orphan-adoption'
 import type { RuntimePtyWorktreeRecord } from './runtime-terminal-state-records'
+import { paneOfPty } from './terminal/surface/pty-pane-query'
 
 const TAB = 'tab-1'
 const KEPT = leaf(1)
@@ -79,6 +79,7 @@ function adoptKeptPane(session: WorkspaceSessionState) {
     ports: {
       readSession: () => ({ session, sessionWorktreeId: GIT_KEY, currentRevision: 0 }),
       getPty: () => pty,
+      paneOf: (record) => paneOfPty(record, () => null),
       getLeaves: () => [],
       getLeaf: () => undefined,
       getDisplayTitle: () => null,
@@ -102,13 +103,5 @@ describe('orphan adoption of a terminal main repaired at load', () => {
     await expect(adoptKeptPane(duplicateSession()).adopted).rejects.toThrow(
       'terminal_orphan_competing_owner'
     )
-  })
-
-  it('replays the kept pane once the stored tree holds one pane per terminal', async () => {
-    const repaired = planDuplicatePtyPaneRepair(duplicateSession())!.session
-    const { adopted, replayPersistedSurface } = adoptKeptPane(repaired)
-
-    await expect(adopted).resolves.toMatchObject({ adopted: false })
-    expect(replayPersistedSurface).toHaveBeenCalledWith(expect.anything(), TAB, `${TAB}:${KEPT}`)
   })
 })

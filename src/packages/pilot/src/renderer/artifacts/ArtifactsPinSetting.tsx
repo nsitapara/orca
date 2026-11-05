@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { SettingsSwitchRow } from '@/components/settings/SettingsFormControls'
+import { SettingsSwitchRow } from '@/components/settings/form-controls/SettingsFormControls'
 import { pilotStore } from '../store'
 import { setSidebarPagePinned, usePinnedPages } from '../sidebar/sidebar-pages'
 

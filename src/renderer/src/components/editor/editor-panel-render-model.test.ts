@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { OpenFile } from '@/store/slices/editor'
 import { RICH_MARKDOWN_MAX_SIZE_BYTES } from '../../../../shared/constants'
-import type { GitStatusEntry } from '../../../../shared/git-status-types'
+import type { GitStatusEntry } from '../../../../shared/git/status/git-status-types'
 import type { FileContent } from './editor-panel-content-types'
 import { getEditorPanelRenderModel } from './editor-panel-render-model'
 
@@ -31,6 +31,7 @@ function renderModel(args: {
   fileContents?: Record<string, FileContent>
   editorDrafts?: Record<string, string>
   markdownViewMode?: Record<string, 'source' | 'rich' | 'preview'>
+  markdownDefaultViewMode?: 'source' | 'rich'
   markdownRichModeSizeOverridden?: boolean
   isChangesMode?: boolean
   gitStatusByWorktree?: Record<string, GitStatusEntry[]>
@@ -43,6 +44,7 @@ function renderModel(args: {
     gitStatusEntries: args.gitStatusByWorktree?.[activeFile.worktreeId],
     gitBranchEntries: undefined,
     markdownViewMode: args.markdownViewMode ?? {},
+    markdownDefaultViewMode: args.markdownDefaultViewMode,
     markdownRichModeSizeOverridden: args.markdownRichModeSizeOverridden ?? false,
     isChangesMode: args.isChangesMode ?? false,
     canOpenWorkspaceFileBrowser: true
@@ -129,17 +131,42 @@ describe('getEditorPanelRenderModel HTML preview affordance', () => {
   })
 })
 
+describe('getEditorPanelRenderModel shebang language fallback', () => {
+  it('uses the shebang when an extensionless file has no name-based language', () => {
+    const scriptFile: OpenFile = {
+      id: '/repo/bin/deploy',
+      filePath: '/repo/bin/deploy',
+      relativePath: 'bin/deploy',
+      worktreeId: 'wt-1',
+      language: 'plaintext',
+      mode: 'edit',
+      isDirty: false
+    }
+    const model = renderModel({
+      activeFile: scriptFile,
+      fileContents: {
+        [scriptFile.id]: textContent({ content: '#!/usr/bin/env python3\nprint(1)' })
+      }
+    })
+
+    expect(model.resolvedLanguage).toBe('python')
+    const diffModel = renderModel({
+      activeFile: { ...scriptFile, mode: 'diff', diffSource: 'unstaged' },
+      editorDrafts: { [scriptFile.id]: '#!/usr/bin/env python3\nprint(2)' }
+    })
+    expect(diffModel.resolvedLanguage).toBe('plaintext')
+  })
+})
+
 describe('getEditorPanelRenderModel read-only raw rendering (AI Vault View Log)', () => {
   it('renders a read-only markdown log as raw source with no markdown viewer or chrome', () => {
     const model = renderModel({ activeFile: markdownFile({ readOnly: true }) })
 
-    // Raw text renderer, not the rich/preview markdown surface.
     expect(model.isMarkdown).toBe(false)
     expect(model.hasViewModeToggle).toBe(false)
     expect(model.canShowMarkdownPreview).toBe(false)
     expect(model.canExportMarkdownToPdf).toBe(false)
     expect(model.canShowMarkdownTableOfContents).toBe(false)
-    // Real language is preserved so Monaco still tokenizes the read-only source.
     expect(model.resolvedLanguage).toBe('markdown')
   })
 
@@ -165,7 +192,8 @@ describe('getEditorPanelRenderModel markdown export affordance', () => {
       editorDrafts: { '/repo/README.md': '[example]: https://example.com' }
     })
 
-    expect(model.canExportMarkdownToPdf).toBe(false)
+    expect(model.inlineMarkdownRenderState?.renderMode).toBe('preview')
+    expect(model.canExportMarkdownToPdf).toBe(true)
   })
 
   it('disables rich export when a multibyte character crosses the byte limit', () => {
@@ -269,5 +297,28 @@ describe('virtual Markdown preview PDF export', () => {
         }).canExportMarkdownToPdf
       ).toBe(false)
     }
+  })
+})
+
+describe('default Markdown view preference', () => {
+  it('opens untoggled Markdown edit tabs in the preferred view', () => {
+    expect(renderModel({}).mdViewMode).toBe('rich')
+    expect(renderModel({ markdownDefaultViewMode: 'source' }).mdViewMode).toBe('source')
+  })
+
+  it('keeps a per-tab toggle over the preference', () => {
+    const model = renderModel({
+      markdownDefaultViewMode: 'source',
+      markdownViewMode: { '/repo/README.md': 'rich' }
+    })
+    expect(model.mdViewMode).toBe('rich')
+  })
+
+  it('leaves Markdown diffs on Source regardless of the preference', () => {
+    const model = renderModel({
+      activeFile: markdownFile({ mode: 'diff', diffSource: 'unstaged' }),
+      markdownDefaultViewMode: 'rich'
+    })
+    expect(model.mdViewMode).toBe('source')
   })
 })

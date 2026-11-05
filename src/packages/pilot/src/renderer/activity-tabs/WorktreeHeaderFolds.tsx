@@ -1,7 +1,7 @@
 import type React from 'react'
 import { ChevronDown, FolderGit2, Workflow } from 'lucide-react'
 import type { ActivityThreadGroup } from '@/components/activity/activity-thread-types'
-import { FilledBellIcon } from '@/components/sidebar/WorktreeCardHelpers'
+import { FilledBellIcon } from '@/components/sidebar/workspace-card/identity/worktree-card-glyphs'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { translate } from '@/i18n/i18n'
 import { cn } from '@/lib/utils'

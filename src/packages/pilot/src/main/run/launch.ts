@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import type { OrcaRuntimeService } from '../../../../../main/runtime/orca-runtime'
-import { AGENT_STATUS_STALE_AFTER_MS } from '../../../../../shared/agent-status-freshness'
+import { AGENT_STATUS_STALE_AFTER_MS } from '../../../../../shared/agent-status/contracts/agent-status-freshness'
 import type { AgentKind, StepDef } from '../../shared/definition/types'
 import type { WorktreeFactDeps } from '../fields/worktree-facts'
 import { UnrecordedLaunchError, type LaunchResult } from '../scheduler/tick-runner'

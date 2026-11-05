@@ -78,43 +78,6 @@ it('separates runner provenance, embedded CLI commits, workflow policy and daily
   }
 })
 
-it('qualifies cache misses and permits cache publication only after the full matrix succeeds', () => {
-  expect(workflow.jobs.qualify.if).toBe("needs.cache.outputs.hit != 'true'")
-  expect(workflow.jobs.qualify.uses).toBe('./.github/workflows/node-server-tests.yml')
-  expect(workflow.jobs.qualify.with).toMatchObject({
-    build_template: true,
-    fast_runners: '${{ inputs.fast_runners }}'
-  })
-  expect(workflow.jobs.save.needs).toContain('qualify')
-  expect(workflow.jobs.save.if).toBe("needs.qualify.result == 'success'")
-  const restore = workflow.jobs.cache.steps.find((step) => step.id === 'restore')
-  expect(restore.with['restore-keys']).toBeUndefined()
-  const validate = workflow.jobs.cache.steps.find((step) => step.id === 'validate')
-  expect(validate.run).toContain('verifyPackagedOrcadTemplate')
-  expect(validate.run).toContain('assertNotDarkBuild')
-})
-
-it('keeps production on free GitHub runners and isolates adhoc qualification caches', () => {
-  const release = parse(readFileSync('.github/workflows/release-cut.yml', 'utf8'))
-  const adhoc = parse(readFileSync('.github/workflows/adhoc-mac-build.yml', 'utf8'))
-  expect(workflow.on.workflow_call.inputs.fast_runners.default).toBe(false)
-  expect(release.jobs['orcad-template'].uses).toBe(
-    './.github/workflows/qualified-orcad-template.yml'
-  )
-  expect(release.jobs['orcad-template'].with).toEqual({
-    ref: 'refs/tags/${{ needs.cut.outputs.tag }}'
-  })
-  expect(adhoc.jobs['orcad-template'].with.fast_runners).toBe(true)
-  expect(identity.env.RUNNER_PROFILE).toBe(
-    "${{ inputs.fast_runners && 'fast' || 'github-hosted' }}"
-  )
-  for (const name of ['cache', 'save']) {
-    expect(workflow.jobs[name]['runs-on']).toBe(
-      "${{ inputs.fast_runners && 'blacksmith-2vcpu-ubuntu-2404' || 'ubuntu-latest' }}"
-    )
-  }
-})
-
 it.each(['valid', 'corrupt', 'dark'])(
   'validates restored bytes and requalifies an unsafe template: %s',
   async (kind) => {

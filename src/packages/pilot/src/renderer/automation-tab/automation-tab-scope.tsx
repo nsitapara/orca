@@ -1,6 +1,6 @@
 import { createContext, useContext, type ReactNode } from 'react'
-import type { TerminalAgent } from '../../../../../shared/terminal-agent'
-import type { TerminalTab } from '../../../../../shared/terminal-tab-types'
+import type { TerminalAgent } from '../../../../../shared/agent-status/identity/terminal-agent'
+import type { TerminalTab } from '../../../../../shared/workspace-layout/terminal-tab-types'
 import { AgentIcon } from '@/lib/agent-catalog'
 import { isAutomationTabTitle } from '../../shared/automation-tab-title'
 import { pilotStore } from '../store'

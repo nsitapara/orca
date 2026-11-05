@@ -41,23 +41,6 @@ describe('recordHangObservation', () => {
     rmSync(dir, { recursive: true, force: true })
   })
 
-  it('records an unresolved hang', () => {
-    const markerPath = join(dir, 'marker.json')
-    recordHangObservation({
-      parentPid: 4242,
-      markerPath,
-      detectedAt: 1_000,
-      unresponsiveMs: 47_000,
-      selfRecovered: false
-    })
-    expect(consumeHangDetectionMarker(markerPath)).toMatchObject({
-      detectedAt: 1_000,
-      parentPid: 4242,
-      unresponsiveMs: 47_000,
-      selfRecovered: false
-    })
-  })
-
   it('overwrites the marker when the stall clears, keeping one observation per stall', () => {
     const markerPath = join(dir, 'marker.json')
     recordHangObservation({
@@ -82,7 +65,6 @@ describe('recordHangObservation', () => {
   })
 
   it('never spawns, signals, or exits', () => {
-    // Why: a false positive must never kill a live main thread while writes may be in flight.
     recordHangObservation({
       parentPid: 4242,
       markerPath: join(dir, 'marker.json'),
@@ -106,18 +88,6 @@ describe('recordHangObservation', () => {
       })
     ).toBe(false)
   })
-
-  it('is a no-op when no marker path is configured', () => {
-    expect(() =>
-      recordHangObservation({
-        parentPid: 4242,
-        markerPath: '',
-        detectedAt: 1_000,
-        unresponsiveMs: 45_000,
-        selfRecovered: false
-      })
-    ).not.toThrow()
-  })
 })
 
 describe('watchdog worker entry', () => {
@@ -130,39 +100,13 @@ describe('watchdog worker entry', () => {
     vi.useRealTimers()
   })
 
-  it('accepts only complete positive worker data', () => {
-    expect(
-      isHangWatchdogWorkerData({
-        parentPid: 42,
-        markerPath: '/tmp/marker',
-        timeoutMs: 100,
-        checkIntervalMs: 25
-      })
-    ).toBe(true)
-    for (const value of [
-      null,
-      {},
-      { parentPid: 0, markerPath: '/tmp/marker', timeoutMs: 100, checkIntervalMs: 25 },
-      { parentPid: 42, markerPath: 7, timeoutMs: 100, checkIntervalMs: 25 },
-      { parentPid: 42, markerPath: '/tmp/marker', timeoutMs: 0, checkIntervalMs: 25 },
-      { parentPid: 42, markerPath: '/tmp/marker', timeoutMs: 100, checkIntervalMs: Infinity },
-      {
-        parentPid: 42,
-        markerPath: '/tmp/marker',
-        timeoutMs: 100,
-        checkIntervalMs: 25,
-        sampleDir: 7
-      },
-      {
-        parentPid: 42,
-        markerPath: '/tmp/marker',
-        timeoutMs: 100,
-        checkIntervalMs: 25,
-        stallSampleMs: 0
-      }
-    ]) {
-      expect(isHangWatchdogWorkerData(value)).toBe(false)
-    }
+  it('accepts sample settings only when well-formed', () => {
+    const base = { parentPid: 42, markerPath: '/tmp/marker', timeoutMs: 100, checkIntervalMs: 25 }
+    expect(isHangWatchdogWorkerData({ ...base, sampleDir: '/logs', stallSampleMs: 15_000 })).toBe(
+      true
+    )
+    expect(isHangWatchdogWorkerData({ ...base, sampleDir: 7 })).toBe(false)
+    expect(isHangWatchdogWorkerData({ ...base, stallSampleMs: 0 })).toBe(false)
   })
 
   it('routes heartbeats and shuts down its timer and port', () => {

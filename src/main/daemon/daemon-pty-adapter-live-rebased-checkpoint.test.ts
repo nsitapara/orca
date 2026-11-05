@@ -1,11 +1,10 @@
 import './mock-descendant-sweep'
-/* Adapter-level coverage for checkpoints rebased on the live daemon snapshot. */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { DaemonPtyAdapter } from './daemon-pty-adapter'
 import type { DaemonServer } from './daemon-server'
-import { DAEMON_RESTORE_SCROLLBACK_ROWS } from './daemon-restore-scrollback-depth'
+import { DESKTOP_TERMINAL_SCROLLBACK_ROWS_DEFAULT as DAEMON_RESTORE_SCROLLBACK_ROWS } from '../../shared/terminal/replay/terminal-scrollback-policy'
 import { DAEMON_SESSION_SCROLLBACK_ROWS } from './daemon-session-scrollback-window'
 import { HeadlessEmulator } from './headless-emulator'
 import { HistoryManager } from './history-manager'
@@ -134,7 +133,7 @@ describe('DaemonPtyAdapter checkpoints rebased on live', () => {
     expect(spawned.coldRestore).toBeDefined()
     historyAdapter.resize(spawned.id, size.cols, size.rows)
     lastSubprocess._simulateData(numberedLines(1, 30, 'NEW'))
-    // A hidden pane's getBufferSnapshot is what folds and persists the first rebased checkpoint.
+    // Hidden-pane snapshot reads persist the first rebased checkpoint.
     const snapshot = await historyAdapter.getBufferSnapshot(spawned.id)
 
     const replayed = new HeadlessEmulator({ cols: size.cols, rows: size.rows, scrollback: 20_000 })
@@ -165,12 +164,12 @@ describe('DaemonPtyAdapter checkpoints rebased on live', () => {
       cwd: '/tmp'
     })
     lastSubprocess._simulateData(numberedLines(1, 4_000))
-    // Commits the deep rebased checkpoint the bounded read then replays.
+    // Persist the deep checkpoint before requesting a bounded replay.
     expect(await historyAdapter.getBufferSnapshot(id)).not.toBeNull()
 
     const snapshot = await historyAdapter.getBufferSnapshot(id, { scrollbackRows: 2_000 })
     const text = `${snapshot?.scrollbackAnsi ?? ''}${snapshot?.data ?? ''}`
-    // 2000 scrollback + 24 screen rows, the last of which is the blank cursor row.
+    // Include screen rows; trailing newline leaves the last row blank.
     const oldest = 4_000 - (2_000 + 24 - 2)
     expect(text).toContain('LINE_04000')
     expect(text).toContain(`LINE_0${oldest}`)

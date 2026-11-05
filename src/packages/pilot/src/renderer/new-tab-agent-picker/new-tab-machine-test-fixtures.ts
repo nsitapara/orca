@@ -6,7 +6,7 @@ import type {
 import type { ProjectHostSetup } from '../../../../../shared/project-types'
 import type { Worktree } from '../../../../../shared/worktree/types'
 import type { NewTabMachineTarget } from './new-tab-machine-step'
-import { makeWorktree } from '@/components/worktree-jump-palette-test-fixtures'
+import { makeWorktree } from '@/components/worktree-jump/worktree-jump-palette-test-fixtures'
 
 export const PROJECT = 'git:example.invalid/pilot/machine-step'
 

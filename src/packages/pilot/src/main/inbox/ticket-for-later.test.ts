@@ -1,7 +1,7 @@
 import { rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
-import { linearError } from '../../../../../main/linear/issue-context-errors'
+import { linearError } from '../../../../../main/linear/issue-context/errors'
 import type { InboxAnswer, InboxItemRow, InboxStatus } from '../../shared/api-types'
 import type { LinearErrorCode } from '../../../../../shared/linear/agent-access'
 import { formatTicketedOutcome, FROZEN_DRAFT } from '../../shared/ticket-outcome'

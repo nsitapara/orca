@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { TabContentType } from '../../../../../shared/tab-types'
-import type { TuiAgent } from '../../../../../shared/tui-agent'
+import type { TuiAgent } from '../../../../../shared/agent-launch/catalog/tui-agent'
 import {
   makeTabWithIds,
   makeWorktreeWithId

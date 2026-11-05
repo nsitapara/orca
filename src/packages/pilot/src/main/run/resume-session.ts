@@ -1,5 +1,5 @@
 import type { OrcaRuntimeService } from '../../../../../main/runtime/orca-runtime'
-import { getAgentResumeArgv } from '../../../../../shared/agent-resume-argv'
+import { getAgentResumeArgv } from '../../../../../shared/agent-launch/startup/agent-resume-argv'
 import type { RunRow, SessionResumeResult, StepRow } from '../../shared/api-types'
 import { checkoutRemoved } from '../../shared/api-types-env'
 import { isSessionId } from '../../shared/session-id'

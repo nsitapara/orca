@@ -9,10 +9,9 @@ import {
 } from './client'
 import {
   type LinearAgentAccessError,
-  classifyLinearError,
   linearError,
-  linearMessage
-} from './issue-context-errors'
+  toLinearAccessError
+} from './issue-context/errors'
 
 // Why below the CLI's 60s wait: a stalled read holds one of the app's four Linear slots until it
 // settles, so it is cancelled in time to free the slot and give the caller a real answer.
@@ -27,24 +26,32 @@ function linearReadTimedOut(): LinearAgentAccessError {
 }
 
 /** Runs one Linear read in a concurrency slot, with a client that the read's deadline aborts.
- *  `publicFileUrls` signs inline upload URLs, which body reads (issue, comments, children) need. */
+ *  `publicFileUrls` signs inline upload URLs, which body reads (issue, comments, children) need.
+ *  `signal` is the caller's cancellation; it aborts the read alongside the deadline. */
 export async function withLinearRead<T>(
   entry: LinearClientForWorkspace,
   read: (client: LinearClient) => Promise<T>,
-  options: { publicFileUrls?: boolean } = {}
+  options: { publicFileUrls?: boolean; signal?: AbortSignal } = {}
 ): Promise<T> {
   const deadline = new AbortController()
   const timer = setTimeout(() => deadline.abort(), LINEAR_READ_TIMEOUT_MS)
+  const signal = options.signal
+    ? AbortSignal.any([options.signal, deadline.signal])
+    : deadline.signal
   try {
     try {
-      await acquire(deadline.signal)
-    } catch {
-      throw linearReadTimedOut()
+      await acquire(signal)
+    } catch (error) {
+      if (deadline.signal.aborted) {
+        throw linearReadTimedOut()
+      }
+      throw error
     }
     try {
+      options.signal?.throwIfAborted()
       const client = options.publicFileUrls
-        ? getPublicFileUrlClient(entry, deadline.signal)
-        : getClientWithSignal(entry, deadline.signal)
+        ? getPublicFileUrlClient(entry, signal)
+        : getClientWithSignal(entry, signal)
       return await read(client)
     } catch (error) {
       if (deadline.signal.aborted) {
@@ -56,7 +63,7 @@ export async function withLinearRead<T>(
           nextSteps: ['Reconnect Linear from Orca settings.']
         })
       }
-      throw linearError(classifyLinearError(error), linearMessage(error))
+      throw toLinearAccessError(error)
     } finally {
       release()
     }

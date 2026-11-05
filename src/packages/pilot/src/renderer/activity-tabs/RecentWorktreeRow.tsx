@@ -1,5 +1,5 @@
 import { FolderGit2, Pin } from 'lucide-react'
-import WorktreeContextMenu from '@/components/sidebar/WorktreeContextMenu'
+import WorktreeContextMenu from '@/components/sidebar/workspace-actions/context-menu/WorktreeContextMenu'
 import { getActivityThreadWorkspaceTitle } from '@/lib/activity-thread-display'
 import { isPortaledRowMenuClick } from '@/lib/list-row-interaction'
 import { WorktreeLinksPrefetch } from '../activity-card/worktree-links'

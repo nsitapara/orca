@@ -7,7 +7,7 @@ import {
   classifyLinearError,
   linearError,
   linearMessage
-} from '../../../../../main/linear/issue-context-errors'
+} from '../../../../../main/linear/issue-context/errors'
 import type { LinearConnector } from '../linear-connector/linear-connector'
 import { PEOPLE, fakeGlab, sourceContext } from './__fixtures__/source-context'
 import { findTicketWorktree, linearTicketSource } from './linear-tickets'

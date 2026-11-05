@@ -2,8 +2,8 @@ import type { Tab, TabGroup } from '../../shared/tab-types'
 import type {
   TerminalLayoutSnapshot,
   TerminalPaneLayoutNode
-} from '../../shared/terminal-tab-types'
-import type { WorkspaceSessionState } from '../../shared/workspace-session-state-types'
+} from '../../shared/workspace-layout/terminal-tab-types'
+import type { WorkspaceSessionState } from '../../shared/workspace-session/workspace-session-state-types'
 import { getRepoIdFromWorktreeId } from '../../shared/worktree/id'
 import { pruneTabGroupLayoutAfterRetirement } from './mobile-session-terminal-retirement'
 
@@ -45,7 +45,7 @@ function rebaseLayout(
   }
   return {
     ...candidate,
-    // Why: renderer layout metadata may move, but only host-persisted live bindings may name PTYs.
+    // Renderer metadata may move; PTY bindings remain host-authoritative.
     ptyIdsByLeafId: {
       ...candidate.ptyIdsByLeafId,
       ...current.ptyIdsByLeafId
@@ -101,8 +101,7 @@ function rebaseTabGroups(
         ...group,
         tabOrder,
         activeTabId,
-        // Why assigned even when it filters to empty: omitting the key lets `...group`
-        // re-introduce the unfiltered array, persisting ids for tabs the host dropped.
+        // Keep empty explicitly or the group spread restores stale tab ids.
         ...(group.recentTabIds ? { recentTabIds: recentTabIds ?? [] } : {})
       }
     ]

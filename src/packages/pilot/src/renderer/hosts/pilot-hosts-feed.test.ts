@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import type { RuntimeEnvironmentStatus } from '../../../../../shared/runtime-host-status'
+import type { RuntimeEnvironmentStatus } from '../../../../../shared/remote-runtime/host-status/runtime-host-status'
 import type { PilotStatus } from '../../shared/api-types'
 import { pilotRpc } from '../api'
 import { registerPilotStore, type PilotStoreState } from '../store'

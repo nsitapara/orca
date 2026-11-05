@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs'
+import { lockfileRootImporter } from './pnpm-lockfile-root-importer.mjs'
 import path from 'node:path'
 import { describe, expect, it } from 'vitest'
 import {
@@ -34,21 +36,19 @@ describe('findSharedDependencyVersionProblems', () => {
     expect(checkZod(locked('4.6.7'), {})).toEqual(['zod is not a direct dependency of mobile'])
     expect(checkZod({}, locked('4.6.7'))).toEqual(['zod is not a direct dependency of the root'])
   })
-
-  it('checks every shared dependency by default', () => {
-    const problems = findSharedDependencyVersionProblems({
-      rootImporter: locked('4.6.7'),
-      mobileImporter: locked('4.6.7')
-    })
-    expect(problems).toEqual([
-      'tweetnacl is not a direct dependency of the root',
-      '@noble/hashes is not a direct dependency of the root',
-      '@types/ws is not a direct dependency of the root'
-    ])
-  })
 })
 
 describe('committed lockfiles', () => {
+  it('rejects a mobile release lock missing the actual shared parser dependency', () => {
+    const read = (file) => lockfileRootImporter(readFileSync(path.join(projectDir, file), 'utf8'))
+    const rootImporter = read('pnpm-lock.yaml')
+    const mobileImporter = read('mobile/pnpm-lock.yaml')
+    delete mobileImporter.dependencies['smol-toml']
+    expect(findSharedDependencyVersionProblems({ rootImporter, mobileImporter })).toEqual([
+      'smol-toml is not a direct dependency of mobile'
+    ])
+  })
+
   it('pass the repository check', () => {
     expect(main(projectDir)).toBe(0)
   })

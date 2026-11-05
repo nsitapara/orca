@@ -1,5 +1,5 @@
 import type { ExecutionHostId } from '../../../../shared/execution-host'
-import type { RuntimeEnvironmentStatus } from '../../../../shared/runtime-host-status'
+import type { RuntimeEnvironmentStatus } from '../../../../shared/remote-runtime/host-status/runtime-host-status'
 
 // The slice of Orca's app store that Pilot reads. Pilot's renderer behavior stays inert until
 // attachPilotRenderer() registers the real store, so upstream tests and unattached runs see pure upstream behavior.

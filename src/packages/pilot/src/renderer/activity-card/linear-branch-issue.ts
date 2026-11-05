@@ -2,6 +2,7 @@ import { useEffect } from 'react'
 import { useAppStore } from '@/store'
 import { getLinearReadScope, scopedLinearCacheKey } from '@/store/slices/linear/linear-slice-scope'
 import type { WorktreeLinearLink } from './worktree-links'
+import { consumeLinearIssueRead } from '@/store/slices/linear/linear-issue-publication'
 
 // Linear names a branch for its issue: "web-2153-create-…", or "nish/web-2153-…".
 const BRANCH_ISSUE = /^([a-z][a-z0-9]*-\d+)(?:-|$)/i
@@ -33,9 +34,17 @@ export function useLinearIssue(identifier: string | null | undefined): WorktreeL
   const key = id ? scopedLinearCacheKey(getLinearReadScope(settings), `selected::${id}`) : ''
   const issue = useAppStore((s) => (key ? s.linearIssueCache[key]?.data : undefined))
   useEffect(() => {
-    if (id) {
-      void fetchLinearIssue(id).catch(() => null)
+    if (!id) {
+      return
     }
+    const controller = new AbortController()
+    void consumeLinearIssueRead(
+      fetchLinearIssue(id),
+      () => !controller.signal.aborted,
+      undefined,
+      controller.signal
+    ).catch(() => {})
+    return () => controller.abort()
   }, [id, fetchLinearIssue])
   if (!issue || issue.identifier.toUpperCase() !== id) {
     return null

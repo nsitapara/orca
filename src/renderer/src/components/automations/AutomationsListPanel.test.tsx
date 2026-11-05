@@ -1,10 +1,6 @@
 // @vitest-environment happy-dom
 
-/**
- * The list panel's persistent chrome: the picker and the search field stay put
- * across loading, empty, no-match, and failure states, so a refresh that briefly
- * returns no rows cannot take the query and the caret with it.
- */
+/** Preserve picker/search identity across loading, empty, no-match and failure states so refresh cannot erase the query/caret. */
 
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
@@ -123,7 +119,6 @@ function renderPanel(
           sshConnectionStates={new Map()}
           runtimeStatusByEnvironmentId={new Map()}
           hostTargetFor={() => null}
-          automationSourceHostAvailabilityByRowKey={new Map()}
           isActionEnabled={() => true}
           externalActionKey={null}
           selectAutomationRow={options.selectAutomationRow ?? (() => undefined)}

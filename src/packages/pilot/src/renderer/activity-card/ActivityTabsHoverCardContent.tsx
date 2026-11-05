@@ -1,13 +1,15 @@
 import type { AgentPaneThread } from '@/components/activity/activity-thread-types'
 import { SelectedTextCopyMenu } from '@/components/SelectedTextCopyMenu'
-import { WORKTREE_NATIVE_CONTEXT_MENU_ATTR } from '@/components/sidebar/WorktreeContextMenu'
-import type { useWorktreeCardDetailsHoverControl } from '@/components/sidebar/worktree-card-details-hover-state'
+import { WORKTREE_NATIVE_CONTEXT_MENU_ATTR } from '@/components/sidebar/workspace-actions/context-menu/worktree-context-menu-policy'
+import type { useWorktreeCardDetailsHoverControl } from '@/components/sidebar/workspace-card/details/worktree-card-details-hover-state'
 import { HoverCardContent } from '@/components/ui/hover-card'
 import { pilotStore } from '../store'
 import { SessionActions, SessionHistory, SessionSummary } from './SessionCardSections'
 
 type ContentProps = {
   thread: AgentPaneThread
+  onOpenLink: (url: string, event: React.MouseEvent) => void
+  onAuxClickCapture: (event: React.MouseEvent) => void
   detailsHoverControl: ReturnType<typeof useWorktreeCardDetailsHoverControl>
   onJumpToWorkspace?: (thread: AgentPaneThread) => void
   canJumpToWorkspace?: boolean

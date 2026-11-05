@@ -1,22 +1,51 @@
 // @vitest-environment happy-dom
 
+import type * as LaunchRegistry from '@/lib/agent-session/launch/structured-agent-session-launch-registry'
+import type * as LaunchOptions from '@/lib/agent-session/launch/structured-agent-session-launch-options'
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { FLOATING_TERMINAL_WORKTREE_ID } from '../../../../shared/constants'
 import type { ManagedRuntimeInstallState } from '../../../../shared/managed-runtime-install'
 import type { ManagedRuntimeInstallObservation } from '@/runtime/use-managed-runtime-install'
 
-const { mocks, moduleFactories, resetStructuredSessionMocks } = await vi.hoisted(async () =>
-  (await import('./NativeChatStructuredSession.test-harness')).createStructuredSessionMocks()
+const { mocks, moduleFactories, resetStructuredSessionMocks, launchModule } = await vi.hoisted(
+  async () => {
+    const setup = (
+      await import('./NativeChatStructuredSession.test-harness')
+    ).createStructuredSessionMocks()
+    return {
+      ...setup,
+      launchModule: setup.moduleFactories.structuredAgentSessionLaunch()
+    }
+  }
 )
 const install = vi.hoisted((): { observation: ManagedRuntimeInstallObservation } => ({
   observation: { kind: 'inactive' }
 }))
 
-vi.mock('@/lib/structured-agent-session-launch', () =>
-  moduleFactories.structuredAgentSessionLaunch()
+vi.mock('@/lib/agent-session/launch/structured-agent-session-launch', () => ({
+  retryStructuredAgentSessionLaunch: launchModule.retryStructuredAgentSessionLaunch,
+  relaunchFailedStructuredAgentSessionForMessage:
+    launchModule.relaunchFailedStructuredAgentSessionForMessage
+}))
+vi.mock(
+  '@/lib/agent-session/launch/structured-agent-session-launch-registry',
+  async (importOriginal) => ({
+    ...(await importOriginal<typeof LaunchRegistry>()),
+    getStructuredAgentSessionLaunchLifecycle: launchModule.getStructuredAgentSessionLaunchLifecycle,
+    getStructuredAgentSessionLaunchResumes: launchModule.getStructuredAgentSessionLaunchResumes,
+    useStructuredAgentSessionLaunchLifecycle: launchModule.useStructuredAgentSessionLaunchLifecycle,
+    useStructuredAgentSessionLaunchFailure: launchModule.useStructuredAgentSessionLaunchFailure
+  })
 )
-vi.mock('@/lib/structured-agent-session-launch-message', () =>
+vi.mock(
+  '@/lib/agent-session/launch/structured-agent-session-launch-options',
+  async (importOriginal) => ({
+    ...(await importOriginal<typeof LaunchOptions>()),
+    useStructuredAgentSessionLaunchSelection: launchModule.useStructuredAgentSessionLaunchSelection
+  })
+)
+vi.mock('@/lib/agent-session/launch/structured-agent-session-launch-message', () =>
   moduleFactories.structuredAgentSessionLaunchMessage()
 )
 vi.mock('@/runtime/structured-agent-session-client', () =>
@@ -37,9 +66,9 @@ vi.mock('@/runtime/use-managed-runtime-install', () => ({
 }))
 
 import { NativeChatStructuredSession } from './NativeChatStructuredSession'
-import { agentSessionRefusalFailure } from '../../../../shared/agent-session-write-failure'
-import { structuredLaunchFailure } from '@/lib/structured-agent-session-launch-failure'
-import { StructuredAgentSessionCreateRefusalError } from '@/lib/structured-agent-session-launch-errors'
+import { agentSessionRefusalFailure } from '../../../../shared/agent-session/failures/agent-session-write-failure'
+import { structuredLaunchFailure } from '@/lib/agent-session/launch/structured-agent-session-launch-failure'
+import { StructuredAgentSessionCreateRefusalError } from '@/lib/agent-session/launch/structured-agent-session-launch-errors'
 import {
   readNativeChatComposerDraft,
   structuredAgentSessionDraftScopeKey,
@@ -67,12 +96,12 @@ function sessionView(agent: 'codex' | 'grok' = 'codex'): React.JSX.Element {
   )
 }
 
-function composerSend(): (text: string, attachments: unknown[]) => boolean | 'queued' {
+function composerSend() {
   const send = mocks.composerProps?.structuredTransport?.send
   if (typeof send !== 'function') {
     throw new Error('Structured composer transport was not installed')
   }
-  return (text, attachments) => send(text, attachments)
+  return send
 }
 
 describe('NativeChatStructuredSession launch lifecycle', () => {
@@ -113,7 +142,6 @@ describe('NativeChatStructuredSession launch lifecycle', () => {
     expect(screen.queryByRole('button', { name: 'Install Codex' })).toBeNull()
     expect(mocks.composerProps?.unavailableHint).toBeUndefined()
 
-    // A new chat gets the install message in its pane; the composer stays, disabled.
     hostSays(notInstalled)
     rerender(sessionView())
     expect(screen.getByRole('button', { name: 'Install Codex' })).toBeTruthy()
@@ -136,7 +164,6 @@ describe('NativeChatStructuredSession launch lifecycle', () => {
     expect(screen.queryByRole('button', { name: /^Install/ })).toBeNull()
     hostSays(notInstalled)
 
-    // With messages, Install is a strip above the composer instead.
     mocks.messages = null
     rerender(sessionView())
     expect(screen.getByRole('button', { name: 'Install' })).toBeTruthy()
@@ -297,7 +324,6 @@ describe('NativeChatStructuredSession launch lifecycle', () => {
     expect(screen.getByText('Chat connection could not be confirmed.')).toBeTruthy()
   })
 
-  // The message rides the restart as its first message, held until the chat exists.
   it('relaunches a failed start on send, with the message as its first message', () => {
     mocks.launchLifecycle = 'failed'
     render(sessionView())
@@ -313,6 +339,24 @@ describe('NativeChatStructuredSession launch lifecycle', () => {
     expect(mocks.send).not.toHaveBeenCalled()
   })
 
+  it.each(['staged file', 'selected skill'] as const)(
+    'keeps a %s draft when Send retries a failed chat',
+    (kind) => {
+      mocks.launchLifecycle = 'failed'
+      render(sessionView())
+      const prepareAttachments = vi.fn(async (input: { text: string }) => input)
+      const request =
+        kind === 'staged file'
+          ? { prepareAttachments }
+          : { skills: [{ name: 'review', path: '/skills/review/SKILL.md' }] }
+      expect(composerSend()('@"browser-file:context.txt"', [], request)).toBe(false)
+      expect(mocks.retryLaunch).toHaveBeenCalledExactlyOnceWith('wt-1', 'session-1')
+      expect(mocks.relaunchWithMessage).not.toHaveBeenCalled()
+      expect(mocks.send).not.toHaveBeenCalled()
+      expect(prepareAttachments).not.toHaveBeenCalled()
+    }
+  )
+
   it.each(['pending', 'visibility-unknown'] as const)(
     'takes no send while the chat is %s: Send is off and the text stays',
     (lifecycle) => {
@@ -326,7 +370,6 @@ describe('NativeChatStructuredSession launch lifecycle', () => {
     }
   )
 
-  // Launch Retry relaunches the chat, and the reader may have scrolled up in it.
   it('brings the latest into view when launch Retry relaunches a failed chat', async () => {
     mocks.launchLifecycle = 'failed'
     render(sessionView())

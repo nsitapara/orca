@@ -1,3 +1,4 @@
+import * as gitExecFile from '../../git/command-runner/git-exec-file'
 import { describe, expect, it, vi } from 'vitest'
 import {
   OrcaRuntimeService,
@@ -5,7 +6,6 @@ import {
   computeWorktreePathMock,
   ensurePathWithinWorkspaceMock,
   getBranchConflictKind,
-  gitRunner,
   listWorktrees
 } from '../orca-runtime-test-mocks.spec'
 import { SshHostNotServedError } from '../../providers/ssh-host-not-served-error'
@@ -26,7 +26,7 @@ describe('OrcaRuntimeService', () => {
     computeWorktreePathMock.mockReturnValue(process.cwd())
     ensurePathWithinWorkspaceMock.mockImplementation((pathValue: string) => pathValue)
     vi.mocked(getBranchConflictKind).mockResolvedValueOnce(null)
-    const gitSpy = vi.spyOn(gitRunner, 'gitExecFileAsync').mockImplementation(async (args) => {
+    const gitSpy = vi.spyOn(gitExecFile, 'gitExecFileAsync').mockImplementation(async (args) => {
       if (args[0] === 'rev-parse' && args.includes('refs/heads/feature/fix^{commit}')) {
         throw new Error('missing local branch')
       }
@@ -77,8 +77,7 @@ describe('OrcaRuntimeService', () => {
     expect(listWorktrees).not.toHaveBeenCalled()
   })
 
-  // Why: the desktop composer sends `parentWorkspace` too, and a bare selector defaults to CLI
-  // provenance — the same user action must not carry different cleanup semantics per host.
+  // The same parent selection must keep manual cleanup semantics across hosts.
   it('records an app-selected parent workspace as a manual action', async () => {
     vi.mocked(addWorktree).mockClear()
     const created = {

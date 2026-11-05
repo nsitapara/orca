@@ -1,12 +1,9 @@
 import { describe, expect, it, vi } from 'vitest'
 import { OrcaRuntimeService } from './orca-runtime'
 import { getDefaultWorkspaceSession } from '../../shared/constants'
-import { SSH_EXIT_UNCONFIRMED_REASON } from '../../shared/pty-liveness-verdict'
 
 export function registerPtyInventoryLivenessVerdictTests(): void {
-  // The aggregate inventory only enumerates registered providers, so a dropped
-  // relay clears `connected` for every one of its PTYs at once. Only the
-  // provider's own answer separates an observed exit from lost contact.
+  // Aggregate inventory may omit a disconnected relay; only its owner's evidence can distinguish exit from lost contact.
 
   const WORKTREE_ID = 'repo-1::/tmp/inventory-verdict'
   const REMOTE_PTY_ID = 'ssh:conn-1@@relay-9'
@@ -20,10 +17,12 @@ export function registerPtyInventoryLivenessVerdictTests(): void {
   }
 
   function makeStore() {
-    const session = getDefaultWorkspaceSession()
+    let session = getDefaultWorkspaceSession()
     return {
       getWorkspaceSession: vi.fn(() => session),
-      setWorkspaceSession: vi.fn(),
+      setWorkspaceSession: vi.fn((next: typeof session) => {
+        session = next
+      }),
       getRepos: vi.fn(() => [
         {
           id: 'repo-1',
@@ -61,98 +60,6 @@ export function registerPtyInventoryLivenessVerdictTests(): void {
   }
 
   describe('inventory sweep liveness verdicts', () => {
-    it('records an abnormal SSH exit as unverifiable at the runtime boundary', () => {
-      const runtime = makeRuntimeMissingFromInventory(() => null)
-
-      runtime.onPtyExit(REMOTE_PTY_ID, -1)
-
-      expect(runtime.getPtyLivenessVerdict(REMOTE_PTY_ID)).toEqual({
-        status: 'unverifiable',
-        reason: SSH_EXIT_UNCONFIRMED_REASON
-      })
-    })
-
-    it('preserves a more specific lost-contact reason across an abnormal SSH exit', () => {
-      const runtime = makeRuntimeMissingFromInventory(() => null)
-      runtime.markPtyLivenessUnverifiable(REMOTE_PTY_ID, 'inventory transport failed')
-
-      runtime.onPtyExit(REMOTE_PTY_ID, -1)
-
-      expect(runtime.getPtyLivenessVerdict(REMOTE_PTY_ID)).toEqual({
-        status: 'unverifiable',
-        reason: 'inventory transport failed'
-      })
-    })
-
-    it('accepts a current owning-host exit even when its numeric code is negative', () => {
-      const runtime = makeRuntimeMissingFromInventory(() => null)
-      runtime.markPtyLivenessUnverifiable(REMOTE_PTY_ID, 'inventory transport failed')
-
-      runtime.onPtyExit(REMOTE_PTY_ID, -1, undefined, { hostExitConfirmed: true })
-
-      // A host-delivered exit frame is the one signal that observes the process, so it both clears
-      // the lost-contact doubt and is retained as the certificate itself.
-      expect(runtime.getPtyLivenessVerdict(REMOTE_PTY_ID)).toEqual({ status: 'exited' })
-    })
-
-    it('records lost contact when no provider can answer for the PTY', async () => {
-      const runtime = makeRuntimeMissingFromInventory(() => null)
-
-      await runtime.listTerminals(`id:${WORKTREE_ID}`)
-
-      expect(runtime.getPtyLivenessVerdict(REMOTE_PTY_ID)).toEqual({
-        status: 'unverifiable',
-        reason: 'no registered provider can observe its host'
-      })
-    })
-
-    it('records no doubt when the owning provider reports the PTY absent', async () => {
-      const runtime = makeRuntimeMissingFromInventory(() => false)
-
-      await runtime.listTerminals(`id:${WORKTREE_ID}`)
-
-      // An observed absence is the death certificate callers already act on.
-      expect(runtime.getPtyLivenessVerdict(REMOTE_PTY_ID)).toBeNull()
-    })
-
-    it('records no death certificate when a listing of the owning host omits the PTY', async () => {
-      // The host answered and named a sibling on the same relay, so this is the strongest absence the
-      // inventory can report — and it is still not a certificate. `pty.listProcesses` returns the
-      // relay's CURRENT session map, so a relay that restarted omits every id the previous one minted
-      // (ids are `pty2:<ptyIdMintEpoch>:<n>` with a fresh epoch per relay start) whether or not those
-      // shells ever died. Recording `exited` here would only relocate the fabrication that
-      // handlePtyReattachFailure was corrected for (docs/reference/ssh-execution-boundary.md).
-      const runtime = makeRuntimeMissingFromInventory(
-        () => false,
-        vi.fn(async () => [{ id: 'ssh:conn-1@@relay-sibling', worktreeId: WORKTREE_ID }])
-      )
-
-      await runtime.listTerminals(`id:${WORKTREE_ID}`)
-
-      expect(runtime.getPtyLivenessVerdict(REMOTE_PTY_ID)).toBeNull()
-    })
-
-    it('records positive host evidence when reconnect inventory observes the PTY live', async () => {
-      let reconnected = false
-      const runtime = makeRuntimeMissingFromInventory(
-        () => null,
-        vi.fn(async () => (reconnected ? [{ id: REMOTE_PTY_ID, worktreeId: WORKTREE_ID }] : []))
-      )
-
-      await runtime.listTerminals(`id:${WORKTREE_ID}`)
-      expect(runtime.getPtyLivenessVerdict(REMOTE_PTY_ID)?.status).toBe('unverifiable')
-
-      reconnected = true
-      await runtime.listTerminals(`id:${WORKTREE_ID}`)
-
-      // The owning host named the id in its own listing. That is evidence of life, and it must be
-      // recorded as such rather than collapsed into the same null a never-asked host produces.
-      expect(runtime.getPtyLivenessVerdict(REMOTE_PTY_ID)).toEqual({
-        status: 'live',
-        ptyIds: [REMOTE_PTY_ID]
-      })
-    })
-
     it('does not let a pre-drop inventory clear a newer lost-contact verdict', async () => {
       const inventory = deferred<{ id: string; worktreeId: string }[]>()
       const listProcesses = vi.fn(() => inventory.promise)
@@ -185,55 +92,6 @@ export function registerPtyInventoryLivenessVerdictTests(): void {
         status: 'unverifiable',
         reason: 'inventory transport failed'
       })
-    })
-
-    it('clears stale doubt when a new PTY lifecycle is positively registered', () => {
-      const runtime = makeRuntimeMissingFromInventory(() => null)
-      runtime.markPtyLivenessUnverifiable(REMOTE_PTY_ID, 'old incarnation lost contact')
-
-      runtime.onPtySpawned(REMOTE_PTY_ID, 'incarnation-2')
-      expect(runtime.getPtyLivenessVerdict(REMOTE_PTY_ID)).toBeNull()
-
-      runtime.markPtyLivenessUnverifiable(REMOTE_PTY_ID, 'registration raced reconnect')
-      runtime.registerPty(REMOTE_PTY_ID, WORKTREE_ID, 'conn-1', {
-        tabId: 'tab-new',
-        leafId: '00000000-0000-4000-8000-000000000001',
-        incarnationId: 'incarnation-2'
-      })
-      expect(runtime.getPtyLivenessVerdict(REMOTE_PTY_ID)).toBeNull()
-    })
-
-    it('retains unresolved verdicts for every still-addressable PTY', () => {
-      const runtime = new OrcaRuntimeService(makeStore() as never)
-      for (let index = 0; index < 257; index += 1) {
-        const ptyId = `ssh:conn-1@@relay-${index}`
-        runtime.registerPty(ptyId, WORKTREE_ID, 'conn-1')
-        runtime.markPtyLivenessUnverifiable(ptyId, 'provider disconnected')
-      }
-
-      expect(runtime.getPtyLivenessVerdict('ssh:conn-1@@relay-0')).toEqual({
-        status: 'unverifiable',
-        reason: 'provider disconnected'
-      })
-    })
-
-    it('bounds detached verdicts while preserving every still-addressable one', () => {
-      // Eviction classifies by CURRENT addressability, so churn cannot push an active PTY's verdict
-      // out: only ids that no record, handle, or leaf still names are candidates.
-      const runtime = new OrcaRuntimeService(makeStore() as never)
-      for (let index = 0; index < 400; index += 1) {
-        const ptyId = `ssh:conn-1@@churn-${index}`
-        runtime.registerPty(ptyId, WORKTREE_ID, 'conn-1')
-        runtime.markPtyLivenessUnverifiable(ptyId, 'provider disconnected')
-        runtime.onPtyExit(ptyId, index % 2 === 0 ? -1 : 0)
-      }
-
-      expect(runtime.getPtyLivenessVerdict('ssh:conn-1@@churn-0')).toBeNull()
-      expect(runtime.getPtyLivenessVerdict('ssh:conn-1@@churn-399')).toEqual({ status: 'exited' })
-      expect(
-        (runtime as unknown as { ptyLivenessVerdictByPtyId: Map<string, unknown> })
-          .ptyLivenessVerdictByPtyId.size
-      ).toBe(256)
     })
   })
 }

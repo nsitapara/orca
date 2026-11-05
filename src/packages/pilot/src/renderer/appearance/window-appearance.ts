@@ -1,8 +1,12 @@
-import { resolveLeftSidebarStyleVariables } from '@/lib/left-sidebar-appearance'
 import { resolveEffectiveTerminalAppearance } from '@/lib/terminal-theme'
+import type { GlobalSettings } from '../../../../../shared/global-settings-types'
 import './window-appearance.css'
 
-type WindowAppearanceSettings = Parameters<typeof resolveLeftSidebarStyleVariables>[0]
+type WindowAppearanceSettings =
+  | (Parameters<typeof resolveEffectiveTerminalAppearance>[0] &
+      Pick<GlobalSettings, 'leftSidebarAppearanceMode'>)
+  | null
+  | undefined
 
 export type WindowAppearanceStore = {
   getState(): { settings: WindowAppearanceSettings }
@@ -17,28 +21,6 @@ type DarkModeQuery = {
 
 // Read by window-appearance.css to recolor the overlay surfaces Orca hard-codes.
 export const WINDOW_APPEARANCE_ATTRIBUTE = 'data-pilot-window-appearance'
-
-// Match Terminal themes the whole window, not only the sidebars: the sidebar's terminal surface tokens,
-// plus the popover and secondary tokens that only overlays and the center column read.
-export function resolvePilotWindowStyleVariables(
-  settings: WindowAppearanceSettings,
-  systemPrefersDark: boolean
-): Record<string, string> | undefined {
-  if (settings?.leftSidebarAppearanceMode !== 'match-terminal') {
-    return undefined
-  }
-  const vars = resolveLeftSidebarStyleVariables(settings, systemPrefersDark)
-  if (!vars) {
-    return undefined
-  }
-  return {
-    ...vars,
-    '--popover': vars['--card'],
-    '--popover-foreground': vars['--foreground'],
-    '--secondary': vars['--muted'],
-    '--secondary-foreground': vars['--foreground']
-  }
-}
 
 export const ACTIVITY_GUIDE_VARIABLE = '--pilot-activity-guide'
 export const SELECTION_ACCENT_VARIABLE = '--pilot-selection-accent'
@@ -61,8 +43,8 @@ export function resolveActivityGuideVariables(
     : {}
 }
 
-// Called from attachPilotRenderer (pilot-hook: renderer). Inline root variables beat the `.dark` theme
-// block, so the center column, tab bar, status bar and every portaled overlay follow the terminal theme.
+// Called from attachPilotRenderer (pilot-hook: renderer). Orca paints Match Terminal at :root itself and
+// mirrors it in leftSidebarAppearanceMode; the attribute adds Pilot's overlay, divider and seam fixes.
 export function attachPilotWindowAppearance(
   store: WindowAppearanceStore,
   root: HTMLElement,
@@ -73,8 +55,7 @@ export function attachPilotWindowAppearance(
 
   const apply = (): void => {
     const { settings } = store.getState()
-    const vars = resolvePilotWindowStyleVariables(settings, darkQuery.matches)
-    const all = { ...resolveActivityGuideVariables(settings, darkQuery.matches), ...vars }
+    const all = resolveActivityGuideVariables(settings, darkQuery.matches)
     for (const name of applied) {
       root.style.removeProperty(name)
     }
@@ -82,7 +63,7 @@ export function attachPilotWindowAppearance(
     for (const [name, value] of Object.entries(all)) {
       root.style.setProperty(name, value)
     }
-    if (vars) {
+    if (settings?.leftSidebarAppearanceMode === 'match-terminal') {
       root.setAttribute(WINDOW_APPEARANCE_ATTRIBUTE, 'match-terminal')
     } else {
       root.removeAttribute(WINDOW_APPEARANCE_ATTRIBUTE)

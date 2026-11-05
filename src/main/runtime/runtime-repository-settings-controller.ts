@@ -1,13 +1,15 @@
 import { isFolderRepo } from '../../shared/repo-kind'
-import { commitProvenRepoKindChange } from '../folder-repo-git-conversion'
+import { commitProvenRepoKindChange } from '../workspaces/catalog/folder-repo-git-conversion'
 import type { Repo } from '../../shared/repo-types'
 import type { RuntimeRepoSelector } from './runtime-repo-selector'
 import type { GhAccountBinding } from '../../shared/github/account-binding'
-import { invalidateAuthorizedRootsCache } from '../ipc/registered-worktree-roots-cache'
-import { prepareLocalWorktreeRootForRepo } from '../worktree-root-preparation'
+import { invalidateAuthorizedRootsCache } from '../ipc/worktrees/removal/registered-worktree-roots-cache'
+import { prepareLocalWorktreeRootForRepo } from '../workspaces/creation/worktree-root-preparation'
 import type { RuntimeStore } from './runtime-store-contract'
 import { assertWslMoveRepoWritable } from '../persistence/moving-wsl-projects/wsl-move-scope-guard'
 import { teardownStops } from './owned-session-teardown-policy'
+import { assertNoProjectWorktreeCreate } from '../workspaces/creation/worktree-create-in-flight'
+import { releaseWorktreeCreatePreparationsForRepo } from '../workspaces/creation/preparation/worktree-create-preparation-project-removal'
 
 const PROJECT_TERMINAL_STOP_BUDGET_MS = 10_000
 
@@ -23,6 +25,7 @@ type RuntimeRepositorySettingsDependencies = {
   invalidateResolvedWorktrees: () => void
   invalidateWorktreeScan: (repoId: string) => void
   notifyReposChanged: () => void
+  notifyWorktreesChanged: (repoId: string, options: { invalidateGitScans: false }) => void
 }
 
 type RepositoryUpdates = Partial<
@@ -33,6 +36,7 @@ type RepositoryUpdates = Partial<
     | 'repoIcon'
     | 'upstream'
     | 'hookSettings'
+    | 'editorFormatter'
     | 'worktreeBaseRef'
     | 'worktreeBasePath'
     | 'kind'
@@ -44,6 +48,8 @@ type RepositoryUpdates = Partial<
     | 'externalWorktreeInboxBaselinePaths'
     | 'importedExternalWorktreePaths'
     | 'agentWorktreeVisibility'
+    | 'customWorktreeVisibilitySources'
+    | 'worktreeVisibilitySourcePreferences'
     | 'projectGroupId'
     | 'projectGroupOrder'
   >
@@ -53,6 +59,16 @@ type RepositoryUpdates = Partial<
   /** Only `null` clears; `omitUndefined` drops a stripped (undefined) field so it never unbinds. */
   ghAccount?: GhAccountBinding | null
 }
+
+// Main computes each row's `visible` from these over cached raw Git scans, so re-list without rescanning.
+const WORKTREE_VISIBILITY_INPUTS = [
+  'externalWorktreeVisibility',
+  'importedExternalWorktreePaths',
+  'agentWorktreeVisibility',
+  'worktreeBasePath',
+  'customWorktreeVisibilitySources',
+  'worktreeVisibilitySourcePreferences'
+] as const satisfies readonly (keyof RepositoryUpdates)[]
 
 function omitUndefined<T extends Record<string, unknown>>(value: T): Partial<T> {
   return Object.fromEntries(
@@ -120,6 +136,9 @@ export class RuntimeRepositorySettingsController {
       this.deps.invalidateWorktreeScan(repo.id)
     }
     this.deps.notifyReposChanged()
+    if (WORKTREE_VISIBILITY_INPUTS.some((key) => key in updates)) {
+      this.deps.notifyWorktreesChanged(repo.id, { invalidateGitScans: false })
+    }
     return updated
   }
 
@@ -131,8 +150,8 @@ export class RuntimeRepositorySettingsController {
     }
     const repo = typeof target === 'string' ? await this.deps.resolveRepo(target) : target
     assertWslMoveRepoWritable(store, repo)
-    // Why here: the host owns these shells; a client only stops the workspaces it has loaded,
-    // and older clients stop none. Bounded so repo.rm still answers inside the client's timeout.
+    assertNoProjectWorktreeCreate(repo)
+    // Host owns all shells; clients may stop only loaded workspaces or none. Bound teardown inside repo.rm timeout.
     const deadline = Date.now() + PROJECT_TERMINAL_STOP_BUDGET_MS
     const stopProjectTerminals = async (closeStructuredSessions: boolean): Promise<void> => {
       await this.deps
@@ -142,12 +161,12 @@ export class RuntimeRepositorySettingsController {
         })
     }
     await stopProjectTerminals(false)
-    // Why again: a WSL move may have fenced the project while the stop was awaited.
+    // Recheck both fences after stop awaits.
     assertWslMoveRepoWritable(store, repo)
+    assertNoProjectWorktreeCreate(repo)
+    releaseWorktreeCreatePreparationsForRepo(store, repo)
     store.removeProjectForHost(repo)
-    // Why again: a terminal spawned while the first stop ran is past that sweep's snapshot, and
-    // nothing can spawn into the project once it is gone. Chats only now: retiring their tabs is
-    // irreversible, and the WSL fence above can still refuse the removal.
+    // Sweep again for terminals spawned during stop. Retire chats only after the final WSL fence because that step is irreversible.
     await stopProjectTerminals(teardownStops('project-removal', 'structured-chat'))
     this.deps.forgetTerminalTopology(repo.id)
     this.deps.invalidateResolvedWorktrees()

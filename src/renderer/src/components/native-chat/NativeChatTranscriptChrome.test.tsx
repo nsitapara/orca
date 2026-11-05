@@ -6,20 +6,26 @@ import { createRoot } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { RuntimeFileOperationArgs } from '@/runtime/runtime-file-client-types'
 import {
-  invalidateLocalImageSrcCacheForTests,
-  loadLocalImageSrc,
-  resetLocalImageSrcStateForTests
-} from '@/components/editor/useLocalImageSrc'
-import { chatImageAccess } from '@/lib/local-file-access'
+  invalidateLocalImageCache as invalidateLocalImageSrcCacheForTests,
+  resetLocalImageCacheState as resetLocalImageSrcStateForTests
+} from '@/components/editor/document-images/local-image-src-cache'
+import { useAppStore } from '@/store'
 import { NativeChatImageAttachments } from './NativeChatTranscriptChrome'
+import { useNativeChatImageRuntimeContext } from './native-chat-image-runtime-context'
+import {
+  nativeChatFanoutFixture,
+  nativeChatFanoutWorkspace
+} from './native-chat-workspace-test-fixtures'
 
 // Chat images carry their runtime owner without resolving an editor connection.
 const mocks = vi.hoisted(() => ({
+  callRuntimeRpc: vi.fn(),
   getConnectionIdForFile: vi.fn(() => {
     throw new Error('Chat image fixtures must not resolve editor file connections')
   })
 }))
 
+vi.mock('@/runtime/runtime-rpc-client', () => ({ callRuntimeRpc: mocks.callRuntimeRpc }))
 vi.mock('@/lib/connection-context', () => ({
   getConnectionIdForFile: mocks.getConnectionIdForFile
 }))
@@ -41,6 +47,11 @@ async function flushPromises(): Promise<void> {
 }
 
 beforeEach(() => {
+  mocks.callRuntimeRpc.mockReset().mockResolvedValue({
+    content: 'AA==',
+    isBinary: true,
+    mimeType: 'image/png'
+  })
   resetLocalImageSrcStateForTests()
   vi.stubGlobal('IntersectionObserver', undefined)
   let urlSequence = 0
@@ -69,6 +80,72 @@ afterEach(() => {
 })
 
 describe('NativeChatImageAttachments', () => {
+  it('reads on the selected folder owner and stops reading when that chat disappears', async () => {
+    const original = useAppStore.getState()
+    const fixture = nativeChatFanoutFixture(1, 1, 0)
+    const workspaceId = nativeChatFanoutWorkspace(0)
+    useAppStore.setState({
+      ...useAppStore.getInitialState(),
+      ...fixture,
+      activeWorktreeId: null,
+      activeWorkspaceExecutionHostId: null,
+      runtimeEnvironmentCatalogHydrated: true
+    })
+    function OwnedAttachments() {
+      const context = useNativeChatImageRuntimeContext('chat-0')
+      return createElement(NativeChatImageAttachments, {
+        blocks: [{ type: 'image-ref', path: '/repo/0/image.png' }],
+        runtimeContext: context
+      })
+    }
+    const container = document.createElement('div')
+    const root = createRoot(container)
+    try {
+      await act(async () => {
+        root.render(createElement(OwnedAttachments))
+        await flushPromises()
+      })
+      expect(container.querySelector('img')?.getAttribute('src')).toBe('blob:owner-1')
+      expect(window.api.fs.readFile).toHaveBeenCalledExactlyOnceWith({
+        filePath: '/repo/0/image.png',
+        connectionId: undefined,
+        access: { kind: 'chat-image' }
+      })
+      expect(mocks.callRuntimeRpc).not.toHaveBeenCalled()
+
+      await act(async () => {
+        useAppStore.setState({
+          folderWorkspaces: fixture.folderWorkspaces.map((folder) => ({
+            ...folder,
+            executionHostId: 'runtime:attachment-owner' as const
+          }))
+        })
+        await flushPromises()
+      })
+      expect(container.querySelector('img')?.getAttribute('src')).toBe('blob:owner-2')
+      expect(mocks.callRuntimeRpc).toHaveBeenCalledExactlyOnceWith(
+        { kind: 'environment', environmentId: 'attachment-owner' },
+        'files.readPreview',
+        { worktree: `id:${workspaceId}`, relativePath: 'image.png' },
+        expect.objectContaining({ timeoutMs: 15_000 })
+      )
+      expect(window.api.fs.readFile).toHaveBeenCalledTimes(1)
+
+      await act(async () => {
+        useAppStore.setState({ unifiedTabsByWorktree: {} })
+        await flushPromises()
+      })
+      expect(container.querySelector('img')).toBeNull()
+      expect(container.querySelector('button')).toBeNull()
+      expect(container.textContent).toContain('image.png')
+      expect(window.api.fs.readFile).toHaveBeenCalledTimes(1)
+      expect(mocks.callRuntimeRpc).toHaveBeenCalledTimes(1)
+    } finally {
+      await act(async () => root.unmount())
+      useAppStore.setState(original, true)
+    }
+  })
+
   it('pools visibility observation across image refs', async () => {
     class FakeIntersectionObserver {
       static instances: FakeIntersectionObserver[] = []
@@ -252,49 +329,23 @@ describe('NativeChatImageAttachments', () => {
     root.unmount()
   })
 
-  it('keeps an off-screen image cached when an equal runtime context is rebuilt', async () => {
-    class FakeIntersectionObserver {
-      readonly observe = vi.fn()
-      readonly unobserve = vi.fn()
-      readonly disconnect = vi.fn()
+  it('shows a remounted row from the cache without re-reading the image', async () => {
+    const props = {
+      blocks: [{ type: 'image-ref' as const, path: '/repo/image.png' }],
+      runtimeContext: runtimeContext('wt-1')
     }
-    vi.stubGlobal('IntersectionObserver', FakeIntersectionObserver)
-    const container = document.createElement('div')
-    const root = createRoot(container)
-    const blocks = [{ type: 'image-ref' as const, path: '/repo/image.png' }]
-    const renderWith = (context: RuntimeFileOperationArgs): void =>
-      root.render(createElement(NativeChatImageAttachments, { blocks, runtimeContext: context }))
-    const loadSameEntry = (): Promise<string | null> =>
-      loadLocalImageSrc(
-        '/repo/image.png',
-        '/repo/image.png',
-        undefined,
-        runtimeContext('wt-1'),
-        chatImageAccess()
-      )
-
-    try {
+    for (let mount = 0; mount < 2; mount += 1) {
+      const container = document.createElement('div')
+      const root = createRoot(container)
       await act(async () => {
-        renderWith(runtimeContext('wt-1'))
+        root.render(createElement(NativeChatImageAttachments, props))
         await flushPromises()
       })
-      // Off-screen nothing pins the entry, so only the release effect's deps decide whether it survives.
-      await expect(loadSameEntry()).resolves.toBe('blob:owner-1')
-
-      for (let update = 0; update < 3; update += 1) {
-        await act(async () => {
-          renderWith(runtimeContext('wt-1'))
-          await flushPromises()
-        })
-      }
-
-      expect(URL.revokeObjectURL).not.toHaveBeenCalled()
-      await expect(loadSameEntry()).resolves.toBe('blob:owner-1')
-      expect(window.api.fs.readFile).toHaveBeenCalledOnce()
-    } finally {
-      // The visibility observer is module-wide; a leaked one breaks later tests.
-      root.unmount()
+      expect(container.querySelector('img')?.getAttribute('src')).toBe('blob:owner-1')
+      await act(async () => root.unmount())
     }
+    expect(window.api.fs.readFile).toHaveBeenCalledOnce()
+    expect(URL.revokeObjectURL).not.toHaveBeenCalled()
   })
 
   it('retries a failed thumbnail after the image cache refreshes', async () => {

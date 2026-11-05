@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { OrcaRuntimeService } from '../../../../../main/runtime/orca-runtime'
-import { AGENT_STATUS_STALE_AFTER_MS } from '../../../../../shared/agent-status-freshness'
+import { AGENT_STATUS_STALE_AFTER_MS } from '../../../../../shared/agent-status/contracts/agent-status-freshness'
 import type { ItemDecision } from '../../shared/api-types'
 import { testDefinition, testStep } from '../../shared/definition/__fixtures__/definition'
 import type { AutomationDefinition } from '../../shared/definition/types'

@@ -1,5 +1,5 @@
-import { pickTuiAgent } from '../../../shared/tui-agent-selection'
-import { withTimeout } from '../../../shared/promise-timeout-fallback'
+import { pickTuiAgent } from '../../../shared/agent-launch/catalog/tui-agent-selection'
+import { acquireAgentLaunchChoices } from './host-chat-program-acquisition'
 import { useAppStore } from '@/store'
 import type { AppState } from '@/store/types'
 import {
@@ -11,71 +11,81 @@ import {
   ensureDetectedAgentsForTarget,
   readDetectedAgentsForTarget
 } from '@/lib/agent-detection-target-inventory'
-import { workspaceKindForWorktreeId } from '@/lib/agent-launch-route-input'
+import { workspaceKindForWorktreeId, worktreeLaunchWorkspace } from '@/lib/agent-launch-route-input'
+import { chosenAgentChatUnlearned, agentChoiceOpensAsChat } from '@/lib/host-chat-program'
 import { planAgentSessionLaunch } from '@/lib/agent-session-launch-plan'
 import { newAgentLaunchRequestId } from '@/lib/agent-launch-request-id'
 import { launchAgentInNewTab } from '@/lib/launch-agent-in-new-tab'
+import { readAgentLaunchPreferencesForWorktree } from '@/runtime/agent-launch-settings/use-host-agent-launch-preferences'
+import type { AgentLaunchPreferences } from '@/runtime/agent-launch-settings/host-agent-launch-preferences-resource'
 
-// Why bounded: detection only decides agent vs shell, so a slow host must not hold the workspace empty.
-const DEFAULT_AGENT_DETECTION_TIMEOUT_MS = 5_000
+type DefaultChatHost = { target: AgentDetectionTarget; preferences: AgentLaunchPreferences }
 
-/**
- * The host whose agent list picks the default agent; undefined when the workspace opens a shell
- * whatever that list says. Shared by the wait and the open so they cannot drift.
- */
-function defaultAgentDetectionTarget(
-  state: AppState,
-  worktreeId: string
-): AgentDetectionTarget | undefined {
-  // Why: a 'blank' default agent also means the user wants workspaces to open without one.
+/** Share the host between wait/open; undefined means the workspace opens a shell regardless of agent inventory. */
+function defaultChatHost(state: AppState, worktreeId: string): DefaultChatHost | undefined {
+  // Why the owner's copy: a paired host keeps its own default agent.
+  const preferences = readAgentLaunchPreferencesForWorktree(state, worktreeId)
+  const chosen = preferences.defaultTuiAgent
+  // Why: only a saved agent opens here; Auto must not turn catalog order into a launch (#36594).
   if (
     state.settings?.emptyWorkspaceOpenSurface === 'terminal' ||
-    state.settings?.defaultTuiAgent === 'blank'
+    !chosen ||
+    chosen === 'blank'
   ) {
     return undefined
   }
   // Why: an unresolved owner is an unknown host, not the local machine.
-  return parseAgentDetectionTargetKey(getAgentDetectionTargetKeyForWorktree(state, worktreeId))
+  const target = parseAgentDetectionTargetKey(
+    getAgentDetectionTargetKeyForWorktree(state, worktreeId)
+  )
+  return target && { target, preferences }
 }
 
-/** True when the default agent could open here but the workspace host's agent list has not loaded. */
-export function emptyWorkspaceDefaultAgentAwaitsDetection(worktreeId: string): boolean {
+export function emptyWorkspaceDefaultChatAwaitsDetection(worktreeId: string): boolean {
   const state = useAppStore.getState()
-  const target = defaultAgentDetectionTarget(state, worktreeId)
-  return target !== undefined && readDetectedAgentsForTarget(state, target) === null
-}
-
-/** Loads the workspace host's agent list; resolves on success, failure, or timeout. */
-export async function loadEmptyWorkspaceDefaultAgentDetection(worktreeId: string): Promise<void> {
-  const state = useAppStore.getState()
-  const target = defaultAgentDetectionTarget(state, worktreeId)
-  if (!target) {
-    return
-  }
-  await withTimeout(
-    ensureDetectedAgentsForTarget(state, target),
-    DEFAULT_AGENT_DETECTION_TIMEOUT_MS,
-    []
+  const host = defaultChatHost(state, worktreeId)
+  const detected = host && readDetectedAgentsForTarget(state, host.target)
+  const workspace = worktreeLaunchWorkspace(worktreeId)
+  return (
+    detected === null ||
+    (!!detected &&
+      chosenAgentChatUnlearned(state, host?.preferences.defaultTuiAgent, detected, workspace))
   )
 }
 
+export async function loadEmptyWorkspaceDefaultChatDetection(worktreeId: string): Promise<void> {
+  const state = useAppStore.getState()
+  const host = defaultChatHost(state, worktreeId)
+  if (!host) {
+    return
+  }
+  await acquireAgentLaunchChoices(
+    worktreeLaunchWorkspace(worktreeId),
+    () => ensureDetectedAgentsForTarget(state, host.target),
+    undefined,
+    true
+  ).catch(() => undefined)
+}
+
 /**
- * Unless the user picked Terminal for empty workspaces, one opens their default agent instead of a
- * bare shell: as a chat when the launch routes there, else in its terminal. Null means nothing
- * opened and the caller seeds the shell.
+ * Unless the user picked Terminal for empty workspaces, open their saved default agent: as a chat
+ * when it routes there, else in its terminal. Null means nothing opened and the caller seeds the shell.
  */
-export function openDefaultAgentInEmptyWorkspace(
-  worktreeId: string
+export function openDefaultAgentChatInEmptyWorkspace(
+  worktreeId: string,
+  initialCwd?: string
 ): { primaryTabId: string | null } | null {
   const state = useAppStore.getState()
-  const target = defaultAgentDetectionTarget(state, worktreeId)
-  if (!target) {
+  const host = defaultChatHost(state, worktreeId)
+  if (!host) {
     return null
   }
+  const detected = readDetectedAgentsForTarget(state, host.target)
   const agent = pickTuiAgent(
-    state.settings?.defaultTuiAgent,
-    readDetectedAgentsForTarget(state, target) ?? [],
-    state.settings?.disabledTuiAgents
+    host.preferences.defaultTuiAgent,
+    detected ?? [],
+    host.preferences.disabledTuiAgents,
+    (chosen) => agentChoiceOpensAsChat(state, chosen, worktreeLaunchWorkspace(worktreeId), detected)
   )
   if (!agent) {
     return null
@@ -84,12 +94,14 @@ export function openDefaultAgentInEmptyWorkspace(
   const agentSessionLaunchPlan = planAgentSessionLaunch(state, {
     requestId: newAgentLaunchRequestId(),
     agent,
-    workspace: { kind: workspaceKindForWorktreeId(worktreeId), worktreeId }
+    workspace: { kind: workspaceKindForWorktreeId(worktreeId), worktreeId },
+    tuiCustomization: { cwd: initialCwd }
   })
   // A host's "no" to the chat opens the agent's terminal, the same as any new agent tab.
   const result = launchAgentInNewTab({
     agent,
     worktreeId,
+    initialCwd,
     launchSource: 'unknown',
     agentSessionLaunchPlan,
     pendingActivationSpawn: true

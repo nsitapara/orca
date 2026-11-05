@@ -11,18 +11,19 @@ import type {
   RuntimeMobileSessionTabsResult,
   RuntimeTerminalOrphanAdoptionRequest
 } from '../../shared/runtime-types'
-import type { WorkspaceSessionState } from '../../shared/workspace-session-state-types'
+import type { WorkspaceSessionState } from '../../shared/workspace-session/workspace-session-state-types'
 import {
   GIT_KEY,
   addWorkspace,
   emptySession,
   leaf
 } from '../../shared/workspace-layout/workspace-layout-session.test-fixture'
-import { closeTestStores, createStore, testState } from '../persistence-test-harness'
-import type { Store } from '../persistence'
+import { closeTestStores, createStore, testState } from '../persistence/persistence-test-harness'
+import type { Store } from '../persistence/loading-store/store'
 import { ProfileStateSqliteAuthority } from '../persistence/profile-state/profile-state-sqlite-authority'
 import { adoptRuntimeTerminalOrphansFromInventory } from './runtime-terminal-orphan-adoption'
 import type { RuntimePtyWorktreeRecord } from './runtime-terminal-state-records'
+import { paneOfPty } from './terminal/surface/pty-pane-query'
 
 vi.mock('electron', () => ({
   app: { getPath: () => testStateDirRef.dir, getName: () => 'orca', getVersion: () => '0.0.0' },
@@ -125,6 +126,7 @@ function adopt(
         }
       },
       getPty: () => pty,
+      paneOf: (record) => paneOfPty(record, () => null),
       getLeaves: () => [],
       getLeaf: () => undefined,
       getDisplayTitle: () => null,

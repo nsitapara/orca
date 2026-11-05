@@ -5,8 +5,8 @@ import {
   DropdownMenuSubTrigger
 } from '@/components/ui/dropdown-menu'
 import { translate } from '@/i18n/i18n'
-import SidebarRepositoryFilterSection from '@/components/sidebar/SidebarRepositoryFilterSection'
-import { SidebarProjectFilterPanel } from '@/components/sidebar/SidebarProjectFilterPanel'
+import SidebarRepositoryFilterSection from '@/components/sidebar/worktree-list/controls/SidebarRepositoryFilterSection'
+import { SidebarProjectFilterPanel } from '@/components/sidebar/worktree-list/controls/SidebarProjectFilterPanel'
 import type { Repo } from '../../../../../shared/repo-types'
 import { useActivityProjectChoices } from './use-activity-project-scope'
 

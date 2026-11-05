@@ -10,6 +10,8 @@ import type { ItemFields } from '../../../shared/api-types'
 import { groupOf } from '../../../shared/inbox-groups'
 import { LOCAL_PILOT_HOST } from '../../hosts/pilot-host'
 import { WorktreeChips } from './WorktreeChips'
+import { linearIssueReadFixture } from '@/store/slices/linear-slice-test-harness'
+import type { LinearIssue } from '../../../../../../shared/linear/issue-types'
 
 vi.mock('@/lib/http-link-routing', async (importOriginal) => ({
   ...(await importOriginal<typeof HttpLinkRouting>()),
@@ -50,7 +52,9 @@ describe("an MR card's chips with no worktree in the app", () => {
   })
 
   it('adds the Linear issue its branch is named for, once Linear has it', () => {
-    const fetchLinearIssue = vi.fn(async () => null)
+    const fetchLinearIssue = vi.fn((_id: string) =>
+      linearIssueReadFixture<LinearIssue | null>(async () => null)
+    )
     const key = scopedLinearCacheKey(
       getLinearReadScope(useAppStore.getState().settings),
       'selected::WEB-2122'

@@ -7,8 +7,8 @@ import {
   type GatedEmptyWorkspaceReseedIntent
 } from './worktree-initial-terminal-seeding'
 import {
-  emptyWorkspaceDefaultAgentAwaitsDetection,
-  loadEmptyWorkspaceDefaultAgentDetection
+  emptyWorkspaceDefaultChatAwaitsDetection,
+  loadEmptyWorkspaceDefaultChatDetection
 } from './empty-workspace-default-agent-chat'
 import {
   claimEmptyWorkspaceDefaultSurface,
@@ -36,7 +36,7 @@ export function gateAndReseedEmptyWorkspace(
       return
     }
     const awaitsDetection =
-      intent.seedUserDefaultSurface && emptyWorkspaceDefaultAgentAwaitsDetection(workspaceKey)
+      intent.seedUserDefaultSurface && emptyWorkspaceDefaultChatAwaitsDetection(workspaceKey)
     if (!awaitsDetection && !isEmptyWorkspaceDefaultSurfacePending(workspaceKey)) {
       reseedGatedEmptyWorkspace(workspaceKey, intent)
       return
@@ -53,6 +53,6 @@ export function gateAndReseedEmptyWorkspace(
         reseedGatedEmptyWorkspace(workspaceKey, latestIntent)
       }
     }
-    void loadEmptyWorkspaceDefaultAgentDetection(workspaceKey).then(settle, settle)
+    void loadEmptyWorkspaceDefaultChatDetection(workspaceKey).then(settle, settle)
   })
 }

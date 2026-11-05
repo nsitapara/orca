@@ -3,7 +3,7 @@ import type { Worktree } from '../../../../../shared/worktree/types'
 import { getSidebarLineageRowsByIdentity } from '../../../../../shared/sidebar-list/pinned-section-worktrees'
 import { getSidebarLineageParentsByIdentity } from '../../../../../shared/sidebar-list/worktree-lineage-projection'
 import { getWorktreeHostIdentity } from '../../../../../shared/worktree/host-qualified-identity'
-import { getLineageAncestorIndex } from '@/components/sidebar/visible-worktree-indexes'
+import { getLineageAncestorIndex } from '@/components/sidebar/worktree-list/listing/visible-worktree-indexes'
 import { useAppStore } from '@/store'
 
 const WORKTREE_GROUP = 'worktree:'

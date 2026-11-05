@@ -50,39 +50,30 @@ describe('attachPilotWindowAppearance', () => {
   })
 
   it.each([
-    ['match-terminal themes the window root', 'match-terminal', MOCHA.background, 'match-terminal'],
-    ['tinted leaves the root to Orca', 'tinted', '', null],
-    ['default leaves the root to Orca', 'default', '', null]
+    ['match-terminal marks the window root', 'match-terminal', 'match-terminal'],
+    ['tinted leaves the root to Orca', 'tinted', null],
+    ['default leaves the root to Orca', 'default', null]
   ] as const)(
     '%s, and Activity’s guide line and the selection accent take the theme’s blue',
-    (_name, mode, background, attribute) => {
+    (_name, mode, attribute) => {
       const store = fakeStore(
         settings({ leftSidebarAppearanceMode: mode, terminalThemeDark: 'Catppuccin Mocha' })
       )
       detach = attachPilotWindowAppearance(store, root, fakeDarkQuery(true))
-      expect(root.style.getPropertyValue('--background')).toBe(background)
+      expect(root.style.getPropertyValue('--background')).toBe('')
       expect(root.getAttribute(WINDOW_APPEARANCE_ATTRIBUTE)).toBe(attribute)
       expect(root.style.getPropertyValue('--pilot-activity-guide')).toContain('#89b4fa')
       expect(root.style.getPropertyValue('--pilot-selection-accent')).toBe('#89b4fa')
     }
   )
 
-  it('themes overlays and the center column, not only the sidebar tokens', () => {
-    const store = fakeStore(settings({ leftSidebarAppearanceMode: 'match-terminal' }))
-    detach = attachPilotWindowAppearance(store, root, fakeDarkQuery(true))
-    expect(root.style.getPropertyValue('--popover')).toContain(MOCHA.background)
-    expect(root.style.getPropertyValue('--popover-foreground')).toBe(MOCHA.foreground)
-    expect(root.style.getPropertyValue('--card')).toContain(MOCHA.background)
-  })
-
   it('hands the root back to Orca when the mode leaves match-terminal, keeping other inline vars', () => {
     root.style.setProperty('--app-font-family', 'Inter')
     const store = fakeStore(null)
     detach = attachPilotWindowAppearance(store, root, fakeDarkQuery(true))
     store.set(settings({ leftSidebarAppearanceMode: 'match-terminal' }))
-    expect(root.style.getPropertyValue('--background')).toBe(MOCHA.background)
+    expect(root.getAttribute(WINDOW_APPEARANCE_ATTRIBUTE)).toBe('match-terminal')
     store.set(settings({ leftSidebarAppearanceMode: 'default' }))
-    expect(root.style.getPropertyValue('--background')).toBe('')
     expect(root.hasAttribute(WINDOW_APPEARANCE_ATTRIBUTE)).toBe(false)
     expect(root.style.getPropertyValue('--app-font-family')).toBe('Inter')
   })
@@ -90,17 +81,17 @@ describe('attachPilotWindowAppearance', () => {
   it('follows the system switching to light when the theme is system', () => {
     const store = fakeStore(
       settings({
-        leftSidebarAppearanceMode: 'match-terminal',
         theme: 'system',
         terminalColorOverrides: undefined,
+        terminalThemeDark: 'Catppuccin Mocha',
         terminalUseSeparateLightTheme: true
       })
     )
     const darkQuery = fakeDarkQuery(true)
     detach = attachPilotWindowAppearance(store, root, darkQuery)
-    const dark = root.style.getPropertyValue('--background')
+    const dark = root.style.getPropertyValue('--pilot-selection-accent')
     darkQuery.flip(false)
-    expect(root.style.getPropertyValue('--background')).not.toBe(dark)
+    expect(root.style.getPropertyValue('--pilot-selection-accent')).not.toBe(dark)
   })
 })
 

@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react'
 import { ChevronDown, FolderGit2, Pin } from 'lucide-react'
 import type { ActivityThreadGroup } from '@/components/activity/activity-thread-types'
-import WorktreeContextMenu from '@/components/sidebar/WorktreeContextMenu'
+import WorktreeContextMenu from '@/components/sidebar/workspace-actions/context-menu/WorktreeContextMenu'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { isPortaledRowMenuClick, isRowActivationKey } from '@/lib/list-row-interaction'
 import { cn } from '@/lib/utils'

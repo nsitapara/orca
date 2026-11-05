@@ -9,9 +9,9 @@ import {
   completeFakeSpawn,
   createFakeSpawnedChild
 } from '../../shared/__fixtures__/fake-spawned-child'
-import { parsePairingCode } from '../../shared/pairing'
-import { pairedRuntimeConnectionFromOffer } from '../../shared/paired-runtime-connection'
-import { RemoteRuntimeRequestConnection } from '../../shared/remote-runtime-request-connection'
+import { parsePairingCode } from '../../shared/remote-runtime/pairing/pairing'
+import { pairedRuntimeConnectionFromOffer } from '../../shared/remote-runtime/pairing/paired-runtime-connection'
+import { RemoteRuntimeRequestConnection } from '../../shared/remote-runtime/requests/remote-runtime-request-connection'
 import type { Repo } from '../../shared/repo-types'
 import type { OrcaRuntimeService } from './orca-runtime'
 import { OrcaRuntimeRpcServer } from './runtime-rpc'
@@ -112,7 +112,6 @@ describe('paired check details over real encrypted loopback transport', () => {
         getRuntimeId: () => 'paired-check-host',
         getStartedAt: () => 1,
         cleanupSubscriptionsForConnection: () => {},
-        cancelMobileDictationForConnection: () => {},
         onClientDisconnected: () => {},
         getRepoPRCheckDetails: (...args: Parameters<typeof query.getRepoPRCheckDetails>) =>
           query.getRepoPRCheckDetails(...args).finally(() => {
