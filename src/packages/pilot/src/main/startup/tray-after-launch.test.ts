@@ -131,6 +131,13 @@ vi.mock('../../../../../main/window/user-quit-window-close', () => ({
 vi.mock('../../../../../main/window/renderer-recovery-prompt', () => ({
   presentRendererRecoveryPrompt: vi.fn()
 }))
+vi.mock(
+  '../../../../../main/browser/extensions/tabs-and-windows/browser-extension-window-model',
+  () => ({ trackBrowserExtensionMainWindow: vi.fn() })
+)
+vi.mock('../../../../../main/window/resource-view-admission', () => ({
+  isResourceWindowVisible: () => true
+}))
 
 import { openMainWindow } from '../../../../../main/startup/main-window-controller'
 import { setActiveSink } from '../../../../../main/observability/tracer'

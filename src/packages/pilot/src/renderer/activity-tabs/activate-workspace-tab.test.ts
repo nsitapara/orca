@@ -15,7 +15,7 @@ vi.mock('@/lib/worktree-activation', () => ({
     return true
   }
 }))
-vi.mock('@/lib/structured-agent-session-tab-activation', () => ({
+vi.mock('@/lib/agent-session/structured-agent-session-tab-activation', () => ({
   activateStructuredAgentSessionTab: (args: unknown) => activation.agentSessions.push(args)
 }))
 vi.mock('@/lib/focus-terminal-tab-surface', () => ({ focusTerminalTabSurface: () => undefined }))

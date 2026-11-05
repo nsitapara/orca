@@ -192,7 +192,11 @@ describe('launchAgentInWorkspace', () => {
       expect(launches).toEqual([
         expect.objectContaining({ worktreeId: worktree.id, groupId: 'gb' })
       ])
-      expect(s.setActiveWorktree).toHaveBeenCalledWith(worktree.id, switchTo.executionHostId)
+      expect(s.setActiveWorktree).toHaveBeenCalledWith(
+        worktree.id,
+        switchTo.executionHostId,
+        expect.anything()
+      )
       expect(s.revealWorktreeInSidebar).toHaveBeenCalledWith(worktree.id, {
         executionHostId: switchTo.executionHostId
       })

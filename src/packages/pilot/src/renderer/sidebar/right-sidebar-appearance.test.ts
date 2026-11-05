@@ -27,12 +27,8 @@ describe('usePilotRightSidebarAppearance', () => {
   afterEach(() => registerPilotStore(null))
 
   it.each([
-    [
-      'match-terminal paints the terminal theme',
-      'match-terminal',
-      MOCHA.background,
-      MOCHA.background
-    ],
+    // Orca paints Match Terminal for the whole window at :root, so nothing is set inline.
+    ['match-terminal leaves the window theme to Orca', 'match-terminal', '', ''],
     [
       'tinted mixes the tint like the left sidebar',
       'tinted',
@@ -49,14 +45,15 @@ describe('usePilotRightSidebarAppearance', () => {
 
   it('clears the variables when the mode goes back to default', () => {
     registerPilotStore({ getState: () => ({ rightSidebarOpen: true, setRightSidebarOpen() {} }) })
-    const { el, hook } = renderSidebar(settings({ leftSidebarAppearanceMode: 'match-terminal' }))
+    const { el, hook } = renderSidebar(settings({ leftSidebarAppearanceMode: 'tinted' }))
+    expect(el.style.getPropertyValue('--sidebar')).not.toBe('')
     hook.rerender({ value: settings({ leftSidebarAppearanceMode: 'default' }) })
     expect(el.style.getPropertyValue('--sidebar')).toBe('')
-    expect(el.style.getPropertyValue('--foreground')).toBe('')
+    expect(el.style.getPropertyValue('--sidebar-foreground')).toBe('')
   })
 
   it('is inert when no store is registered', () => {
-    const { el } = renderSidebar(settings({ leftSidebarAppearanceMode: 'match-terminal' }))
+    const { el } = renderSidebar(settings({ leftSidebarAppearanceMode: 'tinted' }))
     expect(el.style.getPropertyValue('--sidebar')).toBe('')
   })
 })

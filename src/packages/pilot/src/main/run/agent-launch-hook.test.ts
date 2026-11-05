@@ -83,9 +83,9 @@ function runtimeWithStubs() {
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the launch reads only these protected members; each is assigned or stubbed before launchAgentTerminal runs.
   const internals = runtime as unknown as {
     store: Record<string, unknown>
-    resolveWorktreeSelector: (selector: string) => Promise<unknown>
+    resolveGitWorktreeSelector: (selector: string) => Promise<unknown>
     createTerminal: (selector: string, opts: unknown) => Promise<unknown>
-    sendStartupFollowupWhenReady: (handle: string, followup: unknown) => void
+    deliverStartupFollowup: (handle: string, followup: unknown) => Promise<unknown>
   }
   internals.store = {
     getSettings: () => ({ disabledTuiAgents: [], workspaceDir: '/tmp/workspaces' }),
@@ -93,7 +93,7 @@ function runtimeWithStubs() {
     getRepos: () => [repo],
     getRepo: (id: string) => (id === repo.id ? repo : undefined)
   }
-  vi.spyOn(internals, 'resolveWorktreeSelector').mockResolvedValue({
+  vi.spyOn(internals, 'resolveGitWorktreeSelector').mockResolvedValue({
     id: 'repo-1::/home/me/app-feature',
     repoId: 'repo-1',
     path: '/home/me/app-feature'
@@ -103,11 +103,16 @@ function runtimeWithStubs() {
     worktreeId: 'repo-1::/home/me/app-feature',
     title: null
   })
-  vi.spyOn(internals, 'sendStartupFollowupWhenReady').mockImplementation(() => undefined)
+  vi.spyOn(internals, 'deliverStartupFollowup').mockResolvedValue(undefined)
   return { runtime, createTerminal }
 }
 
-type TerminalOpts = { command: string; env?: Record<string, string>; title?: string }
+type TerminalOpts = {
+  command?: string
+  env?: Record<string, string>
+  title?: string
+  startupAgent?: string
+}
 
 describe('launchAgentTerminal with the agent-launch-env hook', () => {
   it("gives the agent terminal Pilot's env and puts the pinned session before the prompt", async () => {
@@ -125,15 +130,16 @@ describe('launchAgentTerminal with the agent-launch-env hook', () => {
     expect(terminal.title).toBe('Fix CI · !1561')
   })
 
-  it('leaves a launch that carries no Pilot extras as upstream builds it', async () => {
+  it("sends a launch that carries no Pilot extras down upstream's startupAgent path", async () => {
     const { runtime, createTerminal } = runtimeWithStubs()
     await runtime.launchAgentTerminal('id:repo-1::/home/me/app-feature', {
       agent: 'claude',
-      prompt: 'fix the flaky test'
+      prompt: 'fix the flaky test',
+      title: 'Fix CI'
     })
     const [, terminal] = createTerminal.mock.calls[0] as [string, TerminalOpts]
-    expect(terminal.command).toMatch(/'fix the flaky test'$/)
-    expect(terminal.command).not.toContain('--session-id')
-    expect(terminal.env?.PILOT_RUN_ID).toBeUndefined()
+    expect(terminal).toMatchObject({ startupAgent: 'claude', title: 'Fix CI' })
+    expect(terminal.command).toBeUndefined()
+    expect(terminal.env).toBeUndefined()
   })
 })

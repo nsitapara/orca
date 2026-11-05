@@ -43,10 +43,10 @@ const agents = vi.hoisted(() => {
   const state: { rows: unknown[]; focused: string | null } = { rows: [], focused: null }
   return state
 })
-vi.mock('@/components/sidebar/useWorktreeAgentRows', () => ({
+vi.mock('@/components/sidebar/workspace-card/activity/useWorktreeAgentRows', () => ({
   useWorktreeAgentRows: () => agents.rows
 }))
-vi.mock('@/components/sidebar/focused-agent-row-highlight', () => ({
+vi.mock('@/components/sidebar/workspace-card/activity/focused-agent-row-highlight', () => ({
   useFocusedAgentPaneKey: () => agents.focused
 }))
 const reveal = vi.hoisted(() => vi.fn())

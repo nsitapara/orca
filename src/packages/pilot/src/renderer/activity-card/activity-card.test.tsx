@@ -27,17 +27,19 @@ import { WorktreePortsChip } from './WorktreePortsChip'
 import { linearIssueReadFixture } from '@/store/slices/linear-slice-test-harness'
 import type { LinearIssue } from '../../../../../shared/linear/issue-types'
 
-vi.mock('@/components/ui/hover-card', () => ({
-  HoverCard: ({
-    children,
+// Opening is owned by the pointer-rest intent, not Radix; open the card as soon as it mounts.
+vi.mock('@/components/activity/activity-thread-hover-card-intent', () => ({
+  useActivityThreadHoverCardIntent: ({
     onOpenChange
   }: {
-    children: ReactNode
-    onOpenChange?: (open: boolean) => void
+    onOpenChange: (open: boolean) => void
   }) => {
-    React.useEffect(() => onOpenChange?.(true), [onOpenChange])
-    return <>{children}</>
-  },
+    React.useEffect(() => onOpenChange(true), [onOpenChange])
+    return { resting: false, onOpenChange, triggerHandlers: {} }
+  }
+}))
+vi.mock('@/components/ui/hover-card', () => ({
+  HoverCard: ({ children }: { children: ReactNode }) => <>{children}</>,
   HoverCardContent: ({ children }: { children: ReactNode }) => (
     <div data-testid="hover-card-content">{children}</div>
   ),

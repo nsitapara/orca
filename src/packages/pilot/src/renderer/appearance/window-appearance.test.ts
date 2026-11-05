@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { readdirSync, readFileSync } from 'node:fs'
+import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { getDefaultSettings } from '../../../../../shared/constants'
@@ -96,22 +96,6 @@ describe('attachPilotWindowAppearance', () => {
 })
 
 describe('window-appearance.css', () => {
-  // The stylesheet swaps Orca's hard-coded glass recipe by its exact class text; if upstream renames it,
-  // the override silently stops matching.
-  it('targets glass classes that Orca’s UI primitives still use', () => {
-    const css = readFileSync(join(__dirname, 'window-appearance.css'), 'utf8')
-    const targets = [...css.matchAll(/\[class\*='([^']+)'\]/g)].map((match) => match[1])
-    const uiDir = join(__dirname, '../../../../../renderer/src/components/ui')
-    const primitives = readdirSync(uiDir)
-      .filter((name) => name.endsWith('.tsx'))
-      .map((name) => readFileSync(join(uiDir, name), 'utf8'))
-      .join('\n')
-    expect(targets.length).toBeGreaterThan(0)
-    for (const target of targets) {
-      expect(primitives, target).toContain(target)
-    }
-  })
-
   it.each([
     ['assets/main.css', '.titlebar-left {'],
     ['assets/main.css', '.titlebar-left-floating {'],

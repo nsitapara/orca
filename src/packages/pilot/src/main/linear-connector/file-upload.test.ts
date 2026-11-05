@@ -15,15 +15,10 @@ vi.mock('../../../../../main/linear/linear-token-store', () => ({ clearToken: vi
 
 // The SDK client a signalled write builds: its fileUpload gets the signal the client was made with.
 vi.mock('../../../../../main/linear/linear-sdk', () => ({
-  loadLinearSdk: () => ({
-    LinearClient: class {
-      readonly fileUpload: (...args: unknown[]) => unknown
-      constructor(options: { signal?: AbortSignal }) {
-        this.fileUpload = (...args) => mocks.fileUpload(options.signal, ...args)
-      }
-    },
-    AuthenticationLinearError: class extends Error {}
-  })
+  createLinearClient: (options: { signal?: AbortSignal }) => ({
+    fileUpload: (...args: unknown[]) => mocks.fileUpload(options.signal, ...args)
+  }),
+  loadLinearSdk: () => ({ AuthenticationLinearError: class extends Error {} })
 }))
 
 import { LINEAR_UPLOAD_SIGN_TIMEOUT_MS } from '../../shared/ticket-create-deadline'
