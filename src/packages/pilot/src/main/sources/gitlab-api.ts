@@ -6,6 +6,7 @@ import {
   glabRepoExecOptions
 } from '../../../../../main/gitlab/gitlab-project-ref-resolution'
 import { encodedProject } from '../../../../../main/gitlab/project-path-encoding'
+import { retryDeadlineKill } from './glab-deadline-retry'
 
 export type GlabApi = {
   projectPath: string
@@ -24,9 +25,12 @@ export async function glabApiForRepo(repoPath: string): Promise<GlabApi> {
   }
   const project = encodedProject(ref.path)
   const found = ref
+  // GET only, so a call killed at its deadline is safe to try once more.
   const call = async <T>(apiPath: string): Promise<T> => {
     const args = ['api', ...glabHostnameArgs(found, undefined), apiPath]
-    const { stdout } = await glabExecFileAsync(args, glabRepoExecOptions(repoPath, undefined))
+    const { stdout } = await retryDeadlineKill(() =>
+      glabExecFileAsync(args, glabRepoExecOptions(repoPath, undefined))
+    )
     return JSON.parse(stdout) as T
   }
   return {
