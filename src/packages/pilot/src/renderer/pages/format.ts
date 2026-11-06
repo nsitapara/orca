@@ -100,6 +100,9 @@ export function tickLine(t: TickRow): string {
   if (t.status === 'failed') {
     return `Failed: ${t.error ?? 'unknown error'}`
   }
+  if (t.status === 'interrupted') {
+    return `Interrupted: ${t.error ?? 'the Mac slept'}`
+  }
   if (t.status === 'running') {
     return 'Running…'
   }

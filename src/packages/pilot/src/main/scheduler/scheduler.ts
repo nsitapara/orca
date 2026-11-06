@@ -42,6 +42,10 @@ export { REPO_WAIT_MS }
 // loader already refuses feeds that go round in a cycle: this bounds a burst of sender runs ending together.
 export const MAX_TRIGGERS_PER_MINUTE = 4
 const MINUTE_MS = 60_000
+// A scheduled tick that fails (glab timed out, the Mac slept mid-call) is due again this soon, at most this many times
+// in a row, instead of waiting for its next slot. Its runs' own retries are retry_after_failure's.
+export const TICK_RETRY_MS = 2 * MINUTE_MS
+export const MAX_TICK_RETRIES = 3
 
 // The next tick depends only on the cron, the timezone and where the walk starts, so it is computed
 // once and kept until the automation ticks or a reload changes its schedule. (A yearly cron walks ~0.5 s.)
@@ -78,6 +82,8 @@ export class PilotScheduler {
   private readonly retrigger = new Map<string, TickTrigger>()
   // Retry's and Go now's keys asked for while the job's tick ran: one more tick by hand with all of them after it.
   private readonly byHandAfter = new Map<string, Set<string>>()
+  // A failed scheduled tick's retry: when it is due and how many failed in a row.
+  private readonly retries = new Map<string, { at: number; failures: number }>()
   private ready: Promise<void> = Promise.resolve()
 
   constructor(
@@ -240,16 +246,45 @@ export class PilotScheduler {
       if (this.repos.missing(def)) {
         return
       }
-      if (!this.isDue(def)) {
+      if (!this.isDue(def) && !this.retryDue(def)) {
         return
       }
       const result = await this.tickNow(def.id, { dryRun: false, pass })
       if (result.status === 'failed') {
         this.deps.log(`[pilot] ${def.id} tick failed: ${result.error}`)
       }
+      this.noteResult(def.id, result.status)
     } catch (error) {
       this.deps.log(`[pilot] ${def.id} tick failed: ${messageOf(error)}`)
     }
+  }
+
+  private retryDue(def: AutomationDefinition): boolean {
+    const retry = this.retries.get(def.id)
+    if (!retry || !this.scheduledHere(def)) {
+      this.retries.delete(def.id)
+      return false
+    }
+    return retry.at <= this.deps.now()
+  }
+
+  // An ok tick ends the retries; a failed one is due again TICK_RETRY_MS later until MAX_TICK_RETRIES have failed.
+  private noteResult(id: string, status: TickNowResult['status']): void {
+    if (status === 'ok') {
+      this.retries.delete(id)
+      return
+    }
+    if (status !== 'failed') {
+      return
+    }
+    const failures = (this.retries.get(id)?.failures ?? 0) + 1
+    if (failures > MAX_TICK_RETRIES) {
+      this.retries.delete(id)
+      this.deps.log(`[pilot] ${id}: ${failures} ticks failed in a row; it waits for its next slot`)
+      return
+    }
+    this.retries.set(id, { at: this.deps.now() + TICK_RETRY_MS, failures })
+    this.deps.log(`[pilot] ${id}: ticks again in ${TICK_RETRY_MS / MINUTE_MS} minutes`)
   }
 
   // Why a trigger can't tick the stage now, or null when it can. A stage that is off, invalid or missing never is.

@@ -2,14 +2,15 @@ import type Database from '../../../../../main/sqlite/sync-database'
 import type { RunRow, TickRow } from '../../shared/api-types'
 import { toRun } from './run-rows'
 
-// A tick with nothing to do: it didn't fail, started no run, read or expired no handover, and was a re-check, or warned
-// of nothing, wasn't triggered and found every item not due, out of scope or held. Activity can leave these out.
-export const QUIET_TICK = `(ticks.status = 'ok'
-  AND NOT EXISTS (SELECT 1 FROM runs WHERE runs.tick_id = ticks.id)
+// A tick with nothing to do: it started no run, read or expired no handover, and either the Mac's sleep interrupted it
+// (the scheduler ticks again soon after) or it didn't fail and was a re-check, or warned of nothing, wasn't triggered
+// and found every item not due, out of scope or held. Activity can leave these out.
+export const QUIET_TICK = `(NOT EXISTS (SELECT 1 FROM runs WHERE runs.tick_id = ticks.id)
   AND NOT EXISTS (SELECT 1 FROM handovers WHERE handovers.tick_id = ticks.id)
-  AND (ticks.recheck = 1 OR (ticks.warnings_json = '[]' AND ticks.trigger_json IS NULL
-    AND NOT EXISTS (SELECT 1 FROM json_each(ticks.counts_json)
-      WHERE json_each.key NOT IN ('notdue', 'out_of_scope', 'held') AND json_each.value > 0))))`
+  AND (ticks.status = 'interrupted'
+    OR (ticks.status = 'ok' AND (ticks.recheck = 1 OR (ticks.warnings_json = '[]' AND ticks.trigger_json IS NULL
+      AND NOT EXISTS (SELECT 1 FROM json_each(ticks.counts_json)
+        WHERE json_each.key NOT IN ('notdue', 'out_of_scope', 'held') AND json_each.value > 0))))))`
 
 export function toTick(r: Record<string, unknown>): TickRow {
   return {

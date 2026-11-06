@@ -183,7 +183,7 @@ export class PilotStore {
 
   finishTick(
     tickId: number,
-    status: 'ok' | 'failed',
+    status: 'ok' | 'failed' | 'interrupted',
     error: string | null,
     counts: Partial<Record<Verdict, number>>,
     at: number,

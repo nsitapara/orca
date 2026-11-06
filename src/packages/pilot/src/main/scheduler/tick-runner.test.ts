@@ -150,6 +150,24 @@ describe('runTick', () => {
     })
   })
 
+  // A glab call that straddled a sleep is killed on wake: the tick is interrupted, not failed, and still returns
+  // failed so the scheduler retries it.
+  it.each([
+    { slept: false, stored: 'failed', error: 'glab timed out.' },
+    { slept: true, stored: 'interrupted', error: 'The Mac slept during this tick: glab timed out.' }
+  ])(
+    'stores a source failure as $stored when slept is $slept',
+    async ({ slept, stored, error }) => {
+      const d = deps({
+        sources: failingSources(new Error('glab timed out.')),
+        sleptSince: () => slept
+      })
+      const result = await runTick(def, people, d, { dryRun: false })
+      expect(result).toMatchObject({ status: 'failed', error })
+      expect(d.store.lastTick('fix-failed-ci')).toMatchObject({ status: stored, error })
+    }
+  )
+
   it('fails the tick, starts nothing and writes no keys when the worktree list fails', async () => {
     const d = deps({
       fields: fieldsWith({

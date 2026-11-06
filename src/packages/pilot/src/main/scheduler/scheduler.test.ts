@@ -7,9 +7,11 @@ import type { LoadedDefinitions } from '../definitions/loader'
 import type { PassFetchCache } from '../sources/fetch-cache'
 import {
   MAX_CONCURRENT_TICKS,
+  MAX_TICK_RETRIES,
   MAX_TRIGGERS_PER_MINUTE,
   PilotScheduler,
   REPO_WAIT_MS,
+  TICK_RETRY_MS,
   type SchedulerDeps
 } from './scheduler'
 import { runsOnGate, type RunsOnGate } from './runs-on-gate'
@@ -162,6 +164,7 @@ describe('PilotScheduler', () => {
     expect(d.logs[0]).toBe('[pilot] step poll failed: probe broke')
     expect(d.logs.slice(1).sort()).toEqual([
       '[pilot] a tick failed: glab: 401',
+      '[pilot] a: ticks again in 2 minutes',
       '[pilot] b tick failed: store closed'
     ])
   })
@@ -666,5 +669,79 @@ describe('PilotScheduler with runs_on', () => {
     const s = new PilotScheduler(d)
     await s.tickNow('there', { dryRun: false, byHand: true })
     expect(d.ran).toEqual(['there'])
+  })
+})
+
+describe('PilotScheduler: a failed scheduled tick is retried soon', () => {
+  const at1012 = Date.UTC(2026, 9, 10, 19, 12) // 12:12 PDT, past the :10 slot
+  const FAILED = {
+    tickId: 1,
+    status: 'failed' as const,
+    error: 'glab timed out.',
+    decisions: [],
+    warnings: []
+  }
+
+  // Each loop runs at the given minutes after 12:12; `results` answers the ticks in order. The :10 slot ticks at
+  // 12:12, a failure is due again TICK_RETRY_MS later, at most MAX_TICK_RETRIES times, and the next :10 slot is 13:10.
+  it.each([
+    { name: 'an ok tick is not retried', results: ['ok'], loops: [0, 2, 4], want: [0] },
+    {
+      name: 'a failed tick is retried after 2 minutes',
+      results: ['failed', 'ok'],
+      loops: [0, 1, 2, 3, 4],
+      want: [0, 2]
+    },
+    {
+      name: 'a retry that succeeds stops the retries',
+      results: ['failed', 'ok'],
+      loops: [0, 2, 4, 6],
+      want: [0, 2]
+    },
+    {
+      name: 'retries stop after MAX_TICK_RETRIES',
+      results: ['failed', 'failed', 'failed', 'failed'],
+      loops: [0, 2, 4, 6, 8, 10],
+      want: [0, 2, 4, 6]
+    }
+  ])('$name', async ({ results, loops, want }) => {
+    expect(MAX_TICK_RETRIES).toBe(3)
+    expect(TICK_RETRY_MS).toBe(2 * 60_000)
+    let clock = at1012
+    let last: number | null = Date.UTC(2026, 9, 10, 18, 10)
+    const ticked: number[] = []
+    const d = deps([def('ci', '10 * * * *')], at1012, null)
+    d.now = () => clock
+    d.lastTickAt = () => last
+    d.runTick = async () => {
+      ticked.push((clock - at1012) / 60_000)
+      last = clock
+      return results[ticked.length - 1] === 'ok' ? OK : FAILED
+    }
+    const s = new PilotScheduler(d)
+    for (const minute of loops) {
+      clock = at1012 + minute * 60_000
+      await s.tickAll()
+    }
+    expect(ticked).toEqual(want)
+  })
+
+  it('does not retry a stage turned off after its tick failed', async () => {
+    let clock = at1012
+    const ticked: number[] = []
+    let defs = [def('ci', '10 * * * *')]
+    const d = deps(defs, at1012, Date.UTC(2026, 9, 10, 18, 10))
+    d.now = () => clock
+    d.definitions = () => loadedOf(defs)
+    d.runTick = async () => {
+      ticked.push(clock)
+      return FAILED
+    }
+    const s = new PilotScheduler(d)
+    await s.tickAll()
+    defs = [def('ci', '10 * * * *', false)]
+    clock += TICK_RETRY_MS
+    await s.tickAll()
+    expect(ticked).toEqual([at1012])
   })
 })

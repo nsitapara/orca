@@ -123,12 +123,12 @@ describe('Pilot API handlers', () => {
     const { ctx, store } = context()
     const tick = (
       at: number,
-      status: 'ok' | 'failed',
+      status: 'ok' | 'failed' | 'interrupted',
       counts: Record<string, number>,
       warnings: string[] = []
     ) => {
       const id = store.startTick('ci', at)
-      store.finishTick(id, status, status === 'failed' ? 'boom' : null, counts, at, warnings)
+      store.finishTick(id, status, status === 'ok' ? null : 'boom', counts, at, warnings)
       return id
     }
     const failed = tick(1, 'failed', {})
@@ -157,9 +157,16 @@ describe('Pilot API handlers', () => {
     const empty = tick(9, 'ok', {})
     const notDue = tick(10, 'ok', { notdue: 3 })
     const outOfScope = tick(11, 'ok', { out_of_scope: 2, notdue: 1 })
+    const interrupted = tick(12, 'interrupted', {})
 
     const kept = [running, fed, ran, warned, deferred, skipped, started, failed]
-    expect(activity(ctx, 'ci', 20).map((t) => t.id)).toEqual([outOfScope, notDue, empty, ...kept])
+    expect(activity(ctx, 'ci', 20).map((t) => t.id)).toEqual([
+      interrupted,
+      outOfScope,
+      notDue,
+      empty,
+      ...kept
+    ])
     expect(activity(ctx, 'ci', 20, { skipQuiet: true }).map((t) => t.id)).toEqual(kept)
     expect(activity(ctx, 'ci', 2, { skipQuiet: true }).map((t) => t.id)).toEqual([running, fed])
   })

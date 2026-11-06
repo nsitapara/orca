@@ -37,6 +37,7 @@ import { buildPilotMethods } from './rpc/methods'
 import { registerPilotRpcMethods } from './rpc/register'
 import { runsOnGate } from './scheduler/runs-on-gate'
 import { PilotScheduler } from './scheduler/scheduler'
+import { SleepWatch } from './scheduler/sleep-watch'
 import { registrySources } from './scheduler/tick-decide'
 import { runTick, type TickDeps } from './scheduler/tick-runner'
 import { createPassFetchCache } from './sources/fetch-cache'
@@ -168,9 +169,12 @@ function openPilot(
     detailsRoot
   })
   const giveUp = giveUpOnFailure(inbox, definitionFor, log)
+  // A tick that fails across the Mac's sleep is stored as interrupted (scheduler/sleep-watch).
+  const sleep = new SleepWatch(now)
   const tickDeps: TickDeps = {
     store,
     now,
+    sleptSince: (at) => sleep.sleptSince(at),
     resolveRepo: (repo) => resolveRepoPath(runtime, repo),
     sources: registrySources,
     fields: {
@@ -265,6 +269,8 @@ function openPilot(
   })
   handover.deps.trigger = (id, cause) => scheduler.trigger(id, cause)
   opened.push(() => scheduler.stop())
+  sleep.start()
+  opened.push(() => sleep.stop())
   const playground = openPlayground(runtime, engineEnv.binDir, opened)
   // The attach hooks decide (pilotSchedulerEnabled); a caller that doesn't say gets no scheduler.
   if (schedulerOn) {

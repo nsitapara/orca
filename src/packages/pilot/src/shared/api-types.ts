@@ -73,7 +73,8 @@ export type TickRow = {
   automationId: string
   startedAt: number
   finishedAt: number | null
-  status: 'running' | 'ok' | 'failed'
+  // interrupted: it failed because the Mac slept during it (main/scheduler/sleep-watch); the scheduler retries it.
+  status: 'running' | 'ok' | 'failed' | 'interrupted'
   error: string | null
   counts: Partial<Record<Verdict, number>>
   // What the tick warned about (an id its source couldn't read). Absent: none.

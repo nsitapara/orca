@@ -45,6 +45,8 @@ export type TickDeps = DecideDeps & {
   previewEnvs?(def: AutomationDefinition, decisions: ItemDecision[]): Promise<void>
   // The runner's line: an item past the run limit (verdict queued) or held by a runner gate waits there.
   capacity?: Pick<RunCapacity, 'admit' | 'hold' | 'settle' | 'tickFailed'>
+  // Whether the Mac slept since `at` (SleepWatch): a tick that failed across a sleep is stored as interrupted.
+  sleptSince?(at: number): boolean
 }
 // `pass` is the scheduler pass's fetch cache, shared by every automation that ticks in that pass. `trigger`: the run
 // whose feed (run: now) asked for this tick, recorded on it for Activity. `byHand`: a Run now, whose runs are stored
@@ -220,16 +222,27 @@ function markDecisions(def: AutomationDefinition, decisions: ItemDecision[], dep
   }
 }
 
+// A failure across a sleep is the sleep's (a glab call killed on wake), so it is stored as interrupted and its message
+// says so. It is still a failed result: the scheduler retries it.
+function failureOf(error: unknown, startedAt: number, deps: TickDeps): Failure {
+  const message = errorMessage(error)
+  if (deps.sleptSince?.(startedAt)) {
+    return { status: 'interrupted', message: `The Mac slept during this tick: ${message}` }
+  }
+  return { status: 'failed', message }
+}
+type Failure = { status: 'failed' | 'interrupted'; message: string }
+
 // finishTick can itself throw (store down); runTick must still resolve with the failed result.
 function finishFailed(
   tickId: number,
-  message: string,
+  failure: Failure,
   counts: Partial<Record<Verdict, number>>,
   deps: TickDeps,
   warnings: readonly string[] = []
 ): void {
   try {
-    deps.store.finishTick(tickId, 'failed', message, counts, deps.now(), warnings)
+    deps.store.finishTick(tickId, failure.status, failure.message, counts, deps.now(), warnings)
   } catch (error) {
     console.error(`pilot: couldn't finish tick ${tickId}: ${errorMessage(error)}`)
   }
@@ -257,7 +270,8 @@ export async function runTick(
   if (opts.dryRun) {
     return dryRunTick(def, people, deps, opts)
   }
-  const tickId = deps.store.startTick(def.id, deps.now(), opts.recheck === true)
+  const startedAt = deps.now()
+  const tickId = deps.store.startTick(def.id, startedAt, opts.recheck === true)
   let decisions: ItemDecision[]
   let waits: ItemDecision[]
   let warnings: string[]
@@ -275,13 +289,13 @@ export async function runTick(
     warnings = outcome.warnings
     feeding = outcome
   } catch (error) {
-    const message = errorMessage(error)
-    finishFailed(tickId, message, {}, deps)
+    const failure = failureOf(error, startedAt, deps)
+    finishFailed(tickId, failure, {}, deps)
     // A job whose ticks keep failing can't hold a slot; its held items hold none, so they keep their place in line.
     try {
       deps.capacity?.tickFailed(def.id)
     } catch {}
-    return { tickId, status: 'failed', error: message, decisions: [], warnings: [] }
+    return { tickId, status: 'failed', error: failure.message, decisions: [], warnings: [] }
   }
   for (const warning of warnings) {
     console.warn(`[pilot] ${def.id}: ${warning}`)
@@ -311,11 +325,11 @@ export async function runTick(
       ...(handover ? { handover } : {})
     }
   } catch (error) {
-    const message = errorMessage(error)
+    const failure = failureOf(error, startedAt, deps)
     if (unlaunched.current) {
-      releaseUnlaunched(def, unlaunched.current, message, deps)
+      releaseUnlaunched(def, unlaunched.current, errorMessage(error), deps)
     }
-    finishFailed(tickId, message, countVerdicts(decisions), deps, warnings)
-    return { tickId, status: 'failed', error: message, decisions, warnings }
+    finishFailed(tickId, failure, countVerdicts(decisions), deps, warnings)
+    return { tickId, status: 'failed', error: failure.message, decisions, warnings }
   }
 }
