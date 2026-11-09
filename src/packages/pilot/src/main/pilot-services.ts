@@ -17,7 +17,9 @@ import { mergeRepoProblems, type RepoProblem } from './definitions/repo-problems
 import { pilotDetailsRoot, pilotVaultAutomationsDir } from './env'
 import { resolveEngineEnv } from './engine-env'
 import { cachedQuotas } from './fields/quota'
+import { gitExecFileAsync } from '../../../../main/git/command-runner/git-exec-file'
 import { reposListed, resolveRepoPath } from './fields/runtime-facts'
+import { deleteBranchAtTip } from './git/delete-kept-branch'
 import { runtimeFieldDeps } from './fields/runtime-field-deps'
 import { runShellScript } from './fields/script-runner'
 import { launchAgentStep } from './run/agent-step'
@@ -299,7 +301,15 @@ function openPilot(
     resumeSession: (req) => resumeStepSession(runtimeResumeDeps(runtime, store, fieldDeps), req),
     continueRun: (runId) =>
       continueRun({ store, now, definitionFor, capacity, launcherDeps, wired }, runId),
-    stopRun: (runId) => wired.engine.stopRun(runId)
+    stopRun: (runId) => wired.engine.stopRun(runId),
+    deleteKeptBranch: async (repo, branch) => {
+      const { path } = await resolveRepoPath(runtime, repo)
+      const head = await deleteBranchAtTip(gitExecFileAsync, path, branch)
+      log(
+        `Clear deleted ${branch} in ${repo} (was ${head}); restore it with git branch ${branch} ${head}`
+      )
+      return head
+    }
   }
 }
 

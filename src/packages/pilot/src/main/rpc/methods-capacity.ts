@@ -5,6 +5,7 @@ import type { CapacityPayload, QuotaUse } from '../../shared/api-types-capacity'
 import { MAX_RUN_LIMIT } from '../../shared/capacity/limit-suggestion'
 import { MAX_RETRY_LIMIT } from '../../shared/capacity/retry-limit'
 import type { AgentKind } from '../../shared/definition/types'
+import { clearItem } from '../capacity/clear-item'
 import { capacityView } from '../capacity/capacity-view'
 import { readSystemMemory, type SystemMemory } from '../capacity/system-memory'
 import { readQuotas, type QuotaReaders } from '../fields/quota'
@@ -55,6 +56,22 @@ const GoNow = z.object({
   itemKey: z.string().min(1),
   ...CallerBinding
 })
+
+const Clear = z.discriminatedUnion('kind', [
+  z.object({
+    kind: z.literal('gaveUp'),
+    automationId: z.string().min(1),
+    onceKey: z.string().min(1),
+    ...CallerBinding
+  }),
+  z.object({
+    kind: z.literal('waiting'),
+    automationId: z.string().min(1),
+    itemKey: z.string().min(1),
+    ...CallerBinding
+  }),
+  z.object({ kind: z.literal('mergeBack'), keptRunId: z.string().min(1), ...CallerBinding })
+])
 
 // Retry and Go now: a person's change to a job's item, then its tick by hand with those keys, after any running tick.
 function changeThenTick(
@@ -154,6 +171,27 @@ export function buildCapacityMethods(
           const itemKey = c.store.resetFailures(p.automationId, p.onceKey)
           return itemKey === null ? [p.onceKey] : [p.onceKey, itemKey]
         })
+        return payload(c, readSystem, now)
+      }
+    }),
+    // Clear: a gave-up key or a waiting item settled until it changes, or a kept fix's branch deleted; then the jobs whose
+    // rows it was tick by hand, so the page drops them at once.
+    defineMethod({
+      name: 'pilot.capacity.clear',
+      permission: 'workspace',
+      params: Clear,
+      handler: async (p, rpc) => {
+        const c = ctx()
+        refuseAgentCaller(c, rpc?.caller, p)
+        const ticks = await clearItem(c, p, now())
+        if (c.schedulerOn) {
+          for (const { automationId, keys } of ticks) {
+            void c.scheduler.tickByHand(automationId, keys).catch((error: unknown) => {
+              const message = error instanceof Error ? error.message : String(error)
+              console.warn(`[pilot] ${automationId}: Clear's tick failed: ${message}`)
+            })
+          }
+        }
         return payload(c, readSystem, now)
       }
     }),

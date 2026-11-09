@@ -1,16 +1,19 @@
 import { Button } from '@/components/ui/button'
-import type { GaveUpKey, RetryKey } from '../../../shared/api-types-capacity'
+import type { ClearRequest, GaveUpKey, RetryKey } from '../../../shared/api-types-capacity'
 import { failedTimesText } from '../../../shared/capacity/waiting-rows'
+import { ClearButton } from './ClearButton'
 
-// A key the runner stopped retrying: Retry frees it and runs its job by hand.
+// A key the runner stopped retrying: Retry frees it and runs its job by hand; Clear settles it until its item changes.
 export function GaveUpRow({
   item,
   saving,
-  onRetry
+  onRetry,
+  onClear
 }: {
   item: GaveUpKey
   saving: boolean
   onRetry(key: RetryKey): void
+  onClear(request: ClearRequest): void
 }): React.JSX.Element {
   return (
     <li className="flex min-w-0 items-center gap-2 px-3 py-2 text-sm">
@@ -36,6 +39,13 @@ export function GaveUpRow({
       >
         Retry
       </Button>
+      <ClearButton
+        label={`Clear ${item.automationName}, ${item.itemLabel}`}
+        disabled={saving}
+        onClear={() =>
+          onClear({ kind: 'gaveUp', automationId: item.automationId, onceKey: item.onceKey })
+        }
+      />
     </li>
   )
 }

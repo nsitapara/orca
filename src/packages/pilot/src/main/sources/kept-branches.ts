@@ -43,7 +43,7 @@ export type KeptBranchDeps = {
 }
 
 // The automation a run belongs to, from its last valid file: its repo and name.
-function originOf(store: PilotStore, run: RunRow): { repo: string; name: string } | null {
+export function originOf(store: PilotStore, run: RunRow): { repo: string; name: string } | null {
   const origin = store.definitions.lastValid(run.automationId)
   const parsed = origin ? parseAutomationYaml(origin.yaml, origin.file) : null
   return parsed?.ok ? { repo: parsed.definition.repo, name: parsed.definition.name } : null

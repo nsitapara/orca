@@ -108,6 +108,13 @@ export type FinishedRun = ListedRun & {
 // What pilot.capacity.retry frees: a job's failed once_per key.
 export type RetryKey = { automationId: string; onceKey: string }
 
+// What pilot.capacity.clear clears: a key the runner gave up on, an item waiting in line, or a fix kept on a branch
+// (Merge back). A kept fix's branch is deleted; anything else is settled until its item changes.
+export type ClearRequest =
+  | { kind: 'gaveUp'; automationId: string; onceKey: string }
+  | { kind: 'waiting'; automationId: string; itemKey: string }
+  | { kind: 'mergeBack'; keptRunId: string }
+
 // What pilot.capacity.goNow marks: an item waiting in the runner's line.
 export type GoNowKey = { automationId: string; itemKey: string }
 

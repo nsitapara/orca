@@ -371,9 +371,16 @@ describe('RunningPage', () => {
   })
 
   it('folds the limits behind Limits & how it works, with who handles what', async () => {
-    serve(capacity({ retryLimit: 2, quotaCeilings: { claude: { weekly: 90, session: 95 }, codex: { weekly: 98, session: 98 } } }))
+    serve(
+      capacity({
+        retryLimit: 2,
+        quotaCeilings: { claude: { weekly: 90, session: 95 }, codex: { weekly: 98, session: 98 } }
+      })
+    )
     await shown()
-    expect(screen.getByText('2 at once · 2 retries · quota stops at Claude 90% / 95%, Codex 98% / 98%')).toBeTruthy()
+    expect(
+      screen.getByText('2 at once · 2 retries · quota stops at Claude 90% / 95%, Codex 98% / 98%')
+    ).toBeTruthy()
     expect(screen.queryByRole('status', { name: 'Jobs at once' })).toBeNull()
     await openLimits()
     const toggle = screen.getByRole('button', { name: 'Limits & how it works' })

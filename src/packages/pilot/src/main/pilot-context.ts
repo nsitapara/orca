@@ -39,6 +39,9 @@ export type PilotContext = {
   continueRun?: (runId: string) => Promise<ContinueRunResult>
   // Stops a running run (run/run-stop.ts); absent where the run engine isn't.
   stopRun?: (runId: string) => Promise<StopRunResult>
+  // Deletes a kept pilot/ branch in the repo (Clear on Running) and answers the commit it was at; absent where the
+  // runtime that knows the repos isn't.
+  deleteKeptBranch?: (repo: string, branch: string) => Promise<string>
   // The Automations folder every card's Details bundle must live in; null reads no bundle.
   detailsRoot?: string | null
   // pilotcli's playground (main/playground); absent in orcad, which has no launcher folder for View source.

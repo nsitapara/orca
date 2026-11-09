@@ -91,6 +91,19 @@ export class HandledStore {
     return Number(row?.failures ?? 0)
   }
 
+  // Clear on the Running page: the key is settled done, so its item isn't started again until it changes. A key a run is
+  // on stays as it is.
+  clear(automationId: string, onceKey: string, at: number): void {
+    this.db
+      .prepare(
+        `INSERT INTO handled (automation_id, once_key, run_id, at, status, failed_at, failures)
+         VALUES (?, ?, NULL, ?, 'done', NULL, 0)
+         ON CONFLICT (automation_id, once_key) DO UPDATE SET status = 'done', failed_at = NULL,
+           failures = 0, at = excluded.at WHERE handled.status != 'started'`
+      )
+      .run(automationId, onceKey, at)
+  }
+
   // Retry: a failed or stopped run's key is freed, so it is due; a key a run holds stays. Returns its run's item key.
   resetFailures(automationId: string, onceKey: string): string | null {
     const freed = this.db

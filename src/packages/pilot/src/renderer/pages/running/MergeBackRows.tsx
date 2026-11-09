@@ -1,9 +1,10 @@
 import { Badge } from '@/components/ui/badge'
-import type { MergeBackRow } from '../../../shared/api-types-capacity'
+import type { ClearRequest, MergeBackRow } from '../../../shared/api-types-capacity'
 import { formatDuration } from '../../../shared/run/format-duration'
 import type { PartState } from '../../../shared/run-views/paint'
 import { usePilotHost } from '../../hosts/PilotHostContext'
 import { openRun } from '../../run-views/run-panel-state'
+import { ClearButton } from './ClearButton'
 
 const STATE_WORD: Record<PartState, string> = {
   done: 'Merged',
@@ -37,8 +38,19 @@ function baseName(path: string): string {
 }
 
 // The fix's job and where it stands, how long it has waited and its two runs on top; the branch and the worktree it goes
-// to under it; then what job 15 says now (why it waits, its retry, what it's doing).
-export function MergeBackItem({ row, now }: { row: MergeBackRow; now: number }): React.JSX.Element {
+// to under it; then what job 15 says now (why it waits, its retry, what it's doing). Clear deletes the kept branch, so
+// it asks first; a fix kept on no branch has nothing to clear.
+export function MergeBackItem({
+  row,
+  now,
+  saving,
+  onClear
+}: {
+  row: MergeBackRow
+  now: number
+  saving: boolean
+  onClear(request: ClearRequest): void
+}): React.JSX.Element {
   const host = usePilotHost()
   const where = row.home ? baseName(row.home) : 'an unknown worktree'
   return (
@@ -66,6 +78,14 @@ export function MergeBackItem({ row, now }: { row: MergeBackRow; now: number }):
           >
             Open merge
           </button>
+        ) : null}
+        {row.branch ? (
+          <ClearButton
+            label={`Clear ${row.automationName}, ${row.branch}`}
+            confirm="Delete its kept branch?"
+            disabled={saving}
+            onClear={() => onClear({ kind: 'mergeBack', keptRunId: row.runId })}
+          />
         ) : null}
       </div>
       <div className="truncate font-mono text-xs text-muted-foreground" title={row.home ?? ''}>

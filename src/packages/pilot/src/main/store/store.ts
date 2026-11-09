@@ -291,6 +291,11 @@ export class PilotStore {
     return this.handled.settle(automationId, runId, status, at)
   }
 
+  // Clear: the key is settled done until its item changes; a key a run is on stays.
+  clearHandled(automationId: string, onceKey: string, at: number): void {
+    this.handled.clear(automationId, onceKey, at)
+  }
+
   // Manual Retry: a failed or stopped run's key is freed, so it is due. Returns the item its last run was about.
   resetFailures(automationId: string, onceKey: string): string | null {
     return this.handled.resetFailures(automationId, onceKey)

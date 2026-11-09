@@ -3,12 +3,10 @@ import { Badge } from '@/components/ui/badge'
 import type {
   CapacityPayload,
   CapacityRun,
+  ClearRequest,
   GoNowKey,
-  QueuedRun,
   RetryKey
 } from '../../../shared/api-types-capacity'
-import { canGoNow } from '../../../shared/capacity/go-now'
-import { holdReasonText, waitedText, waitsForSlot } from '../../../shared/capacity/waiting-rows'
 import { formatDuration } from '../../../shared/run/format-duration'
 import { workedMs } from '../../../shared/run/worked-time'
 import { PilotHostProvider, usePilotHost } from '../../hosts/PilotHostContext'
@@ -20,9 +18,9 @@ import { AnsweringCards } from './AnsweringCards'
 import { FinishedRuns } from './FinishedRuns'
 import { LimitsPanel, LimitsToggle } from './LimitsPanel'
 import { MergeBackItem } from './MergeBackRows'
+import { placeInLine, QueuedRow } from './QueuedRow'
 import { GaveUpRow } from './Retries'
 import { RunWorktreeLine } from './RunWorktreeLine'
-import { checkOf } from './running-checks'
 import { placeBadgeText, placeReasonText } from './running-place'
 import { runMemoryText, stepText, usageText } from './running-text'
 import { useCapacities, type CapacityChanges, type MachineCapacity } from './use-capacity'
@@ -33,6 +31,7 @@ type Changes = {
   onRetryLimit(limit: number): void
   onRetry(key: RetryKey): void
   onGoNow(key: GoNowKey): void
+  onClear(request: ClearRequest): void
 }
 
 // Name, where it works, its figures and Open run and Stop on top; its project and worktree, the item, its step and the
@@ -77,75 +76,6 @@ function RunningRow({ run, now }: { run: CapacityRun; now: number }): React.JSX.
       {why ? <p className="text-xs text-muted-foreground">{why}</p> : null}
       {stop.note ? <p className="text-xs text-muted-foreground">{stop.note}</p> : null}
       {show.note ? <p className="text-xs text-muted-foreground">{show.note}</p> : null}
-    </li>
-  )
-}
-
-// 1-based place among the slot waiters, in line order; null for a held item.
-function placeInLine(queued: readonly QueuedRun[], item: QueuedRun): number | null {
-  if (!waitsForSlot(item)) {
-    return null
-  }
-  return queued.filter(waitsForSlot).indexOf(item) + 1
-}
-
-// A slot waiter's place in line, or Held and the check that holds it, as Limits & how it works names them.
-function QueuedStatus({
-  item,
-  place
-}: {
-  item: QueuedRun
-  place: number | null
-}): React.JSX.Element {
-  if (place !== null) {
-    return <Badge variant="outline">#{place} in line</Badge>
-  }
-  const check = checkOf(item.holdCode)
-  return <Badge variant="secondary">{check ? `Held · ${check.name}` : 'Held'}</Badge>
-}
-
-// Name, status, time and Go now on top; the item under it; then the reason across the whole row.
-function QueuedRow({
-  item,
-  place,
-  now,
-  saving,
-  onGoNow
-}: {
-  item: QueuedRun
-  // Null: it waits on something other than a slot, so it has no place in the slot line.
-  place: number | null
-  now: number
-  saving: boolean
-  onGoNow(key: GoNowKey): void
-}): React.JSX.Element {
-  const reason = holdReasonText(item)
-  return (
-    <li className="flex min-w-0 flex-col gap-1 px-3 py-2 text-sm">
-      <div className="flex min-w-0 items-center gap-2">
-        <span className="min-w-0 truncate font-medium" title={item.automationName}>
-          {item.automationName}
-        </span>
-        <QueuedStatus item={item} place={place} />
-        {item.byHand ? <Badge variant="outline">Run now</Badge> : null}
-        <span className="ml-auto shrink-0 pl-2 text-xs tabular-nums text-muted-foreground">
-          {waitedText(item, now)}
-        </span>
-        {canGoNow(item) ? (
-          <button
-            type="button"
-            className="shrink-0 text-xs underline disabled:opacity-50"
-            disabled={saving}
-            onClick={() => onGoNow({ automationId: item.automationId, itemKey: item.itemKey })}
-          >
-            Go now
-          </button>
-        ) : null}
-      </div>
-      <div className="truncate font-mono text-xs text-muted-foreground" title={item.itemLabel}>
-        {item.itemLabel}
-      </div>
-      {reason ? <p className="text-xs text-muted-foreground">{reason}</p> : null}
     </li>
   )
 }
@@ -205,7 +135,8 @@ function MachineRuns({
   onLimit,
   onRetryLimit,
   onRetry,
-  onGoNow
+  onGoNow,
+  onClear
 }: Omit<MachineProps, 'machine' | 'named' | 'onToggleLimits'> & {
   payload: CapacityPayload
   panelId: string
@@ -239,6 +170,7 @@ function MachineRuns({
             now={now}
             saving={saving}
             onGoNow={onGoNow}
+            onClear={onClear}
           />
         ))}
       </ListSection>
@@ -248,7 +180,7 @@ function MachineRuns({
         count={mergeBack.length}
       >
         {mergeBack.map((row) => (
-          <MergeBackItem key={row.runId} row={row} now={now} />
+          <MergeBackItem key={row.runId} row={row} now={now} saving={saving} onClear={onClear} />
         ))}
       </ListSection>
       {gaveUp.length > 0 ? (
@@ -259,6 +191,7 @@ function MachineRuns({
               item={item}
               saving={saving}
               onRetry={onRetry}
+              onClear={onClear}
             />
           ))}
         </ListSection>
@@ -357,7 +290,8 @@ function changesFor(changes: CapacityChanges, machine: MachineCapacity): Changes
     onLimit: (limit) => void changes.setLimit(host, limit),
     onRetryLimit: (limit) => void changes.setRetryLimit(host, limit),
     onRetry: (key) => void changes.retry(host, key),
-    onGoNow: (key) => void changes.goNow(host, key)
+    onGoNow: (key) => void changes.goNow(host, key),
+    onClear: (request) => void changes.clear(host, request)
   }
 }
 

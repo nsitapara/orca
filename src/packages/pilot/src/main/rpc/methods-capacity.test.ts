@@ -2,6 +2,7 @@ import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
+import type { ItemFields } from '../../shared/api-types'
 import type { CapacityPayload } from '../../shared/api-types-capacity'
 import { testDefinition } from '../../shared/definition/__fixtures__/definition'
 import { EMPTY_PEOPLE } from '../../shared/people'
@@ -35,28 +36,43 @@ function setup(sample: ReturnType<RunMemorySampler['snapshot']> | null, schedule
   const tickByHand = vi.fn(async () => ({ status: 'ok' }))
   const readSystem = vi.fn(async () => FRESH)
   const loaded = {
-    definitions: [testDefinition({ id: 'review', oncePer: '{mr.iid}' })],
+    definitions: [
+      testDefinition({ id: 'review', oncePer: '{mr.iid}' }),
+      testDefinition({
+        id: 'merge-back',
+        items: { kind: 'kept_branch', where: {}, match: [], customFields: [] }
+      })
+    ],
     errors: [],
     people: EMPTY_PEOPLE,
     peopleError: null,
     missingDirs: []
   }
+  const deleteKeptBranch = vi.fn(async () => 'abc123')
   const ctx = {
     store,
     loaded: () => loaded,
     schedulerOn,
     scheduler: { tickAll, tickByHand },
-    memory: sample ? { snapshot: () => sample } : undefined
+    memory: sample ? { snapshot: () => sample } : undefined,
+    deleteKeptBranch
   }
   const list = buildCapacityMethods(
-    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the methods read only store, loaded, memory, scheduler.tickAll/tickByHand and schedulerOn.
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the methods read only store, loaded, memory, scheduler.tickAll/tickByHand, schedulerOn and deleteKeptBranch.
     () => ctx as unknown as PilotContext,
     readSystem,
     () => NOW
   )
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: defineMethod's objects have name, params and handler; the tests call handlers with valid params.
   const methods = new Map((list as unknown as Callable[]).map((m) => [m.name, m]))
-  return { store, tickAll, tickByHand, readSystem, method: (name: string) => methods.get(name)! }
+  return {
+    store,
+    tickAll,
+    tickByHand,
+    readSystem,
+    deleteKeptBranch,
+    method: (name: string) => methods.get(name)!
+  }
 }
 
 const DESKTOP = { caller: { kind: 'desktop' } }
@@ -247,6 +263,147 @@ describe('pilot.capacity.goNow', () => {
     expect(() => method('pilot.capacity.goNow').handler({ ...GO, ...params }, rpc)).toThrow(error)
     expect(store.capacity.queued().map((q) => q.goNow)).toEqual([undefined])
     expect(tickByHand).not.toHaveBeenCalled()
+  })
+})
+
+describe('pilot.capacity.clear', () => {
+  const ORIGIN_YAML =
+    'name: 03 · Review\nrepo: web-platform\nschedule: manual\nsteps:\n  - agent: claude\n    prompt: Review\n'
+
+  // A tick of `automationId` that saw the item with these fields, and the item waiting in line.
+  function waitingItem(
+    store: PilotStore,
+    automationId: string,
+    itemKey: string,
+    fields: ItemFields
+  ) {
+    const tickId = store.startTick(automationId, 1)
+    store.recordDecisions(
+      tickId,
+      [
+        {
+          key: itemKey,
+          label: itemKey,
+          verdict: 'held',
+          reason: '',
+          checks: [],
+          onceKey: itemKey,
+          fields
+        }
+      ],
+      new Map()
+    )
+    store.capacity.enqueue({
+      automationId,
+      itemKey,
+      itemLabel: itemKey,
+      queuedAt: 1,
+      byHand: false,
+      dueAt: 1,
+      holdCode: 'retry',
+      holdDetail: 'Retry 1 of 2 at 12:05',
+      checkedAt: 1
+    })
+  }
+
+  // Run r9 of job 03, whose throwaway kept its fix on pilot/r9.
+  function keptRun(store: PilotStore): void {
+    store.definitions.saveValid(testDefinition({ id: 'review' }), ORIGIN_YAML, 1)
+    store.runs.create({
+      id: 'r9',
+      automationId: 'review',
+      tickId: null,
+      itemKey: 'mr:9',
+      itemLabel: '!9',
+      worktreePath: '/agents/r9',
+      startedAt: 1
+    })
+    store.runs.envs.begin('r9', '/wt/a', {})
+    store.runs.update('r9', { status: 'done', finishedAt: 4 })
+    store.runs.envs.removed('r9', 5, 'pilot/r9')
+  }
+
+  it('settles a gave-up key done, so it leaves Gave up and no run starts on it', async () => {
+    const { store, method, tickByHand } = setup(null)
+    store.runs.create({
+      id: 'run-1',
+      automationId: 'review',
+      tickId: null,
+      itemKey: 'mr:7',
+      itemLabel: '!7',
+      worktreePath: null,
+      startedAt: 1
+    })
+    store.markHandled('review', '7', 'run-1', 1)
+    for (const at of [2, 3, 4]) {
+      store.setHandledStatus('review', 'run-1', 'failed', at)
+    }
+    expect((await method('pilot.capacity.get').handler(undefined)).gaveUp).toHaveLength(1)
+    const view = await method('pilot.capacity.clear').handler(
+      { kind: 'gaveUp', automationId: 'review', onceKey: '7' },
+      DESKTOP
+    )
+    expect(view.gaveUp).toEqual([])
+    expect(store.handledRows('review').map((r) => [r.onceKey, r.status])).toEqual([['7', 'done']])
+    expect(tickByHand).not.toHaveBeenCalled()
+  })
+
+  it('settles a waiting item under its once_per key and takes it out of line', async () => {
+    const { store, method, deleteKeptBranch } = setup(null)
+    waitingItem(store, 'review', 'mr:7', { 'mr.iid': 7 })
+    const view = await method('pilot.capacity.clear').handler(
+      { kind: 'waiting', automationId: 'review', itemKey: 'mr:7' },
+      DESKTOP
+    )
+    expect(view.queued).toEqual([])
+    expect(store.handledRows('review').map((r) => [r.onceKey, r.status])).toEqual([['7', 'done']])
+    expect(deleteKeptBranch).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    [
+      'its waiting job 15 item',
+      { kind: 'waiting', automationId: 'merge-back', itemKey: 'kept:r9' }
+    ],
+    ['its Merge back row', { kind: 'mergeBack', keptRunId: 'r9' }]
+  ])('deletes a kept fix’s branch from %s, and job 15 looks again', async (_name, request) => {
+    const { store, method, deleteKeptBranch, tickByHand } = setup(null)
+    keptRun(store)
+    waitingItem(store, 'merge-back', 'kept:r9', { 'kept.branch': 'pilot/r9', 'kept.run': 'r9' })
+    const view = await method('pilot.capacity.clear').handler(request, DESKTOP)
+    expect(deleteKeptBranch.mock.calls).toEqual([['web-platform', 'pilot/r9']])
+    expect(store.runs.get('r9')?.env?.keptGoneAt).toBe(NOW)
+    expect(tickByHand.mock.calls).toEqual([['merge-back', ['kept:r9']]])
+    if (request.kind === 'waiting') {
+      expect(view.queued).toEqual([])
+    }
+  })
+
+  it.each([
+    [
+      'an agent in a run',
+      { kind: 'gaveUp', automationId: 'review', onceKey: '7', terminal: 'term-1' },
+      { caller: { kind: 'local-cli' } },
+      AGENT_IN_RUN
+    ],
+    [
+      'a job it does not know',
+      { kind: 'gaveUp', automationId: 'gone', onceKey: '7' },
+      DESKTOP,
+      'No automation "gone"'
+    ],
+    [
+      'a run with no kept branch',
+      { kind: 'mergeBack', keptRunId: 'r1' },
+      DESKTOP,
+      'Run r1 has no fix kept on a branch'
+    ]
+  ])('refuses %s, clearing nothing', async (_name, params, rpc, error) => {
+    const { store, method, deleteKeptBranch } = setup(null)
+    agentInRun(store)
+    await expect(method('pilot.capacity.clear').handler(params, rpc)).rejects.toThrow(error)
+    expect(store.handledRows('review')).toEqual([])
+    expect(deleteKeptBranch).not.toHaveBeenCalled()
   })
 })
 
