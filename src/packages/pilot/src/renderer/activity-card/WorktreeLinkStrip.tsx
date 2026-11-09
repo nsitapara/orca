@@ -117,58 +117,75 @@ function LinearChip({
 }
 
 /**
- * An MR/PR and a Linear issue as chips, then any more (`children`). Status rides on each chip's icon
- * and colour; the words are in its tooltip. `worktreeId`: where a link may open in the app; none for an
- * item no worktree holds. Nothing when there is none.
+ * A Linear issue, a git state chip (`git`) and an MR/PR, in that order, then any more (`children`).
+ * Status rides on each chip's icon and colour; the words are in its tooltip. `worktreeId`: where a link
+ * may open in the app; none for an item no worktree holds. Nothing when there is none.
  */
 export function LinkChips({
   review,
   linear,
+  git,
   worktreeId,
   className,
   children
 }: {
   review: WorktreeCardPrDisplay | null
   linear: WorktreeLinearLink | null
+  git?: React.ReactNode
   worktreeId?: string
   className?: string
   children?: React.ReactNode
 }): React.JSX.Element | null {
-  if (!review && !linear && !children) {
+  if (!review && !linear && !git && !children) {
     return null
   }
   return (
     <div className={cn('flex min-w-0 items-center gap-1.5', className)}>
-      {review ? <ReviewChip review={review} worktreeId={worktreeId} /> : null}
       {linear ? <LinearChip linear={linear} worktreeId={worktreeId} /> : null}
+      {git}
+      {review ? <ReviewChip review={review} worktreeId={worktreeId} /> : null}
       {children}
     </div>
   )
 }
 
-/**
- * A worktree's MR/PR, Linear issue, git state, artifacts and live ports, as chips under its name, then any more
- * (`children`). With no linked issue, the one its branch is named for. `canPush` false keeps the git
- * chip to showing state, where a push must go through its own gate (an Inbox card's Push to origin).
- * `artifacts` adds the artifacts chip, on the sidebar's worktree cards only.
- */
-export function WorktreeLinkStrip({
-  worktree,
-  repo,
-  className,
-  canPush = true,
-  artifacts = false,
-  children
-}: {
+export type WorktreeStripLinks = {
+  review: WorktreeCardPrDisplay | null
+  linear: WorktreeLinearLink | null
+}
+
+/** A worktree's MR/PR and Linear issue as its chips show them: with no linked issue, the one its branch is named for. */
+export function useWorktreeStripLinks(worktree: Worktree, repo: Repo | null): WorktreeStripLinks {
+  const { review, linear } = useWorktreeLinks(worktree, repo)
+  const branchLinear = useBranchLinearIssue(linear ? null : worktree.branch)
+  return { review, linear: linear ?? branchLinear }
+}
+
+type StripProps = {
   worktree: Worktree
   repo: Repo | null
   className?: string
   canPush?: boolean
   artifacts?: boolean
   children?: React.ReactNode
-}): React.JSX.Element | null {
-  const { review, linear } = useWorktreeLinks(worktree, repo)
-  const branchLinear = useBranchLinearIssue(linear ? null : worktree.branch)
+}
+
+/**
+ * A worktree's Linear issue, git state, MR/PR, artifacts and live ports, as chips under its name, then any
+ * more (`children`). `canPush` false keeps the git chip to showing state, where a push must go through its
+ * own gate (an Inbox card's Push to origin). `artifacts` adds the artifacts chip, on the sidebar's worktree
+ * cards only. `links`: the MR and issue, when the caller already read them with `useWorktreeStripLinks`.
+ */
+export function WorktreeLinkStripView({
+  worktree,
+  repo,
+  links,
+  className,
+  canPush = true,
+  artifacts = false,
+  children
+}: StripProps & { links: WorktreeStripLinks }): React.JSX.Element | null {
+  const { review, linear } = links
   const git = useWorktreeGitSync(worktree, repo)
   const gitView = worktreeGitChipView(git.sync, { reviewMerged: review?.state === 'merged' })
   const ports = useWorktreeLivePorts(worktree.id)
@@ -182,13 +199,13 @@ export function WorktreeLinkStrip({
   return (
     <LinkChips
       review={review}
-      linear={linear ?? branchLinear}
+      linear={linear}
+      git={gitChip}
       worktreeId={worktree.id}
       className={className}
     >
-      {gitChip || artifactsChip || portsChip || children ? (
+      {artifactsChip || portsChip || children ? (
         <>
-          {gitChip}
           {artifactsChip}
           {portsChip}
           {children}
@@ -196,4 +213,10 @@ export function WorktreeLinkStrip({
       ) : null}
     </LinkChips>
   )
+}
+
+/** `WorktreeLinkStripView` reading its own MR and issue. */
+export function WorktreeLinkStrip(props: StripProps): React.JSX.Element | null {
+  const links = useWorktreeStripLinks(props.worktree, props.repo)
+  return <WorktreeLinkStripView {...props} links={links} />
 }

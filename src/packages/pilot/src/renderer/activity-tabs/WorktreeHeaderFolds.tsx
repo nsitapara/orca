@@ -1,5 +1,5 @@
 import type React from 'react'
-import { ChevronDown, FolderGit2, Workflow } from 'lucide-react'
+import { ChevronDown, FolderGit2, Pin, Workflow } from 'lucide-react'
 import type { ActivityThreadGroup } from '@/components/activity/activity-thread-types'
 import { FilledBellIcon } from '@/components/sidebar/workspace-card/identity/worktree-card-glyphs'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
@@ -17,15 +17,32 @@ const stopRowActivation = {
   onKeyDown: (event: React.KeyboardEvent) => event.stopPropagation()
 }
 
+/** The header's leading icon at rest: a filled pin on a pinned worktree, so its state shows without hovering. */
+export function WorktreeLeadIcon({
+  pinned,
+  className
+}: {
+  pinned: boolean
+  className?: string
+}): React.JSX.Element {
+  return pinned ? (
+    <Pin aria-label="Pinned" className={cn('size-3.5 fill-current text-foreground', className)} />
+  ) : (
+    <FolderGit2 className={cn('size-3.5', className)} />
+  )
+}
+
 /**
- * The header's folder icon, which folds the worktree's own sessions. Hovering the header shows the
+ * The header's leading icon, which folds the worktree's own sessions. Hovering the header shows the
  * chevron in its place, and a folded worktree keeps it, so every icon stays on the guide line.
  */
 export function WorktreeFoldButton({
   collapsed,
+  pinned = false,
   onToggle
 }: {
   collapsed: boolean
+  pinned?: boolean
   onToggle: () => void
 }): React.JSX.Element {
   const label = collapsed ? 'Expand worktree' : 'Collapse worktree'
@@ -43,11 +60,11 @@ export function WorktreeFoldButton({
           }}
           className="group/fold flex size-3.5 shrink-0 cursor-pointer items-center justify-center rounded text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
         >
-          <FolderGit2
-            className={cn(
-              'size-3.5',
+          <WorktreeLeadIcon
+            pinned={pinned}
+            className={
               collapsed ? 'hidden' : 'can-hover:group-hover:hidden group-focus-visible/fold:hidden'
-            )}
+            }
           />
           <ChevronDown
             className={cn(

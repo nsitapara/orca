@@ -1,6 +1,8 @@
 import type { ReactNode } from 'react'
-import { ChevronDown, FolderGit2, Pin } from 'lucide-react'
+import { ChevronDown, Pin } from 'lucide-react'
 import type { ActivityThreadGroup } from '@/components/activity/activity-thread-types'
+import type { Repo } from '../../../../../shared/repo-types'
+import type { Worktree } from '../../../../../shared/worktree/types'
 import WorktreeContextMenu from '@/components/sidebar/workspace-actions/context-menu/WorktreeContextMenu'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { isPortaledRowMenuClick, isRowActivationKey } from '@/lib/list-row-interaction'
@@ -8,7 +10,8 @@ import { cn } from '@/lib/utils'
 import { useAppStore } from '@/store'
 import { getWorktreeLineageGroupKey } from '../../../../../shared/sidebar-list/group-keys'
 import { WorktreeLinksPrefetch } from '../activity-card/worktree-links'
-import { WorktreeLinkStrip } from '../activity-card/WorktreeLinkStrip'
+import { useWorktreeStripLinks, WorktreeLinkStripView } from '../activity-card/WorktreeLinkStrip'
+import { WorktreeBranchLine } from '../activity-card/WorktreeBranchLine'
 import { ActivityMachineChip } from '../activity-machines/ActivityMachineChip'
 import { activityGroupMachineRows } from '../activity-machines/use-activity-machine-chips'
 import { pilotStore } from '../store'
@@ -29,9 +32,11 @@ import {
   HiddenUnreadBell,
   hidesUnread,
   WorktreeChildrenChip,
-  WorktreeFoldButton
+  WorktreeFoldButton,
+  WorktreeLeadIcon
 } from './WorktreeHeaderFolds'
 import { WorktreeTitle } from './WorktreeTitle'
+import { titleWithoutIssueId } from './worktree-header-title'
 
 const WORKTREE_GROUP = 'worktree:'
 
@@ -72,17 +77,116 @@ function PinButton({ worktreeId, pinned }: { worktreeId: string; pinned: boolean
           }}
           onKeyDown={(event) => event.stopPropagation()}
           className={cn(
-            'flex size-5 shrink-0 cursor-pointer items-center justify-center rounded transition-opacity hover:bg-accent focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring',
-            pinned
-              ? 'text-foreground'
-              : 'text-muted-foreground hover:text-foreground can-hover:opacity-0 can-hover:group-hover:opacity-100'
+            'flex size-5 shrink-0 cursor-pointer items-center justify-center rounded hover:bg-accent focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring',
+            pinned ? 'text-foreground' : 'text-muted-foreground hover:text-foreground'
           )}
         >
-          <Pin className="size-3" />
+          <Pin className={cn('size-3', pinned && 'fill-current')} />
         </button>
       </TooltipTrigger>
       <TooltipContent side="top">{label}</TooltipContent>
     </Tooltip>
+  )
+}
+
+// The count sits in a slot as wide as New agent and Pin, which take its place on hover, keyboard
+// focus or an open New agent menu, so the title never moves. Touch screens always show them.
+function HeaderEnd({
+  worktree,
+  repo,
+  pinned,
+  bell,
+  count
+}: {
+  worktree: Worktree
+  repo: Repo | null
+  pinned: boolean
+  bell: boolean
+  count: number
+}) {
+  return (
+    <span className="flex h-[18px] shrink-0 items-center gap-1.5">
+      <MergedWorktreeDeleteButton worktree={worktree} repo={repo} />
+      {bell ? <HiddenUnreadBell /> : null}
+      <span className="group/end relative flex h-full w-[42px] items-center justify-end">
+        <span className="flex [@media(hover:none)]:invisible can-hover:group-hover:invisible group-focus-visible:invisible [[class~='group/end']:has(:focus-visible)_&]:invisible [[class~='group/end']:has([data-state=open])_&]:invisible">
+          <CountBadge count={count} />
+        </span>
+        <span className="absolute inset-y-0 right-0 flex items-center gap-0.5 can-hover:invisible can-hover:group-hover:visible group-focus-visible:visible [[class~='group/end']:has(:focus-visible)_&]:visible [[class~='group/end']:has([data-state=open])_&]:visible">
+          <NewAgentMenu worktreeId={worktree.id} />
+          <PinButton worktreeId={worktree.id} pinned={pinned} />
+        </span>
+      </span>
+    </span>
+  )
+}
+
+// Under the name the chips (Linear, git, MR, artifacts, ports, children, then the project) and the branch. The name drops
+// the Linear ID its chip shows, wraps to two lines, then loses words from its middle.
+function WorktreeHeaderBody({
+  worktree,
+  repo,
+  label,
+  project,
+  pinned,
+  collapsed,
+  onToggle,
+  machine,
+  end,
+  childCount
+}: {
+  worktree: Worktree
+  repo: Repo | null
+  label: string
+  project: string | null
+  pinned: boolean
+  collapsed: boolean
+  onToggle?: () => void
+  machine: ReactNode
+  end: ReactNode
+  childCount: number
+}) {
+  const links = useWorktreeStripLinks(worktree, repo)
+  const branch = (worktree.branch ?? '').replace(/^refs\/heads\//, '')
+  // Why: a worktree named after its branch would show the same words twice.
+  const showBranch = branch.length > 0 && branch.toLowerCase() !== label.trim().toLowerCase()
+  return (
+    <>
+      <div className="flex min-w-0 items-start gap-1.5 py-[7px]">
+        <WorktreeLinksPrefetch worktree={worktree} repo={repo} />
+        <span className="flex h-[18px] shrink-0 items-center">
+          {onToggle ? (
+            <WorktreeFoldButton collapsed={collapsed} pinned={pinned} onToggle={onToggle} />
+          ) : (
+            <WorktreeLeadIcon pinned={pinned} className="text-muted-foreground" />
+          )}
+        </span>
+        {machine ? <span className="flex h-[18px] shrink-0 items-center">{machine}</span> : null}
+        <WorktreeTitle
+          name={titleWithoutIssueId(label, links.linear?.identifier)}
+          project={null}
+          nameClassName="font-semibold"
+          wrap
+        />
+        {end}
+      </div>
+      {/* Under the name: the folder icon's width plus the gap. */}
+      <div className="flex min-w-0 flex-col gap-1 pb-1.5 pl-5">
+        <WorktreeLinkStripView worktree={worktree} repo={repo} links={links} artifacts>
+          {childCount > 0 ? <WorktreeChildrenChip worktree={worktree} count={childCount} /> : null}
+          {/* The project leaves the title its whole line and ends every header's chip row alike. */}
+          {project ? (
+            <span
+              className="ml-auto min-w-0 shrink truncate pl-1 text-2xs text-muted-foreground"
+              title={project}
+            >
+              {project}
+            </span>
+          ) : null}
+        </WorktreeLinkStripView>
+        {showBranch ? <WorktreeBranchLine branch={branch} /> : null}
+      </div>
+    </>
   )
 }
 
@@ -192,29 +296,38 @@ export function ActivityTabsGroupHeader({
       }}
       className="group flex cursor-pointer select-none flex-col rounded-md px-1.5 text-foreground transition-colors hover:bg-accent/60"
     >
-      <div className="flex h-8 min-w-0 items-center gap-1.5">
-        {worktree ? <WorktreeLinksPrefetch worktree={worktree} repo={repo} /> : null}
-        {onToggle ? (
-          <WorktreeFoldButton collapsed={collapsed} onToggle={onToggle} />
-        ) : (
-          <FolderGit2 className="size-3.5 shrink-0 text-muted-foreground" />
-        )}
-        {machineRow ? (
-          <ActivityMachineChip worktree={machineRow.worktree} repo={machineRow.repo} />
-        ) : null}
-        <WorktreeTitle name={group.label} project={project} nameClassName="font-semibold" />
-        <NewAgentMenu worktreeId={worktreeId} />
-        <PinButton worktreeId={worktreeId} pinned={pinned} />
-        {worktree ? <MergedWorktreeDeleteButton worktree={worktree} repo={repo} /> : null}
-        {hidesUnread(group, collapsed, childrenFolded) ? <HiddenUnreadBell /> : null}
-        <CountBadge count={count} />
-      </div>
-      {/* Under the name: the folder icon's width plus the gap. */}
       {worktree ? (
-        <WorktreeLinkStrip worktree={worktree} repo={repo} className="pb-1.5 pl-5" artifacts>
-          {childCount > 0 ? <WorktreeChildrenChip worktree={worktree} count={childCount} /> : null}
-        </WorktreeLinkStrip>
-      ) : null}
+        <WorktreeHeaderBody
+          worktree={worktree}
+          repo={repo}
+          label={group.label}
+          project={project}
+          pinned={pinned}
+          collapsed={collapsed}
+          onToggle={onToggle}
+          machine={
+            machineRow ? (
+              <ActivityMachineChip worktree={machineRow.worktree} repo={machineRow.repo} />
+            ) : null
+          }
+          end={
+            <HeaderEnd
+              worktree={worktree}
+              repo={repo}
+              pinned={pinned}
+              bell={hidesUnread(group, collapsed, childrenFolded)}
+              count={count}
+            />
+          }
+          childCount={childCount}
+        />
+      ) : (
+        <div className="flex h-8 min-w-0 items-center gap-1.5">
+          <WorktreeLeadIcon pinned={false} className="text-muted-foreground" />
+          <WorktreeTitle name={group.label} project={project} nameClassName="font-semibold" />
+          <CountBadge count={count} />
+        </div>
+      )}
     </div>
   )
   return (

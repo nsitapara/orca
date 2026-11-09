@@ -2,10 +2,10 @@ import type { ActivityVirtualItemDescriptor } from '@/components/activity/activi
 import { pilotStore } from '../store'
 import { INACTIVE_WORKTREES_GROUP_KEY } from './activity-tabs-rows'
 
-// Measured in the Activity sidebar: a one-line row with its spacer, a worktree header with its chip
-// strip, Inactive's header, and a recent worktree's row with its strip.
+// Measured in the Activity sidebar: a one-line row with its spacer, a worktree header with a two-line
+// title, its chip strip and branch, Inactive's header, and a recent worktree's row with its strip.
 const ONE_LINE_ROW = 32
-const WORKTREE_HEADER = 62
+const WORKTREE_HEADER = 96
 const INACTIVE_HEADER = 36
 const RECENT_WORKTREE_ROW = 56
 

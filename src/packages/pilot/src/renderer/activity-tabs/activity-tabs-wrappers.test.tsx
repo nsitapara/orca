@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { AgentPaneThread } from '@/components/activity/activity-thread-types'
 import {
   makeRepo,
@@ -42,6 +42,8 @@ const thread: AgentPaneThread = {
 }
 
 const UPSTREAM = <span>upstream</span>
+// A review cache entry fetched just now, on a pinned clock.
+const NOW = Date.parse('2026-10-20T00:00:00Z')
 
 vi.mock('@/lib/worktree-activation', () => ({
   activateAndRevealWorkspace: vi.fn(() => ({ primaryTabId: null }))
@@ -88,7 +90,12 @@ function threadRow(row: AgentPaneThread, groupKey: string | null = null) {
   )
 }
 
+beforeEach(() => {
+  vi.setSystemTime(NOW)
+})
+
 afterEach(() => {
+  vi.useRealTimers()
   cleanup()
   registerPilotStore(null)
   vi.clearAllMocks()
@@ -315,6 +322,55 @@ describe('Pilot wrappers around upstream Activity elements', () => {
     }
   )
 
+  // Why: the Linear chip already shows the ID, so the title is the rest; the branch tells which branch it is.
+  it('a worktree header drops the ID its Linear chip shows, names its branch, and leads with Linear', () => {
+    registerPilotStore(useAppStore)
+    const repo = makeRepo()
+    const branch = 'web-2292-add-default-trait-summary'
+    const worktree = {
+      ...makeWorktree(),
+      branch,
+      displayName: 'WEB-2292 Add default trait summary',
+      linkedLinearIssue: 'WEB-2292'
+    }
+    const key = getHostedReviewCacheKey(repo.path, branch, null, repo.id, null, null, true)
+    useAppStore.setState({
+      repos: [repo],
+      worktreesByRepo: { 'repo-1': [worktree] },
+      hostedReviewCache: {
+        [key]: {
+          fetchedAt: NOW,
+          linkedReviewHintKey: '',
+          data: {
+            provider: 'gitlab',
+            number: 7,
+            title: 'Feature',
+            state: 'open',
+            url: 'https://gitlab.com/x/-/merge_requests/7',
+            status: 'success',
+            updatedAt: '2026-10-20T00:00:00Z',
+            mergeable: 'MERGEABLE',
+            headSha: 'abc123'
+          }
+        }
+      }
+    })
+    const group = { key: 'worktree:wt-1', label: worktree.displayName, threads: [thread] }
+    const view = render(
+      <TooltipProvider>
+        <ActivityTabsGroupHeader group={group}>{UPSTREAM}</ActivityTabsGroupHeader>
+      </TooltipProvider>
+    )
+
+    expect(view.getByTitle('Add default trait summary').textContent).toBe(
+      'Add default trait summary'
+    )
+    expect(view.getByTitle(branch).textContent).toBe(branch)
+    const linear = view.getByRole('button', { name: 'WEB-2292' })
+    const review = view.getByRole('button', { name: 'GitLab MR !7 · Open · Pipeline passed' })
+    expect(linear.compareDocumentPosition(review) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
   // Why: a merged MR is the sign a worktree is ready to go; the button is the Projects menu's own Delete.
   it.each(
     worktreeSurfaces.flatMap((surface) =>
@@ -331,7 +387,7 @@ describe('Pilot wrappers around upstream Activity elements', () => {
       hostedReviewCache: {
         // A branch lookup: no linked MR asked for it.
         [key]: {
-          fetchedAt: Date.now(),
+          fetchedAt: NOW,
           linkedReviewHintKey: '',
           data: {
             provider: 'gitlab',
