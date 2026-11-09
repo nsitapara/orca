@@ -9,6 +9,7 @@ import RuntimeSequencer from './scripts/vitest-runtime-sequencer.mjs'
 import { getNodeRuntimeInclude } from './scripts/vitest-node-runtime-files.mjs'
 import { nodeRuntimePool } from './scripts/vitest-node-runtime-pool'
 import { readRunFilters } from './scripts/vitest-run-filters.mjs'
+import { localTestWorkers } from './scripts/local-check-limits.mjs'
 import { createWorkspaceSourceResolver } from './scripts/workspace-source-exports.mjs'
 import { moduleCacheResolutionKey } from './scripts/vitest-module-cache-resolution-key'
 
@@ -121,6 +122,15 @@ const bunProject = {
     sequence: { groupOrder: 1 }
   }
 }
+// On the dev machine a few workers, beside the desktop and other worktrees' agents; CI keeps Vitest's
+// default, and Windows its cap of 4. `--maxWorkers` still overrides.
+function testMaxWorkers(): number | undefined {
+  if (process.env.CI) {
+    return process.platform === 'win32' ? 4 : undefined
+  }
+  return localTestWorkers()
+}
+
 const projects = [
   ...(process.versions.bun ? [bunProject] : []),
   nodeProject,
@@ -157,6 +167,6 @@ export default defineConfig({
         }
       : {}),
     projects,
-    ...(process.platform === 'win32' ? { maxWorkers: 4 } : {})
+    maxWorkers: testMaxWorkers()
   }
 })

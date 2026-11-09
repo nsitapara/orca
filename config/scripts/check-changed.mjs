@@ -1,7 +1,6 @@
 // Pre-handoff gate: runs the checks a change's paths need, in parallel, printing failures in full.
 import { execFileSync, spawnSync } from 'node:child_process'
 import { existsSync, readdirSync } from 'node:fs'
-import { availableParallelism } from 'node:os'
 import path from 'node:path'
 import process from 'node:process'
 import { pathToFileURL } from 'node:url'
@@ -12,6 +11,7 @@ import {
   writePassHash
 } from './check-changed-pass-cache.mjs'
 import { planChangedChecks } from './check-changed-selection.mjs'
+import { localCheckJobs, lowerProcessPriority } from './local-check-limits.mjs'
 import { resolveOxcCliInvocation } from './oxc-cli-invocation.mjs'
 import { resolvePnpmCliInvocation } from './pnpm-cli-invocation.mjs'
 
@@ -315,7 +315,9 @@ export async function main(root, argv) {
   )
 
   // Typecheck and tests lead the queue: they take longest, so the short checks fill in around them.
-  const concurrency = Math.max(3, Math.floor(availableParallelism() / 3))
+  // Two at a time: the typecheck alone holds about 6 GB, and four checks together froze the Mac.
+  const concurrency = localCheckJobs()
+  lowerProcessPriority('check:changed')
   const running = new Map()
   // Why: output is buffered until a task ends, so long test runs would otherwise look hung.
   const heartbeat = setInterval(() => {

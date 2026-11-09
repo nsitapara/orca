@@ -1,9 +1,10 @@
 import { runProcessSync, spawnProcess } from '@orca/process-host'
 import { readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
-import { availableParallelism, constants, setPriority, totalmem } from 'node:os'
+import { availableParallelism, constants, totalmem } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
+import { localTypecheckLimits, lowerProcessPriority } from './local-check-limits.mjs'
 import { readPinnedBunVersion, resolvePinnedBunExecutable } from './pinned-bun-executable.mjs'
 import { acquireTypecheckLock, repoTypecheckLockDir } from './typecheck-repo-lock.mjs'
 import { resolveTsrsTypecheckCommand, supportsTsrs } from './tsrs-typecheck-compiler.mjs'
@@ -77,26 +78,7 @@ export function resolveProjectCompiler(config, root = repoRoot) {
 // Bun 1.4.3 targets TypeScript 7.0.2; compiler upgrades require a new parity comparison.
 export const BUN_TYPESCRIPT_VERSION = '7.0.2'
 
-function positiveInteger(env, name, fallback) {
-  const raw = env[name]
-  if (raw === undefined || raw === '') {
-    return fallback
-  }
-  const value = Number(raw)
-  if (!Number.isInteger(value) || value < 1) {
-    throw new Error(`${name} must be a positive integer, not ${raw}`)
-  }
-  return value
-}
-
-// Pilot typechecks only on the dev machine, beside the desktop and other worktrees' agents:
-// one compiler at a time, each held to a few cores. Raise either for a faster, heavier check.
-export function localTypecheckLimits(env = process.env) {
-  return {
-    jobs: positiveInteger(env, 'ORCA_TYPECHECK_JOBS', 1),
-    threads: positiveInteger(env, 'ORCA_TYPECHECK_THREADS', 4)
-  }
-}
+export { localTypecheckLimits }
 
 export function parseTypecheckOptions(args) {
   const options = {
@@ -335,18 +317,9 @@ export async function runTypecheckProjects({
   return failures
 }
 
-// Children inherit the lowered priority, so the desktop stays responsive while they check.
-function lowerPriority() {
-  try {
-    setPriority(constants.priority.PRIORITY_BELOW_NORMAL)
-  } catch (error) {
-    console.error(`typecheck: couldn't lower priority: ${error.message}`)
-  }
-}
-
 async function runLocally(options) {
   const { jobs, threads } = localTypecheckLimits()
-  lowerPriority()
+  lowerProcessPriority('typecheck')
   const lockDir = await repoTypecheckLockDir(repoRoot)
   const release = lockDir
     ? await acquireTypecheckLock(lockDir, { worktree: resolve(repoRoot) })
