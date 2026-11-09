@@ -12,6 +12,7 @@ import { getWorktreeLineageGroupKey } from '../../../../../shared/sidebar-list/g
 import { WorktreeLinksPrefetch } from '../activity-card/worktree-links'
 import { useWorktreeStripLinks, WorktreeLinkStripView } from '../activity-card/WorktreeLinkStrip'
 import { WorktreeBranchLine } from '../activity-card/WorktreeBranchLine'
+import { linearIdOfBranch } from '../activity-card/linear-branch-issue'
 import type { AgentDotState } from '@/components/AgentStateDot'
 import { ActivityMachineChip } from '../activity-machines/ActivityMachineChip'
 import { activityGroupMachineRows } from '../activity-machines/use-activity-machine-chips'
@@ -159,8 +160,11 @@ function WorktreeHeaderBody({
   const links = useWorktreeStripLinks(worktree, repo)
   const branch = (worktree.branch ?? '').replace(/^refs\/heads\//, '')
   // Why: a branch named for its ticket would show the chip's ID and the title's words a second time.
+  // The branch's own ID stands in until Linear returns the issue, so the line never flashes in.
   const showBranch =
-    branch.length > 0 && !branchRepeatsHeader(branch, label, links.linear?.identifier)
+    branch.length > 0 &&
+    !branchRepeatsHeader(branch, label, links.linear?.identifier ?? linearIdOfBranch(branch))
+  const title = titleWithoutIssueId(label, links.linear?.identifier)
   return (
     <>
       <div className="flex min-w-0 items-start gap-1.5 py-[7px]">
@@ -173,13 +177,8 @@ function WorktreeHeaderBody({
           )}
         </span>
         {machine ? <span className="flex h-[18px] shrink-0 items-center">{machine}</span> : null}
-        <WorktreeNameTooltip name={worktreeFolderName(worktree.path)}>
-          <WorktreeTitle
-            name={titleWithoutIssueId(label, links.linear?.identifier)}
-            project={null}
-            nameClassName="font-semibold"
-            wrap
-          />
+        <WorktreeNameTooltip name={worktreeFolderName(worktree.path)} title={title}>
+          <WorktreeTitle name={title} project={null} nameClassName="font-semibold" wrap />
         </WorktreeNameTooltip>
         {end}
       </div>

@@ -5,13 +5,14 @@ import { fitMiddleCut } from './middle-cut'
 /**
  * Text that, when it doesn't fit, drops words from its middle and keeps its start and its last
  * `tail` words, so both ends stay readable. `lines` 2 wraps before cutting. The full text is its
- * tooltip.
+ * tooltip, unless `tooltip` is false because the caller shows its own.
  */
 export function MiddleCutText({
   text,
   tail,
   separator = ' ',
   lines = 1,
+  tooltip = true,
   className,
   ...rest
 }: {
@@ -19,6 +20,7 @@ export function MiddleCutText({
   tail: number
   separator?: ' ' | '-'
   lines?: 1 | 2
+  tooltip?: boolean
   className?: string
 } & Omit<React.HTMLAttributes<HTMLSpanElement>, 'children' | 'title'>): React.JSX.Element {
   const ref = useRef<HTMLSpanElement>(null)
@@ -47,7 +49,7 @@ export function MiddleCutText({
   return (
     <span
       ref={ref}
-      title={text}
+      title={tooltip ? text : undefined}
       className={cn(lines === 2 ? 'line-clamp-2 break-words' : 'truncate', className)}
       {...rest}
     />

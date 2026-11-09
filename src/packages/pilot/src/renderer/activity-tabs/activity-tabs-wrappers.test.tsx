@@ -126,7 +126,7 @@ describe('Pilot wrappers around upstream Activity elements', () => {
     registerPilotStore(useAppStore)
     useAppStore.setState({ repos: [makeRepo()], worktreesByRepo: { 'repo-1': [makeWorktree()] } })
     const view = render(<TooltipProvider>{views('worktree:wt-1').header}</TooltipProvider>)
-    expect(view.getByTitle('feature').textContent).toBe('feature')
+    expect(view.getByText('feature')).toBeTruthy()
     expect(view.getByText('Repo')).toBeTruthy()
   })
 
@@ -366,9 +366,7 @@ describe('Pilot wrappers around upstream Activity elements', () => {
         </TooltipProvider>
       )
 
-      expect(view.getByTitle('Add default trait summary').textContent).toBe(
-        'Add default trait summary'
-      )
+      expect(view.getByText('Add default trait summary')).toBeTruthy()
       expect(view.queryByTitle(branch)?.textContent ?? null).toBe(shown ? branch : null)
       const linear = view.getByRole('button', { name: 'WEB-2292' })
       const review = view.getByRole('button', { name: 'GitLab MR !7 · Open · Pipeline passed' })
