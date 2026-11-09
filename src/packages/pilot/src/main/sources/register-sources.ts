@@ -2,6 +2,7 @@ import { existsSync } from 'node:fs'
 import { gitExecFileAsync } from '../../../../../main/git/command-runner/git-exec-file'
 import type { OrcaRuntimeService } from '../../../../../main/runtime/orca-runtime'
 import { pilotcliRunner } from '../envs/pilotcli'
+import { branchOfRun } from '../inbox/run-fields'
 import type { PilotStore } from '../store/store'
 import { runtimeLinearConnector } from '../linear-connector/linear-connector'
 import { linearTicketSource } from './linear-tickets'
@@ -41,6 +42,14 @@ export function registerPilotSources(deps: PilotSourceDeps): void {
           (r) => r.stdout.trim() || null,
           () => null
         ),
+      homeBranch: (run) => branchOfRun(deps.store, run.id),
+      // update-ref with the old value deletes only a branch still at head.
+      deleteBranch: (path, branch, head) =>
+        gitExecFileAsync(['update-ref', '-d', `refs/heads/${branch}`, head], { cwd: path }).then(
+          () => true,
+          () => false
+        ),
+      log: (line) => console.info(`[pilot] kept branches: ${line}`),
       now: Date.now
     })
   )

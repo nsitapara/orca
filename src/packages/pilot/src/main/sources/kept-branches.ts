@@ -34,6 +34,11 @@ export type KeptBranchDeps = {
   keptBranches(path: string): Promise<KeptRef[] | null>
   // The commit checked out in the worktree at path, or null when git can't say.
   headOf(path: string): Promise<string | null>
+  // The branch a run's item was about (its MR's or worktree's), or null when the store doesn't say.
+  homeBranch(run: RunRow): string | null
+  // Deletes the local branch in the repo at path only while it is still at head; whether it did.
+  deleteBranch(path: string, branch: string, head: string): Promise<boolean>
+  log(line: string): void
   now(): number
 }
 
@@ -97,6 +102,30 @@ export function triggerKeptJobs(
 
 const LIVE_STATUSES: readonly string[] = ['running', 'asking']
 
+// A pilot/ branch whose home worktree was removed once its MR merged or closed has nowhere to go: job 15 deletes it
+// (Nish, 2026-11-09: WEB-2534's sat as "by hand" for 5 days after !1850 merged). An open MR, a branch with none, or one
+// pilotcli can't decide on still waits for me.
+async function homeFinished(
+  deps: KeptBranchDeps,
+  repoPath: string,
+  run: RunRow | null,
+  home: string | null,
+  live: ReadonlySet<string>
+): Promise<boolean> {
+  if (!run || !home || live.has(worktreePathKey(home))) {
+    return false
+  }
+  const branch = deps.homeBranch(run)
+  if (!branch) {
+    return false
+  }
+  const reply = await deps.pilotcli({
+    args: ['gitlab', 'check-mr', branch, 'active=true', '-C', repoPath],
+    timeoutMs: DRY_RUN_TIMEOUT_MS
+  })
+  return reply.outcome === 'skip'
+}
+
 // The run a pilot/ branch holds commits of: pilot/<run> as env delete names it, or a name that ends in the run's id,
 // as a skill's own branch did (pilot/ui-qa-<run>).
 function runOfBranch(store: PilotStore, branch: string): RunRow | null {
@@ -157,6 +186,16 @@ export function keptBranchSource(deps: KeptBranchDeps): ItemSource {
         }
         const runId = run?.id ?? branch.slice('pilot/'.length)
         const home = run?.homePath ?? null
+        if (
+          (await homeFinished(deps, ctx.repo.path, run, home, live)) &&
+          (await deps.deleteBranch(ctx.repo.path, branch, head))
+        ) {
+          // The commit stays recoverable by this SHA until git gc.
+          deps.log(
+            `deleted ${branch} (was ${head}): its worktree ${home} is gone and its MR is merged or closed`
+          )
+          continue
+        }
         const wait = await waitFor(deps, run, home, branch, live)
         // A run of job 15 that ended done or was stopped yet left the branch (an answered card, a changed job, Stop):
         // its key is settled, so once_per counts them and the item is due again until the branch is home.

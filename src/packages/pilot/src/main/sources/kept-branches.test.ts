@@ -25,6 +25,11 @@ type Case = {
   worktrees?: string[]
   repo?: string
   holder?: boolean
+  // The branch r1's item was about (default: the store doesn't say), pilotcli's check-mr reply for it, and whether
+  // the branch is still where it was read when deleted.
+  homeBranch?: string
+  checkMr?: PilotcliReply
+  moved?: boolean
 }
 
 function setup(c: Case) {
@@ -68,6 +73,8 @@ function setup(c: Case) {
     })
   }
   const calls: string[][] = []
+  const deleted: string[][] = []
+  const logged: string[] = []
   const refs = c.refs === undefined ? [{ branch: 'pilot/r1', head: 'abc123' }] : c.refs
   const source = keptBranchSource({
     store,
@@ -83,16 +90,22 @@ function setup(c: Case) {
       })),
     pilotcli: async (call: PilotcliCall) => {
       calls.push([...call.args])
-      return c.dryRun ?? reply('ok')
+      return call.args[1] === 'check-mr' ? (c.checkMr ?? reply('ok')) : (c.dryRun ?? reply('ok'))
     },
     keptBranches: async (path) => (path === '/repo' ? refs : []),
     headOf: async (path) => (path === '/wt/a' ? 'home111' : null),
+    homeBranch: () => c.homeBranch ?? null,
+    deleteBranch: async (path, branch, head) => {
+      deleted.push([path, branch, head])
+      return !c.moved
+    },
+    log: (line) => logged.push(line),
     now: () => 99
   })
   const ctx = sourceContext(
     c.repo ? { repo: { id: 'o', name: c.repo, path: '/other', base: null } } : {}
   )
-  return { store, source, ctx, calls }
+  return { store, source, ctx, calls, deleted, logged }
 }
 
 const r1 = (wait: string, branch = 'pilot/r1') => ({
@@ -160,6 +173,54 @@ describe('kept branch source', () => {
         '--dry-run',
         'true'
       ])
+    }
+  })
+
+  // Nish, 2026-11-09: a branch whose worktree was removed once its MR merged or closed goes; anything else waits for him.
+  it.each<[string, Case, { deleted: boolean; asked: boolean }]>([
+    [
+      'its MR merged or closed: deleted',
+      { worktrees: [], homeBranch: 'web-1', checkMr: reply('skip', '!1850 merged') },
+      { deleted: true, asked: true }
+    ],
+    [
+      'its MR still open: waits',
+      { worktrees: [], homeBranch: 'web-1' },
+      { deleted: false, asked: true }
+    ],
+    [
+      'pilotcli can’t say: waits',
+      { worktrees: [], homeBranch: 'web-1', checkMr: reply('failed', 'GitLab can’t say') },
+      { deleted: false, asked: true }
+    ],
+    ['no branch on record: waits', { worktrees: [] }, { deleted: false, asked: false }],
+    [
+      'moved since it was read: waits',
+      { worktrees: [], homeBranch: 'web-1', checkMr: reply('skip', '!1850 merged'), moved: true },
+      { deleted: false, asked: true }
+    ],
+    [
+      'its worktree still there: never asked',
+      { homeBranch: 'web-1', checkMr: reply('skip', '!1850 merged') },
+      { deleted: false, asked: false }
+    ]
+  ])('a kept branch whose worktree is gone, %s', async (_name, c, want) => {
+    const { source, ctx, calls, deleted, logged } = setup(c)
+    const { items } = await source.list(ctx, {})
+    expect(calls.some((args) => args[1] === 'check-mr')).toBe(want.asked)
+    if (want.asked) {
+      expect(calls[0]).toEqual(['gitlab', 'check-mr', 'web-1', 'active=true', '-C', '/repo'])
+    }
+    expect(items.map((i) => i.key)).toEqual(want.deleted ? [] : ['kept:r1'])
+    expect(logged).toEqual(
+      want.deleted
+        ? [
+            'deleted pilot/r1 (was abc123): its worktree /wt/a is gone and its MR is merged or closed'
+          ]
+        : []
+    )
+    if (want.deleted) {
+      expect(deleted).toEqual([['/repo', 'pilot/r1', 'abc123']])
     }
   })
 
