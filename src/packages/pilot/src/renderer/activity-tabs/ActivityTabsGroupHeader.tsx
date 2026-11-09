@@ -97,7 +97,8 @@ function PinButton({ worktreeId, pinned }: { worktreeId: string; pinned: boolean
   )
 }
 
-// The count, New agent and Pin always show, in that order, so nothing appears or moves on hover.
+// The count and the pin always show. New agent takes the count's place, in the same slot, on hover,
+// keyboard focus or its open menu, so nothing moves; touch screens always show it.
 // Before them, what a fold hides: an unread session's bell and a working or waiting agent's dot.
 function HeaderEnd({
   worktree,
@@ -119,11 +120,15 @@ function HeaderEnd({
       <MergedWorktreeDeleteButton worktree={worktree} repo={repo} />
       {bell ? <HiddenUnreadBell /> : null}
       {foldedState ? <FoldedAgentState state={foldedState} /> : null}
-      <CountBadge count={count} />
-      <span className="flex items-center gap-0.5">
-        <NewAgentMenu worktreeId={worktree.id} />
-        <PinButton worktreeId={worktree.id} pinned={pinned} />
+      <span className="group/end relative flex h-full min-w-5 items-center justify-center">
+        <span className="flex [@media(hover:none)]:invisible can-hover:group-hover:invisible group-focus-visible:invisible [[class~='group/end']:has(:focus-visible)_&]:invisible [[class~='group/end']:has([data-state=open])_&]:invisible">
+          <CountBadge count={count} />
+        </span>
+        <span className="absolute inset-0 flex items-center justify-center can-hover:invisible can-hover:group-hover:visible group-focus-visible:visible [[class~='group/end']:has(:focus-visible)_&]:visible [[class~='group/end']:has([data-state=open])_&]:visible">
+          <NewAgentMenu worktreeId={worktree.id} />
+        </span>
       </span>
+      <PinButton worktreeId={worktree.id} pinned={pinned} />
     </span>
   )
 }
@@ -252,8 +257,8 @@ function openWorktree(worktreeId: string): void {
 // sessions, not as one more caption: the worktree in row type, its project beside it, New agent
 // and the Workspaces sidebar's pin (a pinned worktree always shows in Activity, first). Clicking it
 // opens the worktree and a right-click gives its menu, as in Projects. Its leading chevron folds the
-// worktree's own sessions and always shows, as do its count, New agent and pin, so nothing appears
-// or moves on hover. Under the name, chips carry the worktree's MR, Linear issue, git state (commits to
+// worktree's own sessions and always shows, as do its count and pin; New agent takes the count's
+// place on hover, so nothing moves. Under the name, chips carry the worktree's MR, Linear issue, git state (commits to
 // push, uncommitted changes; a click pushes), live ports and, with child worktrees, Projects' own
 // "N children" fold, which hides them apart from the sessions. A bell shows while a fold hides an
 // unread session, and a state dot while it hides a working or waiting agent. It fetches the MR and issue once, for those chips and its Delete once the MR is
