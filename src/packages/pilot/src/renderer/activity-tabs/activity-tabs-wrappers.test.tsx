@@ -257,7 +257,7 @@ describe('Pilot wrappers around upstream Activity elements', () => {
     }
   )
 
-  // Why: no fold keeps every worktree's folder icon in one column, on its guide line.
+  // Why: a header given no fold has nothing to fold, so it shows no chevron.
   it.each([
     { sessions: 'sessions', threads: [thread] },
     { sessions: 'no sessions', threads: [] }
@@ -322,54 +322,59 @@ describe('Pilot wrappers around upstream Activity elements', () => {
     }
   )
 
-  // Why: the Linear chip already shows the ID, so the title is the rest; the branch tells which branch it is.
-  it('a worktree header drops the ID its Linear chip shows, names its branch, and leads with Linear', () => {
-    registerPilotStore(useAppStore)
-    const repo = makeRepo()
-    const branch = 'web-2292-add-default-trait-summary'
-    const worktree = {
-      ...makeWorktree(),
-      branch,
-      displayName: 'WEB-2292 Add default trait summary',
-      linkedLinearIssue: 'WEB-2292'
-    }
-    const key = getHostedReviewCacheKey(repo.path, branch, null, repo.id, null, null, true)
-    useAppStore.setState({
-      repos: [repo],
-      worktreesByRepo: { 'repo-1': [worktree] },
-      hostedReviewCache: {
-        [key]: {
-          fetchedAt: NOW,
-          linkedReviewHintKey: '',
-          data: {
-            provider: 'gitlab',
-            number: 7,
-            title: 'Feature',
-            state: 'open',
-            url: 'https://gitlab.com/x/-/merge_requests/7',
-            status: 'success',
-            updatedAt: '2026-10-20T00:00:00Z',
-            mergeable: 'MERGEABLE',
-            headSha: 'abc123'
+  // Why: the Linear chip already shows the ID, so the title is the rest; the branch shows only when it says more.
+  it.each([
+    { branch: 'web-2292-add-default-trait-summary', shown: false },
+    { branch: 'fix/trait-summary-crash', shown: true }
+  ])(
+    'a worktree header drops the ID its Linear chip shows, leads with Linear, and names branch $branch: $shown',
+    ({ branch, shown }) => {
+      registerPilotStore(useAppStore)
+      const repo = makeRepo()
+      const worktree = {
+        ...makeWorktree(),
+        branch,
+        displayName: 'WEB-2292 Add default trait summary',
+        linkedLinearIssue: 'WEB-2292'
+      }
+      const key = getHostedReviewCacheKey(repo.path, branch, null, repo.id, null, null, true)
+      useAppStore.setState({
+        repos: [repo],
+        worktreesByRepo: { 'repo-1': [worktree] },
+        hostedReviewCache: {
+          [key]: {
+            fetchedAt: NOW,
+            linkedReviewHintKey: '',
+            data: {
+              provider: 'gitlab',
+              number: 7,
+              title: 'Feature',
+              state: 'open',
+              url: 'https://gitlab.com/x/-/merge_requests/7',
+              status: 'success',
+              updatedAt: '2026-10-20T00:00:00Z',
+              mergeable: 'MERGEABLE',
+              headSha: 'abc123'
+            }
           }
         }
-      }
-    })
-    const group = { key: 'worktree:wt-1', label: worktree.displayName, threads: [thread] }
-    const view = render(
-      <TooltipProvider>
-        <ActivityTabsGroupHeader group={group}>{UPSTREAM}</ActivityTabsGroupHeader>
-      </TooltipProvider>
-    )
+      })
+      const group = { key: 'worktree:wt-1', label: worktree.displayName, threads: [thread] }
+      const view = render(
+        <TooltipProvider>
+          <ActivityTabsGroupHeader group={group}>{UPSTREAM}</ActivityTabsGroupHeader>
+        </TooltipProvider>
+      )
 
-    expect(view.getByTitle('Add default trait summary').textContent).toBe(
-      'Add default trait summary'
-    )
-    expect(view.getByTitle(branch).textContent).toBe(branch)
-    const linear = view.getByRole('button', { name: 'WEB-2292' })
-    const review = view.getByRole('button', { name: 'GitLab MR !7 · Open · Pipeline passed' })
-    expect(linear.compareDocumentPosition(review) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
-  })
+      expect(view.getByTitle('Add default trait summary').textContent).toBe(
+        'Add default trait summary'
+      )
+      expect(view.queryByTitle(branch)?.textContent ?? null).toBe(shown ? branch : null)
+      const linear = view.getByRole('button', { name: 'WEB-2292' })
+      const review = view.getByRole('button', { name: 'GitLab MR !7 · Open · Pipeline passed' })
+      expect(linear.compareDocumentPosition(review) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    }
+  )
 
   // Why: a merged MR is the sign a worktree is ready to go; the button is the Projects menu's own Delete.
   it.each(

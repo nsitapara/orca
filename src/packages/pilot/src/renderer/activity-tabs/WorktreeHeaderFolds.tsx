@@ -1,6 +1,8 @@
 import type React from 'react'
-import { ChevronDown, FolderGit2, Pin, Workflow } from 'lucide-react'
+import { ChevronDown, Workflow } from 'lucide-react'
+import { activityThreadStatusId } from '@/components/activity/activity-thread-presentation'
 import type { ActivityThreadGroup } from '@/components/activity/activity-thread-types'
+import { AgentStateDot } from '@/components/AgentStateDot'
 import { FilledBellIcon } from '@/components/sidebar/workspace-card/identity/worktree-card-glyphs'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { translate } from '@/i18n/i18n'
@@ -17,32 +19,15 @@ const stopRowActivation = {
   onKeyDown: (event: React.KeyboardEvent) => event.stopPropagation()
 }
 
-/** The header's leading icon at rest: a filled pin on a pinned worktree, so its state shows without hovering. */
-export function WorktreeLeadIcon({
-  pinned,
-  className
-}: {
-  pinned: boolean
-  className?: string
-}): React.JSX.Element {
-  return pinned ? (
-    <Pin aria-label="Pinned" className={cn('size-3.5 fill-current text-foreground', className)} />
-  ) : (
-    <FolderGit2 className={cn('size-3.5', className)} />
-  )
-}
-
 /**
- * The header's leading icon, which folds the worktree's own sessions. Hovering the header shows the
- * chevron in its place, and a folded worktree keeps it, so every icon stays on the guide line.
+ * The header's leading chevron, which folds the worktree's own sessions. It always shows, and nothing
+ * takes its place on hover, so every header's chevron stays on the guide line.
  */
 export function WorktreeFoldButton({
   collapsed,
-  pinned = false,
   onToggle
 }: {
   collapsed: boolean
-  pinned?: boolean
   onToggle: () => void
 }): React.JSX.Element {
   const label = collapsed ? 'Expand worktree' : 'Collapse worktree'
@@ -58,20 +43,12 @@ export function WorktreeFoldButton({
             event.stopPropagation()
             onToggle()
           }}
-          className="group/fold flex size-3.5 shrink-0 cursor-pointer items-center justify-center rounded text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+          className="flex size-3.5 shrink-0 cursor-pointer items-center justify-center rounded text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
         >
-          <WorktreeLeadIcon
-            pinned={pinned}
-            className={
-              collapsed ? 'hidden' : 'can-hover:group-hover:hidden group-focus-visible/fold:hidden'
-            }
-          />
           <ChevronDown
             className={cn(
               'size-3.5 transition-transform duration-150 motion-reduce:transition-none',
-              collapsed
-                ? '-rotate-90'
-                : 'hidden can-hover:group-hover:block group-focus-visible/fold:block'
+              collapsed && '-rotate-90'
             )}
           />
         </button>
@@ -176,6 +153,43 @@ export function hidesUnread(
   return (
     (collapsed && group.threads.some((thread) => thread.unread)) ||
     (childrenFolded && childGroups(group).some(anyUnread))
+  )
+}
+
+// What a fold can hide that is worth a mark on the header, most pressing first.
+const FOLDED_STATES = ['blocked', 'waiting', 'working'] as const
+type FoldedState = (typeof FOLDED_STATES)[number]
+
+function hiddenThreads(
+  group: ActivityThreadGroup,
+  collapsed: boolean,
+  childrenFolded: boolean
+): ActivityThreadGroup['threads'] {
+  const own = collapsed ? group.threads : []
+  const below = childrenFolded
+    ? childGroups(group).flatMap((child) => hiddenThreads(child, true, true))
+    : []
+  return [...own, ...below]
+}
+
+/** The state a fold hides: an agent waiting on you first, else one working; null when neither. */
+export function foldedAgentState(
+  group: ActivityThreadGroup,
+  collapsed: boolean,
+  childrenFolded: boolean
+): FoldedState | null {
+  const states = new Set<string>(
+    hiddenThreads(group, collapsed, childrenFolded).map(activityThreadStatusId)
+  )
+  return FOLDED_STATES.find((state) => states.has(state)) ?? null
+}
+
+/** The session rows' state dot, on a header whose fold hides a working or waiting agent. */
+export function FoldedAgentState({ state }: { state: FoldedState }): React.JSX.Element {
+  return (
+    <span className="inline-flex size-3.5 shrink-0 items-center justify-center">
+      <AgentStateDot state={state} size="sm" />
+    </span>
   )
 }
 

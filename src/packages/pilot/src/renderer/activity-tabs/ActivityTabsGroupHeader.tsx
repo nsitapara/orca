@@ -12,6 +12,7 @@ import { getWorktreeLineageGroupKey } from '../../../../../shared/sidebar-list/g
 import { WorktreeLinksPrefetch } from '../activity-card/worktree-links'
 import { useWorktreeStripLinks, WorktreeLinkStripView } from '../activity-card/WorktreeLinkStrip'
 import { WorktreeBranchLine } from '../activity-card/WorktreeBranchLine'
+import type { AgentDotState } from '@/components/AgentStateDot'
 import { ActivityMachineChip } from '../activity-machines/ActivityMachineChip'
 import { activityGroupMachineRows } from '../activity-machines/use-activity-machine-chips'
 import { pilotStore } from '../store'
@@ -29,14 +30,20 @@ import { openActivityWorktree } from './open-activity-worktree'
 import { useWorktreeGroupNestDepth } from './worktree-nest-parent'
 import '../sidebar/sidebar-selection.css'
 import {
+  FoldedAgentState,
+  foldedAgentState,
   HiddenUnreadBell,
   hidesUnread,
   WorktreeChildrenChip,
-  WorktreeFoldButton,
-  WorktreeLeadIcon
+  WorktreeFoldButton
 } from './WorktreeHeaderFolds'
+import { WorktreeNameTooltip } from './WorktreeNameTooltip'
 import { WorktreeTitle } from './WorktreeTitle'
-import { titleWithoutIssueId } from './worktree-header-title'
+import {
+  branchRepeatsHeader,
+  titleWithoutIssueId,
+  worktreeFolderName
+} from './worktree-header-title'
 
 const WORKTREE_GROUP = 'worktree:'
 
@@ -89,46 +96,50 @@ function PinButton({ worktreeId, pinned }: { worktreeId: string; pinned: boolean
   )
 }
 
-// The count sits in a slot as wide as New agent and Pin, which take its place on hover, keyboard
-// focus or an open New agent menu, so the title never moves. Touch screens always show them.
+// The count, New agent and Pin always show, in that order, so nothing appears or moves on hover.
+// Before them, what a fold hides: an unread session's bell and a working or waiting agent's dot.
 function HeaderEnd({
   worktree,
   repo,
   pinned,
   bell,
+  foldedState,
   count
 }: {
   worktree: Worktree
   repo: Repo | null
   pinned: boolean
   bell: boolean
+  foldedState: Extract<AgentDotState, 'blocked' | 'waiting' | 'working'> | null
   count: number
 }) {
   return (
-    <span className="flex h-[18px] shrink-0 items-center gap-1.5">
+    <span className="flex h-[18px] shrink-0 items-center gap-1">
       <MergedWorktreeDeleteButton worktree={worktree} repo={repo} />
       {bell ? <HiddenUnreadBell /> : null}
-      <span className="group/end relative flex h-full w-[42px] items-center justify-end">
-        <span className="flex [@media(hover:none)]:invisible can-hover:group-hover:invisible group-focus-visible:invisible [[class~='group/end']:has(:focus-visible)_&]:invisible [[class~='group/end']:has([data-state=open])_&]:invisible">
-          <CountBadge count={count} />
-        </span>
-        <span className="absolute inset-y-0 right-0 flex items-center gap-0.5 can-hover:invisible can-hover:group-hover:visible group-focus-visible:visible [[class~='group/end']:has(:focus-visible)_&]:visible [[class~='group/end']:has([data-state=open])_&]:visible">
-          <NewAgentMenu worktreeId={worktree.id} />
-          <PinButton worktreeId={worktree.id} pinned={pinned} />
-        </span>
+      {foldedState ? <FoldedAgentState state={foldedState} /> : null}
+      <CountBadge count={count} />
+      <span className="flex items-center gap-0.5">
+        <NewAgentMenu worktreeId={worktree.id} />
+        <PinButton worktreeId={worktree.id} pinned={pinned} />
       </span>
     </span>
   )
 }
 
-// Under the name the chips (Linear, git, MR, artifacts, ports, children, then the project) and the branch. The name drops
-// the Linear ID its chip shows, wraps to two lines, then loses words from its middle.
+// Where a header has no fold, the chevron's width, so every title starts in one column.
+function LeadSpacer() {
+  return <span aria-hidden className="size-3.5 shrink-0" />
+}
+
+// Under the name the chips (Linear, git, MR, artifacts, ports, children, then the project) and, when it says more than
+// they do, the branch. The name drops the Linear ID its chip shows, wraps to two lines, then loses words from its
+// middle; hovering it gives the worktree's folder name to copy.
 function WorktreeHeaderBody({
   worktree,
   repo,
   label,
   project,
-  pinned,
   collapsed,
   onToggle,
   machine,
@@ -139,7 +150,6 @@ function WorktreeHeaderBody({
   repo: Repo | null
   label: string
   project: string | null
-  pinned: boolean
   collapsed: boolean
   onToggle?: () => void
   machine: ReactNode
@@ -148,29 +158,32 @@ function WorktreeHeaderBody({
 }) {
   const links = useWorktreeStripLinks(worktree, repo)
   const branch = (worktree.branch ?? '').replace(/^refs\/heads\//, '')
-  // Why: a worktree named after its branch would show the same words twice.
-  const showBranch = branch.length > 0 && branch.toLowerCase() !== label.trim().toLowerCase()
+  // Why: a branch named for its ticket would show the chip's ID and the title's words a second time.
+  const showBranch =
+    branch.length > 0 && !branchRepeatsHeader(branch, label, links.linear?.identifier)
   return (
     <>
       <div className="flex min-w-0 items-start gap-1.5 py-[7px]">
         <WorktreeLinksPrefetch worktree={worktree} repo={repo} />
         <span className="flex h-[18px] shrink-0 items-center">
           {onToggle ? (
-            <WorktreeFoldButton collapsed={collapsed} pinned={pinned} onToggle={onToggle} />
+            <WorktreeFoldButton collapsed={collapsed} onToggle={onToggle} />
           ) : (
-            <WorktreeLeadIcon pinned={pinned} className="text-muted-foreground" />
+            <LeadSpacer />
           )}
         </span>
         {machine ? <span className="flex h-[18px] shrink-0 items-center">{machine}</span> : null}
-        <WorktreeTitle
-          name={titleWithoutIssueId(label, links.linear?.identifier)}
-          project={null}
-          nameClassName="font-semibold"
-          wrap
-        />
+        <WorktreeNameTooltip name={worktreeFolderName(worktree.path)}>
+          <WorktreeTitle
+            name={titleWithoutIssueId(label, links.linear?.identifier)}
+            project={null}
+            nameClassName="font-semibold"
+            wrap
+          />
+        </WorktreeNameTooltip>
         {end}
       </div>
-      {/* Under the name: the folder icon's width plus the gap. */}
+      {/* Under the name: the chevron's width plus the gap. */}
       <div className="flex min-w-0 flex-col gap-1 pb-1.5 pl-5">
         <WorktreeLinkStripView worktree={worktree} repo={repo} links={links} artifacts>
           {childCount > 0 ? <WorktreeChildrenChip worktree={worktree} count={childCount} /> : null}
@@ -239,12 +252,12 @@ function openWorktree(worktreeId: string): void {
 // pilot-hook: activity-tabs-group-header. A worktree group's header reads as a title over its
 // sessions, not as one more caption: the worktree in row type, its project beside it, New agent
 // and the Workspaces sidebar's pin (a pinned worktree always shows in Activity, first). Clicking it
-// opens the worktree and a right-click gives its menu, as in Projects. Its folder icon folds the
-// worktree's own sessions (a chevron on hover and while folded), so every icon still sits on the
-// guide line. Under the name, chips carry the worktree's MR, Linear issue, git state (commits to
+// opens the worktree and a right-click gives its menu, as in Projects. Its leading chevron folds the
+// worktree's own sessions and always shows, as do its count, New agent and pin, so nothing appears
+// or moves on hover. Under the name, chips carry the worktree's MR, Linear issue, git state (commits to
 // push, uncommitted changes; a click pushes), live ports and, with child worktrees, Projects' own
 // "N children" fold, which hides them apart from the sessions. A bell shows while a fold hides an
-// unread session. It fetches the MR and issue once, for those chips and its Delete once the MR is
+// unread session, and a state dot while it hides a working or waiting agent. It fetches the MR and issue once, for those chips and its Delete once the MR is
 // merged. A child worktree's header sits on its parent's guide line, without the project its
 // parent already names.
 export function ActivityTabsGroupHeader({
@@ -302,7 +315,6 @@ export function ActivityTabsGroupHeader({
           repo={repo}
           label={group.label}
           project={project}
-          pinned={pinned}
           collapsed={collapsed}
           onToggle={onToggle}
           machine={
@@ -316,6 +328,7 @@ export function ActivityTabsGroupHeader({
               repo={repo}
               pinned={pinned}
               bell={hidesUnread(group, collapsed, childrenFolded)}
+              foldedState={foldedAgentState(group, collapsed, childrenFolded)}
               count={count}
             />
           }
@@ -323,7 +336,7 @@ export function ActivityTabsGroupHeader({
         />
       ) : (
         <div className="flex h-8 min-w-0 items-center gap-1.5">
-          <WorktreeLeadIcon pinned={false} className="text-muted-foreground" />
+          <LeadSpacer />
           <WorktreeTitle name={group.label} project={project} nameClassName="font-semibold" />
           <CountBadge count={count} />
         </div>
