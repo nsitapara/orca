@@ -132,7 +132,7 @@ A job ported as several automations, such as 13's ticket step and its fix sessio
       stage: 1                            # whole number from 1, its place in the job
       label: Open or update the ticket    # the stage's short label
       feeds:
-        - to: dev-e2e-fix-start           # a stage of the same job
+        - to: e2e-fix-start           # a stage of the same job
           pass: { id: ticket }            # this run's `ticket` output becomes the next stage's item ids
           run: now                        # now (tick it as soon as this run ends) | next_schedule (the default)
           when: success                   # success (the default: the run ended done or needs you) | always

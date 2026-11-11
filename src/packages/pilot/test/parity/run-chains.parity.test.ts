@@ -136,7 +136,7 @@ describe('the chain of every live automation', () => {
       ]
     ],
     [
-      'dev-e2e-fix',
+      'e2e-fix',
       [
         'Starts:pilot',
         'Picks:pilot',
@@ -147,7 +147,7 @@ describe('the chain of every live automation', () => {
       ]
     ],
     [
-      'dev-e2e-fix-start',
+      'e2e-fix-start',
       [
         'Starts:pilot',
         'Picks:pilot',

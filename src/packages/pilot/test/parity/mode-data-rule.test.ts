@@ -16,7 +16,7 @@ const MODES: [string, string][] = [
   ['global-command-address-mr-feedback', 'answers'],
   ['review-mr', 'prepare'],
   ['review-mr', 'answers'],
-  ['dev-e2e-fix', 'answers'],
+  ['e2e-fix', 'answers'],
   ['ui-qa', 'run'],
   ['ui-qa', 'fix'],
   ['ui-qa', 'answers'],
