@@ -317,15 +317,16 @@ export function askedLabel(
   now: number
 ): { text: string; full: string; when: string; relative: string | null } {
   const sameYear = new Date(createdAt).getFullYear() === new Date(now).getFullYear()
-  const when = plain(
-    new Date(createdAt).toLocaleString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      ...(sameYear ? {} : { year: 'numeric' }),
-      hour: 'numeric',
-      minute: '2-digit'
-    })
-  )
+  // Date and time are formatted apart and joined: engines disagree on the joiner when one
+  // call does both (Chromium and Node write "Oct 11, 2:00 AM", Bun "Oct 11 at 2:00 AM").
+  const asked = new Date(createdAt)
+  const day = asked.toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    ...(sameYear ? {} : { year: 'numeric' })
+  })
+  const time = asked.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+  const when = plain(`${day}, ${time}`)
   const recent = now - createdAt <= 7 * DAY_MS
   const relative = recent ? `${ageLabel(createdAt, now)} ago` : null
   const text = relative ? `Asked ${when} · ${relative}` : `Asked ${when}`
