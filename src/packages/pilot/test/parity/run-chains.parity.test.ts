@@ -51,7 +51,8 @@ const NOT_SHOWN = {
     'powers',
     'inbox'
   ],
-  step: ['env', 'timeout', 'exit_codes', 'hold_home', 'session', 'args'],
+  // wait: when an agent step ends (once its session is up), like timeout; not which parts run.
+  step: ['env', 'timeout', 'exit_codes', 'hold_home', 'session', 'args', 'wait'],
   items: [] as string[]
 }
 type KeyKind = keyof typeof SHOWN
