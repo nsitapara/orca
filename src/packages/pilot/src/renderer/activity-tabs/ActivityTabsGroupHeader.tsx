@@ -344,6 +344,10 @@ export function ActivityTabsGroupHeader({
       ) : (
         <div className="flex h-8 min-w-0 items-center gap-1.5">
           <LeadSpacer />
+          {/* Why: a worktree this machine doesn't know is often another machine's, so name it. */}
+          {machineRow ? (
+            <ActivityMachineChip worktree={machineRow.worktree} repo={machineRow.repo} />
+          ) : null}
           <WorktreeTitle name={group.label} project={project} nameClassName="font-semibold" />
           <CountBadge count={count} />
         </div>
