@@ -1,7 +1,7 @@
 import os from 'node:os'
 import { resolve } from 'node:path'
 import { runProcess, runProcessSync, spawnProcess } from '@orca/process-host'
-import { lowerProcessPriority } from './local-check-limits.mjs'
+import { lowerProcessPriority } from '../../local-check-limits.mjs'
 import { hasNoChangedFiles } from './vitest-changed-precheck.mjs'
 import { RUN_ARGS_ENV } from './vitest-run-filters.mjs'
 import { localModuleCacheEnv } from '../module-cache/vitest-local-module-cache.mjs'
