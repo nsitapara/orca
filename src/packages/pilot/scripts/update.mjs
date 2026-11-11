@@ -30,6 +30,7 @@ export const R10_FOLDERS = [
   'src/renderer/src/components/skills'
 ]
 const CODE_FILE = /\.tsx?$/
+const TEST_FILE = /\.test\.tsx?$/
 
 // The vitest filters for every hooked upstream file in HOOKS.md (rows from parseHooksTable). Only code under src/
 // has upstream tests next to it (HOOKS.md, After an upstream sync); a hooked config file such as
@@ -41,7 +42,11 @@ export function hookTestTargets(rows) {
       continue
     }
     const folder = R10_FOLDERS.find((f) => file.startsWith(`${f}/`))
-    targets.add(folder ?? file.replace(CODE_FILE, '.test'))
+    // A hooked test file is its own target; don't name it `.test.test`.
+    const test = TEST_FILE.test(file)
+      ? file.replace(CODE_FILE, '')
+      : file.replace(CODE_FILE, '.test')
+    targets.add(folder ?? test)
   }
   return [...targets].sort()
 }

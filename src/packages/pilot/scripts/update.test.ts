@@ -69,41 +69,29 @@ describe('planUpdate', () => {
 
 describe('hookTestTargets', () => {
   // R10: the folders the hook reviews ran whole, else the tests named after the hooked file.
-  it('maps each hooked code file in HOOKS.md to the upstream tests next to it', () => {
-    const rows = parseHooksTable(readFileSync(join(import.meta.dirname, '../HOOKS.md'), 'utf8'))
+  it('maps each hooked code file to the upstream tests next to it', () => {
+    const rows = [
+      // A file inside an R10 folder runs that whole folder.
+      { file: 'src/main/startup/main-process-runtime-launch.ts' },
+      // Any other hooked code file runs the test named after it.
+      { file: 'src/renderer/src/components/tab-bar/TabDragPreview.tsx' },
+      // A hooked test file is its own target, not `.test.test`.
+      { file: 'src/main/hang-watchdog/hang-detection-marker.test.ts' },
+      // Config, CSS and non-src files have no upstream tests to run.
+      { file: 'config/tsconfig.node.json' },
+      { file: 'src/renderer/src/assets/main.css' },
+      { file: 'src/main/startup/cli-command-names.ts' }
+    ]
     expect(hookTestTargets(rows)).toEqual([
-      'src/cli/dispatch.test',
-      'src/cli/specs',
-      'src/main/git/source-control/status-read.test',
-      'src/main/linear',
-      'src/main/orcad',
-      'src/main/runtime',
+      'src/main/hang-watchdog/hang-detection-marker.test',
       'src/main/startup',
-      'src/main/updater',
-      'src/renderer/src/app-shell',
-      'src/renderer/src/components/TerminalWorkspaceDialogs.test',
-      'src/renderer/src/components/activity',
-      'src/renderer/src/components/artifacts/ArtifactsPage.test',
-      'src/renderer/src/components/right-sidebar',
-      'src/renderer/src/components/settings/AppearanceWindowSidebarSection.test',
-      'src/renderer/src/components/settings/ArtifactsSettingsPane.test',
-      'src/renderer/src/components/sidebar/SidebarAgentsList.test',
-      'src/renderer/src/components/sidebar/index.test',
-      'src/renderer/src/components/sidebar/workspace-options-menu-items.test',
-      'src/renderer/src/components/sidebar/worktree-card-secondary-rows.test',
-      'src/renderer/src/components/skills',
-      'src/renderer/src/components/tab-bar/TabDragPreview.test',
-      'src/renderer/src/components/tab-bar/TerminalSortableTab.test',
-      'src/renderer/src/components/tab-bar/TerminalTabLeadingIcon.test',
-      'src/renderer/src/components/tab-bar/use-tab-bar-runtime-model.test',
-      'src/renderer/src/components/terminal-workspace-keydown.test',
-      'src/renderer/src/hooks/ipc-events/tab-lifecycle-ipc-bridge.test',
-      'src/renderer/src/main.test',
-      'src/renderer/src/store/github/refresh-routing-actions.test',
-      'src/renderer/src/store/right-sidebar-route.test',
-      'src/renderer/src/web/main.test',
-      'src/shared/global-settings-base.test'
+      'src/renderer/src/components/tab-bar/TabDragPreview.test'
     ])
+  })
+
+  it('maps every row of HOOKS.md without a doubled .test suffix', () => {
+    const rows = parseHooksTable(readFileSync(join(import.meta.dirname, '../HOOKS.md'), 'utf8'))
+    expect(hookTestTargets(rows).filter((t: string) => t.endsWith('.test.test'))).toEqual([])
   })
 
   it('skips config files, and code outside src/, and lists each target once', () => {
