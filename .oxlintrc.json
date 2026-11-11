@@ -194,6 +194,14 @@
       }
     },
     {
+      "files": [
+        "src/renderer/src/components/settings/appearance/AppearanceWindowSidebarSection.tsx"
+      ],
+      "rules": {
+        "max-lines": ["error", { "max": 410, "skipBlankLines": true, "skipComments": true }]
+      }
+    },
+    {
       "files": ["**/*.mjs"],
       "rules": {
         "max-lines": ["error", { "max": 600, "skipBlankLines": true, "skipComments": true }]

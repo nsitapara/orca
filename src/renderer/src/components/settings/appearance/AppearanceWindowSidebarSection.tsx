@@ -263,7 +263,6 @@ export function AppearanceWindowSidebarSection({
                   </SearchableSetting>
 
                   <PinnedPagesSettings>
-                    {/* pilot-hook: settings-pinned-pages */}
                     <SearchableSetting
                       title={t(
                         'auto.components.settings.AppearancePane.e0f9902e18',
