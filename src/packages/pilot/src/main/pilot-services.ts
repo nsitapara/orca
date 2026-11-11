@@ -90,7 +90,11 @@ function openPilot(
     ...runtimeLauncherDeps(runtime, fieldDeps, now, store.runs),
     modeText: modeTextFor(readMode),
     // Hand-over steps on herdr or T3 (step system:).
-    foreignLaunchers: foreignLaunchers({ dataDir: host.dataDir, now })
+    foreignLaunchers: foreignLaunchers({
+      dataDir: host.dataDir,
+      now,
+      checkoutOf: async (repo) => (await resolveRepoPath(runtime, repo)).path
+    })
   }
   const definitionFor = (id: string) =>
     definitions.current().definitions.find((d) => d.id === id) ?? null

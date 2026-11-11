@@ -4,11 +4,13 @@ import { join } from 'node:path'
 import { cliExec, spawnDetached } from './foreign-exec'
 import type { ForeignLaunchers } from './foreign-launch'
 import { HERDR_SESSION, herdrLauncher } from './herdr-launch'
-import { t3Launcher } from './t3-launch'
+import { t3CliClient, t3Launcher } from './t3-launch'
 
 export type ForeignWiring = {
   dataDir: string
   now(): number
+  // The repo's main checkout: a T3 thread belongs to the project whose folder it is.
+  checkoutOf(repo: string): Promise<string>
   // Tests and smokes: another herdr session, other binaries.
   herdrSession?: string
   herdrBin?: string
@@ -39,6 +41,9 @@ export function foreignLaunchers(input: ForeignWiring): ForeignLaunchers {
       now: input.now,
       pause
     }),
-    t3: t3Launcher(cliExec(input.t3Bin ?? join(homedir(), '.t3', 'bin', 't3')))
+    t3: t3Launcher({
+      client: t3CliClient(cliExec(input.t3Bin ?? join(homedir(), '.t3', 'bin', 't3'))),
+      checkoutOf: input.checkoutOf
+    })
   }
 }

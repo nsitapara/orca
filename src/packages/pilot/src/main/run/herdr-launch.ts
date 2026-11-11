@@ -122,7 +122,7 @@ export function launcherScript(launch: ForeignLaunch, promptFile: string): strin
   const lines = [
     '#!/bin/sh',
     '# Pilot hand-over step launcher',
-    `for v in $(env | grep -oE '^(CLAUDECODE|CLAUDE_CODE_[A-Z0-9_]*|T3CODE_[A-Z0-9_]*)=' | tr -d =); do unset "$v"; done`,
+    `for v in $(env | grep -oE '^(CLAUDECODE|CLAUDE_CODE_[A-Z0-9_]*|T3CODE_[A-Z0-9_]*|ORCA_TERMINAL_HANDLE|ORCA_PANE_KEY)=' | tr -d =); do unset "$v"; done`,
     ...Object.entries(launch.env).map(([name, value]) => `export ${name}=${shQuote(value)}`),
     `cd ${shQuote(launch.cwd)} || exit 1`,
     `exec ${[launch.agent, ...launch.argv].map(shQuote).join(' ')} "$(cat ${shQuote(promptFile)})"`

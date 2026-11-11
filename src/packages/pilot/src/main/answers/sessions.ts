@@ -3,6 +3,7 @@ import type { InboxItemRow } from '../../shared/api-types'
 import type { AgentKind, AutomationDefinition } from '../../shared/definition/types'
 import type { SessionTerminalState } from '../run/agent-step'
 import type { PilotStore } from '../store/store'
+import { stepSessionElsewhere } from '../../shared/run-views/step-tab'
 import { hold, type Hold } from './holds'
 
 // apply.py FORK_MAX_BYTES / FORK_MAX_AGE_DAYS: past these a fresh session reading the card costs less.
@@ -21,6 +22,8 @@ export type AskingSession = {
   startedAt: number | null
   // The args the asking process runs under (its step's launch_args_json); null when not known.
   launchArgs: string[] | null
+  // A hand-over step's session on another system ("herdr tab w1:t2"); absent on a Pilot tab's.
+  elsewhere?: string
 }
 // The run launcher's H10 states (free: an idle agent running this session, nobody typing, no Pilot
 // step on it), with a draft told apart from other busy: the answers wait instead of forking past it.
@@ -80,7 +83,8 @@ export function askingSession(store: PilotStore, items: InboxItemRow[]): AskingS
         paneKey: step.paneKey,
         transcriptPath: step.transcriptPath,
         startedAt: step.startedAt,
-        launchArgs: step.launchArgs
+        launchArgs: step.launchArgs,
+        ...(stepSessionElsewhere(step) ? { elsewhere: stepSessionElsewhere(step) } : {})
       }
     }
   }
@@ -129,6 +133,17 @@ export async function chooseSession(
   // Decided at answer time (M4 §8): a card from a throwaway run gets a fresh session carrying the card's context.
   if (asking && store.runs.get(asking.runId)?.env?.mode === 'throwaway') {
     return { ...newSession(def, asking), fresh: 'throwaway' }
+  }
+  // A session on another system (step system: herdr, t3) is the user's: Pilot can't type into it, and a second process on
+  // it would be worse. The answers wait for the job to say where they go.
+  if (asking?.elsewhere) {
+    return {
+      kind: 'hold',
+      hold: hold(
+        'session_open',
+        `the session that asked runs in ${asking.elsewhere}, which Pilot can't answer into; set answers.resume: never to answer in a new session`
+      )
+    }
   }
   // Only a session id is resumed or forked (it becomes argv); anything else starts a new session.
   if (!asking?.sessionId || !isSessionId(asking.sessionId)) {

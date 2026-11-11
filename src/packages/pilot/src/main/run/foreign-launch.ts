@@ -27,9 +27,9 @@ export function foreignSystemOf(step: StepDef): ForeignSystem | null {
   return step.system === 'herdr' || step.system === 't3' ? step.system : null
 }
 
-// Pilot follows a step to its end only in its own tabs: on another system only a hand-over step runs. There it starts a
-// new session only: resuming one (session: continue, per_worktree, Continue run) could put a second process on a session
-// still open in a Pilot tab, and T3 keeps its own session ids. `resuming`: the session Pilot planned is an existing one.
+// Pilot follows a step to its end only in its own tabs: on another system only a hand-over step runs, and only on a new
+// session (session: new): resuming one (session: continue or per_worktree, Continue run) could put a second process on a
+// session still open in a Pilot tab, and T3 keeps its own session ids. `resuming`: the session Pilot planned exists.
 export function foreignRefusal(
   step: StepDef,
   system: ForeignSystem,
@@ -38,8 +38,8 @@ export function foreignRefusal(
   if (step.wait !== 'start') {
     return `system ${system} can't report a step's end to Pilot; only a wait: start step can run there`
   }
-  if (resuming) {
-    return `system ${system} starts a new session; it can't resume one`
+  if (step.session.kind !== 'new' || resuming) {
+    return `system ${system} runs only a new session (session: new)`
   }
   return null
 }
@@ -54,11 +54,14 @@ export function foreignTitle(
   return `[Automation] ${definition.name} · ${label} · ${step.name}`
 }
 
-// A parent agent session's markers (Claude Code, its SDK, T3) and herdr's own pane context: inherited, they would make
-// the step's agent a child session, or point the herdr CLI at the pane that runs Pilot rather than its own session.
+// A parent agent session's markers (Claude Code, its SDK, T3), herdr's own pane context and the Orca tab Pilot runs in:
+// inherited, they would make the step's agent a child session, point the herdr CLI at another session, or make the
+// agent's pilotcli read Pilot's own tab as its own.
 export function isInheritedSessionVar(name: string): boolean {
   return (
     name === 'CLAUDECODE' ||
+    name === 'ORCA_TERMINAL_HANDLE' ||
+    name === 'ORCA_PANE_KEY' ||
     name.startsWith('CLAUDE_CODE_') ||
     name.startsWith('HERDR_') ||
     name.startsWith('T3CODE_')

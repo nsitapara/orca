@@ -106,6 +106,32 @@ describe('chooseSession (apply.py start_agent)', () => {
     })
   })
 
+  it.each([
+    ['herdr', 'w1:t2', 'herdr tab w1:t2'],
+    ['t3', 'thread-9', 'T3 thread thread-9']
+  ] as const)(
+    'holds the answers to a session on %s, naming answers.resume: never',
+    async (system, ref, where) => {
+      const { store, items } = setup(null)
+      store.runs.updateStep('run-1', 0, { system, externalRef: ref })
+      expect(await chooseSession(definition(), items, store, probe('free', FRESH), NOW)).toEqual({
+        kind: 'hold',
+        hold: {
+          holdReason: 'session_open',
+          holdDetail: `the session that asked runs in ${where}, which Pilot can't answer into; set answers.resume: never to answer in a new session`
+        }
+      })
+      const never = await chooseSession(
+        definition('answers: { resume: never }\n'),
+        items,
+        store,
+        probe('free', FRESH),
+        NOW
+      )
+      expect(never.kind).toBe('new')
+    }
+  )
+
   it('holds while someone is typing in the asking tab', async () => {
     const { store, items } = setup()
     expect(await chooseSession(definition(), items, store, probe('typing', FRESH), NOW)).toEqual({
