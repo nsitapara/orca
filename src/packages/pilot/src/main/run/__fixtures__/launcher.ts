@@ -1,8 +1,8 @@
-import type { LaunchRequest, LaunchResult } from '../../scheduler/tick-runner'
+import type { LaunchRequest } from '../../scheduler/tick-runner'
 import type { PilotStore } from '../../store/store'
 import { stepKindOf } from '../../store/store-advance'
 import { runFields } from '../../../shared/template'
-import { launchAgentStep, type AgentStepRequest } from '../agent-step'
+import { launchAgentStep, type AgentLaunchResult, type AgentStepRequest } from '../agent-step'
 import type { LauncherDeps } from '../launch'
 import { resolveWorkspace, type Workspace } from '../workspace'
 
@@ -26,7 +26,7 @@ function failFirstStep(store: PilotStore, runId: string, error: string, at: numb
 export function makeLauncher(
   store: PilotStore,
   deps: LauncherDeps
-): (req: LaunchRequest) => Promise<LaunchResult> {
+): (req: LaunchRequest) => Promise<AgentLaunchResult> {
   return async ({ runId, definition, decision }) => {
     const startedAt = store.runs.get(runId)?.startedAt ?? deps.now()
     const fields = {

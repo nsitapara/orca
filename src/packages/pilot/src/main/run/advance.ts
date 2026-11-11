@@ -106,7 +106,10 @@ export function createRunEngine(deps: RunEngineDeps): RunEngine {
   ): Promise<boolean> {
     try {
       await deps.startStep({ run, definition: def, idx, fields, ...(resume ? { resume } : {}) })
-      return false
+      // A hand-over step on another system (step system: herdr, t3) ended at its launch: the walk goes on.
+      const started = store.runs.steps(run.id).find((s) => s.idx === idx)
+      const handedOver = started?.system !== undefined && started.status === 'done'
+      return handedOver && store.runs.get(run.id)?.status === 'running'
     } catch (error) {
       const row = rowFor(run.id, idx, def.steps[idx], deps.now())
       if (error instanceof NothingToDoError) {

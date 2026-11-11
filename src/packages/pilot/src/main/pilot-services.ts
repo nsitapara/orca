@@ -23,6 +23,7 @@ import { deleteBranchAtTip } from './git/delete-kept-branch'
 import { runtimeFieldDeps } from './fields/runtime-field-deps'
 import { runShellScript } from './fields/script-runner'
 import { launchAgentStep } from './run/agent-step'
+import { foreignLaunchers } from './run/foreign-wiring'
 import { wireRunEngine } from './run/engine-wiring'
 import { pilotShellWiring } from './run/shell-wiring'
 import { cancelUnstartedRun, runAnswerSources } from './run/ask-first'
@@ -87,7 +88,9 @@ function openPilot(
   // `store.runs`: a new worktree's claim reads and records running runs there (Task 8b).
   const launcherDeps = {
     ...runtimeLauncherDeps(runtime, fieldDeps, now, store.runs),
-    modeText: modeTextFor(readMode)
+    modeText: modeTextFor(readMode),
+    // Hand-over steps on herdr or T3 (step system:).
+    foreignLaunchers: foreignLaunchers({ dataDir: host.dataDir, now })
   }
   const definitionFor = (id: string) =>
     definitions.current().definitions.find((d) => d.id === id) ?? null

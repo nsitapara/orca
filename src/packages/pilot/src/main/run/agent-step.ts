@@ -1,4 +1,4 @@
-import type { ItemFields } from '../../shared/api-types'
+import type { ForeignSystem, ItemFields } from '../../shared/api-types'
 import type { AgentKind, AutomationDefinition, StepDef } from '../../shared/definition/types'
 import { UnrecordedLaunchError, type LaunchResult } from '../scheduler/tick-runner'
 import type { PilotStore } from '../store/store'
@@ -17,6 +17,13 @@ import { rememberWorktreeSession, worktreeSessionToResume } from './worktree-ses
 import type { Workspace } from './workspace'
 import { NothingToDoError } from './nothing-to-do'
 import { blockUntrackedPreparation, claimPreparationWorker } from './preparation-worker'
+import {
+  foreignRefusal,
+  foreignSystemOf,
+  foreignTitle,
+  type ForeignLaunchers
+} from './foreign-launch'
+import { addRunEvent } from './run-close'
 
 export type AgentStepRequest = {
   runId: string
@@ -82,7 +89,12 @@ export type AgentStepDeps = {
   ): Promise<boolean>
   // Optional: without it a session's old terminal can't be looked at, so it resumes in a new one.
   sessionTerminals?: SessionTerminals
+  // Hand-over steps on another system (step system: herdr, t3). Without them such a step fails at launch.
+  foreignLaunchers?: ForeignLaunchers
 }
+// A hand-over step launched on another system: it ended done at once, and its session is the user's from now on.
+export type ForeignStepResult = { system: ForeignSystem; externalRef: string }
+export type AgentLaunchResult = LaunchResult | ForeignStepResult
 type Terminal = { handle: string; paneKey?: string | null }
 
 function messageOf(error: unknown): string {
@@ -203,6 +215,88 @@ function recordRunning(
   }
 }
 
+function sessionOf(session: SessionPlan): string | null {
+  return session.kind === 'missing' ? null : session.sessionId
+}
+
+function failWith(store: PilotStore, req: AgentStepRequest, error: unknown, at: number): Error {
+  if (error instanceof NothingToDoError) {
+    stopStep(store, req.runId, req.stepIdx, error.message, at)
+    return error
+  }
+  const message = messageOf(error)
+  failStep(store, req.runId, req.stepIdx, message, at)
+  return new Error(message)
+}
+
+// A hand-over step on another system (step system: herdr, t3): refused unless it is wait: start, since Pilot can't see
+// its end there; otherwise launched there and ended done, detached, with where its session lives. Pilot keeps no claim
+// on that session: it isn't remembered for per_worktree, and no tab of Pilot's holds it.
+async function launchForeignStep(
+  store: PilotStore,
+  req: AgentStepRequest,
+  deps: AgentStepDeps,
+  plan: {
+    agent: AgentKind
+    session: Exclude<SessionPlan, { kind: 'missing' }>
+    system: ForeignSystem
+  }
+): Promise<ForeignStepResult> {
+  const { definition, stepIdx: idx, runId } = req
+  const step = definition.steps[idx]
+  const { agent, session, system } = plan
+  const refusal = foreignRefusal(step, system, session.kind !== 'fresh')
+  if (refusal) {
+    throw failWith(store, req, new Error(refusal), deps.now())
+  }
+  const launcher = deps.foreignLaunchers?.[system]
+  if (!launcher) {
+    throw failWith(store, req, new Error(`This Pilot can't launch on system ${system}`), deps.now())
+  }
+  let launched
+  try {
+    const opts = launchOptions(req, agent, session, await deps.modeText(step, req.workspace.path))
+    claimPreparationWorker(store, req, deps.now())
+    launched = await launcher({
+      system,
+      agent,
+      runId,
+      stepIdx: idx,
+      repo: definition.repo,
+      cwd: req.workspace.path,
+      title: foreignTitle(definition, step, req.label),
+      prompt: opts.prompt,
+      env: opts.pilot.env,
+      argv: opts.pilot.argv,
+      args: step.args
+    })
+  } catch (error) {
+    throw failWith(store, req, error, deps.now())
+  }
+  const at = deps.now()
+  const { externalRef } = launched
+  const recorded = store.runs.updateStartingStep(runId, idx, {
+    status: 'done',
+    detached: true,
+    finishedAt: at,
+    system,
+    externalRef,
+    launchArgs: [...step.args]
+  })
+  const run = store.runs.get(runId)
+  if (run) {
+    const payload = {
+      step: step.name,
+      system,
+      ref: externalRef,
+      ...launched.detail,
+      ...(sessionOf(session) ? { session: sessionOf(session) } : {})
+    }
+    addRunEvent(store, at, run, recorded ? 'step_handed_over' : 'handed_over_unrecorded', payload)
+  }
+  return { system, externalRef }
+}
+
 // Starts one agent step of a run in its workspace (spec §7). The step row, with its pinned or
 // resumed session id, exists before the agent does. A session to continue that isn't there fails the
 // step: it never starts a fresh, unpinned session instead.
@@ -210,7 +304,7 @@ export async function launchAgentStep(
   store: PilotStore,
   req: AgentStepRequest,
   deps: AgentStepDeps
-): Promise<LaunchResult> {
+): Promise<AgentLaunchResult> {
   const { definition, stepIdx: idx, runId } = req
   const step = definition.steps[idx]
   if (step.agent === 'shell') {
@@ -222,15 +316,24 @@ export async function launchAgentStep(
       ? await worktreeSessionToResume(store, req, agent, deps)
       : null
   const priorSteps = store.runs.steps(runId)
+  const system = foreignSystemOf(step)
   const newId = deps.newSessionId
-  const session: SessionPlan = req.resume
+  const planned: SessionPlan = req.resume
     ? { kind: 'resume', sessionId: req.resume.sessionId }
     : planSession({ step, agent, priorSteps, worktreeSession, newId })
+  // A T3 thread keeps its own session id: Pilot pins none.
+  const session: SessionPlan =
+    system === 't3' && planned.kind === 'fresh' ? { kind: 'fresh', sessionId: null } : planned
   const sessionId = session.kind === 'missing' ? null : session.sessionId
-  openStepRow(store, req, agent, sessionId, deps.now())
+  // A session handed to another system is the user's: its row names none, so no Resume, answer run or later step of
+  // Pilot's starts a second process on it (an answer run then starts a new session).
+  openStepRow(store, req, agent, system ? null : sessionId, deps.now())
   if (session.kind === 'missing') {
     failStep(store, runId, idx, session.reason, deps.now())
     throw new Error(session.reason)
+  }
+  if (system) {
+    return launchForeignStep(store, req, deps, { agent, session, system })
   }
   let terminal: Terminal
   let launchArgs = [...step.args]

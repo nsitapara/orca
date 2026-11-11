@@ -2,13 +2,12 @@ import type { ItemFields } from '../../shared/api-types'
 import type { StepDef } from '../../shared/definition/types'
 import { kbOf, RESULT_FIELD_CAP_BYTES, utf8Bytes } from '../../shared/run/step-result'
 import { placeholderNames } from '../../shared/template'
-import type { LaunchResult } from '../scheduler/tick-runner'
 import type { StepStarter, StepStartRequest } from './advance'
-import type { AgentStepRequest } from './agent-step'
+import type { AgentLaunchResult, AgentStepRequest } from './agent-step'
 import type { Workspace } from './workspace'
 
 // Task 8d's launchAgentStep, bound to its deps by the caller (pilot-services).
-export type AgentStepLauncher = (req: AgentStepRequest) => Promise<LaunchResult>
+export type AgentStepLauncher = (req: AgentStepRequest) => Promise<AgentLaunchResult>
 
 // The workspace the engine recorded on the run (9b's startRun, from Task 8b's resolveWorkspace).
 function recordedWorkspace(req: StepStartRequest): Workspace {
