@@ -93,6 +93,7 @@ function openPilot(
     foreignLaunchers: foreignLaunchers({
       dataDir: host.dataDir,
       now,
+      resourcesDir: options.resourcesDir,
       checkoutOf: async (repo) => (await resolveRepoPath(runtime, repo)).path
     })
   }

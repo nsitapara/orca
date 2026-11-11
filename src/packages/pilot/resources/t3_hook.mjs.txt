@@ -1,0 +1,135 @@
+// Copied unchanged from pilotd's src/agent/t3_hook.mjs (pilotd ac4954d; how it works: pilotd's docs/t3.md). Pilot's t3 steps
+// run T3's CLI with it as the preload t3_hook.mjs (.txt here so this repo's lint and format leave the copy as it is).
+// Change it in pilotd first, then copy it here below these three lines.
+// pilotd's preload for T3's own `t3 thread start` (loaded with `--import` into the bundled CLI; see docs/t3.md).
+//
+// t3's CLI can launch a thread only in its project's root or in a NEW worktree; T3's MCP tool `t3_thread_launch`
+// also takes `workspaceStrategy: {type: "existing_worktree", worktreePath, branch?}`. This preload lets the CLI do
+// everything as usual (its MCP session, credential, project lookup, model flags, output, revoke on exit) and
+// rewrites only its one `t3_thread_launch` call:
+//
+// - It pins the project: the launch's projectId must be the project whose root is PILOTD_T3_PROJECT_ROOT (the
+//   repo's main checkout, matched by realpath against every `t3_project_list` page the CLI read). The CLI itself
+//   picks the deepest project containing the path, which could be a parent folder.
+// - The CLI is always given `--worktree <SENTINEL>`. With PILOTD_T3_WORKTREE set, that strategy becomes
+//   `existing_worktree` bound to the worktree (and PILOTD_T3_BRANCH, if set); without it, the strategy is dropped
+//   and the thread opens in the project root. The sentinel is no valid git ref, so a launch this preload didn't
+//   rewrite fails on T3's base check and no thread is created: it fails closed.
+//
+// What it did goes as one JSON line to PILOTD_T3_REPORT: {launch: bool, rewritten: bool (the launch passed
+// through it), projectId, worktreePath (null: the root), error}. On a refusal it throws from fetch, so the CLI unwinds (and revokes its session) and exits non-zero.
+import * as fs from "node:fs";
+
+export const SENTINEL = "pilotd: existing worktree";
+
+const env = process.env;
+const projectRoot = env.PILOTD_T3_PROJECT_ROOT;
+const worktree = env.PILOTD_T3_WORKTREE || null;
+const branch = env.PILOTD_T3_BRANCH || null;
+const reportPath = env.PILOTD_T3_REPORT;
+
+const real = (p) => {
+  try {
+    return fs.realpathSync(p);
+  } catch {
+    return p;
+  }
+};
+
+const state = { launch: false, rewritten: false, projectId: null, worktreePath: null, error: null };
+const projects = new Map(); // id -> workspaceRoot
+
+const report = () => {
+  if (!reportPath) return;
+  try {
+    fs.writeFileSync(reportPath, JSON.stringify(state) + "\n");
+  } catch {}
+};
+
+const refuse = (message) => {
+  state.error = message;
+  report();
+  throw new Error(`pilotd: ${message}`);
+};
+
+// A JSON-RPC response body: plain JSON, or SSE `data:` lines.
+const payloadsOf = (text) => {
+  const t = text.trim();
+  if (t.startsWith("{") || t.startsWith("[")) {
+    try {
+      const v = JSON.parse(t);
+      return Array.isArray(v) ? v : [v];
+    } catch {
+      return [];
+    }
+  }
+  const out = [];
+  for (const line of t.split(/\r?\n/)) {
+    if (!line.startsWith("data:")) continue;
+    try {
+      out.push(JSON.parse(line.slice(5).trim()));
+    } catch {}
+  }
+  return out;
+};
+
+const rememberProjects = (text) => {
+  for (const p of payloadsOf(text)) {
+    const list = p?.result?.structuredContent?.projects;
+    if (!Array.isArray(list)) continue;
+    for (const project of list) {
+      if (typeof project?.id === "string" && typeof project?.workspaceRoot === "string") {
+        projects.set(project.id, project.workspaceRoot);
+      }
+    }
+  }
+};
+
+const rewriteLaunch = (args) => {
+  state.launch = true;
+  if (!projectRoot) refuse("PILOTD_T3_PROJECT_ROOT isn't set");
+  const want = real(projectRoot);
+  const match = [...projects].find(([, root]) => real(root) === want);
+  if (match === undefined) refuse(`no T3 project has ${projectRoot} as its root`);
+  if (args.projectId !== match[0]) {
+    refuse(`t3 picked project ${args.projectId} (${projects.get(args.projectId) ?? "?"}), not ${match[0]} at ${projectRoot}`);
+  }
+  state.projectId = match[0];
+  const strategy = args.workspaceStrategy;
+  if (strategy?.type !== "worktree" || strategy.baseRef !== SENTINEL) {
+    refuse("the launch doesn't carry pilotd's worktree sentinel; this t3 changed how it launches threads");
+  }
+  state.rewritten = true;
+  state.worktreePath = worktree;
+  report();
+  const { workspaceStrategy: _sentinel, ...rest } = args;
+  if (worktree === null) return rest;
+  return {
+    ...rest,
+    workspaceStrategy: { type: "existing_worktree", worktreePath: worktree, ...(branch ? { branch } : {}) },
+  };
+};
+
+const original = globalThis.fetch;
+globalThis.fetch = async function pilotdFetch(input, init) {
+  let message = null;
+  if (init && typeof init.body === "string" && (init.method ?? "GET").toUpperCase() === "POST") {
+    try {
+      message = JSON.parse(init.body);
+    } catch {}
+  }
+  const tool = message?.method === "tools/call" ? message.params?.name : null;
+  if (tool === "t3_thread_launch") {
+    const args = rewriteLaunch(message.params.arguments ?? {});
+    init = { ...init, body: JSON.stringify({ ...message, params: { ...message.params, arguments: args } }) };
+  }
+  const response = await original.call(this, input, init);
+  if (tool === "t3_project_list") {
+    try {
+      rememberProjects(await response.clone().text());
+    } catch {}
+  }
+  return response;
+};
+
+report();

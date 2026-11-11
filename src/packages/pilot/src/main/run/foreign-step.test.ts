@@ -9,7 +9,6 @@ import { launchAgentStep, type AgentStepDeps } from './agent-step'
 import { cliExec, type ExecResult } from './foreign-exec'
 import type { ForeignLaunch, ForeignLaunchers } from './foreign-launch'
 import { herdrLauncher, launcherScript } from './herdr-launch'
-import { t3CliClient, t3Launcher, type T3Project, type T3ThreadRequest } from './t3-launch'
 import type { Workspace } from './workspace'
 
 const SESSION = '00000000-0000-4000-8000-00000000000a'
@@ -275,117 +274,6 @@ describe('herdrLauncher', () => {
       `exec 'claude' '--session-id' '${SESSION}' "$(cat '/d/run-1-0.prompt')"`,
       ''
     ])
-  })
-})
-
-describe('t3Launcher', () => {
-  function t3(projects: T3Project[] | null) {
-    const started: T3ThreadRequest[] = []
-    const launch = t3Launcher({
-      client: {
-        projects: async () => projects,
-        startThread: async (req) => {
-          started.push(req)
-          return 'thread-9'
-        }
-      },
-      checkoutOf: async () => '/repos/web'
-    })
-    return { launch, started }
-  }
-  const PROJECTS = [
-    { id: 'p-other', workspaceRoot: '/repos' },
-    { id: 'p-web', workspaceRoot: '/repos/web' }
-  ]
-
-  it.each([
-    ['in a worktree', '/wt/a', [], '/wt/a', null],
-    [
-      'in the main checkout',
-      '/repos/web',
-      ['--model', 'gpt-6'],
-      null,
-      { provider: 'codex', model: 'gpt-6' }
-    ],
-    ['with --model=', '/wt/a', ['--model=gpt-6'], '/wt/a', { provider: 'codex', model: 'gpt-6' }]
-  ])("starts a thread of the repo's project %s", async (_, cwd, args, worktreePath, model) => {
-    const { launch, started } = t3(PROJECTS)
-    await expect(launch({ ...LAUNCH, system: 't3', agent: 'codex', cwd, args })).resolves.toEqual({
-      externalRef: 'thread-9',
-      detail: { thread: 'thread-9', project: 'p-web' }
-    })
-    expect(started).toEqual([
-      {
-        project: 'p-web',
-        worktreePath,
-        title: '[Automation] Kickoff · web-1-a · kickoff',
-        message: "it's -raw",
-        model
-      }
-    ])
-  })
-
-  it("hands the checkout's path to T3 when the transport can't list projects", async () => {
-    const { launch, started } = t3(null)
-    await launch({ ...LAUNCH, system: 't3', cwd: '/repos/web' })
-    expect(started[0].project).toBe('/repos/web')
-  })
-
-  it('fails when no T3 project is the repo', async () => {
-    const { launch, started } = t3([PROJECTS[0]])
-    await expect(launch({ ...LAUNCH, system: 't3' })).rejects.toThrow(
-      'No T3 project has /repos/web (repo web) as its folder; add it in T3'
-    )
-    expect(started).toEqual([])
-  })
-})
-
-describe('t3CliClient', () => {
-  const REQ: T3ThreadRequest = {
-    project: '/repos/web',
-    worktreePath: null,
-    title: 'T',
-    message: "it's -raw",
-    model: { provider: 'claudeAgent', model: 'opus' }
-  }
-
-  it('starts the thread with the prompt on stdin and reads its id', async () => {
-    const cli = fakeCli(() => ({ stdout: '{"threadId":"thread-9","runId":"r"}\n' }))
-    await expect(t3CliClient(cli.exec).startThread(REQ)).resolves.toBe('thread-9')
-    expect(cli.calls).toEqual([
-      {
-        args: [
-          'thread',
-          'start',
-          '/repos/web',
-          '-',
-          '--title',
-          'T',
-          '--provider',
-          'claudeAgent',
-          '--model',
-          'opus',
-          '--json'
-        ],
-        input: "it's -raw"
-      }
-    ])
-  })
-
-  it("refuses an existing worktree, which the CLI can't bind, before calling t3", async () => {
-    const cli = fakeCli(() => ({}))
-    await expect(
-      t3CliClient(cli.exec).startThread({ ...REQ, worktreePath: '/wt/a' })
-    ).rejects.toThrow("t3's CLI can't start a thread in an existing worktree (/wt/a)")
-    expect(cli.calls).toEqual([])
-  })
-
-  it("fails with T3's own reason, and lists no projects on a CLI without project list", async () => {
-    const cli = fakeCli(() => ({ code: 1, stderr: "No T3 Code project matches '/repos/web'.\n" }))
-    await expect(t3CliClient(cli.exec).startThread(REQ)).rejects.toThrow(
-      "t3 thread start failed: No T3 Code project matches '/repos/web'."
-    )
-    await expect(t3CliClient(cli.exec).projects()).resolves.toBeNull()
   })
 })
 
