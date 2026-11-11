@@ -4,6 +4,12 @@ import type { SessionSearchScanRoots } from './session-search-scan-roots'
 export const DEFAULT_SESSION_SEARCH_RECONCILE_INTERVAL_MS = 20_000
 /** Quiet passes double the wait up to this, so an idle machine stops walking every root. */
 export const SESSION_SEARCH_IDLE_RECONCILE_MAX_MS = 5 * 60_000
+/**
+ * The app's cadence while transcripts keep changing. A pass walks every root (~330 ms
+ * with thousands of transcripts), and some agent is usually writing, so 20 s kept it
+ * busy around the clock; a new turn becomes searchable within a minute instead.
+ */
+export const SESSION_SEARCH_APP_RECONCILE_INTERVAL_MS = 60_000
 export const DEFAULT_SESSION_SEARCH_RECENT_PER_AGENT = 12
 /** Allow a quarter-interval read budget, checked between files; rearm after the pass settles. */
 export const DEFAULT_SESSION_SEARCH_PASS_DEADLINE_FRACTION = 4

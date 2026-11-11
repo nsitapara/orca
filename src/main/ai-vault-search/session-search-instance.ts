@@ -12,6 +12,7 @@ import { sessionSearchHistoryCutoffMs } from './session-search-retention-policy'
 import { removeSessionSearchDatabaseAsync } from './session-search-schema'
 import type { SessionSearchScanRoots } from './session-search-scan-roots'
 import {
+  SESSION_SEARCH_APP_RECONCILE_INTERVAL_MS,
   SESSION_SEARCH_IDLE_RECONCILE_MAX_MS,
   type SessionSearchIndexerOptions
 } from './session-search-indexer-options'
@@ -76,6 +77,7 @@ export class SessionSearchInstance {
       const indexer = new SessionSearchIndexer({
         // An idle machine should not walk every transcript root every 20 s.
         idleReconcileMaxMs: SESSION_SEARCH_IDLE_RECONCILE_MAX_MS,
+        reconcileIntervalMs: SESSION_SEARCH_APP_RECONCILE_INTERVAL_MS,
         ...this.options,
         historyDays: settings.historyDays
       })
