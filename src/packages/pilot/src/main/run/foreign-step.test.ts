@@ -6,7 +6,7 @@ import { testDefinition, testStep } from '../../shared/definition/__fixtures__/d
 import type { StepDef } from '../../shared/definition/types'
 import { PilotStore } from '../store/store'
 import { launchAgentStep, type AgentStepDeps } from './agent-step'
-import type { ExecResult } from './foreign-exec'
+import { cliExec, type ExecResult } from './foreign-exec'
 import type { ForeignLaunch, ForeignLaunchers } from './foreign-launch'
 import { herdrLauncher, launcherScript } from './herdr-launch'
 import { t3CliClient, t3Launcher, type T3Project, type T3ThreadRequest } from './t3-launch'
@@ -386,5 +386,13 @@ describe('t3CliClient', () => {
       "t3 thread start failed: No T3 Code project matches '/repos/web'."
     )
     await expect(t3CliClient(cli.exec).projects()).resolves.toBeNull()
+  })
+})
+
+describe('cliExec', () => {
+  it('rejects when the binary is missing', async () => {
+    await expect(cliExec('/nonexistent/t3')(['thread', 'start'], 'prompt')).rejects.toThrow(
+      'ENOENT'
+    )
   })
 })

@@ -23,6 +23,8 @@ export function cliExec(bin: string, extra: Record<string, string> = {}): Exec {
       child.stdout.setEncoding('utf8').on('data', (chunk: string) => (stdout += chunk))
       child.stderr.setEncoding('utf8').on('data', (chunk: string) => (stderr += chunk))
       child.on('error', reject)
+      // A process that exits (or never starts) before reading stdin: its close or error settles the call.
+      child.stdin.on('error', () => undefined)
       child.on('close', (code) => resolve({ code: code ?? 1, stdout, stderr }))
       child.stdin.end(input ?? '')
     })

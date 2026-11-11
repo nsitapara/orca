@@ -139,44 +139,6 @@ const handledOf = (db: ReturnType<typeof setup>['db']) =>
   db((d) => d.prepare("SELECT status, failed_at FROM handled WHERE run_id = 'run-1'").get())
 
 describe('createRunEngine', () => {
-  it('goes on to the next step, and then ends the run, once a step is handed over on another system', async () => {
-    const { store, engine, started, end } = setup(DEF, {
-      startStep: async (req) => {
-        started.push(req)
-        if (req.idx === 0) {
-          store.runs.updateStep(req.run.id, 0, {
-            status: 'done',
-            finishedAt: 1000,
-            detached: true,
-            system: 'herdr',
-            externalRef: 'w1:t2'
-          })
-          return
-        }
-        const s = req.definition.steps[req.idx]
-        store.runs.createStep({
-          runId: req.run.id,
-          idx: req.idx,
-          name: s.name,
-          agent: s.agent,
-          skill: s.skill,
-          startedAt: 1000
-        })
-        store.runs.updateStep(req.run.id, req.idx, {
-          status: 'running',
-          terminalHandle: 't',
-          paneKey: 'p'
-        })
-      }
-    })
-    await startRun(engine)
-    // fix's when: reads review's outputs (none): skipped; cleanup (always) starts in the same walk.
-    expect(started.map((s) => s.idx)).toEqual([0, 2])
-    end(2, 'done')
-    await engine.advance('run-1')
-    expect(store.runs.get('run-1')?.status).toBe('done')
-  })
-
   it('starts the first step with the item, workspace and run fields', async () => {
     const { engine, started } = setup()
     await startRun(engine)

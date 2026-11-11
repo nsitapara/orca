@@ -191,6 +191,10 @@ export function createRunEngine(deps: RunEngineDeps): RunEngine {
         skipStep(runId, idx, step, verdict.reason)
       } else if (!(await start(run, def, idx, fields, opening, resumed))) {
         return
+      } else if (store.runs.steps(runId).some((r) => r.idx === idx && r.system !== undefined)) {
+        // A session now runs elsewhere: a later step that can't start ends the run through its normal end, never the
+        // tick runner's "couldn't start", which would free the item for a second hand-over.
+        opening = false
       }
       rows = store.runs.steps(runId)
       run = store.runs.get(runId) ?? run
