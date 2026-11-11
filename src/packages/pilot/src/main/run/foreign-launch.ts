@@ -54,11 +54,6 @@ export function foreignTitle(
   return `[Automation] ${definition.name} · ${label} · ${step.name}`
 }
 
-// What the timeline and the Running page show for a step's session elsewhere.
-export function foreignSessionLabel(system: ForeignSystem, externalRef: string): string {
-  return system === 't3' ? `T3 thread ${externalRef}` : `herdr tab ${externalRef}`
-}
-
 // A parent agent session's markers (Claude Code, its SDK, T3) and herdr's own pane context: inherited, they would make
 // the step's agent a child session, or point the herdr CLI at the pane that runs Pilot rather than its own session.
 export function isInheritedSessionVar(name: string): boolean {

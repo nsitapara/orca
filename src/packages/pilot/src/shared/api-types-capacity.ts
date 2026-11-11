@@ -65,6 +65,8 @@ export type CapacityRun = {
   // The tab of its running agent step, else its newest detached one; absent for a shell step or a step without a
   // pane, and from older Pilots.
   tab?: RunTab
+  // Its newest step's session on another system ("herdr tab w1:t2", "T3 thread …"); absent otherwise.
+  elsewhere?: string
   // The run started from an answer to an inbox card; absent otherwise, and from older Pilots.
   fromAnswer?: true
   // An answer run's cards, in the order they were sent to it; absent on other runs, and from older Pilots.

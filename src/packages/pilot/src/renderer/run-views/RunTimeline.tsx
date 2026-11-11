@@ -8,7 +8,7 @@ import type { PaintedPart } from '../../shared/run-views/paint'
 import { runTimeline, type RanStep } from '../../shared/run-views/timeline'
 import { formatDuration } from '../../shared/run/format-duration'
 import { clockSeconds, runStatusLabel } from '../pages/format'
-import { stepTabOf } from '../../shared/run-views/step-tab'
+import { stepSessionElsewhere, stepTabOf } from '../../shared/run-views/step-tab'
 import { RailRows } from './RunRail'
 import { useShowTab } from './ShowTab'
 import { StepDetail } from './StepDetail'
@@ -122,6 +122,7 @@ function StepRowView({
     step?.startedAt && step.finishedAt ? formatDuration(step.finishedAt - step.startedAt) : null
   const show = useShowTab(step ? stepTabOf(step, run.worktreePath) : undefined)
   const failed = part.state === 'failed' && step?.error ? step.error : null
+  const elsewhere = step ? stepSessionElsewhere(step) : undefined
   return (
     <li
       ref={ref}
@@ -173,6 +174,7 @@ function StepRowView({
             {`${STATE_MARK[part.state]} ${STATE_LABEL[part.state]}`}
           </span>
           {show.control ? <span className="text-xs">{show.control}</span> : null}
+          {elsewhere ? <span className="text-xs text-muted-foreground">{elsewhere}</span> : null}
         </div>
         <div className="flex flex-wrap gap-x-3 text-xs tabular-nums text-muted-foreground">
           {took ? <span>{took}</span> : null}

@@ -18,7 +18,7 @@ import { reserveOf, spareBytes } from '../../shared/capacity/memory-reserve'
 import { QUOTA_CEILING } from '../../shared/quota-ceiling'
 import type { AgentKind, AutomationDefinition } from '../../shared/definition/types'
 import type { PilotStore } from '../store/store'
-import { runTabOf } from '../../shared/run-views/step-tab'
+import { runSessionElsewhere, runTabOf } from '../../shared/run-views/step-tab'
 import { mergeBackOf } from '../timeline/merge-back'
 import { listedRuns } from '../timeline/run-detail'
 import { holdsSlot } from './run-capacity'
@@ -196,6 +196,7 @@ export function capacityView(input: CapacityViewInput): CapacityPayload {
     const place = runPlace(run)
     const steps = store.runs.steps(run.id)
     const tab = runTabOf(steps, run.worktreePath)
+    const elsewhere = runSessionElsewhere(steps)
     const step = activeStepOf(steps)
     return {
       id: run.id,
@@ -210,6 +211,7 @@ export function capacityView(input: CapacityViewInput): CapacityPayload {
       homePath: homeOf(run),
       ...(place ? { place } : {}),
       ...(tab ? { tab } : {}),
+      ...(elsewhere ? { elsewhere } : {}),
       ...(run.trigger === 'answer'
         ? { fromAnswer: true as const, answering: answeringCards(store, run.id) }
         : {}),

@@ -28,3 +28,18 @@ export function runTabOf(
   }
   return undefined
 }
+
+// Where a hand-over step's session lives when it isn't a Pilot tab (step system: herdr, t3); undefined on a Pilot step.
+export function stepSessionElsewhere(
+  step: Pick<StepRow, 'system' | 'externalRef'>
+): string | undefined {
+  if (!step.system || !step.externalRef) {
+    return undefined
+  }
+  return step.system === 't3' ? `T3 thread ${step.externalRef}` : `herdr tab ${step.externalRef}`
+}
+
+// A run's newest step handed over elsewhere.
+export function runSessionElsewhere(steps: readonly StepRow[]): string | undefined {
+  return steps.map(stepSessionElsewhere).findLast((label) => label !== undefined)
+}

@@ -72,6 +72,9 @@ function RunningRow({ run, now }: { run: CapacityRun; now: number }): React.JSX.
       {run.step ? (
         <div className="truncate text-xs text-muted-foreground">{stepText(run.step)}</div>
       ) : null}
+      {run.elsewhere ? (
+        <div className="truncate text-xs text-muted-foreground">{`Session in ${run.elsewhere}`}</div>
+      ) : null}
       {run.answering?.length ? <AnsweringCards cards={run.answering} /> : null}
       {why ? <p className="text-xs text-muted-foreground">{why}</p> : null}
       {stop.note ? <p className="text-xs text-muted-foreground">{stop.note}</p> : null}
