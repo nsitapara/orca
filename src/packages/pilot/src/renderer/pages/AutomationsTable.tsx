@@ -1,9 +1,25 @@
-import { useState } from 'react'
+import { createContext, useContext, useState } from 'react'
 import { ChevronDown, ChevronRight } from 'lucide-react'
+import ColumnResizeHandle from '@/components/github-project/ColumnResizeHandle'
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/class-names'
-import type { ActivityRun, AutomationSummary } from '../../shared/api-types'
-import { jobLastTick, jobTitle, listEntries, type JobGroup } from '../../shared/job-stages'
+import type { AutomationSummary } from '../../shared/api-types'
+import {
+  jobLastTick,
+  jobTitle,
+  listEntries,
+  soonestToTick,
+  type JobGroup
+} from '../../shared/job-stages'
+import {
+  DEFAULT_WIDTHS,
+  gridTemplate,
+  loadWidths,
+  resizePair,
+  resizeWidths,
+  saveWidths,
+  type ColumnWidths
+} from './automations-column-widths'
 import {
   loadFolded,
   loadSort,
@@ -14,25 +30,25 @@ import {
   type SortColumn,
   type SortState
 } from './automations-sort'
-import { lastTickText } from './format'
+import { formatInZone, lastTickText, relativeTime } from './format'
 import { listRefusal } from '../hosts/automation-home'
 import { MachineChips } from '../hosts/MachineChip'
 import type { ListedMachines } from '../hosts/merge-automations'
-import { hostedRunKey } from '../hosts/merge-activity'
-import { hostOf, type PilotHostRef } from '../hosts/pilot-host'
-import { foldStrip, liveStrip, type StripChip, type StripItem } from '../../shared/run-views/strip'
-import { RunStrip } from '../run-views/RunStrip'
-import { openRun } from '../run-views/run-panel-state'
-import { showActivity, showPilotAutomation } from './automations-view'
+import type { PilotHostRef } from '../hosts/pilot-host'
 import type { Toggle } from './EnabledSwitch'
 import { AutomationSwitch, JobSwitch, MachinesContext } from './RowSwitches'
 import { ScheduleCell } from './ScheduleCell'
 
-// Names and ticks truncate, so the columns can be narrow. Below the sum of their minimums (TABLE_MIN) the table
-// scrolls inside its own box instead of pushing the page sideways.
-const COLS =
-  'grid grid-cols-[minmax(9rem,2fr)_minmax(9rem,2.5fr)_minmax(5rem,1fr)_minmax(7rem,1.5fr)_6rem] gap-3'
-const TABLE_MIN = 'min-w-[40.5rem]'
+// The header and every row are separate grids sharing one template (GridColumns), sized by dragging the header's
+// edges. Cells truncate, so columns can be narrow; below TABLE_MIN the table scrolls inside its own box instead of
+// pushing the page sideways.
+const COLS = 'grid gap-3'
+const TABLE_MIN = 'min-w-[36rem]'
+const GridColumns = createContext(gridTemplate(DEFAULT_WIDTHS))
+
+function useGridStyle(): React.CSSProperties {
+  return { gridTemplateColumns: useContext(GridColumns) }
+}
 const ROW = 'min-h-11 w-full border-t border-border/50 px-3 py-3 text-left text-sm hover:bg-accent'
 // Same padding as ROW so the stage's cells line up with the headers; the indent is inside its name cell.
 const STAGE_ROW = 'min-h-9 w-full bg-muted/30 px-3 py-2 text-left text-sm hover:bg-accent'
@@ -44,57 +60,27 @@ export function stagesText(count: number): string {
   return count === 1 ? '1 stage' : `${count} stages`
 }
 
-// A merged row's live runs name their machines; an untagged one is this machine's.
-type ListedLive = { id: string; live: readonly (ActivityRun & { host?: PilotHostRef })[] }
-
-// The list's strip, its chips naming their runs by hostedRunKey: two machines' live runs can share an id.
-function listStrip(a: Pick<AutomationSummary, 'chain'> & ListedLive): StripChip[] {
-  return liveStrip(a.chain, a.live, hostedRunKey)
+// "in 5 min" until the tick is under a minute away; a dash when nothing is scheduled to tick.
+function nextText(at: number | null, now: number): string {
+  if (at === null) {
+    return '—'
+  }
+  return at - now < 60_000 ? 'Due now' : relativeTime(at, now)
 }
 
-// A chip on the list (spec §2 Strip): the one live run it is lit for, on its machine; Activity filtered to this
-// automation when it is lit for several, else its How it runs.
-export function openChip(a: ListedLive, chip: StripChip): void {
-  const only =
-    chip.runIds.length === 1 ? a.live.find((r) => hostedRunKey(r) === chip.runIds[0]) : null
-  if (only) {
-    openRun(only.id, chip.part, hostOf(only))
-    return
-  }
-  if (chip.runIds.length > 1) {
-    showActivity([a.id])
-    return
-  }
-  showPilotAutomation(a.id, 'how')
-}
-
-function RunsCell({ a }: { a: AutomationSummary }): React.JSX.Element {
+function NextTickCell({
+  a,
+  now
+}: {
+  a: Pick<AutomationSummary, 'nextTickAt' | 'timezone'> | null
+  now: number
+}): React.JSX.Element {
+  const at = a?.nextTickAt ?? null
+  const full = a && at !== null ? formatInZone(at, a.timezone) : undefined
   return (
-    <RunStrip
-      items={foldStrip(listStrip(a))}
-      label={`${a.name} runs`}
-      onChip={(chip) => openChip(a, chip)}
-    />
-  )
-}
-
-function stagesMore(rest: number): StripItem[] {
-  if (rest <= 0) {
-    return []
-  }
-  return [{ kind: 'more', key: 'stages', count: rest, unit: rest === 1 ? 'stage' : 'stages' }]
-}
-
-function JobRunsCell({ job }: { job: JobGroup }): React.JSX.Element {
-  const stage = job.stages.find((s) => s.live.length > 0) ?? job.stages[0]
-  const rest = job.stages.length - 1
-  const extra = stagesMore(rest)
-  return (
-    <RunStrip
-      items={[...foldStrip(listStrip(stage)), ...extra]}
-      label={`${jobTitle(job)} runs`}
-      onChip={(chip) => openChip(stage, chip)}
-    />
+    <span className="truncate text-muted-foreground" title={full}>
+      {nextText(at, now)}
+    </span>
   )
 }
 
@@ -114,15 +100,19 @@ function Row({
   onToggle: Toggle
 }): React.JSX.Element {
   return (
-    <div onClick={() => onOpen(a.id)} className={`${COLS} ${ROW} cursor-pointer`}>
+    <div
+      onClick={() => onOpen(a.id)}
+      style={useGridStyle()}
+      className={`${COLS} ${ROW} cursor-pointer`}
+    >
       <span className="flex min-w-0 items-center gap-2">
         <button type="button" className="min-w-0 truncate text-left font-medium">
           {a.name}
         </button>
         <MachineChips hosts={a.hosts ?? []} />
       </span>
-      <RunsCell a={a} />
       <ScheduleCell a={a} />
+      <NextTickCell a={a} now={now} />
       <span className="truncate text-muted-foreground">{lastText(a, now)}</span>
       <AutomationSwitch a={a} name={a.name} onToggle={onToggle} />
     </div>
@@ -142,7 +132,11 @@ function StageRow({
 }): React.JSX.Element {
   const label = a.job?.label ?? a.name
   return (
-    <div onClick={() => onOpen(a.id)} className={`${COLS} ${STAGE_ROW} cursor-pointer`}>
+    <div
+      onClick={() => onOpen(a.id)}
+      style={useGridStyle()}
+      className={`${COLS} ${STAGE_ROW} cursor-pointer`}
+    >
       <span className="flex min-w-0 items-center gap-2">
         <button
           type="button"
@@ -154,8 +148,8 @@ function StageRow({
         </button>
         <MachineChips hosts={a.hosts ?? []} />
       </span>
-      <RunsCell a={a} />
       <ScheduleCell a={a} />
+      <NextTickCell a={a} now={now} />
       <span className="truncate text-muted-foreground">{lastText(a, now)}</span>
       <AutomationSwitch a={a} name={`Stage ${a.job?.stage ?? ''} ${label}`} onToggle={onToggle} />
     </div>
@@ -185,10 +179,12 @@ function JobRows({
     setFolded(!folded)
   }
   const Chevron = folded ? ChevronRight : ChevronDown
+  const style = useGridStyle()
   return (
     <div>
       <div
         onClick={() => onOpenJob(job.id)}
+        style={style}
         className={`${COLS} ${ROW} cursor-pointer bg-muted/30`}
       >
         <span className="flex min-w-0 items-center gap-2 font-medium">
@@ -213,8 +209,8 @@ function JobRows({
           </button>
           <MachineChips hosts={job.stages.flatMap((s) => s.hosts ?? [])} />
         </span>
-        <JobRunsCell job={job} />
         <span />
+        <NextTickCell a={soonestToTick(job.stages)} now={now} />
         <span className="truncate text-muted-foreground">
           {lastText({ lastTick: jobLastTick(job) }, now)}
         </span>
@@ -231,8 +227,8 @@ function JobRows({
 
 const HEADERS: [SortColumn, string][] = [
   ['name', 'Name'],
-  ['looksAt', 'Runs'],
   ['schedule', 'Schedule'],
+  ['nextTick', 'Next tick'],
   ['lastTick', 'Last tick'],
   ['status', 'Status']
 ]
@@ -266,6 +262,63 @@ function RefusalLine({
   )
 }
 
+type Resize = (column: string, width: number, next: string, nextWidth: number) => void
+
+function HeaderCell({
+  column,
+  label,
+  sort,
+  widths,
+  onSort,
+  onResize
+}: {
+  column: SortColumn
+  label: string
+  sort: SortState
+  widths: ColumnWidths
+  onSort: (column: SortColumn) => void
+  onResize: Resize
+}): React.JSX.Element {
+  const pair = resizePair(column)
+  return (
+    <div role="columnheader" aria-sort={ariaSort(sort, column)} className="relative min-w-0">
+      <button
+        type="button"
+        onClick={() => onSort(column)}
+        className="max-w-full truncate uppercase hover:text-foreground"
+      >
+        {label}
+        {sortMark(sort, column)}
+      </button>
+      {pair ? (
+        <ColumnResizeHandle
+          fieldId={pair[0]}
+          nextFieldId={pair[1]}
+          currentWidth={widths[pair[0]]}
+          nextWidth={widths[pair[1]]}
+          onResize={onResize}
+        />
+      ) : null}
+    </div>
+  )
+}
+
+function HeaderRow(
+  props: Omit<Parameters<typeof HeaderCell>[0], 'column' | 'label'>
+): React.JSX.Element {
+  return (
+    <div
+      role="row"
+      style={useGridStyle()}
+      className={`${COLS} h-8 items-center px-3 text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground`}
+    >
+      {HEADERS.map(([column, label]) => (
+        <HeaderCell key={column} column={column} label={label} {...props} />
+      ))}
+    </div>
+  )
+}
+
 const NO_MACHINES: ListedMachines = { listedHosts: [], failedHosts: [] }
 
 export function AutomationsTable({
@@ -284,60 +337,53 @@ export function AutomationsTable({
   onToggle: Toggle
 }): React.JSX.Element {
   const [sort, setSort] = useState<SortState>(loadSort)
+  const [widths, setWidths] = useState(loadWidths)
   const choose = (column: SortColumn): void => {
     const next = nextSort(sort, column)
     saveSort(next)
     setSort(next)
+  }
+  const resize: Resize = (column, width, next, nextWidth) => {
+    const resized = resizeWidths(widths, column, width, next, nextWidth)
+    saveWidths(resized)
+    setWidths(resized)
   }
   if (!payload.automations.length) {
     return <p className="text-sm text-muted-foreground">No automations found.</p>
   }
   // Inline as well as on each switch's hover: a blocking warning is read before acting.
   const refused = listRefusal(payload.automations, machines)
+  const columns = gridTemplate(widths)
   return (
     <MachinesContext value={machines}>
-      <RefusalLine refused={refused} />
-      <div className="overflow-x-auto rounded-md border border-border/50 bg-muted/20">
-        <div className={TABLE_MIN}>
-          <div
-            role="row"
-            className={`${COLS} h-8 items-center px-3 text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground`}
-          >
-            {HEADERS.map(([column, label]) => (
-              <span key={column} role="columnheader" aria-sort={ariaSort(sort, column)}>
-                <button
-                  type="button"
-                  onClick={() => choose(column)}
-                  className="uppercase hover:text-foreground"
-                >
-                  {label}
-                  {sortMark(sort, column)}
-                </button>
-              </span>
-            ))}
+      <GridColumns value={columns}>
+        <RefusalLine refused={refused} />
+        <div className="overflow-x-auto rounded-md border border-border/50 bg-muted/20">
+          <div className={TABLE_MIN}>
+            <HeaderRow sort={sort} widths={widths} onSort={choose} onResize={resize} />
+            {sortEntries(listEntries(payload.automations), sort).map((entry) =>
+              entry.kind === 'job' ? (
+                <JobRows
+                  key={`job:${entry.id}`}
+                  job={entry}
+                  now={now}
+                  onOpen={onOpen}
+                  onOpenJob={onOpenJob}
+                  onToggle={onToggle}
+                />
+              ) : (
+                <Row
+                  key={entry.automation.id}
+                  a={entry.automation}
+                  now={now}
+                  onOpen={onOpen}
+                  onToggle={onToggle}
+                />
+              )
+            )}
           </div>
-          {sortEntries(listEntries(payload.automations), sort).map((entry) =>
-            entry.kind === 'job' ? (
-              <JobRows
-                key={`job:${entry.id}`}
-                job={entry}
-                now={now}
-                onOpen={onOpen}
-                onOpenJob={onOpenJob}
-                onToggle={onToggle}
-              />
-            ) : (
-              <Row
-                key={entry.automation.id}
-                a={entry.automation}
-                now={now}
-                onOpen={onOpen}
-                onToggle={onToggle}
-              />
-            )
-          )}
         </div>
-      </div>
+      </GridColumns>
     </MachinesContext>
   )
 }

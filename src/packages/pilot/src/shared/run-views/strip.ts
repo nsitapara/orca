@@ -1,15 +1,14 @@
 import type { ActivityRun } from '../api-types-runs'
 import type { ChainPart, Who } from './chain'
-import { isPainted, paintRun, type PaintedPart, type PartState } from './paint'
+import { isPainted, type PaintedPart, type PartState } from './paint'
 import { NOT_REACHED, NOT_REACHED_YET, runTimeline, type RunTimeline } from './timeline'
 
-// One chip of a strip. `state` is null on a chain with no run; `runIds` key the live runs a list chip is lit for.
+// One chip of a strip. `state` is null on a chain with no run.
 export type StripChip = {
   key: string
   label: string
   who: Who
   state: PartState | null
-  runIds: string[]
   // The part openRun scrolls to when the chip is clicked.
   part: string
   // A step's number: its place in the plan, or in the order a run's steps ran. Null for the parts around the steps.
@@ -31,7 +30,6 @@ const PRESSING: readonly PartState[] = [
   'not_reached',
   'none'
 ]
-const LIT: readonly PartState[] = ['running', 'asking']
 // The chips a folded strip keeps in view, each with its neighbours.
 const FOCUS: readonly PartState[] = ['running', 'asking', 'failed']
 
@@ -66,7 +64,7 @@ function chip(
   parts: readonly ChainPart[],
   n: number | null = null
 ): StripChip {
-  return { key, label, who, state: mergedState(parts), runIds: [], part: pressingPart(parts), n }
+  return { key, label, who, state: mergedState(parts), part: pressingPart(parts), n }
 }
 
 // "MRs · 2 gates": what it looks at and how many checks it makes.
@@ -145,7 +143,6 @@ export function runStrip(
     label: part.name,
     who: part.who,
     state: part.state,
-    runIds: [],
     part: part.key,
     n
   }))
@@ -154,37 +151,6 @@ export function runStrip(
   const items = foldStrip([...before, ...ran, ...after], max, keep)
   const note = notRunText(timeline)
   return note ? [...items, { kind: 'note', key: 'not-run', text: note }] : items
-}
-
-// The list's strip (no run of its own): the chain, each chip lit where live runs are, with their ids (`keyOf`), so a chip
-// opens its one run, or Activity when there are several. A lit chip the chain has no place for (an answer run's) is added.
-export function liveStrip<R extends ActivityRun>(
-  chain: readonly ChainPart[],
-  live: readonly R[],
-  keyOf: (run: R) => string = (run) => run.id
-): StripChip[] {
-  const chips = stripOf(chain)
-  for (const run of live) {
-    const painted = paintRun(chain, { run })
-    for (const lit of stripOf(painted.parts)) {
-      if (!lit.state || !LIT.includes(lit.state)) {
-        continue
-      }
-      // A run older than a YAML change, or imported from the vault: its step N isn't the chain's step N, so no step
-      // chip is lit for it.
-      if ((painted.drifted || run.trigger === 'import') && lit.key.startsWith('step:')) {
-        continue
-      }
-      const target = chips.find((c) => c.key === lit.key)
-      if (!target) {
-        chips.push({ ...lit, runIds: [keyOf(run)] })
-        continue
-      }
-      target.runIds.push(keyOf(run))
-      target.state = target.state === 'running' ? 'running' : lit.state
-    }
-  }
-  return chips
 }
 
 function keptIndexes(chips: readonly StripChip[], max: number, keep: string | null): Set<number> {

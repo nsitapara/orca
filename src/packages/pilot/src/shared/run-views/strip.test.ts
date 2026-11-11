@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import { testDefinition, testStep } from '../definition/__fixtures__/definition'
-import { stepAt, testCard, testRun, testStepRow } from './__fixtures__/runs'
+import { testRun, testStepRow } from './__fixtures__/runs'
 import { chainOf } from './chain'
 import { paintRun } from './paint'
-import { foldStrip, liveStrip, runStrip, stripOf, type StripChip, type StripItem } from './strip'
+import { foldStrip, runStrip, stripOf, type StripChip, type StripItem } from './strip'
 
 const review = testDefinition({
   id: 'review',
@@ -30,7 +30,6 @@ function chips(n: number, lit: number[] = []): StripChip[] {
     label: `c${i}`,
     who: 'agent' as const,
     state: lit.includes(i) ? ('running' as const) : ('done' as const),
-    runIds: [],
     part: `c${i}`,
     n: null
   }))
@@ -76,88 +75,6 @@ describe('stripOf', () => {
     const pre = stripOf(paintRun(chain, { run }).parts).find((c) => c.key === 'pre')
     expect(pre).toMatchObject({ state: 'failed', part: 'workspace' })
     expect(stripOf(chain).find((c) => c.key === 'pre')?.part).toBe('starts')
-  })
-})
-
-describe('liveStrip', () => {
-  it('lights the chip each live run is on, with every run on it', () => {
-    const live = [
-      testRun({
-        id: 'a',
-        automationId: 'review',
-        trigger: 'ask_first',
-        steps: [stepAt(0, 'prepare', 'running')]
-      }),
-      testRun({
-        id: 'b',
-        automationId: 'review',
-        trigger: 'ask_first',
-        steps: [stepAt(0, 'prepare', 'running')]
-      }),
-      testRun({ id: 'c', automationId: 'review', trigger: 'ask_first', status: 'asking' })
-    ]
-    const lit = liveStrip(chain, live)
-    expect(lit.find((c) => c.key === 'step:0')).toMatchObject({
-      state: 'running',
-      runIds: ['a', 'b']
-    })
-    expect(lit.find((c) => c.key === 'ask')).toMatchObject({ state: 'asking', runIds: ['c'] })
-    expect(lit.find((c) => c.key === 'pre')).toMatchObject({ state: null, runIds: [] })
-  })
-
-  it.each([
-    [
-      'older than a YAML change',
-      testRun({
-        id: 'old',
-        automationId: 'review',
-        trigger: 'ask_first',
-        steps: [stepAt(0, 'renamed_step', 'running')]
-      })
-    ],
-    [
-      'imported from the vault',
-      testRun({
-        id: 'imp',
-        automationId: 'review',
-        tickId: null,
-        trigger: 'import',
-        status: 'needs_you',
-        steps: [stepAt(0, 'imported', 'done')],
-        inbox: [testCard({ runId: 'imp', stepIdx: 0, type: 'left_for_you' })]
-      })
-    ]
-  ])('lights no step chip for a live run %s', (_, run) => {
-    const lit = liveStrip(chain, [run])
-    expect(lit.find((c) => c.key === 'step:0')).toMatchObject({ state: null, runIds: [] })
-  })
-
-  it('lights the step whose open card a finished run waits on', () => {
-    const waiting = testRun({
-      id: 'w',
-      automationId: 'review',
-      status: 'needs_you',
-      steps: [stepAt(0, 'prepare', 'done')],
-      inbox: [testCard({ runId: 'w', stepIdx: 0, type: 'left_for_you' })]
-    })
-    expect(liveStrip(chain, [waiting]).find((c) => c.key === 'step:0')).toMatchObject({
-      state: 'asking',
-      runIds: ['w']
-    })
-  })
-
-  it('adds an answers chip while an answer run is live, and never lights a step for it', () => {
-    const answering = testRun({
-      id: 'r2',
-      tickId: null,
-      trigger: 'answer',
-      parentRunId: 'r1',
-      steps: [stepAt(0, 'answers', 'running')]
-    })
-    const lit = liveStrip(chain, [answering])
-    expect(lit.find((c) => c.key === 'step:0')?.runIds).toEqual([])
-    expect(lit.find((c) => c.key === 'answers')).toMatchObject({ state: 'running', runIds: ['r2'] })
-    expect(lit.some((c) => c.key.startsWith('answer:'))).toBe(false)
   })
 })
 

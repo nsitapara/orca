@@ -1,13 +1,13 @@
 import type { AutomationSummary } from '../../shared/api-types'
-import { jobEnabled, jobLastTick, type ListEntry } from '../../shared/job-stages'
+import { jobEnabled, jobLastTick, soonestToTick, type ListEntry } from '../../shared/job-stages'
 
-export type SortColumn = 'name' | 'looksAt' | 'schedule' | 'lastTick' | 'status'
+export type SortColumn = 'name' | 'schedule' | 'nextTick' | 'lastTick' | 'status'
 export type SortDirection = 'asc' | 'desc'
 export type SortState = { column: SortColumn; direction: SortDirection }
 
 export const DEFAULT_SORT: SortState = { column: 'name', direction: 'asc' }
 const SORT_KEY = 'pilot.automations.sort'
-const COLUMNS: readonly SortColumn[] = ['name', 'looksAt', 'schedule', 'lastTick', 'status']
+const COLUMNS: readonly SortColumn[] = ['name', 'schedule', 'nextTick', 'lastTick', 'status']
 
 export type JobCode = { prefix: string; number: number }
 
@@ -54,30 +54,20 @@ function stagesOf(e: ListEntry): AutomationSummary[] {
   return e.kind === 'job' ? e.stages : [e.automation]
 }
 
-// Schedule rank: 0 = has a next run time, 1 = only schedule text, 2 = run by hand (always last).
-function scheduleKey(e: ListEntry): { rank: number; time: number; text: string } {
-  const list = stagesOf(e)
-  const times = list.map((a) => a.nextTickAt).filter((t): t is number => t !== null)
-  if (times.length) {
-    return { rank: 0, time: Math.min(...times), text: '' }
+// Missing values always last, whichever the direction.
+function missingLast<T>(a: T | null, b: T | null, compare: (a: T, b: T) => number): number {
+  if (a === null || b === null) {
+    return (a === null ? 1 : 0) - (b === null ? 1 : 0)
   }
-  const timed = list.find((a) => a.schedule !== 'manual')
-  if (timed) {
-    return { rank: 1, time: 0, text: timed.schedule }
-  }
-  return { rank: 2, time: 0, text: '' }
+  return compare(a, b)
 }
 
-function compareSchedule(a: ListEntry, b: ListEntry, sign: number): number {
-  const ka = scheduleKey(a)
-  const kb = scheduleKey(b)
-  if (ka.rank !== kb.rank) {
-    return ka.rank - kb.rank
-  }
-  if (ka.rank === 0) {
-    return sign * (ka.time - kb.time)
-  }
-  return sign * compareText(ka.text, kb.text)
+function scheduleOf(e: ListEntry): string | null {
+  return stagesOf(e).find((a) => a.schedule !== 'manual')?.schedule ?? null
+}
+
+function nextTickAt(e: ListEntry): number | null {
+  return soonestToTick(stagesOf(e))?.nextTickAt ?? null
 }
 
 function lastTickAt(e: ListEntry): number | null {
@@ -87,24 +77,8 @@ function lastTickAt(e: ListEntry): number | null {
   return e.automation.lastTick?.startedAt ?? null
 }
 
-// Most recent first when ascending; never-ticked always last.
-function compareLastTick(a: ListEntry, b: ListEntry, sign: number): number {
-  const ta = lastTickAt(a)
-  const tb = lastTickAt(b)
-  if (ta === null || tb === null) {
-    return (ta === null ? 1 : 0) - (tb === null ? 1 : 0)
-  }
-  return sign * (tb - ta)
-}
-
 function isEnabled(e: ListEntry): boolean {
   return e.kind === 'job' ? jobEnabled(e) : e.automation.enabled
-}
-
-function lookKey(e: ListEntry): string {
-  return stagesOf(e)
-    .map((a) => a.itemKind)
-    .join(' ')
 }
 
 function compareBy(a: ListEntry, b: ListEntry, state: SortState): number {
@@ -112,12 +86,15 @@ function compareBy(a: ListEntry, b: ListEntry, state: SortState): number {
   switch (state.column) {
     case 'name':
       return sign * compareNatural(entryName(a), entryName(b))
-    case 'looksAt':
-      return sign * compareText(lookKey(a), lookKey(b))
+    // run by hand always last
     case 'schedule':
-      return compareSchedule(a, b, sign)
+      return missingLast(scheduleOf(a), scheduleOf(b), (x, y) => sign * compareText(x, y))
+    // soonest first when ascending; nothing scheduled always last
+    case 'nextTick':
+      return missingLast(nextTickAt(a), nextTickAt(b), (x, y) => sign * (x - y))
+    // most recent first when ascending; never-ticked always last
     case 'lastTick':
-      return compareLastTick(a, b, sign)
+      return missingLast(lastTickAt(a), lastTickAt(b), (x, y) => sign * (y - x))
     case 'status':
       return sign * (Number(isEnabled(b)) - Number(isEnabled(a)))
   }

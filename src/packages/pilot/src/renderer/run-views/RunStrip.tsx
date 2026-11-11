@@ -73,9 +73,6 @@ function Chip({
       ) : null}
       <span className="truncate">{chip.label}</span>
       {mark ? <span aria-hidden="true">{mark}</span> : null}
-      {chip.runIds.length > 1 ? (
-        <span className="rounded bg-background/60 px-1 font-semibold">{chip.runIds.length}</span>
-      ) : null}
     </button>
   )
 }

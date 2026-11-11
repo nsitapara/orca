@@ -83,3 +83,18 @@ export function newestTick(list: readonly Pick<AutomationSummary, 'lastTick'>[])
 export function jobLastTick(job: JobGroup): TickRow | null {
   return newestTick(job.stages)
 }
+
+type Timed<T> = T & { nextTickAt: number }
+
+// The one that ticks soonest; null when none is scheduled to tick.
+export function soonestToTick<T extends Pick<AutomationSummary, 'nextTickAt'>>(
+  list: readonly T[]
+): Timed<T> | null {
+  let soonest: Timed<T> | null = null
+  for (const a of list.filter((s): s is Timed<T> => s.nextTickAt !== null)) {
+    if (!soonest || a.nextTickAt < soonest.nextTickAt) {
+      soonest = a
+    }
+  }
+  return soonest
+}

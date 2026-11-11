@@ -9,7 +9,6 @@ const chip = (over: Partial<StripChip>): StripChip => ({
   label: 'MRs · 1 gate',
   who: 'pilot',
   state: 'done',
-  runIds: [],
   part: 'starts',
   n: null,
   ...over
@@ -18,21 +17,19 @@ const chip = (over: Partial<StripChip>): StripChip => ({
 describe('RunStrip', () => {
   afterEach(cleanup)
 
-  it('shows each chip with who runs it, its state and its count, and hands the clicked chip over', () => {
+  it('shows each chip with who runs it and its state, and hands the clicked chip over', () => {
     const onChip = vi.fn()
     const lit = chip({
       key: 'step:0',
       label: 'Claude · review-mr',
       who: 'agent',
       state: 'running',
-      runIds: ['a', 'b'],
       part: 'step:0'
     })
     render(<RunStrip items={foldStrip([chip({}), lit])} label="Run r1" onChip={onChip} />)
     expect(screen.getByRole('list', { name: 'Run r1' })).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Agent · Claude · review-mr · Running' }))
     expect(onChip).toHaveBeenCalledWith(lit)
-    expect(screen.getByText('2')).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Pilot · MRs · 1 gate · Done' })).toBeTruthy()
   })
 

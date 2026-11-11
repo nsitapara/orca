@@ -80,21 +80,20 @@ describe('sortEntries by name', () => {
 describe('sortEntries by other columns', () => {
   const cases: [SortColumn, AutomationSummary[], string[], string[]][] = [
     [
-      'looksAt',
-      [mk('b', { itemKind: 'Pipelines' }), mk('a', { itemKind: 'Linear tickets' })],
-      ['a', 'b'],
-      ['b', 'a']
-    ],
-    [
       'schedule',
       [
         mk('manual', { schedule: 'manual' }),
-        mk('late', { schedule: 'x', nextTickAt: 200 }),
-        mk('soon', { schedule: 'y', nextTickAt: 100 }),
-        mk('text', { schedule: '* * * * *' })
+        mk('five', { schedule: '5 * * * *' }),
+        mk('ten', { schedule: '10 3 * * *' })
       ],
-      ['soon', 'late', 'text', 'manual'],
-      ['late', 'soon', 'text', 'manual']
+      ['ten', 'five', 'manual'],
+      ['five', 'ten', 'manual']
+    ],
+    [
+      'nextTick',
+      [mk('none'), mk('late', { nextTickAt: 200 }), mk('soon', { nextTickAt: 100 })],
+      ['soon', 'late', 'none'],
+      ['late', 'soon', 'none']
     ],
     [
       'lastTick',

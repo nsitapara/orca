@@ -2,21 +2,10 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { AutomationListPayload, AutomationSummary, TickRow } from '../../shared/api-types'
-import { testDefinition, testStep } from '../../shared/definition/__fixtures__/definition'
-import { chainOf } from '../../shared/run-views/chain'
-import { stepAt, testRun } from '../../shared/run-views/__fixtures__/runs'
 import { LOCAL_NAMED, MINI } from '../hosts/__fixtures__/hosts'
 import { LOCAL_PILOT_HOST, type PilotHostRef } from '../hosts/pilot-host'
 import { resetPilotHostsFeed, setPilotHostsForTests } from '../hosts/pilot-hosts-feed'
-import { closeRunPanel, openRunPanel } from '../run-views/run-panel-state'
 import { AutomationsTable } from './AutomationsTable'
-import {
-  pilotAutomationTab,
-  pilotAutomationsView,
-  pilotOpenAutomation,
-  showAutomationsPage,
-  takeActivityFilter
-} from './automations-view'
 import { summary } from './fixtures'
 
 const NOW = Date.UTC(2026, 9, 13, 18, 0)
@@ -283,55 +272,6 @@ describe('AutomationsTable: sorting', () => {
   })
 })
 
-const running = (id: string, automationId: string) =>
-  testRun({ id, automationId, steps: [stepAt(0, 'fix', 'running')] })
-
-describe('AutomationsTable: the Runs strip', () => {
-  beforeEach(() => localStorage.clear())
-  afterEach(() => {
-    cleanup()
-    closeRunPanel()
-    showAutomationsPage()
-  })
-
-  it("shows each automation's runs as a strip: what it looks at, then each step", () => {
-    renderTable([SOLO])
-    const strip = screen.getByRole('list', { name: '07 · Clean Docker runs' })
-    expect(
-      within(strip)
-        .getAllByRole('button')
-        .map((b) => b.getAttribute('aria-label'))
-    ).toEqual(['Pilot · MRs · 1 gate', 'Agent · 1 fix'])
-  })
-
-  it('opens the one run a lit chip is lit for, Activity when it is lit for several, and How it runs when it is not', () => {
-    const first = renderTable([{ ...SOLO, live: [running('a', 'docker-prune')] }])
-    fireEvent.click(screen.getByRole('button', { name: 'Agent · 1 fix · Running' }))
-    expect(openRunPanel()).toEqual({
-      runId: 'a',
-      part: 'step:0',
-      host: expect.objectContaining({ key: 'local' })
-    })
-    expect(first.onOpen).not.toHaveBeenCalled()
-    cleanup()
-    renderTable([{ ...SOLO, live: [running('a', 'docker-prune'), running('b', 'docker-prune')] }])
-    const lit = screen.getByRole('button', { name: 'Agent · 1 fix · Running' })
-    expect(lit.textContent).toContain('2')
-    fireEvent.click(lit)
-    expect([pilotAutomationsView(), takeActivityFilter()]).toEqual(['activity', ['docker-prune']])
-    fireEvent.click(screen.getByRole('button', { name: 'Pilot · MRs · 1 gate' }))
-    expect([pilotOpenAutomation(), pilotAutomationTab()]).toEqual(['docker-prune', 'how'])
-  })
-
-  it("shows a job row's running stage, then +1 stage", () => {
-    renderTable([STAGE_1, { ...STAGE_2, live: [running('r', 'dev-e2e-fix-start')] }])
-    // stage 1 shares the job's title in this fixture, so the job row's strip is the first
-    const [strip] = screen.getAllByRole('list', { name: '13 · Fix red hourly e2e on dev runs' })
-    expect(within(strip).getByRole('button', { name: 'Agent · 1 fix · Running' })).toBeTruthy()
-    expect(within(strip).getByText('+1 stage')).toBeTruthy()
-  })
-})
-
 describe('AutomationsTable on more than one machine', () => {
   beforeEach(() => {
     localStorage.clear()
@@ -339,7 +279,6 @@ describe('AutomationsTable on more than one machine', () => {
   })
   afterEach(() => {
     cleanup()
-    closeRunPanel()
     resetPilotHostsFeed()
   })
   const on = (a: AutomationSummary, hosts: PilotHostRef[]) => ({ ...a, hosts })
@@ -377,22 +316,5 @@ describe('AutomationsTable on more than one machine', () => {
       ],
       true
     )
-  })
-
-  // Run ids are per machine: this machine's run a is at step 2, Mac mini's run a at step 1.
-  it("opens the run a lit chip is lit for on its machine, though another machine's run has its id", () => {
-    const twoSteps = testDefinition({
-      id: 'docker-prune',
-      steps: [testStep({ name: 'fix' }), testStep({ name: 'verify' })]
-    })
-    const here = testRun({
-      id: 'a',
-      automationId: 'docker-prune',
-      steps: [stepAt(0, 'fix', 'done'), stepAt(1, 'verify', 'running')]
-    })
-    const there = { ...running('a', 'docker-prune'), host: MINI }
-    renderTable([{ ...SOLO, chain: chainOf(twoSteps, [twoSteps]), live: [here, there] }])
-    fireEvent.click(screen.getByRole('button', { name: 'Agent · 1 fix · Running' }))
-    expect(openRunPanel()).toEqual({ runId: 'a', part: 'step:0', host: MINI })
   })
 })
