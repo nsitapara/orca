@@ -115,6 +115,32 @@ describe('the sidebar top', () => {
     ])
   })
 
+  // Why: upstream portals its Activity badge and Projects collapse-all toggle into its header,
+  // which Pilot replaces; without slots in Pilot's row both controls vanished.
+  it.each([
+    { view: 'workspaces' as const, collapse: true },
+    { view: 'agents' as const, collapse: false }
+  ])("gives upstream's badge and collapse toggle a slot ($view)", ({ view, collapse }) => {
+    registerPilotStore(useAppStore)
+    useAppStore.setState({ sidebarBody: view })
+    const badge = vi.fn()
+    const collapseTarget = vi.fn()
+    render(
+      <TooltipProvider>
+        <SidebarTop
+          activityOptionsTarget={null}
+          activityBadgeTarget={badge}
+          projectsCollapseTarget={collapseTarget}
+          onWorkspaceBoardMenuOpenChange={() => {}}
+        >
+          <span>upstream</span>
+        </SidebarTop>
+      </TooltipProvider>
+    )
+    expect(badge).toHaveBeenCalledWith(expect.any(HTMLSpanElement))
+    expect(collapseTarget.mock.calls.some(([el]) => el instanceof HTMLDivElement)).toBe(collapse)
+  })
+
   it('pins a page from the ☰ menu, and the row follows', () => {
     registerPilotStore(useAppStore)
     top()

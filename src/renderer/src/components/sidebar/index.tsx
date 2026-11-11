@@ -184,6 +184,8 @@ function Sidebar({
             <>
               <SidebarTop
                 activityOptionsTarget={setAgentOptionsTarget}
+                activityBadgeTarget={setAgentBadgeTarget}
+                projectsCollapseTarget={setProjectsCollapseTarget}
                 onWorkspaceBoardMenuOpenChange={setWorkspaceBoardMenuOpen}
               >
                 {/* pilot-hook: sidebar-top */}

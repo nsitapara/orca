@@ -47,6 +47,10 @@ function SearchButton(): React.JSX.Element {
 type SidebarTopProps = {
   // Where the Activity list portals its options menu (SidebarHeader's slot, upstream).
   activityOptionsTarget: React.Ref<HTMLDivElement>
+  // Where the Activity list portals its attention/working badge (upstream draws it on the bell).
+  activityBadgeTarget?: React.Ref<HTMLSpanElement>
+  // Where the Projects list portals its collapse-all toggle (upstream: beside the Projects title).
+  projectsCollapseTarget?: React.Ref<HTMLDivElement>
   onWorkspaceBoardMenuOpenChange: (open: boolean) => void
   // Upstream's SidebarNav and SidebarHeader, kept while Pilot isn't attached.
   children: React.ReactNode
@@ -60,6 +64,8 @@ type SidebarTopProps = {
  */
 export function SidebarTop({
   activityOptionsTarget,
+  activityBadgeTarget,
+  projectsCollapseTarget,
   onWorkspaceBoardMenuOpenChange,
   children
 }: SidebarTopProps): React.ReactNode {
@@ -79,9 +85,21 @@ export function SidebarTop({
         <div className="mb-0.5 flex min-w-0 items-center gap-1">
           <PagesMenu />
           <SearchButton />
+          {/* Upstream's Activity badge, without its bell: attention or working count, both views. */}
+          <span
+            ref={activityBadgeTarget}
+            data-pilot-activity-badge=""
+            className="relative h-5 w-3 shrink-0 empty:hidden"
+          />
           {agentsViewActive ? (
             <div ref={activityOptionsTarget} className="flex shrink-0 items-center" />
-          ) : null}
+          ) : (
+            <div
+              ref={projectsCollapseTarget}
+              data-pilot-projects-collapse=""
+              className="flex shrink-0 items-center empty:hidden"
+            />
+          )}
           <SidebarHeaderActions
             onWorkspaceBoardMenuOpenChange={onWorkspaceBoardMenuOpenChange}
             agentsViewActive={agentsViewActive}
