@@ -115,7 +115,8 @@ function normalizeStep(s: RawStep, name: string): StepDef {
     always: s.always ?? false,
     timeoutMs: s.timeout ?? null,
     outputs: s.outputs ?? [],
-    holdHome: s.hold_home ?? false
+    holdHome: s.hold_home ?? false,
+    ...(s.system ? { system: s.system } : {})
   }
 }
 

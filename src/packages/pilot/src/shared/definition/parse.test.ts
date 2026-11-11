@@ -15,6 +15,45 @@ describe('step wait', () => {
   })
 })
 
+describe('step system', () => {
+  const parsed = (step: string) =>
+    parseAutomationYaml(
+      `name: n\nrepo: r\nschedule: manual\nsteps:\n  - { ${step} }\n`,
+      '/a/n.yaml'
+    )
+
+  it.each([
+    ['pilot', 'agent: claude, prompt: x, system: pilot', 'pilot'],
+    ['herdr', 'agent: claude, prompt: x, wait: start, system: herdr', 'herdr'],
+    ['t3', 'agent: codex, prompt: x, wait: start, system: t3', 't3'],
+    // A foreign system on a step Pilot follows to its end is refused at launch, not here: validation is engine-free.
+    ['a foreign system without wait: start', 'agent: claude, prompt: x, system: herdr', 'herdr'],
+    ['absent', 'agent: claude, prompt: x', undefined]
+  ])('reads %s', (_, step, system) => {
+    const r = parsed(step)
+    if (!r.ok) {
+      throw new Error(r.errors.join('\n'))
+    }
+    expect(r.definition.steps[0].system).toBe(system)
+    expect('system' in r.definition.steps[0]).toBe(system !== undefined)
+  })
+
+  it.each([
+    [
+      'a shell step',
+      'agent: shell, run: ./x.sh, system: herdr',
+      "/a/n.yaml: step 1: shell steps don't take system:"
+    ],
+    [
+      'an unknown system',
+      'agent: claude, prompt: x, system: tmux',
+      '/a/n.yaml: steps.0.system: expected pilot, herdr or t3'
+    ]
+  ])('refuses %s', (_, step, error) => {
+    expect(parsed(step)).toEqual({ ok: false, errors: [error] })
+  })
+})
+
 const CI_05 = `
 name: Fix failed CI on my MRs
 repo: web-platform

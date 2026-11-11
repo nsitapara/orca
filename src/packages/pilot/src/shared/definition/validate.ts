@@ -21,7 +21,7 @@ export function scheduleErrors(raw: RawAutomation): string[] {
   return errors
 }
 
-const AGENT_ONLY = ['skill', 'mode', 'prompt', 'prompt_style', 'args', 'session'] as const
+const AGENT_ONLY = ['skill', 'mode', 'prompt', 'prompt_style', 'args', 'session', 'system'] as const
 const SHELL_ONLY = ['run', 'env', 'exit_codes', 'hold_home'] as const
 
 function keyNames(keys: readonly string[]): string {

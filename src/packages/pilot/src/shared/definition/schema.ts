@@ -3,7 +3,7 @@ import { MACHINE_NAME_MAX_LENGTH } from '../../../../../shared/machine-name'
 import { OUTPUT_KEY } from '../run/outputs'
 import { durationSchema } from './duration'
 import { envWorkspaceSchema } from './env-workspace'
-import type { AgentKind, ItemKind, Power } from './types'
+import type { AgentKind, ItemKind, Power, StepSystem } from './types'
 
 export const ITEM_KINDS = [
   'merge_request',
@@ -14,6 +14,7 @@ export const ITEM_KINDS = [
   'kept_branch'
 ] as const satisfies readonly ItemKind[]
 export const AGENTS = ['claude', 'codex'] as const satisfies readonly AgentKind[]
+export const STEP_SYSTEMS = ['pilot', 'herdr', 't3'] as const satisfies readonly StepSystem[]
 export const POWERS = [
   'commit',
   'push',
@@ -121,6 +122,8 @@ const step = z.strictObject({
   prompt: z.string().optional(),
   prompt_style: z.enum(['wrapped', 'raw']).optional(),
   wait: z.enum(['start', 'finish']).optional(),
+  // Where an agent step's session runs (types.ts StepSystem); absent: Pilot.
+  system: z.enum(STEP_SYSTEMS, { error: 'expected pilot, herdr or t3' }).optional(),
   args: z.array(z.string()).optional(),
   session: stepSession.optional(),
   run: z.string().min(1).optional(),

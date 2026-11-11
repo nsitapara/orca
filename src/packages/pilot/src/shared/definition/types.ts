@@ -60,6 +60,9 @@ export type LinearTicketWhere = {
 
 export type AgentKind = 'claude' | 'codex'
 export type StepAgent = AgentKind | 'shell'
+// Where an agent step's session runs: a Pilot tab, a herdr tab, or a T3 thread. Pilot follows a step to its end only on
+// its own system; on another one only a hand-over step (wait: start) runs, and it ends once its session is launched.
+export type StepSystem = 'pilot' | 'herdr' | 't3'
 export type Power =
   | 'commit'
   | 'push'
@@ -137,6 +140,8 @@ export type StepDef = {
   promptStyle: 'wrapped' | 'raw'
   // `start`: an agent step ends once its session is up, and the session goes on in its tab.
   wait: 'start' | 'finish'
+  // system: absent is Pilot, exactly as before the key existed (normalize sets it only when the file does).
+  system?: StepSystem
   args: string[]
   session: StepSession
   run: string | null
