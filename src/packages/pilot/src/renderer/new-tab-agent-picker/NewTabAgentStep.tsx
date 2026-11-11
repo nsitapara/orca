@@ -7,7 +7,7 @@ import {
   CommandItem,
   CommandList
 } from '@/components/ui/command'
-import { AgentIcon } from '@/lib/agent-catalog'
+import { AgentIcon } from '@/components/agent/icons/AgentIcon'
 import type { NewTabAgentPickerOption } from './new-tab-agent-picker-options'
 
 function OptionIcon({ option }: { option: NewTabAgentPickerOption }): React.JSX.Element {

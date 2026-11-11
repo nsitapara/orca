@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
-import { cn } from '@/lib/utils'
+import { cn } from '@/lib/class-names'
 import type { InboxListRow, InboxReply } from '../../../shared/api-types'
 import { isPlaceGroup } from '../../../shared/inbox-groups'
 import type {

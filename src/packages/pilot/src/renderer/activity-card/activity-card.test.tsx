@@ -14,8 +14,8 @@ import {
 } from '@/components/activity/ActivityPrototypePage-test-fixtures'
 import type { WorktreeCardPrDisplay } from '@/components/sidebar/workspace-card/review/worktree-card-pr-display'
 import { TooltipProvider } from '@/components/ui/tooltip'
-import { openHttpLink } from '@/lib/http-link-routing'
-import type * as HttpLinkRouting from '@/lib/http-link-routing'
+import { openHttpLink } from '@/lib/browser/navigation/http-link-routing'
+import type * as HttpLinkRouting from '@/lib/browser/navigation/http-link-routing'
 import { useAppStore } from '@/store'
 import { getLinearReadScope, scopedLinearCacheKey } from '@/store/slices/linear/linear-slice-scope'
 import { getWorkspaceAttachmentSourceContext } from '@/components/sidebar/workspace-card/review/workspace-attachment-source-result'
@@ -24,7 +24,7 @@ import { reviewChipLabel, WorktreeLinkStrip } from './WorktreeLinkStrip'
 import { reviewPipelineMark, reviewStateMark } from './review-state-mark'
 import { StackPortsList } from './StackPortsList'
 import { WorktreePortsChip } from './WorktreePortsChip'
-import { linearIssueReadFixture } from '@/store/slices/linear-slice-test-harness'
+import { linearIssueReadFixture } from '@/store/slices/linear/linear-slice-test-harness'
 import type { LinearIssue } from '../../../../../shared/linear/issue-types'
 
 // Opening is owned by the pointer-rest intent, not Radix; open the card as soon as it mounts.
@@ -45,11 +45,11 @@ vi.mock('@/components/ui/hover-card', () => ({
   ),
   HoverCardTrigger: ({ children }: { children: ReactNode }) => <>{children}</>
 }))
-vi.mock('@/lib/http-link-routing', async (importOriginal) => ({
+vi.mock('@/lib/browser/navigation/http-link-routing', async (importOriginal) => ({
   ...(await importOriginal<typeof HttpLinkRouting>()),
   openHttpLink: vi.fn()
 }))
-vi.mock('@/runtime/runtime-file-read-client', () => ({
+vi.mock('@/runtime/files/reads/runtime-file-read-client', () => ({
   readRuntimeFileContent: vi.fn(async () => ({
     isBinary: false,
     content:

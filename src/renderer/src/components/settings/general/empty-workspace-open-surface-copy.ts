@@ -2,6 +2,9 @@ import { translate } from '@/i18n/i18n'
 import type { GlobalSettings } from '../../../../../shared/global-settings-types'
 import { translateSearchKeyword } from '../search/settings-search-keywords'
 
+/** Search anchor for the setting on the General › Workspace folder page. */
+export const EMPTY_WORKSPACE_OPEN_SURFACE_ANCHOR = 'general-empty-workspace-open-surface'
+
 export type EmptyWorkspaceOpenSurface = NonNullable<GlobalSettings['emptyWorkspaceOpenSurface']>
 
 export function getEmptyWorkspaceOpenSurfaceTitle(): string {

@@ -2,8 +2,11 @@ import { useMemo, useState, type ReactNode } from 'react'
 import { ArtifactsPageSkeleton } from '@/components/artifacts/ArtifactsPageSkeleton'
 import { ArtifactsPageErrorBanner } from '@/components/artifacts/ArtifactsPageStates'
 import { VirtualizedList } from '@/components/virtualized-list'
-import { LIST_TABLE_CONTAINER_CLASS, LIST_TABLE_HEADER_CLASS } from '@/lib/list-table-layout'
-import { cn } from '@/lib/utils'
+import {
+  LIST_TABLE_CONTAINER_CLASS,
+  LIST_TABLE_HEADER_CLASS
+} from '@/lib/list-interaction/list-table-layout'
+import { cn } from '@/lib/class-names'
 import { pilotStore } from '../store'
 import { vaultRootOf } from './artifact-actions'
 import { AgentArtifactDrawer } from './AgentArtifactDrawer'

@@ -1,6 +1,6 @@
 import { FileText } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { isWebClientLocation } from '@/lib/web-client-location'
+import { isWebClientLocation } from '@/app-shell/platform/web-client-location'
 import { pilotStore } from '../store'
 
 // A skill's file as a floating-workspace document: its tab reads <skill>/SKILL.md.
@@ -14,8 +14,8 @@ export async function openInFloatingWorkspace(filePath: string): Promise<void> {
   const [{ useAppStore }, { openDocumentInFloatingWorkspace }, { revealFloatingWorkspacePanel }] =
     await Promise.all([
       import('@/store'),
-      import('@/lib/open-document-in-floating-workspace'),
-      import('@/lib/floating-workspace-panel-reveal')
+      import('@/components/floating-terminal/open-document-in-floating-workspace'),
+      import('@/components/floating-terminal/floating-workspace-panel-reveal')
     ])
   const store = useAppStore.getState()
   openDocumentInFloatingWorkspace(store.openFile, skillDocument(filePath))

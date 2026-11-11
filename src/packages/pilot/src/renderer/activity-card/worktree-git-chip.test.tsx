@@ -12,9 +12,9 @@ import {
   makeWorktreeWithId
 } from '@/components/activity/ActivityPrototypePage-test-fixtures'
 import { TooltipProvider } from '@/components/ui/tooltip'
-import type * as ResolveOwner from '@/lib/resolve-owner'
-import { getRuntimeGitBranchCompare } from '@/runtime/runtime-git-diff-client'
-import { getRuntimeGitStatus } from '@/runtime/runtime-git-status-client'
+import type * as ResolveOwner from '@/lib/workspace/ownership/resolve-owner'
+import { getRuntimeGitBranchCompare } from '@/runtime/source-control/git/runtime-git-diff-client'
+import { getRuntimeGitStatus } from '@/runtime/source-control/git/runtime-git-status-client'
 import { useAppStore } from '@/store'
 import { openActivityWorktree } from '../activity-tabs/open-activity-worktree'
 import { registerPilotStore } from '../store'
@@ -22,12 +22,16 @@ import { gitSyncMark, worktreeGitChipView } from './git-sync-mark'
 import { resetWorktreeGitSyncFeeds, type WorktreeGitSync } from './worktree-git-sync-feed'
 import { WorktreeLinkStrip } from './WorktreeLinkStrip'
 
-vi.mock('@/lib/resolve-owner', async (importOriginal) => ({
+vi.mock('@/lib/workspace/ownership/resolve-owner', async (importOriginal) => ({
   ...(await importOriginal<typeof ResolveOwner>()),
   runtimeTargetForWorkspaceOwner: () => ({ kind: 'local' })
 }))
-vi.mock('@/runtime/runtime-git-status-client', () => ({ getRuntimeGitStatus: vi.fn() }))
-vi.mock('@/runtime/runtime-git-diff-client', () => ({ getRuntimeGitBranchCompare: vi.fn() }))
+vi.mock('@/runtime/source-control/git/runtime-git-status-client', () => ({
+  getRuntimeGitStatus: vi.fn()
+}))
+vi.mock('@/runtime/source-control/git/runtime-git-diff-client', () => ({
+  getRuntimeGitBranchCompare: vi.fn()
+}))
 vi.mock('../activity-tabs/open-activity-worktree', () => ({
   openActivityWorktree: vi.fn(() => true)
 }))

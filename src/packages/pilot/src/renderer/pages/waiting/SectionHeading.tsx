@@ -1,4 +1,4 @@
-import { cn } from '@/lib/utils'
+import { cn } from '@/lib/class-names'
 import type { HostedSection } from '../../hosts/hosted-sections'
 
 // A job, kind or age section's heading. It runs out to the page's edges so cards scroll cleanly under it, but stops

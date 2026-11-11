@@ -17,7 +17,7 @@ export function initializeMainProcessAutomations(): AutomationService {
     claudeUsage,
     codexUsage,
     // Remote clients mirror schedules; only server processes execute remote_host_service ownership.
-    headless: state.isServeMode
+    allowRemoteHostScheduling: state.isServeMode
   })
   state.automations = service
   keepOrcaAutomationsOff(service, store) // pilot-hook: orca-automations-off

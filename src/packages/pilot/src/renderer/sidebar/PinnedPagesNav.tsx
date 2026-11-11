@@ -5,7 +5,7 @@ import {
   ContextMenuItem,
   ContextMenuTrigger
 } from '@/components/ui/context-menu'
-import { cn } from '@/lib/utils'
+import { cn } from '@/lib/class-names'
 import type { InboxListPayload } from '../../shared/inbox-types'
 import { sidebarNavPages, type SidebarPageKey } from '../../shared/sidebar-pages-settings'
 import { useHostPoll } from '../hosts/host-poll'

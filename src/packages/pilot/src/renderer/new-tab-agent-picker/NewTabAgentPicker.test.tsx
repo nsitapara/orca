@@ -25,8 +25,8 @@ const detections = vi.hoisted((): Record<string, TuiAgent[]> => ({}))
 vi.mock('@/hooks/useDetectedAgents', () => ({
   useDetectedAgents: () => ({ detectedIds: ['claude', 'codex'], isLoading: false })
 }))
-vi.mock('@/lib/launch-agent-in-new-tab', () => ({
-  launchAgentInNewTab: (args: unknown) => {
+vi.mock('@/lib/agent-session/launch/new-tab/launch-agent-in-new-tab', () => ({
+  launchAgentInNewTabWithOutcome: (args: unknown) => {
     launches.push(args)
     return { surface: { kind: 'host-published' } }
   }
@@ -34,7 +34,7 @@ vi.mock('@/lib/launch-agent-in-new-tab', () => ({
 vi.mock('./use-new-tab-machine-step', () => ({
   useNewTabMachineStep: () => machineStep.value
 }))
-vi.mock('@/lib/agent-detection-target-inventory', () => ({
+vi.mock('@/lib/agent-session/launch/inventory/agent-detection-target-inventory', () => ({
   readDetectedAgentsForWorktree: (_state: unknown, id: string) => detections[id] ?? null,
   ensureDetectedAgentsForWorktree: vi.fn()
 }))

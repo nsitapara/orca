@@ -1,4 +1,4 @@
-import { cn } from '@/lib/utils'
+import { cn } from '@/lib/class-names'
 import type { ActivityRun, AutomationSummary, InboxListRow } from '../../shared/api-types'
 import { money } from '../../shared/money'
 import { paintRun } from '../../shared/run-views/paint'

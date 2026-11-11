@@ -1,5 +1,5 @@
 import { useEffect, useEffectEvent } from 'react'
-import { isImeOwnedKeyboardEvent } from '@/lib/ime-composition-keyboard-event'
+import { isImeOwnedKeyboardEvent } from '@/lib/text-input/ime/ime-composition-keyboard-event'
 
 export function useEscapeBack(active: boolean, onBack: () => void): void {
   const back = useEffectEvent(onBack)

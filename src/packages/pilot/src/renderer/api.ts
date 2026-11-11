@@ -1,5 +1,5 @@
-import { isWebClientLocation } from '@/lib/web-client-location'
-import { callRuntimeRpc } from '@/runtime/runtime-rpc-client'
+import { isWebClientLocation } from '@/app-shell/platform/web-client-location'
+import { callRuntimeRpc } from '@/runtime/rpc/calls/runtime-rpc-call'
 import type { RuntimeClientTarget } from '../../../../shared/runtime-client-target'
 
 const DEFAULT_TIMEOUT_MS = 15_000

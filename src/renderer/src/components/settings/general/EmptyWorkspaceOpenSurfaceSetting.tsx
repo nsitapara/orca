@@ -3,6 +3,7 @@ import { Label } from '../../ui/label'
 import { SearchableSetting } from '../section-layout/SearchableSetting'
 import { SettingsSegmentedControl } from '../form-controls/SettingsFormControls'
 import {
+  EMPTY_WORKSPACE_OPEN_SURFACE_ANCHOR,
   getEmptyWorkspaceOpenSurfaceDescription,
   getEmptyWorkspaceOpenSurfaceLabel,
   getEmptyWorkspaceOpenSurfaceSearchKeywords,
@@ -23,6 +24,7 @@ export function EmptyWorkspaceOpenSurfaceSetting({
 
   return (
     <SearchableSetting
+      id={EMPTY_WORKSPACE_OPEN_SURFACE_ANCHOR}
       title={title}
       description={description}
       keywords={getEmptyWorkspaceOpenSurfaceSearchKeywords()}

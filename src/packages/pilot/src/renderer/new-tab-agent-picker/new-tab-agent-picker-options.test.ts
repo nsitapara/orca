@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { AgentCatalogEntry } from '@/lib/agent-catalog'
+import type { AgentCatalogEntry } from '@/lib/agent-catalog/agent-catalog'
 import type { TuiAgent } from '../../../../../shared/agent-launch/catalog/tui-agent'
 import { buildNewTabAgentPickerOptions } from './new-tab-agent-picker-options'
 

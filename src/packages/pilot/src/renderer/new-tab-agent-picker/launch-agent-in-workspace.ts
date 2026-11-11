@@ -1,8 +1,9 @@
 import { toast } from 'sonner'
-import { newAgentLaunchRequestId } from '@/lib/agent-launch-request-id'
-import { focusTerminalTabSurface } from '@/lib/focus-terminal-tab-surface'
-import { launchAgentInNewTab, type LaunchAgentInNewTabArgs } from '@/lib/launch-agent-in-new-tab'
-import { activateAndRevealWorkspace } from '@/lib/worktree-activation'
+import { createNonSecureContextUuid } from '../../../../../shared/non-secure-context-uuid'
+import { focusTerminalTabSurface } from '@/components/terminal-pane/input/focus/focus-terminal-tab-surface'
+import { launchAgentInNewTabWithOutcome } from '@/lib/agent-session/launch/new-tab/launch-agent-in-new-tab'
+import type { LaunchAgentInNewTabArgs } from '@/lib/agent-session/launch/new-tab/launch-agent-in-new-tab-args'
+import { activateAndRevealWorkspace } from '@/lib/workspace/activation/worktree-activation'
 import { useAppStore } from '@/store'
 import type { ExecutionHostId } from '../../../../../shared/execution-host'
 import type { TuiAgent } from '../../../../../shared/agent-launch/catalog/tui-agent'
@@ -73,15 +74,20 @@ export function launchAgentInWorkspace({
 }): void {
   const state = useAppStore.getState()
   const hold: FirstShellHold = { release: () => {} }
-  const result = launchAgentInNewTab({
-    requestId: newAgentLaunchRequestId(),
-    agent,
-    worktreeId,
-    groupId:
-      state.activeGroupIdByWorktree[worktreeId] ?? state.groupsByWorktree[worktreeId]?.[0]?.id,
-    launchSource: 'shortcut',
-    beforeSurfaceOpen: switchBeforeSurfaceOpen(worktreeId, switchTo, hold)
-  })
+  // Pilot shows its own failure toast, so upstream's notice stays off; a refusal is a failed launch.
+  const outcome = launchAgentInNewTabWithOutcome(
+    {
+      requestId: createNonSecureContextUuid(),
+      agent,
+      worktreeId,
+      groupId:
+        state.activeGroupIdByWorktree[worktreeId] ?? state.groupsByWorktree[worktreeId]?.[0]?.id,
+      launchSource: 'shortcut',
+      beforeSurfaceOpen: switchBeforeSurfaceOpen(worktreeId, switchTo, hold)
+    },
+    false
+  )
+  const result = outcome && 'refused' in outcome ? null : outcome
   if (!result) {
     // Why: a launch can still fail after its switch, and then no agent tab is coming.
     hold.release()

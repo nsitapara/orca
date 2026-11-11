@@ -10,11 +10,11 @@ import {
   getPairedDeviceIdsByEnvironment
 } from '../../../../../shared/workspace-creator-visibility'
 import { resolveActivityScopeRepoIds } from '@/components/activity/activity-scope-filter'
-import { resolvePaletteRepoForWorktree } from '@/lib/palette-repo-resolution'
+import { resolvePaletteRepoForWorktree } from '@/lib/workspace/search/palette-repo-resolution'
 import {
   findAmbiguousWorktreeIds,
   getPaletteOwnershipWorktreeIds
-} from '@/lib/unified-tab-host-ownership'
+} from '@/lib/workspace/ownership/unified-tab-host-ownership'
 import type { AgentPaneThread } from '@/components/activity/activity-thread-types'
 import { useAppStore } from '@/store'
 import { useActivityProjectRepoIds } from '../activity-machines/use-activity-project-scope'

@@ -7,14 +7,14 @@ import type { Worktree } from '../../../../../shared/worktree/types'
 import { useVisibleHostedReviewRefresh } from '@/app-shell/use-visible-hosted-review-refresh'
 import { useVisibleReviewRefreshReporting } from '@/app-shell/use-visible-review-refresh-reporting'
 import { useAppStore } from '@/store'
-import { getHostedReviewCacheKey } from '@/store/slices/hosted-review-cache-identity'
-import { _clearHostedReviewRequestGenerationsForTest } from '@/store/slices/hosted-review-request-state'
+import { getHostedReviewCacheKey } from '@/store/slices/hosted-review/hosted-review-cache-identity'
+import { _clearHostedReviewRequestGenerationsForTest } from '@/store/slices/hosted-review/hosted-review-request-state'
 import { registerPilotStore } from '../store'
 import { useActivityReviewVisibility } from './activity-review-visibility'
 
 vi.mock('@/store', async () => {
   const browserWindow = globalThis.window
-  const { createTestStore } = await import('@/store/slices/github-slice-test-harness')
+  const { createTestStore } = await import('@/store/github/github-slice-test-harness')
   globalThis.window = browserWindow
   return { useAppStore: createTestStore() }
 })

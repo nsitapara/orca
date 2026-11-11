@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { ExecutionHostHealth } from '../../../../../shared/execution-host-registry'
+import type { ExecutionHostHealth } from '../../../../../shared/execution-host/execution-host-health'
 import type { ProjectHostSetupState } from '../../../../../shared/project-types'
 import type { Repo } from '../../../../../shared/repo-types'
 import type { Worktree } from '../../../../../shared/worktree/types'

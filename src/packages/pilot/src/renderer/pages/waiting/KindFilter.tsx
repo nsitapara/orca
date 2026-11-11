@@ -1,6 +1,6 @@
 import { ChevronDown } from 'lucide-react'
 import type { InboxType } from '../../../shared/api-types'
-import { cn } from '@/lib/utils'
+import { cn } from '@/lib/class-names'
 import { INBOX_KINDS } from './inbox-kinds'
 import { useKindsOpen } from './use-list-open'
 

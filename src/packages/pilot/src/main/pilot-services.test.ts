@@ -13,7 +13,9 @@ import { PilotStore } from './store/store'
 
 type Method = { name: string; handler: () => unknown }
 const registry = vi.hoisted(() => [] as Method[])
-vi.mock('../../../../main/runtime/rpc/methods/index', () => ({ ALL_RPC_METHODS: registry }))
+vi.mock('../../../../main/runtime/rpc/methods/rpc-method-registry', () => ({
+  ALL_RPC_METHODS: registry
+}))
 const live = vi.hoisted(() => ({ fail: false }))
 vi.mock('./definitions/live', async (importOriginal) => {
   const actual = await importOriginal<typeof Live>()

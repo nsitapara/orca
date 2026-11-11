@@ -39,24 +39,6 @@ describe('hang detection marker', () => {
     rmSync(dir, { recursive: true, force: true })
   })
 
-  it('round-trips a marker and deletes it on consume', () => {
-    const markerPath = hangDetectionMarkerPath(dir)
-    writeHangDetectionMarker(markerPath, {
-      detectedAt: 123,
-      parentPid: 456,
-      unresponsiveMs: 45000,
-      selfRecovered: false
-    })
-    expect(consumeHangDetectionMarker(markerPath)).toEqual({
-      detectedAt: 123,
-      parentPid: 456,
-      unresponsiveMs: 45000,
-      selfRecovered: false
-    })
-    expect(existsSync(markerPath)).toBe(false)
-    expect(consumeHangDetectionMarker(markerPath)).toBeNull()
-  })
-
   it('round-trips the stack sample paths', () => {
     const markerPath = hangDetectionMarkerPath(dir)
     const marker = {

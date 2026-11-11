@@ -1,6 +1,6 @@
 import { useEffect, useEffectEvent } from 'react'
-import { isEditableTarget } from '@/lib/editable-target'
-import { hasVisibleOverlay } from '@/lib/visible-overlay'
+import { isEditableTarget } from '@/lib/text-input/focus/editable-target'
+import { hasVisibleOverlay } from '@/lib/overlay-interaction/visible-overlay'
 import { useOpenRun } from '../../run-views/run-panel-state'
 
 export type InboxFocusHandlers = {

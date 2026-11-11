@@ -1,4 +1,4 @@
-import { requestScrollToCurrentWorkspaceReveal } from '@/lib/scroll-to-current-workspace-status'
+import { requestScrollToCurrentWorkspaceReveal } from '@/lib/workspace/navigation/scroll-to-current-workspace-status'
 import {
   setActivityInactiveExpanded,
   useActivityInactiveExpanded

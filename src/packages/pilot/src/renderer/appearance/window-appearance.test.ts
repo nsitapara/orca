@@ -100,7 +100,7 @@ describe('window-appearance.css', () => {
     ['assets/main.css', '.titlebar-left {'],
     ['assets/main.css', '.titlebar-left-floating {'],
     ['components/sidebar/index.tsx', 'data-sidebar-resize-handle'],
-    ['lib/left-sidebar-appearance.ts', "'--worktree-sidebar-border'"]
+    ['app-shell/appearance/left-sidebar-appearance.ts', "'--worktree-sidebar-border'"]
   ])(
     'draws borders and the sidebar seam from hooks upstream still has: %s has %s',
     (file, hook) => {

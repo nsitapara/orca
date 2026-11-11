@@ -1,8 +1,13 @@
-import { describe, expect, it } from 'vitest'
+import { afterAll, describe, expect, it, vi } from 'vitest'
 import type { OrcaRuntimeService } from '../../../../../main/runtime/orca-runtime'
 import type { PilotStore } from '../store/store'
 import { registerPilotSources } from './register-sources'
 import { itemSource } from './registry'
+
+// Registered sources live in the registry module; a shared test worker must load it fresh next.
+afterAll(() => {
+  vi.resetModules()
+})
 
 describe('registerPilotSources', () => {
   it('registers the runtime-backed sources without touching the runtime yet', () => {

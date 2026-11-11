@@ -2,13 +2,13 @@ import { Copy, ExternalLink } from 'lucide-react'
 import { formatArtifactUpdatedCompact } from '@/components/artifacts/artifact-display-labels'
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
-import { isRowActivationKey } from '@/lib/list-row-interaction'
+import { isRowActivationKey } from '@/lib/list-interaction/list-row-interaction'
 import {
   LIST_TABLE_ROW_CLASS,
   LIST_TABLE_ROW_DIVIDER_CLASS,
   LIST_TABLE_ROW_SELECTED_CLASS
-} from '@/lib/list-table-layout'
-import { cn } from '@/lib/utils'
+} from '@/lib/list-interaction/list-table-layout'
+import { cn } from '@/lib/class-names'
 import type { AgentArtifact } from '../../shared/api-types-artifacts'
 import { canOpenAgentArtifact, copyAgentArtifact, openAgentArtifact } from './artifact-actions'
 import {

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
-import { cn } from '@/lib/utils'
+import { cn } from '@/lib/class-names'
 import { useAppStore } from '@/store'
 import type { UsageDashboard } from '../../../shared/api-types'
 import { fmtTokens, money } from '../../../shared/money'

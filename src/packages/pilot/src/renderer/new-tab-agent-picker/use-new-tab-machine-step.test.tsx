@@ -9,7 +9,7 @@ import { PROJECT, machineWorktree, setup } from './new-tab-machine-test-fixtures
 import { useNewTabMachineStep } from './use-new-tab-machine-step'
 
 const ensure = vi.hoisted(() => vi.fn((..._args: unknown[]) => Promise.resolve([])))
-vi.mock('@/lib/agent-detection-target-inventory', () => ({
+vi.mock('@/lib/agent-session/launch/inventory/agent-detection-target-inventory', () => ({
   ensureDetectedAgentsForWorktree: ensure
 }))
 

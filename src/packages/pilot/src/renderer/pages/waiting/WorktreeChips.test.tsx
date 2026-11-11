@@ -2,18 +2,18 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { TooltipProvider } from '@/components/ui/tooltip'
-import { openHttpLink } from '@/lib/http-link-routing'
-import type * as HttpLinkRouting from '@/lib/http-link-routing'
+import { openHttpLink } from '@/lib/browser/navigation/http-link-routing'
+import type * as HttpLinkRouting from '@/lib/browser/navigation/http-link-routing'
 import { useAppStore } from '@/store'
 import { getLinearReadScope, scopedLinearCacheKey } from '@/store/slices/linear/linear-slice-scope'
 import type { ItemFields } from '../../../shared/api-types'
 import { groupOf } from '../../../shared/inbox-groups'
 import { LOCAL_PILOT_HOST } from '../../hosts/pilot-host'
 import { WorktreeChips } from './WorktreeChips'
-import { linearIssueReadFixture } from '@/store/slices/linear-slice-test-harness'
+import { linearIssueReadFixture } from '@/store/slices/linear/linear-slice-test-harness'
 import type { LinearIssue } from '../../../../../../shared/linear/issue-types'
 
-vi.mock('@/lib/http-link-routing', async (importOriginal) => ({
+vi.mock('@/lib/browser/navigation/http-link-routing', async (importOriginal) => ({
   ...(await importOriginal<typeof HttpLinkRouting>()),
   openHttpLink: vi.fn()
 }))

@@ -2,7 +2,7 @@ import { defaultUsagePaths, measureFinishedSteps, stepUsageReader } from './usag
 import { mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 import type { OrcaRuntimeService } from '../../../../main/runtime/orca-runtime'
-import { ALL_RPC_METHODS } from '../../../../main/runtime/rpc/methods/index'
+import { ALL_RPC_METHODS } from '../../../../main/runtime/rpc/methods/rpc-method-registry'
 import type { PilotStatus } from '../shared/api-types'
 import { answerRunEnded } from './answers/answer-run-end'
 import { wireAnswerDispatcher } from './answers/wiring'

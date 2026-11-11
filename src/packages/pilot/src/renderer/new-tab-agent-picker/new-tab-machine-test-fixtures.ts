@@ -1,8 +1,6 @@
 import type { ExecutionHostId } from '../../../../../shared/execution-host'
-import type {
-  ExecutionHostHealth,
-  ExecutionHostRegistryEntry
-} from '../../../../../shared/execution-host-registry'
+import type { ExecutionHostHealth } from '../../../../../shared/execution-host/execution-host-health'
+import type { ExecutionHostRegistryEntry } from '../../../../../shared/execution-host/execution-host-registry-entry'
 import type { ProjectHostSetup } from '../../../../../shared/project-types'
 import type { Worktree } from '../../../../../shared/worktree/types'
 import type { NewTabMachineTarget } from './new-tab-machine-step'

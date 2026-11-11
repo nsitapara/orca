@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { cn } from '@/lib/utils'
+import { cn } from '@/lib/class-names'
 import type { InboxListRow, InboxType } from '../../../shared/api-types'
 import type { AnswerState } from '../../../shared/inbox-types'
 import type { HostedSection } from '../../hosts/hosted-sections'

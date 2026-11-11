@@ -7,7 +7,7 @@ import type {
   ActivityThreadGroup,
   AgentPaneThread
 } from '@/components/activity/activity-thread-types'
-import { ipcOrRuntimeTargetForHostId } from '@/runtime/runtime-client-target'
+import { ipcOrRuntimeTargetForHostId } from '@/runtime/rpc/targets/runtime-client-target'
 import { pilotRpc } from '../api'
 import type { WorkspaceTabItem } from './workspace-tab-items'
 

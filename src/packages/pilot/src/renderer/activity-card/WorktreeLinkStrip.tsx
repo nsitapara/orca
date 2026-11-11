@@ -7,8 +7,8 @@ import {
   getReviewLabel
 } from '@/components/sidebar/workspace-card/review/worktree-review-presentation'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
-import { openHttpLink } from '@/lib/http-link-routing'
-import { cn } from '@/lib/utils'
+import { openHttpLink } from '@/lib/browser/navigation/http-link-routing'
+import { cn } from '@/lib/class-names'
 import { worktreeGitChipView } from './git-sync-mark'
 import { useBranchLinearIssue } from './linear-branch-issue'
 import { LinearStateMark } from './LinearStateMark'

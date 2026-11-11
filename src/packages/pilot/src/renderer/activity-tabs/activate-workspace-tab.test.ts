@@ -9,7 +9,7 @@ const activation = vi.hoisted(() => {
   const agentSessions: unknown[] = []
   return { calls, agentSessions }
 })
-vi.mock('@/lib/worktree-activation', () => ({
+vi.mock('@/lib/workspace/activation/worktree-activation', () => ({
   activateAndRevealWorkspace: (...args: unknown[]) => {
     activation.calls.push(args)
     return true
@@ -18,7 +18,9 @@ vi.mock('@/lib/worktree-activation', () => ({
 vi.mock('@/lib/agent-session/structured-agent-session-tab-activation', () => ({
   activateStructuredAgentSessionTab: (args: unknown) => activation.agentSessions.push(args)
 }))
-vi.mock('@/lib/focus-terminal-tab-surface', () => ({ focusTerminalTabSurface: () => undefined }))
+vi.mock('@/components/terminal-pane/input/focus/focus-terminal-tab-surface', () => ({
+  focusTerminalTabSurface: () => undefined
+}))
 
 function tab(contentType: Tab['contentType']): Tab {
   return {

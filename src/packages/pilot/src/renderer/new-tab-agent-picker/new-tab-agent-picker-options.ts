@@ -1,8 +1,8 @@
-import type { AgentCatalogEntry } from '@/lib/agent-catalog'
+import type { AgentCatalogEntry } from '@/lib/agent-catalog/agent-catalog'
 import {
   agentPickerBlankTerminalMatches,
   searchAgentPickerEntries
-} from '@/lib/agent-picker-search'
+} from '@/lib/agent-catalog/agent-picker-search'
 import type { TuiAgent } from '../../../../../shared/agent-launch/catalog/tui-agent'
 
 export const BLANK_TERMINAL_OPTION_ID = '__blank-terminal__'

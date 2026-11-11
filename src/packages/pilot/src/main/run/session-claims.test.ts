@@ -142,7 +142,7 @@ describe('isStartTimeout', () => {
 
 describe('the upstream start-timeout messages', () => {
   it.each([
-    ['orca-runtime-create-terminal-desktop.ts', 'Terminal creation timed out'],
+    ['terminal/launch/orca-runtime-create-terminal-desktop.ts', 'Terminal creation timed out'],
     [
       'session-tabs/renderer-session-terminal-rescue.ts',
       'Timed out waiting for terminal handle after creation'

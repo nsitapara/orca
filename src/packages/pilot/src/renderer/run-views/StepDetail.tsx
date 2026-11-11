@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { RotateCcw } from 'lucide-react'
-import { isWebClientLocation } from '@/lib/web-client-location'
+import { isWebClientLocation } from '@/app-shell/platform/web-client-location'
 import type { SessionResumeResult, StepRow } from '../../shared/api-types'
 import { money } from '../../shared/money'
 import { hostRpc } from '../hosts/host-rpc'

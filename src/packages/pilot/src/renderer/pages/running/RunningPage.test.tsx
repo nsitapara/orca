@@ -17,7 +17,7 @@ import { capacity, finishedRun } from './__fixtures__/capacity'
 const pilotRpc = vi.fn()
 vi.mock('../../api', () => ({ pilotRpc: (...args: unknown[]) => pilotRpc(...args) }))
 const activate = vi.fn()
-vi.mock('@/lib/worktree-activation', () => ({
+vi.mock('@/lib/workspace/activation/worktree-activation', () => ({
   activateAndRevealWorktree: (...args: unknown[]) => activate(...args)
 }))
 

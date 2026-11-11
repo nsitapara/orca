@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { StepForward } from 'lucide-react'
-import { isWebClientLocation } from '@/lib/web-client-location'
+import { isWebClientLocation } from '@/app-shell/platform/web-client-location'
 import type { ActivityRun, ContinueRunResult, RunRow } from '../../shared/api-types'
 import { askSkipped } from '../../shared/run-views/paint'
 import { hostRpc } from '../hosts/host-rpc'

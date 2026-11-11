@@ -1,5 +1,5 @@
 import { useContext, type ReactNode } from 'react'
-import { getActivityThreadWorkspaceTitle } from '@/lib/activity-thread-display'
+import { getActivityThreadWorkspaceTitle } from '@/lib/workspace/activity/activity-thread-display'
 import type { Repo } from '../../../../../shared/repo-types'
 import type { Worktree } from '../../../../../shared/worktree/types'
 import { ActivityMachineChip } from '../activity-machines/ActivityMachineChip'

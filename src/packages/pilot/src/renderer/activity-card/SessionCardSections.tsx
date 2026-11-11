@@ -16,10 +16,10 @@ import type { ActivityEvent, AgentPaneThread } from '@/components/activity/activ
 import CommentMarkdown from '@/components/sidebar/CommentMarkdown'
 import { DetailHeader } from '@/components/sidebar/workspace-card/metadata/WorktreeCardMetadataControls'
 import { Button } from '@/components/ui/button'
-import { AgentIcon } from '@/lib/agent-catalog'
+import { AgentIcon } from '@/components/agent/icons/AgentIcon'
 import { agentTypeToIconAgent } from '../../../../../shared/agent-status/presentation/agent-type-icon-agent'
 import { formatAgentTypeLabel } from '../../../../../shared/agent-status/presentation/agent-type-label'
-import { cn } from '@/lib/utils'
+import { cn } from '@/lib/class-names'
 import { useAppStore } from '@/store'
 
 const HISTORY_LIMIT = 5

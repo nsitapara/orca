@@ -1,5 +1,5 @@
 import { useLayoutEffect, type RefObject } from 'react'
-import { resolveLeftSidebarStyleVariables } from '@/lib/left-sidebar-appearance'
+import { resolveLeftSidebarStyleVariables } from '@/app-shell/appearance/left-sidebar-appearance'
 import { pilotStore } from '../store'
 
 type SidebarAppearanceSettings = Parameters<typeof resolveLeftSidebarStyleVariables>[0]

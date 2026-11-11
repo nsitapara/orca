@@ -1,7 +1,7 @@
 import {
   beginWebRuntimeInitialTerminalBootstrap,
   endWebRuntimeInitialTerminalBootstrap
-} from '@/runtime/web-runtime-initial-terminal-bootstrap'
+} from '@/runtime/web-session-tabs-sync/initial-terminal/web-runtime-initial-terminal-bootstrap'
 import { getWebSessionTabsTrackingGeneration } from '@/runtime/web-session-tabs-sync/tracking-lifecycle'
 import { useAppStore } from '@/store'
 import { parseExecutionHostId, type ExecutionHostId } from '../../../../../shared/execution-host'

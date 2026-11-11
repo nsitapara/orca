@@ -9,10 +9,10 @@ import {
   applyClientHostedBrowserRows,
   getClientHostedBrowserRowSelection,
   hydrateClientHostedBrowserRows
-} from '@/lib/pane-manager/client-hosted-browser-row-state'
+} from '@/runtime/browser/client-hosting/client-hosted-browser-row-state'
 import type { ClientHostedBrowserRow } from '../../../../../shared/client-hosted-browser-rows'
 
-vi.mock('@/lib/worktree-activation', () => ({
+vi.mock('@/lib/workspace/activation/worktree-activation', () => ({
   activateAndRevealWorkspace: () => {
     useAppStore.setState({
       groupsByWorktree: {

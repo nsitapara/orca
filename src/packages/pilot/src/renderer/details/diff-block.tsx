@@ -1,6 +1,6 @@
 import { ChevronRight } from 'lucide-react'
 import { Fragment, useState } from 'react'
-import { cn } from '@/lib/utils'
+import { cn } from '@/lib/class-names'
 import type { DiffBlock as DiffBlockData, DiffFile } from '../../shared/details'
 import { DiffTable, Gap, Section } from './blocks'
 

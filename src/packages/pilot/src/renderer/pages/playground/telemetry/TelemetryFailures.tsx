@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { isWebClientLocation } from '@/lib/web-client-location'
+import { isWebClientLocation } from '@/app-shell/platform/web-client-location'
 import { pilotRpc } from '../../../api'
 import { openRun } from '../../../run-views/run-panel-state'
 import { SourceLink } from '../../../run-views/SourceLink'

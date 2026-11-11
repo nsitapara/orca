@@ -6,7 +6,7 @@ import type { AgentPaneThread } from '@/components/activity/activity-thread-type
 import {
   getClientHostedBrowserRows,
   useClientHostedBrowserRows
-} from '@/lib/pane-manager/client-hosted-browser-row-state'
+} from '@/runtime/browser/client-hosting/client-hosted-browser-row-state'
 import { useAppStore } from '@/store'
 import type { AppState } from '@/store/types'
 import { useWorktreeTabsContext } from './use-worktree-tabs-context'

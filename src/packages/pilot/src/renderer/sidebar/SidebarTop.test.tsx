@@ -50,7 +50,7 @@ vi.mock('@/components/sidebar/workspace-card/activity/focused-agent-row-highligh
   useFocusedAgentPaneKey: () => agents.focused
 }))
 const reveal = vi.hoisted(() => vi.fn())
-vi.mock('@/lib/scroll-to-current-workspace-status', () => ({
+vi.mock('@/lib/workspace/navigation/scroll-to-current-workspace-status', () => ({
   requestScrollToCurrentWorkspaceReveal: reveal
 }))
 

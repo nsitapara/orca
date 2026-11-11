@@ -1,14 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { toast } from 'sonner'
-import type { LaunchAgentInNewTabArgs } from '@/lib/launch-agent-in-new-tab'
+import type { LaunchAgentInNewTabArgs } from '@/lib/agent-session/launch/new-tab/launch-agent-in-new-tab-args'
 import {
   beginWebRuntimeInitialTerminalBootstrap,
   isWebRuntimeInitialTerminalBootstrapInFlight,
   resetWebRuntimeInitialTerminalBootstrapForTests
-} from '@/runtime/web-runtime-initial-terminal-bootstrap'
+} from '@/runtime/web-session-tabs-sync/initial-terminal/web-runtime-initial-terminal-bootstrap'
 import { clearWebSessionTabsTrackingForEnvironment } from '@/runtime/web-session-tabs-sync/tracking-lifecycle'
 import { useAppStore } from '@/store'
-import { makeTab } from '@/store/slices/store-session-test-harness'
+import { makeTab } from '@/store/terminals/terminal-tab.test-fixture'
 import type { Worktree } from '../../../../../shared/worktree/types'
 import { launchAgentInWorkspace, type WorkspaceLaunchSwitch } from './launch-agent-in-workspace'
 import { machineWorktree } from './new-tab-machine-test-fixtures'
@@ -16,8 +16,8 @@ import { machineWorktree } from './new-tab-machine-test-fixtures'
 const launches = vi.hoisted((): LaunchAgentInNewTabArgs[] => [])
 // Why: a structured launch can still come back null after its surface switch succeeded.
 const failAfterSwitch = vi.hoisted(() => ({ value: false }))
-vi.mock('@/lib/launch-agent-in-new-tab', () => ({
-  launchAgentInNewTab: (args: LaunchAgentInNewTabArgs) => {
+vi.mock('@/lib/agent-session/launch/new-tab/launch-agent-in-new-tab', () => ({
+  launchAgentInNewTabWithOutcome: (args: LaunchAgentInNewTabArgs) => {
     launches.push(args)
     if (args.beforeSurfaceOpen?.({ kind: 'host-published' }) === false || failAfterSwitch.value) {
       return null

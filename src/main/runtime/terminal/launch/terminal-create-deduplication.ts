@@ -4,16 +4,17 @@ import type { TerminalWorkspaceCreationEvidence } from './terminal-workspace-sco
 import type { FolderWorkspace } from '../../../../shared/folder-workspaces/folder-workspace-types'
 import type { Repo } from '../../../../shared/repo-types'
 
-import { OrcaRuntimeWithCreateAgentSession } from '../../orca-runtime-create-agent-session'
-import type { RuntimeTerminalCreate } from '../../../../shared/runtime-types'
-import { WORKTREE_CREATE_RESULT_TTL_MS } from '../../orca-runtime-core'
-import { deriveRemoteRuntimeTerminalCreateHandle } from '../../remote-runtime-terminal-create-identity'
-import { withTimeoutResult } from '../../runtime-async-boundaries'
-import { PTY_CONTROLLER_LIST_TIMEOUT_MS } from '../../orca-runtime-postlude'
+import { OrcaRuntimeWithCreateAgentSession } from '../../session-construction/agent-session/orca-runtime-create-agent-session'
+import type { RuntimeTerminalCreate } from '../../../../shared/runtime-terminal-create-contract'
+import { WORKTREE_CREATE_RESULT_TTL_MS } from '../../workspaces/creation/worktree-create-idempotency'
+import { deriveRemoteRuntimeTerminalCreateHandle } from '../identity/remote-runtime-terminal-create-identity'
+import { withTimeoutResult } from '../../../../shared/promise-timeout-fallback'
+import { PTY_CONTROLLER_LIST_TIMEOUT_MS } from '../lifecycle/pty-controller-inventory-budget'
+import { ownerSurfacing } from './terminal-presentation'
 import {
   type ResolvedWorktree,
   inferWorktreeIdFromPtyId
-} from '../../runtime-worktree-path-identity'
+} from '../../workspaces/catalog/runtime-worktree-path-identity'
 import { getRegisteredSshState } from '../../../ssh/targets/ssh-target-registry'
 import {
   getConnectionExecutionHostId,
@@ -21,9 +22,9 @@ import {
   toSshExecutionHostId,
   type ExecutionHostId
 } from '../../../../shared/execution-host'
-import { resolveWorktreeLaunchHost } from '../../worktree-launch-host-repo'
+import { resolveWorktreeLaunchHost } from '../../workspaces/catalog/worktree-launch-host-repo'
 import type { TuiAgent } from '../../../../shared/agent-launch/catalog/tui-agent'
-import type { TerminalWorkspaceLaunchScope } from '../../runtime-legacy-worker-terminal-recovery-types'
+import type { TerminalWorkspaceLaunchScope } from '../../orchestration/terminal-authority/structured-sessions/runtime-legacy-worker-terminal-recovery-types'
 import {
   hasPilotAgentLaunch,
   withPilotAgentLaunch
@@ -148,6 +149,8 @@ export abstract class OrcaRuntimeWithTerminalCreateDeduplication extends OrcaRun
     if (adoptedHandle !== terminalHandle) {
       throw new Error('terminal_create_identity_conflict')
     }
+    // Same as inventory adoption: the stream carries this survivor's title and output.
+    this.mainDaemonAttachments.reconcile(session.id)
     return {
       handle: adoptedHandle,
       ptyId: session.id,
@@ -194,6 +197,7 @@ export abstract class OrcaRuntimeWithTerminalCreateDeduplication extends OrcaRun
       suppressStartupUpdatePrompt?: boolean
       /** Run now is the user's act; a scheduled run is background and a stopped WSL distro holds it. */
       wslUserAct?: true
+      surfaceOwner?: false
     },
     resolvedTarget?: { worktree: ResolvedWorktree; repo: Repo; folderWorkspace?: FolderWorkspace }
   ): Promise<RuntimeTerminalCreate> {
@@ -212,7 +216,7 @@ export abstract class OrcaRuntimeWithTerminalCreateDeduplication extends OrcaRun
       // pilot-hook: agent-launch-env
       const startup = withPilotAgentLaunch(
         opts,
-        this.buildStartupForAgent(repo, opts.agent, opts.prompt, undefined, {
+        await this.buildStartupForAgent(repo, opts.agent, opts.prompt, undefined, {
           ...(opts.extraAgentArgs ? { extraAgentArgs: opts.extraAgentArgs } : {}),
           launchScope: await this.resolveTerminalWorkspaceLaunchScope(`id:${worktree.id}`)
         })
@@ -257,7 +261,8 @@ export abstract class OrcaRuntimeWithTerminalCreateDeduplication extends OrcaRun
         startupPromptDelivery: 'auto-submit',
         ...(opts.suppressStartupUpdatePrompt ? { suppressStartupUpdatePrompt: true } : {}),
         title: opts.title,
-        ...(opts.wslUserAct ? { wslUserAct: true } : {})
+        ...(opts.wslUserAct ? { wslUserAct: true } : {}),
+        ...ownerSurfacing(opts.surfaceOwner !== false)
       },
       undefined,
       worktree,

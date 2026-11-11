@@ -1,7 +1,7 @@
 import { ChevronRight } from 'lucide-react'
 import { useState } from 'react'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
-import { cn } from '@/lib/utils'
+import { cn } from '@/lib/class-names'
 import type { FinishedRun, RetryKey } from '../../../shared/api-types-capacity'
 import { checkoutRemoved, homeOf } from '../../../shared/api-types-env'
 import { formatMemory } from '../../../shared/capacity/format-memory'

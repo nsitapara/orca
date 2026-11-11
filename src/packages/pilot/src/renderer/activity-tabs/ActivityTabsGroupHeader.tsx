@@ -5,8 +5,11 @@ import type { Repo } from '../../../../../shared/repo-types'
 import type { Worktree } from '../../../../../shared/worktree/types'
 import WorktreeContextMenu from '@/components/sidebar/workspace-actions/context-menu/WorktreeContextMenu'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
-import { isPortaledRowMenuClick, isRowActivationKey } from '@/lib/list-row-interaction'
-import { cn } from '@/lib/utils'
+import {
+  isPortaledRowMenuClick,
+  isRowActivationKey
+} from '@/lib/list-interaction/list-row-interaction'
+import { cn } from '@/lib/class-names'
 import { useAppStore } from '@/store'
 import { getWorktreeLineageGroupKey } from '../../../../../shared/sidebar-list/group-keys'
 import { WorktreeLinksPrefetch } from '../activity-card/worktree-links'

@@ -9,7 +9,7 @@ import type { ReactNode } from 'react'
 import type { GlobalSettings } from '../../../../../shared/global-settings-types'
 
 vi.mock('./WorkspaceDirectorySetting', () => ({ WorkspaceDirectorySetting: () => null }))
-vi.mock('./OpenInMenuSetting', () => ({ OpenInMenuSetting: () => null }))
+vi.mock('./OpenInMenuSetting', () => ({ OpenInMenuEditor: () => null }))
 vi.mock('@/components/ui/tooltip', () => ({
   Tooltip: ({ children }: { children: ReactNode }) => <>{children}</>,
   TooltipTrigger: ({ children }: { children: ReactNode }) => <>{children}</>,
@@ -34,6 +34,8 @@ function renderSection(updateSettings: (updates: Partial<GlobalSettings>) => voi
   act(() => {
     root.render(
       <GeneralWorkspaceSettingsSection
+        page="folder"
+        openInDraft={{} as never}
         settings={getDefaultSettings('/home/user')}
         updateSettings={updateSettings}
       />

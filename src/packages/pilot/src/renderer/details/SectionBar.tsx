@@ -1,4 +1,4 @@
-import { cn } from '@/lib/utils'
+import { cn } from '@/lib/class-names'
 import type { Section } from './sections'
 import { toggleSection } from './section-filter'
 

@@ -1,4 +1,4 @@
-import { cn } from '@/lib/utils'
+import { cn } from '@/lib/class-names'
 import { MiddleCutText } from '../activity-card/MiddleCutText'
 
 // Each part takes up to its own width and they share what's left: a short name leaves the project

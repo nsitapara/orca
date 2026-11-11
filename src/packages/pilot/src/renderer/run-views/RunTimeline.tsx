@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { cn } from '@/lib/utils'
+import { cn } from '@/lib/class-names'
 import type { InboxItemSummary } from '../../shared/api-types'
 import { checkoutRemoved, homeOf } from '../../shared/api-types-env'
 import type { ActivityRun } from '../../shared/api-types-runs'

@@ -3,22 +3,23 @@ import type {
   GitStatusResult,
   GitUpstreamStatus
 } from '../../../../../shared/git/status/git-status-types'
+import { normalizeRuntimePathForComparison } from '../../../../../shared/cross-platform-path'
 import { isGitRepoKind } from '../../../../../shared/repo-kind'
 import type { Repo } from '../../../../../shared/repo-types'
 import { getWorktreeHostIdentity } from '../../../../../shared/worktree/host-qualified-identity'
 import type { GitStatusMetadataChangedEvent, Worktree } from '../../../../../shared/worktree/types'
-import { isGitStatusSignalForWorktree } from '@/components/right-sidebar/source-control/sync/git-status-signal-attribution'
+import { gitStatusSignalRecipientTest } from '@/components/right-sidebar/source-control/sync/git-status-signal-attribution'
 import { ORCA_TERMINAL_COMMAND_FINISHED_EVENT } from '@/hooks/terminal-command-finished-event'
-import { getConnectionId } from '@/lib/connection-context'
-import { runtimeTargetForWorkspaceOwner } from '@/lib/resolve-owner'
-import { isWindowVisible } from '@/lib/window-visibility-interval'
-import { ipcOrRuntimeTargetForHostId } from '@/runtime/runtime-client-target'
-import type { RuntimeGitContext } from '@/runtime/runtime-git-client-context'
-import { getRuntimeGitBranchCompare } from '@/runtime/runtime-git-diff-client'
-import { getRuntimeGitStatus } from '@/runtime/runtime-git-status-client'
-import { getRuntimeGitUpstreamStatus } from '@/runtime/runtime-git-sync-client'
+import { getConnectionId } from '@/lib/workspace/ownership/connection-context'
+import { runtimeTargetForWorkspaceOwner } from '@/lib/workspace/ownership/resolve-owner'
+import { isWindowVisible } from '@/lib/window-activity/window-visibility-interval'
+import { ipcOrRuntimeTargetForHostId } from '@/runtime/rpc/targets/runtime-client-target'
+import type { RuntimeGitContext } from '@/runtime/source-control/git/runtime-git-client-context'
+import { getRuntimeGitBranchCompare } from '@/runtime/source-control/git/runtime-git-diff-client'
+import { getRuntimeGitStatus } from '@/runtime/source-control/git/runtime-git-status-client'
+import { getRuntimeGitUpstreamStatus } from '@/runtime/source-control/git/runtime-git-sync-client'
 import { useAppStore } from '@/store'
-import { findRepoForHost } from '@/store/slices/repo-host-identity'
+import { findRepoForHost } from '@/store/repos/repo-host-identity'
 
 // Source Control's floor between two status reads of one checkout.
 const MIN_GAP_MS = 3000
@@ -325,11 +326,13 @@ function attachSignals(): () => void {
       fanOutUnattributed(signal.repoId)
       return
     }
-    const paths = (useAppStore.getState().worktreesByRepo[signal.repoId] ?? []).map((w) => w.path)
+    const isRecipient = gitStatusSignalRecipientTest(signal, (repoId) =>
+      (useAppStore.getState().worktreesByRepo[repoId] ?? []).map((w) => w.path)
+    )
     refreshWhere(
       ({ worktree }) =>
         worktree.repoId === signal.repoId &&
-        isGitStatusSignalForWorktree(signal, worktree.path, paths)
+        isRecipient(normalizeRuntimePathForComparison(worktree.path))
     )
   }
   // A finished command may have pushed or fetched, which moves a push-target upstream without HEAD.

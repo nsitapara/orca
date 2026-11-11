@@ -1,4 +1,4 @@
-import { cn } from '@/lib/utils'
+import { cn } from '@/lib/class-names'
 
 type MarkProps = { stateType?: string; color?: string; className?: string }
 

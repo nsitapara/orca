@@ -1,5 +1,5 @@
 import { ArrowUpRight } from 'lucide-react'
-import { isExecutionHostAliasForWorktree } from '@/lib/worktree-execution-host-alias'
+import { isExecutionHostAliasForWorktree } from '@/lib/workspace/ownership/worktree-execution-host-alias'
 import {
   toRuntimeExecutionHostId,
   type ExecutionHostId
@@ -78,7 +78,7 @@ export function repoNameForPath(path: string): string | null {
 // can name a worktree on two machines, so another machine's opens on its own execution host.
 export function openWorktree(id: string, host: PilotHostRef = LOCAL_PILOT_HOST): void {
   const executionHostId = remoteExecutionHost(host)
-  void import('@/lib/worktree-activation').then((m) => {
+  void import('@/lib/workspace/activation/worktree-activation').then((m) => {
     if (executionHostId) {
       m.activateAndRevealWorktree(id, { executionHostId })
       return

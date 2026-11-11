@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react'
-import { cn } from '@/lib/utils'
+import { cn } from '@/lib/class-names'
 import type { StepRow } from '../../shared/api-types'
 import type { ChainGroup, ChainPart } from '../../shared/run-views/chain'
 import { isPainted, type PaintedPart } from '../../shared/run-views/paint'

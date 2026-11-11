@@ -1,4 +1,4 @@
-import { cn } from '@/lib/utils'
+import { cn } from '@/lib/class-names'
 import type { AgentUsage, UsageAutomationRow, UsageDashboard } from '../../../shared/api-types'
 import { fmtTokens, money } from '../../../shared/money'
 import { AGENT_BAR, AGENT_LABEL, AGENTS, shareText, sharePercent } from './usage-text'

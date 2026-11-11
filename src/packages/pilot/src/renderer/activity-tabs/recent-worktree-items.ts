@@ -2,7 +2,7 @@ import { FLOATING_TERMINAL_WORKTREE_ID } from '../../../../../shared/constants'
 import type { Repo } from '../../../../../shared/repo-types'
 import type { Worktree } from '../../../../../shared/worktree/types'
 import { isActivitySearchQueryTooLarge } from '@/components/activity/activity-thread-grouping'
-import { getPaletteWorktreeIdentity } from '@/lib/palette-repo-resolution'
+import { getPaletteWorktreeIdentity } from '@/lib/workspace/search/palette-repo-resolution'
 import {
   compareWorktreeNames,
   matchesQuery,

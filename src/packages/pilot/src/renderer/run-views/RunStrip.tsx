@@ -1,4 +1,4 @@
-import { cn } from '@/lib/utils'
+import { cn } from '@/lib/class-names'
 import type { StripChip, StripItem } from '../../shared/run-views/strip'
 import type { PilotHostRef } from '../hosts/pilot-host'
 import { useMachineChipsShown } from '../hosts/pilot-hosts-feed'

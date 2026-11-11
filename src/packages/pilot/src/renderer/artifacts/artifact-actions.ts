@@ -3,7 +3,7 @@ import {
   copyArtifactLink,
   openArtifactInBrowser
 } from '@/components/artifacts/artifact-link-actions'
-import { isWebClientLocation } from '@/lib/web-client-location'
+import { isWebClientLocation } from '@/app-shell/platform/web-client-location'
 import { LOCAL_EXECUTION_HOST_ID } from '../../../../../shared/execution-host'
 import type { AgentArtifact } from '../../shared/api-types-artifacts'
 

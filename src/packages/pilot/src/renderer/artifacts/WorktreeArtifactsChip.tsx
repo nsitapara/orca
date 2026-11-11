@@ -1,7 +1,7 @@
 import type React from 'react'
 import { FileText } from 'lucide-react'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
-import { cn } from '@/lib/utils'
+import { cn } from '@/lib/class-names'
 import type { Worktree } from '../../../../../shared/worktree/types'
 import { WORKTREE_CHIP_CLASS } from '../activity-card/worktree-chip-class'
 import { openActivityWorktree } from '../activity-tabs/open-activity-worktree'

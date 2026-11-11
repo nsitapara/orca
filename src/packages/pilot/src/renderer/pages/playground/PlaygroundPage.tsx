@@ -1,5 +1,5 @@
 import { useCallback, useRef, useState } from 'react'
-import { isWebClientLocation } from '@/lib/web-client-location'
+import { isWebClientLocation } from '@/app-shell/platform/web-client-location'
 import { CommandsHere, type TryIt } from './CommandsTab'
 import { anchorOf } from './telemetry/telemetry-view'
 import { TelemetryPanel } from './telemetry/TelemetryPanel'

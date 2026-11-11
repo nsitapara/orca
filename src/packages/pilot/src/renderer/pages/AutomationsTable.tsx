@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { ChevronDown, ChevronRight } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
-import { cn } from '@/lib/utils'
+import { cn } from '@/lib/class-names'
 import type { ActivityRun, AutomationSummary } from '../../shared/api-types'
 import { jobLastTick, jobTitle, listEntries, type JobGroup } from '../../shared/job-stages'
 import {

@@ -6,8 +6,8 @@ import { useAppStore } from '@/store'
 import { createGlobalSettingsFixture } from '../../../../../shared/global-settings-test-fixture'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { NewAgentMenu } from './NewAgentMenu'
-import { launchAgentInNewTab } from '@/lib/launch-agent-in-new-tab'
-import { activateAndRevealWorkspace } from '@/lib/worktree-activation'
+import { launchAgentInNewTabWithOutcome } from '@/lib/agent-session/launch/new-tab/launch-agent-in-new-tab'
+import { activateAndRevealWorkspace } from '@/lib/workspace/activation/worktree-activation'
 
 vi.mock('@/hooks/useAgentDetectionTarget', () => ({
   useAgentDetectionTargetForWorktree: () => null
@@ -23,10 +23,10 @@ vi.mock('@/hooks/useShortcutLabel', () => ({ useOptionalShortcutLabel: () => nul
 vi.mock('@/lib/structured-agent-session-launch', () => ({
   useStructuredAgentLaunchStatus: () => null
 }))
-vi.mock('@/lib/launch-agent-in-new-tab', () => ({
-  launchAgentInNewTab: vi.fn(() => ({ surface: { kind: 'remote-terminal' } }))
+vi.mock('@/lib/agent-session/launch/new-tab/launch-agent-in-new-tab', () => ({
+  launchAgentInNewTabWithOutcome: vi.fn(() => ({ surface: { kind: 'remote-terminal' } }))
 }))
-vi.mock('@/lib/worktree-activation', () => ({
+vi.mock('@/lib/workspace/activation/worktree-activation', () => ({
   activateAndRevealWorkspace: vi.fn(() => ({ primaryTabId: null }))
 }))
 
@@ -75,7 +75,7 @@ it.each([
     await user.click(view.getByRole('button', { name: 'New agent' }))
     await waitFor(() => expect(document.activeElement?.getAttribute('role')).toBe('menuitem'))
     await user.keyboard(keys)
-    expect(launchAgentInNewTab).toHaveBeenCalledWith(
+    expect(launchAgentInNewTabWithOutcome).toHaveBeenCalledWith(
       expect.objectContaining({ agent: expected, worktreeId: 'wt-1', groupId: 'group-1' })
     )
   }
@@ -90,7 +90,9 @@ it('selects the default when agent detection finishes after opening the menu', a
   view.rerender(menu())
   await waitFor(() => expect(view.getByRole('menuitem', { name: /Claude/ })).toBeTruthy())
   await user.keyboard('{Enter}')
-  expect(launchAgentInNewTab).toHaveBeenCalledWith(expect.objectContaining({ agent: 'claude' }))
+  expect(launchAgentInNewTabWithOutcome).toHaveBeenCalledWith(
+    expect.objectContaining({ agent: 'claude' })
+  )
 })
 
 // A recent worktree with no tabs has no group: opening the menu makes its root one for the launch.
@@ -103,7 +105,7 @@ it('a worktree with no tab group gets one when the menu opens, and the agent lau
   await user.keyboard('{Enter}')
   const groupId = useAppStore.getState().groupsByWorktree['wt-1']?.[0]?.id
   expect(groupId).toBeTruthy()
-  expect(launchAgentInNewTab).toHaveBeenCalledWith(
+  expect(launchAgentInNewTabWithOutcome).toHaveBeenCalledWith(
     expect.objectContaining({ agent: 'claude', worktreeId: 'wt-1', groupId })
   )
 })
@@ -118,7 +120,7 @@ it('switches to the worktree as the new tab opens, without seeding a shell besid
   await user.keyboard('{Enter}')
   expect(activateAndRevealWorkspace).not.toHaveBeenCalled()
 
-  const [args] = vi.mocked(launchAgentInNewTab).mock.calls[0] ?? []
+  const [args] = vi.mocked(launchAgentInNewTabWithOutcome).mock.calls[0] ?? []
   expect(args?.beforeSurfaceOpen?.({ kind: 'local-terminal' })).toBe(true)
 
   expect(activateAndRevealWorkspace).toHaveBeenCalledWith('wt-1', {

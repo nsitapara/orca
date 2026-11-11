@@ -1,5 +1,5 @@
 import { useShallow } from 'zustand/react/shallow'
-import { resolveOpenTabOccupantAgent } from '@/lib/open-tab-occupant-agent'
+import { resolveOpenTabOccupantAgent } from '@/lib/agent-session/tab-identity/open-tab-occupant-agent'
 import { useAppStore } from '@/store'
 import type { AppState } from '@/store/types'
 import type { WorkspaceTabItem } from './workspace-tab-items'

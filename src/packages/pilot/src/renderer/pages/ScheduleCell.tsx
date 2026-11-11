@@ -1,4 +1,4 @@
-import { cn } from '@/lib/utils'
+import { cn } from '@/lib/class-names'
 import type { AutomationSummary } from '../../shared/api-types'
 import { usePilotHosts } from '../hosts/pilot-hosts-feed'
 import { runsOnLine } from '../hosts/runs-on-text'

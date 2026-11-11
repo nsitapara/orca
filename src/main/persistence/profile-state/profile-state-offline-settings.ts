@@ -77,7 +77,9 @@ export function updateAgentHookSettingsInProfileState(
     const persistedSettings = domains.values.get('settings')
     const {
       uiLanguagePortugueseMigrationApplied: _migrationApplied,
+      nestedWorkerMaxDepthDefaultedToFour: _depthMigrated,
       agentLaunchChoices: _launchChoices,
+      artifactSharingEnabled: _artifactSharingEnabled,
       ...settingsDefaults
     } = getDefaultPersistedState(homedir()).settings
     const settings = {

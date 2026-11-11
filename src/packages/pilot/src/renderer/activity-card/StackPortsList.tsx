@@ -12,7 +12,7 @@ import {
   MetadataActionIcon
 } from '@/components/sidebar/workspace-card/metadata/WorktreeCardMetadataControls'
 import { WorktreeCardPortsDetails } from '@/components/sidebar/workspace-card/details/WorktreeCardPorts'
-import { openHttpLink } from '@/lib/http-link-routing'
+import { openHttpLink } from '@/lib/browser/navigation/http-link-routing'
 import type { StackPort } from './stack-ports'
 import { useStackPorts } from './use-stack-ports'
 

@@ -1,4 +1,4 @@
-import { resolveEffectiveTerminalAppearance } from '@/lib/terminal-theme'
+import { resolveEffectiveTerminalAppearance } from '@/lib/terminal/appearance/terminal-theme'
 import type { GlobalSettings } from '../../../../../shared/global-settings-types'
 import './window-appearance.css'
 

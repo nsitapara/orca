@@ -1,6 +1,6 @@
 import { useMemo } from 'react'
 import { useAppStore } from '@/store'
-import { getProjectHostSetupProjectionFromState } from '@/store/selectors'
+import { getProjectHostSetupProjectionFromState } from '@/store/projects/project-host-setup-selector'
 import { pilotStore } from '../store'
 import {
   buildActivityProjectChoices,

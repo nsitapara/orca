@@ -2,7 +2,7 @@ import { useEffect } from 'react'
 import { useAppStore } from '@/store'
 import { getLinearReadScope, scopedLinearCacheKey } from '@/store/slices/linear/linear-slice-scope'
 import type { WorktreeLinearLink } from './worktree-links'
-import { consumeLinearIssueRead } from '@/store/slices/linear/linear-issue-publication'
+import { consumeLinearIssueRead } from '@/store/slices/linear/linear-issue-read-lifecycle'
 
 // Linear names a branch for its issue: "web-2153-create-…", or "nish/web-2153-…".
 const BRANCH_ISSUE = /^([a-z][a-z0-9]*-\d+)(?:-|$)/i

@@ -1,17 +1,17 @@
 import { LOCAL_EXECUTION_HOST_ID, type ExecutionHostId } from '../../../../../shared/execution-host'
-import type { ExecutionHostRegistryEntry } from '../../../../../shared/execution-host-registry'
+import type { ExecutionHostRegistryEntry } from '../../../../../shared/execution-host/execution-host-registry-entry'
 import { isFloatingWorkspaceId } from '../../../../../shared/floating-workspace-worktree'
 import { isHostLocalProjectId } from '../../../../../shared/project-host-setup-projection'
 import type { ProjectHostSetup } from '../../../../../shared/project-types'
 import type { Repo } from '../../../../../shared/repo-types'
 import type { Worktree } from '../../../../../shared/worktree/types'
 import { parseWorkspaceKey } from '../../../../../shared/workspace-scope'
-import { getComposerEligibleRepos } from '@/lib/new-workspace-composer-repo'
-import { getPaletteWorktreeExecutionHostId } from '@/lib/palette-repo-resolution'
+import { getNewWorkspaceDialogEligibleRepos } from '../../../../../shared/new-workspace-dialog-repo'
+import { getPaletteWorktreeExecutionHostId } from '@/lib/workspace/search/palette-repo-resolution'
 import {
   buildProjectHostSetupOptions,
   type ReadyProjectHostSetupOption
-} from '@/lib/project-host-setup-options'
+} from '@/lib/workspace/creation/project-host-setup-options'
 
 export type NewTabMachineOpensIn = 'this-workspace' | 'same-branch' | 'main-checkout'
 
@@ -101,7 +101,7 @@ export function buildNewTabMachineStep(input: NewTabMachineStepInput): NewTabMac
   const options = buildProjectHostSetupOptions({
     projectId,
     projectHostSetups: input.projectHostSetups,
-    eligibleRepos: getComposerEligibleRepos(input.repos),
+    eligibleRepos: getNewWorkspaceDialogEligibleRepos(input.repos),
     hosts: input.hosts.filter((h) => h.health === 'local' || h.health === 'available')
   })
   const targets: NewTabMachineTarget[] = []

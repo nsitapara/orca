@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { cn } from '@/lib/utils'
+import { cn } from '@/lib/class-names'
 import { weekStart } from '../run-views/activity-groups'
 import { ActivityView } from '../run-views/ActivityView'
 import { useAutomationsFeed } from '../run-views/automations-feed'

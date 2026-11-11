@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { isWebClientLocation } from '@/lib/web-client-location'
+import { isWebClientLocation } from '@/app-shell/platform/web-client-location'
 import type { SourceIndex, StepSource } from '../../shared/source-types'
 import { stepSource } from '../../shared/run-views/step-source'
 import type { ChainPart } from '../../shared/run-views/chain'

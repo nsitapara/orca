@@ -1,7 +1,7 @@
 import { ChevronRight } from 'lucide-react'
 import { useState } from 'react'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
-import { cn } from '@/lib/utils'
+import { cn } from '@/lib/class-names'
 import type { InboxListRow } from '../../../shared/api-types'
 import type { CardHistoryEntry, HistoryRun } from '../../../shared/inbox-types'
 import { usePilotHost } from '../../hosts/PilotHostContext'

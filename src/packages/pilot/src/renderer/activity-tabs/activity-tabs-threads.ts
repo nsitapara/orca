@@ -1,10 +1,10 @@
 import { useMemo } from 'react'
 import { useAppStore } from '@/store'
-import { isPaletteCurrentWorktree } from '@/lib/palette-repo-resolution'
+import { isPaletteCurrentWorktree } from '@/lib/workspace/search/palette-repo-resolution'
 import {
   isClientHostedBrowserRowSelectionLive,
   useClientHostedBrowserRowSelection
-} from '@/lib/pane-manager/client-hosted-browser-row-state'
+} from '@/runtime/browser/client-hosting/client-hosted-browser-row-state'
 import type {
   ActivityThreadGroup,
   AgentPaneThread

@@ -15,8 +15,11 @@ import { getClientHostedBrowserRowLabel } from '@/components/tab-bar/client-host
 import {
   getPaletteWorktreeExecutionHostId,
   getPaletteWorktreeIdentity
-} from '@/lib/palette-repo-resolution'
-import { findDuplicateIds, isUnifiedTabOwnedByWorktree } from '@/lib/unified-tab-host-ownership'
+} from '@/lib/workspace/search/palette-repo-resolution'
+import {
+  findDuplicateIds,
+  isUnifiedTabOwnedByWorktree
+} from '@/lib/workspace/ownership/unified-tab-host-ownership'
 import type { AppState } from '@/store/types'
 
 export type WorkspaceTabItem = {

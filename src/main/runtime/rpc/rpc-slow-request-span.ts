@@ -1,5 +1,5 @@
 import { startSpan } from '../../observability/tracer'
-import { classifyRuntimeLongPoll } from '../runtime-rpc/runtime-rpc-long-poll'
+import { classifyRuntimeLongPoll } from './server/runtime-rpc-long-poll'
 import type { RpcRequest, RpcResponse } from './core'
 
 // Why: every runtime RPC is served on the main thread, so a stalling main thread first shows up

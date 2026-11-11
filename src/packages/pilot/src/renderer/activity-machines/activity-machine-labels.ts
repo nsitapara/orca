@@ -4,7 +4,7 @@ import {
   getWorktreeExecutionHostId,
   type ExecutionHostId
 } from '../../../../../shared/execution-host'
-import { indexExecutionHostsById } from '../../../../../shared/managed-orcad-execution-host'
+import { indexExecutionHostsById } from '../../../../../shared/execution-host/managed-orcad-execution-host'
 import { getMixedHostContextLabels } from '../../../../../shared/worktree/host-context-labels'
 import type { SidebarHostOption } from '@/components/sidebar/worktree-list/controls/sidebar-host-options'
 

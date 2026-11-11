@@ -1,5 +1,5 @@
 import { LayoutGrid, List, Maximize2 } from 'lucide-react'
-import { cn } from '@/lib/utils'
+import { cn } from '@/lib/class-names'
 import { Select } from './InboxHeader'
 import type { InboxGroupBy, InboxSort, InboxView } from './inbox-view-prefs'
 

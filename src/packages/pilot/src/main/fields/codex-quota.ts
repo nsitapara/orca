@@ -5,12 +5,12 @@ import {
   withCodexHomeProcessLock
 } from '../../../../../main/codex-cli/codex-home-process-lock'
 import { resolveCodexCommand } from '../../../../../main/codex-cli/command'
-import { terminateCodexProbeChild } from '../../../../../main/rate-limits/codex-probe-termination'
+import { terminateCodexProbeChild } from '../../../../../main/codex-cli/codex-probe-termination'
 import {
   readCodexRateLimitsViaRpc,
   type CodexRpcRateLimitChild
-} from '../../../../../main/rate-limits/codex-rpc-rate-limit-probe'
-import { resolveHiddenProbeCwd } from '../../../../../main/rate-limits/hidden-probe-cwd'
+} from '../../../../../main/rate-limits/providers/codex/codex-rpc-rate-limit-probe'
+import { resolveHiddenProbeCwd } from '../../../../../main/lib/hidden-probe-cwd'
 import { withCliRuntimeOnPath } from '../../../../../shared/node-cli-command-resolution'
 import { codexQuotaReading, rateLimitsResultTap } from './codex-quota-reading'
 import type { QuotaReader } from './quota'

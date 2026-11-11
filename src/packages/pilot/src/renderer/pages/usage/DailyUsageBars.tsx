@@ -1,5 +1,5 @@
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
-import { cn } from '@/lib/utils'
+import { cn } from '@/lib/class-names'
 import type { UsageDayRow } from '../../../shared/api-types'
 import { fmtTokens, money } from '../../../shared/money'
 import { AGENT_BAR, AGENT_LABEL, AGENTS, dayLabel, sharePercent } from './usage-text'

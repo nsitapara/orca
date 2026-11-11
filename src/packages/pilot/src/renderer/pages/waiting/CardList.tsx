@@ -1,6 +1,6 @@
 import { ChevronDown, GitBranch } from 'lucide-react'
 import { useState } from 'react'
-import { cn } from '@/lib/utils'
+import { cn } from '@/lib/class-names'
 import type { InboxListRow } from '../../../shared/api-types'
 import type { HostedSection } from '../../hosts/hosted-sections'
 import { MachineChip } from '../../hosts/MachineChip'

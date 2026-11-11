@@ -11,7 +11,7 @@ import {
 } from '@/components/activity/ActivityPrototypePage-test-fixtures'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { useAppStore } from '@/store'
-import { getHostedReviewCacheKey } from '@/store/slices/hosted-review-cache-identity'
+import { getHostedReviewCacheKey } from '@/store/slices/hosted-review/hosted-review-cache-identity'
 import { registerPilotStore } from '../store'
 import { ActivityTabsGroupHeader } from './ActivityTabsGroupHeader'
 import { ActivityTabsNest } from './ActivityTabsNest'
@@ -21,8 +21,8 @@ import { getWorktreeLineageGroupKey } from '../../../../../shared/sidebar-list/g
 import { setActivityInactiveExpanded } from './activity-tabs-setting'
 import { toggleWorktreeGroupFold } from './activity-worktree-folds'
 import { RecentWorktreeRow } from './RecentWorktreeRow'
-import { activateAndRevealWorkspace } from '@/lib/worktree-activation'
-import { launchAgentInNewTab } from '@/lib/launch-agent-in-new-tab'
+import { activateAndRevealWorkspace } from '@/lib/workspace/activation/worktree-activation'
+import { launchAgentInNewTabWithOutcome } from '@/lib/agent-session/launch/new-tab/launch-agent-in-new-tab'
 import { ActivityTabsThreadRow } from './ActivityTabsThreadRow'
 
 const thread: AgentPaneThread = {
@@ -45,7 +45,7 @@ const UPSTREAM = <span>upstream</span>
 // A review cache entry fetched just now, on a pinned clock.
 const NOW = Date.parse('2026-10-20T00:00:00Z')
 
-vi.mock('@/lib/worktree-activation', () => ({
+vi.mock('@/lib/workspace/activation/worktree-activation', () => ({
   activateAndRevealWorkspace: vi.fn(() => ({ primaryTabId: null }))
 }))
 vi.mock('@/hooks/useAgentDetectionTarget', () => ({
@@ -55,8 +55,10 @@ vi.mock('@/hooks/useDetectedAgents', () => ({
   useDetectedAgents: () => ({ detectedIds: ['claude'] })
 }))
 vi.mock('@/hooks/useShortcutLabel', () => ({ useOptionalShortcutLabel: () => null }))
-vi.mock('@/lib/launch-agent-in-new-tab', () => ({
-  launchAgentInNewTab: vi.fn(() => ({ surface: { kind: 'local-terminal', tabId: 'tab-1' } }))
+vi.mock('@/lib/agent-session/launch/new-tab/launch-agent-in-new-tab', () => ({
+  launchAgentInNewTabWithOutcome: vi.fn(() => ({
+    surface: { kind: 'local-terminal', tabId: 'tab-1' }
+  }))
 }))
 
 // Each wrapper renders upstream's own element until Pilot attaches; then only for groups it restyles.
@@ -317,7 +319,8 @@ describe('Pilot wrappers around upstream Activity elements', () => {
 
       fireEvent.contextMenu(view.getByText('feature'))
 
-      expect(await view.findByRole('menuitem', { name: /Copy Path/ })).toBeTruthy()
+      // Upstream's worktree menu keeps Copy Path under a Copy submenu, so its trigger marks the menu.
+      expect(await view.findByRole('menuitem', { name: /^Copy$/ })).toBeTruthy()
       expect(activateAndRevealWorkspace).not.toHaveBeenCalled()
     }
   )
@@ -479,9 +482,13 @@ describe('Pilot wrappers around upstream Activity elements', () => {
     await user.click(view.getByRole('button', { name: 'New agent' }))
     await user.click(await view.findByRole('menuitem', { name: /Claude/ }))
 
-    expect(launchAgentInNewTab).toHaveBeenCalledWith(expect.objectContaining({ agent: 'claude' }))
+    expect(launchAgentInNewTabWithOutcome).toHaveBeenCalledWith(
+      expect.objectContaining({ agent: 'claude' })
+    )
     expect(activateAndRevealWorkspace).not.toHaveBeenCalled()
-    vi.mocked(launchAgentInNewTab).mock.calls[0]![0].beforeSurfaceOpen?.({ kind: 'host-published' })
+    vi.mocked(launchAgentInNewTabWithOutcome).mock.calls[0]![0].beforeSurfaceOpen?.({
+      kind: 'host-published'
+    })
     expect(savedFolds()).toEqual([])
   })
 

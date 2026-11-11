@@ -1,6 +1,6 @@
 import { toast } from 'sonner'
-import { getPaletteWorktreeExecutionHostId } from '@/lib/palette-repo-resolution'
-import { activateAndRevealWorkspace } from '@/lib/worktree-activation'
+import { getPaletteWorktreeExecutionHostId } from '@/lib/workspace/search/palette-repo-resolution'
+import { activateAndRevealWorkspace } from '@/lib/workspace/activation/worktree-activation'
 import type { Worktree } from '../../../../../shared/worktree/types'
 
 // A click in Activity is a user open, so an empty worktree gets the user's default surface, as in Projects.
