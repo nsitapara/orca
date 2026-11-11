@@ -28,8 +28,19 @@ function defaultHerdr(): string {
 // The branch a worktree has checked out; null when detached or not a git checkout.
 async function branchOf(worktree: string): Promise<string | null> {
   const git = cliExec('git', { GIT_OPTIONAL_LOCKS: '0' })
-  const { code, stdout } = await git(['-C', worktree, 'symbolic-ref', '--quiet', '--short', 'HEAD'])
-  return code === 0 && stdout.trim() ? stdout.trim() : null
+  try {
+    const { code, stdout } = await git([
+      '-C',
+      worktree,
+      'symbolic-ref',
+      '--quiet',
+      '--short',
+      'HEAD'
+    ])
+    return code === 0 && stdout.trim() ? stdout.trim() : null
+  } catch {
+    return null
+  }
 }
 
 const pause = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms))
