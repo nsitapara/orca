@@ -77,8 +77,10 @@ export class SessionSearchInstance {
       const indexer = new SessionSearchIndexer({
         // An idle machine should not walk every transcript root every 20 s.
         idleReconcileMaxMs: SESSION_SEARCH_IDLE_RECONCILE_MAX_MS,
-        reconcileIntervalMs: SESSION_SEARCH_APP_RECONCILE_INTERVAL_MS,
         ...this.options,
+        // After the spread so an explicit `undefined` can't drop back to 20 s.
+        reconcileIntervalMs:
+          this.options.reconcileIntervalMs ?? SESSION_SEARCH_APP_RECONCILE_INTERVAL_MS,
         historyDays: settings.historyDays
       })
       try {
