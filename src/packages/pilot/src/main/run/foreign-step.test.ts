@@ -239,7 +239,7 @@ describe('herdrLauncher', () => {
       detail: { workspace: 'w1', tab: 'w1:t2', pane: 'w1:p2' }
     })
     expect(startServer).toHaveBeenCalledOnce()
-    const made = calls.map((c) => c.args).filter((a) => a[0] !== 'status')
+    const made = calls.map((c) => c.args).filter((a) => a[0] !== 'status' && a[4] !== 'visible')
     expect(made).toEqual([
       ['workspace', 'list'],
       ['workspace', 'create', '--cwd', '/wt/a', '--label', 'web', '--no-focus'],
@@ -264,6 +264,22 @@ describe('herdrLauncher', () => {
       args[1] === 'run' ? { code: 1, stdout: '{"error":{"code":"pane_not_found"}}' } : null
     )
     await expect(launch(LAUNCH)).rejects.toThrow('pane_not_found')
+    expect(calls.at(-1)?.args).toEqual(['tab', 'close', 'w1:t2'])
+  })
+
+  it('fails, and closes the tab, when Claude stops at its trust dialog instead of starting', async () => {
+    const dialog =
+      '│ Quick safety check: Is this a project you created or one you trust?\n│ ❯ 1. Yes, I trust this\n│   folder'
+    let launched = false
+    const { launch, calls } = herdr((args) => {
+      if (args[1] === 'run') {
+        launched = true
+      }
+      return args[4] === 'visible' && launched ? { stdout: dialog } : null
+    })
+    await expect(launch(LAUNCH)).rejects.toThrow(
+      'Claude asks whether to trust /wt/a; open Claude there once and trust it'
+    )
     expect(calls.at(-1)?.args).toEqual(['tab', 'close', 'w1:t2'])
   })
 

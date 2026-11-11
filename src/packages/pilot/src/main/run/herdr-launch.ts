@@ -9,6 +9,15 @@ export const HERDR_SESSION = 'pilotd'
 const PROMPT_WAIT_MS = 15_000
 const PROMPT_POLL_MS = 200
 const SERVER_WAIT_MS = 10_000
+// How long after the launch Pilot watches the pane for Claude's folder-trust dialog, which would hold the session.
+const TRUST_WATCH_MS = 20_000
+const TRUST_POLL_MS = 1_000
+// Claude Code's trust dialog (2.1.x: "Quick safety check: Is this a project you created or one you trust?").
+const TRUST_DIALOG = [
+  'yes, i trust this folder',
+  'quick safety check',
+  'do you trust the files in this folder'
+]
 const ENV_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/
 
 export type HerdrDeps = {
@@ -112,6 +121,21 @@ async function waitForPrompt(deps: HerdrDeps, pane: string): Promise<void> {
   }
 }
 
+// Whether Claude's folder-trust dialog shows in the pane within TRUST_WATCH_MS of the launch. Unanswered, it holds the
+// session before the prompt is read, so a launch that hits it isn't a started session.
+async function asksForTrust(deps: HerdrDeps, pane: string): Promise<boolean> {
+  const deadline = deps.now() + TRUST_WATCH_MS
+  while (deps.now() < deadline) {
+    await deps.pause(TRUST_POLL_MS)
+    const read = await deps.herdr(['pane', 'read', pane, '--source', 'visible'])
+    const screen = read.stdout.replace(/\s+/g, ' ').toLowerCase()
+    if (read.code === 0 && TRUST_DIALOG.some((marker) => screen.includes(marker))) {
+      return true
+    }
+  }
+  return false
+}
+
 // The script the tab runs: the step env exported, then the agent with Pilot's argv and the prompt, which is read from
 // its own file so no item text is ever typed into the pane.
 export function launcherScript(launch: ForeignLaunch, promptFile: string): string {
@@ -139,7 +163,7 @@ function writeLauncher(deps: HerdrDeps, launch: ForeignLaunch): string {
 }
 
 // A tab in herdr's session, in the repo's workspace, that runs the step's agent once its shell is up. A launcher that
-// can't be typed closes the tab: no half-made session is left behind.
+// can't be typed, or a Claude stopped at its trust dialog, closes the tab: no half-made session is left behind.
 export function herdrLauncher(deps: HerdrDeps): ForeignLauncher {
   return async (launch) => {
     const launcher = writeLauncher(deps, launch)
@@ -161,6 +185,11 @@ export function herdrLauncher(deps: HerdrDeps): ForeignLauncher {
     try {
       await waitForPrompt(deps, pane)
       await call(deps, ['pane', 'run', pane, `sh ${shQuote(launcher)}`])
+      if (launch.agent === 'claude' && (await asksForTrust(deps, pane))) {
+        throw new Error(
+          `Claude asks whether to trust ${launch.cwd}; open Claude there once and trust it`
+        )
+      }
     } catch (error) {
       await deps.herdr(['tab', 'close', tab]).catch(() => undefined)
       throw error
