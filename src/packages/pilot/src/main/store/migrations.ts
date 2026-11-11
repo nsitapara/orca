@@ -1,6 +1,6 @@
 import type Database from '../../../../../main/sqlite/sync-database'
 
-export const PILOT_SCHEMA_VERSION = 21
+export const PILOT_SCHEMA_VERSION = 22
 
 const V1 = `
 CREATE TABLE ticks (id INTEGER PRIMARY KEY AUTOINCREMENT, automation_id TEXT NOT NULL, started_at INTEGER NOT NULL,
@@ -223,6 +223,13 @@ UPDATE steps SET usage_measured_at = NULL
   WHERE kind = 'agent' AND finished_at >= (CAST(strftime('%s', 'now') AS INTEGER) - 30 * 86400) * 1000;
 `
 
+// A step's session on another system (step system: herdr, t3): which one, and its ref there (a herdr tab and pane, a T3
+// thread). NULL on every Pilot step.
+const V22 = `
+ALTER TABLE steps ADD COLUMN system TEXT;
+ALTER TABLE steps ADD COLUMN external_ref TEXT;
+`
+
 // MIGRATIONS[n - 1] takes a database from version n - 1 to n.
 const MIGRATIONS: readonly string[] = [
   V1,
@@ -245,7 +252,8 @@ const MIGRATIONS: readonly string[] = [
   V18,
   V19,
   V20,
-  V21
+  V21,
+  V22
 ]
 
 // Same pattern as Orca's orchestration.db (migrate.ts): user_version + one transaction, all or nothing.

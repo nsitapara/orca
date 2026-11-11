@@ -1,4 +1,5 @@
 import type {
+  ForeignSystem,
   ItemFields,
   RunRow,
   RunStatus,
@@ -43,6 +44,8 @@ export type StepPatch = Partial<{
   detached: boolean
   launchArgs: string[] | null
   result: StoredResult | null
+  system: ForeignSystem
+  externalRef: string
 }>
 
 export const RUN_COLUMNS: Record<keyof RunPatch, string> = {
@@ -76,7 +79,9 @@ export const STEP_COLUMNS: Record<keyof StepPatch, string> = {
   sessionPinned: 'session_pinned',
   detached: 'detached',
   launchArgs: 'launch_args_json',
-  result: 'result_json'
+  result: 'result_json',
+  system: 'system',
+  externalRef: 'external_ref'
 }
 
 // Values go in as they are, except outputs (JSON text) and the pinned and detached flags (0/1), whose columns are
@@ -165,6 +170,7 @@ export function toStep(r: Record<string, unknown>): StepRow {
     sessionPinned: Number(r.session_pinned) === 1,
     detached: Number(r.detached) === 1,
     launchArgs: r.launch_args_json ? (JSON.parse(String(r.launch_args_json)) as string[]) : null,
-    result: r.result_json ? (JSON.parse(String(r.result_json)) as StoredResult) : null
+    result: r.result_json ? (JSON.parse(String(r.result_json)) as StoredResult) : null,
+    ...(r.system ? { system: r.system as ForeignSystem, externalRef: String(r.external_ref) } : {})
   }
 }

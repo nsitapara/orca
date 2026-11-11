@@ -170,7 +170,13 @@ export type StepRow = {
   launchArgs: string[] | null
   // A shell step's pilotcli result: the one envelope its whole stdout was, or null.
   result: StoredResult | null
+  // A hand-over step launched on another system (step system: herdr, t3), and its session's ref there: a herdr tab id
+  // ("w1:t2"), a T3 thread id. Absent on a Pilot step.
+  system?: ForeignSystem
+  externalRef?: string
 }
+// The systems a step's session can run on other than Pilot's own tabs (definition StepSystem).
+export type ForeignSystem = 'herdr' | 't3'
 
 export type InboxType = 'question' | 'flagged' | 'default' | 'action' | 'bug' | 'left_for_you'
 export type InboxStatus = 'open' | 'answered' | 'done' | 'obsolete' | 'stale' | 'dismissed'
