@@ -218,7 +218,7 @@ export function fixtureTickDeps(
       engineEnv: { binDir: '', dataDir: '/tmp/pilot-parity' },
       now
     },
-    // where.ids_from never runs a real command here; a job whose YAML has one answers it (13: jobs/job-13.ts).
+    // where.ids_from never runs a real command here; a job whose YAML has one answers it through runIds.
     runIds:
       o.runIds ??
       ((cmd) => Promise.reject(miss(f, `ids_from ${[cmd.program, ...cmd.args].join(' ')}`))),

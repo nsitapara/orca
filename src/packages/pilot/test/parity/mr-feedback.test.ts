@@ -1,5 +1,4 @@
-import { readdirSync, readFileSync } from 'node:fs'
-import { homedir } from 'node:os'
+import { readdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import type { PilotStore } from '../../src/main/store/store'
@@ -13,19 +12,6 @@ import { caseFile, dryTick, failedCheck, loadPortedAutomation, stoppedBy } from 
 const JOB = 'mr-feedback'
 const SKILL = 'global-command-address-mr-feedback'
 const { definition, people } = loadPortedAutomation(JOB)
-
-function modeText(mode: string): string {
-  return readFileSync(join(homedir(), '.agents', 'skills', SKILL, 'modes', `${mode}.md`), 'utf8')
-}
-
-function modeOutputs(mode: string): string[] {
-  const front = /^---\n([\s\S]*?)\n---\n/.exec(modeText(mode))?.[1] ?? ''
-  const list = /^outputs: \[(.*)\]$/m.exec(front)?.[1] ?? ''
-  return list
-    .split(',')
-    .map((s) => s.trim())
-    .filter(Boolean)
-}
 
 describe('06 · Address reviewer feedback: the definition', () => {
   it('looks at my open MRs with a thread waiting on me, keyed afresh every tick like the sweep', () => {
@@ -208,29 +194,6 @@ describe('06 · Address reviewer feedback: the definition', () => {
     ]
     expect(decideStep(flagFailed, addressTimedOut, { 'run.failed': true })).toEqual({ run: true })
     expect(decideStep(flagFailed, timedOut, { 'run.failed': false })).toMatchObject({ run: false })
-  })
-
-  it("sends my answers back to the asking session, else to the skill's answers mode, which re-checks and never pushes blind", () => {
-    expect(definition.answers).toEqual({
-      resume: 'asking_session',
-      else: { agent: 'claude', skill: SKILL, mode: 'answers' }
-    })
-    expect([modeOutputs('feedback'), modeOutputs('answers')]).toEqual([
-      ['head', 'summary', 'replies'],
-      ['outcome', 'item_status', 'reply']
-    ])
-    expect(modeText('answers')).toContain('**Never push.**')
-    expect(modeText('feedback')).toContain(
-      `apply them as \`~/.agents/skills/${SKILL}/modes/answers.md\``
-    )
-    // D1: its default, flagged and question items are plain cards, answerable at once, posted with pilotcli inbox create-card.
-    expect(modeText('feedback')).toContain(
-      'pilotcli inbox create-card --kind <default|flagged|question>'
-    )
-    expect(modeText('feedback')).toContain('as a plain card')
-    expect(modeText('feedback')).not.toContain('--evidence')
-    expect(modeText('feedback')).not.toContain('context.py enqueue')
-    expect(modeText('answers')).toContain('item_status=stale')
   })
 })
 

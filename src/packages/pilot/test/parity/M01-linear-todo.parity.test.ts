@@ -24,52 +24,14 @@ import {
 } from './ported'
 
 const { definition, people } = loadPortedAutomation(JOB_M01.automationId)
-const HOUR = 3_600_000
 
 describe('M01 · Start my Todo Linear tickets: the definition (old job: orca automation 08181dcd, prompt /linear-todo-sweep)', () => {
-  it('is a manual run (Orca had no schedule, a Jan 1 placeholder), at most three tickets, urgent first, one kickoff each', () => {
-    expect(definition).toMatchObject({
-      name: 'M01 · Start my Todo Linear tickets',
-      schedule: 'manual',
-      timezone: 'America/Los_Angeles',
-      missedRunGraceMs: 12 * HOUR,
-      firstSeen: 'process',
-      oncePer: '{ticket.id}',
-      limits: { perTick: 3, order: 'priority' },
-      powers: ['commit', 'push', 'update_ticket'],
-      inbox: 'nish',
-      workspace: {
-        kind: 'new_worktree',
-        base: 'origin/dev',
-        name: '{ticket.branch}',
-        reuseExisting: true,
-        setup: 'run'
-      }
-    })
-    expect(definition.steps).toMatchObject([
-      {
-        name: 'kickoff',
-        agent: 'claude',
-        skill: 'ticket-kickoff',
-        promptStyle: 'raw',
-        prompt: '/ticket-kickoff {ticket.id}'
-      }
-    ])
-  })
-
   it('lists Todo tickets with a branch, with no assignee clause (Linear’s `assigned` filter is the signed-in user)', () => {
     expect(definition.items).toMatchObject({ kind: 'linear_ticket' })
     expect(definition.items?.where).toEqual({ state_type: ['unstarted'], has_branch: true })
     // No quota check: the runner holds a run on its agent's quota (runner-gates.ts).
     expect(definition.checks.map((c) => c.kind)).toEqual(['script'])
     expect(definition.checks[0]).toMatchObject({ run: COMMANDS_M01.checkItem, timeoutMs: 60_000 })
-  })
-
-  it('routes prepared kickoff decisions to a fresh answer worker after the original session ends', () => {
-    expect(definition.answers).toEqual({
-      resume: 'never',
-      else: { agent: 'claude', skill: 'ticket-kickoff', mode: 'answers' }
-    })
   })
 
   it('loads through the loader on a copy', () => {

@@ -34,12 +34,8 @@ export const PILOT_SQLITE_RUNTIME_INCLUDE = [
   'src/packages/pilot/test/parity/05-fix-failed-ci.parity.test.ts',
   'src/packages/pilot/test/parity/mr-feedback.test.ts',
   'src/packages/pilot/test/parity/review-requests.test.ts',
-  'src/packages/pilot/test/parity/13-dev-e2e-fix.parity.test.ts',
   'src/packages/pilot/test/parity/M01-linear-todo.parity.test.ts',
   'src/packages/pilot/test/parity/M04-manual-memo.parity.test.ts',
   'src/packages/pilot/test/parity/12-apply-answers.parity.test.ts',
-  'src/packages/pilot/test/parity/03-review-branch-code.parity.test.ts',
-  'src/packages/pilot/test/parity/03-review-branch-code-steps.parity.test.ts',
-  'src/packages/pilot/test/parity/04-ui-qa-overnight.parity.test.ts',
   'src/packages/pilot/test/parity/04-ui-qa-overnight-steps.parity.test.ts'
 ]

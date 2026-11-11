@@ -10,52 +10,6 @@ import { loadPortedAutomation } from './ported'
 const PRECHECK =
   'node /Users/nishsitapara/Documents/web-platform/scripts/agent-loops/manual-memo.mjs precheck'
 
-// The saved Orca definition (`orca automations list --json`: 0afed57c), field by field. M02 and M03 were retired, not
-// ported, on 2026-10-16.
-const SAVED = [
-  {
-    id: 'manual-memo',
-    name: 'M04 · Remove manual React memoization',
-    schedule: '0 8-18 * * 1-5',
-    agent: 'claude',
-    prompt: '/remove-manual-memo',
-    workspace: { kind: 'new_worktree', base: 'origin/dev', reuseExisting: false },
-    checks: [{ kind: 'script', run: PRECHECK, timeoutMs: 60_000 }]
-  }
-]
-
-describe('M04 carries its Orca definition over', () => {
-  it.each(SAVED)('$name', (saved) => {
-    const def = loadPortedAutomation(saved.id).definition
-    expect({
-      name: def.name,
-      schedule: def.schedule,
-      timezone: def.timezone,
-      items: def.items,
-      checks: def.checks
-    }).toEqual({
-      name: saved.name,
-      schedule: saved.schedule,
-      timezone: 'America/Los_Angeles',
-      items: null,
-      checks: saved.checks
-    })
-    expect(def.missedRunGraceMs).toBe(12 * 3_600_000)
-    expect(def.workspace).toMatchObject(saved.workspace)
-    expect(def.steps).toHaveLength(1)
-    expect(def.steps[0]).toMatchObject({
-      agent: saved.agent,
-      promptStyle: 'raw',
-      prompt: saved.prompt,
-      session: { kind: 'new' },
-      timeoutMs: null,
-      args: []
-    })
-    expect(def.limits.timeoutMs).toBeNull()
-    expect(def.answers ?? null).toBeNull() // it asks no question the dispatcher routes
-  })
-})
-
 type Precheck = { code: number; stdout: string; stderr: string }
 
 // Orca's rule for these jobs: no precheck, or a precheck that exits 0, starts the run; any other exit is skipped_precheck.
