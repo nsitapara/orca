@@ -51,7 +51,7 @@ export function listEntries<T extends AutomationSummary>(
   return entries
 }
 
-// "13 · Fix red hourly e2e on dev": the job's heading, and its crumb on a stage's page.
+// "13 · Fix red hourly e2e on main": the job's heading, and its crumb on a stage's page.
 export function jobTitle(job: JobGroup): string {
   return `${job.id} · ${job.name}`
 }

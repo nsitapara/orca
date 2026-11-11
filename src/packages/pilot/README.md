@@ -128,7 +128,7 @@ A job ported as several automations, such as 13's ticket step and its fix sessio
     # stage 1
     job:
       id: "13"                            # the stages of one job share it (quoted text)
-      name: Fix red hourly e2e on dev     # the job's name; at least one stage sets it
+      name: Fix red hourly e2e on main    # the job's name; at least one stage sets it
       stage: 1                            # whole number from 1, its place in the job
       label: Open or update the ticket    # the stage's short label
       feeds:

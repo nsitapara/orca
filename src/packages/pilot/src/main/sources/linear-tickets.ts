@@ -35,7 +35,7 @@ type Ticket = { workspace: string | null; issue: LinearIssueSummary }
 
 const POOL = 3
 const LINEAR_IDENTIFIER = /^[A-Za-z][A-Za-z0-9]*-\d+$/
-// A branch Pilot creates for the ticket (M01: from origin/dev) is mine: no ownership block.
+// A branch Pilot creates for the ticket (M01: from origin/main) is mine: no ownership block.
 const OWN_NEW_BRANCH: ItemFields = {
   'mr.owner_block': '',
   'mr.finished_block': '',
@@ -78,7 +78,7 @@ async function branchExists(git: GitRunner, repoPath: string, branch: string): P
   }
 }
 
-// M01 runs no ownership check for a ticket without a worktree (a new branch off origin/dev is mine),
+// M01 runs no ownership check for a ticket without a worktree (a new branch off origin/main is mine),
 // but a branch whose existence can't be read blocks, as an unknown does everywhere.
 async function lonelyBranchFields(
   git: GitRunner,

@@ -28,7 +28,7 @@ describe('groupOf', () => {
       'web-2118-x'
     ],
     ['an MR', of('mr:1579', null), 'mr:1579', '!1579'],
-    ['a dev pipeline', of('pipeline:98765', null), 'pipeline:dev', 'dev pipeline'],
+    ['a base branch pipeline', of('pipeline:98765', null), 'pipeline:main', 'main pipeline'],
     [
       'a pipeline that names its ref',
       of('pipeline:release-1', null),
@@ -129,7 +129,7 @@ describe('groupItems', () => {
       ['web-a', ['a-q', 'a-left-old', 'a-left']],
       ['web-b', ['b-late']],
       ['!1579', ['mr', 'mr2']],
-      ['dev pipeline', ['pipe']],
+      ['main pipeline', ['pipe']],
       ['WEB-1', ['ticket']],
       ['09 · Prepare reviews requested of me', ['job']],
       ['Clean up', ['clean']]

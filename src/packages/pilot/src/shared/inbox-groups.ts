@@ -26,7 +26,8 @@ export type Section<T extends InboxListRow = InboxListRow> = { group: InboxGroup
 
 const RANK = { worktree: 0, mr: 1, pipeline: 2, ticket: 3, job: 4, cleanup: 5 } as const
 const CLEAN_UP = new Set(['docker-prune'])
-const DEV_PIPELINE = 'dev'
+// Job 13's hourly e2e pipelines, the only numbered pipeline items, run on web-platform's base branch.
+const BASE_PIPELINE = 'main'
 
 // A group that says where a card's work is (worktree, MR, pipeline, ticket), not which job made it.
 export function isPlaceGroup(group: InboxGroup): boolean {
@@ -73,7 +74,7 @@ function mrLabel(iid: string, itemLabel: string | undefined): string {
 
 // A pipeline key is `pipeline:<id>`; one that names a ref (not a number) is that ref's pipeline.
 function pipelineGroup(rest: string): InboxGroup {
-  const ref = /^\d+$/.test(rest) ? DEV_PIPELINE : rest
+  const ref = /^\d+$/.test(rest) ? BASE_PIPELINE : rest
   return { key: `pipeline:${ref}`, label: `${ref} pipeline`, rank: RANK.pipeline }
 }
 

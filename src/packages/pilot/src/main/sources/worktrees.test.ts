@@ -63,7 +63,7 @@ function fakeGit(repos: Record<string, FakeRepo>): GitRunner {
     if (args[0] === 'log') {
       return { stdout: r.log ?? '' }
     }
-    if (args[0] === 'rev-parse' && args[1] === '--verify' && args[3] === 'origin/dev^{commit}') {
+    if (args[0] === 'rev-parse' && args[1] === '--verify' && args[3] === 'origin/main^{commit}') {
       return { stdout: 'ok\n' }
     }
     if (args[0] === 'merge-base') {
@@ -234,7 +234,7 @@ describe('worktreeSource', () => {
     expect(fresh?.fields).toMatchObject({
       'item.baseline': false,
       'worktree.first_sight': true,
-      'worktree.base_ref': 'origin/dev',
+      'worktree.base_ref': 'origin/main',
       'worktree.since': 'base0000',
       'worktree.new_commits': 1
     })

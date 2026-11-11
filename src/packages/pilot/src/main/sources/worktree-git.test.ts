@@ -185,7 +185,7 @@ describe('baseRef (due.base_ref)', () => {
   it.each([
     ["the MR's target when it exists locally", 'main', null, 'main'],
     ['branch.<name>.base when there is no MR', null, 'refs/heads/main', 'main'],
-    ['origin/dev when nothing else resolves', 'nope', null, 'origin/dev']
+    ['origin/main when nothing else resolves', 'nope', null, 'origin/main']
   ])('%s', async (_name, target, recorded, want) => {
     if (recorded) {
       sh(repo, 'config', 'branch.feature.base', recorded)

@@ -113,7 +113,8 @@ export function isAncestor(
 }
 
 // due.base_ref: where the branch's own work starts: its open MR's target, else the base recorded when
-// the worktree was made (branch.<name>.base), else origin/dev.
+// the worktree was made (branch.<name>.base), else origin/main (web-platform's base since it moved from dev,
+// which stays on origin, frozen, so a fallback to it would measure a branch against stale history).
 export async function baseRef(
   git: GitRunner,
   path: string,
@@ -132,13 +133,13 @@ export async function baseRef(
   if (recorded) {
     candidates.push(recorded.replace(/^refs\/heads\//, ''))
   }
-  candidates.push('origin/dev')
+  candidates.push('origin/main')
   for (const ref of candidates) {
     if (await succeeds(git, path, ['rev-parse', '--verify', '--quiet', `${ref}^{commit}`])) {
       return ref
     }
   }
-  return 'origin/dev'
+  return 'origin/main'
 }
 
 // What the worktree kind needs to say whether a branch has new work: with a valid marker, its own
