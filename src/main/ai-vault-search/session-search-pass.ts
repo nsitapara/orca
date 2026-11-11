@@ -54,6 +54,8 @@ export type SessionSearchPassResult = {
   outOfTime: boolean
   /** Deferred candidates excluding due rows, which status already counts from the database. */
   left: number
+  /** Transcripts read this pass; zero means nothing changed since the last one. */
+  read: number
 }
 
 export async function runSessionSearchPass(
@@ -75,6 +77,7 @@ export async function runSessionSearchPass(
     let completed = true
     let outOfTime = false
     let left = 0
+    let readCount = 0
     const rows = new Map(store.files().map((row) => [row.path, row]))
     try {
       const read = await runSessionSearchIndexPass(store, swept.candidates, {
@@ -84,6 +87,7 @@ export async function runSessionSearchPass(
       })
       outOfTime = read.outOfTime
       left = read.left
+      readCount = read.read
     } catch (error) {
       if (!signal?.aborted) {
         throw error
@@ -142,7 +146,8 @@ export async function runSessionSearchPass(
       ),
       completed,
       outOfTime,
-      left
+      left,
+      read: readCount
     }
   })
 }

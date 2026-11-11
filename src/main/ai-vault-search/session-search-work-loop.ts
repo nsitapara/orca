@@ -2,7 +2,8 @@ import type { SessionSearchClock, SessionSearchTimerHandle } from './session-sea
 
 export type SessionSearchWorkLoopOptions = {
   clock: SessionSearchClock
-  intervalMs: number
+  /** Read when each pass settles, so the owner can stretch the wait while nothing changes. */
+  intervalMs: () => number
   /** Reports failures unless the task was aborted. */
   onFailure: (error: unknown) => void
 }
@@ -49,7 +50,7 @@ export class SessionSearchWorkLoop {
     this.timer = this.options.clock.setTimeout(() => {
       this.timer = null
       tick()
-    }, this.options.intervalMs)
+    }, this.options.intervalMs())
   }
 
   private async run(work: (signal: AbortSignal) => Promise<void>): Promise<void> {

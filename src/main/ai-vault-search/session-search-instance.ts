@@ -11,7 +11,10 @@ import { SessionSearchReaders } from './session-search-readers'
 import { sessionSearchHistoryCutoffMs } from './session-search-retention-policy'
 import { removeSessionSearchDatabaseAsync } from './session-search-schema'
 import type { SessionSearchScanRoots } from './session-search-scan-roots'
-import type { SessionSearchIndexerOptions } from './session-search-indexer-options'
+import {
+  SESSION_SEARCH_IDLE_RECONCILE_MAX_MS,
+  type SessionSearchIndexerOptions
+} from './session-search-indexer-options'
 import type { SessionSearchHostScope } from './session-search-service'
 
 export type SessionSearchInstanceOptions = {
@@ -71,6 +74,8 @@ export class SessionSearchInstance {
         return
       }
       const indexer = new SessionSearchIndexer({
+        // An idle machine should not walk every transcript root every 20 s.
+        idleReconcileMaxMs: SESSION_SEARCH_IDLE_RECONCILE_MAX_MS,
         ...this.options,
         historyDays: settings.historyDays
       })

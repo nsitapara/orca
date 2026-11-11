@@ -59,6 +59,8 @@ export class SessionSearchIndexer {
   private left = 0
   private lastCounts: SessionSearchStateCounts | null = null
   private cyclesSinceSweep = 0
+  /** Consecutive completed passes that read nothing and left no backlog. */
+  private quietPasses = 0
   private sweepNext = false
   private started = false
   private closed = false
@@ -80,7 +82,7 @@ export class SessionSearchIndexer {
     this.onError = onError
     this.loop = new SessionSearchWorkLoop({
       clock: this.clock,
-      intervalMs: this.intervalMs,
+      intervalMs: () => this.nextIntervalMs(),
       onFailure: onError
     })
     if (liveIndexerPaths.has(this.ownershipPath)) {
@@ -246,6 +248,8 @@ export class SessionSearchIndexer {
       this.previousRootsWithFiles = result.rootsWithFiles
       this.lastReconcileAt = this.clock.now()
       this.left = result.left
+      this.quietPasses =
+        result.read === 0 && result.left === 0 && !result.outOfTime ? this.quietPasses + 1 : 0
       // Repeat full discovery while backlogged so reads outside the recency window can progress.
       this.sweepNext ||= result.outOfTime
       if (full) {
@@ -265,6 +269,15 @@ export class SessionSearchIndexer {
       this.sweepNext ||= full
       throw error
     }
+  }
+
+  /** Back off while passes find nothing to read; any read returns to the base interval. */
+  private nextIntervalMs(): number {
+    const max = this.options.idleReconcileMaxMs
+    if (max === undefined || this.quietPasses === 0) {
+      return this.intervalMs
+    }
+    return Math.min(this.intervalMs * 2 ** this.quietPasses, Math.max(this.intervalMs, max))
   }
 
   private cutoffMs(): number | null {

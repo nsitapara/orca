@@ -22,7 +22,7 @@ export async function runSessionSearchIndexPass(
   store: SessionSearchIndexStore,
   candidates: readonly SessionFileCandidate[],
   options: SessionSearchIndexPassOptions
-): Promise<{ stats: SessionParseStats; outOfTime: boolean; left: number }> {
+): Promise<{ stats: SessionParseStats; outOfTime: boolean; left: number; read: number }> {
   const stats = createSessionParseStats()
   const cutoffMs = store.retentionCutoff
   let read = 0
@@ -73,5 +73,5 @@ export async function runSessionSearchIndexPass(
       )
     }
   }
-  return { stats, outOfTime, left }
+  return { stats, outOfTime, left, read }
 }
