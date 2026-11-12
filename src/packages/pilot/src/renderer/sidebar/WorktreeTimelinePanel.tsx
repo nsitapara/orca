@@ -12,6 +12,7 @@ import { runStrip } from '../../shared/run-views/strip'
 import { clockTime, runStatusLabel, spentLabel, verdictLabel } from '../pages/format'
 import { useAutomationsFeed } from '../run-views/automations-feed'
 import { envCleanup } from '../run-views/env-lines'
+import { BuiltInEngineNote } from '../pilotd/BuiltInEngineNote'
 import { openRunFromSidebar } from '../run-views/run-panel-state'
 import { RunStrip } from '../run-views/RunStrip'
 import { WaitingRow } from '../timeline/WaitingRow'
@@ -217,6 +218,7 @@ export function WorktreeTimelinePanel(): React.JSX.Element {
   return (
     <div className="flex min-h-0 flex-col gap-1 overflow-y-auto p-3 text-sm">
       <PanelHeader path={path} data={data} />
+      <BuiltInEngineNote />
       <Body path={path} data={data} error={error} />
       {data && error ? <p className="text-xs text-destructive">{error}</p> : null}
     </div>

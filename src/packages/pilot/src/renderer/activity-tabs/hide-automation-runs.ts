@@ -8,6 +8,7 @@ import type {
   AgentPaneThread
 } from '@/components/activity/activity-thread-types'
 import { ipcOrRuntimeTargetForHostId } from '@/runtime/rpc/targets/runtime-client-target'
+import { isAutomationTabTitle } from '../../shared/automation-tab-title'
 import { pilotRpc } from '../api'
 import type { WorkspaceTabItem } from './workspace-tab-items'
 
@@ -137,6 +138,23 @@ export function useAutomationTabIds(
     return () => window.clearInterval(timer)
   }, [enabled, key])
   return enabled ? ids : NONE
+}
+
+// pilotd's runs aren't in Pilot's store, so with pilotd chosen a tab named "[Automation] …" (both engines name their
+// tabs so) counts as one too.
+export function withTitledAutomationTabs(
+  found: ReadonlySet<string>,
+  threads: readonly AgentPaneThread[],
+  tabs: readonly WorkspaceTabItem[]
+): ReadonlySet<string> {
+  const titled = [
+    ...threads.filter((t) => isAutomationTabTitle(t.tab.customTitle)).map((t) => t.tab.id),
+    ...tabs.filter((item) => isAutomationTabTitle(item.label)).map((item) => item.tab.entityId)
+  ]
+  if (titled.length === 0) {
+    return found
+  }
+  return new Set([...found, ...titled])
 }
 
 // Groups less the threads in automation tabs; a group left with none goes.

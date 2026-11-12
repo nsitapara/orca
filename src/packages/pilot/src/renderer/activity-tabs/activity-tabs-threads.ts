@@ -27,8 +27,10 @@ import {
   hostedTabsOf,
   useAutomationTabIds,
   withoutAutomationTabs,
-  withoutAutomationThreads
+  withoutAutomationThreads,
+  withTitledAutomationTabs
 } from './hide-automation-runs'
+import { useAutomationEngine } from '../pilotd/pilotd-engine'
 import { useAgentTabItems } from './hide-terminal-tabs'
 import { childrenFoldedOf } from './activity-worktree-folds'
 import { useOpenTabItems } from './use-open-tab-items'
@@ -110,9 +112,15 @@ export function useActivityTabsThreads<
     useOpenTabItems(tabsVisible && listsAll, view.query, result.allThreads),
     hideTerminals
   )
-  const automationTabs = useAutomationTabIds(
+  const askedTabs = useAutomationTabIds(
     hostedTabsOf(result.allThreads, openTabs),
     attached && hideAutomationRuns
+  )
+  const titledToo = useAutomationEngine() === 'pilotd' && attached && hideAutomationRuns
+  const automationTabs = useMemo(
+    () =>
+      titledToo ? withTitledAutomationTabs(askedTabs, result.allThreads, openTabs) : askedTabs,
+    [titledToo, askedTabs, result.allThreads, openTabs]
   )
   const tabs = useMemo(
     () => withoutAutomationTabs(openTabs, automationTabs),
