@@ -478,6 +478,19 @@ describe('PilotAutomationsPage with pilotd chosen', () => {
     expect(screen.queryByTitle('pilotd dashboard')).toBeNull()
   })
 
+  it('keeps a loaded frame when pilotd stops answering, and says so above it', async () => {
+    choosePilotd({ reachable: true, engineRunning: true, build: null })
+    render(<PilotAutomationsPage />)
+    await screen.findByTitle('pilotd dashboard')
+    choosePilotd({ reachable: false, error: "pilotd didn't answer within 2 s." })
+    fireEvent.click(screen.getByRole('button', { name: 'Reload' }))
+    expect(
+      await screen.findByText("pilotd stopped answering: pilotd didn't answer within 2 s.")
+    ).toBeTruthy()
+    expect(screen.getByTitle('pilotd dashboard')).toBeTruthy()
+    expect(screen.queryByRole('alert')).toBeNull()
+  })
+
   it("keeps Playground as Pilot's own page", async () => {
     choosePilotd({ reachable: true, engineRunning: true, build: null })
     setPilotAutomationsView('playground')

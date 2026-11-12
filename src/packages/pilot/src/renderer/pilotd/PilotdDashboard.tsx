@@ -17,27 +17,48 @@ import {
 
 const HEALTH_POLL_MS = 10_000
 
+// What the header warns of, if anything: pilotd stopped answering after the frame loaded, or its engine is off.
+function headerProblem(health: PilotdHealth | null): { text: string; tone: string } | null {
+  if (health === null) {
+    return null
+  }
+  if (!health.reachable) {
+    return { text: `pilotd stopped answering: ${health.error}`, tone: 'text-destructive' }
+  }
+  if (!health.engineRunning) {
+    return { text: "pilotd's engine isn't running, so no job starts.", tone: 'text-status-warning' }
+  }
+  return null
+}
+
 function Header({
   origin,
   health,
   onReload,
+  onRetry,
   url
 }: {
   origin: string
   health: PilotdHealth | null
   onReload: () => void
+  onRetry: () => void
   url: string
 }): React.JSX.Element {
-  const stopped = health?.reachable === true && !health.engineRunning
+  const problem = headerProblem(health)
   return (
     <header className="flex shrink-0 items-center gap-2 border-b border-border px-3 py-1.5 text-xs">
       <span className="min-w-0 truncate font-medium" title={origin}>
         {`pilotd · ${origin}`}
       </span>
-      {stopped ? (
-        <span className="shrink-0 text-status-warning">
-          pilotd&apos;s engine isn&apos;t running, so no job starts.
+      {problem ? (
+        <span role="status" className={`min-w-0 truncate ${problem.tone}`} title={problem.text}>
+          {problem.text}
         </span>
+      ) : null}
+      {health?.reachable === false ? (
+        <Button type="button" variant="outline" size="xs" onClick={onRetry}>
+          Retry
+        </Button>
       ) : null}
       <div className="ml-auto flex shrink-0 items-center gap-1">
         <Button type="button" variant="ghost" size="xs" onClick={onReload}>
@@ -111,6 +132,11 @@ export function PilotdDashboard(): React.JSX.Element {
   const pendingCard = usePendingInboxCard()
   const { health, refresh } = usePilotdHealth(address, HEALTH_POLL_MS, origin !== null)
   const [frameKey, setFrameKey] = useState(0)
+  // Once the frame has loaded for this address it stays: a missed poll mustn't throw away what's open in it.
+  const [shownFor, setShownFor] = useState<string | null>(null)
+  if (origin !== null && health?.reachable === true && shownFor !== origin) {
+    setShownFor(origin)
+  }
 
   // Card ids from Pilot's own store mean nothing to pilotd: drop the pick so it never lingers.
   useEffect(() => {
@@ -128,11 +154,11 @@ export function PilotdDashboard(): React.JSX.Element {
       />
     )
   }
-  if (health === null) {
+  if (shownFor !== origin) {
+    if (health?.reachable === false) {
+      return <PilotdUnreachable address={origin} error={health.error} onRetry={refresh} />
+    }
     return <p className="p-5 text-sm text-muted-foreground">{`Checking pilotd at ${origin}…`}</p>
-  }
-  if (!health.reachable) {
-    return <PilotdUnreachable address={origin} error={health.error} onRetry={refresh} />
   }
   const url = `${origin}/${pilotdHash(view, { automationId }) ?? '#overview'}`
   return (
@@ -141,6 +167,7 @@ export function PilotdDashboard(): React.JSX.Element {
         origin={origin}
         health={health}
         url={url}
+        onRetry={refresh}
         onReload={() => {
           setFrameKey((n) => n + 1)
           refresh()
