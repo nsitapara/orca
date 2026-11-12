@@ -20,13 +20,12 @@ export const ENGINE_CHOICES: { value: AutomationEngine; label: string; meaning: 
   {
     value: 'builtin',
     label: 'Built-in',
-    meaning: "Pilot's own engine runs the jobs and its own Automations pages show them."
+    meaning: "Pilot's own Automations pages and sidebar counts, from Pilot's built-in engine."
   },
   {
     value: 'pilotd',
     label: 'pilotd',
-    meaning:
-      "pilotd runs the jobs; the Automations pages and the sidebar's counts show pilotd's dashboard."
+    meaning: "pilotd's dashboard on the Automations pages, and pilotd's counts in the sidebar."
   }
 ]
 
@@ -98,8 +97,8 @@ function AddressField({
 }
 
 /**
- * pilot-hook: settings-automation-engine. Settings › Automations: which engine runs the jobs, pilotd's address, and
- * whether pilotd answers there. Built-in keeps everything as it is.
+ * pilot-hook: settings-automation-engine. Settings › Automations: which engine's automations Pilot shows, pilotd's
+ * address, and whether pilotd answers there. Built-in keeps everything as it is.
  */
 export function AutomationEngineSetting({
   settings,
@@ -118,7 +117,7 @@ export function AutomationEngineSetting({
   return (
     <SettingsGroup
       title="Automation engine"
-      description="Which engine runs your automations. Built-in is the fallback if pilotd fails."
+      description="Which engine's automations Pilot shows. It doesn't start or stop either engine: Pilot's built-in jobs keep their own switches. Built-in is the fallback if pilotd fails."
       bodyClassName="py-2"
     >
       <div className="flex items-start justify-between gap-4 py-2">

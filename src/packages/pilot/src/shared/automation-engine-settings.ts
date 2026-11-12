@@ -1,4 +1,5 @@
-// Which engine runs the jobs: Pilot's own (the fallback) or pilotd, whose dashboard then fills the Automations page.
+// Which engine's automations Pilot shows: its own (the fallback) or pilotd's, whose dashboard then fills the Automations
+// page. It changes what Pilot shows, never what either engine runs.
 export type AutomationEngine = 'builtin' | 'pilotd'
 
 // Composed into upstream's GlobalSettingsBase (pilot-hook: automation-engine-settings).
