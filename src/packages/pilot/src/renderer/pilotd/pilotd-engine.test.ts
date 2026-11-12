@@ -28,7 +28,7 @@ describe("Pilot's views as pilotd's deep links", () => {
   it.each([
     ['automations', {}, '#automations'],
     ['automations', { automationId: '05 fix/ci' }, '#automations/05%20fix%2Fci'],
-    ['running', { automationId: '05' }, '#overview'],
+    ['running', { automationId: '05' }, '#running'],
     ['inbox', {}, '#inbox'],
     ['inbox', { cardId: 'c1' }, '#inbox/c1'],
     ['activity', {}, '#runs'],

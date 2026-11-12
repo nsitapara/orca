@@ -22,7 +22,7 @@ export function usePilotdAddress(): string {
 // Pilot's Automations sub-views and the pilotd dashboard views that replace them. Playground stays Pilot's own.
 const DASHBOARD_VIEW: Record<Exclude<PilotAutomationsView, 'playground'>, string> = {
   automations: 'automations',
-  running: 'overview',
+  running: 'running',
   inbox: 'inbox',
   activity: 'runs',
   usage: 'usage'
