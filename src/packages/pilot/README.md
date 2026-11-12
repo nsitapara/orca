@@ -588,6 +588,15 @@ These need a phone, a second Mac and an iPad on Tailscale. Open Pilot (`dist/mac
 
 - Pilot's WebSocket listener binds loopback until a device is paired (upstream STA-2370), so the network bind appears only after the first pairing. If a Tailscale address refuses the connection before pairing, that is expected.
 
+## Automation engine: Built-in or pilotd
+
+Settings › Automations › Automation engine picks who runs the jobs (`pilotAutomationEngine`, absent = Built-in).
+
+- **Built-in** (the default): everything as before. It's the fallback if pilotd fails; nothing about the built-in engine, its pages, RPC methods, CLI or data changes with the setting.
+- **pilotd**: the Automations, Running, Inbox, Activity and Usage views show pilotd's dashboard (`pilotdAddress`, default `http://127.0.0.1:8787`) in a frame, at `#automations`, `#overview`, `#inbox`, `#runs` and `#usage`; an open automation opens at `#automations/<id>`. Playground stays Pilot's own. The frame is a plain `<iframe>` (the renderer's CSP sets only `img-src`, and pilotd sends no frame headers), so it signs in with its own token in its origin's storage in the window's persistent session; Pilot never sees the token. A frame that can't reach pilotd shows what's wrong, Retry and Switch to the built-in engine instead.
+- The sidebar's Inbox and Running pills read pilotd's `GET /counts` (Inbox = `needsYou.cards + needsYou.sessions`) through `pilot.pilotd.counts`, and the setting's status line and the frame read `GET /health` through `pilot.pilotd.health`. The renderer can't read pilotd itself (no CORS headers), so main asks those two fixed paths, 2 s timeout, and returns only parsed numbers; unreachable is no pill.
+- Still Pilot's own data, with pilotd chosen: the worktree panel (it says so in one line) and its badge, and run or card links that come from it (they open Pilot's run panel over the dashboard). "Hide automation runs" also hides tabs named `[Automation] …`, since pilotd's runs aren't in Pilot's store.
+
 ## Known gaps
 
 - In the browser version, the controls that act on the Mac that runs Pilot, not on your device, are hidden:
