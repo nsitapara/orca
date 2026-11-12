@@ -8,8 +8,11 @@ import { resetPilotHostsFeed, setPilotHostsForTests } from '../hosts/pilot-hosts
 import {
   setPilotAutomationsView,
   setPilotOpenAutomation,
-  setPilotOpenJob
+  setPilotOpenJob,
+  showPilotAutomation
 } from './automations-view'
+import { useAppStore } from '@/store'
+import { getDefaultSettings } from '../../../../../shared/constants'
 import { resetAutomationsFeed } from '../run-views/automations-feed'
 import { detail, summary } from './fixtures'
 
@@ -429,5 +432,57 @@ describe('PilotAutomationsPage on more than one machine', () => {
     render(<PilotAutomationsPage />)
     expect(await screen.findByText('down')).toBeTruthy()
     expect(noticeLines()).toEqual([])
+  })
+})
+
+describe('PilotAutomationsPage with pilotd chosen', () => {
+  function choosePilotd(health: unknown): void {
+    useAppStore.setState({
+      settings: { ...getDefaultSettings('/tmp'), pilotAutomationEngine: 'pilotd' }
+    })
+    pilotRpc.mockImplementation(async (method: string) =>
+      method === 'pilot.pilotd.health' ? health : status
+    )
+  }
+
+  afterEach(() => {
+    cleanup()
+    pilotRpc.mockReset()
+    useAppStore.setState({ settings: getDefaultSettings('/tmp') })
+    setPilotOpenAutomation(null)
+    setPilotAutomationsView('automations')
+  })
+
+  it("shows pilotd's dashboard at the open view's deep link, and follows Pilot's navigation", async () => {
+    choosePilotd({ reachable: true, engineRunning: true, build: 'abc' })
+    setPilotAutomationsView('running')
+    render(<PilotAutomationsPage />)
+    const frame = await screen.findByTitle('pilotd dashboard')
+    expect(frame.getAttribute('src')).toBe('http://127.0.0.1:8787/#overview')
+    expect(screen.getByText('pilotd · http://127.0.0.1:8787')).toBeTruthy()
+    act(() => showPilotAutomation('05-fix-ci', 'how'))
+    expect(frame.getAttribute('src')).toBe('http://127.0.0.1:8787/#automations/05-fix-ci')
+    expect(pilotRpc.mock.calls.map(([method]) => method)).not.toContain('pilot.automations.list')
+  })
+
+  it("shows what's wrong instead of a blank frame when pilotd doesn't answer", async () => {
+    choosePilotd({ reachable: false, error: 'Nothing answers at http://127.0.0.1:8787.' })
+    render(<PilotAutomationsPage />)
+    const panel = await screen.findByRole('alert')
+    expect(within(panel).getByText('Nothing answers at http://127.0.0.1:8787.')).toBeTruthy()
+    expect(within(panel).getByText('http://127.0.0.1:8787')).toBeTruthy()
+    expect(within(panel).getByRole('button', { name: 'Retry' })).toBeTruthy()
+    expect(
+      within(panel).getByRole('button', { name: 'Switch to the built-in engine' })
+    ).toBeTruthy()
+    expect(screen.queryByTitle('pilotd dashboard')).toBeNull()
+  })
+
+  it("keeps Playground as Pilot's own page", async () => {
+    choosePilotd({ reachable: true, engineRunning: true, build: null })
+    setPilotAutomationsView('playground')
+    render(<PilotAutomationsPage />)
+    expect(await screen.findByRole('heading', { name: 'Playground' })).toBeTruthy()
+    expect(screen.queryByTitle('pilotd dashboard')).toBeNull()
   })
 })

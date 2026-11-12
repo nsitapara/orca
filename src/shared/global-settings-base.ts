@@ -17,6 +17,7 @@ import type { TerminalScrollSettings } from './terminal/appearance/terminal-scro
 import type { WorktreeDeletionPreferences } from './worktree-deletion-preferences'
 import type { EmptyWorkspaceOpenSurfaceSettings } from '../packages/pilot/src/shared/empty-workspace-open-surface-settings' // pilot-hook: empty-workspace-settings
 import type { SidebarPagesSettings } from '../packages/pilot/src/shared/sidebar-pages-settings' // pilot-hook: sidebar-pages-settings
+import type { AutomationEngineSettings } from '../packages/pilot/src/shared/automation-engine-settings' // pilot-hook: automation-engine-settings
 import type { AgentPermissionGlobalSettings } from './agent-launch/permissions/tui-agent-permission-choice'
 import type { TerminalColorOverrideGlobalSettings } from './terminal-themes/terminal-color-overrides'
 import type { WindowMaterialSettings } from './window-material'
@@ -53,4 +54,5 @@ export type GlobalSettingsBase = AntigravityChatAuthSettings &
   AgentWorkspaceTrustSettings &
   KeybindingGlobalSettings &
   EmptyWorkspaceOpenSurfaceSettings & // pilot-hook: empty-workspace-settings
-  SidebarPagesSettings // pilot-hook: sidebar-pages-settings
+  SidebarPagesSettings & // pilot-hook: sidebar-pages-settings
+  AutomationEngineSettings // pilot-hook: automation-engine-settings

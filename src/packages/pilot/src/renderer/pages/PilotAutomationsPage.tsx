@@ -11,6 +11,8 @@ import {
 import { JobView } from './JobView'
 import { PilotAutomationsSection } from './PilotAutomationsSection'
 import { RunPanelHost } from '../run-views/RunPanelHost'
+import { PilotdDashboard } from '../pilotd/PilotdDashboard'
+import { useAutomationEngine } from '../pilotd/pilotd-engine'
 import { ActivityPage } from './ActivityPage'
 import { PlaygroundPage } from './playground/PlaygroundPage'
 import { RunningPage } from './running/RunningPage'
@@ -21,6 +23,15 @@ function PageBody(): React.JSX.Element {
   const open = usePilotOpenAutomation()
   const job = usePilotOpenJob()
   const view = usePilotAutomationsView()
+  // With pilotd chosen its dashboard stands in for every view but Playground.
+  const engine = useAutomationEngine()
+  if (engine === 'pilotd' && view !== 'playground') {
+    return (
+      <main className="relative flex h-full flex-col bg-background">
+        <PilotdDashboard />
+      </main>
+    )
+  }
   if (view === 'inbox') {
     return (
       <main className="relative flex h-full flex-col overflow-y-auto scrollbar-sleek bg-background px-5 pb-10">

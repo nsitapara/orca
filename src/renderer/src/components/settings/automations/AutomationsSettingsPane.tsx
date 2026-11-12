@@ -5,6 +5,7 @@ import { SettingsSwitchRow } from '../form-controls/SettingsFormControls'
 import { SettingsGroup } from '../section-layout/SettingsGroup'
 import { useAppStore } from '@/store/index'
 import { useTranslate } from '@/i18n/use-translate'
+import { AutomationEngineSetting } from '../../../../../packages/pilot/src/renderer/pilotd/AutomationEngineSetting' // pilot-hook: settings-automation-engine
 
 export function AutomationsSettingsPane({
   settings,
@@ -18,6 +19,7 @@ export function AutomationsSettingsPane({
 
   return (
     <div className="space-y-8">
+      <AutomationEngineSetting settings={settings} updateSettings={updateSettings} />
       <SettingsGroup>
         <SettingsSwitchRow
           label={t('auto.components.settings.automations.d92f253d2d', 'Show automations button')}
