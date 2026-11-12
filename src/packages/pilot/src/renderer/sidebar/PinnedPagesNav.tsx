@@ -10,7 +10,8 @@ import type { InboxListPayload } from '../../shared/inbox-types'
 import { sidebarNavPages, type SidebarPageKey } from '../../shared/sidebar-pages-settings'
 import { useHostPoll } from '../hosts/host-poll'
 import { waitingTotal } from '../hosts/merge-inbox'
-import { useCapacityTotals } from '../pages/running/use-capacity'
+import { CAPACITY_POLL_MS, useCapacityTotals } from '../pages/running/use-capacity'
+import { pilotdPills, useAutomationEngine, usePilotdCounts } from '../pilotd/pilotd-engine'
 import {
   setSidebarPagePinned,
   showSidebarPage,
@@ -58,21 +59,47 @@ function Pills({ pills }: { pills: NavPill[] }): React.JSX.Element {
   )
 }
 
-function InboxPills(): React.JSX.Element {
-  return <Pills pills={[{ count: useWaitingTotal(), tone: 'attention' }]} />
+function inboxPills(count: number): NavPill[] {
+  return [{ count, tone: 'attention' }]
 }
 
-// The Running page's own counts: runs going now, and in yellow the ones waiting.
+// Runs going now, and in yellow the ones waiting.
+function runningPills({ running, queued }: { running: number; queued: number }): NavPill[] {
+  return [
+    { count: running, tone: 'quiet', title: 'Running now' },
+    { count: queued, tone: 'waiting', title: 'Waiting' }
+  ]
+}
+
+function BuiltInInboxPills(): React.JSX.Element {
+  return <Pills pills={inboxPills(useWaitingTotal())} />
+}
+
+function BuiltInRunningPills(): React.JSX.Element {
+  return <Pills pills={runningPills(useCapacityTotals())} />
+}
+
+// pilotd's GET /counts on the same cadence; unreachable shows no pill.
+function PilotdInboxPills(): React.JSX.Element {
+  return <Pills pills={inboxPills(pilotdPills(usePilotdCounts(WAITING_TOTAL_MS)).inbox)} />
+}
+
+function PilotdRunningPills(): React.JSX.Element {
+  return <Pills pills={runningPills(pilotdPills(usePilotdCounts(CAPACITY_POLL_MS)))} />
+}
+
+function InboxPills(): React.JSX.Element {
+  if (useAutomationEngine() === 'pilotd') {
+    return <PilotdInboxPills />
+  }
+  return <BuiltInInboxPills />
+}
+
 function RunningPills(): React.JSX.Element {
-  const { running, queued } = useCapacityTotals()
-  return (
-    <Pills
-      pills={[
-        { count: running, tone: 'quiet', title: 'Running now' },
-        { count: queued, tone: 'waiting', title: 'Waiting' }
-      ]}
-    />
-  )
+  if (useAutomationEngine() === 'pilotd') {
+    return <PilotdRunningPills />
+  }
+  return <BuiltInRunningPills />
 }
 
 const PAGE_PILLS: Partial<Record<SidebarPageKey, () => React.JSX.Element>> = {

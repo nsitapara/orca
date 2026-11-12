@@ -258,4 +258,39 @@ describe('pinned pages nav', () => {
     await act(async () => {})
     expect(screen.queryByText('0')).toBeNull()
   })
+
+  // pilotd's /counts stands in for the inbox list and the capacity read; null is pilotd not answering.
+  it.each([
+    [
+      'cards and sessions that need you, running and waiting',
+      { cards: 2, sessions: 1 },
+      4,
+      2,
+      ['3', '4', '2']
+    ],
+    ['nothing at all', { cards: 0, sessions: 0 }, 0, 0, []],
+    ['pilotd not answering', null, 0, 0, []]
+  ] as const)(
+    'with pilotd chosen, the pills show %s',
+    async (_case, needsYou, running, queued, shown) => {
+      useStore({ activeView: 'mobile', settings: { pilotAutomationEngine: 'pilotd' } })
+      pilotRpc.mockImplementation(async (method: string) => {
+        if (method !== 'pilot.pilotd.counts') {
+          throw new Error(`asked the built-in engine: ${method}`)
+        }
+        if (needsYou === null) {
+          return null
+        }
+        return { running, queued, needsYou, failedToday: 0, gaveUp: 0, engineRunning: true }
+      })
+      render(<PinnedPagesNav />)
+      await act(async () => {})
+      const pills = [/Inbox/, /^Running/].flatMap((name) => [
+        ...screen.getByRole('button', { name }).querySelectorAll('span.rounded-full')
+      ])
+      expect(pills.map((p) => p.textContent)).toEqual(shown)
+      const methods = new Set(pilotRpc.mock.calls.map(([method]) => method))
+      expect([...methods]).toEqual(['pilot.pilotd.counts'])
+    }
+  )
 })
