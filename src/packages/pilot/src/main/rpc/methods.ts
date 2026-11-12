@@ -23,6 +23,7 @@ import { buildInboxMethods } from './methods-inbox'
 import { buildPlaygroundMethods } from './methods-playground'
 import { buildStepSourceMethods } from './methods-step-source'
 import { buildTelemetryMethods } from './methods-telemetry'
+import { buildPilotdMethods } from './methods-pilotd'
 import { buildArtifactsMethods } from './methods-artifacts'
 
 export const PILOT_VERSION = '0.1.0'
@@ -83,6 +84,7 @@ export function buildPilotMethods(host: PilotHost) {
       params: null,
       handler: () => pilotStatus(host)
     }),
+    ...buildPilotdMethods(),
     defineMethod({
       name: 'pilot.automations.list',
       permission: 'workspace',
